@@ -29,7 +29,7 @@ to it later (their current in-tree LLM modules are superseded by this package).
 | `digillm/mcp_server.py` | Optional MCP server (`complete` tool over house routing; `[mcp]` extra). |
 | `digillm/structured.py` | `structured_completion` (json_schema → validated Pydantic model) and `resolve_model` (opt-in test/medium/best resolution). |
 | `digillm/telemetry.py` | Strict provider-agnostic records for node runs, logical calls, physical attempts, artifact references, and fail-soft observer delivery. |
-| `digillm/egress_record.py` | GDPR egress ledger: one frozen `EgressRecord` per provider attempt that reaches the wire (plus one for the `completion()` cache-hit path), carrying a keyed `HMAC-SHA256` digest of the outbound payload and never the payload itself. |
+| `digillm/egress_record.py` | GDPR egress ledger: one frozen `EgressRecord` per provider attempt (plus one for the `completion()` cache-hit path), carrying a keyed `HMAC-SHA256` digest of the outbound messages and never the payload itself. |
 | `digillm/__init__.py` | Public API surface (re-exports). |
 
 ## Public API
@@ -43,7 +43,8 @@ from digillm import (
     set_proxy_key, reset_proxy_key, get_proxy_key, proxy_key,   # proxy override
     set_byok, reset_byok, get_byok, byok, clear_byok,           # BYOK override
     set_fan_out_detach_hook,                                    # consumer detach hook
-    set_egress_observer, EgressRecord, EgressDecision, EgressCategoryId,  # GDPR egress ledger
+    set_egress_observer, EgressRecord, EgressDecision,          # GDPR egress ledger
+    EgressCategoryId,                                           # Art. 9 categories
     clear_caches,
 )
 ```
@@ -429,14 +430,19 @@ second copy of the data with weaker access control than the database it came fro
 
 What it carries instead is `HMAC-SHA256` over the canonical outbound messages under the
 pepper in `DIGILLM_EGRESS_DIGEST_KEY`. That keeps two properties that both matter:
-a reader can still answer "were these the same bytes on the wire?" (joinable across runs
+a reader can still answer "were these the same outbound messages?" (joinable across runs
 and providers), while a reader holding a candidate list cannot rank or confirm it.
+The digest covers the `messages` array only, never the whole request kwargs — which can
+carry a BYOK key in `extra_body` (`client.py:1371`). So two calls that differ only in
+`tools`, `model` or `temperature` share a digest; the digest answers "same messages",
+not "same request".
 
 **The digest is off by default, and that is visible on purpose.** With no pepper (or one
 under `MIN_DIGEST_KEY_LENGTH`), records still emit, with `digest_algorithm: "absent"` and
 `payload_digest: null`. There is no unkeyed fallback: `sha256` of a low-entropy payload is
 the payload, found by table lookup, and a silent fallback would hide that. Measured on
-`develop` after #5152, `pytest digillm/tests/test_digillm.py` produced 397 records, all 397
+`task/1139-digillm-egress-record` at `1c3346585`, `pytest digillm/tests/test_digillm.py`
+produced 83 records and the full `pytest digillm/tests` produced 156, every one of them
 `absent`. So read the ledger's `digest_algorithm` distribution before relying on it: a
 ledger of `absent` records proves egress *happened* and *where it went*, not what was sent.
 
@@ -454,7 +460,7 @@ registered, because a callback nobody registers is not evidence.
 
 ### Reading limits
 
-Three, so no reader over-reads the ledger:
+Five, so no reader over-reads the ledger:
 
 - **Granularity is one digillm provider attempt, not one HTTP packet.** The OpenAI SDK
   retries a single `create()` internally, so one record can stand for more than one
@@ -466,6 +472,21 @@ Three, so no reader over-reads the ledger:
 - **A failed attempt is recorded even when it failed before the wire** (DNS, local
   serialization). That over-counts on purpose: a ledger that misses calls it could not
   prove went is worse than one that lists the ones it could not prove did not go.
+- **A local default sink is test-polluted.** `digillm/tests/test_digillm.py` has no
+  autouse fixture redirecting `DIGILLM_EGRESS_LOG_PATH`, so running the suite appends
+  unit-test records to the real default ledger — with `destination` values like
+  `<MagicMock …>` and `purpose: "unknown"`. Filter them out (`jq -r 'select(.destination
+  | startswith("http")) | .digest_algorithm'`) before drawing any conclusion from a
+  checkout-local ledger.
+- **The digest answers "same messages", not "same request".** `model`, `tools`,
+  `temperature` and `response_format` are outside the digest (see above). Do not use a
+  matching digest as evidence that two requests were configured identically.
+
+On the API surface: `record_egress` takes no pre-computed digest — the record computes its
+own from the payload it is given, so a caller cannot hand in a digest that disagrees with
+the payload. `compute_payload_digest(payload, *, key=None)` is public and accepts a
+caller-supplied key, which is a **test seam, not a caller feature**: passing a key there
+bypasses `DIGILLM_EGRESS_DIGEST_KEY` entirely, so production code must not use it.
 
 ### Deployment: the pepper must not live next to the ledger
 
@@ -477,9 +498,12 @@ person can read.
 
 Required separation in staging and production:
 
-- Inject `DIGILLM_EGRESS_DIGEST_KEY` from the secret store into the digillm process
-  environment (`bws run -- docker compose up`, org secret in CI). Never a committed
-  `.env`, never a value in `.env.example`.
+- Inject `DIGILLM_EGRESS_DIGEST_KEY` into the digillm process environment from whatever
+  secret store the deployment uses. For `docker compose` that means `env_file` or the
+  compose `environment:` block — the value has to reach the process that way. (A GitHub org
+  secret is workflow-scoped and does **not** reach compose; Bitwarden Secrets Manager is
+  still an open migration in this repo, DIG-95, so do not plan around `bws`.) Never a
+  committed `.env`, never a value in `.env.example`.
 - One key per environment, never shared. A reused pepper makes every deployment's digests
   comparable, so a copy of one ledger becomes a dictionary for all of them.
 - Point `DIGILLM_EGRESS_LOG_PATH` at a store the digillm process can **append to but not
@@ -487,10 +511,12 @@ Required separation in staging and production:
   user). Do not bind the key and the ledger onto the same mount, and do not let one backup
   cover both — a backup containing the pepper and its own ledger recovers candidate
   ranking wholesale, which defeats the mechanism.
-- Rotate the pepper per environment on the usual cadence. Rotation changes every future
-  digest, so records written under the old key become unverifiable against new records;
-  keep the old ledger and the old key in separately-guarded custody if counsel needs to
-  verify historical entries.
+- Rotate the pepper on the same schedule as the other per-environment secrets in
+  `docs/ops/SECRETS_ROTATION.md`, and whenever the ledger store changes custody — there is
+  no cadence row for this key yet, so add one when that table is next revised. Rotation
+  changes every future digest, so records written under the old key become unverifiable
+  against new records; keep the old ledger and the old key in separately-guarded custody
+  if counsel needs to verify historical entries.
 
 Reading `digest_algorithm: "absent"` in a ledger is a **finding**, not a curiosity: it
 means that environment never had a pepper, so its digests cannot be recomputed and the
@@ -583,8 +609,8 @@ digitrace on the path) plus `LANGSMITH_API_KEY` to enable spans.
 | `DIGI_LLM_CACHE_TTL_SECONDS` | response cache | Response-cache TTL (default 3600). |
 | `DIGI_TOOL_MESSAGE_MAX_CHARS` | tool loop | Cap on tool-result text injected into the next turn (default 12000). |
 | `DIGILLM_EMPTY_RETRY_MAX` / `DIGILLM_EMPTY_RETRY_BACKOFF` | `completion` | Empty-response self-heal: retry count (default 4, raised in #814) + backoff seconds (default 5.0). `DIGILLM_EMPTY_RETRY_DELAY` is a back-compat alias for `..._BACKOFF`. |
-| `DIGILLM_EGRESS_DIGEST_KEY` | `egress_record` | HMAC pepper over the canonical outbound payload, minimum `MIN_DIGEST_KEY_LENGTH` (32) characters. Unset or shorter → `digest_algorithm: "absent"`, `payload_digest: null`. **No unkeyed fallback.** Secret, per environment, must not be co-located with the ledger — see [Egress record](#egress-record-gdpr-what-left-the-process). |
-| `DIGILLM_EGRESS_LOG_PATH` | `egress_record` | JSONL sink path (default `digiquant/results/egress/records.jsonl` at the checkout root). `off` / `none` disables the file sink; a registered observer still receives records. |
+| `DIGILLM_EGRESS_DIGEST_KEY` | `egress_record` | HMAC pepper over the canonical outbound **messages**, minimum `MIN_DIGEST_KEY_LENGTH` (32) characters. Unset or shorter → `digest_algorithm: "absent"`, `payload_digest: null`. **No unkeyed fallback.** Secret, per environment, must not be co-located with the ledger — see [Egress record](#egress-record-gdpr-what-left-the-process). |
+| `DIGILLM_EGRESS_LOG_PATH` | `egress_record` | JSONL sink path. Unset, empty or whitespace → `digiquant/results/egress/records.jsonl` at the checkout root. `off` / `none` (case-insensitive) disables the file sink; a registered observer still receives records. |
 
 ## Tests and CI
 
