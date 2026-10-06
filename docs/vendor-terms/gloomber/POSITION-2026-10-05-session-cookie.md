@@ -26,8 +26,8 @@ Every claim below was checked against `github/develop` at `713e58b8f` on 2026-10
 
 - 89 `digifetch_*` tools exist; 42 are cookie-gated (41 `GLOOMBERB_SESSION_COOKIE`, 1
   `SUBSTACK_SESSION_COOKIE`); 47 work without a cookie.
-- The cookie is obtained from a human's logged-in browser at `https://term.gloom.sh/`, under
-  Application/Storage → Cookies. It is not issued to us by Gloom.
+- The cookie is obtained from a human's logged-in browser at the vendor's own terminal, by the
+  operator's own sign-in. It is not issued to us by Gloom.
 - **No workflow in the repository sets any `GLOOMBERB_*` variable.** `git grep GLOOMBER --
   .github/workflows/` returns empty. The runbook names the GitHub Actions `cron` environment secret
   as the canonical production store, but no workflow file references it. We cannot enumerate GitHub
