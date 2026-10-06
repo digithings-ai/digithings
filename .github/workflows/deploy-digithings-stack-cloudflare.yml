@@ -76,19 +76,27 @@ permissions:
   contents: read
 
 concurrency:
-  # Per-target-ref group. Previously keyed on run_id, which made every run its
-  # own group and so never queued (#2541) — harmless while the only trigger was
-  # a rare manual dispatch, wrong now that every merge to main fires this: two
-  # merges in quick succession would race two `wrangler deploy`s onto the same
-  # container name and the older one could land last.
+  # Per-run group, unchanged from before this PR and unchanged for the same reason.
+  # #2541: a shared group + `environment: production` + cancel-in-progress: false
+  # means an unapproved run does not delay the workflow, it STOPS it -- every later
+  # run is evicted from the group's single pending slot and reports `cancelled` with
+  # zero jobs, which reads like a cancelled deploy rather than one that never ran.
+  # db-migrate lost 15 days and migrations 066-070 that way.
   #
-  # Keying on the ref to be deployed keeps the original intent (deploys aimed at
-  # different refs must never displace each other) while making same-ref deploys
-  # queue in order. cancel-in-progress stays false: an approved deploy already
-  # waiting on Cloudflare must never be killed by a newer push.
-  group: deploy-digithings-stack-cloudflare-${{ inputs.ref || 'main' }}
+  # I changed this to a per-ref group on the reasoning that two merges in quick
+  # succession would race two `wrangler deploy`s onto the same container name. That
+  # is a real hazard, and this change is still the wrong fix for it: a per-ref group
+  # restores the #2541 starvation, and with a push trigger it would now do it on the
+  # common path -- one unapproved merge to main parks every deploy behind it.
+  # tests/scripts/test_workflow_environment_concurrency.py enforces the rule repo-wide
+  # and failed this branch, correctly.
+  #
+  # The race is instead bounded by the `production` gate: at most one deployment is
+  # ever actually applying per environment approval, and a deploy that gets superseded
+  # mid-flight fails its own run rather than corrupting the container. Serialising
+  # deploys is a separate change with its own test, not a drive-by here.
+  group: deploy-digithings-stack-cloudflare-${{ github.run_id }}
   cancel-in-progress: false
-
 jobs:
   # ── Validation only. Runs on every trigger, deploys nothing. ────────────────
   # Its steps are duplicated in `check-deploy-gate` rather than shared through a
