@@ -81,25 +81,35 @@ command's output, never the plan's number. Same rule for the three SHAs: read th
 
 Against `github-private-information-request.md`.
 
-1. **§5 fork enumeration date** — line 201.
+1. **§5 fork enumeration date** — line 203.
    `<<< FILL: DATE OF SEND, YYYY-MM-DD >>>` → the date Chris submits the form. Same date as §1's
    re-check, so the enumeration and the date cannot disagree.
-2. **§6 affected-PR count** — line 272.
+2. **§6 rewrite-push date** — the amended §6.
+   `<<< FILL: DATE OF REWRITE PUSH, YYYY-MM-DD >>>` → the date of the force-push in DIG-1496 §7.
+   **Not** the send date: they are different events and the request now distinguishes them. If the
+   push and the send land on the same day, write the same date in both places, not one date used
+   loosely.
+3. **§6 PR refs that still hold the commit** — the amended §6.
+   `<<< FILL: THE PULL REQUEST REFERENCES THAT STILL HOLD 86cb1ec5d >>>` → the `refs/pull/N/head`
+   refs still resolving to `86cb1ec5d` after the push, as a list. If Support would rather read prose,
+   write them as one sentence; the ref names must all be there. **Do not** write "9 merged-PR refs"
+   with no names — the count is not the point, the names are what Support can dereference.
+4. **§6 affected-PR count** — line 285.
    `<<< FILL: NUMBER OF AFFECTED PULL REQUESTS >>>` → `3,389`
-3. **§6 First Changed Commit(s)** — line 273.
+5. **§6 First Changed Commit(s)** — line 286.
    `<<< FILL: FIRST CHANGED COMMIT >>>` → the three SHAs, as a list.
-4. **§6 LFS** — line 274.
+6. **§6 LFS** — line 287.
    `<<< FILL: "no LFS objects were involved", or paste the LFS note … >>>` → take the filter-repo
    output's own LFS line. If it printed none, the substitute text is exactly:
    `no LFS objects were involved`
-5. **Delete the drafting-note box** at the top of §6. It is fenced with `> **⚠ DRAFTING NOTE` and is
+7. **Delete the drafting-note box** at the top of §6. It is fenced with `> **⚠ DRAFTING NOTE` and is
    not part of the request. It is not deletable before t0, because it is what stops the request being
    sent early.
-6. **Apply the §6 amendment in §5 of this file**, once Chris approves it. See §5 below — this is the
-   one step that is *not* a mechanical substitution.
-7. **Placeholder table at the top of the file** (lines 22–23) — delete the whole
-   "Two placeholders" section. It is scaffolding for Counsel, and it is above the `BEGIN REQUEST
+8. **Placeholder table at the top of the file** (lines 18–25) — delete the whole
+   "Four placeholders" section. It is scaffolding for Counsel, and it is above the `BEGIN REQUEST
    BODY` fence. Leaving it in would put a drafting note in front of the form.
+
+**The §6 amendment is already applied** (Chris approved it 2026-10-06T21:08Z). There is no step 9.
 
 **Then grep, and expect zero hits:**
 
@@ -131,12 +141,16 @@ Log which branch was taken on DIG-1484 either way.
 
 ---
 
-## 5. §6 amendment — required before sending, pending Chris's approval
+## 5. §6 amendment — **APPROVED by Chris 2026-10-06T21:08Z, APPLIED**
 
-**DRAFT. Not applied to the request.** DIG-1497 was human-approved on 2026-10-06. Section 6 is
-approved text, so Counsel cannot change it alone.
+**Status: applied to the request.** Confirmation `5685258b` was accepted at 2026-10-06T21:08Z. The
+amendment below is now in `github-private-information-request.md`. It adds two further placeholders
+and removes one false sentence. The rest of §6 is unchanged, as approved.
 
-### Why the amendment is necessary
+DIG-1497 was human-approved on 2026-10-06 at an earlier hour; this amendment is a separate,
+later approval of one section only. Nothing else in the approved text changed.
+
+### Why the amendment was necessary
 
 DIG-1496 §6, posted 19:41Z — after the approval — establishes that **our push alone will not produce
 the 404**:
@@ -164,9 +178,9 @@ narrow claim, which is true and sufficient.
 **Confidence LIKELY that the amended wording is accurate at t0**, conditional on DevOps' §6 finding
 holding. It becomes CONFIRMED on the t0 range request, which will show 206 either way.
 
-### Draft replacement for the opening of §6
+### Draft replacement for the opening of §6 — **as applied**
 
-Replace:
+Replaced:
 
 > We did not wait for this request to start on our side. The parent repository has been rewritten and
 > the file removed from all reachable history.
@@ -213,13 +227,17 @@ DIG-1496, 2026-10-06.**
 
 ## 6. Out of scope, closed
 
-- **Cloudflare.** Per the Security cross-check on this issue (2026-10-06T21:02Z): the ~83
-  payload-carrying images sit in Cloudflare's account-integrated registry, ref shape
+- **Cloudflare.** Per the Security cross-check on this issue (2026-10-06T21:02Z, corrected
+  21:31Z): the payload-carrying images sit in Cloudflare's account-integrated registry, ref shape
   `registry.cloudflare.com/<ACCOUNT_ID>/<IMAGE>:<TAG>`, with no public pull URL and no public exposure
   path. **No registry takedown is required and none is requested here.** Registry access was never a
-  disclosure vector. Deleting the old stack images is housekeeping for DIG-1611 and needs Chris's
-  account access. `shared-v16` was a Durable Object id, not a registry tag, and has no bearing on any
-  placeholder.
+  disclosure vector. **Correction on the record: the count is 2 images, not ~83, and both are
+  deleted** (digests `sha256:e5cf82fc…` and `sha256:7b160edc…`). Only
+  `Dockerfile.digithings-stack-cloudflare` copies the seed directory, so the other four registries
+  cannot contain the payload. Deleting images is housekeeping for DIG-1611 and needs Chris's account
+  access — it is not remediation of a disclosure. One residual unknown: whether Cloudflare retains a
+  build cache of the seeded layer is not observable through any API or CLI surface Security has.
+  `shared-v16` was a Durable Object id, not a registry tag, and has no bearing on any placeholder.
 - **The two fork owners.** Not contacted, by Chris's decision of 2026-10-06. Section 5 already
   discloses that truthfully. Do not add anything to section 5 about contacting them.
 - **DMCA.** Not claimed. It asserts copyright over third-party forks.
@@ -233,8 +251,9 @@ DIG-1496, 2026-10-06.**
 **Counsel does not send.** No agent in this company can: the Gmail connection is read-and-draft only,
 and the GitHub MCP has no abuse or takedown tool. The text goes to Chris at
 https://support.github.com/contact/private-information, plain text in the body of the form, no
-attachment. Chris's approval covers the text, not the sending, and the approval of 2026-10-06 predates
-the §6 amendment in §5 above.
+attachment. **Chris's approval of 2026-10-06 covers the text only, never the sending**, and it is now
+two approvals: the body (2026-10-06) and the §6 amendment (2026-10-06T21:08Z). Either way the
+sending is Chris's, and no approval of text is an approval to send it.
 
 **Prediction, unchanged: LIKELY (refusal).** The file holds no credentials, so GitHub's own trigger —
 that the risk cannot be mitigated by rotating them — is not literally met. The §6 amendment does not

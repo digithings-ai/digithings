@@ -53,8 +53,10 @@ fork-owner response to wait for. The fork notices are withdrawn. Nothing in this
    on the server to expunge the sensitive data from storage. Remove cached views."* Filing before the
    rewrite would ask GitHub to act on a repository we have not cleaned ourselves, and wastes the one
    request we are entitled to make carefully.
-2. **Both placeholders are filled** — the affected-PR count and the First Changed Commit, read from
-   the `git filter-repo` output per GitHub's own instructions.
+2. **All four placeholders are filled** — the affected-PR count, the First Changed Commit, the
+   rewrite-push date, and the list of pull request refs that still hold `86cb1ec5d`, read from the
+   `git filter-repo` output and the rewritten clone per GitHub's own instructions. The last two were
+   added by the section 6 amendment Chris approved on 2026-10-06 at 21:08Z.
 3. **The fork count is re-run on the day of sending**, and the date and count in the request match it.
    *"If at the time that you submitted your notice, you identified all existing forks of that
    repository, we would process a valid claim against all forks in that network at the time we process
