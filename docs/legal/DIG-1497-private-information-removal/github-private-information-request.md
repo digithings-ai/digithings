@@ -15,12 +15,14 @@ attachment may result in processing delays."*
 
 ---
 
-## Two placeholders — the request cannot be sent with these in it
+## Four placeholders — the request cannot be sent with these in it
 
 | Placeholder | Fill from |
 | --- | --- |
 | `<<< FILL: NUMBER OF AFFECTED PULL REQUESTS >>>` | `grep -c '^refs/pull/.*/head$' .git/filter-repo/changed-refs` in the rewritten clone |
 | `<<< FILL: FIRST CHANGED COMMIT >>>` | the `NOTE: First Changed Commit(s):` line `git-filter-repo` printed, per their [removing sensitive data](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository) guidance |
+| `<<< FILL: DATE OF REWRITE PUSH, YYYY-MM-DD >>>` | the date of the force-push in DIG-1496 §7 — added by the section 6 amendment Chris approved on 2026-10-06 |
+| `<<< FILL: THE PULL REQUEST REFERENCES THAT STILL HOLD 86cb1ec5d >>>` | the `refs/pull/*` refs still resolving to `86cb1ec5d` after the push, from DIG-1496 — requested 2026-10-06 |
 
 Also re-run the fork count on the day of sending and update the date and the list if it moved:
 `gh api repos/digithings-ai/digithings --jq .forks_count` → expect `2`.
@@ -260,12 +262,23 @@ source project. They have done nothing wrong and hold nothing.
 > tense, and section 8's request for garbage collection cannot be made yet, because your
 > documentation is explicit that garbage collection follows a reporter's own refs being clean.
 
-We did not wait for this request to start on our side. The parent repository has been rewritten and
-the file removed from all reachable history.
+We did not wait for this request to start on our side. On
+**<<< FILL: DATE OF REWRITE PUSH, YYYY-MM-DD >>>** we rewrote the parent repository's history and
+force-pushed our own references.
 
 - History rewritten with `git-filter-repo` using `--sensitive-data-removal`, so the rewrite is
   recorded in the way your documentation requires.
 - Pushed with force to `digithings-ai/digithings`.
+- **Every reference we control is clean.** No branch, tag, or backup reference in
+  `digithings-ai/digithings` reaches `86cb1ec5d` any more.
+
+I want to be precise about the edge of that statement, because your documentation turns on it. **The
+old commit is still reachable through pull request references that your platform owns and that we
+cannot modify.** `refs/pull/*` is read-only to us, so our mirror push could not reach them. I checked
+this rather than assuming it: a one-byte range request against the pinned commit returns **206, not
+404**. The file is still retrievable, and I am not claiming otherwise.
+
+<<< FILL: THE PULL REQUEST REFERENCES THAT STILL HOLD 86cb1ec5d >>>
 
 Values for the fields your documentation asks for:
 

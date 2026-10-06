@@ -134,18 +134,25 @@ see [trigger-note.md](./trigger-note.md).
 
 ---
 
-## The two values that do not exist yet
+## The values that do not exist yet
 
-The GitHub request contains two placeholders. They cannot be filled by Counsel — they are produced
+The GitHub request contains four placeholders. None can be filled by Counsel — all four are produced
 by the rewrite, which has not run.
 
 | Placeholder | Where it comes from |
 | --- | --- |
 | `<<< FILL: NUMBER OF AFFECTED PULL REQUESTS >>>` | `grep -c '^refs/pull/.*/head$' .git/filter-repo/changed-refs` in the rewritten clone |
 | `<<< FILL: FIRST CHANGED COMMIT >>>` | the `NOTE: First Changed Commit(s):` line that `git-filter-repo` prints on completion |
+| `<<< FILL: DATE OF REWRITE PUSH, YYYY-MM-DD >>>` | the date of the force-push in DIG-1496 §7 — added by the section 6 amendment |
+| `<<< FILL: THE PULL REQUEST REFERENCES THAT STILL HOLD 86cb1ec5d >>>` | the `refs/pull/*` refs still resolving to `86cb1ec5d` after the push — added by the section 6 amendment |
 
-DIG-1496 is assigned to DevOps and is currently `todo`. Until it is `done`, those two strings stay
-as they are. **A request with a placeholder still in it must not be sent.**
+The last two were added by the section 6 amendment Chris approved on 2026-10-06 at 21:08Z. The
+amendment removed one sentence that would have been false at send time — *"the file removed from all
+reachable history"* — and replaced it with the narrower, accurate claim plus the evidence for it.
+See [t0-preflight.md](./t0-preflight.md) §5.
+
+DIG-1496 is assigned to DevOps and is currently `blocked`. Until it is `done`, those four strings
+stay as they are. **A request with a placeholder still in it must not be sent.**
 
 ---
 
@@ -156,16 +163,25 @@ Run through this immediately before any send. It takes about two minutes.
 **For the GitHub request:**
 
 - [ ] DIG-1496 is `done`, and the rewrite has been pushed to `digithings-ai/digithings`.
-- [ ] Both placeholders in `github-private-information-request.md` are replaced with real values.
+- [ ] All four placeholders in `github-private-information-request.md` are replaced with real values.
+      `grep -n 'FILL' github-private-information-request.md` returns nothing.
 - [ ] `git filter-repo --version` in the rewritten clone is **2.47 or later**. Below that,
       `--sensitive-data-removal` does not exist and the rewrite is not the rewrite GitHub documents.
 - [ ] If the filter-repo output shows a note about LFS objects, that note is included in the request.
+- [ ] Section 6's list of the pull request refs that still hold `86cb1ec5d` is filled with **ref
+      names**, not with the count alone. Support can dereference a named ref; it cannot dereference
+      "9 merged-PR refs".
+- [ ] A one-byte range request against `86cb1ec5d` still returns **206**. If it returns **404**, stop:
+      do not send this text. See [t0-preflight.md](./t0-preflight.md) §4 for the short alternative
+      confirmation notice that branch needs.
 - [ ] Fork count re-run **on the day of sending**, and the date and count in the request match it:
       `gh api repos/digithings-ai/digithings --jq .forks_count` → expect `2`.
 - [ ] The paginated fork list re-run the same day and still returns exactly `itsnjstyle27` and
       `webclinic017`. If a third fork has appeared, the enumeration must be updated before sending.
       Enumerate-at-notice-time is the only mechanism that reaches a fork.
 - [ ] The drafting-note box at the top of section 6 is deleted — it is not part of the request.
+- [ ] The "Four placeholders" table at the top of the request file is deleted. It sits above
+      `BEGIN REQUEST BODY`, so leaving it puts a drafting note in front of the form.
 - [ ] Nothing in the request claims we contacted a fork owner. Section 5 must read as written: no
       contact was made, no channel existed, and there was nothing for an owner to do. No placeholder
       survives in section 5.
