@@ -44,6 +44,7 @@ from digiquant.strategies.sdca.weight_search import (
     search_oscillator_periods_by_backtest,
     search_oscillator_periods_by_cycle_overlap,
 )
+from pydantic import ValidationError as PydanticValidationError
 
 pytestmark = pytest.mark.unit
 
@@ -77,16 +78,38 @@ _SHAPE = SdcaCurveShape(
 )
 
 
-def _is_days(dates: list[date]) -> set[date]:
-    """Every date the walk-forward folds score as in-sample."""
+def _oos_window_starts(dates: list[date]) -> set[date]:
+    """First date of every fold's out-of-sample window.
+
+    Identify a window by its *start* rather than its membership: walk-forward
+    IS windows are expanding, so a later fold's IS window covers earlier folds'
+    OOS days and no date-partition can tell the two apart.
+    """
     folds, _holdout = make_walk_forward_folds(dates)
-    return {d for f in folds for d in dates if f.is_start <= d <= f.is_end}
+    return {f.oos_start for f in folds}
 
 
-def _z_by_window(dates: list[date], in_sample: float, out_of_sample: float) -> list[float]:
-    """z series that is ``in_sample`` inside IS folds and ``out_of_sample`` outside."""
-    inside = _is_days(dates)
-    return [in_sample if d in inside else out_of_sample for d in dates]
+def _is_better_only_evaluator(oos_starts: set[date]):
+    """Evaluator whose sign depends on *which* fold window it is scoring."""
+
+    def evaluator(
+        window_dates: list[date],
+        window_prices: list[float],
+        model: RiskModel,
+        shape: SdcaCurveShape,
+        valuation_weight: float,
+        extra_indicators: object = None,
+    ) -> SdcaTrialMetrics:
+        mean_z = _mean_z(extra_indicators)
+        is_out_of_sample = window_dates[0] in oos_starts
+        return SdcaTrialMetrics(
+            vs_flat_dca_pct=-mean_z if is_out_of_sample else mean_z,
+            vs_lump_pct=-1.0,
+            capital_deployed_pct=40.0,
+            max_drawdown_pct=12.0,
+        )
+
+    return evaluator
 
 
 def _mean_z(extra_indicators: object, name: str = _SEARCHED) -> float:
@@ -144,10 +167,7 @@ def _cycle_z(dates: list[date], *, aligned: bool) -> list[float]:
     peaks = {d for d in dates if dates[60] <= d <= dates[69] or dates[100] <= d <= dates[119]}
     if not aligned:
         troughs, peaks = peaks, troughs
-    return [
-        3.0 if d in troughs else (-3.0 if d in peaks else 0.0)
-        for d in dates
-    ]
+    return [3.0 if d in troughs else (-3.0 if d in peaks else 0.0) for d in dates]
 
 
 class TestSearchOscillatorPeriodsByBacktest:
@@ -182,10 +202,9 @@ class TestSearchOscillatorPeriodsByBacktest:
         """IS-only ranking: a candidate that wins OOS must not win overall."""
         dates = _dates()
         prices = [100.0 + 0.2 * i for i in range(len(dates))]
-        series = {
-            7: _z_by_window(dates, in_sample=2.0, out_of_sample=-2.0),
-            21: _z_by_window(dates, in_sample=-2.0, out_of_sample=2.0),
-        }
+        # Two flat candidates. This evaluator inverts the score on OOS windows,
+        # so OOS prefers whichever one IS rejects.
+        series = {7: [2.0] * len(dates), 21: [-2.0] * len(dates)}
 
         def compute(params: Mapping[str, int]) -> Sequence[float | None]:
             return series[params["length"]]
@@ -199,7 +218,7 @@ class TestSearchOscillatorPeriodsByBacktest:
             base_extra_z={},
             base_weights=SdcaCompositeWeights(),
             rails_fitter=_fitter,
-            evaluator=_z_mean_evaluator,
+            evaluator=_is_better_only_evaluator(_oos_window_starts(dates)),
             shape=_SHAPE,
         )
         assert result.best.params == {"length": 7}
@@ -573,6 +592,68 @@ class TestUnknownIndicatorNameIsRejected:
             search_oscillator_periods_by_backtest(**kwargs)  # type: ignore[arg-type]
         assert "valuation" in str(excinfo.value)
 
+    def test_cycle_overlap_rejects_the_dedicated_valuation_field_only_via_kwargs(
+        self,
+    ) -> None:
+        """``valuation`` stays a legal cycle-overlap target -- it is the special case.
+
+        Guards against the guard being written too wide: the cycle-overlap search
+        *does* accept ``"valuation"`` (weights become ``SdcaCompositeWeights()``
+        and the candidate z replaces ``base_valuation_z``), so a blanket
+        ``_require_extra_name`` call there would reject the one name the function
+        was written to handle.
+        """
+        dates = _dates()
+        long_windows, medium_windows = _windows(dates)
+        result = search_oscillator_periods_by_cycle_overlap(
+            dates,
+            indicator_name="valuation",
+            param_candidates=[{"length": 21}],
+            compute_indicator_z=lambda p: _cycle_z(dates, aligned=True),
+            base_valuation_z=[0.0] * len(dates),
+            base_extra_z={},
+            long_windows=long_windows,
+            medium_windows=medium_windows,
+        )
+        assert result.best.params == {"length": 21}
+
+    def test_cycle_overlap_rejects_an_unknown_name_before_building_weights(self) -> None:
+        """The guard, not ``_at_least_one_positive``, must be what stops this.
+
+        With the guard removed, the bogus solo weight is dropped by pydantic,
+        the weight total hits 0.0 and ``_at_least_one_positive`` raises --
+        but only once ``compute_indicator_z`` has already been called, and
+        with a message that never mentions the offending name. Counting the
+        calls pins the guard's position.
+        """
+        dates = _dates()
+        long_windows, medium_windows = _windows(dates)
+        built: list[int] = []
+
+        def compute(params: Mapping[str, int]) -> Sequence[float | None]:
+            built.append(params["length"])
+            return [0.0] * len(dates)
+
+        with pytest.raises(ValueError) as excinfo:
+            search_oscillator_periods_by_cycle_overlap(
+                dates,
+                indicator_name="weekly_rsi_typo",
+                param_candidates=[{"length": 14}],
+                compute_indicator_z=compute,
+                base_valuation_z=[0.0] * len(dates),
+                base_extra_z={},
+                long_windows=long_windows,
+                medium_windows=medium_windows,
+            )
+        message = str(excinfo.value)
+        assert "unknown indicator name" in message
+        assert "weekly_rsi_typo" in message
+        # Pydantic's ValidationError subclasses ValueError, so matching the
+        # exception type alone would also accept the accidental trip -- and it
+        # embeds the input dict, so the offending name appears either way.
+        assert not isinstance(excinfo.value, PydanticValidationError)
+        assert built == [], "guard must reject before any candidate z is built"
+
     def test_cycle_overlap_rejects_an_unknown_name(self) -> None:
         dates = _dates()
         long_windows, medium_windows = _windows(dates)
@@ -654,6 +735,85 @@ class TestPurityAndNonMutation:
             probe_weight=1.0,
         )
         assert base_weights.model_dump() == before
+
+
+def test_cycle_overlap_ranks_on_the_combined_objective_not_one_horizon() -> None:
+    """The winner must come from the dual-timeframe blend, not a single leg.
+
+    Real scoring, no stubbing of the objective. Three candidates with opposed
+    horizons: 7 owns the long leg, 21 owns the medium leg, and 14 is partial on
+    both. Ranking on either leg alone puts 7 or 21 first; only the blend ranks
+    14 first, so a single-leg ranking cannot pass this.
+    """
+    import digiquant.strategies.sdca.weight_search as ws
+
+    dates = _dates()
+    long_windows, medium_windows = _windows(dates)
+
+    # z=+3 -> risk 0 (cheap, so good in a trough); z=-3 -> risk 100 (rich, so
+    # good in a peak). A fraction of 1.0 prices a whole window the aligned way;
+    # 0.0 leaves it untouched at z=0 -> risk 50.
+    long_trough, long_peak = dates[0:20], dates[100:120]
+    medium_trough, medium_peak = dates[40:50], dates[60:70]
+    fractions = {7: (1.0, 0.0), 21: (0.0, 1.0), 14: (0.6, 0.6)}
+
+    def compute(params: Mapping[str, int]) -> Sequence[float | None]:
+        long_share, medium_share = fractions[params["length"]]
+        # (window, share, trough?) -- troughs want high z, peaks want low z.
+        priced: list[tuple[set[date], bool]] = []
+        for window, share, is_trough in (
+            (set(long_trough), long_share, True),
+            (set(long_peak), long_share, False),
+            (set(medium_trough), medium_share, True),
+            (set(medium_peak), medium_share, False),
+        ):
+            if share:
+                cut = round(share * len(window))
+                priced.append((set(sorted(window)[:cut]), is_trough))
+        return [
+            next(
+                (3.0 if is_trough else -3.0 for days, is_trough in priced if day in days),
+                0.0,
+            )
+            for day in dates
+        ]
+
+    original = ws.combined_cycle_overlap_score
+    calls: list[tuple[float, float]] = []
+
+    def recording(dates_, risk, long_windows_, medium_windows_, **kwargs):  # type: ignore[no-untyped-def]
+        calls.append(
+            (float(kwargs.get("long_weight", 3.0)), float(kwargs.get("medium_weight", 1.0)))
+        )
+        return original(dates_, risk, long_windows_, medium_windows_, **kwargs)
+
+    ws.combined_cycle_overlap_score = recording  # type: ignore[assignment]
+    try:
+        result = search_oscillator_periods_by_cycle_overlap(
+            dates,
+            indicator_name=_SEARCHED,
+            param_candidates=[{"length": 7}, {"length": 21}, {"length": 14}],
+            compute_indicator_z=compute,
+            base_valuation_z=[0.0] * len(dates),
+            base_extra_z={},
+            long_windows=long_windows,
+            medium_windows=medium_windows,
+            long_weight=1.0,
+            medium_weight=1.0,
+        )
+    finally:
+        ws.combined_cycle_overlap_score = original  # type: ignore[assignment]
+
+    assert calls == [(1.0, 1.0)] * 3, "weights must reach the scorer once per candidate"
+    by_length = {s.params["length"]: s for s in result.all_scores}
+    # Neither horizon alone likes the same candidate: 7 owns the long leg,
+    # 21 owns the medium leg, 14 is middling on both.
+    assert by_length[7].score.long.objective > by_length[21].score.long.objective
+    assert by_length[21].score.medium.objective > by_length[7].score.medium.objective
+    assert by_length[7].score.long.objective > by_length[14].score.long.objective
+    assert by_length[21].score.medium.objective > by_length[14].score.medium.objective
+    # The equal-weight blend picks 14, which neither single leg ranks first.
+    assert result.best.params == {"length": 14}
 
 
 def test_deferred_power_law_rename_is_not_ported() -> None:
