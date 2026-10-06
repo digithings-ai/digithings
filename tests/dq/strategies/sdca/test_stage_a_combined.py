@@ -219,7 +219,8 @@ class TestDevelopApiUnchanged:
 class TestCombinedCycleOverlapScore:
     def test_combined_score_matches_manual_weighted_sum(self) -> None:
         start = date(2020, 1, 1)
-        dates = _dates(90, start)
+        # 120 days: ``_long_medium_windows`` puts the long peak at dates[100:120].
+        dates = _dates(120, start)
         long_windows, medium_windows = _long_medium_windows(dates)
         risk = [10.0 if d <= date(2020, 1, 20) else 90.0 for d in dates]
         combined = combined_cycle_overlap_score(
@@ -244,7 +245,7 @@ class TestCombinedCycleOverlapScore:
         always has a winner to find.
         """
         start = date(2020, 1, 1)
-        dates = _dates(90, start)
+        dates = _dates(120, start)
         long_windows, medium_windows = _long_medium_windows(dates)
         # Scores beautifully on medium, is flat on long.
         medium_only = [10.0 if dates[40] <= d <= dates[49] else 90.0 for d in dates]
@@ -259,7 +260,7 @@ class TestCombinedCycleOverlapScore:
 
     def test_band_thresholds_reach_both_timeframes(self) -> None:
         start = date(2020, 1, 1)
-        dates = _dates(90, start)
+        dates = _dates(120, start)
         long_windows, medium_windows = _long_medium_windows(dates)
         # Trough risk 40 and peak risk 70: outside the default 35/80 bands.
         risk = [40.0 if d <= dates[19] else 70.0 for d in dates]
@@ -296,9 +297,24 @@ class TestCombinedCycleOverlapScore:
     def test_unscorable_timeframe_raises_rather_than_scoring_zero(self) -> None:
         """A window set that misses the sample is an error, not a silent 0."""
         dates = _dates(90, date(2020, 1, 1))
-        long_windows, medium_windows = _long_medium_windows(dates)
+        # One window lands in the sample, its partner never does — so that
+        # timeframe has a trough bucket but an empty peak bucket.
+        half_missing = SdcaCycleWindows(
+            windows=(
+                CycleWindow(name="t", kind=CycleKind.TROUGH, start=dates[0], end=dates[19]),
+                CycleWindow(
+                    name="p", kind=CycleKind.PEAK, start=date(2021, 1, 1), end=date(2021, 2, 1)
+                ),
+            )
+        )
+        in_sample = SdcaCycleWindows(
+            windows=(
+                CycleWindow(name="t2", kind=CycleKind.TROUGH, start=dates[40], end=dates[49]),
+                CycleWindow(name="p2", kind=CycleKind.PEAK, start=dates[60], end=dates[69]),
+            )
+        )
         with pytest.raises(ValueError, match="do not overlap"):
-            combined_cycle_overlap_score(dates, [50.0] * len(dates), long_windows, medium_windows)
+            combined_cycle_overlap_score(dates, [50.0] * len(dates), half_missing, in_sample)
 
 
 class TestOptimizeStageAWeightsCombined:
@@ -433,6 +449,7 @@ class TestOptimizeStageAWeightsCombined:
         zeros = [0.0] * len(dates)
         grid = (0.0, 0.25, 0.5, 1.0)
         kwargs = dict(
+            dates=dates,
             valuation_z=valuation_z,
             extra_z={"weekly_rsi": zeros, "sma_band": zeros},
             long_windows=windows,
@@ -446,6 +463,7 @@ class TestOptimizeStageAWeightsCombined:
         assert zero_floor == none_floor
 
     def test_a_floor_above_the_grid_adds_its_own_candidate(self) -> None:
+        """A floor outside the grid still has to be reachable."""
         dates = _dates(90, date(2020, 1, 1))
         windows = SdcaCycleWindows(
             windows=(
@@ -455,7 +473,14 @@ class TestOptimizeStageAWeightsCombined:
         )
         valuation_z = [3.0 if d <= dates[24] else -3.0 for d in dates]
         zeros = [0.0] * len(dates)
-        # A floor above every grid value still has to be reachable.
+
+        # 0.4 is in no grid value, so _floor_candidates has to add it — and it
+        # leads the tuple, so a tie falls to the allocation the caller asked for.
+        assert stage_a_module._floor_candidates((0.0, 0.1), 0.4) == (0.4, 0.1)
+        assert stage_a_module._floor_candidates((0.0, 0.1), 0.1) == (0.1,)
+        assert stage_a_module._floor_candidates((0.0, 0.1), None) == (0.0, 0.1)
+
+        # 0.0 leaves the grid entirely, so the extra is enabled either way.
         result = optimize_stage_a_weights_combined(
             dates,
             valuation_z=valuation_z,
@@ -467,7 +492,9 @@ class TestOptimizeStageAWeightsCombined:
             valuation_grid=(1.0,),
             min_weight_floor=0.4,
         )
-        assert result.weights.weekly_rsi == pytest.approx(0.4)
+        # A flat extra only dilutes, so 0.1 legitimately outscores 0.4 here —
+        # what the floor guarantees is that neither of them is zero.
+        assert result.weights.weekly_rsi in (0.1, 0.4)
         assert 0.0 not in result.weights.enabled_extras().values()
 
     def test_a_negative_floor_cannot_produce_a_negative_weight(self) -> None:
@@ -553,6 +580,7 @@ class TestOptimizeStageAWeightsCombinedMultiRatio:
         weekly_rsi = [-3.0 if d <= dates[24] else 3.0 for d in dates]
         ratios = ((2.0, 1.0), (3.0, 1.0), (5.0, 1.0))
         kwargs = dict(
+            dates=dates,
             valuation_z=valuation_z,
             extra_z={"weekly_rsi": weekly_rsi},
             long_windows=windows,
@@ -586,6 +614,7 @@ class TestOptimizeStageAWeightsCombinedMultiRatio:
         valuation_z = [3.0 if d <= dates[24] else -3.0 for d in dates]
         zeros = [0.0] * len(dates)
         kwargs = dict(
+            dates=dates,
             valuation_z=valuation_z,
             extra_z={"weekly_rsi": zeros, "sma_band": zeros},
             long_windows=windows,
@@ -661,6 +690,7 @@ class TestOptimizeStageAWeightsCombinedMultiRatio:
             )
         )
         kwargs = dict(
+            dates=dates,
             valuation_z=[0.0] * len(dates),
             extra_z={},
             long_windows=windows,
