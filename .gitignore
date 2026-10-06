@@ -71,9 +71,10 @@ docker-compose.override.yml
 # Confidential: Counsel's client data and data protection policy (never share).
 # Not source code, and not ours to extend this repository's MIT licence over —
 # Counsel version-controls it as a Paperclip issue document on DIG-1502 instead.
-# Anchored to repo root for the same reason as /projects/* above: unanchored would
-# also capture docs/knowledge/ and any nested checkout's copy. The whole directory
-# is ignored, not an allowlist of files, so what Counsel adds later is covered too.
+# Anchored to repo root for the same reason as /projects/* above: an unanchored
+# rule would also match docs/knowledge/, which scripts/seed_knowledge_vault.py
+# uses as a real vault directory. The whole directory is ignored, not an allowlist
+# of files, so what Counsel adds later is covered too.
 # dt-snapshot's capture step (`git add -A`) honours this, which is what keeps the
 # policy out of the backup refs it pushes to the public github remote.
 # Pinned by tests/scripts/test_gitignore_knowledge_policy.py — DIG-1522.

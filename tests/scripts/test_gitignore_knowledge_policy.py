@@ -20,8 +20,10 @@ check the leading slash directly, so a later "just match the name" edit is caugh
 here rather than in a published ref.
 
 These assertions run the real `git check-ignore`, so the pin fails if the rule is
-deleted, narrowed, unanchored, or shadowed by a nearer `.gitignore` — not only if
-the text is edited.
+deleted, narrowed, unanchored, or replaced by a rule somewhere else — not only if
+the text is edited. Git never descends into an excluded directory, so a
+`.gitignore` inside `knowledge/` could not shadow the rule even if one existed;
+what the last test guards is the rule being *moved* out of the repo root.
 
 DIG-1522.
 """
@@ -75,6 +77,10 @@ def _check_ignore(paths: tuple[str, ...]) -> dict[str, str]:
     negation, so `!/projects/README.md` comes back as a "hit" for a path that is
     in fact committable. Skipping negated patterns is what keeps the
     `projects/README.md` probe below meaningful.
+
+    Splitting the leading fields assumes no `.gitignore` rule in this repo
+    contains a colon; none does, and a colon would only ever make the parse
+    ambiguous, never make a committed file look committable by accident here.
     """
     out = subprocess.run(
         ["git", "check-ignore", "-v", "--no-index", *paths],
@@ -102,6 +108,28 @@ def test_the_knowledge_tree_is_ignored() -> None:
     assert not missed, f"not ignored by any rule: {missed}\nresolved: {hits}"
 
 
+def test_nothing_under_knowledge_is_tracked() -> None:
+    """Close the one escape the `--no-index` probes cannot see.
+
+    The probes above answer "would this path be ignored if it were untracked".
+    A path that has been committed is in HEAD, so every capture inherits it from
+    `git read-tree HEAD` with no rule consulted — the ignore rule stops
+    protecting the policy the moment that happens, and every other test here
+    would still pass. Nothing under `knowledge/` may be tracked.
+    """
+    tracked = subprocess.run(
+        ["git", "ls-files", "-z", "--", "knowledge/"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    ).stdout
+    assert not tracked, (
+        "tracked paths under knowledge/ are inherited by every snapshot from HEAD, "
+        f"ignore rule or not: {[p for p in tracked.split(chr(0)) if p]}"
+    )
+
+
 def test_no_tracked_source_is_shadowed() -> None:
     hits = _check_ignore(TRACKED)
     assert not hits, f"root rules now ignore tracked source: {hits}"
@@ -110,9 +138,9 @@ def test_no_tracked_source_is_shadowed() -> None:
 def test_the_rule_is_anchored_to_the_repo_root() -> None:
     """The leading slash is load-bearing, so assert it rather than trust it.
 
-    An unanchored rule would also swallow `docs/knowledge/` and any nested
-    checkout's copy — the same failure ADR-0006 records for an unanchored
-    `projects/` rule.
+    An unanchored rule would also swallow `docs/knowledge/`, the vault directory
+    `scripts/seed_knowledge_vault.py` writes to — the same failure ADR-0006
+    records for an unanchored `projects/` rule.
     """
     hits = _check_ignore(NOT_IGNORED_BY_NAME)
     assert not hits, f"the rule lost its root anchor and now matches by name: {hits}"
