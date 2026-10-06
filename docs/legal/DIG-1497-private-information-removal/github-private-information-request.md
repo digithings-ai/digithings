@@ -219,34 +219,35 @@ the immutable commit address in section 1. I mention this because it means a rev
 repositories today will not see the file, and I do not want that mistaken for the claim being stale.
 I can see it, and anyone holding the link can.
 
-**What I have already done regarding forks, per the "Ask Nicely First" guidance.** I did not come
-here first, and I want to record both the attempt and its limits.
+**What I have and have not done regarding the forks, per the "Ask Nicely First" guidance.** I am
+recording this in full, including the step I did not take, so that you can see it was considered
+rather than overlooked.
 
-I checked the three channels your policy names for reaching a user directly: their public profile
-page, the repository's README or Support file, and an issue on the repository. I found no contact
-address on either fork owner's profile, no address in either fork's README, and no `SUPPORT.md` in
-either fork. I could not reach either owner by email through any published address.
+**I did not write to either fork owner.** The reason is not that the step was skipped for
+convenience. There was no channel to do it through, and — as set out above — nothing for either of
+them to do if I had reached them.
 
-I did contact both owners. On **<<< FILL: DATE FORK REQUESTS SENT, YYYY-MM-DD >>>** I sent each of
-them a notice naming the file, the pinned commit, the fact that it contains customer personal data,
-and the live URL under their own fork. I told them plainly that their repository does not contain
-the file and that there was nothing in their history to remove, because that is what my own
-investigation showed. I explained that the fix belongs to us, that we are rewriting our own history,
-and that the link will stop working for everyone once we have done that. I told them that deleting
-the fork would make the link stop sooner but that it was entirely their decision and that I would not
-ask them to discard their work over our mistake. I confirmed the rest of the project is MIT-licensed
-and that they were free to keep using all of it, and I stated that no legal claim was being made and
-that no deadline applied.
+On the channel: I found no contact address on either fork owner's public profile, no address in
+either fork's README, and no `SUPPORT.md` in either fork. The only address either repository
+contains is one of our own, published in the `SECURITY.md` these forks inherited from us. That is a
+route from them to us, not from us to them, so it does not reach them. The one remaining channel
+your policy names is a public issue, and the `SECURITY.md` in question instructs readers not to open
+one.
 
-<<< FILL: OUTCOME OF THE FORK-OWNER REQUESTS — record what actually happened, e.g. "no response
-received as of <date>", or "itsnjstyle27 deleted the fork on <date>; webclinic017 did not respond",
-or "both forks still in place; neither owner responded" >>>
+On the substance: both forks were created before the commit that introduced the file, and that commit
+is absent from both forks' own object stores. Neither owner holds a copy. There is no file in their
+history to rewrite and nothing for them to delete, so a notice to them could not have asked them to
+do anything. Deleting their fork would not have removed this data from your storage either — that
+depends entirely on the garbage collection requested in section 6.
 
-I flag for completeness that if I was unable to reach either owner by email, I opened a public
-issue on each fork so that the notice could not be said to have been skipped.
+Your policy states of this step: *"A great first step before sending us a request to remove data is
+to try contacting the user directly… This is not strictly required, but it is appreciated."* I take
+the second half of that sentence at face value and file anyway.
 
-<<< FILL: IF TRUE — "I opened an issue on each fork on <date>. Both are unanswered." DELETE THIS
-PARAGRAPH IF NO ISSUE WAS OPENED. >>>
+I am filing against `digithings-ai/digithings`, the repository we own and in which this file was
+committed. **I am not asking you to take any action against either fork owner**, and I would ask you
+not to. They are two people whose only involvement is that GitHub lets them hold a copy of an open
+source project. They have done nothing wrong and hold nothing.
 
 ---
 

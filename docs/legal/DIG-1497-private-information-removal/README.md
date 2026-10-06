@@ -2,6 +2,19 @@
 
 **Status: DRAFT. Nothing in this folder has been sent. Counsel advises only; a human sends.**
 
+> ### Chris's decisions, 2026-10-06 — read these before reading anything else
+>
+> | Question | Decision |
+> | --- | --- |
+> | Reply address | **`contact@digithings.ai`** — confirmed |
+> | How to reach the two fork owners | **Do not contact them at all** |
+> | The corrected text | **Approved as written** |
+>
+> **Consequence: the two fork-owner notices in this folder are withdrawn and must not be sent.** They
+> are kept unchanged as the record Art. 33(1) section 6 asks for. The GitHub request discloses the
+> decision truthfully rather than claiming a contact that never happened. See *Decisions taken* below.
+
+
 Prepared by Counsel, 2026-10-06, for Chris. Companion to [DIG-1484](/DIG/issues/DIG-1484).
 
 Every fact in these drafts was re-derived from the live repository on 2026-10-06, not carried
@@ -57,8 +70,8 @@ values printed, working copy shredded.
 
 | File | What it is | Who sends it |
 | --- | --- | --- |
-| [fork-owner-request-itsnjstyle27.md](./fork-owner-request-itsnjstyle27.md) | Courtesy notice, fork owner 1 | Chris |
-| [fork-owner-request-webclinic017.md](./fork-owner-request-webclinic017.md) | Courtesy notice, fork owner 2 | Chris |
+| [fork-owner-request-itsnjstyle27.md](./fork-owner-request-itsnjstyle27.md) | **WITHDRAWN** — retained as a record, not to be sent | nobody |
+| [fork-owner-request-webclinic017.md](./fork-owner-request-webclinic017.md) | **WITHDRAWN** — retained as a record, not to be sent | nobody |
 | [github-private-information-request.md](./github-private-information-request.md) | GitHub Support private-information removal request | Chris |
 | [trigger-note.md](./trigger-note.md) | Standing instruction on when the GitHub request is filed | — |
 
@@ -99,11 +112,12 @@ network — including under both fork URLs, which then start returning 404 on th
 
 ## Send order
 
-**The two fork-owner notices can go out at any time, including today.** They do not depend on the
-rewrite, because they no longer claim anything about it. Send them first if Chris has an address —
-GitHub's policy treats contacting the user first as a real step, not a formality: *"Ask Nicely
-First. A great first step before sending us a request to remove data is to try contacting the user
-directly… This is not strictly required, but it is appreciated."*
+**The two fork-owner notices are withdrawn and are not sent.** Chris decided on 2026-10-06 not to
+contact either fork owner. Section 5 of the GitHub request says so plainly rather than claiming a
+contact that did not happen. See *Decisions taken* below.
+
+**The GitHub request is the only thing in this folder that goes anywhere**, and it waits for the
+rewrite.
 
 **The GitHub request waits for the rewrite.** Two hard reasons:
 
@@ -152,22 +166,19 @@ Run through this immediately before any send. It takes about two minutes.
       `webclinic017`. If a third fork has appeared, the enumeration must be updated before sending.
       Enumerate-at-notice-time is the only mechanism that reaches a fork.
 - [ ] The drafting-note box at the top of section 6 is deleted — it is not part of the request.
-- [ ] The conditional paragraph in section 5 about opening a public issue is either completed or
-      deleted. Sending it half-finished would claim a step that was not taken.
+- [ ] Nothing in the request claims we contacted a fork owner. Section 5 must read as written: no
+      contact was made, no channel existed, and there was nothing for an owner to do. No placeholder
+      survives in section 5.
 - [ ] The request is pasted as **plain text into the body of the web form**, not attached.
       Their form warns: *"Sending your request in an attachment may result in processing delays."*
 
-**For the fork-owner notices:**
-
-- [ ] Chris is sending the version that matches the actual state: Option A before the rewrite,
-      Option A-after once it is done.
-- [ ] Exactly one channel per owner. Not both.
+**There is no second checklist.** The fork-owner notices are withdrawn and are not sent.
 
 ---
 
-## The reply address — Counsel's recommendation, not a choice
+## The reply address — decided
 
-**Use `contact@digithings.ai`.** It is published at [digithings.ai](https://digithings.ai/) and is the
+**`contact@digithings.ai`.** Chris confirmed this on 2026-10-06. The investigation into the alternative is kept below, because the reasoning is the useful part. It is published at [digithings.ai](https://digithings.ai/) and is the
 only address on the site.
 
 The alternative was `dany.stefan@matador.ai`, from the `SECURITY.md` both forks inherited from us.
@@ -191,21 +202,41 @@ Switching later is a one-line change if Chris knows the mailbox is live.
 
 ---
 
-## The remaining decision for Chris
+## Decisions taken — Chris, 2026-10-06
 
-**How to reach each fork owner, since neither has a reachable address.** Verified 2026-10-06:
-no email on either GitHub profile, no contact address in either README, no `SUPPORT.md` in either fork.
-Both forks have issues enabled, and Ask Nicely First explicitly contemplates *"creating an issue or
-pull request in the repository"* — but our own `SECURITY.md`, which both forks carry, says *"Do not
-open a public GitHub issue."* That instruction is addressed to security reporters rather than to us,
-but it does cut against opening a public issue as the first move.
+| Question | Decision |
+| --- | --- |
+| Reply address | **`contact@digithings.ai`.** Confirmed. |
+| How to reach the two fork owners | **Do not contact them at all.** |
+| The corrected text | **Approved as written.** |
 
-Both files carry both variants. Counsel's preference is Option A if Chris holds any address from
-outside GitHub; otherwise Option B, once, with no deadline language.
+Counsel's reasoning on the second decision, so the record shows it was reasoned and not merely
+obeyed. **All of it cuts the same way: the decision is sound.**
 
-If no channel can be found at all, **record that fact.** It strengthens the GitHub request: it then
-shows the "ask nicely" step was genuinely taken and the reason it produced nothing was that no
-contact route existed — not that it was skipped.
+**Legally, it costs nothing.** GitHub's policy says of the contact-first step: *"This is not strictly
+required, but it is appreciated."* Declining it does not weaken eligibility, and nothing in the
+request depends on having contacted them.
+
+**Factually, there was nothing to ask.** Both forks predate the commit and neither contains the file
+in its own object store. Neither owner holds a copy. There is no file in their history to rewrite and
+nothing for them to delete, so a notice could not have requested any action — it would have been a
+courtesy, and a courtesy notice about our own mistake is a thing to be asked of a stranger, not a
+thing they are obliged to carry.
+
+**It removes a contradiction with our own published instruction.** The `SECURITY.md` both forks
+inherit says *"Do not open a public GitHub issue."* A public issue was the only remaining channel.
+Choosing not to write at all is the option that does not cut against our own file.
+
+**The cost, stated rather than hidden.** The request can no longer say *"we tried to reach them and
+were rebuffed."* It says *"we did not write to them, and here is why."* That is weaker rhetoric and it
+is the truth. A support agent reading it learns that we investigated carefully and declined to write
+— not that we were ignored. Counsel prefers the true version. Inventing the stronger one would be the
+easiest available way to get this request dismissed for bad faith, and it would put a false statement
+in front of a company we may have to deal with again.
+
+The withdrawn notices are retained, unaltered, in this folder. Art. 33(1) section 6 asks the register
+to show the difference between what was done and what was proposed; deleting them would erase the
+second half of that.
 
 ---
 

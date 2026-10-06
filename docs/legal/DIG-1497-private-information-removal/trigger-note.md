@@ -39,6 +39,9 @@ against them is withdrawn. It would have been both wrong and unfair.
 There is no countdown and no waiting period. **A response from a fork owner is neither a precondition
 nor a trigger**, in either direction. Their silence changes nothing about what GitHub is holding.
 
+**Chris decided on 2026-10-06 not to contact either fork owner at all**, so there will never be a
+fork-owner response to wait for. The fork notices are withdrawn. Nothing in this note revives them.
+
 ---
 
 ## Preconditions — all must hold before filing
