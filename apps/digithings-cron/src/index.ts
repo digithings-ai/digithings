@@ -6,7 +6,7 @@
  * scheduled() returns in seconds: waitUntil covers the POST and does not
  * await the container job.
  */
-import { dispatch, type DispatchResult } from "./dispatch";
+import { dispatch, type DispatchResult, UNDECLARED_INPUT } from "./dispatch";
 import type { Env } from "./env";
 import { shouldDispatchAtOpen } from "./et-open";
 import { jobsForCron, type Job } from "./jobs";
@@ -222,12 +222,24 @@ export default {
       if (!cron) {
         return Response.json({ error: "cron_required" }, { status: 400 });
       }
-      const result = await runJobsForCron(cron, Date.now(), env, ctx, {
-        force,
-        args,
-        awaitDispatch: true,
-        includeDisabled: true,
-      });
+      let result;
+      try {
+        result = await runJobsForCron(cron, Date.now(), env, ctx, {
+          force,
+          args,
+          awaitDispatch: true,
+          includeDisabled: true,
+        });
+      } catch (error) {
+        // The caller's own input is what GitHub refused, so it is a 400 and
+        // the message names the key. Every other failure keeps its old shape
+        // and still throws out of the route.
+        const detail = error instanceof Error ? error.message : String(error);
+        if (detail.startsWith(UNDECLARED_INPUT)) {
+          return Response.json({ error: UNDECLARED_INPUT, cron, detail }, { status: 400 });
+        }
+        throw error;
+      }
       return Response.json({ ok: true, cron, ...result }, { status: 200 });
     }
 

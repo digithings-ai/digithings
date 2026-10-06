@@ -137,6 +137,36 @@ describe("dispatch", () => {
     });
   });
 
+  it("prefers the undeclared refusal over the benign 422 check", async () => {
+    // GitHub does not send both phrases in one body. This pins the ordering
+    // anyway: an undeclared key is not benign, and swallowing it as a success
+    // would report a run that never started.
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            message:
+              'Workflow is already running. Unexpected inputs provided to workflow: ["buckett"]',
+          }),
+          { status: 422 },
+        ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const env: Env = { DRY_RUN: "0", GH_DISPATCH_TOKEN: "token" };
+    const job: Job = {
+      ...baseJob,
+      workflow: "market_context_ingest.yml",
+      inputs: { bucket: "intraday" },
+    };
+
+    const thrown: unknown = await dispatch(env, job, job.cron).catch((error: unknown) => error);
+
+    expect(thrown).toBeInstanceOf(Error);
+    expect((thrown as Error).message.startsWith("undeclared_workflow_input:")).toBe(true);
+    expect((thrown as Error).message).toContain("buckett");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("still names the refusal when the 422 body is not JSON", async () => {
     vi.stubGlobal(
       "fetch",

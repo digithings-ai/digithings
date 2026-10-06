@@ -51,6 +51,70 @@ function isRateLimited(status: number, body: string): boolean {
   );
 }
 
+/** Error prefix for a 422 that refuses a workflow input GitHub cannot see. */
+export const UNDECLARED_INPUT = "undeclared_workflow_input";
+
+/** Lower-cased fragment of GitHub's message for that 422. */
+const UNDECLARED_INPUT_MARKER = "unexpected inputs provided";
+
+/**
+ * Strings inside a GitHub error body that may carry the message.
+ * Only top-level string values are collected, never object field names: a
+ * field name is GitHub's own schema key, not a workflow input. A body that is
+ * not JSON is used as-is.
+ */
+function messageCandidates(body: string): string[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return [body];
+  }
+  if (typeof parsed === "string") return [parsed];
+  if (parsed === null || typeof parsed !== "object") return [body];
+  const strings = Object.values(parsed as Record<string, unknown>).filter(
+    (value): value is string => typeof value === "string",
+  );
+  return strings.length > 0 ? strings : [body];
+}
+
+/** Quoted tokens inside the first [...] group, as in ["bucket"]. */
+function bracketedKeys(message: string): string[] {
+  const group = /\[[^\]]*\]/.exec(message);
+  if (!group) return [];
+  return Array.from(group[0].matchAll(/["']([^"'\\]+)["']/g), (match) => match[1]);
+}
+
+/** `unexpected key(s) bucket, bucket2 relative to the expected inputs`. */
+function trailingKeys(message: string): string[] {
+  const match = /unexpected key\(s\)\s+(.+?)(?:,?\s+relative to\b|$)/is.exec(message);
+  if (!match) return [];
+  return match[1]
+    .split(",")
+    .map((key) => key.trim().replace(/^["']|["']$/g, ""))
+    .filter((key) => key.length > 0);
+}
+
+function keysFromMessage(message: string): string[] {
+  const bracketed = bracketedKeys(message);
+  return bracketed.length > 0 ? bracketed : trailingKeys(message);
+}
+
+/**
+ * Input keys GitHub refused, or null when this body is not that refusal and
+ * the caller must leave every other 422 alone. [] means recognised but nothing
+ * parseable, so the caller can still refuse loudly without naming a key it
+ * never actually read.
+ */
+function undeclaredInputKeys(body: string): string[] | null {
+  if (!body.toLowerCase().includes(UNDECLARED_INPUT_MARKER)) return null;
+  for (const message of messageCandidates(body)) {
+    const keys = keysFromMessage(message);
+    if (keys.length > 0) return keys;
+  }
+  return [];
+}
+
 function retryDelayMs(response: Response, attempt: number): number {
   const retryAfter = response.headers.get("Retry-After");
   if (retryAfter === null) return attempt * 1_000;
@@ -272,6 +336,11 @@ async function dispatchGithub(env: Env, job: Job, cron: string): Promise<Dispatc
     url = repositoryDispatchUrl(job.repo);
     body = { event_type: job.event_type, client_payload: {} };
   }
+  // Names what GitHub refused, so the refusal reads on its own.
+  const target =
+    job.kind === "repository_dispatch"
+      ? `repository_dispatch ${job.event_type} on ${job.repo}`
+      : `${job.workflow} on ref ${job.ref}`;
 
   if (dryRun) {
     logLine({
@@ -316,6 +385,26 @@ async function dispatchGithub(env: Env, job: Job, cron: string): Promise<Dispatc
         attempt,
       });
       return { ok: true, status, dry_run: false };
+    }
+
+    // Ahead of the benign and rate-limit checks on purpose. An undeclared input is
+    // a deterministic refusal: it is not benign and retrying cannot change it.
+    const undeclared = undeclaredInputKeys(text);
+    if (undeclared !== null) {
+      const named = undeclared.length > 0 ? `: ${undeclared.join(", ")}` : "";
+      logLine({
+        cron,
+        repo: job.repo,
+        job: job.id,
+        github_status: status,
+        dry_run: false,
+        note: UNDECLARED_INPUT,
+        undeclared_keys: undeclared,
+        error: text.slice(0, 500),
+      });
+      throw new Error(
+        `${UNDECLARED_INPUT}: job ${job.id}: ${target} does not declare the input key(s)${named}. GitHub refused the dispatch, so no run started.`,
+      );
     }
 
     if (status === 422 && isBenign422(text)) {
