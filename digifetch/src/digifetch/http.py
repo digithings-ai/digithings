@@ -49,11 +49,87 @@ MAX_REDIRECTS = 5
 
 _REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
 
+# Redirect statuses that rewrite a body-bearing method to GET. 303 always becomes
+# GET; 301/302 downgrade POST to GET (browser semantics, and httpx's own rule).
+# 307/308 are deliberately absent: RFC 9110 §15.4 requires them to preserve both
+# method and body, so a POST retry must stay a POST with its body intact.
+_METHOD_DOWNGRADE_STATUSES = frozenset({301, 302, 303})
+
+# Headers that may follow a redirect to another origin. This is an ALLOW-list, so
+# a credential header the seam has never heard of (Authorization, x-api-key, a
+# vendor's x-auth-token, …) is dropped by default rather than leaked — httpx only
+# strips Authorization, which is too narrow a net for a shared seam. Anything not
+# named here does not cross an origin boundary.
+#
+# `referer` is included deliberately: browsers send it cross-origin by default,
+# and the one consumer that sets it (digiquant's gloomberb) needs it past an
+# anti-hotlink hop. It can disclose the original path, which is a smaller risk
+# than breaking a live scraper — narrow it via a Referrer-Policy if that changes.
+_CROSS_ORIGIN_SAFE_HEADERS = frozenset(
+    {
+        "accept",
+        "accept-charset",
+        "accept-encoding",
+        "accept-language",
+        "cache-control",
+        "content-type",
+        "if-match",
+        "if-modified-since",
+        "if-none-match",
+        "if-unmodified-since",
+        "range",
+        "referer",
+        "user-agent",
+    }
+)
+
+# Body-only headers. A hop rewritten to GET carries no body, so these must not
+# survive the rewrite (httpx strips the same pair on a downgrade).
+_BODY_ONLY_HEADERS = frozenset({"content-length", "transfer-encoding"})
+
 
 def _url_origin(url: str) -> tuple[str, str, int | None]:
     """(scheme, host, port) identity used for same-origin redirect decisions."""
     parsed = urlparse(url)
     return (parsed.scheme.lower(), (parsed.hostname or "").lower(), parsed.port)
+
+
+def _redirect_method(status_code: int, method: str) -> str:
+    """The method to re-send on the next hop after *status_code*.
+
+    303 always becomes GET and 301/302 downgrade a body-bearing method to GET
+    (browser semantics, matching httpx's own rule). 307/308 keep *method*: RFC 9110
+    §15.4 requires them to preserve both method and body, so a POST re-sent after
+    a 307 must stay a POST with its body.
+    """
+    if status_code in _METHOD_DOWNGRADE_STATUSES and method not in ("GET", "HEAD"):
+        return "GET"
+    return method
+
+
+def _hop_headers(
+    headers: Mapping[str, str] | None,
+    *,
+    same_origin: bool,
+    method: str,
+) -> dict[str, str] | None:
+    """Per-call headers for one hop, with credentials dropped when off-origin.
+
+    Per-call headers are host-agnostic — the same reasoning that origin-scopes
+    per-call cookies applies to a bearer token or API key handed to the seam. On
+    a hop that leaves the original origin only :data:`_CROSS_ORIGIN_SAFE_HEADERS`
+    survive, so an unknown credential header cannot leak by default.
+    """
+    if not headers:
+        return None
+    hop = (
+        dict(headers)
+        if same_origin
+        else {k: v for k, v in headers.items() if k.lower() in _CROSS_ORIGIN_SAFE_HEADERS}
+    )
+    if method == "GET":
+        hop = {k: v for k, v in hop.items() if k.lower() not in _BODY_ONLY_HEADERS}
+    return hop or None
 
 
 class FetchResult(BaseModel):
@@ -129,10 +205,14 @@ class HttpFetcher:
     before a request is sent, and hops are capped at :data:`MAX_REDIRECTS`. Pass
     ``allowed_hosts`` for operator-trusted internal hosts.
 
-    **Redirect cookies.** Per-call ``cookies`` (the Playwright hand-off seam)
-    are host-agnostic, so they are forwarded only while the hop stays on the
-    original origin; a cross-origin redirect drops them instead of leaking a
-    session credential.
+    **Redirect credentials.** Per-call ``cookies`` (the Playwright hand-off
+    seam) and per-call ``headers`` are host-agnostic, so both are scoped to the
+    original origin: a cross-origin redirect hop drops them instead of carrying a
+    session cookie or an API key onto another host. Off-origin, only headers on
+    the :data:`_CROSS_ORIGIN_SAFE_HEADERS` allow-list survive — a credential
+    header the seam has never heard of is dropped by default, not leaked. Cookies
+    given to the constructor are gated the same way. Headers an injected
+    ``client=`` carries are the caller's own and are not touched.
     """
 
     def __init__(
@@ -151,7 +231,10 @@ class HttpFetcher:
         Args:
             timeout:   httpx timeout (float / ``httpx.Timeout`` / None to disable).
             headers:   Default headers sent on every request (e.g. a User-Agent).
-            cookies:   Default cookies (e.g. from :func:`cookies_from_playwright`).
+                        Baked into the client this fetcher builds, so they are the
+                        caller's to keep credential-free.
+            cookies:   Default cookies (e.g. from :func:`cookies_from_playwright`),
+                        applied per hop and origin-scoped like per-call cookies.
             max_bytes: Hard cap on a single download body; exceeding it raises
                        :class:`DownloadTooLargeError`.
             allowed_hosts: Operator-trusted hostnames (exact, case-insensitive)
@@ -179,16 +262,55 @@ class HttpFetcher:
         else:
             self._client = httpx.Client(
                 timeout=timeout,
-                headers=dict(headers) if headers else None,
-                cookies=dict(cookies) if cookies else None,
                 transport=transport,
                 follow_redirects=False,
             )
             self._owns_client = True
+        # Fetcher-level headers/cookies are applied per hop rather than baked
+        # into the client, so they pass through the same origin gate as per-call
+        # values. Two reasons: a client-jar cookie set without a domain is
+        # host-agnostic and httpx replays it to *every* host; and httpx rejects a
+        # ``None`` header value, so a client-level header cannot be withdrawn on
+        # a hop that has to drop it. An injected client keeps its own.
+        self._default_headers = dict(headers) if headers else {}
+        self._default_cookies = dict(cookies) if cookies else {}
 
     def _validate(self, url: str) -> None:
         """Refuse *url* unless it passes the SSRF guard (raises :class:`SsrfBlockedError`)."""
         validate_fetch_url(url, allowed_hosts=self._allowed_hosts)
+
+    def _hop_cookies(
+        self,
+        per_call: Mapping[str, str] | None,
+        *,
+        same_origin: bool,
+    ) -> dict[str, str] | None:
+        """Merged fetcher + per-call cookies for one hop, or ``None`` when off-origin.
+
+        Per-call cookies override the fetcher defaults. A hop that leaves the
+        original origin gets nothing at all, so no session credential follows a
+        redirect onto another host.
+        """
+        if not same_origin:
+            return None
+        merged = {**self._default_cookies, **dict(per_call or {})}
+        return merged or None
+
+    def _hop_headers(
+        self,
+        per_call: Mapping[str, str] | None,
+        *,
+        same_origin: bool,
+        method: str,
+    ) -> dict[str, str] | None:
+        """Merged fetcher + per-call headers for one hop, origin-gated.
+
+        Per-call headers override the fetcher defaults. Off-origin, only
+        :data:`_CROSS_ORIGIN_SAFE_HEADERS` survive, so a credential header the
+        seam has never heard of is dropped by default rather than leaked.
+        """
+        merged = {**self._default_headers, **dict(per_call or {})}
+        return _hop_headers(merged, same_origin=same_origin, method=method)
 
     def __enter__(self) -> HttpFetcher:
         return self
@@ -220,36 +342,41 @@ class HttpFetcher:
         fetcher defaults.
 
         Redirects are followed manually (bounded by :data:`MAX_REDIRECTS`) and
-        each hop is re-validated by the SSRF guard before it is requested.
-        Per-call ``cookies`` are forwarded **only to same-origin hops**; a hop
-        to another origin drops them (session cookies must not leak across
-        hosts). The client-level cookie jar, if any, follows httpx's own
-        domain-scoped rules.
+        each hop is re-validated by the SSRF guard before it is requested. Both
+        ``cookies`` and ``headers`` are forwarded **only to same-origin hops**
+        (see :data:`_CROSS_ORIGIN_SAFE_HEADERS` for the headers that may cross
+        an origin boundary). A 307/308 re-sends the original method and body;
+        301/302/303 rewrite a body-bearing method to GET and drop the body, per
+        RFC 9110 §15.4.
         """
         origin = _url_origin(url)
         current_url = url
         current_method = method
         for _ in range(MAX_REDIRECTS + 1):
             self._validate(current_url)
-            hop_cookies = cookies if _url_origin(current_url) == origin else None
+            same_origin = _url_origin(current_url) == origin
+            hop_cookies = self._hop_cookies(cookies, same_origin=same_origin)
             response = self._client.request(
                 current_method,
                 current_url,
                 params=dict(params) if params else None,
                 data=dict(data) if data else None,
                 json=json,
-                headers=dict(headers) if headers else None,
-                cookies=dict(hop_cookies) if hop_cookies else None,
+                headers=self._hop_headers(
+                    headers, same_origin=same_origin, method=current_method
+                ),
+                cookies=hop_cookies,
                 follow_redirects=False,
             )
             if response.status_code in _REDIRECT_STATUSES:
                 location = response.headers.get("location")
                 if location:
                     current_url = urljoin(str(response.url), location)
-                    # 303 always becomes GET; 301/302 downgrade a body-bearing
-                    # method to GET (browser semantics). 307/308 preserve it.
-                    if response.status_code == 303 or current_method not in ("GET", "HEAD"):
-                        current_method, data, json = "GET", None, None
+                    next_method = _redirect_method(response.status_code, current_method)
+                    if next_method != current_method:
+                        # Only a rewritten hop discards the body; 307/308 keep
+                        # re-encoding it from the same ``data``/``json`` mapping.
+                        current_method, data, json = next_method, None, None
                     params = None
                     continue
             response.raise_for_status()
@@ -277,8 +404,8 @@ class HttpFetcher:
 
         Redirects are followed manually (bounded by :data:`MAX_REDIRECTS`) and
         each hop is re-validated by the SSRF guard before it is requested.
-        Per-call ``cookies`` are forwarded only to same-origin hops, exactly as
-        in :meth:`fetch`.
+        Cookies, headers and the 307/308 method-preservation rule all behave
+        exactly as in :meth:`fetch`.
 
         Raises:
             DownloadTooLargeError: if the body exceeds ``max_bytes``.
@@ -290,20 +417,22 @@ class HttpFetcher:
         current_method = method
         for _ in range(MAX_REDIRECTS + 1):
             self._validate(current_url)
-            hop_cookies = cookies if _url_origin(current_url) == origin else None
+            same_origin = _url_origin(current_url) == origin
+            hop_cookies = self._hop_cookies(cookies, same_origin=same_origin)
             with self._client.stream(
                 current_method,
                 current_url,
-                headers=dict(headers) if headers else None,
-                cookies=dict(hop_cookies) if hop_cookies else None,
+                headers=self._hop_headers(
+                    headers, same_origin=same_origin, method=current_method
+                ),
+                cookies=hop_cookies,
                 follow_redirects=False,
             ) as response:
                 if response.status_code in _REDIRECT_STATUSES:
                     location = response.headers.get("location")
                     if location:
                         current_url = urljoin(str(response.url), location)
-                        if response.status_code == 303 or current_method not in ("GET", "HEAD"):
-                            current_method = "GET"
+                        current_method = _redirect_method(response.status_code, current_method)
                         continue
                 response.raise_for_status()
                 chunks: list[bytes] = []
