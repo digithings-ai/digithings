@@ -459,9 +459,9 @@ def test_politician_skill_steps_have_no_trade_step():
     for heading in headings:
         # "Tariff & Trade Actions" is lawful policy work, so trade/tariff is allowed only
         # when the heading says trade-POLICY. Filing/disclosure/congressional is never allowed.
-        assert not _re.search(
-            r"filing|disclosure|congress", heading, _re.IGNORECASE
-        ), f"step heading reintroduces trade-level content: {heading!r}"
+        assert not _re.search(r"filing|disclosure|congress", heading, _re.IGNORECASE), (
+            f"step heading reintroduces trade-level content: {heading!r}"
+        )
         if _re.search(r"\btrade\b", heading, _re.IGNORECASE):
             assert _re.search(r"tariff|policy", heading, _re.IGNORECASE), (
                 f"step heading names trades without saying policy/tariff: {heading!r}"
