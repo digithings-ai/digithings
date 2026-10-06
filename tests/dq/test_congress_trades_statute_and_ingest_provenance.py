@@ -18,10 +18,14 @@ Also pinned by this file:
   and that the LuxAlgo trackers path carries the same data class by business
   decision dated 2026-10-06 against Counsel's advice. ``trackers_ingest``
   must carry the same note next to its entry point.
-* ``trackers_ingest`` must not assert a licence. The old docstring said
-  "CC0 dump"; that claim is unverified (DIG-1464 is open with Security) and
-  the LuxAlgo terms say the market data includes data licensed from third
-  parties and may not be redistributed.
+* the trackers **data** licence, now classified (DIG-1464). Security read the
+  upstream ``LICENSE`` on 2026-10-06: CC0-1.0, sha256
+  ``a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499``. That
+  resolves the licence question and **sharpens** the statute one: the licence is
+  a copyright waiver by the affirmer and cannot waive 13107(c)(1)(B). Every
+  user-visible trackers claim must therefore carry the licence *and* the two
+  per-family limits, because a payload saying only "CC0" implies permission for
+  congress-trades and short-volume alike, and neither has it.
 * the refusals themselves: ``digifetch_congress_trades`` stays refused, no
   subset re-admits it, and ``live_search`` stays off for the alt-data segment.
 """
@@ -37,12 +41,33 @@ pytestmark = pytest.mark.unit
 
 import digiquant.tool_refusals as tool_refusals  # noqa: E402
 import digisearch.trackers_ingest as trackers_ingest  # noqa: E402
+from digiquant.data.luxalgo.attribution import (  # noqa: E402
+    LUXALGO_TRACKERS_DATA_CAVEATS,
+    attribution_fields_for,
+)
+from digiquant.data.luxalgo.entitlements import TOOL_NOTES  # noqa: E402
+from digiquant.data.luxalgo.models import (  # noqa: E402
+    LUXALGO_TRACKERS_ALLOWED_DATASETS,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TOOL_REFUSALS_PY = REPO_ROOT / "digiquant/src/digiquant/tool_refusals.py"
 TRACKERS_INGEST_PY = REPO_ROOT / "digisearch/src/digisearch/trackers_ingest.py"
 PHASE1_ALTDATA_PY = REPO_ROOT / "digiquant/src/digiquant/research/phases/phase1_altdata.py"
 GLOOMBERB_AGENT_TOOLS_PY = REPO_ROOT / "digiquant/src/digiquant/data/gloomberb/agent_tools.py"
+
+#: Every file that states a trackers data licence on a surface a model reads.
+#: The old guard only looked at ``trackers_ingest.py``; PR #5203 fixed one file
+#: and left four more asserting the same claim, which is why the check is
+#: surface-wide.
+DATA_LICENSE_CLAIM_FILES = (
+    "digisearch/src/digisearch/trackers_ingest.py",
+    "digisearch/src/digisearch/trackers_wave2_ingest.py",
+    "digiquant/src/digiquant/data/luxalgo/attribution.py",
+    "digiquant/src/digiquant/data/luxalgo/entitlements.py",
+    "digiquant/src/digiquant/mcp_server.py",
+    "digiquant/src/digiquant/orchestrator_tools.py",
+)
 
 #: The overstatement DIG-1479 removed. Any file still asserting it is wrong.
 OVERSTATED_FRAGMENT = "for any purpose other than"
@@ -104,21 +129,70 @@ def test_trackers_ingest_entry_point_carries_the_dig_1472_cross_reference() -> N
     assert "business decision" in source or "business owner" in source
 
 
-def test_trackers_ingest_does_not_assert_a_licence() -> None:
-    """DIG-1464 is open with Security; do not claim a licence while it is open.
+def test_trackers_ingest_states_the_classified_licence_and_its_limit() -> None:
+    """DIG-1464 closed: the licence is CC0-1.0 *and* 13107(c) still bites.
 
-    The word "CC0" survives exactly once, in the note that retracts the old
-    claim. What must not come back is a licence *assertion*: the title line, or
-    a ``CC0-1.0`` claim on the feed constant.
+    Reverses the old guard, which forbade any licence word while the question
+    was open. The claim is verified now, so the file must say so — and the
+    verification must not become the thing that misleads, which is why the
+    statutory limit is asserted in the same breath.
     """
-    source = TRACKERS_INGEST_PY.read_text(encoding="utf-8")
     doc = inspect.getdoc(trackers_ingest) or ""
-    assert "CC0" not in doc.splitlines()[0], "the title line must not claim a licence"
-    assert "CC0-1.0" not in source
-    assert source.count("CC0") == doc.count("CC0"), (
-        "CC0 may only appear in the docstring retraction, never in code comments"
+    assert "CC0-1.0" in doc
+    assert "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499" in doc, (
+        "the classification must cite the artefact it was read from"
     )
-    assert "unverified" in doc and "DIG-1464" in doc
+    assert "13107(c)(2)" in doc, "the copyright waiver cannot cure a statutory use limit"
+    assert "DIG-1472" in doc and "not a clearance" in doc
+    for stale in ("Do not assert a licence", "is unverified", "No licence is asserted"):
+        assert stale not in doc, f"the withhold-pending-classification posture is stale: {stale}"
+
+
+def test_no_user_visible_cc0_claim_is_left_unqualified() -> None:
+    """The whole surface, not one file: a CC0 claim must carry its limits.
+
+    This is the defect DIG-1464 was filed against — the licence boundary guard
+    next to these strings covers indicator *source code* and the entitlement
+    note states a data licence with no carve-out, so a reader concludes the
+    position is covered. Every trackers-facing string that says CC0 must also
+    name both per-family limits, or say why it does not apply.
+    """
+    unqualified: list[str] = []
+    for rel in DATA_LICENSE_CLAIM_FILES:
+        text = (REPO_ROOT / rel).read_text(encoding="utf-8")
+        if "CC0" not in text:
+            continue
+        if not any(marker in text for marker in ("13107", "FINRA", "short-volume")):
+            unqualified.append(rel)
+    assert not unqualified, (
+        "these files claim CC0 for trackers data without a per-family limit: "
+        + ", ".join(sorted(unqualified))
+    )
+
+
+def test_the_trackers_caveats_cover_exactly_the_two_limited_families() -> None:
+    """Congress-trades is refused by statute; short-volume is unresolved.
+
+    Both are in the dataset allowlist, so neither can be dropped by refusing to
+    answer. The other four are public records with no open question.
+    """
+    assert set(LUXALGO_TRACKERS_DATA_CAVEATS) == {"congress-trades", "short-volume"}
+    assert all(d in LUXALGO_TRACKERS_ALLOWED_DATASETS for d in LUXALGO_TRACKERS_DATA_CAVEATS)
+
+
+def test_every_trackers_tool_note_carries_the_caveat() -> None:
+    """Attribution is per-tool, so the per-family caveat must be unconditional."""
+    for tool in (
+        "luxalgo_trackers_datasets",
+        "luxalgo_trackers_latest",
+        "luxalgo_trackers_ticker",
+    ):
+        note = TOOL_NOTES[tool]
+        assert "13107" in note, tool
+        assert "FINRA" in note, tool
+        fields = attribution_fields_for(tool)
+        assert "13107" in fields["license_note"], tool
+        assert "FINRA" in fields["license_note"], tool
 
 
 def test_trackers_ingest_entry_point_is_still_exported() -> None:

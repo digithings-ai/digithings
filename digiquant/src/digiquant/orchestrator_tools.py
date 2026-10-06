@@ -1167,7 +1167,7 @@ def build_digifetch_ibkr_execute_order_tool() -> dict[str, Any]:
 # keyless (``free``); every payload carries a per-family "Sourced from LuxAlgo
 # ..." attribution + a canonical link. Indicator source code is deliberately
 # NOT wrapped (CC BY-NC-SA license boundary), and neither is trackers_query
-# (the CC0 dumps stay the source of record).
+# (the CC0-1.0 dumps stay the source of record).
 
 
 def build_luxalgo_library_search_tool() -> dict[str, Any]:
@@ -1434,16 +1434,20 @@ def build_luxalgo_trackers_datasets_tool() -> dict[str, Any]:
             "name": "luxalgo_trackers_datasets",
             "description": (
                 "Market Trackers catalog (hosted LuxAlgo MCP, anonymous): the "
-                "datasets of US public-record market data the LuxAlgo pipeline "
-                "publishes as CC0 dumps, with row counts, freshness, the years "
-                "with data, and whether it is ticker-searchable. That list is "
-                "upstream's own and runs past the six datasets we ingest — "
-                "congressional trades, insider transactions, 13F holdings, "
-                "federal contracts and grants, lobbying filings, short-sale "
-                "volume. `dataset` narrows the listing to one dataset's full "
-                "field roster (read it before composing filters) and accepts "
-                "only those six, the ids in its enum; any other dataset is "
-                "refused. The dumps are the source of record."
+"datasets of US public-record market data the LuxAlgo pipeline "
+                "publishes as CC0-1.0 dumps, with row counts, freshness, the "
+                "years with data, and whether it is ticker-searchable. That "
+                "list is upstream's own and runs past the six datasets we "
+                "ingest — congressional trades, insider transactions, 13F "
+                "holdings, federal contracts and grants, lobbying filings, "
+                "short-sale volume. `dataset` narrows the listing to one "
+                "dataset's full field roster (read it before composing "
+                "filters) and accepts only those six, the ids in its enum; any "
+                "other dataset is refused. The dumps are the source of record. "
+                "The CC0-1.0 grant does not clear two of them: congress-trades "
+                "rows are 13107(c) reports whose commercial use 5 U.S.C. "
+                "13107(c)(1)(B) restricts, and short-volume carries unresolved "
+                "upstream FINRA terms (DIG-1464, DIG-1472)."
             ),
             "parameters": {
                 "type": "object",

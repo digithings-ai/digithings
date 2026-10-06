@@ -3011,10 +3011,12 @@ def create_mcp_server(
 
     @_maybe_tool("luxalgo_trackers_datasets")
     def luxalgo_trackers_datasets(dataset: str | None = None) -> str:
-        """Market Trackers catalog of CC0 public-record datasets (anonymous).
+        """Market Trackers catalog of CC0-1.0 public-record datasets (anonymous).
 
         `dataset` selects one dataset's full field roster. The dumps are the
-        source of record.
+        source of record. Two families carry a limit the CC0 grant cannot
+        supply: congress-trades (5 U.S.C. 13107(c)(1)(B) restricts commercial
+        use) and short-volume (unresolved upstream FINRA terms) — DIG-1464.
         """
         from digiquant.data.luxalgo.models import TrackersDatasetsInput
 

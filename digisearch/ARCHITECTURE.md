@@ -1217,7 +1217,7 @@ digisearch/src/digisearch/
 │   ├── ingest.py              # Canonical filesystem ingest (HTTP + CLI + tests)
 │   └── url_ingest.py          # Sole URL-fetch site: ingest_url (HTML→markdown)
 │                              # + fetch_json_feed (JSON feeds, e.g. trackers)
-├── trackers_ingest.py         # luxalgo market-trackers-data CC0 ingest (#4826):
+├── trackers_ingest.py         # luxalgo market-trackers-data CC0-1.0 ingest (#4826):
 │                              # congress-trades fetch → normalize → index_chunks
 │                              # (fetch delegates to pipeline.url_ingest)
 ├── trackers_wave2_ingest.py   # wave-2 ticker datasets (#4849): insider →
@@ -1343,7 +1343,7 @@ digisearch/src/digisearch/
 
 ### luxalgo market-trackers ingest (#4826)
 
-CC0 public-records layer **beside Gloomberg** (never replacing the terminal
+CC0-1.0 public-records layer **beside Gloomberg** (never replacing the terminal
 digest). `trackers_ingest.py` proves the per-dataset adapter pattern on the
 smallest dataset (congress-trades) for the remaining 17 to copy:
 

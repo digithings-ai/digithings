@@ -1,11 +1,24 @@
 """luxalgo market-trackers-data congress-trades feed → digisearch index.
 
 Upstream is LuxAlgo's public ``market-trackers-data`` repository, which publishes
-the underlying US public-records disclosures as a derived feed. **No licence is
-asserted here.** The earlier docstring called this a CC0 dump; that claim is
-unverified and is open with Security under DIG-1464, and LuxAlgo's own terms say
-the market data includes data licensed from third parties and may not be
-redistributed. Do not assert a licence in this file until DIG-1464 closes.
+the underlying US public-records disclosures as a derived feed. **Licence
+classified by Security 2026-10-06 (DIG-1464): CC0-1.0**, read from the
+repository's own ``LICENSE`` at ``main`` (sha256
+``a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499``). The
+LuxAlgo ToS "may not be redistributed" clause does not reach this feed: it sits
+under "Market Data & Delays" and every sentence in that block is scoped to
+quote and price data (Vela, luxalgo.com market pages). An earlier revision of
+this docstring withheld the licence while DIG-1464 was open, citing that clause
+as a reason to withhold — that reasoning was itself the unverified claim, and
+it is corrected here.
+
+That licence answer is only half of the position, and the half that governs
+this file. Congress-trades rows are 13107(c) disclosure reports, so 5 U.S.C.
+13107(c)(1)(B) restricts their commercial use and 13107(c)(2) runs to whoever
+obtains or uses them; a copyright waiver cannot cure a statutory use
+prohibition. Counsel classified this data class refused (DIG-1472); the dataset
+is in service by business decision dated 2026-10-06 against that advice, which
+is not a clearance.
 
 Primary-source US public-records layer **beside Gloomberg** (never replacing
 the terminal digest). Thin wrap mirroring :mod:`digisearch.research_ingest`:
