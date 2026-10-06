@@ -315,7 +315,12 @@ now fails the guard.
 `apps/digithings-web` typecheck fails on 4 errors and `next build` fails, both on clean
 `develop`, because BOTH `components/landing/Sections.tsx` AND `components/landing/sections.ts`
 are tracked (`git ls-tree` shows all three blobs: `Sections.tsx`, `sections.test.ts`,
-`sections.ts`). Webpack resolves the wrong one, so `FaqList` and `OpenSource` are missing
-from `./Sections`. Neither file is touched by this PR. Proven by stash-and-rebuild: the
-failure is byte-identical on clean `develop`. `packages/ui` has 68 pre-existing typecheck
-errors, all from `@types/node` missing in that tsconfig; none in any file this PR touches.
+`sections.ts`). `SectionRail.tsx:4` imports `LANDING_SECTIONS` from `"./sections"`, webpack
+resolves that to `Sections.tsx`, which does not export it, and `SECTIONS.map` throws at
+`SectionRail.tsx:52` — so the **home page returns HTTP 500**. Neither file is touched by this
+PR. Proven by stash-and-rebuild: the failure is byte-identical on clean `develop`.
+`packages/ui` has 68 pre-existing typecheck errors, all from `@types/node` missing in that
+tsconfig; none in any file this PR touches.
+
+Filed as its own issue rather than fixed here — it is not a rebrand change, and bundling it
+would put a live develop outage behind a PR about a different subject.
