@@ -1,11 +1,24 @@
 # Fork owner request — `webclinic017`
 
+> ## ⛔ NOT TO BE SENT — withdrawn by decision
+>
+> **Chris decided on 2026-10-06 not to contact this fork owner. Do not send this letter, by any
+> channel, to anyone.** Neither it nor the version for the other owner is part of the incident
+> response.
+>
+> It is kept here unchanged because Art. 33(1) section 6 asks for the record to show the difference
+> between what was done and what was proposed. Nothing in this document has been sent to anyone.
+>
+> The only document in this folder that goes anywhere is
+> [github-private-information-request.md](./github-private-information-request.md), and only after
+> [DIG-1496](/DIG/issues/DIG-1496) completes and Chris sends it.
+
 **Repository:** https://github.com/webclinic017/digithings
 **Display name:** WebClinic
 **Forked:** 2026-05-29 · last push 2026-05-25 · default branch `develop`
-**Send order:** this letter may go out **before** [DIG-1496](/DIG/issues/DIG-1496) completes. It does not depend on it.
+**Send order:** **none. Withdrawn — see the notice above.**
 
-**Status: DRAFT. Not sent.** Prepared by Counsel 2026-10-06. Chris reads and sends.
+**Status: WITHDRAWN. Not sent, and not to be sent.** Drafted by Counsel 2026-10-06; withdrawn by Chris the same day.
 
 ---
 
@@ -59,7 +72,7 @@ One of them does contain an address: both forks carry our own `SECURITY.md`, whi
 
 ---
 
-## Option A — email body (preferred)
+## Option A — WITHDRAWN, do not send
 
 ```
 From:    contact@digithings.ai
@@ -122,7 +135,7 @@ contact@digithings.ai
 
 ---
 
-## Option A-after — send after [DIG-1496](/DIG/issues/DIG-1496) completes
+## Option A-after — WITHDRAWN, do not send (post-rewrite wording)
 
 **Only use this version if the rewrite has actually finished and GitHub's garbage collection has run.** Otherwise a reader can check the URL and find it still live, and we will have lost their trust for no gain.
 
@@ -134,7 +147,7 @@ Identical to Option A except that the section **"What we are doing about it"** i
 >
 > If you kept your fork, the URL above may still resolve for a short while, because GitHub collects unreferenced objects on its own schedule. We will write to you again when the link stops working.
 
-## If the rewrite is genuinely in flight when Chris sends
+## If the rewrite is genuinely in flight when Chris sends — WITHDRAWN, do not send
 
 Option A is written so that it stays true throughout a rewrite, because it never claims the rewrite is finished. **Use Option A unchanged.** If you want to acknowledge the work in progress, add one sentence to the end of the *"What we are doing about it"* section:
 
@@ -144,7 +157,7 @@ That sentence is the only one that is not safe to add while [DIG-1496](/DIG/issu
 
 ---
 
-## Option B — GitHub issue body (fallback only)
+## Option B — WITHDRAWN, do not send
 
 Use this only if Chris holds no address for the owner. It is public and permanent. Do not also send Option A.
 
