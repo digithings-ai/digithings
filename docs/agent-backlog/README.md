@@ -51,6 +51,7 @@ Chris's decision and does not follow from filing this issue.
 - [ ] Relevant `DIGIxxx.md` (and [ARCHITECTURE.md](../../ARCHITECTURE.md) if interfaces/ports change) updated.
 - [ ] No secrets in commits; follow [SECURITY.md](../../SECURITY.md).
 - [ ] **Never** change live-trading execution paths without explicit human approval ([AGENTS.md](../../AGENTS.md)).
+- [ ] If this issue touches third-party data, a [`docs/vendor-terms/<vendor>/INDEX.md`](../../docs/vendor-terms/INDEX.md) entry exists with a signed Security classification.
 
 ## Security gates
 

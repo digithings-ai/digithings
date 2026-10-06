@@ -3,26 +3,33 @@
 **Vendor:** LuxAlgo Global, LLC (Delaware)
 **Classification:** **pending Security** — see [Classification status](#classification-status)
 **Record opened:** 2026-10-06 · **CTO**
-**Related:** DIG-1318 · DIG-1447 (three live trackers tools) · DIG-1251 (origin)
+**Related:** DIG-1318 · DIG-1447 (three live trackers tools) · DIG-1251 (Counsel's ruling that *bounds* these tools — it is not their origin, and their absence from `REFUSED_TOOLS` is not a clearance)
 
 ---
 
 ## Access method
 
 **Live, on `develop`, already integrated.** This is the vendor's own documented
-hosted interface, not a replayed browser session:
+hosted interface, not a replayed browser session.
 
-| Field | Value |
+Per [VENDOR_CONTENT_BOUNDARY.md](../../VENDOR_CONTENT_BOUNDARY.md#what-this-repository-does-and-does-not-publish),
+the endpoint, request shapes and tool inventory are **not published here**. They
+are named only in aggregate, because the fact that an access exists at all is
+the finding:
+
+| Fact | Detail |
 |---|---|
 | Interface | Hosted MCP server, streamable HTTP / JSON-RPC |
-| Endpoint | `https://mcp.luxalgo.com/mcp` |
+| Reaches the vendor | Yes. The endpoint and tool inventory live in the code, not here. |
 | Kill switch | `LUXALGO_ENABLED` — default ON, fails closed |
-| Cache | 900s TTL |
-| Context | `LUXALGO_CONTEXT` injected server-side, so client PII is not sent to the vendor |
-| Wrapped tools | 8 (`library_*`, `edge_*`, `trackers_*`, `broker_*`) |
+| Context handling | `LUXALGO_CONTEXT` injected server-side, so client PII is not sent to the vendor |
+| Wrapped tools | 14 — 8 library, 3 edge, 3 trackers. Asserted in `tests/dq/test_mcp_luxalgo_tools.py:191`. |
 | Existing guard | `scripts/check_luxalgo_license_boundary.py` |
 
-**CONFIDENCE: CONFIRMED** for the interface shape, read from the repository.
+**CONFIDENCE: CONFIRMED**, read from the repository. Every string here is
+already public in `digiquant/src/digiquant/data/luxalgo/client.py`, so nothing
+is disclosed by naming the category; the endpoint string itself is withheld to
+keep this folder consistent with its own policy and with the Bloomberg record.
 
 This record therefore is not preventive for LuxAlgo. It is corrective on one
 point and prospective on another, and it says so: DIG-1318 describes the position
@@ -34,6 +41,10 @@ late, which is the failure mode the issue was written to prevent.
 `library_get_source_code` (Pine indicator source, CC BY-NC-SA 4.0) is not
 exposed. A guard keeps it off every surface while `LUXALGO_COMMERCIAL_LICENSE`
 is unset, and the flag defaults OFF.
+
+`broker_*` is also not wrapped, for a different reason: broker credentials are
+never sent to the hosted MCP, so those calls are local mirrors under
+`digiquant/src/digiquant/brokers/` and do not reach the vendor at all.
 
 ---
 
@@ -113,7 +124,9 @@ them is a public-record source, and none of them is CC0.
 > … use read-only API keys you create, or tokens issued after you sign in directly
 > with your broker or with our data partner **Plaid** …
 
-> LuxAlgo never asks for or stores your brokerage password.
+> LuxAlgo never asks for or stores your brokerage password; connections use
+> read-only API keys you create, or tokens issued after you sign in directly
+> with your broker or with our data partner **Plaid**.
 
 **Licence scope** (Licensing page §1.1)
 
@@ -183,10 +196,16 @@ depends on whether a specific use is "expressly permitted".
 **Redistribution is where it stops being obvious.** Three clauses point the same
 way — no distribution without written permission, market data that "may not be
 redistributed", and any unpermitted use is a breach. Our surfaces render LuxAlgo
-values with attribution ("Sourced from LuxAlgo Library", the Edge Stats and Market
-Trackers families, the dashboard chart at `/research/vela-spike`). Whether
-attributing a value inside our product is redistribution is **the question for
-Counsel**, and it is Unclear until answered.
+values with attribution: `"Sourced from LuxAlgo Library"` in the digiquant
+attribution payload, plus the Edge Stats and Market Trackers tool families.
+Whether attributing a value inside our product is redistribution is **the
+question for Counsel**, and it is Unclear until answered.
+
+Not a LuxAlgo-data surface: the dashboard chart at `/research/vela-spike` uses
+the Apache-2.0 `@luxalgo/vela` charting library, and its bars are annotated
+"Sourced from Gloomberb" (`apps/dashboard/app/research/vela-spike/page.tsx:104`).
+That is a code licence and a different vendor's data. It belongs in this folder
+only as the trap-1 example: an Apache-2.0 library is not a data licence.
 
 The licensing page is more useful than it first looks, and it names its own
 limits: **Business Tier** §2.2(b) grants redistribution of the Software as
@@ -202,9 +221,12 @@ data licence as a flag gets.
 
 ### The specific claim that has never been checked
 
-`digisearch/src/digisearch/trackers_ingest.py` and the attribution notes assert
-that the three `luxalgo_trackers_*` datasets are **"CC0 public-record dumps"**,
+Our code asserts that the trackers datasets are **"CC0 public-record dumps"**,
 with `provenance.sourceUrl` on every row, and the entitlement note repeats it.
+Three tools expose them (`luxalgo_trackers_datasets`, `_latest`, `_ticker`), and
+**six ingest datasets** sit behind them: congress-trades
+(`trackers_ingest.py`) plus insider-transactions, thirteenf-holdings,
+short-volume, lobbying-filings and gov-contracts (`trackers_wave2_ingest.py`).
 
 **That is our own assertion, in our own code, made without anyone reading the
 LuxAlgo terms.** It is exactly trap 1 from the [intake record](../INDEX.md): a
@@ -214,8 +236,17 @@ Cboe EDGX, CME Group via Databento, Financial Modeling Prep, Massive and Twelve
 Data — all commercial market-data businesses, none a public-record source. It
 also states the data "may not be redistributed". Meanwhile our own code says the
 hosted MCP is the transport while "the dumps are the source of record".
-**The CC0 claim is therefore unverified, and for the market-data families it is
-in tension with what the vendor actually publishes.**
+**The CC0 claim is therefore unverified.**
+
+Precisely: no quoted clause addresses these dumps. The market-data prohibitions
+are scoped to *quote and price* data and are written about Vela and
+luxalgo.com ("In **Vela**, U.S. equities data is real-time from the Cboe EDGX
+exchange…", "**Market pages on luxalgo.com** use data from providers
+including…"). The trackers feeds are public-record extracts from the
+`LuxAlgo/market-trackers-data` repository, and the exhaustion clause may not
+reach `raw.githubusercontent.com` at all. So the answer is **unknown**, not
+"the vendor disagrees". Nobody has read anything that speaks to these datasets
+either way, which is precisely why the claim in our code is the problem.
 
 This is the highest-value thing in this record. It is stated here rather than
 fixed here: a data-provenance claim is Security's to classify and Counsel's to
@@ -231,9 +262,20 @@ Counsel takes anything Unclear or Prohibited before implementation.
 
 Questions already shaped, in the order they should be answered:
 
-1. **Is the CC0 assertion on the trackers datasets correct**, and if not, what
-   licence is it actually under? (Security to classify; affects three live tools
-   and two ingest modules.)
+1. **Is the CC0 assertion on the six trackers datasets correct**, and if not,
+   what licence are they actually under? No vendor clause read so far speaks to
+   them. (Security to classify; affects three live tools and two ingest modules.)
+1b. **Is congress-trades data refusable as a matter of statute?** This is a
+   separate question from the licence and it is the sharper one. Counsel has
+   already refused the same data class under 5 U.S.C. 13107(c)(1)(B)
+   (`digiquant/src/digiquant/tool_refusals.py`, `phase1_altdata.py:76-78`:
+   *"Counsel has ruled this feed permanently refused under 5 U.S.C.
+   13107(c)(1)(B)"*), yet `trackers_ingest.py:1` ingests
+   `congress/trades/latest.json` and `TrackersLatestInput` accepts an
+   unrestricted `dataset`, so a caller can request congress trades through a live
+   tool. **A statutory prohibition is not a licensing question and no clause in
+   this folder answers it.** This should be answered before the licence
+   questions.
 2. **Does rendering LuxAlgo-sourced values with attribution inside our product
    count as redistribution** under the ToS, and which tier covers it —
    Business Tier within its §1.6 limits, or an Enterprise Agreement? (Counsel.)

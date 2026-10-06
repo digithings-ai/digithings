@@ -36,9 +36,9 @@ scope. Full scope and exclusions: [VENDOR_CONTENT_BOUNDARY.md](../VENDOR_CONTENT
 These are the specific mistakes we have already made. Read them before reading a
 vendor's repository.
 
-**1. An open-source licence on the code is not a licence on the data.** Every
-vendor in this folder ships an open-source SDK and a separately-licensed data
-product. Gloomberb's terms put MIT on the source code and said in the same
+**1. An open-source licence on the code is not a licence on the data.** Where a
+vendor ships open-source tooling, the data behind it is licensed separately.
+Gloomberb's terms put MIT on the source code and said in the same
 paragraph that the terms govern "the data and content we provide" (§2). Reading
 a repository's `LICENSE` tells you nothing about the data. Our own
 [LuxAlgo record](luxalgo/INDEX.md) is the worked example: our guard
@@ -51,9 +51,9 @@ wrapper is ours and the credential is a browser session we replay, the terms are
 still theirs. The transport does not change who is authenticating.
 
 **3. "The client brings their own account" needs the vendor's terms to say so.**
-It is the shape most likely to be permitted, and it was permitted in Gloomber's
+It is the shape most likely to be permitted, and it was permitted in Gloomberb's
 §12 ("for yourself **or for users who have their own access**"). That reading is
-Gloomber's. It does not transfer to another vendor without reading theirs.
+Gloomberb's. It does not transfer to another vendor without reading theirs.
 
 **And a fourth, cheap to state:** where a vendor offers a documented API key,
 MCP server or developer interface, that is the access method to build on. A
@@ -65,9 +65,10 @@ cookie is the fallback of last resort and is never the design.
 
 1. Locate the vendor's current terms, API terms or developer agreement.
    Record URL + ISO 8601 UTC retrieval timestamp.
-2. Save the artefact to private storage (`digithings-ai/digithings-ops`) and
-   record its sha256. **Not committed to this repository** — see
-   [Artefact Standards](../VENDOR_CONTENT_BOUNDARY.md#artefact-standards).
+2. Save the artefact to private storage and record its sha256. **Not committed
+   to this repository** — see
+   [Artefact Standards](../VENDOR_CONTENT_BOUNDARY.md#artefact-standards) and
+   [Where the artefact lives](#where-the-artefact-lives).
 3. Quote the clauses that bear on the access method, verbatim, with section
    numbers, in the vendor's `INDEX.md`.
 4. Security classifies the access method **Permitted / Prohibited / Unclear**.
@@ -90,8 +91,8 @@ and it stays his.
 
 | Vendor | Access method | Classification | Retrieved |
 |---|---|---|---|
-| [Bloomberg](bloomberg/INDEX.md) | none in code; no credential held; no contact | **pending Security** | 2026-10-06 |
-| [LuxAlgo](luxalgo/INDEX.md) | hosted MCP (`https://mcp.luxalgo.com/mcp`), 8 wrapped tools | **pending Security** | 2026-10-06 |
+| [Bloomberg](bloomberg/INDEX.md) | no integration, no credential, no contact; one scoped news-retrieval domain | **pending Security** | 2026-10-06 |
+| [LuxAlgo](luxalgo/INDEX.md) | documented hosted MCP, 14 wrapped tools, live on `develop` | **pending Security** | 2026-10-06 |
 
 "Pending Security" means the clauses are recorded and quoted but nobody has
 signed a classification yet. Under step 5 that blocks implementation on anything
@@ -102,3 +103,24 @@ writing it early.
 
 > `DIG-###` are internal issue-tracker IDs, not resolvable in this public
 > repository; each is cited so the reasoning is traceable internally.
+
+---
+
+## Where the artefact lives
+
+**The saved artefact goes in private internal storage. It is never committed to
+this public repository.** That is not a preference — republishing a counterparty's
+full document is the thing this policy exists to prevent.
+
+Note that [VENDOR_CONTENT_BOUNDARY.md](../VENDOR_CONTENT_BOUNDARY.md#artefact-standards)
+names `digithings-ai/digithings-ops` as the intended private home. That repo is
+the outside-contractor mailbox: its own README and routine describe it as a queue
+an outside firm reads, and its hard limits say nothing from outside that firm
+goes in. It is not private internal storage in the sense this policy means, so
+the artefacts behind these two records are **not** filed there pending a
+correction to the policy. That correction is tracked separately.
+
+Until then, what preserves the evidence is reproducibility: both artefacts were
+retrieved twice on 2026-10-06 and returned byte-identical bytes, and this folder
+records the URL, the ISO 8601 timestamp, the sha256 and the verbatim clauses.
+Those four things are the evidentiary record. The artefact is the backup copy.

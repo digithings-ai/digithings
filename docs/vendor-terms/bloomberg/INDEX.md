@@ -9,13 +9,26 @@
 
 ## Access method
 
-**None.** No Bloomberg access exists in this repository, no credential is held,
-no endpoint is configured, and no vendor contact has been made. This record
-exists because a partnership and a data-sourcing arrangement have been *proposed*
-(Chris, 2026-10-05), and the check is cheap now and expensive later.
+**No Bloomberg data integration.** No credential is held, no vendor API is
+called, no vendor contact has been made. This record exists because a
+partnership and a data-sourcing arrangement have been *proposed* (Chris,
+2026-10-05), and the check is cheap now and expensive later.
 
 Nothing in this record describes how to reach Bloomberg data. There is no recipe
 to withhold.
+
+**One scoped reference, which is not nothing.** `bloomberg.com` appears as a
+retrieval domain in
+`digiquant/src/digiquant/research/config/search_domains.yaml:40`, under the
+`alt-sentiment-news` segment, and that file passes through to the web-grounding
+tool's `include_domains` (`research/data/web_grounding.py:3-4`). That is a
+scoped search over news pages, not a data feed: we do not hold an entitlement,
+and no Bloomberg content is pulled and stored.
+
+Whether a search provider's retrieval against a named third party is
+attributable to us is Security's call, not this record's, and it is recorded
+here rather than answered. It meets conditions 1 and 2 of the
+[scope test](../INDEX.md#scope-test), which is why it is written down at all.
 
 ## Artefact
 
@@ -27,7 +40,7 @@ to withhold.
 | sha256 of saved HTML | `33af25936933d1e9ae0920777aa64e1ef3182b15430233203eacb3aaaad15faa` |
 | Size | 188,148 bytes |
 | Effective date | **Not stated on the page.** The only date in the body is 2023-07-31, and it is the anchor for the §30-day arbitration opt-out window, not a terms effective date. |
-| Artefact location | private — `digithings-ai/digithings-ops`. Not committed here. |
+| Artefact location | Private. Not committed here. **The private home named in the policy is not a safe place for it** — see [Where the artefact lives](../INDEX.md#where-the-artefact-lives). |
 
 The hash, not the date, is what carries the evidentiary weight here: with no
 effective date on the page we cannot say the terms have not changed, only that
@@ -101,9 +114,13 @@ Three things follow from the text above, and Security owns whether they add up
 to Permitted, Prohibited or Unclear.
 
 1. **Any automated retrieval is off the table without written consent.** §3 names
-   "computer code" and "any other automate device", not just crawlers. This is
-   the clause that killed PrimeMarket and Gloomberb, and it is written broadly
-   enough to reach a programmatic pull as well as a scraper.
+   "computer code" and "any other automate device", not just crawlers. It is
+   written broadly enough to reach a programmatic pull as well as a scraper.
+   It is *analogous to* what stopped PrimeMarket and Gloomberb, not the cause:
+   PrimeMarket failed on its own §11/§12
+   ([VENDOR_CONTENT_BOUNDARY.md](../../VENDOR_CONTENT_BOUNDARY.md)), and Gloomberb
+   was refused under 5 U.S.C. 13107(c)(1)(B) (`tool_refusals.py`). No Bloomberg
+   clause has stopped anything here, because no Bloomberg access has been taken.
 2. **The default licence is use-in-accordance-with-the-TOS.** §4 grants nothing
    else. It is not a data licence, not a redistribution right and not an
    embedding right.
