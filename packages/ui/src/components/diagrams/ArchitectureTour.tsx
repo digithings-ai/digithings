@@ -46,13 +46,22 @@
  *
  * MOTION BUDGET. One rAF-throttled passive scroll listener writing custom
  * properties (`--arch-out` / `--arch-in` on the grid; `--arch-p` on the pin);
- * React state changes only when the coarse step index changes. Reduced motion
+ * React state changes only when the coarse step index changes. The wheel is
+ * never captured: a flick skips through with the page, and once scroll rests
+ * the camera eases onto the narrated boxes (`scroll-glide`). Reduced motion
  * gets the static treatment, and so does anything narrower than the breakpoint
  * at which the pinned layout fits.
  */
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
+import {
+  REST_GLIDE_MS,
+  REST_QUIET_MS,
+  applyRestBlend,
+  restBlendAmount,
+  shouldStartRestGlide,
+} from "../../motion/scroll-glide";
 import { ArchitectureDiagram, type ArchSpec } from "./ArchitectureDiagram";
 import {
   CAM_IDENTITY,
@@ -508,12 +517,16 @@ export function ArchitectureTour({
 
     /* The camera follows scroll, not the integer step. It rests on the
        narrated boxes, then glides to the next ones across the tail of the
-       beat so the move and the text rail arrive together. A controlled
-       parent (the why band) only hears the integer index — without this
-       report the rail and the glow stay on the opening beat forever. */
+       beat so the move and the text rail arrive together. `restBlend` eases
+       that glide back to the parked boxes after the page stops; it stays 0
+       while the reader is skipping, so the picture never lags the wheel.
+       A controlled parent (the why band) only hears the integer index —
+       without this report the rail and the glow stay on the opening beat
+       forever. */
+    let restBlend = 0;
     const pose = (progress: number) => {
       const cursor = walkCursor(progress, count);
-      const glide = glideAmount(cursor.frac);
+      const glide = applyRestBlend(glideAmount(cursor.frac), restBlend);
       const steps = flatRef.current;
       const current = steps[cursor.index];
       const upcoming = steps[Math.min(count - 1, cursor.index + 1)];
@@ -643,7 +656,71 @@ export function ArchitectureTour({
       report(index);
     };
 
+    /* Skip-through / rest. Scroll position is never rewritten and the wheel
+       is never captured, so a flick crosses the walk with the page. While
+       scrollY is changing, `data-skipping` drops the time-based CSS follows
+       (they lag a fast skip). After the page has been still, the camera
+       eases onto the narrated boxes — unless that glide is already committed,
+       in which case the frame stays where the reader left it. */
+    let restRaf = 0;
+    let restTimer = 0;
+    let resting = false;
+    let lastScrollY = window.scrollY;
+    let lastMoveAt = performance.now();
+
+    const setSkipping = (on: boolean) => {
+      const root = rootRef.current;
+      if (!root) return;
+      if (on) root.setAttribute("data-skipping", "");
+      else root.removeAttribute("data-skipping");
+    };
+
+    const cancelRest = () => {
+      resting = false;
+      restBlend = 0;
+      if (restRaf) cancelAnimationFrame(restRaf);
+      restRaf = 0;
+    };
+
+    const beginRest = () => {
+      if (resting) return;
+      const availNow = Math.max(1, track.offsetHeight - pin.offsetHeight);
+      const progress = clamp01((pinOffset(pin) - track.getBoundingClientRect().top) / availNow);
+      const live = glideAmount(walkCursor(progress, count).frac);
+      if (!shouldStartRestGlide({ quietMs: performance.now() - lastMoveAt, liveGlide: live })) {
+        setSkipping(false);
+        return;
+      }
+      const start = performance.now();
+      resting = true;
+      const step = (now: number) => {
+        if (!resting) return;
+        restBlend = restBlendAmount(now - start, REST_GLIDE_MS);
+        update();
+        if (restBlend < 1) {
+          restRaf = requestAnimationFrame(step);
+          return;
+        }
+        resting = false;
+        restRaf = 0;
+        setSkipping(false);
+      };
+      restRaf = requestAnimationFrame(step);
+    };
+
+    const noteMove = () => {
+      const y = window.scrollY;
+      if (Math.abs(y - lastScrollY) < 0.5) return;
+      lastScrollY = y;
+      lastMoveAt = performance.now();
+      if (resting || restBlend !== 0) cancelRest();
+      setSkipping(true);
+      window.clearTimeout(restTimer);
+      restTimer = window.setTimeout(beginRest, REST_QUIET_MS);
+    };
+
     const onScroll = () => {
+      noteMove();
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(update);
     };
@@ -664,108 +741,15 @@ export function ArchitectureTour({
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", onResize);
 
-    /* ── one gesture, one step ─────────────────────────────────────────
-       Without this the walk is pure position: a single trackpad flick keeps
-       feeding scroll events and carries the reader through every step at once.
-       So while the pin is held we take the wheel/touch gesture and advance
-       EXACTLY one step, then lock for the settle window. A gesture that arrives
-       outside the pin, or once the walk is finished and the pin about to
-       release, is left alone so the page never traps the reader.
-
-       The lock is deliberately generous: it has to outlast the smooth scroll
-       below (which is longer now) so a second flick in the same movement is
-       swallowed rather than advancing again — that is what makes the walk read
-       as continuous instead of jumpy. */
-    const GESTURE_COOLDOWN_MS = 1250;
-    /* A flick that carries the reader INTO the pin keeps firing wheel events
-       after it lands; those are the arrival, not a request for the next step.
-       While they keep coming this close together they are swallowed, so the
-       reader parks on the walk's edge and the next deliberate gesture walks.
-       Capped from the moment the pin catches: a reader flicking again and
-       again never leaves a 350ms gap, and without the cap every flick after
-       the first would read as arrival and the walk would never start. */
-    const ARRIVAL_GAP_MS = 350;
-    const ARRIVAL_MAX_MS = 1000;
-    let lockUntil = 0;
-    let freeAt = -Infinity;
-    let caughtAt = -Infinity;
-    let parked = true;
-
-    const avail = () => Math.max(1, track.offsetHeight - pin.offsetHeight);
-
-    const stepScrollTop = (next: number) => {
-      const trackTop = track.getBoundingClientRect().top + window.scrollY;
-      const target = trackTop - pinOffset(pin) + (next / count) * avail();
-      return Math.max(0, Math.round(target));
-    };
-
-    const pinned = () => {
-      // Held from its first pixel: a section snap parks the reader exactly
-      // there, and the first gesture must start the walk, not scroll past it.
-      const raw = pinOffset(pin) - track.getBoundingClientRect().top;
-      return raw >= -1 && raw / avail() < 1;
-    };
-
-    const nudge = (dir: number) => {
-      const now = performance.now();
-      if (now < lockUntil) return true;
-      if (!pinned()) {
-        freeAt = now;
-        parked = false;
-        return false;
-      }
-      if (now - freeAt < ARRIVAL_GAP_MS && (!parked || now - caughtAt < ARRIVAL_MAX_MS)) {
-        freeAt = now;
-        // The free scroll overshoots by up to one wheel delta; land on the
-        // edge the reader came in through, so the pin sits on its rules. The
-        // nearer edge, not the gesture's direction: a flick leaving through
-        // the bottom can dip back into the pin, and must not rewind the walk.
-        if (!parked) {
-          parked = true;
-          caughtAt = now;
-          const p = (pinOffset(pin) - track.getBoundingClientRect().top) / avail();
-          window.scrollTo({ top: stepScrollTop(p < 0.5 ? 0 : count), behavior: "smooth" });
-        }
-        return true;
-      }
-      const p = clamp01((pinOffset(pin) - track.getBoundingClientRect().top) / avail());
-      const current = Math.min(count - 1, Math.floor(p * count));
-      const next = Math.max(0, Math.min(count - 1, current + dir));
-      // At either end, hand the gesture back to the page so the reader can
-      // leave the band by continuing to scroll.
-      if (next === current) return false;
-      lockUntil = now + GESTURE_COOLDOWN_MS;
-      window.scrollTo({ top: stepScrollTop(next + 0.5), behavior: "smooth" });
-      return true;
-    };
-
-    const onWheel = (event: WheelEvent) => {
-      if (Math.abs(event.deltaY) < 2 || event.ctrlKey) return;
-      if (nudge(event.deltaY > 0 ? 1 : -1)) event.preventDefault();
-    };
-    let touchStartY = 0;
-    const onTouchStart = (event: TouchEvent) => {
-      touchStartY = event.touches[0]?.clientY ?? 0;
-    };
-    const onTouchMove = (event: TouchEvent) => {
-      const dy = touchStartY - (event.touches[0]?.clientY ?? 0);
-      if (Math.abs(dy) < 24) return;
-      if (nudge(dy > 0 ? 1 : -1)) event.preventDefault();
-      touchStartY = event.touches[0]?.clientY ?? 0;
-    };
-
-    pin.addEventListener("wheel", onWheel, { passive: false });
-    pin.addEventListener("touchstart", onTouchStart, { passive: true });
-    pin.addEventListener("touchmove", onTouchMove, { passive: false });
-
     return () => {
+      resting = false;
       cancelAnimationFrame(frame);
       cancelAnimationFrame(settle);
+      cancelAnimationFrame(restRaf);
+      window.clearTimeout(restTimer);
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", onResize);
-      pin.removeEventListener("wheel", onWheel);
-      pin.removeEventListener("touchstart", onTouchStart);
-      pin.removeEventListener("touchmove", onTouchMove);
+      rootRef.current?.removeAttribute("data-skipping");
       track.style.height = "";
     };
   }, [mode, count, swapAt, sides.length, vhPerStep, cameraFill, cameraMaxScale, cameraCover]);
