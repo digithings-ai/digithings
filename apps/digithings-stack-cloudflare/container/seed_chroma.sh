@@ -5,13 +5,6 @@
 # Seeds:
 #   - digithings_docs  ← /seed/digithings_docs  (digithings.ai/chat)
 #   - occ_help         ← /seed/occ_help         (digithings.ai/chat/occ)
-#   - occ_tickets      ← /seed/occ_tickets.jsonl (fan-out partner of occ_help)
-#
-# occ_tickets is a committed Zammad snapshot (scripts/build_occ_tickets_seed.py
-# regenerates it) rather than a live backfill: /data is ephemeral on Cloudflare
-# Containers, so a live backfill would have to re-run on every cold boot. It is
-# a snapshot, not a sync — rebuild the JSONL when the corpus needs refreshing.
-#
 # Marker version: bump SEED_VER when seed markdown changes so existing volumes
 # re-ingest on the next Container boot (shared-vN bump still recommended on CF).
 set -eu
@@ -65,21 +58,6 @@ seed_index() {
     digisearch ingest --index "$index_name" "$seed_dir"
 }
 
-# occ_tickets ships as one JSONL payload (not a markdown tree), so it needs its
-# own call shape. Absent payload is a WARN, not a failure: OCC then answers from
-# occ_help alone rather than blocking digisearch, which matches seed_index's
-# tolerance for a missing seed dir.
-seed_tickets() {
-  snapshot="$1"
-  if [ ! -f "$snapshot" ]; then
-    echo "digithings-stack: WARN no ${snapshot}; occ_tickets fan-out will return no hits"
-    return 0
-  fi
-  echo "digithings-stack: seeding occ_tickets from ${snapshot}"
-  CHROMA_PATH="$DATA_CHROMA" DIGISEARCH_ALLOW_STUB=0 \
-    python3 -m scripts.build_occ_tickets_seed --ingest "$snapshot"
-}
-
 ok=1
 if ! seed_index digithings_docs /seed/digithings_docs; then
   echo "digithings-stack: WARN digithings_docs seed failed"
@@ -87,10 +65,6 @@ if ! seed_index digithings_docs /seed/digithings_docs; then
 fi
 if ! seed_index occ_help /seed/occ_help; then
   echo "digithings-stack: WARN occ_help seed failed"
-  ok=0
-fi
-if ! seed_tickets /seed/occ_tickets.jsonl; then
-  echo "digithings-stack: WARN occ_tickets seed failed"
   ok=0
 fi
 
@@ -102,7 +76,7 @@ if [ "$ok" -eq 1 ]; then
     "${DATA_CHROMA}/.stack_chroma_seeded_v1" "${DATA_CHROMA}/.stack_chroma_seeded_v2" \
     "${DATA_CHROMA}/.stack_chroma_seeded_v3" "${DATA_CHROMA}/.stack_chroma_seeded_v4" \
     2>/dev/null || true
-  echo "digithings-stack: chroma seed ${SEED_VER} complete (digithings_docs + occ_help + occ_tickets)"
+  echo "digithings-stack: chroma seed ${SEED_VER} complete (digithings_docs + occ_help)"
   exit 0
 fi
 
