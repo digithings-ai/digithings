@@ -30,6 +30,33 @@ workflow_dispatch and logs `github_override` at error.
 
 Set secrets from this directory with wrangler secret put (never echo values).
 
+## POST /kick
+
+Hidden (404) unless `CRON_KICK_SECRET` is set. `Authorization: Bearer
+$CRON_KICK_SECRET`, otherwise 401. Body `{ cron, force?, args? }`; every `args`
+value must be a string.
+
+400 responses, each with `error`:
+
+- `invalid_json` — the body did not parse.
+- `invalid_args` — an `args` value was not a string.
+- `cron_required` — `cron` was empty.
+- `undeclared_workflow_input` — GitHub refused the dispatch because a
+  `workflow_dispatch` input key is not declared in the workflow YAML. The body
+  also carries `cron` and a `detail` naming the workflow, the ref and the
+  offending key(s). It is the caller's own input, so it answers 400 and not 500.
+  `dispatchGithub` fails closed on the first attempt: a deterministic refusal
+  is never retried. Only `workflow_dispatch` / `repository_dispatch` rows can
+  reach this; `kind: container` and `kind: probe` never call GitHub unless the
+  job id is in `GITHUB_OVERRIDE_JOBS`.
+
+Every other failure keeps its previous shape. `dispatchGithub` throws, the
+error leaves the route, and the response is the Worker runtime's 500.
+
+`args` reach `kind: container` rows only. On the GitHub path the request body is
+`{ ref, inputs: job.inputs ?? {} }` built from `src/jobs.ts`; per-request `args`
+are not merged into it.
+
 ## Unique crons
 
 `wrangler.toml` `[triggers].crons` matches `uniqueEnabledCrons()` in order
