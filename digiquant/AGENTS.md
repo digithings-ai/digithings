@@ -202,7 +202,12 @@ the full module map.
   not 90-day rolling z. Preset `btc_optimized` sells (`long_only: false`)
   with a concentrated remaining-book curve (high max daily % of remaining
   cash/coins at the extremes). Walk-forward OOS `beats_flat_dca_oos` is
-  still false — in-sample richness, not a proven OOS beat. Allocation
+  still false — do not claim an OOS win over flat DCA unless a new run
+  actually prints true. Extras are also searched as Stage 0 solos (OOS vs
+  `power_law_solo`); `indicator_weights` only change when an operator
+  passes `--persist-settings` *and* combined OOS is not worse. The Stage 0
+  CLI default is sidecar-only — a 2-trial `curve_simulator` Stage B is not
+  a published-weight flip. Allocation
   charts draw MTM allocated % plus fill dots; do not draw a percent-cash
   line (it is the inverse of allocated).
 - **Public copy.** User-facing name is **BTC-SDCA** (asset then type; never
@@ -257,11 +262,14 @@ on the extra-indicator allowlist.
 4. Allowlist extras: generic (`weekly_rsi`, `weekly_macd`, `sma_band`) vs
    plugins (BTC M2/rs_eth/dxy; on-chain #1086 later). No put/call scrape
    in this WP.
-5. Stage A backtest keep/drop (`optimize_stage_a_by_backtest` over
-   `stage_a_search_names(profile)`) → Stage B → `regularize`. Cycle
+5. Stage 0 solo books (`run_stage_0`, OOS vs `power_law_solo`) then
+   Stage 1 survivor weights (`optimize_stage_1_survivor_weights`, no 0 on
+   the grid) → Stage B → `regularize`. Legacy Stage A IS keep/drop
+   (`optimize_stage_a_by_backtest`) remains for diagnostics. Cycle
    overlap is diagnostic. Platform MCP: `digiquant_fit_sdca_weights` /
    `digiquant_run_optimize` (`strategy_name=sdca`, freeze `*_weight` keys).
-   Do not publish until the backtest looks comfortable.
+   Do not publish until the backtest looks comfortable. Do not claim
+   `beats_flat_dca_oos` unless a new run prints true.
 6. Only then add `settings.json`. `SdcaAssetProfile.eth_research_v1()` is
    research-only — not `eth_sdca` in settings, no `--push-supabase`, no
    live-trading. Do not change publish `signal_delay_days`.
@@ -486,7 +494,7 @@ stays a generic transport engine (no URLs, no env reads).
   `digifetch_exchange_rate`, `digifetch_search`, `digifetch_news`, plus the #4110
   phase-1 cohort `digifetch_econ_calendar`, `digifetch_econ_series`,
   `digifetch_yield_curve`, `digifetch_cds`, `digifetch_research_search`,
-  `digifetch_congress_trades`, `digifetch_transcripts`, the #4110 phase-2
+  `digifetch_congress_trades`†, `digifetch_transcripts`, the #4110 phase-2
   cohort `digifetch_statements`, `digifetch_ticker_tweets`,
   `digifetch_tweet_search`, `digifetch_venues`, `digifetch_screener`,
   `digifetch_13f_funds`, `digifetch_13f_holdings`, and the #4110 phase-3
@@ -596,11 +604,14 @@ stays a generic transport engine (no URLs, no env reads).
   (a bare 402 with no recognizable plan body keeps the generic `auth_required`
   mapping), and the plan-gate path must not trip the circuit breaker. Read transcript rows from the upstream `calls`
   key (`companyName`/`callAt`/`webcastUrl`); `transcripts` is accepted only as a
-  wrapped variant. `digifetch_congress_trades` is exposed but its upstream
-  Mistral OCR dependency currently answers HTTP 500 (`402 Customer monthly
-  spending limit reached`), surfaced as a typed `upstream_error`; its typed
-  fields follow the known live names (`memberName`/`assetName`/`sourceUrl`/
-  `filingDate`/`notificationDate`) and extras carry the rest.
+  wrapped variant. † `digifetch_congress_trades` is **REFUSED on every
+  digiquant surface** — see "Refused tools" below; do not re-add it to
+  `READ_SCOPE_TOOLS`, the orchestrator manifest, or any pipeline subset
+  without Counsel's written clearance. Its upstream is live, not failing
+  (probed 2026-10-05: `GET https://api.gloom.sh/cloud/congress/house?limit=3`
+  → HTTP 200, `source: "house-clerk"`, `filingCount: 407`, `filingsParsed: 20`),
+  so an earlier note here claiming a Mistral OCR spend-cap HTTP 500 was wrong.
+  Client, normalizer and models are retained in-tree for a possible clearance.
   `digifetch_econ_calendar` takes **no parameters** — upstream ignores `limit`
   (fixed ~105-row window), so do not reintroduce a page-size knob.
   `digifetch_cds.days` is bounded 1–90 in the **input model** (the upstream
@@ -613,6 +624,36 @@ stays a generic transport engine (no URLs, no env reads).
   the description rather than promising `data.delay_note`. Do not tighten the
   deliberately permissive wire types (`float | str`, `str | int`) for the
   partly-probed routes without a live probe.
+- **Refused tools (DIG-1057).** `digiquant.tool_refusals` holds a deny-by-default
+  `REFUSED_TOOLS` frozenset — currently `{"digifetch_congress_trades"}` — naming
+  tools Counsel has ruled we must not obtain or serve (currently 5 U.S.C.
+  13107(c)(1)(B)). A refused name is dropped in `mcp_server._maybe_tool` **before**
+  registration, so it is absent from `create_mcp_server(scope="read")` *and*
+  `scope="full"` — dropping it from `READ_SCOPE_TOOLS` alone is not enough.
+  `build_orchestrator_tool_manifest()` filters refused names out of the
+  `POST /v1/orchestrator_tools` manifest, and `server.v1_orchestrator_invoke`
+  answers `{"ok": false, "refused": true, "code": "tool_refused", …}` before any
+  dispatch branch, so the HTTP invoke path cannot reach the upstream even though
+  `DIGIFETCH_DISPATCH` still carries the name. The refusal is
+  registration-level by design: client, normalizer, models and the `free`
+  entitlement entry stay in-tree so a Counsel clearance is a one-line removal
+  from the frozenset.
+- **The refusal env denylist is additive only (DIG-1251 Q5).** The effective rule
+  is `refused = REFUSED_TOOLS | env_denied_tools(DIGIQUANT_REFUSED_TOOLS)`, where
+  `DIGIQUANT_REFUSED_TOOLS` is a separator-delimited list (`,` `;` or whitespace)
+  of extra tool names, read per call. It can only **add** refusals: there is no
+  allow/negate/un-refuse syntax, so `-name`, `!name` and `allow=name` parse as
+  unknown tokens rather than permissions, and no value can lift a
+  `REFUSED_TOOLS` member. Missing, empty or whitespace-only means *no extra
+  names*, which leaves the code constant in force (fail closed); a malformed value
+  yields tokens and never raises past the refusal check. Counsel approved this
+  shape on condition that the code constant stays the carrier of the refusal — an
+  env var is not a legal gate, and the real gate is Counsel's written clearance
+  plus the CTO's merge. Proof is
+  `tests/dq/test_tool_refusals_env_denylist.py`, not a log line: it pins every
+  `REFUSED_TOOLS` member as still refused under every legal value of the variable
+  *and* pins that the variable does add refusals, so a parser that ignored the
+  environment entirely could not pass.
 - **Plan and upstream caveats (#4110 phase 2).** `digifetch_screener` is the
   second Pro-only tool and has **two plan-gate shapes** that must map to the
   same non-retryable `pro_required`: the 402 text body
@@ -730,12 +771,14 @@ stays a generic transport engine (no URLs, no env reads).
   `available_digifetch_tools` returns no digifetch tools at all when
   `GLOOMBERB_ENABLED` disables the family, and drops session/preview/pro names
   when `GLOOMBERB_SESSION_COOKIE` is unset (CI has neither → never advertised);
-  the client still applies both gates per call. `digifetch_congress_trades`,
+  the client still applies both gates per call.
   `digifetch_polls`, `digifetch_hacker_news`,
   `digifetch_compare_performance`, `digifetch_correlation_matrix`, and
   `digifetch_relative_valuation` stay MCP-only (the first three for upstream
   reliability/ToS reasons, the last three until an owner-signed subset
   eviction frees a prompt-budget slot) and are not in any subset.
+  `digifetch_congress_trades` is in no subset either and must stay out: it is
+  refused outright (DIG-1057, 5 U.S.C. 13107(c)(1)(B)), not merely MCP-only.
   deliberation stays off (research-tools-only by #2908) and legacy Phase 7D is unwired.
   Enrichment-only is enforced structurally: the subset attaches **only when a
   primary data/research executor built**. The client factory + envelope

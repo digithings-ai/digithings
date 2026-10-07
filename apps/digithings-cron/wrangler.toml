@@ -62,7 +62,9 @@ crons = [
   "37 6 * * MON",      # security-npm-audit
   "41 6 * * *",        # token-canary
   "17 6 1 * *",        # secret-staleness (monthly, DIG-248)
+  "23 6 1 * *",        # dependency-freshness (monthly, DIG-1515)
   "17 6 * * *",        # smoke-site
+  "17 * * * *",        # datatap-answer-check
   "7 0 * * MON-FRI",   # twelve-x-asia
   "12 7 * * MON-FRI",  # twelve-x-london
   "17 12 * * MON-FRI", # twelve-x-new-york
