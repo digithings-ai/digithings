@@ -71,7 +71,11 @@ jobs:
           requireScope: true
           # Module / surface scopes. digitrace = Phase 0 rename forward-compat;
           # digismith kept for legacy titles until rename lands.
+          # cron = apps/digithings-cron (the Worker that dispatches scheduled
+          # jobs and answers POST /kick). Added by DIG-1601: without it every
+          # cron PR fails this check and no cron title is expressible.
           scopes: |
+            cron
             digichat
             digiskills
             digillm

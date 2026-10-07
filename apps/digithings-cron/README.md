@@ -30,6 +30,32 @@ workflow_dispatch and logs `github_override` at error.
 
 Set secrets from this directory with wrangler secret put (never echo values).
 
+## POST /kick
+
+Body is `{ cron, force?, args? }`, authorised by `CRON_KICK_SECRET`. It fires
+every enabled row on `cron`; `force` also fires disabled rows.
+
+`args` reaches **every** dispatch path, never silently dropped:
+
+| Row kind | Where `args` goes |
+|---|---|
+| `workflow_dispatch` | `inputs` in the `POST /dispatches` body |
+| `repository_dispatch` | `client_payload` in the `POST /dispatches` body |
+| `container` | `args` in the digiquant-runner body |
+| `probe` | nothing to send — a probe fetches a URL and takes no input |
+
+**Conflict rule on a GitHub row: the caller's arg wins per key.** The row's
+static `inputs` are the defaults, and each key in `args` overrides that one
+key. Keys `args` does not mention keep the row's value, so a partial override
+cannot blank the rest of the inputs. Before this rule existed, `args` on a
+GitHub row were discarded and the run still answered `200 {ok:true}` with the
+row's static input — a silent wrong-input run.
+
+A key GitHub's workflow does not declare still comes back as GitHub's own
+refusal of the dispatch. #5220 turns that into a legible
+`400 undeclared_workflow_input` naming the key; until that lands it is an
+opaque 500.
+
 ## Unique crons
 
 `wrangler.toml` `[triggers].crons` matches `uniqueEnabledCrons()` in order
