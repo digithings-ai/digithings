@@ -5,13 +5,19 @@
 # Deduplicates by title so only one open radar issue exists at a time.
 #
 # Visibility only. This never changes a bound and never bumps anything.
+#
+# No `on: schedule` here on purpose. develop carries no GitHub cron for this
+# repo — every clock lives on the digithings-cron Worker, because a GitHub cron
+# on the default branch double-fires with it
+# (tests/scripts/test_no_gha_schedules.py). The monthly clock is the
+# `dependency-freshness` wd() row in apps/digithings-cron/src/jobs.ts, plus its
+# `[triggers] crons` entry in wrangler.toml. Same precedent as
+# secret-staleness-check.yml and datatap-answer-check.yml.
 
 name: "Pipeline: dependency freshness radar"
 
 on:
-  schedule:
-    - cron: "0 6 1 * *"  # Monthly, 1st of month 06:00 UTC
-  workflow_dispatch:      # Manual trigger
+  workflow_dispatch:
 
 permissions:
   contents: read
