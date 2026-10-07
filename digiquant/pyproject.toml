@@ -41,7 +41,9 @@ dependencies = [
 # A minor bump within 1.x moved the Python-visible return type of
 # PortfolioAnalyzer.realized_pnls() (1.228.0 -> 1.230.0), which silently changed
 # dedup semantics in the honesty envelope. The Dockerfile installs this extra
-# without a lockfile, so THIS LINE IS THE ONLY THING PINS THE SHIPPED CONTAINER.
+# without a lockfile, so this line is what pins nautilus_trader in the shipped
+# container. Every OTHER dependency in the image still floats from PyPI at build
+# time -- see "What the pin does not fix" in the ADR.
 # Bump it in its own PR: change the pin here, re-run `uv lock` at the repo root,
 # and record the new version in digiquant/AGENTS.md + digiquant/ARCHITECTURE.md.
 nautilus = ["nautilus_trader==1.230.0", "requests>=2.28", "statsmodels>=0.14"]

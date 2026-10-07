@@ -103,9 +103,12 @@ alternative (an engine upgrade) would have dragged an unknown transitive set alo
 
 - One answer to "the build we ship": **1.230.0**, in the lock, in `pyproject.toml`,
   in `digiquant/AGENTS.md`, and in `digiquant/ARCHITECTURE.md`.
-- The shipped container is now actually pinned. Since the Dockerfile copies no
-  lockfile, the `==1.230.0` in `pyproject.toml` is the *only* thing that pins it —
-  which is the real fix. Before this ADR the production image tracked PyPI.
+- The shipped container's **engine** is now pinned. Since the Dockerfile copies no
+  lockfile, the `==1.230.0` in `pyproject.toml` is the *only* thing that pins
+  `nautilus_trader` in it — which is the real fix for the defect Premise 1 found.
+  Before this ADR the image tracked PyPI for the engine too.
+- The class of defect is named and cannot recur silently: a module-level lock that
+  *reads* as a pin is now a written rule with a stated consequence.
 - `uv lock --check` passes from the repo root **and** from inside `digiquant/`, so the
   34 `--frozen` lanes stay satisfied and an in-module `uv sync` cannot pick a stale set.
 - A second, false source of truth is gone. It was actively misleading: 1.223.0 in
@@ -131,6 +134,37 @@ alternative (an engine upgrade) would have dragged an unknown transitive set alo
   range we widen later, and because the local venv is still on 1.228.0 until someone
   re-syncs it.
 
+### Scope of the fix: what the pin does **not** close
+
+This ADR pins one package. It does **not** make the digiquant image
+reproducible, and this ADR must not be read as saying it does.
+
+`digiquant/Dockerfile` runs `uv pip install --system -e ".[nautilus]"` with no
+lockfile and no constraints file. The `==1.230.0` is now fixed, but every other
+package in the image is resolved from PyPI **at image build time**:
+`polars`, `optuna`, `cryptography`, `fastapi`, `uvicorn`, `langgraph`, `httpx`,
+`requests`, `statsmodels`, and the whole transitive closure beneath
+`nautilus_trader` itself (msgspec, pandas, the Rust-backed wheels). So:
+
+- A rebuild of an **unchanged** commit can produce a **different** image. The
+  failure mode is not "the pin broke" but "some transitive dependency moved
+  under a tag that did not".
+- `.github/workflows/publish-service-images.yml` runs on every push to `main`
+  touching `digiquant/**` and republishes `:latest` **and** `:v<pyproject-version>`.
+  `digiquant`'s `pyproject.toml` version is `0.1.0` and does not move per release,
+  so **`ghcr.io/digithings-ai/digiquant:v0.1.0` is a mutable tag over a
+  non-reproducible build.** Rolling back to `v0.1.0` does not restore a known
+  build.
+- The same Dockerfile backs `docker-compose.yml`, the Cloudflare Workers stack,
+  `Dockerfile.mcp` and `Dockerfile.sandbox`, so the exposure is the whole surface
+  named in Premise 1 — only the engine's own version is now closed.
+
+Closing this needs a lock or a constraints file inside the image build, which is
+a change to how images are built rather than a pin change. It is deliberately
+**not** in this ADR: the DIG-938 constraint is pin and re-lock only, and folding
+an image-build change into the same PR would put two different blast radii in one
+review. Tracked as follow-up 4.
+
 ### Re-syncing the local venv
 
 Until `uv sync --frozen --package digiquant --extra nautilus` is run in a developer's
@@ -147,6 +181,24 @@ reproduce a CI-only defect class locally until they do.
 2. **Re-sync local venvs** to 1.230.0.
 3. Consider a repo-level test asserting no module ships a `uv.lock`, so this class of
    stale second-lock cannot reappear silently.
+4. **Make the digiquant image reproducible.** The pin fixed the engine inside the
+   container; nothing pins the rest of it. The options, in the order I would take
+   them:
+   - **Copy the root `uv.lock` into the image and install from it** — the one true
+     lock, already authoritative for CI, so the container matches CI by
+     construction. Needs a `COPY uv.lock` plus switching `uv pip install` to a
+     frozen/`--requirement` form; it also means the workspace members installed
+     as `-e` paths must stay consistent with the lock.
+   - **`uv pip compile` the service's dependency set into a committed
+     `requirements.txt`** and install with `-r`. Smaller change, but that file
+     becomes a second lock and can drift — which is exactly the failure mode this
+     ADR just deleted in `digiquant/uv.lock`. Prefer the first option.
+   - **Stop publishing `:v<pyproject-version>` for digiquant, or bump that version
+     per release.** This does not fix the image, but it removes a mutable tag that
+     currently reads as an immutable version reference. Cheap, and worth doing
+     whichever option is chosen above.
+   Whatever is picked belongs to Platform/DevOps; it is an image-build change, not
+   a dependency decision.
 
 ### Bump checklist (the next time)
 
