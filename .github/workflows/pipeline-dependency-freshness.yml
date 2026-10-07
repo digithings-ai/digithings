@@ -108,6 +108,15 @@ jobs:
             gh issue edit "$EXISTING" --repo "$REPO" --title "$TITLE" --body "$BODY"
             echo "Updated existing radar issue #$EXISTING"
           else
+            # `gh issue create --label` is fatal on a label that does not exist,
+            # and a monthly job that dies on a deleted label reports nothing for
+            # a month. The other pipelines never create labels because every
+            # label they pass already exists; `radar` is the first novel one, so
+            # the radar creates its own. Idempotent, and never fails the step.
+            gh label create radar --repo "$REPO" --color 1D76DB \
+              --description "Standing informational check: read the report, no defect implied" \
+              >/dev/null 2>&1 || true
+
             URL=$(gh issue create --repo "$REPO" \
               --title "$TITLE" \
               --label "radar,component:root,priority:low" \
