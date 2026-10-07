@@ -18,8 +18,17 @@ The verdict branches pinned here, offline:
 * ``tests/`` and ``docs/`` prose and fixtures are never scanned;
 * the enabling set is read from the client's ``_TRUTHY_ENV_VALUES``, so this
   guard and the runtime cannot drift apart;
-* every tracked ``wrangler.*`` in the repo is claimed by ``DEPLOYED_PATTERNS`` --
-  a new Cloudflare app must not land outside the guard unnoticed.
+* every tracked ``wrangler.*``, ``Dockerfile*`` and compose config in the repo is
+  claimed by a rule -- a new Cloudflare app, a new ``Dockerfile.<target>`` or a new
+  compose family must not land outside the guard unnoticed.
+
+Dockerfile coverage is asserted with **this repo's real names**
+(``digiquant/Dockerfile.mcp``, ``scripts/zammad_mcp/Dockerfile.mcp``,
+``Dockerfile.digithings-stack-cloudflare``, ...). The first version of this suite
+asserted only the bare ``Dockerfile`` name, which this repo does not use, so all of
+it passed while 12 of the 20 tracked Dockerfiles -- every root deploy image among
+them -- sat outside the guard. A synthetic ``apps/a/b/Dockerfile`` fixture cannot
+catch that class of gap; the names below come from ``git ls-files``.
 """
 
 from __future__ import annotations
@@ -92,6 +101,8 @@ def test_every_deployed_surface_is_scanned(guard: Any) -> None:
         "apps/digichat-cloudflare/wrangler.toml",
         "apps/digiquant-runner/wrangler.jsonc",
         "apps/dashboard-api/wrangler.toml",
+        # This repo names its build recipes Dockerfile.<target>; the bare
+        # Dockerfile name is the minority case, not the convention.
         "digiquant/Dockerfile",
         "digivault/Dockerfile",
         "docker-compose.yml",
@@ -108,6 +119,151 @@ def test_nested_wrangler_and_two_level_dockerfile(guard: Any) -> None:
     assert guard.is_deployed("apps/group/sub/wrangler.toml")
     assert guard.is_deployed("apps/group/sub/wrangler.json")
     assert guard.is_deployed("apps/a/b/Dockerfile")
+
+
+# ── Dockerfiles named the way this repo actually names them ───────────────────
+#
+# The review that blocked the first version of this PR appended an enabling
+# ``ENV`` to Dockerfile.digithings-stack-cloudflare and the guard passed: its
+# patterns were ``*/Dockerfile`` and ``*/*/Dockerfile``, a literal filename match
+# against a repo that names 12 of its 20 Dockerfiles ``Dockerfile.<target>``.
+# Every assertion below uses a path from ``git ls-files``, so the same class of
+# hole cannot be re-introduced by a name this repo never uses.
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        # The five root deploy images, which a `*/Dockerfile` glob cannot reach at
+        # all: with no directory component there is no `/` to anchor the glob on.
+        "Dockerfile.digichat-cloudflare",
+        "Dockerfile.digiquant-runner",
+        "Dockerfile.digithings-stack-cloudflare",
+        "Dockerfile.digitrace-langfuse-web",
+        "Dockerfile.digitrace-langfuse-worker",
+        # Nested targets.
+        "digiquant/Dockerfile.mcp",
+        "digiquant/Dockerfile.sandbox",
+        "digivault/Dockerfile.mcp",
+        # Under scripts/, which the local exemption covers by path.
+        "scripts/zammad_mcp/Dockerfile.mcp",
+        # Deeper than the two levels the old `*/*/Dockerfile` reached.
+        "infra/containers/Dockerfile.digiclaw",
+        "apps/digichat/Dockerfile.prod",
+    ],
+)
+def test_dockerfile_target_naming_is_deployed(guard: Any, path: str) -> None:
+    assert guard.is_deployed(path), f"{path} builds a deployed image; ENV is baked into it"
+    findings = _scan(guard, path, "ENV GLOOMBERB_ENABLED=1\n")
+    assert len(findings) == 1, f"{path} must catch an ENV-baked enabling value"
+    assert findings[0].deployed is True
+
+
+def test_a_bare_dockerfile_is_still_deployed(guard: Any) -> None:
+    """The old glob's covered case must not regress while widening it."""
+    for path in ("digiquant/Dockerfile", "apps/a/b/Dockerfile"):
+        assert guard.is_deployed(path)
+        assert _scan(guard, path, "ENV GLOOMBERB_ENABLED=1\n")[0].deployed is True
+
+
+def test_local_exemption_cannot_claim_a_dockerfile(guard: Any) -> None:
+    """scripts/ is local-exempt, but a recipe built there still ships its ENV."""
+    assert guard.is_deployed("scripts/zammad_mcp/Dockerfile.mcp")
+    assert not guard.is_local("scripts/zammad_mcp/Dockerfile.mcp")
+
+
+def test_every_tracked_dockerfile_is_covered(guard: Any) -> None:
+    """The repo-wide claim: no tracked Dockerfile may sit outside the guard."""
+    files = guard.tracked_files(REPO_ROOT)
+    dockerfiles = [p for p in files if guard.gap_family(p) == "dockerfile"]
+    assert len(dockerfiles) >= 20, f"expected the repo's Dockerfiles, found {len(dockerfiles)}"
+    uncovered = [
+        p
+        for p in dockerfiles
+        if not (guard.is_deployed(p) or guard.is_local(p) or guard.is_ignored(p))
+    ]
+    assert uncovered == [], f"uncovered Dockerfiles: {uncovered}"
+
+
+# ── compose: release and self-host deploy sets, plus the local override ───────
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "docker-compose.yml",
+        "infra/self-host/compose.ghcr.yml",
+        "infra/digichat-release/compose.digichat-release.yml",
+        "infra/digichat-release/compose.profile-a.yml",
+        "infra/digichat-release/compose.profile-b.yml",
+        "infra/digichat-release/compose.profile-a-bundle.yml",
+    ],
+)
+def test_compose_deploy_sets_are_deployed(guard: Any, path: str) -> None:
+    assert guard.is_deployed(path), f"{path} starts containers; environment entries apply"
+    findings = _scan(guard, path, "  - GLOOMBERB_ENABLED=true\n")
+    assert len(findings) == 1
+    assert findings[0].deployed is True
+
+
+def test_the_root_override_stays_local(guard: Any) -> None:
+    """LOCAL wins over the deployed compose glob — the override is layered locally.
+
+    Widening the compose glob to basename matching must not capture
+    docker-compose.override.yml, which docker compose layers on top of the deployed
+    root stack at run time.
+    """
+    assert guard.is_deployed("docker-compose.yml")
+    assert not guard.is_deployed("docker-compose.override.yml")
+    assert guard.is_local("docker-compose.override.yml")
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "docker-compose.override.yml",
+        "docker-compose.override.yaml",
+        "apps/digitrace-langfuse/docker-compose.local.yml",
+    ],
+)
+def test_local_compose_files_stay_local(guard: Any, path: str) -> None:
+    assert guard.is_local(path), f"{path} is a local/dev compose file"
+    assert not guard.is_deployed(path)
+    assert _scan(guard, path, "  - GLOOMBERB_ENABLED=true\n")[0].deployed is False
+
+
+def test_every_tracked_compose_file_is_covered(guard: Any) -> None:
+    files = guard.tracked_files(REPO_ROOT)
+    composes = [p for p in files if guard.gap_family(p) == "compose"]
+    assert len(composes) >= 5, f"expected the repo's compose files, found {len(composes)}"
+    uncovered = [
+        p
+        for p in composes
+        if not (guard.is_deployed(p) or guard.is_local(p) or guard.is_ignored(p))
+    ]
+    assert uncovered == [], f"uncovered compose files: {uncovered}"
+
+
+# ── .github/ config that carries env: outside .github/workflows/ ───────────────
+
+
+def test_pipeline_env_file_outside_workflows_is_deployed(guard: Any) -> None:
+    """`.github/digiquant-pipeline.yml` is loaded into $GITHUB_ENV by a workflow.
+
+    Its `env:` block reaches a deployed pipeline, so it must be inside the guard
+    even though path filtering on .github/workflows/ cannot see it.
+    """
+    path = ".github/digiquant-pipeline.yml"
+    assert guard.is_deployed(path)
+    findings = _scan(guard, path, '  GLOOMBERB_ENABLED: "1"\n')
+    assert len(findings) == 1
+    assert findings[0].deployed is True
+
+
+def test_github_issue_templates_are_not_deploy_surfaces(guard: Any) -> None:
+    for path in (".github/ISSUE_TEMPLATE/agent_task.yml", ".github/ISSUE_TEMPLATE/config.yml"):
+        assert not guard.is_deployed(path), f"{path} is a PR form template, not a workflow"
+        assert _scan(guard, path, 'GLOOMBERB_ENABLED: "1"\n') == []
 
 
 # ── local/dev exemption: the issue requires it, so it is asserted ────────────
@@ -185,6 +341,8 @@ def test_disabled_value_in_deployed_config_is_allowed(guard: Any) -> None:
         ".env.example",
         "apps/digichat/reference/assistant-ui-templates/x/Dockerfile",
         "node_modules/pkg/wrangler.toml",
+        # A compose file that is prose-in-a-template, not this repo's stack.
+        "docs/templates/project/docker-compose.yml",
     ],
 )
 def test_non_config_files_are_never_scanned(guard: Any, path: str) -> None:
@@ -242,13 +400,144 @@ def test_every_tracked_wrangler_config_is_inside_the_guard(guard: Any) -> None:
     configs = [p for p in files if p.rsplit("/", 1)[-1] in guard.COVERAGE_FAMILIES]
     assert len(configs) >= 7, f"expected the repo's wrangler configs, found {configs}"
     assert guard.coverage_gaps(files) == [], (
-        f"uncovered config files: {guard.coverage_gaps(files)} -- add them to DEPLOYED_PATTERNS"
+        f"uncovered config files: {guard.coverage_gaps(files)} -- claim them in a rule"
     )
 
 
-def test_coverage_gaps_detects_an_uncovered_config(guard: Any) -> None:
-    gaps = guard.coverage_gaps(["infra/brand-new/wrangler.toml"])
-    assert gaps == ["infra/brand-new/wrangler.toml"]
+@pytest.mark.parametrize(
+    ("path", "family"),
+    [
+        ("infra/brand-new/wrangler.toml", "wrangler"),
+        ("infra/brand-new/wrangler.jsonc", "wrangler"),
+        ("deploy/nested/wrangler.json", "wrangler"),
+    ],
+)
+def test_coverage_gaps_detects_an_uncovered_config(guard: Any, path: str, family: str) -> None:
+    """A new deploy family must fail the build, not land quietly.
+
+    coverage_gaps() originally only knew wrangler.*, so a Dockerfile or compose
+    family added later escaped it — the exact failure mode the function exists to
+    prevent.
+    """
+    gaps = guard.coverage_gaps([path])
+    assert gaps == [guard.Gap(family=family, path=path)], f"{path} should be a {family} gap"
+
+
+# Because the Dockerfile and compose families are matched by basename at any depth,
+# a new file in either family is covered the moment it lands — coverage_gaps() has
+# nothing left to catch there by construction. What it is left to catch is a
+# regression in the patterns themselves, which is the hole this PR is fixing. These
+# two tests are that claim, executed: they narrow DEPLOYED_BASENAMES back to the
+# literal-filename match the first version shipped and assert the coverage check
+# reports the real files that match would miss. If someone later re-narrows the
+# patterns, these fail instead of the hole landing quietly.
+
+
+def test_coverage_gaps_would_have_caught_the_bare_dockerfile_patterns(
+    guard: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regressing to a literal-filename Dockerfile match must fail the build."""
+    monkeypatch.setattr(guard, "DEPLOYED_BASENAMES", ("Dockerfile",))
+    monkeypatch.setattr(guard, "NEVER_LOCAL_BASENAMES", ())
+    gaps = {gap.path for gap in guard.coverage_gaps(guard.tracked_files(REPO_ROOT))}
+    missed = {
+        "Dockerfile.digichat-cloudflare",
+        "Dockerfile.digiquant-runner",
+        "Dockerfile.digithings-stack-cloudflare",
+        "Dockerfile.digitrace-langfuse-web",
+        "Dockerfile.digitrace-langfuse-worker",
+        "digiquant/Dockerfile.mcp",
+        "digiquant/Dockerfile.sandbox",
+        "digivault/Dockerfile.mcp",
+    }
+    assert missed <= gaps, f"coverage_gaps missed {sorted(missed - gaps)}"
+    # scripts/ is a local path prefix, so under the original design the zammad image
+    # was silently claimed LOCAL instead of reported. NEVER_LOCAL_BASENAMES is what
+    # stops that, and it is asserted directly in
+    # test_local_exemption_cannot_claim_a_dockerfile.
+    assert "scripts/zammad_mcp/Dockerfile.mcp" not in gaps
+
+
+def test_a_dockerfile_is_deployed_even_with_no_pattern_listing_it(
+    guard: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`Dockerfile*` is deployed by name, not by an entry in a pattern list.
+
+    A Dockerfile is never a local file — ENV is baked into the image — so coverage
+    cannot depend on someone remembering to add a glob for the new one.
+    """
+    monkeypatch.setattr(guard, "DEPLOYED_BASENAMES", ())
+    monkeypatch.setattr(guard, "NEVER_LOCAL_BASENAMES", ("Dockerfile", "Dockerfile.*"))
+    for path in ("Dockerfile.anything", "deep/nested/Dockerfile.worker"):
+        assert guard.is_deployed(path), path
+        assert guard.coverage_gaps([path]) == []
+
+
+def test_coverage_gaps_would_have_caught_the_bare_compose_patterns(
+    guard: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        guard, "DEPLOYED_BASENAMES", ("Dockerfile", "Dockerfile.*", "docker-compose.yml")
+    )
+    gaps = {gap.path for gap in guard.coverage_gaps(guard.tracked_files(REPO_ROOT))}
+    missed = {
+        "infra/self-host/compose.ghcr.yml",
+        "infra/digichat-release/compose.digichat-release.yml",
+        "infra/digichat-release/compose.profile-a.yml",
+        "infra/digichat-release/compose.profile-b.yml",
+        "infra/digichat-release/compose.profile-a-bundle.yml",
+        "infra/digichat-release/compose.profile-a-bundle.override.yml",
+    }
+    assert missed <= gaps, f"coverage_gaps missed {sorted(missed - gaps)}"
+    # The local override is claimed by the exemption, so narrowing must not turn it
+    # into a gap: it is a local file, not a missing deploy surface.
+    assert "docker-compose.override.yml" not in gaps
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        # Each of these is claimed by a rule, so none may be reported as a gap.
+        "apps/x/wrangler.toml",
+        "digiquant/Dockerfile",
+        "digiquant/Dockerfile.mcp",
+        "scripts/zammad_mcp/Dockerfile.mcp",
+        "docker-compose.yml",
+        "docker-compose.override.yml",
+        "infra/self-host/compose.ghcr.yml",
+        "apps/digichat/reference/assistant-ui-templates/x/Dockerfile",
+    ],
+)
+def test_a_claimed_config_is_never_a_gap(guard: Any, path: str) -> None:
+    assert guard.coverage_gaps([path]) == []
+
+
+def test_coverage_gaps_is_sorted_by_family_then_path(
+    guard: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Narrow the families so the paths below are genuinely unclaimed, then check the
+    # ordering the report depends on.
+    monkeypatch.setattr(guard, "DEPLOYED_BASENAMES", ("Dockerfile", "docker-compose.yml"))
+    monkeypatch.setattr(guard, "NEVER_LOCAL_BASENAMES", ())
+    gaps = guard.coverage_gaps(
+        [
+            "infra/b/Dockerfile.x",
+            "infra/a/compose.b.yml",
+            "infra/a/Dockerfile.y",
+            "infra/b/wrangler.toml",
+        ]
+    )
+    assert [(g.family, g.path) for g in gaps] == [
+        ("compose", "infra/a/compose.b.yml"),
+        ("dockerfile", "infra/a/Dockerfile.y"),
+        ("dockerfile", "infra/b/Dockerfile.x"),
+        ("wrangler", "infra/b/wrangler.toml"),
+    ]
+
+
+def test_coverage_families_widen_past_wrangler(guard: Any) -> None:
+    labels = {label for label, _ in guard.COVERAGE_BASENAME_FAMILIES}
+    assert labels == {"wrangler", "dockerfile", "compose"}
 
 
 # ── the repo itself is clean today ───────────────────────────────────────────
@@ -275,9 +564,36 @@ def test_main_exits_nonzero_on_a_deployed_finding(
 
 def test_main_exits_nonzero_on_a_coverage_gap(guard: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        guard, "scan", lambda *a, **k: ([], ["infra/x/wrangler.toml"], VALUES, "test")
+        guard,
+        "scan",
+        lambda *a, **k: ([], [guard.Gap("dockerfile", "infra/x/Dockerfile.mcp")], VALUES, "test"),
     )
     assert guard.main([]) == 1
+
+
+def test_coverage_gap_render_names_the_family(guard: Any) -> None:
+    rendered = guard.render(
+        [], [guard.Gap("dockerfile", "infra/x/Dockerfile.mcp")], "parsed from client.py", VALUES
+    )
+    assert "COVERAGE GAP" in rendered
+    assert "dockerfile" in rendered
+    assert "infra/x/Dockerfile.mcp" in rendered
+
+
+def test_json_output_carries_gap_families(
+    guard: Any, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import json
+
+    monkeypatch.setattr(
+        guard,
+        "scan",
+        lambda *a, **k: ([], [guard.Gap("compose", "infra/x/compose.y.yml")], VALUES, "test"),
+    )
+    assert guard.main(["--json"]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is False
+    assert payload["coverageGaps"] == [{"family": "compose", "path": "infra/x/compose.y.yml"}]
 
 
 def test_main_exits_zero_when_clean(

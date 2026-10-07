@@ -31,20 +31,32 @@ exact failure the guard exists to catch. If the client cannot be parsed the guar
 FALLS BACK to the literal set and says so on stdout -- it does not silently scan
 with a set it invented, and it does not pass by being unable to read anything.
 
-Deployed surfaces (``DEPLOYED_PATTERNS``) — an enabling value fails the build:
+Deployed surfaces — an enabling value fails the build:
   * ``apps/**/wrangler.toml|json|jsonc``  — Workers deployment config; ``[vars]``
     is shipped to the edge.
-  * ``**/Dockerfile``                       — ``ENV`` is baked into the image.
-  * ``.github/workflows/*.yml|yaml``         — ``env:`` runs in CI and in deploys.
-  * ``docker-compose*.yml``                 — the shared integration stack.
+  * ``**/Dockerfile*`` at any depth, by basename — ``ENV`` is baked into the image.
+  * ``**/docker-compose*.yml``, ``**/compose*.yml`` — the shared integration stack
+    plus the client release and self-host compose sets under ``infra/``.
+  * ``.github/workflows/*.yml|yaml`` and ``.github/*.yml|yaml`` — ``env:`` runs in
+    CI and in deploys. The second entry is deliberately broad: it is there for
+    ``.github/digiquant-pipeline.yml``, whose ``env:`` block
+    ``workflows/pipeline-digiquant.yml`` loads into ``$GITHUB_ENV`` from outside
+    ``.github/workflows/``, which path filtering cannot see.
 
 Local / dev surfaces (``LOCAL_PATTERNS``) — an enabling value is ALLOWED, because
 this is the stated exemption the issue asks for. Local development keeps the family
 reachable; only deployed configs are policed:
   * ``.env``, ``.env.*`` (except ``.env.example``, which is documentation)
   * ``docker-compose.override.yml``, ``compose/**``, ``dev/**``, ``scripts/**``
+  * ``docker-compose.local.yml`` — the Langfuse bring-up compose, which its own
+    header marks LOCAL DEV ONLY.
   * ``tests/**`` and ``docs/**`` are never scanned at all -- they hold prose and
     fixtures, not deploy artifacts.
+
+One family is never local: a ``Dockerfile*`` basename (``NEVER_LOCAL_BASENAMES``).
+``ENV`` is baked into whichever image the recipe builds, so the recipe ships from
+``scripts/`` as much as from ``digiquant/`` -- ``scripts/zammad_mcp/Dockerfile.mcp``
+builds the zammad MCP image and is covered by that rule, not by ``scripts/**``.
 
 There is deliberately **no per-line escape token** (no ``gloomberb-allow``). An
 escape hatch on a security guard is just a second way to fail the guard; the only
@@ -53,9 +65,18 @@ tests.
 
 Coverage self-check: ``DEPLOYED_PATTERNS`` is an allowlist, so a config family
 added later could escape it. ``coverage_gaps()`` therefore fails the build if any
-git-tracked ``wrangler.toml`` in the repo matches no deployed pattern -- today
-there are seven, and a new Cloudflare app must not be able to land outside the
-guard unnoticed.
+git-tracked file of a watched family -- ``wrangler.*``, ``Dockerfile*``, or a
+compose basename -- is claimed by no rule at all: neither deployed, nor on the
+local exemption list, nor ignored. A new Cloudflare app, a new
+``Dockerfile.<target>``, or a new ``infra/`` release compose can therefore not land
+outside the guard unnoticed, and a deliberate exemption has to be written down as
+one of the three lists above.
+
+Deliberately **not** a watched family: ``digiquant/supabase/config.toml``. It
+configures the local Supabase CLI stack (ports, schemas, seed) and carries no
+``env``/``environment`` surface through which the flag could reach a deployed
+process; the containers it configures are described by compose files that are
+watched. Adding it would be coverage of the file rather than of the vector.
 
 Stdlib-only; no pip or npm install needed.
 
@@ -85,7 +106,7 @@ CLIENT_REL = Path("digiquant/src/digiquant/data/gloomberb/client.py")
 # at the time of writing; `enabling_values()` reports which source it used.
 FALLBACK_ENABLING_VALUES = frozenset({"1", "true", "yes", "on"})
 
-# Patterns that ship to a deployed process.
+# Patterns that ship to a deployed process, matched against the whole path.
 DEPLOYED_PATTERNS: tuple[str, ...] = (
     "apps/*/wrangler.toml",
     "apps/*/wrangler.json",
@@ -93,12 +114,42 @@ DEPLOYED_PATTERNS: tuple[str, ...] = (
     "apps/*/*/wrangler.toml",
     "apps/*/*/wrangler.json",
     "apps/*/*/wrangler.jsonc",
-    "*/Dockerfile",
-    "*/*/Dockerfile",
     ".github/workflows/*.yml",
     ".github/workflows/*.yaml",
-    "docker-compose*.yml",
-    "docker-compose*.yaml",
+    # `.github/digiquant-pipeline.yml` holds `env:` tunables that
+    # .github/workflows/pipeline-digiquant.yml loads into $GITHUB_ENV. It sits
+    # outside .github/workflows/, so the entry above misses it. Deliberately
+    # broad over the rest of `.github/`: over-covering costs nothing on the
+    # deployed side, and the one real carrier there is invisible to path
+    # filtering. (fnmatch `*` crosses `/`, so this also reaches workflows/.)
+    ".github/*.yml",
+    ".github/*.yaml",
+)
+
+# Families matched against the BASENAME at any depth, because the repo's own
+# naming defeats path globs on both axes:
+#
+#   * depth — five root deploy images (`Dockerfile.digithings-stack-cloudflare`,
+#     `Dockerfile.digitrace-langfuse-web`, ...) have no `/` for a path glob to
+#     anchor on at all, and `*/*/Dockerfile` cannot reach three-deep recipes;
+#   * name  — this repo does not call a build recipe `Dockerfile`. Of the 20
+#     tracked Dockerfiles, 12 are `Dockerfile.<target>`.
+#
+# A glob like `*/Dockerfile` therefore matched 8 of the 20 tracked Dockerfiles and
+# let the other 12 through, every root deploy image among them -- the exact vector
+# the guard exists to catch. Basename matching makes depth irrelevant and follows
+# the repo's real convention instead of an invented one.
+DEPLOYED_BASENAMES: tuple[str, ...] = (
+    "Dockerfile",
+    "Dockerfile.*",
+    "docker-compose.yml",
+    "docker-compose.yaml",
+    "docker-compose.*.yml",
+    "docker-compose.*.yaml",
+    "compose.yml",
+    "compose.yaml",
+    "compose.*.yml",
+    "compose.*.yaml",
 )
 
 # The stated local/dev exemption. Enabling values here are allowed.
@@ -112,6 +163,19 @@ LOCAL_PATTERNS: tuple[str, ...] = (
     "scripts/*",
 )
 
+# Local exemptions keyed on basename, because the deployed compose globs above are
+# now basename-matched and would otherwise claim these. `docker-compose.override.yml`
+# wins over the deployed `docker-compose*.yml` glob: it is the root stack's local
+# override, layered on the deployed file at run time.
+LOCAL_BASENAMES: tuple[str, ...] = (
+    "docker-compose.override.yml",
+    "docker-compose.override.yaml",
+    # apps/digitrace-langfuse/docker-compose.local.yml — its own header says
+    # "LOCAL DEV ONLY ... NOT for production".
+    "docker-compose.local.yml",
+    "docker-compose.local.yaml",
+)
+
 # Never a deploy artifact.
 IGNORED_PATTERNS: tuple[str, ...] = (
     ".env.example",
@@ -120,10 +184,46 @@ IGNORED_PATTERNS: tuple[str, ...] = (
     ".paperclip/*",
     "apps/*/reference/*",
     "apps/*/*/reference/*",
+    # docs/ holds prose, examples and templates. docs/templates/project/
+    # docker-compose.yml is a starting point for a client, not this repo's stack.
+    # The module docstring promises docs/ is never scanned; basename matching
+    # would otherwise reach it now that compose is matched by name at any depth.
+    "docs/*",
+    # GitHub issue/PR form templates: not workflows, no env: block.
+    ".github/ISSUE_TEMPLATE/*",
 )
 
-# Families that must never escape DEPLOYED_PATTERNS without a deliberate edit.
-COVERAGE_FAMILIES: tuple[str, ...] = ("wrangler.toml", "wrangler.json", "wrangler.jsonc")
+# Families the local/dev exemption must not be able to claim. A build recipe is
+# not a dev config: `ENV` is baked into whichever image it builds, so it ships
+# from scripts/ as much as from digiquant/. scripts/zammad_mcp/Dockerfile.mcp
+# builds the zammad MCP image and is deployed under that rule, not under scripts/**.
+NEVER_LOCAL_BASENAMES: tuple[str, ...] = ("Dockerfile", "Dockerfile.*")
+
+# Families that must never escape coverage without a deliberate edit. Each entry is
+# (label, basename patterns); every tracked file matching one must be claimed by
+# DEPLOYED, LOCAL or IGNORED, or coverage_gaps() fails the build.
+COVERAGE_BASENAME_FAMILIES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("wrangler", ("wrangler.toml", "wrangler.json", "wrangler.jsonc")),
+    ("dockerfile", ("Dockerfile", "Dockerfile.*")),
+    (
+        "compose",
+        (
+            "docker-compose.yml",
+            "docker-compose.yaml",
+            "docker-compose.*.yml",
+            "docker-compose.*.yaml",
+            "compose.yml",
+            "compose.yaml",
+            "compose.*.yml",
+            "compose.*.yaml",
+        ),
+    ),
+)
+
+# Flattened view of the table above, kept for callers that just want the names.
+COVERAGE_FAMILIES: tuple[str, ...] = tuple(
+    pattern for _, patterns in COVERAGE_BASENAME_FAMILIES for pattern in patterns
+)
 
 # name=value / name: value / "name": value, with an optional leading `export`,
 # `ENV`, `-`, or `{` so compose and Dockerfile forms match too.
@@ -168,22 +268,69 @@ class Finding:
         }
 
 
+@dataclass(frozen=True)
+class Gap:
+    """One tracked config file that no rule claims."""
+
+    family: str
+    path: str
+
+    def as_dict(self) -> dict[str, object]:
+        return {"family": self.family, "path": self.path}
+
+
+def _basename(path: str) -> str:
+    return path.rsplit("/", 1)[-1]
+
+
 def _matches(path: str, patterns: tuple[str, ...]) -> bool:
     return any(fnmatch.fnmatch(path, pattern) for pattern in patterns)
 
 
+def _matches_basename(path: str, patterns: tuple[str, ...]) -> bool:
+    name = _basename(path)
+    return any(fnmatch.fnmatch(name, pattern) for pattern in patterns)
+
+
+def is_ignored(path: str) -> bool:
+    """True when a committed file at ``path`` is never a deploy artifact."""
+    return _matches(path, IGNORED_PATTERNS) or _matches_basename(path, IGNORED_PATTERNS)
+
+
+def _never_local(path: str) -> bool:
+    """True for families the local/dev exemption is not allowed to claim."""
+    return _matches_basename(path, NEVER_LOCAL_BASENAMES)
+
+
 def is_deployed(path: str) -> bool:
     """True when a committed file at ``path`` ships to a deployed process."""
-    if _matches(path, IGNORED_PATTERNS):
+    if is_ignored(path):
         return False
-    return _matches(path, DEPLOYED_PATTERNS) and not _matches(path, LOCAL_PATTERNS)
+    if _never_local(path):
+        return True
+    if _matches(path, LOCAL_PATTERNS) or _matches_basename(path, LOCAL_BASENAMES):
+        return False
+    return _matches(path, DEPLOYED_PATTERNS) or _matches_basename(path, DEPLOYED_BASENAMES)
 
 
 def is_local(path: str) -> bool:
     """True when a committed file at ``path`` is a local/dev config."""
-    if _matches(path, IGNORED_PATTERNS):
+    if is_ignored(path) or _never_local(path):
         return False
-    return _matches(path, LOCAL_PATTERNS)
+    return _matches(path, LOCAL_PATTERNS) or _matches_basename(path, LOCAL_BASENAMES)
+
+
+def is_claimed(path: str) -> bool:
+    """True when some rule — deployed, local exemption or ignore — owns ``path``."""
+    return is_deployed(path) or is_local(path) or is_ignored(path)
+
+
+def gap_family(path: str) -> str | None:
+    """Label of the watched family ``path`` belongs to, or ``None``."""
+    for label, patterns in COVERAGE_BASENAME_FAMILIES:
+        if _matches_basename(path, patterns):
+            return label
+    return None
 
 
 def enabling_values(client_path: Path | None = None) -> tuple[frozenset[str], str]:
@@ -251,22 +398,23 @@ def tracked_files(repo_root: Path | None = None) -> list[str]:
     return [p for p in out.decode("utf-8", "replace").split("\0") if p]
 
 
-def coverage_gaps(files: list[str]) -> list[str]:
-    """Tracked config files that no deployed pattern claims.
+def coverage_gaps(files: list[str]) -> list[Gap]:
+    """Tracked config files that no deployed, local or ignore rule claims.
 
-    An empty return is the claim "every Cloudflare config in this repo is inside
-    the guard". A non-empty return means a new app or config family landed
-    outside DEPLOYED_PATTERNS and the allowlist needs a deliberate edit.
+    An empty return is the claim "every watched config family in this repo is inside
+    the guard". A non-empty return means a new app, a new ``Dockerfile.<target>`` or
+    a new compose family landed where no rule reaches, and one of the three lists
+    needs a deliberate edit — as a claim, not as an omission.
     """
-    gaps = []
+    gaps: list[Gap] = []
     for path in files:
-        name = path.rsplit("/", 1)[-1]
-        if name in COVERAGE_FAMILIES and not is_deployed(path):
-            gaps.append(path)
-    return sorted(gaps)
+        family = gap_family(path)
+        if family is not None and not is_claimed(path):
+            gaps.append(Gap(family=family, path=path))
+    return sorted(gaps, key=lambda gap: (gap.family, gap.path))
 
 
-def scan(repo_root: Path | None = None) -> tuple[list[Finding], list[str], frozenset[str], str]:
+def scan(repo_root: Path | None = None) -> tuple[list[Finding], list[Gap], frozenset[str], str]:
     """Full scan: (findings, coverage gaps, enabling values, values source)."""
     root = repo_root if repo_root is not None else REPO_ROOT
     values, source = enabling_values(root / CLIENT_REL)
@@ -285,7 +433,7 @@ def scan(repo_root: Path | None = None) -> tuple[list[Finding], list[str], froze
     return findings, coverage_gaps(files), values, source
 
 
-def render(findings: list[Finding], gaps: list[str], source: str, values: frozenset[str]) -> str:
+def render(findings: list[Finding], gaps: list[Gap], source: str, values: frozenset[str]) -> str:
     lines = [
         f"gloomberb-ci-guard: enabling values = {sorted(values)} ({source})",
     ]
@@ -293,7 +441,10 @@ def render(findings: list[Finding], gaps: list[str], source: str, values: frozen
     local = [f for f in findings if not f.deployed]
 
     for gap in gaps:
-        lines.append(f"  COVERAGE GAP  {gap}: no DEPLOYED_PATTERNS entry claims this config")
+        lines.append(
+            f"  COVERAGE GAP  [{gap.family}] {gap.path}:"
+            " no deployed, local or ignore rule claims this config"
+        )
 
     for finding in deployed:
         lines.append(
@@ -323,7 +474,7 @@ def main(argv: list[str] | None = None) -> int:
                     "ok": not gaps and not [f for f in findings if f.deployed],
                     "enablingValues": sorted(values),
                     "valuesSource": source,
-                    "coverageGaps": gaps,
+                    "coverageGaps": [g.as_dict() for g in gaps],
                     "findings": [f.as_dict() for f in findings],
                 },
                 indent=2,
