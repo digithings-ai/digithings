@@ -13,6 +13,17 @@ on:
       - "tests/test_e2e.py"
       - "tests/test_e2e_contract.py"
       - "docker-compose.yml"
+      # The only CI job that builds service images is the e2e stack job below
+      # (`docker compose up`), so a Dockerfile edit must start this workflow or the
+      # image change is never built. The job starts four services — digigraph,
+      # digiquant, digisearch, digikey — and `depends_on` pulls nothing else that
+      # builds, so those four Dockerfiles are the whole closure (DIG-1407; the test
+      # deriving it is tests/scripts/test_e2e_build_inputs.py). The job is
+      # continue-on-error, so the extra triggers cost nothing when it does run.
+      - "digigraph/Dockerfile"
+      - "digiquant/Dockerfile"
+      - "digisearch/Dockerfile"
+      - "digikey/Dockerfile"
       - ".github/workflows/test-e2e.yml"
 
 permissions:
