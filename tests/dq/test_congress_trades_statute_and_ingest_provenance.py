@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import ast
 import inspect
+import re
 from pathlib import Path
 
 import pytest
@@ -44,6 +45,7 @@ import digiquant.tool_refusals as tool_refusals  # noqa: E402
 import digisearch.trackers_ingest as trackers_ingest  # noqa: E402
 from digiquant.data.luxalgo.attribution import (  # noqa: E402
     LUXALGO_TRACKERS_DATA_CAVEATS,
+    LUXALGO_TRACKERS_DATA_LICENSE,
     attribution_fields_for,
 )
 from digiquant.data.luxalgo.entitlements import TOOL_NOTES  # noqa: E402
@@ -62,6 +64,7 @@ GLOOMBERB_AGENT_TOOLS_PY = REPO_ROOT / "digiquant/src/digiquant/data/gloomberb/a
 #: file and left four more asserting the same claim, which is why the check is
 #: surface-wide.
 DATA_LICENSE_CLAIM_FILES = (
+    "digiquant/src/digiquant/data/luxalgo/__init__.py",
     "digiquant/src/digiquant/data/luxalgo/agent_tools.py",
     "digiquant/src/digiquant/data/luxalgo/attribution.py",
     "digiquant/src/digiquant/data/luxalgo/client.py",
@@ -103,20 +106,25 @@ POINTER_MARKERS = (
 #: near it. Without this, ``trackers_wave2_ingest.py`` passed on an incidental
 #: "congress-trades spike" lineage note and a "FINRA" in a row-schema key —
 #: both markers present, neither saying the licence fails to cover the family.
-LIMIT_SIGNALS = (
-    "clear",
-    "waive",
-    "restrict",
-    "unresolved",
-    "refuse",
-    "limit",
-    "cannot",
-    "does not",
-    "not a clearance",
+#:
+#: Matched with word boundaries rather than substrings: bare ``in`` matching let
+#: "unlimited", "clearly" and "delimitation" each read as an assertion of a
+#: limit, which is the same vacuity one token in.
+LIMIT_SIGNALS = re.compile(
+    r"\b(?:clear\w*|waiv\w*|restrict\w*|unresolved|refus\w*|limit\w*|cannot|"
+    r"does not|not a clearance|prohibited)\b",
+    re.IGNORECASE,
 )
 
 #: Characters around a family marker in which a limit must be asserted.
 LIMIT_WINDOW = 160
+
+#: Backstop against a *runaway* claim unit, not against length. The real
+#: longest unit in the surface list is a ~3.9k-char module docstring, so the
+#: cap sits well above it: its job is to catch a parser that swallowed a whole
+#: document (a Markdown-fence bug produced units of exactly that shape), not
+#: to second-guess a long paragraph that states its limits correctly.
+MAX_CLAIM_CHARS = 6000
 
 #: The overstatement DIG-1479 removed. Any file still asserting it is wrong.
 OVERSTATED_FRAGMENT = "for any purpose other than"
@@ -237,6 +245,7 @@ def _cc0_claims(text: str, *, python: bool = True) -> list[tuple[str, str]]:
     """
     claims: list[tuple[str, str]] = []
     lines = text.splitlines()
+    in_fence = False
     if python:
         try:
             tree = ast.parse(text)
@@ -264,7 +273,22 @@ def _cc0_claims(text: str, *, python: bool = True) -> list[tuple[str, str]]:
         stripped = raw.strip()
         if not python:
             # Markdown: a paragraph is the run of non-blank lines a reader takes
-            # in, so accumulate before flushing.
+            # in, so accumulate before flushing. Fenced blocks are structure,
+            # not prose — a directory tree is not a claim, and accumulating one
+            # ran the claim unit thousands of characters past any real
+            # statement until the length cap caught it.
+            if stripped.startswith("```"):
+                in_fence = not in_fence
+                claims.extend(flush())
+                continue
+            if in_fence:
+                continue
+            # A bullet starts its own claim. Treating a whole blank-line-free
+            # list as one paragraph made a tool-inventory bullet hundreds of
+            # characters long past any statement of the licence.
+            if stripped.startswith(("- ", "* ", "+ ")) and not stripped.startswith("---"):
+                claims.extend(flush())
+                start = lineno
             if stripped:
                 if not block:
                     start = lineno
@@ -286,7 +310,14 @@ def _block_claims(block: list[str], start: int, *, comment: bool) -> list[tuple[
     body = " ".join(part for part in block if part)
     if "CC0" not in body:
         return []
-    return [(f"{'comment' if comment else 'para'}:{start}", body)]
+    kind = "comment" if comment else "para"
+    # A block is a claim because a reader reads the whole thing. Without a cap
+    # that lets a qualified opening line launder an arbitrarily long bare tail,
+    # which is file-scoped co-occurrence rebuilt one unit up. Oversized blocks
+    # are reported rather than passed.
+    if len(body) > MAX_CLAIM_CHARS:
+        return [(f"{kind}:{start}+oversized", body[:MAX_CLAIM_CHARS])]
+    return [(f"{kind}:{start}", body)]
 
 
 def _family_is_qualified(low: str, markers: tuple[str, ...]) -> bool:
@@ -295,10 +326,17 @@ def _family_is_qualified(low: str, markers: tuple[str, ...]) -> bool:
         start = 0
         while (at := low.find(marker.lower(), start)) != -1:
             window = low[max(0, at - LIMIT_WINDOW) : at + len(marker) + LIMIT_WINDOW]
-            if any(signal in window for signal in LIMIT_SIGNALS):
+            if LIMIT_SIGNALS.search(window):
                 return True
             start = at + 1
     return False
+
+
+def _names_a_family(low: str) -> bool:
+    """True when the snippet names either limited family at all."""
+    return _family_is_qualified(low, CONGRESS_TRADES_LIMIT_MARKERS) or _family_is_qualified(
+        low, SHORT_VOLUME_LIMIT_MARKERS
+    )
 
 
 def _missing_limits(snippet: str) -> list[str]:
@@ -306,13 +344,22 @@ def _missing_limits(snippet: str) -> list[str]:
     # Case-insensitive so prose that opens a sentence ("Two families need…")
     # is not reported for missing a pointer it does carry.
     low = snippet.lower()
-    if any(marker.lower() in low for marker in POINTER_MARKERS):
-        return []
     missing: list[str] = []
     if not _family_is_qualified(low, CONGRESS_TRADES_LIMIT_MARKERS):
         missing.append("congress-trades/13107")
     if not _family_is_qualified(low, SHORT_VOLUME_LIMIT_MARKERS):
         missing.append("short-volume/FINRA")
+    # A pointer lets prose defer the law to the classifier instead of restating
+    # it, but it is a *pointer*, not a licence: it must name a family and
+    # assert a limit alongside the reference. Accepting a bare pointer word
+    # ("caveat", "DIG-1464", "classified") as qualification on its own was
+    # MAJOR in review — a claim saying "CC0 records cleared for any use; no
+    # caveat applies" asserted the opposite of a limit and passed.
+    if not missing:
+        return []
+    if any(marker.lower() in low for marker in POINTER_MARKERS) and LIMIT_SIGNALS.search(low):
+        if _names_a_family(low):
+            return []
     return missing
 
 
@@ -332,10 +379,68 @@ def test_no_cc0_claim_is_left_unqualified() -> None:
     for rel in (*DATA_LICENSE_CLAIM_FILES, *DATA_LICENSE_CLAIM_DOCS):
         text = (REPO_ROOT / rel).read_text(encoding="utf-8")
         for kind, snippet in _cc0_claims(text, python=rel.endswith(".py")):
+            if kind.endswith("+oversized"):
+                unqualified.append(
+                    f"{rel} [{kind}]: claim unit exceeds MAX_CLAIM_CHARS "
+                    f"({MAX_CLAIM_CHARS}) — split it so each unit is checked"
+                )
+                continue
             missing = _missing_limits(snippet)
             if missing:
                 unqualified.append(f"{rel} [{kind}] missing {', '.join(missing)}: {snippet[:90]}")
     assert not unqualified, "unqualified CC0 claims:\n  " + "\n  ".join(sorted(unqualified))
+
+
+def test_the_license_constant_stays_the_bare_licence_id() -> None:
+    """F2: the licence constant is exempt from the guard, so pin it directly.
+
+    ``LUXALGO_TRACKERS_DATA_LICENSE`` is the one string the claim guard cannot
+    see — it is exempt *by design*, because it **is** the classified licence.
+    Exemption without a pin is a hole: the constant is interpolated into every
+    trackers payload, so widening it to "CC0-1.0 public records, cleared for
+    any purpose including congress-trades and short-volume" would restate the
+    two limits this work exists to qualify, and every guard here would pass.
+    The caveat half of the exemption is covered by the two tests below; this
+    covers the licence half.
+    """
+    assert LUXALGO_TRACKERS_DATA_LICENSE == "CC0-1.0", (
+        "the licence constant must stay the bare identifier; qualification "
+        "belongs in LUXALGO_TRACKERS_DATA_CAVEATS, never here"
+    )
+
+
+def test_a_pointer_word_alone_cannot_qualify_a_cc0_claim() -> None:
+    """F1: the pointer bypass must not swallow the check it stands in for.
+
+    The claim-scoped rewrite left ``POINTER_MARKERS`` returning ``[]`` before
+    any family marker or limit signal was examined, so the bare word
+    "caveat" — or a bare ticket reference — marked a claim qualified. These
+    are the reviewer's exploits: each states the **opposite** of a limit and
+    must be reported as unqualified.
+    """
+    exploits = (
+        # "clear" is a limit signal in this vocabulary; with no family named
+        # and the word "caveat" present, the old rule returned [].
+        "Trackers rows are CC0-1.0 public records cleared for any use; no caveat applies.",
+        "Trackers rows are CC0-1.0; see DIG-1464.",
+        "Trackers rows are CC0-1.0, classified by Security.",
+        "CC0-1.0 caveat: cleared for any use.",
+        "CC0-1.0 public records; no limitation applies.",
+    )
+    for exploit in exploits:
+        assert _missing_limits(exploit) == [
+            "congress-trades/13107",
+            "short-volume/FINRA",
+        ], f"the guard was bypassed by a pointer word: {exploit!r}"
+
+    # A pointer is still allowed to carry prose that names a family and
+    # asserts a limit — that is the pattern the real surfaces use.
+    pointer_ok = (
+        "Trackers rows are CC0-1.0 dumps, but the grant does not clear "
+        "congress-trades (13107(c)) or short-volume (FINRA terms prohibit "
+        "redistribution); see DIG-1464 for the classifier."
+    )
+    assert _missing_limits(pointer_ok) == []
 
 
 def test_the_guard_would_catch_a_bare_claim() -> None:

@@ -1168,7 +1168,9 @@ def build_digifetch_ibkr_execute_order_tool() -> dict[str, Any]:
 # ..." attribution + a canonical link. Indicator source code is deliberately
 # NOT wrapped (CC BY-NC-SA license boundary), and neither is trackers_query
 # (the CC0-1.0 dumps stay the source of record; the per-family limits
-# classified in DIG-1464 ride on every trackers description and payload).
+# classified in DIG-1464 — congress-trades restricted by 5 U.S.C. 13107,
+# short-volume carrying unresolved FINRA terms — ride on every trackers
+# description and payload).
 
 
 def build_luxalgo_library_search_tool() -> dict[str, Any]:

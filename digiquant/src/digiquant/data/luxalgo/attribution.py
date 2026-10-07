@@ -16,9 +16,10 @@ surface by :mod:`digiquant.data.luxalgo.license_guard`. The *data* licence
 governs what a trackers row is: the vendor publishes those dumps under a
 CC0 1.0 Universal LICENSE (classified 2026-10-06, DIG-1464 — see
 :data:`LUXALGO_TRACKERS_DATA_LICENSE`), but two of the six families need a limit
-the copyright waiver cannot supply, so every trackers licence note carries
-:func:`trackers_data_caveat`. A payload that says only "CC0" is not telling the
-truth about those two.
+the copyright waiver cannot supply — congress-trades is restricted by 5 U.S.C.
+13107 and short-volume carries unresolved FINRA redistribution terms — so every
+trackers licence note carries :func:`trackers_data_caveat`. A payload that says
+only "CC0" is not telling the truth about those two.
 
 License boundary (scope §P0, guard #4845): the Library search/concept/
 indicator-metadata reads are research references. Indicator *source code*
@@ -87,7 +88,9 @@ LUXALGO_EDGE_LICENSE_NOTE = (
 #: repository reports SPDX ``CC0-1.0``. The LuxAlgo ToS "Market Data & Delays"
 #: clause is scoped to quote and price data (Vela, luxalgo.com market pages), so
 #: its redistribution prohibition does not reach these public-record extracts.
-#: The verdict is per-family — see :data:`LUXALGO_TRACKERS_DATA_CAVEATS`.
+#: The verdict is per-family: congress-trades is restricted by 5 U.S.C. 13107
+#: and short-volume carries unresolved FINRA redistribution terms — see
+#: :data:`LUXALGO_TRACKERS_DATA_CAVEATS`.
 LUXALGO_TRACKERS_DATA_LICENSE = "CC0-1.0"
 
 #: The artefacts the classification rests on, named so the claim stays
@@ -229,7 +232,9 @@ def trackers_data_caveat(dataset: str | None = None) -> str:
     """The per-family limits that ride on the trackers CC0 grant.
 
     A bare "CC0 public-record dumps" string reads as permission for every family,
-    and two of the six need a limit that a copyright waiver cannot supply. With
+    and two of the six need a limit that a copyright waiver cannot supply —
+    congress-trades under 5 U.S.C. 13107 and short-volume under the unresolved
+    FINRA terms. With
     *dataset* given, only that family's caveats render; with ``None`` (the
     default, and the only thing a tool-level attribution block can know) every
     caveat renders, so a payload mixing families is never quietly clean.
@@ -245,7 +250,11 @@ def trackers_data_caveat(dataset: str | None = None) -> str:
     caveats = " ".join(
         LUXALGO_TRACKERS_DATA_CAVEATS[dataset] for dataset in sorted(LUXALGO_TRACKERS_DATA_CAVEATS)
     )
-    return f" Two families need a limit the CC0 grant cannot supply. {caveats}"
+    return (
+        " Two families need a limit the CC0 grant cannot supply: congress-trades "
+        "is restricted by 5 U.S.C. 13107, and short-volume carries unresolved "
+        f"FINRA redistribution terms. {caveats}"
+    )
 
 
 def attribution_fields_for(
