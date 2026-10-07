@@ -15,6 +15,7 @@ import importlib.util
 import json
 from pathlib import Path
 from types import ModuleType
+from urllib.error import URLError
 
 import pytest
 
@@ -155,7 +156,7 @@ def test_missing_grant_fails_loudly_rather_than_reporting_success(
     monkeypatch.setattr(mint, "mint_token", lambda *a, **k: (TOKEN, "2026-10-07T21:00:00Z"))
 
     def _refused(*_a: object, **_k: object) -> list[str]:
-        raise mint.MintError("GET /repos/.../protection -> HTTP 403 Forbidden")
+        raise mint.ApiError("GET /repos/.../protection -> HTTP 403 Forbidden")
 
     monkeypatch.setattr(mint, "read_required_contexts", _refused)
     monkeypatch.setenv(mint.PRIVATE_KEY_ENV, pem.decode("utf-8"))
@@ -180,3 +181,179 @@ def test_missing_key_is_a_setup_error_not_a_credential_failure(
     assert exit_code == mint.SETUP_ERROR
     assert mint.SETUP_ERROR != mint.FAILED
     assert mint.PRIVATE_KEY_ENV in captured.err
+
+
+# --------------------------------------------------------------------------
+# "I could not tell" must never be reported as "the credential is bad".
+#
+# Rotation deletes the previous key only once the new one is proven, so an
+# outcome that proves nothing must not exit on the code that means "proven
+# wrong". Each test below drives one way the read can fail to *prove*, and
+# asserts the exit code that keeps an operator from destroying a working key.
+# --------------------------------------------------------------------------
+
+
+def _install_key(monkeypatch: pytest.MonkeyPatch, pem: bytes, *, mint_ok: bool = True) -> None:
+    monkeypatch.setenv(mint.PRIVATE_KEY_ENV, pem.decode("utf-8"))
+    if mint_ok:
+        monkeypatch.setattr(mint, "mint_token", lambda *a, **k: (TOKEN, "2026-10-07T21:00:00Z"))
+
+
+def test_encrypted_private_key_is_a_setup_error_not_a_credential_failure(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """A passphrase-protected key raises ValueError. That is a setup problem.
+
+    Nothing about the key's authorisation was proven wrong, so exit 1 — the code
+    that says "this credential is bad, rotate it" — would be a lie.
+    """
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    pem = key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.BestAvailableEncryption(b"not-the-passphrase"),
+    )
+    monkeypatch.setenv(mint.PRIVATE_KEY_ENV, pem.decode("utf-8"))
+
+    exit_code = mint.main(["--app-id", APP_ID, "--installation-id", INSTALLATION_ID, "--verify"])
+
+    assert exit_code == mint.SETUP_ERROR, "an encrypted key is unreadable, not revoked"
+    assert exit_code != mint.FAILED
+    assert capsys.readouterr().err
+
+
+def test_a_non_json_response_body_is_a_setup_error(
+    key_pair: tuple, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """HTTP 200 with a body that is not the protection JSON proves nothing.
+
+    A captive portal, a proxy, or a future API change would all land here, and
+    all three are "the answer is unknown" rather than "the key was rejected".
+    """
+    _, pem = key_pair
+    _install_key(monkeypatch, pem)
+
+    def _garbage(*_a: object, **_k: object) -> list[str]:
+        # Exactly what `json.loads` raises inside `_api` for a body that is not JSON.
+        raise json.JSONDecodeError("Expecting value", "<html>not json</html>", 0)
+
+    monkeypatch.setattr(mint, "read_required_contexts", _garbage)
+    exit_code = mint.main(["--app-id", APP_ID, "--installation-id", INSTALLATION_ID, "--verify"])
+
+    assert exit_code == mint.SETUP_ERROR
+    assert capsys.readouterr().err
+
+
+def test_a_transport_failure_is_a_setup_error(
+    key_pair: tuple, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """A DNS or TCP failure never reached GitHub, so it says nothing about the grant."""
+    _, pem = key_pair
+    _install_key(monkeypatch, pem)
+
+    def _unreachable(*_a: object, **_k: object) -> list[str]:
+        raise URLError("[Errno 8] nodename nor servname provided")
+
+    monkeypatch.setattr(mint, "read_required_contexts", _unreachable)
+    exit_code = mint.main(["--app-id", APP_ID, "--installation-id", INSTALLATION_ID, "--verify"])
+
+    assert exit_code == mint.SETUP_ERROR
+    assert exit_code != mint.FAILED
+    assert "not evidence that the snapshot is stale" in capsys.readouterr().err
+
+
+def test_a_mint_failure_is_not_reported_as_a_missing_grant(
+    key_pair: tuple, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """An unauthenticated mint is a broken key, and it must say so plainly."""
+    _, pem = key_pair
+    monkeypatch.setenv(mint.PRIVATE_KEY_ENV, pem.decode("utf-8"))
+
+    def _rejected(*_a: object, **_k: object) -> tuple[str, str]:
+        raise mint.ApiError("POST /app/installations/…/access_tokens -> HTTP 401 Unauthorized")
+
+    monkeypatch.setattr(mint, "mint_token", _rejected)
+    exit_code = mint.main(["--app-id", APP_ID, "--installation-id", INSTALLATION_ID, "--verify"])
+
+    assert exit_code == mint.FAILED
+    err = capsys.readouterr().err
+    assert TOKEN not in err
+    assert "did not authenticate" in err
+
+
+def test_a_caller_cannot_widen_the_token_lifetime(key_pair: tuple) -> None:
+    """`ttl` is capped at the constant, so no caller can ask for a long-lived JWT.
+
+    GitHub rejects an App JWT more than 10 minutes old; a JWT that overshoots gets
+    a 401 that reads exactly like a revoked key, which is the worst possible
+    failure mode for a credential whose rotation path is "delete the old key last".
+    """
+    _, pem = key_pair
+    jwt = mint.build_jwt(APP_ID, pem, now=1_700_000_000, ttl=86_400)
+    claims = _segment(jwt, 1)
+
+    assert claims["exp"] - 1_700_000_000 <= 600, "an App JWT may not live past 10 minutes"
+
+
+def test_a_redirect_off_github_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The bearer must never follow a redirect to another host.
+
+    `urlopen` forwards `Authorization` across a cross-host redirect, so a
+    redirect is the one way this request could put the installation token in front
+    of a third party. The response URL is compared against what was requested.
+    """
+
+    class _Response:
+        def __enter__(self) -> "_Response":
+            return self
+
+        def __exit__(self, *_exc: object) -> None:
+            return None
+
+        def geturl(self) -> str:
+            return "https://elsewhere.example/steal"
+
+        def read(self) -> bytes:
+            return b"[]"
+
+    monkeypatch.setattr(mint.urllib.request, "urlopen", lambda *_a, **_k: _Response())
+    monkeypatch.setattr(mint, "API", "https://api.github.test")
+
+    with pytest.raises(mint.MintError, match="refused a redirect"):
+        mint._api("GET", "/repos/digithings-ai/digithings/branches/develop/protection", token=TOKEN)
+
+
+def test_every_request_declares_a_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A hung socket must not hang the probe.
+
+    Without a timeout this blocks indefinitely, and a guard that never returns is
+    indistinguishable from a guard that is passing.
+    """
+    seen: dict[str, object] = {}
+
+    class _Response:
+        def __enter__(self) -> "_Response":
+            return self
+
+        def __exit__(self, *_exc: object) -> None:
+            return None
+
+        def geturl(self) -> str:
+            return f"{mint.API}/repos/digithings-ai/digithings/branches/develop/protection"
+
+        def read(self) -> bytes:
+            return b"{}"
+
+    def _urlopen(request: object, timeout: object = None) -> _Response:
+        seen["timeout"] = timeout
+        return _Response()
+
+    monkeypatch.setattr(mint.urllib.request, "urlopen", _urlopen)
+
+    assert (
+        mint._api("GET", "/repos/digithings-ai/digithings/branches/develop/protection", token=TOKEN)
+        == {}
+    )
+
+    assert seen["timeout"] == mint.REQUEST_TIMEOUT_SECONDS
+    assert mint.REQUEST_TIMEOUT_SECONDS > 0

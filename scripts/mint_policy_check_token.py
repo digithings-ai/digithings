@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Mint and smoke-test the ``policy-check-reader`` GitHub App token (DIG-2102).
 
-``scripts/check_required_policy_checks.py --live`` cannot read branch protection
-with a workflow's own ``GITHUB_TOKEN``: the endpoint needs ``Administration:
-read``, and that permission has no key in the ``permissions:`` vocabulary of an
-Actions installation token. Comparing the committed policy inventory against the
-*real* required set therefore needs one non-human credential that can hold it —
-the App documented in ``docs/ops/policy-check-credential.md``.
+The planned drift guard, ``scripts/check_required_policy_checks.py --live``
+(DIG-2098 decision D), cannot read branch protection with a workflow's own
+``GITHUB_TOKEN``: the endpoint needs ``Administration: read``, and that
+permission has no key in the ``permissions:`` vocabulary of an Actions
+installation token. Comparing the committed policy inventory against the *real*
+required set therefore needs one non-human credential that can hold it — the App
+documented in ``docs/ops/policy-check-credential.md``.
 
 This script is the **local half** of that credential. It signs the App JWT with
 the App private key, exchanges it for an installation token, and with ``--verify``
@@ -55,11 +56,33 @@ OK = 0
 FAILED = 1
 SETUP_ERROR = 2
 
+# Without a timeout a runner that accepts the connection and never answers hangs
+# until the Actions 6-hour ceiling, which reads as a pipeline timeout rather than
+# as anything about the credential.
+REQUEST_TIMEOUT_SECONDS = 30
+
 USER_AGENT = "digithings-policy-check-reader"
 
 
 class MintError(RuntimeError):
     """The credential could not be proven usable. Never carries secret material."""
+
+
+class ApiError(MintError):
+    """GitHub answered with an error status — the only outcome that proves anything.
+
+    Everything else this script can hit is indistinguishable from a broken setup: a
+    missing id, an unreadable/encrypted/malformed PEM, a DNS blip, or a body that is
+    not JSON. Those are ``SETUP_ERROR``. This one is ``FAILED``, because GitHub
+    looked and said no.
+    """
+
+
+# Anything fixable by the operator before GitHub has answered. None of it proves the
+# credential is wrong, so none of it may exit FAILED — during a rotation the operator
+# deletes the previous key only once this script proves the new one works, and
+# "I could not tell" must not read as "the new key is bad".
+SETUP_ERRORS = (MintError, ValueError, TypeError, OSError, urllib.error.URLError)
 
 
 def _b64(raw: bytes) -> str:
@@ -81,8 +104,11 @@ def build_jwt(
     """Return the RS256 JWT that authenticates *us as the App*, not as a user.
 
     ``alg`` is pinned here rather than taken from any input, so no caller can turn
-    this into an ``alg: none`` or an HMAC-signed forgery.
+    this into an ``alg: none`` or an HMAC-signed forgery. ``ttl`` is capped for the
+    same reason: GitHub rejects an App JWT older than 10 minutes, so a caller must
+    not be able to mint one that looks fine and then fails at the exchange.
     """
+    ttl = min(ttl, JWT_TTL_SECONDS)
     issued = int(time.time()) if now is None else now
     signing_input = (
         _json_segment({"alg": "RS256", "typ": "JWT"})
@@ -126,12 +152,21 @@ def _api(
         headers=headers,
     )
     try:
-        with urllib.request.urlopen(request) as response:
+        with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+            # urllib's redirect handler forwards every header except content-length and
+            # content-type, so a cross-host 30x would hand the bearer token to that host
+            # (and a https -> http one in cleartext). api.github.com does not redirect
+            # these paths, but this is the one script here whose whole job is holding a
+            # credential, so refuse to follow one rather than reason about it.
+            final_url = response.geturl()
+            if final_url != f"{API}{path}":
+                raise MintError(f"{method} {path} -> refused a redirect to {final_url}")
             return json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         # Deliberately not echoing the response body: for a 403 it can echo the
-        # request headers, which carry the credential.
-        raise MintError(f"{method} {path} -> HTTP {exc.code} {exc.reason}") from None
+        # request headers, which carry the credential. This is the one failure that
+        # proves the credential is wrong rather than merely untested.
+        raise ApiError(f"{method} {path} -> HTTP {exc.code} {exc.reason}") from None
 
 
 def mint_token(jwt: str, installation_id: str) -> tuple[str, str]:
@@ -235,8 +270,22 @@ def main(argv: list[str] | None = None) -> int:
             build_jwt(args.app_id, _load_key(args)),
             args.installation_id,
         )
-    except (MintError, ValueError) as exc:
+    except ApiError as exc:
+        # GitHub rejected the JWT: the key is wrong, revoked, or not this App's.
         print(f"FAIL mint: {exc}", file=sys.stderr)
+        print(
+            "The App private key did not authenticate. Do not delete a working key.",
+            file=sys.stderr,
+        )
+        return FAILED
+    except SETUP_ERRORS as exc:
+        print(f"FAIL mint: {exc}", file=sys.stderr)
+        print(
+            "Setup could not be completed, so nothing is proven about the credential "
+            "itself — check the id variables and the key export before reading this as a "
+            "key problem.",
+            file=sys.stderr,
+        )
         return SETUP_ERROR
 
     # Past this line the token exists only in memory, and only as a bearer header.
@@ -247,7 +296,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         contexts = read_required_contexts(token, args.repo, args.branch)
-    except MintError as exc:
+    except ApiError as exc:
         print(f"FAIL verify: {exc}", file=sys.stderr)
         print(
             "The key minted a token, so it is valid — but the Administration: read "
@@ -255,6 +304,16 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return FAILED
+    except SETUP_ERRORS as exc:
+        # Same distinction as above, and the reason it matters: the guard's failure
+        # mode is a stale snapshot, so a transport blip must never be filed as one.
+        print(f"FAIL verify: {exc}", file=sys.stderr)
+        print(
+            "The read did not complete, so the branch's required set is unverified — "
+            "this is not evidence that the snapshot is stale.",
+            file=sys.stderr,
+        )
+        return SETUP_ERROR
 
     print(f"OK verify: {args.repo}@{args.branch} requires {len(contexts)} context(s)")
     for context in contexts:

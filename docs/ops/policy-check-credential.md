@@ -3,9 +3,10 @@
 > **Rule** (from [`credential-ownership.md`](credential-ownership.md)): *Any credential we hold by hand needs one owner, one refresh path, and a check that fails loudly when it is stale.*
 
 This document registers the one credential that can read `develop`'s branch
-protection. It exists for a single call: `scripts/check_required_policy_checks.py
---live`, which compares the committed inventory against the **real** required-set.
-It is not a general CI token and must never become one.
+protection. It exists for a single call: the planned drift guard
+`scripts/check_required_policy_checks.py --live` (DIG-2098 decision D, not yet
+written), which compares the committed inventory against the **real**
+required-set. It is not a general CI token and must never become one.
 
 ---
 
@@ -70,6 +71,20 @@ an App at all, which no PAT claim can prove.
 minting step. That is ~150 lines of script that [`mint_policy_check_token.py`](../../scripts/mint_policy_check_token.py)
 already covers and that `actions/create-github-app-token` covers in CI.
 
+**One overlap to state, not to hide.** [`SECRETS_INVENTORY.md`](SECRETS_INVENTORY.md)
+**R14** (DIG-363, accepted 2026-10-05) is the accepted risk that
+`digithings-cron`'s only GitHub credential is a fine-grained PAT on a human
+account, and Chris declined a GitHub App there precisely because it "would add a
+second long-lived secret with power to mint dispatch and issue tokens." This App
+private key **is** a second long-lived secret with power to mint tokens, so the
+shape of the objection lands. The differences that make it a different case:
+`GH_DISPATCH_TOKEN` can `workflow_dispatch` all 38 cron runs and comment on the
+alarm with no expiry, while this key mints a token that can read branch
+administration on **one repository** and nothing else — no events, no dispatch,
+no issue writes, tokens capped at nine minutes, revocable by uninstalling the
+App without touching a human account. If Chris reads R14 as covering Apps
+generally, the PAT fallback below is the live option and nothing else changes.
+
 **The fallback, if the CTO prefers house precedent over a non-human identity:** a
 fine-grained PAT named `digithings-policy-check-reader` with
 `Administration: read` on `digithings-ai/digithings` satisfies the permission
@@ -93,8 +108,8 @@ safety check.
 This is the same trade the repo already declined twice, and both precedents are
 on the record:
 
-- [`CODE_REVIEW_POLICY.md`](../agents/CODE_REVIEW_POLICY.md): *"Never let a
-  metered third-party service hold a veto over deploys."*
+- [`AGENTS.md`](../../AGENTS.md) (§ Review coverage): *"Never let a metered
+  third-party service hold a veto over deploys."*
 - Cursor Bugbot was **not** made a required check on `main`, because it reports
   `neutral` on a usage-limit skip and a required check must report `success` —
   on 2026-08-05 that would have made all ten promotions unmergeable.
@@ -108,12 +123,27 @@ issue on failure, the shape `token-canary.yml` already uses.
 
 ### 2. It must never sit on a deploy path
 
-No deploy workflow reads this credential. The secret is `cron`-environment
-scoped — DIG-248 (2026-10-04) put every job that reads a non-automatic
-`secrets.*` behind an environment — and only the hygiene job declares
-`environment: cron`. The `deploy-*-cloudflare.yml` pair is untouched: they are
-`pull_request` build checks with `paths:` filters, not deploys on the PR path,
-and they gain nothing here.
+No deploy workflow reads this credential, and the secret is `cron`-environment
+scoped. Two honest caveats about that scoping, because it is weaker than it looks:
+
+- **`cron` is not a private environment.** `grep -rln 'environment: cron'
+  .github/workflows/` returns **19 files** — every cron pipeline, plus
+  `agent-backlog-snapshot`, `agent-pr-finalizer`, `pipeline-*`,
+  `secret-staleness-check`, `token-canary`, `sync-digiquant-runner-*`. A
+  `cron`-scoped secret is therefore readable by all of them, not only by the
+  guard job. That is acceptable here because the permission is
+  `Administration: read` on one repo; it would not be for anything with write.
+- **The gate is real but currently empty.** `SECRETS_INVENTORY.md` R13 §2 records
+  that environment-scoped secrets stay invisible to jobs that do not declare that
+  environment, and that the values are still at repo/org scope pending re-entry.
+  So a `secrets.*` name added to a `cron` job resolves to empty exactly as it
+  would with no environment at all. **Whoever wires the job must declare
+  `environment: cron` on it**, or the read fails as "no key" and never as
+  "permission denied".
+
+The `deploy-*-cloudflare.yml` pair is untouched: they are `pull_request` build
+checks with `paths:` filters, not deploys on the PR path, and they gain nothing
+here.
 
 ### 3. One repo, one permission
 
@@ -178,13 +208,17 @@ permission and is revocable in one action (below).
 
 ### Routine rotation
 
-1. Generate a new private key on the App (`POST /app/{slug}/keys`).
-2. Publish it:
-   `gh secret set POLICY_CHECK_APP_PRIVATE_KEY --env cron --repo digithings-ai/digithings --body-file <pem>`
+1. Generate a new private key on the App (`POST /app/{slug}/keys`), downloaded to a
+   `0600` file.
+2. Publish it — `gh secret set` reads the value from **stdin**, there is no
+   `--body-file` flag:
+   `gh secret set POLICY_CHECK_APP_PRIVATE_KEY --env cron --repo digithings-ai/digithings < <pem>`
 3. **Smoke call** — prove the new key before the old one dies:
    `POLICY_CHECK_APP_ID=… POLICY_CHECK_INSTALLATION_ID=… POLICY_CHECK_APP_PRIVATE_KEY=… python3 scripts/mint_policy_check_token.py --verify`
    It prints the token's expiry and the required contexts it read. It never prints
-   the token.
+   the token. **Exit `1` is the only outcome that authorises step 4** — exit `2`
+   means the probe could not tell, and deleting the old key on a `2` is how a
+   working credential gets destroyed.
 4. Delete the **old** key last (`DELETE /app/{slug}/keys/{key_id}`).
 
 Old key last on purpose: if step 3 fails, the working credential is still in place
@@ -280,23 +314,41 @@ documented runbook.
 
 1. Chris creates the App from the manifest URL (Install on `digithings-ai/digithings`
    only; permissions defaulted from the manifest).
-2. Download the private key once. Never paste it into a comment, an issue, a chat,
-   or a prompt — values never pass through a model.
-3. Publish it and set the two identifiers:
+2. Download the private key once, into a file only you can read, and delete that
+   file the moment step 3 finishes. Never paste it into a comment, an issue, a
+   chat, or a prompt — values never pass through a model.
    ```bash
-   gh secret set POLICY_CHECK_APP_PRIVATE_KEY --env cron --repo digithings-ai/digithings --body-file <pem>
+   umask 077            # the key lands 0600; a default umask writes it 0644
+   open -a TextEdit <pem> && chmod 600 <pem>
+   ```
+3. Publish it and set the two identifiers. `gh secret set` reads the value from
+   **stdin** — there is no `--body-file` flag:
+   ```bash
+   gh secret set POLICY_CHECK_APP_PRIVATE_KEY --env cron --repo digithings-ai/digithings < <pem>
    gh variable set POLICY_CHECK_APP_ID           --repo digithings-ai/digithings --body <app id>
    gh variable set POLICY_CHECK_INSTALLATION_ID  --repo digithings-ai/digithings --body <installation id>
    ```
-4. Smoke call, which proves the credential end to end:
+4. Smoke call, which proves the credential end to end. The key stays in an
+   environment variable for the life of the command and is never an argv value:
    ```bash
    POLICY_CHECK_APP_ID=… POLICY_CHECK_INSTALLATION_ID=… \
      POLICY_CHECK_APP_PRIVATE_KEY="$(cat <pem>)" \
      python3 scripts/mint_policy_check_token.py --verify
    ```
-   Expect the three contexts — `Required checks passed`, `doc-links + agents-init`,
-   `mypy — digibase + digikey`. Anything else means the grant is wrong, and the
-   failure is loud rather than a silent stale snapshot.
+   Expect, literally:
+   ```
+   OK mint: installation token valid, expires <an hour from now>
+   OK verify: digithings-ai/digithings@develop requires 3 context(s)
+     - Required checks passed
+     - doc-links + agents-init
+     - mypy — digibase + digikey
+   ```
+   Exit `0`. Any other exit is loud, and the three exit codes do not mean the
+   same thing: `0` proved it, `1` means the credential was **proven wrong** (the
+   key was rejected, or the grant is missing), `2` means the probe could not
+   **tell** (no key, unparsable key, network blip). A `2` is never filed as a
+   stale snapshot — deleting the previous key on a `2` is how a good credential
+   gets destroyed.
 5. Add the inventory row in [`SECRETS_INVENTORY.md`](SECRETS_INVENTORY.md) §(a),
    and the rotation procedure in [`SECRETS_ROTATION.md`](SECRETS_ROTATION.md).
 
