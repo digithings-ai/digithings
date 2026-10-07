@@ -319,28 +319,35 @@ credential question. Neither belongs here.
 
 ---
 
-## Open question, unresolved: does this credential need to exist at all?
+## Settled: the credential is necessary, and there is no anonymous way around it
 
-**Unverified. Do not treat it as settled either way.**
+The obvious objection to all of this is that `digithings-ai/digithings` is **public**,
+so maybe the branch-protection gate is readable with no credential at all and the
+whole App is unnecessary. That is worth settling rather than assuming, so it was
+measured. First attempt failed to settle it: this machine's unauthenticated API quota
+was exhausted (`GET /rate_limit` → `limit 60, remaining 0`) and the 403s came back
+carrying `API rate limit exceeded` — a rate-limit answer, not a permission answer.
+Reading those as a denial would have been the exact error this issue is about.
 
-`GET /repos/{owner}/{repo}/branches/{branch}/protection` on a **public** repository may
-be readable **anonymously**. `digithings-ai/digithings` is public. GitHub's current
-docs for that endpoint state no admin requirement on the read, while every write
-endpoint on the same page states one explicitly ("requires admin or owner
-permissions to the repository") — which is suggestive, not conclusive, and their
-per-endpoint fine-grained-token permission blocks are no longer rendered on these
-pages.
+Re-measured on 2026-10-07 at 20:03 UTC with the quota freshly reset to 60/60, no
+`Authorization` header at all:
 
-I could not settle it here. This machine's unauthenticated API quota was exhausted
-at the moment I tried: `GET /rate_limit` returned `limit 60, remaining 0`, reset
-`2026-10-07T20:15:52Z`, and the 403s came back carrying
-`API rate limit exceeded` — a rate-limit answer, not a permission answer. Reading
-those 403s as "anonymous access is denied" would be the exact error this issue is
-about.
+| Request (anonymous) | Result |
+|---|---|
+| `GET /repos/digithings-ai/digithings/branches/develop/protection` | **401 Requires authentication** |
+| `GET /repos/digithings-ai/digithings/branches/develop/protection/required_status_checks` | **401 Requires authentication** |
+| `GET /repos/digithings-ai/digithings/rulesets` | 200 — one ruleset listed |
+| `GET /repos/digithings-ai/digithings/rulesets/15270439` | 200 — but the wrong object, see below |
 
-**It does not change the recommendation.** A GitHub-hosted runner shares its egress
-IP with every other job on that address and is capped at 60 unauthenticated requests
-per hour, so an anonymous read is a rate-limit plan whose failure mode is
-indistinguishable from "the snapshot is stale" — the exact confusion this credential
-is meant to remove. Provision the credential. If somebody later proves the anonymous
-read works, the right follow-up is a note on DIG-2098, not an unwind of the App.
+So the branch-protection read genuinely needs a credential. GitHub does publish
+*some* protection state anonymously on a public repo, and that is the trap: the one
+ruleset that is readable without authentication is `module-branch-protection`
+(id 15270439), and it is **not develop's gate**. Its conditions are
+`refs/heads/module/**` and its rules are `deletion`, `non_fast_forward` and
+`pull_request` — there is no `required_status_checks` rule in it at all. develop's
+three contexts live in classic branch protection, which is the 401.
+
+So there is no anonymous substitute, and the guard would be reading a different
+branch's ruleset if it settled for the one that is readable. **Provision the
+credential.** If somebody later finds an unauthenticated route to develop's
+protection state, the right follow-up is a note on DIG-2098, not an unwind of the App.
