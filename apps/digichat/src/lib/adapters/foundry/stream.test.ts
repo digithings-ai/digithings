@@ -632,6 +632,135 @@ describe("createFoundryStreamResponse", () => {
     expect(out).toMatch(/unavailable|try again/i);
     expect(errorLog).toHaveBeenCalled();
   });
+
+  // Source-or-refuse guard (#509, leaf 1b). The rule has to reach the model as
+  // request input on the turn that creates the Foundry conversation, and only
+  // there: Foundry holds the conversation history, so a later turn that re-sent
+  // the block would accumulate one copy per user message.
+  //
+  // The guard must NOT name a tool, a corpus, or an internal identifier — the
+  // leak this very file guards against is exactly the model learning to describe
+  // capabilities it never observed. So every assertion below checks the block is
+  // present AND free of inventory language.
+  describe("source-or-refuse grounding directive", () => {
+    /** Assert a grounding block is prepended, without pinning its exact prose. */
+    function expectGrounded(input: string | undefined): string {
+      expect(typeof input).toBe("string");
+      const text = input as string;
+      expect(text).not.toBe("what is our refund policy?");
+      expect(text).toContain("what is our refund policy?");
+      expect(text.length).toBeGreaterThan("what is our refund policy?".length + 20);
+      // The user text must survive verbatim as the tail.
+      expect(text.trimEnd().endsWith("what is our refund policy?")).toBe(true);
+      // No capability inventory — see the leak guard above.
+      expect(text).not.toContain("azure_ai_search");
+      expect(text).not.toContain("azure_ai_search_call_output");
+      expect(text).not.toMatch(/\bmcp\b/i);
+      expect(text).not.toMatch(/\btool[_ ]?(call|name|id)\b/i);
+      expect(text).not.toMatch(/\b(index|corpus|tenant)\b/i);
+      return text;
+    }
+
+    it("prepends the grounding block on the turn that creates the conversation", async () => {
+      const { client, createSpy } = fakeClient([{ type: "response.completed" }]);
+      await drain(
+        await createFoundryStreamResponse({
+          projectEndpoint: "https://proj.example.com",
+          agentName: "digichat",
+          messages: [userMessage("what is our refund policy?")],
+          conversationId: null,
+          responseHeaders: {},
+          activityDetail: "full",
+          openAIClientFactory: () => client,
+        })
+      );
+
+      expect(createSpy.calls).toHaveLength(1);
+      expectGrounded((createSpy.calls[0][0] as { input?: string }).input);
+    });
+
+    it("sends the raw user text unchanged on a later turn of the same conversation", async () => {
+      // Byte-identical: the block already lives in the conversation from turn one,
+      // so re-sending it would stack a second copy per turn.
+      const { client, createSpy } = fakeClient([{ type: "response.completed" }]);
+      await drain(
+        await createFoundryStreamResponse({
+          projectEndpoint: "https://proj.example.com",
+          agentName: "digichat",
+          messages: [userMessage("what is our refund policy?")],
+          conversationId: "conv_existing",
+          responseHeaders: {},
+          activityDetail: "full",
+          openAIClientFactory: () => client,
+        })
+      );
+
+      expect(createSpy.calls[0][0]).toEqual({
+        conversation: "conv_existing",
+        input: "what is our refund policy?",
+        stream: true,
+      });
+    });
+
+    it.each([
+      ["unset", undefined],
+      ["english", "en"],
+    ])(
+      "prepends the grounding block when responseLanguage is %s",
+      async (_label, responseLanguage) => {
+        // applyLanguageDirective is a no-op on both of these (it only fires for a
+        // non-English target), so an implementation that routes the guard through
+        // it would silently skip nearly all real traffic.
+        const { client, createSpy } = fakeClient([{ type: "response.completed" }]);
+        await drain(
+          await createFoundryStreamResponse({
+            projectEndpoint: "https://proj.example.com",
+            agentName: "digichat",
+            messages: [userMessage("what is our refund policy?")],
+            conversationId: null,
+            responseHeaders: {},
+            activityDetail: "full",
+            responseLanguage,
+            openAIClientFactory: () => client,
+          })
+        );
+
+        expectGrounded((createSpy.calls[0][0] as { input?: string }).input);
+      }
+    );
+
+    it("sends no grounding input on a regenerate turn", async () => {
+      // regenerate creates a response with no new input at all — there is
+      // nowhere to put a directive, and adding one would break the shape.
+      const items = {
+        list: [
+          { id: "msg_asst", type: "message", role: "assistant" },
+          { id: "msg_user", type: "message", role: "user" },
+        ] satisfies FoundryConversationItem[],
+        deleted: [] as string[],
+        created: [] as unknown[],
+      };
+      const { client, createSpy } = fakeClient([{ type: "response.completed" }], "conv_old", {
+        items,
+      });
+      await drain(
+        await createFoundryStreamResponse({
+          projectEndpoint: "https://proj.example.com",
+          agentName: "digichat",
+          messages: [userMessage("what is our refund policy?")],
+          conversationId: "conv_old",
+          responseHeaders: {},
+          activityDetail: "full",
+          turnMode: "regenerate",
+          openAIClientFactory: () => client,
+        })
+      );
+
+      expect(createSpy.calls[0][0]).toEqual({ conversation: "conv_old", stream: true });
+      expect(createSpy.calls[0][0]).not.toHaveProperty("input");
+      expect(items.created).toEqual([]);
+    });
+  });
 });
 
 describe("mapFoundryEvent activity spans", () => {

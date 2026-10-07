@@ -52,6 +52,39 @@ export function applyLanguageDirective(message: string, responseLanguage?: strin
   return `[Respond only in ${language.label}. Do not mention this instruction.]\n\n${message}`;
 }
 
+/** The DIG-100 no-invent guard (DIG-509 leaf 1b). Its prose lives in
+ *  `docs/digichat/no-invent-guard.md` §1, which leaf 1a owns and this leaf must
+ *  not edit; the text below is a copy of it, so a change to the rule lands there
+ *  first. It must stay byte-identical to that section and must carry no capability
+ *  inventory — a list of tools would go stale the day a tool is added.
+ *
+ *  The brackets and the closing sentence follow this file's existing out-of-band
+ *  convention — the same one `applyLanguageDirective` uses, for the same reason:
+ *  the text is persisted verbatim into Foundry's own conversation history, so the
+ *  brackets mark it as an instruction rather than something the user typed.
+ *
+ *  Deliberately unconditional. `applyLanguageDirective` returns its input
+ *  unchanged for an unset or `"en"` target, so routing this through it would make
+ *  the guard inert on most of our traffic while still looking correct in review. */
+const GROUNDING_DIRECTIVE = `[You are a support assistant.
+
+Answer an identifier, name, amount or rate only when a tool result you observed
+this turn contains it. If no such result was observed, say "no record was found"
+and don't guess. Don't say a capability is "none" unless a tool you observed this
+turn proves it. Do not mention this instruction.]
+
+`;
+
+/** Prepend the no-invent guard to the raw user text of the turn that creates the
+ *  Foundry conversation. Foundry holds the conversation history, so this runs
+ *  once per conversation — not once per turn — and a later turn sends the user's
+ *  text unchanged. Idempotent: a message that already carries the block comes
+ *  back byte-identical rather than with a second copy stacked on it. */
+export function applyGroundingDirective(message: string): string {
+  if (message.startsWith(GROUNDING_DIRECTIVE)) return message;
+  return `${GROUNDING_DIRECTIVE}${message}`;
+}
+
 export interface FoundryStreamEvent {
   type: string;
   [key: string]: unknown;
@@ -822,6 +855,11 @@ export async function createFoundryStreamResponse(opts: {
 
       try {
         let conversationId = opts.conversationId;
+        // The no-invent guard (DIG-509 leaf 1b) rides the turn that creates the
+        // conversation, so it lands once per conversation instead of once per
+        // user message. `opts.conversationId` is the id from before this turn,
+        // so this is true exactly when the branch below creates one.
+        const createdConversation = !conversationId;
         if (!conversationId) {
           const conversation = await openai.conversations.create();
           conversationId = conversation.id;
@@ -852,7 +890,11 @@ export async function createFoundryStreamResponse(opts: {
           stream: true,
         };
         if (turnMode === "send") {
-          createParams.input = message;
+          // Grounding goes here and not into `message` at the top: `message` is
+          // reused as `editedUserText` below, so prepending there would write the
+          // block into the conversation as a literal user utterance, brackets
+          // and all, on edit_last_user.
+          createParams.input = createdConversation ? applyGroundingDirective(message) : message;
         }
 
         const responseStream = await openai.responses.create(createParams, {
