@@ -47,6 +47,7 @@ from digiquant.service import (
     service_run_optimize,
     service_run_policy_replay,
 )
+from digiquant.tool_refusals import REFUSAL_CODE, is_refused, refusal_message
 
 app = FastAPI(
     title="digiquant",
@@ -435,6 +436,19 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
     """Execute one digiquant orchestrator tool (digigraph hub dispatch)."""
     tool = (req.tool or "").strip()
     args = req.arguments if isinstance(req.arguments, dict) else {}
+
+    # Counsel's refusal list (DIG-1057) is checked before any dispatch branch:
+    # a refused tool answers a typed refusal and never reaches the upstream,
+    # whatever it is named. See digiquant.tool_refusals.
+    if is_refused(tool):
+        return {
+            "ok": False,
+            "service": "digiquant",
+            "tool": tool,
+            "error": refusal_message(tool),
+            "code": REFUSAL_CODE,
+            "refused": True,
+        }
 
     if tool == "digiquant_list_strategies":
         data = service_list_strategies()

@@ -1,0 +1,151 @@
+# Pipeline: dependency freshness radar
+#
+# Monthly comparison of uv.lock against PyPI latest versions.
+# Posts a tracking issue with a version gap table (major/minor/patch).
+# Deduplicates by title so only one open radar issue exists at a time.
+#
+# Visibility only. This never changes a bound and never bumps anything.
+#
+# No `on: schedule` here on purpose. develop carries no GitHub cron for this
+# repo — every clock lives on the digithings-cron Worker, because a GitHub cron
+# on the default branch double-fires with it
+# (tests/scripts/test_no_gha_schedules.py). The monthly clock is the
+# `dependency-freshness` wd() row in apps/digithings-cron/src/jobs.ts, plus its
+# `[triggers] crons` entry in wrangler.toml. Same precedent as
+# secret-staleness-check.yml and datatap-answer-check.yml.
+
+name: "Pipeline: dependency freshness radar"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+# One radar at a time. The radar edits the single open report issue in place, so
+# two overlapping dispatches would race each other on the same body; `false`
+# queues the second instead of cancelling the first.
+concurrency:
+  group: pipeline-dependency-freshness
+  cancel-in-progress: false
+
+jobs:
+  dependency-freshness:
+    name: Dependency freshness radar
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Export workspace closure from uv.lock
+        run: |
+          uv export --frozen --all-packages --all-extras \
+            --format requirements-txt \
+            --no-emit-project --no-emit-workspace --no-hashes \
+            -o freshness-requirements.txt
+
+      # `packaging` is a transitive dep of the workspace, not a declared
+      # direct one, so it is not importable from a bare interpreter. Sync
+      # from the lock so the version comes from uv.lock, not a guess
+      # (#1715: no unpinned `pip install` in CI).
+      - name: Install from lockfile
+        run: uv sync --frozen --all-packages --all-extras
+
+      - name: Compute freshness report
+        id: report
+        run: |
+          uv run --frozen --no-sync python scripts/dependency_freshness.py \
+            > report.json
+
+          # Step outputs must be written to $GITHUB_OUTPUT. Printing to
+          # stdout alone leaves steps.report.outputs.* empty (DIG-1515).
+          TABLE=$(uv run --frozen --no-sync python -c \
+            "import json;print(json.load(open('report.json'))['table'])")
+          SUMMARY=$(uv run --frozen --no-sync python -c \
+            "import json;print(json.load(open('report.json'))['summary'])")
+          {
+            echo "table<<RADAR_EOF"
+            echo "$TABLE"
+            echo "RADAR_EOF"
+            echo "summary=$SUMMARY"
+          } >> "$GITHUB_OUTPUT"
+
+      # The report step is the fragile one (a 2.4 GB `uv sync` and 284 PyPI
+      # reads sit behind it), and the step below edits the standing report issue
+      # in place. Without this guard, any upstream failure left `table` empty
+      # and the edit overwrote a good monthly report with a blank table while
+      # reporting success — the radar would destroy its own record once, and
+      # never be able to explain why. Fail loudly instead; `always()` so the
+      # error surfaces even when the failure was further upstream.
+      - name: "Guard: refuse to publish an empty report"
+        if: always()
+        env:
+          TABLE: ${{ steps.report.outputs.table }}
+        run: |
+          if [[ -z "$TABLE" ]]; then
+            echo "::error::the freshness scan produced no table; refusing to overwrite the standing report with a blank one"
+            exit 1
+          fi
+
+      - name: Create/update tracking issue
+        env:
+          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN }}
+          REPO: ${{ github.repository }}
+          PROJ: ${{ vars.DIGI_MAINTENANCE_PROJECT_NUMBER }}
+          TABLE: ${{ steps.report.outputs.table }}
+          SUMMARY: ${{ steps.report.outputs.summary }}
+        run: |
+          TITLE="[radar] Dependency freshness report — $(date +%Y-%m-%d)"
+
+          BODY="## Dependency Freshness Radar
+
+          Monthly comparison of \`uv.lock\` against PyPI latest versions.
+
+          ${SUMMARY}
+
+          ## Comparison Table
+
+          ${TABLE}
+
+          ## Notes
+          - Floors are \`>=\` — the locked version is what uv resolved, not the floor
+          - Major gaps 🔴 are candidates for review; minors 🟡 for awareness; patches 🟢 for info
+          - \`mcp\` cap (\`<2\`) is tracked in DIG-1514 separately
+          - This is visibility only — no auto-bumping
+          - \`no stable release\` means the package has only ever shipped prereleases (all six opentelemetry-instrumentation packages we lock)
+          - \`unknown\` means PyPI could not be read for that package — a read timeout, or no such project on PyPI at all. It should be 0; if it is not, the scan itself was degraded
+
+          ## Acceptance Criteria
+          - [ ] Major gaps reviewed by team
+          - [ ] Decision recorded (upgrade / hold / investigate)"
+
+          EXISTING=$(gh issue list --repo "$REPO" --state open \
+            --search "Dependency freshness report in:title" \
+            --json number --jq '.[0].number' 2>/dev/null || echo "")
+
+          if [[ -n "$EXISTING" ]]; then
+            gh issue edit "$EXISTING" --repo "$REPO" --title "$TITLE" --body "$BODY"
+            echo "Updated existing radar issue #$EXISTING"
+          else
+            # `gh issue create --label` is fatal on a label that does not exist,
+            # and a monthly job that dies on a deleted label reports nothing for
+            # a month. The other pipelines never create labels because every
+            # label they pass already exists; `radar` is the first novel one, so
+            # the radar creates its own. Idempotent, and never fails the step.
+            gh label create radar --repo "$REPO" --color 1D76DB \
+              --description "Standing informational check: read the report, no defect implied" \
+              >/dev/null 2>&1 || true
+
+            URL=$(gh issue create --repo "$REPO" \
+              --title "$TITLE" \
+              --label "radar,component:root,priority:low" \
+              --body "$BODY")
+            echo "Created: $URL"
+            if [[ -n "${PROJ:-}" ]]; then
+              gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
+            fi
+          fi

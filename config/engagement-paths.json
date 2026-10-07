@@ -1,0 +1,27 @@
+{
+  "$comment": [
+    "Engagement -> projects/ directory mapping for the agent-runtime path guard",
+    "(.opencode/plugins/projects-path-guard.js, DIG-1302).",
+    "",
+    "The directory is written out explicitly. It is NEVER derived from the",
+    "engagement id by string munging: `twelve-x` -> `twelve_x` is exactly the",
+    "rule the issue forbids, and it breaks the first time a name is not a",
+    "mechanical transliteration.",
+    "",
+    "An engagement id that is not a key here resolves to NO allowlist, which",
+    "means every path under projects/ except README.md is denied. Adding an",
+    "engagement is a reviewed data change, not a code change."
+  ],
+  "version": 1,
+  "engagements": {
+    "twelve-x": {
+      "dir": "twelve_x"
+    },
+    "sitaas": {
+      "dir": "sitaas"
+    },
+    "local": {
+      "dir": "local"
+    }
+  }
+}
