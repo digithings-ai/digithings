@@ -15,6 +15,7 @@ import polars as pl
 import pytest
 from digiquant.backtest import run_backtest
 from digiquant.data.loader import generate_synthetic_ohlcv
+from digiquant.nautilus_runner import RETURNS_SERIES_MISSING
 from digiquant.strategies import get_strategy, list_strategies
 
 from tests.dq.conftest import SKIP_NATIVE_CRASH
@@ -102,7 +103,12 @@ class TestStrategyBacktestSmoke:
                 data_dir=tmp,
             )
         assert result is not None
-        assert result.status == "ok"
+        # Partial over the withheld chart series and nothing else. The pinned
+        # nautilus_trader's returns() alias cannot be confirmed against
+        # portfolio_returns(), so it is withheld rather than charted.
+        assert result.status == "partial"
+        assert result.missing == [RETURNS_SERIES_MISSING]
+        assert result.success
 
     def test_ema_cross_smoke(self) -> None:
         self._run_smoke("ema_cross")
