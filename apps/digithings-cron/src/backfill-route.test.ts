@@ -406,7 +406,7 @@ describe("POST /backfill — failure handling", () => {
 
   it("backfills a suppressed date once the workflow is dispatchable again", async () => {
     githubAnswers(422, "Workflow is already running");
-    const { env: e, ledger } = withLedger(env());
+    const { env: e } = withLedger(env());
     expect((await postBackfill({ dates: "2026-06-02" }, e)).status).toBe(409);
 
     // DIG-757 re-enables maintenance.yml: the retry is a real dispatch, not a

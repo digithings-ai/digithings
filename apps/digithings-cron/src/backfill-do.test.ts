@@ -363,7 +363,7 @@ describe("BackfillLedger — a settle only writes the caller's own claim", () =>
   });
 
   it("still settles its own claim after a neighbour's late settle was fenced off", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
     const { l } = ledger();
     const a = await l.claim(["2026-06-02", "2026-06-03"], T0, false);
     const b = await l.claim(["2026-06-03"], PAST_TTL, false);
