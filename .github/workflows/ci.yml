@@ -251,6 +251,28 @@ jobs:
       - name: Frontend canon guard
         run: python3 scripts/check_frontend_canon.py
 
+  # GLOOMBERB_ENABLED is the kill switch for the Gloomberb tool family. DIG-1233
+  # makes it default OFF; this job makes that default enforceable by failing when
+  # an enabling value (1/true/yes/on) is committed into a config that ships --
+  # a wrangler [vars], a Dockerfile ENV, a workflow env: block, a compose
+  # environment: entry. An access path Counsel ruled prohibited must not come back
+  # through a line that looks like configuration, not like a credential.
+  # Not path-filtered on purpose: the file that regresses is a config file, and a
+  # guard that only runs when scripts/ or .github/ changes cannot see a value
+  # added to apps/*/wrangler.toml. Stdlib-only; no pip or npm install needed.
+  gloomberb-ci-guard:
+    name: GLOOMBERB_ENABLED deployed-config guard
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: GLOOMBERB_ENABLED deployed-config guard
+        run: python3 scripts/check_gloomberb_ci_guard.py
+
   # ── Per-component test suites (gated by paths) ───────────────────────────────
   digibase:
     needs: changes
@@ -632,6 +654,7 @@ jobs:
     needs:
       - changes
       - frontend-canon
+      - gloomberb-ci-guard
       - digibase
       - digikey
       - digitrace
