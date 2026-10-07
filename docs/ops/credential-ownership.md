@@ -48,7 +48,7 @@ One deliberate departure from the schema below: owners here are **named humans, 
 | Field | Value |
 |-------|-------|
 | **Owner** | **Chris Stefan** — the digithings side of the production write. He is the `production` GitHub environment's required reviewer (`chrizefan`, read from `GET /repos/digithings-ai/digithings/environments/production`). He is also the operator on whose Mac the authenticated Azure session runs as the shared account (`az account show --query user` returns that UPN, `type: user`). |
-| **Backup / DataTap side** | **Unassigned — this is the gap.** No individual user in the tenant holds any role assignment on the subscription. `az ad user list` returns five users (`DataTap`, `Info`, `Nick Stefan`, `Pierre Chamberland`, `Trials Registration`); the shared account's `memberOf` is empty. The only `Owner` of `fc64972f-…` is the **shared** account `datatap@datatapstream.onmicrosoft.com`, so it cannot be given least privilege without breaking whoever depends on it, and **who holds its credential is recorded nowhere.** |
+| **Backup / DataTap side** | **Closed 2026-10-07.** Chris answered on card `cd8a3cc7` (DIG-1727): the shared account `datatap@datatapstream.onmicrosoft.com` is **owned by DataTap, the client, with Chris as backup**. The technical facts are unchanged — `az ad user list` returns five users (`DataTap`, `Info`, `Nick Stefan`, `Pierre Chamberland`, `Trials Registration`), the shared account's `memberOf` is empty, and it is still the only `Owner` of `fc64972f-…`, so it cannot be given least privilege without breaking whoever depends on it. **What the answer changes is who may act on it: DataTap, not digithings.** Any remediation here needs client sign-off. See [Every surface, classified](#every-surface-classified--the-dig-95-inventory). |
 | **Required change** | Name a DataTap-side human for the tenant `Owner` role, record who holds the shared account's credential, and move day-to-day work onto per-person accounts (PIM / break-glass). That is a DataTap-side decision; raise it with DataTap through Counsel's provider contact rather than acting on the shared account. |
 
 ### Principals and their role assignments
@@ -223,9 +223,22 @@ Also recorded there and worth repeating here: the ambient `az` context on the sh
 **second, unrecorded** human UPN, `admin@testingdatatapstream.onmicrosoft.com`, in tenant
 `b93123d1-15e6-4963-8c9a-36c020681cce`. Production is no longer the default subscription and
 `~/.azure/config` pins no default at all — which is an improvement on the state the DIG-1686 ruling
-describes — but **the UPN that replaced the old one is named in no document**, and that is the same gap as
-`datatap@datatapstream.onmicrosoft.com` above. Both ownership questions are on a human-only card
-(`cd8a3cc7-410d-49e0-ab02-65fb43b0e71c`) on DIG-1727, because who holds a credential is not an agent's call.
+describes. **Both ownership questions went to Chris on a human-only card
+(`cd8a3cc7-410d-49e0-ab02-65fb43b0e71c` on DIG-1727, answered 2026-10-07), because who holds a credential
+is not an agent's call. The answer changed what this section is:**
+
+- **`datatap@datatapstream.onmicrosoft.com` is owned by DataTap, the client, with Chris as backup.**
+  The only `Owner` on DataTap's production subscription is therefore held by a credential **we do not own
+  and must not rotate**. So the DataTap scoped-machine-identity work in
+  [Lane-B CI credential — scoped, not created](#lane-b-ci-credential--scoped-not-created) is not ours to
+  execute unilaterally: it needs client sign-off and belongs in the client-facing record, not in our
+  registers as if it were our own row. **Anything in this file that treats `datatap@` as a digithings
+  credential to be rotated is now wrong.**
+- **`admin@testingdatatapstream.onmicrosoft.com` is still unnamed.** Chris's answer said this login is
+  "separate" from the shared account, which is a fact about the identity and not a name against it. It is
+  the login the ambient `az` context on the shared Mac actually uses, so it is the one most likely to be
+  picked up by the next person who opens a terminal here — unnamed, unrefreshed, and pointed at a tenant
+  that is not production. One line from Chris closes it.
 
 ---
 
