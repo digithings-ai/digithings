@@ -7,17 +7,18 @@
  * await the container job.
  *
  * A cron that fires with no enabled job behind it raises an alarm on the
- * twelve-x issues path (DIG-732): unrecognised_cron, which is a different class
- * from a required cron being absent. The required set itself is
- * `src/required-triggers.ts` and is checked against the deployed trigger list,
- * not only against wrangler.toml.
+ * twelve-x issues path (DIG-732). Which class it raises is derived from the
+ * required-trigger contract, not decided here: a required cron firing with no
+ * backstop is missing_required_cron, anything else is unrecognised_cron. The
+ * required set itself is `src/required-triggers.ts` and is also checked against
+ * the deployed trigger list, not only against wrangler.toml.
  */
 import { dispatch, type DispatchResult } from "./dispatch";
 import type { Env } from "./env";
 import { shouldDispatchAtOpen } from "./et-open";
 import { jobsForCron, type Job } from "./jobs";
 import { raiseViolationAlarms } from "./trigger-alarm";
-import { unrecognisedCronViolation } from "./trigger-contract";
+import { violationsForTick } from "./trigger-contract";
 
 export type StartedRun = {
   job_id: string;
@@ -91,23 +92,28 @@ async function runJobsForCron(
   const pending: Promise<StartedRun>[] = [];
 
   if (jobs.length === 0) {
-    const violation = unrecognisedCronViolation(cron);
+    // The class is derived, never hardcoded: the tick asks the contract what
+    // this cron breaking means. Hardcoding "unrecognised" made a disabled
+    // required row — a lost backstop — report as silence, which is the failure
+    // DIG-732 exists to prevent.
+    const violations = violationsForTick(cron);
+    const class: string = violations[0]?.class ?? "none";
     // Still one line per occurrence for observability search, now carrying the
     // class. Before DIG-732 this was the whole response to a trigger that fires
     // with nothing behind it.
-    console.error(
-      JSON.stringify({ cron, error: "unmapped_cron", alarm_class: violation.class }),
-    );
-    // A cron whose only owner is a deliberately disabled job (`house-run-10/11/12`
-    // keep their cron lines as retry slots) is a known configuration, not drift.
-    // Alarming on it would cry wolf three times a day. Alarm only when no job
-    // row at all claims the cron.
-    const knownDisabledSlot = jobsForCron(cron, { includeDisabled: true }).length > 0;
-    if (opts.alarmUnmapped && !knownDisabledSlot) {
+    console.error(JSON.stringify({ cron, error: "unmapped_cron", alarm_class: class }));
+    // A parked cron (only disabled rows claim it — `house-run-10/11/12` keep
+    // their cron lines as retry slots) is a known configuration, not drift, and
+    // violationsForTick returns nothing for it.
+    if (opts.alarmUnmapped && violations.length > 0) {
       // waitUntil, not await: the tick has nothing to dispatch, and the alarm
       // must not become a reason for scheduled() to throw.
       ctx.waitUntil(
-        raiseViolationAlarms(env, [violation], "the deployed trigger list, at the tick that fired"),
+        raiseViolationAlarms(
+          env,
+          violations,
+          "the deployed trigger list, at the tick that fired",
+        ),
       );
     }
   }

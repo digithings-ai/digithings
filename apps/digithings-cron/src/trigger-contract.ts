@@ -17,6 +17,12 @@
  *
  * A deployed cron that is both is reported once, as missing: deleting the job
  * row and forgetting the cron line is one defect and must not raise two alarms.
+ *
+ * One third state exists so both layers read the same world: a cron whose only
+ * owners are deliberately disabled job rows is *parked*. It is not drift, so
+ * neither the contract nor the tick calls it unrecognised. The tick and the
+ * contract therefore agree on parked, which they did not before DIG-732 review:
+ * the contract rejected a disabled slot while the tick tolerated it.
  */
 import { JOBS, type Job } from "./jobs";
 import { REQUIRED_TRIGGERS, type RequiredTrigger } from "./required-triggers";
@@ -65,6 +71,26 @@ function missingReason(trigger: RequiredTrigger, job: Job | undefined): string {
 }
 
 /**
+ * Crons whose only owners are disabled job rows.
+ *
+ * `house-run-10/11/12` are the reason this exists: they keep their cron lines as
+ * retry slots while the rows are switched off. A cron is parked only when no
+ * enabled row claims it too — otherwise the enabled job is what is running it.
+ */
+function parkedCrons(jobs: readonly Job[]): Set<string> {
+  const enabled = new Set<string>();
+  const disabled = new Set<string>();
+  for (const job of jobs) {
+    (job.enabled ? enabled : disabled).add(normaliseCron(job.cron));
+  }
+  const parked = new Set<string>();
+  for (const cron of disabled) {
+    if (!enabled.has(cron)) parked.add(cron);
+  }
+  return parked;
+}
+
+/**
  * Evaluate the contract against a trigger list.
  *
  * `crons` is the list under test: the deployed schedule list in production, or
@@ -88,6 +114,7 @@ export function checkTriggerContract(
     if (job.enabled) mapped.add(normaliseCron(job.cron));
   }
   const requiredCrons = new Set(required.map((trigger) => normaliseCron(trigger.cron)));
+  const parked = parkedCrons(jobs);
 
   const missing: TriggerViolation[] = [];
   for (const trigger of required) {
@@ -114,6 +141,9 @@ export function checkTriggerContract(
     // A required cron nobody claims is already reported as missing. Reporting it
     // again as unrecognised would turn one deletion into two alarms.
     if (requiredCrons.has(cron)) continue;
+    // A cron only disabled rows claim is a known configuration, not drift. The
+    // tick tolerates these too; see parkedCrons.
+    if (parked.has(cron)) continue;
     unrecognised.push({
       class: UNRECOGNISED_CRON,
       cron,
@@ -143,6 +173,47 @@ export function unrecognisedCronViolation(cron: string): TriggerViolation {
     lost: "whatever that trigger used to run, at whatever rate it used to run",
     evidence: "DIG-732",
   };
+}
+
+/**
+ * The violations a firing cron raises, derived from the same contract.
+ *
+ * The tick cannot call `checkTriggerContract([cron])`: the cron is firing, so it
+ * is by definition in the list, and the question is only whether an enabled job
+ * is behind it. Asking that question through the contract is what stops the two
+ * layers from disagreeing about the same world — the review found a disabled
+ * *required* row reported as missing by the contract and as silence by the tick.
+ *
+ *   enabled owner      → no violation; the tick has a job
+ *   parked (disabled)  → no violation; a known configuration
+ *   required cron      → missing_required_cron; it fires with no backstop
+ *   anything else      → unrecognised_cron; it fires with nothing behind it
+ */
+export function violationsForTick(
+  cron: string,
+  opts: { jobs?: readonly Job[]; required?: readonly RequiredTrigger[] } = {},
+): TriggerViolation[] {
+  const jobs = opts.jobs ?? JOBS;
+  const required = opts.required ?? REQUIRED_TRIGGERS;
+  const firing = normaliseCron(cron);
+  const enabledOwns = jobs.some((job) => job.enabled && normaliseCron(job.cron) === firing);
+  if (enabledOwns) return [];
+  if (parkedCrons(jobs).has(firing)) return [];
+  const trigger = required.find((row) => normaliseCron(row.cron) === firing);
+  if (trigger) {
+    const job = jobs.find((row) => row.id === trigger.job);
+    return [
+      {
+        class: MISSING_REQUIRED_CRON,
+        cron: trigger.cron,
+        job: trigger.job,
+        reason: `${trigger.reason} (it fired, but ${missingReason(trigger, job)})`,
+        lost: trigger.lost,
+        evidence: trigger.evidence,
+      },
+    ];
+  }
+  return [unrecognisedCronViolation(cron)];
 }
 
 /** Human-readable one line per violation. Used by scripts and test failures. */
