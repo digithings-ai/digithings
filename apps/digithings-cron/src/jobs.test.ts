@@ -40,7 +40,9 @@ const PATH_A_ENABLED_IDS = [
   "security-npm-audit",
   "token-canary",
   "secret-staleness",
+  "dependency-freshness",
   "smoke-site",
+  "datatap-answer-check",
 ] as const;
 
 const TWELVE_X_ENABLED_IDS = [
@@ -57,7 +59,7 @@ const TWELVE_X_ENABLED_IDS = [
   "twelve-x-digisearch-parity",
 ] as const;
 
-// The 38-expression list this file used to hardcode is gone. A copied list is a
+// The 40-expression list this file used to hardcode is gone. A copied list is a
 // second source of truth that drifts silently, and a copied list was the only
 // thing that noticed the deleted backstop — as a unit test nobody ran for five
 // weeks (DIG-553 Finding 1). The assertion of record is now
@@ -247,7 +249,7 @@ describe("jobsForCron", () => {
     ).toEqual(
       [...RESUMED_PIPELINE_IDS, ...PATH_A_ENABLED_IDS, ...TWELVE_X_ENABLED_IDS].sort(),
     );
-    // The 38-expression set this file used to hardcode is asserted against
+    // The full cron set this file used to hardcode is asserted against
     // wrangler.toml in src/trigger-contract.test.ts, alongside the required FX
     // triggers and their reasons.
     expect(uniqueEnabledCrons()).toContain("52 * * * MON-FRI");

@@ -43,6 +43,34 @@ function parseHeaderBlocks(text: string): HeaderBlock[] {
  * inherited value before this rule's own value is attached. Detach applies only
  * to inherited headers, never to a value in the same block.
  */
+/**
+ * Effective values of one header a browser would receive for a path, using the
+ * same Cloudflare inheritance + `!` detach rules as `effectiveCspFor`, so a
+ * route that adds a header must detach the inherited one or the browser sees
+ * both and picks one.
+ */
+function effectiveHeaderFor(
+  blocks: HeaderBlock[],
+  path: string,
+  header: string,
+): string[] {
+  let values: string[] = [];
+  for (const block of blocks) {
+    const matches =
+      block.pattern === "/*" || path.startsWith(block.pattern.replace(/\*$/, ""));
+    if (!matches) continue;
+    for (const line of block.lines) {
+      if (line.startsWith("! ")) {
+        if (line.slice(2).trim() === header) values = [];
+        continue;
+      }
+      const [name, ...rest] = line.split(":");
+      if (name.trim() === header) values.push(rest.join(":").trim());
+    }
+  }
+  return values;
+}
+
 function effectiveCspFor(blocks: HeaderBlock[], path: string): string[] {
   let values: string[] = [];
   for (const block of blocks) {
@@ -198,6 +226,51 @@ describe("digithings-web security-headers", () => {
       openwikiCsp(),
     ]);
     expect(effectiveCspFor(blocks, "/")).toEqual([
+      digithingsCsp(DEFAULT_DIGICHAT_EMBED_ORIGIN),
+    ]);
+  });
+
+  it("drops Referrer-Policy to no-referrer on the OCC invite route only", () => {
+    // The invite key rides in the /chat/occ query (DIG-1210). The /* policy
+    // already strips query on cross-origin navigations, but a same-origin
+    // request still sends the full URL — every first-party asset on the page
+    // would see the key. Detach the inherited value first, or Cloudflare joins
+    // both and the browser picks one.
+    const blocks = parseHeaderBlocks(
+      renderCloudflareHeaders(frameSrcForCsp()),
+    );
+    const occBlock = blocks.find((b) => b.pattern === "/chat/occ*");
+    expect(occBlock?.lines).toContain("! Referrer-Policy");
+    expect(occBlock?.lines).toContain("Referrer-Policy: no-referrer");
+
+    expect(effectiveHeaderFor(blocks, "/chat/occ", "Referrer-Policy")).toEqual([
+      "no-referrer",
+    ]);
+    // Splat, so the export's alternate URLs are covered too.
+    expect(
+      effectiveHeaderFor(blocks, "/chat/occ.html", "Referrer-Policy"),
+    ).toEqual(["no-referrer"]);
+    // Unrelated routes keep the site-wide policy.
+    expect(effectiveHeaderFor(blocks, "/", "Referrer-Policy")).toEqual([
+      "strict-origin-when-cross-origin",
+    ]);
+    expect(effectiveHeaderFor(blocks, "/chat", "Referrer-Policy")).toEqual([
+      "strict-origin-when-cross-origin",
+    ]);
+  });
+
+  it("committed _headers carries the OCC invite route referrer rule", () => {
+    const blocks = parseHeaderBlocks(readFileSync(headersPath, "utf8"));
+    expect(
+      effectiveHeaderFor(blocks, "/chat/occ", "Referrer-Policy"),
+    ).toEqual(["no-referrer"]);
+  });
+
+  it("leaves the CSP on the OCC invite route at the site-wide value", () => {
+    // The referrer rule must not detach anything else, or the chat iframe
+    // would lose its frame-src and stop rendering.
+    const blocks = parseHeaderBlocks(readFileSync(headersPath, "utf8"));
+    expect(effectiveCspFor(blocks, "/chat/occ")).toEqual([
       digithingsCsp(DEFAULT_DIGICHAT_EMBED_ORIGIN),
     ]);
   });

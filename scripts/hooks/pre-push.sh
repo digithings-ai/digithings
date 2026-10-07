@@ -31,10 +31,19 @@ origin_draft_regex='^origin/[a-z0-9][a-z0-9-]*$'
 # Allowed branch name taxonomy. Keep in sync with BRANCHING.md and the
 # GitHub branch-naming ruleset on origin.
 #
+# `DIG-<n>-<title-slug>` is the branch Paperclip checks out an execution
+# workspace on. It matched no arm here, so a bare `git push` from such a
+# workspace was refused outright — the hook validates the destination
+# `remote_ref`, and there is no exemption for a branch the remote already holds.
+# Admitting the shape is the whole fix; the digit is required so this cannot
+# widen into a prefix match on `DIG`, and the slug is required so `DIG-47-` is
+# not a branch name. Such a branch accumulates commits from unrelated issues and
+# must not be blanket pushed — see the execution-workspace rule in BRANCHING.md.
+#
 # Contributor namespaces (human handles) go in CONTRIBUTOR_HANDLES; add a new
 # handle (GitHub login) here when a new human contributor joins.
 CONTRIBUTOR_HANDLES='chrizefan'
-branch_regex="^(main|develop|module/[a-z0-9-]+|release/v[0-9]+\.[0-9]+\.[0-9]+|release-please--branches--(develop|module/[a-z0-9-]+)--components--[a-z0-9-]+|task/[0-9]+-[a-z0-9-]+|(claude|codex|cursor|copilot)/[a-z0-9-]+|(${CONTRIBUTOR_HANDLES})/[a-z0-9-]+|(feat|fix|docs|chore)/[a-z0-9-]+|bot/[a-z0-9-]+)$"
+branch_regex="^(main|develop|module/[a-z0-9-]+|release/v[0-9]+\.[0-9]+\.[0-9]+|release-please--branches--(develop|module/[a-z0-9-]+)--components--[a-z0-9-]+|task/[0-9]+-[a-z0-9-]+|(claude|codex|cursor|copilot)/[a-z0-9-]+|(${CONTRIBUTOR_HANDLES})/[a-z0-9-]+|(feat|fix|docs|chore)/[a-z0-9-]+|bot/[a-z0-9-]+|DIG-[0-9]+-[a-z0-9-]+)$"
 
 # A ref deletion pushes an all-zero sha as the local sha; a branch that does not
 # exist upstream yet reports an all-zero remote sha. The width follows the repo's
@@ -106,6 +115,8 @@ while read -r local_ref local_sha remote_ref remote_sha; do
       echo "           {feat,fix,docs,chore}/<slug>" >&2
       echo "           bot/<slug>  (pushed by project-stub-fields.yml," >&2
       echo "                        agent-backlog-snapshot.yml, pipeline-provider-review.yml)" >&2
+      echo "           DIG-<n>-<slug>  (a Paperclip execution workspace; push" >&2
+      echo "                        per-issue, never blanket — BRANCHING.md)" >&2
       failed=1
       continue
     fi
@@ -189,6 +200,38 @@ while read -r local_ref local_sha remote_ref remote_sha; do
       echo "         Add 'Human-Approved-By: <name>' to a commit message, or remove the live-trading changes." >&2
       failed=1
       continue
+    fi
+  fi
+
+  # ── DIG-1589: duplicate-work guard (resume before create) ──────────────────
+  # Appended last so a content refusal above is never masked by this one: the
+  # live-trading arm is the safety gate, and the operator should read that
+  # message first. Deliberately additive — no existing arm is modified.
+  #
+  # Runs on refs/heads/ only, because the guard is about branching: a tag or a
+  # note pushed from an unmerged commit is not a second attempt at the work.
+  if [ "$is_deletion" -eq 0 ] && [[ "$remote_ref" == refs/heads/* ]]; then
+    # An installed hook is a *copy* under .git/hooks, shared by every worktree,
+    # so $0 cannot find the checker. Resolve it from the repository the push is
+    # running in — the checker is committed, so a real checkout always has it.
+    top="$(git rev-parse --show-toplevel 2>/dev/null || echo '')"
+    checker="${BRANCH_RESTART_CHECK_PATH:-${top:+$top/scripts/branch_restart_check.py}}"
+    if [ -z "$checker" ] || [ ! -f "$checker" ]; then
+      echo "pre-push: duplicate-work guard skipped — scripts/branch_restart_check.py not found." >&2
+      echo "         Run 'git fetch origin' and retry; without it a rebuilt branch cannot be detected." >&2
+    elif ! command -v "${BRANCH_RESTART_CHECK_PYTHON:-python3}" >/dev/null 2>&1; then
+      echo "pre-push: duplicate-work guard skipped — '${BRANCH_RESTART_CHECK_PYTHON:-python3}' not found." >&2
+    elif ! restart_out="$("${BRANCH_RESTART_CHECK_PYTHON:-python3}" "$checker" "$local_sha" \
+                            --branch-name "${branch_name:-$local_ref}" 2>&1)"; then
+      # Non-zero is a refusal; the checker has already written the reason and the
+      # sibling list, and it carries the escapes that permit the push.
+      printf '%s\n' "$restart_out" >&2
+      failed=1
+      continue
+    elif [ -n "$restart_out" ]; then
+      # Allowed, but something worth recording — an applied escape, or a
+      # fail-open path. An escape that is invisible is an escape nobody trusts.
+      printf '%s\n' "$restart_out" >&2
     fi
   fi
 done

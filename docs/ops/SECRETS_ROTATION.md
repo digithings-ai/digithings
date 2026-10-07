@@ -12,6 +12,9 @@ risk ids R1–R15). No value is ever printed here; every literal below is masked
 - Worker secrets are `secret_text` and **write-only** (`wrangler secret list` returns names + type, never values). "Verify" below always means **behaviour**, never readback.
 - Bump the container id whenever a rotated value must reach a running Container — see the next section. `wrangler deploy` alone does **not**.
 - Log every rotation in [`## Rotation log`](#rotation-log). An unlogged rotation is an unverified rotation.
+- The OCC tenant's `token` inside `DIGICHAT_EMBED_TENANTS` has its own runbook, including the
+  verification script and the **Act B2 rollback**: [OCC_INVITE_KEY.md](OCC_INVITE_KEY.md). Read it
+  before acting on §1 for the `occ` entry.
 
 ## The container boot-env trap
 
@@ -71,6 +74,10 @@ sleep 180   # sleepAfter == 3m on digichat, stack, and MCP; the old instance dra
 `curl -s -o /dev/null -w '%{http_code}\n' -H "x-digi-mcp-key: $NEW" https://graph.digithings.ai/_stack/mcp/zammad/mcp` → any status except `401`; drop the header → `401`.
 **Rollback** — re-put the previous `MCP_EDGE_KEY` **and** the previous tenant JSON together.
 **Gotchas** — a one-sided rotation 401s the embed (R10). `tokenEnv` cannot resolve the key: the stack Worker secret is never forwarded into the digichat container, so the literal is required (`apps/digichat-cloudflare/README.md:115-117`).
+
+**The OCC tenant's `token` is a separate, non-`MCP_EDGE_KEY` credential** — an invite bearer
+capability carried as `?token=` on `digithings.ai/chat/occ`, not the MCP edge key. Do not rotate the
+two together. Procedure, verification script and revocation: [OCC_INVITE_KEY.md](OCC_INVITE_KEY.md).
 
 ### 2. `DIGIKEY_BFF_TOKEN`
 
@@ -262,6 +269,7 @@ sleep 180   # sleepAfter == 3m on digichat, stack, and MCP; the old instance dra
 | `DIGIKEY_ADMIN_TOKEN`, `DIGIKEY_BFF_TOKEN` | 12 months | admin-token exposure; offboarding | digikey / security owner |
 | `DIGIKEY_DATABASE_URL` | 12 months, with the DB role | DB incident; role audit | data platform |
 | `MCP_EDGE_KEY` + tenant JSON | 12 months | edge 401 incident; tenant offboarding | Cloudflare / platform operator |
+| OCC tenant `token` in `DIGICHAT_EMBED_TENANTS` | on every staff off-handoff, and 12 months otherwise — **rotation is the only revocation** ([OCC_INVITE_KEY.md](OCC_INVITE_KEY.md)); before Act B2 it grants nothing, after Act B2 it is the whole perimeter | invite link leaked; staff offboarding | Cloudflare / platform operator, custody with security |
 | `GH_DISPATCH_TOKEN` | 12 months | CI PAT expiry (GitHub notifies); offboarding | CI / platform operator |
 | `CLOUDFLARE_API_TOKEN` / `VECTORIZE_API_TOKEN` / `D1_API_TOKEN` | 12 months | token expiry; leaked-scope audit | Cloudflare / platform operator |
 | `AUTH_SECRET` | 12 months | auth incident; expected session reset | digichat owner |
@@ -342,6 +350,64 @@ keys sit side by side as live Pages secrets on `digiquant-io`. Rotating the *twe
 rotating the *core* key as a twelve-x fix is a platform-wide action that breaks every other surface. **Confirm which
 of the two you are rotating before you click**, and note that the fallback fires on any build where the twelve-x var
 is missing (preview builds included, where no such secret is set).
+
+## Registering a secret for a Paperclip agent
+
+A credential an **agent** needs at run time is a different object from a repo secret or a Pages env var. It lives in
+Paperclip's own store and takes **two** records, not one. Checked against the running API on 2026-10-05; the
+"verified" and "schema" labels below are load-bearing, because the obvious endpoint does not exist.
+
+### What does not exist
+
+- `GET`/`POST /api/agents/{id}/secrets` → **`404 {"error":"API route not found"}`**. There is no per-agent secrets
+  route to "register for" another agent.
+- The per-agent route is **`/api/agents/me/secrets`**, which is **GET-only** and answers for the **calling** agent
+  alone. For Security it returns `{"secrets": []}`.
+- `POST /api/agents/me/secrets/{key}/value` has **no request-body schema** in `/api/openapi.json`. Treat it as
+  internal plumbing; do not build a runbook on it.
+- `GET /api/agents/{id}/keys` → **`{"error":"Board access required"}`**. Minting an agent key is a board action and
+  stays a red line for agents.
+
+### What does exist — two records
+
+1. **The secret**, at company scope:
+   `POST /api/companies/{companyId}/secrets` with `{name, key, provider, value, managedMode, description, ...}`.
+   `provider` ∈ `local_encrypted | aws_secrets_manager | gcp_secret_manager | vault`;
+   `managedMode` ∈ `paperclip_managed | external_reference`; `key` must match `^[a-zA-Z0-9_.-]+$`, so
+   `GROK_ROUTINE_WEBHOOK_URL` is a legal key. Only `name` is required.
+2. **The binding**, which puts it into one agent's environment:
+   `POST /api/agents/me/secret-proposals` with `kind: "binding"`, `targetAgentId`, `configPath` (the env var name),
+   `justification`, and optionally `secretId`. A board approval at
+   `POST /api/secret-proposals/{id}/approve` is what commits it.
+
+The sibling proposal kind is `kind: "secret"` — `{name, value, justification}` — and **that one requires the value**,
+so it is only usable by whoever already holds the credential. *Verified:* the 404s, the GET bodies, the 28 routines
+and the `Board access required` above. *Schema only, not executed:* the two POST shapes and their field enums.
+
+### The rule this gives us
+
+**Only the value has to come from outside.** `managedMode: "external_reference"` with `value: null` and an
+`externalRef` is the shape for registering the *name and location* of a credential you are not permitted to hold.
+Security can own the store's metadata while the value never enters the model, a comment, a document or a commit.
+Verification stays a **names-only** read — never a value fetch.
+
+### The gap this exposed: `GROK_ROUTINE_WEBHOOK_*`
+
+`skills/grok-mailbox/SKILL.md` tells the EA that urgent jobs are also pushed by POST to a Grok Bot routine webhook,
+using `GROK_ROUTINE_WEBHOOK_URL` and `GROK_ROUTINE_WEBHOOK_KEY`. Those two names appear **exactly once in the whole
+company** — that one sentence. Verified 2026-10-05:
+
+- **No consumer.** Nothing reads either name. `git grep GROK_ROUTINE_WEBHOOK github/develop` → no match; the kit has
+  no matching file.
+- **No spec.** The sentence gives no endpoint path and no payload, so there is nothing to implement against.
+- **No holder.** The EA agent record contains **zero** occurrences of `webhook`, and its `/api/agents/me/secrets`
+  is empty.
+- **No Paperclip trigger.** All 28 company routines are `kind: "schedule"`; there is no webhook-kind trigger, and
+  `/api/routine-triggers/{id}/rotate-secret` is not the credential the skill means.
+
+So the urgent path is **documented but not implemented and not credentialed**. Registering the two names would turn
+that issue's checklist green with a dead feature behind it. Specify the POST or drop the claim — do not mint
+credentials for an endpoint nobody has written down. (DIG-570.)
 
 ## Rotation log
 

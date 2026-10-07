@@ -86,11 +86,25 @@ jobs:
         if: github.event_name == 'pull_request'
         run: |
           # Fast path: scan only commits in the PR range. Uses git log -p.
+          #
+          # --report-* makes the scan self-diagnosing (DIG-872). Without it the
+          # only trace of a finding is a bare "WRN leaks found: N" in a log that
+          # is gone after retention, so every red costs a manual reproduction:
+          # fetch the pinned scanner, pin --log-opts against the right history,
+          # and discard whatever the bare run invents by walking local refs.
+          # A red that will not say what it found invites a re-run reflex, and
+          # on a gate that has been red for days the cheapest available action
+          # is to suppress the next finding rather than reproduce it.
+          #
+          # The report is written under RUNNER_TEMP, never inside the repo, so
+          # it cannot be committed and cannot re-enter the next scan's history.
           gitleaks detect \
             --source . \
             --config .gitleaks.toml \
             --redact \
             --no-banner \
+            --report-format json \
+            --report-path "${RUNNER_TEMP}/gitleaks-report.json" \
             --log-opts="--no-merges origin/${GITHUB_BASE_REF}..HEAD"
 
       - name: Scan (full history)
@@ -102,4 +116,39 @@ jobs:
             --source . \
             --config .gitleaks.toml \
             --redact \
-            --no-banner
+            --no-banner \
+            --report-format json \
+            --report-path "${RUNNER_TEMP}/gitleaks-report.json"
+
+      # `if: always()` on both steps below is load-bearing. The artifact is
+      # needed exactly when the scan fails, and a step gated on success() would
+      # publish nothing on the one run a human is trying to read.
+      - name: Name the findings
+        if: always()
+        run: |
+          set -uo pipefail
+          report="${RUNNER_TEMP}/gitleaks-report.json"
+          if [ ! -f "$report" ]; then
+            echo "::warning::gitleaks wrote no report, so the scan did not complete. Read the step above."
+            exit 0
+          fi
+          # Reads the ALREADY-redacted report and prints only locating metadata.
+          # --redact rewrites both the Secret field and the Match field (the
+          # latter embeds the offending source line), which is what makes it safe
+          # to publish this file; verified against a seeded fixture, not assumed.
+          python3 -c 'import json,sys
+          f=json.load(open(sys.argv[1]))
+          print("=== gitleaks findings: %d ===" % len(f))
+          if not f: print("  (none)")
+          for x in f:
+              print("  %-24s %s:%s  commit %s" % (x.get("RuleID"), x.get("File"), x.get("StartLine"), (x.get("Commit") or "")[:9]))
+          ' "$report"
+
+      - name: Upload the findings report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-report
+          path: ${{ runner.temp }}/gitleaks-report.json
+          if-no-files-found: warn
+          retention-days: 30

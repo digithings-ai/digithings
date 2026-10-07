@@ -138,9 +138,14 @@ describe("the repo's own deploy config satisfies the contract", () => {
   });
 
   it("no violation is raised against wrangler.toml", () => {
-    const verdict = checkTriggerContract(cronsFromWranglerToml(WRANGLER_TOML));
+    const crons = cronsFromWranglerToml(WRANGLER_TOML);
+    const verdict = checkTriggerContract(crons);
+    // The count is read from the config, never written here. A literal would be a
+    // second source of truth that goes red every time any cron is added on
+    // develop — the same brittleness DIG-732 removed from jobs.test.ts, and the
+    // same class of copy that let the deleted backstop pass unnoticed.
     expect(describeVerdict(verdict, "wrangler.toml")).toEqual([
-      "trigger contract satisfied against wrangler.toml (38 crons)",
+      `trigger contract satisfied against wrangler.toml (${crons.length} crons)`,
     ]);
     expect(verdict.ok).toBe(true);
   });

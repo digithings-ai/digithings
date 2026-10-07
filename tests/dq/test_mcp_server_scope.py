@@ -50,7 +50,8 @@ DIGIFETCH_TOOLS = {
     "digifetch_yield_curve",
     "digifetch_cds",
     "digifetch_research_search",
-    "digifetch_congress_trades",
+    # `digifetch_congress_trades` is refused under 5 U.S.C. 13107(c)(1)(B)
+    # (DIG-1057) and is on no scope — see `digiquant.tool_refusals`.
     "digifetch_transcripts",
     "digifetch_statements",
     "digifetch_ticker_tweets",
@@ -246,6 +247,20 @@ def test_read_scope_includes_luxalgo_family():
 
 @pytest.mark.unit
 def test_tool_counts_pin_post_3855_surface():
-    assert len(READ_SCOPE_TOOLS) == 113
+    # 113 → 112: `digifetch_congress_trades` left the read scope (DIG-1057).
+    assert len(READ_SCOPE_TOOLS) == 112
     assert len(COMPUTE_TOOLS) == 14
-    assert len(_tool_names(create_mcp_server())) == 127
+    # 127 → 126: the refused tool is registered on no scope, full included.
+    assert len(_tool_names(create_mcp_server())) == 126
+
+
+@pytest.mark.unit
+def test_congress_trades_is_refused_on_every_scope():
+    # DIG-1057 / 5 U.S.C. 13107(c)(1)(B): Counsel's refusal list is enforced at
+    # registration, so `scope="full"` cannot reopen the tool.
+    from digiquant.tool_refusals import REFUSED_TOOLS
+
+    assert "digifetch_congress_trades" in REFUSED_TOOLS
+    assert "digifetch_congress_trades" not in READ_SCOPE_TOOLS
+    assert "digifetch_congress_trades" not in _tool_names(create_mcp_server())
+    assert "digifetch_congress_trades" not in _tool_names(create_mcp_server(scope="read"))
