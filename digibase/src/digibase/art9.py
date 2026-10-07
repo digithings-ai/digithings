@@ -355,11 +355,18 @@ category_order: tuple[str, ...] = (
 #: This is exactly what `digibase.audit._key_is_sensitive` does — the technique
 #: §5.5 names as already proven in this codebase — so the substring rule is
 #: deliberately **not** narrowed to exact keys or to word boundaries. It
-#: over-triggers, and that is the accepted trade: `healthcheck_url`,
-#: `medical_billing_code`, `grace_period` (contains `race`), `trades` (contains
-#: `trade`) and `philosophical` all trip. Leaf L13 owns the false-positive battery
+#: over-triggers, and that is the accepted trade: `medical_billing_code`,
+#: `dna_sequence_length`, `political_alerts` and `grace_period` (contains
+#: `race`) all trip. Leaf L13 owns the false-positive battery
 #: (`tests/db/test_art9_false_positives.py`) and settles which of those to narrow
 #: or accept; narrowing here would pre-empt it and silently change the contract.
+#:
+#: The substring rule cuts both ways, and these stay **allowed** because §5.5
+#: names the longer form and not the shorter substring: `healthcheck_url` (the
+#: table lists `health_status`, not `health`), `trades` (the table lists
+#: `trade_union`, not `trade`) and `undiagnosed` (it lists `diagnosis`, not
+#: `diagnos`). Pinned by
+#: `test_keys_whose_substrings_are_not_section_5_5_names_stay_allowed`.
 field_names: Mapping[str, tuple[str, ...]] = MappingProxyType(
     {
         "health": ("diagnosis", "health_status", "medical"),
@@ -487,7 +494,7 @@ def _match_value(value: str) -> tuple[tuple[str, str], ...]:
     return tuple(key for key, pattern in value_patterns.items() if pattern.search(value))
 
 
-def _scan(node: Any, found: set[tuple[str, str]], seen: set[int]) -> None:
+def _scan(node: Any, found: set[tuple[str, str]], seen: set[int], alive: list[Any]) -> None:
     """Collect every ``(category, signal)`` hit reachable from ``node``.
 
     Mapping keys go through the field-name table and string values through the
@@ -496,6 +503,14 @@ def _scan(node: Any, found: set[tuple[str, str]], seen: set[int]) -> None:
     terminates instead of recursing until the stack gives out — a request body is
     caller-supplied, so a cycle must not be a denial of service. Bytes are not
     decoded: decoding here would mean guessing an encoding.
+
+    ``alive`` holds a strong reference to every object whose id is in ``seen``.
+    The set alone is not enough: an ephemeral container — a generator or a lazy
+    row iterator — is released as the walk rebinds, and CPython recycles its
+    address, so the next object can collide on an id that is still in the set and
+    be skipped unscanned. On a streamed payload that fails open, which for a
+    detector means allowing data it was asked to refuse. Keeping the objects
+    alive pins their ids to the objects they were taken from.
     """
     if isinstance(node, str):
         found.update(_match_value(node))
@@ -505,16 +520,17 @@ def _scan(node: Any, found: set[tuple[str, str]], seen: set[int]) -> None:
     if id(node) in seen:
         return
     seen.add(id(node))
+    alive.append(node)
 
     if isinstance(node, Mapping):
         for key, value in node.items():
             for category in _match_key(key if isinstance(key, str) else str(key)):
                 found.add((category, "field_name"))
-            _scan(value, found, seen)
+            _scan(value, found, seen, alive)
         return
     if isinstance(node, Iterable):
         for item in node:
-            _scan(item, found, seen)
+            _scan(item, found, seen, alive)
 
 
 def _decide(
@@ -540,9 +556,13 @@ def _decide(
     categories = tuple(
         category for category in category_order if any(c == category for c, _ in found)
     )
+    # Two value patterns in one category tie on the first two keys, and `min` over
+    # a set falls back to set iteration order — which is hash-seed randomised, so
+    # the same payload would emit a different reason per process and scatter the
+    # label series `reason` is meant to key. The signal name breaks the tie.
     category, signal = min(
         found,
-        key=lambda hit: (category_order.index(hit[0]), hit[1] != "field_name"),
+        key=lambda hit: (category_order.index(hit[0]), hit[1] != "field_name", hit[1]),
     )
     decision: Literal["allow", "mask", "refuse"] = "mask" if exception_ref else "refuse"
     return categories, decision, f"art9:{category}:{signal}"
@@ -589,7 +609,7 @@ def screen_request(payload: Any, *, exception_ref: str | None = None) -> ScreenR
     than recurse.
     """
     found: set[tuple[str, str]] = set()
-    _scan(payload, found, set())
+    _scan(payload, found, set(), [])
     categories, decision, reason = _decide(found, exception_ref)
     return ScreenResult(
         categories=categories,

@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import dataclasses
 import importlib
+from collections.abc import Iterator
 from typing import Any
 
 import pytest
@@ -407,6 +408,35 @@ def test_reason_codes_are_stable_across_repeated_calls() -> None:
     assert reasons == {"art9:health:field_name"}
 
 
+@pytest.mark.parametrize(
+    ("payload", "expected"),
+    [
+        # Two value patterns in one category. `min` over a set with a tie falls
+        # back to set iteration order, which is hash-seed randomised, so these
+        # two emitted different codes per process: art9:genetic:genotype_call vs
+        # art9:genetic:brca_marker on one seed, the other way round on the next.
+        # `reason` keys a metric label, so that scatters the series.
+        pytest.param(
+            {"note": "BRCA1 positive, c.68_69delAG confirmed"},
+            "art9:genetic:brca_marker",
+            id="two-genetic-patterns",
+        ),
+        pytest.param(
+            {"note": "NHS number: 943 476 5919, date of birth 1974-03-11"},
+            "art9:health:date_of_birth",
+            id="two-health-patterns",
+        ),
+    ],
+)
+def test_reason_tie_breaks_deterministically(payload: dict[str, Any], expected: str) -> None:
+    """The winner among tied hits must not depend on the process hash seed.
+
+    Run under several ``PYTHONHASHSEED`` values to be meaningful; the assertion
+    inside the test pins the tie-break rule, this pins which signal it picks.
+    """
+    assert art9.screen_request(payload).reason == expected
+
+
 # ── 6. decisions ─────────────────────────────────────────────────────────────
 
 
@@ -512,6 +542,29 @@ def test_screen_request_survives_shared_subtrees() -> None:
     shared = {"medical": "x"}
 
     assert art9.screen_request({"a": shared, "b": shared}).categories == ("health",)
+
+
+def test_screen_request_screens_an_ephemeral_stream_to_the_end() -> None:
+    """A streamed payload must not fail open when its objects are freed.
+
+    The cycle guard keys on ``id(node)``. A generator releases each dict as the
+    walk rebinds, CPython recycles the address, and the next dict can collide on
+    an id the set still holds — skipping it unscanned. With the hit last, that
+    returned ``allow`` for a payload holding ``medical``. The guard must keep the
+    objects it has seen alive so an id always means the object it was taken from.
+    """
+    filler = 59  # enough distinct dicts to force at least one address reuse
+
+    def rows() -> Iterator[dict[str, Any]]:
+        for i in range(filler):
+            yield {f"filler_{i}": "v" * 40}
+        yield {"medical": "x"}
+
+    result = art9.screen_request(rows())
+
+    assert result.categories == ("health",)
+    assert result.decision == "refuse"
+    assert result.reason == "art9:health:field_name"
 
 
 # ── 8. the ScreenResult contract ─────────────────────────────────────────────
