@@ -121,6 +121,18 @@ state, `dispatch_suppressed`, and it is the one that keeps the endpoint honest:
   killed between `claim` and settle — isolate eviction, client abort — otherwise locks its
   dates out forever, and every later POST reports them as remediated. Past the TTL an
   `in_flight` date is claimable again; an unparseable `claimed_at` counts as abandoned.
+- **Only the caller that owns a claim may settle it.** `claim` hands back the `claimed_at` it
+  wrote, and `markDone`, `markSuppressed` and `release` write nothing unless that token still
+  matches the stored record. Without the fence a slow request can delete or overwrite a claim
+  that has since aged out and been re-dispatched, leaving a date with no record at all even
+  though a run exists for it. A settle that finds no matching claim is skipped and logged with
+  its reason (`ledger_write_skipped`).
+- **A declined forced re-dispatch leaves a `done` date `done`.** `force_dates` on a date already
+  `done` borrows its record and notes `reclaimed_from: "done"`. If GitHub then declines, the
+  earlier run is still standing, so the record goes back to `done` with its original
+  `completed_at` — through both the `dispatch_suppressed` path and the `release` path a hard
+  dispatch failure takes. Demoting it would throw away the fact the date was remediated and
+  let the next plain POST dispatch it a second time, which is the DIG-48 surplus.
 - **`already_remediated` means every date is `done`.** A date held by a live request answers
   `dispatched: []` with `already_remediated: false`, because in-flight is not remediated.
 

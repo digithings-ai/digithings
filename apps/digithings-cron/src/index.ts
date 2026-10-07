@@ -274,7 +274,9 @@ async function handleBackfill(request: Request, env: Env): Promise<Response> {
 
     if (result.dry_run) {
       // Nothing ran upstream, so nothing may be recorded as remediated.
-      const release_failed = !(await writeLedger("release", () => stub.release(split.toDispatch)));
+      const release_failed = !(await writeLedger("release", () =>
+        stub.release(split.toDispatch, split.claimedAt),
+      ));
       return respond(
         {
           ok: true,
@@ -298,7 +300,7 @@ async function handleBackfill(request: Request, env: Env): Promise<Response> {
       // and the caller gets 409 — not the 200 that claimed success.
       const ledger_write_failed = !(
         await writeLedger("markSuppressed", () =>
-          stub.markSuppressed(split.toDispatch, now, result.status),
+          stub.markSuppressed(split.toDispatch, now, result.status, split.claimedAt),
         )
       );
       return respond(
@@ -323,7 +325,9 @@ async function handleBackfill(request: Request, env: Env): Promise<Response> {
     // IN_FLIGHT_TTL_MS, which is the honest outcome: at most one extra dispatch,
     // and the caller is told the ledger is behind.
     const ledger_write_failed = !(
-      await writeLedger("markDone", () => stub.markDone(split.toDispatch, now))
+      await writeLedger("markDone", () =>
+        stub.markDone(split.toDispatch, now, split.claimedAt),
+      )
     );
     return respond(
       {
@@ -342,7 +346,9 @@ async function handleBackfill(request: Request, env: Env): Promise<Response> {
     // in_flight and ages out via IN_FLIGHT_TTL_MS rather than staying locked
     // forever — which is why the failure is reported instead of swallowed, and
     // why the status stays 502 rather than becoming an unhandled 500.
-    const release_failed = !(await writeLedger("release", () => stub.release(split.toDispatch)));
+    const release_failed = !(await writeLedger("release", () =>
+        stub.release(split.toDispatch, split.claimedAt),
+      ));
     const detail = err instanceof Error ? err.message : String(err);
     return respond({ error: "dispatch_failed", detail, release_failed }, 502, await readStates());
   }

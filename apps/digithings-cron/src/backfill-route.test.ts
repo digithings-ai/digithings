@@ -1,84 +1,89 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import worker from "./index";
 import type { Env } from "./env";
-import type {
-  BackfillLedger,
-  LedgerSplit,
-  RemediationRecord,
-  RemediationState,
-} from "./backfill-do";
-import { isStaleClaim } from "./backfill-do";
+import type { LedgerSplit, RemediationRecord, RemediationState } from "./backfill-do";
+import { BackfillLedger } from "./backfill-do";
+
+/** Fake DurableObjectState with a genuinely serialising transaction, as in backfill-do.test.ts. */
+function fakeState() {
+  const store = new Map<string, unknown>();
+  let chain: Promise<unknown> = Promise.resolve();
+  const txn = {
+    async get<T>(k: string) { return store.get(k) as T | undefined; },
+    async put(k: string, v: unknown) { store.set(k, v); },
+    async delete(k: string) { store.delete(k); },
+  };
+  const storage = {
+    async get<T>(k: string) { return store.get(k) as T | undefined; },
+    async put(k: string, v: unknown) { store.set(k, v); },
+    async delete(k: string) { store.delete(k); },
+    async transaction<T>(cb: (t: typeof txn) => Promise<T>): Promise<T> {
+      const run = chain.then(() => cb(txn));
+      chain = run.then(() => undefined, () => undefined);
+      return run;
+    },
+  };
+  return { state: { storage } as unknown as DurableObjectState, store };
+}
 
 /**
- * In-memory stand-in for the Durable Object, addressed by binding. It mirrors the
- * real claim rules (three states, in-flight age-out, force only over `done`) so a
- * route test cannot pass against ledger semantics the worker does not have. Name
- * a write in `failOnce` to make it reject, which is how the ledger-error paths
- * are reached at all.
+ * Binding shim over the real `BackfillLedger`, so a route test cannot pass
+ * against ledger semantics the worker does not have. This harness used to
+ * re-implement the claim rules, which is how the two blocking defects below
+ * stayed invisible: the fake agreed with a buggy ledger rather than catching it.
+ * Name a write in `failOnce` to make it reject, which is how the ledger-error
+ * paths are reached at all.
  */
 class FakeLedger {
-  records = new Map<string, RemediationRecord>();
   failOnce = new Set<"markDone" | "markSuppressed" | "release">();
+
+  private readonly state = fakeState();
+  private readonly inner = new BackfillLedger(this.state.state, {} as Env);
 
   private fault(op: "markDone" | "markSuppressed" | "release"): void {
     if (this.failOnce.delete(op)) throw new Error(`ledger ${op} failed`);
   }
 
-  async status(dates: string[]): Promise<Record<string, RemediationState | "unknown">> {
-    const out: Record<string, RemediationState | "unknown"> = {};
-    for (const date of dates) out[date] = this.records.get(date)?.state ?? "unknown";
-    return out;
+  /** Date-keyed view over the ledger's storage, for arranging a precondition. */
+  readonly records = (() => {
+    const store = this.state.store;
+    return {
+      set: (date: string, record: RemediationRecord): void => {
+        store.set(`backfill:${date}`, record);
+      },
+      get: (date: string): RemediationRecord | undefined =>
+        store.get(`backfill:${date}`) as RemediationRecord | undefined,
+      has: (date: string): boolean => store.has(`backfill:${date}`),
+      size: (): number => store.size,
+    };
+  })();
+
+  status(dates: string[]): Promise<Record<string, RemediationState | "unknown">> {
+    return this.inner.status(dates);
   }
 
   async claim(dates: string[], now: string, force: boolean): Promise<LedgerSplit> {
-    const toDispatch: string[] = [];
-    const skipped: string[] = [];
-    const nowMs = Date.parse(now);
-    for (const date of dates) {
-      const existing = this.records.get(date);
-      const claimable =
-        existing === undefined ||
-        existing.state === "dispatch_suppressed" ||
-        (existing.state === "in_flight" && isStaleClaim(existing, nowMs)) ||
-        (force && existing.state === "done");
-      if (!claimable) {
-        skipped.push(date);
-        continue;
-      }
-      this.records.set(date, { state: "in_flight", claimed_at: now });
-      toDispatch.push(date);
-    }
-    return { toDispatch, skipped };
+    return this.inner.claim(dates, now, force);
   }
 
-  async markDone(dates: string[], now: string): Promise<void> {
+  async markDone(dates: string[], now: string, claimedAt: string): Promise<void> {
     this.fault("markDone");
-    for (const date of dates) {
-      const record = this.records.get(date);
-      if (record) this.records.set(date, { ...record, state: "done", completed_at: now });
-    }
+    await this.inner.markDone(dates, now, claimedAt);
   }
 
-  async markSuppressed(dates: string[], now: string, githubStatus: number): Promise<void> {
+  async markSuppressed(
+    dates: string[],
+    now: string,
+    githubStatus: number,
+    claimedAt: string,
+  ): Promise<void> {
     this.fault("markSuppressed");
-    for (const date of dates) {
-      const record = this.records.get(date);
-      if (record) {
-        this.records.set(date, {
-          ...record,
-          state: "dispatch_suppressed",
-          suppressed_at: now,
-          github_status: githubStatus,
-        });
-      }
-    }
+    await this.inner.markSuppressed(dates, now, githubStatus, claimedAt);
   }
 
-  async release(dates: string[]): Promise<void> {
+  async release(dates: string[], claimedAt: string): Promise<void> {
     this.fault("release");
-    for (const date of dates) {
-      if (this.records.get(date)?.state === "in_flight") this.records.delete(date);
-    }
+    await this.inner.release(dates, claimedAt);
   }
 }
 
@@ -187,7 +192,7 @@ describe("POST /backfill — the guard ladder", () => {
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ error: "missing_required_arg" });
     expect(fetchSpy).not.toHaveBeenCalled();
-    expect(ledger.records.size).toBe(0);
+    expect(ledger.records.size()).toBe(0);
   });
 
   it("400s run_date without reaching upstream", async () => {
@@ -471,6 +476,134 @@ describe("POST /backfill — failure handling", () => {
       states: { "2026-06-02": "in_flight" },
     });
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /backfill — a declined forced re-dispatch is not a surplus", () => {
+  /**
+   * The three-step sequence, end to end through the route.
+   *
+   * 1. A plain POST dispatches and GitHub accepts, so the date is remediated.
+   * 2. An operator forces the date again while twelve-x maintenance.yml is
+   *    disabled, and GitHub answers a benign 422. Nothing ran.
+   * 3. A plain POST for the same date must be a no-op.
+   *
+   * Step 2 used to demote the date to `dispatch_suppressed`, which threw away
+   * the fact that step 1 started a real run. Step 3 then re-dispatched it — the
+   * DIG-48 surplus. This is reachable today, not hypothetically, precisely
+   * because the workflow is disabled and every forced POST takes the 422 branch.
+   */
+  it("keeps a remediated date remediated when a forced re-dispatch is declined", async () => {
+    const fetchSpy = spyFetch();
+    const { env: e, ledger } = withLedger(env());
+
+    const first = await postBackfill({ dates: "2026-06-02" }, e);
+    expect(first.status).toBe(200);
+    expect(ledger.records.get("2026-06-02")).toMatchObject({ state: "done" });
+
+    fetchSpy.mockRestore();
+    const declined = githubAnswers(422, "Workflow is already running");
+    const forced = await postBackfill({ dates: "2026-06-02", force_dates: "true" }, e);
+    expect(forced.status).toBe(409);
+    expect(await forced.json()).toMatchObject({ error: "dispatch_suppressed" });
+    expect(ledger.records.get("2026-06-02")).toMatchObject({ state: "done" });
+    expect(declined).toHaveBeenCalledTimes(1);
+
+    // Step 3: nothing left to do, and nothing is dispatched.
+    const third = await postBackfill({ dates: "2026-06-02" }, e);
+    expect(third.status).toBe(200);
+    expect(await third.json()).toMatchObject({
+      ok: true,
+      dispatched: [],
+      already_remediated: true,
+      states: { "2026-06-02": "done" },
+    });
+    expect(declined).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a remediated date remediated when the workflow is disabled", async () => {
+    // The other decline path, and the one reachable today. GitHub answers 422
+    // with "The workflow is not valid" for a disabled workflow, which is not one
+    // of dispatch.ts's benign-422 bodies — so the dispatch fails hard and the
+    // route releases the claim. Releasing must restore the `done` record rather
+    // than deleting it; deleting it leaves the date unknown and the next plain
+    // POST dispatches it a second time.
+    const fetchSpy = spyFetch();
+    const { env: e, ledger } = withLedger(env());
+
+    const first = await postBackfill({ dates: "2026-06-02" }, e);
+    expect(first.status).toBe(200);
+    expect(ledger.records.get("2026-06-02")).toMatchObject({ state: "done" });
+
+    fetchSpy.mockRestore();
+    githubAnswers(422, JSON.stringify({ message: "The workflow is not valid" }));
+    const forced = await postBackfill({ dates: "2026-06-02", force_dates: "true" }, e);
+    expect(forced.status).toBe(502);
+    expect(await forced.json()).toMatchObject({
+      error: "dispatch_failed",
+      release_failed: false,
+    });
+    expect(ledger.records.get("2026-06-02")).toMatchObject({ state: "done" });
+
+    const third = await postBackfill({ dates: "2026-06-02" }, e);
+    expect(await third.json()).toMatchObject({
+      dispatched: [],
+      already_remediated: true,
+      states: { "2026-06-02": "done" },
+    });
+  });
+
+  it("still leaves a date that never ran claimable, because nothing ran", async () => {
+    // The counterpart, so the fix cannot be "422 always means done": a date that
+    // has never been accepted by GitHub has no run behind it and must stay
+    // dispatchable once the workflow is enabled again.
+    const fetchSpy = spyFetch();
+    const { env: e, ledger } = withLedger(env());
+    await postBackfill({ dates: "2026-06-02" }, e);
+    expect(ledger.records.get("2026-06-02")).toMatchObject({ state: "done" });
+
+    fetchSpy.mockRestore();
+    githubAnswers(422, "Workflow is already running");
+    // A different date, never dispatched, forced while disabled.
+    const declined = await postBackfill({ dates: "2026-06-03", force_dates: "true" }, e);
+    expect(declined.status).toBe(409);
+    expect(ledger.records.get("2026-06-03")).toMatchObject({
+      state: "dispatch_suppressed",
+    });
+
+    // The workflow is dispatchable again, so the retry is a real dispatch.
+    githubAnswers(204);
+    const retried = await postBackfill({ dates: "2026-06-03" }, e);
+    expect(retried.status).toBe(200);
+    expect(await retried.json()).toMatchObject({
+      ok: true,
+      dispatched: ["2026-06-03"],
+      states: { "2026-06-03": "done" },
+    });
+  });
+});
+
+describe("POST /backfill — a late settle does not touch a re-dispatched date", () => {
+  /**
+   * A claim that has aged out is re-dispatched by a later request, and that
+   * request's markDone must land — the date it settled is the one now on disk.
+   * The complementary late-write case (A settling after B re-dispatched) is
+   * fenced and asserted in backfill-do.test.ts, where the interleaving can be
+   * arranged directly rather than raced through the route.
+   */
+  it("settles the claim it just took over an aged-out one", async () => {
+    const fetchSpy = githubAnswers(204);
+    const { env: e, ledger } = withLedger(env());
+
+    // A claim stranded by a request that never settled, aged past the window.
+    const stale = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    ledger.records.set("2026-06-02", { state: "in_flight", claimed_at: stale });
+
+    const res = await postBackfill({ dates: "2026-06-02" }, e);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ dispatched: ["2026-06-02"] });
+    expect(ledger.records.get("2026-06-02")).toMatchObject({ state: "done" });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 });
 
