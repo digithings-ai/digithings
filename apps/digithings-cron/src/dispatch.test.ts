@@ -318,6 +318,46 @@ describe("dispatch", () => {
     expect(logged).toContain('"error":"github_override"');
   });
 
+  it("merges opts.args into the body of a forced-over row", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const runnerFetch = vi.fn();
+    const job: Job = {
+      id: "market-data-refresh-evening",
+      cron: "30 21 * * *",
+      repo: "digithings-ai/digithings",
+      kind: "container",
+      workflow: "pipeline-market-data-refresh.yml",
+      inputs: { scope: "evening", refresh_scope: "auto" },
+      ref: "develop",
+      command: "market-data-refresh",
+      concurrency: "market-data-refresh",
+      timeoutSeconds: 1800,
+      codeRef: "main",
+      enabled: true,
+    };
+    const env: Env = {
+      DRY_RUN: "0",
+      GH_DISPATCH_TOKEN: "token",
+      RUNNER_AUTH_TOKEN: "runner-token",
+      GITHUB_OVERRIDE_JOBS: "market-data-refresh-evening",
+      RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
+    };
+    // The override reroutes a container row onto the GitHub path, so /kick args
+    // must survive the reroute: the caller wins on refresh_scope and the row's
+    // own scope is kept, and the runner must not also see them.
+    await dispatch(env, job, job.cron, 9, { args: { refresh_scope: "all" } });
+    expect(runnerFetch).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toEqual({
+      ref: "develop",
+      inputs: { scope: "evening", refresh_scope: "all" },
+    });
+    expect(errorSpy).toHaveBeenCalled();
+  });
+
   it("probe smoke-stack fetches healthz and does not call the runner or GitHub", async () => {
     const urls: string[] = [];
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
