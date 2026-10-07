@@ -48,7 +48,7 @@
       "addLabels": ["ci-toolchain"]
     },
     {
-      "description": "mcp is capped below 2.0 for a KNOWN incompatibility: 2.0 removed mcp.server.fastmcp, which four packages import (digigraph, digiquant, digisearch, digivault). Raising the cap requires porting to the 2.x API, so surface it on the dashboard but never open it unattended.",
+      "description": "mcp is capped below 2.0 for a KNOWN incompatibility: 2.0 removed mcp.server.fastmcp, which six tracked modules import across five packages (digigraph, digillm, digiquant, digisearch, digivault, plus scripts/zammad_mcp). Three of those call sites are wrapped in try/except ImportError and degrade to _MCP_AVAILABLE = False (silent capability loss); three are unguarded module-scope imports that crash on import (digisearch, digivault, scripts/zammad_mcp). A botched port is therefore not all-or-nothing: three services lose their MCP tools quietly while three crash loudly. Raising the cap requires porting to the 2.x API (mcp.server.fastmcp -> mcp.server.mcpserver, FastMCP -> MCPServer), so surface it on the dashboard but never open it unattended.",
       "matchPackageNames": ["mcp"],
       "dependencyDashboardApproval": true,
       "addLabels": ["needs-migration"]
