@@ -32,6 +32,7 @@ Also pinned by this file:
 
 from __future__ import annotations
 
+import ast
 import inspect
 from pathlib import Path
 
@@ -56,18 +57,66 @@ TRACKERS_INGEST_PY = REPO_ROOT / "digisearch/src/digisearch/trackers_ingest.py"
 PHASE1_ALTDATA_PY = REPO_ROOT / "digiquant/src/digiquant/research/phases/phase1_altdata.py"
 GLOOMBERB_AGENT_TOOLS_PY = REPO_ROOT / "digiquant/src/digiquant/data/gloomberb/agent_tools.py"
 
-#: Every file that states a trackers data licence on a surface a model reads.
-#: The old guard only looked at ``trackers_ingest.py``; PR #5203 fixed one file
-#: and left four more asserting the same claim, which is why the check is
+#: Every source file that states a trackers data licence on a surface a model
+#: reads. The old guard only looked at ``trackers_ingest.py``; PR #5203 fixed one
+#: file and left four more asserting the same claim, which is why the check is
 #: surface-wide.
 DATA_LICENSE_CLAIM_FILES = (
-    "digisearch/src/digisearch/trackers_ingest.py",
-    "digisearch/src/digisearch/trackers_wave2_ingest.py",
+    "digiquant/src/digiquant/data/luxalgo/agent_tools.py",
     "digiquant/src/digiquant/data/luxalgo/attribution.py",
+    "digiquant/src/digiquant/data/luxalgo/client.py",
     "digiquant/src/digiquant/data/luxalgo/entitlements.py",
     "digiquant/src/digiquant/mcp_server.py",
     "digiquant/src/digiquant/orchestrator_tools.py",
+    "digisearch/src/digisearch/trackers_ingest.py",
+    "digisearch/src/digisearch/trackers_wave2_ingest.py",
 )
+
+#: Prose that states the same claim. Doc comments are read by the next agent to
+#: edit the file, so an unqualified line here propagates.
+DATA_LICENSE_CLAIM_DOCS = (
+    "digiquant/AGENTS.md",
+    "digisearch/ARCHITECTURE.md",
+)
+
+#: A CC0 claim is only *qualified* if it names **both** per-family limits. The
+#: markers are deliberately the vocabulary a reader needs, not the caveat
+#: function's own wording, so a file cannot pass by carrying the caveat
+#: somewhere far away — the file-scoped guard this replaces did exactly that
+#: and passed vacuously on ``trackers_wave2_ingest.py``, whose only "short
+#: volume" token was a dataset id.
+CONGRESS_TRADES_LIMIT_MARKERS = ("13107", "congress-trades", "congress trades", "congress_trades")
+SHORT_VOLUME_LIMIT_MARKERS = ("FINRA", "short-volume", "short volume", "short_volume")
+
+#: Doc comments and Markdown may satisfy the requirement by *pointing* at the
+#: classifier instead of restating the law, so the rule stays readable in prose.
+POINTER_MARKERS = (
+    "DIG-1464",
+    "DIG-1472",
+    "caveat",
+    "classified",
+    "classification",
+    "two families",
+)
+
+#: A family marker only counts as a *qualification* when a limit is asserted
+#: near it. Without this, ``trackers_wave2_ingest.py`` passed on an incidental
+#: "congress-trades spike" lineage note and a "FINRA" in a row-schema key —
+#: both markers present, neither saying the licence fails to cover the family.
+LIMIT_SIGNALS = (
+    "clear",
+    "waive",
+    "restrict",
+    "unresolved",
+    "refuse",
+    "limit",
+    "cannot",
+    "does not",
+    "not a clearance",
+)
+
+#: Characters around a family marker in which a limit must be asserted.
+LIMIT_WINDOW = 160
 
 #: The overstatement DIG-1479 removed. Any file still asserting it is wrong.
 OVERSTATED_FRAGMENT = "for any purpose other than"
@@ -148,26 +197,201 @@ def test_trackers_ingest_states_the_classified_licence_and_its_limit() -> None:
         assert stale not in doc, f"the withhold-pending-classification posture is stale: {stale}"
 
 
-def test_no_user_visible_cc0_claim_is_left_unqualified() -> None:
-    """The whole surface, not one file: a CC0 claim must carry its limits.
+#: Values that state the licence or one family's limit *by design*. Exempted
+#: structurally — by the constant they are assigned to — so a new bare string
+#: cannot buy its way past the guard the way a nearby marker used to.
+EXEMPT_CLAIM_CONSTANTS = frozenset(
+    {"LUXALGO_TRACKERS_DATA_LICENSE", "LUXALGO_TRACKERS_DATA_CAVEATS"}
+)
+
+
+def _exempted_string_nodes(tree: ast.Module) -> set[int]:
+    """``id()`` of string nodes that are the classified constants themselves."""
+    exempt: set[int] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+            continue
+        targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+        if not any(isinstance(t, ast.Name) and t.id in EXEMPT_CLAIM_CONSTANTS for t in targets):
+            continue
+        value = node.value
+        for child in ast.walk(value) if value is not None else ():
+            if isinstance(child, ast.Constant) and isinstance(child.value, str):
+                exempt.add(id(child))
+    return exempt
+
+
+def _cc0_claims(text: str, *, python: bool = True) -> list[tuple[str, str]]:
+    """Every place ``text`` asserts the CC0 licence, as ``(kind, snippet)``.
+
+    Claim-scoped on purpose. The guard this replaces asked "does this file
+    mention CC0 *and* some marker anywhere", which a bare note 400 characters
+    from a ``13107`` reference passes — the reader of the note sees the claim
+    and none of the limits.
+
+    A claim is one **thing a reader reads**: a string constant, a docstring, a
+    contiguous ``#`` comment block, or a Markdown paragraph. Comment blocks and
+    paragraphs are grouped because a reader reads the block; checking each line
+    separately reports the explanation of the caveat machinery as violations of
+    it.
+    """
+    claims: list[tuple[str, str]] = []
+    lines = text.splitlines()
+    if python:
+        try:
+            tree = ast.parse(text)
+        except SyntaxError:  # pragma: no cover - a non-Python claim file
+            tree = None
+        if tree is not None:
+            exempt = _exempted_string_nodes(tree)
+            for node in ast.walk(tree):
+                if (
+                    isinstance(node, ast.Constant)
+                    and isinstance(node.value, str)
+                    and "CC0" in node.value
+                    and id(node) not in exempt
+                ):
+                    claims.append(("string", " ".join(node.value.split())))
+    block: list[str] = []
+    start = 0
+
+    def flush() -> list[tuple[str, str]]:
+        found = _block_claims(block, start, comment=python) if block else []
+        block.clear()
+        return found
+
+    for lineno, raw in enumerate((*lines, ""), start=1):
+        stripped = raw.strip()
+        if not python:
+            # Markdown: a paragraph is the run of non-blank lines a reader takes
+            # in, so accumulate before flushing.
+            if stripped:
+                if not block:
+                    start = lineno
+                block.append(stripped)
+            else:
+                claims.extend(flush())
+            continue
+        if stripped.startswith("#") or (block and not stripped):
+            if not block:
+                start = lineno
+            block.append(stripped.lstrip("# ").strip())
+            continue
+        claims.extend(flush())
+    claims.extend(flush())
+    return claims
+
+
+def _block_claims(block: list[str], start: int, *, comment: bool) -> list[tuple[str, str]]:
+    body = " ".join(part for part in block if part)
+    if "CC0" not in body:
+        return []
+    return [(f"{'comment' if comment else 'para'}:{start}", body)]
+
+
+def _family_is_qualified(low: str, markers: tuple[str, ...]) -> bool:
+    """True when some marker asserts a limit, not merely names the family."""
+    for marker in markers:
+        start = 0
+        while (at := low.find(marker.lower(), start)) != -1:
+            window = low[max(0, at - LIMIT_WINDOW) : at + len(marker) + LIMIT_WINDOW]
+            if any(signal in window for signal in LIMIT_SIGNALS):
+                return True
+            start = at + 1
+    return False
+
+
+def _missing_limits(snippet: str) -> list[str]:
+    """Which per-family limits this snippet omits, or ``[]`` if it is qualified."""
+    # Case-insensitive so prose that opens a sentence ("Two families need…")
+    # is not reported for missing a pointer it does carry.
+    low = snippet.lower()
+    if any(marker.lower() in low for marker in POINTER_MARKERS):
+        return []
+    missing: list[str] = []
+    if not _family_is_qualified(low, CONGRESS_TRADES_LIMIT_MARKERS):
+        missing.append("congress-trades/13107")
+    if not _family_is_qualified(low, SHORT_VOLUME_LIMIT_MARKERS):
+        missing.append("short-volume/FINRA")
+    return missing
+
+
+def test_no_cc0_claim_is_left_unqualified() -> None:
+    """Every CC0 claim, on every surface, carries both per-family limits.
 
     This is the defect DIG-1464 was filed against — the licence boundary guard
     next to these strings covers indicator *source code* and the entitlement
     note states a data licence with no carve-out, so a reader concludes the
-    position is covered. Every trackers-facing string that says CC0 must also
-    name both per-family limits, or say why it does not apply.
+    position is covered. The first version of this test compared whole files,
+    which reproduced the same failure one level up: it passed vacuously on
+    ``trackers_wave2_ingest.py``, where "short-volume" occurs only as a
+    dataset id, and it kept passing when a bare claim was injected into a file
+    that mentioned the statute elsewhere.
     """
     unqualified: list[str] = []
-    for rel in DATA_LICENSE_CLAIM_FILES:
+    for rel in (*DATA_LICENSE_CLAIM_FILES, *DATA_LICENSE_CLAIM_DOCS):
         text = (REPO_ROOT / rel).read_text(encoding="utf-8")
-        if "CC0" not in text:
-            continue
-        if not any(marker in text for marker in ("13107", "FINRA", "short-volume")):
-            unqualified.append(rel)
-    assert not unqualified, (
-        "these files claim CC0 for trackers data without a per-family limit: "
-        + ", ".join(sorted(unqualified))
+        for kind, snippet in _cc0_claims(text, python=rel.endswith(".py")):
+            missing = _missing_limits(snippet)
+            if missing:
+                unqualified.append(f"{rel} [{kind}] missing {', '.join(missing)}: {snippet[:90]}")
+    assert not unqualified, "unqualified CC0 claims:\n  " + "\n  ".join(sorted(unqualified))
+
+
+def test_the_guard_would_catch_a_bare_claim() -> None:
+    """Prove the guard is claim-scoped: it must fail on an injected claim.
+
+    A guard that cannot fail is how DIG-1318 and DIG-1464 happened. This test
+    runs the same check against a synthetic file so a future refactor cannot
+    quietly weaken it back into co-occurrence.
+    """
+    bare = 'NOTE = "Trackers rows are CC0 public records."\n'
+    qualified = (
+        'NOTE = ("Trackers rows are CC0-1.0 dumps. The grant does not clear '
+        'congress-trades (13107(c)) or short-volume (FINRA terms unresolved).")\n'
     )
+    assert [m for _, s in _cc0_claims(bare) for m in _missing_limits(s)]
+    assert not [m for _, s in _cc0_claims(qualified) for m in _missing_limits(s)]
+
+    # The exact vacuity the file-scoped guard had: a module whose docstring
+    # asserts CC0 while listing the dataset ids, including "short-volume".
+    # The old guard passed this because the id is spelled in the file.
+    wave2 = (
+        '"""luxalgo market-trackers-data wave-2 CC0-1.0 dumps -> index (#4849)."""\n'
+        'DATASETS = ("short-volume", "lda", "usaspending")\n'
+    )
+    assert [m for _, s in _cc0_claims(wave2) for m in _missing_limits(s)] == [
+        "congress-trades/13107",
+        "short-volume/FINRA",
+    ]
+    # One limit is not both, and naming a family is not asserting a limit:
+    # "incl. short-volume" is a dataset id, not a statement about its terms.
+    assert _missing_limits("CC0-1.0 dumps, incl. short-volume") == [
+        "congress-trades/13107",
+        "short-volume/FINRA",
+    ]
+    # Asserting one limit does not qualify the other family.
+    assert _missing_limits("CC0-1.0 dumps. congress-trades is restricted by 13107(c)(1)(B).") == [
+        "short-volume/FINRA"
+    ]
+
+
+def test_the_data_caveat_fails_closed_on_an_unknown_family() -> None:
+    """A misspell must not clear the limit it was meant to carry.
+
+    ``dataset`` is currently dead — no production caller passes it — so a
+    future caller will get this wrong first time. Returning ``""`` for a name
+    that is not in the map would hand back a clean note.
+    """
+    from digiquant.data.luxalgo.attribution import trackers_data_caveat
+
+    assert "13107" in trackers_data_caveat("congress-trades")
+    assert "FINRA" in trackers_data_caveat("short-volume")
+    for misspell in ("congress_trades", "Congress-Trades", "", "unfunded-trades"):
+        note = trackers_data_caveat(misspell)
+        assert "13107" in note and "FINRA" in note, (
+            f"{misspell!r} must not render a clean note: {note!r}"
+        )
 
 
 def test_the_trackers_caveats_cover_exactly_the_two_limited_families() -> None:

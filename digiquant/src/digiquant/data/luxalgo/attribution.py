@@ -90,18 +90,31 @@ LUXALGO_EDGE_LICENSE_NOTE = (
 #: The verdict is per-family — see :data:`LUXALGO_TRACKERS_DATA_CAVEATS`.
 LUXALGO_TRACKERS_DATA_LICENSE = "CC0-1.0"
 
-#: The artefact the classification rests on, named so the claim stays checkable
-#: rather than inherited (DIG-1318 intake trap 1).
+#: The artefacts the classification rests on, named so the claim stays
+#: checkable rather than inherited (DIG-1318 intake trap 1). Both the grant and
+#: the negative reading are pinned: a licence hash alone would leave "the ToS
+#: does not reach these" as the same unverified assertion in the other
+#: direction.
 LUXALGO_TRACKERS_LICENSE_ARTEFACT = (
     "https://github.com/LuxAlgo/market-trackers-data LICENSE @ main, sha256 "
     "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499"
+)
+
+#: Read and hashed 2026-10-06. The "Market Data & Delays" clause quoted in the
+#: module comment is scoped to quote and price feeds; it names Cboe EDGX, CME
+#: via Databento, Financial Modeling Prep, Massive and Twelve Data, and says
+#: such data "may not be redistributed".
+LUXALGO_TRACKERS_TOS_ARTEFACT = (
+    "https://www.luxalgo.com/legal/terms-of-service/ @ 2026-10-06, sha256 "
+    "cad4afb7b7d7545f2c299c2c07b6ed761bcf7ac8be8a0fcadf3d36af65c5fad0"
 )
 
 #: Per-family position on top of the CC0 grant, for the families where "CC0" on
 #: its own overstates the position. A CC0 dedication is a waiver by the affirmer:
 #: it cannot waive a statutory use prohibition, and under CC0 §4(b)-(c) the
 #: affirmer gives no warranty of title and disclaims any duty to clear other
-#: people's rights. Both limits bite on exactly one family each.
+#: people's rights. Both limits bite on exactly one family each:
+#: congress-trades for the statute, short-volume for the upstream terms.
 LUXALGO_TRACKERS_DATA_CAVEATS: dict[str, str] = {
     "congress-trades": (
         "Congress-trades rows are 13107(c) disclosure reports: the CC0 grant "
@@ -115,7 +128,9 @@ LUXALGO_TRACKERS_DATA_CAVEATS: dict[str, str] = {
         "Short-volume rows originate with FINRA, a private self-regulatory "
         "organisation rather than a federal records custodian, so its own "
         "upstream terms are unresolved — CC0 §4(b)-(c) means the vendor cannot "
-        "clear rights it does not hold. Route with Counsel (DIG-1464)."
+        "clear rights it does not hold. Do not present as cleared. Open with "
+        "Counsel (raised DIG-1464; the durable question is the upstream FINRA "
+        "redistribution terms, which no vendor licence answers)."
     ),
 }
 
@@ -218,10 +233,15 @@ def trackers_data_caveat(dataset: str | None = None) -> str:
     *dataset* given, only that family's caveats render; with ``None`` (the
     default, and the only thing a tool-level attribution block can know) every
     caveat renders, so a payload mixing families is never quietly clean.
+
+    Fails **closed**. A *dataset* that is not in
+    :data:`LUXALGO_TRACKERS_DATA_CAVEATS` — a typo, a case variant, an empty
+    string — renders every caveat rather than none. Returning ``""`` for an
+    unknown family would let a misspell clear the very limit the caveat exists
+    to state, which is the opposite of what a licence note is for.
     """
-    if dataset is not None:
-        caveat = LUXALGO_TRACKERS_DATA_CAVEATS.get(dataset)
-        return f" {caveat}" if caveat else ""
+    if dataset is not None and dataset in LUXALGO_TRACKERS_DATA_CAVEATS:
+        return f" {LUXALGO_TRACKERS_DATA_CAVEATS[dataset]}"
     caveats = " ".join(
         LUXALGO_TRACKERS_DATA_CAVEATS[dataset] for dataset in sorted(LUXALGO_TRACKERS_DATA_CAVEATS)
     )

@@ -1167,7 +1167,8 @@ def build_digifetch_ibkr_execute_order_tool() -> dict[str, Any]:
 # keyless (``free``); every payload carries a per-family "Sourced from LuxAlgo
 # ..." attribution + a canonical link. Indicator source code is deliberately
 # NOT wrapped (CC BY-NC-SA license boundary), and neither is trackers_query
-# (the CC0-1.0 dumps stay the source of record).
+# (the CC0-1.0 dumps stay the source of record; the per-family limits
+# classified in DIG-1464 ride on every trackers description and payload).
 
 
 def build_luxalgo_library_search_tool() -> dict[str, Any]:
@@ -1434,7 +1435,7 @@ def build_luxalgo_trackers_datasets_tool() -> dict[str, Any]:
             "name": "luxalgo_trackers_datasets",
             "description": (
                 "Market Trackers catalog (hosted LuxAlgo MCP, anonymous): the "
-"datasets of US public-record market data the LuxAlgo pipeline "
+                "datasets of US public-record market data the LuxAlgo pipeline "
                 "publishes as CC0-1.0 dumps, with row counts, freshness, the "
                 "years with data, and whether it is ticker-searchable. That "
                 "list is upstream's own and runs past the six datasets we "
