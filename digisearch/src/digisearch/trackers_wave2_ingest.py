@@ -1,4 +1,4 @@
-"""luxalgo market-trackers-data wave-2 CC0 dumps → digisearch index (#4849).
+"""luxalgo market-trackers-data wave-2 CC0-1.0 dumps → digisearch index (#4849).
 
 Ticker-bearing follow-up to the congress-trades spike
 (:mod:`digisearch.trackers_ingest`, #4826): ``insider-transactions`` (~17.5k

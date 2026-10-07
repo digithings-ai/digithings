@@ -801,7 +801,7 @@ place the `mcp.luxalgo.com` URL/logic lives — callers never supply a URL.
   companions `luxalgo_edge_symbols`, `luxalgo_edge_presets`,
   `luxalgo_edge_report` (preset reads with the honesty disclaimer) and
   `luxalgo_trackers_datasets`, `luxalgo_trackers_latest`,
-  `luxalgo_trackers_ticker` (freshness/ad-hoc lookups over the CC0 dumps) are
+  `luxalgo_trackers_ticker` (freshness/ad-hoc lookups over the CC0-1.0 dumps) are
   registered in `mcp_server.py` (`_maybe_tool`, `READ_SCOPE_TOOLS`) and listed
   in `orchestrator_tools.py`. Default-ON behind `LUXALGO_ENABLED` — only
   `1`/`true`/`yes`/`on` enable it, any other explicit value fails closed to a
@@ -828,7 +828,7 @@ place the `mcp.luxalgo.com` URL/logic lives — callers never supply a URL.
   the upstream `data.disclaimer` field and the envelope `warnings`. Research
   reference only — never a pipeline primary. `library_get_source_code` is
   deliberately NOT wrapped (CC BY-NC-SA: no indicator source in paid
-  surfaces); `trackers_query` is deliberately NOT wrapped (the CC0 dumps stay
+  surfaces); `trackers_query` is deliberately NOT wrapped (the CC0-1.0 dumps stay
   the source of record — live queries are freshness checks only);
   `broker_*` keys are never sent to the hosted MCP; `journal_*`/`propfirms_*`
   are separate packages.
@@ -841,6 +841,18 @@ place the `mcp.luxalgo.com` URL/logic lives — callers never supply a URL.
   repo-wide reference scan. Guard halves: `tests/dq/test_luxalgo_license_guard.py`
   (unit) + `scripts/check_luxalgo_license_boundary.py` (CI-adjacent, exit 1 on
   violations). Hub `/v1/orchestrator_invoke` 400s unknown `luxalgo_*` names.
+  **That guard is the _code_ licence only** (indicator Pine source, CC BY-NC-SA).
+  The _data_ licence that governs every trackers row is CC0-1.0 (classified
+  2026-10-06, DIG-1464, from the upstream `LICENSE` at `main`), and it carries
+  two per-family limits a copyright waiver cannot supply: congress-trades is
+  restricted by 5 U.S.C. 13107(c)(1)(B) and refused as a data class by Counsel
+  (DIG-1472, in service only by business decision), and short-volume carries
+  unresolved upstream FINRA terms (with Counsel). Both live in
+  `attribution.LUXALGO_TRACKERS_DATA_CAVEATS`; every trackers licence note and
+  entitlement note renders them via `attribution.trackers_data_caveat`. A CC0
+  claim without them is a defect, guarded in
+  `tests/dq/test_congress_trades_statute_and_ingest_provenance.py` across all
+  six claim surfaces.
 - **Tests are offline.** `httpx.MockTransport` straight into `LuxAlgoClient`
   (SSE-shaped `data:` bodies), or a patched `_build_luxalgo_client`; never hit
   the live MCP. Run `pytest tests/dq/test_mcp_luxalgo_tools.py
