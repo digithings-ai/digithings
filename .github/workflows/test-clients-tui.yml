@@ -1,0 +1,154 @@
+name: "Test: clients (TUI)"
+
+# Closes the DIG-2072 gap: `clients/` has three bun packages, each with
+# `"test": "bun test"` in its manifest, and until this lane none of them ran in
+# CI. `scripts/ci_paths.yaml` had no `clients/**` entry and no workflow in
+# .github/workflows/ mentioned bun at all, so every green number reported for
+# the TUI clients — including the render-seam suite that #183 added after a
+# reviewer asked whether it would notice a defect — was a developer-local run
+# that only the developer who ran it could verify.
+#
+# One matrixed lane, not three workflow files. The three packages share a
+# dependency set (@opentui/react 0.5.14, react 19.2.4) and differ only in src/,
+# so a per-package workflow would be three copies of the same install and the
+# same command. Adding a fourth client is one line of `matrix.client`, and the
+# coverage job below is what keeps that honest.
+#
+# `bun test` ONLY — deliberately no `tsc --noEmit`. The client tsconfigs list
+# `bun` in `types`, but no package.json in this repo declares `@types/bun` or
+# `bun-types`, so `bunx tsc --noEmit` fails TS2688 ("Cannot find type definition
+# file for 'bun'") on pristine HEAD of this base. That is pre-existing and
+# unrelated to the missing lane; a type gate cannot be added in the same commit
+# that introduces the lane, because it would be red on arrival and block the
+# lane itself. Tracked as a follow-up; adding a step here that always fails
+# would be worse than having no type gate.
+#
+# bun is version-pinned (1.4.2) for the reason AGENTS.md § "Context &
+# compaction policy" gives: "an unpinned tool changing behaviour under a green
+# build" is what produced #1701, #1705 and #1711. That rule bounds gate-CI tools
+# to their current major; this lane goes one step further and pins the exact
+# patch, because these clients are private packages whose test count is what this
+# lane is for, and a silent patch-level behaviour change in a renderer test is
+# the exact failure. Same escape hatch as the rule: bump it in its own PR. The
+# install is `--frozen-lockfile` against each client's committed bun.lock, so a
+# dependency bump shows up as a lockfile diff rather than silently changing what
+# runs here.
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ${{ matrix.client }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      # One client failing must not hide the other two — they are independent
+      # suites, and fail-fast would cancel a passing client's result.
+      fail-fast: false
+      matrix:
+        client:
+          - digichat-devkit
+          - digichat-tui
+          - digiquant-tui
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.2"
+
+      # --frozen-lockfile fails if the committed bun.lock is stale rather than
+      # silently re-resolving, matching the uv --frozen shape every other lane
+      # in this repo uses.
+      #
+      # Installed per-client, not once at the repo root: each client is a
+      # standalone bun package with its own lockfile and is deliberately NOT an
+      # npm workspace of the root package.json (adding it there would put these
+      # deps in the root package-lock.json and fire the npm_audit lane for
+      # reasons unrelated to that lane's root-workspace scope).
+      - name: Install from lockfile
+        working-directory: clients/${{ matrix.client }}
+        run: bun install --frozen-lockfile
+
+      # Runs the manifest's own `test` script rather than a bare `bun test`, so
+      # the command CI enforces and the command a developer runs locally are the
+      # same string. A suite that is skipped by editing package.json is visible
+      # in the package.json diff.
+      - name: Tests
+        working-directory: clients/${{ matrix.client }}
+        run: bun run test
+
+  # The lane is only durable while it still covers every client that has a test
+  # script. A new client/ with a `bun test` manifest and no matrix entry would
+  # otherwise ship untested and green — the same failure this lane exists to
+  # close, one level up. This reads the real tree, so it needs no updating when
+  # a client is added; it fails instead.
+  #
+  # A separate job, not a step in the matrixed one: its verdict is a property of
+  # (matrix, tree), not of any single client. As a per-leg step it checked the
+  # matrix against itself once per client and said nothing extra.
+  client-coverage:
+    name: Every bun client is in the matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Every bun client is in the matrix
+        run: |
+          set -euo pipefail
+          wf=.github/workflows/test-clients-tui.yml
+          # Read the matrix out of the workflow file rather than through
+          # expression syntax. `matrix.client` is a SCALAR inside a matrixed
+          # job, so `toJSON(matrix.client)` is a quoted string such as
+          # `"digiquant-tui"`, never an array. A first version of this guard did
+          # that, and every leg then saw only itself as "the matrix" and failed
+          # on its sibling clients while passing its own — all three legs red on
+          # a suite that is green locally. The other expression route is closed
+          # too: actionlint rejects a separator form of the matrix-join
+          # expression, because that overload takes a string, not an array.
+          #
+          # So the matrix is the single source of truth and this reads it from
+          # the file. Both YAML list spellings are handled, so the guard does not
+          # depend on which one this file happens to use.
+          #
+          # If the awk finds nothing, fail loudly. Every way this can stop
+          # working — a reformat, a renamed key — must go red rather than
+          # silently report an empty matrix as complete.
+          matrix=$(awk '
+            /^ *matrix: *$/ { in_matrix = 1; next }
+            in_matrix && /^ *client:/ {
+              rest = $0
+              sub(/^ *client: *\[?/, "", rest)
+              sub(/\] *$/, "", rest)
+              if (rest != "") { print rest; exit }   # flow style: [a, b, c]
+              block = 1; next
+            }
+            block && /^ *- / { print $2; next }
+            block { exit }
+          ' "$wf" | tr ',' ' ' | tr -s '[:space:]' ' ' | sed 's/^ *//; s/ *$//')
+          if [ -z "$matrix" ]; then
+            echo "::error::could not read the client matrix from $wf — this guard is inert, not passing"
+            exit 1
+          fi
+          seen=0
+          for pkg in clients/*/package.json; do
+            client=${pkg#clients/}
+            client=${client%/package.json}
+            grep -q '"test"[[:space:]]*:[[:space:]]*"bun test"' "$pkg" || continue
+            seen=$((seen + 1))
+            case " $matrix " in
+              *" $client "*) ;;
+              *) echo "::error::clients/$client declares \"test\": \"bun test\" but is not in the matrix in $wf (matrix: $matrix)"; exit 1 ;;
+            esac
+          done
+          if [ "$seen" -eq 0 ]; then
+            echo "::error::no clients/*/package.json declares a bun test script — this guard is inert, not passing"
+            exit 1
+          fi
+          echo "all $seen bun client(s) with a test script are in the matrix: $matrix"
