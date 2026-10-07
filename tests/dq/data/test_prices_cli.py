@@ -587,3 +587,79 @@ def test_fetch_fx_intraday_requires_credentials() -> None:
 
     assert result.exit_code != 0
     assert "Supabase credentials not set" in result.output
+
+
+# ─── fetch-fx-intraday upsert chunk size (DIG-1835) ───────────────────────
+#
+# Measured on core: /rest/v1/fx_intraday_observations took 2,265 requests in
+# the 12h before the egress restriction, ~2,209 of them POST upserts, from
+# python-httpx with the service role. At DEFAULT_CHUNK=500 that is roughly
+# 1.1M rows moved per 12h window, and every one of those rows is also echoed
+# back by PostgREST (see DIG-2112). Request COUNT is the lever here: a wider
+# chunk is strictly fewer round trips for the same rows.
+
+
+def test_fetch_fx_intraday_passes_default_chunk_to_writer() -> None:
+    """The CLI must plumb an explicit chunk, not silently inherit DEFAULT_CHUNK."""
+    with (
+        patch(_FETCH_INTRADAY, return_value=_fake_candles()),
+        patch(f"{_WRITER}.build_supabase_client", return_value=Mock()),
+        patch(f"{_WRITER}.upsert_fx_intraday_observations", return_value=Mock(rows=2)) as upsert,
+    ):
+        result = CliRunner().invoke(fetch_fx_intraday_cmd, ["--supabase"])
+
+    assert result.exit_code == 0, result.output
+    chunk = upsert.call_args.kwargs.get("chunk")
+    assert chunk is not None, "fetch-fx-intraday must pass chunk= to the writer"
+    assert chunk > 0
+
+
+def test_fetch_fx_intraday_chunk_exceeds_writer_default() -> None:
+    """The whole point: fewer requests than DEFAULT_CHUNK=500 for the same rows."""
+    from digiquant.data.prices.supabase_writer import DEFAULT_CHUNK
+
+    with (
+        patch(_FETCH_INTRADAY, return_value=_fake_candles()),
+        patch(f"{_WRITER}.build_supabase_client", return_value=Mock()),
+        patch(f"{_WRITER}.upsert_fx_intraday_observations", return_value=Mock(rows=2)) as upsert,
+    ):
+        result = CliRunner().invoke(fetch_fx_intraday_cmd, ["--supabase"])
+
+    assert result.exit_code == 0, result.output
+    chunk = upsert.call_args.kwargs.get("chunk")
+    assert chunk is not None, "fetch-fx-intraday must pass chunk= to the writer"
+    assert chunk > DEFAULT_CHUNK, f"chunk {chunk} must beat DEFAULT_CHUNK {DEFAULT_CHUNK}"
+
+
+def test_fetch_fx_intraday_chunk_flag_overrides_default() -> None:
+    """An operator can drop to a small chunk on a constrained gateway."""
+    with (
+        patch(_FETCH_INTRADAY, return_value=_fake_candles()),
+        patch(f"{_WRITER}.build_supabase_client", return_value=Mock()),
+        patch(f"{_WRITER}.upsert_fx_intraday_observations", return_value=Mock(rows=2)) as upsert,
+    ):
+        result = CliRunner().invoke(fetch_fx_intraday_cmd, ["--supabase", "--chunk", "250"])
+
+    assert result.exit_code == 0, result.output
+    assert upsert.call_args.kwargs.get("chunk") == 250
+
+
+def test_fetch_fx_intraday_chunk_rejects_non_positive() -> None:
+    """A zero or negative chunk would spin forever in _chunks()."""
+    with (
+        patch(_FETCH_INTRADAY, return_value=_fake_candles()),
+        patch(f"{_WRITER}.build_supabase_client", return_value=Mock()),
+        patch(f"{_WRITER}.upsert_fx_intraday_observations", return_value=Mock(rows=2)),
+    ):
+        result = CliRunner().invoke(fetch_fx_intraday_cmd, ["--supabase", "--chunk", "0"])
+
+    assert result.exit_code != 0
+    # Must reject the VALUE, not merely reject --chunk as an unknown option.
+    assert "No such option" not in result.output, result.output
+
+
+def test_fetch_fx_intraday_help_documents_chunk() -> None:
+    result = CliRunner().invoke(fetch_fx_intraday_cmd, ["--help"])
+
+    assert result.exit_code == 0, result.output
+    assert "--chunk" in result.output
