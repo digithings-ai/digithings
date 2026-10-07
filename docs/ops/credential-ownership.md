@@ -176,6 +176,56 @@ With retention disabled, all 33 tags stay pullable forever, including the two de
 | Credential | Owner | Canonical Store | Refresh Path | Detector |
 |------------|-------|-----------------|--------------|----------|
 | ACA inline `auth-secret` / `embed-tenants` — 4 bindings (DataTap ACA, prod + dev) | Chris Stefan (confirmed by board answer, 2026-10-06) | the Container App itself, confirmed by board answer (no Key Vault exists in the subscription) | read back with `az containerapp secret list --show-values`, then `az containerapp secret set -n digichat -g <rg> --secrets <name>=<new-value>` on one app at a time | `scripts/digichat_aca_secret_detector.py` — fingerprints in [`digichat-aca-secret-fingerprints.json`](digichat-aca-secret-fingerprints.json), expiry 2027-01-04 (see [above](#container-app-inline-secrets--and-yes-they-are-readable)) |
+| `CLAUDE_CODE_OAUTH_TOKEN` — org secret, a Claude Pro/Max **seat** token used as a CI credential | Security (Keymaster); Anthropic Console setup is Chris | GitHub Actions **org secret** (temporary; the target is no store at all) | delete it — after federation replaces it. Minting it again is `claude setup-token` at a laptop, which is why it is human-held | `token-canary.yml`, presence only. It cannot tell a working token from a revoked one, and it does not notice that both consumers would quietly disable themselves if it went missing |
+| `CURSOR_API_KEY` — org secret, same human-seat class | Security | GitHub Actions org secret | vendor-side | `token-canary.yml`, presence only |
+| `GLOOMBERB_SESSION_COOKIE` — human-inherited: it is the cookie of a logged-in browser | Platform | see [`## GLOOMBERB_SESSION_COOKIE`](#gloomberb_session_cookie) | see that section | see that section (DIG-345 pending) |
+| `PRIMEMARKET_SESSION_COOKIE`, `PRIMEMARKET_SESSION_TOKEN` — human-inherited: browser session artefacts | Security | `digithings-ai/twelve-x` repo secret | human re-login | none |
+| `PRIMEMARKET_USERNAME`, `PRIMEMARKET_PASSWORD` — a human's desk login, in **three** places | Security; Chris owns the desk account | **three**, which is the defect | delete in all three | captcha-gated since ~2026-07-29, so no code path currently authenticates |
+
+**Machine-scoped, for contrast** (no human in the refresh path — these are the ones that are right):
+`GITHUB_TOKEN` (per run), `GH_DISPATCH_TOKEN` (fine-grained PAT `digithings-cron-dispatch`, expires 2027-09-15, Actions rw + Issues rw on two repos, no Contents), `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_EMAIL_API_TOKEN`, `CRON_KICK_SECRET`, `RUNNER_AUTH_TOKEN`, the R2 keys, the provider API keys, and the Azure managed identities `e56a35e6-…` (prod, `AcrPull`) and `e338abce-…` (dev, `AcrPush`/`AcrPull`).
+
+---
+
+## Every surface, classified — the DIG-95 inventory
+
+The org-wide inventory, in which **every** credential surface is marked machine-scoped or
+human-inherited with a named remediation owner, lives in the **DIG-95 "Credential inventory — digithings org"**
+document (`key: inventory`, id `7cdd335c-c73a-4ce5-b386-749e1a2f07fb`) on issue DIG-95. This file is the
+operational register — owner, store, refresh, detector. **The inventory is the classification; this file is
+the runbook.** Do not fork a second classification list here; add the row above and let DIG-95's section 2
+carry the verdict.
+
+The DIG-1727 sweep that produced that classification re-read this file and recorded four drifts it found
+while doing so. Each is a fact about the estate, not about one laptop:
+
+1. **`CLAUDE_CODE_OAUTH_TOKEN` is live in 3 workflows, not 6.** `agent-claude.yml`,
+   `agent-claude-review.yml` and `agent-claude-dispatch.yml` were deleted in
+   `f54af7052dc0e2e6c777b6a783061c4e5ba252c8` (2026-10-01, on `origin/develop`). The count fell by
+   deletion, not by remediation, and the secret is still an un-scoped human seat token in the org store.
+2. **The replacement path is documented by Anthropic, not invented.** `anthropics/claude-code-action@v1`
+   supports Workload Identity Federation — an Anthropic *service account* plus a federation rule matched
+   to a `repo:digithings-ai/digithings:` subject prefix, with the workflow passing identifiers and
+   `permissions: id-token: write`, and **no static secret at all**. That is the same shape as the parked
+   lane-B spec in [Lane-B CI credential — scoped, not created](#rotation-path-for-the-ci-deploy-identity).
+   A static credential takes precedence, so the OAuth secret must be deleted in the same change.
+   It needs an org admin in the Anthropic Console, so it is Chris's action to start.
+3. **`datatapdigichatacr.azurecr.io` is a second DataTap container registry** that this file does not
+   register. It appears as a human `docker login` in `~/.docker/config.json` alongside
+   `datatapchatregistry.azurecr.io`, `ghcr.io` and `registry.cloudflare.com`. Whether it is a client asset
+   nobody told us about or a leftover is **unresolved**; it is question 3 for Security on DIG-95.
+4. **The `az` guard is a PATH convention, not a wall.** `~/.local/bin/az` is a symlink into
+   [`scripts/az-guard/az`](../../scripts/az-guard/az); `/opt/homebrew/bin/az` is the real unguarded
+   `azure-cli 2.87.0`. The guard binds only where `~/.local/bin` precedes `/opt/homebrew/bin`. Installing
+   the shim into a path that actually precedes the real binary is the fix, and it is Platform's.
+
+Also recorded there and worth repeating here: the ambient `az` context on the shared Mac has drifted to a
+**second, unrecorded** human UPN, `admin@testingdatatapstream.onmicrosoft.com`, in tenant
+`b93123d1-15e6-4963-8c9a-36c020681cce`. Production is no longer the default subscription and
+`~/.azure/config` pins no default at all — which is an improvement on the state the DIG-1686 ruling
+describes — but **the UPN that replaced the old one is named in no document**, and that is the same gap as
+`datatap@datatapstream.onmicrosoft.com` above. Both ownership questions are on a human-only card
+(`cd8a3cc7-410d-49e0-ab02-65fb43b0e71c`) on DIG-1727, because who holds a credential is not an agent's call.
 
 ---
 
