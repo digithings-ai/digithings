@@ -398,6 +398,46 @@ assert_exit 1 "new-branch live tip without trailer (zero remote sha)" \
   "$FIXTURE" "$ORIGIN_URL" \
   "refs/heads/task/2483-new $LIVE_BLOCKED refs/heads/task/2483-new $ZERO40"
 
+# ── an update push is still scanned for live paths ───────────────────────────
+# The duplicate-work arm treats an update as not-refusable, and it must not have
+# done that by skipping the rest of the hook. The base sha below is real — the
+# branch is genuinely pushed — so this is an update rather than a create wearing
+# a sha the remote does not hold.
+LIVE_UPD_BASE="$(make_live_tip <<'EOF'
+feat: touch live path
+
+Human-Approved-By: A Human
+EOF
+)"
+git -C "$FIXTURE" push -q origin task/2483-cosign-tmp
+
+# Built on top rather than by make_live_tip, which resets its branch to develop
+# and would leave the new tip a sibling of the pushed base instead of a child.
+git -C "$FIXTURE" checkout -q task/2483-cosign-tmp
+echo "order-update-$RANDOM" > "$FIXTURE/digiquant/src/digiquant/live/place_order.py"
+git -C "$FIXTURE" add -A
+git -C "$FIXTURE" commit -q -F - <<'EOF'
+feat: touch a live path on an update push
+
+Co-Authored-By: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+EOF
+LIVE_UPD_TIP="$(git -C "$FIXTURE" rev-parse HEAD)"
+assert_exit 1 "an update push to a live path without the trailer still refuses" \
+  "$FIXTURE" "$ORIGIN_URL" \
+  "refs/heads/task/2483-cosign-tmp $LIVE_UPD_TIP refs/heads/task/2483-cosign-tmp $LIVE_UPD_BASE"
+
+echo "order-update-signed-$RANDOM" > "$FIXTURE/digiquant/src/digiquant/live/place_order.py"
+git -C "$FIXTURE" add -A
+git -C "$FIXTURE" commit -q -F - <<'EOF'
+feat: touch a live path on an update push, signed off
+
+Human-Approved-By: A Human
+EOF
+LIVE_UPD_SIGNED="$(git -C "$FIXTURE" rev-parse HEAD)"
+assert_exit 0 "an update push to a live path with the trailer is allowed" \
+  "$FIXTURE" "$ORIGIN_URL" \
+  "refs/heads/task/2483-cosign-tmp $LIVE_UPD_SIGNED refs/heads/task/2483-cosign-tmp $LIVE_UPD_BASE"
+
 # ── #2483: fail-closed when no diff base ─────────────────────────────────────
 cd "$FIXTURE"
 git checkout -q --orphan orphan-unrelated

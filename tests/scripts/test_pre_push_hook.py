@@ -205,3 +205,25 @@ def test_unexpected_internal_error_fails_open(monkeypatch: pytest.MonkeyPatch) -
     decision = checker.check(repo, "HEAD", branch_name="task/1589-update", env={})
     assert decision.allowed is True
     assert any("synthetic unexpected failure" in note for note in decision.notes), decision.notes
+
+
+@pytest.mark.unit
+def test_unreadable_arguments_fail_open(capsys) -> None:
+    """A usage error must not read as a refusal.
+
+    ``argparse`` exits 2 on a usage error and ``pre-push.sh`` reads any non-zero
+    exit as a deliberate block, so a checker that cannot parse the hook's
+    arguments would stop the push. The reachable case is version skew:
+    ``install-hooks.sh`` installs the hook from ``origin/develop`` while
+    ``pre-push.sh`` resolves this file from the working tree, so a checkout that
+    has not pulled pairs the new hook (which sends ``--is-update``) with an older
+    checker that does not know the flag.
+    """
+    checker = _load_checker()
+
+    # Conflicting flags, and a flag this version does not define: both are what
+    # the skew produces, and both must allow.
+    assert checker.main(["HEAD", "--is-create", "--is-update"]) == 0
+    assert "could not read its arguments" in capsys.readouterr().out
+    assert checker.main(["HEAD", "--is-a-flag-from-the-future"]) == 0
+    assert "could not read its arguments" in capsys.readouterr().out
