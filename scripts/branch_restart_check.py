@@ -462,7 +462,24 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="the remote already holds this ref, so this push updates it and is not refused",
     )
-    args = parser.parse_args(list(argv) if argv is not None else None)
+    try:
+        args = parser.parse_args(list(argv) if argv is not None else None)
+    except SystemExit as exc:
+        # argparse exits 2 on a usage error, and the hook reads any non-zero exit
+        # as a deliberate refusal — so an argument it cannot parse would block the
+        # push. The reachable case is a version skew: install-hooks.sh installs the
+        # hook from origin/develop while this file is resolved from the working
+        # tree, so a checkout that has not pulled yet pairs the new hook with a
+        # checker that does not know --is-update. Fail open and say why; `git pull`
+        # is the fix.
+        if not exc.code:
+            raise
+        print(
+            "branch-restart-check: the duplicate-work guard could not read its "
+            f"arguments, so it did not block the push — run 'git pull' so the hook "
+            f"and this checker are the same revision."
+        )
+        return 0
 
     decision = check(
         args.repo,
