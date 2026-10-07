@@ -2,26 +2,56 @@
 """Names-only ageing check for GitHub Actions secrets (#248).
 
 `gh secret list` and `gh api .../actions/secrets` return a name and a
-last-written date and never a value, so this whole check runs without reading a
-single credential. That is the point: the 90-day rotation rule in
+last-written date and never a value, so this check never reads a single
+credential. That part is the point: the 90-day rotation rule in
 `docs/ops/SECRETS_INVENTORY.md` was a memory exercise, and this turns it into a
-control that fires on its own.
+control instead of an intention.
 
     python3 scripts/secret_staleness_check.py                     # report, no issue
     python3 scripts/secret_staleness_check.py --file-names a.txt   # offline, no `gh`
     python3 scripts/secret_staleness_check.py --open-issue         # file the tracker
     python3 scripts/secret_staleness_check.py --max-age-days 60
+    python3 scripts/secret_staleness_check.py --gates-only         # gates only, no `gh`
 
 Three levels are aged, because each has its own rotation blast radius:
 
-    repo       a secret any workflow on any branch could read
-    org        inherited by every repo in the org (`gh` needs `admin:org`)
+    repo       a secret any workflow on any branch could read   (needs `repo` scope)
+    org        inherited by every repo in the org              (needs `admin:org`)
     cron       the environment scope the CI reads moved to in #248
+
+Every one of those endpoints needs a token with the `repo` or `admin:org` scope.
+**A workflow's GITHUB_TOKEN has neither**: it is a GitHub App installation token,
+and GitHub's `permissions:` vocabulary has no key for secrets at all, so no grant
+in a workflow file can make these three listings readable. This was measured, not
+assumed — run 37235973852 on `develop` had `actions: read` visibly granted and all
+three listings still answered `Resource not accessible by integration (HTTP 403)`.
+So run this from a shell that holds a token with those scopes — `gh auth` on
+Chris's Mac already carries `repo` and `admin:org` — or pass `--file-names`. It
+does NOT run from the Keymaster weekly key report, which is built from Bitwarden
+and never reads this API.
+
+Run from CI, it reads nothing. By decision (Paperclip DIG-477, option D, 2026-10-05)
+the ageing half is not automated at all, so `secret-staleness-check.yml` invokes
+this script with `--gates-only`, which skips the three listings entirely and does
+only the environment-gate comparison described below. If it is nevertheless run in
+full from CI, every level is reported as NOT CHECKED with the reason printed; see
+`--strict-offline` for turning that into a non-zero exit when a report must not be
+trusted.
 
 Not a hard gate. `--fail-overdue` exits 1 when anything is overdue, which CI
 does *not* use: a stale credential is a decision for a human (rotate now, or
-record why not), and a red build is not that decision. The monthly workflow
-files or updates one tracking issue instead.
+record why not), and a red build is not that decision. Where a token does allow
+the read — the manual `make secrets-staleness` run — it files or updates one
+tracking issue, but it files nothing at all when not one level could be read,
+because a monthly issue reading "I could not do my job" is noise wearing a
+tracker's clothes.
+
+Reading nothing from an operator shell does not close a tracker either, and
+exits 2 rather than 0. CLOSE_NOTE explains the unreadable run as CI's missing
+token scope, which is true of a CI run and false of a hand run whose `gh auth`
+has gone stale; since option D the two are not the same event, because CI runs
+`--gates-only` and never reaches this path. `--close-unmeasurable-tracker`
+restores the close when an operator means it.
 
 Offline switch: `--file-names` reads `SCOPE\\tNAME\\tUPDATED` lines so the
 ageing logic can be tested without `gh`, and `--strict-offline` refuses to
@@ -42,6 +72,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -58,6 +89,20 @@ DEFAULT_MAX_AGE_DAYS = 90
 #: App installation token and never has it, so the org level is best-effort from
 #: CI and authoritative only from an operator's shell.
 ORG_SCOPE_REQUIRES_ADMIN = "admin:org"
+
+#: Why a level reads as unavailable, in the words a human needs at 06:17 on the 1st.
+#: `GET .../actions/secrets` documents that it needs the `repo` scope, and
+#: GITHUB_TOKEN is an installation token whose `permissions:` vocabulary has no key
+#: for secrets at all — so from CI this is a certainty, not a suspicion. Run
+#: 37235973852 measured it with `actions: read` visibly granted and all three
+#: listings still 403. Naming the scope matters: the raw reason used to read
+#: `repo secret list unavailable for digithings-ai/digithings`, which is true and
+#: tells a reader nothing about what to do next.
+SCOPE_NEEDS_TOKEN_SCOPE = (
+    "needs a token with the `repo` scope, which a workflow's GITHUB_TOKEN never has "
+    "(run 37235973852 measured this with `actions: read` granted); read it from an "
+    "operator shell, where `gh auth` already has `repo` and `admin:org`"
+)
 
 SCOPES = ("repo", "org", "cron")
 
@@ -78,6 +123,29 @@ ISSUE_LABELS = ("security:finding",)
 #: declare that environment, which after #248 is the CI read set.
 SCOPE_ORDER = {"org": 0, "repo": 1, "cron": 2}
 
+#: What `--gates-only` reports instead of an ageing verdict. Paperclip DIG-477,
+#: option D (Chris, 2026-10-05): keep the drift check, drop the ageing from
+#: automation. A monthly tracker that can never name a secret is noise wearing a
+#: tracker's clothes, and giving CI a token that could read the listings means
+#: standing up the exact category of repo-scoped credential #248 exists to
+#: shrink. Rotation stays a human decision recorded in
+#: `docs/ops/SECRETS_INVENTORY.md`, which already lists the 16 names measured
+#: past the window on 2026-10-04.
+#:
+#: The wording is load-bearing. `ageing_verdict()`'s "nothing was read" branch is
+#: *true* in gates-only mode and reads as a failure, which would put a
+#: red-sounding sentence in a green run every month and train readers to ignore
+#: it. Nothing is broken here, so nothing should read as though it were. Same
+#: defect as #5078, opposite direction.
+GATES_ONLY_NOTE = (
+    "It is out of automation by decision (DIG-477, option D): the secret listings "
+    "need a token carrying the `repo` scope, which no workflow grant can supply, so "
+    "this half could only ever come back unread. Rotation is a human decision, "
+    "recorded in `docs/ops/SECRETS_INVENTORY.md`. Run `make secrets-staleness` from "
+    "a shell whose `gh auth` already has `repo` and `admin:org` to age the names by "
+    "hand."
+)
+
 
 @dataclass(frozen=True)
 class Secret:
@@ -94,10 +162,25 @@ class Secret:
 
 @dataclass
 class Report:
-    """The ageing result, plus whatever could not be checked."""
+    """The ageing result, plus whatever could not be checked.
+
+    `readable` is how many levels were actually served. It cannot be inferred from
+    `secrets` and `unavailable`: `main()`'s `--file-names` path builds a report
+    with both empty having read nothing at all, which is indistinguishable from a
+    repo whose listings all came back empty. Deriving "nothing to age" from that
+    produced a run that printed "Every level was readable" over a zero-byte file
+    and exited 0. `None` means "not stated", so a hand-built report keeps working
+    and only `collect()` — the one path that knows — asserts a number.
+    """
 
     secrets: list[Secret] = field(default_factory=list)
     unavailable: dict[str, str] = field(default_factory=dict)
+    readable: int = 0
+
+    @property
+    def read_any(self) -> bool:
+        """Whether any level was actually served. False means no count is possible."""
+        return self.readable > 0
 
     def overdue(self, max_age_days: int) -> list[Secret]:
         """Overdue names, widest scope first, then oldest first."""
@@ -241,16 +324,19 @@ def repo_secrets(root: Path, repo: str) -> tuple[list[Secret], str | None]:
     payload = _gh_json(["gh", "api", "--paginate", f"repos/{repo}/actions/secrets"], root)
     entries = _secret_entries(payload)
     if entries is None:
-        return [], f"repo secret list unavailable for {repo}"
+        return [], f"repo secret list unavailable for {repo}: {SCOPE_NEEDS_TOKEN_SCOPE}"
     return _aged(entries, "repo")
 
 
 def org_secrets(root: Path, org: str) -> tuple[list[Secret], str | None]:
-    """Org-scope secrets. Needs `admin:org`; a GITHUB_TOKEN will fail here."""
+    """Org-scope secrets. Needs `admin:org`, so it never works from CI."""
     payload = _gh_json(["gh", "api", "--paginate", f"orgs/{org}/actions/secrets"], root)
     entries = _secret_entries(payload)
     if entries is None:
-        return [], f"org secret list unavailable (needs {ORG_SCOPE_REQUIRES_ADMIN})"
+        return [], (
+            f"org secret list unavailable: needs {ORG_SCOPE_REQUIRES_ADMIN}, "
+            f"which a workflow's GITHUB_TOKEN never has"
+        )
     return _aged(entries, "org")
 
 
@@ -271,7 +357,9 @@ def environment_secrets(root: Path, repo: str, environment: str) -> tuple[list[S
     )
     entries = _secret_entries(payload)
     if entries is None:
-        return [], f"environment {environment!r} secret list unavailable"
+        return [], (
+            f"environment {environment!r} secret list unavailable: {SCOPE_NEEDS_TOKEN_SCOPE}"
+        )
     return _aged(entries, environment)
 
 
@@ -446,6 +534,8 @@ def collect(root: Path, repo: str, org: str, environment: str = "cron") -> Repor
         report.secrets.extend(secrets)
         if reason:
             report.unavailable[scope] = reason
+        else:
+            report.readable += 1
     return report
 
 
@@ -493,13 +583,87 @@ def gate_markdown(
     return lines
 
 
+def ageing_verdict(report: Report, max_age_days: int, per_level_position: str) -> str:
+    """The one sentence that says what this run concluded about staleness.
+
+    Both renderers call this, because they were two hand-maintained copies of the
+    same judgement and they disagreed: `markdown()` keyed "nothing could be aged"
+    on `report.secrets` while `render()` added `and report.unavailable`, so a
+    report where every level was readable but held nothing printed a bare
+    `0 of 0 listed` on stdout while the summary claimed nothing had been read.
+    Neither was right — every level *had* been read, and the honest answer for an
+    empty repo is that there is nothing to age.
+
+    A shared function is the only version of "the two must agree" that a
+    reviewer does not have to take on trust. `per_level_position` is "above" from
+    `render()` and "below" from `markdown()`, because only `render()` lists the
+    unread levels ahead of this line; hard-coding one of them was a sentence that
+    was simply false in the other renderer.
+    """
+    overdue = report.overdue(max_age_days)
+    if not report.secrets:
+        if report.read_any:
+            return (
+                f"Every level was readable and none of them holds a secret, so there "
+                f"is nothing to age. All {report.readable} level(s) were served."
+            )
+        if not report.unavailable:
+            # Nothing was listed and nothing failed, so naming a count of unread
+            # levels would read as "0 of 0 could not be read", i.e. a clean bill.
+            # This is the `--file-names` case: a hand-made list, never an API read.
+            return (
+                "No secrets could be aged: nothing was read, so no count is possible. "
+                "This run did not read the live secret listings."
+            )
+        return (
+            f"No secrets could be aged: {len(report.unavailable)} level(s) could "
+            f"not be read, so no count is possible. The per-level reason is "
+            f"{per_level_position}."
+        )
+    if report.unavailable:
+        return (
+            f"{len(overdue)} name(s) past {max_age_days} days among the "
+            f"{len(report.secrets)} that could be read; {len(report.unavailable)} "
+            "level(s) could not be read. That is not a clean bill of health."
+        )
+    if overdue:
+        return f"{len(overdue)} name(s) past {max_age_days} days of {len(report.secrets)} listed."
+    return (
+        f"{len(overdue)} name(s) past {max_age_days} days of {len(report.secrets)} "
+        "listed. No action needed."
+    )
+
+
 def markdown(
     report: Report,
     max_age_days: int,
     gates: tuple[list[dict[str, object]], dict[str, str]] | None = None,
+    gates_only: bool = False,
 ) -> str:
     """The issue body. Names and ages only — no value ever reaches this string."""
     overdue = report.overdue(max_age_days)
+    if gates_only:
+        # DIG-477 option D. The ageing section is replaced rather than reported as
+        # an empty failure: an empty `report` here means "not attempted", which is a
+        # decision, not a failed read, and the two must not look alike on the run
+        # page. `gates_markdown` still runs below, so the drift table is unchanged.
+        return (
+            "\n".join(
+                [
+                    ISSUE_MARKER,
+                    "",
+                    "Environment-gate drift check only — `scripts/secret_staleness_check.py"
+                    " --gates-only` (#248, DIG-477).",
+                    "",
+                    "## Secret ageing",
+                    "",
+                    f"**Secret ageing was NOT RUN.** {GATES_ONLY_NOTE}",
+                    "",
+                ]
+                + gate_markdown(gates)
+            )
+            + "\n"
+        )
     lines = [
         ISSUE_MARKER,
         "",
@@ -508,8 +672,13 @@ def markdown(
         "",
     ]
     if report.secrets:
+        listed = f"**{len(report.secrets)}** listed secrets"
+        # On a partial read the denominator is the count that was read, so it must
+        # say so here rather than only in the trailing `## Levels not checked`.
+        if report.unavailable:
+            listed += " (of the levels that could be read)"
         lines += [
-            f"**{len(overdue)}** of **{len(report.secrets)}** listed secrets are past",
+            f"**{len(overdue)}** of {listed} are past",
             f"**{max_age_days} days** since last written.",
             "",
         ]
@@ -518,9 +687,15 @@ def markdown(
         # set, and it was the exact sentence a run printed while every listing 403'd.
         # Appended rather than added to the list, because a wrapped string literal
         # inside a list is implicit concatenation, which CodeQL reads as a lost comma.
+        # `readable` distinguishes "every level was served and holds nothing" from
+        # "nothing was served", which read identically from the two containers alone.
         lines.append(
-            "**No secrets could be aged.** Nothing below says anything about whether "
-            "a secret is stale, because nothing was read."
+            f"**Every level was readable and none of them holds a secret.** All "
+            f"{report.readable} level(s) were served and came back empty, so there is "
+            "nothing to age. That is a real answer rather than a failed read."
+            if report.read_any
+            else "**No secrets could be aged.** Nothing below says anything about "
+            "whether a secret is stale, because nothing was read."
         )
         lines.append("")
     if overdue:
@@ -535,20 +710,13 @@ def markdown(
             "Rotate, or record here why a name is deliberately long-lived. A name "
             "only counts as rotated when its **last-written date** moves."
         )
-    elif report.unavailable:
-        if report.secrets:
-            missed = ", ".join(f"`{scope}`" for scope in sorted(report.unavailable))
-            lines.append(
-                f"Nothing is past {max_age_days} days **among the levels that could be "
-                f"read**, but {missed} could not be. That is not a clean bill of "
-                "health: a level nobody read cannot report a stale name. The per-level "
-                "reason is below."
-            )
-        # With nothing read at all the header has already said so. Adding a sentence
-        # about "the levels that could be read" would be a claim about an empty set,
-        # which is the shape of bug this whole change is about.
-    else:
-        lines.append(f"Nothing is past {max_age_days} days. No action needed.")
+    # The verdict closes the report whether or not anything is overdue. It used to
+    # sit in an `elif` behind `if overdue:`, which made the partial-read qualifier
+    # unreachable in exactly the case it exists for — an overdue name plus an
+    # unread level printed a bare `1 of 1 listed` and disclosed the gap only in the
+    # trailing `## Levels not checked`. This is the artefact a human reads first,
+    # so it is the one that must not overstate.
+    lines.append(ageing_verdict(report, max_age_days, "below"))
     if report.unavailable:
         lines += ["", "## Levels not checked", ""]
         lines += [f"- `{scope}` — {reason}" for scope, reason in sorted(report.unavailable.items())]
@@ -559,9 +727,14 @@ def markdown(
 def ordered_scopes(report: Report) -> list[str]:
     """Every level the report actually holds, widest blast radius first.
 
-    A level that read successfully but holds nothing still prints, as `0 name(s)`:
-    for the `cron` environment that is the signal the migration has not landed yet,
-    and silence would read as "nothing to see".
+    A level that read successfully but holds nothing does not appear here, and
+    cannot: `Report` carries `secrets` and `unavailable` only, so a scope that
+    returned an empty list lands in neither. An earlier version of this docstring
+    claimed such a scope printed as `0 name(s)` and used that as its reason to
+    exist — a claim `Report` cannot represent, and one the test at
+    `test_secret_staleness_check.py` asserts against (`assert "cron:" not in out`).
+    The empty-but-readable case is handled by `ageing_verdict` instead, which can
+    see it, because it reads `secrets` and `unavailable` together.
     """
     present = {secret.scope for secret in report.secrets}
     return sorted(present, key=lambda scope: (SCOPE_ORDER.get(scope, 99), scope))
@@ -571,23 +744,30 @@ def render(
     report: Report,
     max_age_days: int,
     gates: tuple[list[dict[str, object]], dict[str, str]] | None = None,
+    gates_only: bool = False,
 ) -> str:
     """Human-readable stdout, grouped by scope and oldest first."""
-    grouped = report.by_scope()
     out: list[str] = []
-    for scope in ordered_scopes(report):
-        secrets = sorted(grouped.get(scope, []), key=lambda s: -s.age_days)
-        out.append(f"{scope}: {len(secrets)} name(s)")
-        for secret in secrets:
-            marker = "OVERDUE" if secret.age_days > max_age_days else "ok"
-            out.append(
-                f"  {marker:>7} {secret.age_days:>5}d  {secret.updated_at.date()}  {secret.name}"
-            )
-    for scope, reason in sorted(report.unavailable.items()):
-        out.append(f"{scope}: NOT CHECKED — {reason}")
-    overdue = report.overdue(max_age_days)
-    out.append("")
-    out.append(f"{len(overdue)} name(s) past {max_age_days} days of {len(report.secrets)} listed.")
+    if gates_only:
+        # DIG-477 option D. Nothing was attempted here, so the per-scope listing and
+        # the ageing verdict are both skipped rather than reported as an empty
+        # result — see `markdown()` for why the two must not look alike.
+        out.append("secret ageing: NOT RUN (--gates-only)")
+        out.append(GATES_ONLY_NOTE)
+    else:
+        grouped = report.by_scope()
+        for scope in ordered_scopes(report):
+            secrets = sorted(grouped.get(scope, []), key=lambda s: -s.age_days)
+            out.append(f"{scope}: {len(secrets)} name(s)")
+            for secret in secrets:
+                marker = "OVERDUE" if secret.age_days > max_age_days else "ok"
+                out.append(
+                    f"  {marker:>7} {secret.age_days:>5}d  {secret.updated_at.date()}  {secret.name}"
+                )
+        for scope, reason in sorted(report.unavailable.items()):
+            out.append(f"{scope}: NOT CHECKED — {reason}")
+        out.append("")
+        out.append(ageing_verdict(report, max_age_days, "above"))
     if gates is not None:
         rows, unavailable = gates
         out.append("")
@@ -634,6 +814,95 @@ def _issue_exists(root: Path, repo: str) -> str | None:
                 if isinstance(number, int):
                     return str(number)
     return None
+
+
+CLOSE_NOTE = f"""{ISSUE_MARKER}
+This tracker cannot be refreshed from CI, so it is being closed rather than left
+open and wrong.
+
+The ageing half of `secret-staleness-check` reads the GitHub Actions secret
+listings, and those endpoints need a token with the `repo` scope. A workflow's
+`GITHUB_TOKEN` is a GitHub App installation token and GitHub's `permissions:`
+vocabulary has no key for secrets, so no grant in a workflow file can supply it.
+Every level comes back `403 Resource not accessible by integration`.
+
+Leaving this open would be the worst of both: a `security:finding` that claims to
+be watching a rotation window it cannot see. The environment-gate half of the same
+job needs only `contents: read` and does work — it compares
+`.github/environments.json` against live protection rules on every run.
+
+The real rotation state is recorded by hand in `docs/ops/SECRETS_INVENTORY.md`.
+As of 2026-10-04, 16 of 33 secret names were past the 90-day window; the oldest
+were `CURSOR_API_KEY` and `FRED_API_KEY` at 165 days.
+
+Give the ageing half a credential and the next run files a fresh tracker with real
+names in it."""
+
+
+def _in_ci() -> bool:
+    """Whether this process is a GitHub Actions job.
+
+    Read from the environment rather than inferred from whether the listings worked.
+    That inference is what option D invalidated: it used to be true that only CI ran
+    this and could read nothing, and now the reverse holds — CI runs `--gates-only`
+    and the only caller that ages anything is a person. `GITHUB_ACTIONS` is set to
+    the literal string `"true"` by the runner, so this is a presence test on a name
+    the workflow platform guarantees, not a heuristic about the host.
+    """
+    return bool(os.environ.get("GITHUB_ACTIONS"))
+
+
+def close_unmeasurable_tracker(root: Path, repo: str) -> str:
+    """Close an open tracker when nothing could be aged, recording why.
+
+    Skipping the write was not enough on its own. The tracker opened by run
+    37235973852 was already open and empty when this was written, carrying
+    `security:finding` and a body saying nothing had been read. A guard that only
+    prevents *new* empty trackers leaves that one sitting forever, and the docs
+    claim the clock files no tracker while a tracker is open. Silence here is
+    indistinguishable from "still running".
+
+    The comment lands before the close, so the reason is on the record before the
+    issue stops counting as an open finding. If the comment cannot be written the
+    issue is left open, because closing it without the explanation would be worse.
+    """
+    try:
+        existing = _issue_exists(root, repo)
+    except TrackerUnreadable as exc:
+        return f"filed nothing: {exc}"
+    if existing is None:
+        return "filed nothing: no tracker is open"
+    noted = _gh_json(
+        [
+            "gh",
+            "api",
+            "--method",
+            "POST",
+            f"repos/{repo}/issues/{existing}/comments",
+            "--input",
+            "-",
+        ],
+        root,
+        stdin=json.dumps({"body": CLOSE_NOTE}),
+    )
+    if noted is None:
+        return f"FAILED to record why on #{existing}; left open (see stderr)"
+    closed = _gh_json(
+        [
+            "gh",
+            "api",
+            "--method",
+            "PATCH",
+            f"repos/{repo}/issues/{existing}",
+            "--input",
+            "-",
+        ],
+        root,
+        stdin=json.dumps({"state": "closed"}),
+    )
+    if closed is None:
+        return f"recorded why on #{existing} but FAILED to close it (see stderr)"
+    return f"recorded why on #{existing} and closed it"
 
 
 def file_or_update_issue(root: Path, repo: str, body: str) -> str:
@@ -740,16 +1009,52 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="do not compare `.github/environments.json` to the live protection rules",
     )
+    parser.add_argument(
+        "--gates-only",
+        action="store_true",
+        help=(
+            "only run the environment-gate drift check; never read the secret listings "
+            "and never touch a tracker (DIG-477 option D, what CI runs)"
+        ),
+    )
+    parser.add_argument(
+        "--close-unmeasurable-tracker",
+        action="store_true",
+        help=(
+            "retire an open tracker deliberately when this run read nothing. Without "
+            "it, only a CI run closes one: CLOSE_NOTE blames CI, so closing it from an "
+            "operator shell records a false cause and discards real names. Ignored when "
+            "the listings were read, since the tracker is then refreshed normally."
+        ),
+    )
     args = parser.parse_args(argv)
 
     root = REPO_ROOT
     gates: tuple[list[dict[str, object]], dict[str, str]] | None = None
-    if args.file_names:
+    read_from_file = bool(args.file_names)
+    if args.gates_only:
+        if args.file_names:
+            parser.error("--gates-only and --file-names are mutually exclusive")
+        # An empty report with `readable` left at 0, which now means "not attempted"
+        # rather than "attempted and found nothing" — the distinction `readable`
+        # exists to carry. `collect()` is skipped entirely rather than called and
+        # allowed to fail, so a gates-only run spends no doomed API calls.
+        report = Report()
+        slug = repo_slug(root)
+        if slug is None:
+            print("secret_staleness_check: cannot resolve the repository", file=sys.stderr)
+            return 2
+        if not args.skip_environment_gates:
+            gates = environment_gate_status(root, f"{slug[0]}/{slug[1]}")
+    elif args.file_names:
         try:
             report = Report(secrets=parse_tsv(args.file_names.read_text(encoding="utf-8")))
         except (OSError, ValueError) as exc:
             print(f"secret_staleness_check: {exc}", file=sys.stderr)
             return 2
+        # `readable` stays 0: the file is a hand-made list, not a served listing, and
+        # reporting its contents as "every level was readable" would claim an API read
+        # that never happened.
     else:
         slug = repo_slug(root)
         if slug is None:
@@ -760,19 +1065,73 @@ def main(argv: list[str] | None = None) -> int:
         if not args.skip_environment_gates:
             gates = environment_gate_status(root, f"{owner}/{name}")
 
-    body = markdown(report, args.max_age_days, gates)
-    print(render(report, args.max_age_days, gates))
+    body = markdown(report, args.max_age_days, gates, gates_only=args.gates_only)
+    print(render(report, args.max_age_days, gates, gates_only=args.gates_only))
 
     if args.summary:
         args.summary.parent.mkdir(parents=True, exist_ok=True)
         args.summary.write_text(body, encoding="utf-8")
 
-    if args.open_issue and not args.file_names:
+    # Gated on `not args.gates_only` as well as on `--open-issue`: a gates-only run has
+    # no ageing result to publish, and the tracker it would open could only ever say
+    # "I read nothing". DIG-477 option D is precisely to stop opening that.
+    if args.open_issue and not args.file_names and not args.gates_only:
         slug = repo_slug(root)
         if slug is None:
             print("secret_staleness_check: cannot resolve the repository", file=sys.stderr)
             return 2
-        print(file_or_update_issue(root, f"{slug[0]}/{slug[1]}", body))
+        if not report.read_any:
+            # Keyed on `read_any`, not `secrets`: a run where the listings were served and
+            # came back empty did measure something, and closing its tracker on the note
+            # below — which asserts every level 403'd — would put a false claim on the
+            # permanent record next to a stdout that says the opposite.
+            #
+            # Closing is refused unless this run is *in CI*, because CLOSE_NOTE asserts a
+            # CI cause and CI is the only context in which that assertion is true. Before
+            # option D this was safe by accident: the one caller that could not read
+            # anything was the CI job, so "read nothing" implied "run from CI". Option D
+            # inverted that. CI now runs `--gates-only` and never reaches this branch at
+            # all, which leaves `make secrets-staleness` — a person on the Mac — as the
+            # only caller, and a person whose token has lost `repo` scope reads nothing
+            # for a reason that has nothing to do with CI.
+            #
+            # That combination was destructive, and reachable: this repo is public, so
+            # `repo_slug()` still resolves it without `repo`, and the run proceeds to
+            # close a tracker carrying real names while printing a note saying CI did it.
+            # Exit 0 makes it worse — DIG-668's monthly run would report success having
+            # deleted the record it exists to refresh. The repo is public so this needs
+            # no credential to exploit; the read simply needs a token without `repo`.
+            #
+            # So an operator run that read nothing reports why and exits non-zero,
+            # leaving the tracker and its last real contents standing. An operator who
+            # means to retire a stale tracker says so explicitly, and then the close
+            # happens whatever the context — the flag is the consent, not the setting.
+            if not _in_ci() and not args.close_unmeasurable_tracker:
+                print(
+                    "secret_staleness_check: nothing could be aged, so no tracker was "
+                    "opened, updated or closed. Leaving any open tracker as it is: this "
+                    "was a run from an operator shell, so the CI explanation in "
+                    "CLOSE_NOTE would be false, and a tracker holding real names must not "
+                    "be closed by a run that could not read them. Check that `gh auth` "
+                    "still carries `repo` and `admin:org` (see `gh auth status`), then "
+                    "re-run. To retire a stale tracker deliberately, pass "
+                    "--close-unmeasurable-tracker.",
+                    file=sys.stderr,
+                )
+                return 2
+            # Every level being unreadable is the normal case from CI, where the
+            # listings need a token the job cannot have — see SCOPE_NEEDS_TOKEN_SCOPE.
+            # So a run that aged nothing opens nothing, and clears up any tracker an
+            # earlier run already left open.
+            print(close_unmeasurable_tracker(root, f"{slug[0]}/{slug[1]}"))
+        else:
+            if args.close_unmeasurable_tracker:
+                print(
+                    "secret_staleness_check: --close-unmeasurable-tracker was passed but "
+                    "this run read the listings, so the tracker is refreshed, not closed",
+                    file=sys.stderr,
+                )
+            print(file_or_update_issue(root, f"{slug[0]}/{slug[1]}", body))
 
     if gates is not None and any(row["drift"] for row in gates[0]):
         # Deliberately unconditional, unlike `--fail-overdue`. A drifted gate does not
@@ -781,6 +1140,17 @@ def main(argv: list[str] | None = None) -> int:
     if args.fail_overdue and report.overdue(args.max_age_days):
         return 1
     if args.strict_offline and report.unavailable:
+        return 1
+    if args.strict_offline and read_from_file:
+        # The module docstring promises this refuses to report success when the input
+        # came from a file, and the previous check (`report.unavailable`) could never
+        # fire on that path because the offline report has no unread levels. A file
+        # read is not evidence about the live API, so it fails here too.
+        print(
+            "secret_staleness_check: --strict-offline with --file-names cannot verify "
+            "the live API; refusing to report success",
+            file=sys.stderr,
+        )
         return 1
     return 0
 

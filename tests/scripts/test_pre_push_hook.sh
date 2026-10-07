@@ -12,6 +12,19 @@
 #         • unresolvable diff base / failed diff refuse rather than skip
 #         • sensitive-path grep is not -q (pipefail + SIGPIPE false negative)
 #
+# DIG-1122 — execution-workspace branches (DIG-<n>-<title-slug>, the shape the
+#         Paperclip harness checks out) are in the taxonomy, while the
+#         near-misses that a loose prefix match would also admit are not.
+#
+# DIG-1589 — duplicate-work guard (resume-before-create):
+#         • a new branch rebuilding >=3 unmerged patch-ids on another unmerged
+#           origin/* branch is refused, and the refusal names the sibling, its
+#           tip and the overlap count
+#         • an overlap of 1 or 2 is allowed (two parallel leaves share a patch)
+#         • RESUME_FROM=<sibling> and RESTART_REASON both permit the push
+#         • patches already merged into develop never trip the guard
+#         • re-pushing an unmerged branch at its own tip is not a self-refusal
+#
 # Usage: bash tests/scripts/test_pre_push_hook.sh
 # CI: pytest wrapper tests/scripts/test_pre_push_hook.py under ruff-and-scripts.
 set -euo pipefail
@@ -54,6 +67,13 @@ git config user.name "pre-push-test"
 git checkout -q -b develop
 mkdir -p digiquant/src/digiquant/dashboard
 echo 'seed' > digiquant/src/digiquant/dashboard/README.md
+# The checker is copied in before the seed commit, not after: the hook resolves
+# it from the git toplevel (an installed hook is a copy under .git/hooks and
+# cannot find it via $0), and committing it into develop first means every
+# fixture branch built off develop already carries it — otherwise the copy would
+# land as one extra shared patch and skew every overlap count below.
+mkdir -p scripts
+cp "$REPO_ROOT/scripts/branch_restart_check.py" scripts/branch_restart_check.py
 git add -A
 git commit -q -m "seed develop"
 # Bare has no default branch yet — push and set HEAD.
@@ -97,6 +117,55 @@ assert_exit() {
     echo "FAIL [exit $want] $desc  (got $rc)"
     fail=$((fail + 1))
   fi
+}
+
+# Same invocation as run_hook, but keeps stderr so the refusal *text* can be
+# asserted, not just the exit status. run_hook discards it, which cannot tell
+# "refused for the right reason" from "refused for an unrelated one".
+capture_hook() {
+  local cwd="$1"
+  local url="$2"
+  local stdin_line="$3"
+  shift 3
+  (
+    cd "$cwd"
+    printf '%s\n' "$stdin_line" | env -u ALLOW_MAIN_PUSH "$@" \
+      bash "$HOOK" origin "$url"
+  ) 2>&1
+}
+
+# Refusal must carry the evidence the operator needs to act: which sibling, at
+# which tip, and how many patch-ids overlap. A bare "duplicate work" line would
+# send the reader back to git by hand — the whole point is that the hook did it.
+assert_refusal_names() {
+  local desc="$1"
+  local want_branch="$2"
+  local want_tip="$3"
+  local want_count="$4"
+  local cwd="$5"
+  local url="$6"
+  local line="$7"
+  shift 7
+  local out rc=0
+  # `|| rc=$?` must sit *outside* the command substitution: inside `$( )` it
+  # would assign in the subshell and the parent would always read rc 0, so every
+  # refusal would look like a pass.
+  out="$(capture_hook "$cwd" "$url" "$line" "$@")" || rc=$?
+  if [ "$rc" -ne 1 ]; then
+    echo "FAIL [refusal] $desc  (expected exit 1, got $rc)"
+    fail=$((fail + 1))
+    return
+  fi
+  if ! grep -qF "$want_branch" <<<"$out" \
+    || ! grep -qF "$want_tip" <<<"$out" \
+    || ! grep -qF "shares $want_count of them" <<<"$out"; then
+    echo "FAIL [refusal] $desc  (missing sibling/tip/count in the message)"
+    echo "$out" | sed 's/^/      | /'
+    fail=$((fail + 1))
+    return
+  fi
+  echo "PASS [refusal] $desc"
+  pass=$((pass + 1))
 }
 
 # Build a tip that changes a live-trading path; commit message via stdin (heredoc).
@@ -202,6 +271,37 @@ assert_exit 1 "promotion branch toward Origin-only endpoint" \
 assert_exit 0 "non-sensitive task branch update (no trailer needed)" \
   "$FIXTURE" "$ORIGIN_URL" \
   "refs/heads/task/2483-safe $SAFE_TIP refs/heads/task/2483-safe $DEV_SHA"
+
+# ── DIG-1122: execution-workspace branches DIG-<n>-<title-slug> ──────────────
+# Paperclip checks out execution workspaces on `DIG-<n>-<title-slug>`, which
+# matched no taxonomy arm: every commit made there was unpushable by
+# construction. Uses real shas so the acceptance case also clears the scan.
+DIG_WS='DIG-47-digithings-cron-twelve-x-dispatch-counts-do-not-match-the-cron-duplicate-dispatches-and-silent-gaps'
+assert_exit 0 "execution-workspace branch DIG-<n>-<slug> accepted" \
+  "$FIXTURE" "$ORIGIN_URL" \
+  "refs/heads/$DIG_WS $SAFE_TIP refs/heads/$DIG_WS $DEV_SHA"
+
+# The narrowness cases matter as much as the acceptance one: a regex written as
+# a bare `DIG[a-z-]*` prefix would accept all three of these.
+assert_exit 1 "DIG-noNumber-slug refused (number required)" \
+  "$FIXTURE" "$ORIGIN_URL" \
+  "refs/heads/DIG-noNumber-slug $SAFE_TIP refs/heads/DIG-noNumber-slug $DEV_SHA"
+
+assert_exit 1 "DIGITHINGS/x refused (no digit after DIG)" \
+  "$FIXTURE" "$ORIGIN_URL" \
+  "refs/heads/DIGITHINGS/x $SAFE_TIP refs/heads/DIGITHINGS/x $DEV_SHA"
+
+assert_exit 1 "DIG/47-slug refused (slash namespace is not the harness shape)" \
+  "$FIXTURE" "$ORIGIN_URL" \
+  "refs/heads/DIG/47-slug $SAFE_TIP refs/heads/DIG/47-slug $DEV_SHA"
+
+assert_exit 1 "DIG-47-refused-with-no-slug (slug required)" \
+  "$FIXTURE" "$ORIGIN_URL" \
+  "refs/heads/DIG-47- $SAFE_TIP refs/heads/DIG-47- $DEV_SHA"
+
+assert_exit 1 "DIG-47-SLUG refused (slug is lowercase only)" \
+  "$FIXTURE" "$ORIGIN_URL" \
+  "refs/heads/DIG-47-SLUG $SAFE_TIP refs/heads/DIG-47-SLUG $DEV_SHA"
 
 # ── #2483: live-trading co-sign matrix ───────────────────────────────────────
 LIVE_BLOCKED="$(make_live_tip <<'EOF'
@@ -309,6 +409,142 @@ assert_exit 1 "orphan tip with no merge-base refuses unscanned" \
   "$FIXTURE" "$ORIGIN_URL" \
   "refs/heads/task/2483-orphan $ORPHAN_TIP refs/heads/task/2483-orphan $ZERO40"
 
+# ── DIG-1589: duplicate-work guard (resume before create) ────────────────────
+# The guard asks git whether the candidate's unmerged patch-ids already exist on
+# another unmerged origin/* branch. Building that fixture needs two branches off
+# one base holding the same patches, which is exactly what a cherry-pick
+# produces: same diff, same patch-id, different commit sha. Content is prefixed
+# per branch so two fixtures never share a patch-id by accident — that would
+# silently turn the merged-into-develop case below into the refusal case.
+cd "$FIXTURE"
+
+SHARED_COMMITS=()
+make_shared_patches() {
+  local prefix="$1"
+  local count="$2"
+  local branch="$3"
+  git checkout -q -B "$branch" develop
+  SHARED_COMMITS=()
+  local i
+  for ((i = 1; i <= count; i++)); do
+    echo "${prefix}-$i" > "digiquant/src/digiquant/dashboard/${prefix}-$i.txt"
+    git add -A
+    git commit -q -m "feat(dashboard): ${prefix} change $i"
+    SHARED_COMMITS+=("$(git rev-parse HEAD)")
+  done
+}
+
+rebuild_from() {
+  # New branch off develop replaying the first <n> shared patches.
+  local branch="$1"
+  local n="$2"
+  local base="${3:-develop}"
+  local i
+  git checkout -q -B "$branch" "$base"
+  for ((i = 0; i < n; i++)); do
+    git cherry-pick -x "${SHARED_COMMITS[$i]}" >/dev/null 2>&1
+  done
+  git rev-parse HEAD
+}
+
+# ── a sibling with 3 unmerged patches, pushed so origin/<branch> exists ──────
+make_shared_patches shared 3 task/1589-sibling
+git push -q origin task/1589-sibling
+git fetch -q origin
+SIBLING_TIP="$(git rev-parse HEAD)"
+SIBLING_TIP_SHORT="$(git rev-parse --short=8 HEAD)"
+
+REBUILD_TIP="$(rebuild_from task/1589-rebuild 3)"
+REBUILD_LINE="refs/heads/task/1589-rebuild $REBUILD_TIP refs/heads/task/1589-rebuild $ZERO40"
+
+assert_exit 1 "rebuild of 3 unmerged patch-ids on an unmerged sibling is refused" \
+  "$FIXTURE" "$ORIGIN_URL" "$REBUILD_LINE"
+
+assert_refusal_names "refusal names the sibling, its tip and the overlap count" \
+  "origin/task/1589-sibling" "$SIBLING_TIP_SHORT" 3 \
+  "$FIXTURE" "$ORIGIN_URL" "$REBUILD_LINE"
+
+# ── re-pushing an unmerged branch at its own tip is not a self-refusal ───────
+# Without the self-exclusion the candidate overlaps *itself* on origin/ 100% and
+# no agent could ever push a second commit to an unmerged branch.
+assert_exit 0 "re-push of an unmerged branch at its own tip is allowed" \
+  "$FIXTURE" "$ORIGIN_URL" \
+  "refs/heads/task/1589-sibling $SIBLING_TIP refs/heads/task/1589-sibling $SIBLING_TIP"
+
+# ── 1 and 2 shared patches is parallel work, not a rebuild ───────────────────
+REBUILD_ONE_TIP="$(rebuild_from task/1589-rebuild-one 1)"
+assert_exit 0 "overlap of 1 patch-id does not refuse" \
+  "$FIXTURE" "$ORIGIN_URL" \
+  "refs/heads/task/1589-rebuild-one $REBUILD_ONE_TIP refs/heads/task/1589-rebuild-one $ZERO40"
+
+REBUILD_TWO_TIP="$(rebuild_from task/1589-rebuild-two 2)"
+assert_exit 0 "overlap of 2 patch-ids does not refuse" \
+  "$FIXTURE" "$ORIGIN_URL" \
+  "refs/heads/task/1589-rebuild-two $REBUILD_TWO_TIP refs/heads/task/1589-rebuild-two $ZERO40"
+
+# ── RESUME_FROM=<sibling> excludes the sibling and permits the push ──────────
+assert_exit 0 "RESUME_FROM=<sibling> permits the push" \
+  "$FIXTURE" "$ORIGIN_URL" "$REBUILD_LINE" \
+  RESUME_FROM=task/1589-sibling
+
+# RESUME_FROM that names some *other* branch leaves the sibling in scope, so the
+# refusal stands — the escape is not a blanket bypass.
+assert_exit 1 "RESUME_FROM naming a different branch does not bypass" \
+  "$FIXTURE" "$ORIGIN_URL" "$REBUILD_LINE" \
+  RESUME_FROM=task/1589-unrelated
+
+# ── RESTART_REASON in the tip commit message ─────────────────────────────────
+RESTART_TIP="$(rebuild_from task/1589-restart 3)"
+git commit -q --amend -F - <<'EOF'
+feat(dashboard): shared change 3
+
+RESTART_REASON: the sibling branch is stranded with no owner and no PR.
+EOF
+RESTART_TIP="$(git rev-parse HEAD)"
+assert_exit 0 "RESTART_REASON in the tip commit message permits the push" \
+  "$FIXTURE" "$ORIGIN_URL" \
+  "refs/heads/task/1589-restart $RESTART_TIP refs/heads/task/1589-restart $ZERO40"
+
+# ── RESTART_REASON in the push environment, and echoed back into the log ─────
+out_rc=0
+env_out="$(capture_hook "$FIXTURE" "$ORIGIN_URL" "$REBUILD_LINE" \
+  RESTART_REASON="hand-rolled baseline, no sibling to resume from")" || out_rc=$?
+if [ "$out_rc" -eq 0 ] && grep -qF "hand-rolled baseline" <<<"$env_out"; then
+  echo "PASS [exit 0] RESTART_REASON in the push env permits and is echoed back"
+  pass=$((pass + 1))
+else
+  echo "FAIL [exit 0] RESTART_REASON in the push env permits and is echoed back (rc=$out_rc)"
+  echo "$env_out" | sed 's/^/      | /'
+  fail=$((fail + 1))
+fi
+
+# ── overlap with work already merged into develop never refuses ──────────────
+# Two independent reasons, which is why this is safe: the merged branch is no
+# longer an unmerged sibling, and `git cherry` reports those patches as already
+# upstream so they are not in the candidate's unmerged set at all.
+MERGED_TIP="$(rebuild_from task/1589-merged-rebuild 3)"
+git checkout -q develop
+git merge -q --no-ff -m "merge: fold the sibling into develop" task/1589-sibling
+git push -q origin develop
+git fetch -q origin develop:refs/remotes/origin/develop
+DEV_SHA="$(git rev-parse develop)"
+assert_exit 0 "overlap with a branch already merged into develop does not refuse" \
+  "$FIXTURE" "$ORIGIN_URL" \
+  "refs/heads/task/1589-merged-rebuild $MERGED_TIP refs/heads/task/1589-merged-rebuild $DEV_SHA"
+
+# ── a protected branch is never treated as a sibling ─────────────────────────
+make_shared_patches mod 3 module/dashboard
+git push -q origin module/dashboard
+git fetch -q origin
+git checkout -q -B task/1589-mod-rebuild develop
+for sha in "${SHARED_COMMITS[@]}"; do
+  git cherry-pick -x "$sha" >/dev/null 2>&1
+done
+MOD_REBUILD_TIP="$(git rev-parse HEAD)"
+assert_exit 0 "a protected module/* branch is not a duplicate-work sibling" \
+  "$FIXTURE" "$ORIGIN_URL" \
+  "refs/heads/task/1589-mod-rebuild $MOD_REBUILD_TIP refs/heads/task/1589-mod-rebuild $DEV_SHA"
+
 # ── structural guards ────────────────────────────────────────────────────────
 if grep -nE 'is_zero_sha\(\)' "$HOOK" >/dev/null \
   && grep -nE '\[\[ "\$1" =~ \^0\+\$ \]\]' "$HOOK" >/dev/null; then
@@ -337,6 +573,47 @@ if grep -nE 'bot/\[a-z0-9-\]\+' "$HOOK" >/dev/null; then
   pass=$((pass + 1))
 else
   echo "FAIL [structure] branch_regex missing bot/[a-z0-9-]+"
+  fail=$((fail + 1))
+fi
+
+# DIG-1122: the execution-workspace arm, with its digit required, plus a help
+# line that names it. A refusal message that omits the shape the harness
+# actually produces is what made this look like a config error, not a policy gap.
+# Comments may quote the pattern (the rationale above the regex does), so only
+# non-comment lines count — same lesson as the Co-Authored-By guard below.
+if awk '
+  /^[[:space:]]*#/ { next }
+  /branch_regex=/ && /DIG-\[0-9\]\+/ { found=1 }
+  END { exit found ? 0 : 1 }
+' "$HOOK"; then
+  echo "PASS [structure] DIG-<n>-<slug> present in branch_regex"
+  pass=$((pass + 1))
+else
+  echo "FAIL [structure] branch_regex missing DIG-[0-9]+-[a-z0-9-]+"
+  fail=$((fail + 1))
+fi
+
+if awk '
+  /^[[:space:]]*#/ { next }
+  /echo .*DIG-<n>-<slug>/ { found=1 }
+  END { exit found ? 0 : 1 }
+' "$HOOK"; then
+  echo "PASS [structure] help text lists DIG-<n>-<slug>"
+  pass=$((pass + 1))
+else
+  echo "FAIL [structure] Allowed-patterns help must list DIG-<n>-<slug>"
+  fail=$((fail + 1))
+fi
+
+# BRANCHING.md carries the no-blanket-push rule; the regex without it is the
+# destructive half of this change. Match the rule heading, not the word
+# "blanket" anywhere in the file.
+if grep -qF 'DIG-<n>-<slug>' "$REPO_ROOT/BRANCHING.md" \
+  && grep -qF 'never blanket-push' "$REPO_ROOT/BRANCHING.md"; then
+  echo "PASS [structure] BRANCHING.md documents the execution-workspace branch"
+  pass=$((pass + 1))
+else
+  echo "FAIL [structure] BRANCHING.md must document DIG-<n>-<slug> and the no-blanket-push rule"
   fail=$((fail + 1))
 fi
 
@@ -390,6 +667,56 @@ if grep -nE 'cannot determine a diff base' "$HOOK" >/dev/null; then
   pass=$((pass + 1))
 else
   echo "FAIL [structure] empty diff base must refuse, not skip"
+  fail=$((fail + 1))
+fi
+
+# DIG-1589: the threshold is a named constant with its rationale attached. A
+# bare literal in the comparison is how it silently became 1 and turned every
+# pair of parallel leaves into a refusal.
+if awk '
+  /^[[:space:]]*#/ { if (!seen) last_comment = last_comment "\n" $0; next }
+  /^MIN_UNMERGED_PATCH_OVERLAP[[:space:]]*=/ { seen = 1; next }
+  { last_comment = "" }
+  END { exit seen ? 0 : 1 }
+' "$REPO_ROOT/scripts/branch_restart_check.py" \
+  && grep -qE '^MIN_UNMERGED_PATCH_OVERLAP = 3$' "$REPO_ROOT/scripts/branch_restart_check.py"; then
+  echo "PASS [structure] MIN_UNMERGED_PATCH_OVERLAP = 3 is a named constant"
+  pass=$((pass + 1))
+else
+  echo "FAIL [structure] branch_restart_check.py must define MIN_UNMERGED_PATCH_OVERLAP = 3"
+  fail=$((fail + 1))
+fi
+
+if grep -qF 'threshold is 3 and not 1' "$REPO_ROOT/scripts/branch_restart_check.py"; then
+  echo "PASS [structure] the 3-not-1 rationale sits with the constant"
+  pass=$((pass + 1))
+else
+  echo "FAIL [structure] the 'threshold is 3 and not 1' rationale is missing"
+  fail=$((fail + 1))
+fi
+
+# The hook must call the checker rather than re-deriving the logic in bash.
+if grep -qF 'branch_restart_check.py' "$HOOK"; then
+  echo "PASS [structure] hook delegates to branch_restart_check.py"
+  pass=$((pass + 1))
+else
+  echo "FAIL [structure] hook must invoke scripts/branch_restart_check.py"
+  fail=$((fail + 1))
+fi
+
+# The guard must run on branch pushes only. Tags and notes pushed from an
+# unmerged commit are not a second attempt at the work, and deletions have no
+# branch left to judge — so the arm is gated on refs/heads and not on deletions.
+if awk '
+  /^[[:space:]]*#/ { next }
+  /is_deletion.*-eq 0/ && /refs\/heads/ { gate = NR }
+  /branch_restart_check\.py/ && !gate { early = NR }
+  END { exit (gate && !early) ? 0 : 1 }
+' "$HOOK"; then
+  echo "PASS [structure] duplicate-work arm is gated on refs/heads"
+  pass=$((pass + 1))
+else
+  echo "FAIL [structure] duplicate-work arm must be gated on refs/heads"
   fail=$((fail + 1))
 fi
 
