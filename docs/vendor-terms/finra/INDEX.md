@@ -468,6 +468,43 @@ is not close.**
 
 ---
 
+## The caveat text this record requires in the product
+
+What we tell users about the terms of the data we serve is a legal artefact, so
+the wording is stated here rather than left to whoever edits the string. The
+current `LUXALGO_TRACKERS_DATA_CAVEATS["short-volume"]` in
+`digiquant/src/digiquant/data/luxalgo/attribution.py` says the upstream terms
+are **"unresolved"**. They are not — this record resolves them. It also says the
+durable question is "the upstream FINRA redistribution terms, which no vendor
+licence answers", which is now wrong in the other direction: the answer does not
+turn on a vendor licence at all.
+
+Two consequences, and only these two:
+
+1. **The caveat must state the position, not the doubt.** It has to carry, in
+   substance: FINRA permits no commercial redistribution of this compilation on
+   any published route; **Specific Terms for Equity Data §2.3** is the decisive
+   clause, capping End Users' use at *"non-commercial personal or professional
+   use only"* **and "No Charge"**, with even bundled distribution clean only
+   where there is *"no additional or incremental fee charged for the Equity
+   Data"*; and the CC0 grant cannot cure any of it, because **§4(b)–(c)** is the
+   affirmer disclaiming warranty of title and any duty to clear other people's
+   rights or obtain their consents.
+2. **Nothing may present the family as cleared**, and that has to stay in the
+   same breath as the licence note, on every surface. Security's guards
+   (`test_no_user_visible_cc0_claim_is_left_unqualified`,
+   `test_every_trackers_tool_note_carries_the_caveat`) stay green on every branch
+   of the decision. The caveat **wording** changes; the guard may not be deleted
+   or weakened. If the family is removed, the guard has to keep passing with it
+   absent rather than by being skipped around.
+
+Whether the family stays in service is the business decision, and it does not
+change this wording. A family kept in service against this advice is a dated
+decision to accept a documented exposure — **not** a clearance — which is the
+form the `congress-trades` caveat already takes.
+
+---
+
 ## Clauses this record does *not* support reading
 
 Stated so nobody over-reads it later:
