@@ -83,7 +83,9 @@ jobs:
           DIGI_ENABLE_DEBUG_ENDPOINTS: "1"
         run: |
           cp .env.example .env
-          docker compose up -d --wait digigraph digiquant digisearch digikey
+          docker compose up -d --wait \
+            digigraph digiquant \
+            digisearch digikey
 
       # Protected-route tests need a digikey JWT. Mint one from the stack this job
       # just started and exchange it at /v1/oauth/token. A stored JWT would expire
