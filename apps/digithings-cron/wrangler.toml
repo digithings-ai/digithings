@@ -75,5 +75,7 @@ crons = [
   "3 6,18 * * *",      # twelve-x-primemarket-heartbeat
   "52 * * * MON-FRI",  # twelve-x-session-catchup
   "30 2 * * *",        # twelve-x-archive-maintenance
-  "8 9 * * MON"        # twelve-x-digisearch-parity (GHA was 0 9 * * 1; :08 offset)
+  "8 9 * * MON",        # twelve-x-digisearch-parity (GHA was 0 9 * * 1; :08 offset)
+  "41 14 * * MON-FRI",  # twelve-x-feed-confirm (DIG-1073: detect an unpublished day)
+  "23 16 * * MON-FRI",  # twelve-x-feed-confirm-watchdog (DIG-1073: detect no detection)
 ]

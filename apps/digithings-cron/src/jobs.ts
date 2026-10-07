@@ -340,6 +340,47 @@ export const JOBS: readonly Job[] = [
   // house-run-09 at 09:17 (`17 9 * * MON`) or project-enforce-assignment at 09:23.
   // days input omitted — workflow default 14.
   wd("twelve-x-digisearch-parity", "8 9 * * MON", TWELVE_X, "digisearch_parity_check.yml"),
+
+  // --- twelve-x: feed-published confirmation, and the watchdog for the watchdog --
+  //
+  // DIG-1073. The confirmation itself already exists in twelve-x
+  // (scripts/confirm_feed_published.py) and already has the exit-code contract
+  // DIG-1073 asked for: 0 clean, 1 gaps, 2 could-not-run. What it lacked was a
+  // clock of its own. Its only clock was a Paperclip routine, and a routine
+  // opens a run *assigned to an agent* — so when that run died, the day was
+  // simply unreported. It died on the first day: run 69d54f36 was
+  // `adapter_failed: Rate limit exceeded` and nothing alerted. That is DIG-526
+  // again (a detector failing 29 consecutive times over 14 days, alerting
+  // nobody), so detection must not live in the agent loop.
+  //
+  // So: the clock lives here, in the Worker, and the Worker's only job is to
+  // dispatch. The check runs in Actions because that is where
+  // TWELVEX_SUPABASE_SERVICE_KEY already exists — no new credential to
+  // provision (DIG-377 tracked the equivalent for the Worker, and this route
+  // does not need it).
+  //
+  // Weekday-only, matching the FX session clocks it reads: the check's
+  // expected-date rule is the weekday rule, so a weekend firing would report a
+  // gap that is not one.
+  //
+  // 14:41Z is 2h24m after twelve-x-new-york (12:17Z): late enough that the
+  // new-york session has had time to publish, early enough to leave room for
+  // the watchdog below.
+  wd("twelve-x-feed-confirm", "41 14 * * MON-FRI", TWELVE_X, "feed_published_confirm.yml"),
+
+  // The watchdog exists because "the check said pass" and "the check did not
+  // run" are otherwise indistinguishable from the outside — which is the whole
+  // point of DIG-1073. It asks a *different* workflow whether that workflow
+  // completed, and pages if it did not. 16:23Z is 1h42m after the confirm, far
+  // inside the watchdog's 6h lookback, so ordinary Actions queueing cannot make
+  // a healthy day look silent. Gap to the next confirm is ~22h, so a confirm
+  // missed outright is caught the same day, not the next morning.
+  wd(
+    "twelve-x-feed-confirm-watchdog",
+    "23 16 * * MON-FRI",
+    TWELVE_X,
+    "feed_confirm_watchdog.yml",
+  ),
 ];
 
 /** Exact cron-string match; one trigger may map to multiple jobs. */

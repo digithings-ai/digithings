@@ -57,6 +57,8 @@ const TWELVE_X_ENABLED_IDS = [
   "twelve-x-session-catchup",
   "twelve-x-archive-maintenance",
   "twelve-x-digisearch-parity",
+  "twelve-x-feed-confirm",
+  "twelve-x-feed-confirm-watchdog",
 ] as const;
 
 const ENABLED_CRONS = [
@@ -100,6 +102,8 @@ const ENABLED_CRONS = [
   "52 * * * MON-FRI",
   "30 2 * * *",
   "8 9 * * MON",
+  "41 14 * * MON-FRI",
+  "23 16 * * MON-FRI",
 ] as const;
 
 describe("jobsForCron", () => {
@@ -341,5 +345,92 @@ describe("jobsForCron", () => {
     // Prior GHA was `0 9 * * 1`. Offset :08 avoids house-run-09 at 09:17.
     expect(jobsForCron("0 9 * * MON")).toEqual([]);
     expect(jobsForCron("17 9 * * MON").map((row) => row.id)).toEqual(["house-run-09"]);
+  });
+
+  // DIG-1073: the confirmation clock, and the clock that notices when the
+  // confirmation clock did not fire. Both assertions below exist because the
+  // thing being prevented is silence, so a quiet regression is the failure mode
+  // worth pinning.
+  //
+  // Ordering is compared in minutes-since-midnight, never as strings: these
+  // crons share a day-of-week suffix, so a lexicographic compare reads "23 16"
+  // as earlier than "41 14" and would pass a clock that fires before its own
+  // check.
+  const atMinute = (cron: string): number => {
+    const [m, h] = cron.split(" ").map(Number);
+    return h * 60 + m;
+  };
+
+  it("runs the feed-published confirm after the new_york session, on weekdays", () => {
+    const job = JOBS.find((row) => row.id === "twelve-x-feed-confirm");
+    expect(job).toMatchObject({
+      id: "twelve-x-feed-confirm",
+      repo: "digithings-ai/twelve-x",
+      kind: "workflow_dispatch",
+      workflow: "feed_published_confirm.yml",
+      enabled: true,
+    });
+    // Weekday-only: the check's expected-date rule is the weekday rule, so a
+    // weekend firing would report a gap that is not one.
+    expect(job?.cron).toBe("41 14 * * MON-FRI");
+    expect(job?.cron.endsWith("MON-FRI")).toBe(true);
+    // After twelve-x-new-york at 12:17Z, or the check would race the very
+    // session whose publication it is confirming.
+    const ny = JOBS.find((row) => row.id === "twelve-x-new-york");
+    expect(ny?.cron).toBe("17 12 * * MON-FRI");
+    expect(atMinute(job!.cron)).toBeGreaterThan(atMinute(ny!.cron));
+    expect(jobsForCron("41 14 * * MON-FRI").map((row) => row.id)).toEqual([
+      "twelve-x-feed-confirm",
+    ]);
+  });
+
+  it("runs the confirm watchdog later than the confirm, still inside its lookback", () => {
+    const confirm = JOBS.find((row) => row.id === "twelve-x-feed-confirm");
+    const watchdog = JOBS.find((row) => row.id === "twelve-x-feed-confirm-watchdog");
+    expect(watchdog).toMatchObject({
+      id: "twelve-x-feed-confirm-watchdog",
+      repo: "digithings-ai/twelve-x",
+      kind: "workflow_dispatch",
+      workflow: "feed_confirm_watchdog.yml",
+      enabled: true,
+    });
+    expect(watchdog?.cron).toBe("23 16 * * MON-FRI");
+    expect(atMinute(watchdog!.cron)).toBeGreaterThan(atMinute(confirm!.cron));
+    // The watchdog reads a 6h lookback. A gap smaller than that would let
+    // ordinary Actions queueing make a healthy day look silent — which is the
+    // same class of false page as the bug it exists to catch. Assert the margin
+    // rather than the literal minute so a retimed confirm cannot quietly break
+    // it.
+    const gapMinutes = atMinute(watchdog!.cron) - atMinute(confirm!.cron);
+    expect(gapMinutes).toBeGreaterThan(30);
+    expect(gapMinutes).toBeLessThan(6 * 60);
+    // Long enough that a missed confirm is caught the same day, not the next
+    // morning: the watchdog must land before the confirm's own next firing, so
+    // the wait between "the confirm did not run" and "somebody was told" stays
+    // inside one trading day.
+    expect(gapMinutes).toBeLessThan(12 * 60);
+    expect(jobsForCron("23 16 * * MON-FRI").map((row) => row.id)).toEqual([
+      "twelve-x-feed-confirm-watchdog",
+    ]);
+  });
+
+  it("watches a workflow rather than repeating the check's own verdict", () => {
+    // The watchdog's whole job is to answer a question the confirm cannot ask
+    // itself: "did I run at all?". If it ever dispatched the confirm's findings
+    // instead, a clean confirm would silence it and the two clocks would
+    // collapse into the single clock DIG-1073 exists to replace.
+    const confirm = JOBS.find((row) => row.id === "twelve-x-feed-confirm");
+    const watchdog = JOBS.find((row) => row.id === "twelve-x-feed-confirm-watchdog");
+    expect(watchdog?.workflow).not.toBe(confirm?.workflow);
+    // Neither job may reuse an existing cron: two jobs on one trigger would
+    // dispatch in the same instant, and the watchdog could not then tell a
+    // missing confirm from its own concurrent firing.
+    expect(watchdog?.cron).not.toBe(confirm?.cron);
+    // Neither is a GHA schedule in disguise — both are workflow_dispatch only,
+    // so the Worker stays the authoritative clock.
+    expect(confirm?.kind).toBe("workflow_dispatch");
+    expect(watchdog?.kind).toBe("workflow_dispatch");
+    expect(confirm?.command).toBeUndefined();
+    expect(watchdog?.command).toBeUndefined();
   });
 });
