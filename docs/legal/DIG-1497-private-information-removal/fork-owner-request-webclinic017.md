@@ -95,7 +95,7 @@ Our repository `digithings-ai/digithings` included a file of support-ticket expo
 apps/digithings-stack-cloudflare/container/seed/occ_tickets.jsonl
 ```
 
-It was added on 2 October 2026 in commit `86cb1ec5d62b2422cf2c312b6d63722c86fb2000`. It contains roughly 87 customer records and 248 email addresses across 185 tickets — including 135 people named inside the correspondence who are not customers of ours at all.
+It was added on 2 October 2026 in commit `86cb1ec5d62b2422cf2c312b6d63722c86fb2000`. It contains roughly 87 customer records and 248 email addresses across 185 tickets — including 164 email addresses belonging to people who are not customers of ours at all.
 
 Because your repository is a fork of ours, this file is currently reachable through your URL as well:
 

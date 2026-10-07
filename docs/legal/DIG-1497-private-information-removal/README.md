@@ -136,8 +136,9 @@ see [trigger-note.md](./trigger-note.md).
 
 ## The values that do not exist yet
 
-The GitHub request contains four placeholders. None can be filled by Counsel — all four are produced
-by the rewrite, which has not run.
+The GitHub request contains six placeholders. None can be filled by Counsel. Four are produced by the
+rewrite, which has not run; the date of send is the send date and is not a rewrite product at all; the
+LFS line is read from the same `git-filter-repo` output.
 
 | Placeholder | Where it comes from |
 | --- | --- |
@@ -145,13 +146,16 @@ by the rewrite, which has not run.
 | `<<< FILL: FIRST CHANGED COMMIT >>>` | the `NOTE: First Changed Commit(s):` line that `git-filter-repo` prints on completion |
 | `<<< FILL: DATE OF REWRITE PUSH, YYYY-MM-DD >>>` | the date of the force-push in DIG-1496 §7 — added by the section 6 amendment |
 | `<<< FILL: THE PULL REQUEST REFERENCES THAT STILL HOLD 86cb1ec5d >>>` | the `refs/pull/*` refs still resolving to `86cb1ec5d` after the push — added by the section 6 amendment |
+| `<<< FILL: DATE OF SEND, YYYY-MM-DD >>>` | the date Chris submits the form |
+| `<<< FILL: "no LFS objects were involved", or paste the LFS note from the filter-repo output >>>` | the filter-repo output's own LFS line; if it printed none, the substitute text is exactly `no LFS objects were involved` |
 
-The last two were added by the section 6 amendment Chris approved on 2026-10-06 at 21:08Z. The
+Rows three and four were added by the section 6 amendment Chris approved on 2026-10-06 at 21:08Z. Rows
+five and six were already in the request body but were missing from this table. The
 amendment removed one sentence that would have been false at send time — *"the file removed from all
 reachable history"* — and replaced it with the narrower, accurate claim plus the evidence for it.
 See [t0-preflight.md](./t0-preflight.md) §5.
 
-DIG-1496 is assigned to DevOps and is currently `blocked`. Until it is `done`, those four strings
+DIG-1496 is assigned to DevOps and is currently `blocked`. Until it is `done`, those six strings
 stay as they are. **A request with a placeholder still in it must not be sent.**
 
 ---
@@ -163,7 +167,7 @@ Run through this immediately before any send. It takes about two minutes.
 **For the GitHub request:**
 
 - [ ] DIG-1496 is `done`, and the rewrite has been pushed to `digithings-ai/digithings`.
-- [ ] All four placeholders in `github-private-information-request.md` are replaced with real values.
+- [ ] All six placeholders in `github-private-information-request.md` are replaced with real values.
       `grep -n 'FILL' github-private-information-request.md` returns nothing.
 - [ ] `git filter-repo --version` in the rewritten clone is **2.47 or later**. Below that,
       `--sensitive-data-removal` does not exist and the rewrite is not the rewrite GitHub documents.
@@ -180,7 +184,7 @@ Run through this immediately before any send. It takes about two minutes.
       `webclinic017`. If a third fork has appeared, the enumeration must be updated before sending.
       Enumerate-at-notice-time is the only mechanism that reaches a fork.
 - [ ] The drafting-note box at the top of section 6 is deleted — it is not part of the request.
-- [ ] The "Four placeholders" table at the top of the request file is deleted. It sits above
+- [ ] The "Six placeholders" table at the top of the request file is deleted. It sits above
       `BEGIN REQUEST BODY`, so leaving it puts a drafting note in front of the form.
 - [ ] Nothing in the request claims we contacted a fork owner. Section 5 must read as written: no
       contact was made, no channel existed, and there was nothing for an owner to do. No placeholder

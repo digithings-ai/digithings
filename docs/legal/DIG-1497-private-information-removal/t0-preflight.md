@@ -4,7 +4,7 @@
 DIG-1529. Nothing here goes into the form body.
 
 The request itself is [github-private-information-request.md](./github-private-information-request.md).
-Its five placeholders cannot be filled until DIG-1496 lands. This file holds
+Its six placeholders cannot be filled until DIG-1496 lands. This file holds
 everything that is **already knowable**, so that the t0 pass is mechanical instead of researched
 under time pressure.
 
@@ -106,7 +106,7 @@ Against `github-private-information-request.md`.
    not part of the request. It is not deletable before t0, because it is what stops the request being
    sent early.
 8. **Placeholder table at the top of the file** (lines 18–25) — delete the whole
-   "Four placeholders" section. It is scaffolding for Counsel, and it is above the `BEGIN REQUEST
+   "Six placeholders" section. It is scaffolding for Counsel, and it is above the `BEGIN REQUEST
    BODY` fence. Leaving it in would put a drafting note in front of the form.
 
 **The §6 amendment is already applied** (Chris approved it 2026-10-06T21:08Z). There is no step 9.
@@ -114,10 +114,12 @@ Against `github-private-information-request.md`.
 **Then grep, and expect zero hits:**
 
 ```
-grep -n 'FILL\|DRAFTING NOTE\|BEGIN REQUEST BODY\|END REQUEST BODY' github-private-information-request.md
+grep -n 'FILL\|DRAFTING NOTE' github-private-information-request.md
 ```
 
-Anything left is a defect. Then hand the text to Chris. **Counsel does not send.**
+Anything left is a defect. The `BEGIN REQUEST BODY` and `END REQUEST BODY` fences are deliberately
+**not** in the pattern: they are the structural boundaries of what gets pasted and must survive t0
+(see step 8 and README §Pre-send checklist). Then hand the text to Chris. **Counsel does not send.**
 
 ---
 

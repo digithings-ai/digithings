@@ -5,8 +5,7 @@
 Submit at: **https://support.github.com/contact/private-information**
 Choose the private-information / sensitive-data option offered on that form.
 
-**Send order:** after the two fork-owner notices have been sent, and **only after**
-DIG-1496 is `done`. There is no waiting period. See
+**Send order:** only after DIG-1496 is `done`. There is no waiting period. See
 [trigger-note.md](./trigger-note.md).
 
 **Paste as plain text into the body of the form.** Do not attach anything. GitHub: *"Please include
@@ -15,7 +14,7 @@ attachment may result in processing delays."*
 
 ---
 
-## Four placeholders — the request cannot be sent with these in it
+## Six placeholders — the request cannot be sent with these in it
 
 | Placeholder | Fill from |
 | --- | --- |
@@ -23,6 +22,8 @@ attachment may result in processing delays."*
 | `<<< FILL: FIRST CHANGED COMMIT >>>` | the `NOTE: First Changed Commit(s):` line `git-filter-repo` printed, per their [removing sensitive data](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/removing-sensitive-data-from-a-repository) guidance |
 | `<<< FILL: DATE OF REWRITE PUSH, YYYY-MM-DD >>>` | the date of the force-push in DIG-1496 §7 — added by the section 6 amendment Chris approved on 2026-10-06 |
 | `<<< FILL: THE PULL REQUEST REFERENCES THAT STILL HOLD 86cb1ec5d >>>` | the `refs/pull/*` refs still resolving to `86cb1ec5d` after the push, from DIG-1496 — requested 2026-10-06 |
+| `<<< FILL: DATE OF SEND, YYYY-MM-DD >>>` | the date Chris submits the form — the send date, not a rewrite product |
+| `<<< FILL: "no LFS objects were involved", or paste the LFS note from the filter-repo output >>>` | the filter-repo output's own LFS line; if it printed none, the substitute text is exactly `no LFS objects were involved` |
 
 Also re-run the fork count on the day of sending and update the date and the list if it moved:
 `gh api repos/digithings-ai/digithings --jq .forks_count` → expect `2`.
@@ -52,8 +53,9 @@ Paste everything between the lines into the form.
 
 #### 1. Working links to the affected file
 
-The file is currently retrievable at these permanent, account-free URLs. All four were confirmed
-to resolve on the date of this request.
+The file is currently retrievable at these permanent, account-free URLs. **The three blob URLs below**
+were each confirmed to resolve, by an unauthenticated one-byte range request, on the date of this
+request.
 
 Parent repository (we are the owner and have acted here ourselves — see section 6):
 
@@ -67,7 +69,8 @@ Fork 2 of 2 — `webclinic017`:
 
 https://github.com/webclinic017/digithings/blob/86cb1ec5d62b2422cf2c312b6d63722c86fb2000/apps/digithings-stack-cloudflare/container/seed/occ_tickets.jsonl
 
-Raw form, if the rendered view is inconvenient for review:
+Raw form of the parent-repository blob, if the rendered view is inconvenient for review. Same blob at the
+same pinned commit; it was not range-requested separately:
 
 https://raw.githubusercontent.com/digithings-ai/digithings/86cb1ec5d62b2422cf2c312b6d63722c86fb2000/apps/digithings-stack-cloudflare/container/seed/occ_tickets.jsonl
 
@@ -112,7 +115,7 @@ If a line-level view is easier for you, GitHub renders any line as
 | — present **only** inside quoted message bodies | 164 |
 | Distinct email domains | 101 |
 | Distinct organisations named | 47 |
-| Individuals named who are **not** our customers | 135 |
+| Email addresses belonging to people who are **not** our customers | 164 |
 
 ---
 
@@ -140,8 +143,9 @@ them. They have the employer and its domain, which is what a convincing domain-l
 "IT support" pretext is built from. They know the exact product, ticket number and problem the
 person described, and they can quote the person's own words about it. GitHub's examples of an
 appropriate request — credentials, AWS tokens, network diagrams, SSNs — all work the same way: they
-are *levers*, and this file is levers for 87 customer accounts plus 135 other named people, laid out
-one per line and retrievable without an account. The support thread text is the pretext material.
+are *levers*, and this file is levers for 87 customer accounts plus 164 other identifiable email
+addresses, laid out one per line and retrievable without an account. The support thread text is the
+pretext material.
 A message arriving at one of these addresses saying "we are migrating your ticket, please confirm
 your login on this link" has a realistic source, because the attacker can reproduce the exact
 context the real support team would have had.
@@ -159,7 +163,7 @@ company that holds their identity documents, and it pairs each identity with the
 needed to act as them. It is a ready-made target list, and the affordances are free: no breach, no
 access logs, no pretexting skill beyond reading the file.
 
-**Retrieval is unauthenticated and the URL is permanent.** I confirmed today that all three URLs
+**Retrieval is unauthenticated and the URL is permanent.** I confirmed today that the three blob URLs
 in section 1 return the file to a request carrying no credentials. Because the content sits at an
 immutable commit address rather than at a branch tip, deleting the file in a later commit does not
 make it unavailable — anyone holding the link keeps it, and any future fork inherits it.
