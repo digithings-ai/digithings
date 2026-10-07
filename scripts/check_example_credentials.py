@@ -11,10 +11,13 @@ from pathlib import Path
 PLACEHOLDER_PATTERNS = [
     r'^(replace|REPLACE|CHANGE_ME|TODO|FIXME|CHANGEME)',
     r'<.*>',
-    r'your_',
-    r'example_',
-    r'test_',
-    r'dummy_',
+    # Separator is `-` or `_`: `your-litellm-key-here` in
+    # docs/templates/project/.env.example is as obviously a placeholder as
+    # `your_litellm_key_here` is.
+    r'your[-_]',
+    r'example[-_]',
+    r'test[-_]',
+    r'dummy[-_]',
     r'placeholder',
     r'changeme',
     r'^$',
@@ -30,6 +33,13 @@ CRED_VALUE_PATTERNS = [
     r'^sk-[A-Za-z0-9]{20,}$',
     r'^ghp_', r'^gho_', r'^glpat-',
 ]
+# A generated password is usually mixed alphanumerics *and* punctuation
+# (`kR7v!Qm2@XpL9#Td4$Wn8b`). The patterns above only ever match values made of
+# safe characters, so the class of secret this file exists to catch — the one
+# the digichat Postgres password came from — slipped straight through.
+# Any value long enough and messy enough to be a machine-generated secret
+# counts, whatever it is made of.
+CRED_VALUE_SPECIAL_PATTERN = r'^[!-~]{16,}$'
 
 def is_placeholder(v):
     v = v.strip().strip('"').strip("'")
@@ -57,6 +67,11 @@ def looks_cred_val(v):
         if re.match(p, v):
             return True
     if re.match(r'^[A-Za-z0-9_\-.]{32,}$', v):
+        return True
+    # Same length floor as every rule above, but any printable ASCII: catches
+    # mixed-alphanumeric-plus-punctuation secrets and 16-31 char alnum values,
+    # which none of the narrower patterns reach.
+    if re.match(CRED_VALUE_SPECIAL_PATTERN, v):
         return True
     return False
 
