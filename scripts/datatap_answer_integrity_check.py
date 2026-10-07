@@ -186,6 +186,88 @@ _EMBED_URL_RE = re.compile(r'"embedUrl"\s*:\s*"(https?://[^"]+)"')
 _TOKEN_RE = re.compile(r'"token"\s*:\s*"([A-Za-z0-9_-]{16,})"')
 
 
+def _opening_brace_owning(flat: str, key_at: int) -> int | None:
+    """Return the index of the ``{`` that opens the object holding ``key_at``.
+
+    Walk backwards, counting how many objects have already closed. The first
+    ``{`` met with nothing outstanding is the innermost one still open at
+    ``key_at`` — the object that owns the key. A ``rfind`` instead takes the
+    previous ``{`` whatever closed in between, which is a *neighbour's* brace
+    whenever an earlier object ended before the key.
+
+    Braces inside a quoted span are text, not structure, so a ``{`` in an
+    earlier string value cannot be mistaken for the opening brace. Quotes are
+    tracked as a parity rather than as spans because the flattened RSC payload's
+    own wrapper quotes are indistinguishable from the JSON's — the ``[1,"``
+    around the payload opens a span that no JSON rule can see.
+    """
+    outstanding = 0
+    in_string = False
+    index = key_at - 1
+    while index >= 0:
+        char = flat[index]
+        if char == '"':
+            in_string = not in_string
+        elif not in_string:
+            if char == "}":
+                outstanding += 1
+            elif char == "{":
+                if outstanding == 0:
+                    return index
+                outstanding -= 1
+        index -= 1
+    return None
+
+
+def _own_token(flat: str, open_at: int) -> str | None:
+    """Return the token member of the object opening at ``open_at``.
+
+    Walk forward counting depth, so a nested object's braces are stepped over
+    rather than mistaken for this object's ends — a nested object between
+    embedUrl and the token used to hide it and make discovery exit 2 forever.
+    Quoted spans are skipped so a brace inside a string value cannot move the
+    count.
+
+    Only keys at depth 1 are read. A ``"token"`` that belongs to a nested
+    object is that object's token, not the embed config's, and sending it is the
+    decoy: it 401s, and a 401 reads like the client's fault rather than like
+    our discovery bug. Returns ``None`` when this object has no token of its
+    own, or never closes; the caller treats both as blind, never as permission
+    to look elsewhere.
+    """
+    depth = 0
+    in_string = False
+    token: str | None = None
+    index = open_at
+    while index < len(flat):
+        char = flat[index]
+        if in_string:
+            if char == "\\":
+                index += 2
+                continue
+            if char == '"':
+                in_string = False
+        elif char == '"':
+            if depth == 1 and token is None and flat.startswith('"token"', index):
+                found = _TOKEN_RE.match(flat, index)
+                if found is not None:
+                    token = found.group(1)
+            in_string = True
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                # Only now is the object closed, and only now does a member of
+                # it belong to a whole object rather than to a fragment of one.
+                return token
+        index += 1
+    # The page ended before the object closed, so there is no closed object to
+    # attribute a token to. Refusing is the only honest answer; the alternative
+    # is reading a partial structure and reporting it as a verdict.
+    return None
+
+
 def discover_embed_target(html: str) -> EmbedTarget:
     """Read the embed URL and token out of DataTap's own public /chat page.
 
@@ -209,27 +291,31 @@ def discover_embed_target(html: str) -> EmbedTarget:
     if not embed.group(1).startswith("https://"):
         raise ProbeError("the embedUrl in the DataTap /chat page is not an https URL")
 
-    # Read the token out of the same JSON object as the embed URL. Taking the
-    # first ``"token"`` key anywhere in the page would pick up an unrelated
-    # session or analytics token if one ever appears above the embed config, and
-    # that wrong-but-present token fails as a 401 that reads like their fault.
+    # Read the token out of the object that owns embedUrl, and out of no other.
+    # Taking the first ``"token"`` key anywhere on the page would pick up an
+    # unrelated session or analytics token, and that wrong-but-present token
+    # fails as a 401 that reads like their fault.
     #
-    # The window is bounded at both ends by the braces of the object holding
-    # embedUrl. Searching forward from embed.end() — the earlier version — found
-    # the object *after* it, so it both missed a token that precedes embedUrl in
-    # the same object and could read a token out of a neighbouring one.
-    close = flat.find("}", embed.end())
-    open_at = flat.rfind("{", 0, embed.start())
-    window = flat[open_at + 1 : close if close != -1 else len(flat)]
-    token = _TOKEN_RE.search(window)
+    # So measure the object rather than guess at its edges: step back to the
+    # brace that opens it, then read its own depth-1 members. The earlier
+    # versions each guessed one end — ``find("}")`` forward, ``rfind("{")``
+    # backward — and a guess cannot tell this object's brace from a neighbour's.
+    # The forward guess stopped at a nested object's closer and hid the token
+    # entirely, which is a check that can never pass again and looks no
+    # different from their platform being down. The backward guess landed on
+    # whichever sibling closed last and handed back its token.
+    open_at = _opening_brace_owning(flat, embed.start())
+    if open_at is None:
+        raise ProbeError("no JSON object holds the embedUrl in the DataTap /chat page")
+    token = _own_token(flat, open_at)
     if token is None:
-        # No fallback to a token from elsewhere on the page. The window search
-        # exists precisely so an unrelated analytics or session token cannot be
-        # picked up, and falling back would defeat it while looking like it
-        # worked. A token we cannot source from the embed config is a discovery
-        # failure, and discovery failure is exit 2.
+        # No fallback to a token from anywhere else on the page. A token we
+        # cannot source from the embed object itself is a discovery failure,
+        # and discovery failure is exit 2 — which reports this check as blind,
+        # the truth. A neighbouring object's token would instead exit 0 or 1
+        # off a 401 and report *them* as broken.
         raise ProbeError("no embed token in the DataTap /chat page")
-    return EmbedTarget(embed_url=embed.group(1), token=token.group(1))
+    return EmbedTarget(embed_url=embed.group(1), token=token)
 
 
 def build_headers(token: str) -> dict[str, str]:
