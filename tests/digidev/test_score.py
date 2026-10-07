@@ -16,16 +16,19 @@ Known gaps, pinned as-is so they are visible rather than accidental (each is a
 one-line pattern fix in a *vendored* file, which is the EM's call, not this
 leaf's — see DIG-1596):
 
-* ``_OPT`` never fires on real ``git diff`` output. Both optimization patterns
-  are written against bare source, but ``main()`` only ever passes
-  ``staged_diff()``, whose added lines start with ``+``. The N+1 pattern also
-  requires the loop body to *begin* with the call, so ``rows = await db.query(…)``
-  is missed; the sequential-awaits pattern misses ``const b = await fetchOrders()``.
+* ``_OPT``'s N+1 pattern fires only when the ``for`` header is a *context* line
+  (leading space) -- so it catches a loop that was moved or re-indented, but
+  misses a loop that is newly added, where every line carries ``+``. It also
+  requires the loop body to *begin* with the call, so ``rows = await db.query()``
+  is missed. The sequential-awaits pattern never fires at all on real diff
+  output: two consecutive added lines are separated by ``\n+``, and the pattern
+  allows only a newline plus spaces.
 * ``_QUAL``'s "Line >120 chars added" fires from 123 characters, because
   ``^[+][^+].{121,}`` spends two characters on the diff marker.
-
-The `_SEC` and `_QUAL` ``# TODO`` patterns require a space between the ``+`` and
-the ``#``, which is what git emits for an indented comment.
+* Both ``# TODO`` patterns (``_SEC`` and ``_QUAL``) need a character between the
+  ``+`` and the ``#``, so they only see *indented* comments. A top-level
+  ``+# TODO: rotate the auth token`` is invisible to both -- including the
+  security one, which is the finding that matters most.
 """
 
 from __future__ import annotations
@@ -34,6 +37,7 @@ import importlib.util
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any  # score:allow untyped any — dynamically loaded module
 
 import pytest
@@ -139,16 +143,43 @@ def test_optimization_flags_two_adjacent_bare_awaits() -> None:
     ) == ["Sequential awaits — consider gather/Promise.all"]
 
 
-def test_optimization_misses_awaits_hidden_behind_a_diff_marker_or_assignment() -> None:
-    # Both misses are real and both are pinned deliberately rather than papered
-    # over: ``main()`` only ever passes a real ``git diff`` output, whose added
-    # lines carry a leading ``+``. See "Known gaps" in the docstring.
+def test_optimization_n_plus_one_fires_only_on_a_context_line_loop_header() -> None:
+    """The N+1 pattern is anchored on an unanchored ``for`` that is *not* preceded
+    by ``+``, so it only fires when the loop header is a context line."""
+    # A loop that was moved/re-indented: the header is context, the body indented.
+    moved = "+def _render_inner(users):\n     for user in users:\n         await db.query(user.id)\n"
+    assert score.heuristic(moved, score._OPT) == ["Query inside loop — possible N+1"]
+    # A loop that is newly added: every line carries ``+``, so the header is missed.
+    added = "+    for user in users:\n+        await db.query(user.id)\n"
+    assert score.heuristic(added, score._OPT) == []
+    # The body must *begin* with the call; an assignment in front hides it.
+    assigned = "     for user in users:\n         rows = await db.query(user.id)\n"
+    assert score.heuristic(assigned, score._OPT) == []
+
+
+def test_optimization_sequential_awaits_never_fires_on_diff_output() -> None:
+    # Two consecutive *added* lines are separated by ``\n+``, and the pattern allows
+    # only ``\n\s*``, so the heuristic is dead on real ``git diff`` input.
     assert score.heuristic(
         "+const a = await fetchProfile()\n+await fetchOrders()\n", score._OPT
     ) == []
     assert score.heuristic(
-        "const a = await fetchProfile()\nconst b = await fetchOrders()\n", score._OPT
+        "+const a = await fetchProfile()\n+const b = await fetchOrders()\n", score._OPT
     ) == []
+
+
+def test_both_todo_patterns_miss_a_top_level_todo() -> None:
+    # ``^[+][^+].*#\s*TODO`` needs a character between ``+`` and ``#``, so a
+    # column-0 comment is invisible to both -- including the security pattern.
+    top_level = "+# TODO: rotate the auth token\n"
+    assert score.heuristic(top_level, score._SEC) == []
+    assert score.heuristic(top_level, score._QUAL) == []
+    # An indented comment is seen by both.
+    indented = "+    # TODO: rotate the auth token\n"
+    assert score.heuristic(indented, score._SEC) == [
+        "Security TODO left unresolved in staged changes"
+    ]
+    assert score.heuristic(indented, score._QUAL) == ["TODO added in staged changes"]
 
 
 def test_clean_diff_raises_nothing_in_any_dimension() -> None:
@@ -231,16 +262,28 @@ def test_get_thresholds_falls_back_to_regex_without_pyyaml(
     assert thresholds["quality"] == score.DEFAULTS["quality"]
 
 
-def test_repo_agents_yml_agrees_with_module_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The vendored defaults must match the thresholds this repo actually ships."""
-    assert (REPO_ROOT / "agents.yml").exists()
-    monkeypatch.chdir(REPO_ROOT)
+def test_thresholds_fall_back_to_module_defaults_without_agents_yml(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With no ``agents.yml`` in scope the gate uses the vendored defaults.
+
+    Deliberately *not* asserted against this repo's live ``agents.yml``: tuning a
+    threshold there is a legitimate one-line change that would fail the suite.
+    """
+    monkeypatch.chdir(tmp_path)
+    assert not (tmp_path / "agents.yml").exists()
     assert score.get_thresholds() == dict(score.DEFAULTS)
 
 
-def test_every_dimension_has_a_threshold_on_the_ten_point_scale() -> None:
-    assert sorted(score.DEFAULTS) == sorted(score.DIMENSIONS)
-    assert all(0 <= v <= 10 for v in score.DEFAULTS.values())
+def test_every_dimension_resolves_to_a_threshold_on_the_ten_point_scale(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Assert the *resolved* thresholds, not the two literals: the module must
+    produce a 0-10 score for each dimension it advertises."""
+    monkeypatch.chdir(tmp_path)
+    thresholds = score.get_thresholds()
+    assert sorted(thresholds) == sorted(score.DIMENSIONS)
+    assert all(0 <= v <= 10 for v in thresholds.values())
 
 
 # ── Rubric loading ────────────────────────────────────────────────────────────
@@ -349,13 +392,14 @@ def _stage(
     argv: list[str],
     files: list[str] | None = None,
     diff: str = "+def add(a, b):\n+    return a + b\n",
+    lint_errors: list[tuple[str, str]] | None = None,
 ) -> None:
-    """Put main() in a sandbox: no git, no linters, no real agents.yml."""
+    """Put main() in a sandbox: no git, no real linters, no real agents.yml."""
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(sys, "argv", ["score.py", *argv])
     monkeypatch.setattr(score, "staged_files", lambda: list(files if files is not None else ["tests/test_app.py"]))
     monkeypatch.setattr(score, "staged_diff", lambda: diff)
-    monkeypatch.setattr(score, "run_lint", lambda _files: [])
+    monkeypatch.setattr(score, "run_lint", lambda _files: list(lint_errors or []))
 
 
 def test_main_exits_zero_with_nothing_staged(
@@ -377,12 +421,24 @@ def test_main_exits_zero_with_nothing_staged(
 def test_main_accepts_both_set_flag_forms(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Both argv spellings must reach the parser.
+
+    Asserting the results file (not just exit 0) is what makes this a test: when
+    ``--set=`` parsing is deleted the gate silently falls through to the
+    rubric-printing branch, which *also* exits 0 but writes nothing.
+    """
     passing = "security=8,quality=8,optimization=7,accuracy=9"
     for argv in (["--set", passing], ["--set=" + passing]):
+        results_file = tmp_path / ".score-last.json"
+        results_file.unlink(missing_ok=True)
         _stage(monkeypatch, tmp_path, argv)
         with pytest.raises(SystemExit) as exc:
             score.main()
         assert exc.value.code == 0, argv
+        assert results_file.exists(), f"{argv} was ignored -- no results written"
+        results = json.loads(results_file.read_text(encoding="utf-8"))
+        assert results["security"] == {"score": 8, "threshold": 8, "passed": True}, argv
+        assert results["accuracy"] == {"score": 9, "threshold": 9, "passed": True}, argv
 
 
 def test_main_writes_results_and_passes_when_all_dimensions_meet_threshold(
@@ -466,3 +522,104 @@ def test_main_surfaces_heuristic_findings(
     out = capsys.readouterr().out
     assert "Security: Possible hardcoded credential" in out
     assert "Accuracy: Source files staged without test files" in out
+
+def test_main_exits_one_and_stops_before_scoring_when_lint_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The lint gate is the module's only hard-fail path ahead of scoring."""
+    _stage(
+        monkeypatch,
+        tmp_path,
+        ["--set", "security=10,quality=10,optimization=10,accuracy=10"],
+        lint_errors=[("ruff", "E501 line too long")],
+    )
+    with pytest.raises(SystemExit) as exc:
+        score.main()
+    assert exc.value.code == 1
+    out = capsys.readouterr().out
+    assert "Lint (ruff) failed" in out
+    assert "E501 line too long" in out
+    # It must stop there: no self-score demand, no results file.
+    assert "Submit your self-score" not in out
+    assert not (tmp_path / ".score-last.json").exists()
+
+
+def test_main_runs_lint_before_it_reports_heuristics(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A lint failure must suppress heuristic output, not merely precede it."""
+    _stage(
+        monkeypatch,
+        tmp_path,
+        ["--set", "security=10,quality=10,optimization=10,accuracy=10"],
+        files=["src/app.py"],
+        diff='+password = "hunter2xyz"\n',
+        lint_errors=[("eslint", "no-unused-vars")],
+    )
+    with pytest.raises(SystemExit) as exc:
+        score.main()
+    assert exc.value.code == 1
+    out = capsys.readouterr().out
+    assert "Lint (eslint) failed" in out
+    assert "Possible hardcoded credential" not in out
+
+
+def test_main_surfaces_optimization_and_quality_findings_from_a_real_diff(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """``_OPT`` and ``_QUAL`` findings must reach the user, not just the helpers."""
+    diff = "+    # TODO: tidy this up\n"
+    _stage(
+        monkeypatch,
+        tmp_path,
+        [],
+        files=["src/app.py", "tests/test_app.py"],
+        diff=diff,
+    )
+    with pytest.raises(SystemExit):
+        score.main()
+    assert "Quality: TODO added in staged changes" in capsys.readouterr().out
+
+
+def test_main_surfaces_an_optimization_finding_from_a_real_diff(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """``_OPT`` findings must survive the trip through ``main()`` and be labelled."""
+    diff = (
+        "+def _render_inner(users):\n"
+        "     for user in users:\n"
+        "         await db.query(user.id)\n"
+    )
+    _stage(
+        monkeypatch, tmp_path, [], files=["src/app.py", "tests/test_app.py"], diff=diff
+    )
+    with pytest.raises(SystemExit):
+        score.main()
+    out = capsys.readouterr().out
+    assert "Optimization: Query inside loop — possible N+1" in out
+
+
+def test_main_delta_flag_names_the_branch_it_compares_against(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def fake_run(*cmd: str) -> Any:
+        assert cmd[:2] == ("git", "rev-parse"), cmd
+        return SimpleNamespace(returncode=0, stdout="feature/thing\n", stderr="")
+
+    monkeypatch.setattr(score, "_run", fake_run)
+    _stage(monkeypatch, tmp_path, ["--delta"], files=["src/app.py", "tests/test_app.py"])
+    with pytest.raises(SystemExit):
+        score.main()
+    assert "comparing HEAD vs origin/feature/thing" in capsys.readouterr().out
+
+
+def test_main_without_delta_never_asks_git_for_a_branch_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def boom(*cmd: str) -> Any:
+        raise AssertionError(f"unexpected git call: {cmd}")
+
+    monkeypatch.setattr(score, "_run", boom)
+    _stage(monkeypatch, tmp_path, [], files=["src/app.py", "tests/test_app.py"])
+    with pytest.raises(SystemExit):
+        score.main()
