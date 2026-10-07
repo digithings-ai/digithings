@@ -222,7 +222,8 @@ def fetch_queue(repo: str, base: str, limit: int) -> list[dict[str, Any]]:
         str(limit),
         "--json",
         "number,title,headRefName,headRefOid,baseRefName,isDraft,mergeable,"
-        "mergeStateStatus,statusCheckRollup,reviewDecision,author,createdAt,reviews",
+        "mergeStateStatus,statusCheckRollup,reviewDecision,author,createdAt,reviews,"
+        "comments,commits",
     )
     if not isinstance(prs, list):
         raise QueueError(f"gh pr list did not return a list for {repo}:{base}")
@@ -346,11 +347,125 @@ def _gate_checks(pr: dict[str, Any], policy: Policy) -> list[str]:
     return reasons
 
 
+# --- a code-review verdict posted as a PR comment -----------------------------
+#
+# `docs/agents/CODE_REVIEW_POLICY.md` makes a PR comment the sanctioned place for
+# review findings, and a reviewer's verdict posted there is a real review signal
+# that GitHub's `reviewDecision` cannot see. twelve-x PR #347 posted "changes
+# requested — one finding blocks approval" at 22:07:11Z and merged at 22:13:57Z on
+# an attestation, because the queue only ever fetched `reviews`.
+#
+# Only the marker's `key=value` fields are read. The prose is not a contract: a
+# matcher on `## Verdict: changes requested (narrow)` would have to survive a
+# reviewer reformatting a heading, and a heading someone forgets to update is
+# indistinguishable from a verdict someone forgot to post.
+
+_MARKER_RE = re.compile(r"<!--\s*opencode-power-pack:code-review\b(?P<fields>[^>]*?)\s*-->")
+_MARKER_FIELD_RE = re.compile(r"(?P<key>[A-Za-z_][A-Za-z0-9_.-]*)=(?P<value>\S+)")
+_SCOPE_SHA_RE = re.compile(r"@(?P<sha>[0-9a-f]{7,40})\b")
+
+# `changes_needed` is read alongside `changes_requested` because DIG-1021's interim
+# discipline named the two verdicts "approve" and "changes needed"; a reviewer
+# writing that spelling must not slip past the gate.
+BLOCKING_VERDICTS = frozenset({"changes_requested", "changes_needed"})
+READABLE_VERDICTS = BLOCKING_VERDICTS | {"approved", "approve"}
+
+
+def _normalise_verdict(value: str) -> str:
+    return value.strip().strip("'\";").lower().replace("-", "_")
+
+
+def _posted_verdict(comment: dict[str, Any]) -> tuple[str, str] | None:
+    """`(verdict, scope_sha)` from a review marker comment, or None.
+
+    None means "this comment is not a verdict the queue can read" — which covers
+    both a plain comment and a marker whose `verdict=` is missing or misspelled.
+    That is a missing signal, not a clearance, and it must not be treated as one.
+    """
+    body = str(comment.get("body") or "")
+    for marker in _MARKER_RE.finditer(body):
+        fields = {
+            m.group("key").lower(): m.group("value")
+            for m in _MARKER_FIELD_RE.finditer(marker.group("fields"))
+        }
+        verdict = _normalise_verdict(fields.get("verdict", ""))
+        if verdict not in READABLE_VERDICTS:
+            continue
+        scope_sha = _SCOPE_SHA_RE.search(fields.get("scope", ""))
+        return verdict, (scope_sha.group("sha") if scope_sha else "")
+    return None
+
+
+def _on_pr_history(pr: dict[str, Any], sha: str) -> bool:
+    """Whether `sha` is the PR head, or a commit behind it.
+
+    Every commit GitHub lists for a PR is an ancestor of its head, so the commit
+    list is the ancestry proof the gate needs — without a repository or a network
+    round trip, which is what keeps `evaluate` a pure function the tests can pin.
+    """
+    if not sha:
+        return False
+    head = str(pr.get("headRefOid") or "")
+    if head and sha == head:
+        return True
+    return sha in {str(c.get("oid") or "") for c in (pr.get("commits") or [])}
+
+
+def _latest_readable_verdict(pr: dict[str, Any]) -> tuple[dict[str, Any], str, str] | None:
+    """The newest comment carrying a verdict the queue can read, with its scope.
+
+    Newest wins, so a reviewer who blocked and then came back and approved clears
+    their own block. Comments the queue cannot read are skipped rather than
+    counted as the newest: letting a typo'd marker displace a real block would
+    hand anyone who can comment a way to unlock the queue.
+    """
+    best: tuple[dict[str, Any], str, str] | None = None
+    best_at = ""
+    for comment in pr.get("comments") or []:
+        if not isinstance(comment, Mapping):
+            continue
+        parsed = _posted_verdict(comment)
+        if parsed is None:
+            continue
+        verdict, scope_sha = parsed
+        posted_at = str(comment.get("createdAt") or "")
+        if best is None or posted_at >= best_at:
+            best, best_at = (comment, verdict, scope_sha), posted_at
+    return best
+
+
+def _posted_verdict_reason(pr: dict[str, Any]) -> list[str]:
+    """A refusal when the newest readable posted verdict blocks this exact head."""
+    latest = _latest_readable_verdict(pr)
+    if latest is None:
+        return []
+    comment, verdict, scope_sha = latest
+    if verdict not in BLOCKING_VERDICTS:
+        return []
+    if not _on_pr_history(pr, scope_sha):
+        return []
+    login = str((comment.get("author") or {}).get("login") or "?")
+    where = (
+        f"comment {comment.get('id') or '?'}" if comment.get("id") else f"a comment from {login}"
+    )
+    scope = scope_sha[:12] if scope_sha else "an unstated commit"
+    return [
+        f"a code-review verdict of '{verdict}' was posted on this PR by {login} "
+        f"({where}) against {scope}, and that commit is still on this branch; "
+        "a new review must clear it"
+    ]
+
+
 def _gate_review(pr: dict[str, Any], acting_role: str, attest_role: str | None) -> list[str]:
     """Satisfied by an approving review from someone else, or by another role's attestation."""
     reasons: list[str] = []
     if str(pr.get("reviewDecision") or "").upper() == "CHANGES_REQUESTED":
         reasons.append("review has outstanding change requests")
+
+    # A blocking verdict is checked before the approval shortcut below. An approving
+    # review is a way *past* this gate, not a waiver of it: twelve-x PR #347 carried
+    # `--attest-review qa` and a posted "changes requested", and it merged.
+    reasons.extend(_posted_verdict_reason(pr))
 
     author = str((pr.get("author") or {}).get("login") or "")
     reviews = pr.get("reviews") or []
