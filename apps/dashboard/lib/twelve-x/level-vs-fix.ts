@@ -209,6 +209,12 @@ export interface LevelFixSeries {
   points: FxFixPoint[];
   /** True when `points` is just the eval anchors (no table history). */
   anchorsOnly: boolean;
+  /**
+   * The idea carries a bracket that is not publishable, so the levels above are
+   * withheld and the caller should show a pending state instead of an empty
+   * chart. False when the idea has no bracket at all (nothing to wait for).
+   */
+  levelsPending: boolean;
 }
 
 /**
@@ -240,6 +246,8 @@ export function buildLevelFixSeries(
   fixes: FxFixPoint[],
 ): LevelFixSeries {
   const tl = parseTradeLevels(idea.trade_levels);
+  // Levels are withheld unless the bracket is complete; the fix line below is
+  // independent of the bracket and still publishes.
   const published = isPublishableBracket(tl) ? tl : null;
   const entryFix = evalRow?.entry_fix ?? null;
   const exitFix = evalRow?.exit_fix ?? null;
@@ -259,6 +267,7 @@ export function buildLevelFixSeries(
 
   return {
     pair: idea.pair,
+    // A bracket publishes complete or not at all (DIG-260 L5 follow-up).
     entryLow: published ? numOrNull(published.entry_low?.value) : null,
     entryHigh: published ? numOrNull(published.entry_high?.value) : null,
     stop: published ? numOrNull(published.stop?.value) : null,
@@ -273,5 +282,6 @@ export function buildLevelFixSeries(
     exitFix,
     points,
     anchorsOnly,
+    levelsPending: tl !== null && published === null,
   };
 }
