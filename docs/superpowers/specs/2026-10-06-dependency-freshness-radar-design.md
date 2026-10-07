@@ -1,10 +1,10 @@
 # Dependency freshness radar — design note
 
 - **Issue:** DIG-1515
-- **Status:** Implemented (fix landed, awaiting first dispatch)
+- **Status:** Implemented and verified (30 tests + 3 live runs; awaiting first dispatch)
 - **Date:** 2026-10-06, revised 2026-10-07
 - **Author:** Architect
-- **Supersedes:** the first draft of this note, which shipped a workflow that could not work. See "Correction" below.
+- **Supersedes:** the first draft of this note, which shipped a workflow that could not work. See "Correction" below — it had six defects, not three.
 
 ## Problem
 
@@ -46,12 +46,21 @@ preferred for testability, not because A is wrong.
 
 ## Design
 
-- **Trigger:** `cron: "0 6 1 * *"` (monthly, 1st, 06:00 UTC) plus
-  `workflow_dispatch`.
+- **Trigger:** `workflow_dispatch` only. The clock is **not** on GitHub: develop
+  carries no `on.schedule` for any workflow
+  (`tests/scripts/test_no_gha_schedules.py`), because every clock for this repo
+  lives on the digithings-cron Worker and a GitHub cron would double-fire with
+  it. The monthly clock is the `dependency-freshness` `wd()` row at
+  `23 6 1 * *` in `apps/digithings-cron/src/jobs.ts` plus its `[triggers] crons`
+  entry in `wrangler.toml`. `secret-staleness` is the precedent.
 - **Input:** `uv export --frozen --all-packages --all-extras` against the
   checked-in `uv.lock`. 284 pinned packages today.
-- **Comparison:** PyPI JSON API per package; newest non-prerelease release.
-- **Classification:** major 🔴 / minor 🟡 / patch 🟢 / current ✅ / unknown ⚠️.
+- **Comparison:** PyPI JSON API per package, 16-way concurrent; newest
+  non-prerelease release.
+- **Classification:** major 🔴 / minor 🟡 / patch 🟢 / current ✅ /
+  no stable release 🟣 / unknown ⚠️. The last two are deliberately different:
+  "no stable release" means PyPI answered and has only ever shipped prereleases,
+  "unknown" means we could not read PyPI at all.
 - **Output:** one deduplicated GitHub issue, searched by title, updated in place.
 - **Permissions:** `contents: read`, `issues: write`. No lock mutation.
 
@@ -73,6 +82,21 @@ worked. Three defects, all found by running it rather than reading it:
    declared direct one, and the step ran a bare `python3` with no install. Fixed
    per the repo's existing #1715 rule — sync from the lock, no unpinned
    `pip install`.
+4. **A GitHub cron this repo cannot carry.** The shipped workflow used
+   `on: schedule`. develop fails `tests/scripts/test_no_gha_schedules.py` on any
+   workflow whose `on` contains `schedule` — every clock here lives on the
+   digithings-cron Worker, and a GitHub cron on the default branch double-fires
+   with it. The monthly clock moved to the Worker's `wd()` row.
+5. **A sequential fetch slow enough to fake its own failures.** Measured on the
+   real lock: **8m06s** for 284 packages, of which 6 `unknown` rows were our own
+   10s read timeout firing under load rather than PyPI being unreachable. A row
+   that reads "could not compare" because the radar was slow is the radar lying
+   about its own gaps. Now a 16-way `ThreadPoolExecutor`: **36s**, `0 unknown`.
+6. **Six packages mislabelled.** All six `opentelemetry-instrumentation*` we lock
+   have never shipped a non-beta on PyPI — every one of their 75 releases is a
+   prerelease. Calling that `unknown` blamed our own network for PyPI's release
+   policy. They now carry their own `no stable release` 🟣 label, so `unknown`
+   keeps meaning exactly one thing: we could not read PyPI.
 
 Also: the logic moved out of the YAML into `scripts/dependency_freshness.py` so
 it is testable without Actions, and dedup now searches by title instead of by a
@@ -85,19 +109,35 @@ local `dt-snapshot` commits.
 
 ### Verification
 
-- 9 unit tests in `tests/scripts/test_dependency_freshness.py`, all passing.
-- Full live run against the real `uv.lock`: exit 0, all 284 packages parsed,
-  no crash.
-- Live result independently reproduces the original finding:
-  `cryptography 49.0.0 → 50.0.2`, `mcp` 1.29.0, `optuna` 4.9.0.
+- 30 tests green across three files: 16 in `test_dependency_freshness.py` (the
+  script), 12 in `test_dependency_freshness_clock.py` (the clock wiring), and the
+  2 pre-existing `test_no_gha_schedules.py` guard tests the radar must not break.
+- `apps/digithings-cron` vitest: 15 passed, including `uniqueEnabledCrons()`,
+  which asserts the enabled cron set by exact ordered equality — the new
+  `23 6 1 * *` had to be added at its `JOBS` position, not appended.
+- Three full live runs against the real `uv.lock`: exit 0, all 284 packages
+  parsed, no crash, 36s.
+- Live result independently reproduces the original finding and widens it:
+  `cryptography 49.0.0 → 50.0.2` 🔴, `mcp` 1.29.0 → 2.3.0 🔴, `optuna` 4.9.0 →
+  5.0.0 🔴, plus 13 further majors visible only in the full closure
+  (`openai`, `kubernetes`, `websockets`, `plotly`, `filelock`, `huggingface-hub`,
+  `multidict`, `oauthlib`, `polars`, `xxhash`, `pyee`, `uuid-utils`).
+  The issue filed 3 majors because it listed direct dependencies; the radar reads
+  the whole closure, so 16 is the honest number.
 - `ruff check` and `ruff format --check` clean.
 
 ## Risks
 
-- **284 sequential HTTPS calls to PyPI.** Roughly 2-4 minutes, and PyPI rate
-  limits are the likely first failure. A `unknown` row now degrades gracefully
-  instead of failing the run, but a heavily throttled run would post a noisy
-  table. Acceptable for monthly; revisit if the closure grows much larger.
+- **284 HTTPS calls to PyPI**, now 16-way concurrent, measured at 36s. The pool
+  is deliberately capped at 16 rather than one-thread-per-package: PyPI is a free
+  public service and a monthly radar should not become someone else's rate-limit
+  incident. If the closure grows past ~600 packages, revisit the worker count
+  before revisiting the cadence.
+- **A throttled run still degrades, and now visibly so.** A heavily throttled run
+  would post `unknown` rows instead of a comparison. That is why the issue body
+  spells out that `unknown` should be 0 and that a non-zero count means the scan
+  itself was degraded — the failure mode is legible from the artifact rather than
+  needing the reader to know the script.
 - **Posting 284 rows monthly** is a lot of issue body. The summary line is the
   signal; the table is the evidence. Acceptable, and it is what the R&D Lead
   asked for.

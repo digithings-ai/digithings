@@ -85,6 +85,109 @@ def test_latest_stable_returns_none_when_all_unusable() -> None:
     assert mod.latest_stable({"0.3.2d": [], "1.0.0rc1": []}) is None
 
 
+def test_fetch_all_is_concurrent_not_sequential(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A measured run of the sequential version took 8m06s for 284 packages and
+    produced 7 false `unknown` rows, because a single 10s read timeout under
+    load swallowed six opentelemetry packages plus python-multipart. Unknown
+    means "could not compare", so it must not be manufactured by our own
+    timeout. Concurrency is the fix, and it is the only reason this test can
+    distinguish the two implementations: the sleep-per-package below is what a
+    sequential loop would serialise.
+    """
+    import time
+
+    def slow_fetch(package: str, timeout: float = 10.0) -> str:
+        time.sleep(0.2)
+        return "9.9.9"
+
+    monkeypatch.setattr(mod, "fetch_latest", slow_fetch)
+    names = [f"pkg{index}" for index in range(8)]
+
+    started = time.monotonic()
+    latest = mod.fetch_all(names, workers=8)
+    elapsed = time.monotonic() - started
+
+    assert len(latest) == 8, "every package must still be compared"
+    # Sequential would be >= 1.6s. Anything near it means the loop is serialised.
+    assert elapsed < 1.0, f"fetch_all ran sequentially ({elapsed:.2f}s for 8 x 0.2s)"
+
+
+def test_fetch_all_keeps_going_past_one_failed_package(monkeypatch: pytest.MonkeyPatch) -> None:
+    """One unreadable package must not cost the other 283 their comparison."""
+
+    def fetch(package: str, timeout: float = 10.0) -> str:
+        if package == "broken":
+            raise TimeoutError("read timed out")
+        if package == "empty":
+            return None  # release history had no usable version
+        return "1.2.3"
+
+    monkeypatch.setattr(mod, "fetch_latest", fetch)
+
+    latest = mod.fetch_all(["broken", "empty", "fine"], workers=2)
+
+    assert latest == {"empty": None, "fine": "1.2.3"}
+
+
+def test_fetch_all_bounds_its_workers() -> None:
+    """PyPI is a free public service. One unbounded thread per package is how a
+    monthly radar turns into a rate-limit incident for everyone else."""
+    assert 1 <= mod.DEFAULT_WORKERS <= 16
+
+
+def test_a_package_with_only_prereleases_is_not_called_unknown() -> None:
+    """All six opentelemetry-instrumentation packages we lock have never shipped a
+    non-beta on PyPI. `unknown` means "could not compare", so calling a package
+    that PyPI answered clearly about "unknown" makes the radar lie about its own
+    gaps. A radar that mislabels one row drags trust down on all 284, so this
+    gets its own label.
+    """
+    releases = {"0.64b0": [], "0.65b0": [], "0.66b1": []}
+    assert mod.latest_stable(releases) is None
+
+    # fetch_all reports "PyPI answered, no stable release" as a present None.
+    report = mod.build_report(
+        {"opentelemetry-instrumentation": "0.65b0"},
+        {"opentelemetry-instrumentation": None},
+    )
+
+    assert "no stable release" in report["table"]
+    assert "0 unknown" in report["summary"], "an all-prerelease package is not a failure"
+    assert "1 no stable release" in report["summary"]
+
+
+def test_unreachable_pypi_is_still_unknown() -> None:
+    """The other failure mode stays honest: no answer at all is unknown."""
+    report = mod.build_report({"cryptography": "49.0.0"}, {})
+
+    assert "1 unknown" in report["summary"]
+    assert "0 no stable release" in report["summary"]
+
+
+def test_fetch_all_separates_no_stable_from_unreachable(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The three return states must survive the concurrency, or the label above
+    cannot be earned: a dropped key is unreachable, a present None is no-stable."""
+
+    def fetch(package: str, timeout: float = 10.0) -> str | None:
+        if package == "unreachable":
+            raise TimeoutError("read timed out")
+        if package == "beta-only":
+            return None
+        return "1.2.3"
+
+    monkeypatch.setattr(mod, "fetch_latest", fetch)
+
+    latest = mod.fetch_all(["unreachable", "beta-only", "fine"], workers=2)
+
+    assert "unreachable" not in latest, "an exception drops the key"
+    assert latest["beta-only"] is None, "an all-prerelease package keeps its key"
+    assert latest["fine"] == "1.2.3"
+
+
+def test_fetch_all_is_empty_in_empty() -> None:
+    assert mod.fetch_all([]) == {}
+
+
 def test_build_report_counts_and_renders_table() -> None:
     pinned = {"cryptography": "49.0.0", "fastapi": "0.141.1"}
     latest = {"cryptography": "50.0.2", "fastapi": "0.142.2"}

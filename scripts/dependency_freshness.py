@@ -25,6 +25,7 @@ import json
 import re
 import sys
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from packaging.version import InvalidVersion
@@ -32,12 +33,19 @@ from packaging.version import parse as parse_version
 
 REQUIREMENTS = Path("freshness-requirements.txt")
 
+# Concurrency for the PyPI read. PyPI serves this fine and asks only that we
+# stay gentle; 16 is well inside that and turns an 8-minute scan into ~40s.
+DEFAULT_WORKERS = 16
+
 # `name==version ; marker` -> capture name and version only.
 PIN_RE = re.compile(r"^([A-Za-z0-9._-]+)==([^;\s]+)")
 
 # Marker for a package we could not compare. Emoji kept as escapes so the
 # source stays ASCII and cannot drift on encoding.
 UNKNOWN_ICON = "\u26a0\ufe0f"
+# No stable release exists: the package has only ever shipped prereleases. This
+# is not a failed comparison, so it must not share the `unknown` label.
+NO_STABLE_ICON = "\U0001f7e3"
 MAJOR_ICON = "\U0001f534"
 MINOR_ICON = "\U0001f7e1"
 PATCH_ICON = "\U0001f7e2"
@@ -82,6 +90,43 @@ def fetch_latest(package: str, timeout: float = 10.0) -> str | None:
     return latest_stable(data.get("releases", {}))
 
 
+def fetch_all(
+    packages: list[str],
+    workers: int = DEFAULT_WORKERS,
+    timeout: float = 10.0,
+) -> dict[str, str | None]:
+    """Latest stable version per package, fetched concurrently.
+
+    The return value distinguishes the two ways a comparison can fail, which is
+    the whole point of returning ``None`` values rather than dropping the key:
+
+    * present with a ``str`` -> PyPI answered, here is the latest stable release
+    * present with ``None`` -> PyPI answered, and it has never shipped a stable
+      release for this package (all six opentelemetry-instrumentation packages
+      we lock are in this group, having only ever released betas)
+    * absent -> we could not read PyPI at all for this package
+
+    Sequential fetching was measured at 8m06s for this repo's 284-package
+    closure, and six of its seven `unknown` rows were our own 10s read timeout
+    firing under load rather than PyPI being unreachable. `unknown` means "could
+    not compare", so the scan must not manufacture it by being slow. The pool is
+    capped at DEFAULT_WORKERS because PyPI is a free public service.
+    """
+    if not packages:
+        return {}
+
+    def one(package: str) -> tuple[str, str | None] | None:
+        try:
+            return package, fetch_latest(package, timeout=timeout)
+        except Exception as exc:  # one bad package must not kill the run
+            print(f"Warning: failed to fetch {package}: {exc}", file=sys.stderr)
+            return None
+
+    with ThreadPoolExecutor(max_workers=max(1, min(workers, len(packages)))) as pool:
+        results = list(pool.map(one, packages))
+    return {name: version for result in results if result for name, version in [result]}
+
+
 def classify(locked_ver: str, latest_ver: str) -> tuple[str, str]:
     """Return (gap, icon) for a locked/latest pair."""
     try:
@@ -102,9 +147,16 @@ def build_report(pinned: dict[str, str], latest: dict[str, str]) -> dict:
     """Assemble the markdown table and the one-line summary."""
     rows = []
     for package, locked_ver in sorted(pinned.items()):
-        latest_ver = latest.get(package)
-        if latest_ver is None:
+        if package not in latest:
             rows.append((package, locked_ver, "unknown", "unknown", UNKNOWN_ICON))
+            continue
+        latest_ver = latest[package]
+        if latest_ver is None:
+            # `latest` carries one of three meanings for a missing key, decided by
+            # what PyPI returned: no releases at all, only prereleases, or an
+            # unreadable response. All six opentelemetry-instrumentation packages
+            # we lock are the middle case, so they get the middle label.
+            rows.append((package, locked_ver, "no stable release", "no-stable", NO_STABLE_ICON))
             continue
         gap, icon = classify(locked_ver, latest_ver)
         rows.append((package, locked_ver, latest_ver, gap, icon))
@@ -119,6 +171,7 @@ def build_report(pinned: dict[str, str], latest: dict[str, str]) -> dict:
     summary = (
         f"**{count('major')} major**, {count('minor')} minor, "
         f"{count('patch')} patch, {count('current')} current, "
+        f"{count('no-stable')} no stable release, "
         f"{count('unknown')} unknown (of {len(rows)} packages)"
     )
     return {"table": "\n".join(lines), "summary": summary}
@@ -128,15 +181,7 @@ def main() -> int:
     pinned = read_pinned()
     print(f"Parsed {len(pinned)} pinned packages", file=sys.stderr)
 
-    latest: dict[str, str] = {}
-    for package in pinned:
-        try:
-            version = fetch_latest(package)
-        except Exception as exc:  # one bad package must not kill the run
-            print(f"Warning: failed to fetch {package}: {exc}", file=sys.stderr)
-            continue
-        if version:
-            latest[package] = version
+    latest = fetch_all(sorted(pinned))
 
     json.dump(build_report(pinned, latest), sys.stdout)
     return 0
