@@ -158,6 +158,52 @@ async function loadNavRows(env: SupabaseEnv): Promise<NavRowInput[]> {
   }));
 }
 
+/**
+ * TTL for the nav-history read cache (DIG-1835). `public_accounting_nav_history`
+ * took 4,027 requests on 2026-10-03 against a 0-row table; one read per 10
+ * minutes per process collapses that to single digits a day. NAV history for a
+ * closed book moves on a daily cadence, so 10 minutes is far inside any
+ * freshness tolerance.
+ */
+export const NAV_ROWS_TTL_MS = 10 * 60 * 1000;
+
+let navRowsCache: { rows: NavRowInput[]; at: number } | null = null;
+let navRowsInFlight: Promise<NavRowInput[]> | null = null;
+
+/**
+ * `loadNavRows` behind a short TTL with single-flight coalescing.
+ *
+ * The coalescing is the part that matters: `loadCommittedBook` runs this inside
+ * a `Promise.all` and is itself invoked at four call sites, so one page load
+ * fans out to several identical reads. Concurrent callers await the same
+ * promise instead of starting their own.
+ *
+ * Failures are never cached — an `UpstreamError` clears the in-flight promise
+ * so the next call retries, because caching a 502 would turn a transient
+ * Supabase blip into a 10-minute dashboard outage.
+ *
+ * The cached array is shared as-is: every consumer copies before sorting or
+ * only maps/filters, so no caller can mutate it (checked across `brief.ts`,
+ * `envelope.ts`, `performance.ts` and `portfolio.ts`).
+ */
+export async function loadNavRowsCached(env: SupabaseEnv): Promise<NavRowInput[]> {
+  const cached = navRowsCache;
+  if (cached != null && Date.now() - cached.at < NAV_ROWS_TTL_MS) return cached.rows;
+  if (navRowsInFlight != null) return navRowsInFlight;
+  navRowsInFlight = loadNavRows(env).then(
+    (rows) => {
+      navRowsCache = { rows, at: Date.now() };
+      navRowsInFlight = null;
+      return rows;
+    },
+    (err: unknown) => {
+      navRowsInFlight = null;
+      throw err;
+    },
+  );
+  return navRowsInFlight;
+}
+
 interface MetricsRow {
   date?: string | null;
   as_of_date?: string | null;
@@ -208,7 +254,7 @@ async function loadCommittedBook(
   const dates = [...new Set(all.map((p) => p.date))];
   const bookAsOf = committedDate(snapshotDate, dates);
   if (bookAsOf == null) return null;
-  const [navRows, metrics] = await Promise.all([loadNavRows(env), loadMetrics(env)]);
+  const [navRows, metrics] = await Promise.all([loadNavRowsCached(env), loadMetrics(env)]);
   return {
     snapshotDate,
     bookAsOf,
@@ -426,7 +472,7 @@ export function createSupabaseSource(env: SupabaseEnv): SupabaseSource {
       from: string | null,
       to: string | null,
     ): Promise<BenchmarksBook | null> => {
-      const navRows = await loadNavRows(env);
+      const navRows = await loadNavRowsCached(env);
       const inWindow = navRows.filter(
         (r) => (from == null || r.date >= from) && (to == null || r.date <= to),
       );
