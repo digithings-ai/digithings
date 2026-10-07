@@ -5,13 +5,14 @@
  * assembly, and fail-closed behavior (non-OK upstream → `UpstreamError`).
  */
 
-import { describe, expect, it, vi, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   UpstreamError,
   committedDate,
   createSupabaseSource,
   hasSupabaseEnv,
   loadMarketClosesMap,
+  loadNavRowsCached,
   supaGet,
   type SupabaseEnv,
 } from './supabase';
@@ -250,5 +251,103 @@ describe('fail-closed routing (slice 0008)', () => {
     const { default: app } = await import('./index');
     const res = await app.fetch(new Request('https://x/portfolio'), {});
     expect(res.status).toBe(200);
+  });
+});
+
+// ─── nav read cache (DIG-1835) ───────────────────────────────────────────────
+//
+// public_accounting_nav_history took 4,027 requests on 2026-10-03 against a
+// table holding 0 rows / 0 bytes. `loadCommittedBook` is invoked at four call
+// sites and is itself one of the two loadNavRows callers, so one page load can
+// fan out to several identical full-table reads.
+//
+// These count fetches, so a cache that returns the right rows while still
+// hitting the network every call fails them.
+
+describe('loadNavRowsCached', () => {
+  const NAV_ENV: SupabaseEnv = {
+    SUPABASE_URL: 'https://test.supabase.co',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-service-key',
+  };
+
+  const NAV_ROW = {
+    date: '2026-10-01',
+    nav: 108.4,
+    cash_pct: 64.87,
+    invested_pct: 35.13,
+    day_return_pct: 0.1,
+    source: 'finalized_accounting',
+    contract: 'finalized_accounting',
+    series_seam: false,
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    FETCHED.length = 0;
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function navFetch(): void {
+    (globalThis as Record<string, unknown>).fetch = vi.fn(async () =>
+      Response.json([NAV_ROW]),
+    );
+  }
+
+  function navRequests(): number {
+    return FETCHED.filter((u) => u.includes('/public_accounting_nav_history')).length;
+  }
+
+  it('fetches the nav history on the first call', async () => {
+    navFetch();
+    const rows = await loadNavRowsCached(NAV_ENV);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.date).toBe('2026-10-01');
+    expect(navRequests()).toBe(1);
+  });
+
+  it('serves a second call inside the TTL without another fetch', async () => {
+    navFetch();
+    await loadNavRowsCached(NAV_ENV);
+    const second = await loadNavRowsCached(NAV_ENV);
+    expect(second).toHaveLength(1);
+    expect(navRequests()).toBe(1);
+  });
+
+  it('fetches again once the TTL has expired', async () => {
+    navFetch();
+    await loadNavRowsCached(NAV_ENV);
+    vi.advanceTimersByTime(10 * 60 * 1000);
+    await loadNavRowsCached(NAV_ENV);
+    expect(navRequests()).toBe(2);
+  });
+
+  it('coalesces concurrent callers into a single fetch', async () => {
+    // loadCommittedBook runs loadNavRows inside a Promise.all, so two callers
+    // can be in flight at once against a cold cache.
+    navFetch();
+    const [a, b] = await Promise.all([loadNavRowsCached(NAV_ENV), loadNavRowsCached(NAV_ENV)]);
+    expect(a).toHaveLength(1);
+    expect(b).toHaveLength(1);
+    expect(navRequests()).toBe(1);
+  });
+
+  it('does not cache a failed read', async () => {
+    (globalThis as Record<string, unknown>).fetch = vi.fn(
+      async () => new Response('quota exceeded', { status: 402 }),
+    );
+    await expect(loadNavRowsCached(NAV_ENV)).rejects.toBeInstanceOf(UpstreamError);
+    (globalThis as Record<string, unknown>).fetch = vi.fn(async () => Response.json([NAV_ROW]));
+    await expect(loadNavRowsCached(NAV_ENV)).resolves.toHaveLength(1);
+  });
+
+  it('requests the same explicit column set, not select=*', async () => {
+    navFetch();
+    await loadNavRowsCached(NAV_ENV);
+    const url = FETCHED.find((u) => u.includes('/public_accounting_nav_history'))!;
+    expect(url).not.toContain('select=*');
+    expect(url).toContain('select=date,nav,cash_pct,invested_pct,day_return_pct');
   });
 });
