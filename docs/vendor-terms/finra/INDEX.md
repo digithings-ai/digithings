@@ -503,6 +503,32 @@ Two consequences, and only these two:
    or weakened. If the family is removed, the guard has to keep passing with it
    absent rather than by being skipped around.
 
+The string to use, in the house style of the `congress-trades` sibling, replacing
+`LUXALGO_TRACKERS_DATA_CAVEATS["short-volume"]` on the Security branch. It is
+**drafted wording, not code** — it is the text Counsel stands behind, not text
+Counsel has applied:
+
+```
+"Short-volume rows originate with FINRA, a private self-regulatory "
+"organisation rather than a federal records custodian, and FINRA's own "
+"terms permit no commercial redistribution of this compilation on any "
+"published route: its Equity Data Specific Terms §2.3 cap End User use at "
+"'non-commercial personal or professional use only' and 'No Charge'. The "
+"vendor's CC0 grant cannot cure it — under CC0 §4(b)-(c) the affirmer "
+"gives no warranty of title and disclaims any duty to clear other people's "
+"rights or obtain their consents. Do not present as cleared. Counsel ruled "
+"PROHIBITED (DIG-1521); the dataset is in service by business decision "
+"dated 2026-10-07 against that advice, which is not a clearance."
+```
+
+Three properties of that wording are load-bearing, so they survive later editing:
+
+- It says **Prohibited**, not unresolved. The doubt is gone and the record settles it.
+- It names the **decisive clause** (§2.3), so a reader can go verify it.
+- It carries the **dated decision against advice**, which is what keeps the
+  statement honest about the exposure being accepted rather than cleared. That
+  clause is the one most likely to be trimmed for length. It is the one that must not be.
+
 Whether the family stays in service is the business decision, and it does not
 change this wording. A family kept in service against this advice is a dated
 decision to accept a documented exposure — **not** a clearance — which is the
