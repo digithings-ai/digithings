@@ -96,7 +96,8 @@ _TRACKERS_ENTITLEMENT_NOTE = (
 #: the ``free`` entitlement but need their own description sentence — the
 #: Library source-code note would mislead on a preset stat or a CC0-1.0 row,
 #: so the trackers note repeats the per-family limits from
-#: :data:`attribution.LUXALGO_TRACKERS_DATA_CAVEATS`.
+#: :data:`attribution.LUXALGO_TRACKERS_DATA_CAVEATS` — congress-trades under
+#: 5 U.S.C. 13107 and short-volume under the unresolved FINRA terms.
 TOOL_NOTES: dict[str, str] = {
     "luxalgo_edge_symbols": (
         "Entitlement: free (anonymous; no key needed). Edge Stats content is "

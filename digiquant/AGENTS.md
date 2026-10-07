@@ -810,7 +810,9 @@ place the `mcp.luxalgo.com` URL/logic lives — callers never supply a URL.
   `luxalgo_edge_report` (preset reads with the honesty disclaimer) and
   `luxalgo_trackers_datasets`, `luxalgo_trackers_latest`,
   `luxalgo_trackers_ticker` (freshness/ad-hoc lookups over the CC0-1.0
-  dumps, per-family limits classified DIG-1464) are
+  dumps, per-family limits classified DIG-1464: congress-trades is a 13107
+  disclosure report and short-volume carries FINRA's non-commercial terms)
+  are
   registered in `mcp_server.py` (`_maybe_tool`, `READ_SCOPE_TOOLS`) and listed
   in `orchestrator_tools.py`. Default-ON behind `LUXALGO_ENABLED` — only
   `1`/`true`/`yes`/`on` enable it, any other explicit value fails closed to a
@@ -838,7 +840,8 @@ place the `mcp.luxalgo.com` URL/logic lives — callers never supply a URL.
   reference only — never a pipeline primary. `library_get_source_code` is
   deliberately NOT wrapped (CC BY-NC-SA: no indicator source in paid
   surfaces); `trackers_query` is deliberately NOT wrapped (the CC0-1.0 dumps,
-per-family limits classified DIG-1464, stay
+per-family limits classified DIG-1464 — congress-trades restricted by 5 U.S.C.
+13107, short-volume carrying unresolved FINRA terms — stay
   the source of record — live queries are freshness checks only);
   `broker_*` keys are never sent to the hosted MCP; `journal_*`/`propfirms_*`
   are separate packages.
