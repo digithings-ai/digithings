@@ -301,7 +301,8 @@ class LuxAlgoClient:
 
     # -- Market Trackers live-query companions (#4844; keyless, read-only) --
     #
-    # Freshness/ad-hoc lookups only: the CC0-1.0 dumps stay the source of record
+    # Freshness/ad-hoc lookups only: the CC0-1.0 dumps stay the source of
+    # record (per-family limits classified in DIG-1464 ride on every payload)
     # (trackers_query is deliberately NOT wrapped). An upstream ``stale`` flag
     # on the payload folds into the envelope ``stale`` bit.
 
