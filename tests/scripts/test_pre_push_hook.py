@@ -157,3 +157,51 @@ def test_restart_reason_is_read_from_the_tip_commit_message(
 ) -> None:
     checker = _load_checker()
     assert checker.parse_restart_reason(message) == expected
+
+
+@pytest.mark.unit
+def test_update_push_is_allowed_without_looking_at_siblings() -> None:
+    """An update push is never refused, and the answer costs no git call.
+
+    The guard is about creation. Once the remote holds the ref, the branch keeps
+    overlapping the same siblings at every later commit, so a sibling check on an
+    update refuses ordinary follow-up work — and this repo's stranded branches
+    make that most pushes.
+
+    The repository below does not exist, so reaching any git call would raise.
+    An allowance here can therefore only come from the short-circuit, not from a
+    lookup that ran and happened to find nothing: the assertions on the empty
+    reason and notes keep a fail-open allowance from standing in for it.
+    """
+    checker = _load_checker()
+    decision = checker.check("/nonexistent-repo-for-this-test", "HEAD", is_update=True)
+    assert decision.allowed is True
+    assert decision.reason == ""
+    assert decision.notes == ()
+
+
+@pytest.mark.unit
+def test_unexpected_internal_error_fails_open(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A bug in the guard must not block pushes.
+
+    ``_Unknown`` is the anticipated failure and has its own message. Anything
+    else — a decoding error, a git format change, a bad index into the ref
+    listing — used to reach the hook as a traceback and a non-zero exit, which
+    the hook reads as a deliberate refusal. That is fail-*closed* on exactly the
+    surprises this guard exists to tolerate, across every agent's push.
+    """
+    checker = _load_checker()
+    repo = str(_CHECKER.parents[1])
+
+    def boom(_repo: str) -> None:
+        raise RuntimeError("synthetic unexpected failure")
+
+    # Everything up to the sibling walk succeeds, so the walk is where the
+    # surprise lands.
+    monkeypatch.setattr(checker, "_is_reachable_from_base", lambda *_a, **_k: False)
+    monkeypatch.setattr(checker, "unmerged_patch_ids", lambda *_a, **_k: {"a", "b", "c", "d"})
+    monkeypatch.setattr(checker, "unmerged_remote_branches", boom)
+
+    decision = checker.check(repo, "HEAD", branch_name="task/1589-update", env={})
+    assert decision.allowed is True
+    assert any("synthetic unexpected failure" in note for note in decision.notes), decision.notes
