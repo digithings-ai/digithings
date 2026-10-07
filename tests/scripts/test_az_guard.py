@@ -436,6 +436,39 @@ def test_every_selector_spelling_is_checked(guard: Guard, flag: str) -> None:
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize(
+    ("argv", "expected"),
+    [
+        # `-s<id>` is the attached short form. `argparse` binds the tail as the value, so a
+        # guard that matches `-s` exactly sees no selector at all, falls back to the
+        # profile default and execs the real az against a subscription nobody authorised.
+        (["group", "list", f"-s{OBSERVED_PRODUCTION}"], OBSERVED_PRODUCTION),
+        # …and it must read the tail, not swallow the next argument as the subscription.
+        (["account", "show", "-o", "json", f"-s{OBSERVED_PRODUCTION}"], OBSERVED_PRODUCTION),
+        (["account", "show", f"-s{OBSERVED_PRODUCTION}"], OBSERVED_PRODUCTION),
+        # The separated spelling stays separated.
+        (["group", "list", "-s", OBSERVED_PRODUCTION], OBSERVED_PRODUCTION),
+    ],
+)
+def test_attached_short_selector_is_not_a_bypass(
+    guard: Guard, argv: list[str], expected: str
+) -> None:
+    """The bypass that reached production was one character of spacing.
+
+    Regression pin for ``-s<id>``: the guard must resolve the same subscription `az` would
+    resolve, and must refuse rather than fall through to the profile default.
+    """
+    guard.write_register([AUTHORISED])
+    guard.set_profile_default(AUTHORISED)
+
+    refusal = guard.refuse(*argv)
+
+    assert refusal.reason == "subscription-not-authorised", argv
+    assert guard.last_log_entry()["subscription"] == expected
+    assert guard.calls == [], "the real az must not run on an unauthorised subscription"
+
+
+@pytest.mark.unit
 def test_two_different_targets_on_one_command_line_refuse(guard: Guard) -> None:
     guard.write_register([AUTHORISED])
     refusal = guard.refuse(
@@ -637,6 +670,54 @@ def test_uninstall_leaves_a_real_az_alone(tmp_path: Path) -> None:
 
     assert result.returncode != 0
     assert real_az.is_file(), "the installer deleted an az that is not its own symlink"
+
+
+@pytest.mark.unit
+def test_install_refuses_to_replace_a_real_az(tmp_path: Path) -> None:
+    """The other half of the same promise: installing must not clobber a real ``az`` either.
+
+    Installing over a real binary reads like hardening, but the documented rollback then
+    deletes the replacement and takes the real CLI with it -- and ``--uninstall`` refuses to
+    restore what it never backed up. The runbook says the guard "cannot delete a real az";
+    that has to hold for install as well as uninstall.
+    """
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    real_az = bindir / "az"
+    real_az.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+
+    result = _run_installer("--bindir", str(bindir), bindir=bindir, tmp_path=tmp_path)
+
+    assert result.returncode != 0, result.stderr
+    assert real_az.is_file(), "the installer replaced a real az"
+    assert not real_az.is_symlink(), "the installer pointed a real az at the guard"
+    assert "not this guard's symlink" in result.stderr
+
+
+@pytest.mark.unit
+def test_install_refuses_a_directory_named_az(tmp_path: Path) -> None:
+    """``ln -sfn`` into a real directory puts the link *inside* it and reports success."""
+    bindir = tmp_path / "bin"
+    (bindir / "az").mkdir(parents=True)
+
+    result = _run_installer("--bindir", str(bindir), bindir=bindir, tmp_path=tmp_path)
+
+    assert result.returncode != 0, result.stderr
+    assert not (bindir / "az" / "az").exists(), "the link landed inside the directory"
+
+
+@pytest.mark.unit
+def test_install_is_idempotent_for_the_guards_own_symlink(tmp_path: Path) -> None:
+    """Re-installing over the guard's own symlink is the normal upgrade path, not a refusal."""
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    first = _run_installer("--bindir", str(bindir), bindir=bindir, tmp_path=tmp_path)
+    assert first.returncode == 0, first.stderr
+
+    second = _run_installer("--bindir", str(bindir), bindir=bindir, tmp_path=tmp_path)
+
+    assert second.returncode == 0, second.stderr
+    assert (bindir / "az").is_symlink()
 
 
 @pytest.mark.unit

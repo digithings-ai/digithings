@@ -35,7 +35,10 @@ Known limits (read before trusting it)
   is a decision about a whole subscription; do not add one for "just one resource group".
 - **`az` resolves long options by unambiguous prefix**, so `--sub <id>` selects the
   subscription exactly like `--subscription`. The guard therefore treats any long option
-  sharing the "subscription" stem as a subscription selector, plus the short form `-s`.
+  sharing the "subscription" stem as a subscription selector. It also treats the short
+  form as a prefix of the whole token, because `argparse` accepts the attached spelling
+  `-s<id>` — reading `-s` as an exact match left a one-character bypass that reached
+  production and left no refusal in the log.
 - **A subscription name is refused, never resolved.** `--subscription "DataTap WebSite"`
   exits 78 rather than asking Azure which id that name means.
 - **The default subscription comes from the local profile file only**
@@ -75,6 +78,9 @@ MAX_LOGGED_ARGS = 24
 
 #: Option names whose value is redacted before anything is written or printed. The guard
 #: is not a credential store and must not become one by logging a `--password` it passed on.
+#: This is a *best-effort* filter keyed on the option's name, not a guarantee: `az keyvault
+#: secret set --value X` matches none of these, so X reaches the log and the stderr block.
+#: Treat the refusal log as sensitive; it is written owner-only (0600) for that reason.
 SENSITIVE_HINTS = ("password", "secret", "token", "sas", "key", "cert")
 
 #: Exit code for a refusal. 78 is sysexits EX_CONFIG: the command was refused because of
@@ -188,9 +194,16 @@ def _is_subscription_option(name: str) -> bool:
     spelling is a guard with a bypass in it. ``--subscriptions`` counts too, for the same
     reason: over-reading a selector is a refusal, under-reading one is a production
     subscription.
+
+    The short form is matched as a *prefix* of the whole token, not as an exact ``-s``,
+    because `argparse` — which is what binds `az`'s command line — accepts ``-sVALUE`` as
+    ``-s VALUE``. Matching only the exact spelling left ``-s<production id>`` invisible to
+    the guard: it saw no selector at all, fell back to the profile default, and exec'd the
+    real `az` against a subscription nobody authorised. Reading a little too much of a
+    token like ``-sfoo`` costs a refusal; reading too little costs a production tenant.
     """
     if not name.startswith("--"):
-        return name.lower() == "-s"
+        return name.lower() == "-s" or name.lower().startswith("-s")
     stem = name[2:].lower()
     if not stem:
         return False
@@ -207,6 +220,11 @@ def selector_values(argv: list[str]) -> list[str]:
         if _is_subscription_option(name):
             if separator:
                 values.append(inline.strip())
+            elif name.lower() != "-s" and name.lower().startswith("-s"):
+                # The attached short form, `-s<value>`: `argparse` binds the tail of the
+                # token as the option's value, so the tail — not the next argument — is
+                # the subscription. An exact `-s` still takes the next argument.
+                values.append(name[2:].strip())
             elif index + 1 < len(argv):
                 index += 1
                 values.append(argv[index].strip())
@@ -365,7 +383,14 @@ def log_refusal(
     path = refusal_log_path()
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
+        # Redaction is best-effort -- it matches on option *name*, so a secret passed to a
+        # neutral-sounding option (`--value`, `--data`, a positional) still lands here. The
+        # log is therefore created owner-only rather than world-readable: a partial filter
+        # should not be the only thing between a refused command and a credential at rest.
+        existed = path.exists()
         with path.open("a", encoding="utf-8") as handle:
+            if not existed:
+                os.chmod(path, 0o600)
             handle.write(json.dumps(entry, sort_keys=True) + "\n")
     except OSError as exc:
         print(f"az guard: WARNING: refusal log {path} is unwritable ({exc})", file=sys.stderr)

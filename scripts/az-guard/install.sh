@@ -86,6 +86,25 @@ case "$mode" in
 esac
 
 mkdir -p "$bindir"
+
+# Never clobber something that is not already this guard. Replacing a real `az` binary
+# here looks like hardening, but the documented rollback then deletes the replacement and
+# takes the real CLI with it -- and `--uninstall` refuses to restore what it never backed
+# up. Refuse loudly and let the operator choose a bindir of their own.
+if [ -e "$link" ] || [ -L "$link" ]; then
+  if [ -d "$link" ]; then
+    echo "install.sh: $link is a directory, not a place for the guard." >&2
+    echo "install.sh: refusing to install; pick another --bindir." >&2
+    exit 1
+  fi
+  if [ ! -L "$link" ] || [ "$(cd "$(dirname "$link")" && readlink "$link")" != "$shim" ]; then
+    echo "install.sh: $link already exists and is not this guard's symlink -- left alone." >&2
+    echo "install.sh: refusing to replace it. Point the guard at its own bindir instead:" >&2
+    echo "install.sh:   install.sh --bindir <dir>   (and put <dir> ahead of the real az on PATH)" >&2
+    exit 1
+  fi
+fi
+
 ln -sfn "$shim" "$link"
 chmod +x "$shim"
 echo "installed $link -> $shim"
