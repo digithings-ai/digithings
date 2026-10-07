@@ -1,0 +1,112 @@
+# Pipeline: dependency freshness radar
+#
+# Monthly comparison of uv.lock against PyPI latest versions.
+# Posts a tracking issue with a version gap table (major/minor/patch).
+# Deduplicates by title so only one open radar issue exists at a time.
+#
+# Visibility only. This never changes a bound and never bumps anything.
+
+name: "Pipeline: dependency freshness radar"
+
+on:
+  schedule:
+    - cron: "0 6 1 * *"  # Monthly, 1st of month 06:00 UTC
+  workflow_dispatch:      # Manual trigger
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  dependency-freshness:
+    name: Dependency freshness radar
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Export workspace closure from uv.lock
+        run: |
+          uv export --frozen --all-packages --all-extras \
+            --format requirements-txt \
+            --no-emit-project --no-emit-workspace --no-hashes \
+            -o freshness-requirements.txt
+
+      # `packaging` is a transitive dep of the workspace, not a declared
+      # direct one, so it is not importable from a bare interpreter. Sync
+      # from the lock so the version comes from uv.lock, not a guess
+      # (#1715: no unpinned `pip install` in CI).
+      - name: Install from lockfile
+        run: uv sync --frozen --all-packages --all-extras
+
+      - name: Compute freshness report
+        id: report
+        run: |
+          uv run --frozen --no-sync python scripts/dependency_freshness.py \
+            > report.json
+
+          # Step outputs must be written to $GITHUB_OUTPUT. Printing to
+          # stdout alone leaves steps.report.outputs.* empty (DIG-1515).
+          TABLE=$(uv run --frozen --no-sync python -c \
+            "import json;print(json.load(open('report.json'))['table'])")
+          SUMMARY=$(uv run --frozen --no-sync python -c \
+            "import json;print(json.load(open('report.json'))['summary'])")
+          {
+            echo "table<<RADAR_EOF"
+            echo "$TABLE"
+            echo "RADAR_EOF"
+            echo "summary=$SUMMARY"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create/update tracking issue
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN }}
+          REPO: ${{ github.repository }}
+          PROJ: ${{ vars.DIGI_MAINTENANCE_PROJECT_NUMBER }}
+          TABLE: ${{ steps.report.outputs.table }}
+          SUMMARY: ${{ steps.report.outputs.summary }}
+        run: |
+          TITLE="[radar] Dependency freshness report — $(date +%Y-%m-%d)"
+
+          BODY="<!-- dependency-freshness-radar -->
+          ## Dependency Freshness Radar
+
+          Monthly comparison of \`uv.lock\` against PyPI latest versions.
+
+          ${SUMMARY}
+
+          ## Comparison Table
+
+          ${TABLE}
+
+          ## Notes
+          - Floors are \`>=\` — the locked version is what uv resolved, not the floor
+          - Major gaps 🔴 are candidates for review; minors 🟡 for awareness; patches 🟢 for info
+          - \`mcp\` cap (\`<2\`) is tracked in DIG-1514 separately
+          - This is visibility only — no auto-bumping
+          - \`unknown\` means PyPI was unreachable or the release history could not be parsed
+
+          ## Acceptance Criteria
+          - [ ] Major gaps reviewed by team
+          - [ ] Decision recorded (upgrade / hold / investigate)"
+
+          EXISTING=$(gh issue list --repo "$REPO" --state open \
+            --search "Dependency freshness report in:title" \
+            --json number --jq '.[0].number' 2>/dev/null || echo "")
+
+          if [[ -n "$EXISTING" ]]; then
+            gh issue edit "$EXISTING" --repo "$REPO" --title "$TITLE" --body "$BODY"
+            echo "Updated existing radar issue #$EXISTING"
+          else
+            URL=$(gh issue create --repo "$REPO" \
+              --title "$TITLE" \
+              --label "radar,component:root,priority:low" \
+              --body "$BODY")
+            echo "Created: $URL"
+            if [[ -n "${PROJ:-}" ]]; then
+              gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
+            fi
+          fi
