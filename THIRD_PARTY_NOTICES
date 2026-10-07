@@ -1,0 +1,93 @@
+# Third-party notices
+
+This file records the licences of third-party software that digithings
+**redistributes inside images we publish**.
+
+It is not a dependency inventory — that is what `pip-audit`, `npm-audit` and
+`uv.lock` are for. A dependency you install at runtime in someone else's venv is
+that operator's notice obligation. A dependency baked into an image under
+`ghcr.io/digithings-ai/` is redistributed by us, and ships with whatever terms it
+carries, to whoever pulls it.
+
+Each entry records: what we redistribute, under what licence, from which source, at
+which version, and — where it matters — what the licence does **not** cover.
+
+> The general obligation to maintain this file is tracked separately on
+> [DIG-1768](https://github.com/digithings-ai/digithings/issues/1768). Only the
+> LiteLLM entry is recorded here, because DIG-1780 moved LiteLLM into an image we
+> publish. Other images in `ghcr.io/digithings-ai/` are **not yet covered** — treat
+> this file as incomplete until that work lands.
+
+---
+
+## litellm
+
+- **What we redistribute:** the LiteLLM proxy, installed from the PyPI wheel
+  (`litellm[proxy]`) into `ghcr.io/digithings-ai/litellm` by
+  [`Dockerfile.litellm`](Dockerfile.litellm).
+- **Version:** `1.72.6` (exact pin; not a range).
+- **Source:** the Python package repository, PyPI. We do **not** redistribute
+  BerriAI's container image. See
+  [docs/architecture/litellm-pypi-image.md](docs/architecture/litellm-pypi-image.md).
+- **Copyright:** `Copyright (c) 2023 Berri AI`
+
+### The licence is split, and only half of it is MIT
+
+This is the part that matters, so it is quoted rather than summarised. From
+upstream's `LICENSE`:
+
+> Portions of this software are licensed as follows:
+>
+> * All content that resides under the "enterprise/" directory of this repository,
+>   if that directory exists, is licensed under the license defined in
+>   "enterprise/LICENSE".
+> * Content outside of the above mentioned directories or restrictions above is
+>   available under the MIT license as defined below.
+
+Everything we redistribute is the second half: content **outside** `enterprise/`.
+The MIT text applies to it in full.
+
+What that means in practice, and why the image is built the way it is: the MIT grant
+covers the MIT tree, and `enterprise/LICENSE.md` grants production use of the
+proprietary tree only to subscribers holding an Enterprise seat licence, with an
+explicit development-and-testing carve-out. So a local stack is licensed and a
+production gateway is not. `Dockerfile.litellm` asserts at build time that no
+`enterprise/` directory and no `litellm-enterprise` distribution is present, which is
+what keeps the MIT grant the only one that applies to the image we publish.
+
+### Licence text
+
+```
+MIT License
+
+Copyright (c) 2023 Berri AI
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+The MIT text above is transcribed from `BerriAI/litellm` at `main` on 2026-10-07
+(`https://raw.githubusercontent.com/BerriAI/litellm/main/LICENSE`). No `enterprise/`
+text is reproduced here, and none is needed: we do not redistribute it.
+
+### Transitive dependencies
+
+Not enumerated here. `litellm[proxy]` pulls a large dependency tree whose licences
+are inventoried by `pip-audit` against the build, and this file records the
+direct, load-bearing choice — which LiteLLM artefact we ship and under which half of
+its licence.

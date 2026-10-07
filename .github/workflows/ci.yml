@@ -463,6 +463,11 @@ jobs:
       - name: Pandas boundary (REM-132)
         run: bash scripts/check_pandas_boundary.sh
 
+      - name: LiteLLM vendor-image boundary (DIG-1780)
+        # Chris's red line on DIG-1768: the PyPI wheel only, never the vendor image.
+        # ripgrep is already installed by the step above.
+        run: bash scripts/check_litellm_vendor_boundary.sh
+
   # ── GitHub Actions workflow lint (repo-wide) ────────────────────────────────
   # Gated on `.github/workflows/**`, so it fires on any workflow edit — including
   # edits to ci.yml itself. The predecessor was a job inside test-research-graph.yml

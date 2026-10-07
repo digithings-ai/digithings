@@ -21,15 +21,24 @@ Install unit: `ghcr.io/digithings-ai/digichat:vX.Y.Z` (not npm, not `:latest`).
 | digichat | **GHCR** `ghcr.io/digithings-ai/digichat:v${DIGICHAT_VERSION}` |
 | digichat-db | Public `postgres:16-alpine` |
 | digikey-blocklist-redis | Public `redis:7-alpine` |
-| litellm | Public `docker.litellm.ai/berriai/litellm:main-stable` |
+| litellm | **GHCR** `ghcr.io/digithings-ai/litellm:1.72.6` (built by [`Dockerfile.litellm`](../../Dockerfile.litellm) from the MIT PyPI wheel, DIG-1780) |
 | digikey / digigraph / digivault | **GHCR** `ghcr.io/digithings-ai/<svc>:${DIGI_IMAGE_TAG}` |
 
 Pin stack and digichat tags separately (`DIGI_IMAGE_TAG` ≠ `DIGICHAT_VERSION`). Prefer
 `DIGI_IMAGE_TAG=sha-<12>` or `v0.1.0` in production — never `:latest`.
 
-Stack packages are published by [`publish-service-images.yml`](../../.github/workflows/publish-service-images.yml)
-on `main` (after #2023). Until the first publish, `docker pull` for digikey /
-digigraph / digivault will 404 — promote develop → main, then run the workflow.
+Stack packages were published by `publish-service-images.yml` on `main` after #2023.
+That workflow was **deleted on `develop` by #4919** (the 2026-10-01 Actions-budget cut),
+so nothing on `develop` re-publishes on merge. Until it is restored, a service image
+must be built and pushed by hand:
+
+```bash
+docker build -f digikey/Dockerfile -t ghcr.io/digithings-ai/digikey:$TAG .
+docker push ghcr.io/digithings-ai/digikey:$TAG
+```
+
+LiteLLM works the same way (`docker build -f Dockerfile.litellm …`), and its build
+fails if the image would contain BerriAI's proprietary `enterprise/` tree.
 
 Optional: LiteLLM cache Redis via `--profile litellm-cache` and `REDIS_URL=redis://redis:6379` in the env file. Leave `REDIS_URL` unset when Redis is not running — an empty value makes LiteLLM exit 3.
 

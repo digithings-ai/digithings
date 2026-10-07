@@ -1,0 +1,53 @@
+# digithings-owned LiteLLM proxy image (DIG-1780).
+#
+# Why this exists: the LiteLLM container image published by BerriAI bakes in their
+# proprietary `enterprise/` tree on purpose — upstream's own Dockerfile says so — and
+# `enterprise/LICENSE.md` grants production use only to subscribers holding an
+# Enterprise seat licence, with an explicit carve-out for development and testing.
+# Chris ratified the red line on DIG-1768: LiteLLM from the Python package repository
+# only, never the official Docker image.
+#
+# So this image is built from the MIT-licensed PyPI wheel and asserts, at build
+# time, that nothing proprietary rode along. That assertion is the point of the
+# image: it is what makes the image compliant rather than merely differently-sourced.
+#
+# `scripts/check_litellm_vendor_boundary.sh` fails CI if a vendor image reference
+# reappears anywhere in tracked files, including in prose — so this comment names the
+# problem without reproducing a reference the gate would (correctly) reject.
+
+FROM python:3.12-slim
+
+# The pin is the same one our own production stack runs
+# (Dockerfile.digithings-stack-cloudflare), so the self-host image and the deployed
+# Profile A stack cannot drift apart on the one dependency both of them carry.
+ARG LITELLM_VERSION=1.72.6
+# Ceiling, not a pin: litellm 1.72.x calls fastapi internals that 0.116 removed
+# (`get_flat_dependant`). Bumping it needs a litellm bump and a proxy smoke test.
+ARG FASTAPI_SPEC="fastapi<0.116"
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    LITELLM_VERSION=${LITELLM_VERSION}
+
+WORKDIR /app
+
+RUN pip install --no-cache-dir "uv==0.5.11"
+
+# MIT tree only. No `--find-links` to an enterprise index, no `litellm-enterprise`
+# extra, nothing that could resolve to a proprietary artefact.
+RUN uv pip install --system "litellm[proxy]==${LITELLM_VERSION}" "${FASTAPI_SPEC}"
+
+COPY scripts/verify_litellm_no_enterprise.py /app/scripts/verify_litellm_no_enterprise.py
+
+# Licence gate. This fails the build rather than warning, so a dirty image cannot
+# exist in any registry. `scripts/check_litellm_vendor_boundary.sh` re-runs the same
+# script against a pulled image, so the check survives a tag built outside this repo.
+RUN python /app/scripts/verify_litellm_no_enterprise.py
+
+# ENTRYPOINT (not CMD) so the existing compose `command:` overrides continue to work
+# unchanged: both compose files pass ["--config", "/app/config/litellm.yaml", "--port", "4000"],
+# which is how the vendor image was invoked. No CMD is set — the vendor image's
+# default config path does not exist here, and a wrong default would start a proxy
+# with no model list instead of failing loudly.
+ENTRYPOINT ["litellm"]
