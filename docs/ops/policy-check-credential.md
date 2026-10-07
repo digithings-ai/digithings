@@ -316,3 +316,31 @@ half of the question is moot. The two deploy workflows are
 `pull_request`-triggered `paths:`-filtered **build checks**, not deploys, and
 declaring them is a policy-surface decision inside DIG-2098 decision B, not a
 credential question. Neither belongs here.
+
+---
+
+## Open question, unresolved: does this credential need to exist at all?
+
+**Unverified. Do not treat it as settled either way.**
+
+`GET /repos/{owner}/{repo}/branches/{branch}/protection` on a **public** repository may
+be readable **anonymously**. `digithings-ai/digithings` is public. GitHub's current
+docs for that endpoint state no admin requirement on the read, while every write
+endpoint on the same page states one explicitly ("requires admin or owner
+permissions to the repository") — which is suggestive, not conclusive, and their
+per-endpoint fine-grained-token permission blocks are no longer rendered on these
+pages.
+
+I could not settle it here. This machine's unauthenticated API quota was exhausted
+at the moment I tried: `GET /rate_limit` returned `limit 60, remaining 0`, reset
+`2026-10-07T20:15:52Z`, and the 403s came back carrying
+`API rate limit exceeded` — a rate-limit answer, not a permission answer. Reading
+those 403s as "anonymous access is denied" would be the exact error this issue is
+about.
+
+**It does not change the recommendation.** A GitHub-hosted runner shares its egress
+IP with every other job on that address and is capped at 60 unauthenticated requests
+per hour, so an anonymous read is a rate-limit plan whose failure mode is
+indistinguishable from "the snapshot is stale" — the exact confusion this credential
+is meant to remove. Provision the credential. If somebody later proves the anonymous
+read works, the right follow-up is a note on DIG-2098, not an unwind of the App.
