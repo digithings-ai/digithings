@@ -1,0 +1,32 @@
+{
+  "_comment": [
+    "GitHub App manifest for `policy-check-reader` — the one credential that can read",
+    "develop's branch protection. Rationale, scope, rotation and the owner-run",
+    "provisioning steps: docs/ops/policy-check-credential.md",
+    "",
+    "Register at: https://github.com/settings/apps/new?url=https://raw.githubusercontent.com/digithings-ai/digithings/develop/.github/policy-check-reader-app.json",
+    "then Install on digithings-ai/digithings only.",
+    "",
+    "`hook_attributes.url` and `redirect_url` are required by GitHub's manifest",
+    "schema and are NOT used: `default_events` is empty (no webhooks) and there is",
+    "no OAuth flow. They point at this repo's issue URL rather than inventing live",
+    "endpoints. Leave them as they are.",
+    "",
+    "One permission, on purpose. `administration: read` is the minimum the",
+    "branch-protection endpoint accepts and is exactly what a workflow's own",
+    "GITHUB_TOKEN can never hold. Two installations on this org already hold it",
+    "(`cursor`, `graphite-app`), so the grant is demonstrably available.",
+    "If this credential ever needs a write, that is a new issue and a new decision."
+  ],
+  "name": "policy-check-reader",
+  "url": "https://github.com/digithings-ai/digithings",
+  "hook_attributes": {
+    "url": "https://github.com/digithings-ai/digithings/issues"
+  },
+  "redirect_url": "https://github.com/digithings-ai/digithings/issues",
+  "public": false,
+  "default_events": [],
+  "default_permissions": {
+    "administration": "read"
+  }
+}
