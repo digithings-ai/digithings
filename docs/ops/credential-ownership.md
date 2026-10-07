@@ -39,6 +39,8 @@ registry      datatapchatregistry.azurecr.io   (SKU Basic, RG datatap-rg)
 
 This is **DataTap's** tenant, not ours, but the rule at the top of this file applies unchanged: anything digithings hands into that tenant needs one owner, one refresh path, and a check that fails loudly when it is stale.
 
+Every `az` command in this section — including the refresh paths — is refused by [`scripts/az-guard/az`](../../scripts/az-guard/az) until a subscription is on the register. See [`datatap-azure-az-guard.md`](datatap-azure-az-guard.md).
+
 One deliberate departure from the schema below: owners here are **named humans, not teams.** The usual rule is a team, but a client tenant has no digithings team to name, and "the owner" is only actionable when a person answers to it.
 
 ### Named human owner of the production write
@@ -194,3 +196,4 @@ With retention disabled, all 33 tags stay pullable forever, including the two de
 - **No secret values in docs**: This file and `.env.example` document *names* and *processes* only. Real values never appear here.
 - **Fingerprints are not values**: a SHA-256 plus a byte length per binding (see [`digichat-aca-secret-fingerprints.json`](digichat-aca-secret-fingerprints.json)) is the accepted way to make a single-copy secret drift-detectable without holding it. It is a one-way digest of a high-entropy value, not the value.
 - **Detector required**: Every credential must have a failing-loud check. If the detector doesn't exist, the credential is not production-ready (see `DIG-345` for the Gloomberb detector).
+- **Reach is enforced, not remembered**: the DataTap Azure access register ([`config/datatap_azure_access_register.json`](../../config/datatap_azure_access_register.json)) is enforced by [`scripts/az-guard/az`](../../scripts/az-guard/az), which refuses every `az` command aimed at a subscription that is not on it. Runbook, install, rollback and the limits of that control: [`datatap-azure-az-guard.md`](datatap-azure-az-guard.md) (DIG-1725). The register is empty, so every `az` command is refused today — including the `az …` commands quoted elsewhere in this file.

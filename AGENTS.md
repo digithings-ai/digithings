@@ -88,6 +88,21 @@ digithings — open-core agentic stack (quant finance, RAG, chat). Services: **d
   `DIGI_ENGAGEMENT`. Details in [SECURITY.md](SECURITY.md#client-data-under-projects).
 - **Pointer cursors are kit-level** — `@digithings/ui` interactive parts set `cursor-pointer` (and `cursor-not-allowed` when disabled); app-local `cursor-*` utilities are refused by the canon guard (`apps/reference` excepted). Missing cursor = missing kit part.
 - **Digi names are always lowercase** — see [Naming](#naming--digi-modules) below
+- **`az` is guarded — see [Azure: the az guard](#azure-the-az-guard) below.** Any `az` command that exits **78** with `az guard: REFUSED` is an enforced refusal, not a bug. Do not retry it, do not look for a bypass, do not re-argue the rule.
+
+---
+
+## Azure: the `az` guard
+
+`az` on this machine may be [`scripts/az-guard/az`](scripts/az-guard/az) — a shim installed ahead of the real Azure CLI that reads the DataTap Azure access register, [`config/datatap_azure_access_register.json`](config/datatap_azure_access_register.json), and refuses any command aimed at a subscription that is not on it.
+
+- **The register is empty. Every `az` command is refused.** That is the enforced state, not a broken install. Reads are refused like writes.
+- **A refusal exits 78 and prints `az guard: REFUSED (<reason>)`.** Nothing was executed. There is no bypass flag and no bypass environment variable; a test pins that.
+- **Do not work around it, and do not re-litigate it per run.** Do not reach for `/opt/homebrew/bin/az` or any absolute path, do not edit the register to unblock a task, and do not ask for a subscription to be added because a command was refused. Adding a row is a security decision: only DataTap, in writing, can classify a subscription (DIG-1687).
+- **If a task genuinely needs Azure access, say so in the run report** — name the subscription, who would have to authorise it, and what the task is blocked on. The blocked report is the deliverable; the bypass is not.
+- Refusals are logged to `~/.digithings/az-guard-refusals.log` with the resolved subscription, so a refused attempt is visible in review rather than silent.
+
+Install, verify, rollback and the limits of this control: [`docs/ops/datatap-azure-az-guard.md`](docs/ops/datatap-azure-az-guard.md).
 
 ---
 

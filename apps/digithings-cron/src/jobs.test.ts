@@ -40,6 +40,7 @@ const PATH_A_ENABLED_IDS = [
   "security-npm-audit",
   "token-canary",
   "secret-staleness",
+  "dependency-freshness",
   "smoke-site",
   "datatap-answer-check",
 ] as const;
@@ -85,6 +86,7 @@ const ENABLED_CRONS = [
   "37 6 * * MON",
   "41 6 * * *",
   "17 6 1 * *",
+  "23 6 1 * *",
   "17 6 * * *",
   "17 * * * *",
   "7 0 * * MON-FRI",
