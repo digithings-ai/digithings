@@ -1,8 +1,9 @@
 # Dependency freshness radar — design note
 
 - **Issue:** DIG-1515
-- **Status:** Implemented, reviewed, and fixed before its first run. Open as
-  PR #5242; not on `develop`, so not yet dispatchable.
+- **Status:** Shipped. Merged to `develop` as PR #5242 and dispatched by hand
+  once on 2026-10-07 — the first and only `workflow_dispatch` it will ever
+  need until the Worker's `23 6 1 * *` row takes over on 2026-11-01.
 - **Date:** 2026-10-06, revised 2026-10-07
 - **Author:** Architect
 - **Supersedes:** the first draft of this note, which shipped a workflow that
@@ -117,9 +118,10 @@ local `dt-snapshot` commits.
 - 38 tests green across three files: 21 in `test_dependency_freshness.py` (the
   script), 15 in `test_dependency_freshness_clock.py` (the clock wiring), and the
   2 pre-existing `test_no_gha_schedules.py` guard tests the radar must not break.
-- `apps/digithings-cron` vitest: 15 passed, including `uniqueEnabledCrons()`,
-  which asserts the enabled cron set by exact ordered equality — the new
-  `23 6 1 * *` had to be added at its `JOBS` position, not appended.
+- `apps/digithings-cron` vitest: 71 passed across 7 files, including
+  `uniqueEnabledCrons()`, which asserts the enabled cron set by exact ordered
+  equality — the new `23 6 1 * *` had to be added at its `JOBS` position, not
+  appended.
 - Three full live runs against the real `uv.lock`: exit 0, all 284 packages
   parsed, no crash, 36s.
 - Live result independently reproduces the original finding and widens it:
@@ -131,6 +133,14 @@ local `dt-snapshot` commits.
   The issue filed 3 majors because it listed direct dependencies; the radar reads
   the whole closure, so 16 is the honest number.
 - `ruff check` and `ruff format --check` clean.
+- **The one manual dispatch**, run 37636863094 on 2026-10-07 against the merged
+  `develop`: exit 0 in 51s. `Parsed 284 pinned packages`, the guard step saw a
+  non-empty `TABLE`, and the report landed as issue #5243 with the `radar`,
+  `component:root` and `priority:low` labels applied — `radar` created by the
+  run itself, which is the part that had never executed. `unknown` was 0.
+  This is the first time the workflow has ever run, and it is the whole reason
+  the review fixed `if: always()` first: before that fix, any upstream failure
+  would have posted a blank table and called it success.
 
 ## Risks
 
@@ -150,10 +160,15 @@ local `dt-snapshot` commits.
 - **Posting 284 rows monthly** is a lot of issue body. The summary line is the
   signal; the table is the evidence. Acceptable, and it is what the R&D Lead
   asked for.
-- **Not yet dispatched.** `workflow_dispatch` has never fired. The first
-  production run is scheduled 2026-11-01, at which point GitHub disables
-  scheduled workflows on repos with no activity, so it would likely no-op
-  anyway until the repo is active. A manual dispatch is required.
+- **The 2026-11-01 run is unattended.** GitHub disables scheduled workflows on
+  repos with no activity, so the first Worker's `23 6 1 * *` firing may no-op
+  until the repo is active again. Nothing in this job is time-critical — a
+  missed month costs one stale report — but if the December issue does not
+  appear, check repo activity rather than the workflow.
+- **One thing the dispatch did not prove.** It created the report issue, so the
+  dedup path (title search → `gh issue edit`) has still never executed. It
+  fires on the first *second* run. If that path is wrong, the symptom is a
+  duplicate radar issue rather than a missing one.
 
 ## Not doing
 
