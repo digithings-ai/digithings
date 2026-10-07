@@ -11,7 +11,7 @@
 >
 > The only document in this folder that goes anywhere is
 > [github-private-information-request.md](./github-private-information-request.md), and only after
-> [DIG-1496](/DIG/issues/DIG-1496) completes and Chris sends it.
+> DIG-1496 completes and Chris sends it.
 
 **Repository:** https://github.com/webclinic017/digithings
 **Display name:** WebClinic
@@ -153,7 +153,7 @@ Option A is written so that it stays true throughout a rewrite, because it never
 
 > The rewrite is under way now. We will confirm to you when it completes.
 
-That sentence is the only one that is not safe to add while [DIG-1496](/DIG/issues/DIG-1496) is still `todo`. Do not write "we have asked GitHub to purge it from their storage" at any point before the GitHub request in `github-private-information-request.md` has actually been filed — at the moment these letters go out, we have not asked GitHub anything.
+That sentence is the only one that is not safe to add while DIG-1496 is still `todo`. Do not write "we have asked GitHub to purge it from their storage" at any point before the GitHub request in `github-private-information-request.md` has actually been filed — at the moment these letters go out, we have not asked GitHub anything.
 
 ---
 

@@ -1,10 +1,10 @@
 # t0 pre-flight — GitHub private-information request
 
 **Status: working notes, not part of the request.** Prepared by Counsel 2026-10-06 for
-[DIG-1529](/DIG/issues/DIG-1529). Nothing here goes into the form body.
+DIG-1529. Nothing here goes into the form body.
 
 The request itself is [github-private-information-request.md](./github-private-information-request.md).
-Its five placeholders cannot be filled until [DIG-1496](/DIG/issues/DIG-1496) lands. This file holds
+Its five placeholders cannot be filled until DIG-1496 lands. This file holds
 everything that is **already knowable**, so that the t0 pass is mechanical instead of researched
 under time pressure.
 

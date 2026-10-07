@@ -1,7 +1,7 @@
 # Trigger note — when to file the GitHub request
 
 **Status: standing instruction. Prepared by Counsel 2026-10-06.**
-File alongside [DIG-1484](/DIG/issues/DIG-1484). Read it before anything in this folder is sent.
+File alongside DIG-1484. Read it before anything in this folder is sent.
 
 **Purpose.** So that the decision to file with GitHub does not have to be re-made from scratch later,
 at the exact moment when everyone involved is least willing to spend attention on it. This note fixes
@@ -20,7 +20,7 @@ gone, for three reasons:
    letters carry **no deadline**, so there is no window to run, and nothing to escalate on.
 2. **Waiting on a stranger cannot move the exposure.** The file lives in our repository. Their
    response changes nothing about whether GitHub's servers still hold the object.
-3. **The real dependency was never the fork owners.** It is the rewrite in [DIG-1496](/DIG/issues/DIG-1496).
+3. **The real dependency was never the fork owners.** It is the rewrite in DIG-1496.
 
 Any earlier plan that treated "the fork owners did not reply in fourteen days" as grounds to file
 against them is withdrawn. It would have been both wrong and unfair.
@@ -30,7 +30,7 @@ against them is withdrawn. It would have been both wrong and unfair.
 ## The standing instruction
 
 > The GitHub private-information removal request is filed when **the history rewrite in
-> [DIG-1496](/DIG/issues/DIG-1496) has landed on `digithings-ai/digithings`** and the file is **still
+> DIG-1496 has landed on `digithings-ai/digithings`** and the file is **still
 > publicly retrievable** at the pinned commit `86cb1ec5d62b2422cf2c312b6d63722c86fb2000`.
 >
 > The trigger is a technical state, not a date. It fires when our own refs are clean and the object is
@@ -46,7 +46,7 @@ fork-owner response to wait for. The fork notices are withdrawn. Nothing in this
 
 ## Preconditions — all must hold before filing
 
-1. **[DIG-1496](/DIG/issues/DIG-1496) is `done`.** This is the trigger *and* the precondition, because
+1. **DIG-1496 is `done`.** This is the trigger *and* the precondition, because
    it is both. GitHub's guidance is explicit that garbage collection follows: *"If you have
    successfully cleaned up all references other than PRs, and no forks have references to the sensitive
    data, Support will then: Dereference or delete any affected PRs on GitHub. Run a garbage collection
@@ -105,14 +105,14 @@ one count, read it, send.
 
 ## Recording on DIG-1484
 
-Post a comment on [DIG-1484](/DIG/issues/DIG-1484) at each of these points. Article 33(1) GDPR requires
+Post a comment on DIG-1484 at each of these points. Article 33(1) GDPR requires
 the notification record to show what was done, not what was intended, and the Garante reads that
 difference closely:
 
 | When | What to record |
 | --- | --- |
 | Fork-owner notices sent | Date, channel used per owner, address or issue URL used, and the variant that went to which owner |
-| Rewrite completed ([DIG-1496](/DIG/issues/DIG-1496)) | Date, the First Changed Commit, the affected-PR count, the `git filter-repo --version` used |
+| Rewrite completed (DIG-1496) | Date, the First Changed Commit, the affected-PR count, the `git filter-repo --version` used |
 | Any fork-owner reply | Date, and the substance — including a reply that only asks a question |
 | A fork deleted by its owner | Date, which owner, and how. Then re-run the fork count |
 | Request filed with GitHub | Date, the case reference, the fork count stated in it |
@@ -125,5 +125,5 @@ route was attempted and that the exposure persisted after it — which is exactl
 record is supposed to show. A blank outcome field is the one thing that would look bad.
 
 **The Article 33(1) notification is not gated by any of this.** It runs on its own statutory clock —
-due **2026-10-08** per [DIG-1486](/DIG/issues/DIG-1486) — and does not wait for GitHub, for the
+due **2026-10-08** per DIG-1486 — and does not wait for GitHub, for the
 rewrite, or for anyone to reply to anything.

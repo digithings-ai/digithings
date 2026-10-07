@@ -15,7 +15,7 @@
 > decision truthfully rather than claiming a contact that never happened. See *Decisions taken* below.
 
 
-Prepared by Counsel, 2026-10-06, for Chris. Companion to [DIG-1484](/DIG/issues/DIG-1484).
+Prepared by Counsel, 2026-10-06, for Chris. Companion to DIG-1484.
 
 Every fact in these drafts was re-derived from the live repository on 2026-10-06, not carried
 over from earlier notes. Where an earlier figure was wrong, the corrected figure is used and the
@@ -105,7 +105,7 @@ Three things follow, and all three change what these documents say:
 3. **The letters are courtesy notices, not demands.** They tell the truth, ask for nothing, carry no
    deadline, and make no legal claim. That is the only honest version available.
 
-**The fix is [DIG-1496](/DIG/issues/DIG-1496) alone.** Rewrite the parent, and the object dies in the
+**The fix is DIG-1496 alone.** Rewrite the parent, and the object dies in the
 network — including under both fork URLs, which then start returning 404 on their own.
 
 ---

@@ -6,7 +6,7 @@ Submit at: **https://support.github.com/contact/private-information**
 Choose the private-information / sensitive-data option offered on that form.
 
 **Send order:** after the two fork-owner notices have been sent, and **only after**
-[DIG-1496](/DIG/issues/DIG-1496) is `done`. There is no waiting period. See
+DIG-1496 is `done`. There is no waiting period. See
 [trigger-note.md](./trigger-note.md).
 
 **Paste as plain text into the body of the form.** Do not attach anything. GitHub: *"Please include
@@ -257,7 +257,7 @@ source project. They have done nothing wrong and hold nothing.
 
 > **⚠ DRAFTING NOTE — NOT PART OF THE REQUEST. Delete this box before sending.** Every sentence in
 > this section asserts a completed action. They are only true once the rewrite in
-> [DIG-1496](/DIG/issues/DIG-1496) has finished and been force-pushed. **Do not send this request
+> DIG-1496 has finished and been force-pushed. **Do not send this request
 > before that is true.** If the rewrite has not run, this section must be rewritten in the future
 > tense, and section 8's request for garbage collection cannot be made yet, because your
 > documentation is explicit that garbage collection follows a reporter's own refs being clean.
