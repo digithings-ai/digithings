@@ -6,8 +6,13 @@ self-regulatory organisation, not a federal records custodian)
 see [Counsel's position](#counsels-position) · triggers the
 [`short-volume`](../luxalgo/INDEX.md#per-family-classification) row
 **Record opened:** 2026-10-06 · **Counsel** (DIG-1521)
+**Service decision:** 2026-10-07 — `short-volume` **stays in service by business
+decision against this advice**, caveat restated to the ruled position. A
+documented exposure, **not** a clearance. See
+[the service decision](#the-service-decision-and-what-it-does-not-do).
 **Related:** DIG-1521 (the question) · DIG-1464 (the trackers classification that
-routed it here) · DIG-1318 (the vendor-terms programme) · DIG-1479 (allowlist)
+routed it here) · DIG-1318 (the vendor-terms programme) · DIG-1479 (allowlist) ·
+DIG-1523 (the caveat remediation)
 
 ---
 
@@ -502,6 +507,46 @@ Whether the family stays in service is the business decision, and it does not
 change this wording. A family kept in service against this advice is a dated
 decision to accept a documented exposure — **not** a clearance — which is the
 form the `congress-trades` caveat already takes.
+
+---
+
+## The service decision, and what it does not do
+
+**Decided 2026-10-07, by the board, on Counsel's recorded advice: `short-volume`
+stays in service.** The exposure is accepted and documented; it is not cleared.
+The remediation is therefore the *keep* branch — restate the caveat to the ruled
+position — filed as DIG-1523.
+
+Three things follow, and only these three:
+
+1. **The caveat string changes. The guards do not.** Security's two guards stay
+   exactly as they are. If they are relaxed to let this change through, the
+   decision has been quietly reversed without anyone voting on it, which is the
+   one outcome worse than either branch of the decision itself.
+2. **Nothing else in the record moves.** The classification stays PROHIBITED.
+   The service decision is downstream of it and does not soften it: the data is
+   not cleared for the use we make of it, and the string now says so in the
+   product rather than in this folder.
+3. **This is dated on purpose.** An undated "kept against advice" is a finding
+   nobody can re-open later. Dated, it can be re-opened — by the launch, by a FINRA
+   permission, or by a changed product. Same form as the `congress-trades`
+   decision recorded 2026-10-06.
+
+What the decision **does not** do, stated plainly so it is not over-read later:
+
+- It does not make any part of this record Permitted. **Counsel's advice is
+  unchanged: remove the family.**
+- It is not a licence, a permission, a waiver, or a finding that FINRA's terms
+  permit this use. It is a business decision to operate while accepting a known
+  documented exposure.
+- It does not authorise outreach. Route 3 in the table above — FINRA's written
+  permission process — remains **not sought**, and it is Chris's decision whether
+  to seek it. An unanswered permission request changes nothing about today's
+  position; it is the only route that could change it.
+
+If the exposure is ever revisited, this record is the starting point, and the
+question to reopen is narrow: has a FINRA written permission been obtained, or has
+the family been removed.
 
 ---
 

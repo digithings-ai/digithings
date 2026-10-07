@@ -276,7 +276,7 @@ one; see §[Per-family classification](#per-family-classification) below).
 | gov-contracts | `contracts/awards/` | USAspending | **CC0-1.0 CONFIRMED** |
 | lobbying-filings | `lobbying/filings/` | Senate LDA API | **CC0-1.0 CONFIRMED** |
 | congress-trades | `congress/trades/` | House Clerk, Senate eFD | **CC0-1.0 CONFIRMED** as licence · **commercial use restricted by statute** |
-| short-volume | `short-volume/daily/` | FINRA | **PROHIBITED** for commercial redistribution — Counsel, 2026-10-06 |
+| short-volume | `short-volume/daily/` | FINRA | **PROHIBITED** for commercial redistribution — Counsel, 2026-10-06 · in service by business decision dated 2026-10-07, **not** a clearance |
 
 The four plain confirmations do not rest on the vendor's assertion alone.
 EDGAR filings, House Clerk and Senate disclosure reports, Senate LDA and
@@ -295,15 +295,16 @@ decision dated 2026-10-06 against that advice, which is not a clearance** —
 recorded at `LUXALGO_TRACKERS_ALLOWED_DATASETS` and pinned by
 `tests/dq/test_congress_trades_statute_and_ingest_provenance.py`.
 
-**short-volume is Unclear, and this is where the CC0 grant runs out.** FINRA is
-a **private self-regulatory organisation**, not a federal records custodian
-like the other four. Its short-sale-volume compilation carries FINRA's own
-terms, and CC0 §4(b)–(c) is explicit about what that means: the affirmer makes
-no warranty of title or non-infringement and disclaims responsibility for
-clearing other people's rights. LuxAlgo cannot license what it does not hold.
-This is exactly the failure mode Counsel predicted — *"Form 4 and 13F data are
-republished third-party data and may carry upstream redistribution terms
-regardless of what LuxAlgo asserts about its own dump."* Routed to Counsel.
+**As filed 2026-10-06, Security's position was: short-volume is Unclear, and this
+is where the CC0 grant runs out.** FINRA is a **private self-regulatory
+organisation**, not a federal records custodian like the other four. Its
+short-sale-volume compilation carries FINRA's own terms, and CC0 §4(b)–(c) is
+explicit about what that means: the affirmer makes no warranty of title or
+non-infringement and disclaims responsibility for clearing other people's rights.
+LuxAlgo cannot license what it does not hold. This is exactly the failure mode
+Counsel predicted — *"Form 4 and 13F data are republished third-party data and may
+carry upstream redistribution terms regardless of what LuxAlgo asserts about its
+own dump."* Routed to Counsel. **Answered the same day, below.**
 
 **Answered on 2026-10-06 — see the [FINRA record](../finra/INDEX.md).** Counsel
 read FINRA's terms and recorded the position as **PROHIBITED** for commercial
