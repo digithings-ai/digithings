@@ -167,9 +167,15 @@ function sessionLines(data: unknown): string[] {
   // result: `/fx/sessions` answers with three hardcoded sessions and null state,
   // and there is no run behind them to age. Rendering that as three rows of
   // dashes left the pane on healthy ink, which is the same false claim DIG-183
-  // exists to remove, just with nothing behind it. Saying so keeps it muted.
-  if (sessions.every((row) => !str(row.state) && !str(row.note))) return ["no session state"];
-  return sessions.map((row) => {
+  // exists to remove, just with nothing behind it.
+  //
+  // The test is per row rather than per list. One provisioned session must not
+  // switch the other two back on, which is what a guard over the whole list does
+  // the moment the route fills in session by session: `session Asia  state —`
+  // paints on healthy ink beside a real row, and claims a state nobody read.
+  const live = sessions.filter((row) => str(row.state) || str(row.note));
+  if (live.length === 0) return ["sessions not provisioned"];
+  return live.map((row) => {
     const note = str(row.note);
     const base = cells(row, [["session", "session"], ["state", "state"]]);
     return note ? `${base}  ${note}` : base;

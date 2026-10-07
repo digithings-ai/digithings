@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import type { ReadResult } from "../read";
+import { DASH, type ReadResult } from "../read";
 import { fxBlockLines, fxInk, fxPaneStatus, fxTone } from "./fx";
+import { shapeLines } from "./shape";
 
 /**
  * Criterion 2 of DIG-183: ageing one FX block and leaving the rest green "looks
@@ -146,5 +147,117 @@ describe("fx-sessions cannot read healthy", () => {
     expect(fxPaneStatus(result, { sessions: rows }, "fx-sessions", "2026-09-22")).toBe(
       "as of 2026-09-17 · 3 trading days old · stale",
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// QA follow-ups on the fx-sessions change (DIG-2104, verdict on DIG-2071).
+// ---------------------------------------------------------------------------
+
+type SessionRow = { session: string; state: string | null; note: string | null };
+
+/** The three rows `/fx/sessions` answers with today: named sessions, no state. */
+const SKELETON: SessionRow[] = [
+  { session: "Asia", state: null, note: null },
+  { session: "London", state: null, note: null },
+  { session: "New York", state: null, note: null },
+];
+
+/** One session provisioned, two not. The partial rollout the route will do. */
+const MIXED: SessionRow[] = [
+  { session: "London", state: "open", note: null },
+  { session: "Asia", state: null, note: null },
+  { session: "New York", state: null, note: null },
+];
+
+/** The pane body without the provenance head `fxBlockLines` keeps above it. */
+const body = (lines: string[]) => lines.filter((line) => !line.startsWith("source  ") && !line.startsWith("marks  "));
+
+/** The fx-sessions block as the pane builds it, for a given row list. */
+const sessionsBlock = (rows: SessionRow[], asOf: string | null = null) => {
+  const result = envelope(asOf, asOf === null ? "static-sessions" : "fx_session_states");
+  const data = { sessions: rows };
+  return { result, data, lines: fxBlockLines("fx-sessions", result, data) };
+};
+
+describe("fx-sessions names the cause, not the absence", () => {
+  test("an unprovisioned block reads `sessions not provisioned`", () => {
+    // `sessions()` in dashboard-api has no table behind it, the same as the flags,
+    // paper and directives blocks. Those all surface the client's existing
+    // sentence for a draft migration, so this block said a different thing for the
+    // same situation -- and `no session state` sat one line from `no sessions`, the
+    // empty-list case, on the same muted ink. Cause, not absence, and no new rule.
+    const { lines } = sessionsBlock(SKELETON);
+    expect(body(lines)).toEqual(["sessions not provisioned"]);
+  });
+
+  test("both quiet rules already know that sentence, so neither was edited", () => {
+    // `isQuiet()` in fx.tsx matches `not provisioned`; `isSentence()` in shape.ts
+    // matches it too. The pane tone proves the first, the block shape the second.
+    // Both read the sentence this block actually renders, so a string that needed a
+    // new branch in either file fails here instead of quietly going bright.
+    const { result, data, lines } = sessionsBlock(SKELETON);
+    const tone = fxTone(result, lines, { now: "2026-10-05", data });
+    expect(tone).toBe("empty");
+    expect(fxInk(tone)).not.toBe(fxInk("ok"));
+    expect(shapeLines(body(lines))).toEqual({
+      blocks: [{ kind: "sentence", text: "sessions not provisioned" }],
+    });
+  });
+
+  test("`no sessions` and `sessions not provisioned` stay two different situations", () => {
+    // Empty array: the desk has no sessions to report. Populated array, nothing
+    // filled in: the sessions exist and their state is not provisioned. Same ink,
+    // two sentences, and the reader can tell which one they are looking at.
+    const empty = body(sessionsBlock([]).lines);
+    const unprovisioned = body(sessionsBlock(SKELETON).lines);
+    expect(empty).toEqual(["no sessions"]);
+    expect(unprovisioned).toEqual(["sessions not provisioned"]);
+  });
+});
+
+describe("fx-sessions filters rows per-row, not per-list", () => {
+  test("one populated row does not switch the guard off for the others", () => {
+    // The defect QA reproduced: `every` over the whole list meant a single
+    // provisioned session put `session Asia  state —` back on healthy ink beside
+    // it. The rows are judged one at a time, so only London paints.
+    const { lines } = sessionsBlock(MIXED);
+    expect(body(lines)).toEqual(["session London  state open"]);
+  });
+
+  test("a row that drops out leaves no dash and no name behind", () => {
+    const { lines } = sessionsBlock(MIXED);
+    const painted = body(lines).join("\n");
+    expect(painted).not.toContain("Asia");
+    expect(painted).not.toContain("New York");
+    expect(painted).not.toContain(DASH);
+  });
+
+  test("a mixed list still ages on its run date once one row carries state", () => {
+    // Filtering the rows must not cost the block its ageing: it is the populated
+    // row that gives the pane something to be stale about.
+    const { result, data, lines } = sessionsBlock(MIXED, "2026-09-17");
+    expect(fxTone(result, lines, { now: "2026-09-17", data })).toBe("ok");
+    expect(fxTone(result, lines, { now: "2026-09-22", data })).toBe("stale");
+  });
+
+  test("a row carrying only a note counts as provisioned", () => {
+    // A half day or a holiday is provisioned data. Dropping it would hide the
+    // one thing the desk did manage to say.
+    const { lines } = sessionsBlock([{ session: "London", state: null, note: "half day" }]);
+    expect(body(lines)).toEqual([`session London  state ${DASH}  half day`]);
+  });
+
+  test("a fully populated list renders every row", () => {
+    const rows: SessionRow[] = [
+      { session: "Asia", state: "closed", note: null },
+      { session: "London", state: "open", note: "quiet" },
+      { session: "New York", state: "pre", note: null },
+    ];
+    expect(body(sessionsBlock(rows).lines)).toEqual([
+      "session Asia  state closed",
+      "session London  state open  quiet",
+      "session New York  state pre",
+    ]);
   });
 });
