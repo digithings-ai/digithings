@@ -55,28 +55,40 @@ PROBE_PATH = "/ingest/__art9_registry_probe__"
 # ── the diff ─────────────────────────────────────────────────────────────────
 
 
-def _template(path: str) -> str:
-    """Normalise a path template the way ``art9.is_registered`` normalises a lookup.
+def _served_template(path: str) -> str:
+    """Normalise the *served* template the way the refusal floor normalises a lookup.
 
-    ``APIRouter(prefix="/ingest")`` with a route declared at ``"/"`` reports
-    ``.path == "/ingest/"``, so a bare string comparison would report both
-    ``/ingest/`` as unserved *and* ``/ingest`` as unserved for one registered
-    route. ``art9.is_registered`` strips the trailing slash for exactly this
-    reason; the diff has to agree with it or it invents a failure out of a
-    registered route. Only the trailing slash is touched — nothing here can make
-    two different templates compare equal.
+    ``art9.route_kind`` resolves ``routes.get(path) or routes.get(_normalize(path))``:
+    the normalisation is applied to the **lookup**, never to the stored key. So
+    this function has to be applied to the served side and to nothing else —
+    ``_registered_templates`` deliberately reads the registry raw.
+
+    Getting that backwards is the bug this guards: normalising both sides makes a
+    registry key written ``"/ingest/"`` compare equal to the served ``"/ingest"``,
+    the test goes green, and production still refuses the route —
+    ``routes.get("/ingest")`` misses and ``_normalize("/ingest")`` is ``"/ingest"``,
+    which is not the ``"/ingest/"`` that was stored.
+    ``test_a_trailing_slash_registry_key_does_not_cover_its_route`` pins that.
+
+    Only the trailing slash is touched, and only on this side, so two distinct
+    served templates cannot collapse into one registry entry.
     """
     return path.rstrip("/") or "/"
 
 
 def _served_templates() -> set[str]:
     """Every ingestion path template the running app serves."""
-    return {_template(path) for path in art9.iter_ingest_routes(app.routes, APP)}
+    return {_served_template(path) for path in art9.iter_ingest_routes(app.routes, APP)}
 
 
 def _registered_templates() -> set[str]:
-    """Every path template the registry claims for digisearch."""
-    return {_template(path) for path in art9.INGEST_ROUTES[APP]}
+    """Every path template the registry claims for digisearch, exactly as stored.
+
+    Not normalised. The registry key is what ``routes.get`` is handed, so a stray
+    trailing slash here is a genuine 403 rather than a cosmetic difference, and
+    this test is the only thing that reports it.
+    """
+    return set(art9.INGEST_ROUTES[APP])
 
 
 def _diff() -> tuple[set[str], set[str]]:
@@ -123,7 +135,16 @@ def _attached(route: APIRoute) -> Iterator[None]:
 
 
 def test_registry_and_running_app_agree_in_both_directions() -> None:
-    served_but_unregistered, registered_but_unserved = _diff()
+    # The non-empty assertions live here rather than in a sibling test. An
+    # enumeration that silently found nothing, against a registry that is empty,
+    # would otherwise pass this diff as a clean agreement — and deselecting a
+    # separate vacuity test is enough to lose that guard.
+    served, registered = _served_templates(), _registered_templates()
+    assert served, "digisearch serves no route under its declared prefix"
+    assert registered, "INGEST_ROUTES['digisearch'] is empty"
+
+    served_but_unregistered = served - registered
+    registered_but_unserved = registered - served
 
     assert served_but_unregistered == set(), (
         "digisearch serves ingestion routes that INGEST_ROUTES['digisearch'] does "
@@ -136,18 +157,10 @@ def test_registry_and_running_app_agree_in_both_directions() -> None:
     assert registered_but_unserved == set(), (
         "INGEST_ROUTES['digisearch'] lists routes the running app does not serve: "
         f"{sorted(registered_but_unserved)}. The route was renamed or removed and the "
-        "registry entry was not, so the entry reads as coverage that does not exist."
+        "registry entry was not, so the entry reads as coverage that does not exist. "
+        "A key written with a trailing slash is that same failure: production looks "
+        "the template up as given and only normalises it as a fallback."
     )
-
-
-def test_the_comparison_is_not_vacuous() -> None:
-    """Guard the green above: an empty side on both ends would also be green.
-
-    Cheap, and it is the only thing that distinguishes "the registry and the app
-    agree" from "the enumeration found nothing and the registry is empty".
-    """
-    assert _served_templates(), "digisearch serves no route under its declared prefix"
-    assert _registered_templates(), "INGEST_ROUTES['digisearch'] is empty"
 
 
 # ── 2. the mutation assertion: the diff can fail, in both directions ─────────
@@ -210,9 +223,11 @@ def test_registry_entry_with_no_route_is_reported(
 def test_a_trailing_slash_route_matches_its_registry_entry() -> None:
     """FastAPI reports ``/ingest/`` for a route declared at ``"/"`` under the prefix.
 
-    Without normalisation that is a false positive on both sides at once, and a
-    false positive here trains the next reader to loosen the diff. The registry
-    entry stays the single source of the path.
+    This is the case the served-side normalisation exists for: production resolves
+    ``routes.get(path) or routes.get(_normalize(path))``, so a route whose raw
+    template is ``/ingest/`` is served and registered under ``/ingest``. Reporting
+    it as unserved would be a false positive, and a false positive here trains the
+    next reader to loosen the diff.
     """
     trailing = _probe_route("/ingest/")
     with _attached(trailing):
@@ -227,4 +242,40 @@ def test_a_trailing_slash_route_matches_its_registry_entry() -> None:
     assert registered_but_unserved == set(), (
         "trailing-slash route reported as unserved in the registry: "
         f"{sorted(registered_but_unserved)}"
+    )
+
+
+def test_a_trailing_slash_registry_key_does_not_cover_its_route(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The mirror of the test above, and the one that bites.
+
+    A registry key written ``"/ingest/"`` looks identical to ``"/ingest"`` to any
+    reader, and to a diff that normalises both sides. Production disagrees:
+    ``routes.get("/ingest")`` misses, and the fallback ``_normalize("/ingest")`` is
+    ``"/ingest"`` — not the ``"/ingest/"`` that was stored. The route is refused.
+    A test that normalised the registry side too would stay green through exactly
+    the edit that turns an ingestion route into a 403.
+    """
+    only_route = "/ingest/__art9_slash_key__"
+    patched = dict(art9.INGEST_ROUTES[APP])
+    patched[f"{only_route}/"] = art9.ROUTE_KIND_INGEST
+    monkeypatch.setattr(art9, "INGEST_ROUTES", {**art9.INGEST_ROUTES, APP: patched})
+
+    route = _probe_route(only_route)
+    with _attached(route):
+        served_but_unregistered, registered_but_unserved = _diff()
+
+    # The registry claims a route that is not the one the app serves.
+    assert registered_but_unserved == {f"{only_route}/"}
+    assert served_but_unregistered == {only_route}, (
+        "the served route was matched against a registry key that differs by a "
+        "trailing slash; production refuses that route, so the diff must too"
+    )
+
+    # And confirm the premise against the floor itself, so this test cannot be
+    # satisfied by a diff that simply disagrees with production for some other
+    # reason: the slash-keyed entry must not register the slashless route.
+    assert art9.route_kind(APP, only_route) is None, (
+        "the floor would register this route, so there is no drift to catch"
     )
