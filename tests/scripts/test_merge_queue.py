@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -75,6 +76,8 @@ def _pr(
     merge_state: str = "CLEAN",
     extra_checks: list[dict[str, Any]] | None = None,
     title: str = "",
+    comments: list[dict[str, Any]] | None = None,
+    commits: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     rollup: list[dict[str, Any]] = list(extra_checks or [])
     if test_conclusion is not None:
@@ -86,7 +89,7 @@ def _pr(
                 "conclusion": test_conclusion,
             }
         )
-    return {
+    pr = {
         "number": number,
         "title": title or f"work for #{number}",
         "headRefName": f"DIG-{number}-work",
@@ -100,6 +103,44 @@ def _pr(
         "author": {"login": author},
         "createdAt": created,
         "reviews": reviews if reviews is not None else [],
+    }
+    # `comments` and `commits` are fetched from GitHub but are absent from every
+    # hand-built PR that does not ask for them, so the gates stay exercised on the
+    # shape they will really meet when a key is missing.
+    if comments is not None:
+        pr["comments"] = comments
+    if commits is not None:
+        pr["commits"] = commits
+    return pr
+
+
+def _review_comment(
+    *,
+    verdict: str | None = "changes_requested",
+    head_sha: str = "a" * 40,
+    created: str = "2026-10-07T22:07:11Z",
+    login: str = "chrizefan",
+    number: int = 347,
+    prose: bool = True,
+) -> dict[str, Any]:
+    """A PR comment in the shape a posted code-review verdict arrives in.
+
+    The marker is an HTML comment whose `key=value` fields are the machine-readable
+    part; the prose below it is what a human reads. Only the fields are parsed, so
+    the prose here is free to say anything.
+    """
+    fields = [f"scope=digithings-ai/twelve-x#{number}@{head_sha}"]
+    if verdict is not None:
+        fields.append(f"verdict={verdict}")
+    body = f"<!-- opencode-power-pack:code-review {' '.join(fields)} -->\n"
+    if prose:
+        body += "## Verdict: changes requested (narrow)\n\n**One finding blocks approval.**\n"
+    return {
+        "id": f"IC_kwDO{login}_{number}",
+        "author": {"login": login},
+        "authorAssociation": "MEMBER",
+        "body": body,
+        "createdAt": created,
     }
 
 
@@ -601,6 +642,174 @@ def test_an_em_merge_attested_by_the_cto_passes() -> None:
     assert mq.evaluate(
         _pr(1), mq.load_policy(), acting_role="em", base="develop", attest_role="cto"
     ).eligible
+
+
+# --- a verdict posted as a PR comment has to reach the gate --------------------
+#
+# twelve-x PR #347 merged 6m37s after a review saying "changes requested — one
+# finding blocks approval" was posted on it. GitHub never saw a blocking
+# `CHANGES_REQUESTED` review, so `reviewDecision` was empty, and the queue only
+# fetched `reviews` — a comment was invisible to it. `--attest-review qa` then
+# satisfied the gate and pointed straight past the verdict.
+
+
+def test_a_posted_verdict_of_changes_requested_blocks_even_with_an_attestation() -> None:
+    """The exact #347 shape: no blocking review, a distinct attestation, one verdict.
+
+    Every other input here is the one that merged. Only the posted verdict is new,
+    and it has to be enough on its own.
+    """
+    pr = _pr(
+        347,
+        reviews=[],
+        comments=[_review_comment(verdict="changes_requested")],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop", attest_role="qa")
+    assert not verdict.eligible
+    # The refusal has to name the comment. A queue that refuses without saying
+    # where the block came from is a queue nobody can clear.
+    assert any("changes_requested" in r and "chrizefan" in r for r in verdict.reasons)
+
+
+def test_a_posted_verdict_of_approved_does_not_block() -> None:
+    """An approving verdict is a signal, not a gate. It must not turn into one."""
+    pr = _pr(347, reviews=[], comments=[_review_comment(verdict="approved")])
+    assert mq.evaluate(
+        pr, mq.load_policy(), acting_role="em", base="develop", attest_role="qa"
+    ).eligible
+
+
+def test_a_comment_without_the_marker_is_ignored() -> None:
+    """Prose is not a contract.
+
+    The #347 comment reads `## Verdict: changes requested (narrow)` in its prose.
+    Matching on that text would mean matching a heading a reviewer is free to
+    reword, so the gate reads the marker's `verdict=` field and nothing else. This
+    comment says the same words with no marker and must not block.
+    """
+    pr = _pr(
+        347,
+        reviews=[],
+        comments=[
+            {
+                "id": "IC_kwDOprose_347",
+                "author": {"login": "chrizefan"},
+                "body": "## Verdict: changes requested (narrow)\n\n**One finding blocks approval.**",
+                "createdAt": "2026-10-07T22:07:11Z",
+            }
+        ],
+    )
+    assert mq.evaluate(
+        pr, mq.load_policy(), acting_role="em", base="develop", attest_role="qa"
+    ).eligible
+
+
+def test_a_pr_without_a_comments_key_does_not_crash_the_gate() -> None:
+    """A missing key is a missing signal. It must not be an exception.
+
+    `comments` is fetched conditionally and the gates run on whatever the fetch
+    returned, so the shape with the key absent is one the gate will really meet.
+    """
+    pr = _pr(347)
+    assert "comments" not in pr
+    assert mq.evaluate(
+        pr, mq.load_policy(), acting_role="em", base="develop", attest_role="qa"
+    ).eligible
+
+
+def test_a_verdict_against_an_older_commit_on_the_branch_still_blocks() -> None:
+    """A reviewer who blocked commit A still blocks A+B.
+
+    Forgetting to re-review after pushing a fix is the common case, and the
+    finding is normally still there. Clearing this silently is how the gate
+    becomes decoration.
+    """
+    older = "b" * 40
+    head = "c" * 40
+    pr = _pr(
+        347,
+        head_sha=head,
+        reviews=[],
+        comments=[_review_comment(verdict="changes_requested", head_sha=older)],
+        commits=[{"oid": older}, {"oid": head}],
+    )
+    assert not mq.evaluate(
+        pr, mq.load_policy(), acting_role="em", base="develop", attest_role="qa"
+    ).eligible
+
+
+def test_a_verdict_against_a_head_this_pr_does_not_carry_does_not_block() -> None:
+    """A force-push or rebase rewrites history, and the old sha is gone.
+
+    The verdict was about code that no longer exists, so holding the PR on it
+    would strand it: the finding cannot be re-applied to the new commits, and the
+    only way to clear it would be to close and reopen the PR. A reviewer who
+    disagrees posts a fresh verdict against the new head.
+    """
+    head = "c" * 40
+    pr = _pr(
+        347,
+        head_sha=head,
+        reviews=[],
+        comments=[_review_comment(verdict="changes_requested", head_sha="f" * 40)],
+        commits=[{"oid": head}],
+    )
+    assert mq.evaluate(
+        pr, mq.load_policy(), acting_role="em", base="develop", attest_role="qa"
+    ).eligible
+
+
+def test_the_latest_posted_verdict_wins() -> None:
+    """A reviewer who came back and approved clears their own earlier block."""
+    pr = _pr(
+        347,
+        reviews=[],
+        comments=[
+            _review_comment(verdict="changes_requested", created="2026-10-07T22:07:11Z"),
+            _review_comment(verdict="approved", created="2026-10-07T22:20:00Z"),
+        ],
+    )
+    assert mq.evaluate(
+        pr, mq.load_policy(), acting_role="em", base="develop", attest_role="qa"
+    ).eligible
+
+
+def test_an_older_block_still_blocks_when_a_later_marker_has_no_verdict() -> None:
+    """A typo is a missing signal, not a clearance.
+
+    The gate refuses to read a verdict it cannot parse, and refusing to read is
+    not the same as reading "approved". Letting an unreadable marker clear a
+    block would hand anyone who can comment a way to unlock the queue.
+    """
+    pr = _pr(
+        347,
+        reviews=[],
+        comments=[
+            _review_comment(verdict="changes_requested", created="2026-10-07T22:07:11Z"),
+            _review_comment(verdict="looks-fine", created="2026-10-07T22:20:00Z"),
+        ],
+    )
+    assert not mq.evaluate(
+        pr, mq.load_policy(), acting_role="em", base="develop", attest_role="qa"
+    ).eligible
+
+
+def test_the_fetch_asks_github_for_the_fields_the_posted_verdict_needs() -> None:
+    """The structural fix, pinned: a gate cannot read a field the fetch dropped.
+
+    This is the whole root cause of #347 — `comments` was never requested, so no
+    amount of parsing could have reached it. Pinning the field list keeps the
+    fetch and the gate from drifting apart again.
+    """
+    source = SCRIPT.read_text()
+    # The field list is written as implicitly-concatenated string literals, so take
+    # every literal that follows `--json` rather than only the first.
+    tail = source.split('"--json",', 1)
+    assert len(tail) == 2, "the fetch no longer passes --json"
+    literals = re.findall(r'"([^"]*)"', tail[1])
+    fields = "".join(literals)
+    assert "comments" in fields
+    assert "commits" in fields
 
 
 # --- ordering: a queue, not a race --------------------------------------------
