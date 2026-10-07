@@ -20,8 +20,19 @@ PLACEHOLDER_PATTERNS = [
     r'^$',
 ]
 CRED_VAR_PATTERNS = [
+    # `ACCESS_KEY` sits beside `ACCESS_TOKEN` because the two spell the same
+    # credential class on either side of the access-key / token split, and `TOKEN`
+    # reaches only the token half. Every leaf before this one widened the value
+    # side, which left the canonical AWS access key id (`AWS_ACCESS_KEY_ID`) out of
+    # scope before the value was ever read - the `^AKIA[A-Za-z0-9]{16,}` pattern
+    # would have reported it. Substring matching covers the neighbouring spellings
+    # for free: `AZURE_STORAGE_ACCESS_KEY`, `MONGO_ACCESS_KEY`,
+    # `PUBLIC_ACCESS_KEY_ID`. It costs no false positive against the tracked
+    # `.example` / `.template` corpus: of 124 candidate lines in 18 files, none
+    # names an access key, and the names that only point at one (`AWS_ACCOUNT_ID`,
+    # `AWS_KEY_ALIAS`, `AWS_KEY_COUNT`) do not contain the substring.
     r'API_KEY', r'SECRET', r'TOKEN', r'PASSWORD', r'PRIVATE_KEY',
-    r'CLIENT_SECRET', r'ACCESS_TOKEN', r'REFRESH_TOKEN',
+    r'ACCESS_KEY', r'CLIENT_SECRET', r'ACCESS_TOKEN', r'REFRESH_TOKEN',
     r'WEBHOOK_SECRET', r'SIGNING_KEY',
 ]
 CRED_VALUE_PATTERNS = [
