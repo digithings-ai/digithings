@@ -97,7 +97,9 @@ def _compose_files() -> list[Path]:
         f"{WORKFLOW.name} runs neither `docker compose` nor `docker build`; this guard "
         f"has nothing to derive from and would pass vacuously"
     )
-    return found
+    # `up`, `exec` and `down` all name the same file; walking its closure once per
+    # invocation is wasted work and would multiply any failure message.
+    return sorted(set(found))
 
 
 def _compose_up_services() -> set[str]:
@@ -163,7 +165,9 @@ def _build_dockerfile(service: dict[str, Any]) -> str | None:
         return f"{build.removeprefix('./')}/Dockerfile"
     context = str(build.get("context", ".")).removeprefix("./")
     prefix = "" if context == "." else f"{context}/"
-    return f"{prefix}{build['dockerfile']}"
+    # A mapping `build:` may omit `dockerfile:`; Compose then uses the context's
+    # `Dockerfile`, which is the same default the short form above relies on.
+    return f"{prefix}{build.get('dockerfile', 'Dockerfile')}"
 
 
 def _built_dockerfiles(compose_file: Path, seeds: set[str]) -> set[str]:
@@ -194,17 +198,26 @@ def _built_dockerfiles(compose_file: Path, seeds: set[str]) -> set[str]:
 
 
 def _glob_regex(glob: str) -> re.Pattern[str]:
-    """Translate a git path glob to a regex over a repo-relative file path."""
+    """Translate a git path glob to a regex over a repo-relative file path.
+
+    `*` does not cross `/`, `**` does, and a leading `**/` may match zero directories the
+    way git treats it — so `**/Dockerfile` covers a top-level `Dockerfile` too. Getting
+    this wrong in the permissive direction makes the guard demand four explicit entries
+    forever; getting it wrong in the strict direction lets an unwatched Dockerfile through,
+    which is the bug this file exists for.
+    """
     out = []
-    for part in re.split(r"(\*\*|\*)", glob):
-        if part == "**":
+    # Longest alternative first, or `**/` and `**` get split into single `*`s.
+    for part in re.split(r"(\*\*/|\*\*|\*)", glob):
+        if part == "**/":
+            out.append("(?:.*/)?")
+        elif part == "**":
             out.append(".*")
         elif part == "*":
             out.append("[^/]*")
         else:
             out.append(re.escape(part))
-    # `a/**` should also match `a` itself, as git treats it.
-    return re.compile("".join(out).removesuffix(".*") + "(?:/.*)?")
+    return re.compile("".join(out))
 
 
 def _watched_by(dockerfile: str, globs: list[str]) -> bool:
@@ -226,9 +239,7 @@ def test_e2e_stack_job_is_triggered_by_every_dockerfile_it_builds() -> None:
         watched |= _built_dockerfiles(compose_file, seeds)
     watched |= _literal_build_dockerfiles()
 
-    missing = sorted(
-        path for path in watched if not _watched_by(path, globs) and not (REPO_ROOT / path).is_dir()
-    )
+    missing = sorted(path for path in watched if not _watched_by(path, globs))
     assert not missing, (
         f"{WORKFLOW.name} does not watch {missing}, which the compose services it starts "
         f"build. Its `e2e` job is the only CI job that compiles those images, and it is "
@@ -241,10 +252,10 @@ def test_e2e_stack_job_is_triggered_by_every_dockerfile_it_builds() -> None:
 def test_the_closure_is_not_vacuous() -> None:
     """A guard that can pass by finding nothing is not a guard.
 
-    Pins the two derivations this file rests on: the workflow really does start four
-    services through Compose, and at least four of them really do have a `build:`
-    section. If a Compose rewrite renames a service or moves the build context, this
-    fails loudly instead of the filter test above quietly checking nothing.
+    Pins the two derivations this file rests on: the workflow really does start those four
+    services through Compose, and every Dockerfile the derived closure names really exists
+    on disk. If a Compose rewrite renames a service or moves a build context, this fails
+    loudly instead of the filter test above quietly checking nothing.
     """
     seeds = _compose_up_services()
     assert {"digigraph", "digiquant", "digisearch", "digikey"} <= seeds, (

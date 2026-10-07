@@ -7,9 +7,10 @@ failure directions were both silent until this file:
 
 - dropping `digillm` from the `[embedding]` extra (`build(digisearch): declare digillm
   …` did add it, but nothing would have noticed the removal), and
-- adding `digillm` — as an extra on the install line, or as a fifth
-  `uv pip install -e ./digillm` sibling — which would reopen the remote-embedding path
-  the board deliberately kept out of the container (DIG-1407).
+- adding `digillm` — as an extra on the install line, as a fifth
+  `uv pip install -e ./digillm` sibling, or as a requirement on one of the extras the
+  image already installs — which would reopen the remote-embedding path the board
+  deliberately kept out of the container (DIG-1407).
 
 So this derives the installed set from the Dockerfile rather than restating it, and
 pins the two decisions the board made: digillm is *declared* in `[embedding]`, and
@@ -77,20 +78,40 @@ _DIGILLM_TOKEN = re.compile(r"\bdigillm\b")
 pytestmark = pytest.mark.unit
 
 
-def _install_lines() -> list[str]:
-    """Every `RUN … pip install …` line, comments excluded.
+def _logical_lines() -> list[str]:
+    """The Dockerfile's lines with comments dropped and `\\` continuations joined.
 
-    Comment lines are skipped rather than the whole file being grepped: the Dockerfile
-    explains at length why digillm is *not* a sibling, and those words must not read as
-    an installation.
+    Both steps matter. Comment lines must be dropped rather than the whole file being
+    grepped, because the Dockerfile explains at length why digillm is *not* a sibling and
+    those words must not read as an installation. Continuations must be joined because a
+    sibling spelled across lines puts `-e "./digillm"` on a physical line with no `RUN` of
+    its own — a per-line scan would never see it, and would count the wrapped install as
+    absent from `_image_extras()` too.
     """
-    lines = []
+    joined: list[str] = []
+    pending = ""
     for raw in DOCKERFILE.read_text(encoding="utf-8").splitlines():
         stripped = raw.strip()
         if stripped.startswith("#"):
             continue
-        if _INSTALL_LINE.match(raw):
-            lines.append(stripped)
+        if pending:
+            stripped = f"{pending} {stripped}".strip()
+            pending = ""
+        if stripped.endswith("\\"):
+            pending = stripped[:-1].rstrip()
+            continue
+        joined.append(stripped)
+    assert not pending, f"{DOCKERFILE.name} ends on a dangling line continuation"
+    return joined
+
+
+def _install_lines() -> list[str]:
+    """Every logical `RUN … pip install …` line.
+
+    Logical, not physical, so a continued install is inspected as the single command the
+    shell will actually run.
+    """
+    lines = [line for line in _logical_lines() if _INSTALL_LINE.match(line)]
     assert lines, f"{DOCKERFILE.name} installs nothing — did the invocation change?"
     return lines
 
@@ -194,8 +215,10 @@ def test_digillm_is_not_installed_anywhere_in_the_digisearch_image() -> None:
 
     The board ruled that the deployed image does not need the remote embedding path.
     Installing digillm here would drag `openai` in with it and make that path importable
-    for the first time. Both routes are covered: an extra on digisearch's own install
-    line, and a fifth `uv pip install -e ./digillm` sibling.
+    for the first time. All three routes are covered: an extra on digisearch's own install
+    line, a fifth `uv pip install -e ./digillm` sibling, and — the indirect one — a
+    requirement added to any extra the image *does* install, which ships digillm just as
+    effectively while the install line stays untouched.
     """
     offenders = [line for line in _install_lines() if _DIGILLM_TOKEN.search(line)]
     assert not offenders, (
@@ -203,4 +226,17 @@ def test_digillm_is_not_installed_anywhere_in_the_digisearch_image() -> None:
         f"deployed image — digillm's hard deps would drag openai in and enable the remote "
         f"embedding path the board declined. Remove the line, not the comment explaining "
         f"it is absent."
+    )
+
+    declared = _declared_extras()
+    indirect = {
+        name: [req for req in declared[name] if _DIGILLM_TOKEN.search(req)]
+        for name in sorted(_image_extras())
+    }
+    indirect = {name: reqs for name, reqs in indirect.items() if reqs}
+    assert not indirect, (
+        f"extras {sorted(_image_extras())} are installed into the image, and "
+        f"{indirect} now require digillm. The install line can stay untouched and the "
+        f"image still ships digillm (and openai), which is the same DIG-1407 decision "
+        f"reopened by another route."
     )
