@@ -91,7 +91,7 @@ all = ["digiquant[nautilus]"]
 # shadowing investigation for the same failure mode in digigraph.
 dev = ["digiquant[research]", "digiquant[indicators]", "digiquant[m2]"]
 # Upper-bounded: mcp 2.0 removed `mcp.server.fastmcp` (see #1705). The single
-# MCP server here (src/digiquant/mcp_server.py:474) imports it inside a
+# MCP server here (src/digiquant/mcp_server.py:475) imports it inside a
 # try/except ImportError, which defers the failure rather than hiding it:
 # create_mcp_server() calls _require_mcp(), which raises ImportError. An
 # unbounded 2.x therefore does not cost this service its tools quietly — it

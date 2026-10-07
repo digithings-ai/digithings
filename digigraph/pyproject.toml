@@ -35,7 +35,7 @@ tracing = ["langsmith>=0.1"]
 dev = ["langgraph-checkpoint-sqlite>=2.0"]
 otel = ["digibase[otel]"]
 # Upper-bounded: mcp 2.0 removed `mcp.server.fastmcp` (see #1705). The single
-# MCP server here (src/digigraph/mcp_server.py:197) imports it inside a
+# MCP server here (src/digigraph/mcp_server.py:198) imports it inside a
 # try/except ImportError, which defers the failure rather than hiding it:
 # create_mcp_server() calls _require_mcp(), which raises ImportError. An
 # unbounded 2.x therefore does not cost this service its tools quietly — it
