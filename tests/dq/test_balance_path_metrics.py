@@ -35,6 +35,7 @@ from pathlib import Path
 
 import pytest
 from digiquant.data.loader import generate_synthetic_ohlcv
+from digiquant.nautilus_runner import RETURNS_SERIES_MISSING
 
 from .conftest import SKIP_NATIVE_CRASH
 
@@ -173,7 +174,11 @@ class TestBalancePathMetricsRealRun:
         final_balance = float(account_report["total"].tolist()[-1])
         assert result.total_pnl == pytest.approx(final_balance - 1_000_000.0)
         assert result.total_return_pct == pytest.approx((final_balance - 1_000_000.0) / 10_000.0)
-        assert result.status == "ok"
+        # Partial, and only over the chart series: under the pinned nautilus_trader the
+        # analyzer's returns() alias cannot be confirmed against portfolio_returns(),
+        # so it is withheld. Every metric above is present.
+        assert result.status == "partial"
+        assert result.missing == [RETURNS_SERIES_MISSING]
 
 
 @SKIP_NATIVE_CRASH

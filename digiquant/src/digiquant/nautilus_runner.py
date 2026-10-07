@@ -9,7 +9,7 @@ _build_engine          — configure BacktestEngine with venue/instrument/data/s
 _account_balance_path  — whole account report -> (balance series, timestamps)
 _balance_path_metrics  — Sharpe + max drawdown from that balance series
 _extract_pnl           — parse account report -> (total_pnl, total_return_pct)
-_extract_perf_stats    — balance-path Sharpe/drawdown + series from portfolio analyzer
+_extract_perf_stats    — balance-path Sharpe/drawdown + verified returns series
 _build_result          — assemble BacktestResult from raw engine outputs
 _run_backtest_ohlcv    — orchestrates the above; writes tearsheet if requested
 
@@ -19,6 +19,11 @@ position*, so annualising it by 252 trading days produced numbers like -76 Sharp
 and -76% drawdown next to a -3.1% total return. The balance path already in hand
 is the equity curve, and deriving all three metrics from it makes them mutually
 consistent by construction.
+
+The returns *series* the tearsheet charts are read from that same alias, so it is
+verified rather than trusted: ``_verified_returns_series`` only publishes it when it
+matches ``analyzer.portfolio_returns()``, and withholds it otherwise. See that
+function for why the alias cannot be believed on its own.
 """
 
 from __future__ import annotations
@@ -69,6 +74,21 @@ _ACCOUNT_TIMESTAMP_COLUMNS = ("ts_event", "timestamp", "index")
 
 # 365.25 days in seconds — the year length used to annualise the balance path.
 _YEAR_SECONDS = 365.25 * 86400.0
+
+# Marker appended to ``missing`` when ``analyzer.returns()`` cannot be confirmed to be
+# the portfolio return series. Tracked separately from the metric markers because a
+# missing *chart* series must not cost a symbol its place in a multi-symbol aggregate
+# (see _degraded_symbol_reason): the aggregates use no series at all.
+RETURNS_SERIES_MISSING = "returns_series"
+
+# Marker prefix for the per-symbol accounting inside a multi-symbol aggregate, matching
+# the existing "sharpe_ratio (k/n symbols)" wording already emitted by that function.
+RETURNS_SERIES_MISSING_SYMBOLS = f"{RETURNS_SERIES_MISSING} ("
+
+# Elementwise tolerance for the alias-vs-portfolio comparison. The two series are the
+# same objects when the alias is in sync, so the only differences seen in practice are
+# float round-trips; anything larger than this is a genuinely different series.
+_SERIES_MATCH_TOLERANCE = 1e-12
 
 # Default position size, as a fraction of starting balance, expressed in notional.
 # trade_size (units) = floor(STARTING_BALANCE_USD * fraction / first_price), min 1.
@@ -501,17 +521,92 @@ def _extract_pnl(account_report: Any, errors: list[str] | None = None) -> tuple[
         return _fail(f"PnL extraction failed: {e}")
 
 
+def _series_is_portfolio_returns(alias: Any, portfolio: Any) -> bool:
+    """True only when ``alias`` *is* the portfolio series, value for value.
+
+    Length alone proves nothing: a per-position series can match the portfolio one
+    in length by coincidence. Index and dtype are ignored on purpose — only the
+    ordered values decide what the charts would draw.
+    """
+    if alias is None or portfolio is None:
+        return False
+    try:
+        if len(alias) == 0 or len(alias) != len(portfolio):
+            return False
+        left = [float(v) for v in alias]
+        right = [float(v) for v in portfolio]
+    except (TypeError, ValueError):
+        return False
+    for a, b in zip(left, right):
+        if math.isnan(a) and math.isnan(b):
+            continue
+        if abs(a - b) > _SERIES_MATCH_TOLERANCE:
+            return False
+    return True
+
+
+def _verified_returns_series(analyzer: Any) -> tuple[Any, str | None]:
+    """The analyzer returns series worth publishing, and why it was withheld.
+
+    ``analyzer.returns()`` is an *alias*, not the portfolio series. Where Nautilus
+    exposes ``_sync_returns_alias``, it repoints ``_returns`` at the portfolio
+    returns when those are non-empty and otherwise at the per-position returns —
+    silently, with no warning. DigiQuant never calls ``analyze_statistics``, so the
+    portfolio series is populated only by Nautilus' own post-run venue loop, and it
+    is empty whenever ``_calculate_portfolio_returns`` sees fewer than two account
+    state events, more than one balance currency on any event, a currency change
+    between events, or fewer than two distinct calendar days of balance data.
+
+    Publishing the fallback is how ``charts/equity.py`` came to compound a
+    per-position series as ``(1 + r).cum_prod() * initial_balance`` under a
+    ``Daily Equity`` label: roughly -78% compounded next to a real final balance of
+    968,989.60 on 1,000,000. So the alias is compared against
+    ``portfolio_returns()`` and anything that cannot be confirmed is withheld.
+
+    Three separate ways to fail, all refused, because all three leave the alias
+    indistinguishable from a per-position series: no ``portfolio_returns`` to
+    compare against (nautilus_trader below the release that added it — including
+    the 1.223.0 pin), an empty portfolio series (the silent fallback), or values
+    that differ. Building a correct daily series instead is DIG-1834's job; here a
+    blank chart is honest and a wrong curve is not.
+    """
+    if not hasattr(analyzer, "portfolio_returns"):
+        return None, (
+            f"analyzer has no portfolio_returns() to confirm the alias against "
+            f"(nautilus_trader {getattr(analyzer, '__class__', type(analyzer)).__module__})"
+        )
+    try:
+        portfolio = analyzer.portfolio_returns()
+    except _ANALYZER_ERRORS as e:
+        return None, f"portfolio_returns() failed: {e}"
+    if portfolio is None or len(portfolio) == 0:
+        return None, "portfolio_returns() is empty, so returns() is the per-position fallback"
+    alias = analyzer.returns()
+    if not _series_is_portfolio_returns(alias, portfolio):
+        return None, (
+            f"returns() has {0 if alias is None else len(alias)} values against "
+            f"{len(portfolio)} in portfolio_returns() and does not match them"
+        )
+    return alias, None
+
+
 def _extract_perf_stats(
     engine: Any,
     USD: Any,
     account_report: Any = None,
 ) -> dict[str, Any]:
-    """Sharpe and max drawdown from the balance path, series from the analyzer.
+    """Sharpe and max drawdown from the balance path, series only when verified.
 
     ``sharpe`` and ``max_dd`` are derived from ``account_report``'s balance path by
-    ``_balance_path_metrics``. The analyzer is still read for the raw per-trade
-    series the tearsheet renders, but never for a metric: its returns are per closed
-    position, not an equity curve.
+    ``_balance_path_metrics``. The analyzer is read for the series the tearsheet
+    renders, but never for a metric: its returns are per closed position, not an
+    equity curve.
+
+    ``returns_series`` is published only when ``_verified_returns_series`` can
+    confirm it against ``analyzer.portfolio_returns()``. An alias that cannot be
+    confirmed is withheld rather than drawn, and ``RETURNS_SERIES_MISSING`` is
+    appended to ``missing`` so the result lands ``partial`` instead of advertising a
+    chart it cannot stand behind.
 
     ``errors`` records analyzer/parse failures and ``missing`` names metrics that
     remained ``None``, so callers can mark a result ``partial`` instead of
@@ -536,7 +631,12 @@ def _extract_perf_stats(
         if hasattr(analyzer, "get_performance_stats_general"):
             result["stats_general"] = analyzer.get_performance_stats_general()
         if hasattr(analyzer, "returns"):
-            result["returns_series"] = analyzer.returns()
+            series, refusal = _verified_returns_series(analyzer)
+            if series is None:
+                logger.warning("Withholding returns series: %s", refusal)
+                result["missing"].append(RETURNS_SERIES_MISSING)
+            else:
+                result["returns_series"] = series
         if hasattr(analyzer, "realized_pnls"):
             rp = analyzer.realized_pnls(USD)
             result["realized_pnls_series"] = rp if rp is not None and len(rp) > 0 else None
@@ -613,6 +713,7 @@ def _build_result(
         sharpe_ratio=perf["sharpe"],
         max_drawdown_pct=normalize_drawdown_pct(perf["max_dd"]),
         num_trades=num_trades,
+        missing=missing,
         status=status,
         message=message,
     )
@@ -725,6 +826,27 @@ def _run_backtest_ohlcv(
     return bt_result
 
 
+def _degraded_symbol_reason(result: BacktestResult) -> str | None:
+    """Why this symbol cannot be averaged in, or ``None`` when it can be.
+
+    The aggregates use PnL, total return, Sharpe, drawdown and the trade count. A
+    withheld returns series is none of those, so a symbol that is ``partial``
+    *only* because ``RETURNS_SERIES_MISSING`` is present still has honest numbers to
+    contribute and stays in. Excluding it would drop real trades from every average
+    to avoid a chart that is not drawn here anyway (multi-symbol tearsheets are
+    skipped), and because the refusal fires on every run under the pinned
+    nautilus_trader, excluding on it would empty the aggregate entirely.
+
+    Every other reason still excludes: a partial missing a real metric, or any
+    error. That is unchanged behaviour.
+    """
+    if result.status == "ok":
+        return None
+    if result.status == "partial" and set(result.missing) == {RETURNS_SERIES_MISSING}:
+        return None
+    return result.status
+
+
 def _run_multi_symbol_backtest(
     symbol_dfs: dict[str, pl.DataFrame],
     strategy_name: str,
@@ -743,7 +865,9 @@ def _run_multi_symbol_backtest(
 
     Symbols whose backtest failed (``None`` or ``status="error"``) are never
     silently averaged in as fabricated zeros; they are named and the result is
-    marked ``partial``.
+    marked ``partial``. A symbol ``partial`` only because its returns series was
+    withheld is still averaged in — see ``_degraded_symbol_reason`` — and counted
+    under ``missing`` so the reader can see the charts were not drawn.
     """
     per_symbol_pnl: dict[str, float] = {}
     per_symbol_return: dict[str, float] = {}
@@ -751,6 +875,7 @@ def _run_multi_symbol_backtest(
     per_symbol_max_dd: dict[str, float] = {}
     skipped_symbols: list[str] = [s for s in symbols if s not in symbol_dfs]
     degraded_symbols: list[str] = []
+    withheld_series_symbols: list[str] = []
     num_trades_total = 0
     combined_run_id = f"multi-{uuid.uuid4().hex[:8]}"
     start_time: str | None = None
@@ -770,14 +895,17 @@ def _run_multi_symbol_backtest(
             logger.warning("Multi-symbol: backtest returned None for symbol %s — skipping", sym)
             skipped_symbols.append(sym)
             continue
-        if result.status != "ok":
+        degraded = _degraded_symbol_reason(result)
+        if degraded is not None:
             logger.warning(
                 "Multi-symbol: backtest status=%s for symbol %s — excluding from aggregates",
-                result.status,
+                degraded,
                 sym,
             )
-            degraded_symbols.append(f"{sym} ({result.status})")
+            degraded_symbols.append(f"{sym} ({degraded})")
             continue
+        if RETURNS_SERIES_MISSING in result.missing:
+            withheld_series_symbols.append(sym)
         per_symbol_pnl[sym] = result.total_pnl
         per_symbol_return[sym] = result.total_return_pct
         if result.sharpe_ratio is not None:
@@ -810,6 +938,10 @@ def _run_multi_symbol_backtest(
         missing.append("max_drawdown_pct")
     elif len(per_symbol_max_dd) < n:
         missing.append(f"max_drawdown_pct ({len(per_symbol_max_dd)}/{n} symbols)")
+    if withheld_series_symbols:
+        missing.append(
+            f"{RETURNS_SERIES_MISSING_SYMBOLS}{len(withheld_series_symbols)}/{n} symbols)"
+        )
 
     status = "partial" if (skipped_symbols or degraded_symbols or missing) else "ok"
 
@@ -843,6 +975,7 @@ def _run_multi_symbol_backtest(
         max_drawdown_pct=normalize_drawdown_pct(worst_dd),
         num_trades=num_trades_total,
         per_symbol_pnl={k: round(v, 4) for k, v in per_symbol_pnl.items()},
+        missing=missing,
         status=status,
         message=" ".join(message_bits),
     )
