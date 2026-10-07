@@ -29,6 +29,7 @@ function idea(partial: Partial<FxTradeIdeaRow> & Pick<FxTradeIdeaRow, 'run_date'
       entry_high: { value: '148.60', provenance: 'broker_quoted', source_ref: 'desk.md' },
       stop: { value: '147.40', provenance: 'broker_quoted', source_ref: 'desk.md' },
       targets: [{ value: '150.50', provenance: 'broker_quoted', source_ref: 'desk.md' }],
+      status: 'complete',
     },
     evidence: [],
     as_of: '2026-07-31T00:00:00Z',
@@ -111,6 +112,36 @@ describe('assembleTradeHistory', () => {
     expect(rows[1].stop).toBe('147.4');
     expect(rows[1].target).toBe('150.5');
     expect(rows[1].hasLevels).toBe(true);
+  });
+
+  it('withholds every ladder field when the bracket is not complete', () => {
+    // Broker target-only: targets exist but entry + stop are missing. A history
+    // row must publish nothing — a target with no entry or stop is a half ladder.
+    const partial = idea({
+      run_date: '2026-07-28',
+      rank: 1,
+      trade_levels: {
+        targets: [{ value: '1.1800', provenance: 'broker_quoted', source_ref: 'desk.md' }],
+        status: 'partial',
+      },
+    });
+    const rows = assembleTradeHistory([partial], []);
+    const row = rows[0];
+    expect(row.entryBand).toBeNull();
+    expect(row.stop).toBeNull();
+    expect(row.target).toBeNull();
+    // Shape-only: the row still knows levels exist (see hasTradeLevels contract).
+    expect(row.hasLevels).toBe(true);
+    // The internal status enum never reaches the published row.
+    expect(JSON.stringify(row)).not.toContain('partial');
+  });
+
+  it('publishes the ladder only for a complete bracket', () => {
+    const complete = idea({ run_date: '2026-07-29', rank: 1 });
+    const rows = assembleTradeHistory([complete], []);
+    expect(rows[0].entryBand).toBe('148.2–148.6');
+    expect(rows[0].stop).toBe('147.4');
+    expect(rows[0].target).toBe('150.5');
   });
 
   it('marks missing_rates as no_data, unscored and level-less ideas honestly', () => {

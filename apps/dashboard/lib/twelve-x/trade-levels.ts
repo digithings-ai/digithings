@@ -441,8 +441,12 @@ function buildLadderRows(
  *
  * Shape stays a separate question: `hasTradeLevels` answers "is there data",
  * this answers "may it be shown".
+ *
+ * Exported so every ladder publisher gates on the same rule (DIG-260 L5
+ * follow-up): a publisher that derives fields from shape alone renders a
+ * target with no entry and no stop.
  */
-function isPublishableBracket(tradeLevels: FxTradeLevels | null): tradeLevels is FxTradeLevels {
+export function isPublishableBracket(tradeLevels: FxTradeLevels | null): tradeLevels is FxTradeLevels {
   return tradeLevels !== null && tradeLevels.status === 'complete';
 }
 
