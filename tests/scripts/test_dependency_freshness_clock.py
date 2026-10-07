@@ -111,10 +111,17 @@ def test_the_cron_is_in_the_wrangler_trigger() -> None:
 
 
 def test_the_pinned_cron_set_is_updated() -> None:
-    """jobs.test.ts asserts uniqueEnabledCrons() by exact ordered equality, and
-    the enabled id list by exact set equality."""
+    """jobs.test.ts asserts the enabled id list by exact set equality.
+
+    It used to also assert the cron against ENABLED_CRONS, an ordered hardcoded
+    copy of the trigger list. DIG-732 deleted that copy: a copied list is a second
+    source of truth that drifts silently, and it was the only thing that noticed a
+    deleted backstop -- as a unit test nobody ran for five weeks. The cron half of
+    the guard moved with the list; test_the_cron_is_in_the_wrangler_trigger above
+    still asserts the clock against wrangler.toml, and
+    apps/digithings-cron/src/trigger-contract.test.ts now asserts the whole set.
+    """
     text = JOBS_TEST.read_text(encoding="utf-8")
-    assert f'"{CRON}"' in text, "ENABLED_CRONS must gain the new clock at its JOBS position"
     assert f'"{JOB_ID}"' in text, "PATH_A_ENABLED_IDS must gain the new job id"
 
 
