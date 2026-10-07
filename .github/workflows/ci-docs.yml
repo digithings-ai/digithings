@@ -48,6 +48,15 @@ jobs:
         # docs/adr/NNNN-*.md must stay zero-padded, unique and gap-free (#3524).
         run: uv run --frozen --no-sync python scripts/check_adr_numbering.py
 
+      - name: Check agent skills links resolve
+        # Seats load skills through slug -> slug--hash -> source. When the source is
+        # garbage-collected the links survive and the skill silently stops loading
+        # (DIG-2284: 8 dangling aliases on a 59-seat org). Read-only; repairs nothing.
+        # A CI checkout has no .claude/skills until `make agents-init` runs, so an absent
+        # home is reported, not failed — the real teeth are the operator run:
+        #   python scripts/check_agent_skills_links.py --skills-home ~/.claude/skills --strict
+        run: uv run --frozen --no-sync python scripts/check_agent_skills_links.py
+
       - name: Lint the docs/vision digivault vault
         # `uv run make` rather than bare `make`: the Makefile target invokes
         # `python3` directly, and uv run puts the synced venv first on PATH so
