@@ -608,7 +608,7 @@ series the manifest actually declared. Four whole-leg freezes still exit 0:
 |---|---|---|
 | Partial leg (2 or 3 of 4 slow series dead) | indistinguishable from a rate-limit blip; a subset is not evidence | accepted, by design |
 | Single **slow-cadence** series in the manifest | the `> 1` floor counts exempt ids, not manifest size — an 8-series panel with one monthly series has a frozen slow leg and cannot trip it | accepted, by design |
-| Panel serving stale rows in-window | outcome is `up-to-date`, not a soft fail, so it never enters the reduction | **open, pre-dates this guard** |
+| Panel serving stale rows in-window | outcome is `up-to-date`, not a soft fail, so it never enters the reduction | **decided (DIG-1142), not yet built — see below** |
 | Unreadable manifest | `_resolve_macro_specs` swallows the exception and returns `[]`, so `exempt` is empty and the guard has no ids to reason about | **open, pre-dates this guard** |
 
 The last two are the same class of defect this guard closed — a macro panel frozen while
@@ -619,6 +619,55 @@ an empty spec list. A monthly series only reaches `up-to-date` once its 120-day
 `_CADENCE_WINDOW_DAYS["monthly"]` window is exhausted while rows still land inside it, so
 that shape carries a ~120-day fuse before a healthy panel trips it — which is why it has
 not surfaced.
+
+**Decided shape for the frozen-but-serving panel (DIG-1142).** Design recorded here so the
+EM can cut it as a leaf. **Not yet built** — `origin/develop` has no such function today.
+
+The gap is that `refresh_macro_series` returns `MODE_UP_TO_DATE` with `as_of=seal` whenever
+the live window is non-empty but carries nothing newer than the seal. `up-to-date` is not in
+`_SOFT_FAIL_MODES` and is not `history-only`, so the outcome never enters the reduction and
+the run exits 0 claiming fresh. Two healthy paths reach that same shape: a same-day FRED
+restatement (`MODE_FULL_REPULL`, `as_of=top2 == seal`) and an unchanged overlap that then
+finds nothing new.
+
+`_macro_as_of_stale(outcomes, macro_specs, run) -> set[str]`, defined next to
+`_live_window_days` and called in `main` between the `failed` list and `stale = ...`:
+
+- **Predicate.** For each macro series, take the declared cadence from `macro_specs`
+  (ticker key is `f"{source}__{series}"`, matching `_slow_macro_exempt_ids`), resolve the
+  window with the existing `_live_window_days`, and report the series when
+  `(run_date - as_of).days > window`. Age against the series' own window, **never**
+  `as_of == seal` and never `mode` — the two restatement paths above are healthy, so keying
+  on either would fail a healthy panel.
+- **Mode filter.** Success modes only (`MODE_UP_TO_DATE`, `MODE_INCREMENTAL`,
+  `MODE_FULL_REPULL`). `history-only` and `error` are already `_SOFT_FAIL_MODES` and stay
+  with `_macro_leg_dead`; an empty `as_of` is skipped rather than guessed.
+- **No declared cadence** defaults to the 45-day daily window via `_live_window_days`,
+  matching the live-fetch default rather than inventing a second one.
+- **Calendar days, not trading days.** `_CADENCE_WINDOW_DAYS` is calendar days (45/120/240).
+  `staleness_gate` (`digiquant/src/digiquant/data/prices/refresh_gate.py:49`) counts *open
+  trading days* against `bound_trading_days=5`; reusing it per series would call a 120-day
+  monthly series fresh after ~5 trading days. The file already has `_shift_days` for
+  calendar arithmetic.
+- **Per-outcome, composing with `_macro_leg_dead`.** `_macro_leg_dead` judges the leg
+  (`history-only` on every exempt series at once); this judges one series' age. They are
+  orthogonal, and the new names only ever *add* to `failed` — the guard never turns a stale
+  run fresh. **The DIG-981 "a subset is not evidence" reasoning does not carry over to age.**
+  That reasoning was about `history-only`, which has two causes (exhausted publication
+  window vs. per-series vendor refusal) where a rate-limit blip silences an arbitrary subset,
+  so a subset proves nothing. Age has one cause — the series is old — and it is measured, not
+  inferred from a mode. A single frozen monthly series past its window is evidence by
+  itself; the #4621 fuse already draws the line, fresh inside the window and loud outside it.
+  At 34 days the seal is still inside the 120-day window and the run **should** exit 0.
+- Staleness flag only. No money, rate or weight arithmetic, matching the other guards here.
+
+**Known limits accepted for this guard.** Both are recorded rather than fixed, in the same
+spirit as the two above:
+
+| Limit | Why it stays |
+|---|---|
+| Undeclared cadence is judged at the 45-day daily window | the manifest is the source of truth; omitting `cadence` opts into the daily default, so a genuinely monthly series missing it goes loud at 45 days |
+| The window is calendar days, not open trading days | deliberate, and consistent with `_CADENCE_WINDOW_DAYS`; reusing `staleness_gate` would fire ~5 trading days into a 120-day window |
 
 #### Market-data R2 read path (#3780 Task 10)
 
