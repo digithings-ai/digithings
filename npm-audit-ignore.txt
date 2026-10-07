@@ -81,6 +81,28 @@ GHSA-r28c-9q8g-f849
 # sharp (next optionalDependency) — high: inherited libvips / libheif CVEs.
 GHSA-f88m-g3jw-g9cj
 GHSA-rgj7-g3m4-5g8c
+# sharp (next optionalDependency) 0.34.5 — high: librsvg CVE-2026-96889. Reachable
+# only if sharp is asked to decode an attacker-supplied SVG. Nothing in this repo
+# can do that: zero `sharp` imports under apps/, packages/, scripts/ or tools/;
+# zero `next/og` / `ImageResponse` / opengraph-image; zero `dangerouslyAllowSVG`,
+# which is the switch next needs before it hands SVG bytes to sharp; and the three
+# files that do use next/image sit in apps that all set `images.unoptimized: true`,
+# so the Image Optimization API — sharp's only entry point — never runs. The second
+# copy, sharp 0.35.4 nested under miniflare, is dev-only and no worker declares a
+# cf:image binding for it to transform.
+#
+# Not fixed in this change: the patched release is sharp >=0.35.5, which is outside
+# next@16.2.4's declared `^0.34.5`. A root `overrides` entry was evaluated for it
+# (DIG-2212) and rejected — it re-resolves ~50 native @img/* libvips bindings for
+# every OS/arch, hoists a single 0.35.5 that overrides miniflare's exact 0.35.4
+# pin, and relies on the override-reapply behaviour the block above already
+# records as unreliable. The sibling sharp advisories above clear with #4396.
+#
+# Re-evaluate when #4396 lands (next >=16.3.6): delete the whole sharp block and
+# let the lane enforce. Re-open this earlier if any app enables next's image
+# optimization, sets dangerouslyAllowSVG, adds a cf:image binding, or imports
+# sharp directly — then pin >=0.35.5 instead of extending this comment.
+GHSA-wq5f-xc86-pv6w
 
 # undici 7.29.0 (transitive: @ai-sdk/provider-utils in prod digichat server, jsdom + miniflare dev-only) — high: GHSA-rfgv needs undici WebSocket (unused anywhere in-repo), GHSA-w293 needs BalancedPool (unused; sole prod consumer uses plain Agent({connect}) + fetch). Refs #4838. Re-check on undici major bump or any new undici consumer.
 GHSA-rfgv-xxqx-mfg5
