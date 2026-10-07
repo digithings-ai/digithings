@@ -337,13 +337,23 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Hashes only (count still 127) re-recorded for #4973 (grokipedia MCP tool
     rows + module-map / digiclaw-attach notes in ARCHITECTURE.md) — fixture
     prose only; RecursiveChunker unchanged.
+    Hashes only (count still 127) re-recorded for DIG-1464 (LuxAlgo trackers
+    data-licence classification: the module-map row and the CC0 public-records
+    layer note now read CC0-1.0, the licence Security classified against the
+    upstream LICENSE file) — fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 128 for the DIG-1464 review follow-up (the
+    ARCHITECTURE.md trackers section now carries the per-family
+    congress-trades/short-volume limits, and the module-map row says
+    so). The added prose pushed one chunk over the split boundary, so
+    this is a count change as well as a hash re-record; the size
+    invariant (max chunk 1997 <= 2000) and RecursiveChunker are unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 127
+    assert len(chunks) == 128
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
@@ -412,12 +422,13 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "5c929ad2654944ce",
         "80578aa2dbbb641d",
         "1f9fe54a7f6c6f25",
-        "9fdf82f0c003a7a4",
-        "9ebbe22f37b1ac89",
-        "75aa00c56fa87d4c",
-        "acc08c97a5620aaf",
-        "2da9a534085afc86",
-        "d040c14d01f65a04",
+        "9db4140a31598a03",
+        "f7ef2f68779a303e",
+        "ed9fd383de98c694",
+        "cd4e7192b6baa3d3",
+        "a03c67e88e3c2999",
+        "8bb70d874a5aceb3",
+        "bd6476821a8100f0",
         "3021ca751898fc7b",
         "ef1849e4569e10b8",
         "8e7e26ccae99b4a2",
