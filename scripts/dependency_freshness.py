@@ -66,8 +66,19 @@ def read_pinned(path: Path = REQUIREMENTS) -> dict[str, str]:
     return pinned
 
 
+def _all_files_yanked(files: list) -> bool:
+    """True only when PyPI told us every file in a release is yanked.
+
+    PyPI yanks per file, so a release is only uninstallable when all of its
+    files are. A release with no file list in the payload is NOT treated as
+    yanked: absence of evidence is not a yank, and guessing here would silently
+    drop versions the radar exists to report.
+    """
+    return bool(files) and all(file.get("yanked") for file in files)
+
+
 def latest_stable(releases: dict[str, list]) -> str | None:
-    """Newest non-prerelease, non-dev release that parses as a version."""
+    """Newest installable, non-prerelease, non-dev release that parses."""
     best = None
     for version in releases:
         try:
@@ -76,6 +87,12 @@ def latest_stable(releases: dict[str, list]) -> str | None:
             # Legacy non-PEP440 version in the release history. Skip it.
             continue
         if parsed.is_prerelease or parsed.is_devrelease:
+            continue
+        if _all_files_yanked(releases[version]):
+            # Yanked releases cannot be installed, so calling one "latest"
+            # points the radar at a version `uv add` would refuse. Verified
+            # live: narwhals 2.27.0 has every file yanked while 2.26.0 is the
+            # newest installable release.
             continue
         if best is None or parsed > best:
             best = parsed
@@ -109,8 +126,11 @@ def fetch_all(
     Sequential fetching was measured at 8m06s for this repo's 284-package
     closure, and six of its seven `unknown` rows were our own 10s read timeout
     firing under load rather than PyPI being unreachable. `unknown` means "could
-    not compare", so the scan must not manufacture it by being slow. The pool is
-    capped at DEFAULT_WORKERS because PyPI is a free public service.
+    not compare", so the scan must not manufacture it by being slow. Concurrency
+    narrows that window to near-nothing (three consecutive runs at 0) but does not
+    remove it: the timeout is unchanged, and a review reproduced 6 self-inflicted
+    `unknown`s at the same worker count under load. The pool is capped at
+    DEFAULT_WORKERS because PyPI is a free public service.
     """
     if not packages:
         return {}
@@ -124,7 +144,7 @@ def fetch_all(
 
     with ThreadPoolExecutor(max_workers=max(1, min(workers, len(packages)))) as pool:
         results = list(pool.map(one, packages))
-    return {name: version for result in results if result for name, version in [result]}
+    return dict(result for result in filter(None, results))
 
 
 def classify(locked_ver: str, latest_ver: str) -> tuple[str, str]:
@@ -134,6 +154,12 @@ def classify(locked_ver: str, latest_ver: str) -> tuple[str, str]:
         newest = parse_version(latest_ver)
     except InvalidVersion:
         return "unknown", UNKNOWN_ICON
+    if locked > newest:
+        # Our locked version is newer than the newest installable release. The
+        # only way that happens is a release we locked before it was yanked, so
+        # there is nothing to upgrade to. Reporting a negative gap would read as
+        # "we are behind", which is the opposite of the truth.
+        return "current", CURRENT_ICON
     if locked.major != newest.major:
         return "major", MAJOR_ICON
     if locked.minor != newest.minor:
@@ -152,10 +178,12 @@ def build_report(pinned: dict[str, str], latest: dict[str, str]) -> dict:
             continue
         latest_ver = latest[package]
         if latest_ver is None:
-            # `latest` carries one of three meanings for a missing key, decided by
-            # what PyPI returned: no releases at all, only prereleases, or an
-            # unreadable response. All six opentelemetry-instrumentation packages
-            # we lock are the middle case, so they get the middle label.
+            # A present-but-None value means PyPI answered and has only ever
+            # shipped prereleases. All six opentelemetry-instrumentation packages
+            # we lock are in this group, so they get the middle label. An absent
+            # key (handled above) is the other failure: unreadable, or a project
+            # that does not exist on PyPI at all — the issue body spells that out
+            # because `unknown` covers both.
             rows.append((package, locked_ver, "no stable release", "no-stable", NO_STABLE_ICON))
             continue
         gap, icon = classify(locked_ver, latest_ver)

@@ -47,6 +47,10 @@ def _on(doc: dict) -> object:
     raise AssertionError("workflow missing on:")
 
 
+def _steps() -> list[dict]:
+    return _workflow()["jobs"]["dependency-freshness"]["steps"]
+
+
 def test_the_clock_workflow_exists() -> None:
     _workflow()
 
@@ -66,8 +70,18 @@ def test_the_workflow_is_workflow_dispatch_only() -> None:
 
 def test_the_clock_is_monthly() -> None:
     """The finding was that nobody sees a major arriving. A weekly clock would
-    bury the report; monthly is the cadence the idea asked for."""
-    assert CRON.endswith("1 * *"), f"{CRON!r} is not monthly on the 1st"
+    bury the report; monthly is the cadence the idea asked for.
+
+    Read out of jobs.ts rather than asserted against the module literal, so this
+    fails if the registered row's day-of-month ever changes.
+    """
+    row = re.search(
+        rf'wd\(\s*"{re.escape(JOB_ID)}"\s*,\s*"([^"]+)"', JOBS_SOURCE.read_text(encoding="utf-8")
+    )
+    assert row, f'no wd("{JOB_ID}", "…") row in jobs.ts'
+    registered = row.group(1)
+    assert registered == CRON, f"jobs.ts registers {registered!r}, this suite pins {CRON!r}"
+    assert registered.endswith("1 * *"), f"{registered!r} is not monthly on the 1st"
 
 
 def test_the_clock_is_registered_on_the_cron_worker() -> None:
@@ -137,3 +151,55 @@ def test_the_workflow_changes_no_bound() -> None:
     assert "--upgrade" not in body
     assert "uv add" not in body
     assert "uv lock" not in body.replace("uv.lock", "").replace("uv lock file", "")
+
+
+def test_a_failed_scan_cannot_blank_the_standing_report() -> None:
+    """The one blocker a review found.
+
+    The publish step edits the single open radar issue in place, so `if: always()`
+    on it meant any upstream failure — and the fragile step behind it is a 2.4 GB
+    `uv sync` plus 284 PyPI reads — published an empty table over a good monthly
+    report and reported success. The radar would have destroyed its own record
+    once and had no way to explain why. It must fail loudly instead, and only
+    ever edit a body it actually produced.
+    """
+    steps = _steps()
+    publish = next(s for s in steps if s.get("name") == "Create/update tracking issue")
+    assert "always()" not in str(publish.get("if", "")), (
+        "the publish step must not run when a predecessor failed"
+    )
+
+    guards = [s for s in steps if "Guard" in str(s.get("name", ""))]
+    assert guards, "an empty report has to be refused, not published over the good one"
+    guard = guards[0]
+    assert str(guard.get("if")) == "always()", (
+        "the guard must also surface a failure that happened upstream of the scan"
+    )
+    assert "steps.report.outputs.table" in yaml.safe_dump(guard.get("env") or {}), (
+        "read the table through env:, not ${{ }} interpolation into the script"
+    )
+    run = guard["run"]
+    assert "-z" in run and "exit 1" in run, "the guard must actually fail the job"
+
+
+def test_the_radar_creates_its_own_label_before_using_it() -> None:
+    """`gh issue create --label` is fatal on a label that does not exist, and
+    `radar` did not exist in this repo. Left alone, the first monthly run would
+    have died on a label lookup and reported nothing for a month."""
+    body = WORKFLOW.read_text(encoding="utf-8")
+    assert body.index("gh label create radar") < body.index('--label "radar,')
+
+
+def test_the_job_is_bounded_and_single_flighted() -> None:
+    """An unbounded job is a stuck clock, and two overlapping dispatches would
+    race each other on the same issue body — the radar edits one issue in
+    place, so the loser of that race silently discards the winner's table."""
+    job = _workflow()["jobs"]["dependency-freshness"]
+    timeout = job.get("timeout-minutes", 0)
+    assert 0 < timeout <= 30, f"timeout-minutes is {timeout!r}; 27 sibling workflows set one"
+
+    concurrency = _workflow().get("concurrency") or {}
+    assert concurrency.get("group"), "overlapping dispatches must share a concurrency group"
+    assert concurrency.get("cancel-in-progress") is False, (
+        "queue the second dispatch; cancelling the first would leave a half-run report"
+    )

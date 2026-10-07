@@ -212,3 +212,83 @@ def test_report_is_json_serialisable() -> None:
 
     report = mod.build_report({"cryptography": "49.0.0"}, {"cryptography": "50.0.2"})
     assert set(json.loads(json.dumps(report))) == {"table", "summary"}
+
+
+def test_latest_stable_skips_fully_yanked_releases() -> None:
+    """A yanked release is not something `uv add` can install, so it cannot be
+    "latest". Verified live against the 284-package closure: narwhals 2.27.0 has
+    every file yanked, so the radar was pointing at a version uv would refuse.
+    """
+    releases = {
+        "2.26.0": [{"filename": "narwhals-2.26.0-py3-none-any.whl", "yanked": False}],
+        "2.27.0": [{"filename": "narwhals-2.27.0-py3-none-any.whl", "yanked": True}],
+    }
+    assert mod.latest_stable(releases) == "2.26.0"
+
+
+def test_latest_stable_keeps_a_release_that_has_one_installable_file() -> None:
+    """PyPI yanks per file. A release with any surviving file is still
+    installable, so it must not be filtered out."""
+    releases = {
+        "2.26.0": [{"filename": "narwhals-2.26.0.tar.gz", "yanked": True}],
+        "2.25.0": [
+            {"filename": "narwhals-2.25.0.tar.gz", "yanked": True},
+            {"filename": "narwhals-2.25.0-py3-none-any.whl", "yanked": False},
+        ],
+    }
+    assert mod.latest_stable(releases) == "2.25.0"
+
+
+def test_a_yanked_release_with_no_file_list_is_not_assumed_yanked() -> None:
+    """Absence of evidence is not a yank. Dropping a version because PyPI
+    omitted its file list would silently hide the very gap the radar reports."""
+    assert mod.latest_stable({"1.0.0": []}) == "1.0.0"
+
+
+def test_locked_past_the_newest_installable_is_current_not_a_negative_gap() -> None:
+    """We locked a version that has since been yanked, so the newest installable
+    release is behind us. A `minor`/`major` label here would say we are behind
+    when we are not, and send someone to chase a downgrade."""
+    assert mod.classify("2.27.0", "2.26.0") == ("current", mod.CURRENT_ICON)
+
+    report = mod.build_report({"narwhals": "2.27.0"}, {"narwhals": "2.26.0"})
+    assert "0 major" in report["summary"]
+    assert "1 current" in report["summary"]
+    assert "| narwhals | 2.27.0 | 2.26.0 |" in report["table"]
+
+
+def test_main_writes_the_contract_the_workflow_reads(
+    requirements: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The whole workflow<->script seam, and the one the rest of this file never
+    touched: `main()` reads `freshness-requirements.txt` from the working
+    directory and writes JSON with `table` and `summary` on stdout. Mutating
+    either end (wrong filename, `print` instead of `json.dump`) left all 16
+    other tests passing, so this test is the only thing standing between a
+    blank table and the standing report it would overwrite.
+    """
+    import contextlib
+    import io
+    import json
+
+    def fake_fetch_all(packages: list[str], **_: object) -> dict[str, str | None]:
+        return {
+            "aiohttp": "3.15.0",
+            "colorama": "0.4.6",
+            "pywin32": "312",
+            "cryptography": "50.0.2",
+        }
+
+    monkeypatch.setattr(mod, "fetch_all", fake_fetch_all)
+    monkeypatch.chdir(requirements.parent)
+
+    stdout, stderr = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+        assert mod.main() == 0
+
+    report = json.loads(stdout.getvalue())
+    assert set(report) == {"table", "summary"}
+    assert "| cryptography | 49.0.0 | 50.0.2 |" in report["table"]
+    assert "**1 major**, 1 minor, 0 patch, 2 current" in report["summary"]
+    assert "4 packages" in report["summary"]
+    assert "Parsed 4 pinned packages" in stderr.getvalue()

@@ -1,10 +1,12 @@
 # Dependency freshness radar — design note
 
 - **Issue:** DIG-1515
-- **Status:** Implemented and verified (30 tests + 3 live runs; awaiting first dispatch)
+- **Status:** Implemented, reviewed, and fixed before its first run. Open as
+  PR #5242; not on `develop`, so not yet dispatchable.
 - **Date:** 2026-10-06, revised 2026-10-07
 - **Author:** Architect
-- **Supersedes:** the first draft of this note, which shipped a workflow that could not work. See "Correction" below — it had six defects, not three.
+- **Supersedes:** the first draft of this note, which shipped a workflow that
+  could not work. See "Correction" below — it had six defects, not three.
 
 ## Problem
 
@@ -67,7 +69,7 @@ preferred for testability, not because A is wrong.
 ### Correction (2026-10-07)
 
 The first implementation was reported as done on 2026-10-06. It could not have
-worked. Three defects, all found by running it rather than reading it:
+worked. Six defects, all found by running it rather than reading it:
 
 1. **Step outputs never written.** The report step `print`ed JSON to stdout but
    wrote nothing to `$GITHUB_OUTPUT`, so `steps.report.outputs.table` and
@@ -91,7 +93,10 @@ worked. Three defects, all found by running it rather than reading it:
    real lock: **8m06s** for 284 packages, of which 6 `unknown` rows were our own
    10s read timeout firing under load rather than PyPI being unreachable. A row
    that reads "could not compare" because the radar was slow is the radar lying
-   about its own gaps. Now a 16-way `ThreadPoolExecutor`: **36s**, `0 unknown`.
+   about its own gaps. Now a 16-way `ThreadPoolExecutor`: **36s**, and three
+   consecutive runs at `0 unknown`. That narrows the window, it does not remove
+   the mechanism — the 10s read timeout is unchanged, and a review reproduced 6
+   self-inflicted `unknown`s at the same 16 workers under local load. See Risks.
 6. **Six packages mislabelled.** All six `opentelemetry-instrumentation*` we lock
    have never shipped a non-beta on PyPI — every one of their 75 releases is a
    prerelease. Calling that `unknown` blamed our own network for PyPI's release
@@ -99,8 +104,8 @@ worked. Three defects, all found by running it rather than reading it:
    keeps meaning exactly one thing: we could not read PyPI.
 
 Also: the logic moved out of the YAML into `scripts/dependency_freshness.py` so
-it is testable without Actions, and dedup now searches by title instead of by a
-`radar` label that does not exist in the repo.
+it is testable without Actions, and dedup searches by title — the run creates
+the `radar` label it uses rather than assuming one already exists.
 
 Both prior claims — that the design note and workflow were "in place" — were
 wrong about the repository as well: both files were untracked on disk in the
@@ -109,8 +114,8 @@ local `dt-snapshot` commits.
 
 ### Verification
 
-- 30 tests green across three files: 16 in `test_dependency_freshness.py` (the
-  script), 12 in `test_dependency_freshness_clock.py` (the clock wiring), and the
+- 38 tests green across three files: 21 in `test_dependency_freshness.py` (the
+  script), 15 in `test_dependency_freshness_clock.py` (the clock wiring), and the
   2 pre-existing `test_no_gha_schedules.py` guard tests the radar must not break.
 - `apps/digithings-cron` vitest: 15 passed, including `uniqueEnabledCrons()`,
   which asserts the enabled cron set by exact ordered equality — the new
@@ -121,7 +126,8 @@ local `dt-snapshot` commits.
   `cryptography 49.0.0 → 50.0.2` 🔴, `mcp` 1.29.0 → 2.3.0 🔴, `optuna` 4.9.0 →
   5.0.0 🔴, plus 13 further majors visible only in the full closure
   (`openai`, `kubernetes`, `websockets`, `plotly`, `filelock`, `huggingface-hub`,
-  `multidict`, `oauthlib`, `polars`, `xxhash`, `pyee`, `uuid-utils`).
+  `multidict`, `oauthlib`, `polars`, `polars-runtime-32`, `xxhash`, `pyee`,
+  `uuid-utils`). Each pair re-verified against PyPI on 2026-10-07.
   The issue filed 3 majors because it listed direct dependencies; the radar reads
   the whole closure, so 16 is the honest number.
 - `ruff check` and `ruff format --check` clean.
@@ -133,11 +139,14 @@ local `dt-snapshot` commits.
   public service and a monthly radar should not become someone else's rate-limit
   incident. If the closure grows past ~600 packages, revisit the worker count
   before revisiting the cadence.
-- **A throttled run still degrades, and now visibly so.** A heavily throttled run
-  would post `unknown` rows instead of a comparison. That is why the issue body
-  spells out that `unknown` should be 0 and that a non-zero count means the scan
-  itself was degraded — the failure mode is legible from the artifact rather than
-  needing the reader to know the script.
+- **A throttled run still degrades, and now visibly so.** The 16-way pool made
+  self-inflicted timeouts rare (three consecutive runs at 0; a review reproduced 6
+  under load at the same worker count), not impossible — the mechanism is a 10s
+  read timeout, and concurrency only shrinks how often it fires. A throttled run
+  therefore still posts `unknown` rows instead of comparisons. That is why the
+  issue body spells out that `unknown` should be 0 and that a non-zero count means
+  the scan itself was degraded — the failure mode is legible from the artifact
+  rather than needing the reader to know the script.
 - **Posting 284 rows monthly** is a lot of issue body. The summary line is the
   signal; the table is the evidence. Acceptable, and it is what the R&D Lead
   asked for.
