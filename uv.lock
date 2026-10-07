@@ -1604,7 +1604,7 @@ requires-dist = [
     { name = "langgraph", specifier = ">=0.2" },
     { name = "matplotlib", marker = "extra == 'visualization'", specifier = ">=3.8" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.2,<2" },
-    { name = "nautilus-trader", marker = "extra == 'nautilus'", specifier = ">=1.190,<2" },
+    { name = "nautilus-trader", marker = "extra == 'nautilus'", specifier = "==1.230.0" },
     { name = "numpy", marker = "extra == 'indicators'", specifier = ">=1.26" },
     { name = "optuna", specifier = ">=4.7.0" },
     { name = "optuna", marker = "extra == 'optimize'", specifier = ">=3.0" },
