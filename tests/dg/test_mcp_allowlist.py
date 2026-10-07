@@ -305,3 +305,342 @@ def test_openai_tools_for_servers_never_leaks_the_raw_name(monkeypatch):
         openai_tools_for_servers([{"id": "datatap", "url": "https://mcp.example.com/mcp"}])
         == offered
     )
+
+
+# =====================================================================
+# DIG-284 leaf 284.3 — the brake: deny-by-default intersection.
+# =====================================================================
+#
+# 284.1 carried the contract. 284.3 is where it bites: of everything a remote MCP
+# server advertises, the operator's allowlist decides what the model is shown.
+# Every test below drives the chain research_node actually runs —
+# ``extra_tool_names_for_servers`` → ``apply_mcp_extra_tools`` →
+# ``get_tools_for_skills`` → the payload a provider receives — with only the
+# network call faked. Faking the policy function instead would pin the test to
+# the policy function rather than to the behaviour.
+
+# The four meta tools, refused before the allowlist is read at all.
+META_TOOL_NAMES = ("discover", "executeRead", "executeWrite", "executeDestructive")
+
+# Atlassian's published write surface. Four of these are marked primary in the
+# shipped catalog; the brake must not care, so the fixture marks all fifteen.
+WRITE_JIRA_TOOL_NAMES = (
+    "createJiraIssue",
+    "editJiraIssue",
+    "transitionJiraIssue",
+    "addOrEditJiraIssueComment",
+    "addOrEditJiraIssueWorklog",
+    "createJiraIssueLink",
+    "manageJiraProjectVersion",
+    "manageJiraProjectVersionRelatedWork",
+    "manageJiraSprint",
+    "createJiraBoard",
+    "watchJiraIssue",
+    "uploadAttachmentToJiraIssue",
+    "editJiraEntityProperty",
+    "createJiraIssueRemoteIssueLink",
+    "convertJiraIssueHierarchy",
+)
+
+ATLASSIAN_READ_TOOL = "getJiraIssue"
+
+
+def _records(server_id: str, raw_names: tuple[str, ...]) -> list[dict]:
+    """Listed-tool records for a fake server, every one carrying the same marker.
+
+    ``digi_primary`` mirrors the annotation the shipped catalog uses to separate
+    headline tools from the long tail. Publishing it on *every* tool means a brake
+    built from catalog shape ("primary tools minus the meta four") has nothing to
+    separate and cannot produce the expected answer. It is not a schema key and
+    never reaches a provider; it is here so the adversarial condition is legible.
+    """
+    from digigraph.orchestration.mcp_client import _tool_record
+
+    out = []
+    for raw in raw_names:
+        rec = _tool_record(
+            server_id, raw, f"{raw} description", {"type": "object", "properties": {}}
+        )
+        rec["annotations"] = {"digi_primary": True}
+        out.append(rec)
+    return out
+
+
+def _install_catalog(monkeypatch, catalogs: dict[str, list[dict]]) -> None:
+    """Serve *catalogs* (keyed by server id) in place of the network call.
+
+    Patches ``_list_tools_blocking`` — the one call behind ``list_tools_cached``,
+    the chokepoint the policy path and ``get_tools`` both read through — so the
+    cache, the brake, and the allowlist intersection all execute for real. The
+    module cache is replaced so one test's catalog cannot answer the next.
+    """
+    from digigraph.orchestration import mcp_client
+
+    monkeypatch.setattr(mcp_client, "_cache", {})
+    monkeypatch.setattr(
+        mcp_client,
+        "_list_tools_blocking",
+        lambda server: list(catalogs.get(server.get("id"), [])),
+    )
+
+
+def _atlassian_row(**overrides) -> dict:
+    """One operator MCP row: the operator's URL, their token, one allowed tool."""
+    row = {
+        "id": "atlassian",
+        "url": "https://mcp.atlassian.com/v1/sse",
+        "authHeader": "Authorization",
+        "token": "operator-token",
+        "allowedTools": [ATLASSIAN_READ_TOOL],
+    }
+    row.update(overrides)
+    return row
+
+
+def _atlassian_catalog() -> list[dict]:
+    return _records("atlassian", (ATLASSIAN_READ_TOOL, *META_TOOL_NAMES, *WRITE_JIRA_TOOL_NAMES))
+
+
+def _research_chain(servers: list[dict], session_allowed: frozenset[str] | None = None) -> list[str]:
+    """Tool names a provider would be sent, through research_node's real sequence.
+
+    ``session_allowed`` stands in for whatever ``allowed_tool_names_for_workflow``
+    resolved for the request; the default ``None`` is the unrestricted session,
+    which is the case a brake has to survive.
+    """
+    from digigraph.orchestration import mcp_client
+    from digigraph.orchestration.registry import ToolContext, ToolExposureMode
+    from digigraph.skills.registry import get_tools_for_skills
+    from digigraph.tool_policy import apply_mcp_extra_tools
+
+    context = ToolContext(
+        session_id="s-1",
+        run_data_dir=None,
+        index_name="default",
+        index_config={},
+        state={"mcp_servers": servers},
+        extra_mcp_servers=servers,
+    )
+    # research.py:390-413 — discovery, policy, then the model-facing projection.
+    context.allowed_tool_names = apply_mcp_extra_tools(
+        session_allowed,
+        frozenset(mcp_client.extra_tool_names_for_servers(servers)),
+        frozenset(),
+        enable_web_search=False,
+    )
+    tools = get_tools_for_skills([], context, ToolExposureMode.DETAILED)
+    return [t["function"]["name"] for t in tools if isinstance(t, dict) and t.get("function")]
+
+
+@pytest.mark.unit
+def test_only_the_allowlisted_tool_reaches_the_model_from_a_full_atlassian_catalog(monkeypatch):
+    """The decisive test: 4 meta + 15 write tools published, one allowed, one offered.
+
+    Everything here is marked primary and every write tool is identically shaped,
+    so the only thing that can separate ``getJiraIssue`` from the other nineteen
+    is the operator's allowlist. A brake keyed on the offered name — prefixed,
+    substituted, truncated — cannot match ``getJiraIssue`` at all, and one built
+    from catalog shape has nothing to go on.
+    """
+    _install_catalog(monkeypatch, {"atlassian": _atlassian_catalog()})
+    assert _research_chain([_atlassian_row()]) == ["atlassian_getJiraIssue"]
+
+
+@pytest.mark.unit
+def test_meta_tools_are_refused_even_when_the_operator_allowlists_them(monkeypatch):
+    """Rule 3 runs before and regardless of the allowlist — a separate check.
+
+    Security's correction to the acceptance bar: a literal deny-set does not
+    hold, because the brake keys on the raw remote name and ``atlassian.executeWrite``
+    is not byte-equal to ``executeWrite``. The ruled shape — segment deny on the
+    same substitution that builds the offered name, then case-folded — refuses
+    all eight spellings below, including the five a naive normalisation misses.
+    """
+    aliases = (
+        "executeWrite",
+        "ExecuteWrite",
+        "executewrite",
+        "atlassian.executeWrite",
+        "jira.executeWrite",
+        "confluence-executeWrite",
+        " executeWrite ",
+        "x.y.discover",
+    )
+    _install_catalog(
+        monkeypatch,
+        {"atlassian": _records("atlassian", (ATLASSIAN_READ_TOOL, *aliases, "getChangelog"))},
+    )
+
+    # The operator allowlists the aliases explicitly. That is precisely the case
+    # the separate check exists for.
+    row = _atlassian_row(allowedTools=list(aliases))
+    assert _research_chain([row]) == ["atlassian_getChangelog"]
+
+
+@pytest.mark.parametrize(
+    "request_allowed",
+    [
+        pytest.param(None, id="tools-all-or-absent"),
+        pytest.param([], id="request-denies-everything"),
+        pytest.param(["atlassian_createJiraIssue"], id="request-names-a-refused-tool"),
+        pytest.param(["atlassian_executeWrite"], id="request-names-a-refused-meta-tool"),
+        pytest.param(["atlassian_getJiraIssue"], id="request-names-the-allowed-tool"),
+    ],
+)
+@pytest.mark.unit
+def test_no_request_input_widens_the_operator_allowlist(monkeypatch, request_allowed):
+    """Session input never grants: ``?tools=all``, a deny-all request, a request
+    naming a refused tool all resolve to the same single offered tool.
+
+    A request is session input; the allowlist is operator configuration. The
+    request's opinion is an input to the native allowlist and never a grant
+    against the operator row.
+    """
+    from digigraph.models import WorkflowRequest
+    from digigraph.project_config import DigiProjectConfig
+    from digigraph.tool_policy import allowed_tool_names_for_workflow
+
+    _install_catalog(monkeypatch, {"atlassian": _atlassian_catalog()})
+    # Pin both non-request inputs to "unset" so the request is the only variable:
+    # an empty project config and an absent env var.
+    monkeypatch.delenv("DIGI_ALLOWED_TOOLS", raising=False)
+    empty_cfg = DigiProjectConfig()
+
+    session_allowed = allowed_tool_names_for_workflow(
+        WorkflowRequest(prompt="hi", allowed_tools=request_allowed), cfg=empty_cfg
+    )
+    assert _research_chain([_atlassian_row()], session_allowed) == ["atlassian_getJiraIssue"]
+
+
+@pytest.mark.unit
+def test_allowlist_follows_the_row_not_the_server_id(monkeypatch):
+    """A re-pointed row is judged on its own allowlist; the id grants nothing.
+
+    There is deliberately no id-keyed allowlist table. If the gate remembered
+    "atlassian allows getJiraIssue" from the first row it saw, then re-pointing
+    the row at another host — or tightening the allowlist on the same host —
+    would keep serving the earlier, wider answer for the whole 60s cache TTL. The
+    allowlist is a property of the row, so each row is read on its own.
+    """
+    _install_catalog(monkeypatch, {"atlassian": _atlassian_catalog()})
+
+    operator = [_atlassian_row()]
+    assert _research_chain(operator) == ["atlassian_getJiraIssue"]
+
+    # Same id, same auth header, same operator token — the attacker just moved
+    # the URL, and their row carries an allowlist naming none of what they publish.
+    attacker = [
+        _atlassian_row(
+            url="https://mcp.attacker.example/v1/sse",
+            allowedTools=["createJiraIssue"],
+        )
+    ]
+    assert _research_chain(attacker) == ["atlassian_createJiraIssue"]
+
+    # Tightened on the original host: the wider answer must not survive the cache.
+    tightened = [_atlassian_row(allowedTools=["createJiraIssue"])]
+    assert _research_chain(tightened) == ["atlassian_createJiraIssue"]
+
+    # And the first row still resolves on its own allowlist, not the last one seen.
+    assert _research_chain(operator) == ["atlassian_getJiraIssue"]
+
+
+@pytest.mark.unit
+def test_offered_name_collision_offers_zero_tools_and_audits(monkeypatch):
+    """Two allowlisted raw names that collapse to one offered name offer neither.
+
+    ``prefixed_tool_name`` is lossy — it substitutes every character outside
+    ``[a-zA-Z0-9_-]`` — so ``read.jira.issue`` and ``read_jira_issue`` are two
+    distinct operator-approved tools wearing one name. Picking either would hand
+    the choice of which approved tool runs to whichever the server listed first,
+    so the gate refuses the name outright and records it.
+    """
+    from unittest.mock import patch
+
+    _install_catalog(
+        monkeypatch,
+        {"atlassian": _records("atlassian", ("read.jira.issue", "read_jira_issue", ATLASSIAN_READ_TOOL))},
+    )
+    row = _atlassian_row(allowedTools=["read.jira.issue", "read_jira_issue"])
+
+    with patch("digigraph.audit.audit_log") as audit:
+        assert _research_chain([row]) == []
+
+    events = [str(c.args[0]) for c in audit.call_args_list if c.args]
+    assert any("collision" in e for e in events), f"no collision event in {events}"
+
+
+@pytest.mark.unit
+def test_offered_name_is_a_function_of_one_approved_raw_name(monkeypatch):
+    """CTO bar item 10 — naming a different tool must be unrepresentable.
+
+    Not "the brake does not implement it" but "there is no value in which a
+    second name could be written": every tool that leaves the gate carries a name
+    that is ``prefixed_tool_name(server_id, raw)`` for a raw name the operator
+    listed, and nothing else in the payload can disagree about which tool it is.
+    """
+    from digigraph.orchestration import mcp_client
+    from digigraph.orchestration.mcp_client import prefixed_tool_name
+
+    _install_catalog(monkeypatch, {"atlassian": _atlassian_catalog()})
+    servers = [_atlassian_row()]
+
+    offered = mcp_client.openai_tools_for_servers(servers)
+    assert [t["function"]["name"] for t in offered] == ["atlassian_getJiraIssue"]
+
+    # The payload a provider receives has no field that could carry a tool or
+    # args the operator did not write: the schema is fixed and the name is one
+    # value, not a template plus an override.
+    record = offered[0]
+    assert set(record) == {"type", "function"}
+    assert set(record["function"]) == {"name", "description", "parameters"}
+    assert record["function"]["name"] == prefixed_tool_name("atlassian", ATLASSIAN_READ_TOOL)
+
+    # Same one-to-one property at the gate itself, read back off the sidecar:
+    # every offered name maps back to exactly one operator-written raw name, and
+    # two different approved tools can never collapse to one offered name.
+    kept = mcp_client.filter_tools_for_server(servers[0], _atlassian_catalog())
+    assert mcp_client.raw_tool_names_for_server("atlassian", kept) == [ATLASSIAN_READ_TOOL]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("allowlist", [None, []], ids=["key-absent", "explicit-empty"])
+def test_missing_or_empty_allowlist_denies_every_tool_and_warns_loudly(
+    monkeypatch, caplog, allowlist
+):
+    """EM ruling: deny *and* fail loudly — id, host, and the count refused.
+
+    Silence is the failure mode. A row that reaches the gate without a usable
+    ``allowedTools`` still has a URL, a token and an auth header, so it looks
+    configured; a quiet denial then presents as "the server offered nothing" and
+    nobody goes looking for the config mistake that caused it.
+
+    Both spellings are the same deny. ``absent == empty`` is the wire rule: an
+    operator who omits the key and an operator who writes ``[]`` get the same
+    refusal, so a missing key cannot read as "unrestricted" to anyone reading
+    the config.
+    """
+    import logging
+    from unittest.mock import patch
+
+    catalog = _atlassian_catalog()
+    _install_catalog(monkeypatch, {"atlassian": catalog})
+    row = _atlassian_row()
+    if allowlist is not None:
+        row["allowedTools"] = allowlist
+    else:
+        row.pop("allowedTools")
+
+    with patch("digigraph.audit.audit_log") as audit:
+        with caplog.at_level(logging.WARNING, logger="digigraph.orchestration.mcp_client"):
+            assert _research_chain([row]) == []
+
+    warning = "\n".join(r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING)
+    assert "atlassian" in warning
+    assert "mcp.atlassian.com" in warning
+    assert str(len(catalog)) in warning
+
+    # One denial per discovered tool, not one per server: the operator needs to
+    # see that fifteen write tools went dark, not that "something" was refused.
+    denials = [c for c in audit.call_args_list if c.args and c.args[0] == "tool_denied"]
+    assert len(denials) == len(catalog)
