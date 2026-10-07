@@ -163,6 +163,12 @@ function pathLines(data: unknown): string[] {
 function sessionLines(data: unknown): string[] {
   const sessions = list(rec(data)?.sessions);
   if (sessions.length === 0) return ["no sessions"];
+  // Rows that carry neither a state nor a note are the shape of the desk, not a
+  // result: `/fx/sessions` answers with three hardcoded sessions and null state,
+  // and there is no run behind them to age. Rendering that as three rows of
+  // dashes left the pane on healthy ink, which is the same false claim DIG-183
+  // exists to remove, just with nothing behind it. Saying so keeps it muted.
+  if (sessions.every((row) => !str(row.state) && !str(row.note))) return ["no session state"];
   return sessions.map((row) => {
     const note = str(row.note);
     const base = cells(row, [["session", "session"], ["state", "state"]]);
