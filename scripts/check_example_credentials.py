@@ -19,9 +19,25 @@ PLACEHOLDER_PATTERNS = [
     r'^<.*>$',
     r'^$',
 ]
+#: Name-side patterns. This is a substring test (`p in var.upper()`), so an entry
+#: claims every name containing it. Matching is only half the guard: a line is
+#: reported when the name matches *and* the value survives `looks_cred_val`, so
+#: widening this list costs nothing on a corpus whose credential-named lines are
+#: empty, placeholder or a comment - which is the case for every entry below, and
+#: measured rather than assumed by
+#: `test_check_example_credentials_access_key_names.py`.
 CRED_VAR_PATTERNS = [
     r'API_KEY', r'SECRET', r'TOKEN', r'PASSWORD', r'PRIVATE_KEY',
-    r'CLIENT_SECRET', r'ACCESS_TOKEN', r'REFRESH_TOKEN',
+    r'CLIENT_SECRET',
+    # `ACCESS_TOKEN` was in this list and `ACCESS_KEY` was not, which left an AWS
+    # access key ID out of scope before its value was ever looked at: the
+    # `^AKIA[A-Za-z0-9]{16,}` rule below would have reported the key, but the name
+    # gate ran first and said no. The identical value under `AWS_ACCESS_TOKEN` was
+    # reported, so the value was never the problem - only the name was. This is the
+    # repo's own spelling too: the R2 workflows read `R2_ACCESS_KEY_ID` and
+    # `CHECKPOINT_ARCHIVE_R2_ACCESS_KEY`. It newly matches `SSH_ACCESS_KEY_ID`,
+    # which is acceptable for the reason in the comment above.
+    r'ACCESS_KEY', r'ACCESS_TOKEN', r'REFRESH_TOKEN',
     r'WEBHOOK_SECRET', r'SIGNING_KEY',
 ]
 CRED_VALUE_PATTERNS = [
