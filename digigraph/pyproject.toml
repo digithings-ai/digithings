@@ -34,13 +34,15 @@ dependencies = [
 tracing = ["langsmith>=0.1"]
 dev = ["langgraph-checkpoint-sqlite>=2.0"]
 otel = ["digibase[otel]"]
-# Upper-bounded: mcp 2.0 removed `mcp.server.fastmcp` (see #1705). This package's
-# single MCP server (src/digigraph/mcp_server.py) imports it inside a
-# try/except ImportError, so an unbounded 2.x does not crash here — it sets
-# _MCP_AVAILABLE = False and the MCP tools vanish silently. Repo-wide the bound is
-# pinned by five packages and six modules import the removed path; the three
-# unguarded ones (digisearch, digivault, scripts/zammad_mcp) crash on import
-# instead. Lift the bound only together with a migration to the 2.x API
+# Upper-bounded: mcp 2.0 removed `mcp.server.fastmcp` (see #1705). The single
+# MCP server here (src/digigraph/mcp_server.py:197) imports it inside a
+# try/except ImportError, which defers the failure rather than hiding it:
+# create_mcp_server() calls _require_mcp(), which raises ImportError. An
+# unbounded 2.x therefore does not cost this service its tools quietly — it
+# costs it the MCP server, with a clearer message. Repo-wide the bound is pinned
+# by five packages and six modules import the removed path; the three unguarded
+# ones (digisearch, digivault, scripts/zammad_mcp) fail at import time instead.
+# Lift the bound only together with a migration to the 2.x API
 # (mcp.server.fastmcp -> mcp.server.mcpserver, FastMCP -> MCPServer).
 mcp = ["mcp>=1.2,<2"]
 checkpoint-sqlite = ["langgraph-checkpoint-sqlite>=2.0"]
