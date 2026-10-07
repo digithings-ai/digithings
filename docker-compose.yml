@@ -296,16 +296,23 @@ services:
       start_period: 10s
 
   # ─── LiteLLM router (Phase 1: digigraph uses this for all LLM calls) ───
-  # Image: see DOCKER.md § LiteLLM upgrades (pin digest in production).
+  # Built from the MIT PyPI wheel, not the vendor image (DIG-1780 — Chris's red line
+  # on DIG-1768). The tag is the litellm pin from Dockerfile.litellm, never a moving
+  # tag; `scripts/check_litellm_vendor_boundary.sh` enforces both in CI. Local builds
+  # come from source like every other digithings service here; `make up-ghcr` pulls the
+  # published ghcr.io/digithings-ai/litellm instead (infra/self-host/compose.ghcr.yml).
   litellm:
-    image: docker.litellm.ai/berriai/litellm:main-stable
+    build:
+      context: .
+      dockerfile: Dockerfile.litellm
+    image: digi-litellm:1.72.6
     container_name: digi-litellm
     ports:
       - "127.0.0.1:4000:4000"
     env_file:
       - .env
     # Do not inject REDIS_URL with an empty default: an empty string makes
-    # LiteLLM main-stable treat Redis as configured and exit 3
+    # LiteLLM treat Redis as configured and exit 3
     # (ValueError: Redis URL must specify one of the following schemes).
     # Leave the var unset for the default local cache. When using
     # --profile litellm-cache, set REDIS_URL=redis://redis:6379 in .env so
@@ -314,7 +321,7 @@ services:
     volumes:
       - ./config:/app/config:ro
     # LiteLLM can start without Ollama; Ollama models fail until ollama is healthy
-    # main-stable image has no curl/wget — probe with the bundled Python.
+    # python:3.12-slim has no curl/wget either — probe with the bundled Python.
     healthcheck:
       test:
         [

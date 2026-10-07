@@ -281,7 +281,7 @@ rg -n "image:|build:" docker-compose.yml | head -80
 
 Document in README:
 - digichat → GHCR (Task 2)
-- litellm → public `docker.litellm.ai/berriai/litellm:main-stable`
+- litellm → the vendor-published image, not republished by digithings **[superseded — DIG-1780: now `ghcr.io/digithings-ai/litellm:1.72.6`, built by `Dockerfile.litellm` from the MIT PyPI wheel, because the vendor image is licensed for development and testing only]**
 - digichat-db / digikey data → postgres / local volumes
 - digikey / digigraph / digivault → if only `build:` exists today, Profile A overlay **builds those from repo** OR documents “clone monorepo for Profile A stack services until GHCR exists”. Prefer honesty: v1 Profile A for external clients who want digigraph may still need the monorepo for Python services; digichat Node itself must not require a monorepo build.
 
