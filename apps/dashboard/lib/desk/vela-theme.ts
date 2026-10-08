@@ -3,8 +3,8 @@
  * These match `lib/chart-colors.ts` dark fallbacks. They are not TradingView
  * green/red and not the mock stylesheet's green/salmon.
  *
- * Inter and JetBrains Mono belong to the shell slice. The chart uses the
- * platform mono stack so this slice does not load a second font.
+ * The shell's faces belong to the shell slice (`app/fonts.ts`). The chart uses
+ * the platform mono stack so this slice does not load a second font.
  */
 import type { VelaSpikeBar } from '@/components/research/VelaSpikeChart';
 

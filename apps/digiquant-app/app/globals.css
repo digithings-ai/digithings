@@ -1,5 +1,5 @@
 /* digiquant — terminal look from the canvas mock: black canvas, hairline
-   frames, radius 0, Inter prose + JetBrains Mono chrome/figures, one accent.
+   frames, radius 0, Inter prose + Geist Mono chrome/figures, one accent.
    Compact and utilitarian: no animation, no shadows, no rounding. */
 :root {
   --bg: #000;
@@ -14,8 +14,12 @@
   --up: #52d296;
   --down: #f06a5e;
   --warn: #e0b341;
-  --sans: var(--font-inter), "Inter", ui-sans-serif, system-ui, sans-serif;
-  --mono: var(--font-jbmono), "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  /* This surface does not load @digithings/design/tokens.css, so it builds the
+     same two stacks here, off the generic face variables app/fonts.ts sets.
+     The mono fallback chain keeps the nav-tree triangles (U+25B8/U+25BE) and the
+     command key (U+2318), which Geist Mono does not carry. */
+  --sans: var(--font-sans-face, "Inter"), ui-sans-serif, system-ui, sans-serif;
+  --mono: var(--font-mono-face, "Geist Mono"), ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", "Segoe UI Symbol", monospace;
   --top: 32px;
   --rail: 184px;
   color-scheme: dark;
@@ -39,7 +43,7 @@ button, input { font-family: var(--mono); letter-spacing: 0; border-radius: 0; }
 .brand { display: flex; align-items: center; gap: 12px; padding: 0 10px; min-width: min(var(--rail), 60vw); border-right: 1px solid var(--hair-strong); }
 .has-rail .brand { width: var(--rail); }
 .logo { display: inline-flex; align-items: center; gap: 4px; color: var(--ink); }
-.logo-word { font: 400 16.8px/1 var(--font-geist-mono), var(--mono); letter-spacing: 0; }
+.logo-word { font: 400 16.8px/1 var(--mono); letter-spacing: 0; }
 /* Buttons are plain underlined text; no boxes. */
 .btn { font-size: 11px; line-height: 1; color: var(--ink-soft); background: none; border: 0; padding: 2px 0; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--hair-strong); }
 .btn:hover { color: var(--ink); text-decoration-color: var(--ink-soft); }

@@ -11,7 +11,6 @@ vi.mock("next/font/google", () => {
   return {
     Geist_Mono: load("Geist_Mono"),
     Inter: load("Inter"),
-    JetBrains_Mono: load("JetBrains_Mono"),
   };
 });
 
