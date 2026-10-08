@@ -1,4 +1,3 @@
-# digiquant Architecture
 
 **Version:** 0.1.x
 **Last updated:** 2026-09-01
@@ -564,7 +563,7 @@ the window came back empty, `_fetch_macro` raised `empty live window`, and every
 scheduled refresh was marked stale. Each entry in
 `research/config/macro_series.yaml` may now declare a `cadence`
 (`daily`/`weekly`/`monthly`/`quarterly`), which selects the window
-(`_CADENCE_WINDOW_DAYS`: 45/60/120/240 days; absent = daily). The widened window
+(`_CADENCE_WINDOW_DAYS`: 45/45/120/240 days — weekly shares the daily constant, so there is no 60; absent = daily, which is also the narrowest of the four). Every fetched id now declares one
 then *contains* the series' seal row, so the live fetch is non-empty and the
 existing benign `up-to-date` path covers it. Note what does **not** change: an
 empty live window still returns `history-only` — `_fetch_macro` raises on empty
