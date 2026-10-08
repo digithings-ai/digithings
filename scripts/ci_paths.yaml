@@ -113,6 +113,9 @@ web:
   # manifest, so a bad range here must fire the lane (deploy checks name the
   # same manifest when those workflow files can be edited).
   - apps/digiquant-app/**
+  # digiquant-web's desk reads the TUI page catalog and response presenter from
+  # source (components/desk/public-surface.ts, read-block.ts).
+  - clients/digiquant-tui/src/**
   # digiquant-web's pipeline-data pin re-reads this file at test time and asserts the
   # site's portfolio chips match its `phases.append(...)` sequence in order (#4441).
   # Without this entry the pin only runs when the APP changes — a backend-only phase

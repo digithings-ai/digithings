@@ -70,7 +70,9 @@ All failures return HTTP status + this body (no other shape):
 Codes: `bad_request` (400, malformed `asOf`/`retrieval_pin`/params),
 `not_found` (404, no committed book or tip for `asOf`),
 `upstream_empty` (200-body is never empty-as-healthy; 502 when a required
-upstream read fails — never synthesize numbers), `internal` (500).
+upstream read fails — never synthesize numbers), `not_provisioned` (503, a
+write whose table is not migrated yet; nothing is written), `unauthorized` (401),
+`forbidden` (403), `internal` (500).
 Empty sessions (e.g. ledger with no events in range) are success with empty
 arrays plus honest `provenance`, never errors. Fail closed to `null`/`—`
 downstream — never invent P&L, fills, or weights.

@@ -1,6 +1,6 @@
 // data-layout family barrel (#1450) — re-exported from src/index.ts by the
-// wire stage. Two css sheets for the family: styles/data-layout.css and
-// styles/card-rail.css (the rail carries only what utilities can't express).
+// wire stage. One css sheet for the family: styles/data-layout.css. CardRail is
+// utilities-only.
 export { Odometer, OdometerStrip, type OdometerStat } from "./Odometer";
 export { DotMatrixStat, type DotMatrixStatProps } from "./DotMatrixStat";
 export { BentoGrid, BentoCell, type BentoSpan } from "./BentoGrid";

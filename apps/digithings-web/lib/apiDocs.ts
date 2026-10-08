@@ -299,7 +299,7 @@ print(r.json()["sharpe_ratio"])`,
         path: "/backtest/start",
         summary: "Submit an async backtest job; returns {job_id}. Poll progress over SSE.",
         auth: "digiquant:backtest",
-        rateLimit: "10/min/IP",
+        rateLimit: "30/min/IP",
         responseExample: `{ "job_id": "..." }`,
       },
       {
