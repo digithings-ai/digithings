@@ -1,0 +1,165 @@
+# Policy-check inventory — the declared list of which CI checks are policy
+# checks, and what each one's merge-gate enforcement is meant to be.
+#
+# Read by `scripts/check_required_policy_checks.py` (DIG-1982), which reconciles
+# three sets:
+#
+#   1. this inventory  vs  the jobs the workflows actually define
+#   2. this inventory  vs  develop's required status-check contexts
+#   3. `Required checks passed`  vs  `required-checks.needs` in ci.yml
+#      (reconciliation 3 is the pre-existing in-file staleness check and stays
+#       in ci.yml; it is not repeated here)
+#
+# WHY THIS FILE EXISTS INSTEAD OF MATCHING JOB NAMES
+#
+# DIG-1952 asked the guard to "enumerate every .github/workflows/*.yml job whose
+# name matches a required-policy check". That is guessing. A job called `score`
+# is a policy check; a job called `npm-audit` may be one. Name patterns cannot
+# tell those apart and will be wrong the first time someone names a lane
+# `policy-something`. So the set is declared here, once, and the guard reads it.
+#
+# WHAT COUNTS AS A CHECK IN A TRACKED WORKFLOW
+#
+# A job with an explicit `name:`. A job without one reports its check under the
+# job id — those are internal lane jobs (ci.yml's path-gated component jobs,
+# ci-pr-hygiene.yml's `path-filter` helper) and are folded into an aggregator
+# rather than being gates in their own right. Naming a job makes it a policy
+# surface; leaving it unnamed keeps it internal. That is the whole rule.
+#
+# ENFORCEMENT VALUES
+#
+#   required      Must appear in develop's required-status-check contexts, and
+#                 must report on every develop PR. Drift in either direction
+#                 fails the guard.
+#   advisory      Deliberately not a merge gate. REQUIRES a `reason` saying why
+#                 not. Runs on PRs, reports, goes red — and merges continue.
+#   other-branch  A policy check that gates a different branch (main), not
+#                 develop. Its develop-reachability does not apply.
+#
+# `scripts/check_required_policy_checks.py` reports `advisory` and
+# `other-branch` entries as ungated policy checks: that is the DIG-1952 class of
+# bug, found and priced, not hidden. Closing them is DIG-1952 child B — a
+# human-only repo-settings write, deliberately sequenced behind this detector.
+
+# Workflow files whose named jobs are policy checks. Adding a file here makes
+# every named job in it a policy surface the inventory must account for.
+tracked_workflows:
+  - ci.yml
+  - ci-dco-sign-off.yml
+  - ci-pr-hygiene.yml
+  - ci-pr-title.yml
+  - ci-review-coverage.yml
+  - ci-docs.yml
+  - ci-type-check.yml
+  - security-gitleaks.yml
+
+checks:
+  # ── develop's merge gate ────────────────────────────────────────────────────
+
+  - context: Required checks passed
+    workflow: ci.yml
+    job: required-checks
+    enforcement: required
+    reason: >-
+      The single stable required name on develop. Every other ci.yml job is
+      individually path-gated, so none of them can be required directly — a PR
+      that does not touch a component reports no status for that job at all,
+      not "skipped", and GitHub then blocks forever.
+
+  - context: doc-links + agents-init
+    workflow: ci-docs.yml
+    job: docs-and-agents-init
+    enforcement: required
+    reason: >-
+      Internal markdown link validation plus `agents-init --check`. Its
+      `pull_request:` trigger is deliberately unfiltered so the check posts on
+      every PR; see the comment in ci-docs.yml.
+
+  - context: mypy — digibase + digikey
+    workflow: ci-type-check.yml
+    job: mypy
+    enforcement: required
+    reason: >-
+      Type checking for digibase/digikey. Same unfiltered `pull_request:`
+      trigger, for the same reason as ci-docs.yml.
+
+  # ── PR-triggered, run and report, gate nothing ──────────────────────────────
+  #
+  # These five are the drift DIG-1952 is about: the check runs, it goes red, and
+  # the merge proceeds anyway. They are listed here so the guard can prove each
+  # one still exists and still reports — and so the ungated ones are visible in
+  # one file instead of inferred from 53 workflows.
+
+  - context: All commits signed off
+    workflow: ci-dco-sign-off.yml
+    job: dco-sign-off
+    enforcement: advisory
+    reason: >-
+      DCO 1.1 sign-off. Runs on every PR and fails without a Signed-off-by
+      line, but is required nowhere, so a PR with no sign-off merges clean.
+      Ungated since it was written. DIG-1952 child B.
+
+  - context: gitleaks-scan
+    workflow: security-gitleaks.yml
+    job: scan
+    enforcement: advisory
+    reason: >-
+      Secret scanning, and the highest-value check in this file. It cannot be
+      made required as it stands: `security-gitleaks.yml` carries a
+      workflow-level `paths-ignore` of `**.md` and `docs/**`, so a docs-only PR
+      never starts the workflow, its check never reports, and requiring the name
+      would hang those PRs on "Waiting for status to be reported" forever. This
+      is exactly failure mode 1 and exactly what docs/BRANCH_PROTECTION.md's
+      pre-apply note warns about. To require it, first move the skip to a
+      job-level `if:` (a skipped job reports Success; a skipped workflow does
+      not) or drop the PR trigger filter. The guard refuses the required
+      transition while that filter is still there.
+
+  - context: All agent-task issues in TSV with real phase and valid model
+    workflow: ci-pr-hygiene.yml
+    job: coverage
+    enforcement: advisory
+    reason: >-
+      Agent-task TSV coverage. Deliberately ungated: the issue-linkage check
+      that used to live in this file was removed in docs/adr/0024 precisely
+      because it was never a required check, so its failures never blocked a
+      merge while still costing a CI run per PR and producing rework.
+
+  - context: Validate PR title
+    workflow: ci-pr-title.yml
+    job: lint-pr-title
+    enforcement: advisory
+    reason: >-
+      Conventional-commit title lint for PRs into develop. Squash merges use the
+      PR title as the commit subject, so this protects release-please, but it is
+      not a merge gate. Ungated since #4625.
+
+  # ── gates main, not develop ────────────────────────────────────────────────
+
+  - context: Every commit reaching main was reviewed
+    workflow: ci-review-coverage.yml
+    job: review-coverage
+    enforcement: other-branch
+    reason: >-
+      The one required check on main. Its trigger is
+      `pull_request: branches: [main]`, so it never reports on a develop PR and
+      must never appear in develop's required contexts — requiring it there is
+      failure mode 1 in its purest form, a gate that can never report.
+
+  # ── named ci.yml jobs that are internal lanes, not gates ───────────────────
+  #
+  # Both are path-gated and aggregated by `Required checks passed`. Named, so
+  # the inventory must account for them; advisory, because the aggregator is the
+  # gate.
+
+  - context: Frontend canon guard
+    workflow: ci.yml
+    job: frontend-canon
+    enforcement: advisory
+    reason: Path-gated lane, folded into `Required checks passed`.
+
+  - context: actionlint
+    workflow: ci.yml
+    job: actionlint
+    enforcement: advisory
+    reason: Path-gated lane, folded into `Required checks passed`.
