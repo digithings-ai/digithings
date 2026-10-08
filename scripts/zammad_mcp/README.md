@@ -120,7 +120,16 @@ environment, and the Worker secret is deliberately not forwarded there); the
 server still authenticates to Zammad with its own environment (no Zammad token
 in the tenant entry).
 
-## Ticket search index (`occ_tickets`)
+## Ticket search index (`occ_tickets`) — retired
+
+> **Not on the boot path, and not part of the served corpus.** DIG-1380 retired
+> the ticket index: the committed `occ_tickets.jsonl` snapshot is deleted and
+> DIG-1438 removed the `[program:seed_occ_tickets]` boot step that re-imported
+> live tickets from the Zammad API, so nothing in the stack image populates
+> `occ_tickets` any more. The writer below is kept only because DIG-1210 still
+> owns its masking semantics. **Do not point a tenant at this index** — the OCC
+> tenant serves `occ_help` and reaches tickets through the read-only Zammad
+> tools.
 
 Separate from the `occ_help` docs corpus, `scripts/index_occ_tickets.py`
 backfills every visible ticket (GET-only) plus its articles — one Chunk per
@@ -145,14 +154,22 @@ collection to verify the model stamp. Never query `occ_tickets` with the
 Demo snapshot: data as of 2026-10-01. There is no sync job — re-run the
 script for a fresh snapshot.
 
-## Serving tickets in OCC chat (multi-index fan-out)
+## Serving tickets in OCC chat
 
-`query_index` accepts a comma-separated index list
-(`"occ_help,occ_tickets"`), fans out to each index, and merges with RRF —
-so the OCC tenant serves docs plus tickets with no routing-code changes:
-set the tenant's `digisearchIndex` to the comma pair (tenant map,
-`occ-embed.yaml`) after both indexes are (re)built with the multilingual
-model. All embeddings — ingest and query — must set
+**Do not fan the OCC tenant out to a ticket index.** `query_index` still accepts a
+comma-separated index list and merges the hits with RRF, but the tenant's
+`digisearchIndex` is `occ_help` alone (tenant map, `occ-embed.yaml`).
+
+The ticket corpus was retired in DIG-1380: it was a committed
+`occ_tickets.jsonl` snapshot plus a `[program:seed_occ_tickets]` boot step, and
+neither is in the image any more (DIG-1438). Pointing the tenant back at a ticket
+index therefore searches an empty collection, or — if the writer is ever wired
+back in — one full of unmasked ticket bodies and sender metadata. For ticket
+questions use the read-only Zammad tools through the key-gated MCP route above;
+the OCC system prompt says so and tells the model to say when they do not ground
+the answer.
+
+All embeddings — ingest and query — must set
 `DIGISEARCH_EMBEDDING_PROVIDER` to the model id
 (`Xenova/paraphrase-multilingual-MiniLM-L12-v2`); same 384 dims across models
 means a mismatch retrieves silently wrong results (MiniLM vectors are not
@@ -167,13 +184,11 @@ interchangeable with multilingual ones).
    Replace the `occ_help` collection in place for the demo (delete +
    re-ingest under the same name); Chroma refuses cross-model writes via
    its model stamp, so a stale collection fails loud, not silent.
-2. Refresh tickets: `python -m scripts.index_occ_tickets` (pins +
-   verifies the model stamp; see usage above).
-3. Evaluate: run the gold queries in `tests/scripts/data/` against the
+2. Evaluate: run the gold queries in `tests/scripts/data/` against the
    live indexes; proceed past the agreed recall bar only.
-4. Rebuild + redeploy the stack image (rebuild marker v11 carries the new
-   extra) and flip the tenant map to `"occ_help,occ_tickets"`; rollback is
-   a redeploy of the previous image + tenant map.
+3. Rebuild + redeploy the stack image (rebuild marker v11 carries the new
+   extra) with the tenant map at `occ_help`; rollback is a redeploy of the
+   previous image + tenant map.
 
 ## Privacy & exposure
 

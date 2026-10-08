@@ -40,7 +40,9 @@ const PATH_A_ENABLED_IDS = [
   "security-npm-audit",
   "token-canary",
   "secret-staleness",
+  "dependency-freshness",
   "smoke-site",
+  "datatap-answer-check",
 ] as const;
 
 const TWELVE_X_ENABLED_IDS = [
@@ -57,46 +59,13 @@ const TWELVE_X_ENABLED_IDS = [
   "twelve-x-digisearch-parity",
 ] as const;
 
-const ENABLED_CRONS = [
-  "40 13 * * MON-FRI",
-  "40 14 * * MON-FRI",
-  "19 */2 * * MON-FRI",
-  "19 22 * * SUN",
-  "27 21 * * MON-FRI",
-  "0 13 * * *",
-  "30 13 * * *",
-  "30 21 * * *",
-  "17 9 * * MON",
-  "5 22 * * *",
-  "12 0 * * *",
-  "40 22 * * *",
-  "15 12 * * *",
-  "8 22 * * SUN",
-  "8 8 * * MON",
-  "9 0 * * SUN",
-  "11 7 * * *",
-  "13 6 * * MON",
-  "21 6 * * *",
-  "10 6 * * MON",
-  "23 9 * * *",
-  "27 7 * * *",
-  "33 6 * * MON",
-  "37 6 * * MON",
-  "41 6 * * *",
-  "17 6 1 * *",
-  "17 6 * * *",
-  "7 0 * * MON-FRI",
-  "12 7 * * MON-FRI",
-  "17 12 * * MON-FRI",
-  "4 */4 * * *",
-  "30 5 * * *",
-  "8 7 * * SAT",
-  "30 17 * * MON-FRI",
-  "3 6,18 * * *",
-  "52 * * * MON-FRI",
-  "30 2 * * *",
-  "8 9 * * MON",
-] as const;
+// The 40-expression list this file used to hardcode is gone. A copied list is a
+// second source of truth that drifts silently, and a copied list was the only
+// thing that noticed the deleted backstop — as a unit test nobody ran for five
+// weeks (DIG-553 Finding 1). The assertion of record is now
+// src/trigger-contract.test.ts: the required-trigger contract with its reasons,
+// checked against the trigger list read out of wrangler.toml and against the
+// deployed trigger list, failing with an alarm rather than a red test line.
 
 describe("jobsForCron", () => {
   it("matches exact cron strings only", () => {
@@ -280,7 +249,10 @@ describe("jobsForCron", () => {
     ).toEqual(
       [...RESUMED_PIPELINE_IDS, ...PATH_A_ENABLED_IDS, ...TWELVE_X_ENABLED_IDS].sort(),
     );
-    expect(uniqueEnabledCrons()).toEqual([...ENABLED_CRONS]);
+    // The full cron set this file used to hardcode is asserted against
+    // wrangler.toml in src/trigger-contract.test.ts, alongside the required FX
+    // triggers and their reasons.
+    expect(uniqueEnabledCrons()).toContain("52 * * * MON-FRI");
     expect(uniqueEnabledCrons()).toContain("17 12 * * MON-FRI");
     expect(uniqueEnabledCrons()).not.toContain("17 12 * * *");
     expect(uniqueEnabledCrons()).not.toContain("17 9 * * *");

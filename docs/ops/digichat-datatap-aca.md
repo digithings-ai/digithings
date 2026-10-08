@@ -36,30 +36,33 @@ So the lane being absent is not a missing workflow to restore. It is the absence
 
 ## 1. The decision: what lane
 
-Three options. The recommendation is **A now, escalate to B only if Chris wants the ACA write automated**.
+**Option A was chosen and is built.** Asked on DIG-1242 and answered 2026-10-06 by the local board: build lane only (`a_restore_build_only`), rehearse on dev first (`rehearse_dev`), and both prerequisites — probes plus traffic shifting, and an owned Azure principal — before any production write (`do_both`). This section records the option as decided, and the rest of the document is written against it.
 
-### Option A — restore an image-build lane; keep the ACA promotion a documented human step *(recommended)*
+### Option A — restore an image-build lane; keep the ACA promotion a documented human step *(chosen, shipped in this PR)*
 
-Restore the deleted `publish-digichat-image.yml` (recoverable at `git show f54af7052^:.github/workflows/publish-digichat-image.yml`), adapted:
+The lane is [`.github/workflows/publish-digichat-image.yml`](../../.github/workflows/publish-digichat-image.yml). It is the deleted workflow (recoverable at `git show f54af7052^:.github/workflows/publish-digichat-image.yml`) re-derived for lane A, not a straight revert:
 
-- triggers on the `digichat-v*` tag push, plus `workflow_dispatch`;
+- triggers on the `digichat-v*` tag push, plus `workflow_dispatch` with an explicit `tag` input, and **refuses any tag that is not exactly `digichat-v<major>.<minor>.<patch>`** — the glob is wider than what the lane will publish, deliberately, so a malformed tag fails loudly instead of producing an image named after it. The deleted file's `branches: [main]` push trigger is **deliberately dropped** — a main-push build would publish `v2.4.0` carrying main's commit, and the idempotency guard would then skip the tag build, leaving the tag bound to the wrong commit;
 - **refuses to publish when the tag version ≠ `apps/digichat/package.json` version** (the deleted workflow's own guard, and the check `scripts/check_digichat_image_binding.py` now enforces offline);
-- idempotency guard via `docker manifest inspect` (already-published ⇒ no-op);
+- idempotency guard via `docker manifest inspect`, with three outcomes rather than two: present ⇒ no-op, the registry's own `manifest unknown` ⇒ publish, and **anything else fails the run** — collapsing "absent" and "could not ask" into one answer would let a registry blip repush a released tag and change the digest under its name. No `force` input: a released tag is immutable;
 - builds `context: .`, `file: apps/digichat/Dockerfile` — the repo root is required, it is an npm workspace whose lockfile and private `@digithings/design` dependency resolve only through the workspace link;
-- passes `--build-arg DIGICHAT_REVISION=$GITHUB_SHA` so the image names its own commit (see §2);
-- publishes `ghcr.io/digithings-ai/digichat:vX.Y.Z` (+ `:latest`).
+- passes `--build-arg DIGICHAT_REVISION=$commit` where `commit` is `git rev-list -n 1 <tag>`, **not** `github.sha`, so the image names the commit its tag points at (see §2);
+- publishes `ghcr.io/digithings-ai/digichat:vX.Y.Z` (+ `:latest`);
+- **re-reads the pushed image and runs `scripts/check_digichat_image_binding.py --facts -` against it**, so the lane proves its own output rather than asserting a build-arg was honoured.
+
+**What it deliberately cannot do.** No `azure/login`, no `az`, no `environment:`, no `id-token: write`, no repository secret beyond `GITHUB_TOKEN` — the job holds `contents: read` and `packages: write` and nothing else. It cannot read `datatap-rg`, cannot name `datatapchatregistry`, and cannot write a revision. `tests/scripts/test_publish_digichat_image_workflow.py` asserts that boundary over the **whole parsed workflow** — every key, not a hand-picked subset — so widening it through `with:`, a step or job `env:`, a job-level `permissions:` or an `environment:` fails the suite rather than passing it.
 
 The `az containerapp update` stays a human step, run from this document.
 
 **Why this and not more:** the ACA belongs to DataTap. `docs/architecture/digichat-self-hosted-release.md` records "DataTap path | Client-side (out of repo)" and "digithings has no Azure"; a `git grep` for `eastus2|containerApps|jollygrass` on `develop` returns **0 hits**. DevOps' own rule is that the role ends at a PR into their repo and never deploys to DataTap. A workflow that holds write access to a production customer Container App would put us inside that boundary and make us a dependency of a client's uptime — for a deploy that happens a handful of times a year.
 
-### Option B — add an ACA promotion workflow, gated
+### Option B — add an ACA promotion workflow, gated *(not chosen)*
 
 A second workflow: `workflow_dispatch` with an `image` + `environment` input, `environment: production` (required reviewer: Chris), Azure OIDC rather than a stored secret, then `--image …@sha256:…` digest-pinned, wait for the new revision `Running`, verify `/api/health` reports the expected version, fail loudly otherwise.
 
-This is the right *eventual* shape — it is what makes promotion reproducible and reviewable. It needs a federated credential on `datatap-rg/digichat`, which is a real security decision (child issue). Build the lane first; escalate to this when Chris wants the ACA write automated.
+This is the right *eventual* shape — it is what makes promotion reproducible and reviewable. It needs a federated credential on `datatap-rg/digichat`, which is a real security decision. Security scoped one in PR #5179 without creating anything, then Option A was chosen, so that credential has no consumer: **DIG-1349 is moot unless the lane is revisited.** Nothing about lane A depends on it.
 
-### Option C — document the hand-run and stop there *(not recommended)*
+### Option C — document the hand-run and stop there *(rejected)*
 
 Cheapest, and the option that produced the current state. 67 commits of drift is the argument against it: documenting a manual path does not make anyone follow it. The doc *plus* the binding check plus the dev rehearsal is the floor; stopping at the doc re-creates DIG-1242.
 
@@ -173,7 +176,18 @@ Both ACAs declare exactly two secrets, `auth-secret` and `embed-tenants`, and **
 
 Consequence: **never pass `--secrets` to a promote.** Re-declaring the secret list requires the original values, which the read paths above do not give you. A promote that re-declares them with empty or placeholder values destroys working auth and embed configuration, and the app boots into a login nobody can explain. The image update does not need them — `az containerapp update --image` patches the template and leaves the rest alone.
 
-If the secret list is ever genuinely lost, it must be re-supplied by whoever holds the values out of band. That is a credential-ownership question, not a deploy question — tracked in the Security child issue.
+If the secret list is ever genuinely lost, it is **not** unrecoverable: `az containerapp secret list --show-values` reads both values back, so rotation never depends on someone remembering the original out of band. That is a credential-ownership question, not a deploy question — tracked in the Security child issue DIG-1344.
+
+**There is now a check for it** (DIG-1344), and it belongs at the top of every promote. It compares a fingerprint of each live value against the recorded inventory, so a secret that changed outside the inventory fails loudly instead of being discovered during an incident:
+
+```bash
+python3 scripts/digichat_aca_secret_detector.py          # exit 0 clean, 1 = a finding
+python3 scripts/digichat_aca_secret_detector.py --offline # lock + expiry only, no Azure call
+```
+
+Exit 1 means the digichat secret inventory is not trustworthy — stop and read [`credential-ownership.md`](credential-ownership.md) before promoting. It prints names, lengths and digests only; no value is ever printed.
+
+It fails on the whole drift family (`drift`, `missing`, `unbound`, `migrated`, `expired`, `lock`) **and** on `unrecorded` — a secret added to the app that has no owner and no fingerprint row in [`digichat-aca-secret-fingerprints.json`](digichat-aca-secret-fingerprints.json). Env vars bound with a plain `value` rather than a `secretRef` are ordinary config and do not trip it, so a new `PORT=…` or `NODE_ENV=…` is not a finding.
 
 ### Step 0 — preflight (read-only)
 
@@ -200,9 +214,37 @@ Record the current revision name and image digest. That is the rollback target.
 
 ### Step 1 — rehearsal on **dev** (`datatap-dev-rg`)
 
-Requires the 2.4.0 image in the ACR. **There is none** — nothing has been pushed since `v2.3.3` (2026-09-21), so the rehearsal is blocked on §1 Option A shipping a build lane, or on one deliberate hand-build whose digest is then recorded here.
+Requires the 2.4.0 image in the ACR. **There is none** — nothing has been pushed since `v2.3.3` (2026-09-21). Getting one there takes two steps, in this order, and the second one is the gap the build lane does not close:
 
-> **Rehearsal gate: do not start until an image exists in the ACR whose `org.opencontainers.image.revision` names the 2.4.0 release commit** — and that commit must be tagged `digichat-v2.4.0` first. **No `digichat-v2.4.0` tag exists today** (`git tag -l 'digichat-v*'` stops at `digichat-v2.3.2`), even though `develop` already reads `2.4.0`. Cutting it is the release decision, and the binding check needs it. A rehearsal on an unlabelled image validates the mechanism, not the artifact.
+**1. Publish (CI, lane A).** Cut the release tag and push it; `publish-digichat-image.yml` builds and pushes to GHCR.
+
+```bash
+git tag digichat-v2.4.0 <commit carrying version 2.4.0 in apps/digichat/package.json>
+git push origin digichat-v2.4.0
+```
+
+**No `digichat-v2.4.0` tag exists today** (`git tag -l 'digichat-v*'` stops at `digichat-v2.3.2`) even though `develop` already reads `2.4.0`. Cutting it is the release decision, not a deploy step, and the workflow refuses to publish without it.
+
+**2. Import into the ACR (human, Azure write).** The Container Apps pull from `datatapchatregistry.azurecr.io`, **not** from GHCR. Nothing in this repository bridges those two registries: the old `datatap-web` lane that did the GHCR→ACR import was client-side and out of repo, and a `git grep` for `datatapchatregistry` / `azurecr.io` across `develop` returns 0 hits in any workflow. So the lane stops at GHCR, and a human runs the import:
+
+```bash
+# Azure write. Needs a principal with AcrImport on datatapchatregistry.
+# GHCR is a foreign registry, so --username/--password are required: the import
+# runs server-side and has no GitHub session to borrow. Use a classic PAT with
+# read:packages. If the package is public these can be omitted, but do not
+# assume that — org default visibility decides, and `ghcr.io/digithings-ai/digichat`
+# does not exist yet.
+az acr import -n datatapchatregistry --subscription "$SUB" \
+  --source "ghcr.io/digithings-ai/digichat:v${VERSION}" \
+  --username "$GHCR_USER" --password "$GHCR_PAT" \
+  -t "digichat:v${VERSION}" -o none
+```
+
+`--source` takes one fully-qualified value (`registry/repository:tag`) — there is no two-token form, and `--registry` is only for a source that is itself an ACR. The destination is `-t/--image`, not `--tag`. Import is a no-op-overwrite hazard in its own right: without `--force` it refuses an existing tag, which is the behaviour to keep on a release tag.
+
+Import is by digest-preserving copy, so the `org.opencontainers.image.revision` label the build lane set survives it — re-run `check_digichat_image_binding.py` against the **ACR** digest afterwards to prove that rather than assume it. This step is an Azure write on a customer resource and belongs to the owned principal that DIG-1292's `do_both` answer requires; it is not something the pipeline does.
+
+> **Rehearsal gate: do not start until an ACR image exists whose `org.opencontainers.image.revision` names the 2.4.0 release commit.** A rehearsal on an unlabelled image validates the mechanism, not the artifact.
 
 ```bash
 DIGEST=sha256:<full digest from the ACR ledger>   # pin, never the tag
@@ -286,25 +328,32 @@ Nothing newer. No 2.4.0 image exists in any registry.
 
 ---
 
-## 6. Known gaps this PR does not close
+## 6. Known gaps
 
-Each has a child issue on DIG-1242 rather than being folded in here.
-
-| Gap | Why it is separate |
+| Gap | State |
 |---|---|
-| **No probes on either ACA** | A production-affecting behavior change on a customer resource. Needs its own approval and its own rehearsal. |
-| **No federated Azure credential** | Adding write access to a customer Container App is a security decision with an owner and a rotation path ([`credential-ownership.md`](credential-ownership.md)). |
-| **No build lane** | Depends on the §1 decision and on the release-tagging flow, which a human owns. |
+| **No probes on either ACA** | Open — DIG-1292. A production-affecting behavior change on a customer resource, with its own approval and its own rehearsal. Chosen as a prerequisite (`do_both`), not a follow-up: in `Single` mode with no probes a failed revision takes all traffic and there is nothing to demote it. |
+| **No owned Azure principal for the promotion** | Open — the other half of `do_both`. Security established that principal `44cfda92-…` is **dormant** (no credential at all) rather than a usable deploy identity, so the writes in §4 currently have no owned identity to run as. |
+| **No federated CI credential** | Moot. Scoped in PR #5179 for lane B; lane A was chosen, so DIG-1349 has no consumer. Revisit only if the ACA write is ever automated. |
+| **No GHCR→ACR import lane** | Open, and the honest limit of lane A. The build lane publishes to GHCR; the ACAs pull from ACR; the bridge is a human `az acr import` documented in §4 Step 1. Nothing in this repository can do that hop — the old importer was client-side and out of repo. Until it is automated, "build" and "available to promote" remain two human actions. |
 | **`/healthz` 404s in both running builds** | Self-resolving: any deploy carrying `916c4b5d5` adds the route. Recorded so nobody reads the 404 as a regression. |
+| ~~**No build lane**~~ | **Closed by this PR** (DIG-1294). `.github/workflows/publish-digichat-image.yml` is back, tag-triggered, revision-labelled and self-verifying. |
 | ~~**Principal `44cfda92-…`**~~ | **Closed by DIG-1293** (2026-10-06, read-only). It is the service principal for app registration `datatap-digichat-deploy` (`be54468d-2f66-4aeb-a231-5db0b6e58789`), created 2026-08-09 by the shared account `datatap@datatapstream.onmicrosoft.com`. It holds `Contributor` on both ACAs and on the ACR, and it has **no credential at all** — 0 keys, 0 passwords, 0 federated credentials. Dormant, not deleted. Registered in [`credential-ownership.md`](credential-ownership.md) with the owner and the required roles for a future federated credential. |
 
 ---
 
 ## 7. Corrections to existing docs
 
-The false claim — that `ghcr.io/digithings-ai/digichat` is published — was **not** confined to two files. A fresh-context review of this PR found roughly thirteen more sites, written when `publish-digichat-image.yml` was live and left behind when the strict-essentials cut removed it (`f54af7052`, 2026-10-01).
+The false claim — that `ghcr.io/digithings-ai/digichat` is published — was **not** confined to two files. A fresh-context review found roughly thirteen more sites, written when `publish-digichat-image.yml` was live and left behind when the strict-essentials cut removed it (`f54af7052`, 2026-10-01).
 
-**Corrected in this PR** — the sites that cause a failed command or a wrong belief about whether a lane exists:
+Restoring the lane splits those claims in two, and the distinction matters:
+
+- **Claims that a lane was removed and never replaced** are now false — the lane is back. Corrected.
+- **Claims that the GHCR package exists** are still false. Restoring a workflow does not create a package: nothing publishes until a `digichat-v*` tag is pushed, and the ladder stops at `digichat-v2.3.2`. So `ghcr.io/digithings-ai/digichat` does not exist today, and will not until someone cuts the next release tag.
+
+Any doc corrected in this PR that tells a reader to `docker pull ghcr.io/digithings-ai/digichat` must keep saying **that this works once the tag lands**, not that it works now.
+
+**Corrected in PR #5167** — the sites that cause a failed command or a wrong belief about whether a lane exists:
 
 | Site | Was |
 |---|---|
@@ -314,6 +363,14 @@ The false claim — that `ghcr.io/digithings-ai/digichat` is published — was *
 | `docs/digichat/INSTALL.md` | `docker pull ghcr.io/…` as the primary install unit |
 | `docs/digichat/RELEASE-SMOKE.md` | a smoke checklist whose steps cannot run |
 | `apps/digithings-web/lib/sharedDocs.ts`, `apiDocs.ts` | **public site copy** asserting digichat "is already on GHCR" |
+
+**Corrected in this PR** — the lane-restoration half:
+
+| Site | What it now says |
+|---|---|
+| `docs/agents/CI_CONVENTIONS.md` | `publish-digichat-image.yml` is **Working (restored)** with its real triggers, its guards, and the lane-A boundary |
+| `docs/ops/credential-ownership.md` | DIG-1242's lane question is **answered** (Option A), not open; DIG-1349 is moot |
+| this document | §1 records the decision and the shipped workflow; §4 Step 1 documents the ACR import; §6 closes the build-lane gap |
 
 **Still false — enumerated, not yet swept** (child issue). Listed so the next person does not rediscover them:
 
