@@ -749,11 +749,13 @@ def test_series_of_only_unrepresentable_numbers_is_none() -> None:
 def test_bools_are_kept_as_one_and_zero_in_every_container() -> None:
     """The chart path keeps bools, so the rate path must keep them too.
 
-    ``charts/common.py::_extract_frame`` casts with ``strict=False`` and polars
-    maps ``Boolean -> Float64`` to 1.0/0.0, so a boolean row is charted. Dropping
-    it here made the rate and the chart disagree about N, which is the one thing
-    this module exists to prevent. Decided by value, so a ``numpy.bool_`` from
-    ``list(arr)`` and a plain ``bool`` from ``.to_list()`` behave identically.
+    ``charts/common.py::_extract_frame`` delegates to this function (DIG-848), so
+    a boolean row has to survive here for both paths to see the same N. When the
+    chart path still had its own polars cast with ``strict=False``, ``Boolean``
+    became 1.0/0.0 there while this function dropped the row, and the two
+    disagreed about N -- the one thing this module exists to prevent. Decided by
+    value, so a ``numpy.bool_`` from ``list(arr)`` and a plain ``bool`` from
+    ``.to_list()`` behave identically.
     """
     expected = (["0", "1", "2"], [1.0, 0.0, 1.0])
 
