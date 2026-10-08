@@ -32,6 +32,8 @@ from __future__ import annotations
 
 import dataclasses
 import importlib
+import re
+import time
 from collections.abc import Iterator
 from typing import Any
 
@@ -273,6 +275,121 @@ def test_screen_text_finds_no_category_in_neutral_prose() -> None:
     assert result.redacted is None
     assert result.decision == "allow"
     assert result.reason == "art9:no_match"
+
+
+@pytest.mark.parametrize(
+    ("pattern_name", "payload"),
+    [
+        ("_genotype_call_re", "c." + "9" * 40_000),
+        ("_date_of_birth_re", "date of birth" + " " * 40_000),
+        ("_nhs_number_re", "health number" + " " * 40_000),
+        ("_record_number_re", "medical record number" + " " * 40_000),
+    ],
+)
+def test_value_patterns_stay_linear_on_long_non_matching_input(
+    pattern_name: str, payload: str
+) -> None:
+    """The identifier patterns must be linear, not quadratic, in input length.
+
+    Each payload is a pattern's own label followed by filler that cannot complete
+    a match, which is the worst case: `re` then retries every way of splitting
+    the tail. A label whose optional separator was written `\s*[:#]?\s*` — two
+    adjacent optional-ish quantifiers — made that split ambiguous and the
+    attempt quadratic. Measured against that form: `_genotype_call_re` and
+    `_date_of_birth_re` took 8.4 s and 5.4 s on 16 kB and passed 15 s on 32 kB,
+    `_nhs_number_re` took 4.9 s on 32 kB, all roughly 4x per doubling.
+
+    This is a denial-of-service test, not a speed test. These patterns run on
+    caller-supplied request text and nothing upstream caps the length, so one
+    long string is enough to pin a worker; a request body is a list, so it
+    multiplies. The ceiling is set so a quadratic regression fails in seconds
+    rather than hanging the suite, while the fixed patterns keep a wide margin.
+    """
+    pattern = getattr(art9, pattern_name)
+
+    started = time.perf_counter()
+    assert pattern.search(payload) is None  # worst case: no match
+    elapsed = time.perf_counter() - started
+
+    assert elapsed < 1.0, f"{pattern_name} took {elapsed:.3f}s on a 40k-char miss"
+
+
+def test_grouped_separators_match_exactly_what_the_ambiguous_ones_did() -> None:
+    """Fixing the backtracking must not change which strings match.
+
+    The ReDoS fix is a rewrite, and a rewrite of a matching rule is a silent
+    behaviour change unless something pins the language. These are the two forms
+    side by side: the ambiguous one that shipped first, and the grouped one that
+    replaced it. They must agree on every case here — the labelled forms that
+    must match, and the near misses that must not.
+    """
+    ambiguous = {
+        "_nhs_number_re": re.compile(
+            r"\b(?:nhs|health)\s*(?:record\s*)?(?:number|no\.?|#)\s*[:#]?\s*\d[\d\s-]{7,}\d",
+            re.IGNORECASE,
+        ),
+        "_record_number_re": re.compile(
+            r"\b(?:medical|patient|health)\s*(?:record|file)\s*(?:number|no\.?|#)"
+            r"\s*[:#]?\s*\d[\d\s-]{4,}\d",
+            re.IGNORECASE,
+        ),
+        "_date_of_birth_re": re.compile(
+            r"\b(?:date\s*of\s*birth|birth\s*date|d\.?o\.?b\.?)\s*[:#=]?\s*"
+            r"(?:(?:19|20)\d{2}[-/.](?:0?[1-9]|1[0-2])[-/.](?:0?[1-9]|[12]\d|3[01])"
+            r"|(?:0?[1-9]|[12]\d|3[01])[-/.](?:0?[1-9]|1[0-2])[-/.](?:19|20)\d{2})",
+            re.IGNORECASE,
+        ),
+        "_genotype_call_re": re.compile(
+            r"\b(?:(?:chr)?[0-9]{1,2}|x|y|mt)[:.][0-9]+[:. ]?[acgt]*[acgt]>[acgt]"
+            r"|c\.[0-9]+_?[0-9]*(?:del|dup|ins|inv|[acgt]>)[a-z]*",
+            re.IGNORECASE,
+        ),
+    }
+    cases = [
+        # labelled record numbers, in every separator style the old form allowed
+        "NHS number: 943 476 5919",
+        "NHS number 9434765919",
+        "nhs no. 943 476 5919",
+        "nhs #943 476 5919",
+        "health record number 12345678",
+        "NHS record number : 943 476 5919",
+        "medical record number 4471902",
+        "medical record no: 4471902",
+        "patient file #4471-902",
+        # dates of birth, labelled and bare
+        "date of birth: 1984-03-11",
+        "date of birth 11/03/1984",
+        "date of birth =1984.3.1",
+        "birth date: 1984-03-11",
+        "d.o.b 1984-03-11",
+        "dob: 11/03/1984",
+        # genotype calls
+        "chr17:43124095:G>T",
+        "c.68_69delAG",
+        "c.68delAG",
+        "X:1234C>T",
+        "mt.1A>G",
+        # near misses that must stay misses
+        "healthcheck_url",
+        "the meeting is on 1984-03-11",
+        "a phone number 943 476 5919",
+        "policy number 12345678",
+        "version 2.1.0",
+        "c. is short for circa",
+        "c.",
+        "date of birth ",
+        "NHS number ",
+    ]
+
+    for name, old in ambiguous.items():
+        new = getattr(art9, name)
+        for case in cases:
+            assert bool(old.search(case)) == bool(new.search(case)), (
+                f"{name} changed its verdict on {case!r}"
+            )
+
+    # Guard the guard: if every case missed, agreement would be vacuous.
+    assert any(any(old.search(case) for case in cases) for old in ambiguous.values())
 
 
 # ── 3. prose detection is not available in v1 ────────────────────────────────
