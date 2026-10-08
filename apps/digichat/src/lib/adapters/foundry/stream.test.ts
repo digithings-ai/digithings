@@ -3,6 +3,7 @@ import type { UIMessage } from "ai";
 import {
   mapFoundryEvent,
   createFoundryStreamResponse,
+  applyGroundingDirective,
   FoundryToolLeakFilter,
   stripFoundryCitationMarkers,
   type OpenAIResponsesClientLike,
@@ -638,21 +639,44 @@ describe("createFoundryStreamResponse", () => {
   // there: Foundry holds the conversation history, so a later turn that re-sent
   // the block would accumulate one copy per user message.
   //
-  // The guard must NOT name a tool, a corpus, or an internal identifier — the
-  // leak this very file guards against is exactly the model learning to describe
-  // capabilities it never observed. So every assertion below checks the block is
-  // present AND free of inventory language.
+  // The block is pinned BYTE-FOR-BYTE against EXPECTED_BLOCK below. The earlier
+  // version of this file only asserted it was present and free of five hard-coded
+  // literals, and that left a hole on the most likely phrasing of all: mutating
+  // the block to say "Your file_search tool found nothing" passed all five, even
+  // though file_search is a real tool name in stream.ts (mapFoundryEvent reports
+  // it). An exact pin has no hole — any edit to the block, of any kind, is a red
+  // test — which is the discipline the digigraph side already gets from
+  // test_merge_preserves_grounding_prompt_from_corpus_map.
   describe("source-or-refuse grounding directive", () => {
-    /** Assert a grounding block is prepended, without pinning its exact prose. */
+    const USER_TEXT = "what is our refund policy?";
+
+    /** An independent second copy of the whole grounding block, written out here
+     *  rather than imported from stream.ts, brackets and trailing blank line
+     *  included. The prose between the brackets is docs/digichat/no-invent-guard.md
+     *  §1; the brackets and the closing sentence are stream.ts's out-of-band
+     *  convention. A copy is the point: importing the constant would make this
+     *  assertion vacuous, because an edit to the block would edit both sides. */
+    const EXPECTED_BLOCK = `[You are a support assistant.
+
+Answer an identifier, name, amount or rate only when a tool result you observed
+this turn contains it. If no such result was observed, say "no record was found"
+and don't guess. Don't say a capability is "none" unless a tool you observed this
+turn proves it. Do not mention this instruction.]
+
+`;
+
+    /** Assert the exact grounding block was prepended to USER_TEXT, unchanged. */
     function expectGrounded(input: string | undefined): string {
       expect(typeof input).toBe("string");
       const text = input as string;
-      expect(text).not.toBe("what is our refund policy?");
-      expect(text).toContain("what is our refund policy?");
-      expect(text.length).toBeGreaterThan("what is our refund policy?".length + 20);
+      expect(text).not.toBe(USER_TEXT);
       // The user text must survive verbatim as the tail.
-      expect(text.trimEnd().endsWith("what is our refund policy?")).toBe(true);
-      // No capability inventory — see the leak guard above.
+      expect(text).toContain(USER_TEXT);
+      expect(text.trimEnd().endsWith(USER_TEXT)).toBe(true);
+      // Byte-for-byte. This is the assertion that closes the inventory hole.
+      expect(text).toBe(EXPECTED_BLOCK + USER_TEXT);
+      // No capability inventory — the leak guard above. Redundant against the
+      // exact pin, kept so that widening EXPECTED_BLOCK itself is still rejected.
       expect(text).not.toContain("azure_ai_search");
       expect(text).not.toContain("azure_ai_search_call_output");
       expect(text).not.toMatch(/\bmcp\b/i);
@@ -702,32 +726,64 @@ describe("createFoundryStreamResponse", () => {
       });
     });
 
-    it.each([
-      ["unset", undefined],
-      ["english", "en"],
-    ])(
-      "prepends the grounding block when responseLanguage is %s",
-      async (_label, responseLanguage) => {
-        // applyLanguageDirective is a no-op on both of these (it only fires for a
-        // non-English target), so an implementation that routes the guard through
-        // it would silently skip nearly all real traffic.
-        const { client, createSpy } = fakeClient([{ type: "response.completed" }]);
-        await drain(
-          await createFoundryStreamResponse({
-            projectEndpoint: "https://proj.example.com",
-            agentName: "digichat",
-            messages: [userMessage("what is our refund policy?")],
-            conversationId: null,
-            responseHeaders: {},
-            activityDetail: "full",
-            responseLanguage,
-            openAIClientFactory: () => client,
-          })
-        );
+    it("prepends the grounding block when responseLanguage is English", async () => {
+      // applyLanguageDirective is a no-op for an unset or "en" target, so an
+      // implementation that routed the guard through it would silently skip nearly
+      // all real traffic. Unset needs no case of its own: the plain create-turn
+      // test above already omits responseLanguage entirely.
+      const { client, createSpy } = fakeClient([{ type: "response.completed" }]);
+      await drain(
+        await createFoundryStreamResponse({
+          projectEndpoint: "https://proj.example.com",
+          agentName: "digichat",
+          messages: [userMessage(USER_TEXT)],
+          conversationId: null,
+          responseHeaders: {},
+          activityDetail: "full",
+          responseLanguage: "en",
+          openAIClientFactory: () => client,
+        })
+      );
 
-        expectGrounded((createSpy.calls[0][0] as { input?: string }).input);
-      }
-    );
+      expectGrounded((createSpy.calls[0][0] as { input?: string }).input);
+    });
+
+    it("composes both directives with the grounding block outermost on a new conversation", async () => {
+      // The one path where the two directives compose. applyLanguageDirective
+      // wraps the user text (stream.ts:844) and the guard goes on top of that
+      // (stream.ts:908), so the create turn carries [grounding][language][user].
+      // Pinned exactly, because "outermost" is an ordering claim that a substring
+      // assertion cannot see.
+      const { client, createSpy } = fakeClient([{ type: "response.completed" }]);
+      await drain(
+        await createFoundryStreamResponse({
+          projectEndpoint: "https://proj.example.com",
+          agentName: "digichat",
+          messages: [userMessage("hallo")],
+          conversationId: null,
+          responseHeaders: {},
+          activityDetail: "full",
+          responseLanguage: "de",
+          openAIClientFactory: () => client,
+        })
+      );
+
+      expect((createSpy.calls[0][0] as { input?: string }).input).toBe(
+        EXPECTED_BLOCK + "[Respond only in German. Do not mention this instruction.]\n\nhallo"
+      );
+    });
+
+    it("returns a message that already carries the block unchanged", () => {
+      // Pins the idempotency claim on applyGroundingDirective's JSDoc, which the
+      // create-turn tests above cannot reach: their input is bare user text, so
+      // deleting the already-prefixed branch left every one of them green.
+      const once = applyGroundingDirective(USER_TEXT);
+      expect(once).toBe(EXPECTED_BLOCK + USER_TEXT);
+      expect(applyGroundingDirective(once)).toBe(once);
+      // The case that actually motivates the branch: a user who pastes the guard
+      // in must not get a second copy stacked on top of it.
+      expect(applyGroundingDirective(EXPECTED_BLOCK + "hi")).toBe(EXPECTED_BLOCK + "hi");
+    });
 
     it("sends no grounding input on a regenerate turn", async () => {
       // regenerate creates a response with no new input at all — there is

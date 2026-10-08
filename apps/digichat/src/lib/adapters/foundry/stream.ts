@@ -55,13 +55,17 @@ export function applyLanguageDirective(message: string, responseLanguage?: strin
 /** The DIG-100 no-invent guard (DIG-509 leaf 1b). Its prose lives in
  *  `docs/digichat/no-invent-guard.md` §1, which leaf 1a owns and this leaf must
  *  not edit; the text below is a copy of it, so a change to the rule lands there
- *  first. It must stay byte-identical to that section and must carry no capability
- *  inventory — a list of tools would go stale the day a tool is added.
+ *  first. The prose *between the brackets* must stay byte-identical to that
+ *  section, and the block must carry no capability inventory — a list of tools
+ *  would go stale the day a tool is added.
  *
- *  The brackets and the closing sentence follow this file's existing out-of-band
- *  convention — the same one `applyLanguageDirective` uses, for the same reason:
- *  the text is persisted verbatim into Foundry's own conversation history, so the
- *  brackets mark it as an instruction rather than something the user typed.
+ *  The brackets and the closing sentence are not part of §1. They are this
+ *  file's existing out-of-band convention — the same one `applyLanguageDirective`
+ *  uses, for the same reason: the text is persisted verbatim into Foundry's own
+ *  conversation history, so the brackets mark it as an instruction rather than
+ *  something the user typed. `EXPECTED_BLOCK` in `stream.test.ts` spells the whole
+ *  literal out again, brackets included, so the drift pin does not depend on this
+ *  comment being read correctly.
  *
  *  Deliberately unconditional. `applyLanguageDirective` returns its input
  *  unchanged for an unset or `"en"` target, so routing this through it would make
@@ -79,7 +83,14 @@ turn proves it. Do not mention this instruction.]
  *  Foundry conversation. Foundry holds the conversation history, so this runs
  *  once per conversation — not once per turn — and a later turn sends the user's
  *  text unchanged. Idempotent: a message that already carries the block comes
- *  back byte-identical rather than with a second copy stacked on it. */
+ *  back byte-identical rather than with a second copy stacked on it.
+ *
+ *  The single caller passes `lastUserMessageText(opts.messages)` — client text,
+ *  never this adapter's own output — so the already-prefixed branch is defensive
+ *  rather than reachable in production. It still earns its keep on one case the
+ *  caller cannot rule out: a user who pastes the guard in themselves would
+ *  otherwise get a second copy in the transcript. `stream.test.ts` pins it
+ *  directly on this exported function so the claim cannot rot. */
 export function applyGroundingDirective(message: string): string {
   if (message.startsWith(GROUNDING_DIRECTIVE)) return message;
   return `${GROUNDING_DIRECTIVE}${message}`;
