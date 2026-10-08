@@ -174,7 +174,7 @@ function sessionLines(data: unknown): string[] {
   // the moment the route fills in session by session: `session Asia  state —`
   // paints on healthy ink beside a real row, and claims a state nobody read.
   const live = sessions.filter((row) => str(row.state) || str(row.note));
-  if (live.length === 0) return ["sessions not provisioned"];
+  if (live.length === 0) return ["no state yet"];
   return live.map((row) => {
     const note = str(row.note);
     const base = cells(row, [["session", "session"], ["state", "state"]]);

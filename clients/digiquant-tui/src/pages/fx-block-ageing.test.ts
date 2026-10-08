@@ -181,18 +181,20 @@ const sessionsBlock = (rows: SessionRow[], asOf: string | null = null) => {
 };
 
 describe("fx-sessions names the cause, not the absence", () => {
-  test("an unprovisioned block reads `sessions not provisioned`", () => {
-    // `sessions()` in dashboard-api has no table behind it, the same as the flags,
-    // paper and directives blocks. Those all surface the client's existing
-    // sentence for a draft migration, so this block said a different thing for the
-    // same situation -- and `no session state` sat one line from `no sessions`, the
-    // empty-list case, on the same muted ink. Cause, not absence, and no new rule.
+  test("an unprovisioned block reads `no state yet`", () => {
+    // Client QA (DIG-2071) picked this string. `sessions()` in dashboard-api has no
+    // table behind it, the same as the flags, paper and directives blocks. It chose
+    // `no state yet` over `no session state` and over `sessions not provisioned`:
+    // the sibling panes match their header noun exactly (`no pairs`, `no levels`,
+    // `no sessions`), so a second noun and the word `state` both add a fault reading
+    // the pane does not have. The full reasoning is on DIG-2071, verdict comment
+    // 2026-10-07; DIG-2104 carries the change request itself.
     const { lines } = sessionsBlock(SKELETON);
-    expect(body(lines)).toEqual(["sessions not provisioned"]);
+    expect(body(lines)).toEqual(["no state yet"]);
   });
 
   test("both quiet rules already know that sentence, so neither was edited", () => {
-    // `isQuiet()` in fx.tsx matches `not provisioned`; `isSentence()` in shape.ts
+    // `isQuiet()` in fx.tsx matches `no `; `isSentence()` in shape.ts
     // matches it too. The pane tone proves the first, the block shape the second.
     // Both read the sentence this block actually renders, so a string that needed a
     // new branch in either file fails here instead of quietly going bright.
@@ -201,18 +203,18 @@ describe("fx-sessions names the cause, not the absence", () => {
     expect(tone).toBe("empty");
     expect(fxInk(tone)).not.toBe(fxInk("ok"));
     expect(shapeLines(body(lines))).toEqual({
-      blocks: [{ kind: "sentence", text: "sessions not provisioned" }],
+      blocks: [{ kind: "sentence", text: "no state yet" }],
     });
   });
 
-  test("`no sessions` and `sessions not provisioned` stay two different situations", () => {
+  test("`no sessions` and `no state yet` stay two different situations", () => {
     // Empty array: the desk has no sessions to report. Populated array, nothing
-    // filled in: the sessions exist and their state is not provisioned. Same ink,
+    // filled in: the sessions exist and none has reported state yet. Same ink,
     // two sentences, and the reader can tell which one they are looking at.
     const empty = body(sessionsBlock([]).lines);
     const unprovisioned = body(sessionsBlock(SKELETON).lines);
     expect(empty).toEqual(["no sessions"]);
-    expect(unprovisioned).toEqual(["sessions not provisioned"]);
+    expect(unprovisioned).toEqual(["no state yet"]);
   });
 });
 

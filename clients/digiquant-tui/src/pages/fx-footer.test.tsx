@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { act } from "react";
 import { testRender } from "@opentui/react/test-utils";
 import { PaneFrame } from "./pane";
-import { fxInk, fxPaneStatus, fxTone } from "./fx";
+import { fxBlockLines, fxInk, fxPaneStatus, fxTone } from "./fx";
 import { INK, WARN, DANGER } from "../theme";
 import type { ReadResult } from "../read";
 
@@ -88,5 +88,43 @@ describe("the age words the FX desk computes reach the screen", () => {
     expect(staleInk).toBe(DANGER);
     expect(staleInk).not.toBe(healthyInk);
     expect(WARN).not.toBe(staleInk);
+  });
+});
+
+describe("the sentence an unprovisioned FX pane shows reaches the screen", () => {
+  test("the `fx-sessions` no-state sentence paints, on quiet ink", async () => {
+    // Client QA (DIG-2071) chose this copy and then said plainly that it had only
+    // judged it from the source string, not from the screen. This closes that
+    // limit: the sentence goes through the real block builder and the real pane and
+    // is read back out of real cells, so "it reads correctly" is a claim about
+    // pixels rather than about a literal in a test file.
+    const result: ReadResult = { status: "ok", lines: [], asOf: null };
+    const body = fxBlockLines("fx-sessions", result, { sessions: [
+      { session: "Asia", state: null, note: null },
+      { session: "London", state: null, note: null },
+      { session: "New York", state: null, note: null },
+    ] });
+    const tone = fxTone(result, body);
+    expect(tone).toBe("empty");
+
+    const setup = await testRender(
+      <PaneFrame
+        title="FX · sessions"
+        status={fxPaneStatus(result, null, "/fx/sessions", "2026-10-08")}
+        focused={false}
+        lines={body}
+        ink={fxInk(tone)}
+      />,
+      { width: 60, height: 7 },
+    );
+    await setup.renderOnce();
+    const captured = setup.captureCharFrame();
+    act(() => setup.renderer.destroy());
+
+    expect(captured).toContain("no state yet");
+    // It must not be the sentence QA rejected, and it must not be the branch's
+    // own `sessions not provisioned`, which no gate ever reviewed.
+    expect(captured).not.toContain("no session state");
+    expect(captured).not.toContain("sessions not provisioned");
   });
 });
