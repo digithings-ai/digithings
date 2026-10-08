@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -75,6 +76,8 @@ def _pr(
     merge_state: str = "CLEAN",
     extra_checks: list[dict[str, Any]] | None = None,
     title: str = "",
+    comments: list[dict[str, Any]] | None = None,
+    commits: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     rollup: list[dict[str, Any]] = list(extra_checks or [])
     if test_conclusion is not None:
@@ -86,7 +89,7 @@ def _pr(
                 "conclusion": test_conclusion,
             }
         )
-    return {
+    pr = {
         "number": number,
         "title": title or f"work for #{number}",
         "headRefName": f"DIG-{number}-work",
@@ -100,6 +103,44 @@ def _pr(
         "author": {"login": author},
         "createdAt": created,
         "reviews": reviews if reviews is not None else [],
+    }
+    # `comments` and `commits` are fetched from GitHub but are absent from every
+    # hand-built PR that does not ask for them, so the gates stay exercised on the
+    # shape they will really meet when a key is missing.
+    if comments is not None:
+        pr["comments"] = comments
+    if commits is not None:
+        pr["commits"] = commits
+    return pr
+
+
+def _review_comment(
+    *,
+    verdict: str | None = "changes_requested",
+    head_sha: str = "a" * 40,
+    created: str = "2026-10-07T22:07:11Z",
+    login: str = "chrizefan",
+    number: int = 347,
+    prose: bool = True,
+) -> dict[str, Any]:
+    """A PR comment in the shape a posted code-review verdict arrives in.
+
+    The marker is an HTML comment whose `key=value` fields are the machine-readable
+    part; the prose below it is what a human reads. Only the fields are parsed, so
+    the prose here is free to say anything.
+    """
+    fields = [f"scope=digithings-ai/twelve-x#{number}@{head_sha}"]
+    if verdict is not None:
+        fields.append(f"verdict={verdict}")
+    body = f"<!-- opencode-power-pack:code-review {' '.join(fields)} -->\n"
+    if prose:
+        body += "## Verdict: changes requested (narrow)\n\n**One finding blocks approval.**\n"
+    return {
+        "id": f"IC_kwDO{login}_{number}",
+        "author": {"login": login},
+        "authorAssociation": "MEMBER",
+        "body": body,
+        "createdAt": created,
     }
 
 
@@ -601,6 +642,331 @@ def test_an_em_merge_attested_by_the_cto_passes() -> None:
     assert mq.evaluate(
         _pr(1), mq.load_policy(), acting_role="em", base="develop", attest_role="cto"
     ).eligible
+
+
+# --- a verdict posted as a PR comment has to reach the gate --------------------
+#
+# twelve-x PR #347 merged 6m37s after a review saying "changes requested — one
+# finding blocks approval" was posted on it. GitHub never saw a blocking
+# `CHANGES_REQUESTED` review, so `reviewDecision` was empty, and the queue only
+# fetched `reviews` — a comment was invisible to it. `--attest-review qa` then
+# satisfied the gate and pointed straight past the verdict.
+
+
+def test_a_posted_verdict_of_changes_requested_blocks_even_with_an_attestation() -> None:
+    """The exact #347 shape: no blocking review, a distinct attestation, one verdict.
+
+    Every other input here is the one that merged. Only the posted verdict is new,
+    and it has to be enough on its own.
+    """
+    pr = _pr(
+        347,
+        reviews=[],
+        comments=[_review_comment(verdict="changes_requested")],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop", attest_role="qa")
+    assert not verdict.eligible
+    # The refusal has to name the comment. A queue that refuses without saying
+    # where the block came from is a queue nobody can clear.
+    assert any("changes_requested" in r and "chrizefan" in r for r in verdict.reasons)
+
+
+def test_a_posted_verdict_of_approved_does_not_block() -> None:
+    """An approving verdict is a signal, not a gate. It must not turn into one."""
+    pr = _pr(347, reviews=[], comments=[_review_comment(verdict="approved")])
+    assert mq.evaluate(
+        pr, mq.load_policy(), acting_role="em", base="develop", attest_role="qa"
+    ).eligible
+
+
+def test_a_comment_without_the_marker_is_ignored() -> None:
+    """Prose is not a contract.
+
+    The #347 comment reads `## Verdict: changes requested (narrow)` in its prose.
+    Matching on that text would mean matching a heading a reviewer is free to
+    reword, so the gate reads the marker's `verdict=` field and nothing else. This
+    comment says the same words with no marker and must not block.
+    """
+    pr = _pr(
+        347,
+        reviews=[],
+        comments=[
+            {
+                "id": "IC_kwDOprose_347",
+                "author": {"login": "chrizefan"},
+                "body": "## Verdict: changes requested (narrow)\n\n**One finding blocks approval.**",
+                "createdAt": "2026-10-07T22:07:11Z",
+            }
+        ],
+    )
+    assert mq.evaluate(
+        pr, mq.load_policy(), acting_role="em", base="develop", attest_role="qa"
+    ).eligible
+
+
+def test_a_pr_without_a_comments_key_does_not_crash_the_gate() -> None:
+    """A missing key is a missing signal. It must not be an exception.
+
+    `comments` is fetched conditionally and the gates run on whatever the fetch
+    returned, so the shape with the key absent is one the gate will really meet.
+    """
+    pr = _pr(347)
+    assert "comments" not in pr
+    assert mq.evaluate(
+        pr, mq.load_policy(), acting_role="em", base="develop", attest_role="qa"
+    ).eligible
+
+
+def test_a_verdict_against_an_older_commit_on_the_branch_still_blocks() -> None:
+    """A reviewer who blocked commit A still blocks A+B.
+
+    Forgetting to re-review after pushing a fix is the common case, and the
+    finding is normally still there. Clearing this silently is how the gate
+    becomes decoration.
+    """
+    older = "b" * 40
+    head = "c" * 40
+    pr = _pr(
+        347,
+        head_sha=head,
+        reviews=[],
+        comments=[_review_comment(verdict="changes_requested", head_sha=older)],
+        commits=[{"oid": older}, {"oid": head}],
+    )
+    assert not mq.evaluate(
+        pr, mq.load_policy(), acting_role="em", base="develop", attest_role="qa"
+    ).eligible
+
+
+def test_a_verdict_against_a_head_this_pr_does_not_carry_does_not_block() -> None:
+    """A force-push or rebase rewrites history, and the old sha is gone.
+
+    The verdict was about code that no longer exists, so holding the PR on it
+    would strand it: the finding cannot be re-applied to the new commits, and the
+    only way to clear it would be to close and reopen the PR. A reviewer who
+    disagrees posts a fresh verdict against the new head.
+    """
+    head = "c" * 40
+    pr = _pr(
+        347,
+        head_sha=head,
+        reviews=[],
+        comments=[_review_comment(verdict="changes_requested", head_sha="f" * 40)],
+        commits=[{"oid": head}],
+    )
+    assert mq.evaluate(
+        pr, mq.load_policy(), acting_role="em", base="develop", attest_role="qa"
+    ).eligible
+
+
+def test_the_latest_posted_verdict_wins() -> None:
+    """A reviewer who came back and approved clears their own earlier block."""
+    pr = _pr(
+        347,
+        reviews=[],
+        comments=[
+            _review_comment(verdict="changes_requested", created="2026-10-07T22:07:11Z"),
+            _review_comment(verdict="approved", created="2026-10-07T22:20:00Z"),
+        ],
+    )
+    assert mq.evaluate(
+        pr, mq.load_policy(), acting_role="em", base="develop", attest_role="qa"
+    ).eligible
+
+
+def test_an_older_block_still_blocks_when_a_later_marker_has_no_verdict() -> None:
+    """A typo is a missing signal, not a clearance.
+
+    The gate refuses to read a verdict it cannot parse, and refusing to read is
+    not the same as reading "approved". Letting an unreadable marker clear a
+    block would hand anyone who can comment a way to unlock the queue.
+    """
+    pr = _pr(
+        347,
+        reviews=[],
+        comments=[
+            _review_comment(verdict="changes_requested", created="2026-10-07T22:07:11Z"),
+            _review_comment(verdict="looks-fine", created="2026-10-07T22:20:00Z"),
+        ],
+    )
+    assert not mq.evaluate(
+        pr, mq.load_policy(), acting_role="em", base="develop", attest_role="qa"
+    ).eligible
+
+
+def test_the_fetch_asks_github_for_the_fields_the_posted_verdict_needs() -> None:
+    """The structural fix, pinned: a gate cannot read a field the fetch dropped.
+
+    This is the whole root cause of #347 — `comments` was never requested, so no
+    amount of parsing could have reached it. Pinning the field list keeps the
+    fetch and the gate from drifting apart again.
+    """
+    source = SCRIPT.read_text()
+    # The field list is written as implicitly-concatenated string literals, so take
+    # every literal that follows `--json` rather than only the first.
+    tail = source.split('"--json",', 1)
+    assert len(tail) == 2, "the fetch no longer passes --json"
+    literals = re.findall(r'"([^"]*)"', tail[1])
+    fields = "".join(literals)
+    assert "comments" in fields
+    assert "commits" in fields
+
+
+# --- pinning the seven surviving posted-verdict mutants (DIG-2379) --------------
+#
+# QA mutated `scripts/merge_queue.py` ten ways against this suite: three mutants
+# were caught, seven survived with all tests green. Each test below pins one
+# surviving mutant (M1, M2, M3, M4, M5, M6, M8) to a documented behaviour in
+# `docs/agents/CODE_REVIEW_POLICY.md`, so re-running that mutation fails here.
+
+
+def test_a_posted_verdict_of_changes_needed_blocks() -> None:
+    """M1: the DIG-1021 spelling blocks, not just `changes_requested`.
+
+    Dropping `changes_needed` from `BLOCKING_VERDICTS` survived the suite, which
+    would silently un-block every reviewer using the interim-discipline spelling
+    with all tests green.
+    """
+    pr = _pr(
+        347,
+        reviews=[],
+        comments=[_review_comment(verdict="changes_needed")],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop", attest_role="qa")
+    assert not verdict.eligible
+    assert any("changes_needed" in r for r in verdict.reasons)
+
+
+def test_a_posted_verdict_of_approve_does_not_block() -> None:
+    """M2: the DIG-1021 approving spelling is a signal, not a gate.
+
+    Adding `approve` to `BLOCKING_VERDICTS` survived the suite — the `approved`
+    spelling was pinned but its `approve` sibling was not, so a reviewer clearing
+    with the interim-discipline word would stay blocked.
+    """
+    pr = _pr(347, reviews=[], comments=[_review_comment(verdict="approve")])
+    assert mq.evaluate(
+        pr, mq.load_policy(), acting_role="em", base="develop", attest_role="qa"
+    ).eligible
+
+
+def test_a_posted_verdict_with_a_hyphen_reads_as_its_underscore_spelling() -> None:
+    """M3: `changes-requested` is the same verdict as `changes_requested`.
+
+    Dropping the `-` -> `_` step in `_normalise_verdict()` survived the suite,
+    so a reviewer writing the hyphenated spelling would post a block the gate
+    cannot read — a missing signal that silently stops blocking.
+    """
+    pr = _pr(
+        347,
+        reviews=[],
+        comments=[_review_comment(verdict="changes-requested")],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop", attest_role="qa")
+    assert not verdict.eligible
+    assert any("changes-requested" in r or "changes_requested" in r for r in verdict.reasons)
+
+
+def test_a_posted_verdict_with_a_space_is_not_readable() -> None:
+    """M4: spaces are not collapsed, so `verdict=changes requested` reads as nothing.
+
+    Making `_normalise_verdict()` collapse spaces survived the suite. The field
+    matcher only captures `changes` before the space either way, so the pin has
+    two halves: the normaliser keeps the space (a direct assertion the collapsing
+    mutant fails), and end to end a spaced marker neither blocks nor clears an
+    earlier block.
+    """
+    assert mq._normalise_verdict("changes requested") == "changes requested"
+    head = "a" * 40
+    pr = _pr(
+        347,
+        reviews=[],
+        comments=[
+            _review_comment(verdict="changes_requested", created="2026-10-07T22:07:11Z"),
+            {
+                "id": "IC_kwDOchrizefan_spaced",
+                "author": {"login": "chrizefan"},
+                "body": (
+                    "<!-- opencode-power-pack:code-review "
+                    f"scope=digithings-ai/twelve-x#347@{head} verdict=changes requested -->\n"
+                ),
+                "createdAt": "2026-10-07T22:20:00Z",
+            },
+        ],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop", attest_role="qa")
+    assert not verdict.eligible, "a spaced verdict must not clear the earlier block"
+
+
+def test_a_posted_verdict_from_a_different_author_still_counts() -> None:
+    """M5: the parser filters on no author — anyone who can comment can block or clear.
+
+    Filtering out comments from a different author than the PR author survived
+    the suite (every existing posted-verdict test posts as the PR author), which
+    would hand reviewers' blocks to whoever the filter keeps and let anyone else
+    be silently ignored.
+    """
+    pr = _pr(
+        347,
+        reviews=[],
+        comments=[
+            _review_comment(
+                verdict="changes_requested",
+                login="reviewer-two",
+                created="2026-10-07T22:07:11Z",
+            )
+        ],
+    )
+    blocked = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop", attest_role="qa")
+    assert not blocked.eligible
+    assert any("reviewer-two" in r for r in blocked.reasons)
+    # And the other direction of the same rule: a third commenter can clear it.
+    pr["comments"].append(
+        _review_comment(verdict="approved", login="reviewer-three", created="2026-10-07T22:20:00Z")
+    )
+    assert mq.evaluate(
+        pr, mq.load_policy(), acting_role="em", base="develop", attest_role="qa"
+    ).eligible
+
+
+def test_a_blocking_verdict_with_no_sha_stops_applying() -> None:
+    """M6: a blocking verdict with no sha silently stops applying.
+
+    Treating a missing sha as on-branch in `_on_pr_history()` survived the
+    suite, which would turn a scope-less marker — a verdict about no stated
+    commit — into a block no new review can scope away.
+    """
+    pr = _pr(
+        347,
+        reviews=[],
+        comments=[
+            {
+                "id": "IC_kwDOchrizefan_347",
+                "author": {"login": "chrizefan"},
+                "body": "<!-- opencode-power-pack:code-review verdict=changes_requested -->\n",
+                "createdAt": "2026-10-07T22:07:11Z",
+            }
+        ],
+    )
+    assert mq.evaluate(
+        pr, mq.load_policy(), acting_role="em", base="develop", attest_role="qa"
+    ).eligible
+
+
+def test_a_posted_verdict_is_matched_case_insensitively() -> None:
+    """M8: `_normalise_verdict()` lowercases, so `Changes_Requested` blocks.
+
+    Dropping `.lower()` survived the suite — every existing verdict is already
+    lowercase — so a reviewer capitalising the word would post a block the gate
+    cannot read.
+    """
+    pr = _pr(
+        347,
+        reviews=[],
+        comments=[_review_comment(verdict="Changes_Requested")],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop", attest_role="qa")
+    assert not verdict.eligible
 
 
 # --- ordering: a queue, not a race --------------------------------------------
