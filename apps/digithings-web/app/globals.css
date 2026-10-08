@@ -936,21 +936,24 @@ html {
   .pixel-word { width: 616px; }
 }
 
+/* The band holds the footer mark at page width. Two rules, both load-bearing:
+   the band carries NO height, so the mark sets it from its own 88x10 aspect
+   (8.8); and `overflow` clips the horizontal axis only, never the vertical one.
+   A fixed band height with `overflow: clip` on both axes shaved the top and
+   bottom glyph rows at every viewport wider than ~1280 — 7.8px at 1440, 26px at
+   1600, 37.8px at 1728 — and the mark read as squashed (DIG-2304).
+   The mark stays at `min(100%, 1400px)` so it fits the padded band: a bleed
+   wider than the band loses the outer columns of the first and last letter
+   (3.8 of 88 cells a side at 1440), which is the same class of defect DIG-2304
+   is about. Whether the footer should bleed is a design call, not a bug fix. */
 .pixel-word-band {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: clamp(4.5rem, 12vw, 9rem);
-  padding-left: var(--page-pad);
-  padding-right: var(--page-pad);
-  overflow: clip;
+  padding: clamp(3rem, 8vw, 6rem) var(--page-pad) 0;
+  overflow-x: clip;
 }
 
 .pixel-word.pixel-word-footer {
-  width: min(118%, 1600px);
-  height: auto;
-  margin: 0;
-  margin-top: 0;
+  width: min(100%, 1400px);
+  margin: 0 auto;
 }
 
 .pixel-word .c { opacity: var(--f); }
