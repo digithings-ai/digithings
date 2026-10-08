@@ -564,7 +564,13 @@ the window came back empty, `_fetch_macro` raised `empty live window`, and every
 scheduled refresh was marked stale. Each entry in
 `research/config/macro_series.yaml` may now declare a `cadence`
 (`daily`/`weekly`/`monthly`/`quarterly`), which selects the window
-(`_CADENCE_WINDOW_DAYS`: 45/60/120/240 days; absent = daily). The widened window
+(`_CADENCE_WINDOW_DAYS`: 45/45/120/240 days; absent = daily). Daily series are
+deliberately left unannotated rather than spelled out `daily`, so that absent is
+the one convention instead of two ways to say the same thing; a pinned contract
+test (`test_daily_series_carry_no_cadence`) holds those blocks annotation-free.
+Yahoo FX pairs and ad-hoc `--macro-series` specs have no entry at all and resolve
+to the same daily window, because a same-day quote has no publication calendar to
+declare. The widened window
 then *contains* the series' seal row, so the live fetch is non-empty and the
 existing benign `up-to-date` path covers it. Note what does **not** change: an
 empty live window still returns `history-only` — `_fetch_macro` raises on empty

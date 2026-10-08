@@ -1572,8 +1572,19 @@ def main(argv: list[str] | None = None) -> int:
     # vendor that keeps answering lands on `up-to-date`, which `_macro_leg_dead`
     # cannot see. Measured against each series' own cadence window. Additive
     # only, like the exemption above -- it names series, it never clears them.
-    failed += _macro_as_of_stale(outcomes, macro_specs, run)
-    stale = (not gate["ok"]) or bool(failed)
+    # Wrapped like the per-series fetch above, because it sits between two
+    # already-guarded regions and an unwrapped line here would take the manifest
+    # write down with it. It does not fail *open*, though: ages that could not
+    # be measured leave the panel's freshness unproven, so the run is marked
+    # stale rather than trusted. Dropping the guard silently is the exact
+    # failure this whole check exists to prevent.
+    age_guard_error = None
+    try:
+        failed += _macro_as_of_stale(outcomes, macro_specs, run)
+    except Exception as exc:
+        age_guard_error = f"macro as_of age guard raised: {type(exc).__name__}: {exc}"
+        print(f"WARNING: {age_guard_error}")
+    stale = (not gate["ok"]) or bool(failed) or age_guard_error is not None
     manifest.update(build_manifest(new_as_of, datasets, stale=stale))
     digest = store.write_manifest(manifest)
     artifact = {

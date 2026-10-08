@@ -19,14 +19,24 @@ dataset" rather than a clean failure.
 
 DIG-1137 adds the second half of the same hole. The guard above reads ``mode``,
 and there is a shape where the vendor keeps *answering* while the panel stops
-advancing: every live row is inside the window, so nothing looks like a failure
-and the run lands on ``up-to-date`` -- a success mode the soft-fail reduction
-never sees. ``staleness_gate`` cannot cover it either, because healthy price
-tickers pin ``max(as_of)`` at the run date. The panel is frozen at the same
+advancing, so the run lands on ``up-to-date`` -- a success mode the soft-fail
+reduction never sees. ``staleness_gate`` cannot cover it either, because healthy
+price tickers pin ``max(as_of)`` at the run date. The panel is frozen at the same
 place, with ``stale=False`` and exit 0. So ``_macro_as_of_stale`` measures each
 macro series' ``as_of`` against its own cadence window and names anything past
 it. The section at the end of this file pins that guard, including the fuse: a
 monthly seal 34 days old is legitimately fresh and must stay quiet.
+
+The reachable shape is narrow, and pinning it precisely matters. A frozen
+in-window panel needs rows that survive ``_fetch_macro``'s ``<= run + 1`` clamp
+yet are dropped by ``refresh_macro_series``' settled-close ``<= run`` clamp --
+so, since ``obs_date`` is a whole date, every such row must be dated exactly
+``run + 1``. Anything later is dropped at fetch time and becomes an empty live
+window (``history-only``, the leg guard's case); anything at or before ``run``
+survives into the panel and genuinely advances it. And only ``MODE_UP_TO_DATE``
+can trip the guard at all: ``MODE_INCREMENTAL`` and ``MODE_FULL_REPULL`` both
+derive their ``as_of`` from rows already clamped ``<= run``, so their top row is
+by construction both ``<= run`` and inside the window.
 
 How this stays a real test rather than a stub. It does not reimplement the
 logic. It parses ``refresh_market_data_r2.py`` with :mod:`ast`, extracts the
@@ -852,3 +862,60 @@ def test_age_guard_is_wired_not_merely_defined(r2: dict[str, Any]) -> None:
             f"the age guard is missing main's `{binding}` binding, so it is being "
             f"called against something else. Got: {addition}"
         )
+
+
+def test_the_age_guard_cannot_fail_open(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A guard that raises marks the run stale rather than quietly vanishing (DIG-2406).
+
+    The addition is wrapped so a future divergence cannot take ``write_manifest``
+    down with it. The tempting shape for that ``except`` is to log and carry on,
+    and it is wrong here: the panel's ages went *unmeasured*, not *verified young*.
+    Swallowing turns an unprovable panel into a fresh one, which is the exact
+    silent-freeze failure this guard exists to catch -- so the except arm forces
+    ``stale`` instead.
+
+    Exercised through ``main`` with the real guard stubbed to raise, so the
+    assertion covers the wiring rather than a copy of the except body.
+    """
+    import scripts.refresh_market_data_r2 as refresh_mod
+    from scripts.refresh_market_data_r2 import _macro_as_of_stale as _real_guard
+    from tests.scripts.test_market_data_restatement_4621 import (
+        HIST,
+        FakeStore,
+        _run_main,
+        price_frame,
+        price_rows,
+    )
+
+    store = FakeStore()
+    store.histories["SPY"] = price_frame(price_rows(HIST))
+    store.lives["SPY"] = price_frame(price_rows(HIST))
+    # A panel that is genuinely healthy: fresh monthly seals, nothing expired.
+    # Without the raising guard this run is fresh, so `stale` can only be True
+    # because the guard failed to measure.
+    specs = [("fred", "M2SL", "monthly")]
+    store.macros[("fred", "M2SL")] = [
+        {"source": "fred", "series_id": "M2SL", "obs_date": "2026-09-18", "value": 21.0},
+    ]
+    store.macro_lives[("fred", "M2SL")] = [
+        {"source": "fred", "series_id": "M2SL", "obs_date": "2026-09-18", "value": 21.0},
+    ]
+
+    def _raising_guard(outcomes, macro_specs, run):
+        raise RuntimeError("cadence source diverged")
+
+    monkeypatch.setattr(refresh_mod, "_macro_as_of_stale", _raising_guard)
+
+    rc, artifact = _run_main(monkeypatch, tmp_path, store, specs, RUN)
+
+    # The guard is additive, so a raise costs no names -- it costs certainty.
+    assert _real_guard is not _raising_guard
+    assert artifact["failed"] == [], (
+        "the guard is additive and raises before naming anything; a raise must "
+        f"not fabricate failures. Got: {artifact['failed']}"
+    )
+    assert artifact["stale"] is True, (
+        "a macro panel whose as_of ages could not be measured must not report "
+        "itself fresh; that is the silent freeze this guard exists to catch"
+    )
+    assert rc == 1, "an unmeasured panel must exit non-zero so the cron alerts"
