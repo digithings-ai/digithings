@@ -173,7 +173,7 @@ so: *"Production clock: Cloudflare Worker digithings-cron. Schedule removed
 line 271 registers:
 
 ```
-wd("ci-pr-hygiene", "21 6 * * *", DIGITHINGS, "ci-pr-hygiene.yml")
+wd("ci-pr-hygiene", "21 6 * * *", MONOREPO, "ci-pr-hygiene.yml")
 ```
 
 a daily 06:21 UTC `workflow_dispatch` against `develop`. So the new job block
