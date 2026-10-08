@@ -6,8 +6,10 @@ import os
 from pathlib import Path
 from typing import Any
 
+from lib.roots import RESEARCH_CONFIG
+
 ROOT = Path(__file__).resolve().parent.parent.parent
-MANIFEST_PATH = ROOT / "config" / "macro_series.yaml"
+MANIFEST_PATH = RESEARCH_CONFIG / "macro_series.yaml"
 
 CHUNK_SIZE = 500
 

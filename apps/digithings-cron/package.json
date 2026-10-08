@@ -6,6 +6,8 @@
     "deploy": "wrangler deploy",
     "dev": "wrangler dev --test-scheduled",
     "test": "vitest run",
+    "check:deployed-triggers": "vitest run src/deployed-triggers.test.ts",
+    "pretypecheck": "node scripts/check-app-install.mjs",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

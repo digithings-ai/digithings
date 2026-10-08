@@ -404,7 +404,7 @@ Tables: `digikey_api_keys`, `digikey_jti_issued`, `digikey_user_profile_pointers
 1. If any granted scope is `"*"`: grant everything.
 2. Exact string match: `"digisearch:query"` satisfies `"digisearch:query"`.
 3. Prefix wildcard: granted `"digisearch:*"` satisfies any `"digisearch:X"`.
-4. Reverse wildcard: required `"digisearch:*"` is satisfied if the caller has any specific `"digisearch:X"` scope.
+4. No reverse wildcard: a required `"digisearch:*"` is satisfied only by `"*"` or `"digisearch:*"`, never by a narrower `"digisearch:X"`. Token exchange issues `requested_scopes` verbatim once this check passes, so a reverse match would let `digivault:read` mint `digivault:*` and then pass `digivault:write`.
 
 ---
 

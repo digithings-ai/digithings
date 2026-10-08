@@ -8,6 +8,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from digiquant.tool_refusals import is_refused
+
+
+def _tool_name(tool: dict[str, Any]) -> str:
+    """Return the declared function name of an OpenAI-style tool schema."""
+    return str(tool.get("function", {}).get("name") or "")
+
 
 def _pipeline_parameters() -> dict[str, Any]:
     return {
@@ -646,11 +653,10 @@ def build_digifetch_congress_trades_tool() -> dict[str, Any]:
         "function": {
             "name": "digifetch_congress_trades",
             "description": (
-                "US House disclosure trades (Gloomberb Cloud, anonymous). The "
-                "upstream OCR dependency is currently failing (HTTP 500, "
-                "Mistral monthly spend cap) and surfaces as typed "
-                "upstream_error; exposed so coverage completes when upstream "
-                "recovers. year/limit filter the tape."
+                "US House disclosure trades (Gloomberb Cloud, anonymous). "
+                "REFUSED on every digiquant surface (5 U.S.C. 13107(c)(1)(B); "
+                "DIG-1057) and filtered out of the manifest. year/limit filter "
+                "the tape."
             ),
             "parameters": {
                 "type": "object",
@@ -1405,26 +1411,44 @@ def build_luxalgo_edge_report_tool() -> dict[str, Any]:
     }
 
 
+def _trackers_dataset_enum() -> list[str]:
+    """The pinned trackers dataset ids, for the tool schemas (DIG-1479).
+
+    Advertising the allowlist saves the model a refused round trip; the
+    dispatcher still validates against ``TrackersLatestInput`` /
+    ``TrackersDatasetsInput``, so the enum is a shortcut, never the gate.
+
+    Imported lazily because ``digiquant.data.luxalgo.agent_tools`` imports
+    ``build_orchestrator_tool_manifest`` from this module to build the same
+    schemas — a module-level luxalgo import here would be a cycle.
+    """
+    from digiquant.data.luxalgo.models import LUXALGO_TRACKERS_ALLOWED_DATASETS
+
+    return sorted(LUXALGO_TRACKERS_ALLOWED_DATASETS)
+
+
 def build_luxalgo_trackers_datasets_tool() -> dict[str, Any]:
     return {
         "type": "function",
         "function": {
             "name": "luxalgo_trackers_datasets",
             "description": (
-                "Market Trackers catalog (hosted LuxAlgo MCP, anonymous): every "
-                "dataset of US public-record market data the LuxAlgo pipeline "
-                "publishes as CC0 dumps — congressional trades, insider "
-                "transactions, 13F holdings, federal contracts and grants, "
-                "lobbying filings, short-sale volume, and more — with row "
-                "counts, freshness, the years with data, and whether it is "
-                "ticker-searchable. `dataset` selects one dataset's full field "
-                "roster (read it before composing filters). The dumps are the "
-                "source of record."
+                "Market Trackers catalog (hosted LuxAlgo MCP, anonymous): the "
+                "datasets of US public-record market data the LuxAlgo pipeline "
+                "publishes as CC0 dumps, with row counts, freshness, the years "
+                "with data, and whether it is ticker-searchable. That list is "
+                "upstream's own and runs past the six datasets we ingest — "
+                "congressional trades, insider transactions, 13F holdings, "
+                "federal contracts and grants, lobbying filings, short-sale "
+                "volume. `dataset` narrows the listing to one dataset's full "
+                "field roster (read it before composing filters) and accepts "
+                "only those six, the ids in its enum; any other dataset is "
+                "refused. The dumps are the source of record."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "dataset": {"type": "string"},
+                    "dataset": {"type": "string", "enum": _trackers_dataset_enum()},
                 },
             },
         },
@@ -1440,15 +1464,16 @@ def build_luxalgo_trackers_latest_tool() -> dict[str, Any]:
                 "Newest ingestion day's rows for one Market Trackers dataset "
                 "(hosted LuxAlgo MCP, anonymous): the cheapest freshness check "
                 "— today's insider filings, this week's congressional "
-                "disclosures. `dataset` is required; `ticker`/`text`/`where` "
-                "narrow the rows; `sort` is newest|oldest; `limit` is 1-100 "
+                "disclosures. `dataset` is required and must be one of the "
+                "allowlisted ids in its enum; `ticker`/`text`/`where` narrow the "
+                "rows; `sort` is newest|oldest; `limit` is 1-100 "
                 "(default 25); `offset` pages. Freshness checks and ad-hoc "
                 "lookups only — never build a pipeline on live queries alone."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "dataset": {"type": "string"},
+                    "dataset": {"type": "string", "enum": _trackers_dataset_enum()},
                     "ticker": {"type": "string"},
                     "text": {"type": "string"},
                     "where": {"type": "object"},
@@ -3453,6 +3478,10 @@ def build_orchestrator_tool_manifest() -> list[dict[str, Any]]:
     its description; see :mod:`digiquant.data.gloomberb.entitlements`. Every
     luxalgo tool carries ``entitlement="free"`` plus the LuxAlgo
     attribution/license note; see :mod:`digiquant.data.luxalgo.entitlements`.
+
+    Tools on Counsel's refusal list (:mod:`digiquant.tool_refusals`) are
+    filtered out of the returned manifest, so a refused tool is never
+    advertised to a caller.
     """
     tools = [
         build_digiquant_list_strategies_tool(),
@@ -3580,4 +3609,4 @@ def build_orchestrator_tool_manifest() -> list[dict[str, Any]]:
         build_dashboard_evaluate_policy_gate_tool(),
         build_dashboard_get_policy_gate_evaluation_tool(),
     ]
-    return [_with_entitlement(tool) for tool in tools]
+    return [_with_entitlement(tool) for tool in tools if not is_refused(_tool_name(tool))]

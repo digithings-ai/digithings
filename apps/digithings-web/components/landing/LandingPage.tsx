@@ -13,7 +13,7 @@ import { Pricing } from "@/components/landing/Pricing";
 import { QuantSection } from "@/components/landing/QuantSection";
 import { SectionRail } from "@/components/landing/SectionRail";
 import { SectionHead } from "@/components/landing/SectionHead";
-import { OpenSource } from "@/components/landing/Sections";
+import { OpenSource } from "@/components/landing/LandingSections";
 import { WhyStack } from "@/components/landing/WhyStack";
 import { REPO_CLONE, REPO_URL } from "@/lib/repoActivity";
 

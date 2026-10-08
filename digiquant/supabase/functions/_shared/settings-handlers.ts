@@ -1639,18 +1639,34 @@ function postgrestInviteStore(
         throw new Error("invite redemption write failed");
       }
     },
-    async incrementRedemptionCount(id) {
-      const { data } = await admin
-        .from("product_invite_codes")
-        .select("redemption_count")
-        .eq("id", id)
-        .maybeSingle();
-      const current =
-        data && typeof data.redemption_count === "number" ? data.redemption_count : 0;
-      await admin
-        .from("product_invite_codes")
-        .update({ redemption_count: current + 1 })
-        .eq("id", id);
+    async claimRedemption(id) {
+      // Compare-and-set. Two redeems that both read 0 must not both write 1
+      // and both insert a grant. The UPDATE ... WHERE redemption_count = observed
+      // is one statement, so the loser matches zero rows and retries or stops.
+      for (let attempt = 0; attempt < 8; attempt++) {
+        const { data, error } = await admin
+          .from("product_invite_codes")
+          .select("redemption_count, max_redemptions, revoked_at")
+          .eq("id", id)
+          .maybeSingle();
+        if (error || !data || data.revoked_at) return false;
+        const count = Number(data.redemption_count);
+        if (!Number.isInteger(count) || count < 0) return false;
+        const max = data.max_redemptions == null ? null : Number(data.max_redemptions);
+        if (max != null && (!Number.isInteger(max) || count >= max)) return false;
+        const { data: updated, error: updateError } = await admin
+          .from("product_invite_codes")
+          .update({ redemption_count: count + 1 })
+          .eq("id", id)
+          .eq("redemption_count", count)
+          .is("revoked_at", null)
+          .select("id")
+          .maybeSingle();
+        if (updated && typeof updated.id === "string") return true;
+        // Lost the compare-and-set (no row, or PGRST116). A real write error stops.
+        if (updateError && updateError.code !== "PGRST116") return false;
+      }
+      return false;
     },
     async recordAdminAudit(row) {
       if (!row.workspace_id) return;

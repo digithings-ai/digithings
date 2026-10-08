@@ -83,10 +83,36 @@ COPY digisearch/src ./digisearch/src
 COPY digisearch/seeds ./digisearch/seeds
 RUN uv pip install --system -e "./digisearch[server,ingestion,chroma,web-search,embedding-multilingual]"
 # ^ embedding-multilingual (onnxruntime + tokenizers + numpy, CPU-only) powers
-# the multilingual ticket/docs indexes for the OCC chat (#4756). Model weights
-# (~120 MB Xenova quantized ONNX) download on first embed; bake them with
-# scripts/download_multilingual_model.py + DIGISEARCH_MULTILINGUAL_MODEL_DIR
-# to avoid runtime HF Hub egress on the critical path.
+# the multilingual ticket/docs indexes for the OCC chat (#4756). Its weights
+# (~120 MB Xenova quantized ONNX) are baked below at build time — v14
+# prescribed that bake in this comment but never ran it, so every cold start
+# downloaded the snapshot from HF Hub on the seed's critical path, and when
+# that egress failed the seed still exited 0 (CLI ingest skips failed files)
+# and digisearch came up on an empty corpus (#5045). Inlined rather than
+# COPYing scripts/download_multilingual_model.py because .dockerignore
+# excludes scripts/ from this build context; the pins (model id + file names)
+# are imported from the installed digisearch package, so they cannot drift
+# from the provider. The assert fails the build when the snapshot is empty or
+# partial — a silent no-download bake cannot land.
+RUN python -c "from pathlib import Path; from huggingface_hub import snapshot_download; \
+from digisearch.embedding.providers.multilingual import ( \
+MULTILINGUAL_MODEL_FILE, MULTILINGUAL_MODEL_ID, MULTILINGUAL_TOKENIZER_FILE); \
+out = Path('/models/multilingual'); \
+snapshot_download(repo_id=MULTILINGUAL_MODEL_ID, \
+allow_patterns=[MULTILINGUAL_MODEL_FILE, MULTILINGUAL_TOKENIZER_FILE], \
+local_dir=str(out)); \
+missing = [str(p) for p in (out / MULTILINGUAL_MODEL_FILE, \
+out / MULTILINGUAL_TOKENIZER_FILE) if not p.is_file()]; \
+assert not missing, f'multilingual weights bake incomplete, missing: {missing}'; \
+print(f'multilingual weights ready in {out} ({MULTILINGUAL_MODEL_ID})')"
+# Runtime: the multilingual provider resolves DIGISEARCH_MULTILINGUAL_MODEL_DIR
+# with local stat()s only (multilingual.py `_resolve_under` -> onnxruntime +
+# tokenizers local file reads; huggingface_hub is never imported on that path),
+# and HF_HUB_OFFLINE=1 turns the unset-var fallback (HF snapshot_download) into
+# a loud RuntimeError instead of silent runtime egress. Both sit AFTER the bake
+# RUN on purpose: the bake itself must run online.
+ENV DIGISEARCH_MULTILINGUAL_MODEL_DIR=/models/multilingual \
+    HF_HUB_OFFLINE=1
 
 COPY digivault/pyproject.toml digivault/ARCHITECTURE.md ./digivault/
 COPY digivault/src ./digivault/src
@@ -103,6 +129,14 @@ COPY scripts/merge_litellm_cheaperinference.py /app/scripts/merge_litellm_cheape
 # Read-only Zammad MCP for the OCC help chat (supervisord [program:zammad-mcp];
 # deps `mcp` + `httpx` already present via digigraph[mcp]).
 COPY scripts/zammad_mcp ./scripts/zammad_mcp
+# scripts/index_occ_tickets.py is deliberately NOT copied into the image
+# (DIG-1438). It was only there for [program:seed_occ_tickets], the boot step
+# that backfilled occ_tickets from the live Zammad API with unmasked ticket
+# bodies and sender/subject metadata. With the program gone nothing invokes it,
+# and leaving the writer in the image would leave the leak one supervisord line
+# away from returning. The .dockerignore re-include stays: DIG-1210 still has to
+# change what this script writes. tests/scripts/test_stack_dockerignore_context.py
+# pins that re-include, but it is on `main` only and does not exist on develop.
 COPY apps/digithings-stack-cloudflare/container/supervisor/supervisord.conf \
      /etc/supervisor/conf.d/digithings.conf
 # SearXNG config — the SAME file docker-compose.yml mounts into the dev
@@ -140,6 +174,26 @@ COPY apps/digithings-stack-cloudflare/container/searxng/limiter.toml \
 # Rebuild marker v14 (2026-10-01): installs digisearch[embedding-multilingual]
 # (onnxruntime + tokenizers + numpy) for the multilingual OCC ticket/docs
 # indexes (#4756). Full rebuild required (wrangler caches by Dockerfile hash).
+# Rebuild marker v15 (2026-10-04): bakes the multilingual embedding weights
+# (Xenova quantized ONNX, ~120 MB) into /models/multilingual at build time and
+# pins DIGISEARCH_MULTILINGUAL_MODEL_DIR + HF_HUB_OFFLINE=1 — closing the v14
+# gap where the bake was only prescribed in a comment and every cold start
+# pulled the snapshot from HF Hub on the seed critical path (#5045). Dockerfile
+# only; full rebuild required (wrangler caches by Dockerfile hash).
+# Rebuild marker v17 (2026-10-06): drops seed_occ_tickets.sh from the image and
+# the [program:seed_occ_tickets] boot step that called it (DIG-1438). That step
+# backfilled the Zammad ticket corpus into occ_tickets at every container start,
+# writing unmasked customer ticket bodies and sender/subject metadata, and
+# ZAMMAD_API_TOKEN is present in the live Worker env, so any deploy built from a
+# branch carrying it refilled the collection. seed_chroma.sh is now the only
+# seeder. Rebuild required: the file and its supervisord block were in the v16
+# image layer.
+# Rebuild marker v16 (2026-10-04): ships seed_occ_tickets.sh, the new
+# [program:seed_occ_tickets] boot step that backfills the Zammad ticket corpus
+# into the occ_tickets index, plus scripts/index_occ_tickets.py and the
+# .dockerignore re-include it needs. Superseded by v17, which removed the boot
+# step again and dropped the COPY (DIG-1438); only the .dockerignore re-include
+# remains, because DIG-1210 still has to change what the script writes.
 # Rebuild marker v10 (2026-09-19): installs SearXNG into the image as the
 # in-stack PRIMARY web-search backend (supervisord [program:searxng], loopback
 # :8080, granian/wsgi) and wires digisearch's DIGISEARCH_SEARXNG_URL at it, so
@@ -169,7 +223,8 @@ COPY apps/digithings-stack-cloudflare/container/seed_chroma.sh /seed_chroma.sh
 COPY apps/digithings-stack-cloudflare/container/start_digikey.sh /start_digikey.sh
 COPY apps/digithings-stack-cloudflare/container/start_digisearch.sh /start_digisearch.sh
 COPY apps/digithings-stack-cloudflare/container/seed /seed
-RUN chmod +x /entrypoint.sh /seed_chroma.sh /start_digikey.sh /start_digisearch.sh \
+RUN chmod +x /entrypoint.sh /seed_chroma.sh \
+        /start_digikey.sh /start_digisearch.sh \
     && mkdir -p /data/chroma /data/vault /data/digikey /var/log/supervisor /var/cache/searxng
 
 EXPOSE 8000 8002 8005

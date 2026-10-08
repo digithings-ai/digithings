@@ -107,7 +107,7 @@
       ["uv", "run", "--frozen", "--no-sync", "python", "digiquant/scripts/verify_strategy_calibrations_rls.py"],
       ["uv", "run", "--frozen", "--with", "ccxt", "python", "digiquant/scripts/fetch_coinbase.py", "--through-yesterday"],
       {"argv": ["uv", "run", "--frozen", "--no-sync", "python", "digiquant/scripts/export_sdca_macro.py"], "when_file": "digiquant/scripts/export_sdca_macro.py"},
-      ["uv", "run", "--frozen", "--no-sync", "python", "digiquant/scripts/generate_tearsheets.py", "--from-supabase", "--push-supabase", "--signal-delay-days", "3", "--cache-dir", "digiquant/data/price-history"]
+      ["uv", "run", "--frozen", "--no-sync", "python", "digiquant/scripts/generate_tearsheets.py", "--strategy", "btc_sdca", "--from-supabase", "--push-supabase", "--signal-delay-days", "3", "--cache-dir", "digiquant/data/price-history"]
     ]
   },
   "house-run": {
