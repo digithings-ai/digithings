@@ -304,7 +304,7 @@ export async function handleMcp(
   const m = buildManifest(callerFor(request, env));
   const stub = secretlessStubLane(request, env);
   const identity: Record<string, string> = {};
-  for (const h of ['x-digi-tier', 'x-digi-groups']) {
+  for (const h of ['x-digi-tier', 'x-digi-groups', 'x-digi-edge-key']) {
     const v = request.headers.get(h);
     if (v !== null) identity[h] = v;
   }

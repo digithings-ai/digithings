@@ -139,18 +139,25 @@ export function devCaller(spec: string | undefined): Caller | null {
 }
 
 /**
- * Are the identity headers (`x-digi-tier|groups|user`) from the edge? When
- * `DASHBOARD_EDGE_KEY` is set they are honoured only with a matching
- * `x-digi-edge-key`; otherwise a direct caller could claim any tier. Unset keeps
- * the headers trusted (local dev / tests): a deployed worker MUST set it.
+ * Are the identity headers (`x-digi-tier|groups|user`) from the edge? They are
+ * honoured only with an `x-digi-edge-key` matching `DASHBOARD_EDGE_KEY`; otherwise a
+ * direct caller could claim any tier. Unset key fails closed, unless local dev / tests
+ * opt in with `DASHBOARD_TRUST_IDENTITY_HEADERS=1`. Never set that on a deployed worker.
  */
-export function identityTrusted(request: Request, env: { DASHBOARD_EDGE_KEY?: string }): boolean {
+export function identityTrusted(
+  request: Request,
+  env: { DASHBOARD_EDGE_KEY?: string; DASHBOARD_TRUST_IDENTITY_HEADERS?: string },
+): boolean {
   const key = (env.DASHBOARD_EDGE_KEY ?? "").trim();
-  return key === "" || request.headers.get("x-digi-edge-key") === key;
+  if (key === "") return env.DASHBOARD_TRUST_IDENTITY_HEADERS === "1";
+  return request.headers.get("x-digi-edge-key") === key;
 }
 
 /** Caller for a request: trusted edge headers win; else the dev override; else fail closed. */
-export function callerFor(request: Request, env: { DASHBOARD_DEV_CALLER?: string; DASHBOARD_EDGE_KEY?: string }): Caller {
+export function callerFor(
+  request: Request,
+  env: { DASHBOARD_DEV_CALLER?: string; DASHBOARD_EDGE_KEY?: string; DASHBOARD_TRUST_IDENTITY_HEADERS?: string },
+): Caller {
   const h = request.headers;
   if (!identityTrusted(request, env)) return devCaller(env.DASHBOARD_DEV_CALLER) ?? { tier: "free", groups: [] };
   if (h.get("x-digi-tier") === null && h.get("x-digi-groups") === null) return devCaller(env.DASHBOARD_DEV_CALLER) ?? parseCaller(h);

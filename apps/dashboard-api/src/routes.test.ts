@@ -5,8 +5,9 @@ import { Registry, matchPath } from "./routes/registry";
 import { corsHeaders } from "./cors";
 
 const ORIGIN = "https://digiquant.io";
-const ENV: Env = { DASHBOARD_DEV_CALLER: "enterprise+12x" };
-const FREE: Env = {};
+const TRUST = { DASHBOARD_TRUST_IDENTITY_HEADERS: "1" };
+const ENV: Env = { DASHBOARD_TRUST_IDENTITY_HEADERS: "1", DASHBOARD_DEV_CALLER: "enterprise+12x" };
+const FREE: Env = { DASHBOARD_TRUST_IDENTITY_HEADERS: "1",};
 
 beforeEach(() => {
   ROUTE_MODULES.length = 0;
@@ -94,9 +95,11 @@ describe("writes", () => {
     expect(res.status).toBe(502);
   });
   it("userIdFor trims and bounds", () => {
-    expect(userIdFor(new Request("https://x", { headers: { "x-digi-user": " abc-123 " } }))).toBe("abc-123");
-    expect(userIdFor(new Request("https://x", { headers: { "x-digi-user": "a".repeat(129) } }))).toBeNull();
-    expect(userIdFor(new Request("https://x"))).toBeNull();
+    expect(userIdFor(new Request("https://x", { headers: { "x-digi-user": " abc-123 " } }), TRUST)).toBe("abc-123");
+    expect(userIdFor(new Request("https://x", { headers: { "x-digi-user": "a".repeat(129) } }), TRUST)).toBeNull();
+    expect(userIdFor(new Request("https://x"), TRUST)).toBeNull();
+    // No edge key and no dev opt-in: identity headers are never trusted.
+    expect(userIdFor(new Request("https://x", { headers: { "x-digi-user": "abc" } }))).toBeNull();
   });
 });
 

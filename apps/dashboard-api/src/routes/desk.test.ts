@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import app, { type Env } from "../index";
 
-const ENV: Env = { DASHBOARD_DEV_CALLER: "enterprise+12x" };
-const BRIEF: Env = { DASHBOARD_DEV_CALLER: "brief" };
-const FREE: Env = {};
-const CORE: Env = {
+const ENV: Env = { DASHBOARD_TRUST_IDENTITY_HEADERS: "1", DASHBOARD_DEV_CALLER: "enterprise+12x" };
+const BRIEF: Env = { DASHBOARD_TRUST_IDENTITY_HEADERS: "1", DASHBOARD_DEV_CALLER: "brief" };
+const FREE: Env = { DASHBOARD_TRUST_IDENTITY_HEADERS: "1",};
+const CORE: Env = { DASHBOARD_TRUST_IDENTITY_HEADERS: "1",
   ...ENV,
   SUPABASE_URL: "https://core.supabase.co",
   SUPABASE_SERVICE_ROLE_KEY: "core-key",
