@@ -1,28 +1,39 @@
 # digichat release smoke checklist
 
-After `digichat-vX.Y.Z` is tagged (release-please on `develop`, which dispatches the
-image publish) and the promotion to `main` has landed:
+> **Steps 1–2 below assume a published image, and there is not one yet.**
+> `publish-digichat-image.yml` is back (DIG-1294) and publishes on a
+> `digichat-vX.Y.Z` tag, but the tag ladder stops at `digichat-v2.3.2`, so
+> `ghcr.io/digithings-ai/digichat` does not exist yet (verified 2026-10-06) and
+> no image has been published. Substitute a local build until the next tag
+> lands. The steps themselves — probe, health, embed, Foundry — remain correct
+> for whatever image you built.
 
 ## Identity
 
 | Artifact | Value |
 |---|---|
 | Git tag | `digichat-vX.Y.Z` |
-| GHCR image | `ghcr.io/digithings-ai/digichat:vX.Y.Z` |
+| Published image | **none yet** — build locally, or import to your own registry |
 | Changelog | `apps/digichat/CHANGELOG.md` |
-| Install unit | **GHCR image** — not npm (`private: true`) |
-| Current app version | `2.3.2` (`apps/digichat/package.json`) |
+| Install unit | **a built image** — not npm (`private: true`) |
+| Current app version | `2.4.0` (`apps/digichat/package.json` on `develop`) |
 
-`ghcr.io/digithings-ai/digichat:v0.9.3` remains on GHCR for existing clients
-(DataTap and others). Do not delete or retag it.
+Existing clients (DataTap and others) run digichat images already imported into
+their own Azure registry (`datatapchatregistry.azurecr.io`). Those copies are
+unaffected by anything here.
 
-Prefer the version pin. Do not use `:latest` in production.
+Prefer a digest pin. Do not use `:latest` in production.
 
 ## Checklist
 
-1. [ ] `docker pull ghcr.io/digithings-ai/digichat:vX.Y.Z`
-2. [ ] `docker run --rm --entrypoint curl ghcr.io/digithings-ai/digichat:vX.Y.Z -sf http://127.0.0.1:3000/api/health`  
+1. [ ] Build or import the image, and record its digest:
+       `docker inspect --format '{{ index .RepoDigests 0 }}' <image>`
+2. [ ] Confirm the image carries its source revision, then probe it:
+       `docker inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' <image>`
+       `docker run --rm --entrypoint curl <image> -sf http://127.0.0.1:3000/api/health`  
    (or start with required Auth env + db and `curl` host-mapped `/api/health`)
+2b. [ ] Bind the image to the tag, per
+       [`docs/ops/digichat-datatap-aca.md`](../ops/digichat-datatap-aca.md) §2.
 3. [ ] Embed smoke: Profile A tenant fixture (`backend.type: digigraph`) — tool rows + answer via digigraph (not direct OpenRouter from digichat)
 4. [ ] Optional: Foundry smoke only when Azure credentials are available (CI secrets or local MI) — skip if unavailable
 

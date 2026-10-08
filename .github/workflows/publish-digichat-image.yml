@@ -1,0 +1,233 @@
+# Publishes the digichat image to GHCR, bound to the commit its release tag names.
+#
+# WHAT THIS LANE IS (DIG-1294 — restoring the build lane, lane A of DIG-1242)
+# -------------------------------------------------------------------------
+# It builds and publishes an image. It cannot promote anything: there is no
+# `azure/login`, no `az`, no `environment:` and deliberately no
+# `id-token: write` below, so this workflow holds no credential that could reach
+# a customer Container App. The DataTap ACA promotion is a human step run from
+# docs/ops/digichat-datatap-aca.md. That is the whole point of lane A — the
+# artifact is reproducible in CI, the production write stays with a person who
+# owns the Azure subscription. Adding `azure/login` here would be a different
+# lane (and a different security decision, DIG-1349) and must not be an
+# "improvement" to this file.
+#
+# WHY A TAG PUSH IS THE ONLY AUTOMATIC TRIGGER
+# --------------------------------------------
+# The release moment is the `digichat-vX.Y.Z` tag, so that is the only trigger
+# that can produce a bound image: it names a version, and it resolves to exactly
+# one commit. The pre-deletion workflow also fired on `push: branches: [main]`
+# as a backstop for "a version reached main without its tag push being rerun".
+# That backstop is *harmful* here, and removing it is the substantive change
+# from the deleted file. A main-push build would publish `v2.4.0` labelled with
+# main's commit; the tag's idempotency guard would then skip the tag build, and
+# the release tag would name a commit no published image was built from — the
+# exact image→commit hole DIG-1242 exists to close, re-opened by the safety net.
+# One tag, one image, one commit.
+#
+# The old file's header also explained that a release-please-cut tag could not
+# start it, because events raised by GITHUB_TOKEN do not create runs (#4348), so
+# release-please dispatched it instead. release-please-digichat.yml was deleted
+# in the same strict-essentials cut (`f54af7052`, #4919) and is not coming back:
+# digichat versions are hand-bumped on develop. So the tag is now cut by a
+# person with a real credential, and `push.tags` works as written.
+#
+# WHAT IT REFUSES TO DO
+# ---------------------
+# * Publish when the tag's version differs from apps/digichat/package.json — a
+#   hand-made or mismatched tag must not mint a plausible-looking release image.
+#   The version is read from the *tag's tree*, because the checkout is pinned to
+#   that tag; reading it from develop is how you audit the wrong artifact.
+# * Overwrite an existing tag. There is no `force` input, deliberately: a
+#   release tag is the identity clients cite, and re-pushing it would change the
+#   digest under that name. To replace a broken image, cut a new patch version.
+#   The check below distinguishes "absent" from "could not ask" and fails on
+#   the second rather than treating it as the first.
+# * Run on a schedule. develop has zero `on.schedule` keys, pinned by
+#   tests/scripts/test_no_gha_schedules.py.
+#
+# It also proves its own output before exiting: the published image is pulled
+# back and run through scripts/check_digichat_image_binding.py, so a Dockerfile
+# that silently stopped emitting `org.opencontainers.image.revision` fails this
+# lane instead of being discovered at the next promotion.
+#
+# OPERATOR NOTE — first publish after this lane lands
+# ---------------------------------------------------
+# `ghcr.io/digithings-ai/digichat` does not exist yet (verified 2026-10-06:
+# anonymous pull 401, org package list empty). The first tag push creates it.
+# A GHCR package created by GITHUB_TOKEN inherits the org's default visibility,
+# so check `gh api /orgs/digithings-ai/packages/container/digichat` after the
+# first run and set it public if the documented anonymous install path
+# (`docker pull ghcr.io/digithings-ai/digichat:v2.4.0`) is to work.
+name: "Publish: digichat image"
+
+on:
+  push:
+    tags:
+      - "digichat-v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to build and publish (e.g. digichat-v2.4.0)"
+        required: true
+        type: string
+
+# Queue, do not cancel: a publish already halfway through pushing must not be
+# killed by a second run of the same tag.
+concurrency:
+  group: publish-digichat-image
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      # fetch-depth 0 so the release tag is present and `git rev-list -n1 <tag>`
+      # can resolve it — the binding check needs the tag's commit, and a shallow
+      # clone of the tag would not have it.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve release tag and version
+        id: version
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          tag="${TAG#refs/tags/}"
+          # Same shape as TAG_RE in scripts/check_digichat_image_binding.py, so
+          # the lane and the checker cannot disagree about what a release tag is.
+          if ! [[ "$tag" =~ ^digichat-v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::$tag is not a digichat-vX.Y.Z release tag — refusing to publish."
+            exit 1
+          fi
+          # Read from the checked-out tree, which is pinned to the tag.
+          version="$(jq -r .version apps/digichat/package.json)"
+          tag_version="${tag#digichat-v}"
+          if [ "$tag_version" != "$version" ]; then
+            echo "::error::$tag does not match apps/digichat/package.json ($version) — refusing to publish."
+            exit 1
+          fi
+          # `|| true` so the emptiness check below is reachable: under `set -e` a
+          # bad ref would abort the step with git's own `fatal: ambiguous
+          # argument` before this diagnostic could explain what went wrong.
+          commit="$(git rev-list -n1 "$tag" 2>/dev/null || true)"
+          if [ -z "$commit" ]; then
+            echo "::error::$tag does not resolve to a commit — there is nothing to bind an image to."
+            exit 1
+          fi
+          echo "Publishing $tag (version $version) from commit $commit."
+          {
+            echo "version=$version"
+            echo "commit=$commit"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Check if this version is already published
+        id: check
+        env:
+          IMAGE_TAG: "ghcr.io/digithings-ai/digichat:v${{ steps.version.outputs.version }}"
+        run: |
+          set -euo pipefail
+          # Three outcomes, not two. `docker manifest inspect` exits non-zero for
+          # a genuinely absent tag and also for "could not ask" — a registry 5xx,
+          # an expired login, DNS, a rate limit. Treating both as "not published"
+          # would repush `:vX.Y.Z` over a released name and change the digest
+          # under a tag clients already cite. So: success means published,
+          # the registry's own "manifest unknown" means absent, and anything else
+          # fails the run rather than guessing.
+          if output="$(docker manifest inspect "$IMAGE_TAG" 2>&1)"; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          elif grep -q '^manifest unknown$' <<< "$output"; then
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::could not determine whether $IMAGE_TAG is published — refusing to guess. Registry said:"
+            echo "$output"
+            exit 1
+          fi
+
+      - name: Build and push
+        if: steps.check.outputs.exists == 'false'
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/digichat/Dockerfile
+          push: true
+          # The repo root is the build context, not apps/digichat: digichat is an
+          # npm workspace member whose lockfile lives at the root and whose
+          # private @digithings/design dependency resolves only through the
+          # workspace link.
+          build-args: |
+            DIGICHAT_VERSION=${{ steps.version.outputs.version }}
+            DIGICHAT_REVISION=${{ steps.version.outputs.commit }}
+            DIGICHAT_SOURCE_URL=${{ github.server_url }}/${{ github.repository }}
+          tags: |
+            ghcr.io/digithings-ai/digichat:v${{ steps.version.outputs.version }}
+            ghcr.io/digithings-ai/digichat:latest
+
+      - name: Verify the published image is bound to the tag's commit
+        if: steps.check.outputs.exists == 'false'
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+          VERSION: ${{ steps.version.outputs.version }}
+          COMMIT: ${{ steps.version.outputs.commit }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          tag="${TAG#refs/tags/}"
+          image="ghcr.io/digithings-ai/digichat:v${VERSION}"
+          docker pull -q "$image" > /dev/null
+          # --format everywhere: a bare `docker inspect` emits a JSON array,
+          # which the checker rejects as bad input (see the runbook §2).
+          # Guard the two index lookups — `index .RepoDigests 0` raises
+          # index out of range on an image with no repo digest, and that would
+          # fail this step *after* the push already succeeded.
+          revision="$(docker inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$image")"
+          image_version="$(docker inspect --format '{{ index .Config.Labels "org.opencontainers.image.version" }}' "$image")"
+          repo_digest="$(docker inspect --format '{{ if .RepoDigests }}{{ index .RepoDigests 0 }}{{ end }}' "$image")"
+          {
+            echo "### digichat image published"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| tag | \`$tag\` |"
+            echo "| commit | \`$COMMIT\` |"
+            echo "| image | \`$image\` |"
+            echo "| digest | \`$repo_digest\` |"
+            echo "| pushed digest | \`$DIGEST\` |"
+            echo ""
+            echo "Promote it with the steps in docs/ops/digichat-datatap-aca.md."
+          } >> "$GITHUB_STEP_SUMMARY"
+          jq -n \
+            --arg version "$image_version" \
+            --arg package_version "$VERSION" \
+            --arg tag "$tag" \
+            --arg tag_commit "$COMMIT" \
+            --arg image_ref "$image" \
+            --arg image_revision "$revision" \
+            --arg image_digest "$repo_digest" \
+            '{version:$version, package_version:$package_version, tag:$tag,
+              tag_commit:$tag_commit, image_ref:$image_ref,
+              image_revision:$image_revision, image_digest:$image_digest}' \
+            | python3 scripts/check_digichat_image_binding.py --facts -
+
+      - name: Report an already-published version
+        if: steps.check.outputs.exists == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          echo "ghcr.io/digichings-ai/digichat:v${VERSION} is already published — nothing to do."
+          echo "Release tags are immutable here: to replace a broken image, cut a new patch version."
