@@ -90,8 +90,16 @@ all = ["digiquant[nautilus]"]
 # `pytest` happened to be on PATH instead -- see the digillm/CallPurpose
 # shadowing investigation for the same failure mode in digigraph.
 dev = ["digiquant[research]", "digiquant[indicators]", "digiquant[m2]"]
-# Upper-bounded: mcp 2.0 removed `mcp.server.fastmcp`, which both MCP servers
-# import (see #1705). Lift the bound only together with a migration to the 2.x API.
+# Upper-bounded: mcp 2.0 removed `mcp.server.fastmcp` (see #1705). The single
+# MCP server here (src/digiquant/mcp_server.py:475) imports it inside a
+# try/except ImportError, which defers the failure rather than hiding it:
+# create_mcp_server() calls _require_mcp(), which raises ImportError. An
+# unbounded 2.x therefore does not cost this service its tools quietly — it
+# costs it the MCP server, with a clearer message. Repo-wide the bound is pinned
+# by five packages and six modules import the removed path; the three unguarded
+# ones (digisearch, digivault, scripts/zammad_mcp) fail at import time instead.
+# Lift the bound only together with a migration to the 2.x API
+# (mcp.server.fastmcp -> mcp.server.mcpserver, FastMCP -> MCPServer).
 # yfinance backs digifetch_earnings_calendar (the one Yahoo-backed tool in the
 # digifetch family, #4069). Declared on this extra so the MCP image
 # ([research,mcp]) serves all 89 tools instead of 88 + a typed upstream_error.

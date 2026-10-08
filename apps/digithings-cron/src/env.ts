@@ -15,6 +15,17 @@ export interface Env {
    * Default empty. Non-empty burns Actions minutes.
    */
   GITHUB_OVERRIDE_JOBS?: string;
+  /**
+   * Per-date remediation ledger for POST /backfill. Absent means the endpoint
+   * answers 503 backfill_unconfigured rather than dispatching without a ledger,
+   * because without it idempotence per date is not enforced.
+   */
+  BACKFILL_LEDGER?: DurableObjectNamespace;
+  /**
+   * "1" enables POST /backfill. Default "0". Off by default because a backfill
+   * writes production snapshots; the endpoint must be turned on deliberately.
+   */
+  BACKFILL_ENABLED?: string;
 }
 
 declare namespace Cloudflare {
@@ -25,5 +36,7 @@ declare namespace Cloudflare {
     RUNNER?: Fetcher;
     RUNNER_AUTH_TOKEN?: string;
     GITHUB_OVERRIDE_JOBS?: string;
+    BACKFILL_LEDGER?: DurableObjectNamespace;
+    BACKFILL_ENABLED?: string;
   }
 }
