@@ -466,13 +466,21 @@ figure is `null` (the app shows "—"). An unconfigured reader is 502
 
 Portfolio: `GET /allocations/enriched`, `/attribution`, `/theses`,
 `/theses/signals` (brief), `/ledger/cash`, `/performance/drawdown`,
-`/brief/decision`, `/brief/risks`, `/dossier/{ticker}`.
+`/brief/decision`, `/brief/risks`, `/dossier/{ticker}`. Theses read the
+latest daily snapshot (`thesis_id`, `status` → active / watch / exited);
+signals are `CHALLENGED` theses. `/attribution` is the latest
+`position_attribution` date, a static-book lookback diagnostic (`basis`),
+not realized contribution. `/brief/risks` has no source table yet and is
+an empty list marked `unavailable`. Every `documents` read is pinned to the
+house workspace.
 
 Pipeline: `GET /pipeline/runs/latest/health` (optional `date=YYYY-MM-DD`),
 `/graph`, `/narrative`, `/trace`, `/artifacts`,
 `/nodes/selected/document` (optional `node=`). Cost and token fields on
 health stay null. The graph is the static ingest → research → decide →
-publish shape; node state is null when `node_runs` is unavailable.
+publish shape. Node state is the latest `node_runs` run's `outcome` for a
+node whose `node_name` matches the stage id exactly, else null; there is no
+guessed mapping. The narrative is the house `Daily Digest`.
 
 FX and rates (group `12x`): `GET /fx/summary`, `/fx/pairs`, `/fx/levels`,
 `/fx/sessions`, `/fx/ideas`, `/fx/ideas/{pair}`, `/fx/pairs/{pair}/path`,
@@ -480,6 +488,7 @@ FX and rates (group `12x`): `GET /fx/summary`, `/fx/pairs`, `/fx/levels`,
 `/rates/summary`, `/rates/curve`, `/rates/watchlist`, `/rates/theses`.
 Bid, offer, and level pips stay null. Flags, paper exposure, and
 directives are typed empty until the draft tables exist.
-`PUT /fx/directives` returns 503 `{ error.code: "not_provisioned" }` and
-does not write. Draft SQL: `migrations-draft/`. Do not apply it from this
+`flagged` is null until the flags table exists. The pair path is the newest
+500 one-hour Yahoo bars in time order. `PUT /fx/directives` returns 503
+`{ error.code: "not_provisioned" }` and does not write. Draft SQL: `migrations-draft/`. Do not apply it from this
 contract.

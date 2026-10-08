@@ -192,11 +192,13 @@ async function pairPath(req: Request, ctx: RouteCtx<Env>): Promise<Response> {
   }
   const out = await tableRows(ctx.env, {
     table: "fx_intraday_observations",
-    query: `select=ts,close&series_id=eq.${encodeURIComponent(series)}&order=ts.asc&limit=500`,
+    // Newest 500 one-hour Yahoo bars (PK is source, series_id, ts, interval), then
+    // back into time order: ascending + limit would return the oldest bars.
+    query: `select=ts,close&source=eq.yahoo&series_id=eq.${encodeURIComponent(series)}&interval=eq.1h&order=ts.desc&limit=500`,
     allowEmpty: true,
   });
   if ("error" in out) return out.error;
-  const points = out.rows.map((r) => ({ t: str(r.ts) ?? "", v: num(r.close) })).filter((p) => p.t !== "");
+  const points = [...out.rows].reverse().map((r) => ({ t: str(r.ts) ?? "", v: num(r.close) })).filter((p) => p.t !== "");
   const tip = points.at(-1)?.t.slice(0, 10) ?? null;
   return ok({ pair, session: null, points, note: null }, "core:fx_intraday_observations", pinR.pin, tip);
 }
@@ -240,7 +242,7 @@ function flags(req: Request, ctx: RouteCtx<Env>): Response {
   const pinR = pinOf(req);
   if ("error" in pinR) return pinR.error;
   return ok(
-    { pair: normPair(ctx.params.pair ?? ""), flagged: false, level: null, text: null, scope_note: NOT_PROVISIONED },
+    { pair: normPair(ctx.params.pair ?? ""), flagged: null, level: null, text: null, scope_note: NOT_PROVISIONED },
     "draft:fx_flags",
     pinR.pin,
     null,
@@ -369,7 +371,7 @@ async function ratesTheses(req: Request, ctx: RouteCtx<Env>): Promise<Response> 
   const theses = rows.map((r) => ({
     id: str(r.id) ?? str(r.thesis_id) ?? "",
     name: str(r.name) ?? str(r.title) ?? "",
-    state: (str(r.state) ?? "watch").toLowerCase(),
+    state: str(r.state)?.toLowerCase() ?? null,
     vehicles: Array.isArray(r.vehicles) ? r.vehicles.filter((v): v is string => typeof v === "string") : [],
     evidence: str(r.evidence),
     kill_condition: str(r.kill_condition),

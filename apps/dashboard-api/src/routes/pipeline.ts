@@ -5,6 +5,7 @@
  */
 
 import { buildProvenance, errorResponse, type Provenance } from "../errors";
+import { HOUSE_WORKSPACE_ID } from "../supabase";
 import { tableRows, type TableReadEnv } from "../table-read";
 import type { RouteCtx, RouteModule } from "./registry";
 
@@ -97,13 +98,21 @@ async function health(req: Request, ctx: RouteCtx<Env>): Promise<Response> {
 async function graph(req: Request, ctx: RouteCtx<Env>): Promise<Response> {
   const pinR = pinOf(req);
   if ("error" in pinR) return pinR.error;
-  const runs = await tableRows(ctx.env, { table: "node_runs", query: "select=*&order=run_date.desc&limit=200", allowEmpty: true });
-  const rows = "error" in runs ? [] : runs.rows;
+  const runs = await tableRows(ctx.env, {
+    table: "node_runs",
+    query: "select=run_id,node_name,outcome,started_at&order=started_at.desc&limit=200",
+    allowEmpty: true,
+  });
   const failed = "error" in runs;
-  const runDate = rows.map((r) => str(r.run_date)).find((d) => d !== null)?.slice(0, 10) ?? null;
+  const all = "error" in runs ? [] : runs.rows;
+  // Latest run only. node_name is the pipeline's own node id; a static stage gets a
+  // state only on an exact match, never a guessed mapping.
+  const runId = str(all[0]?.run_id);
+  const rows = runId === null ? [] : all.filter((r) => str(r.run_id) === runId);
+  const runDate = str(rows.at(-1)?.started_at ?? rows[0]?.started_at)?.slice(0, 10) ?? null;
   const stateFor = (id: string): string | null => {
-    const hit = rows.find((r) => (str(r.node) ?? str(r.node_id) ?? "") === id);
-    return hit ? str(hit.state) ?? str(hit.status) : null;
+    const hit = rows.find((r) => str(r.node_name) === id);
+    return hit ? str(hit.outcome) : null;
   };
   return ok(
     {
@@ -121,27 +130,46 @@ async function graph(req: Request, ctx: RouteCtx<Env>): Promise<Response> {
 async function trace(req: Request, ctx: RouteCtx<Env>): Promise<Response> {
   const pinR = pinOf(req);
   if ("error" in pinR) return pinR.error;
-  const out = await read(ctx.env, "run_event_trace", "select=*&order=created_at.desc&limit=200");
+  const out = await read(
+    ctx.env,
+    "run_event_trace",
+    "select=run_id,run_date,name,operation,status,duration_ms,sequence&order=run_date.desc,sequence.desc&limit=200",
+  );
   if ("error" in out) return out.error;
-  const rows = out.rows.map((r) => ({
-    node: str(r.node) ?? str(r.node_id) ?? "",
-    calls: num(r.calls),
-    duration_s: num(r.duration_s),
-    state: str(r.state) ?? str(r.status),
-  })).filter((r) => r.node !== "");
-  return ok({ rows }, "core:run_event_trace", pinR.pin, null);
+  const runId = str(out.rows[0]?.run_id);
+  const latest = runId === null ? [] : out.rows.filter((r) => str(r.run_id) === runId);
+  const rows = latest.map((r) => {
+    const ms = num(r.duration_ms);
+    return {
+      node: str(r.name) ?? str(r.operation) ?? "",
+      calls: null,
+      duration_s: ms === null ? null : ms / 1000,
+      state: str(r.status),
+    };
+  }).filter((r) => r.node !== "");
+  const runDate = str(latest[0]?.run_date)?.slice(0, 10) ?? null;
+  return ok({ rows }, "core:run_event_trace", pinR.pin, runDate);
+}
+
+/** House-workspace documents, newest first. `documents` is per-workspace (migration 105). */
+function houseDocs(env: Env, select: string, extra = "", limit = 200) {
+  return read(env, "documents", `select=${select}&workspace_id=eq.${HOUSE_WORKSPACE_ID}${extra}&order=date.desc&limit=${limit}`);
+}
+
+function paragraphsOf(content: string | null): string[] {
+  return content ? content.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean) : [];
 }
 
 async function narrative(req: Request, ctx: RouteCtx<Env>): Promise<Response> {
   const pinR = pinOf(req);
   if ("error" in pinR) return pinR.error;
-  const out = await read(ctx.env, "documents", "select=*&limit=100");
+  // The run's narrative is its Daily Digest.
+  const out = await houseDocs(ctx.env, "date,title,content", "&doc_type=eq.Daily%20Digest", 1);
   if ("error" in out) return out.error;
-  const row = out.rows.find((r) => (str(r.kind) ?? str(r.doc_type) ?? "").toLowerCase().includes("narrative"));
-  const body = row ? str(row.body) ?? str(row.summary) : null;
-  const runDate = row ? str(row.run_date)?.slice(0, 10) ?? null : null;
+  const row = out.rows[0];
+  const runDate = row ? str(row.date)?.slice(0, 10) ?? null : null;
   return ok(
-    { run_date: runDate, heading: row ? str(row.title) : null, paragraphs: body ? [body] : [] },
+    { run_date: runDate, heading: row ? str(row.title) : null, paragraphs: paragraphsOf(row ? str(row.content) : null) },
     "core:documents",
     pinR.pin,
     runDate,
@@ -151,39 +179,40 @@ async function narrative(req: Request, ctx: RouteCtx<Env>): Promise<Response> {
 async function artifacts(req: Request, ctx: RouteCtx<Env>): Promise<Response> {
   const pinR = pinOf(req);
   if ("error" in pinR) return pinR.error;
-  const out = await read(ctx.env, "documents", "select=*&limit=200");
+  const out = await houseDocs(ctx.env, "date,title,category,document_key,content");
   if ("error" in out) return out.error;
-  const rows = out.rows.map((r) => ({
-    stage: str(r.stage),
-    node: str(r.node) ?? str(r.node_id) ?? str(r.title) ?? "",
+  const tip = str(out.rows[0]?.date);
+  const rows = out.rows.filter((r) => str(r.date) === tip).map((r) => ({
+    stage: str(r.category),
+    node: str(r.document_key) ?? str(r.title) ?? "",
     document: str(r.title),
-    date: str(r.run_date)?.slice(0, 10) ?? str(r.as_of)?.slice(0, 10) ?? null,
-    state_only: str(r.body) === null && str(r.title) === null,
+    date: str(r.date)?.slice(0, 10) ?? null,
+    state_only: str(r.content) === null,
   })).filter((r) => r.node !== "");
-  return ok({ rows }, "core:documents", pinR.pin, null);
+  return ok({ rows }, "core:documents", pinR.pin, tip?.slice(0, 10) ?? null);
 }
 
 async function nodeDocument(req: Request, ctx: RouteCtx<Env>): Promise<Response> {
   const pinR = pinOf(req);
   if ("error" in pinR) return pinR.error;
   const node = new URL(req.url).searchParams.get("node") ?? ctx.params.node ?? "selected";
-  const out = await read(ctx.env, "documents", "select=*&limit=200");
+  const out = await houseDocs(ctx.env, "date,title,document_key,content");
   if ("error" in out) return out.error;
   const row = node === "selected"
     ? out.rows[0]
-    : out.rows.find((r) => (str(r.node) ?? str(r.node_id)) === node);
-  const body = row ? str(row.body) ?? str(row.summary) : null;
+    : out.rows.find((r) => str(r.document_key) === node);
+  const runDate = row ? str(row.date)?.slice(0, 10) ?? null : null;
   return ok(
     {
-      run_date: row ? str(row.run_date)?.slice(0, 10) ?? null : null,
-      node_id: row ? str(row.node) ?? str(row.node_id) ?? node : node,
+      run_date: runDate,
+      node_id: row ? str(row.document_key) ?? node : node,
       title: row ? str(row.title) : null,
-      paragraphs: body ? [body] : [],
+      paragraphs: paragraphsOf(row ? str(row.content) : null),
       note: row ? null : "no document for this node",
     },
     "core:documents",
     pinR.pin,
-    row ? str(row.run_date)?.slice(0, 10) ?? null : null,
+    runDate,
   );
 }
 
