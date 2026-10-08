@@ -20,6 +20,20 @@ def test_prefix_wildcard():
     assert not scope_grants_required(["digigraph:*"], ["digiquant:backtest"])
 
 
+def test_requested_wildcard_does_not_upgrade_a_read_grant():
+    """A requested prefix:* is not a subset of a plain read.
+
+    Token exchange issues the requested scopes when this returns True, so the
+    old reverse match let digivault:read mint digivault:* and then satisfy
+    digivault:write.
+    """
+    granted = ["digivault:read"]
+    assert not scope_grants_required(granted, ["digivault:*"])
+    assert not scope_grants_required(granted, ["digivault:write"])
+    assert scope_grants_required(["digivault:*"], ["digivault:write"])
+    assert scope_grants_required(["digivault:*"], ["digivault:*"])
+
+
 def test_run_pipeline_dual():
     req = ["digiquant:backtest", "digiquant:optimize"]
     assert scope_grants_required(["*"], req)
