@@ -8,6 +8,8 @@ from typing import Any  # score:allow untyped any — plotly Figure typing
 
 import polars as pl
 
+from digiquant.fonts import MONO_FONT_STACK
+
 logger = logging.getLogger(__name__)
 
 
@@ -100,7 +102,7 @@ _CHART_LAYOUT = dict(
     template="plotly_dark",
     paper_bgcolor="rgba(0,0,0,0)",
     plot_bgcolor="rgba(255,255,255,0.03)",
-    font=dict(family="'IBM Plex Mono', 'Courier New', monospace", size=11, color="#94a3b8"),
+    font=dict(family=MONO_FONT_STACK, size=11, color="#94a3b8"),
     margin=dict(l=55, r=20, t=36, b=44),
     xaxis=dict(
         showgrid=True,
