@@ -348,9 +348,28 @@ jobs:
     uses: ./.github/workflows/security-pip-audit.yml
 
   # ── Dependency CVE audit (npm / GHSA) — root JS workspaces (#3523) ──────────
+  # The path filter answers "did this commit touch a manifest?"; the audit answers
+  # "which advisories exist right now?". Filtering the second by the first is what
+  # made this lane decorative on develop: pushes that touched no manifest reported
+  # `npm-audit: skipped` while `Required checks passed: success` stood behind them
+  # (develop head e45b12e7, 2026-10-07). A lane that never runs cannot gate, and the
+  # aggregate's success was a false negative rather than a pass — the five `next`
+  # advisories of 2026-10-07 had nowhere to land on develop, so they surfaced on
+  # PR #5107, whose lockfile was strictly better than develop's, and cost a round of
+  # auditing develop to rule out as the cause (DIG-2305).
+  #
+  # So on a push to develop/main the filter is dropped and the audit always runs:
+  # an advisory is caught where it lands instead of on an unrelated future PR. The
+  # cost is one extra audit per branch push — `--package-lock-only`, no install, a
+  # couple of minutes against a cache warm from the rest of the pipeline.
+  #
+  # On pull_request the filter stays. A doc-only PR should not pay for an audit, and
+  # `required-checks` still tolerates the resulting skip there — the invariant this
+  # buys is the narrower and achievable one: on a push, every lane this gate reports
+  # on has actually run. `scripts/ci_required_checks_aggregate.py` enforces it.
   npm-audit:
     needs: changes
-    if: needs.changes.outputs.npm_audit == 'true'
+    if: needs.changes.outputs.npm_audit == 'true' || github.event_name == 'push'
     uses: ./.github/workflows/security-npm-audit.yml
 
   # ── Root-level ruff + scripts unit tests ────────────────────────────────────
@@ -686,4 +705,10 @@ jobs:
       - name: Fail if any non-advisory dependency failed or was cancelled
         env:
           RESULTS: ${{ toJSON(needs) }}
+          # On a push, a lane in the aggregate's ALWAYS_EVALUATED_ON_PUSH set must have
+          # produced a real verdict. `skipped` is tolerated everywhere else — it is why
+          # this job exists, since no path-gated job can be named in branch protection —
+          # but tolerating it on develop is how `npm-audit` reported success having never
+          # run (DIG-2305). Carried on a push only, so a doc-only PR still skips cleanly.
+          PUSH_EVENT: ${{ github.event_name == 'push' }}
         run: python3 scripts/ci_required_checks_aggregate.py
