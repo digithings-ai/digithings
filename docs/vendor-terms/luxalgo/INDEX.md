@@ -319,13 +319,14 @@ concludes CC0 makes congress-trades fine. It does not. That is the same defect
 shape `tool_refusals.py` was fixed for under DIG-1479: the §13107 note reached
 the refusal module and never reached the attribution constants.
 
-Fixed 2026-10-06 (DIG-1464): the classification now lives in
+Fix proposed in [#5209](https://github.com/digithings-ai/digithings/pull/5209)
+(open, DIG-1464): the classification moves into
 `digiquant/src/digiquant/data/luxalgo/attribution.py` as
 `LUXALGO_TRACKERS_DATA_LICENSE`, `LUXALGO_TRACKERS_LICENSE_ARTEFACT` and
 `LUXALGO_TRACKERS_DATA_CAVEATS`, and every trackers licence and entitlement
-note renders the caveats via `trackers_data_caveat`. The guard is
+note renders the caveats via `trackers_data_caveat`. The proposed guard is
 surface-wide: a file that says CC0 for trackers data without naming a limit
-fails `test_no_user_visible_cc0_claim_is_left_unqualified`. That guard closes
+fails `test_no_cc0_claim_is_left_unqualified`. Once merged, that guard closes
 the wider hole this issue found — **nothing in the tree checked the data
 licence at all**, while `scripts/check_luxalgo_license_boundary.py` and
 `license_guard.py` cover the *code* licence only.
@@ -342,7 +343,7 @@ short-volume, lobbying-filings and gov-contracts (`trackers_wave2_ingest.py`).
 That was our own assertion, in our own code, made without anyone reading the
 LuxAlgo terms — exactly trap 1 from the [intake record](../INDEX.md): a licence
 claim inherited from a repository rather than read from the vendor. **It has now
-been checked; see [above](#the-claim-that-has-now-be-checked--cc0-10-confirmed).
+been checked; see [above](#the-claim-that-has-now-been-checked--cc0-10-confirmed).
 The claim is CONFIRMED, and what was wrong with it was its unqualifiedness.**
 
 Retained for the audit trail, superseded by the sections above: the ToS states
