@@ -1,16 +1,10 @@
 import "./globals.css";
 import type { ReactNode } from "react";
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
 import { HashScrollManager, MotionProvider, ThemeProvider } from "@digithings/ui";
 import { SiteChrome } from "@/components/site-chrome";
 import { HERO_PLAYED_SCRIPT } from "@/lib/hero-play";
-
-// Self-hosted at build time by next/font, so no request leaves for Google at runtime.
-// Inter is the sans/display voice (headings, prose); JetBrains Mono is the chrome voice
-// (labels, code, figures). Same pairing as digithings.ai.
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
-const jetbrainsMono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains-mono", display: "swap" });
+import { fontVariables } from "./fonts";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://digiquant.io"),
@@ -63,7 +57,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   // suppressHydrationWarning: the inline script sets data-theme before hydration;
   // scoped to this element only.
   return (
-    <html lang="en" data-theme="dark" suppressHydrationWarning className={`${inter.variable} ${jetbrainsMono.variable} accent-digiquant no-js`}>
+    <html lang="en" data-theme="dark" suppressHydrationWarning className={`${fontVariables} accent-digiquant no-js`}>
       <head>
         {/* One solid black canvas: the page is pinned to the dark theme, so the
             system-light flip themeInitScript does is deliberately not used. */}
