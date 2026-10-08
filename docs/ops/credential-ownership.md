@@ -27,7 +27,7 @@ This document registers every hand-held credential in the digithings monorepo wi
 
 ## DataTap Azure — digichat Container App identities and inline secrets
 
-**Resource under review** (DIG-1293; read-only sweep 2026-10-06, `az … show` / `list` / `show-tags` / `role definition list` only — no ARM write, no secret value read):
+**Resource under review** (DIG-1293 sweep 2026-10-06, `az … show` / `list` / `show-tags` / `role definition list` only — no ARM write, no secret value read; DIG-1344 followed on the same date with `az containerapp secret list --show-values` to compute **fingerprints only** — still read-only, still no ARM write, and no value read by a human or an agent):
 
 ```
 subscription  fc64972f-8c1e-46f1-a2b0-bd2407c0cdf0   "DataTap WebSite"  (East US 2)
@@ -38,6 +38,8 @@ registry      datatapchatregistry.azurecr.io   (SKU Basic, RG datatap-rg)
 ```
 
 This is **DataTap's** tenant, not ours, but the rule at the top of this file applies unchanged: anything digithings hands into that tenant needs one owner, one refresh path, and a check that fails loudly when it is stale.
+
+Every `az` command in this section — including the refresh paths — is refused by [`scripts/az-guard/az`](../../scripts/az-guard/az) until a subscription is on the register. See [`datatap-azure-az-guard.md`](datatap-azure-az-guard.md).
 
 One deliberate departure from the schema below: owners here are **named humans, not teams.** The usual rule is a team, but a client tenant has no digithings team to name, and "the owner" is only actionable when a person answers to it.
 
@@ -114,16 +116,42 @@ The spec is kept because choosing B later should be a single decision with no fu
 
 Both ACAs declare exactly two secrets, and both hold **inline values** rather than referencing a Key Vault secret (`keyVaultUrl: null`, `identity: null` on the secret entry):
 
-| Secret name on the ACA | Env var in the container | Owner | Canonical store | Refresh path | Detector |
-|------------------------|-------------------------|-------|-----------------|--------------|----------|
-| `auth-secret` | `AUTH_SECRET` | Chris Stefan | **None.** Inline on the ACA, and readable in cleartext from Azure. | Re-supply out of band, then `az containerapp secret set -n digichat -g datatap-rg --secrets auth-secret=<new-value>` on **one** app, then re-verify login on that app before touching the other. **Never pass `--secrets` to a promote** — re-declaring the list requires the original values and destroys working auth. | **None** |
-| `embed-tenants` | `DIGICHAT_EMBED_TENANTS` | Chris Stefan | **None.** Same shape. | Same, per app (`-n digichat -g datatap-dev-rg` for the dev app). Carries the per-tenant embed `token` values. | **None** |
+**Four bindings, not two.** Each ACA carries its own pair, and the prod and dev values **differ** (verified by fingerprint 2026-10-06, DIG-1344). Anything below that says "per app" is four credentials, not two.
+
+| Secret name on the ACA | Env var | Owner | Canonical store | Refresh path | Detector |
+|------------------------|---------|-------|-----------------|--------------|----------|
+| `auth-secret` (prod, dev) | `AUTH_SECRET` | Chris Stefan | **The Container App itself** — `datatap-rg/digichat` and `datatap-dev-rg/digichat`. Inline value, `keyVaultUrl: null`. There is no Key Vault in the subscription, so this is the only copy. | Read the current value back with `az containerapp secret list --show-values`, edit it **outside the model**, then `az containerapp secret set -n digichat -g <rg> --secrets auth-secret=<new-value>` on **one** app, re-verify login on that app, then the other. Never pass `--secrets` to a promote. | `scripts/digichat_aca_secret_detector.py` — live fingerprint + inline-binding check, exit 1 on drift. |
+| `embed-tenants` (prod, dev) | `DIGICHAT_EMBED_TENANTS` | Chris Stefan | **The Container App itself** — same shape. Carries the per-tenant embed `token` values. | Same, per app and per binding. | Same detector. |
+
+**Fingerprints, not values** live in [`digichat-aca-secret-fingerprints.json`](digichat-aca-secret-fingerprints.json): a SHA-256 and a byte length per binding, plus owner, custody state and the expiry. A fingerprint is safe to commit and is enough to notice a value that changed — which is the only drift mode a single-copy inline secret actually has. The detector compares live values against it **inside the process**; no value is printed, returned, or written anywhere.
+
+**Correction to an earlier statement on this issue.** DIG-1344 opened claiming the values had "no recovery path" and that `az containerapp secret list` returns "names and metadata, never values". That is wrong, and the paragraph below already said so: `--show-values` returns them in cleartext. The practical consequence is large — **no human needs to supply anything out of band.** Rotation does not depend on finding the original value, which removes the single thing that made this look unrecoverable.
+
+### Store decision, and a contradiction recorded rather than hidden
+
+Chris Stefan answered the DIG-1344 board card on 2026-10-06: holder = *"lives on the datatap-web repo"*, path = *`document`* (keep inline, no Azure change). Both parts were checked against the source before being written down:
+
+- **`auth-secret` is not in that repo at all.** Zero matches in the working tree; the only hit in full history is a 2026-08-05 docs commit by Chris (`docs/superpowers/plans/2026-08-05-chat-access.md`) naming the variable in passing. The card's premise — that both values share one custody answer — does not hold.
+- **The `DIGICHAT_EMBED_TENANTS` value in that repo is not the deployed one.** `DataTapStream/datatap-web` `README.md:51` carries a tracked `export DIGICHAT_EMBED_TENANTS=…`, first committed 2026-07-06 in `9e849f3`. It is a **320-byte local-dev placeholder** under a heading that reads *"Local digichat embed iteration"* (`http://127.0.0.1:3000/embed`), containing one token entry with the literal `local-dev-token`. The prod ACA value is **1112 bytes** and the dev value **1304 bytes**. Different fingerprints, not a reformat.
+- **So the canonical store is the Container App, and `document` as chosen does not match reality.** It is recorded above as the ACA, because that is where the value provably lives.
+
+A committed README is also **not an acceptable canonical store** under this file's own rules — the acceptable list is GitHub environment secret / Workers secret / Vault, and committing a real value is the thing `DIG-78` and `DIG-51` removed from `main`. The client's own repo is theirs to run as they like; what is not acceptable is quietly marking this compliant. It is written down as a dated exception instead:
+
+> **Accepted exception (Chris Stefan, 2026-10-06).** The `datatap-web` README holds a *non-production* embed placeholder. It is not the canonical store for the deployed registry and must never be treated as one. If a real tenant token is ever committed there, that is a leak and a rotation trigger, not a documented store.
+
+**Custody closed on the second card (Chris Stefan, 2026-10-06T12:41Z).** The first card asked one question about two secrets and got one answer that only covered `embed-tenants`; the CTO asked for a second card for the rest. Chris answered it: accountable holder for `auth-secret` = **Chris Stefan**, canonical store = **the Container App**. Both cards are now `answered`, so this record is a decision and not an assumption:
+
+- **Owner** for all four bindings (two secrets x prod + dev) is **Chris Stefan**, as recorded in the table above.
+- **Canonical store** is the Container App itself. Confirmed by the answer *and* by the fingerprint evidence — the only provable location of each deployed value. This supersedes `path = document` from the first card for the deployed values; that answer describes the client's repo, which holds only a non-production placeholder (see the accepted exception below).
+- **No ARM write was made and none is pending.** Keeping the ACA as the store means no Key Vault is created, no role is granted and no value moves, so nothing waits on a DataTap tenant `Owner` account. Rotation stays an agent-executable operation because the values are readable.
+
+**What this does not settle:** whether the ACA is still the store after `2027-01-04`, and the `listSecrets` blast radius below. Both are DataTap-side ARM decisions and are recorded as open items, not as custody gaps.
 
 **The values are recoverable, and that changes the risk.** `Microsoft.App/containerApps/listSecrets/action` returns secret values in cleartext — the CLI exposes it as `az containerapp secret list --show-values`, and `Contributor`'s `Actions: ["*"]` covers it with no `notActions` exclusion. So any principal that can authenticate and holds `listSecrets` on the app can read `AUTH_SECRET` and every `DIGICHAT_EMBED_TENANTS` token in plaintext.
 
 Who that is today: **only the shared subscription-`Owner` account can authenticate** — all three service principals are dormant with no credential. So the shared account is a single point of compromise for both secrets *and* for deletion of either Container App. That is the finding that matters, and it is why "nobody else can read it" is not the reassuring answer it looks like.
 
-`az keyvault list` on the subscription returns `[]` — there is no Key Vault in it, so these two values have no canonical store, no expiry and no rotation path. Per this file's own enforcement rule, a credential with no detector **is not production-ready**, and both are recorded that way. Adding a Key Vault would not by itself fix the read path — the roles above still hand out `listSecrets` — so the durable fix is Key Vault references on the app **plus** a custom role that omits `listSecrets`.
+`az keyvault list` on the subscription returns `[]` — there is no Key Vault in it. As of 2026-10-06 (DIG-1344) the four bindings therefore have an owner, a canonical store (the Container App itself), a working refresh path, a fingerprint lock file and a failing-loud detector, and an expiry of **2027-01-04**. They are production-ready on the letter of this file's rule. The blast radius is unchanged and is a separate, open item: `listSecrets` is still handed out by the `Contributor` grants above, so adding a Key Vault would not by itself fix the read path — the durable fix is Key Vault references on the app **plus** a custom role that omits `listSecrets`. That is an ARM write on a client production resource and is a DataTap-side decision.
 
 `AUTH_URL` and `DIGICHAT_ENABLED_SERVICES` are also set on both ACAs but come from `secretRef: null` — plain configuration, not secrets. They are not registered here.
 
@@ -149,7 +177,8 @@ With retention disabled, all 33 tags stay pullable forever, including the two de
 
 | Credential | Owner | Canonical Store | Refresh Path | Detector |
 |------------|-------|-----------------|--------------|----------|
-| ACA inline `auth-secret` / `embed-tenants` (DataTap ACA) | Chris Stefan | **none** | re-supply out of band, then `az containerapp secret set -n digichat -g <rg> --secrets auth-secret=<new-value>` | **none — not production-ready** (see [above](#container-app-inline-secrets--and-yes-they-are-readable)) |
+| ACA inline `auth-secret` / `embed-tenants` — 4 bindings (DataTap ACA, prod + dev) | Chris Stefan (confirmed by board answer, 2026-10-06) | the Container App itself, confirmed by board answer (no Key Vault exists in the subscription) | read back with `az containerapp secret list --show-values`, then `az containerapp secret set -n digichat -g <rg> --secrets <name>=<new-value>` on one app at a time | `scripts/digichat_aca_secret_detector.py` — fingerprints in [`digichat-aca-secret-fingerprints.json`](digichat-aca-secret-fingerprints.json), expiry 2027-01-04 (see [above](#container-app-inline-secrets--and-yes-they-are-readable)) |
+| `POLICY_CHECK_APP_PRIVATE_KEY` — the policy-check gate reader: GitHub App `policy-check-reader`, `digithings-ai/digithings` only, `Administration: read` only. **Scoped, not created.** | Security team (Chris Stefan as the create-and-install backstop — creating an org App is an owner action) | Planned: GitHub Actions `cron` environment secret, one home, **no Bitwarden copy**. GitHub Actions is the only consumer and write-only access to a secret is all it needs, so a second copy would be a second way to lose the credential. | Create the App from [`.github/policy-check-reader-app.json`](../../.github/policy-check-reader-app.json), install it on this repo, generate a private key, `gh secret set POLICY_CHECK_APP_PRIVATE_KEY --env cron`, smoke it with `python3 scripts/mint_policy_check_token.py --verify`, then delete the previous key **last**. On a suspected leak, **uninstall the App first** — deleting only the exposed key leaves the App able to mint. | **Scoped, not live.** The drift guard that would consume it is DIG-2098 decision D; until that lands there is no failing-loud check, so by the Enforcement rule below this row is a specification, not a production-ready credential. Full runbook: [`policy-check-credential.md`](policy-check-credential.md) |
 
 ---
 
@@ -168,4 +197,6 @@ With retention disabled, all 33 tags stay pullable forever, including the two de
 
 - **No duplicate stores**: A credential must not be written to multiple independent stores (e.g., both GitHub secret and local `.env` as production sources).
 - **No secret values in docs**: This file and `.env.example` document *names* and *processes* only. Real values never appear here.
+- **Fingerprints are not values**: a SHA-256 plus a byte length per binding (see [`digichat-aca-secret-fingerprints.json`](digichat-aca-secret-fingerprints.json)) is the accepted way to make a single-copy secret drift-detectable without holding it. It is a one-way digest of a high-entropy value, not the value.
 - **Detector required**: Every credential must have a failing-loud check. If the detector doesn't exist, the credential is not production-ready (see `DIG-345` for the Gloomberb detector).
+- **Reach is enforced, not remembered**: the DataTap Azure access register ([`config/datatap_azure_access_register.json`](../../config/datatap_azure_access_register.json)) is enforced by [`scripts/az-guard/az`](../../scripts/az-guard/az), which refuses every `az` command aimed at a subscription that is not on it. Runbook, install, rollback and the limits of that control: [`datatap-azure-az-guard.md`](datatap-azure-az-guard.md) (DIG-1725). The register is empty, so every `az` command is refused today — including the `az …` commands quoted elsewhere in this file.

@@ -1,11 +1,11 @@
 # digichat
 
-Next.js **App Router** app: React chat UI + BFF for **digigraph** (`POST /v1/chat/completions`). See root **[DIGICHAT.md](../DIGICHAT.md)** for architecture, Compose, and ops.
+Next.js **App Router** app: React chat UI + BFF for **digigraph** (`POST /v1/chat/completions`). See **[ARCHITECTURE.md](ARCHITECTURE.md)** for the module map and API contract, and **[OPERATIONS.md](OPERATIONS.md)** for env, Compose, and runbooks.
 
 ## Local chat + tools (host stack)
 
-1. Repo root: **`make stack-local`** (digikey **:8005**, digigraph **:8000**, digiquant **:8001**, digisearch **:8002**, digitrace **:8003**). Ensure an **LLM** is reachable from digigraph ([`docs/LOCAL_STACK.md`](../docs/LOCAL_STACK.md) — LiteLLM **:4000** or Ollama on loopback).
-2. **`cp -n .env.example .env.local`** and fill **`DIGIKEY_BFF_TOKEN`**, **`AUTH_SECRET`**, service URLs, **`DIGICHAT_DEV_AUTH=1`**, optional **`DIGICHAT_LOCAL_AUTH_KEY`** (see DIGICHAT.md).
+1. Repo root: **`make stack-local`** (digikey **:8005**, digigraph **:8000**, digiquant **:8001**, digisearch **:8002**, digitrace **:8003**). Ensure an **LLM** is reachable from digigraph ([`docs/LOCAL_STACK.md`](../../docs/LOCAL_STACK.md) — LiteLLM **:4000** or Ollama on loopback).
+2. **`cp -n .env.example .env.local`** and fill **`DIGIKEY_BFF_TOKEN`**, **`AUTH_SECRET`**, service URLs, **`DIGICHAT_DEV_AUTH=1`**, optional **`DIGICHAT_LOCAL_AUTH_KEY`** (see OPERATIONS.md).
 3. **`npm install`** then **`npm run dev`** (or **`make digichat-dev`** from repo root).
 4. Open **`http://127.0.0.1:3000`**, confirm **`GET /api/health`** is `ok` for all enabled services.
 5. Sign in (dev password) or rely on local-bootstrap when **`DIGICHAT_LOCAL_AUTH_KEY`** is set; chat uses digikey **`bff_session`** JWTs so digigraph can call digisearch/digiquant tools with the same auth chain.
@@ -82,7 +82,7 @@ Live digithings.ai chat is **`apps/digithings-web`** (`app/chat/page.tsx` + `Cha
 
 `https://digithings.ai/embed?host=digithings.ai`
 
-Parent `frame-src` and iframe origin both come from `embedOriginForChat()` (default `https://digithings.ai`). Child `/embed` CSP `frame-ancestors` is set at request time by `src/proxy.ts` (matcher `/embed` only) — first-party `'self' https://digithings.ai https://www.digithings.ai https://digiquant.io` plus runtime `DIGICHAT_EMBED_HOSTS` / tenants. Other digichat routes keep `frame-ancestors 'none'` + `X-Frame-Options: DENY`.
+Parent `frame-src` and iframe origin both come from `embedOriginForChat()` (default `https://digithings.ai`). Child `/embed` CSP `frame-ancestors` is set at request time by `src/proxy.ts` (matcher `/embed`, `/embed/:path*`, and `/`) — first-party `'self' https://digithings.ai https://www.digithings.ai https://digiquant.io` plus runtime `DIGICHAT_EMBED_HOSTS` / tenants. The `/` matcher entry only rewrites the CSP for the `/?mode=embed` replay; every other digichat route keeps `frame-ancestors 'none'` + `X-Frame-Options: DENY`.
 
 Prod tenant (`host=digithings.ai`): `gateMode: ungated`, `llmAccess: free_then_byok`, `showByok: true`. Do **not** assert a 3-turn gate on that path. `turn_limited` remains for other tenants (unit tests lock it).
 
