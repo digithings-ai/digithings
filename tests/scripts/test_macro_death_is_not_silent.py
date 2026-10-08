@@ -1,4 +1,3 @@
-
 Context. ``scripts/refresh_market_data_r2.py`` makes macro fetches fail-soft: a
 per-series vendor failure becomes a ``history-only`` outcome so the previous
 generation keeps serving. That is the right default. ``SLOW_CADENCES``
@@ -30,8 +29,8 @@ dated exactly ``run + 1``: it satisfies the raw-rows test, the clamp then drops
 it, and ``new_rows`` comes back empty in front of an old ``seal``. It is the
 seal -- stored history, not bounded by the window -- that ages out, not a live
 row. ``MODE_INCREMENTAL`` cannot reach the guard at all: its ``as_of`` is the max
-of history and live rows, and its live rows are both ``<= run`` and ``>= run - window`` by
-construction, so its age can never exceed that window.
+of history and live rows, and its live rows are both ``<= run`` and inside the
+cadence window by construction, so its age can never exceed that window.
 
 So ``_macro_as_of_stale`` measures each macro series' ``as_of`` against its own
 cadence window and names anything past it. The section at the end of this file
