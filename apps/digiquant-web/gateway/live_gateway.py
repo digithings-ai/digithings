@@ -859,7 +859,6 @@ class Gateway:
             try:
                 raw = await self.bridge.call(probe.tool, args, probe.timeout)
             except ToolError as e:
-                self.locks.pop(key, None)
                 return 502, error_env(
                     probe.id,
                     probe.tool,
@@ -868,7 +867,9 @@ class Gateway:
                     e.message,
                     int((time.monotonic() - t0) * 1000),
                 )
-            self.locks.pop(key, None)
+            finally:
+                # Any exit (timeout, cancel, bridge crash) drops the key so locks stay bounded.
+                self.locks.pop(key, None)
         ms = int((time.monotonic() - t0) * 1000)
         err = upstream_error(raw)
         if err:

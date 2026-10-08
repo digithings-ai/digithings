@@ -98,7 +98,7 @@ print(r.json()["sharpe_ratio"])
 ### POST /backtest/start
 Submit an async backtest job; returns {job_id}. Poll progress over SSE.
 
-auth: digiquant:backtest · rate: 10/min/IP
+auth: digiquant:backtest · rate: 30/min/IP
 
 Response example:
 ```json

@@ -519,21 +519,20 @@ export function QuantSection({ className }: { className?: string }) {
 
             {/* Right: the library, in the kit's horizontal rail — the element
                 promoted from the design reference's changelog rail. */}
-            <div className="flex min-w-0 flex-col justify-center gap-[0.5rem]">
-              <span className={GROUPED_LABEL}>
-                {showExampleBadge ? "flagship strategies · example" : "flagship strategies"}
-              </span>
-              <CardRail ariaLabel="Flagship digiquant strategies">
-                {cards.length === 0 ? (
-                  <p className="m-0 px-6 py-4 font-mono text-[0.78rem] text-ink-mute">
-                    {live.loading
-                      ? "Reading published tearsheets."
-                      : "The official API has not published these tearsheets."}
-                  </p>
-                ) : null}
-                {cards.map((strategy) => (
-                  <div key={strategy.slug} role="listitem" className="flex-[0_0_17rem] snap-start">
-                    <TearsheetCard href={`${DIGIQUANT_URL}/strategies/${strategy.slug}`}>
+            <div className="flex min-w-0 flex-col justify-center">
+              {cards.length === 0 ? (
+                <p className="m-0 px-6 py-4 font-mono text-[0.78rem] text-ink-mute">
+                  {live.loading
+                    ? "Reading published tearsheets."
+                    : "The official API has not published these tearsheets."}
+                </p>
+              ) : (
+                <CardRail ariaLabel="Flagship digiquant strategies" itemClassName="w-[17rem]">
+                  {cards.map((strategy) => (
+                    <TearsheetCard
+                      key={strategy.slug}
+                      href={`${DIGIQUANT_URL}/strategies/${strategy.slug}`}
+                    >
                       <div className="ts-card-head">
                         <div className="ts-card-title">
                           <div className="ts-card-title-text">
@@ -551,9 +550,9 @@ export function QuantSection({ className }: { className?: string }) {
                         ))}
                       </TearsheetCardKpis>
                     </TearsheetCard>
-                  </div>
-                ))}
-              </CardRail>
+                  ))}
+                </CardRail>
+              )}
             </div>
           </div>
 

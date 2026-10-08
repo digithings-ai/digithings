@@ -1,6 +1,13 @@
 /** Contract §1/§2 shared shapes: error envelope + provenance. Re-exported from ./index. */
 
-export type ErrorCode = "bad_request" | "unauthorized" | "forbidden" | "not_found" | "upstream_empty" | "internal";
+export type ErrorCode =
+  | "bad_request"
+  | "unauthorized"
+  | "forbidden"
+  | "not_found"
+  | "upstream_empty"
+  | "not_provisioned"
+  | "internal";
 
 export interface Provenance {
   source: string;
@@ -16,6 +23,7 @@ const ERROR_STATUS: Record<ErrorCode, number> = {
   forbidden: 403,
   not_found: 404,
   upstream_empty: 502,
+  not_provisioned: 503,
   internal: 500,
 };
 

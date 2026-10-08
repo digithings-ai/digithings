@@ -283,10 +283,7 @@ function directivesGet(req: Request): Response {
 
 function directivesPut(req: Request): Response {
   const pin = new URL(req.url).searchParams.get("retrieval_pin");
-  return Response.json(
-    { error: { code: "not_provisioned", message: NOT_PROVISIONED, details: { table: "fx_directives" }, retrieval_pin: pin } },
-    { status: 503 },
-  );
+  return errorResponse("not_provisioned", NOT_PROVISIONED, pin, { table: "fx_directives" });
 }
 
 async function ratesSummary(req: Request, ctx: RouteCtx<Env>): Promise<Response> {

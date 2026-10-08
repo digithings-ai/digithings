@@ -117,6 +117,7 @@ jobs:
               - 'apps/digithings-web/**'
               - 'apps/digiquant-web/**'
               - 'apps/digiquant-app/**'
+              - 'clients/digiquant-tui/src/**'
               - 'digiquant/src/digiquant/portfolio/graph.py'
               - 'apps/digithings-cron/**'
               - 'apps/digiquant-runner/**'
