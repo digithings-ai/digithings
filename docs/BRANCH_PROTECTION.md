@@ -109,10 +109,53 @@ It reconciles:
 |---|---|---|
 | `.github/policy-checks.yml` | the jobs the workflows actually define | a renamed or dropped check; a policy surface nobody declared |
 | `.github/policy-checks.yml` | develop's required contexts | a check the gate does not hold, and a gate the inventory does not own |
-| develop's required contexts | whether each can report on every develop PR | **the stall** — a required check that never arrives hangs every merge |
+| every context the gate holds **or** the inventory declares | whether each can report on every develop PR | **the stall** — a required check that never arrives hangs every merge |
 
-`ci.yml`'s in-file `needs` staleness check is **kept**, not replaced. The three
-reconciliations do not overlap; dropping the old one would leave a real hole.
+That third row covers both sets on purpose, and the second half of it is
+[DIG-2237](https://github.com/digithings-ai/digithings/issues/2237), because the original
+guard only asked about the live gate. A workflow whose checks are all `advisory` reports
+nothing that anyone is waiting for, so a workflow-level `paths-ignore` added to one was a
+**false green**: no failing check, and a PR shape the check would never cover. The moment
+DIG-1952 child B promotes such an entry, every PR it skips hangs. The guard now reports that
+as a finding before the promotion, not after.
+
+"Whether it can report" is decided from the `pull_request:` trigger alone, and all four
+filters matter, not two of them:
+
+| trigger filter | why it can stop the check arriving |
+|---|---|
+| `paths:` / `paths-ignore:` | a skipped **workflow** reports nothing — only a skipped *job* reports Success |
+| `branches:` | the workflow never starts for a PR into another branch |
+| `branches-ignore:` | the same filter spelled as an exclusion; matching globs |
+| `types:` | **required contexts are evaluated against the PR's head SHA**, and `synchronize` is the only event that re-reports on a new push. A workflow on `types: [opened]` reports for the opening SHA and never again, so after the first push the PR waits on "Waiting for status to be reported" forever with no failing check to explain it. |
+
+An **absent** `types:` key is GitHub's default (`opened`, `synchronize`, `reopened`), which
+includes `synchronize` and is therefore reachable. A `types:` key that is present but
+unreadable is treated as empty, so the rule fails closed rather than passing on a value
+nobody could read.
+
+`ci.yml`'s in-file `needs` staleness check is **kept**, not replaced. The reconciliations do
+not overlap; dropping the old one would leave a real hole.
+
+### Completeness: `tracked_workflows` is an allowlist, not the scope
+
+`.github/policy-checks.yml` tracks 8 of the 53 workflow files — the ones with policy
+surfaces. That is the right size, but an allowlist nobody checks for completeness is not an
+inventory: a brand-new workflow carrying a real gate would be out of scope by construction,
+and `policy.untracked-producer` would never be raised.
+
+So the guard also scans every `*.yml` under `.github/workflows/` for a named job matching a
+live or declared context, and fails when the producer is untracked — including when the
+producer is untracked *and* cannot report, which previously drew `policy.undeclared-gate`
+and then stopped, giving the wrong diagnosis on exactly the case `gitleaks-scan` exists to
+exercise. Adding a workflow is therefore not free: either name it in `tracked_workflows`, or
+do not give any of its jobs a `name:`. Migrating all 53 is not the answer and is not
+required.
+
+An untracked file that will not parse is reported (`policy.unreadable-workflow`), not
+raised — otherwise any of the 45 untracked workflows could take the guard down with an
+unreadable error instead of a diagnosis. A **tracked** file that will not parse still
+raises, because a tracked file is a declared surface.
 
 **Check the gate, at any time:**
 
@@ -128,6 +171,40 @@ workflow can read it. The snapshot is only trustworthy if it is updated in the s
 change as the protection itself — run `--live` after any manual branch-protection edit
 and commit the difference, or the guard is checking a fiction.
 
+### Re-verifying the snapshot on a clock
+
+Doing that by hand leaves one gap: nothing catches a branch-protection edit that nobody ran
+`--live` after. The PR path cannot close it, because `GITHUB_TOKEN` cannot read branch
+protection at all, so putting the read on the PR path would mean putting a human-only
+credential in front of every merge.
+
+So it runs on a schedule instead. The `policy-gate-live` job in
+[`ci-pr-hygiene.yml`](../.github/workflows/ci-pr-hygiene.yml) mints a
+[`policy-check-reader`](../docs/ops/policy-check-credential.md) installation token, exports
+it as `GH_TOKEN`, and runs the guard with `--live`, failing when the snapshot and the live
+gate disagree. Three deliberate choices:
+
+- **It rides the existing `digithings-cron` dispatch** (`jobs.ts`, daily 06:21 UTC,
+  `workflow_dispatch` against `develop`) rather than adding an `on.schedule:` trigger, which
+  `tests/scripts/test_no_gha_schedules.py` forbids.
+- **The job is unnamed.** A job with a `name:` is a policy surface that the inventory must
+  list, and a check that reads branch protection must never appear on the PR path.
+- **`environment: cron` is declared on it.** Without that, `secrets.*` resolves to empty
+  rather than to the key, so the read would fail as "no key" and never as "permission
+  denied".
+
+An **absent credential is reported as unvalidated, never as a failure** — the job posts
+`::notice` and exits 0. A canary that starts red because it cannot read its own secret is
+how a check becomes a silent stop, which is what happened to the token canary in #2541. A
+present credential that disagrees with the snapshot *is* a failure.
+
+> **Not yet provisioned.** The `policy-check-reader` App, the `cron`-scoped
+> `POLICY_CHECK_APP_PRIVATE_KEY` secret and the `POLICY_CHECK_APP_ID` /
+> `POLICY_CHECK_INSTALLATION_ID` variables do not exist yet (the `cron` environment holds
+> no secrets at all), and creating the App needs `Administration: write`, which is
+> Chris-only on this one-member org. Until they exist the job notices and exits 0 on every
+> run. Provisioning is tracked on DIG-2237; nothing else here depends on it.
+
 ### Declaring a new policy check
 
 Add it to `.github/policy-checks.yml` with one of three `enforcement` values:
@@ -136,6 +213,30 @@ Add it to `.github/policy-checks.yml` with one of three `enforcement` values:
   The guard fails both if it is absent and if it could be skipped.
 - `advisory` — runs and reports but deliberately does not gate. **Requires a `reason`.**
 - `other-branch` — gates another branch (`main`), not develop.
+
+### Every non-`required` entry needs an owner
+
+A `reason` records what was true when it was written. On its own it is indistinguishable
+from what is true now, forever — which is what makes `advisory` an escape hatch nobody owns
+([DIG-2237](https://github.com/digithings-ai/digithings/issues/2237)). So:
+
+| field | required on | meaning |
+|---|---|---|
+| `owner:` | every non-`required` entry | who answers for it. Missing → `GuardError` |
+| `review_by:` | *or* one of the two below, on `advisory` | a date to revisit the decision |
+| `issue:` | | the issue tracking the gap (`DIG-NNNN`) |
+| `gated_by:` | | a context that is `required` in this inventory **and** present in the live gate |
+
+`gated_by:` is validated, not trusted: naming a context the inventory does not declare is a
+`GuardError`, and naming one that is declared but not actually in the live gate is a
+`policy.bad-gated-by` finding. Otherwise "it is gated by the aggregator" would be a citation
+rather than a fact. `advisory` with none of the three raises.
+
+There is a separate, narrower field for a gap that is **accepted on purpose**: `known_gap:`.
+It suppresses the reachability finding for that entry while the entry is ungated, and stops
+applying the moment the entry reaches the live gate — at that point the check really does
+have to report, so the accepted gap has expired. `gitleaks-scan` is the only entry with one
+today.
 
 A job counts as a policy surface when it has an explicit `name:`. A job without one
 reports under its job id and is folded into an aggregator instead. Naming a job makes it

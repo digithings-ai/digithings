@@ -68,3 +68,94 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python3 scripts/check_project_fields_coverage.py
+
+  # ── DIG-2237: prove the committed required-contexts snapshot against the live
+  # merge gate, on the clock digithings-cron already drives.
+  #
+  # Why here and not in its own file: `tests/scripts/test_no_gha_schedules.py`
+  # pins that no workflow may carry `on.schedule`, and the clock that already
+  # dispatches this file is `apps/digithings-cron` (`ci-pr-hygiene`, 06:21 UTC).
+  # This rides it rather than adding a second trigger.
+  #
+  # Why it is unnamed: a job with a `name:` is a policy surface by the rule in
+  # .github/policy-checks.yml, and this one deliberately is not — it validates the
+  # inventory, it is not a check in it.
+  #
+  # Why it cannot gate a merge: `docs/ops/policy-check-credential.md` requires the
+  # `policy-check-reader` App's name never to appear in develop's required
+  # contexts, and requires its read never to sit on a deploy path. This is a
+  # dispatch-only job that writes nothing.
+  #
+  # The absence case is *unvalidated*, never *failed* — same shape as
+  # token-canary.yml's `unvalidated-by-design`. A canary that starts failing
+  # because it cannot read a secret is how #2541 became a silent stop.
+  policy-gate-live:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Required by DIG-248 and by docs/ops/policy-check-credential.md: without it
+    # secrets.POLICY_CHECK_APP_PRIVATE_KEY resolves to empty and a read failure
+    # looks like "no key" rather than "permission denied".
+    environment: cron
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      # One step, branching in bash rather than in `if:`: GitHub does not expose
+      # the `secrets` context to conditionals, so a step-level
+      # `if: secrets.X == ''` is not a shape to rely on. token-canary.yml
+      # branches in the runner for the same reason.
+      - name: Prove the snapshot against the live gate
+        env:
+          POLICY_CHECK_APP_PRIVATE_KEY: ${{ secrets.POLICY_CHECK_APP_PRIVATE_KEY }}
+          POLICY_CHECK_APP_ID: ${{ vars.POLICY_CHECK_APP_ID }}
+          POLICY_CHECK_INSTALLATION_ID: ${{ vars.POLICY_CHECK_INSTALLATION_ID }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -uo pipefail
+
+          if [[ -z "${POLICY_CHECK_APP_PRIVATE_KEY:-}" \
+             || -z "${POLICY_CHECK_APP_ID:-}" \
+             || -z "${POLICY_CHECK_INSTALLATION_ID:-}" ]]; then
+            echo "::notice title=policy-gate snapshot not re-verified::policy-check-reader is not provisioned, so .github/required-contexts.txt was NOT checked against develop's live gate on this run. Unvalidated, not failing; see docs/ops/policy-check-credential.md."
+            exit 0
+          fi
+
+          # Minted twice on purpose: once here for a verdict that distinguishes
+          # "proven wrong" (exit 1) from "could not tell" (exit 2), and once below
+          # to hand the guard a token. Each is a one-hour installation token and
+          # this runs once a day; never printing it or writing it to disk is worth
+          # more than saving one round trip.
+          python3 scripts/mint_policy_check_token.py --verify \
+            --repo "$REPO" --branch develop
+          mint=$?
+          case "$mint" in
+            0) ;;
+            2)
+              echo "::notice title=policy-gate read incomplete::the App credential could not be exercised, so this run proves nothing about whether the snapshot matches the live gate. A setup or transport problem, not evidence of drift; see docs/ops/policy-check-credential.md."
+              exit 0
+              ;;
+            *)
+              echo "::error title=policy-gate credential refused::policy-check-reader is provisioned and was rejected. See docs/ops/policy-check-credential.md; do not delete a working key."
+              exit 1
+              ;;
+          esac
+
+          # Captured by command substitution, so the token never reaches the log
+          # and never touches disk.
+          GH_TOKEN="$(python3 - <<'PY'
+          import os, sys
+          sys.path.insert(0, "scripts")
+          import mint_policy_check_token as mint
+          jwt = mint.build_jwt(
+              os.environ["POLICY_CHECK_APP_ID"],
+              os.environ["POLICY_CHECK_APP_PRIVATE_KEY"].encode("utf-8"),
+          )
+          token, _expires_at = mint.mint_token(jwt, os.environ["POLICY_CHECK_INSTALLATION_ID"])
+          sys.stdout.write(token)
+          PY
+          )"
+          export GH_TOKEN
+          python3 scripts/check_required_policy_checks.py --live \
+            --repo "$REPO" --branch develop
