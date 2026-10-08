@@ -22,7 +22,8 @@ The contract pinned here:
   * the two gates together report a real ``AKIA`` value under that name, bare and
     behind a trailing ``# comment`` - the commented case is the one that matters,
     because a value carrying a comment never reaches the entropy score and so the
-    vendor loop is the only gate that can catch it;
+    vendor loop is the only gate that can catch it - and that ``main()`` itself can
+    fail, which no other assertion in the epic pins;
   * the widening the substring form causes is pinned *by its boundary*, not left
     implicit: the names it newly claims, and the neighbouring names it must not;
   * widening the list costs the tracked ``.example`` / ``.template`` corpus nothing.
@@ -293,9 +294,10 @@ def test_the_corpus_scan_actually_covers_the_corpus(monkeypatch: pytest.MonkeyPa
     ``main()`` calls ``git ls-files`` without a ``cwd``, so it reports whatever the
     process CWD happens to be. Run from ``tests/scripts/`` it sees 103 files and none
     of them is an ``.example`` / ``.template``, and prints ``OK`` over nothing. This
-    test pins that the corpus is non-empty - so a fence or a ``main()`` call reading
-    an empty file set fails loudly instead of passing - and that the anchored scan and
-    the CWD-relative one agree once the CWD is the repo root.
+    test pins that the corpus is non-empty - so a fence reading an empty file set
+    fails loudly instead of passing - and that the anchored scan and the CWD-relative
+    one agree once the CWD is the repo root. It pins that the *scan* is real; the
+    sibling test below pins that ``main()`` acts on what it scans.
     """
     candidates = _corpus_assignable_lines()
     assert candidates, "the tracked .example / .template corpus has no assignable lines"
@@ -310,6 +312,32 @@ def test_the_corpus_scan_actually_covers_the_corpus(monkeypatch: pytest.MonkeyPa
         ["git", "ls-files"], stdout=subprocess.PIPE, text=True, check=True
     ).stdout.splitlines()
     assert from_cwd == anchored
+
+
+def test_main_reports_a_planted_credential_in_a_throwaway_repo(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """``main()`` must be able to *fail*, not merely to return 0.
+
+    Every other ``main()`` assertion in the epic is ``main() == 0``, and all five guard
+    test files together still pass against a ``main()`` that scans nothing at all and
+    prints ``OK`` unconditionally - a guard that cannot report a credential is
+    indistinguishable from a clean corpus. So the other direction is pinned here, on a
+    throwaway git repo of the test's own so the real corpus is never touched:
+
+        plant AWS_ACCESS_KEY_ID=<real-looking AKIA value> -> main() returns 1
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    planted = repo / "planted.example"
+    planted.write_text(f"{AWS_ACCESS_KEY_ID}={AKIA_KEY}{TRAILING_COMMENT}\n")
+    # `git ls-files` lists staged files, so an untracked file is invisible to `main()`.
+    subprocess.run(["git", "add", "planted.example"], cwd=repo, check=True)
+
+    monkeypatch.chdir(repo)
+    assert cec.main() == 1
+    assert AWS_ACCESS_KEY_ID in capsys.readouterr().err
 
 
 def test_guard_itself_is_clean_on_the_corpus(monkeypatch: pytest.MonkeyPatch) -> None:
