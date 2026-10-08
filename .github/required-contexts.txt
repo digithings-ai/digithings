@@ -23,6 +23,14 @@
 # `scripts/check_required_policy_checks.py` executes that script and fails if the
 # two ever disagree, which makes this file the single place a context is added.
 # See docs/BRANCH_PROTECTION.md, "Ownership of develop's required contexts".
+#
+# The `--live` read above is also on a clock: the unnamed `policy-gate-live`
+# job in ci-pr-hygiene.yml runs it daily via the digithings-cron dispatch and
+# fails when this file disagrees with the live gate, so a hand edit that forgot
+# to update the snapshot becomes a dated red run rather than invisible drift.
+# It can never gate a merge — see docs/ops/policy-check-credential.md — and an
+# absent credential makes it report *unvalidated*, not fail. See
+# docs/BRANCH_PROTECTION.md § Re-verifying the snapshot on a clock.
 
 Required checks passed
 doc-links + agents-init
