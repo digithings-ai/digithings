@@ -37,11 +37,21 @@ describe("phase 3 fx and rates", () => {
   });
 
   it("pair path uses the core series id and does not invent a quote", async () => {
-    mockFetch((url) => (url.includes("fx_intraday_observations") ? [{ ts: "2026-09-02T10:00:00Z", close: 1.1 }, { ts: "2026-09-02T11:00:00Z", close: null }] : []));
+    const urls: string[] = [];
+    mockFetch((url) => {
+      urls.push(url);
+      // Served newest first, as the query orders it.
+      return url.includes("fx_intraday_observations") ? [{ ts: "2026-09-02T11:00:00Z", close: null }, { ts: "2026-09-02T10:00:00Z", close: 1.1 }] : [];
+    });
     const res = await app.fetch(new Request("https://x/fx/pairs/EURUSD/path"), CORE);
-    const body = (await res.json()) as { data: { points: { v: number | null }[] }; provenance: { source: string } };
+    const body = (await res.json()) as { data: { points: { t: string; v: number | null }[] }; provenance: { source: string }; as_of: string };
     expect(body.provenance.source).toBe("core:fx_intraday_observations");
+    expect(body.data.points.map((p) => p.t)).toEqual(["2026-09-02T10:00:00Z", "2026-09-02T11:00:00Z"]);
     expect(body.data.points[1].v).toBeNull();
+    const q = decodeURIComponent(urls.find((u) => u.includes("fx_intraday_observations")) ?? "");
+    expect(q).toContain("order=ts.desc");
+    expect(q).toContain("interval=eq.1h");
+    expect(q).toContain("source=eq.yahoo");
     const unknown = await app.fetch(new Request("https://x/fx/pairs/ZZZZZZ/path"), CORE);
     const empty = (await unknown.json()) as { data: { points: unknown[]; note: string } };
     expect(empty.data.points).toEqual([]);
@@ -52,8 +62,8 @@ describe("phase 3 fx and rates", () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     const flags = await app.fetch(new Request("https://x/fx/flags/USDJPY"), CORE);
-    const flagBody = (await flags.json()) as { data: { flagged: boolean; scope_note: string } };
-    expect(flagBody.data.flagged).toBe(false);
+    const flagBody = (await flags.json()) as { data: { flagged: boolean | null; scope_note: string } };
+    expect(flagBody.data.flagged).toBeNull();
     expect(flagBody.data.scope_note).toContain("not provisioned");
     const paper = await app.fetch(new Request("https://x/fx/paper-exposure"), CORE);
     const paperBody = (await paper.json()) as { data: { gross_usd: null; lines: unknown[] } };

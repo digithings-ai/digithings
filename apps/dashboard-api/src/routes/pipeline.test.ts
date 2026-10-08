@@ -49,6 +49,52 @@ describe("phase 2 pipeline routes", () => {
     expect(body.provenance.marks).toBe("unavailable");
   });
 
+  it("graph reads the latest node_runs run by started_at", async () => {
+    const urls: string[] = [];
+    mockFetch((url) => {
+      urls.push(url);
+      return url.includes("node_runs")
+        ? [
+            { run_id: "r2", node_name: "research", outcome: "succeeded", started_at: "2026-09-02T09:00:00Z" },
+            { run_id: "r2", node_name: "ingest", outcome: "succeeded", started_at: "2026-09-02T08:00:00Z" },
+            { run_id: "r1", node_name: "decide", outcome: "failed", started_at: "2026-09-01T08:00:00Z" },
+          ]
+        : [];
+    });
+    const res = await app.fetch(new Request("https://x/pipeline/runs/latest/graph"), ENV);
+    const body = (await res.json()) as { data: { run_date: string; nodes: { id: string; state: string | null }[] } };
+    expect(urls.find((u) => u.includes("node_runs")) ?? "").toContain("order=started_at.desc");
+    expect(body.data.run_date).toBe("2026-09-02");
+    expect(Object.fromEntries(body.data.nodes.map((n) => [n.id, n.state]))).toEqual({ ingest: "succeeded", research: "succeeded", decide: null, publish: null });
+  });
+
+  it("trace maps run_event_trace columns for the latest run", async () => {
+    mockFetch((url) => (url.includes("run_event_trace")
+      ? [
+          { run_id: "r2", run_date: "2026-09-02", name: "atlas.publish", status: "ok", duration_ms: 1500 },
+          { run_id: "r1", run_date: "2026-09-01", name: "old", status: "ok", duration_ms: 10 },
+        ]
+      : []));
+    const res = await app.fetch(new Request("https://x/pipeline/runs/latest/trace"), ENV);
+    const body = (await res.json()) as { data: { rows: { node: string; duration_s: number; calls: null; state: string }[] }; as_of: string };
+    expect(body.data.rows).toEqual([{ node: "atlas.publish", calls: null, duration_s: 1.5, state: "ok" }]);
+    expect(body.as_of).toBe("2026-09-02");
+  });
+
+  it("narrative is the house Daily Digest split into paragraphs", async () => {
+    const urls: string[] = [];
+    mockFetch((url) => {
+      urls.push(url);
+      return url.includes("/documents?") ? [{ date: "2026-09-02", title: "Digest", content: "One.\n\nTwo." }] : [];
+    });
+    const res = await app.fetch(new Request("https://x/pipeline/runs/latest/narrative"), ENV);
+    const body = (await res.json()) as { data: { heading: string; paragraphs: string[]; run_date: string } };
+    expect(body.data).toEqual({ run_date: "2026-09-02", heading: "Digest", paragraphs: ["One.", "Two."] });
+    const q = decodeURIComponent(urls[0] ?? "");
+    expect(q).toContain("workspace_id=eq.");
+    expect(q).toContain("doc_type=eq.Daily Digest");
+  });
+
   it("rejects a bad date query", async () => {
     const res = await app.fetch(new Request("https://x/pipeline/runs/latest/health?date=yesterday"), ENV);
     expect(res.status).toBe(400);

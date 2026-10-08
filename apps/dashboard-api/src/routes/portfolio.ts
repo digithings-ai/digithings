@@ -157,25 +157,45 @@ async function enriched(req: Request, ctx: RouteCtx<Env>): Promise<Response> {
   );
 }
 
+/** theses.status (chk_theses_status) → the three UI buckets. Unknown/null stays null. */
+const THESIS_STATE: Record<string, "active" | "watch" | "exited"> = {
+  ACTIVE: "active",
+  NEW: "active",
+  MONITORING: "watch",
+  CHALLENGED: "watch",
+  PAUSED: "watch",
+  CLOSED: "exited",
+  INVALIDATED: "exited",
+};
+
+/** theses and thesis_vehicles are daily snapshots: keep only the latest date. */
+function latestSnapshot(rows: Row[]): Row[] {
+  const tip = maxDate(rows, "date");
+  return tip === null ? [] : rows.filter((r) => str(r.date) === tip);
+}
+
 function thesisShape(rows: Row[], vehicles: Row[]) {
   const byId = new Map<string, string[]>();
   for (const v of vehicles) {
     const id = str(v.thesis_id);
-    const ticker = str(v.ticker) ?? str(v.vehicle);
+    const ticker = str(v.ticker);
     if (!id || !ticker) continue;
-    byId.set(id, [...(byId.get(id) ?? []), ticker]);
+    const list = byId.get(id) ?? [];
+    if (!list.includes(ticker)) list.push(ticker);
+    byId.set(id, list);
   }
   const theses = rows.map((r) => {
-    const id = str(r.id) ?? str(r.thesis_id) ?? "";
-    const state = (str(r.state) ?? str(r.status) ?? "").toLowerCase();
+    const id = str(r.thesis_id) ?? "";
+    const status = str(r.status)?.toUpperCase() ?? null;
     return {
       id,
-      name: str(r.name) ?? str(r.title) ?? id,
-      state: state === "active" || state === "watch" || state === "exited" ? state : state || "—",
+      name: str(r.name) ?? id,
+      state: status === null ? null : THESIS_STATE[status] ?? null,
+      status,
       vehicles: byId.get(id) ?? [],
-      evidence: str(r.evidence),
-      kill_condition: str(r.kill_condition),
-      note: str(r.note),
+      evidence: null,
+      kill_condition: str(r.invalidation),
+      note: str(r.notes),
     };
   });
   const counts = {
@@ -189,27 +209,33 @@ function thesisShape(rows: Row[], vehicles: Row[]) {
 async function theses(req: Request, ctx: RouteCtx<Env>, onlySignals: boolean): Promise<Response> {
   const pinR = pinOf(req);
   if ("error" in pinR) return pinR.error;
-  const rows = await read(ctx.env, "theses", "select=*&limit=500");
+  const rows = await read(ctx.env, "theses", "select=*&order=date.desc&limit=500");
   if ("error" in rows) return rows.error;
-  const vehicles = await read(ctx.env, "thesis_vehicles", "select=*&limit=2000");
+  const vehicles = await read(ctx.env, "thesis_vehicles", "select=*&order=date.desc&limit=2000");
   if ("error" in vehicles) return vehicles.error;
-  const filtered = onlySignals ? rows.rows.filter((r) => r.needs_resolution === true) : rows.rows;
-  const tip = maxDate(filtered, "updated_at") ?? maxDate(filtered, "as_of");
-  return ok(thesisShape(filtered, vehicles.rows), "core:theses", pinR.pin, tip ? tip.slice(0, 10) : null);
+  const book = latestSnapshot(rows.rows);
+  // Signals: theses the pipeline has flagged as needing resolution.
+  const filtered = onlySignals ? book.filter((r) => str(r.status)?.toUpperCase() === "CHALLENGED") : book;
+  const tip = maxDate(rows.rows, "date");
+  return ok(thesisShape(filtered, latestSnapshot(vehicles.rows)), "core:theses", pinR.pin, tip ? tip.slice(0, 10) : null);
 }
 
 async function attribution(req: Request, ctx: RouteCtx<Env>): Promise<Response> {
   const pinR = pinOf(req);
   if ("error" in pinR) return pinR.error;
-  const out = await read(ctx.env, "position_attribution", "select=*&order=as_of.desc&limit=500");
+  // position_attribution is a static-book lookback diagnostic (migration 073), not
+  // realized period contribution: serve only the latest date and label the basis.
+  const out = await read(ctx.env, "position_attribution", "select=*&order=date.desc&limit=500");
   if ("error" in out) return out.error;
-  const start = maxDate(out.rows, "window_start") ?? maxDate(out.rows, "start");
-  const end = maxDate(out.rows, "window_end") ?? maxDate(out.rows, "end") ?? maxDate(out.rows, "as_of");
-  const names = out.rows.map((r) => ({
-    ticker: str(r.ticker) ?? "",
-    sleeve: str(r.sleeve),
-    contribution_bp: num(r.contribution_bp),
-  })).filter((r) => r.ticker !== "");
+  const tip = maxDate(out.rows, "date");
+  const latest = tip === null ? [] : out.rows.filter((r) => str(r.date) === tip);
+  const start = maxDate(latest, "window_start_date");
+  const end = maxDate(latest, "window_end_date") ?? tip;
+  const lookback = latest.map((r) => num(r.lookback_days)).find((v) => v !== null) ?? null;
+  const names = latest.map((r) => {
+    const pct = num(r.contribution_pct);
+    return { ticker: str(r.ticker) ?? "", sleeve: str(r.sector_bucket), contribution_bp: pct === null ? null : pct * 100 };
+  }).filter((r) => r.ticker !== "");
   const sleeveMap = new Map<string, { vals: number[]; complete: boolean }>();
   for (const n of names) {
     const key = n.sleeve ?? "Unassigned";
@@ -223,7 +249,12 @@ async function attribution(req: Request, ctx: RouteCtx<Env>): Promise<Response> 
     contribution_bp: g.complete && g.vals.length > 0 ? g.vals.reduce((a, b) => a + b, 0) : null,
   }));
   return ok(
-    { window: { start: start?.slice(0, 10) ?? null, end: end?.slice(0, 10) ?? null }, sleeves, names },
+    {
+      window: { start: start?.slice(0, 10) ?? null, end: end?.slice(0, 10) ?? null },
+      basis: { kind: "static_book_lookback", lookback_days: lookback },
+      sleeves,
+      names,
+    },
     "core:position_attribution",
     pinR.pin,
     end ? end.slice(0, 10) : null,
@@ -233,7 +264,11 @@ async function attribution(req: Request, ctx: RouteCtx<Env>): Promise<Response> 
 async function cash(req: Request, ctx: RouteCtx<Env>): Promise<Response> {
   const pinR = pinOf(req);
   if ("error" in pinR) return pinR.error;
-  const periods = await read(ctx.env, "accounting_periods", "select=*&order=period_end.desc&limit=200");
+  const periods = await read(
+    ctx.env,
+    "accounting_periods",
+    `select=*&workspace_id=eq.${HOUSE_WORKSPACE_ID}&order=period_date.desc&limit=200`,
+  );
   if ("error" in periods) return periods.error;
   const events = await read(
     ctx.env,
@@ -242,10 +277,10 @@ async function cash(req: Request, ctx: RouteCtx<Env>): Promise<Response> {
   );
   if ("error" in events) return events.error;
   const fromPeriods = periods.rows.map((r) => ({
-    date: (str(r.period_end) ?? str(r.date) ?? "").slice(0, 10),
-    kind: str(r.kind) ?? "period",
-    amount: num(r.cash_flow) ?? num(r.amount),
-    balance: num(r.cash_balance) ?? num(r.balance),
+    date: (str(r.period_date) ?? "").slice(0, 10),
+    kind: "period",
+    amount: num(r.cash_contribution),
+    balance: num(r.closing_cash),
   })).filter((e) => e.date !== "");
   const fromEvents = events.rows
     .filter((r) => {
@@ -331,29 +366,25 @@ async function drawdown(req: Request, ctx: RouteCtx<Env>): Promise<Response> {
 async function decision(req: Request, ctx: RouteCtx<Env>): Promise<Response> {
   const pinR = pinOf(req);
   if ("error" in pinR) return pinR.error;
-  const out = await read(ctx.env, "decision_log", "select=*&order=created_at.desc&limit=20");
+  const out = await read(ctx.env, "decision_log", "select=*&order=run_date.desc,created_at.desc&limit=20");
   if ("error" in out) return out.error;
-  const row = out.rows.find((r) => str(r.lead) ?? str(r.title) ?? str(r.summary) ?? str(r.decision));
-  const lead = row ? str(row.lead) ?? str(row.title) ?? str(row.summary) ?? str(row.decision) : null;
+  const row = out.rows.find((r) => str(r.ticker) !== null && str(r.stance) !== null);
+  const lead = row ? `${str(row.stance)} ${str(row.ticker)}` : null;
   const runDate = row ? (str(row.run_date) ?? str(row.created_at)) : null;
   return ok(
-    { decision: lead ? { lead, body: row ? str(row.body) ?? str(row.note) : null, run_date: runDate ? runDate.slice(0, 10) : null } : null },
+    { decision: lead && row ? { lead, body: str(row.thesis), run_date: runDate ? runDate.slice(0, 10) : null } : null },
     "core:decision_log",
     pinR.pin,
     runDate ? runDate.slice(0, 10) : null,
   );
 }
 
-async function risks(req: Request, ctx: RouteCtx<Env>): Promise<Response> {
+async function risks(req: Request, _ctx: RouteCtx<Env>): Promise<Response> {
   const pinR = pinOf(req);
   if ("error" in pinR) return pinR.error;
-  const out = await read(ctx.env, "documents", "select=*&limit=200");
-  if ("error" in out) return out.error;
-  const items = out.rows
-    .filter((r) => (str(r.kind) ?? str(r.doc_type) ?? str(r.type) ?? "").toLowerCase().includes("risk"))
-    .map((r) => str(r.body) ?? str(r.title) ?? str(r.summary))
-    .filter((s): s is string => s !== null);
-  return ok({ risks: items }, "core:documents", pinR.pin, maxDate(out.rows, "as_of")?.slice(0, 10) ?? null);
+  // No documents.doc_type carries a risk list (chk_documents_doc_type), so there is
+  // nothing honest to serve yet: an empty list marked unavailable, never a guess.
+  return ok({ risks: [] }, "unavailable", pinR.pin, null, "unavailable");
 }
 
 async function dossier(req: Request, ctx: RouteCtx<Env>): Promise<Response> {
@@ -365,10 +396,14 @@ async function dossier(req: Request, ctx: RouteCtx<Env>): Promise<Response> {
   }
   const key = ticker.toUpperCase();
   const [thesesOut, vehicles, events, docs, positions] = await Promise.all([
-    read(ctx.env, "theses", "select=*&limit=500"),
-    read(ctx.env, "thesis_vehicles", "select=*&limit=2000"),
+    read(ctx.env, "theses", "select=*&order=date.desc&limit=500"),
+    read(ctx.env, "thesis_vehicles", `select=*&ticker=eq.${encodeURIComponent(key)}&order=date.desc&limit=200`),
     read(ctx.env, "position_events", `select=*&workspace_id=eq.${HOUSE_WORKSPACE_ID}&order=date.desc&limit=200`),
-    read(ctx.env, "documents", "select=*&limit=200"),
+    read(
+      ctx.env,
+      "documents",
+      `select=date,title,doc_type,document_key&workspace_id=eq.${HOUSE_WORKSPACE_ID}&order=date.desc&limit=200`,
+    ),
     read(ctx.env, "positions", `select=*&workspace_id=eq.${HOUSE_WORKSPACE_ID}&order=date.desc&limit=500`),
   ]);
   if ("error" in thesesOut) return thesesOut.error;
@@ -377,22 +412,27 @@ async function dossier(req: Request, ctx: RouteCtx<Env>): Promise<Response> {
   if ("error" in docs) return docs.error;
   if ("error" in positions) return positions.error;
   const vehicleIds = new Set(
-    vehicles.rows.filter((r) => (str(r.ticker) ?? str(r.vehicle) ?? "").toUpperCase() === key).map((r) => str(r.thesis_id)).filter((id): id is string => id !== null),
+    latestSnapshot(vehicles.rows)
+      .filter((r) => (str(r.ticker) ?? "").toUpperCase() === key)
+      .map((r) => str(r.thesis_id))
+      .filter((id): id is string => id !== null),
   );
-  const thesis = thesesOut.rows.find((r) => vehicleIds.has(str(r.id) ?? str(r.thesis_id) ?? "") || (str(r.ticker) ?? "").toUpperCase() === key);
+  const thesis = latestSnapshot(thesesOut.rows).find(
+    (r) => vehicleIds.has(str(r.thesis_id) ?? "") || (str(r.vehicle) ?? "").toUpperCase() === key,
+  );
   const pos = positions.rows.find((r) => (str(r.ticker) ?? "").toUpperCase() === key);
   const ev = events.rows.filter((r) => (str(r.ticker) ?? "").toUpperCase() === key).map((r) => ({
     date: str(r.date)?.slice(0, 10) ?? null,
     type: str(r.type) ?? str(r.kind),
   }));
   const documents = docs.rows
-    .filter((r) => (str(r.ticker) ?? "").toUpperCase() === key || (str(r.title) ?? "").toUpperCase().includes(key))
+    .filter((r) => (str(r.title) ?? "").toUpperCase().includes(key) || (str(r.document_key) ?? "").toUpperCase().includes(key))
     .map((r) => ({ title: str(r.title) }));
   return ok(
     {
       ticker: key,
       thesis: thesis
-        ? { id: str(thesis.id) ?? str(thesis.thesis_id), name: str(thesis.name) ?? str(thesis.title), state: str(thesis.state) ?? str(thesis.status) }
+        ? { id: str(thesis.thesis_id), name: str(thesis.name), state: THESIS_STATE[str(thesis.status)?.toUpperCase() ?? ""] ?? null }
         : null,
       vehicles: [...vehicleIds],
       pnl: { unrealized_pct: pos ? num(pos.unrealized_pnl_pct) ?? num(pos.since_entry_return_pct) : null },
