@@ -53,6 +53,7 @@ from typing import (  # score:allow untyped any — OpenAI message dict payloads
     Any,
     NoReturn,
 )
+from urllib.parse import urlsplit, urlunsplit
 from uuid import UUID, uuid4
 
 from openai import BadRequestError, OpenAI, Timeout
@@ -61,6 +62,12 @@ from openai.types.chat import ChatCompletion
 from digillm import cache as _cache
 from digillm import overrides as _overrides
 from digillm import types as _types
+from digillm.egress_record import (
+    NO_EGRESS_DESTINATION,
+    UNKNOWN_DESTINATION,
+    EgressDecision,
+    record_egress,
+)
 from digillm.telemetry import (
     ArtifactRef,
     CacheStatus,
@@ -1211,6 +1218,62 @@ def _record_usage(**fields: Any) -> None:
         logger.debug("usage observer raised: %s", exc)
 
 
+# ── Egress record ─────────────────────────────────────────────────────────────
+# One record per physical attempt that reached the wire, plus one for the cache-hit
+# path where nothing left the process. The record carries a keyed digest of the
+# outbound messages, never the messages: see digillm.egress_record for why an
+# unkeyed fallback is worse than no digest at all.
+
+
+def _egress_destination(client: OpenAI) -> str:
+    """Resolve where a call is going, without ever reading the API key.
+
+    A base URL may legitimately carry credentials in its userinfo
+    (``https://user:token@proxy/v1``), so the userinfo is stripped before the
+    value reaches a plain-text ledger. When the client has no usable base URL the
+    destination is recorded as ``unknown`` rather than ``none``: ``none`` is the
+    no-egress sentinel, and an egress we cannot place must not be filed as one.
+    """
+    base_url = getattr(client, "base_url", None)
+    if not base_url:
+        return UNKNOWN_DESTINATION
+    text = str(base_url)
+    try:
+        parts = urlsplit(text)
+    except ValueError:  # pragma: no cover - urlsplit is very permissive
+        return text.split("@")[-1]
+    if "@" not in parts.netloc:
+        return text
+    host = parts.netloc.rsplit("@", 1)[1]
+    return urlunsplit((parts.scheme, host, parts.path, parts.query, parts.fragment))
+
+
+def _record_egress(
+    *,
+    scope: _AttemptScope,
+    destination: str,
+    provider: str,
+    model: str,
+    outcome: str,
+    decision: EgressDecision = EgressDecision.UNSCREENED,
+    payload: Any = None,
+) -> None:
+    """Emit one egress record for a call that left (or did not leave) the process."""
+    metadata = scope.metadata
+    record_egress(
+        call_id=scope.call_id,
+        attempt_id=uuid4(),
+        destination=destination,
+        provider=provider,
+        model=model,
+        purpose=str(metadata.purpose) if metadata is not None else "unknown",
+        cache_status=str(scope.cache_status),
+        outcome=outcome,
+        decision=decision,
+        payload=payload,
+    )
+
+
 # ── Tool-argument normalization ───────────────────────────────────────────────
 
 
@@ -1302,6 +1365,11 @@ def _create_with_retry(
         requested_model = _requested_model or str(kwargs.get("model") or "unknown")
         provider = _provider_name(_provider)
         kwargs = _with_byok_litellm_pass_through(kwargs)
+        # The digest covers the messages as they go on the wire, which is after any
+        # DIGI_TOOL_MESSAGE_MAX_CHARS compaction -- and only the messages, never the
+        # whole kwargs dict, which can carry a BYOK key in extra_body.
+        outbound_payload = kwargs.get("messages")
+        destination = _egress_destination(client)
         for attempt in range(max_attempts):
             attempt_number, retry_reason, started_at = scope.start()
             try:
@@ -1310,6 +1378,14 @@ def _create_with_retry(
                 response = client.chat.completions.create(**kwargs)
             except asyncio.CancelledError:
                 scope.terminal_outcome = ProviderCallOutcome.CANCELLED
+                _record_egress(
+                    scope=scope,
+                    destination=destination,
+                    provider=provider,
+                    model=str(kwargs.get("model") or "unknown"),
+                    outcome=ProviderAttemptOutcome.CANCELLED.value,
+                    payload=outbound_payload,
+                )
                 _emit_attempt(
                     scope=scope,
                     attempt_number=attempt_number,
@@ -1321,6 +1397,16 @@ def _create_with_retry(
                 )
                 raise
             except Exception as error:
+                # The attempt reached the wire (or failed to), so it gets a record
+                # even when the retry loop will try again.
+                _record_egress(
+                    scope=scope,
+                    destination=destination,
+                    provider=provider,
+                    model=str(kwargs.get("model") or "unknown"),
+                    outcome=ProviderAttemptOutcome.FAILED.value,
+                    payload=outbound_payload,
+                )
                 _emit_attempt(
                     scope=scope,
                     attempt_number=attempt_number,
@@ -1343,6 +1429,23 @@ def _create_with_retry(
                 )
                 delay = _sleep_transient_retry(delay)
                 continue
+            _record_egress(
+                scope=scope,
+                destination=destination,
+                provider=provider,
+                model=str(kwargs.get("model") or "unknown"),
+                # A streaming call has already sent the payload at this point, but
+                # its body has not been read yet, so the attempt's fate is still
+                # open. Recording "started" is the honest value; recording
+                # "succeeded" here would leave a permanent false success for every
+                # stream that dies mid-flight, which is the case counsel asks about.
+                outcome=(
+                    ProviderAttemptOutcome.STARTED.value
+                    if _defer_success
+                    else ProviderAttemptOutcome.SUCCEEDED.value
+                ),
+                payload=outbound_payload,
+            )
             if _defer_success:
                 return response, scope, attempt_number, retry_reason, started_at
             _emit_attempt(
@@ -1478,6 +1581,17 @@ def completion(
             logger.debug("LLM cache hit: model=%s key=%s…", effective_model, cache_key[:8])
             if attempt_scope is not None:
                 attempt_scope.cache_status = CacheStatus.HIT
+                # Nothing left the process, and the record has to say so: a log that
+                # omits the no-egress path is a spotty sample, not a ledger.
+                _record_egress(
+                    scope=attempt_scope,
+                    destination=NO_EGRESS_DESTINATION,
+                    provider=_provider_name(provider),
+                    model=effective_model,
+                    outcome=ProviderAttemptOutcome.SUCCEEDED.value,
+                    decision=EgressDecision.CACHE_HIT,
+                    payload=None,
+                )
             return ChatCompletion.model_validate_json(cached)
 
     kwargs: dict[str, Any] = {

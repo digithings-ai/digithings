@@ -36,10 +36,39 @@
 #   other-branch  A policy check that gates a different branch (main), not
 #                 develop. Its develop-reachability does not apply.
 #
+# OWNERSHIP (DIG-2237)
+#
+# `advisory` used to require only a free-text `reason`, and nothing ever checked
+# the reason was still true or that anyone was on the hook. An entry that was
+# right when written is now indistinguishable from one that is right today,
+# forever. So:
+#
+#   owner:      REQUIRED on every non-`required` entry. Who answers for it.
+#   review_by:  A date to revisit the decision. An `advisory` entry needs at
+#               least one of these three…
+#   issue:      …or the issue tracking the gap…
+#   gated_by:   …or a context that is `required` here *and* really present in
+#               develop's gate (the guard verifies that against the live set, so
+#               it is not a new escape hatch). Means "this still blocks a merge,
+#               just not directly".
+#
+# `known_gap:` is separate again, and narrower. It records an *accepted*
+# reachability gap for an entry that is not a gate — used only by `gitleaks-scan`
+# below. It suppresses the reachability finding only while the entry is out of
+# develop's required set; promote it and the gap becomes a `policy.stall`.
+#
 # `scripts/check_required_policy_checks.py` reports `advisory` and
 # `other-branch` entries as ungated policy checks: that is the DIG-1952 class of
 # bug, found and priced, not hidden. Closing them is DIG-1952 child B — a
 # human-only repo-settings write, deliberately sequenced behind this detector.
+#
+# COMPLETENESS (DIG-2237)
+#
+# `tracked_workflows` is an allowlist, and the guard reads every other
+# `*.yml`/`*.yaml` in this directory too. A workflow that produces a live or
+# declared context while sitting outside the allowlist is a `policy.untracked-
+# producer` finding, so adding `security-scc.yml` carrying a real gate cannot
+# leave this guard green.
 
 # Workflow files whose named jobs are policy checks. Adding a file here makes
 # every named job in it a policy surface the inventory must account for.
@@ -60,6 +89,7 @@ checks:
     workflow: ci.yml
     job: required-checks
     enforcement: required
+    owner: DevOps
     reason: >-
       The single stable required name on develop. Every other ci.yml job is
       individually path-gated, so none of them can be required directly — a PR
@@ -70,6 +100,7 @@ checks:
     workflow: ci-docs.yml
     job: docs-and-agents-init
     enforcement: required
+    owner: DevOps
     reason: >-
       Internal markdown link validation plus `agents-init --check`. Its
       `pull_request:` trigger is deliberately unfiltered so the check posts on
@@ -79,6 +110,7 @@ checks:
     workflow: ci-type-check.yml
     job: mypy
     enforcement: required
+    owner: DevOps
     reason: >-
       Type checking for digibase/digikey. Same unfiltered `pull_request:`
       trigger, for the same reason as ci-docs.yml.
@@ -94,6 +126,8 @@ checks:
     workflow: ci-dco-sign-off.yml
     job: dco-sign-off
     enforcement: advisory
+    owner: DevOps
+    issue: DIG-1952
     reason: >-
       DCO 1.1 sign-off. Runs on every PR and fails without a Signed-off-by
       line, but is required nowhere, so a PR with no sign-off merges clean.
@@ -103,6 +137,15 @@ checks:
     workflow: security-gitleaks.yml
     job: scan
     enforcement: advisory
+    owner: Security
+    issue: DIG-1952
+    known_gap: >-
+      Accepted while ungated: `security-gitleaks.yml` carries a workflow-level
+      `paths-ignore` of `**.md` and `docs/**`, so docs-only PRs never start the
+      workflow and this check cannot report on them. That is fine only because
+      nothing waits on the name. The guard stops accepting it the moment
+      `gitleaks-scan` enters develop's required set — at which point the same
+      filter becomes a `policy.stall`, not a known gap.
     reason: >-
       Secret scanning, and the highest-value check in this file. It cannot be
       made required as it stands: `security-gitleaks.yml` carries a
@@ -119,6 +162,8 @@ checks:
     workflow: ci-pr-hygiene.yml
     job: coverage
     enforcement: advisory
+    owner: DevOps
+    issue: DIG-1952
     reason: >-
       Agent-task TSV coverage. Deliberately ungated: the issue-linkage check
       that used to live in this file was removed in docs/adr/0024 precisely
@@ -129,6 +174,8 @@ checks:
     workflow: ci-pr-title.yml
     job: lint-pr-title
     enforcement: advisory
+    owner: DevOps
+    issue: DIG-1952
     reason: >-
       Conventional-commit title lint for PRs into develop. Squash merges use the
       PR title as the commit subject, so this protects release-please, but it is
@@ -140,26 +187,35 @@ checks:
     workflow: ci-review-coverage.yml
     job: review-coverage
     enforcement: other-branch
+    owner: DevOps
     reason: >-
       The one required check on main. Its trigger is
       `pull_request: branches: [main]`, so it never reports on a develop PR and
       must never appear in develop's required contexts — requiring it there is
-      failure mode 1 in its purest form, a gate that can never report.
+      failure mode 1 in its purest form, a gate that can never report. No
+      `gated_by:` on purpose: it genuinely gates main, and `gated_by` is
+      validated against develop's required set, so claiming one here would be
+      false.
 
   # ── named ci.yml jobs that are internal lanes, not gates ───────────────────
   #
   # Both are path-gated and aggregated by `Required checks passed`. Named, so
   # the inventory must account for them; advisory, because the aggregator is the
-  # gate.
+  # gate — and `gated_by:` names it, so "advisory" here means "not a gate *in its
+  # own name*", not "blocks nothing".
 
   - context: Frontend canon guard
     workflow: ci.yml
     job: frontend-canon
     enforcement: advisory
+    owner: DevOps
+    gated_by: Required checks passed
     reason: Path-gated lane, folded into `Required checks passed`.
 
   - context: actionlint
     workflow: ci.yml
     job: actionlint
     enforcement: advisory
+    owner: DevOps
+    gated_by: Required checks passed
     reason: Path-gated lane, folded into `Required checks passed`.
