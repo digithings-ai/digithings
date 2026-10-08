@@ -17,16 +17,15 @@ was reported, which is what proves the value was never the problem.
 
 The contract pinned here:
 
-  * ``ACCESS_KEY`` is a ``CRED_VAR_PATTERNS`` entry, so an AWS access key ID name
-    is in scope;
+  * ``ACCESS_KEY`` is a ``CRED_VAR_PATTERNS`` entry, so an AWS access key ID name is
+    in scope;
   * the two gates together report a real ``AKIA`` value under that name, bare and
     behind a trailing ``# comment`` - the commented case is the one that matters,
     because a value carrying a comment never reaches the entropy score and so the
     vendor loop is the only gate that can catch it;
-  * widening the list costs the tracked ``.example`` / ``.template`` corpus
-    nothing. ``ACCESS_KEY`` is a substring test, so ``SSH_ACCESS_KEY_ID`` newly
-    matches on the name; that widening is pinned deliberately rather than left
-    implicit, and the corpus fence below is what keeps it honest.
+  * the widening the substring form causes is pinned *by its boundary*, not left
+    implicit: the names it newly claims, and the neighbouring names it must not;
+  * widening the list costs the tracked ``.example`` / ``.template`` corpus nothing.
 
 Kept in its own file rather than added to
 ``test_check_example_credentials.py``, which is the pinned contract for DIG-50 and
@@ -65,49 +64,60 @@ def _load_module():
 
 cec = _load_module()
 
-#: A body AWS actually issues. The guard's ``AKIA`` rule wants 16 or more, and
-#: AWS access key IDs are 20 characters in total.
+#: A 16-character body. ``^AKIA[A-Za-z0-9]{16,}`` wants 16 or more after the prefix;
+#: a real AWS access key ID is 20 characters in total. Hand-typed, not a live key.
 AKIA_BODY = "QWERTYUIOPASDFGHJ"
 
-#: The real key: the 4-character prefix plus the 16-character body.
+#: The whole value: the 4-character prefix plus the body.
 AKIA_KEY = "AKIA" + AKIA_BODY
 
 #: A trailing inline comment, as carried by a live ``KEY = ... # comment`` line.
 TRAILING_COMMENT = " # rotated 2026-01"
 
+#: A path to a key file rather than a key. Used below for the widening discussion.
+SSH_KEY_PATH = "~/.ssh/id_ed25519"
+
 #: The name this leaf is about: AWS's own spelling for an access key ID.
 AWS_ACCESS_KEY_ID = "AWS_ACCESS_KEY_ID"
 
 
-def _with_patterns(patterns):
-    """Run a callable against a temporary ``CRED_VAR_PATTERNS``, then restore it.
+def _run_with(patterns):
+    """Return a callable that runs ``fn`` against a temporary ``CRED_VAR_PATTERNS``.
 
     ``cec`` is a module-level singleton shared by every test in this file, so the
-    global is put back on the way out rather than left narrowed.
+    global is read at call time and put back on the way out rather than left
+    narrowed. Reading it at call time (not at decoration time) means a test that
+    narrows the list itself is restored to *its* starting value, not to whatever the
+    list held when this helper was built.
     """
-    saved = cec.CRED_VAR_PATTERNS
 
-    def _run(fn):
+    def _call(fn):
+        saved = cec.CRED_VAR_PATTERNS
         cec.CRED_VAR_PATTERNS = patterns
         try:
             return fn()
         finally:
             cec.CRED_VAR_PATTERNS = saved
 
-    return _run
+    return _call
 
 
-_without_access_key = _with_patterns(
-    [p for p in cec.CRED_VAR_PATTERNS if p != "ACCESS_KEY"]
-)
+def _without_access_key():
+    """``_run_with`` against the name list with this leaf's entry taken back out."""
+    return _run_with([p for p in cec.CRED_VAR_PATTERNS if p != "ACCESS_KEY"])
 
 
-def _corpus_findings():
-    """Every ``(file, var)`` the guard reports over the tracked example corpus.
+def _corpus_assignable_lines():
+    """Every ``(file, var, value)`` line ``main()``'s scan considers.
 
-    Mirrors ``main()``'s scan - tracked files whose name contains ``.example`` or
-    ``.template``, one ``NAME=value`` line at a time, both gates required - so a
-    fence on this walks exactly the set CI's ``main()`` call would report.
+    Mirrors ``main()``: tracked files whose name contains ``.example`` or
+    ``.template``, one ``NAME=value`` line at a time, comment lines and lines without
+    an ``=`` skipped. Both gates are applied by the caller, so a fence on this walks
+    the same candidates the guard's own ``main()`` call would.
+
+    The scan is anchored on ``REPO_ROOT`` rather than the process CWD, because
+    ``git ls-files`` is CWD-relative: run from anywhere else it reports a different,
+    possibly empty, file set.
     """
     tracked = subprocess.run(
         ["git", "ls-files"],
@@ -116,56 +126,123 @@ def _corpus_findings():
         text=True,
         check=True,
     ).stdout.splitlines()
-    findings = []
+    lines = []
     for name in tracked:
         if ".example" not in name and ".template" not in name:
             continue
-        for line in (REPO_ROOT / name).read_text(errors="replace").splitlines():
+        try:
+            body = (REPO_ROOT / name).read_text(errors="replace")
+        except OSError:
+            continue
+        for line in body.splitlines():
             s = line.strip()
             if not s or s.startswith("#") or "=" not in s:
                 continue
             var, val = s.split("=", 1)
-            if cec.looks_cred_var(var.strip()) and cec.looks_cred_val(val):
-                findings.append((name, var.strip()))
-    return findings
+            lines.append((name, var.strip(), val))
+    return lines
+
+
+def _corpus_findings():
+    """The ``(file, var)`` pairs the guard reports over the corpus, both gates on."""
+    return [
+        (name, var)
+        for name, var, val in _corpus_assignable_lines()
+        if cec.looks_cred_var(var) and cec.looks_cred_val(val)
+    ]
+
+
+#: Names that contain ``ACCESS_KEY`` and were out of scope before this leaf. The
+#: first two are the neighbours the widening most plausibly over-reaches on.
+NEWLY_MATCHED_NAMES = [
+    AWS_ACCESS_KEY_ID,
+    "SSH_ACCESS_KEY_ID",
+    "SSH_ACCESS_KEY_FILE",
+    "GPG_ACCESS_KEY",
+]
+
+#: Neighbouring names that must *not* be dragged in. The first three are the ones
+#: that only point at a key; the last three are unrelated identifiers of about the
+#: same shape. ``ACCESS_KEY`` is a substring test, so this is the boundary that
+#: decides whether the widening is acceptable.
+NAMES_THAT_MUST_NOT_MATCH = [
+    "AWS_ACCOUNT_ID",
+    "AWS_KEY_ALIAS",
+    "AWS_KEY_COUNT",
+    "MONGO_DB_URI",
+    "KEYSTORE_PATH",
+    "SSH_AUTH_SOCK",
+]
 
 
 def test_access_key_is_a_name_pattern():
     """The gap was a missing list entry, so the list entry is what is pinned.
 
     Asserted against the pattern list rather than ``looks_cred_var`` alone: a name
-    pattern can match by accident under some other entry, and the next test is
-    what rules that out.
+    pattern can match by accident under some other entry, and the next tests are
+    what rule that out.
     """
     assert "ACCESS_KEY" in cec.CRED_VAR_PATTERNS
 
 
-def test_aws_access_key_id_name_is_in_scope():
-    """The name this leaf is about is now in scope, and only because of ACCESS_KEY.
+def test_the_leaf_name_is_in_scope_and_only_because_of_access_key():
+    """The name this leaf is about is now in scope, and the cause is pinned too.
 
     The differential half matters: it is what distinguishes this fix from a rename
     that happens to match some other entry.
     """
     assert cec.looks_cred_var(AWS_ACCESS_KEY_ID) is True
-    assert _without_access_key(lambda: cec.looks_cred_var(AWS_ACCESS_KEY_ID)) is False
+    assert _without_access_key()(lambda: cec.looks_cred_var(AWS_ACCESS_KEY_ID)) is False
+
+
+@pytest.mark.parametrize("name", NEWLY_MATCHED_NAMES)
+def test_name_is_newly_matched_by_access_key(name: str) -> None:
+    """Each name ``ACCESS_KEY`` newly claims is claimed because of ``ACCESS_KEY``.
+
+    The substring form does not stop at AWS. ``SSH_ACCESS_KEY_FILE`` and
+    ``GPG_ACCESS_KEY`` are the two it is most likely to over-reach on, so they are
+    pinned here rather than left to be discovered later.
+    """
+    assert cec.looks_cred_var(name) is True
+    assert _without_access_key()(lambda: cec.looks_cred_var(name)) is False
+
+
+@pytest.mark.parametrize("name", NAMES_THAT_MUST_NOT_MATCH)
+def test_neighbouring_names_are_not_dragged_in(name: str) -> None:
+    """The other side of the boundary: names the widening must leave alone.
+
+    Three of these only *point* at a key (``AWS_KEY_ALIAS`` is a label,
+    ``AWS_KEY_COUNT`` a count, ``AWS_ACCOUNT_ID`` an account), and an account id is
+    not a credential. If a future edit to ``CRED_VAR_PATTERNS`` widens the list
+    far enough to claim them, the widening has gone past what this leaf measured.
+    """
+    assert cec.looks_cred_var(name) is False
 
 
 @pytest.mark.parametrize("suffix", ["", TRAILING_COMMENT])
 def test_real_aws_key_under_that_name_is_reported(suffix: str) -> None:
-    """Both gates, together, on the exact line the gap let through."""
-    assert cec.looks_cred_var(AWS_ACCESS_KEY_ID) and cec.looks_cred_val(AKIA_KEY + suffix)
+    """Both gates, together, on the exact line the gap let through.
 
-
-def test_the_control_name_was_never_the_difference():
-    """The value was already a credential; only the name decided the verdict.
-
-    This is the pair that isolates the defect. Same value, same file, same
-    everything except the variable name - and the ``ACCESS_TOKEN`` spelling is
-    reported today, before this leaf's change.
+    Two assertions rather than one conjunction, so a failure says which gate
+    stopped matching.
     """
-    value = AKIA_KEY + TRAILING_COMMENT
-    assert cec.looks_cred_var("AWS_ACCESS_TOKEN") and cec.looks_cred_val(value)
-    assert cec.looks_cred_var(AWS_ACCESS_KEY_ID) and cec.looks_cred_val(value)
+    assert cec.looks_cred_var(AWS_ACCESS_KEY_ID) is True
+    assert cec.looks_cred_val(AKIA_KEY + suffix) is True
+
+
+def test_the_value_passed_before_this_leaf_and_the_name_did_not():
+    """The pair that isolates the defect: same value, only the name differs.
+
+    With the value taken out of scope along with the name, the value still passes
+    ``looks_cred_val`` - including the commented form, which never reaches the
+    entropy score. So the value was never the problem, and the identical value under
+    a name that has always been in the list was already reported.
+    """
+    for value in (AKIA_KEY, AKIA_KEY + TRAILING_COMMENT):
+        assert _without_access_key()(lambda: cec.looks_cred_var(AWS_ACCESS_KEY_ID)) is False
+        assert _without_access_key()(lambda: cec.looks_cred_val(value)) is True
+        assert cec.looks_cred_var("AWS_ACCESS_TOKEN") is True
+        assert cec.looks_cred_val(value) is True
 
 
 def test_aws_secret_access_key_keeps_matching_without_access_key():
@@ -175,81 +252,76 @@ def test_aws_secret_access_key_keeps_matching_without_access_key():
     Pinned so a later edit that prunes the list cannot quietly un-scope it by
     dropping ``SECRET`` and leaning on the ``ACCESS_KEY`` substring instead.
     """
-    assert _without_access_key(lambda: cec.looks_cred_var("AWS_SECRET_ACCESS_KEY")) is True
+    assert _without_access_key()(lambda: cec.looks_cred_var("AWS_SECRET_ACCESS_KEY")) is True
 
 
-def test_ssh_access_key_id_newly_matches_and_behaves_like_every_incumbent_key_name():
-    """The widening ``ACCESS_KEY`` causes, stated rather than left implicit.
+def test_the_key_path_reported_under_a_newly_matched_name_is_shared_with_every_incumbent():
+    """Why ``SSH_ACCESS_KEY_ID`` reporting a key *path* is not new behaviour.
 
-    ``ACCESS_KEY`` is a substring test, so ``SSH_ACCESS_KEY_ID`` newly matches on
-    the name. Asserted differentially instead of by taste, because that is the only
-    version of this claim worth pinning: the widened name must reach the same
-    verdicts as a name that has always been in the list.
+    ``ACCESS_KEY`` is a substring test, so ``SSH_ACCESS_KEY_ID`` newly matches on the
+    name, and a path to a key file is therefore reported under it. That is the value
+    side's doing, not this leaf's: the name side can only switch a verdict *off* for a
+    name that does not match, and every incumbent key name matches today. So the verdict
+    is pinned where it is actually made - on the value - with the incumbent name matches
+    pinned alongside it.
 
-    That matters because ``SSH_ACCESS_KEY_ID=~/.ssh/id_ed25519`` - a path to a key
-    file, not a credential - is *reported*. It is reported for every incumbent name
-    too (``PRIVATE_KEY``, ``SSH_PRIVATE_KEY``, ``API_KEY``, ``SIGNING_KEY`` all
-    report the same three paths today), so it is the value side's existing
-    behaviour and not something this leaf decides. Changing it means touching
-    ``CRED_MIN_VALUE_LEN`` / ``CRED_MIN_ENTROPY_LEN``, which the leaf that owns
-    the short-value rules pins and this leaf must not edit.
+    Reported today under the incumbents as well; changing that means touching
+    ``CRED_MIN_VALUE_LEN`` / ``CRED_MIN_ENTROPY_LEN``, which the leaf that owns the
+    short-value rules pins and this leaf must not edit.
     """
-    assert cec.looks_cred_var("SSH_ACCESS_KEY_ID") is True
-    assert _without_access_key(lambda: cec.looks_cred_var("SSH_ACCESS_KEY_ID")) is False
-    values = (AKIA_KEY, AKIA_KEY + TRAILING_COMMENT, "~/.ssh/id_ed25519", "changeme", "", "AKIA")
-    for value in values:
-        widened = cec.looks_cred_var("SSH_ACCESS_KEY_ID") and cec.looks_cred_val(value)
-        incumbent = cec.looks_cred_var("PRIVATE_KEY") and cec.looks_cred_val(value)
-        assert widened == incumbent, (
-            f"{value!r}: widened name reports {widened}, incumbent name reports {incumbent}"
-        )
+    assert cec.looks_cred_val(SSH_KEY_PATH) is True
+    for incumbent in ("PRIVATE_KEY", "SSH_PRIVATE_KEY", "API_KEY", "SIGNING_KEY"):
+        assert cec.looks_cred_var(incumbent) is True
 
 
 def test_access_key_adds_no_finding_to_the_tracked_corpus():
     """The fence: widening the name list must not move any corpus verdict.
 
-    Measured rather than assumed, and in both directions - the corpus is empty
-    with ``ACCESS_KEY`` in the list, and stays empty when it is taken back out.
-    An empty corpus alone would not catch a list edit that also changed something
-    else, so the equality is asserted too.
+    Measured, not assumed, and in both directions. The corpus is empty with
+    ``ACCESS_KEY`` in the list *and* stays empty when it is taken back out - the
+    equality is the forward-looking half: it holds even once the corpus gains
+    findings, where an empty-set check alone would stop distinguishing anything.
     """
     with_access_key = _corpus_findings()
-    without_access_key = _without_access_key(_corpus_findings)
     assert with_access_key == [], f"ACCESS_KEY added a corpus finding: {with_access_key}"
-    assert with_access_key == without_access_key
+    assert with_access_key == _without_access_key()(_corpus_findings)
 
 
-def test_no_tracked_corpus_line_names_an_access_key():
-    """Why the fence above is empty: the corpus never uses this spelling at all.
+def test_the_corpus_scan_actually_covers_the_corpus(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The fence above is worthless over an empty scan, so the scan is pinned.
 
-    Worth pinning on its own, because it is the fact that makes this leaf safe, and
-    it fails loudly if someone later commits the very line this leaf is about -
-    at which point the guard has to report it, and the fence needs re-reading.
+    ``main()`` calls ``git ls-files`` without a ``cwd``, so it reports whatever the
+    process CWD happens to be. Run from ``tests/scripts/`` it sees 103 files and none
+    of them is an ``.example`` / ``.template``, and prints ``OK`` over nothing. This
+    test pins that the corpus is non-empty - so a fence or a ``main()`` call reading
+    an empty file set fails loudly instead of passing - and that the anchored scan and
+    the CWD-relative one agree once the CWD is the repo root.
     """
-    tracked = subprocess.run(
-        ["git", "ls-files"],
-        cwd=REPO_ROOT,
-        stdout=subprocess.PIPE,
-        text=True,
-        check=True,
+    candidates = _corpus_assignable_lines()
+    assert candidates, "the tracked .example / .template corpus has no assignable lines"
+
+    anchored = subprocess.run(
+        ["git", "ls-files"], cwd=REPO_ROOT, stdout=subprocess.PIPE, text=True, check=True
     ).stdout.splitlines()
-    named = []
-    for name in tracked:
-        if ".example" not in name and ".template" not in name:
-            continue
-        for line in (REPO_ROOT / name).read_text(errors="replace").splitlines():
-            s = line.strip()
-            if not s or s.startswith("#") or "=" not in s:
-                continue
-            if "ACCESS_KEY" in s.split("=", 1)[0].upper():
-                named.append(f"{name}:{s}")
-    assert named == [], f"tracked corpus now names an access key: {named}"
+    assert any(".example" in n or ".template" in n for n in anchored)
+
+    monkeypatch.chdir(REPO_ROOT)
+    from_cwd = subprocess.run(
+        ["git", "ls-files"], stdout=subprocess.PIPE, text=True, check=True
+    ).stdout.splitlines()
+    assert from_cwd == anchored
 
 
-def test_guard_itself_is_clean_on_the_corpus():
+def test_guard_itself_is_clean_on_the_corpus(monkeypatch: pytest.MonkeyPatch) -> None:
     """``main()``'s own verdict on the tracked corpus, at the gate's own threshold.
 
     This is the third gate in the brief, run as a test so a regression in the fix
     shows up in the unit suite rather than only in CI.
+
+    ``chdir`` is not optional: ``main()`` resolves both ``git ls-files`` and the
+    tracked paths against the process CWD, so from anywhere else it scans a
+    different - possibly empty - file set and returns 0 without having looked at
+    anything. Matches how the sibling short-value leaf pins the same call.
     """
+    monkeypatch.chdir(REPO_ROOT)
     assert cec.main() == 0
