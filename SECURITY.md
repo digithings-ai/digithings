@@ -222,7 +222,10 @@ Every Python component is scanned on every PR, every push to `main`/`develop`, a
 - **Warn-only:** findings at **MEDIUM** or **LOW** severity, and findings with unknown severity — surfaced via `::warning::` annotations on the PR, not gated.
 - **Scope:** `digibase`, `digigraph`, `digiquant`, `digisearch`, `digitrace`, `digikey`, `digiclaw`. Each component is installed with its `[dev]` extras and audited against the resolved transitive closure. `digiquant[nautilus]` is excluded (tracked in #42).
 
-The JS workspaces are covered by the sibling [`npm audit` workflow](.github/workflows/security-npm-audit.yml) on the same cadence, auditing the whole `apps/*` + `packages/*` closure from the single root `package-lock.json`.
+The JS workspaces are covered by the [`npm audit` workflow](.github/workflows/security-npm-audit.yml), auditing the whole `apps/*` + `packages/*` closure from the single root `package-lock.json`.
+
+- **Cadence:** every PR and every push to `main`/`develop`, plus a weekly Monday 06:37 UTC dispatch from the cron Worker. The `ci.yml` `npm-audit` lane is **unconditional** — it has no path filter. Its verdict is a property of the committed lockfile, not of the diff, so gating it on the diff meant an advisory published between one push and the next was reported against whichever PR happened to be open rather than against the change that introduced it. `npm audit --package-lock-only` reads the lockfile and never installs, so the lane is cheap enough to run every time (#2371).
+- **A skip is not a pass:** the lane carries no `if:` gate, so `scripts/ci_required_checks_aggregate.py` fails `Required checks passed` if it is reported `skipped` instead of running. See `MUST_RUN_JOBS` there.
 
 - **Blocks merge:** any advisory npm reports as **HIGH** or **CRITICAL**.
 - **Warn-only:** **MODERATE**, **LOW** and unknown severities.
