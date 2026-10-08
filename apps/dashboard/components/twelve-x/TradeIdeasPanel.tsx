@@ -96,7 +96,8 @@ export function ideaDetailBlocksClass(hasLevels: boolean, hasEvidence: boolean):
 }
 
 export function IdeaDetail({ idea }: { idea: FxTradeIdeaRow }) {
-  const { levelsPending, riskRewardLabel, levelRows, evidenceRows } = buildIdeaDetailModel(idea);
+  const { status, levelsPending, riskRewardLabel, levelRows, evidenceRows } =
+    buildIdeaDetailModel(idea);
   const [openEvidence, setOpenEvidence] = useState<number[]>([]);
   const toggleEvidenceDetail = (index: number) =>
     setOpenEvidence((open) =>
@@ -107,6 +108,13 @@ export function IdeaDetail({ idea }: { idea: FxTradeIdeaRow }) {
   const showEvidence = evidenceRows.length > 0;
   // A pending bracket keeps the column (pending state instead of a half ladder).
   const showGrid = showLevels || levelsPending || showEvidence;
+  /**
+   * Publishability, not row count: the level-vs-fix chart's subject is
+   * published levels, and `buildLevelFixSeries` parses `trade_levels` with no
+   * gate of its own — so a bracket that was never published must never reach
+   * it, whatever it happens to carry in its shape.
+   */
+  const levelsPublished = status === 'complete';
 
   return (
     <div className="mt-2 space-y-2 border-t border-hair pt-2 text-left">
@@ -115,14 +123,36 @@ export function IdeaDetail({ idea }: { idea: FxTradeIdeaRow }) {
         <p className="text-[11px] text-ink-mute">Catalyst: {idea.catalyst}</p>
       ) : null}
       {showGrid ? (
-        <div className={ideaDetailBlocksClass(showLevels, showEvidence)}>
+        <div className={ideaDetailBlocksClass(showLevels || levelsPending, showEvidence)}>
           {showLevels || levelsPending ? (
             <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <span className="text-[11px] text-ink-soft">Levels</span>
               </div>
               {levelsPending ? (
-                <p className="text-[11px] text-ink-mute">Levels pending</p>
+                /* One sentence, and a frame only when it has a grid position to
+                   mark: beside the evidence column the box says "one cell of two,
+                   intentionally empty", which is why the pending state is correct
+                   rather than missing. Alone in the column there is no slot, so the
+                   box would have no referent and read as a callout — the same object
+                   as the `Catalyst:` caption above, unpadded and flush with the edge.
+                   No skeleton and no reserved height either way: this surface fetches
+                   once and never refetches, so there is no arrival to hold space for. */
+                showEvidence ? (
+                  <p
+                    className="rounded-none border border-hair bg-surface/40 px-2 py-1.5 text-[11px] leading-relaxed text-ink-mute"
+                    data-testid="trade-levels-pending"
+                  >
+                    Not published — entry, stop and target appear together, or not at all.
+                  </p>
+                ) : (
+                  <p
+                    className="text-[11px] leading-relaxed text-ink-mute"
+                    data-testid="trade-levels-pending"
+                  >
+                    Not published — entry, stop and target appear together, or not at all.
+                  </p>
+                )
               ) : (
                 <div className="space-y-0.5">
                   {levelRows.map((row) => (
@@ -180,7 +210,7 @@ export function IdeaDetail({ idea }: { idea: FxTradeIdeaRow }) {
           ) : null}
         </div>
       ) : null}
-      {showLevels ? (
+      {levelsPublished ? (
         <div className="pt-1">
           <LevelFixSection idea={idea} />
         </div>
