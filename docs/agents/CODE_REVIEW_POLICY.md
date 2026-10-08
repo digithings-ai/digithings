@@ -22,16 +22,19 @@ A verdict can be delivered as a **PR comment**. The merge queue reads one field,
 <!-- opencode-power-pack:code-review verdict=approved scope=@<full-40-char-sha> -->
 ```
 
+Post that marker in a comment of its own. Do not paste this block into a comment to show someone the syntax — the parser reads the raw comment, so a quoted example is a live verdict.
+
 | Field | Effect |
 |-------|--------|
 | `verdict=` **inside the marker** | `changes_requested` and `changes_needed` **block** the merge. `approved` and `approve` do not block. |
-| `scope=` inside the marker | Carries the reviewed commit as `@<sha>`. |
+| `scope=` inside the marker | Carries the reviewed commit as `@<full-40-char-lowercase-sha>`. |
 | Everything outside the marker | Ignored. |
 
-- **Only fields inside the marker count.** `## Verdict: changes requested` in the body — or the marker written as plain text rather than an HTML comment — is prose. The queue reads that as *no verdict*, not as a block.
+- **Only fields inside the marker count.** `## Verdict: changes requested` in the body is prose, and so is the marker with its `<!--` `-->` stripped or escaped. The queue reads all three as *no verdict*, not as a block.
+- **A fence does not hide the marker.** The `<!--` `-->` are read from the raw comment, so a marker inside a code fence, an indented block, or inline backticks still posts a live verdict — and a fenced example of an *approval* clears a live block.
 - **Spelling.** `_normalise_verdict()` lowercases and turns `-` into `_`, so `changes-requested` is the same as `changes_requested`. It does not collapse spaces, so `verdict=changes requested` is not readable. Any other spelling is ignored.
 - **A missing or misspelled `verdict=` neither blocks nor clears.** The comment is skipped, so an earlier blocking verdict still stands.
-- **`scope=` must carry a real `@<sha>`.** `_on_pr_history()` applies a blocking verdict only while that sha is the PR head or still in the PR's commits. A blocking verdict with no sha, or with a sha that a force-push or rebase removed, silently stops applying. Post a new verdict after the fix.
+- **`scope=` must carry a full 40-character lowercase sha.** `_on_pr_history()` applies a blocking verdict only while that sha is the PR head or still in the PR's commits, and it compares the whole string, so a 7-character prefix is read and then never matches. A blocking verdict with no sha, with an uppercase sha, or with a sha that a force-push or rebase removed silently stops applying. Post a new verdict after the fix.
 - **The newest readable verdict wins.** A later `verdict=approved` clears an earlier block. The parser filters on no author and no association, so anyone who can comment on the PR can clear it — an approved marker is not evidence that a review happened. Check the comment thread before you merge.
 
 ## Metered third parties (quota)
