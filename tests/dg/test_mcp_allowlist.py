@@ -471,9 +471,10 @@ def test_meta_tools_are_refused_even_when_the_operator_allowlists_them(monkeypat
         {"atlassian": _records("atlassian", (ATLASSIAN_READ_TOOL, *aliases, "getChangelog"))},
     )
 
-    # The operator allowlists the aliases explicitly. That is precisely the case
-    # the separate check exists for.
-    row = _atlassian_row(allowedTools=list(aliases))
+    # The operator allowlists the aliases explicitly, alongside a legitimate tool
+    # as the positive control. That is precisely the case the separate check
+    # exists for: the allowlist grants them, and the gate still refuses them.
+    row = _atlassian_row(allowedTools=[*aliases, "getChangelog"])
     assert _research_chain([row]) == ["atlassian_getChangelog"]
 
 
@@ -554,20 +555,43 @@ def test_offered_name_collision_offers_zero_tools_and_audits(monkeypatch):
     distinct operator-approved tools wearing one name. Picking either would hand
     the choice of which approved tool runs to whichever the server listed first,
     so the gate refuses the name outright and records it.
+
+    ``getJiraIssue`` is allowlisted too, and it is the control: it shares no
+    offered name with the pair, so it must survive untouched. A collision is a
+    fact about one name, not a reason to distrust the row.
     """
     from unittest.mock import patch
 
     _install_catalog(
         monkeypatch,
-        {"atlassian": _records("atlassian", ("read.jira.issue", "read_jira_issue", ATLASSIAN_READ_TOOL))},
+        {
+            "atlassian": _records(
+                "atlassian", ("read.jira.issue", "read_jira_issue", ATLASSIAN_READ_TOOL)
+            )
+        },
     )
-    row = _atlassian_row(allowedTools=["read.jira.issue", "read_jira_issue"])
+    row = _atlassian_row(
+        allowedTools=["read.jira.issue", "read_jira_issue", ATLASSIAN_READ_TOOL]
+    )
 
     with patch("digigraph.audit.audit_log") as audit:
-        assert _research_chain([row]) == []
+        offered = _research_chain([row])
 
-    events = [str(c.args[0]) for c in audit.call_args_list if c.args]
-    assert any("collision" in e for e in events), f"no collision event in {events}"
+    # The colliding name is offered by neither tool; the third survives, so the
+    # refusal is confined to the one unresolvable name.
+    assert offered == [f"atlassian_{ATLASSIAN_READ_TOOL}"]
+
+    reasons = {
+        (c.kwargs.get("payload") or {}).get("tool"): (c.kwargs.get("payload") or {}).get("reason")
+        for c in audit.call_args_list
+        if c.args and c.args[0] == "tool_denied"
+    }
+    # Both participants, not just the one that happened to be listed second.
+    assert reasons.get("read.jira.issue") == "offered_name_collision"
+    assert reasons.get("read_jira_issue") == "offered_name_collision"
+    assert ATLASSIAN_READ_TOOL not in reasons, (
+        "the collision must not drag down an unrelated allowed tool"
+    )
 
 
 @pytest.mark.unit
@@ -588,13 +612,28 @@ def test_offered_name_is_a_function_of_one_approved_raw_name(monkeypatch):
     offered = mcp_client.openai_tools_for_servers(servers)
     assert [t["function"]["name"] for t in offered] == ["atlassian_getJiraIssue"]
 
-    # The payload a provider receives has no field that could carry a tool or
-    # args the operator did not write: the schema is fixed and the name is one
-    # value, not a template plus an override.
+    # The tool definition a provider receives is fixed-shape: three fields, the
+    # name being one value derived from one approved raw name. There is no second
+    # field that could name a different tool, and no template plus override.
     record = offered[0]
-    assert set(record) == {"type", "function"}
     assert set(record["function"]) == {"name", "description", "parameters"}
     assert record["function"]["name"] == prefixed_tool_name("atlassian", ATLASSIAN_READ_TOOL)
+
+    # The catalog's own decorations ride along on the record but decide nothing:
+    # dropping the primary marker from every tool changes nothing about the
+    # outcome. This is the same property CTO item 9 asks for — a brake built from
+    # catalog shape would answer differently here.
+    _install_catalog(
+        monkeypatch,
+        {
+            "atlassian": [
+                {k: v for k, v in rec.items() if k != "annotations"}
+                for rec in _atlassian_catalog()
+            ]
+        },
+    )
+    undecorated = mcp_client.openai_tools_for_servers(servers)
+    assert [t["function"]["name"] for t in undecorated] == ["atlassian_getJiraIssue"]
 
     # Same one-to-one property at the gate itself, read back off the sidecar:
     # every offered name maps back to exactly one operator-written raw name, and
