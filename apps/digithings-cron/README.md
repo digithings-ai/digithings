@@ -200,6 +200,47 @@ benign 422 and answers **`409 dispatch_suppressed`** — not yet live, not succe
 recorded as remediated, so re-enabling the workflow (DIG-757) and POSTing again is all it
 takes; no date is lost to the attempt.
 
+## Required trigger contract (DIG-732)
+
+`src/required-triggers.ts` is the contract as data: every cron the FX pipeline
+needs, with the reason it is required and what is lost without it. Today that is
+the three session clocks, `twelve-x-session-catchup`, and
+`twelve-x-primemarket-heartbeat`. Each row names the capability, so DIG-678 /
+DIG-55 may change which job fills a row but may never let a required cron vanish
+silently.
+
+DIG-553 Finding 1 (measured over 543 runs): 1–30 Aug 2026 had zero catch-up runs,
+so every failed day auto-unrecovered, and six client-visible stale days (7, 14,
+19, 20, 24, 25 Aug) predated the Worker's first clock day on 2026-08-31 and were
+unrecoverable. Deleting the `twelve-x-session-catchup` job row and its cron line
+together left `src/jobs.ts`'s own assertion green — only a copied id list in a
+unit test noticed, and nobody ran it for five weeks.
+
+Two distinct alarm classes, one issue per occurrence, the label is the class
+(twelve-x convention, `tests/test_alerting_workflows.py` in twelve-x):
+
+- `missing_required_cron` — a required cron is absent from the trigger list under
+  test, or its job row is gone, disabled, or points at a different cron. Label
+  `cron-missing-required-trigger`.
+- `unrecognised_cron` — a cron fires and no job row claims it, not even a
+  disabled one, so it starts nothing. Label `cron-unrecognised-trigger`. This is
+  not the same failure as a missing required cron and must not read as one.
+  Raised from the cron tick in `src/index.ts` (scheduled only; a human typing a
+  cron on POST /kick is not drift).
+
+A broken contract opens an issue in `digithings-ai/twelve-x` through
+`GH_DISPATCH_TOKEN` and never throws. Absence is loud by default: an unmet
+contract fails the deploy and alarms.
+
+"Occurrence" means an occurrence of drift, not an observation of it. A tick
+re-detects the same unmapped trigger every time it fires and the deployed check
+re-runs on every deploy, so `src/trigger-alarm.ts` first looks for an open issue
+with the same class label and the same title, and returns that issue instead of
+filing another. It never comments on the open issue, so an unresolved drift
+stays one visible open issue instead of six a day. Close it when the drift is
+resolved and the next occurrence opens a fresh one. An unreadable search always
+raises rather than suppressing: a duplicate issue is recoverable, a silent
+miss is not.
 ## Local
 
 ```

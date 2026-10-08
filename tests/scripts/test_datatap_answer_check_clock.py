@@ -25,7 +25,6 @@ pytestmark = pytest.mark.unit
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "datatap-answer-check.yml"
 JOBS_SOURCE = REPO_ROOT / "apps" / "digithings-cron" / "src" / "jobs.ts"
-JOBS_TEST = REPO_ROOT / "apps" / "digithings-cron" / "src" / "jobs.test.ts"
 WRANGLER = REPO_ROOT / "apps" / "digithings-cron" / "wrangler.toml"
 
 CRON = "17 * * * *"
@@ -109,12 +108,6 @@ def test_the_cron_is_in_the_wrangler_trigger() -> None:
     block = text.split("[triggers]", 1)[1]
     entry = next(line for line in block.splitlines() if line.strip().startswith(f'"{CRON}"'))
     assert f"# {JOB_ID}" in entry, "keep the job id as the trailing comment, like its neighbours"
-
-
-def test_the_pinned_cron_set_is_updated() -> None:
-    """jobs.test.ts asserts uniqueEnabledCrons() by exact ordered equality."""
-    text = JOBS_TEST.read_text(encoding="utf-8")
-    assert f'"{CRON}"' in text, "ENABLED_CRONS must gain the new clock at its JOBS position"
 
 
 def test_the_new_clock_does_not_collide_with_an_existing_one() -> None:
