@@ -1,3 +1,5 @@
+# digiquant Architecture
+
 **Version:** 0.1.x
 **Last updated:** 2026-09-01
 **Audience:** Engineers, reviewers, and agents working on or integrating with digiquant.

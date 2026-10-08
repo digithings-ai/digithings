@@ -1,3 +1,4 @@
+"""Daily R2 refresh: vendor live overlap -> new immutable generations (#3780).
 
 Production clock is digithings-cron → digiquant-runner (``market-data-refresh``,
 13:00 and 21:30 UTC, #4761). ``pipeline-market-data-refresh.yml`` is manual

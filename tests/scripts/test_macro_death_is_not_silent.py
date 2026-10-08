@@ -1,3 +1,5 @@
+"""A dead macro feed must not pass the refresh gate silently (DIG-694 follow-up).
+
 Context. ``scripts/refresh_market_data_r2.py`` makes macro fetches fail-soft: a
 per-series vendor failure becomes a ``history-only`` outcome so the previous
 generation keeps serving. That is the right default. ``SLOW_CADENCES``

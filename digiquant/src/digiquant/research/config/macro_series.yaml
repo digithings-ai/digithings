@@ -1,3 +1,4 @@
+# Manifest for systematic macro ingestion into sealed R2 generations.
 # The `fred:` block below is the gloomberb panel (dataset id remains `fred`:
 # generations are still sealed as `fred__{SERIES}` with `source="fred"`).
 # Refreshed from anonymous gloomberb `econ_series` pages — no FRED_API_KEY.
