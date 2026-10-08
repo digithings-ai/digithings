@@ -17,6 +17,13 @@ Two results, both verified by read-back rather than by HTTP status:
 Part 2's hypothesis (absent value should default to `inherit`) is therefore **not the defect**.
 The correct upstream fix is to stop the silent inheritance injection on create.
 
+**Upstream: filed.** [paperclipai/paperclip#15511](https://github.com/paperclipai/paperclip/issues/15511)
+(2026-10-08) reports the unenforced `allowIssueOverride` gate. The silent-injection
+mechanism above is **not** re-reported: it is already filed upstream as **#13930** (open,
+2026-09-24), and `DELETE /api/projects/{id}`'s 500 is **#4833**. See
+[`UPSTREAM-REPORT.md`](./UPSTREAM-REPORT.md) for what was filed, what was withheld, and the
+deviations from the approved draft.
+
 ---
 
 ## Part 1 — the probe
@@ -256,4 +263,16 @@ Setting `allowIssueOverride: false` is not a mitigation and should not be attemp
   it is read in the same condition, so the gate is likely shared.
 - I did not test the `PATCH` create path, where the same injection presumably applies to
   updates.
-- Upstream issue not yet filed: publishing outside the company is Chris-only. Draft ready.
+
+## Upstream outcome
+
+- **#15511 filed** 2026-10-08 — the unenforced `allowIssueOverride` gate. The only defect of
+  the three that was not already on file.
+- **#13930 already covered** the silent-injection mechanism (Part 2 here). Withheld rather
+  than duplicated.
+- **#4833 already covered** the `DELETE /api/projects/{id}` 500 seen during rollback.
+- Chris's `request_confirmation` accepted 2026-10-07T21:28:07Z authorised the publishing.
+
+I filed one defect instead of the approved draft's two. He approved publishing the report,
+not publishing a duplicate of an open upstream issue; the deviation is recorded in
+[`UPSTREAM-REPORT.md`](./UPSTREAM-REPORT.md) and reported on DIG-2041.
