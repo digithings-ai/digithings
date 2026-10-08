@@ -44,7 +44,6 @@ jobs:
       workflows: ${{ steps.filter.outputs.workflows }}
       compose: ${{ steps.filter.outputs.compose }}
       pip_audit: ${{ steps.filter.outputs.pip_audit }}
-      npm_audit: ${{ steps.filter.outputs.npm_audit }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -213,14 +212,6 @@ jobs:
               - '**/pyproject.toml'
               - 'pip-audit-ignore.txt'
               - '.github/workflows/security-pip-audit.yml'
-            npm_audit:
-              - 'package.json'
-              - 'package-lock.json'
-              - 'apps/*/package.json'
-              - 'packages/*/package.json'
-              - 'npm-audit-ignore.txt'
-              - 'scripts/classify_npm_audit.py'
-              - '.github/workflows/security-npm-audit.yml'
             # CI_PATH_FILTERS_END
 
   # ── Frontend canon guard (#1404, #1434) — UNCONDITIONAL ─────────────────────
@@ -348,9 +339,27 @@ jobs:
     uses: ./.github/workflows/security-pip-audit.yml
 
   # ── Dependency CVE audit (npm / GHSA) — root JS workspaces (#3523) ──────────
+  # UNCONDITIONAL since #2371. Previously gated on a path filter over
+  # package.json / package-lock.json / npm-audit-ignore.txt /
+  # classify_npm_audit.py, which meant a push to develop that touched none of
+  # them skipped the lane while `Required checks passed` still reported success.
+  # Two distinct failures came out of that:
+  #   1. A green develop head did not mean the tree was clean. Measured on
+  #      e45b12e70 the lane was `skipped` while develop's own lockfile carried
+  #      5 HIGH/CRITICAL blockers (1 after #5107's acceptances landed).
+  #   2. Advisories published *after* a PR's last run landed on whoever pushed
+  #      next and read as a regression caused by that PR — which is what made
+  #      DIG-2195's red npm-audit look like #5107's fault.
+  # The verdict is a property of the committed `package-lock.json`, not of the
+  # diff: the advisory database moves under the tree, so a filter that only
+  # fires when the lockfile changes answers "is my diff clean?" when the gate
+  # needs "is this tree clean?". Same argument as frontend-canon above, and the
+  # cost is low — `npm audit --package-lock-only` reads the committed lockfile
+  # and deliberately never installs.
+  # Keep it ungated: `MUST_RUN_JOBS` in scripts/ci_required_checks_aggregate.py
+  # lists this job, and MUST_RUN_JOBS_MATCHES_UNGATED_JOBS fails if you re-gate
+  # it without deciding what that means for a skip.
   npm-audit:
-    needs: changes
-    if: needs.changes.outputs.npm_audit == 'true'
     uses: ./.github/workflows/security-npm-audit.yml
 
   # ── Root-level ruff + scripts unit tests ────────────────────────────────────
