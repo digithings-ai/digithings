@@ -1,0 +1,28 @@
+# Rebuildable at apply time by apply.sh, which writes the live bytes it finds.
+rollback-originals/
+
+# A staged copy of the whole bundle tree. Large, and derived from the pinned
+# install; baseline/ and patched/ are the artefacts that actually need review.
+stage/
+
+# --- rehearsal: evidence is kept, scratch state is not -------------------
+
+# Scratch postgres data directories from the rehearsal boot. Binary, huge, and
+# recreated on every run - only the transcripts in results/ are evidence.
+rehearsal/data-*/
+rehearsal/data-run/
+rehearsal/data-patched/
+
+# The self-test's clone of the install tree, plus its throwaway logs.
+rehearsal/staged-install/
+rehearsal/selftest-store/
+
+# Session tokens from the rehearsal harness. These are real cookies for a local
+# rehearsal instance and must never reach the repo.
+rehearsal/*.cookie
+
+# Stale pid files and raw boot logs. The boot logs are kept locally for the
+# window card's "expected interruption" evidence, not committed.
+rehearsal/*.pid
+rehearsal/boot-*.log
+rehearsal/selftest-*.log

@@ -1,0 +1,147 @@
+--- a/node_modules/@paperclipai/server/dist/services/documents.js
++++ b/node_modules/@paperclipai/server/dist/services/documents.js
+@@ -1,7 +1,7 @@
+ import { randomUUID } from "node:crypto";
+ import { and, asc, desc, eq } from "drizzle-orm";
+ import { documentRevisions, documents, issueDocuments, issues } from "@paperclipai/db";
+-import { isSystemIssueDocumentKey, issueDocumentKeySchema } from "@paperclipai/shared";
++import { isSystemIssueDocumentKey, isUuidLike, issueDocumentKeySchema } from "@paperclipai/shared";
+ import { conflict, notFound, unprocessable } from "../errors.js";
+ import { isUniqueViolation } from "../db-errors.js";
+ import { insertRowsInChunks } from "./batch-insert.js";
+@@ -13,6 +13,27 @@
+     }
+     return parsed.data;
+ }
++/**
++ * Fault 1 (DIG-2365). `issueDocumentKeySchema` is /^[a-z0-9][a-z0-9_-]*$/, so a
++ * lowercase uuid is a valid document key. Every lookup below filtered on
++ * `issueDocuments.key` alone, which can never match `documents.id`, so a write
++ * addressed by document id found no row, minted a second document keyed by the
++ * uuid and answered 201. Resolve a uuid-shaped key against `documents.id`
++ * first; report an unresolvable one as "no document" so each caller keeps the
++ * not-found semantics it already has instead of minting a shadow row.
++ */
++async function resolveIssueDocumentKey(exec, issueId, rawKey) {
++    const key = normalizeDocumentKey(rawKey);
++    if (!isUuidLike(key))
++        return key;
++    const byDocumentId = await exec
++        .select({ key: issueDocuments.key })
++        .from(issueDocuments)
++        .innerJoin(documents, eq(issueDocuments.documentId, documents.id))
++        .where(and(eq(issueDocuments.issueId, issueId), eq(documents.id, key)))
++        .then((rows) => rows[0] ?? null);
++    return byDocumentId ? byDocumentId.key : null;
++}
+ function nextAvailableDocumentKey(sourceKey, existingKeys) {
+     const usedKeys = new Set(existingKeys);
+     for (let index = 2; index < 1000; index += 1) {
+@@ -121,7 +142,9 @@
+             return filterSystemDocuments(rows, options.includeSystem ?? false).map((row) => mapIssueDocumentRow(row, true));
+         },
+         getIssueDocumentByKey: async (issueId, rawKey) => {
+-            const key = normalizeDocumentKey(rawKey);
++            const key = await resolveIssueDocumentKey(db, issueId, rawKey);
++            if (key === null)
++                return null;
+             const row = await db
+                 .select(issueDocumentSelect)
+                 .from(issueDocuments)
+@@ -131,7 +154,9 @@
+             return row ? mapIssueDocumentRow(row, true) : null;
+         },
+         listIssueDocumentRevisions: async (issueId, rawKey) => {
+-            const key = normalizeDocumentKey(rawKey);
++            const key = await resolveIssueDocumentKey(db, issueId, rawKey);
++            if (key === null)
++                return [];
+             return db
+                 .select({
+                 id: documentRevisions.id,
+@@ -155,7 +180,14 @@
+                 .orderBy(desc(documentRevisions.revisionNumber));
+         },
+         upsertIssueDocument: async (input) => {
+-            const key = normalizeDocumentKey(input.key);
++            const key = await resolveIssueDocumentKey(db, input.issueId, input.key);
++            if (key === null) {
++                throw conflict("Document key is a document id that does not belong to this issue", {
++                    key: normalizeDocumentKey(input.key),
++                    issueId: input.issueId,
++                    resolvedBy: "documents.id",
++                });
++            }
+             const issue = await db
+                 .select({ id: issues.id, companyId: issues.companyId })
+                 .from(issues)
+@@ -509,7 +541,9 @@
+             });
+         },
+         restoreIssueDocumentRevision: async (input) => {
+-            const key = normalizeDocumentKey(input.key);
++            const key = await resolveIssueDocumentKey(db, input.issueId, input.key);
++            if (key === null)
++                throw notFound("Document not found");
+             return db.transaction(async (tx) => {
+                 const existing = await tx
+                     .select(issueDocumentSelect)
+@@ -598,7 +632,9 @@
+             });
+         },
+         lockIssueDocument: async (input) => {
+-            const key = normalizeDocumentKey(input.key);
++            const key = await resolveIssueDocumentKey(db, input.issueId, input.key);
++            if (key === null)
++                throw notFound("Document not found");
+             return db.transaction(async (tx) => {
+                 const existing = await tx
+                     .select(issueDocumentSelect)
+@@ -641,7 +677,9 @@
+             });
+         },
+         unlockIssueDocument: async (issueId, rawKey) => {
+-            const key = normalizeDocumentKey(rawKey);
++            const key = await resolveIssueDocumentKey(db, issueId, rawKey);
++            if (key === null)
++                throw notFound("Document not found");
+             return db.transaction(async (tx) => {
+                 const existing = await tx
+                     .select(issueDocumentSelect)
+@@ -684,7 +722,9 @@
+             });
+         },
+         deleteIssueDocument: async (issueId, rawKey) => {
+-            const key = normalizeDocumentKey(rawKey);
++            const key = await resolveIssueDocumentKey(db, issueId, rawKey);
++            if (key === null)
++                return null;
+             return db.transaction(async (tx) => {
+                 const existing = await tx
+                     .select(issueDocumentSelect)
+--- a/node_modules/@paperclipai/server/dist/routes/issues.js
++++ b/node_modules/@paperclipai/server/dist/routes/issues.js
+@@ -9012,6 +9012,23 @@
+             ? await svc.getRelationSummaries(existing.id)
+             : null;
+         const { comment: commentBody, commentClientRequestId, attachmentIds: commentAttachmentIds, reviewInteractionId: requestedReviewInteractionId, reviewRequest, reopen: reopenRequested, resume: resumeRequested, interrupt: interruptRequested, deferWakeForGoal, hiddenAt: hiddenAtRaw, onBehalfOfUserId: _requestedOnBehalfOfUserId, ...updateFields } = req.body;
++        // Fault 2 (DIG-2365). updateIssueSchema advertises reviewInteractionId, but
++        // assertInReviewReviewPath returns null unless the same PATCH also sets
++        // status: in_review, and nothing else reads the field. Outside a transition
++        // it was dropped behind a 200 with an empty changes map. Refuse it instead
++        // of losing it; it stays accepted during the transition.
++        if (requestedReviewInteractionId !== undefined &&
++            updateFields.status !== "in_review") {
++            res.status(422).json({
++                error: "reviewInteractionId requires status: in_review in the same request",
++                details: {
++                    code: "review_interaction_requires_in_review",
++                    reviewInteractionId: requestedReviewInteractionId,
++                    acceptedInteractionKinds: ["request_confirmation", "request_checkbox_confirmation"],
++                },
++            });
++            return;
++        }
+         if (existing.conversationAgentId && req.actor.type === "board" && commentBody) {
+             throw unprocessable("Send conversation messages through the comments endpoint with a clientRequestId");
+         }
