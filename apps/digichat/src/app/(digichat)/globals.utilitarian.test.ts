@@ -13,9 +13,10 @@ function read(path: string): string {
 }
 
 /**
- * Catalog skins keep Inter / IBM Plex on product globals (see product-isolation).
- * `chrome.skin: digichat` loads Geist Mono as `--font-geist-mono` and consumes
- * package `chat-digichat.css` — not the 1.5 CLI session sheets.
+ * Catalog skins keep the shared sans stack and the one mono face (Geist Mono,
+ * loaded by src/app/fonts.ts) on product globals (see product-isolation).
+ * `chrome.skin: digichat` consumes package `chat-digichat.css` — not the 1.5
+ * CLI session sheets.
  */
 describe("product chrome vs 1.5 utilitarian-terminal", () => {
   const css = read(globalsPath);
@@ -26,19 +27,19 @@ describe("product chrome vs 1.5 utilitarian-terminal", () => {
   it("keeps stock shadcn radius/type on product globals, not CLI ink/paper", () => {
     expect(css).toContain("@digithings/ui/styles/digichat-app-theme.css");
     expect(bridge).toMatch(/--radius:\s*0\.625rem/);
-    expect(bridge).toMatch(/--font-sans:\s*var\(--font-inter\)/);
+    expect(bridge).toMatch(/--font-sans:\s*var\(--font-sans-face/);
     expect(css).not.toMatch(
       /--font-sans:\s*var\(--font-geist-mono\),\s*ui-monospace,\s*monospace/,
     );
     expect(css).not.toMatch(/--primary:\s*var\(--ink\)/);
   });
 
-  it("does not put Geist Mono on the document body", () => {
+  it("does not put the mono face on the document body", () => {
     const layout = read(layoutPath);
     expect(layout).not.toMatch(/<body[^>]*font-mono/);
-    expect(layout).toMatch(/inter\.className/);
-    expect(layout).toMatch(/geistMono\.variable/);
-    expect(layout).not.toMatch(/geistMono\.className/);
+    expect(layout).toMatch(/sans\.className/);
+    expect(layout).toMatch(/fontVariables/);
+    expect(layout).not.toMatch(/mono\.className/);
   });
 
   it("does not fill the embed BYOK CTA with module accent", () => {

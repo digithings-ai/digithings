@@ -16,10 +16,12 @@ describe("baseline preview isolation", () => {
     expect(layout).not.toMatch(/import ["'].*globals\.css["']/);
     expect(layout).not.toMatch(/themeInitScript/);
     expect(layout).not.toMatch(/accent-digichat/);
-    // The catalog renders the first-party `digichat` skin, whose theme reads
-    // `--font-geist-mono`; only that font variable is borrowed from the app
+    // Fonts come from the one app config (src/app/fonts.ts), never from a
+    // loader in this layout. Only the font variables are borrowed from the app
     // shell — never its `data-theme` wiring.
-    expect(layout).toMatch(/variable:\s*"--font-geist-mono"/);
+    expect(layout).not.toMatch(/next\/font/);
+    expect(layout).toMatch(/from\s*["']@\/app\/fonts["']/);
+    expect(layout).toMatch(/fontVariables/);
     expect(layout).not.toMatch(/data-theme/);
     // The shared theme bridge is the only package import allowed here —
     // it carries the stock shadcn tokens both entry sheets used to duplicate.
@@ -48,7 +50,7 @@ describe("baseline preview isolation", () => {
       "../../../../../packages/ui/src/styles/digichat-app-theme.css",
     );
     expect(bridge).toMatch(/--background:\s*oklch\(1 0 0\)/);
-    expect(bridge).toMatch(/--font-sans:\s*var\(--font-inter\)/);
+    expect(bridge).toMatch(/--font-sans:\s*var\(--font-sans-face/);
   });
 
   it("mounts ThreadSkinView for the official assistant-ui templates", () => {

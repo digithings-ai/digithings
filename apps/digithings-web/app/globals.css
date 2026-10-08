@@ -151,15 +151,17 @@
    controls-core.css), so components/controls needs no line here. */
 @source "../../../packages/ui/src/ui";
 
-/* Point the token font families at the self-hosted next/font variables (layout.tsx).
-   digithings.ai type stack (owner-locked 2026-10-01): Inter for sans/display —
-   nav, headings, prose, form fields — and JetBrains Mono for mono chrome:
-   labels, code, commands, numerals, `.brand-word`. Geist Mono is not used on
-   this surface. The PixelWordmark SVG is the brand mark, not a font, so it is
-   unaffected. Scoped to this app: tokens.css keeps its defaults for the others. */
+/* Route the token font families at the shared stacks (tokens.css), which are
+   built from the self-hosted next/font faces this surface loads in fonts.ts.
+   digithings.ai type stack: Inter for sans/display — nav, headings, prose, form
+   fields — and Geist Mono for mono chrome: labels, code, commands, numerals,
+   `.brand-word`. Swapping either face is a loader edit in fonts.ts; nothing
+   here names a font family. The PixelWordmark SVG is the brand mark, not a font,
+   so it is unaffected. Scoped to this app: tokens.css keeps its defaults for the
+   others. */
 :root[data-theme] {
-  --font-sans: var(--font-inter), system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: var(--font-jetbrains-mono), ui-monospace, "SF Mono", Menlo, monospace;
+  --font-sans: var(--font-stack-sans);
+  --font-mono: var(--font-stack-mono);
   --font-display: var(--font-sans);
 }
 

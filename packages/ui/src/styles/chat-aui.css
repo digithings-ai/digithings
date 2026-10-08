@@ -28,11 +28,22 @@
   --color-warn: var(--warn);
 }
 
+/* `--font-geist-mono` is the retired name for the host surface's one mono face
+   (DIG-2375). It is declared HERE, beside the rules that read it, because every
+   surface that mounts this sheet sets only the generic `--font-mono-face` from
+   its own `fonts.ts` and none of them loads `digichat-app-theme.css`. Without it
+   `font-family: var(--font-geist-mono), …` below is invalid and the skin falls
+   back to the page font. Swap the face in the surface's config; never here. */
+:root {
+  --font-geist-mono: var(--font-mono-face, "Geist Mono");
+}
+
 [data-thread-skin="digichat"] {
   --radius: 0;
   --radius-thread: 0;
   --composer-radius: 0;
-  /* Gallery chatbot.css uses var(--font-mono). Catalog :root keeps IBM Plex. */
+  /* Gallery chatbot.css uses var(--font-mono). --font-geist-mono is the
+     retired-name alias declared below for the app's one mono face. */
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
   --font-sans: var(--font-geist-mono), ui-monospace, monospace;
   font-family: var(--font-geist-mono), ui-monospace, monospace;
