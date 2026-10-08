@@ -294,6 +294,7 @@ export class DigiChatContainer extends Container {
     DIGIKEY_URL: env.DIGIKEY_URL ?? "",
     DIGIKEY_BFF_TOKEN: env.DIGIKEY_BFF_TOKEN ?? "",
     DIGICHAT_PLAN_PROOF_SECRET: env.DIGICHAT_PLAN_PROOF_SECRET ?? "",
+    DIGICHAT_MONITOR_TOKENS: env.DIGICHAT_MONITOR_TOKENS ?? "",
     // Canonical fallbacks (#4700): the DIGICHAT_DASHBOARD names are legacy
     // duplicates of the canonical SUPABASE names. Old names still win when
     // set, so this stays backward compatible across the manual deploy lag.
@@ -455,6 +456,7 @@ export interface Env {
   DIGIGRAPH_INTERNAL_URL?: string;
   DIGIKEY_URL?: string;
   DIGICHAT_PLAN_PROOF_SECRET?: string;
+  DIGICHAT_MONITOR_TOKENS?: string;
   DIGICHAT_DASHBOARD_SUPABASE_URL?: string;
   DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY?: string;
 }

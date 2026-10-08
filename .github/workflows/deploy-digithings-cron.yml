@@ -51,3 +51,17 @@ jobs:
             GH_DISPATCH_TOKEN
         env:
           GH_DISPATCH_TOKEN: ${{ secrets.GH_DISPATCH_TOKEN }}
+
+      # DIG-732: a contract satisfied by the repo but not by the deployment is
+      # DIG-553 Finding 1 wearing a passing test. The "Test + typecheck" step above
+      # proves the contract against wrangler.toml; this step proves it against the
+      # deployed schedule. Unmet here fails the deploy AND opens a twelve-x alarm
+      # (label cron-missing-required-trigger), so a missing backstop is never silent.
+      - name: Verify the deployed trigger contract
+        run: npm run check:deployed-triggers --workspace digithings-cron
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GH_DISPATCH_TOKEN: ${{ secrets.GH_DISPATCH_TOKEN }}
+          # The live check is opt-in on a laptop (no token => skipped) but mandatory here.
+          REQUIRE_DEPLOYED_CONTRACT: "1"
