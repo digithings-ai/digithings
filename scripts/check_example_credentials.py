@@ -34,7 +34,8 @@ CRED_VALUE_PATTERNS = [
 def is_placeholder(v):
     v = v.strip().strip('"').strip("'")
     for p in PLACEHOLDER_PATTERNS:
-        if re.search(p, v, re.I): return True
+        if re.search(p, v, re.I):
+            return True
     low = v.lower()
     if low in ('digichat', 'local', 'dev', 'development', 'test', 'localhost', 'none'):
         return True
@@ -42,16 +43,21 @@ def is_placeholder(v):
 
 def looks_cred_var(var):
     for p in CRED_VAR_PATTERNS:
-        if p in var.upper(): return True
+        if p in var.upper():
+            return True
     return False
 
 def looks_cred_val(v):
     v = v.strip().strip('"').strip("'")
-    if len(v) < 16: return False
-    if is_placeholder(v): return False
+    if len(v) < 16:
+        return False
+    if is_placeholder(v):
+        return False
     for p in CRED_VALUE_PATTERNS:
-        if re.match(p, v): return True
-    if re.match(r'^[A-Za-z0-9_\-.]{32,}$', v): return True
+        if re.match(p, v):
+            return True
+    if re.match(r'^[A-Za-z0-9_\-.]{32,}$', v):
+        return True
     return False
 
 def main():
@@ -63,11 +69,13 @@ def main():
     issues = []
     for f in tracked:
         name = str(f)
-        if not ('.example' in name or '.template' in name): continue
+        if not ('.example' in name or '.template' in name):
+            continue
         try:
             for line in f.read_text(errors='replace').splitlines():
                 s = line.strip()
-                if not s or s.startswith('#') or '=' not in s: continue
+                if not s or s.startswith('#') or '=' not in s:
+                    continue
                 var, val = s.split('=', 1)
                 if looks_cred_var(var.strip()) and looks_cred_val(val):
                     issues.append(f"{name}:{var.strip()}")
@@ -75,7 +83,8 @@ def main():
             continue
     if issues:
         print('ERROR: non-placeholder credential values found', file=sys.stderr)
-        for i in issues: print(f'  {i}', file=sys.stderr)
+        for i in issues:
+            print(f'  {i}', file=sys.stderr)
         return 1
     print('OK')
     return 0

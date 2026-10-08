@@ -6,7 +6,8 @@ digichat is the **production** web client for tenants that run digigraph. The br
 
 ## Release artifacts
 
-- Install digichat from GHCR (`ghcr.io/digithings-ai/digichat:vX.Y.Z`), not npm.
+- Install digichat from a built image, not npm. **No published image registry exists today** — `ghcr.io/digithings-ai/digichat` does not exist (verified 2026-10-06), because `publish-digichat-image.yml` was removed in the strict-essentials cut. Until a build lane is restored, images are built locally from the repo root (`docker build -f apps/digichat/Dockerfile .`) — see [`docs/ops/digichat-datatap-aca.md`](../../docs/ops/digichat-datatap-aca.md).
+- Deploys and image→commit binding (DataTap ACA): [`docs/ops/digichat-datatap-aca.md`](../../docs/ops/digichat-datatap-aca.md). Binding is checked by `scripts/check_digichat_image_binding.py`.
 - Post-publish smoke: [`docs/digichat/RELEASE-SMOKE.md`](../../docs/digichat/RELEASE-SMOKE.md)
 - Client / operator install: [`docs/digichat/INSTALL.md`](../../docs/digichat/INSTALL.md)
 

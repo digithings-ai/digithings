@@ -173,11 +173,13 @@ services:
       AUDIT_LOG_PATH: /audit/events.jsonl
     volumes:
       # This mount SHADOWS the Dockerfile's baked-in config/, it does not merge
-      # with it. ./config here must contain byok-providers.json or digigraph
-      # crash-loops at startup (fails loud, by design). A missing
-      # model_modes.yaml does NOT crash -- it silently falls back to a
-      # hardcoded default model -- so supply both regardless. See
-      # digigraph/Dockerfile and its ARCHITECTURE.md's DIGI_CONFIG_PATH entry.
+      # with it. ./config here must contain byok-providers.json AND
+      # model-policy.json or digigraph crash-loops at startup (both load
+      # fail-loud at import, by design). A missing model_modes.yaml does NOT
+      # crash -- that loader degrades to an empty config and the mode ladder
+      # falls through to `fallback_model` from model-policy.json -- so supply
+      # all three regardless. See digigraph/Dockerfile and its ARCHITECTURE.md's
+      # DIGI_CONFIG_PATH entry.
       - ./config:/app/config:ro
       - digigraph_audit:/audit
     depends_on:

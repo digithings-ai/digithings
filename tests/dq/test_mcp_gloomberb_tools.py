@@ -28,6 +28,7 @@ from digiquant.data.gloomberb import (  # noqa: E402
 )
 from digiquant.mcp_server import create_mcp_server  # noqa: E402
 from digiquant.orchestrator_tools import build_orchestrator_tool_manifest  # noqa: E402
+from digiquant.tool_refusals import REFUSED_TOOLS  # noqa: E402
 
 from digifetch import HttpFetcher, RateLimiter, RetryPolicy  # noqa: E402
 from digiquant import mcp_server  # noqa: E402
@@ -52,7 +53,9 @@ DIGIFETCH_TOOLS = {
     "digifetch_yield_curve",
     "digifetch_cds",
     "digifetch_research_search",
-    "digifetch_congress_trades",
+    # `digifetch_congress_trades` is deliberately absent: refused under 5 U.S.C.
+    # 13107(c)(1)(B) (DIG-1057) and registered on no scope. See
+    # `REFUSED_TOOLS` and `digiquant.tool_refusals`.
     "digifetch_transcripts",
     # coverage expansion (#4110 phase 2)
     "digifetch_statements",
@@ -135,6 +138,12 @@ DIGIFETCH_TOOLS = {
     "digifetch_ibkr_preview_order",
     "digifetch_ibkr_execute_order",
 }
+
+#: Declared entitlements of refused tools are kept (the client code is retained so
+#: the route can come back if Counsel clears it) but the tools are never
+#: registered or advertised, so every surface assertion excludes them.
+REFUSED_DIGIFETCH = {name for name in REFUSED_TOOLS if name.startswith("digifetch_")}
+LIVE_DIGIFETCH_TOOLS = DIGIFETCH_TOOLS - REFUSED_DIGIFETCH
 
 #: Tools whose payload carries a term.gloom.sh deep link (one listing).
 LINKED_TOOLS = {
@@ -1099,15 +1108,47 @@ def _sweep_handler(request: httpx.Request) -> httpx.Response:
     raise AssertionError(f"unexpected Gloomberb path {path!r}")
 
 
-def test_all_89_tools_registered_in_full_and_read_scope() -> None:
-    assert len(DIGIFETCH_TOOLS) == 89
-    assert DIGIFETCH_TOOLS <= _names()
-    assert DIGIFETCH_TOOLS <= _names(scope="read")
+def test_all_88_live_tools_registered_in_full_and_read_scope() -> None:
+    assert REFUSED_DIGIFETCH == {"digifetch_congress_trades"}
+    assert len(DIGIFETCH_TOOLS) == 88
+    assert LIVE_DIGIFETCH_TOOLS == DIGIFETCH_TOOLS
+    assert LIVE_DIGIFETCH_TOOLS <= _names()
+    assert LIVE_DIGIFETCH_TOOLS <= _names(scope="read")
+
+
+def test_refused_tools_are_registered_on_no_scope_and_never_advertised() -> None:
+    """DIG-1057: a refused tool has no route into digiquant at all.
+
+    The client/normalizer stay so the route can be restored if Counsel clears
+    the feed; the surface must not.
+    """
+    rows = {row["function"]["name"] for row in build_orchestrator_tool_manifest()}
+    for name in sorted(REFUSED_DIGIFETCH):
+        assert name not in _names()
+        assert name not in _names(scope="read")
+        assert name not in rows
+        # The upstream route itself is untouched, so nothing is lost by refusing.
+        from digiquant.data.gloomberb.client import ENDPOINTS
+
+        assert ENDPOINTS["congress_trades"] == "/cloud/congress/house"
+
+
+def test_orchestrator_invoke_refuses_a_refused_tool() -> None:
+    from digiquant.server import OrchestratorInvokeRequest, v1_orchestrator_invoke
+
+    result = v1_orchestrator_invoke(
+        OrchestratorInvokeRequest(tool="digifetch_congress_trades", arguments={"limit": 3})
+    )
+    assert result["ok"] is False
+    assert result["refused"] is True
+    assert result["code"] == "tool_refused"
+    assert "congress" in result["error"]
+    assert "data" not in result
 
 
 def test_orchestrator_manifest_lists_each_tool_with_attribution() -> None:
     rows = {row["function"]["name"]: row for row in build_orchestrator_tool_manifest()}
-    missing = DIGIFETCH_TOOLS - set(rows)
+    missing = LIVE_DIGIFETCH_TOOLS - set(rows)
     assert not missing, f"missing orchestrator tools: {sorted(missing)}"
     unattributed = {
         "digifetch_earnings_calendar",
@@ -1148,7 +1189,7 @@ def test_orchestrator_manifest_lists_each_tool_with_attribution() -> None:
         "digifetch_money_markets",
         "digifetch_rate_path",
     }
-    for name in sorted(DIGIFETCH_TOOLS - unattributed):
+    for name in sorted(LIVE_DIGIFETCH_TOOLS - unattributed):
         description = rows[name]["function"]["description"]
         assert "Gloomberb" in description, f"{name} description must name the source"
     # The earnings calendar is Yahoo-backed; it must not claim Gloomberb.
@@ -1396,7 +1437,7 @@ TOOL_CALLS: dict[str, tuple[Any, ...]] = {
     "digifetch_yield_curve": (),
     "digifetch_cds": (),
     "digifetch_research_search": ("inflation",),
-    "digifetch_congress_trades": (),
+    # `digifetch_congress_trades` has no entry: refused (DIG-1057), not registered.
     "digifetch_transcripts": ("AAPL",),
     "digifetch_statements": ("AAPL",),
     "digifetch_ticker_tweets": ("AAPL",),
@@ -1756,17 +1797,17 @@ def test_transcripts_wrapper_maps_the_upstream_calls_payload(
     assert row["webcast_url"] == "https://example.test/call/t1"
 
 
-def test_congress_trades_upstream_500_maps_to_upstream_error(
+def test_congress_trades_refused_surface_makes_no_request(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(
-            500, text="Mistral OCR failed: 402 Customer monthly spending limit reached"
-        )
+    """DIG-1057: the refused tool is not registered, so a call cannot be made.
 
-    _patch_client(monkeypatch, handler)
-    payload = json.loads(_mcp("digifetch_congress_trades")())
-    assert payload["data"]["code"] == "upstream_error"
+    Upstream 500 mapping for this route is covered at the client layer in
+    tests/dq/data/test_gloomberb_client.py — the MCP wrapper is unreachable.
+    """
+    assert "digifetch_congress_trades" not in create_mcp_server()._tool_manager.list_tools()
+    assert "digifetch_congress_trades" not in _names()
+    assert "digifetch_congress_trades" not in _names(scope="read")
 
 
 def test_yield_curve_tool_returns_points_without_a_deep_link(
@@ -2288,7 +2329,10 @@ def test_every_digifetch_tool_declares_an_entitlement() -> None:
 
     from digiquant.data.gloomberb.entitlements import TOOL_ENTITLEMENTS, Entitlement
 
-    assert DIGIFETCH_TOOLS == set(TOOL_ENTITLEMENTS)
+    # Refused tools keep their declaration (client code is retained for a
+    # possible Counsel clearance) but are registered nowhere, so the live
+    # surface is the declared set minus the refused names.
+    assert DIGIFETCH_TOOLS | REFUSED_DIGIFETCH == set(TOOL_ENTITLEMENTS)
     assert set(TOOL_ENTITLEMENTS.values()) <= set(get_args(Entitlement))
 
 
@@ -2453,7 +2497,7 @@ def test_entitlement_note_is_surfaced_in_mcp_and_manifest() -> None:
 
     rows = {row["function"]["name"]: row for row in build_orchestrator_tool_manifest()}
     server = create_mcp_server()
-    for name in sorted(DIGIFETCH_TOOLS):
+    for name in sorted(LIVE_DIGIFETCH_TOOLS):
         expected = TOOL_ENTITLEMENTS[name]
         note = entitlement_note(name)
         assert note is not None
