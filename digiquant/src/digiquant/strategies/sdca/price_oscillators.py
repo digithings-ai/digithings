@@ -52,6 +52,46 @@ _LMACD_TOP_FLOOR = 0.09
 _LMACD_TOP_CEILING = 0.16
 _LMACD_RICH_FRAC = 0.20
 
+# --- multi-timeframe confluence family (DIG-1597 leaf 1, ported from
+# --- claude/sdca-develop-sync). Dormant: nothing here is wired into
+# --- price_oscillator_z_vectors or SdcaCompositeWeights yet.
+
+# Continuous RSI map. z is 0 only at RSI=_RSI_MID and ramps along a
+# _RSI_CURVE_POWER curve, so the slope stays shallow through an ordinary
+# mid-bull 55-75 and only steepens near _RSI_EXTREME_LOW/_RSI_EXTREME_HIGH.
+# A linear map through 50 pegs a bull at the floor for the whole run.
+_RSI_DAILY_LENGTH = 14
+_RSI_MID = 50.0
+_RSI_CURVE_POWER = 4.0
+
+# Medium-term daily legs. RSI needs no z-window: Wilder smoothing is already
+# causal on the daily series, so it maps straight through rsi_continuous_z.
+# MACD does need one — the weekly leg's absolute lmacd thresholds are tuned for
+# the wide, slow weekly amplitude, so a medium-term dip has to register against
+# *recent* normal instead (see daily_macd_z).
+_MACD_DAILY_FAST = 12
+_MACD_DAILY_SLOW = 26
+_MACD_DAILY_Z_WINDOW = 90
+_MACD_DAILY_Z_MIN_SAMPLES = 30
+
+# SMA-band has no weekly aggregation, so its timeframe separation comes purely
+# from window length: one formula, a slow and a fast window.
+_SMA_BAND_FAST_WINDOW = 20
+_SMA_BAND_FAST_MIN_SAMPLES = 10
+
+# Agreement-scaled blending, identical across all three families. A silent leg
+# (exactly 0.0) passes the other through unscaled — a quiet timeframe is not a
+# disagreement.
+_RSI_CONFLUENCE_WEEKLY_WEIGHT = 0.5
+_RSI_CONFLUENCE_AGREEMENT_BOOST = 0.5
+_RSI_CONFLUENCE_DISAGREEMENT_DAMP = 0.5
+_MACD_CONFLUENCE_WEEKLY_WEIGHT = 0.5
+_MACD_CONFLUENCE_AGREEMENT_BOOST = 0.5
+_MACD_CONFLUENCE_DISAGREEMENT_DAMP = 0.5
+_SMA_BAND_CONFLUENCE_SLOW_WEIGHT = 0.5
+_SMA_BAND_CONFLUENCE_AGREEMENT_BOOST = 0.5
+_SMA_BAND_CONFLUENCE_DISAGREEMENT_DAMP = 0.5
+
 
 class SdcaOscillatorSpec(BaseModel):
     """Per-asset RSI / MACD / SMA-band windows. BTC v1 is the default.
@@ -334,6 +374,422 @@ def sma_band_z(
     return (-raw).clip(-3.0, 3.0).alias("sma_band")
 
 
+# --- multi-timeframe confluence family -------------------------------------
+# Ported from claude/sdca-develop-sync (DIG-1597 leaf 1). Additive: the
+# dead-zone oscillators above are untouched, and nothing here is wired into
+# price_oscillator_z_vectors or SdcaCompositeWeights yet. Switching the
+# *published* oscillators to the continuous map is its own leaf with its own
+# measured delta.
+
+
+def rsi_continuous_z(rsi: pl.Series) -> pl.Series:
+    """Map RSI onto ``[-3, 3]`` as a continuous curve through the RSI=50 midpoint.
+
+    A power curve (``_RSI_CURVE_POWER``), not a dead zone: z is exactly 0
+    only at RSI=50 and varies continuously on both sides, saturating at ±3
+    as RSI approaches ``_RSI_EXTREME_LOW``/``_RSI_EXTREME_HIGH``. The power
+    keeps the slope shallow near 50 (an ordinary mid-bull RSI of 55-75 stays
+    mild) and steep near the extremes — a naive linear map through 50 pegs a
+    bull at the floor for the whole run.
+    """
+    rsi_col = pl.col("rsi")
+    low_span = _RSI_MID - _RSI_EXTREME_LOW
+    high_span = _RSI_EXTREME_HIGH - _RSI_MID
+    cheap_frac = ((_RSI_MID - rsi_col) / low_span).clip(0.0, 1.0)
+    rich_frac = ((rsi_col - _RSI_MID) / high_span).clip(0.0, 1.0)
+    mapped = (
+        pl.when(rsi_col.is_null())
+        .then(None)
+        .otherwise((cheap_frac**_RSI_CURVE_POWER) * 3.0 - (rich_frac**_RSI_CURVE_POWER) * 3.0)
+        .alias("rsi_z")
+    )
+    return pl.DataFrame({"rsi": rsi}).select(mapped)["rsi_z"]
+
+
+def weekly_rsi_continuous_z(
+    dates: pl.Series,
+    close: pl.Series,
+    *,
+    length: int = _RSI_LENGTH,
+) -> pl.Series:
+    """Weekly Wilder RSI → continuous z, as-of onto daily dates.
+
+    The continuous counterpart of ``weekly_rsi_z``, which keeps the dead zone.
+    Same weekly aggregation and same join-asof broadcast, so the causal
+    property (a Wednesday never sees its week's close) holds identically.
+    """
+    weekly = completed_weekly_closes(dates, close)
+    rsi = _wilder_rsi(weekly["close"], length=length)
+    return _asof_to_daily(dates, weekly["week_end"], rsi_continuous_z(rsi)).alias("weekly_rsi")
+
+
+def monthly_rsi_continuous_z(
+    dates: pl.Series,
+    close: pl.Series,
+    *,
+    length: int = _RSI_LENGTH,
+) -> pl.Series:
+    """Monthly Wilder RSI (completed months) → same continuous z as weekly."""
+    monthly = completed_monthly_closes(dates, close)
+    rsi = _wilder_rsi(monthly["close"], length=length)
+    return _asof_to_daily(dates, monthly["month_end"], rsi_continuous_z(rsi)).alias("monthly_rsi")
+
+
+def daily_rsi_z(
+    dates: pl.Series,
+    close: pl.Series,
+    *,
+    length: int = _RSI_DAILY_LENGTH,
+) -> pl.Series:
+    """Daily Wilder RSI (medium-term) → continuous z. No as-of broadcast needed.
+
+    Wilder's smoothing is already causal on the daily series, unlike the
+    weekly/monthly legs which aggregate first and then join-asof onto daily
+    dates.
+    """
+    if dates.len() != close.len():
+        raise ValueError("dates and close must be the same length")
+    rsi = _wilder_rsi(close, length=length)
+    return rsi_continuous_z(rsi).alias("daily_rsi")
+
+
+def agreement_scaled_blend(
+    long_term_z: pl.Series,
+    medium_term_z: pl.Series,
+    *,
+    long_term_weight: float,
+    agreement_boost: float,
+    disagreement_damp: float,
+    name: str,
+) -> pl.Series:
+    """Blend two timeframe legs, amplified on sign-agreement, damped on conflict.
+
+    A ``long_term_weight``/``1 - long_term_weight`` blend of the two z-scores
+    is the anchor. When both legs share sign, the blend is scaled up toward
+    ``1 + agreement_boost`` (more so the closer their magnitudes are — full
+    agreement, not just same-sign noise). When they disagree in sign, the
+    blend is damped to ``disagreement_damp`` of its value — the timeframes
+    are fighting, so the combined vote should say less, not more. Either leg
+    sitting at exactly 0 passes the other through unscaled: a silent
+    timeframe is not a disagreement. Result stays clipped to ``[-3, 3]``.
+    """
+    medium_term_weight = 1.0 - long_term_weight
+    blended: list[float | None] = []
+    for lv, mv in zip(long_term_z.to_list(), medium_term_z.to_list(), strict=True):
+        if lv is None and mv is None:
+            blended.append(None)
+        elif mv is None:
+            blended.append(lv)
+        elif lv is None:
+            blended.append(mv)
+        else:
+            base = long_term_weight * float(lv) + medium_term_weight * float(mv)
+            if lv == 0.0 or mv == 0.0:
+                multiplier = 1.0
+            elif (lv > 0) == (mv > 0):
+                agreement_frac = min(abs(lv), abs(mv)) / max(abs(lv), abs(mv))
+                multiplier = 1.0 + agreement_boost * agreement_frac
+            else:
+                multiplier = disagreement_damp
+            blended.append(max(-3.0, min(3.0, base * multiplier)))
+    return pl.Series(name, blended, dtype=pl.Float64)
+
+
+def rsi_confluence_z(
+    dates: pl.Series,
+    close: pl.Series,
+    *,
+    weekly_length: int = _RSI_LENGTH,
+    daily_length: int = _RSI_DAILY_LENGTH,
+    weekly_weight: float = _RSI_CONFLUENCE_WEEKLY_WEIGHT,
+    agreement_boost: float = _RSI_CONFLUENCE_AGREEMENT_BOOST,
+    disagreement_damp: float = _RSI_CONFLUENCE_DISAGREEMENT_DAMP,
+) -> pl.Series:
+    """Weekly (long-term) + daily (medium-term) RSI, amplified on agreement.
+
+    A ``weekly_weight``/``1 - weekly_weight`` blend of the two continuous
+    z-scores is the anchor. Either leg sitting at exactly 0 (only possible at
+    RSI=50) passes the other through unscaled. Result stays clipped to
+    ``[-3, 3]``.
+    """
+    weekly = weekly_rsi_continuous_z(dates, close, length=weekly_length)
+    daily = daily_rsi_z(dates, close, length=daily_length)
+    return agreement_scaled_blend(
+        weekly,
+        daily,
+        long_term_weight=weekly_weight,
+        agreement_boost=agreement_boost,
+        disagreement_damp=disagreement_damp,
+        name="weekly_rsi",
+    )
+
+
+def monthly_rsi_confluence_z(
+    dates: pl.Series,
+    close: pl.Series,
+    *,
+    monthly_length: int = _RSI_LENGTH,
+    daily_length: int = _RSI_DAILY_LENGTH,
+    monthly_weight: float = _RSI_CONFLUENCE_WEEKLY_WEIGHT,
+    agreement_boost: float = _RSI_CONFLUENCE_AGREEMENT_BOOST,
+    disagreement_damp: float = _RSI_CONFLUENCE_DISAGREEMENT_DAMP,
+) -> pl.Series:
+    """Monthly (long-term) + daily (medium-term) RSI, amplified on agreement.
+
+    Same blend as ``rsi_confluence_z``, with the long-term leg aggregated to
+    completed calendar months instead of weeks — a slower cadence for the same
+    multi-year cycle question, and the premise for comparing monthly against
+    weekly cadence on the same instrument.
+    """
+    monthly = monthly_rsi_continuous_z(dates, close, length=monthly_length)
+    daily = daily_rsi_z(dates, close, length=daily_length)
+    return agreement_scaled_blend(
+        monthly,
+        daily,
+        long_term_weight=monthly_weight,
+        agreement_boost=agreement_boost,
+        disagreement_damp=disagreement_damp,
+        name="monthly_rsi",
+    )
+
+
+def weekly_monthly_rsi_confluence_z(
+    dates: pl.Series,
+    close: pl.Series,
+    *,
+    monthly_length: int = _RSI_LENGTH,
+    weekly_length: int = _RSI_LENGTH,
+    monthly_weight: float = _RSI_CONFLUENCE_WEEKLY_WEIGHT,
+    agreement_boost: float = _RSI_CONFLUENCE_AGREEMENT_BOOST,
+    disagreement_damp: float = _RSI_CONFLUENCE_DISAGREEMENT_DAMP,
+) -> pl.Series:
+    """Monthly (long-term) + weekly (medium-term) RSI, amplified on agreement.
+
+    A third pairing: both legs are macro-cadence, with no daily leg at all —
+    a pure long-vs-medium-term cycle read rather than a short-term momentum
+    check. Distinct from ``rsi_confluence_z``/``monthly_rsi_confluence_z``,
+    which both hang the long leg off the daily one.
+    """
+    monthly = monthly_rsi_continuous_z(dates, close, length=monthly_length)
+    weekly = weekly_rsi_continuous_z(dates, close, length=weekly_length)
+    return agreement_scaled_blend(
+        monthly,
+        weekly,
+        long_term_weight=monthly_weight,
+        agreement_boost=agreement_boost,
+        disagreement_damp=disagreement_damp,
+        name="weekly_monthly_rsi",
+    )
+
+
+def monthly_macd_z(
+    dates: pl.Series,
+    close: pl.Series,
+    *,
+    fast: int = _MACD_FAST,
+    slow: int = _MACD_SLOW,
+    signal: int = _MACD_SIGNAL,
+    z_window: int = _MACD_Z_WINDOW,
+    min_samples: int = _MACD_Z_MIN_SAMPLES,
+) -> pl.Series:
+    """Monthly log-MACD (completed months), same sloped top cap as ``weekly_macd_z``.
+
+    ``lmacd_top_cap`` is a function of calendar date, not bar count, so the
+    same secular top-decay applies unchanged to monthly bars.
+    """
+    del signal, z_window, min_samples
+    monthly = completed_monthly_closes(dates, close)
+    frame = pl.DataFrame({"close": monthly["close"]})
+    ema_fast = pl.col("close").ewm_mean(span=fast, adjust=False, min_samples=fast)
+    ema_slow = pl.col("close").ewm_mean(span=slow, adjust=False, min_samples=slow)
+    with_ema = frame.select(
+        ema_fast.clip(lower_bound=_SIGMA_FLOOR).alias("ema_fast"),
+        ema_slow.clip(lower_bound=_SIGMA_FLOOR).alias("ema_slow"),
+    )
+    lmacd = with_ema["ema_fast"].log(10) - with_ema["ema_slow"].log(10)
+    month_ends = monthly["month_end"].to_list()
+    z_vals = [
+        None if v is None else _lmacd_to_z(float(v), lmacd_top_cap(month_end))
+        for v, month_end in zip(lmacd.to_list(), month_ends, strict=True)
+    ]
+    z = pl.Series("monthly_macd", z_vals, dtype=pl.Float64)
+    return _asof_to_daily(dates, monthly["month_end"], z).alias("monthly_macd")
+
+
+def daily_macd_z(
+    dates: pl.Series,
+    close: pl.Series,
+    *,
+    fast: int = _MACD_DAILY_FAST,
+    slow: int = _MACD_DAILY_SLOW,
+    z_window: int = _MACD_DAILY_Z_WINDOW,
+    min_samples: int = _MACD_DAILY_Z_MIN_SAMPLES,
+) -> pl.Series:
+    """Daily log-MACD (medium-term), rolling-z-scored against its own recent history.
+
+    The weekly leg's absolute lmacd thresholds (dead zone + decaying top cap)
+    are tuned for the wide, slow-moving weekly amplitude and BTC's secular
+    top-decay — reusing them here would misfire, since daily-bar log-MACD has
+    a different characteristic scale. A few-months momentum dip needs to
+    register relative to *recent* normal instead, so this is a causal rolling
+    z-score of the daily lmacd value, sign-flipped (momentum unusually low
+    vs its own history = cheap = +z) — the same convention as ``sma_band_z``.
+    """
+    if dates.len() != close.len():
+        raise ValueError("dates and close must be the same length")
+    frame = pl.DataFrame({"close": close})
+    ema_fast = pl.col("close").ewm_mean(span=fast, adjust=False, min_samples=fast)
+    ema_slow = pl.col("close").ewm_mean(span=slow, adjust=False, min_samples=slow)
+    with_ema = frame.select(
+        ema_fast.clip(lower_bound=_SIGMA_FLOOR).alias("ema_fast"),
+        ema_slow.clip(lower_bound=_SIGMA_FLOOR).alias("ema_slow"),
+    )
+    lmacd = with_ema["ema_fast"].log(10) - with_ema["ema_slow"].log(10)
+    return (-_causal_z(lmacd, window=z_window, min_samples=min_samples)).alias("daily_macd")
+
+
+def macd_confluence_z(
+    dates: pl.Series,
+    close: pl.Series,
+    *,
+    weekly_fast: int = _MACD_FAST,
+    weekly_slow: int = _MACD_SLOW,
+    daily_fast: int = _MACD_DAILY_FAST,
+    daily_slow: int = _MACD_DAILY_SLOW,
+    daily_z_window: int = _MACD_DAILY_Z_WINDOW,
+    daily_min_samples: int = _MACD_DAILY_Z_MIN_SAMPLES,
+    weekly_weight: float = _MACD_CONFLUENCE_WEEKLY_WEIGHT,
+    agreement_boost: float = _MACD_CONFLUENCE_AGREEMENT_BOOST,
+    disagreement_damp: float = _MACD_CONFLUENCE_DISAGREEMENT_DAMP,
+) -> pl.Series:
+    """Weekly (long-term) + daily (medium-term) log-MACD, amplified on agreement.
+
+    Same agreement-scaled blend as ``rsi_confluence_z``. The weekly leg keeps
+    its secular top-cap/dead-zone mapping (``weekly_macd_z``); the daily leg
+    is a rolling z-score of its own recent lmacd (``daily_macd_z``), so a
+    few-months momentum dip inside an otherwise-rich weekly regime still
+    registers instead of being swallowed by the slow-moving weekly leg.
+    """
+    weekly = weekly_macd_z(dates, close, fast=weekly_fast, slow=weekly_slow)
+    daily = daily_macd_z(
+        dates,
+        close,
+        fast=daily_fast,
+        slow=daily_slow,
+        z_window=daily_z_window,
+        min_samples=daily_min_samples,
+    )
+    return agreement_scaled_blend(
+        weekly,
+        daily,
+        long_term_weight=weekly_weight,
+        agreement_boost=agreement_boost,
+        disagreement_damp=disagreement_damp,
+        name="weekly_macd",
+    )
+
+
+def monthly_macd_confluence_z(
+    dates: pl.Series,
+    close: pl.Series,
+    *,
+    monthly_fast: int = _MACD_FAST,
+    monthly_slow: int = _MACD_SLOW,
+    daily_fast: int = _MACD_DAILY_FAST,
+    daily_slow: int = _MACD_DAILY_SLOW,
+    daily_z_window: int = _MACD_DAILY_Z_WINDOW,
+    daily_min_samples: int = _MACD_DAILY_Z_MIN_SAMPLES,
+    monthly_weight: float = _MACD_CONFLUENCE_WEEKLY_WEIGHT,
+    agreement_boost: float = _MACD_CONFLUENCE_AGREEMENT_BOOST,
+    disagreement_damp: float = _MACD_CONFLUENCE_DISAGREEMENT_DAMP,
+) -> pl.Series:
+    """Monthly (long-term) + daily (medium-term) log-MACD, amplified on agreement.
+
+    Same blend as ``macd_confluence_z``, with the long-term leg aggregated to
+    completed calendar months instead of weeks — ``monthly_fast``/
+    ``monthly_slow`` spans are counted in months, so the default 12/26 reaches
+    roughly 1-2 years back rather than 3-6 months.
+    """
+    monthly = monthly_macd_z(dates, close, fast=monthly_fast, slow=monthly_slow)
+    daily = daily_macd_z(
+        dates,
+        close,
+        fast=daily_fast,
+        slow=daily_slow,
+        z_window=daily_z_window,
+        min_samples=daily_min_samples,
+    )
+    return agreement_scaled_blend(
+        monthly,
+        daily,
+        long_term_weight=monthly_weight,
+        agreement_boost=agreement_boost,
+        disagreement_damp=disagreement_damp,
+        name="monthly_macd",
+    )
+
+
+def weekly_monthly_macd_confluence_z(
+    dates: pl.Series,
+    close: pl.Series,
+    *,
+    monthly_fast: int = _MACD_FAST,
+    monthly_slow: int = _MACD_SLOW,
+    weekly_fast: int = _MACD_FAST,
+    weekly_slow: int = _MACD_SLOW,
+    monthly_weight: float = _MACD_CONFLUENCE_WEEKLY_WEIGHT,
+    agreement_boost: float = _MACD_CONFLUENCE_AGREEMENT_BOOST,
+    disagreement_damp: float = _MACD_CONFLUENCE_DISAGREEMENT_DAMP,
+) -> pl.Series:
+    """Monthly (long-term) + weekly (medium-term) log-MACD, amplified on agreement.
+
+    The MACD counterpart of ``weekly_monthly_rsi_confluence_z``: a single
+    merged monthly+weekly vote instead of two slots each confluenced against
+    daily. Both legs are macro-cadence — a pure long-vs-medium-term trend read.
+    """
+    monthly = monthly_macd_z(dates, close, fast=monthly_fast, slow=monthly_slow)
+    weekly = weekly_macd_z(dates, close, fast=weekly_fast, slow=weekly_slow)
+    return agreement_scaled_blend(
+        monthly,
+        weekly,
+        long_term_weight=monthly_weight,
+        agreement_boost=agreement_boost,
+        disagreement_damp=disagreement_damp,
+        name="weekly_monthly_macd",
+    )
+
+
+def sma_band_confluence_z(
+    dates: pl.Series,
+    close: pl.Series,
+    *,
+    slow_window: int = _SMA_BAND_WINDOW,
+    slow_min_samples: int = _SMA_BAND_MIN_SAMPLES,
+    fast_window: int = _SMA_BAND_FAST_WINDOW,
+    fast_min_samples: int = _SMA_BAND_FAST_MIN_SAMPLES,
+    slow_weight: float = _SMA_BAND_CONFLUENCE_SLOW_WEIGHT,
+    agreement_boost: float = _SMA_BAND_CONFLUENCE_AGREEMENT_BOOST,
+    disagreement_damp: float = _SMA_BAND_CONFLUENCE_DISAGREEMENT_DAMP,
+) -> pl.Series:
+    """Slow (long-term) + fast (medium-term) SMA-band z, amplified on agreement.
+
+    Same agreement-scaled blend as ``rsi_confluence_z``/``macd_confluence_z``.
+    Unlike RSI/MACD, both legs are the same daily Bollinger-style z
+    (``sma_band_z``) — timeframe separation comes purely from window length,
+    since ``sma_band_z`` never aggregates to weekly bars in the first place.
+    """
+    slow = sma_band_z(dates, close, window=slow_window, min_samples=slow_min_samples)
+    fast = sma_band_z(dates, close, window=fast_window, min_samples=fast_min_samples)
+    return agreement_scaled_blend(
+        slow,
+        fast,
+        long_term_weight=slow_weight,
+        agreement_boost=agreement_boost,
+        disagreement_damp=disagreement_damp,
+        name="sma_band",
+    )
+
+
 def price_oscillator_z_vectors(
     dates: pl.Series,
     close: pl.Series,
@@ -362,15 +818,29 @@ def price_oscillator_z_vectors(
 
 __all__ = [
     "SdcaOscillatorSpec",
+    "agreement_scaled_blend",
     "completed_monthly_closes",
     "completed_weekly_closes",
+    "daily_macd_z",
+    "daily_rsi_z",
     "documented_warmup_calendar_days",
     "lmacd_top_cap",
+    "macd_confluence_z",
+    "monthly_macd_confluence_z",
+    "monthly_macd_z",
+    "monthly_rsi_confluence_z",
+    "monthly_rsi_continuous_z",
     "monthly_rsi_z",
     "mtf_rsi_z",
     "price_oscillator_z_vectors",
+    "rsi_confluence_z",
+    "rsi_continuous_z",
     "rsi_deadzone_z",
+    "sma_band_confluence_z",
     "sma_band_z",
     "weekly_macd_z",
+    "weekly_monthly_macd_confluence_z",
+    "weekly_monthly_rsi_confluence_z",
+    "weekly_rsi_continuous_z",
     "weekly_rsi_z",
 ]

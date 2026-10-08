@@ -23,8 +23,9 @@
 # ── Accepted risk: next@16.2.4 and the postcss/sharp it bundles (#4396) ──────
 #
 # All 31 advisories below share one remediation: the #4396 upgrade. It was
-# scoped at `next@16.3.5`, but npm now offers `16.3.8` and GHSA-vcvr-r3jv-pc5j
-# is only patched at `>=16.3.6`, so #4396 must land at or above that. We are
+# scoped at `next@16.3.5`, but npm now offers `16.4.0`: GHSA-vcvr-r3jv-pc5j is
+# only patched at `>=16.3.6`, and the 2026-10-07 wave at the foot of this block
+# is ranged `>=16.0.0 <16.3.8`. #4396 must therefore land at `>=16.3.8`. We are
 # deliberately pinned at 16.2.4 because the bump re-reds three Next builds with
 # ~79 pre-existing TypeScript errors (66 dashboard, 8 digichat, 5
 # digiquant-web). That upgrade — its acceptance criteria are "0 HIGH/CRITICAL"
@@ -81,6 +82,79 @@ GHSA-r28c-9q8g-f849
 # sharp (next optionalDependency) — high: inherited libvips / libheif CVEs.
 GHSA-f88m-g3jw-g9cj
 GHSA-rgj7-g3m4-5g8c
+# sharp (next optionalDependency) 0.34.5 — high: librsvg CVE-2026-96889. Reachable
+# only if sharp is asked to decode an attacker-supplied SVG. Nothing in this repo
+# can do that: zero `sharp` imports under apps/, packages/, scripts/ or tools/;
+# zero `next/og` / `ImageResponse` / opengraph-image; zero `dangerouslyAllowSVG`,
+# which is the switch next needs before it hands SVG bytes to sharp; and the three
+# files that do use next/image sit in apps that all set `images.unoptimized: true`,
+# so the Image Optimization API — sharp's only entry point — never runs. The second
+# copy, sharp 0.35.4 nested under miniflare, is dev-only and no worker declares a
+# cf:image binding for it to transform.
+#
+# Not fixed in this change: the patched release is sharp >=0.35.5, which is outside
+# next@16.2.4's declared `^0.34.5`. A root `overrides` entry was evaluated for it
+# (DIG-2212) and rejected — it re-resolves ~50 native @img/* libvips bindings for
+# every OS/arch, hoists a single 0.35.5 that overrides miniflare's exact 0.35.4
+# pin, and relies on the override-reapply behaviour the block above already
+# records as unreliable. The sibling sharp advisories above clear with #4396.
+#
+# Re-evaluate when #4396 lands (next >=16.3.6): delete the whole sharp block and
+# let the lane enforce. Re-open this earlier if any app enables next's image
+# optimization, sets dangerouslyAllowSVG, adds a cf:image binding, or imports
+# sharp directly — then pin >=0.35.5 instead of extending this comment.
+GHSA-wq5f-xc86-pv6w
+
+# next@16.2.4 — HIGH, 2026-10-07 wave. Five advisories published together on
+# 2026-10-07, all ranged `>=16.0.0 <16.3.8` with no patched release. Four are
+# moderate/low and are therefore warn-only under SECURITY.md
+# "Dependency-audit policy" ("Warn-only: MODERATE, LOW and unknown") — they are
+# named here for the record and deliberately NOT listed as ids below, because
+# accepting a low-severity advisory is not an acceptance Security makes:
+#   - GHSA-4jqv-mc3x-m676 (medium, 5.3) SSG/ISR cache poisoning, Pages Router
+#     only. Unreachable: no `pages/` directory exists anywhere in the repo.
+#   - GHSA-39w2-rjm5-chcv (low, 5.4) `next dev` MCP endpoint disclosure. Dev
+#     server only; never reachable from a built artifact.
+#   - GHSA-f87g-xv8r-7p7x (medium, 5.3) App Router metadata image routes ignore
+#     `dynamicParams` under webpack. Unreachable: zero `opengraph-image`,
+#     `twitter-image`, `ImageResponse` or `next/og` in apps/* + packages/*.
+#   - GHSA-mcj8-r9mp-w47p (medium, 4.8) SSG/ISR cache poisoning via root
+#     catch-all. Unreachable: same Pages-Router precondition as above.
+# All four clear with #4396 and need no entry.
+#
+# GHSA-cjq9-62q9-8jv4 (CVE-2026-94483, HIGH 6.5) is SSRF in Image Optimization
+# and is the sole blocker in this wave. The advisory states the trigger is an
+# "attacker-controlled, allow-listed remote URL", and its own workaround section
+# says "If no `images.remotePatterns` are configured, your app is not affected."
+# Three independent repo facts confirm that precondition holds at this commit:
+#   1. `git grep -i remotePatterns` over apps/* + packages/* returns zero hits,
+#      so there is no allow-list an attacker could be matched against.
+#   2. Four of the five first-party Next apps — dashboard, digiquant-web,
+#      digithings-web, reference — set `output: 'export'`. A static export emits
+#      no `/_next/image` server route, so the optimizer does not exist at
+#      runtime for them. All four also set `images: { unoptimized: true }`.
+#   3. The only self-hosted Next server is apps/digichat (`output: 'standalone'`),
+#      and it has zero `next/image` / `<Image>` imports in its own source, so no
+#      code path can hand a remote URL to the optimizer. There are zero
+#      `_next/image` references repo-wide. The `next/image` hits under
+#      apps/digichat/reference/ are vendored assistant-ui templates that the root
+#      `workspaces` globs (apps/*, packages/*) do not match, so they are never
+#      built or deployed.
+#
+# Accepted rather than remediated for now, because the pinned 16.2.4 is the only
+# version that keeps three Next builds green and #4396 is the tracked fix. Per
+# SECURITY.md the earlier remediations were evaluated first: pinning a patched
+# next is not possible below 16.3.8, and there is no second package to swap.
+#
+# Re-evaluate (any one of these removes this entry):
+#   - #4396 lands at next >=16.3.8 -> delete this block and let the lane enforce.
+#   - 2026-11-07, as a hard calendar backstop if #4396 has not moved by then.
+#   - Any app adds `images.remotePatterns`, `images.loader`, `images.domains` or
+#     `images.dangerouslyAllowSVG`, or any app leaves `output: 'export'` while
+#     keeping the image optimizer, or any `next/image` import lands in
+#     apps/digichat source. That makes the advisory reachable and it must block
+#     again immediately — bump the pin instead of extending this comment.
+GHSA-cjq9-62q9-8jv4
 
 # undici 7.29.0 (transitive: @ai-sdk/provider-utils in prod digichat server, jsdom + miniflare dev-only) — high: GHSA-rfgv needs undici WebSocket (unused anywhere in-repo), GHSA-w293 needs BalancedPool (unused; sole prod consumer uses plain Agent({connect}) + fetch). Refs #4838. Re-check on undici major bump or any new undici consumer.
 GHSA-rfgv-xxqx-mfg5

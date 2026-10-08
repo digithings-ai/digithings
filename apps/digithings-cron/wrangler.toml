@@ -19,6 +19,9 @@ DRY_RUN = "0"
 # Empty: migrated jobs never call api.github.com. Comma-separated job ids
 # restore workflow_dispatch for those ids only and log github_override.
 GITHUB_OVERRIDE_JOBS = ""
+# POST /backfill answers 404 while this is "0". Flip to "1" deliberately: a
+# backfill writes production snapshots, so the surface ships closed.
+BACKFILL_ENABLED = "0"
 
 # Secrets (wrangler secret put; never commit values):
 #   GH_DISPATCH_TOKEN   — Actions write + Issues read/write on digithings-ai/digithings
@@ -33,6 +36,16 @@ GITHUB_OVERRIDE_JOBS = ""
 [[services]]
 binding = "RUNNER"
 service = "digiquant-runner"
+
+# Per-date remediation ledger for POST /backfill. No cron trigger attaches to
+# it; POST /backfill is its only entry point.
+[[durable_objects.bindings]]
+name = "BACKFILL_LEDGER"
+class_name = "BackfillLedger"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["BackfillLedger"]
 
 [triggers]
 crons = [
@@ -62,6 +75,7 @@ crons = [
   "37 6 * * MON",      # security-npm-audit
   "41 6 * * *",        # token-canary
   "17 6 1 * *",        # secret-staleness (monthly, DIG-248)
+  "23 6 1 * *",        # dependency-freshness (monthly, DIG-1515)
   "17 6 * * *",        # smoke-site
   "17 * * * *",        # datatap-answer-check
   "7 0 * * MON-FRI",   # twelve-x-asia
