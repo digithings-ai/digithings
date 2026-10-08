@@ -7,7 +7,7 @@ import {
   pairFixSpec,
   type FxFixPoint,
 } from './level-vs-fix';
-import type { FxIdeaEvalRow, FxTradeIdeaRow } from './types';
+import type { FxIdeaEvalRow, FxTradeIdeaRow, FxTradeLevels } from './types';
 
 describe('normalizeFixPair', () => {
   it('normalizes compact and dashed forms to BASE/QUOTE', () => {
@@ -173,6 +173,38 @@ describe('buildLevelFixSeries', () => {
       { date: '2026-06-13', fix: 1.082 },
       { date: '2026-06-18', fix: 1.095 },
     ]);
+  });
+
+  it('withholds the whole ladder until the bracket is publishable', () => {
+    // A non-publishable bracket can still carry a surviving target — the ladder
+    // is all-or-nothing, so no single leg may reach the chart on its own. The
+    // fix history is not part of the ladder and must survive either way.
+    const bracket: FxTradeLevels = {
+      entry_low: { value: '1.0800', provenance: 'broker_quoted', source_ref: 'desk' },
+      entry_high: { value: '1.0850', provenance: 'broker_quoted', source_ref: 'desk' },
+      stop: { value: '1.0700', provenance: 'broker_quoted', source_ref: 'desk' },
+      targets: [{ value: '1.1000', provenance: 'broker_quoted', source_ref: 'desk' }],
+      risk_reward: 2,
+      status: 'partial',
+    };
+    const fixes = pts(['2026-06-13', '2026-06-14'], [1.082, 1.086]);
+
+    const withheld = buildLevelFixSeries(idea({ trade_levels: bracket }), evalRow(), fixes);
+    expect(withheld.entryLow).toBeNull();
+    expect(withheld.entryHigh).toBeNull();
+    expect(withheld.stop).toBeNull();
+    expect(withheld.targets).toEqual([]);
+    expect(withheld.points).toHaveLength(2);
+
+    const published = buildLevelFixSeries(
+      idea({ trade_levels: { ...bracket, status: 'complete' } }),
+      evalRow(),
+      fixes,
+    );
+    expect(published.entryLow).toBeCloseTo(1.08, 10);
+    expect(published.entryHigh).toBeCloseTo(1.085, 10);
+    expect(published.stop).toBeCloseTo(1.07, 10);
+    expect(published.targets).toEqual([1.1]);
   });
 
   it('handles missing levels and missing eval gracefully', () => {

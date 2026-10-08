@@ -8,7 +8,7 @@
  * pair, callers fall back to the anchors-only series built from the eval row's
  * `entry_fix`/`exit_fix` — the chart still renders levels + markers.
  */
-import { parseTradeLevels } from './trade-levels';
+import { isPublishableBracket, parseTradeLevels } from './trade-levels';
 import type { FxIdeaEvalRow, FxTradeIdeaRow } from './types';
 
 export interface FxFixPoint {
@@ -222,7 +222,11 @@ export function buildLevelFixSeries(
   evalRow: FxIdeaEvalRow | null | undefined,
   fixes: FxFixPoint[],
 ): LevelFixSeries {
-  const tl = parseTradeLevels(idea.trade_levels);
+  const parsed = parseTradeLevels(idea.trade_levels);
+  // The ladder is all-or-nothing: a bracket that is not publishable carries no
+  // entry, stop or target series, so the chart cannot draw a half ladder. The
+  // fix line is independent of the bracket and is left alone (DIG-2351).
+  const tl = isPublishableBracket(parsed) ? parsed : null;
   const entryFix = evalRow?.entry_fix ?? null;
   const exitFix = evalRow?.exit_fix ?? null;
   const entryDate = evalRow?.entry_date ?? null;
