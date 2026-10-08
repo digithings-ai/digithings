@@ -24,6 +24,13 @@ CRED_VAR_PATTERNS = [
     r'CLIENT_SECRET', r'ACCESS_TOKEN', r'REFRESH_TOKEN',
     r'WEBHOOK_SECRET', r'SIGNING_KEY',
 ]
+#: Subset of `CRED_VAR_PATTERNS` that corroborates a short value on its own.
+#: `*_API_KEY` and `*_SECRET` name a machine-issued token, so an ordinary
+#: 9-to-11-character word under one of them is already a mistake worth
+#: stopping. Matched as a substring, like `CRED_VAR_PATTERNS` itself, so
+#: `CLIENT_SECRET` and `WEBHOOK_SECRET` are reached through `SECRET` and need
+#: no entry of their own.
+STRONG_CRED_VAR_PATTERNS = [r'API_KEY', r'SECRET']
 CRED_VALUE_PATTERNS = [
     # Vendor prefixes only: high-signal, short, and a prefix alone is enough.
     # The generic character-class entries are gone - they whitelisted an
@@ -101,7 +108,24 @@ CRED_MIN_ENTROPY = 3.0
 #: Nothing in the tracked corpus sets the bound - every credential-named line
 #: there is empty, a placeholder, or a `#` comment - so the shortest pinned
 #: probe sets it, at 12.
+#:
+#: The floor is conditional, and the condition is the evidence. `*_PASSWORD` and
+#: `*_TOKEN` are ordinary environment variables that legitimately hold a plain
+#: word, so under them 12 is as short as a key may be and no shorter. Under a
+#: name in `STRONG_CRED_VAR_PATTERNS` the name itself is evidence and the
+#: window closes down to `CRED_MIN_VALUE_LEN_STRONG`. 9 is where it stops: the
+#: shortest word a developer actually writes under a credential name
+#: (`postgres`, 8) has to stay clean, and this guard fails the pull request, so
+#: a false positive blocks a developer rather than merely annotating one.
 CRED_MIN_VALUE_LEN = 12
+#: Floor applied instead of `CRED_MIN_VALUE_LEN` when the variable name
+#: corroborates. Set at 9, strictly above 8, because `postgres` is 8 and is
+#: pinned clean by the DIG-119 contract. It costs nothing in recall on the
+#: tracked corpus: dropping the floor to 9 for every credential name newly
+#: flags zero lines in every tracked `.example` and `.template` file, so the
+#: whole cost of the unconditional drop would have been false positives on
+#: files written later.
+CRED_MIN_VALUE_LEN_STRONG = 9
 #: Length at or above which `CRED_MIN_ENTROPY` is a meaningful test. That floor is
 #: bits *per character*, so below the length it was calibrated at the rate reports
 #: sample size rather than randomness: over 40 000 random hex secrets per length a
@@ -135,9 +159,21 @@ def shannon_entropy(v: str) -> float:
     # `+ 0.0` normalizes the `-0.0` a single-symbol string would otherwise return.
     return -sum((c / n) * log2(c / n) for c in Counter(v).values()) + 0.0
 
-def looks_cred_val(v):
+def looks_strong_cred_var(var):
+    """True when ``var`` names a machine-issued credential, per `STRONG_CRED_VAR_PATTERNS`."""
+    upper = var.upper()
+    for p in STRONG_CRED_VAR_PATTERNS:
+        if p in upper:
+            return True
+    return False
+
+def looks_cred_val(v, var=''):
+    """Score a value read out of ``var``. ``var`` defaults to empty, which
+    carries no corroboration and leaves the floor at `CRED_MIN_VALUE_LEN`, so
+    every existing single-argument caller is unaffected."""
     v = v.strip().strip('"').strip("'")
-    if len(v) < CRED_MIN_VALUE_LEN:
+    floor = CRED_MIN_VALUE_LEN_STRONG if looks_strong_cred_var(var) else CRED_MIN_VALUE_LEN
+    if len(v) < floor:
         return False
     if is_placeholder(v):
         return False
@@ -175,8 +211,9 @@ def main():
                 if not s or s.startswith('#') or '=' not in s:
                     continue
                 var, val = s.split('=', 1)
-                if looks_cred_var(var.strip()) and looks_cred_val(val):
-                    issues.append(f"{name}:{var.strip()}")
+                var = var.strip()
+                if looks_cred_var(var) and looks_cred_val(val, var):
+                    issues.append(f"{name}:{var}")
         except Exception:
             continue
     if issues:
