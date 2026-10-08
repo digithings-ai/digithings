@@ -2,9 +2,9 @@
   <style>
     .n  { fill: rgba(255,255,255,0.02); stroke: #666; stroke-width: 1; }
     .np { fill: rgba(229,183,101,0.05); stroke: #e5b765; stroke-width: 1.6; }
-    .l  { font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: 2px;
+    .l  { font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px; letter-spacing: 2px;
           fill: #e6e6e6; text-anchor: middle; text-transform: uppercase; }
-    .sl { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 1.5px;
+    .sl { font-family: 'Geist Mono', ui-monospace, monospace; font-size: 9px; letter-spacing: 1.5px;
           fill: #888; text-anchor: middle; text-transform: uppercase; }
     .e  { fill: none; stroke: #444; stroke-width: 1; stroke-dasharray: 4 6; }
     text { dominant-baseline: middle; }

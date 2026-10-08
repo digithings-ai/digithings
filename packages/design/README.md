@@ -76,8 +76,56 @@ Phase 2/3 debt ([`ROLLOUT.md`](ROLLOUT.md)).
 
 | Token (legacy, deprecated) | Unthemed `:root`                      | Themed `[data-theme]`     |
 | --------------------------- | ------------------------------------- | ------------------------- |
-| `--font-family`             | `'Inter', system-ui, …`               | `var(--font-sans)`        |
-| `--font-family-mono`        | `'JetBrains Mono', 'Fira Code', …`    | `var(--font-mono)`        |
+| `--font-family`             | `var(--font-stack-sans)`              | `var(--font-sans)`        |
+| `--font-family-mono`        | `var(--font-stack-mono)`              | `var(--font-mono)`        |
+
+### Fonts per surface
+
+`tokens.css` builds the **stacks**, each app supplies the **faces**. One file
+per app calls `next/font`; nothing else in a surface may load a face or name a
+font family.
+
+```
+apps/<app>/app/fonts.ts   →   --font-sans-face, --font-mono-face   (next/font)
+tokens.css                →   --font-stack-sans / -mono / -display  (face + fallbacks)
+                             --font-sans / --font-mono / --font-display  (read by CSS)
+```
+
+`--font-stack-mono` is `var(--font-mono-face, "Geist Mono"), ui-monospace,
+"SF Mono", Menlo, Consolas, "DejaVu Sans Mono", "Segoe UI Symbol",
+monospace`. The fallback chain is required, not decoration: Geist Mono has no
+U+25B8 / U+25BE (nav triangles) and no U+2318 (the command key), so those
+glyphs come from a later family in the row.
+
+**Swapping a surface's mono is one line.** Change the `mono` loader in that
+surface's config:
+
+| Surface | Config | Line to edit |
+| --- | --- | --- |
+| dashboard (`apps/dashboard`) | `app/fonts.ts` | the only `Geist_Mono({…})` call (mono only; this surface has no sans loader) |
+| digiquant.io (`apps/digiquant-web`) | `app/fonts.ts` | the `Geist_Mono({… variable: "--font-mono-face" …})` call |
+| digiquant app (`apps/digiquant-app`) | `app/fonts.ts` | same; `app/globals.css` `--mono` reads `--font-mono-face` |
+| digithings.ai (`apps/digithings-web`) | `app/fonts.ts` | same |
+| DigiChat (`apps/digichat`), both `(digichat)` and `(baseline)` layouts | `src/app/fonts.ts` | same — one config serves the product and the catalog skins. Stacks live in `packages/ui/src/styles/digichat-app-theme.css` (baseline-isolation forbids that sheet importing any other `@digithings/` file), where `--font-geist-mono` stays as an alias of `--font-mono-face` so the chat-skin CSS keeps resolving the same shipped face |
+| tearsheet (client-facing HTML) | `digiquant/src/digiquant/fonts.py` | `MONO_FONT_FAMILY` — Python, not `next/font`: `MONO_FONT_STACK` and `GOOGLE_FONTS_HREF` follow it, and the page CSS, both Plotly layouts and `charts/trades.py` read the stack |
+
+To try another face, change one loader (and its import) in one `fonts.ts`,
+screenshot it, then revert:
+
+```diff
+-import { Geist_Mono, Inter } from "next/font/google";
++import { <Other_Mono_Face>, Inter } from "next/font/google";
+-export const mono = Geist_Mono({ subsets: ["latin"], variable: "--font-mono-face", display: "swap" });
++export const mono = <Other_Mono_Face>({ subsets: ["latin"], variable: "--font-mono-face", display: "swap" });
+```
+
+Nothing else changes: the variable name is generic, so every consumer of
+`--font-mono` follows. Swap `--font-sans` the same way if a surface ever
+leaves Inter.
+
+Out of scope for this system: `apps/reference/**` and
+`apps/digichat/reference/**` are type-specimen galleries that deliberately
+name alternatives.
 
 | Token                      | Value                                 |
 | -------------------------- | ------------------------------------- |

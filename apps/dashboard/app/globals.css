@@ -112,18 +112,18 @@
 @source "../../../packages/ui/src/components/conviction";
 
 /* ── Fonts (next/font routing) ───────────────────────────────────────────
-   tokens.css names Geist Mono for sans / mono / display (BLEND v0.1).
-   dashboard self-hosts that face through next/font (layout.tsx), which
-   exposes it ONLY via the hashed --font-geist-mono variable. Re-declare
-   the canon font tokens (equal specificity, later source) so utilities
-   resolve to the CSP-safe self-hosted face (font-src 'self' data:). */
+   BLEND v0.1: one mono voice for display, body, and chrome. tokens.css names
+   Geist Mono for all three and builds the stacks off the generic
+   --font-mono-face variable; app/fonts.ts is the only place the face is
+   loaded (self-hosted through next/font, so it satisfies the CSP
+   font-src 'self' data:). Re-declare the canon font tokens (equal specificity,
+   later source) so utilities resolve to the CSP-safe shipped face. */
 :root[data-theme] {
-  --font-sans: var(--font-geist-mono), ui-monospace, monospace;
-  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
-  --font-display: var(--font-geist-mono), ui-monospace, monospace;
+  --font-sans: var(--font-stack-mono);
+  --font-mono: var(--font-stack-mono);
+  --font-display: var(--font-stack-display);
   /* quant-native still reads the legacy token name — route it to canon mono
-     so .qn-* text uses the shipped face instead of a JetBrains Mono that
-     never loads. */
+     so .qn-* text uses the shipped face. */
   --font-family-mono: var(--font-mono);
 }
 

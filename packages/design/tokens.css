@@ -54,11 +54,19 @@
   --accent: var(--fg);
 
   /* --- Typography ------------------------------------------------------- */
-  /* Unthemed legacy slot. Themed surfaces remap this to --font-sans (mono)
-     under :root[data-theme] so Inter is not the live body default. Override
+  /* Font stacks are built HERE, once. Each reads the face variable a surface
+     sets through next/font, then a system fallback chain, so no stylesheet
+     outside this file names a font family. Swap a surface's face by editing
+     one loader line in that surface's fonts.ts — never this file. */
+  --font-stack-sans: var(--font-sans-face, "Inter"), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-stack-mono: var(--font-mono-face, "Geist Mono"), ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", "Segoe UI Symbol", monospace;
+  --font-stack-display: var(--font-mono-face, "Geist Mono"), ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", "Segoe UI Symbol", monospace;
+
+  /* Legacy slot. Themed surfaces remap this to --font-sans (mono) under
+     :root[data-theme] so Inter is not the live body default. Override
      --font-sans locally for a sans/serif escape hatch; --font-family follows. */
-  --font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  --font-family-mono: 'JetBrains Mono', 'Fira Code', 'Space Mono', monospace;
+  --font-family: var(--font-stack-sans);
+  --font-family-mono: var(--font-stack-mono);
 
   --font-size-h1: clamp(3rem, 6vw, 4.5rem);
   --font-size-h2: 2.5rem;
@@ -367,9 +375,9 @@
      Serif/sans escape hatches set --font-display / --font-sans locally.
      Legacy --font-family follows --font-sans so themed consumers of
      components.css / app-shell-terminal do not fall through to Inter. */
-  --font-sans: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
-  --font-mono: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
-  --font-display: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
+  --font-sans: var(--font-stack-mono);
+  --font-mono: var(--font-stack-mono);
+  --font-display: var(--font-stack-display);
   --font-family: var(--font-sans);
   --font-family-mono: var(--font-mono);
 

@@ -25,11 +25,24 @@ describe("skin host contract matches the sources", () => {
     expect(css).toContain(contract.tailwindSources.sourceDirective);
   });
 
-  it("the host layout provides the Geist Mono variable", () => {
-    const layout = read(`../../../../../../apps/digichat/${contract.fontVariables.hostLayout}`);
-    expect(layout).toMatch(
+  it("the host font config provides the mono face variable and the layout applies it", () => {
+    const config = read(`../../../../../../apps/digichat/${contract.fontVariables.hostFontConfig}`);
+    expect(config).toMatch(
       new RegExp(`variable:\\s*"${contract.fontVariables.variable}"`),
     );
+    const layout = read(`../../../../../../apps/digichat/${contract.fontVariables.hostLayout}`);
+    expect(layout).not.toMatch(/next\/font/);
+    expect(layout).toMatch(/from\s*["']@\/app\/fonts["']/);
+    expect(layout).toMatch(/fontVariables/);
+  });
+
+  it("the retired-name font alias is a CSS alias, not a second loader", () => {
+    const theme = read("../../../styles/digichat-app-theme.css");
+    expect(theme).toMatch(
+      new RegExp(`${contract.fontVariables.alias}:\\s*var\\(${contract.fontVariables.variable}`),
+    );
+    const config = read(`../../../../../../apps/digichat/${contract.fontVariables.hostFontConfig}`);
+    expect(config).not.toMatch(new RegExp(contract.fontVariables.alias));
   });
 
   it("the host client drives the theme dataset and classes", () => {

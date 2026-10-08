@@ -32,7 +32,8 @@
   --radius: 0;
   --radius-thread: 0;
   --composer-radius: 0;
-  /* Gallery chatbot.css uses var(--font-mono). Catalog :root keeps IBM Plex. */
+  /* Gallery chatbot.css uses var(--font-mono). --font-geist-mono is the
+     retired-name alias for the app's one mono face (digichat-app-theme.css). */
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
   --font-sans: var(--font-geist-mono), ui-monospace, monospace;
   font-family: var(--font-geist-mono), ui-monospace, monospace;
