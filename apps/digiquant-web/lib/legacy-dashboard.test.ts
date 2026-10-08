@@ -4,7 +4,9 @@ import { publicCatalogPages } from "../components/desk/public-surface";
 import { WEB_SLOTS } from "../components/desk/web-slots";
 import { deskHref } from "../components/desk/paths";
 import {
+  DASHBOARD_ACCOUNT_PATHS,
   LEGACY_DESK_PATHS,
+  RETIRED_DASHBOARD_PATHS,
   legacyDashboardCloudflareLines,
   legacyDashboardRedirects,
   legacyDashboardTarget,
@@ -31,26 +33,49 @@ describe("legacy dashboard redirects", () => {
     expect(legacyDashboardTarget("/dashboard/portfolio/holdings")).toBe("/app/portfolio/holdings/");
   });
 
-  it("sends unknown old paths to /app and ignores other sites", () => {
-    expect(legacyDashboardTarget("/dashboard/login")).toBe("/app");
-    expect(legacyDashboardTarget("/dashboard/settings/brokers/callback")).toBe("/app");
+  it("sends retired pages to /app and leaves account pages and other sites alone", () => {
     expect(legacyDashboardTarget("/dashboard/portfolio/performance")).toBe("/app");
-    expect(legacyDashboardTarget("/dashboard/tools/luxalgo")).toBe("/app");
-    expect(legacyDashboardTarget("/dashboard/fx")).toBe("/app");
-    expect(legacyDashboardTarget("/dashboard/fx/ideas")).toBe("/app");
-    expect(legacyDashboardTarget("/dashboard/twelve-x")).toBe("/app");
+    expect(legacyDashboardTarget("/dashboard/twelve-x/")).toBe("/app");
+    for (const path of RETIRED_DASHBOARD_PATHS) {
+      expect(legacyDashboardTarget(`/dashboard${path}`)).toBe("/app");
+    }
+    for (const path of DASHBOARD_ACCOUNT_PATHS) {
+      expect(legacyDashboardTarget(`/dashboard${path}`)).toBeNull();
+      expect(legacyDashboardTarget(`/dashboard${path}/`)).toBeNull();
+    }
     expect(legacyDashboardTarget("/app")).toBeNull();
     expect(legacyDashboardTarget("/app/portfolio/")).toBeNull();
     expect(legacyDashboardTarget("/")).toBeNull();
   });
 
-  it("lists specific Next redirects before the unknown catch-all", () => {
+  it("never shadows the account pages apps/dashboard still ships", () => {
+    // Supabase Edge Functions pin these (digiquant/supabase/functions/_shared/app-url.ts).
+    expect(DASHBOARD_ACCOUNT_PATHS).toEqual(
+      expect.arrayContaining(["/login", "/auth/callback", "/settings", "/settings/brokers/callback"]),
+    );
+    const sources = legacyDashboardRedirects().map((rule) => rule.source);
+    expect(sources.some((source) => source.includes(":path") || source.includes("*"))).toBe(false);
+    const text = readFileSync(new URL("../public/_redirects", import.meta.url), "utf8");
+    expect(text).not.toMatch(/^\/dashboard\/\*/m);
+    for (const path of DASHBOARD_ACCOUNT_PATHS) {
+      expect(sources).not.toContain(`/dashboard${path}`);
+      expect(sources).not.toContain(`/dashboard${path}/`);
+      expect(text).not.toMatch(new RegExp(`^/dashboard${path}/? `, "m"));
+    }
+    for (const path of RETIRED_DASHBOARD_PATHS) {
+      expect(LEGACY_DESK_PATHS).not.toContain(path);
+      expect(DASHBOARD_ACCOUNT_PATHS).not.toContain(path);
+    }
+  });
+
+  it("lists longer Next redirects before shorter ones", () => {
     const rules = legacyDashboardRedirects();
     const portfolio = rules.find((rule) => rule.source === "/dashboard/portfolio");
     const holdings = rules.find((rule) => rule.source === "/dashboard/portfolio/holdings");
     const root = rules.find((rule) => rule.source === "/dashboard");
     const slash = rules.find((rule) => rule.source === "/dashboard/");
-    const splat = rules.at(-1);
+    const research = rules.find((rule) => rule.source === "/dashboard/research");
+    const vela = rules.find((rule) => rule.source === "/dashboard/research/vela-spike");
     expect(portfolio).toEqual({
       source: "/dashboard/portfolio",
       destination: "/app/portfolio/",
@@ -59,19 +84,18 @@ describe("legacy dashboard redirects", () => {
     expect(holdings?.destination).toBe("/app/portfolio/holdings/");
     expect(root).toEqual({ source: "/dashboard", destination: "/app", permanent: true });
     expect(slash).toEqual({ source: "/dashboard/", destination: "/app", permanent: true });
-    expect(splat).toEqual({ source: "/dashboard/:path*", destination: "/app", permanent: true });
+    expect(rules.at(-1)).toEqual(slash);
     expect(rules.indexOf(holdings!)).toBeLessThan(rules.indexOf(portfolio!));
-    expect(rules.indexOf(portfolio!)).toBeLessThan(rules.indexOf(splat!));
+    expect(rules.indexOf(vela!)).toBeLessThan(rules.indexOf(research!));
   });
 
   it("publishes the same map in public/_redirects", () => {
     const text = readFileSync(new URL("../public/_redirects", import.meta.url), "utf8");
     const lines = legacyDashboardCloudflareLines();
     expect(lines[0]?.startsWith("/dashboard/portfolio/attribution ")).toBe(true);
-    expect(lines.at(-1)).toBe("/dashboard/* /app 308");
+    expect(lines.at(-1)).toBe("/dashboard/ /app 308");
     const block = lines.join("\n");
     expect(text).toContain(block);
-    expect(text.indexOf("/dashboard/portfolio /app/portfolio/ 308")).toBeLessThan(text.indexOf("/dashboard/* /app 308"));
     expect(text).toContain("/olympus/*              /dashboard/:splat         308");
   });
 });

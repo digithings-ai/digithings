@@ -1,8 +1,11 @@
 /**
  * Retired operator URLs under /dashboard map onto the live desk.
  * /dashboard and /dashboard/ are the brief (/app). A known desk path uses the
- * same trailing-slash shape as deskHref. Anything else under /dashboard goes
- * to /app. The apps/dashboard package stays in the tree; it is not a destination.
+ * same trailing-slash shape as deskHref. Retired dashboard pages with no desk
+ * twin go to /app. There is no catch-all: the account pages (login, signup,
+ * Auth callback, settings, Alpaca OAuth callback) still ship from apps/dashboard
+ * under /dashboard and are pinned by Supabase Edge Functions (app-url.ts),
+ * Stripe returns and scripts/build-digiquant.sh. A splat would shadow them.
  *
  * Keep LEGACY_DESK_PATHS equal to the public catalog pages plus the web-only
  * slots. Invite-only FX Hub paths are not public routes.
@@ -27,6 +30,32 @@ export const LEGACY_DESK_PATHS = [
   "/tools/chat",
 ];
 
+/** Retired apps/dashboard pages with no desk twin. They go to /app. */
+export const RETIRED_DASHBOARD_PATHS = [
+  "/architecture",
+  "/house",
+  "/library",
+  "/observability",
+  "/portfolio/performance",
+  "/portfolio/period",
+  "/portfolio/tickers",
+  "/research",
+  "/research/vela-spike",
+  "/strategy",
+  "/system",
+  "/twelve-x",
+  "/why",
+];
+
+/** Still served from apps/dashboard. Never redirected. */
+export const DASHBOARD_ACCOUNT_PATHS = [
+  "/login",
+  "/signup",
+  "/auth/callback",
+  "/settings",
+  "/settings/brokers/callback",
+];
+
 /** Live desk URL for one catalog or web-slot path. Matches deskHref. */
 export function legacyDeskHref(path) {
   return `/app${path}/`;
@@ -34,7 +63,8 @@ export function legacyDeskHref(path) {
 
 /**
  * @param {string} pathname
- * @returns {string | null} destination, or null when pathname is not a /dashboard URL
+ * @returns {string | null} destination, or null when the path is not redirected
+ *   (another site, an account page, or anything unlisted)
  */
 export function legacyDashboardTarget(pathname) {
   const path = pathname.split("?")[0]?.split("#")[0] ?? "";
@@ -42,14 +72,19 @@ export function legacyDashboardTarget(pathname) {
   const rest = path.slice("/dashboard".length).replace(/\/+$/, "");
   if (rest === "") return "/app";
   if (LEGACY_DESK_PATHS.includes(rest)) return legacyDeskHref(rest);
-  return "/app";
+  if (RETIRED_DASHBOARD_PATHS.includes(rest)) return "/app";
+  return null;
 }
 
 function deskPathsLongestFirst() {
   return [...LEGACY_DESK_PATHS].sort((a, b) => b.length - a.length || a.localeCompare(b));
 }
 
-/** Next.js redirects(). Specific desk paths, then the root, then the unknown catch-all. */
+function retiredLongestFirst() {
+  return [...RETIRED_DASHBOARD_PATHS].sort((a, b) => b.length - a.length || a.localeCompare(b));
+}
+
+/** Next.js redirects(). Specific desk paths, then retired pages, then the root. */
 export function legacyDashboardRedirects() {
   /** @type {{ source: string, destination: string, permanent: true }[]} */
   const rules = [];
@@ -58,13 +93,16 @@ export function legacyDashboardRedirects() {
     rules.push({ source: `/dashboard${path}`, destination, permanent: true });
     rules.push({ source: `/dashboard${path}/`, destination, permanent: true });
   }
+  for (const path of retiredLongestFirst()) {
+    rules.push({ source: `/dashboard${path}`, destination: "/app", permanent: true });
+    rules.push({ source: `/dashboard${path}/`, destination: "/app", permanent: true });
+  }
   rules.push({ source: "/dashboard", destination: "/app", permanent: true });
   rules.push({ source: "/dashboard/", destination: "/app", permanent: true });
-  rules.push({ source: "/dashboard/:path*", destination: "/app", permanent: true });
   return rules;
 }
 
-/** Cloudflare Pages `_redirects` lines. Static rules before the splat. */
+/** Cloudflare Pages `_redirects` lines. No splat; see the header comment. */
 export function legacyDashboardCloudflareLines() {
   /** @type {string[]} */
   const lines = [];
@@ -73,8 +111,11 @@ export function legacyDashboardCloudflareLines() {
     lines.push(`/dashboard${path} ${destination} 308`);
     lines.push(`/dashboard${path}/ ${destination} 308`);
   }
+  for (const path of retiredLongestFirst()) {
+    lines.push(`/dashboard${path} /app 308`);
+    lines.push(`/dashboard${path}/ /app 308`);
+  }
   lines.push("/dashboard /app 308");
   lines.push("/dashboard/ /app 308");
-  lines.push("/dashboard/* /app 308");
   return lines;
 }
