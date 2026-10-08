@@ -1,4 +1,3 @@
-"""Daily R2 refresh: vendor live overlap -> new immutable generations (#3780).
 
 Production clock is digithings-cron → digiquant-runner (``market-data-refresh``,
 13:00 and 21:30 UTC, #4761). ``pipeline-market-data-refresh.yml`` is manual
@@ -1420,6 +1419,15 @@ def _resolve_macro_specs(
 
     The third element is the series' native cadence (``None`` means daily), which
     sets the live fetch window in :func:`refresh_macro_series`.
+
+    ``None`` is a deliberate reading, not a gap (DIG-2406).
+    `_live_window_days` resolves it to `LIVE_WINDOW_DAYS`, the *narrowest*
+    of the four windows in `_CADENCE_WINDOW_DAYS`, so a series nobody wrote a
+    cadence down is judged at 45 days rather than at the slowest: an
+    undeclared cadence buys no patience. Every id the shipped manifest fetches
+    declares one -- see `research/config/macro_series.yaml`. The paths that
+    cannot are the `--macro-series` override below and the Yahoo FX
+    list, both daily by construction.
     """
     if cli_specs:
         out: list[tuple[str, str, str | None]] = []
@@ -1572,7 +1580,21 @@ def main(argv: list[str] | None = None) -> int:
     # vendor that keeps answering lands on `up-to-date`, which `_macro_leg_dead`
     # cannot see. Measured against each series' own cadence window. Additive
     # only, like the exemption above -- it names series, it never clears them.
-    failed += _macro_as_of_stale(outcomes, macro_specs, run)
+    # Wrapped like the per-series work either side of it (DIG-2406). The guard
+    # reads `macro_specs`, so a divergence here must not ride over the
+    # manifest write below; a raising guard is recorded as a macro error, which
+    # fails the run loud instead of letting a possibly-frozen panel report
+    # itself fresh.
+    try:
+        failed += _macro_as_of_stale(outcomes, macro_specs, run)
+    except Exception as exc:
+        failed.append(
+            _outcome(
+                "macro__as_of_guard",
+                MODE_ERROR,
+                note=f"as_of age guard raised: {type(exc).__name__}: {exc}",
+            )
+        )
     stale = (not gate["ok"]) or bool(failed)
     manifest.update(build_manifest(new_as_of, datasets, stale=stale))
     digest = store.write_manifest(manifest)
