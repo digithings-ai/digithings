@@ -5,7 +5,12 @@
  * measured grade basis.
  */
 import type { FxIdeaEvalRow, FxLevelProvenance, FxTradeIdeaRow } from './types';
-import { formatLevelValue, hasTradeLevels, parseTradeLevels } from './trade-levels';
+import {
+  formatLevelValue,
+  hasTradeLevels,
+  isPublishableBracket,
+  parseTradeLevels,
+} from './trade-levels';
 
 export type TradeLifecycle = 'live' | 'closed' | 'no_data' | 'unscored';
 
@@ -222,10 +227,13 @@ export function assembleTradeHistory(
       const tl = parseTradeLevels(idea.trade_levels);
       const fmt = (value: string, provenance?: FxLevelProvenance) =>
         formatLevelValue(value, idea.pair, provenance);
+      // A bracket publishes complete or not at all: a partial ladder would put a
+      // target on screen with no entry and no stop (DIG-260 L5 follow-up).
+      const publishable = isPublishableBracket(tl);
       const entryBand =
-        tl?.entry_low && tl?.entry_high
+        publishable && tl.entry_low && tl.entry_high
           ? `${fmt(tl.entry_low.value, tl.entry_low.provenance)}–${fmt(tl.entry_high.value, tl.entry_high.provenance)}`
-          : (tl?.entry_low ?? tl?.entry_high)
+          : publishable && (tl.entry_low ?? tl.entry_high)
             ? fmt(
                 (tl.entry_low ?? tl.entry_high)?.value ?? '',
                 (tl.entry_low ?? tl.entry_high)?.provenance,
@@ -239,8 +247,12 @@ export function assembleTradeHistory(
         title: idea.title,
         catalyst: idea.catalyst,
         entryBand,
-        stop: tl?.stop ? fmt(tl.stop.value, tl.stop.provenance) : null,
-        target: tl && tl.targets.length > 0 ? fmt(tl.targets[0].value, tl.targets[0].provenance) : null,
+        stop: publishable && tl.stop ? fmt(tl.stop.value, tl.stop.provenance) : null,
+        target:
+          publishable && tl.targets.length > 0
+            ? fmt(tl.targets[0].value, tl.targets[0].provenance)
+            : null,
+        // Shape-only, by contract: "levels exist" stays distinct from "may be shown".
         hasLevels: hasTradeLevels(tl),
         lifecycle: lifecycleOf(ev?.status),
         entryDate: ev?.entry_date ?? null,

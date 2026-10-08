@@ -181,6 +181,44 @@ describe('buildLevelFixSeries', () => {
     expect(s.targets).toEqual([]);
     expect(s.points).toEqual([]);
     expect(s.anchorsOnly).toBe(false);
+    // No bracket at all is not "pending" — there is nothing to wait for.
+    expect(s.levelsPending).toBe(false);
+  });
+
+  it('withholds the level series when the bracket is not complete', () => {
+    const s = buildLevelFixSeries(
+      idea({
+        trade_levels: {
+          targets: [{ value: '1.1000', provenance: 'broker_quoted', source_ref: 'desk' }],
+          status: 'partial',
+        },
+      }),
+      evalRow(),
+      pts(['2026-06-13', '2026-06-14'], [1.082, 1.086]),
+    );
+    // A target with no entry band and no stop is a half ladder: publish none of it.
+    expect(s.entryLow).toBeNull();
+    expect(s.entryHigh).toBeNull();
+    expect(s.stop).toBeNull();
+    expect(s.targets).toEqual([]);
+    expect(s.levelsPending).toBe(true);
+    // The fix line itself is real data and still renders.
+    expect(s.points).toHaveLength(2);
+  });
+
+  it('flags an incomplete (statusless) bracket as pending, not published', () => {
+    // No `status` coerces to 'incomplete' — populated, but not publishable.
+    const { status: _status, ...populated } = idea().trade_levels!;
+    const s = buildLevelFixSeries(idea({ trade_levels: populated }), evalRow(), []);
+    expect(s.entryLow).toBeNull();
+    expect(s.targets).toEqual([]);
+    expect(s.levelsPending).toBe(true);
+  });
+
+  it('keeps levelsPending false for a complete bracket', () => {
+    const s = buildLevelFixSeries(idea(), evalRow(), []);
+    expect(s.entryLow).toBeCloseTo(1.08, 10);
+    expect(s.levelsPending).toBe(false);
   });
 });
 
