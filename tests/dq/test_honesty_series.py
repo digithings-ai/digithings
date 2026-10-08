@@ -140,13 +140,33 @@ def _pyo3():
     return pytest.importorskip("nautilus_trader.core.nautilus_pyo3")
 
 
+def _add_trade_at(analyzer, position_id, money, ts) -> bool:
+    """``add_trade`` stamped with an explicit ``ts_event``. False if this build refuses one.
+
+    Probed by *calling*, never by reading the signature: a signature test has to
+    match a parameter name, so a build that still emitted rows but renamed
+    ``ts_event`` would skip on exactly the builds that prove rows exist.
+
+    ``TypeError`` alone is not proof of arity either — pyo3 raises it for
+    argument *type conversion* too — so the 2-arg form this build does accept is
+    the only thing that can tell the two apart. If that is refused too the error
+    is something else and propagates, rather than being swallowed into a skip.
+
+    The trade lands either way: a build that refuses the timestamp still gets the
+    trade, with the 2-arg form, so the caller sees the engine's own behaviour for
+    it rather than a hole in the data.
+    """
+    try:
+        analyzer.add_trade(position_id, ts, money)
+    except TypeError:
+        analyzer.add_trade(position_id, money)
+        return False
+    return True
+
+
 def _add_trade(analyzer, pyo3, usd, pid, pnl, ts=1_700_000_000_000_000_000):
     """``add_trade`` with the arity this build has: 2 args to 1.228, 3 from 1.230."""
-    money = pyo3.Money(float(pnl), usd)
-    try:
-        analyzer.add_trade(pyo3.PositionId(pid), money)
-    except TypeError:
-        analyzer.add_trade(pyo3.PositionId(pid), int(ts), money)
+    _add_trade_at(analyzer, pyo3.PositionId(pid), pyo3.Money(float(pnl), usd), int(ts))
 
 
 def _analyzer_with_trades(trades):
@@ -159,12 +179,20 @@ def _analyzer_with_trades(trades):
     return analyzer, usd
 
 
+#: Nanosecond stamps one day apart. Read off ``datetime`` rather than by hand:
+#: two comment threads in this leaf mis-derived a day boundary in their heads and
+#: published it as a defect before any code was run. ``test_the_stamps_are_the
+#: _days_the_comments_named`` is the oracle.
+_TS_1 = 1_700_000_000_000_000_000
+_TS_2 = 1_700_086_400_000_000_000
+_TS_3 = 1_700_172_800_000_000_000
+
 #: The 1.230.0 record row. Not produced by the 1.228.0 build, so it is written
 #: out literally: the shape is the contract, and the normalizer must honour it.
 _ROWS_1230 = [
-    ("P-1", 1_700_000_000_000_000_000, 10.0),
-    ("P-2", 1_700_086_400_000_000_000, -4.0),
-    ("P-3", 1_700_172_800_000_000_000, 0.0),
+    ("P-1", _TS_1, 10.0),
+    ("P-2", _TS_2, -4.0),
+    ("P-3", _TS_3, 0.0),
 ]
 
 
@@ -241,38 +269,18 @@ def test_the_engine_really_emits_three_column_rows_with_a_real_timestamp() -> No
     The skip keys on the build's **capability** to emit a record row, not on the
     shape that came back. Keying on the observed shape would be the trap: a
     nautilus that reverted 1.230.0 to ``{pid: pnl}`` would then skip on the one
-    build whose whole job is to prove rows exist.
-
-    It is probed by *calling*, not by reading ``add_trade``'s signature. A
-    signature test would be a second version of the same mistake one level down:
-    it would have to match the parameter's name, so a build that still emitted
-    rows but renamed ``ts_event`` to ``event_ts`` — or dropped
-    ``__text_signature__``, which makes ``inspect.signature`` fail differently on
-    3.12 and 3.13 — would skip on exactly the builds that prove rows exist.
-
-    ``TypeError`` alone is not proof of arity, though: pyo3 raises it for
-    argument *type conversion* too, measured on the live builds — a ``float``
-    where ``Money`` belongs gives ``'float' object is not an instance of
-    'Money'``, a ``datetime`` where ``int`` belongs gives ``'datetime.datetime'
-    object cannot be interpreted as an integer``. So a rejected 3-arg call only
-    counts as "this build cannot carry a timestamp" if the 2-arg form it does
-    accept still works; if both are refused the error is something else and is
-    re-raised rather than skipped.
+    build whose whole job is to prove rows exist. The capability probe is
+    :func:`_add_trade_at`, shared with the two scale-out cases below.
     """
     pyo3 = _pyo3()
     usd = pyo3.Currency.from_str("USD")
     analyzer = pyo3.PortfolioAnalyzer()
-    ts = 1_700_000_000_000_000_000
+    ts = _TS_1
     # Built outside the probe: only ``add_trade`` is under test, so a
     # TypeError from constructing these must fail loudly rather than skip.
     position_id = pyo3.PositionId("P-1")
     money = pyo3.Money(10.0, usd)
-    try:
-        analyzer.add_trade(position_id, ts, money)
-    except TypeError:
-        # Arity, or a type conversion? Only the 2-arg form this build does
-        # accept can tell the two apart; if it is refused too, re-raise.
-        analyzer.add_trade(position_id, money)
+    if not _add_trade_at(analyzer, position_id, money, ts):
         pytest.skip("add_trade rejects a ts_event, so this build cannot emit record rows")
 
     raw = analyzer.realized_pnls(usd)
@@ -316,6 +324,211 @@ def test_case_4_recorded_trade_replaces_the_added_one_for_one_round_trip() -> No
     assert result is not None
     assert len(result[1]) == 1, "one (pid, ts) is one round trip"
     assert result[1] == [4.0], "the recorded value is the one that survives"
+
+
+def test_the_stamps_are_the_days_the_comments_named() -> None:
+    """The oracle for :data:`_TS_1`/:data:`_TS_2`/:data:`_TS_3`.
+
+    Every label in this module is derived from these three stamps, so an off-by-a-
+    day constant would silently move every assertion below with it — a set of
+    tests that agree with each other and with nothing. Computed here from the
+    epoch, one stamp at a time.
+
+    Only the *differences* are whole days: ``_TS_1`` is 22:13:20Z, so it is not a
+    midnight. Written as a per-stamp "is on a day boundary" check this test failed
+    on its first run, which is why it is a difference.
+    """
+    day_ns = 86_400_000_000_000
+    for stamp, day in ((_TS_1, "2023-11-14"), (_TS_2, "2023-11-15"), (_TS_3, "2023-11-16")):
+        moment = datetime.fromtimestamp(stamp // 1_000_000_000, tz=timezone.utc)
+        assert moment.strftime("%Y-%m-%d") == day, f"{stamp} is not {day}"
+    assert _TS_2 - _TS_1 == day_ns, "the fixtures really are one day apart"
+    assert _TS_3 - _TS_2 == day_ns
+
+
+def test_case_8_a_repeated_pair_is_one_record_not_a_sum() -> None:
+    """Board ruling (a), step 1: repeated records go before the parts are summed.
+
+    Two ``add_trade`` calls for one ``(position_id, ts_event)`` leave that
+    position worth **one** record's value. Summing first would report 17.0 — a
+    close event counted twice, and a denominator that grows with the engine's own
+    duplication instead of with the trading.
+    """
+    rows = [("P-1", _TS_1, 10.0), ("P-1", _TS_1, 7.0), ("P-2", _TS_2, 5.0)]
+
+    dates, values = normalize_series(rows)
+
+    assert len(values) == 2, "the repeated pair is one record, and P-2 is a second"
+    assert values == [7.0, 5.0], "the later record wins; it is not the sum of both"
+    assert 17.0 not in values, "the duplicated close event must not be added twice"
+
+
+def test_case_8_engine_two_adds_on_one_pair_stay_one_row() -> None:
+    """The same property on the installed engine, where the pair is built, not spelled out.
+
+    Up to 1.228 ``realized_pnls`` is keyed by position id and the engine collapses
+    the pair itself, last write winning; from 1.230.0 the pair reaches us and
+    :func:`normalize_series` has to collapse it. Either way one position, one row.
+    """
+    analyzer, usd = _analyzer_with_trades([("P-1", 10.0), ("P-1", 7.0), ("P-2", 5.0)])
+
+    result = normalize_series(analyzer.realized_pnls(usd))
+
+    assert result is not None
+    assert result[1] == [7.0, 5.0], "one row per position, the later record's value"
+
+
+def test_case_9_two_parts_of_one_position_sum_into_a_single_row() -> None:
+    """Board ruling (a), step 2: two legs of one position are one row.
+
+    A scale-out closes one position in two parts. Counting the parts would report
+    ``n=2`` here and ``n=1`` on the 1.228 dict that cannot express them, so the
+    same strategy would carry a different honest rate depending on the installed
+    engine. This is the case the ruling was made for: it returns ``[10.0, -5.0]``
+    today and would have returned three rows.
+    """
+    rows = [("P-1", _TS_1, 6.0), ("P-1", _TS_2, 4.0), ("P-2", _TS_3, -5.0)]
+
+    dates, values = normalize_series(rows)
+
+    assert len(values) == 2, "one row per closed position, not per close event"
+    assert values == [10.0, -5.0], "P-1's two legs are summed into its single row"
+    assert sum(1 for v in values if v > 0) == 1, "k counts positions whose total is positive"
+
+
+def test_case_9_engine_scale_out_is_one_position_not_two_legs() -> None:
+    """The same scale-out, built on the engine that can express it.
+
+    Only a build whose ``add_trade`` carries a ``ts_event`` can hold two legs of
+    one position, so this skips on 1.228 — where the equivalent is measured by
+    :func:`test_the_denominator_is_the_closed_position_count_on_both_engine_shapes`.
+    """
+    pyo3 = _pyo3()
+    usd = pyo3.Currency.from_str("USD")
+    analyzer = pyo3.PortfolioAnalyzer()
+    money_1, money_2 = pyo3.Money(6.0, usd), pyo3.Money(4.0, usd)
+    if not _add_trade_at(analyzer, pyo3.PositionId("P-1"), money_1, _TS_1):
+        pytest.skip("add_trade rejects a ts_event, so this build cannot carry two legs")
+    analyzer.add_trade(pyo3.PositionId("P-1"), _TS_2, money_2)
+    analyzer.add_trade(pyo3.PositionId("P-2"), _TS_3, pyo3.Money(-5.0, usd))
+
+    result = normalize_series(analyzer.realized_pnls(usd))
+
+    assert result is not None
+    dates, values = result
+    assert len(values) == 2, "the scale-out is one position, not two legs"
+    assert values == [10.0, -5.0]
+    assert dates == ["2023-11-15", "2023-11-16"], "labelled with each position's last close"
+
+
+def test_the_repeated_pair_is_collapsed_before_the_parts_are_summed() -> None:
+    """Both steps at once, which is where their order shows.
+
+    ``(P-1, ts1)`` arrives twice and ``(P-1, ts2)`` once. Collapsing first leaves
+    99.0 + 4.0 = 103.0. Summing first leaves 6.0 + 99.0 + 4.0 = 109.0 — the same
+    close event counted twice, in a value nobody can audit. Each of the two cases
+    above passes against an implementation that gets this order wrong, because
+    neither of them mixes a duplicated pair with a second leg.
+    """
+    rows = [
+        ("P-1", _TS_1, 6.0),
+        ("P-1", _TS_1, 99.0),
+        ("P-1", _TS_2, 4.0),
+    ]
+
+    _, values = normalize_series(rows)
+
+    assert values == [103.0], "the surviving 99.0 is what gets summed, not the 6.0"
+
+
+def test_a_position_whose_parts_cancel_below_zero_is_a_loss() -> None:
+    """Summing is what decides the sign, so a winner's legs can make it a loss.
+
+    10.0 and -12.0 are two winning-ish parts of one position whose total is -2.0.
+    Counting the parts would report a win and add a fake one to ``k``, so the
+    honest rate would be flattered by the very duplication the ruling removes.
+    """
+    rows = [("P-1", _TS_1, 10.0), ("P-1", _TS_2, -12.0), ("P-2", _TS_3, 1.0)]
+
+    _, values = normalize_series(rows)
+
+    assert values == [-2.0, 1.0]
+    assert sum(1 for v in values if v > 0) == 1, "a net loss is not a win, however its legs fell"
+
+
+def test_a_position_with_one_unreadable_part_is_dropped_whole() -> None:
+    """No partial sums. One unreadable part makes the position's total unknowable.
+
+    Keeping P-1's readable 10.0 and dropping only its NaN part would report a
+    fabricated total — the one outcome this module exists to prevent, and a new
+    one the summing introduces. The position goes instead; a row we can state is
+    worth more than a row we cannot.
+    """
+    rows = [
+        ("P-1", _TS_1, 10.0),
+        ("P-1", _TS_2, float("nan")),
+        ("P-2", _TS_3, 3.0),
+    ]
+
+    result = normalize_series(rows)
+
+    assert result is not None, "P-2 survives on its own"
+    assert result[1] == [3.0], "P-1 is dropped whole, not summed from its readable part"
+
+
+def test_a_total_that_overflows_drops_the_position_rather_than_reporting_infinity() -> None:
+    """Two finite parts can sum to ``inf``; ``inf`` is not a realized PnL."""
+    rows = [("P-1", _TS_1, 1e308), ("P-1", _TS_2, 1e308), ("P-2", _TS_3, 3.0)]
+
+    result = normalize_series(rows)
+
+    assert result is not None, "P-2 survives on its own"
+    assert result[1] == [3.0]
+    assert all(math.isfinite(v) for v in result[1]), "no infinity reaches the caller"
+
+
+def test_a_summed_position_is_labelled_with_its_last_close_event() -> None:
+    """A position's realized PnL is complete when its final leg closes.
+
+    Taking the first part's stamp instead would date the round trip to when it
+    began being unwound, which is the open, not the close. The dict shape has one
+    part per position, so this changes nothing there.
+    """
+    rows = [("P-1", _TS_1, 6.0), ("P-1", _TS_2, 4.0), ("P-2", _TS_3, 1.0)]
+
+    dates, values = normalize_series(rows)
+
+    assert values == [10.0, 1.0]
+    assert dates == ["2023-11-15", "2023-11-16"]
+
+
+def test_the_denominator_is_the_closed_position_count_on_both_engine_shapes() -> None:
+    """The invariant the ruling buys: ``n`` is the same whatever build produced the rows.
+
+    One logical activity — P-1 scaled out into two closes, P-2 closed once — in
+    both shapes an installed engine emits. ``n`` must be 2 either way. Under the
+    ``(pid, ts_event)`` key this leaf started with, the rows reported 3 and the
+    dict 2, so the same strategy carried a different honest rate, and a different
+    Wilson interval, depending on the installed engine.
+
+    The *values* are not the same and cannot be: up to 1.228 the engine keys
+    ``realized_pnls`` by position id, so it has already collapsed P-1's two legs
+    to one entry before this code sees them, and that entry is whatever the engine
+    last computed. n is what this module promises to mean the same everywhere, and
+    it is the number the honest rate is divided by.
+    """
+    from_dict = normalize_series({"P-1": 10.0, "P-2": -5.0})
+    from_rows = normalize_series(
+        [("P-1", _TS_1, 6.0), ("P-1", _TS_2, 4.0), ("P-2", _TS_3, -5.0)],
+    )
+
+    assert from_dict is not None
+    assert from_rows is not None
+    n_dict, n_rows = len(from_dict[1]), len(from_rows[1])
+    assert n_dict == n_rows == 2, f"n is build-dependent: {n_dict} on the dict, {n_rows} on rows"
+    assert from_dict[1][0] == from_rows[1][0] == 10.0, "P-1 is worth its legs on both shapes"
+    assert sum(1 for v in from_dict[1] if v > 0) == 1
+    assert sum(1 for v in from_rows[1] if v > 0) == 1, "same k, same rate, same interval"
 
 
 def test_case_5_breakeven_is_a_loss_on_both_shapes() -> None:
