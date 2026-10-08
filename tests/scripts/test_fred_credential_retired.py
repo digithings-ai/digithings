@@ -98,6 +98,26 @@ ALLOWED_LIVE_MENTIONS = {
             ),
         }
     ),
+}
+
+# Paths that keep the name on purpose, for a reason that is *not* a live
+# requirement. Anything added here is a decision to review, not a default.
+ALLOWED_ELSEWHERE = {
+    "docs/ops/SECRETS_INVENTORY.md": (
+        "human lock held by DIG-124; the inventory records the exposure and "
+        "must not be edited from this leaf"
+    ),
+}
+
+# Rows that only exist on ONE of the two branches this guard ships to.
+# `scripts/secret_staleness_check.py` and `apps/digiquant-runner/` are tracked on
+# develop but absent from main (verified with `git ls-tree -r` against both), so
+# a fixed row for them is correct on one tree and a lie on the other: the
+# staleness assertion below fails on main with "exempt but no longer exists",
+# and dropping the row outright fails on develop with "these live surfaces still
+# reference it" (measured 2026-10-09, both directions, on clean worktrees).
+# Filtering by existence keeps the row honest on whichever tree is under test.
+BRANCH_SPECIFIC_LIVE_MENTIONS = {
     "scripts/secret_staleness_check.py": (
         {
             "were `CURSOR_API_KEY` and `FRED_API_KEY` at 165 days.": (
@@ -112,13 +132,7 @@ ALLOWED_LIVE_MENTIONS = {
     ),
 }
 
-# Paths that keep the name on purpose, for a reason that is *not* a live
-# requirement. Anything added here is a decision to review, not a default.
-ALLOWED_ELSEWHERE = {
-    "docs/ops/SECRETS_INVENTORY.md": (
-        "human lock held by DIG-124; the inventory records the exposure and "
-        "must not be edited from this leaf"
-    ),
+BRANCH_SPECIFIC_ELSEWHERE = {
     "apps/digiquant-runner/src/commands.test.ts": (
         "negative assertion -- asserts FRED_API_KEY is absent from the spec"
     ),
@@ -126,6 +140,15 @@ ALLOWED_ELSEWHERE = {
         "negative assertion -- asserts FRED_API_KEY is not forwarded"
     ),
 }
+
+
+def _present(mapping):
+    """Rows whose exempt path exists on this tree; the rest are dropped."""
+    return {k: v for k, v in mapping.items() if (REPO_ROOT / k).exists()}
+
+
+ALLOWED_LIVE_MENTIONS = {**ALLOWED_LIVE_MENTIONS, **_present(BRANCH_SPECIFIC_LIVE_MENTIONS)}
+ALLOWED_ELSEWHERE = {**ALLOWED_ELSEWHERE, **_present(BRANCH_SPECIFIC_ELSEWHERE)}
 
 # FRED splits its API in two. ``api.stlouisfed.org`` is the JSON/CSV
 # observations API and it *requires* a key; ``fred.stlouisfed.org/graph/...csv``
