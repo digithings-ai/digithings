@@ -838,11 +838,13 @@ def test_a_retired_daily_series_is_named_once_not_twice(r2: dict[str, Any]) -> N
 
 
 def test_an_error_outcome_is_not_re_judged_on_age(r2: dict[str, Any]) -> None:
-    """``error`` is never exempt, so its age can only ever name it twice.
+    """``error`` is never exempt, so it is already loud without an age judgement.
 
     ``MODE_ERROR`` is in ``_SOFT_FAIL_MODES`` and the #4621 exemption clause
-    requires ``MODE_HISTORY_ONLY``, so an error is already loud whatever its
-    seal says. Measuring it adds no finding.
+    requires ``MODE_HISTORY_ONLY``, so an error fails the run whatever its seal
+    says. Measuring it would add no finding -- not because of the ``already``
+    de-duplication, which would handle a duplicate name fine, but because
+    there is nothing left to decide.
     """
     specs = [("fred", "M2SL", "monthly")]
     outcomes = [
