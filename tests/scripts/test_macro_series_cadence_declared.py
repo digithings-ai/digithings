@@ -1,3 +1,4 @@
+"""Every macro series the cron fetches declares the cadence it is judged on.
 
 DIG-2406, out of the DIG-2381 review of #5248. Six of the 23 ids on
 ``KEPT_SERIES_IDS`` shipped a ``cadence:``; the other 17 were fetched all the
@@ -104,17 +105,39 @@ def fred_cadences(shipped_specs) -> dict[str, str | None]:
 
 @pytest.fixture(scope="module")
 def window_days() -> dict[str, int]:
-    """The real ``_CADENCE_WINDOW_DAYS`` table, read out of the script's own AST."""
+    """The real ``_CADENCE_WINDOW_DAYS`` table, read out of the script's own AST.
+
+    ``daily`` and ``weekly`` are written as ``LIVE_WINDOW_DAYS`` rather than as
+    literals, so ``ast.literal_eval`` alone raises on the name. Substitute the
+    one name the table uses from the same parse -- read as data, not re-parsed
+    by hand -- so the table stays the shipped one.
+    """
     tree = ast.parse(REFRESH_SCRIPT.read_text(encoding="utf-8"))
+    names: dict[str, ast.expr] = {}
+    table: ast.expr | None = None
     for node in tree.body:
         if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-            if node.target.id == "_CADENCE_WINDOW_DAYS":
-                return ast.literal_eval(node.value)
-        if isinstance(node, ast.Assign):
-            names = [t.id for t in node.targets if isinstance(t, ast.Name)]
-            if "_CADENCE_WINDOW_DAYS" in names:
-                return ast.literal_eval(node.value)
-    raise AssertionError(f"{REFRESH_SCRIPT.name} no longer defines _CADENCE_WINDOW_DAYS")
+            if node.target.id == "LIVE_WINDOW_DAYS":
+                names["LIVE_WINDOW_DAYS"] = node.value
+            elif node.target.id == "_CADENCE_WINDOW_DAYS":
+                table = node.value
+        elif isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == "LIVE_WINDOW_DAYS":
+                    names["LIVE_WINDOW_DAYS"] = node.value
+    if table is None:
+        raise AssertionError(f"{REFRESH_SCRIPT.name} no longer defines _CADENCE_WINDOW_DAYS")
+    if not isinstance(table, ast.Dict):
+        raise AssertionError(f"_CADENCE_WINDOW_DAYS is a {type(table).__name__}, not a dict")
+    resolved: dict[str, int] = {}
+    for key, value in zip(table.keys, table.values, strict=True):
+        if isinstance(value, ast.Name):
+            if value.id not in names:
+                raise AssertionError(f"unresolved name {value.id!r} in _CADENCE_WINDOW_DAYS")
+            value = names[value.id]
+        assert key is not None
+        resolved[ast.literal_eval(key)] = ast.literal_eval(value)
+    return resolved
 
 
 @pytest.fixture(scope="module")
@@ -155,8 +178,7 @@ def test_an_undeclared_cadence_lands_on_the_narrowest_window(refresh, window_day
     patience -- the opposite of what the fallback is for.
     """
     assert refresh._live_window_days(None) == min(window_days.values()), (
-        "None must resolve to the narrowest window, so an undeclared "
-        "cadence buys no patience"
+        "None must resolve to the narrowest window, so an undeclared cadence buys no patience"
     )
 
 
@@ -165,8 +187,7 @@ def test_declaring_daily_changed_no_window(refresh, fred_cadences, backfill_limi
     assert set(daily) == set(REVIEWED_UNDECLARED), f"daily drifted: {daily}"
     assert refresh._live_window_days("daily") == refresh.LIVE_WINDOW_DAYS
     assert backfill_limit("daily") == backfill_limit(None), (
-        "the 17 are declared daily precisely so that declaring them "
-        "changes no window"
+        "the 17 are declared daily precisely so that declaring them changes no window"
     )
 
 
