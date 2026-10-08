@@ -265,7 +265,8 @@ export async function POST(req: Request) {
   // turns, defers the locked presentation to the embedding page (which shows the
   // trial form) rather than the BYOK/contact card. Enforced per client IP in
   // memory — best-effort anti-abuse per the design spec. Fail open on any internal
-  // error so an infra hiccup never blocks a legitimate visitor.
+  // error in the per-IP quota check so an infra hiccup never blocks a legitimate
+  // visitor; the monitor-allowlist check below is the exception and fails closed.
   // When the tenant configures gate.consumeUrl and the client presents a chat
   // token, server-side quota supersedes the unlock header and the IP quota.
   let quotaSatisfied = false;
@@ -302,7 +303,16 @@ export async function POST(req: Request) {
           quotaSatisfied = true;
         }
       } catch (e) {
-        console.warn("[trial-gate] monitor allowlist error, failing open:", e);
+        // Fails CLOSED for the bypass: the assignment above never ran, so
+        // quotaSatisfied stays false and the per-IP quota below applies to this
+        // caller exactly as it did before the monitor check existed. Do not set
+        // quotaSatisfied here to "reconcile" this log with the wording it replaced
+        // ("failing open") — that would turn a safe fallback into a real quota
+        // bypass (DIG-1165).
+        console.warn(
+          "[trial-gate] monitor allowlist error, falling back to the per-IP cap:",
+          e,
+        );
       }
     }
 

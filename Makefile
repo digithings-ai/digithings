@@ -1,7 +1,7 @@
 # Digi Ecosystem – common targets (Phase 0+)
 # Use: make build, make test, make test-e2e, make up, make down
 
-.PHONY: build up down test test-unit test-e2e test-baseline doc-check adr-check vault-check package up-heartbeat up-digichat down-digichat digichat-release-up digichat-release-down digichat-profile-a-up digichat-profile-a-down digichat-profile-a-bundle-up digichat-profile-a-bundle-down digichat-dev digichat-health digichat-config-check stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init model-catalog model-catalog-check clean-imports find-stale commit pr task new-task status batch-candidates parse-error hooks-install up-observability down-observability research-validate supabase-migrations-check
+.PHONY: build up down test test-unit test-e2e test-baseline doc-check adr-check vault-check package up-heartbeat up-digichat down-digichat digichat-release-up digichat-release-down digichat-profile-a-up digichat-profile-a-down digichat-profile-a-bundle-up digichat-profile-a-bundle-down digichat-dev digichat-health digichat-config-check stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init model-catalog model-catalog-check clean-imports find-stale commit pr task new-task status batch-candidates parse-error hooks-install up-observability down-observability research-validate supabase-migrations-check datatap-answer-check
 
 build:
 	docker compose build
@@ -56,6 +56,20 @@ adr-check:
 # loads, not the repo-root namespace dir.
 vault-check:
 	PYTHONPATH=digivault/src python3 -P scripts/check_vault.py
+
+# Read-only probe of the DataTap production answer path. Exits 2 if it cannot see.
+#
+# GNU make returns 2 for *any* failing recipe and cannot return 1, so this target
+# cannot carry the script's exit 1 on its own. The recipe therefore echoes the
+# real status on a `datatap-answer-check: exit N` line and still fails, so make
+# never reports success for a check that found something. Anything that schedules
+# this must run `python3 scripts/datatap_answer_integrity_check.py` directly and
+# branch on its exit code, not on make's.
+datatap-answer-check:
+	@python3 scripts/datatap_answer_integrity_check.py; \
+	code=$$?; \
+	echo "datatap-answer-check: exit $$code"; \
+	exit $$code
 
 # Coverage for Phase 1 code (digigraph + digiquant + digitrace). Requires: pip install -e "digigraph[dev]" -e "digiquant[dev]" -e "digitrace"
 test-cov:
