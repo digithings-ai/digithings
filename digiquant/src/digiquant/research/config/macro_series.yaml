@@ -6,6 +6,22 @@
 # DTWEXBGS, GVZCLS, MANEMP, MORTGAGE30US, NFCI, OVXCLS, STLFSI4, VXNCLS.
 # Treasury: scripts/ingest_treasury_curve.py → us_treasury + treasury_market (not listed here).
 #
+# `cadence:` (daily/weekly/monthly/quarterly) declares a series' publishing rhythm
+# and selects its staleness window via _CADENCE_WINDOW_DAYS in
+# scripts/refresh_market_data_r2.py. Every fred entry below declares one
+# explicitly, including the 17 that are genuinely daily-publishing (verified
+# per-series against the panel, not assumed) — DIG-2406. Declaring is a no-op
+# on behaviour: `daily` and `weekly` share the same 45-day window, so an
+# undeclared entry was already judged at the daily window. It is worth stating
+# anyway: the DIG-1137 age guard fails loud, and an undeclared cadence means the
+# expectation behind that failure is an accident rather than a decision.
+#
+# A *missing* `cadence` is still meaningful and means `daily`. It applies to the
+# Yahoo FX pairs (resolved in `_resolve_macro_specs`, no YAML entry exists) and
+# to any ad-hoc `--macro-series` CLI spec. Those are same-day market quotes with
+# no publication calendar to declare, so `daily` is the honest answer for them
+# and is intentional, not a fallback to be tidied up later.
+#
 # FX rates (FX/EUR, FX/GBP, FX/JPY, FX/CAD) come from Yahoo Finance via
 # fetch_fx_yahoo — no YAML entry required (the symbol map is hard-coded in the
 # fetcher). Issue #328 dropped the Frankfurter and crypto_fear_greed blocks
@@ -16,53 +32,69 @@ fred:
   backfill_start: "1990-01-01"
   series:
     - id: DGS2
+      cadence: daily
       title: "Treasury 2Y constant maturity"
       unit: percent
     - id: DGS5
+      cadence: daily
       title: "Treasury 5Y constant maturity"
       unit: percent
     - id: DGS10
+      cadence: daily
       title: "Treasury 10Y constant maturity"
       unit: percent
     - id: DGS30
+      cadence: daily
       title: "Treasury 30Y constant maturity"
       unit: percent
     - id: DFF
+      cadence: daily
       title: "Effective federal funds rate"
       unit: percent
     - id: SOFR
+      cadence: daily
       title: "SOFR"
       unit: percent
     - id: T10Y2Y
+      cadence: daily
       title: "10Y minus 2Y Treasury spread"
       unit: percent
     - id: T10Y3M
+      cadence: daily
       title: "10Y minus 3M Treasury spread"
       unit: percent
     - id: T10YIE
+      cadence: daily
       title: "10Y breakeven inflation"
       unit: percent
     - id: T5YIE
+      cadence: daily
       title: "5Y breakeven inflation"
       unit: percent
     - id: DFII10
+      cadence: daily
       title: "10Y TIPS real yield"
       unit: percent
     - id: T5YIFR
+      cadence: daily
       title: "5Y5Y forward inflation expectation"
       unit: percent
     - id: BAMLH0A0HYM2
+      cadence: daily
       title: "ICE BofA US high yield OAS"
       unit: percent
     - id: BAMLC0A0CM
+      cadence: daily
       title: "ICE BofA US corporate OAS (IG)"
       unit: percent
     - id: VIXCLS
+      cadence: daily
       title: "VIX close"
       unit: index
     # Volatility complex (#708, Phase D) — VIXCLS/VXVCLS term structure only.
     # VXNCLS/GVZCLS/OVXCLS are not on the gloomberb panel (dropped 2026-09-29).
     - id: VXVCLS
+      cadence: daily
       title: "VIX 3-month (VIX3M)"
       unit: index
     # Macro-liquidity regime gauge (#1085) — M2 + labor.
@@ -83,6 +115,7 @@ fred:
       title: "PCE price index"
       unit: index
     - id: DCOILWTICO
+      cadence: daily
       title: "WTI crude oil spot (EIA via FRED)"
       unit: usd_per_barrel
     - id: WALCL
