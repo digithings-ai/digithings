@@ -33,6 +33,10 @@ from pathlib import Path
 
 import polars as pl
 import pytest
+from digiquant.strategies.sdca.price_oscillators import (
+    SdcaOscillatorSpec,
+    sma_band_confluence_z,
+)
 from digiquant.strategies.sdca.indicator_catalog import (
     BTC_PLUGIN_INDICATOR_NAMES,
     EXTRA_INDICATOR_NAMES,
@@ -62,6 +66,7 @@ from digiquant.strategies.sdca.indicator_catalog import (
     sources_from_optional_paths,
 )
 from digiquant.strategies.sdca.two_stage import freeze_weight_params
+from pydantic import ValidationError
 
 pytestmark = pytest.mark.unit
 
@@ -223,6 +228,110 @@ class TestDormantNames:
             "weekly_macd",
             "sma_band",
         )
+
+
+class TestDefaultCompositeIsTheValuationRailAlone:
+    """The port's counterpart to the branch's ``TestDefaultMatchesPowerLawOnly``.
+
+    The branch carried a test asserting its default composite is power-law-only.
+    It was not ported, and — unlike the four rewires this port defers — it had
+    **no pin recording that leaving it out was a choice**, so a future leaf
+    could change the default composite silently. This class is that pin.
+
+    It also corrects the record on *why* it was not ported. QA's open item 2
+    recorded that "develop's default differs (``valuation`` is the only non-zero
+    default)", implying the branch's assertion was false against develop. It is
+    not false — it is the same assertion under a different spelling. On develop
+    ``valuation`` **is** the power-law rail: ``indicator_catalog``'s own module
+    docstring calls it ``power-law valuation_z``, and ``indicator_display_name``
+    renders it to users as ``"power law"`` (pinned in
+    :meth:`TestDisplayNames.test_develop_labels_still_win`). So "default is
+    power-law-only" and "default is valuation-only" say the same thing here. The
+    spelling gap is the deferred ``valuation`` → ``power_law`` rename, already
+    pinned by ``test_deferred_power_law_rename_is_not_ported``; it is not a
+    behavioural difference and does not need a second pin of its own.
+
+    What genuinely was unpinned is the *value*: that ``valuation`` is the one and
+    only non-zero default across every field on the model. That is what these
+    tests assert, and it is the assertion that catches a future weight being
+    given a non-zero default — the dormancy invariant from leaf 2's scope note,
+    extended from the seven new ids to all fourteen fields.
+    """
+
+    def test_valuation_is_the_only_non_zero_default(self) -> None:
+        """Fails if any field, old or new, is given a non-zero default.
+
+        This is the whole point. ``SdcaCompositeWeights`` has 14 fields; the
+        assertion is deliberately over the whole model rather than over
+        ``RESEARCH_ONLY_NAMES``, so it also guards the seven develop weights
+        that predate this port.
+        """
+        w = SdcaCompositeWeights()
+        non_zero = {
+            name: getattr(w, name)
+            for name in type(w).model_fields
+            if getattr(w, name) != 0.0
+        }
+        assert non_zero == {"valuation": pytest.approx(1.0)}, (
+            "the default composite must be the valuation rail alone; got "
+            f"{sorted(non_zero)} -- a non-zero default silently changes what "
+            "digiquant publishes without any measured delta"
+        )
+
+    def test_the_default_enables_no_extras_at_all(self) -> None:
+        """``enabled_extras()`` is empty, but ``extra_items()`` is the full catalogue.
+
+        The two views differ and the distinction is load-bearing: ``extra_items()``
+        yields every extra field at its weight *including the zeros*, and it is
+        what ``weight_search._extra_weight_names()`` derives the searchable-name
+        set from. So "no extra is enabled" must not be pinned as "no extra is
+        listed" — that would assert the searchable set is empty, which is
+        exactly the QA-G4 gap (a research extra silently dropping out of the
+        searchable set) wearing a different hat.
+        """
+        w = SdcaCompositeWeights()
+        assert w.enabled_extras() == {}
+        listed = dict(w.extra_items())
+        assert len(listed) == 13, "the extra catalogue is 13 names on develop plus this leaf"
+        assert set(listed.values()) == {0.0}
+        for name in RESEARCH_ONLY_NAMES:
+            assert listed[name] == pytest.approx(0.0), f"{name} must be listed, at weight 0"
+
+    def test_the_default_normalizes_to_a_pure_valuation_point(self) -> None:
+        """``normalized()`` is a no-op on the default — it is already on the simplex."""
+        w = SdcaCompositeWeights()
+        n = w.normalized()
+        assert n.valuation == pytest.approx(1.0)
+        assert sum(n.model_dump().values()) == pytest.approx(1.0)
+        for name in RESEARCH_ONLY_NAMES:
+            assert getattr(n, name) == pytest.approx(0.0)
+
+    def test_the_valuation_id_is_the_power_law_rail(self) -> None:
+        """Why "valuation-only" and "power-law-only" are the same sentence.
+
+        This is what justifies treating the branch's un-ported assertion as
+        *satisfied* rather than as a gap. If someone ever changes the chart
+        label away from ``"power law"``, the equivalence this class relies on is
+        no longer documented anywhere and this test is the thing that notices.
+        """
+        assert INDICATOR_DISPLAY_NAMES["valuation"] == "power law"
+        assert indicator_display_name("valuation") == "power law"
+        assert WEIGHT_PARAM_BY_NAME["valuation"] == "valuation_weight"
+
+    def test_the_default_is_reachable_through_both_parsing_paths(self) -> None:
+        """Both published defaults resolve to the same valuation-only point.
+
+        ``composite_weights_from_params`` and ``parse_indicator_weights_json``
+        are the MCP / settings entry points. If either defaulted a different way,
+        the "default" that callers actually get would drift from the model
+        default this class pins.
+        """
+        from_params = composite_weights_from_params({})
+        from_json = parse_indicator_weights_json("{}")
+        for w in (from_params, from_json):
+            assert w.valuation == pytest.approx(1.0)
+            assert w.enabled_extras() == {}
+            assert sum(w.normalized().model_dump().values()) == pytest.approx(1.0)
 
 
 class TestDisplayNames:
@@ -712,6 +821,164 @@ class TestRsEthConfluence:
 
 
 # --------------------------------------------------------------------------------------
+class TestRsEthConfluenceWindowValidation:
+    """What ``rs_eth_confluence_z`` actually promises about window/sample pairs.
+
+    **This class corrects the record on an open item rather than papering over
+    it.** QA's open item 1 was scoped as: "``fast_min_samples > fast_window`` is
+    rejected in one confluence function and silently accepted in the other."
+    Both halves of that turned out to be wrong when measured:
+
+    * **Nothing is "silently accepted".** ``min_samples > window`` raises in both
+      functions. It raises ``polars.exceptions.InvalidOperationError`` with the
+      message ``min_periods should be <= window_size``, from two frames inside
+      polars rather than at the argument.
+    * **Neither confluence function rejects it at all.** The ``ValueError``
+      guard QA found lives on ``SdcaOscillatorSpec._ordered`` and covers
+      ``sma_band_min_samples > sma_band_window`` — a *spec* field. Develop's spec
+      carries no ``rs_eth_*`` fields at all, so there is nothing for an
+      ``rs_eth_*`` validator to hang off, and ``sma_band_confluence_z`` — which
+      also takes plain keyword-only args rather than a spec — does no such
+      check either.
+
+    So adding a ``ValueError`` to ``rs_eth_confluence_z`` would have made the
+    pair *more* inconsistent, not less. The real contract is the symmetric one
+    below, and it is worth pinning: a caller who inverts the pair gets a loud
+    polars error on both legs rather than a silently all-null or mis-windowed
+    z, and the error is raised by the leg whose arguments were actually wrong.
+
+    What the branch's lost ``TestOscillatorSpecRsEthFast`` was really protecting
+    is pinned too, further down: that ``SdcaOscillatorSpec`` still refuses an
+    inverted min-samples pair, and that it exposes no ``rs_eth_*`` fields for a
+    future leaf to attach such a validator to.
+    """
+
+    @staticmethod
+    def _inputs(n: int = 200) -> tuple[pl.Series, pl.Series, pl.Series, pl.Series]:
+        src = _src(n)
+        eth = src["eth_close"]
+        assert eth is not None
+        return (_dates(n), _geom(n, 1.01, 50_000.0), src["eth_dates"], eth)
+
+    def test_an_inverted_fast_pair_raises_rather_than_returning_a_wrong_number(self) -> None:
+        dates, btc, eth_dates, eth_close = self._inputs()
+        with pytest.raises(pl.exceptions.InvalidOperationError):
+            rs_eth_confluence_z(
+                dates, btc, eth_dates, eth_close, fast_window=20, fast_min_samples=21
+            )
+
+    def test_the_inverted_slow_pair_raises_too(self) -> None:
+        """Both legs are unguarded symmetrically — not just the fast one."""
+        dates, btc, eth_dates, eth_close = self._inputs()
+        with pytest.raises(pl.exceptions.InvalidOperationError):
+            rs_eth_confluence_z(
+                dates, btc, eth_dates, eth_close, slow_window=20, slow_min_samples=21
+            )
+
+    def test_an_equal_pair_is_accepted(self) -> None:
+        """``min_samples == window`` is the tightest legal pair, and it is legal.
+
+        Polars' own rule is ``min_periods <= window_size``, so this pins the
+        inclusive edge on the legal side — the mirror of the raising cases.
+        """
+        dates, btc, eth_dates, eth_close = self._inputs()
+        z = rs_eth_confluence_z(
+            dates, btc, eth_dates, eth_close, fast_window=20, fast_min_samples=20
+        )
+        assert z.name == "rs_eth"
+        assert z.null_count() < len(z)
+
+    def test_sma_band_confluence_behaves_identically(self) -> None:
+        """The symmetry claim itself, measured against the sibling function.
+
+        This is the assertion that keeps QA's original framing from creeping
+        back: if a future edit adds a ``ValueError`` to ``rs_eth_confluence_z``
+        and not to ``sma_band_confluence_z``, this test fails and the divergence
+        has to be a deliberate, visible act.
+        """
+        n = 200
+        dates = _dates(n)
+        close = _geom(n, 1.01, 50_000.0)
+        for fn in (sma_band_confluence_z, rs_eth_confluence_z):
+            kwargs = {"fast_window": 20, "fast_min_samples": 21}
+            args = (dates, close) if fn is sma_band_confluence_z else (
+                dates,
+                close,
+                dates,
+                close,
+            )
+            with pytest.raises(pl.exceptions.InvalidOperationError):
+                fn(*args, **kwargs)
+
+    def test_a_leg_with_an_inverted_pair_never_silently_returns_all_nulls(self) -> None:
+        """The failure mode a caller must never hit is a plausible-looking z.
+
+        A guard that instead of raising clipped ``min_samples`` down to
+        ``window`` would produce a *number* here — an all-but-undefined blend
+        rather than an error. Assert the series is unreachable, not merely
+        null-heavy.
+        """
+        dates, btc, eth_dates, eth_close = self._inputs()
+        with pytest.raises(pl.exceptions.InvalidOperationError):
+            rs_eth_confluence_z(
+                dates, btc, eth_dates, eth_close, fast_window=10, fast_min_samples=10_000
+            )
+
+    def test_the_fast_kwargs_reach_the_fast_leg(self) -> None:
+        """Why the raising cases matter: ``fast_*`` is not silently ignored.
+
+        If ``fast_window`` / ``fast_min_samples`` were dropped, the inverted-pair
+        tests would pass vacuously (nothing would ever raise) *and* every
+        ``rs_eth_confluence_z`` call would quietly collapse onto the slow leg.
+        Pin the kwargs as load-bearing by checking the blend really moves when
+        the fast window changes.
+        """
+        dates, btc, eth_dates, eth_close = self._inputs(300)
+        narrow = _z_list(
+            rs_eth_confluence_z(
+                dates,
+                btc,
+                eth_dates,
+                eth_close,
+                slow_window=90,
+                slow_min_samples=30,
+                fast_window=20,
+                fast_min_samples=10,
+            )
+        )
+        wide = _z_list(
+            rs_eth_confluence_z(
+                dates,
+                btc,
+                eth_dates,
+                eth_close,
+                slow_window=90,
+                slow_min_samples=30,
+                fast_window=60,
+                fast_min_samples=30,
+            )
+        )
+        assert narrow != wide
+
+    def test_the_spec_still_refuses_an_inverted_min_samples_pair(self) -> None:
+        """The surviving half of the branch's lost ``TestOscillatorSpecRsEthFast``.
+
+        Develop's ``SdcaOscillatorSpec`` has no ``rs_eth_*`` fields, so the only
+        inherited coverage available is the sibling validator it does have.
+        """
+        with pytest.raises(ValidationError, match="sma_band_min_samples"):
+            SdcaOscillatorSpec(sma_band_window=20, sma_band_min_samples=21)
+
+    def test_the_spec_carries_no_rs_eth_fields(self) -> None:
+        """Record *why* there is no spec-level ``rs_eth_*`` validator to port.
+
+        If a future leaf adds ``rs_eth_fast_window`` here, this test is the one
+        that has to be revisited — at that point ``rs_eth_confluence_z`` can take
+        a spec and the two functions can agree on validation again.
+        """
+        assert [f for f in SdcaOscillatorSpec.model_fields if "rs_eth" in f] == []
+
+
 # build_extra_indicators / extra_z_vectors wiring
 # --------------------------------------------------------------------------------------
 

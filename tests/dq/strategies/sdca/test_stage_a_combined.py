@@ -67,6 +67,8 @@ from digiquant.strategies.sdca.cycle_windows import (
 )
 from digiquant.strategies.sdca.indicator_catalog import SdcaCompositeWeights
 from digiquant.strategies.sdca.stage_a import (
+    ACCUMULATE_RISK_MAX,
+    DISTRIBUTE_RISK_MIN,
     CombinedCycleOverlapScore,
     CombinedStageAResult,
     CycleOverlapScore,
@@ -726,3 +728,139 @@ class TestOptimizeStageAWeightsCombinedMultiRatio:
                 search_names=(),
                 ratios=((3.0, 1.0),),
             )
+
+
+class TestBandThresholdBoundaryIsInclusive:
+    """``cycle_overlap_score``'s two band comparisons are inclusive on both sides.
+
+    QA's G7 finding: the bands are written ``v <= accumulate_risk_max`` and
+    ``v >= distribute_risk_min``, and ``trough_in_accumulate_frac`` /
+    ``peak_in_distribute_frac`` are already asserted in five places — but every
+    one of those places puts risk values well away from the edges (10/40/50/70/90).
+    Changing ``<=`` to ``<`` on the accumulate side, or ``>=`` to ``>`` on the
+    distribute side, therefore returned identical numbers and survived.
+
+    This class puts risk exactly **on** each threshold, so the inclusivity is the
+    only thing the assertion can be pinning. The edge values are one ulp apart in
+    behaviour, not in magnitude: a trough at exactly ``ACCUMULATE_RISK_MAX``
+    (35.0) counts as accumulate, and a peak at exactly ``DISTRIBUTE_RISK_MIN``
+    (80.0) counts as distribute. A risk value sitting on the *other* band's
+    threshold lands in neither band, because each threshold is only consulted on
+    its own side of the cycle.
+
+    Why inclusivity is the right contract rather than an accident: the band
+    bonus is a bonus for landing inside a band, and 35.0 is a risk value a real
+    composite can produce. Treating the documented edge as "outside" would mean
+    the function's own default constants sit at a value the function excludes,
+    which is a silent cliff for any caller sweeping risk onto the boundary.
+    """
+
+    @staticmethod
+    def _band_windows(dates: list[date]) -> SdcaCycleWindows:
+        """A trough over the first 20 days and a peak over the last 20 of ``dates``."""
+        return SdcaCycleWindows(
+            windows=(
+                CycleWindow(
+                    name="t", kind=CycleKind.TROUGH, start=dates[0], end=dates[19]
+                ),
+                CycleWindow(name="p", kind=CycleKind.PEAK, start=dates[40], end=dates[59]),
+            )
+        )
+
+    def test_a_trough_exactly_on_the_accumulate_threshold_counts_as_accumulate(self) -> None:
+        dates = _dates(60, date(2020, 1, 1))
+        windows = self._band_windows(dates)
+        # Every trough day sits exactly on the boundary, every peak day is well clear.
+        risk = [ACCUMULATE_RISK_MAX] * 20 + [50.0] * 20 + [DISTRIBUTE_RISK_MIN] * 20
+        score = cycle_overlap_score(dates, risk, windows)
+        assert isinstance(score, CycleOverlapScore)
+        assert score.trough_in_accumulate_frac == pytest.approx(1.0)
+        assert score.peak_in_distribute_frac == pytest.approx(1.0)
+
+    def test_a_trough_one_step_above_the_accumulate_threshold_does_not(self) -> None:
+        """The same window, nudged a hair over the edge: the frac must fall to zero."""
+        dates = _dates(60, date(2020, 1, 1))
+        windows = self._band_windows(dates)
+        just_over = ACCUMULATE_RISK_MAX + 1e-9
+        risk = [just_over] * 20 + [50.0] * 20 + [DISTRIBUTE_RISK_MIN] * 20
+        score = cycle_overlap_score(dates, risk, windows)
+        assert score.trough_in_accumulate_frac == pytest.approx(0.0)
+        assert score.mean_trough_risk == pytest.approx(just_over)
+
+    def test_a_peak_exactly_on_the_distribute_threshold_counts_as_distribute(self) -> None:
+        dates = _dates(60, date(2020, 1, 1))
+        windows = self._band_windows(dates)
+        risk = [ACCUMULATE_RISK_MAX] * 20 + [50.0] * 20 + [DISTRIBUTE_RISK_MIN] * 20
+        score = cycle_overlap_score(dates, risk, windows)
+        assert score.peak_in_distribute_frac == pytest.approx(1.0)
+        assert score.mean_peak_risk == pytest.approx(DISTRIBUTE_RISK_MIN)
+
+    def test_a_peak_one_step_below_the_distribute_threshold_does_not(self) -> None:
+        dates = _dates(60, date(2020, 1, 1))
+        windows = self._band_windows(dates)
+        just_under = DISTRIBUTE_RISK_MIN - 1e-9
+        risk = [ACCUMULATE_RISK_MAX] * 20 + [50.0] * 20 + [just_under] * 20
+        score = cycle_overlap_score(dates, risk, windows)
+        assert score.peak_in_distribute_frac == pytest.approx(0.0)
+        assert score.mean_peak_risk == pytest.approx(just_under)
+
+    def test_a_trough_on_the_distribute_threshold_is_in_neither_band(self) -> None:
+        """Each threshold is consulted only on its own side of the cycle.
+
+        A trough day at exactly ``DISTRIBUTE_RISK_MIN`` (80.0) is *above* the
+        accumulate threshold, so it counts as no band at all — the distribute
+        band never sees it, because ``DISTRIBUTE_RISK_MIN`` is only applied to
+        peak days. This is the ``and one at exactly 80.0 counted as neither``
+        half of QA's G7.
+        """
+        dates = _dates(60, date(2020, 1, 1))
+        windows = self._band_windows(dates)
+        risk = [DISTRIBUTE_RISK_MIN] * 20 + [50.0] * 20 + [50.0] * 20
+        score = cycle_overlap_score(dates, risk, windows)
+        assert score.trough_in_accumulate_frac == pytest.approx(0.0)
+        assert score.peak_in_distribute_frac == pytest.approx(0.0)
+        assert score.trough_days == 20
+        assert score.peak_days == 20
+
+    def test_a_peak_on_the_accumulate_threshold_is_in_neither_band(self) -> None:
+        """The mirror case: a peak at 35.0 clears the accumulate threshold but
+        ``ACCUMULATE_RISK_MAX`` is never applied to peak days, so it is no band."""
+        dates = _dates(60, date(2020, 1, 1))
+        windows = self._band_windows(dates)
+        risk = [10.0] * 20 + [50.0] * 20 + [ACCUMULATE_RISK_MAX] * 20
+        score = cycle_overlap_score(dates, risk, windows)
+        assert score.trough_in_accumulate_frac == pytest.approx(1.0)
+        assert score.peak_in_distribute_frac == pytest.approx(0.0)
+
+    def test_the_default_thresholds_are_the_ones_under_test(self) -> None:
+        """Guard the fixture itself.
+
+        The tests above are only about the 35.0/80.0 edges because those are the
+        shipped defaults. If a future edit moves either constant, the boundary
+        tests would silently start asserting a different pair of edges — so pin
+        the constants the rest of the class is calibrated against.
+        """
+        assert ACCUMULATE_RISK_MAX == 35.0
+        assert DISTRIBUTE_RISK_MIN == 80.0
+
+    def test_inclusive_edges_beat_exclusive_edges_on_the_objective(self) -> None:
+        """The inclusivity is observable in the ranked objective, not just the fracs.
+
+        ``objective = spread + 25 * (trough_frac + peak_frac)``, so a boundary
+        series scores exactly 50.0 above the equivalent strictly-outside series.
+        This is what makes the difference load-bearing for a search: a curve
+        landing on the edge is rewarded, not penalised.
+        """
+        dates = _dates(60, date(2020, 1, 1))
+        windows = self._band_windows(dates)
+        peak_side = [50.0] * 20 + [DISTRIBUTE_RISK_MIN] * 20
+        on_edge = cycle_overlap_score(
+            dates, [ACCUMULATE_RISK_MAX] * 20 + peak_side, windows
+        )
+        off_edge = cycle_overlap_score(
+            dates,
+            [ACCUMULATE_RISK_MAX + 1e-9] * 20 + peak_side,
+            windows,
+        )
+        # Only the trough fracs differ, so only the trough band bonus does.
+        assert on_edge.objective - off_edge.objective == pytest.approx(25.0)
