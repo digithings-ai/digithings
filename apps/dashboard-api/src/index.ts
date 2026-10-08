@@ -59,6 +59,8 @@ export interface Env {
   MCP_EDGE_KEY?: string;
   /** Secret the edge sends as `x-digi-edge-key`; when set, identity headers without it are ignored. Set on every deployed worker. */
   DASHBOARD_EDGE_KEY?: string;
+  /** Local dev / tests only: trust identity headers when DASHBOARD_EDGE_KEY is unset. */
+  DASHBOARD_TRUST_IDENTITY_HEADERS?: string;
   /** Comma-separated CORS allowlist override (issue #4679); defaults cover
    * the production dashboard plus local dashboard dev servers. */
   DASHBOARD_API_ALLOWED_ORIGINS?: string;

@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import app, { type Env } from "../index";
 
-const ENV: Env = {
+const ENV: Env = { DASHBOARD_TRUST_IDENTITY_HEADERS: "1",
   DASHBOARD_DEV_CALLER: "enterprise+12x",
   SUPABASE_URL: "https://core.supabase.co",
   SUPABASE_SERVICE_ROLE_KEY: "core-key",
 };
-const FREE: Env = { SUPABASE_URL: "https://core.supabase.co", SUPABASE_SERVICE_ROLE_KEY: "core-key" };
+const FREE: Env = { DASHBOARD_TRUST_IDENTITY_HEADERS: "1", SUPABASE_URL: "https://core.supabase.co", SUPABASE_SERVICE_ROLE_KEY: "core-key" };
 
 function mockFetch(handler: (url: string) => unknown): void {
   vi.stubGlobal("fetch", vi.fn(async (url: string) => Response.json(handler(String(url)))));
