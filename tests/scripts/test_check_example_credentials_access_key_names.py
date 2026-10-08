@@ -15,6 +15,12 @@ spelling in this repo reported clean before the value was ever looked at:
 gate simply ran first and said no. The identical value under ``AWS_ACCESS_TOKEN``
 was reported, which is what proves the value was never the problem.
 
+``ACCESS_KEY`` rather than the vendor-prefixed ``AWS_ACCESS_KEY``, so the entry also
+covers ``R2_ACCESS_KEY_ID`` - the live spelling, read by ten ``secrets`` uses across
+five workflows. The retired ``CHECKPOINT_ARCHIVE_R2_ACCESS_KEY`` spelling is not
+cited: ``tests/scripts/test_checkpoint_archive_workflow.py`` and
+``tests/dq/ops/test_checkpoint_archive.py`` both assert it is gone.
+
 The contract pinned here:
 
   * ``ACCESS_KEY`` is a ``CRED_VAR_PATTERNS`` entry, so an AWS access key ID name is
@@ -152,10 +158,15 @@ def _corpus_findings():
     ]
 
 
-#: Names that contain ``ACCESS_KEY`` and were out of scope before this leaf. The
-#: first two are the neighbours the widening most plausibly over-reaches on.
+#: Names that contain ``ACCESS_KEY`` and were out of scope before this leaf.
+#: ``AWS_ACCESS_KEY`` is the nearest neighbour of the leaf's own subject and
+#: ``R2_ACCESS_KEY_ID`` is the live spelling this repo actually reads - both are
+#: pinned so the comment in the script cannot drift away from the code. The last two
+#: are the neighbours the substring form most plausibly over-reaches on.
 NEWLY_MATCHED_NAMES = [
     AWS_ACCESS_KEY_ID,
+    "AWS_ACCESS_KEY",
+    "R2_ACCESS_KEY_ID",
     "SSH_ACCESS_KEY_ID",
     "SSH_ACCESS_KEY_FILE",
     "GPG_ACCESS_KEY",
@@ -240,7 +251,10 @@ def test_the_value_passed_before_this_leaf_and_the_name_did_not():
     """
     for value in (AKIA_KEY, AKIA_KEY + TRAILING_COMMENT):
         assert _without_access_key()(lambda: cec.looks_cred_var(AWS_ACCESS_KEY_ID)) is False
-        assert _without_access_key()(lambda: cec.looks_cred_val(value)) is True
+        # No `_without_access_key()` wrapper here: `looks_cred_val` reads only
+        # `CRED_VALUE_PATTERNS`, so narrowing the name list around it would be
+        # decoration that reads as if it were doing work.
+        assert cec.looks_cred_val(value) is True
         assert cec.looks_cred_var("AWS_ACCESS_TOKEN") is True
         assert cec.looks_cred_val(value) is True
 
@@ -294,8 +308,10 @@ def test_the_corpus_scan_actually_covers_the_corpus(monkeypatch: pytest.MonkeyPa
     process CWD happens to be. Run from ``tests/scripts/`` it sees 103 files and none
     of them is an ``.example`` / ``.template``, and prints ``OK`` over nothing. This
     test pins that the corpus is non-empty - so a fence or a ``main()`` call reading
-    an empty file set fails loudly instead of passing - and that the anchored scan and
-    the CWD-relative one agree once the CWD is the repo root.
+    an empty file set fails loudly instead of passing - and then that the anchored
+    scan and the CWD-relative one agree once the CWD is the repo root. That second
+    assertion is what fails if the ``chdir`` below is ever dropped, which is the whole
+    point of having it: ``main()`` keeps returning 0 over nothing either way.
     """
     candidates = _corpus_assignable_lines()
     assert candidates, "the tracked .example / .template corpus has no assignable lines"
@@ -303,7 +319,6 @@ def test_the_corpus_scan_actually_covers_the_corpus(monkeypatch: pytest.MonkeyPa
     anchored = subprocess.run(
         ["git", "ls-files"], cwd=REPO_ROOT, stdout=subprocess.PIPE, text=True, check=True
     ).stdout.splitlines()
-    assert any(".example" in n or ".template" in n for n in anchored)
 
     monkeypatch.chdir(REPO_ROOT)
     from_cwd = subprocess.run(
