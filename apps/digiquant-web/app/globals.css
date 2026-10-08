@@ -76,9 +76,12 @@ html[data-dq-hero="played"] :not([data-dq-live]) > [data-dq-stray] {
   }
 }
 
+/* Same pairing as digithings.ai: Inter for sans/display, Geist Mono for chrome.
+   Both stacks come from tokens.css, built off the faces in app/fonts.ts — no
+   font family is named here. */
 :root[data-theme] {
-  --font-sans: var(--font-inter), system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: var(--font-jetbrains-mono), ui-monospace, "SF Mono", Menlo, monospace;
+  --font-sans: var(--font-stack-sans);
+  --font-mono: var(--font-stack-mono);
   --font-display: var(--font-sans);
 }
 

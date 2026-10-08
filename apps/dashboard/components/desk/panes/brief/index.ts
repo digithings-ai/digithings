@@ -3,8 +3,8 @@
  *
  * Slice A mounts `BRIEF_PANES` and `BriefPaneContent` inside `DeskShell`.
  * Slice B replaces `@/lib/desk/digiquant`, `@/lib/desk/movers`, and
- * `components/desk/atoms/*`. Fonts stay with the shell (Inter + JetBrains
- * is not loaded here).
+ * `components/desk/atoms/*`. Fonts stay with the shell (`app/fonts.ts` loads
+ * them; no face is loaded here).
  */
 export { BRIEF_PANES, type DeskPaneModel, type PaneState } from './catalog';
 export { BriefDesk, BriefDeskView, BriefPaneFrame } from './BriefDesk';
