@@ -101,15 +101,36 @@ def _records_from(rows: list[Any]) -> list[tuple[Any, Any, Any]] | None:
 
 
 def _from_records(records: list[tuple[Any, Any, Any]]) -> tuple[list[str], list[float]] | None:
-    """Collapse records to one row per distinct ``(position_id, ts_event)``.
+    """Collapse records to one row per closed position, two steps in this order.
 
-    Last occurrence wins, mirroring the engine's own bookkeeping. That is not a
-    guess between builds: 1.223/1.228 key the whole mapping by position id, and
-    1.230.0 already folds an ``add_trade`` into a later ``record_trade`` for the
-    same pair, so a repeated pair only survives to this point when
-    ``record_trade`` was called twice for it — and the return value carries no
-    provenance saying which of the two was the recorded one. Taking the later row
-    keeps N equal to the number of round trips and never counts one twice.
+    1. **Drop repeated records.** One record per distinct ``(position_id,
+       ts_event)``, later occurrence winning. Mirrors the engine's own
+       bookkeeping, and is not a guess between builds: 1.223/1.228 key the whole
+       mapping by position id, and 1.230.0 already folds an ``add_trade`` into a
+       later ``record_trade`` for the same pair, so a repeated pair only survives
+       to this point when ``record_trade`` was called twice for it — and the
+       return value carries no provenance saying which of the two was the
+       recorded one.
+    2. **Sum each position's parts.** One row per distinct ``position_id``, worth
+       the sum of the PnL parts that survive step 1.
+
+    The order is load-bearing, and step 1 is why. Summing first would add one
+    close event twice for every repeated pair the engine emits, so a position's
+    value would grow with the engine's own duplication rather than with the
+    trading.
+
+    This makes N the number of **closed positions** on every build, which is what
+    a denominator has to mean: one position closed in two parts reports ``n=1``
+    whichever build ran the backtest, so the honest rate and its Wilson interval
+    are comparable across builds. Keying on ``(position_id, ts_event)`` instead
+    would report ``n=1`` on 1.228.0 and ``n=2`` on 1.230.0 for the same fills.
+
+    A position with a part that cannot be read is dropped whole rather than
+    summed from its remaining parts. A partial total is a fabricated number for
+    the position, which is the one outcome this module exists to prevent; the
+    same goes for a total that overflows to infinity. The position's date is its
+    **last** part's ``ts_event``: a position's realized PnL is only complete when
+    the final leg closes.
     """
     collapsed: dict[tuple[Any, Any], Any] = {}
     for key, ts_event, value in records:
@@ -123,14 +144,28 @@ def _from_records(records: list[tuple[Any, Any, Any]]) -> tuple[list[str], list[
             # this leaf exists to remove.
             continue
 
-    kept: list[str] = []
-    values: list[float] = []
+    totals: dict[Any, float] = {}
+    stamps: dict[Any, Any] = {}
+    unreadable: set[Any] = set()
     for (key, ts_event), value in collapsed.items():
         number = _finite_or_none(value)
         if number is None:
+            unreadable.add(key)
             continue
-        kept.append(_record_date(key, ts_event) or str(len(kept)))
-        values.append(number)
+        total = totals.get(key, 0.0) + number
+        if not math.isfinite(total):
+            unreadable.add(key)
+            continue
+        totals[key] = total
+        stamps[key] = ts_event
+
+    kept: list[str] = []
+    values: list[float] = []
+    for key, total in totals.items():
+        if key in unreadable:
+            continue
+        kept.append(_record_date(key, stamps[key]) or str(len(kept)))
+        values.append(total)
 
     return (kept, values) if values else None
 
@@ -142,10 +177,12 @@ def normalize_series(series: Any) -> tuple[list[str], list[float]] | None:
 
     1. **Analyzer records** — what the pyo3 analyzer actually hands back: the
        ``{position_id: pnl}`` dict, the 1.230.0 ``(position_id, ts_event, pnl)``
-       rows, and the ``{ts_ns: return}`` mapping. Collapsed to one row per
-       distinct ``(position_id, ts_event)``, last occurrence winning, so N counts
-       closed round trips and is never ``None`` merely because the shape was not
-       recognised.
+       rows, and the ``{ts_ns: return}`` mapping. Collapsed to one row per closed
+       position — repeated ``(position_id, ts_event)`` pairs first, then the
+       remaining parts of each position summed — so N counts closed positions on
+       every build and is never ``None`` merely because the shape was not
+       recognised. See :func:`_from_records` for the order and why it is
+       load-bearing.
     2. **Series** — ``.values`` + ``.index`` (pandas shape, read only — pandas is
        never imported), then ``.to_list()`` (polars), then ``.tolist()``, then a
        plain iterable. Dates are ``str(index)[:10]`` for the pandas shape,
