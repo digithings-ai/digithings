@@ -280,7 +280,7 @@ def causal_rolling_z(
     """Rolling z in ``[-3, 3]``. Each day uses only that day and prior window."""
     if window < 2:
         raise ValueError(f"rolling window must be >= 2, got {window}")
-    mu = values.rolling_mean(window_size=window, min_samples=min_samples)
+    mu = values.rolling_mean(window_size=window, min_samples=1)
     sigma = values.rolling_std(window_size=window, min_samples=min_samples)
     return ((values - mu) / sigma.clip(lower_bound=_SIGMA_FLOOR)).clip(-3.0, 3.0)
 
