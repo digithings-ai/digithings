@@ -310,7 +310,8 @@ def test_load_tenant_corpus_map_skips_invalid_slug_and_non_object_entry() -> Non
         '"also-ok":"not-an-object"}'
     )
     table = load_tenant_corpus_map(raw)
-    assert "OCC" not in table  # uppercase fails _SLUG
+    assert "OCC" not in table  # lowercased to occ; occ_help is kept
+    assert table["occ"].digisearch_index == "occ_help"
     assert "also-ok" not in table
     assert table["ok-tenant"].digisearch_index == "ok_docs"
     assert table["ok-tenant"].vault_path_prefix == "clients/ok"

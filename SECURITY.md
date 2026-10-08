@@ -2,6 +2,30 @@
 
 This document describes the security posture of digithings and how to report vulnerabilities. See [ARCHITECTURE.md](ARCHITECTURE.md) for the system diagram and [docs/agents/CODE_REVIEW_POLICY.md](docs/agents/CODE_REVIEW_POLICY.md) for the review policy.
 
+## Client data under `projects/`
+
+Every agent runs as the same unix user, so filesystem permissions cannot separate
+engagements. The control is at the **tool-call boundary**: the opencode plugin
+[`.opencode/plugins/projects-path-guard.js`](.opencode/plugins/projects-path-guard.js)
+refuses any read under `projects/` except
+
+1. `projects/README.md` — tracked in git, not client data; and
+2. `projects/<engagement-dir>/**` — the single engagement bound to the run.
+
+It is **default-deny and fails closed**: no bound engagement, a missing or
+unreadable mapping, or a path that cannot be evaluated are all denials. Paths are
+normalised (`..`, absolute paths, symlinks) before matching, so the guard cannot
+be walked around by writing the path differently. Every refusal is logged as a
+`projects_path_denied` audit event. One engagement per run: a run holds the paths
+of the engagement named in `DIGI_ENGAGEMENT`, resolved through the explicit
+mapping in [`config/engagement-paths.json`](config/engagement-paths.json).
+
+Kill switch: `DIGI_PROJECTS_PATH_GUARD=off`, which is logged. Every other value,
+including an unrecognised one, enforces.
+
+`.gitignore` is **not** part of this control. It prevents a commit; it never
+prevented a read. See `knowledge/data-policy.md` §7.
+
 ## Threat model
 
 digithings is designed to run on a single host or private network. The primary threats we design against:
@@ -66,6 +90,16 @@ These are enforced in code and reviewed on every PR:
 ## Data protection
 
 - **Client and pilot work** lives under `projects/` (gitignored; never pushed to public remotes). Treat this as confidential.
+- **Provider-side account records of client work** — one provider account, and no provider project isolates a client, so an account-level usage or billing export is on its face other clients' cost data. The `projects/` bullet above scopes confidentiality to the `projects/` tree and does not reach such an export; these rules close that gap. They are Security's position on DIG-455, restated here so the rule binds engineers and not only agents (memo `2026-10-05_security-shared-account-no-nda-no-apportionment-DIG-455.md` §4 "Security's position, effective now for every agent", kept in the books repo and outside this repository — it stays canonical):
+
+  1. **A provider account record is other clients' data by default.** One account, and no provider project isolates a client (CONFIRMED on DIG-455), so every line of a usage or billing export is on its face another client's cost data. Assume this on contact; do not investigate to find out.
+  2. **No account-level figure enters an agent's context, ever.** If a figure is needed, a human reads the dashboard and a redacted per-client line is what enters the books.
+  3. **No account-level export is stored in the books repo or in any client file.** If ever unavoidable: quarantine outside the books, reduce to the single client's line, delete the unredacted original.
+  4. **Read access:** provider-side account records are readable by Security and the CTO only. The Bookkeeper receives redacted per-client lines. No other agent holds an account-level file. Today nothing technical prevents this — it is a behavioural rule, so honour it rather than looking for a control that enforces it.
+  5. **Retention:** the ledger row is the record, the export is not. Delete the export the same day the redacted line is recorded. If nothing is recorded, delete it the same day it was made.
+  6. **Codenames and names only.** Figures and line detail go into a file; they do not go into issue comments and never pass through a model.
+
+  Scoping inference per client is a **provider-side** action — a separate project or account — not a code change. That is why the residual risk "no per-tenant token/cost budget enforcement at the proxy layer" is accepted above rather than closed here.
 - **Index and corpus licensing** — digisearch indexes must respect upstream copyright and license. Do not automate retrieval of paywalled content without entitlement. The optional `edgar_dev` corpus is for dev/testing on loopback only; cite the upstream dataset when publishing results.
 - **Per-tenant isolation** on multi-tenant deployments is a roadmap item (see `digibase/ARCHITECTURE.md` — digibase data-plane). Today, tenant isolation is enforced at the digikey key-scope level, not at the storage layer.
 

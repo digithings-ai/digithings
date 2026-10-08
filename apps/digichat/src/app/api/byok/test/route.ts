@@ -15,6 +15,7 @@ import {
 import { checkEmbedIpRateLimit } from "@/lib/embed-ip-rate-limit";
 import { checkBffRateLimit } from "@/lib/bff-rate-limit";
 import { fetchWithTimeout, abortOrMessage } from "@/lib/fetch-with-timeout";
+import { MODEL_CATALOG_ROUTABLE_BYOK_MODEL_IDS } from "@/lib/model-catalog.generated";
 
 export const maxDuration = 30;
 
@@ -24,6 +25,42 @@ type TestResult = {
   models?: { id: string; label: string }[];
   error?: string;
 };
+
+/**
+ * The ids this provider's LiteLLM `model_name` groups can actually route.
+ *
+ * A provider's own `/models` endpoint lists everything the account can *see*,
+ * which is routinely far more than the house can serve: Google's ListModels
+ * returns 61 entries and `config/litellm.yaml` routes three. Every id outside
+ * this set is a pick the proxy would refuse (`test_every_advertised_byok_preset_is_a_litellm_model_group`
+ * #3605), and `config/litellm.yaml:6` routes strictly with no `fallbacks`, so
+ * picking one is a hard failure rather than a degradation.
+ *
+ * The key-scoped list is what tells us the *key* works; this set is what tells
+ * us the *model* is reachable. Both are needed, and they are independent: an
+ * id can be live at the provider and unrouted here. The set is derived, not
+ * declared — `scripts/refresh_model_catalog.py` reads it back out of the
+ * litellm configs, so it cannot drift from them.
+ */
+function routableIds(provider: BYOKProvider): ReadonlySet<string> {
+  return new Set(MODEL_CATALOG_ROUTABLE_BYOK_MODEL_IDS[provider] ?? []);
+}
+
+/**
+ * Narrow a provider's model list to the routable ids, preserving its order.
+ *
+ * Applied to the list *and* to the `model` default derived from it, because the
+ * default is the other half of the bug: xAI lists `grok-4.20-*` first and Google
+ * lists `gemini-2.5-flash` first, so an unfiltered `models[0]` names a model the
+ * house cannot route even when every id in the list is routable. See #5000.
+ */
+function routableOnly(
+  provider: BYOKProvider,
+  models: { id: string; label: string }[],
+): { id: string; label: string }[] {
+  const routable = routableIds(provider);
+  return models.filter((m) => routable.has(m.id));
+}
 
 function rateLimitResponse(message: string, retryAfterSec: number): Response {
   return new Response(JSON.stringify({ ok: false, error: message }), {
@@ -120,7 +157,7 @@ export async function POST(req: Request): Promise<Response> {
         // widens, derive the example per provider rather than hardcoding one
         // (#2537 fixed exactly this in digigraph, where a hardcoded
         // openai/… example was offered to four providers serving no such slug).
-        error: `Model is required for ${provider} (e.g. grok-4-3).`,
+        error: `Model is required for ${provider} (e.g. grok-4.3).`,
       },
       400
     );
@@ -170,7 +207,10 @@ async function testOpenAIKey(key: string): Promise<TestResult> {
       return { ok: false, error: body.error?.message ?? `OpenAI returned HTTP ${resp.status}` };
     }
     const data = (await resp.json()) as { data?: { id: string }[] };
-    const models = (data.data ?? []).map((m) => ({ id: m.id, label: m.id }));
+    const models = routableOnly(
+      "openai",
+      (data.data ?? []).map((m) => ({ id: m.id, label: m.id })),
+    );
     return { ok: true, model: models[0]?.id ?? "gpt-4o-mini", models };
   } catch (e) {
     return { ok: false, error: abortOrMessage(e) };
@@ -192,8 +232,11 @@ async function testAnthropicKey(key: string): Promise<TestResult> {
       return { ok: false, error: body.error?.message ?? `Anthropic returned HTTP ${resp.status}` };
     }
     const data = (await resp.json()) as { data?: { id: string }[] };
-    const models = (data.data ?? []).map((m) => ({ id: m.id, label: m.id }));
-    return { ok: true, model: models[0]?.id ?? "claude-3-haiku-20240307", models };
+    const models = routableOnly(
+      "anthropic",
+      (data.data ?? []).map((m) => ({ id: m.id, label: m.id })),
+    );
+    return { ok: true, model: models[0]?.id ?? "claude-haiku-4-5", models };
   } catch (e) {
     return { ok: false, error: abortOrMessage(e) };
   }
@@ -247,11 +290,20 @@ async function testGeminiKey(key: string): Promise<TestResult> {
       };
     }
     const data = (await resp.json()) as { models?: { name?: string }[] };
-    const models = (data.models ?? [])
-      .map((m) => (m.name ?? "").replace(/^models\//, ""))
-      .filter(Boolean)
-      .map((id) => ({ id, label: id }));
-    return { ok: true, model: models[0]?.id ?? "gemini-2.0-flash", models };
+    const models = routableOnly(
+      "gemini",
+      (data.models ?? [])
+        .map((m) => (m.name ?? "").replace(/^models\//, ""))
+        .filter(Boolean)
+        .map((id) => ({ id, label: id })),
+    );
+    // Fallback used only when the routable subset comes back empty (the key works
+    // but none of the models the house routes are on this account). It has to be a
+    // model that actually serves a fresh BYOK key: Google 404s `gemini-2.0-flash`
+    // ("is no longer available.") and `gemini-2.5-flash-lite` alike ("no longer
+    // available to new users"), so the old default handed back a model id that
+    // could only fail. See #5000.
+    return { ok: true, model: models[0]?.id ?? "gemini-3.5-flash-lite", models };
   } catch (e) {
     return { ok: false, error: abortOrMessage(e) };
   }
@@ -269,7 +321,12 @@ async function testXaiKey(key: string): Promise<TestResult> {
       return { ok: false, error: body.error?.message ?? `x.ai returned HTTP ${resp.status}` };
     }
     const data = (await resp.json()) as { data?: { id: string }[] };
-    return { ok: true, model: data.data?.[0]?.id ?? "grok-4-3" };
+    // xAI's list is ordered `grok-4.20-*` first, none of which the house routes,
+    // so an unfiltered `[0]` names a model the proxy refuses. Take the first
+    // routable id instead. No `models[]` is returned: x.ai is not in
+    // LIVE_PING_MODEL_PROVIDERS, so this result never drives the picker.
+    const firstRoutable = (data.data ?? []).find((m) => routableIds("xai").has(m.id));
+    return { ok: true, model: firstRoutable?.id ?? "grok-4.3" };
   } catch (e) {
     return { ok: false, error: abortOrMessage(e) };
   }

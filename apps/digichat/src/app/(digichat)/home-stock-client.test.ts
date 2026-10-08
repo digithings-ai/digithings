@@ -17,4 +17,12 @@ describe("HomeStockClient force-tool key", () => {
     expect(src).not.toMatch(/takePendingForceTool\(threadKey\)/);
     expect(src).not.toMatch(/takePendingWebSearchForce\(threadKey\)/);
   });
+
+  it("wires /redo to regenerate with the turn-mode header", () => {
+    expect(src).not.toMatch(/redo: \(\) => \{\}/);
+    expect(src).toMatch(/setPendingTurnMode\(key, "regenerate"\)/);
+    expect(src).toMatch(/setPendingForceTool\(sessionKey\)/);
+    expect(src).toMatch(/chat\.regenerate\(\)/);
+    expect(src).toMatch(/redoRef\.current\(\)/);
+  });
 });

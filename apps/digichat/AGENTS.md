@@ -45,7 +45,7 @@ Beyond root `AGENTS.md`:
 - **No raw Next.js version assumptions**: Next.js 16 App Router has breaking changes. Read `node_modules/next/dist/docs/` before writing route handlers, server actions, or middleware.
 - **Machine keys are bcrypt-hashed in Postgres**: `digi_live_…` API keys are stored hashed. Never store or log raw machine key material.
 - **Session token never in responses**: `AUTH_SECRET` encrypted session cookie must not be re-surfaced in API responses or logged. `X-Digichat-Session` header carries only a stable opaque UUID — not the session token itself.
-- **`DIGICHAT_ALLOW_DEV_GLOBAL=1` is dev-only**: Dev password provider and local bootstrap gate must never activate in production builds. They are guarded by env var checks — do not weaken them.
+- **Dev auth gates are `DIGICHAT_DEV_AUTH=1` and `DIGICHAT_LOCAL_AUTH_KEY`, not `DIGICHAT_ALLOW_DEV_GLOBAL`** (no such variable exists). `assertDevAuthDisabledInProduction()` in `src/lib/startup-env-guards.ts` throws when `NODE_ENV=production` and `DIGICHAT_DEV_AUTH=1`. It runs from `register()` in `src/instrumentation.ts` and from `devProvider()` in `src/auth.ts`, so the dev password provider cannot register in production. The local-bootstrap provider is gated on `DIGICHAT_LOCAL_AUTH_KEY` and `NODE_ENV !== "production"` (`src/auth.ts`). Do not weaken either guard.
 - **Drizzle migrations are additive**: New columns must be nullable or have a default. Never drop a column from an existing migration file — write a new one.
 - **OpenClaw and RAG ingestion UI are Phase 2**: Do not scaffold, stub, or add routing for channel integrations or document upload UI without explicit phase scope.
 

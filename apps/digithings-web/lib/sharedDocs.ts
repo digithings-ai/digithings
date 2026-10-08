@@ -28,7 +28,7 @@ export const guides: Guide[] = [
       {
         kind: "p",
         text:
-          "This guide starts the core services from a clone of the repository. digigraph orchestrates the specialist services. Chat, the vault, the heartbeat, and observability are compose profiles you turn on separately.",
+          "digithings is open-source, MIT-licensed AI infrastructure: modules that plug into the stack you already run rather than replacing it. digigraph orchestrates specialist sub-graphs — quant research, retrieval, vault, and chat. Self-hosted anywhere, BYOK, audit-on by default.",
       },
       { kind: "h", text: "Prerequisites" },
       {
@@ -39,17 +39,12 @@ export const guides: Guide[] = [
           "Node.js LTS (for the frontends)",
         ],
       },
-      { kind: "h", text: "Run the core stack" },
+      { kind: "h", text: "Run the whole stack" },
       {
         kind: "code",
         lang: "bash",
         code:
           "git clone https://github.com/digithings-ai/digithings && cd digithings\ncp .env.example .env   # add your keys\ndocker compose up -d",
-      },
-      {
-        kind: "p",
-        text:
-          "`docker compose up -d` starts the core services. It does not start the profiles `digichat`, `digivault`, `heartbeat`, `litellm-cache`, or `observability`. Use `make up-digichat` for the chat BFF, and `docker compose --profile digivault up -d` for the vault.",
       },
       {
         kind: "p",
@@ -101,7 +96,7 @@ export const guides: Guide[] = [
       },
       {
         kind: "p",
-        text: "Or: `make up-ghcr` / `make up-ghcr-digichat`. digichat itself is already on GHCR (`ghcr.io/digithings-ai/digichat`).",
+        text: "Or: `make up-ghcr` / `make up-ghcr-digichat`. digichat has no published image yet — the publish workflow builds one per `digichat-vX.Y.Z` tag, and no tag after `digichat-v2.3.2` has been cut, so digichat builds from source here.",
       },
       { kind: "h", text: "Profiles" },
       {
@@ -142,14 +137,15 @@ export const guides: Guide[] = [
       {
         kind: "code",
         lang: "bash",
-        code: "docker pull ghcr.io/digithings-ai/digichat:v2.4.0",
+        code: "docker build -f apps/digichat/Dockerfile \\\n  --build-arg DIGICHAT_VERSION=2.4.0 \\\n  --build-arg DIGICHAT_REVISION=\"$(git rev-parse HEAD)\" \\\n  -t digichat:2.4.0 .",
       },
       {
         kind: "list",
         items: [
           "Git tag: `digichat-vX.Y.Z`",
-          "GHCR image: `ghcr.io/digithings-ai/digichat:vX.Y.Z` (package version `2.4.0`, released 2026-09-29). Pin a tag the release workflow has published from `main`; do not assume `v2.4.0` is on GHCR until that workflow has run.",
+          "Published image: not yet. The publish workflow is back and builds an image from each `digichat-vX.Y.Z` tag, but no tag after `digichat-v2.3.2` has been cut, so there is nothing published to pull. Until the next release, digichat builds from source.",
           "Changelog: `apps/digichat/CHANGELOG.md`",
+          "Pin by digest once you publish the image yourself — do not rely on `:latest`.",
         ],
       },
       { kind: "h", text: "Profiles" },
@@ -283,46 +279,22 @@ export const guides: Guide[] = [
       {
         kind: "p",
         text:
-          '`GET /healthz` is the auth-exempt liveness probe — always `{"ok": true}`, for load balancers. `GET /v1/status` on digitrace is a public operator diagnostic. On digigraph the same path requires `digigraph:workflow`. Do not point a load balancer at `/v1/status`.',
-      },
-      { kind: "h", text: "Auth errors" },
-      {
-        kind: "p",
-        text: "Failures from the shared auth middleware are a flat JSON body, not the envelope below.",
-      },
-      {
-        kind: "code",
-        lang: "json",
-        code: '{\n  "code": "unauthorized",\n  "message": "Bearer token required"\n}',
-      },
-      {
-        kind: "list",
-        items: [
-          "`unauthorized` (401) — no bearer token.",
-          "`invalid_token` (401) — the token did not verify. `token_revoked` (401) — the `jti` is on the blocklist.",
-          "`insufficient_scope` (403) — the token lacks the route's scope.",
-          "`auth_not_configured` (503) — neither `DIGIKEY_JWKS_URL` nor `DIGIKEY_PUBLIC_KEY_PEM` is set.",
-          "`auth_backend_unavailable` (503) — the revocation blocklist could not be read.",
-        ],
+          '`GET /healthz` is the auth-exempt liveness probe — always `{"ok": true}`, for load balancers. `GET /v1/status` (digigraph, digitrace) is a richer operator diagnostic; never use it for health checks.',
       },
       { kind: "h", text: "Error envelope" },
-      {
-        kind: "p",
-        text:
-          "HTTPException, request validation, and unhandled errors use the digibase envelope. Auth failures do not.",
-      },
+      { kind: "p", text: "Every service returns the same error shape:" },
       {
         kind: "code",
         lang: "json",
         code:
-          '{\n  "error": {\n    "code": "validation_error",\n    "message": "field required",\n    "request_id": "req-…",\n    "service": "digigraph"\n  }\n}',
+          '{\n  "error": {\n    "code": "http_401",\n    "message": "Bearer token required",\n    "request_id": "req-…",\n    "service": "digigraph"\n  }\n}',
       },
       {
         kind: "list",
         items: [
-          "`http_<status>` — a raised HTTPException.",
-          "`validation_error` — HTTP 422, the request body failed validation.",
-          "`internal_error` — HTTP 500.",
+          "`http_401` — missing/invalid token · `http_403` / `insufficient_scope` — scope denied.",
+          "`validation_error` — request body failed validation.",
+          "`rate_limited` — HTTP 429, with a `Retry-After` header.",
         ],
       },
       { kind: "h", text: "Correlation" },
@@ -335,7 +307,7 @@ export const guides: Guide[] = [
       {
         kind: "p",
         text:
-          "digigraph, digiquant, and digisearch answer 429 with code `rate_limit_exceeded` and a `Retry-After` header. digikey answers 429 with `{\"detail\":\"rate_limited\",\"retry_after\":N}` and the same header. `/health` and `/healthz` are unlimited. Per IP: `/workflow`, `/query`, and `/run_backtest` are 10/min; `/v1/chat/completions` is 60/min; `/ingest` is 30/min; other routes default to 30/min. CORS uses an explicit allowlist (`DIGI_CORS_ORIGINS`) — no wildcard — with credentials enabled for session cookies.",
+          "Mutating routes are rate-limited per IP (typically 10/min, 429 + `Retry-After` on breach). CORS uses an explicit allowlist (`DIGI_CORS_ORIGINS`) — no wildcard — with credentials enabled for session cookies.",
       },
     ],
   },

@@ -47,6 +47,8 @@ __all__ = [
     "EdgeSymbolsInput",
     "EdgePresetsInput",
     "EdgeReportInput",
+    "LUXALGO_TRACKERS_ALLOWED_DATASETS",
+    "TrackersDatasetName",
     "TrackersDatasetsInput",
     "TrackersLatestInput",
     "TrackersTickerInput",
@@ -221,9 +223,47 @@ class EdgeReportInput(_InputModel):
 # trackers_latest takes a required dataset plus ticker/text/where/sort/limit/
 # offset, trackers_ticker takes a required ticker plus year/limit. Bounds below
 # mirror the upstream input schemas (limit caps, ticker/text lengths, year
-# range); dataset membership itself is validated upstream so a newly published
-# dataset is never rejected client-side. trackers_query (ad-hoc dump search)
-# is deliberately NOT wrapped — dumps stay the source of record.
+# range). Dataset membership is NOT upstream's to decide: it is pinned
+# client-side in :data:`LUXALGO_TRACKERS_ALLOWED_DATASETS` (DIG-1479), so a
+# newly published dataset is refused until a reviewed code change adds it.
+# Upstream validating membership is not a legal classification. Adding a
+# dataset is a code review with a statute attached, not an upstream event.
+# trackers_query (ad-hoc dump search) is deliberately NOT wrapped — dumps stay
+# the source of record.
+
+#: The trackers datasets this service will ask for. The only sanctioned way to
+#: widen it is to edit this frozenset in a reviewed change; there is no
+#: environment override, in either direction.
+LUXALGO_TRACKERS_ALLOWED_DATASETS: frozenset[str] = frozenset(
+    {
+        "insider-transactions",  # EDGAR Form 4, 17 C.F.R. 240.16a-3
+        "thirteenf-holdings",  # 13F-HR, 15 U.S.C. 78m(a)(6)
+        "short-volume",  # FINRA daily
+        "lobbying-filings",  # LDA, 2 U.S.C. 1601 et seq.
+        "gov-contracts",  # USAspending, 31 U.S.C. 3512
+        # RISK-ACCEPTED 2026-10-06 (business owner: Chris). Counsel classified these
+        # rows as periodic transaction reports under 5 U.S.C. 13105(l), therefore
+        # "reports" for 13107(c), and advised refusal (DIG-1472, CONFIRMED). The
+        # business owner decided to keep this dataset in service. That is a decision
+        # to accept the 13107(c)(2) exposure, not a legal clearance.
+        # digifetch_congress_trades stays in REFUSED_TOOLS for the same data class.
+        # Do not read the entry below as counsel clearance.
+        "congress-trades",
+    }
+)
+
+#: The pydantic-facing spelling of the six datasets above. Hand-written rather
+#: than derived — a ``Literal`` cannot be built from a frozenset — so it is a
+#: second place to forget. Drift is caught, not prevented, by
+#: ``test_the_literal_alias_and_the_frozenset_agree`` (corrected in DIG-1519).
+TrackersDatasetName = Literal[
+    "insider-transactions",
+    "thirteenf-holdings",
+    "short-volume",
+    "lobbying-filings",
+    "gov-contracts",
+    "congress-trades",
+]
 
 TickerStr = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=12)]
 TrackerTextStr = Annotated[
@@ -235,13 +275,13 @@ SortOrder = Literal["newest", "oldest"]
 class TrackersDatasetsInput(_InputModel):
     """Trackers catalog; ``dataset`` selects one dataset's detailed view when given."""
 
-    dataset: NonEmptyStr | None = None
+    dataset: TrackersDatasetName | None = None
 
 
 class TrackersLatestInput(_InputModel):
     """Newest ingestion day's rows for one dataset (freshness/ad-hoc lookups only)."""
 
-    dataset: NonEmptyStr
+    dataset: TrackersDatasetName
     ticker: TickerStr | None = None
     text: TrackerTextStr | None = None
     where: dict[str, str | int | bool] | None = None
