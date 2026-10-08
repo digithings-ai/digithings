@@ -29,6 +29,7 @@ from digisearch import __version__
 from digisearch.agent.pipeline_models import ResearchTurnOutput
 from digisearch.backend_require import require_real_search_backend
 from digisearch.core.models import Query
+from digisearch.indexes.backends.backend_errors import CorpusNotSeededError
 from digisearch.indexes.backends.vectorize import MAX_TOP_K as _VECTORIZE_MAX_TOP_K
 from digisearch.logging import configure_logging
 from digisearch.monitors.exa_adapter import (
@@ -61,7 +62,7 @@ from digisearch.orchestrator_tools import (
 )
 from digisearch.pipeline.ingest import IngestError, ingest_source
 from digisearch.pipeline.url_ingest import UrlIngestResult, ingest_url
-from digisearch.search._stub import query_index
+from digisearch.search._stub import query_index, unseeded_indexes
 from digisearch.web_search.models import (
     WebSearchConfigError,
     WebSearchErrorResponse,
@@ -534,9 +535,24 @@ class ResearchTurnRequest(BaseModel):
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
-    """Legacy health check for Docker and digigraph (kept for back-compat)."""
-    return {"status": "ok", "service": "digisearch"}
+def health() -> dict[str, Any]:
+    """Legacy health check for Docker and digigraph (kept for back-compat).
+
+    Reports ``degraded`` when a boot marked indexes as unseeded (#5045): their
+    collections are empty, so every query would answer "no results" and read as
+    a confident miss. HTTP stays 200 on purpose — every consumer gates on the
+    status code (``scripts/run_stack_local.sh`` uses ``curl -sf``,
+    ``tests/test_e2e.py::test_digisearch_health`` asserts 200) and none read this
+    body. ``/healthz`` stays the pure liveness probe the CI pipeline calls.
+    """
+    unseeded = sorted(unseeded_indexes())
+    body: dict[str, Any] = {
+        "status": "degraded" if unseeded else "ok",
+        "service": "digisearch",
+    }
+    if unseeded:
+        body["unseeded_indexes"] = unseeded
+    return body
 
 
 @app.get("/healthz")
@@ -725,7 +741,19 @@ def run_query(req: QueryRequest) -> QueryResponse:
 @app.post("/query", response_model=QueryResponse)
 def api_query(req: QueryRequest) -> QueryResponse:
     """Search documents. Use format=table to get response.formatted as markdown table."""
-    return run_query(req)
+    try:
+        return run_query(req)
+    except CorpusNotSeededError as exc:
+        # 503, not 500: the corpus is a dependency that is not ready yet, and
+        # the next container boot retries the seed (#5045). An unseeded index
+        # must never look like a query that legitimately matched nothing.
+        # `detail` stays a string: the registered digibase error handler renders
+        # `HTTPException.detail` verbatim into `error.message`, and a dict here
+        # would reach API consumers as a Python repr.
+        raise HTTPException(
+            status_code=503,
+            detail=f"corpus_not_seeded: {exc}",
+        ) from exc
 
 
 class OrchestratorToolsRequest(BaseModel):
@@ -1085,6 +1113,22 @@ def _invoke_webset_tool(tool: str, args: dict[str, Any]) -> OrchestratorInvokeRe
     return OrchestratorInvokeResponse(ok=True, service="digisearch", tool=tool, data=data)
 
 
+def _orchestrator_run_query(qreq: QueryRequest, tool: str) -> OrchestratorInvokeResponse:
+    """Run a hub-dispatched query, mapping an unseeded corpus onto the error shape.
+
+    digigraph reads ``inv["ok"]`` (``digisearch_tools.py``) and surfaces
+    ``error`` when it is false, so returning ``ok=False`` here is what turns
+    "zero hits" into a diagnosable failure instead of a confident non-answer
+    (#5045). Staying on this function's own ``ok=False`` convention also keeps
+    the HTTP status 200, which is what the hub's manifest/invoke client expects.
+    """
+    try:
+        resp = run_query(qreq)
+    except CorpusNotSeededError as exc:
+        return OrchestratorInvokeResponse(ok=False, error=f"corpus_not_seeded: {exc}")
+    return OrchestratorInvokeResponse(ok=True, service="digisearch", tool=tool, data=resp)
+
+
 @app.post("/v1/orchestrator_invoke")
 def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvokeResponse:
     """Execute one digisearch orchestrator tool by name (hub dispatch)."""
@@ -1107,13 +1151,7 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
         )
         if not qreq.text.strip():
             return OrchestratorInvokeResponse(ok=False, error="query is required")
-        resp = run_query(qreq)
-        return OrchestratorInvokeResponse(
-            ok=True,
-            service="digisearch",
-            tool=tool,
-            data=resp,
-        )
+        return _orchestrator_run_query(qreq, tool)
 
     if tool == TOOL_DIGISEARCH_FETCH_ALL:
         page_size = min(100, _resolve_fetch_all_max(None))
@@ -1154,7 +1192,10 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
                 # Exhaustive pagination must not reorder each partial page (#2441).
                 skip_rerank=True,
             )
-            resp = run_query(qreq)
+            try:
+                resp = run_query(qreq)
+            except CorpusNotSeededError as exc:
+                return OrchestratorInvokeResponse(ok=False, error=f"corpus_not_seeded: {exc}")
             payload = resp.model_dump(mode="json")
             results = payload.get("results") or []
             if not results:

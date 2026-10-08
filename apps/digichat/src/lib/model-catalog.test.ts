@@ -101,7 +101,12 @@ describe("catalogEntriesFor", () => {
   it("maps gemini to the google catalog provider", () => {
     const entries = catalogEntriesFor("gemini");
     expect(entries.length).toBeGreaterThan(0);
-    expect(entries.map((e) => e.id)).toContain("gemini-2.5-flash");
+    // Assert a *routable* id, not merely one models.dev carries: the catalog
+    // still lists gemini-2.5-flash, but `config/litellm.yaml` has no
+    // `model_name` for it, so the routable intersection (#5000) excludes it.
+    // Asserting the unfiltered row here would pass on a member of the catalog
+    // the picker can never route -- the defect F2 of PR #4997 was about.
+    expect(entries.map((e) => e.id)).toContain("gemini-3.5-flash");
   });
 
   it("returns an empty list for a provider the catalog does not carry", () => {
@@ -132,20 +137,27 @@ describe("catalogEntriesFor", () => {
 
   it("covers every advertised BYOK preset, so no advertised option is lost", () => {
     // The other side of the same filter: intersecting must not silently drop an
-    // id config/byok-providers.json advertises. Where the two sets are disjoint
-    // (anthropic today: 3 routable ids, none of them in the catalog) the picker
-    // falls back to byokModelPresets instead, so nothing regresses.
+    // id config/byok-providers.json advertises. Every advertised preset has to
+    // survive the routable intersection, or the picker's first choice stops
+    // working for that provider.
     const presets: Record<string, string[]> = {
       openai: ["gpt-4o-mini", "gpt-4o", "o4-mini"],
-      xai: ["grok-4-3", "grok-4.5"],
+      xai: ["grok-4.3", "grok-4.5"],
+      anthropic: ["claude-haiku-4-5", "claude-opus-4-5", "claude-sonnet-4-6"],
+      gemini: ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3.7-flash"],
     };
     for (const [provider, ids] of Object.entries(presets)) {
-      const offered = new Set(catalogEntriesFor(provider).map((e) => e.id));
+      // `offered` is by construction a subset of `routable` (catalogEntriesFor
+      // filters by the routable set), so `routable.has(id)` is the whole claim:
+      // every advertised preset is still routable, which is what keeps the
+      // picker's first-choice option working. Spelled as a plain membership
+      // check rather than the old `offered || routable` disjunction, which had
+      // collapsed to `routable` and read like it was checking two things.
       const routable = new Set(MODEL_CATALOG_ROUTABLE_BYOK_MODEL_IDS[provider] ?? []);
       for (const id of ids) {
         expect(
-          offered.has(id) || routable.has(id),
-          `${provider}: advertised preset ${id} is neither in the catalog nor routed`,
+          routable.has(id),
+          `${provider}: advertised preset ${id} is not in the routable set`,
         ).toBe(true);
       }
     }

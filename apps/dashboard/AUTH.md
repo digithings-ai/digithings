@@ -221,17 +221,36 @@ Tier-only codes (no `product_key`) are not supported yet — `ClientProductKey`
 Everything in this file (RLS, `client_product_grants`, the invite system) is
 scoped to the CORE project. The FX Hub page's own data — every `fx_*` table —
 lives in a second, independent Supabase project (`twelve-x`, its own repo,
-its own migrations). That project has never had its own logins, and every
-`fx_*` table there still has `anon_read USING (true)`: the invite/
-`ClientProductGate` system controls whether the *page* renders, not whether
-the *data* is readable. Anyone holding `NEXT_PUBLIC_TWELVEX_SUPABASE_ANON_KEY`
+its own migrations). That project has never had its own logins, and its
+`fx_*` tables used to carry `anon_read USING (true)`: the invite/
+`ClientProductGate` system controlled whether the *page* rendered, not whether
+the *data* was readable, so anyone holding `NEXT_PUBLIC_TWELVEX_SUPABASE_ANON_KEY`
 (a `NEXT_PUBLIC_*` var, baked into the static bundle same as the core anon
-key) can already read all FX research directly, invited or not.
+key) could read all FX research directly, invited or not.
 
-**Do not treat an FX Hub invite as a real access boundary until the twelve-x
-cutover below has shipped.** The fix lives in the twelve-x repo:
-`supabase/migrations/cutover/fx_hub_rls_cutover.sql` (staged, inert — see
-that file's own header for the full precondition list and inventory). Summary:
+**That gap is closed.** The RLS cutover was promoted on 2026-09-14 (twelve-x
+`supabase/migrations/028_fx_hub_rls_cutover.sql`, promoted from
+`supabase/migrations/cutover/fx_hub_rls_cutover.sql`, with
+`029_fx_hub_rls_access_fix.sql` replacing the inline subquery with a
+`SECURITY DEFINER` `fx_hub_has_access()` helper). Re-verified 2026-10-05
+(DIG-258): a bare anon key gets **HTTP 401 on all 20** FX tables, `POST
+/rest/v1/rpc/fx_hub_has_access` returns **401**, storage lists no buckets, and
+`GET /auth/v1/user` refuses to impersonate a user — held identically for the
+legacy `anon` JWT and for the publishable key that replaced it. So the control
+is **no read grants for the anon role**, which is the only durable design for a
+`NEXT_PUBLIC_*` key that cannot be kept secret in a JavaScript bundle; an invite
+is now a real access boundary.
+
+**Consequence for credential hygiene:** because the key is public by
+construction, rotating it is defence in depth, not the control. It was rotated
+on 2026-10-05 (legacy `anon` JWT → publishable key, DIG-258); the rotation is
+logged in [docs/ops/SECRETS_ROTATION.md](../../docs/ops/SECRETS_ROTATION.md)
+with the inventory row and risks in
+[docs/ops/SECRETS_INVENTORY.md](../../docs/ops/SECRETS_INVENTORY.md). Note two
+traps that file records: a `NEXT_PUBLIC_*` change only reaches users on the next
+production **build**, and this var falls back to the **core**
+`NEXT_PUBLIC_SUPABASE_ANON_KEY` when unset (`lib/twelve-x/supabase.ts:23-26`) —
+so never rotate the core key as a twelve-x fix.
 
 **Correction**: an earlier draft of this section assumed Supabase's
 Third-Party Auth could trust core as a JWT issuer directly. It cannot —
@@ -266,7 +285,11 @@ step for this at all; twelve-x instead mints its own real session:
    granted — ships independently of the rest, harmless pre-cutover (falls
    back to the anon key when no session is minted yet).
 5. Once 1–4 are live, promote the staged migration (copy, don't move, per its
-   header) and verify: bare anon key against any fx_* table returns empty,
-   not an error — AND an actual granted user's FX Hub page load succeeds
-   end-to-end (not just the negative anon-denied case).
+   header) and verify: a bare anon key against any `fx_*` table returns **401**,
+   not an empty result — the policies are `GRANT`-less for `anon`, so the
+   correct anon-denied outcome is a permission error, and a probe that expects
+   `200 []` is testing the wrong thing — AND an actual granted user's FX Hub page
+   load succeeds end-to-end (not just the negative anon-denied case).
+   **Done 2026-09-14** (migration 028 promoted, 029 access fix); re-verified
+   2026-10-05 as 401 on 20/20 tables.
 

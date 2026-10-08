@@ -309,8 +309,14 @@ describe("ByokCliFlow", () => {
     // Now select the empty "free" tier — the presets must come back rather
     // than the picker emptying out to just "custom…".
     fireEvent.click(await screen.findByText(/free \(0\)/));
-    expect(await screen.findByText("claude-sonnet-4-20250514")).toBeInTheDocument();
-    expect(screen.queryByText("Claude Opus 4.5")).not.toBeInTheDocument();
+    expect(await screen.findByText("claude-sonnet-4-6")).toBeInTheDocument();
+    // haiku is a preset that the mocked catalog does NOT carry, so seeing it
+    // proves the fall-through reached byokModelPresets. #5000 made the preset
+    // ids and the catalog ids overlap (both are now claude-*-4-5/4-6), so an
+    // opus option can no longer be used to tell the two sources apart — and
+    // modelLabels resolves it to the catalog's friendlier "Claude Opus 4.5"
+    // rather than the bare id, which is accurate: same id, same model.
+    expect(await screen.findByText("claude-haiku-4-5")).toBeInTheDocument();
   });
 
   it("pings at the key step for OpenAI and populates the model picker from the live list", async () => {
@@ -419,7 +425,7 @@ describe("ByokCliFlow", () => {
     fireEvent.change(keyInput, { target: { value: "sk-ant-test" } });
     fireEvent.keyDown(keyInput, { key: "Enter" });
 
-    expect(await screen.findByText("claude-sonnet-4-20250514")).toBeInTheDocument();
+    expect(await screen.findByText("claude-sonnet-4-6")).toBeInTheDocument();
     expect(screen.queryByText("Incorrect API key")).not.toBeInTheDocument();
   });
 
