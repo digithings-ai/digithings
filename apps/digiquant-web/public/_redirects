@@ -19,8 +19,9 @@
 /subsystems/kairos/      /subsystems/execution/   301
 
 # Retired operator UI. /dashboard is the brief at /app. Known desk paths keep
-# their slug. Unknown paths under /dashboard go to /app. apps/dashboard stays
-# in the tree and is not a destination. Same map as legacyDashboardRedirects().
+# their slug. Retired pages go to /app. No splat: login, signup, the Auth
+# callback and settings (incl. the Alpaca OAuth callback) still ship from
+# apps/dashboard. Same map as legacyDashboardRedirects().
 /dashboard/portfolio/attribution /app/portfolio/attribution/ 308
 /dashboard/portfolio/attribution/ /app/portfolio/attribution/ 308
 /dashboard/portfolio/tearsheet /app/portfolio/tearsheet/ 308
@@ -51,6 +52,31 @@
 /dashboard/pipeline/ /app/pipeline/ 308
 /dashboard/brief /app/brief/ 308
 /dashboard/brief/ /app/brief/ 308
+/dashboard/portfolio/performance /app 308
+/dashboard/portfolio/performance/ /app 308
+/dashboard/research/vela-spike /app 308
+/dashboard/research/vela-spike/ /app 308
+/dashboard/portfolio/tickers /app 308
+/dashboard/portfolio/tickers/ /app 308
+/dashboard/portfolio/period /app 308
+/dashboard/portfolio/period/ /app 308
+/dashboard/observability /app 308
+/dashboard/observability/ /app 308
+/dashboard/architecture /app 308
+/dashboard/architecture/ /app 308
+/dashboard/research /app 308
+/dashboard/research/ /app 308
+/dashboard/strategy /app 308
+/dashboard/strategy/ /app 308
+/dashboard/twelve-x /app 308
+/dashboard/twelve-x/ /app 308
+/dashboard/library /app 308
+/dashboard/library/ /app 308
+/dashboard/system /app 308
+/dashboard/system/ /app 308
+/dashboard/house /app 308
+/dashboard/house/ /app 308
+/dashboard/why /app 308
+/dashboard/why/ /app 308
 /dashboard /app 308
 /dashboard/ /app 308
-/dashboard/* /app 308
