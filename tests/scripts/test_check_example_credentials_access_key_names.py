@@ -15,6 +15,12 @@ spelling in this repo reported clean before the value was ever looked at:
 gate simply ran first and said no. The identical value under ``AWS_ACCESS_TOKEN``
 was reported, which is what proves the value was never the problem.
 
+``ACCESS_KEY`` rather than the vendor-prefixed ``AWS_ACCESS_KEY``, so the entry also
+covers ``R2_ACCESS_KEY_ID`` - the live spelling, read by nine ``secrets`` uses across
+five workflows. The retired ``CHECKPOINT_ARCHIVE_R2_ACCESS_KEY`` spelling is not
+cited: ``tests/scripts/test_checkpoint_archive_workflow.py`` and
+``tests/dq/ops/test_checkpoint_archive.py`` both assert it is gone.
+
 The contract pinned here:
 
   * ``ACCESS_KEY`` is a ``CRED_VAR_PATTERNS`` entry, so an AWS access key ID name is
@@ -153,10 +159,15 @@ def _corpus_findings():
     ]
 
 
-#: Names that contain ``ACCESS_KEY`` and were out of scope before this leaf. The
-#: first two are the neighbours the widening most plausibly over-reaches on.
+#: Names that contain ``ACCESS_KEY`` and were out of scope before this leaf.
+#: ``AWS_ACCESS_KEY`` is the nearest neighbour of the leaf's own subject and
+#: ``R2_ACCESS_KEY_ID`` is the live spelling this repo actually reads - both are
+#: pinned so the comment in the script cannot drift away from the code. The last two
+#: are the neighbours the substring form most plausibly over-reaches on.
 NEWLY_MATCHED_NAMES = [
     AWS_ACCESS_KEY_ID,
+    "AWS_ACCESS_KEY",
+    "R2_ACCESS_KEY_ID",
     "SSH_ACCESS_KEY_ID",
     "SSH_ACCESS_KEY_FILE",
     "GPG_ACCESS_KEY",
@@ -241,7 +252,10 @@ def test_the_value_passed_before_this_leaf_and_the_name_did_not():
     """
     for value in (AKIA_KEY, AKIA_KEY + TRAILING_COMMENT):
         assert _without_access_key()(lambda: cec.looks_cred_var(AWS_ACCESS_KEY_ID)) is False
-        assert _without_access_key()(lambda: cec.looks_cred_val(value)) is True
+        # No `_without_access_key()` wrapper here: `looks_cred_val` reads only
+        # `CRED_VALUE_PATTERNS`, so narrowing the name list around it would be
+        # decoration that reads as if it were doing work.
+        assert cec.looks_cred_val(value) is True
         assert cec.looks_cred_var("AWS_ACCESS_TOKEN") is True
         assert cec.looks_cred_val(value) is True
 
@@ -295,9 +309,17 @@ def test_the_corpus_scan_actually_covers_the_corpus(monkeypatch: pytest.MonkeyPa
     process CWD happens to be. Run from ``tests/scripts/`` it sees 103 files and none
     of them is an ``.example`` / ``.template``, and prints ``OK`` over nothing. This
     test pins that the corpus is non-empty - so a fence reading an empty file set
-    fails loudly instead of passing - and that the anchored scan and the CWD-relative
-    one agree once the CWD is the repo root. It pins that the *scan* is real; the
-    sibling test below pins that ``main()`` acts on what it scans.
+    fails loudly instead of passing - that the anchored scan really lists example
+    files, and that the anchored scan and the CWD-relative one agree once the CWD is
+    the repo root.
+
+    The two halves fail for different reasons and both are needed. The agreement
+    assertion alone passes when *every* ``git ls-files`` in the process is answering
+    about the wrong repository - an exported ``GIT_DIR`` or ``GIT_INDEX_FILE``, as a
+    bisect or an IDE-launched run leaves behind - because both runs are then equally
+    wrong, and the corpus fence above passes over the wrong file set too. That is why
+    the ``any()`` below is not redundant with the ``candidates`` assertion: one reads
+    the files on disk, the other asks git what it tracks, and only the second notices.
     """
     candidates = _corpus_assignable_lines()
     assert candidates, "the tracked .example / .template corpus has no assignable lines"
@@ -305,13 +327,24 @@ def test_the_corpus_scan_actually_covers_the_corpus(monkeypatch: pytest.MonkeyPa
     anchored = subprocess.run(
         ["git", "ls-files"], cwd=REPO_ROOT, stdout=subprocess.PIPE, text=True, check=True
     ).stdout.splitlines()
-    assert any(".example" in n or ".template" in n for n in anchored)
+    assert any(".example" in n or ".template" in n for n in anchored), (
+        "git ls-files at the repo root listed no .example / .template file: the index "
+        "this scan reads is not the repo's (exported GIT_DIR / GIT_INDEX_FILE?)"
+    )
 
     monkeypatch.chdir(REPO_ROOT)
     from_cwd = subprocess.run(
         ["git", "ls-files"], stdout=subprocess.PIPE, text=True, check=True
     ).stdout.splitlines()
     assert from_cwd == anchored
+
+
+#: Environment that redirects git at a repository other than the process CWD's.
+#: ``main()`` shells out to ``git ls-files`` with no ``cwd``, so an exported
+#: ``GIT_DIR`` / ``GIT_WORK_TREE`` / ``GIT_INDEX_FILE`` makes it read a different
+#: index. Measured: with ``GIT_DIR`` pointed at the repo, the planted-file test below
+#: fails at ``git add`` with ``pathspec ... did not match any files``.
+GIT_INDEX_ENV = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE")
 
 
 def test_main_reports_a_planted_credential_in_a_throwaway_repo(
@@ -326,7 +359,15 @@ def test_main_reports_a_planted_credential_in_a_throwaway_repo(
     throwaway git repo of the test's own so the real corpus is never touched:
 
         plant AWS_ACCESS_KEY_ID=<real-looking AKIA value> -> main() returns 1
+
+    The redirecting environment is cleared for the duration: without it the test
+    depends on whatever the caller exported and fails for a reason that has nothing
+    to do with the guard. That is a measured fragility, not a hypothetical one - it
+    is exactly how this test failed when the clearing was absent.
     """
+    for var in GIT_INDEX_ENV:
+        monkeypatch.delenv(var, raising=False)
+
     repo = tmp_path / "repo"
     repo.mkdir()
     subprocess.run(["git", "init", "-q"], cwd=repo, check=True)

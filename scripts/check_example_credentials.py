@@ -33,10 +33,18 @@ CRED_VAR_PATTERNS = [
     # access key ID out of scope before its value was ever looked at: the
     # `^AKIA[A-Za-z0-9]{16,}` rule below would have reported the key, but the name
     # gate ran first and said no. The identical value under `AWS_ACCESS_TOKEN` was
-    # reported, so the value was never the problem - only the name was. This is the
-    # repo's own spelling too: the R2 workflows read `R2_ACCESS_KEY_ID` and
-    # `CHECKPOINT_ARCHIVE_R2_ACCESS_KEY`. It newly matches `SSH_ACCESS_KEY_ID`,
-    # which is acceptable for the reason in the comment above.
+    # reported, so the value was never the problem - only the name was.
+    #
+    # `ACCESS_KEY` rather than the vendor-prefixed `AWS_ACCESS_KEY`, because the
+    # substring form has to cover this repo's own spellings too: `R2_ACCESS_KEY_ID`
+    # is the live name, read by nine `secrets` uses across five workflows. The retired
+    # `CHECKPOINT_ARCHIVE_R2_ACCESS_KEY` spelling is deliberately not cited here -
+    # two tests assert it is absent from the workflows.
+    #
+    # The widening also claims three non-AWS names - `SSH_ACCESS_KEY_ID`,
+    # `SSH_ACCESS_KEY_FILE` and `GPG_ACCESS_KEY` - which is acceptable for the
+    # reason in the comment above: a path to a key file is already reported today
+    # under the incumbents, and a single-line GPG key id is reported there too.
     r'ACCESS_KEY', r'ACCESS_TOKEN', r'REFRESH_TOKEN',
     r'WEBHOOK_SECRET', r'SIGNING_KEY',
 ]
