@@ -8,7 +8,8 @@ import TearsheetPage from "@/app/strategies/[id]/page";
 describe("linked routes", () => {
   it("lists real tagged releases and does not say placeholder", () => {
     const html = renderToStaticMarkup(<ChangelogPage />);
-    expect(html).toContain("digichat 2.4.0");
+    expect(html).toContain("digichat 2.3.2");
+    expect(html).not.toContain("digichat 2.4.0");
     expect(html).toContain("digiskills 0.2.1");
     expect(html).toContain("no product tag");
     expect(html).not.toContain(">placeholder<");

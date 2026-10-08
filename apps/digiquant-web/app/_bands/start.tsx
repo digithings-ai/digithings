@@ -20,7 +20,7 @@ const COMMAND =
 
 export function StartBand() {
   return (
-    <Band id="start" title="Run it yourself" takeaway="digiquant is open core. Self-host it free, or have it run for you.">
+    <Band id="start" title="Run it yourself" takeaway="digiquant is open core. Self-host it free; a managed tier is coming.">
       <>
         <div className="grid grid-cols-[minmax(0,1fr)] border border-hair lg:grid-cols-2">
           <Step n="01" label="install digiquant">
