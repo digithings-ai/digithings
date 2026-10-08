@@ -84,6 +84,10 @@ function retiredLongestFirst() {
   return [...RETIRED_DASHBOARD_PATHS].sort((a, b) => b.length - a.length || a.localeCompare(b));
 }
 
+function accountPathsLongestFirst() {
+  return [...DASHBOARD_ACCOUNT_PATHS].sort((a, b) => b.length - a.length || a.localeCompare(b));
+}
+
 /** Next.js redirects(). Specific desk paths, then retired pages, then the root. */
 export function legacyDashboardRedirects() {
   /** @type {{ source: string, destination: string, permanent: true }[]} */
@@ -117,5 +121,38 @@ export function legacyDashboardCloudflareLines() {
   }
   lines.push("/dashboard /app 308");
   lines.push("/dashboard/ /app 308");
+  return lines;
+}
+
+/**
+ * Retired static digiquant.io URLs under /olympus. Previously these bounced
+ * through /dashboard (itself redirected to /app), a 2-3 hop chain once the
+ * root's own trailing-slash redirect is counted. Each line here points
+ * straight at the final destination in one hop. Account pages still live
+ * under /dashboard (never /olympus), so they keep going there, where
+ * apps/dashboard serves them with no further redirect. The trailing splat
+ * only catches paths no longer in any list above; it is safe here (unlike
+ * the /dashboard block) because /olympus never served account pages for it
+ * to shadow.
+ */
+export function legacyOlympusCloudflareLines() {
+  /** @type {string[]} */
+  const lines = [];
+  for (const path of deskPathsLongestFirst()) {
+    const destination = legacyDeskHref(path);
+    lines.push(`/olympus${path} ${destination} 308`);
+    lines.push(`/olympus${path}/ ${destination} 308`);
+  }
+  for (const path of retiredLongestFirst()) {
+    lines.push(`/olympus${path} /app/ 308`);
+    lines.push(`/olympus${path}/ /app/ 308`);
+  }
+  for (const path of accountPathsLongestFirst()) {
+    lines.push(`/olympus${path} /dashboard${path} 308`);
+    lines.push(`/olympus${path}/ /dashboard${path} 308`);
+  }
+  lines.push("/olympus /app/ 308");
+  lines.push("/olympus/ /app/ 308");
+  lines.push("/olympus/* /app/ 308");
   return lines;
 }
