@@ -1,0 +1,60 @@
+{
+  "$meta": {
+    "version": 1,
+    "updatedAt": "2026-10-08T00:00:00.000Z",
+    "source": "configure"
+  },
+  "database": {
+    "mode": "embedded-postgres",
+    "embeddedPostgresDataDir": "/Users/chrisstefan/Code/digithings/.paperclip/worktrees/DIG-2366-stage-a-revertible-hotpatch-bundle-for-the-two-paperclip-write-faults-from-the-pinned-2026-1001-0-baseline/ops/hotpatch/DIG-2366/rehearsal/data-patched/instances/dig2366/db",
+    "embeddedPostgresPort": 54339,
+    "backup": {
+      "enabled": false,
+      "intervalMinutes": 60,
+      "retentionDays": 1,
+      "dir": "/Users/chrisstefan/Code/digithings/.paperclip/worktrees/DIG-2366-stage-a-revertible-hotpatch-bundle-for-the-two-paperclip-write-faults-from-the-pinned-2026-1001-0-baseline/ops/hotpatch/DIG-2366/rehearsal/data-patched/instances/dig2366/data/backups"
+    }
+  },
+  "logging": {
+    "mode": "file",
+    "logDir": "/Users/chrisstefan/Code/digithings/.paperclip/worktrees/DIG-2366-stage-a-revertible-hotpatch-bundle-for-the-two-paperclip-write-faults-from-the-pinned-2026-1001-0-baseline/ops/hotpatch/DIG-2366/rehearsal/data-patched/instances/dig2366/logs"
+  },
+  "server": {
+    "deploymentMode": "authenticated",
+    "exposure": "private",
+    "bind": "loopback",
+    "host": "127.0.0.1",
+    "port": 3199,
+    "allowedHostnames": [],
+    "serveUi": false
+  },
+  "telemetry": {
+    "enabled": false
+  },
+  "updates": {
+    "checkEnabled": false
+  },
+  "auth": {
+    "baseUrlMode": "auto",
+    "disableSignUp": false
+  },
+  "storage": {
+    "provider": "local_disk",
+    "localDisk": {
+      "baseDir": "/Users/chrisstefan/Code/digithings/.paperclip/worktrees/DIG-2366-stage-a-revertible-hotpatch-bundle-for-the-two-paperclip-write-faults-from-the-pinned-2026-1001-0-baseline/ops/hotpatch/DIG-2366/rehearsal/data-patched/instances/dig2366/data/storage"
+    },
+    "s3": {
+      "bucket": "paperclip",
+      "region": "us-east-1",
+      "prefix": "",
+      "forcePathStyle": false
+    }
+  },
+  "secrets": {
+    "provider": "local_encrypted",
+    "strictMode": false,
+    "localEncrypted": {
+      "keyFilePath": "/Users/chrisstefan/Code/digithings/.paperclip/worktrees/DIG-2366-stage-a-revertible-hotpatch-bundle-for-the-two-paperclip-write-faults-from-the-pinned-2026-1001-0-baseline/ops/hotpatch/DIG-2366/rehearsal/data-patched/instances/dig2366/secrets/master.key"
+    }
+  }
+}
