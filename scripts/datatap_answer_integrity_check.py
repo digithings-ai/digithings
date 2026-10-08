@@ -262,11 +262,25 @@ def build_payload(probe_text: str) -> dict:
     }
 
 
-# Both spellings this product emits, and no more: the dashed UUID, and the
-# dashless 32-hex form that `build_payload` writes as `uuid.uuid4().hex` on every
-# message it sends. The braced and urn spellings are deliberately still not
-# matched — nothing here emits them, so accepting them would buy no real leak the
-# pattern cannot already see, and every shape added here widens exit 1.
+# Both spellings this product emits: the dashed UUID, and the dashless 32-hex
+# form that `build_payload` writes as `uuid.uuid4().hex` on every message it
+# sends. Those are the only two shapes this pattern names.
+#
+# The braced and urn spellings are NOT accepted as shapes of their own, and that
+# is a decision rather than an oversight — but be precise about what it means,
+# because the naive reading of it is wrong. `\b` holds after `{` and after `:`
+# too, so `{a3f9c1e4-7b2d-48f6-a0c5-e91d3b7f2486}` and
+# `urn:uuid:a3f9c1e4-7b2d-48f6-a0c5-e91d3b7f2486}` are both caught, by the dashed
+# branch, through the inner UUID. They are caught rather than matched. Adding a
+# braced or urn branch would widen exit 1 for no leak the dashed branch cannot
+# already see, and this detector's asymmetry is deliberate: a false alarm on a
+# prose sentence is recoverable, a silent pass on a leaked identifier is the
+# failure that started the SEV1.
+#
+# Do not "fix" the braced and urn cases by narrowing `\b`. The same `\b` after
+# `:` is what catches a real identifier sitting in a URL path, and trading that
+# detection to satisfy the letter of a narrower requirement would be a
+# regression.
 _UUID_RE = re.compile(
     r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b"
     r"|\b[0-9a-fA-F]{32}\b"
