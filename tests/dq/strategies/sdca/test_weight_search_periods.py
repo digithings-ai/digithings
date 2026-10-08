@@ -40,6 +40,7 @@ from digiquant.strategies.sdca.indicator_catalog import SdcaCompositeWeights
 from digiquant.strategies.sdca.risk_model import RiskModel
 from digiquant.strategies.sdca.stage_a import ACCUMULATE_RISK_MAX, DISTRIBUTE_RISK_MIN
 from digiquant.strategies.sdca.walk_forward import SdcaTrialMetrics, make_walk_forward_folds
+from digiquant.strategies.sdca import weight_search as weight_search_module
 from digiquant.strategies.sdca.weight_search import (
     search_oscillator_periods_by_backtest,
     search_oscillator_periods_by_cycle_overlap,
@@ -590,7 +591,17 @@ class TestUnknownIndicatorNameIsRejected:
         kwargs["indicator_name"] = "valuation"
         with pytest.raises(ValueError) as excinfo:
             search_oscillator_periods_by_backtest(**kwargs)  # type: ignore[arg-type]
-        assert "valuation" in str(excinfo.value)
+        message = str(excinfo.value)
+        assert "valuation" in message
+        # The dedicated-field guard exists only to give a *different* message from
+        # the unknown-name guard. "valuation" is not in ``_extra_weight_names()``,
+        # so without the first guard the unknown-name guard would also satisfy
+        # the assertion above -- after telling the operator to pick from a
+        # thirteen-name list that does not contain the name they passed. Pin the
+        # difference explicitly, or the guard can be deleted unnoticed.
+        assert "dedicated valuation field" in message
+        assert "unknown indicator name" not in message
+        assert "expected one of" not in message
 
     def test_cycle_overlap_rejects_the_dedicated_valuation_field_only_via_kwargs(
         self,
@@ -825,3 +836,65 @@ def test_deferred_power_law_rename_is_not_ported() -> None:
     assert "base_valuation_z" in params
     assert "base_power_law_z" not in params
     assert "power_law" not in ws.__all__
+
+
+class TestSearchableExtraNameSetIsPinned:
+    """G4: the name set the searchers validate against must not silently shrink.
+
+    ``_extra_weight_names()`` is derived from ``SdcaCompositeWeights().extra_items()``,
+    which is the right way to build it -- a hand-maintained list would drift. But
+    "derived" is not "pinned": filtering one research extra out of *this* set
+    leaves the weight model untouched (leaf 2's own tests still pass, because
+    ``extra_items()`` is unchanged) while making that extra unsearchable, so the
+    searches raise "unknown indicator name" on a perfectly real field.
+
+    Pinning the exact tuple turns that silent regression into a failing test.
+    """
+
+    def test_the_derivation_is_not_a_filtration(self) -> None:
+        assert weight_search_module._extra_weight_names() == tuple(
+            name for name, _ in SdcaCompositeWeights().extra_items()
+        )
+
+    def test_the_searchable_set_is_the_exact_expected_tuple(self) -> None:
+        assert weight_search_module._extra_weight_names() == (
+            "m2",
+            "rs_eth",
+            "dxy",
+            "onchain_mvrv",
+            "onchain_asopr",
+            "onchain_puell",
+            "onchain_rhodl",
+            "onchain_addr_ratio",
+            "fear_greed",
+            "weekly_rsi",
+            "weekly_macd",
+            "sma_band",
+            "fast_crash_vol",
+        )
+
+    def test_every_research_extra_is_reachable_by_both_searches(self) -> None:
+        """Each name in the set must be accepted by the guard, not just listed."""
+        for name in weight_search_module._extra_weight_names():
+            assert weight_search_module._require_extra_name(name, "probe") == name
+
+    def test_the_research_only_extras_are_in_the_set(self) -> None:
+        """The dormancy decision is per *weight*, not per *name*.
+
+        Leaf 2's new extras ship with weight ``0.0`` and stay out of
+        ``MACRO_INDICATOR_NAMES`` / ``EXTRA_INDICATOR_NAMES``. They are still
+        legitimate search targets for a research run, so all seven must be
+        searchable even though none is enabled by default.
+        """
+        names = weight_search_module._extra_weight_names()
+        for research_only in (
+            "onchain_mvrv",
+            "onchain_asopr",
+            "onchain_puell",
+            "onchain_rhodl",
+            "onchain_addr_ratio",
+            "fear_greed",
+            "fast_crash_vol",
+        ):
+            assert research_only in names
+            assert getattr(SdcaCompositeWeights(), research_only) == 0.0
