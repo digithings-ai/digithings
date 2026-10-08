@@ -341,13 +341,17 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     /health degraded contract, the ingest exit-code block, and the fan-out
     provenance note in ARCHITECTURE.md) — fixture prose only; RecursiveChunker
     unchanged.
+    Re-recorded at count 132 for the #5088 review fix (the POST /query row of
+    the unseeded-corpus per-caller table now documents the real `http_503`
+    error envelope in ARCHITECTURE.md) — fixture prose only; RecursiveChunker
+    unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 131
+    assert len(chunks) == 132
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
@@ -424,7 +428,8 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "acc08c97a5620aaf",
         "2da9a534085afc86",
         "354bda51b13bec14",
-        "da50791e3f00d395",
+        "81a3302403f3eb85",
+        "ce69650ecfb49d00",
         "3021ca751898fc7b",
         "ef1849e4569e10b8",
         "8e7e26ccae99b4a2",

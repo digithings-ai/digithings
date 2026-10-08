@@ -1425,7 +1425,7 @@ to the next backend — which would reintroduce exactly the silent-empty answer.
 
 | Path | Response | Why |
 |------|----------|-----|
-| `POST /query` | **HTTP 503**, `error.code = corpus_not_seeded`, `error.indexes` | The corpus is a not-yet-ready dependency the next boot retries |
+| `POST /query` | **HTTP 503**, `error.code = "http_503"`, `error.message` starting `corpus_not_seeded:` and naming the indexes | The corpus is a not-yet-ready dependency the next boot retries |
 | `POST /v1/orchestrator_invoke` | **HTTP 200**, `{"ok": false, "error": "corpus_not_seeded: …"}` | The hub already branches on `inv["ok"]` at all three call sites and returns it to the model as tool content |
 | `GET /health` | **HTTP 200**, `status: "degraded"` + `unseeded_indexes` | Consumers gate on the status code; only the body is informative |
 | `GET /healthz` | **HTTP 200**, `{"ok": true}` | Pure liveness — AGENTS.md requires it unconditional |
