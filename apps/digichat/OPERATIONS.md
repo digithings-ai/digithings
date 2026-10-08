@@ -2,7 +2,7 @@
 
 Operator-focused runbook: local dev setup, environment variables, Docker Compose flows, troubleshooting. For the canonical design reference (module map, data flow, API contract, data models), see [ARCHITECTURE.md](ARCHITECTURE.md).
 
-digichat is the **production** web client for tenants that run digigraph. The browser talks only to the **digichat BFF** (Next.js Route Handlers). The BFF calls digigraph's OpenAI-compatible API using **`DIGIGRAPH_UPSTREAM_API_KEY`** (legacy shared secret) **or** a short-lived **digikey JWT** when **`DIGIKEY_URL`** and **`DIGIKEY_BFF_TOKEN`** are set (`POST /v1/oauth/token` with `grant_type=bff_session`). Machine clients may present **`dgk_live_…`** keys issued by digikey directly for the same exchange path. **Local full stack** (digikey, all services, seeding, env matrix): **[../docs/LOCAL_STACK.md](../docs/LOCAL_STACK.md)**.
+digichat is the **production** web client for tenants that run digigraph. The browser talks only to the **digichat BFF** (Next.js Route Handlers). The BFF calls digigraph's OpenAI-compatible API using **`DIGIGRAPH_UPSTREAM_API_KEY`** (legacy shared secret) **or** a short-lived **digikey JWT** when **`DIGIKEY_URL`** and **`DIGIKEY_BFF_TOKEN`** are set (`POST /v1/oauth/token` with `grant_type=bff_session`). Machine clients may present **`dgk_live_…`** keys issued by digikey directly for the same exchange path. **Local full stack** (digikey, all services, seeding, env matrix): **[../../docs/LOCAL_STACK.md](../../docs/LOCAL_STACK.md)**.
 
 ## Release artifacts
 
@@ -17,7 +17,7 @@ digichat follows the **digithings.ai** marketing palette from **digiweb** tokens
 
 ## Features
 
-- **Ecosystem** side panel: digigraph, digiquant, digitrace, and **digisearch** base URLs (httpOnly cookie overrides + health badges). On the host, use `127.0.0.1` ports **8000–8003** (graph / quant / search / smith).
+- **Ecosystem endpoints** are server-side only (`GET`/`POST /api/ecosystem/config`, httpOnly `digichat-endpoints` cookie, 180-day `maxAge`). There is no Ecosystem side panel, no health-badge UI, and no sheet that shows whether the server DB is configured — `connections-sheet.tsx` is gone and no client calls `/api/ecosystem/config`. DB readiness is `GET /api/health` (`database`: `ok` / `error` / `skipped`). On the host, use `127.0.0.1` ports **8000–8003** in `.env.example` order — graph **8000** / quant **8001** / trace **8003** / search **8002**.
 - **React 19 + AI SDK** streaming chat (`useChat`, UI message parts).
 - **Auth.js (OIDC)** for humans + **digichat machine keys** (`digi_live_…`, hashed in Postgres). **digikey** issues separate `dgk_live_…` keys for upstream JWT exchange — see `ARCHITECTURE.md` §Machine API key prefixes.
 - **Optional Postgres**: tenants, `api_keys`, `user_tenants` mapping (OIDC `sub` → tenant).
@@ -39,7 +39,7 @@ rather than showing a row with no reader-visible content.
 
 ## Capability matrix (federated hub)
 
-Deployments can describe which Digi ecosystem surfaces the BFF and UI treat as **enabled** (health checks, future admin toggles, copy in the ecosystem sheet):
+Deployments can describe which Digi ecosystem surfaces the BFF treats as **enabled** (health checks and hub tools). There is no ecosystem sheet:
 
 | Env | Purpose |
 |-----|---------|
@@ -50,13 +50,13 @@ Trace payloads from digigraph may include **`service`** (`digigraph` \| `digisea
 
 ## digiclone (end-to-end quant copilot)
 
-**digiclone** is the Compose-backed path **digichat → digigraph → digiquant** (optional **digisearch** for grounded research). OHLCV lives under [`digiquant/data`](digiquant/data) (mounted at `DIGIQUANT_DATA_DIR` in `docker-compose.yml`). **digikey** issues short-lived JWTs; the BFF exchanges OIDC sessions or `dgk_live_` machine keys and forwards **`Authorization: Bearer <JWT>`** to digigraph (and the graph forwards the same credential to digiquant/digisearch). After a workflow run, the chat shows a **quant comparison strip** when assistant/tool payloads contain `BacktestResult`-shaped JSON (`run_id`, `sharpe_ratio`, …). With Postgres, persist runs via `GET`/`POST` **`/api/conversations/[id]/quant-runs`** (apply migration `digichat/drizzle/0002_quant_runs.sql`). Optional post-backtest **optimization**: add **`optimize`** to project `agents.enabled` or set **`DIGI_GRAPH_OPTIMIZE_AFTER_BACKTEST=1`** on digigraph.
+**digiclone** is the Compose-backed path **digichat → digigraph → digiquant** (optional **digisearch** for grounded research). OHLCV lives under [`digiquant/data`](../../digiquant/data) (mounted at `DIGIQUANT_DATA_DIR` in `docker-compose.yml`). **digikey** issues short-lived JWTs; the BFF exchanges OIDC sessions or `dgk_live_` machine keys and forwards **`Authorization: Bearer <JWT>`** to digigraph (and the graph forwards the same credential to digiquant/digisearch). After a workflow run, the chat shows a **quant comparison strip** when assistant/tool payloads contain `BacktestResult`-shaped JSON (`run_id`, `sharpe_ratio`, …). With Postgres, persist runs via `GET`/`POST` **`/api/conversations/[id]/quant-runs`** (apply migration `digichat/drizzle/0002_quant_runs.sql`). Optional post-backtest **optimization**: add **`optimize`** to project `agents.enabled` or set **`DIGI_GRAPH_OPTIMIZE_AFTER_BACKTEST=1`** on digigraph.
 
-**Local RAG on EDGAR (dev):** To exercise document-mode research against a larger financial-text slice than [`digisearch/seeds`](digisearch/seeds/), export and ingest the optional **EDGAR-CORPUS** sample into Chroma index **`edgar_dev`** and set **`DIGISEARCH_INDEX=edgar_dev`** for digigraph (see [../docs/LOCAL_STACK.md](../docs/LOCAL_STACK.md): `make export-edgar-digisearch-dev`, `make seed-digisearch-edgar-dev` or `seed-digisearch-edgar-dev-host`). Same JWT chain applies to digisearch queries from the hub.
+**Local RAG on EDGAR (dev):** To exercise document-mode research against a larger financial-text slice than [`digisearch/seeds`](../../digisearch/seeds/), export and ingest the optional **EDGAR-CORPUS** sample into Chroma index **`edgar_dev`** and set **`DIGISEARCH_INDEX=edgar_dev`** for digigraph (see [../../docs/LOCAL_STACK.md](../../docs/LOCAL_STACK.md): `make export-edgar-digisearch-dev`, `make seed-digisearch-edgar-dev` or `seed-digisearch-edgar-dev-host`). Same JWT chain applies to digisearch queries from the hub.
 
 ## Chat UI
 
-- **Sidebar**: conversation list, **New chat**, rename/delete (overflow menu on each row). **Ctrl/Cmd+B** toggles the rail (shadcn sidebar). Layout is full-width with **digithings.ai-aligned** dark tokens (see Design above).
+- **Sidebar**: conversation list, **New chat**, rename/delete (overflow menu on each row). **Cmd/Ctrl+/** toggles the rail (`src/components/chat-shell.tsx`; suppressed while an input, textarea, or contenteditable is focused). **Escape** closes BYOK configure mode. Layout is full-width with **digithings.ai-aligned** dark tokens (see Design above).
 - **Transcript**: scroll stick-to-bottom with a **New messages** chip when scrolled up; **Copy** and **Regenerate** on assistant bubbles; reasoning and tool payloads in **collapsible** blocks. digigraph **`data-digigraphTrace`** parts render **Sources** (tier, year, title, snippet) and a compact **Research brief** card (themes + profiling questions) when trace events include `rag_sources` / `graph_update` payloads.
 - **Composer**: auto-growing textarea (capped height), **Enter** to send, **Shift+Enter** for newline, **Stop** while streaming.
 
@@ -81,14 +81,14 @@ Use the **Next.js dev server** for hot reload. For the fastest loop, run **all b
 
 ### Host backends only (recommended for iteration)
 
-1. **Prereqs:** Repo **`.venv`** with editable installs per [scripts/run_stack_local.sh](scripts/run_stack_local.sh) (`digibase`, `digikey`, `digiquant`, `digigraph`, `digisearch`, `digitrace`). Optional: `litellm` on PATH or set **`OPENAI_API_BASE`** in root `.env` to any OpenAI-compatible URL (e.g. Ollama on `127.0.0.1:11434/v1`).
+1. **Prereqs:** Repo **`.venv`** with editable installs per [scripts/run_stack_local.sh](../../scripts/run_stack_local.sh) (`digibase`, `digikey`, `digiquant`, `digigraph`, `digisearch`, `digitrace`). Optional: `litellm` on PATH or set **`OPENAI_API_BASE`** in root `.env` to any OpenAI-compatible URL (e.g. Ollama on `127.0.0.1:11434/v1`).
 2. **Start stack** (from repo root):
 
    ```bash
    make stack-local
    ```
 
-   Stop: `make stack-local-stop`. Details, Ollama, and **`litellm_proxy_api_key`**: **[../docs/LOCAL_STACK.md](../docs/LOCAL_STACK.md)**.
+   Stop: `make stack-local-stop`. Details, Ollama, and **`litellm_proxy_api_key`**: **[../../docs/LOCAL_STACK.md](../../docs/LOCAL_STACK.md)**.
 
 3. **digichat env** — `cd apps/digichat && cp -n .env.example .env.local`, then set at least:
 
@@ -96,9 +96,9 @@ Use the **Next.js dev server** for hot reload. For the fastest loop, run **all b
    - **`AUTH_URL`** and **`NEXTAUTH_URL`** — must match the origin you open in the browser. **`npm run dev`** serves **`http://127.0.0.1:3000`** by default (don’t mix `localhost` vs `127.0.0.1` for cookies). If repo-root `.env` uses **`AUTH_URL=...:3005`** for Docker digichat, your **host** `.env.local` should still use **:3000** when using `make digichat-dev`, unless you change the Next port.
    - **`DIGIKEY_URL=http://127.0.0.1:8005`** and **`DIGIKEY_BFF_TOKEN`** — **identical** to **`DIGIKEY_BFF_TOKEN`** on the running digikey process (same as repo-root `.env` when using `make stack-local`). Without this, chat returns **`upstream_auth`**.
    - `DIGIGRAPH_INTERNAL_URL=http://127.0.0.1:8000`, `DIGIQUANT_INTERNAL_URL=http://127.0.0.1:8001`, `DIGITRACE_INTERNAL_URL=http://127.0.0.1:8003`, **`DIGISEARCH_INTERNAL_URL=http://127.0.0.1:8002`**.
-   - **`DIGICHAT_ENABLED_SERVICES=digigraph,digisearch,digiquant,digitrace`** so the Ecosystem sheet, health probes, and hub tools see digisearch.
+   - **`DIGICHAT_ENABLED_SERVICES=digigraph,digisearch,digiquant,digitrace`** so health probes and hub tools see digisearch. An empty `DIGICHAT_ENABLED_SERVICES=""` enables no service (the all-four default applies only when the variable is unset).
    - **`DIGICHAT_DEV_AUTH=1`** and **`DIGICHAT_DEV_PASSWORD`** (e.g. `dev`) — password login at `/login`.
-   - **`DIGICHAT_LOCAL_AUTH_KEY`** (`openssl rand -hex 24`) — recommended: **real** Auth.js session on first load ([`local-bootstrap`](digichat/src/app/actions/local-bootstrap.ts)); same experience as signing in, without clicking through `/login` every time.
+   - **`DIGICHAT_LOCAL_AUTH_KEY`** (`openssl rand -hex 24`) — recommended: **real** Auth.js session on first load ([`local-bootstrap`](src/app/actions/local-bootstrap.ts)); same experience as signing in, without clicking through `/login` every time.
 
 4. **Run UI:**
 
@@ -114,9 +114,9 @@ Use the **Next.js dev server** for hot reload. For the fastest loop, run **all b
    make up-digichat-db
    ```
 
-   Then in `apps/digichat/.env.local` set `DIGICHAT_DATABASE_URL=postgresql://digichat:digichat@127.0.0.1:5433/digichat`, run `cd apps/digichat && npm run db:migrate`, and restart digichat. The **Ecosystem** sheet shows when server DB is configured vs skipped. **Strategic direction:** platform data (chat DB, checkpoints, cache creds, etc.) should eventually route through a **digibase** data-plane service so secrets and policy live in one place — see [digibase/ARCHITECTURE.md](../digibase/ARCHITECTURE.md). **v1** remains a normal Postgres URL per environment.
+   Then in `apps/digichat/.env.local` set `DIGICHAT_DATABASE_URL=postgresql://digichat:digichat@127.0.0.1:5433/digichat`, run `cd apps/digichat && npm run db:migrate`, and restart digichat. Confirm with `GET /api/health` (`database` is `skipped` when `DIGICHAT_DATABASE_URL` is unset, not via a UI sheet). **Strategic direction:** platform data (chat DB, checkpoints, cache creds, etc.) should eventually route through a **digibase** data-plane service so secrets and policy live in one place — see [digibase/ARCHITECTURE.md](../../digibase/ARCHITECTURE.md). **v1** remains a normal Postgres URL per environment.
 
-Older two-service-only script (digiquant + digigraph on **18001** / **18000**): [`scripts/run_local.sh`](scripts/run_local.sh).
+Older two-service-only script (digiquant + digigraph on **18001** / **18000**): [`scripts/run_local.sh`](../../scripts/run_local.sh).
 
 **Backend in Docker, UI on the host** (optional):
 
@@ -153,7 +153,7 @@ Older two-service-only script (digiquant + digigraph on **18001** / **18000**): 
 
    Open [http://127.0.0.1:3000](http://127.0.0.1:3000). Or use `make digichat-dev` from the repo root.
 
-**Fully local Python stack** (no Docker): see [scripts/run_local.sh](scripts/run_local.sh) for digigraph/digiquant on ports `18000`/`18001`, then set `DIGIGRAPH_INTERNAL_URL=http://127.0.0.1:18000` (and matching Quant URL) in `.env.local`.
+**Fully local Python stack** (no Docker): see [scripts/run_local.sh](../../scripts/run_local.sh) for digigraph/digiquant on ports `18000`/`18001`, then set `DIGIGRAPH_INTERNAL_URL=http://127.0.0.1:18000` (and matching Quant URL) in `.env.local`.
 
 ## Quick start (local)
 
@@ -221,7 +221,7 @@ Map OIDC users to tenants with SQL or a future admin UI: insert into `user_tenan
 
 ## Environment reference
 
-See [digichat/.env.example](digichat/.env.example). Critical variables:
+See [digichat/.env.example](.env.example). Critical variables:
 
 | Variable | Purpose |
 |----------|---------|
@@ -239,14 +239,14 @@ See [digichat/.env.example](digichat/.env.example). Critical variables:
 
 ## Chat troubleshooting
 
-- **`upstream_auth` / missing JWT:** If `DIGIKEY_URL` points at digikey, **`DIGIKEY_BFF_TOKEN` must match** the secret on the digikey process (same value in root `.env` / compose and `apps/digichat/.env.local`). Restart digichat after changing env. See [../docs/LOCAL_STACK.md](../docs/LOCAL_STACK.md) for the full matrix. Alternatives: call the BFF with **`Authorization: Bearer dgk_live_…`**, or set **`DIGIGRAPH_UPSTREAM_API_KEY`** for a static upstream Bearer.
+- **`upstream_auth` / missing JWT:** If `DIGIKEY_URL` points at digikey, **`DIGIKEY_BFF_TOKEN` must match** the secret on the digikey process (same value in root `.env` / compose and `apps/digichat/.env.local`). Restart digichat after changing env. See [../../docs/LOCAL_STACK.md](../../docs/LOCAL_STACK.md) for the full matrix. Alternatives: call the BFF with **`Authorization: Bearer dgk_live_…`**, or set **`DIGIGRAPH_UPSTREAM_API_KEY`** for a static upstream Bearer.
 - **digigraph** accepts both string `content` and OpenAI/AI-SDK **part lists** (`[{ "type": "text", "text": "..." }]`) on `/v1/chat/completions`. The **trace** BFF path normalizes AI SDK `ModelMessage` payloads to plain `{ "role", "content" }` strings before `POST /v1/chat/completions`, matching digigraph’s `ChatMessage` model and avoiding `422` from strict body validation. If a call still fails, the assistant bubble includes the **upstream response body** (e.g. FastAPI `detail`) after the status line.
-- **Auth:** In production Docker you must **sign in** at `/login` (or use a machine `Authorization: Bearer …` key). `DIGICHAT_DEV_AUTH=1` enables the dev password provider; set **`AUTH_URL`** to the exact origin users use (e.g. `http://127.0.0.1:3005`) so the session cookie is issued correctly.
+- **Auth:** In production Docker you must **sign in** (OIDC or a machine `Authorization: Bearer …` key). There is no standalone `/login` page. `DIGICHAT_DEV_AUTH=1` with `NODE_ENV=production` does not enable password login: `assertDevAuthDisabledInProduction()` throws at startup (`src/lib/startup-env-guards.ts`, from `register()` and `devProvider()`). Set **`AUTH_URL`** to the exact origin users use (e.g. `http://127.0.0.1:3005`) so the session cookie is issued correctly.
 
 ## Security notes
 
 - Do **not** expose digigraph to the public internet for browser-driven flows; route users through digichat only.
-- digigraph **rate limits** by caller IP; behind the BFF all requests may share one IP — tune limits or add trusted-forwarded handling if needed (see [digigraph/src/digigraph/server.py](digigraph/src/digigraph/server.py)).
+- digigraph **rate limits** by caller IP; behind the BFF all requests may share one IP — tune limits or add trusted-forwarded handling if needed (see [digigraph/src/digigraph/server.py](../../digigraph/src/digigraph/server.py)).
 - Never enable `DIGICHAT_DEV_AUTH` in production.
 
 ## Legacy static UI
