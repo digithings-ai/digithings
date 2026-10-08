@@ -1,7 +1,7 @@
 # LuxAlgo — terms record
 
 **Vendor:** LuxAlgo Global, LLC (Delaware)
-**Classification:** **CC0-1.0 CONFIRMED for the trackers dumps (Security, 2026-10-06)** — two families limited · redistribution question still open · see [Classification status](#classification-status)
+**Classification:** **CC0-1.0 CONFIRMED for the trackers dumps (Security, 2026-10-06)** — five families confirmed · **one Prohibited** (`short-volume`, Counsel 2026-10-06) · three items open with Counsel · see [Classification status](#classification-status)
 **Record opened:** 2026-10-06 · **CTO**
 **Related:** DIG-1318 · DIG-1447 (three live trackers tools) · DIG-1251 (Counsel's ruling that *bounds* these tools — it is not their origin, and their absence from `REFUSED_TOOLS` is not a clearance)
 
@@ -276,7 +276,7 @@ one; see §[Per-family classification](#per-family-classification) below).
 | gov-contracts | `contracts/awards/` | USAspending | **CC0-1.0 CONFIRMED** |
 | lobbying-filings | `lobbying/filings/` | Senate LDA API | **CC0-1.0 CONFIRMED** |
 | congress-trades | `congress/trades/` | House Clerk, Senate eFD | **CC0-1.0 CONFIRMED** as licence · **commercial use restricted by statute** |
-| short-volume | `short-volume/daily/` | FINRA | **UNCLEAR** — upstream terms unresolved · with Counsel |
+| short-volume | `short-volume/daily/` | FINRA | **PROHIBITED** for commercial redistribution — Counsel, 2026-10-06 · in service by business decision dated 2026-10-07, **not** a clearance |
 
 The four plain confirmations do not rest on the vendor's assertion alone.
 EDGAR filings, House Clerk and Senate disclosure reports, Senate LDA and
@@ -295,15 +295,46 @@ decision dated 2026-10-06 against that advice, which is not a clearance** —
 recorded at `LUXALGO_TRACKERS_ALLOWED_DATASETS` and pinned by
 `tests/dq/test_congress_trades_statute_and_ingest_provenance.py`.
 
-**short-volume is Unclear, and this is where the CC0 grant runs out.** FINRA is
-a **private self-regulatory organisation**, not a federal records custodian
-like the other four. Its short-sale-volume compilation carries FINRA's own
-terms, and CC0 §4(b)–(c) is explicit about what that means: the affirmer makes
-no warranty of title or non-infringement and disclaims responsibility for
-clearing other people's rights. LuxAlgo cannot license what it does not hold.
-This is exactly the failure mode Counsel predicted — *"Form 4 and 13F data are
-republished third-party data and may carry upstream redistribution terms
-regardless of what LuxAlgo asserts about its own dump."* Routed to Counsel.
+**As filed 2026-10-06, Security's position was: short-volume is Unclear, and this
+is where the CC0 grant runs out.** FINRA is a **private self-regulatory
+organisation**, not a federal records custodian like the other four. Its
+short-sale-volume compilation carries FINRA's own terms, and CC0 §4(b)–(c) is
+explicit about what that means: the affirmer makes no warranty of title or
+non-infringement and disclaims responsibility for clearing other people's rights.
+LuxAlgo cannot license what it does not hold. This is exactly the failure mode
+Counsel predicted — *"Form 4 and 13F data are republished third-party data and may
+carry upstream redistribution terms regardless of what LuxAlgo asserts about its
+own dump."* Routed to Counsel. **Answered the same day, below.**
+
+**Answered on 2026-10-06 — see the [FINRA record](../finra/INDEX.md).** Counsel
+read FINRA's terms and recorded the position as **PROHIBITED** for commercial
+redistribution. The finding is worse for us than the CC0 gap Security predicted,
+because it is not only that the affirmer cannot clear the third-party layer: **FINRA
+does not permit commercial redistribution to anyone** under any of its three
+published routes. The catalogue page says the data is "free for non-commercial
+use". The Website Terms of Use permit use "ONLY for your own non-commercial
+personal or professional use". The Equity Specific Terms §2.3 — the one
+redistribution right FINRA publishes, and the one instrument that outranks the
+general API terms under §2 — caps redistribution at End Users' "non-commercial
+personal or professional use only" **and** adds "No Charge": no fee may be
+charged for the data, even bundled with other fee-liable data, because there must
+be "no additional or incremental fee charged for the Equity Data".
+
+Two subsidiary points that were open and are now closed. **Resultant Data does
+not rescue us** — API ToS §1.6 requires data "substantially different from the
+original Licensed Data" that third parties "are unable to identify"; a sorted
+per-symbol per-date volume series is neither. **And the exchange market-data
+licences do not reach this compilation at all**: FINRA states the files "are not
+consolidated with exchange data" and that a complete picture requires combining
+FINRA's TRF/ADF/ORF files with each exchange's own file, so the CTA/UTP-class
+licences that govern quote and price feeds are simply not in the chain.
+
+Confidence: **CONFIRMED** that the published terms do not permit the use we are
+making. One unknown remains and does not change the answer — whether LuxAlgo
+holds a private commercial licence from FINRA. If it does, the CC0 is an
+over-grant relative to it and §4(b)–(c) disclaims exactly that gap. If it does
+not, nobody could redistribute this commercially in the first place. Only written
+permission from FINRA changes the position, and outreach is Chris's decision.
 
 ### The defect this record was filed against
 
@@ -364,11 +395,17 @@ tabulated above (2026-10-06).** Clauses recorded, quoted and hashed. Two items
 remain open and both are Counsel's, because Security's classification is about
 the licence and theirs is about what we may do with it.
 
-1. **short-volume upstream terms (UNCLEAR → Counsel).** FINRA is a private SRO,
-   not a federal records custodian, so the CC0 grant reaches LuxAlgo's own
-   normalisation and not FINRA's compilation. Counsel to give a recorded
-   position: keep, refuse, or condition on FINRA's own redistribution terms.
-   Raised as a child of DIG-1464.
+1. ~~short-volume upstream terms~~ **Answered: PROHIBITED** (Counsel,
+   2026-10-06, [FINRA record](../finra/INDEX.md)). FINRA permits no commercial
+   redistribution of its short-sale compilation under any published route — the
+   catalogue page, the Website Terms of Use, and the Equity Specific Terms §2.3
+   all cap use at non-commercial, and §2.3 also caps it at no-charge. The CC0
+   question never gets to matter, because the data could not be redistributed
+   commercially by anyone. Resultant Data is unavailable under API ToS §1.6, and
+   the exchange market-data licences do not reach the compilation (FINRA: the
+   files "are not consolidated with exchange data"). Remediation is removal from
+   `LUXALGO_TRACKERS_ALLOWED_DATASETS`; the business decision is Chris's, on the
+   same pattern as DIG-1472 below. Raised and answered as DIG-1521.
 1b. ~~Is congress-trades data refusable as a matter of statute?~~ **Answered.**
    Counsel ruled the data class refused under 5 U.S.C. 13107(c)(1)(B) on
    DIG-1472 (CONFIRMED). The dataset remains in service by business decision
