@@ -14,6 +14,7 @@ import {
   standardPartsToSpans,
   type ActivitySpan,
 } from "./chat-activity";
+import type { DigiChatActivity } from "@digithings/digichat-ui";
 
 const span = (extra: Record<string, unknown> = {}): Record<string, unknown> => ({
   operation: "execute_tool",
@@ -296,7 +297,13 @@ describe("toDigiChatActivity", () => {
         ],
         { settle: false },
       ),
-    ).toEqual([{ kind: "status", message: 'Search for "auth" failed.' }]);
+    ).toEqual([
+      {
+        kind: "status",
+        message: 'Search for "auth" failed.',
+        outcome: { name: "file_search", query: "auth", state: "failed" },
+      },
+    ]);
   });
 
   it("keeps two different queries as separate rows", () => {
@@ -395,13 +402,21 @@ describe("toDigiChatActivity", () => {
         started("file_search"),
         { ...finished("file_search", "auth"), status: "failed" },
       ])
-    ).toEqual([{ kind: "status", message: 'Search for "auth" failed.' }]);
+    ).toEqual([
+      {
+        kind: "status",
+        message: 'Search for "auth" failed.',
+        outcome: { name: "file_search", query: "auth", state: "failed" },
+      },
+    ]);
   });
 
   it("renders a failed search with no known query using a generic message", () => {
     expect(
       toDigiChatActivity([{ operation: "execute_tool", toolName: "file_search", status: "failed", label: "x" }])
-    ).toEqual([{ kind: "status", message: "Search failed." }]);
+    ).toEqual([
+      { kind: "status", message: "Search failed.", outcome: { name: "file_search", state: "failed" } },
+    ]);
   });
 
   // Regression (#2330): a failed retrieve with hitCount set (error count
@@ -418,7 +433,13 @@ describe("toDigiChatActivity", () => {
           hitCount: 2,
         },
       ]),
-    ).toEqual([{ kind: "status", message: 'Search for "batch" failed.' }]);
+    ).toEqual([
+      {
+        kind: "status",
+        message: 'Search for "batch" failed.',
+        outcome: { name: "digivault_search_notes", query: "batch", state: "failed" },
+      },
+    ]);
   });
 
   it("still uses positive hitCount on a completed retrieve when documents mapped empty", () => {
@@ -510,6 +531,316 @@ describe("toDigiChatActivity", () => {
         count: 1,
       },
     ]);
+  });
+});
+
+// The DIG-100 no-invent guard, BFF half (leaf 2a).
+//
+// The projector has exactly one lever for "a search ran and found nothing":
+// a tool_result with count === 0, which the shared UI renders as the literal
+// string `no hits` (packages/ui/.../activity-view.ts, outcomeMeta). That is
+// an authoritative negative claim — it asserts that a retrieval happened and
+// came back empty.
+//
+// It must therefore only ever be emitted when a retrieval actually ran. The
+// trailing pass today reaches it from any completed execute_tool span whose
+// result the projector cannot count, and that is not the same thing: an MCP
+// call that returned a payload the BFF does not recognise is a completed tool
+// call, not an empty search. Today such a row renders as "no hits", which is
+// a fabricated negative claim in the client-visible transcript — the same
+// failure class as the DCE-150 incident, one layer down.
+describe("toDigiChatActivity — a negative claim requires a retrieval", () => {
+  /** Every row that reads to the user as "searched, found nothing". */
+  function zeroHitRows(rows: DigiChatActivity[]): DigiChatActivity[] {
+    return rows.filter((r) => r.kind === "tool_result" && r.count === 0);
+  }
+
+  it("does not claim no hits for a completed tool whose result is not a counted retrieval", () => {
+    // The MCP shape: a completed dynamic-tool part whose output carries no
+    // `documents`, no `documentsWithheld` and no `hitCount`. standardPartsToSpans
+    // projects it as a single completed execute_tool span, and the trailing
+    // pass currently rewrites that into a zero-hit tool_result.
+    const spans = standardPartsToSpans([
+      {
+        type: "dynamic-tool",
+        toolCallId: "t1",
+        toolName: "datatap__list_connections",
+        state: "output-available",
+        input: {},
+        output: { result: { connections: [] } },
+      },
+    ] as unknown as UIMessage["parts"]);
+
+    expect(spans).toHaveLength(1);
+    expect(zeroHitRows(toDigiChatActivity(spans))).toEqual([]);
+  });
+
+  it("does not claim no hits for a completed tool that returned an uncounted payload", () => {
+    // Same shape with a query: the user asked something, a tool ran and
+    // returned, and the result was not countable. "no hits" would assert the
+    // retrieval came back empty, which nothing here establishes.
+    const spans = standardPartsToSpans([
+      {
+        type: "dynamic-tool",
+        toolCallId: "t1",
+        toolName: "datatap_search",
+        state: "output-available",
+        input: { query: "acme" },
+        output: { result: { rows: 3 } },
+      },
+    ] as unknown as UIMessage["parts"]);
+
+    expect(zeroHitRows(toDigiChatActivity(spans))).toEqual([]);
+  });
+
+  it("holds for a payload shape nobody has listed, not just the ones we probed", () => {
+    // The property, pinned generally rather than as a shape list. The payloads
+    // reach the projector as raw `toolResult` spans — standardPartsToSpans
+    // projects a settled tool part without its output, so going through the
+    // parts path here would test the projection, not the guard, and every
+    // payload would collapse to the same span. `records` carries a real hit in
+    // a shape we cannot read: the sharpest case, because "no hits" there
+    // contradicts the payload in front of us.
+    const payloads: unknown[] = [
+      { connections: [] },
+      { rows: 3 },
+      { records: [{ id: "x" }] },
+      { some_future_mcp_shape: { nested: true } },
+    ];
+
+    for (const toolResult of payloads) {
+      const rows = toDigiChatActivity([
+        {
+          operation: "execute_tool",
+          toolName: "some_mcp_tool",
+          query: "acme",
+          status: "completed",
+          label: "Searched for: \"acme\"",
+          toolResult,
+        },
+      ]);
+
+      expect(zeroHitRows(rows), JSON.stringify(toolResult)).toEqual([]);
+      expect(rows.some((r) => "count" in r), JSON.stringify(toolResult)).toBe(false);
+      expect(
+        rows.find((r) => r.kind === "status"),
+        JSON.stringify(toolResult)
+      ).toMatchObject({ outcome: { name: "some_mcp_tool", query: "acme", state: "unreadable" } });
+    }
+  });
+
+  it("says an unreadable result is unreadable for any tool, not only MCP ones", () => {
+    // One of our own search tools, but it came back with something we cannot
+    // count. `count: 0` here would contradict the payload that exists, so the
+    // payload — not the tool's name — is what makes this an unknown. Without
+    // this, a name-only guard reads as: ours means empty, and the two halves of
+    // the rule would be silently conflated.
+    const rows = toDigiChatActivity([
+      {
+        operation: "execute_tool",
+        toolName: "digisearch",
+        query: "auth",
+        status: "completed",
+        label: 'Searched for: "auth"',
+        toolResult: { chunks: [] },
+      },
+    ]);
+
+    expect(zeroHitRows(rows)).toEqual([]);
+    expect(rows.some((r) => "count" in r)).toBe(false);
+    expect(rows.find((r) => r.kind === "status")).toMatchObject({
+      outcome: { name: "digisearch", query: "auth", state: "unreadable" },
+    });
+  });
+
+  it("still claims no hits for a settled search tool that produced no retrieve span", () => {
+    // The one legitimate zero, on the path the embed actually uses:
+    // standardPartsToSpans settles a completed tool part into a single
+    // `completed` span with no retrieve span and no toolResult. An empty answer
+    // from a tool we know searches is a real answer, so this must keep working —
+    // a real empty result and a tool whose output we cannot read are different
+    // cases, and collapsing them loses the honest negative the guard depends on.
+    const spans = standardPartsToSpans([
+      {
+        type: "tool-digisearch",
+        toolCallId: "t1",
+        state: "output-available",
+        input: { query: "auth" },
+        output: { label: 'Searched for: "auth"' },
+      },
+    ] as unknown as UIMessage["parts"]);
+
+    expect(spans).toHaveLength(1);
+    expect(toDigiChatActivity(spans)).toEqual([
+      { kind: "tool_result", name: "digisearch", query: "auth", hits: [], count: 0 },
+    ]);
+  });
+
+  it("does not claim no hits for a settled search tool whose retrieve came back empty", () => {
+    // The same path with the retrieve output present but no documents: the
+    // retrieve span itself is the evidence a retrieval ran, and `hitCount: 0`
+    // from upstream is a real zero.
+    const spans = standardPartsToSpans([
+      {
+        type: "tool-digisearch",
+        toolCallId: "t1",
+        state: "output-available",
+        input: { query: "auth" },
+        output: { label: "Sources", documents: [] },
+      },
+    ] as unknown as UIMessage["parts"]);
+
+    expect(toDigiChatActivity(spans)).toEqual([
+      { kind: "tool_result", name: "digisearch", query: "auth", hits: [], count: 0 },
+    ]);
+  });
+
+  it("does not claim no hits when a recognised tool's payload arrived on the parts path", () => {
+    // A tenant MCP tool whose name collides with one of ours, on the path the
+    // embed uses. The name alone would license the zero, but a payload came
+    // back — "no hits" there contradicts it. Keyed per (name, query): the
+    // unrecognised second query below still claims its own honest zero.
+    const rows = toDigiChatActivity(
+      standardPartsToSpans([
+        {
+          type: "dynamic-tool",
+          toolCallId: "t1",
+          toolName: "digisearch",
+          state: "output-available",
+          input: { query: "auth" },
+          output: { result: { chunks: [{ text: "a real hit" }] } },
+        },
+        {
+          type: "dynamic-tool",
+          toolCallId: "t2",
+          toolName: "digisearch",
+          state: "output-available",
+          input: { query: "billing" },
+          output: { label: 'Searched for: "billing"' },
+        },
+      ] as unknown as UIMessage["parts"])
+    );
+
+    expect(zeroHitRows(rows)).toEqual([{ kind: "tool_result", name: "digisearch", query: "billing", hits: [], count: 0 }]);
+    const status = rows.find((r) => r.kind === "status");
+    expect(status).toMatchObject({
+      outcome: { name: "digisearch", query: "auth", state: "unreadable" },
+    });
+    // The transcript renders `status` on `message` alone until 2b teaches it to
+    // read `outcome`, so two unreadable searches for one tool must not read
+    // identically. Pin the query and the tool into the sentence itself.
+    expect(status && status.message).toContain("auth");
+    expect(status && status.message).toContain("digisearch");
+    expect(status && status.message.toLowerCase()).not.toContain("no result");
+    expect(status && status.message.toLowerCase()).not.toContain("failed");
+  });
+
+  it("leaves a results-withheld note with no outcome key on it at all", () => {
+    // The exact-shape assertion above passes even if the withheld branch sets
+    // `outcome: undefined`, because toEqual ignores undefined properties — so
+    // "there is a test that fails if anything is added there" needs a property
+    // check to be true. Absent must mean absent, not present-and-empty: 2b
+    // will branch on the key, and a key that exists with no value is a fourth
+    // reading of a quiet note.
+    const rows = toDigiChatActivity([
+      started("file_search"),
+      finished("file_search", "auth"),
+      {
+        operation: "retrieve",
+        toolName: "file_search",
+        query: "auth",
+        status: "completed",
+        label: "Sources",
+        documentsWithheld: true,
+      },
+    ]);
+
+    expect(rows).toHaveLength(1);
+    expect(Object.hasOwn(rows[0], "outcome")).toBe(false);
+  });
+
+  it("still claims no hits when a search completed and produced no retrieve span", () => {
+    // The one legitimate zero: the search provably ran (started + completed)
+    // and no retrieve span followed. This must keep working — a real empty
+    // result and a tool whose output we cannot read are different cases, and
+    // collapsing them would lose the honest negative the guard depends on.
+    expect(toDigiChatActivity([started("file_search"), finished("file_search", "auth")])).toEqual([
+      { kind: "tool_result", name: "file_search", query: "auth", hits: [], count: 0 },
+    ]);
+  });
+
+  it("still settles a failed search as a failure, never as a zero-hit row", () => {
+    const rows = toDigiChatActivity([
+      started("file_search"),
+      { ...finished("file_search", "auth"), status: "failed" },
+    ]);
+    expect(zeroHitRows(rows)).toEqual([]);
+    expect(rows).toEqual([
+      {
+        kind: "status",
+        message: 'Search for "auth" failed.',
+        outcome: { name: "file_search", query: "auth", state: "failed" },
+      },
+    ]);
+  });
+
+  it("says an uncounted result is unreadable rather than empty, and names the tool", () => {
+    // The honest unknown. `outcome` is the contract with leaf 2b: it is what
+    // lets the transcript render this as a first-class row that claims no
+    // count, instead of the renderer having to parse the message prose. The
+    // row still carries no `count` anywhere — a count of zero here is the lie.
+    const spans = standardPartsToSpans([
+      {
+        type: "dynamic-tool",
+        toolCallId: "t1",
+        toolName: "datatap_search",
+        state: "output-available",
+        input: { query: "acme" },
+        output: { result: { rows: 3 } },
+      },
+    ] as unknown as UIMessage["parts"]);
+
+    const rows = toDigiChatActivity(spans);
+    const status = rows.find((r) => r.kind === "status");
+    expect(status).toBeDefined();
+    expect(status).toMatchObject({
+      outcome: { name: "datatap_search", query: "acme", state: "unreadable" },
+    });
+    // Never the words a reader would take as an empty or a failed search.
+    expect(status && status.message.toLowerCase()).not.toContain("no results");
+    expect(rows.some((r) => "count" in r)).toBe(false);
+  });
+
+  it("leaves a results-withheld note carrying no outcome, so it stays a quiet aside", () => {
+    // GUARD, and the one the CTO named. "Found results for …" means results
+    // EXIST and this tenant's detail level withholds them — the opposite of a
+    // negative. If it grew an `outcome`, leaf 2b would promote it into a result
+    // row and turn it into "found 0 results", which is the exact misrender the
+    // guard exists to remove. A quiet note carries no outcome.
+    const rows = toDigiChatActivity([
+      started("file_search"),
+      finished("file_search", "auth"),
+      {
+        operation: "retrieve",
+        toolName: "file_search",
+        query: "auth",
+        status: "completed",
+        label: "Sources",
+        documentsWithheld: true,
+      },
+    ]);
+    expect(rows).toEqual([{ kind: "status", message: 'Found results for "auth".' }]);
+  });
+
+  it("does not produce a zero-hit row while the turn is still open", () => {
+    // settle: false means the turn has not settled. A completed call with no
+    // retrieve span yet is not yet evidence of an empty result — the retrieve
+    // may still arrive — so it must stay a running tool_call.
+    expect(
+      toDigiChatActivity([started("file_search"), finished("file_search", "auth")], {
+        settle: false,
+      }),
+    ).toEqual([{ kind: "tool_call", name: "file_search", query: "auth" }]);
   });
 });
 
