@@ -12,7 +12,27 @@ Prefer **in-session** review on a **fresh-context subagent** (author session mus
 | digithings / Cursor | Same `/review` path (or equivalent fresh-context subagent). Optional: Bugbot / security-review when they fit. **Not** the CodeRabbit Cursor plugin `code-review` / `code-reviewer` skills. |
 | twelve-x / other org repos | Same idea: fresh subagent + findings posted on the PR |
 
-Post findings on the record (PR comment). digithings requires `<!-- in-session-review -->` + `reviewed:agent` for the coverage gate.
+Post findings on the record (PR comment). digithings requires `<!-- in-session-review -->` + `reviewed:agent` for the coverage gate. The merge queue is a second, separate gate on the comment — see [Posted verdicts](#posted-verdicts-merge-queue-gate).
+
+## Posted verdicts (merge-queue gate)
+
+A verdict can be delivered as a **PR comment**. The merge queue reads one field, and only inside an HTML marker comment — never the prose ([`scripts/merge_queue.py`](../../scripts/merge_queue.py), DIG-2253 / PR #5268):
+
+```html
+<!-- opencode-power-pack:code-review verdict=approved scope=@<full-40-char-sha> -->
+```
+
+| Field | Effect |
+|-------|--------|
+| `verdict=` **inside the marker** | `changes_requested` and `changes_needed` **block** the merge. `approved` and `approve` do not block. |
+| `scope=` inside the marker | Carries the reviewed commit as `@<sha>`. |
+| Everything outside the marker | Ignored. |
+
+- **Only fields inside the marker count.** `## Verdict: changes requested` in the body — or the marker written as plain text rather than an HTML comment — is prose. The queue reads that as *no verdict*, not as a block.
+- **Spelling.** `_normalise_verdict()` lowercases and turns `-` into `_`, so `changes-requested` is the same as `changes_requested`. It does not collapse spaces, so `verdict=changes requested` is not readable. Any other spelling is ignored.
+- **A missing or misspelled `verdict=` neither blocks nor clears.** The comment is skipped, so an earlier blocking verdict still stands.
+- **`scope=` must carry a real `@<sha>`.** `_on_pr_history()` applies a blocking verdict only while that sha is the PR head or still in the PR's commits. A blocking verdict with no sha, or with a sha that a force-push or rebase removed, silently stops applying. Post a new verdict after the fix.
+- **The newest readable verdict wins.** A later `verdict=approved` clears an earlier block. The parser filters on no author and no association, so anyone who can comment on the PR can clear it — an approved marker is not evidence that a review happened. Check the comment thread before you merge.
 
 ## Metered third parties (quota)
 
@@ -61,7 +81,7 @@ The inverse also holds: a finding labelled Low whose failure mode is fatal on a 
 - Do not re-review the same commit with a paid bot after trivial push-ups.
 - Do not treat `risk:low` as “someone read it.”
 - Do not skip review when Bugbot/CodeRabbit are unavailable — run in-session instead.
-- Do not skip review coverage just to merge faster. Use **`/review` / in-session / `review-and-ship`** when a hatch is required; skip a full pass on a typo-only one-liner if another hatch already applies. After CI is green and threads are triaged, **merge** the task PR into its base ([AGENTS.md § Merge-when-ready](../../AGENTS.md#merge-when-ready)). `reviewed:agent` still requires the `<!-- in-session-review -->` comment.
+- Do not skip review coverage just to merge faster. Use **`/review` / in-session / `review-and-ship`** when a hatch is required; skip a full pass on a typo-only one-liner if another hatch already applies. After CI is green and threads are triaged, **merge** the task PR into its base ([AGENTS.md § Merge-when-ready](../../AGENTS.md#merge-when-ready)). `reviewed:agent` still requires the `<!-- in-session-review -->` comment. A posted `verdict=` blocks the merge until a newer readable verdict clears it — see [Posted verdicts](#posted-verdicts-merge-queue-gate).
 
 ## After review: merge
 
