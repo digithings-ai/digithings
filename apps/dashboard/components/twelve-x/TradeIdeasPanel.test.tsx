@@ -53,7 +53,9 @@ const LEVELS_IDEA: FxTradeIdeaRow = {
     },
     targets: [{ value: '1.18', provenance: 'broker_quoted', source_ref: 'ING.pdf' }],
     risk_reward: 1.5,
-    status: 'partial',
+    // A publishable bracket. The non-complete cases below derive from this shape
+    // and flip only `status`, so the base has to be the published one.
+    status: 'complete',
   },
   evidence: [
     {
