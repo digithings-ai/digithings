@@ -11,6 +11,7 @@ import {
   legacyDashboardRedirects,
   legacyDashboardTarget,
   legacyDeskHref,
+  legacyOlympusCloudflareLines,
 } from "./legacy-dashboard.mjs";
 
 describe("legacy dashboard redirects", () => {
@@ -96,6 +97,56 @@ describe("legacy dashboard redirects", () => {
     expect(lines.at(-1)).toBe("/dashboard/ /app 308");
     const block = lines.join("\n");
     expect(text).toContain(block);
-    expect(text).toContain("/olympus/*              /dashboard/:splat         308");
+  });
+});
+
+describe("legacy olympus redirects", () => {
+  it("sends every /olympus path to its final destination in one hop, never through /dashboard", () => {
+    const lines = legacyOlympusCloudflareLines();
+    for (const line of lines) {
+      const [, destination] = line.split(" ");
+      if (destination?.startsWith("/dashboard")) continue; // account paths only
+      expect(destination).not.toBe("/dashboard/");
+      expect(destination?.startsWith("/dashboard")).toBe(false);
+    }
+  });
+
+  it("keeps account paths on /dashboard, where apps/dashboard serves them with no further redirect", () => {
+    const lines = legacyOlympusCloudflareLines();
+    for (const path of DASHBOARD_ACCOUNT_PATHS) {
+      expect(lines).toContain(`/olympus${path} /dashboard${path} 308`);
+      expect(lines).toContain(`/olympus${path}/ /dashboard${path} 308`);
+    }
+  });
+
+  it("sends known desk and retired paths straight to /app, matching deskHref", () => {
+    const lines = legacyOlympusCloudflareLines();
+    for (const path of LEGACY_DESK_PATHS) {
+      expect(lines).toContain(`/olympus${path} ${legacyDeskHref(path)} 308`);
+    }
+    for (const path of RETIRED_DASHBOARD_PATHS) {
+      expect(lines).toContain(`/olympus${path} /app/ 308`);
+    }
+  });
+
+  it("sends the bare root and any unlisted path straight to /app/", () => {
+    const lines = legacyOlympusCloudflareLines();
+    expect(lines).toContain("/olympus /app/ 308");
+    expect(lines).toContain("/olympus/ /app/ 308");
+    expect(lines.at(-1)).toBe("/olympus/* /app/ 308");
+  });
+
+  it("lists every exact-match rule before the trailing splat", () => {
+    const lines = legacyOlympusCloudflareLines();
+    const splatIndex = lines.indexOf("/olympus/* /app/ 308");
+    expect(splatIndex).toBe(lines.length - 1);
+  });
+
+  it("publishes the same map in public/_redirects", () => {
+    const text = readFileSync(new URL("../public/_redirects", import.meta.url), "utf8");
+    const lines = legacyOlympusCloudflareLines();
+    const block = lines.join("\n");
+    expect(text).toContain(block);
+    expect(text).not.toMatch(/^\/olympus\/\*\s+\/dashboard\/:splat/m);
   });
 });

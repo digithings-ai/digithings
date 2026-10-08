@@ -1,7 +1,4 @@
 # Back-compat for the legacy static digiquant.io URLs.
-/olympus                /dashboard/               308
-/olympus/               /dashboard/               308
-/olympus/*              /dashboard/:splat         308
 /atlas.html              /subsystems/research/    301
 /atlas                   /subsystems/research/    301
 /index.html              /                        301
@@ -80,3 +77,81 @@
 /dashboard/why/ /app 308
 /dashboard /app 308
 /dashboard/ /app 308
+
+# Retired static digiquant.io URLs under /olympus. One hop straight to the
+# final destination (previously /olympus bounced through /dashboard, a 2-3
+# hop chain once /dashboard's own trailing-slash redirect is counted).
+# Account pages still live under /dashboard, never /olympus, so those keep
+# going there, where apps/dashboard serves them with no further redirect.
+# The trailing splat is safe here (unlike the /dashboard block) because
+# /olympus never served account pages for it to shadow. Same map as
+# legacyOlympusCloudflareLines().
+/olympus/portfolio/attribution /app/portfolio/attribution/ 308
+/olympus/portfolio/attribution/ /app/portfolio/attribution/ 308
+/olympus/portfolio/tearsheet /app/portfolio/tearsheet/ 308
+/olympus/portfolio/tearsheet/ /app/portfolio/tearsheet/ 308
+/olympus/portfolio/holdings /app/portfolio/holdings/ 308
+/olympus/portfolio/holdings/ /app/portfolio/holdings/ 308
+/olympus/strategies/deploy /app/strategies/deploy/ 308
+/olympus/strategies/deploy/ /app/strategies/deploy/ 308
+/olympus/strategies/detail /app/strategies/detail/ 308
+/olympus/strategies/detail/ /app/strategies/detail/ 308
+/olympus/portfolio/ledger /app/portfolio/ledger/ 308
+/olympus/portfolio/ledger/ /app/portfolio/ledger/ 308
+/olympus/portfolio/theses /app/portfolio/theses/ 308
+/olympus/portfolio/theses/ /app/portfolio/theses/ 308
+/olympus/tools/terminal /app/tools/terminal/ 308
+/olympus/tools/terminal/ /app/tools/terminal/ 308
+/olympus/tools/charts /app/tools/charts/ 308
+/olympus/tools/charts/ /app/tools/charts/ 308
+/olympus/performance /app/performance/ 308
+/olympus/performance/ /app/performance/ 308
+/olympus/strategies /app/strategies/ 308
+/olympus/strategies/ /app/strategies/ 308
+/olympus/tools/chat /app/tools/chat/ 308
+/olympus/tools/chat/ /app/tools/chat/ 308
+/olympus/portfolio /app/portfolio/ 308
+/olympus/portfolio/ /app/portfolio/ 308
+/olympus/pipeline /app/pipeline/ 308
+/olympus/pipeline/ /app/pipeline/ 308
+/olympus/brief /app/brief/ 308
+/olympus/brief/ /app/brief/ 308
+/olympus/portfolio/performance /app/ 308
+/olympus/portfolio/performance/ /app/ 308
+/olympus/research/vela-spike /app/ 308
+/olympus/research/vela-spike/ /app/ 308
+/olympus/portfolio/tickers /app/ 308
+/olympus/portfolio/tickers/ /app/ 308
+/olympus/portfolio/period /app/ 308
+/olympus/portfolio/period/ /app/ 308
+/olympus/observability /app/ 308
+/olympus/observability/ /app/ 308
+/olympus/architecture /app/ 308
+/olympus/architecture/ /app/ 308
+/olympus/research /app/ 308
+/olympus/research/ /app/ 308
+/olympus/strategy /app/ 308
+/olympus/strategy/ /app/ 308
+/olympus/twelve-x /app/ 308
+/olympus/twelve-x/ /app/ 308
+/olympus/library /app/ 308
+/olympus/library/ /app/ 308
+/olympus/system /app/ 308
+/olympus/system/ /app/ 308
+/olympus/house /app/ 308
+/olympus/house/ /app/ 308
+/olympus/why /app/ 308
+/olympus/why/ /app/ 308
+/olympus/settings/brokers/callback /dashboard/settings/brokers/callback 308
+/olympus/settings/brokers/callback/ /dashboard/settings/brokers/callback 308
+/olympus/auth/callback /dashboard/auth/callback 308
+/olympus/auth/callback/ /dashboard/auth/callback 308
+/olympus/settings /dashboard/settings 308
+/olympus/settings/ /dashboard/settings 308
+/olympus/signup /dashboard/signup 308
+/olympus/signup/ /dashboard/signup 308
+/olympus/login /dashboard/login 308
+/olympus/login/ /dashboard/login 308
+/olympus /app/ 308
+/olympus/ /app/ 308
+/olympus/* /app/ 308
