@@ -1,0 +1,90 @@
+[
+  {
+    "id": "G1-calendar-delay-sign-flip",
+    "file": "digiquant/src/digiquant/strategies/sdca/curve_optimize.py",
+    "find": "    cutoff = ohlcv[ts_col].max() - timedelta(days=signal_delay_days)",
+    "replace": "    cutoff = ohlcv[ts_col].max() + timedelta(days=signal_delay_days)",
+    "claim": "G1 re-inject: apply_calendar_delay adds instead of subtracting - frozen index includes future bars"
+  },
+  {
+    "id": "G2-beats-baseline-inverted",
+    "file": "digiquant/src/digiquant/strategies/sdca/curve_optimize.py",
+    "find": "    if candidate.buy_mean_risk > baseline.buy_mean_risk + 1e-9:\n        return False",
+    "replace": "    if candidate.buy_mean_risk > baseline.buy_mean_risk - 1e-9:\n        return False",
+    "claim": "G2 re-inject: beats_baseline_concentration epsilon sign flipped, buys may be worse than baseline"
+  },
+  {
+    "id": "G3-valuation-guard-disabled",
+    "file": "digiquant/src/digiquant/strategies/sdca/weight_search.py",
+    "find": "    if indicator_name == _VALUATION_FIELD:\n        raise ValueError(",
+    "replace": "    if False:\n        raise ValueError(",
+    "claim": "G3 re-inject: the dedicated 'valuation is not an extra' branch is deleted"
+  },
+  {
+    "id": "G4-fast-crash-vol-dropped-from-derived-set",
+    "file": "digiquant/src/digiquant/strategies/sdca/weight_search.py",
+    "find": "    return tuple(name for name, _ in SdcaCompositeWeights().extra_items())",
+    "replace": "    return tuple(name for name, _ in SdcaCompositeWeights().extra_items() if name != \"fast_crash_vol\")",
+    "claim": "G4 re-inject: _extra_weight_names() drops fast_crash_vol from the searchable derived set"
+  },
+  {
+    "id": "G5-weekly-cutoff-strict-lt",
+    "file": "digiquant/src/digiquant/strategies/sdca/price_oscillators.py",
+    "find": "    return weekly.filter(pl.col(\"week_start\") + pl.duration(days=_WEEK_DAYS) <= last_daily)",
+    "replace": "    return weekly.filter(pl.col(\"week_start\") + pl.duration(days=_WEEK_DAYS) < last_daily)",
+    "claim": "G5 re-inject: completed_weekly_closes drops a week that ends exactly on the last daily bar"
+  },
+  {
+    "id": "G6a-wilder-avg-loss-min-periods-1",
+    "file": "digiquant/src/digiquant/strategies/sdca/price_oscillators.py",
+    "find": "    avg_loss = loss.ewm_mean(alpha=1.0 / length, adjust=False, min_periods=length)",
+    "replace": "    avg_loss = loss.ewm_mean(alpha=1.0 / length, adjust=False, min_periods=1)",
+    "claim": "G6 re-inject (the survivor I reported): avg_loss min_periods length -> 1, avg_gain left alone"
+  },
+  {
+    "id": "G6b-wilder-avg-gain-min-periods-1",
+    "file": "digiquant/src/digiquant/strategies/sdca/price_oscillators.py",
+    "find": "    avg_gain = gain.ewm_mean(alpha=1.0 / length, adjust=False, min_periods=length)",
+    "replace": "    avg_gain = gain.ewm_mean(alpha=1.0 / length, adjust=False, min_periods=1)",
+    "claim": "G6 mirror control: avg_gain min_periods length -> 1, avg_loss left alone"
+  },
+  {
+    "id": "G6c-wilder-both-sides-min-periods-1",
+    "file": "digiquant/src/digiquant/strategies/sdca/price_oscillators.py",
+    "find": "    avg_gain = gain.ewm_mean(alpha=1.0 / length, adjust=False, min_periods=length)\n    avg_loss = loss.ewm_mean(alpha=1.0 / length, adjust=False, min_periods=length)",
+    "replace": "    avg_gain = gain.ewm_mean(alpha=1.0 / length, adjust=False, min_periods=1)\n    avg_loss = loss.ewm_mean(alpha=1.0 / length, adjust=False, min_periods=1)",
+    "claim": "G6 joint control: BOTH sides min_periods length -> 1 (author claims 16 failures)"
+  },
+  {
+    "id": "G7a-trough-frac-strict-lt",
+    "file": "digiquant/src/digiquant/strategies/sdca/stage_a.py",
+    "find": "    trough_frac = sum(v <= accumulate_risk_max for v in trough_vals) / len(trough_vals)",
+    "replace": "    trough_frac = sum(v < accumulate_risk_max for v in trough_vals) / len(trough_vals)",
+    "claim": "G7a re-inject: trough_frac accumulate band boundary off by one day (my old survivor S3i)"
+  },
+  {
+    "id": "G7b-peak-frac-strict-gt",
+    "file": "digiquant/src/digiquant/strategies/sdca/stage_a.py",
+    "find": "    peak_frac = sum(v >= distribute_risk_min for v in peak_vals) / len(peak_vals)",
+    "replace": "    peak_frac = sum(v > distribute_risk_min for v in peak_vals) / len(peak_vals)",
+    "claim": "G7b re-inject: peak_frac distribute band boundary off by one day"
+  },
+  {
+    "id": "F1a-continuous-ok-accepts-bad-sign",
+    "file": "digiquant/src/digiquant/strategies/sdca/curve_optimize.py",
+    "find": "    return shape.sell_max_rate > 0.0",
+    "replace": "    return True",
+    "expect": 2,
+    "occ": 1,
+    "claim": "F1 control: continuous_shape_ok accepts a non-positive sell_max_rate (author says the line stays dead)"
+  },
+  {
+    "id": "F1b-bounds-ok-accepts-bad-sign",
+    "file": "digiquant/src/digiquant/strategies/sdca/curve_optimize.py",
+    "find": "    return shape.sell_max_rate > 0.0",
+    "replace": "    return True",
+    "expect": 2,
+    "occ": 0,
+    "claim": "F1 control: shape_from_bounds_ok accepts a non-positive sell_max_rate (author says the line stays dead)"
+  }
+]

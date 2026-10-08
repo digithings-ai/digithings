@@ -1,0 +1,20 @@
+{
+  "head": "dbbbcc9fb3818701ae08b38676d786602e6d7afb",
+  "results": [
+    {
+      "id": "N3-stage-a-weights-valuerror-reraised",
+      "file": "digiquant/src/digiquant/strategies/sdca/stage_a.py",
+      "claim": "line 403 is never executed: no test reaches the ValueError catch in the ratio sweep (3rd site, line 399). Prove it is dead by re-raising.",
+      "verdict": "CAUGHT",
+      "n_failed": 4,
+      "failed": [
+        "tests/dq/strategies/sdca/test_stage_a_combined.py::TestOptimizeStageAWeightsCombinedMultiRatio::test_a_ratio_can_select_a_different_winner",
+        "tests/dq/strategies/sdca/test_stage_a_combined.py::TestOptimizeStageAWeightsCombinedMultiRatio::test_candidates_are_counted_once_not_once_per_ratio",
+        "tests/dq/strategies/sdca/test_stage_a_combined.py::TestOptimizeStageAWeightsCombinedMultiRatio::test_matches_one_single_ratio_run_per_ratio",
+        "tests/dq/strategies/sdca/test_stage_a_combined.py::TestOptimizeStageAWeightsCombinedMultiRatio::test_raises_when_no_candidate_is_scorable"
+      ],
+      "summary": "4 failed, 723 passed in 14.58s",
+      "seconds": 17.2
+    }
+  ]
+}

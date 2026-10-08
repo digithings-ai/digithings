@@ -1,0 +1,65 @@
+[
+  {
+    "id": "CZ1-window-guard-weakened",
+    "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+    "claim": "causal_rolling_z: 'window must be >= 2' is a real contract, not decoration",
+    "find": "    if window < 2:\n        raise ValueError(f\"rolling window must be >= 2, got {window}\")",
+    "replace": "    if window < 0:\n        raise ValueError(f\"rolling window must be >= 2, got {window}\")"
+  },
+  {
+    "id": "CZ2-sigma-floor-clip-removed",
+    "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+    "claim": "causal_rolling_z: _SIGMA_FLOOR lower bound must stop a zero-std window from dividing by zero",
+    "find": "    sigma = values.rolling_std(window_size=window, min_samples=min_samples)\n    return ((values - mu) / sigma.clip(lower_bound=_SIGMA_FLOOR)).clip(-3.0, 3.0)",
+    "replace": "    sigma = values.rolling_std(window_size=window, min_samples=min_samples)\n    return ((values - mu) / sigma).clip(-3.0, 3.0)"
+  },
+  {
+    "id": "CZ3-z-clip-loosened",
+    "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+    "claim": "causal_rolling_z: the [-3, 3] bound is part of every family's contract",
+    "find": "    return ((values - mu) / sigma.clip(lower_bound=_SIGMA_FLOOR)).clip(-3.0, 3.0)",
+    "replace": "    return ((values - mu) / sigma.clip(lower_bound=_SIGMA_FLOOR)).clip(-4.0, 4.0)"
+  },
+  {
+    "id": "CZ4-rolling-mean-min-samples-1",
+    "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+    "claim": "causal_rolling_z: rolling_mean must honour min_samples (warmup contract)",
+    "find": "    mu = values.rolling_mean(window_size=window, min_samples=min_samples)",
+    "replace": "    mu = values.rolling_mean(window_size=window, min_samples=1)"
+  },
+  {
+    "id": "CZ5-lookahead-global-mean",
+    "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+    "claim": "LOOK-AHEAD: mu must be trailing-only. Replacing it with the global mean must be caught",
+    "find": "    mu = values.rolling_mean(window_size=window, min_samples=min_samples)",
+    "replace": "    mu = values.mean()"
+  },
+  {
+    "id": "AD1-keep-last-becomes-keep-first",
+    "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+    "claim": "align_to_dates: duplicate source dates must resolve to the LAST value",
+    "find": "        .unique(subset=[\"date\"], keep=\"last\")\n        .sort(\"date\")",
+    "replace": "        .unique(subset=[\"date\"], keep=\"first\")\n        .sort(\"date\")"
+  },
+  {
+    "id": "AD2-left-join-becomes-inner",
+    "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+    "claim": "align_to_dates: must be a LEFT join so target dates with no source row still appear",
+    "find": "    joined = pl.DataFrame({\"date\": dates}).join(src, on=\"date\", how=\"left\")",
+    "replace": "    joined = pl.DataFrame({\"date\": dates}).join(src, on=\"date\", how=\"inner\")"
+  },
+  {
+    "id": "AD3-forward-fill-disabled",
+    "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+    "claim": "align_to_dates: forward_fill=True must actually forward-fill (weekly fear_greed, sparse onchain)",
+    "find": "    if forward_fill:\n        joined = joined.with_columns(pl.col(\"value\").forward_fill())",
+    "replace": "    if False:\n        joined = joined.with_columns(pl.col(\"value\").forward_fill())"
+  },
+  {
+    "id": "AD4-sort-dropped",
+    "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+    "claim": "align_to_dates: the source must be sorted by date before the join",
+    "find": "        .unique(subset=[\"date\"], keep=\"last\")\n        .sort(\"date\")\n    )",
+    "replace": "        .unique(subset=[\"date\"], keep=\"last\")\n    )"
+  }
+]

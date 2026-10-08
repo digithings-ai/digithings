@@ -1,0 +1,134 @@
+{
+  "head": "dbbbcc9fb3818701ae08b38676d786602e6d7afb",
+  "results": [
+    {
+      "id": "ON1-onchain-family-sign-flip",
+      "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+      "claim": "SIGN BLIND SPOT: _log_ratio_sign_flipped_z must stay sign-flipped (elevated ratio = sell). Covers all 4 Bitview families.",
+      "verdict": "CAUGHT",
+      "n_failed": 11,
+      "failed": [
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestOnchainAddrRatio::test_falling_price_per_address_is_buy_favourable",
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestOnchainAddrRatio::test_rising_price_per_address_is_sell_favourable",
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestOnchainRatioFamily::test_depressed_ratio_is_buy_favourable[onchain_asopr-onchain_asopr_z]",
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestOnchainRatioFamily::test_depressed_ratio_is_buy_favourable[onchain_mvrv-onchain_mvrv_z]",
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestOnchainRatioFamily::test_depressed_ratio_is_buy_favourable[onchain_puell-onchain_puell_z]",
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestOnchainRatioFamily::test_depressed_ratio_is_buy_favourable[onchain_rhodl-onchain_rhodl_z]",
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestOnchainRatioFamily::test_elevated_ratio_is_sell_favourable[onchain_asopr-onchain_asopr_z]",
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestOnchainRatioFamily::test_elevated_ratio_is_sell_favourable[onchain_mvrv-onchain_mvrv_z]",
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestOnchainRatioFamily::test_elevated_ratio_is_sell_favourable[onchain_puell-onchain_puell_z]",
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestOnchainRatioFamily::test_elevated_ratio_is_sell_favourable[onchain_rhodl-onchain_rhodl_z]",
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestOnchainRatioFamily::test_window_two_pins_std_semantics_and_sign"
+      ],
+      "summary": "11 failed, 716 passed in 18.96s",
+      "seconds": 21.4
+    },
+    {
+      "id": "ON2-onchain-log-transform-dropped",
+      "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+      "claim": "_log_ratio_sign_flipped_z must log-transform before the rolling std (a level-based std lets one spike dominate)",
+      "verdict": "SURVIVED",
+      "n_failed": 0,
+      "failed": [],
+      "summary": "727 passed in 17.58s",
+      "seconds": 19.8
+    },
+    {
+      "id": "ON3-non-positive-filter-loosened",
+      "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+      "claim": "_log_ratio_sign_flipped_z must null non-positive values BEFORE the log (log(0) = -inf)",
+      "verdict": "CAUGHT",
+      "n_failed": 3,
+      "failed": [
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestOnchainNonPositiveValues::test_all_non_positive_is_entirely_null",
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestOnchainNonPositiveValues::test_gap_is_forward_filled_not_treated_as_minus_infinity",
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestOnchainNonPositiveValues::test_zero_or_negative_source_does_not_poison_the_log[0.0]"
+      ],
+      "summary": "3 failed, 724 passed in 17.26s",
+      "seconds": 19.8
+    },
+    {
+      "id": "AR1-addr-ratio-divides-raw-zeroes",
+      "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+      "claim": "onchain_addr_ratio_z must null zero active-address counts BEFORE the divide (pre-adoption days report 0)",
+      "verdict": "CAUGHT",
+      "n_failed": 1,
+      "failed": [
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestOnchainAddrRatio::test_zero_addresses_nulled_before_the_divide"
+      ],
+      "summary": "1 failed, 726 passed in 14.83s",
+      "seconds": 17.1
+    },
+    {
+      "id": "FG1-fear-greed-sign-flip",
+      "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+      "claim": "SIGN BLIND SPOT: fear_greed_z must stay contrarian (greed = sell-favourable)",
+      "verdict": "CAUGHT",
+      "n_failed": 4,
+      "failed": [
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestFearGreed::test_extreme_fear_is_buy_favourable",
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestFearGreed::test_extreme_greed_is_sell_favourable",
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestFearGreed::test_level_not_log",
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestFearGreed::test_window_two_pins_sign"
+      ],
+      "summary": "4 failed, 723 passed in 13.43s",
+      "seconds": 15.6
+    },
+    {
+      "id": "RSE1-rs-eth-sign-flip",
+      "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+      "claim": "SIGN BLIND SPOT: rs_eth_z must stay sign-flipped (BTC cheap vs ETH = +z)",
+      "verdict": "CAUGHT",
+      "n_failed": 1,
+      "failed": [
+        "tests/dq/strategies/sdca/test_indicator_catalog.py::TestNamedExtras::test_rs_eth_cheap_btc_is_positive_z"
+      ],
+      "summary": "1 failed, 726 passed in 23.20s",
+      "seconds": 25.4
+    },
+    {
+      "id": "DXY1-dxy-sign-flip",
+      "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+      "claim": "SIGN BLIND SPOT: dxy_z must stay sign-flipped (strong dollar = -z). This is develop code - the PR must not have weakened its coverage.",
+      "verdict": "CAUGHT",
+      "n_failed": 1,
+      "failed": [
+        "tests/dq/strategies/sdca/test_indicator_catalog.py::TestNamedExtras::test_dxy_strength_is_negative_z"
+      ],
+      "summary": "1 failed, 726 passed in 21.21s",
+      "seconds": 23.7
+    },
+    {
+      "id": "FCV1-fast-crash-vol-sign-flip",
+      "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+      "claim": "SIGN BLIND SPOT: fast_crash_vol_z must stay sign-flipped (vol spike = de-risk favourable)",
+      "verdict": "SURVIVED",
+      "n_failed": 0,
+      "failed": [],
+      "summary": "727 passed in 23.20s",
+      "seconds": 25.2
+    },
+    {
+      "id": "FCV3-realized-vol-min-samples-1",
+      "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+      "claim": "fast_crash_vol_z: the realized-vol rolling_std must honour min_samples (its own warmup)",
+      "verdict": "SURVIVED",
+      "n_failed": 0,
+      "failed": [],
+      "summary": "727 passed in 15.98s",
+      "seconds": 18.2
+    },
+    {
+      "id": "M21-m2-roc-sign-flip",
+      "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+      "claim": "m2_liquidity_z: expanding liquidity must be +z. Develop code - the PR must not have weakened its coverage.",
+      "verdict": "CAUGHT",
+      "n_failed": 1,
+      "failed": [
+        "tests/dq/strategies/sdca/test_indicator_catalog.py::TestNamedExtras::test_m2_high_growth_is_positive_z"
+      ],
+      "summary": "1 failed, 726 passed in 14.44s",
+      "seconds": 16.3
+    }
+  ]
+}

@@ -1,0 +1,134 @@
+{
+  "head": "dbbbcc9fb3818701ae08b38676d786602e6d7afb",
+  "results": [
+    {
+      "id": "CZ1-window-guard-weakened",
+      "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+      "claim": "causal_rolling_z: 'window must be >= 2' is a real contract, not decoration",
+      "verdict": "CAUGHT",
+      "n_failed": 1,
+      "failed": [
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestOnchainRatioFamily::test_too_short_window_rejected"
+      ],
+      "summary": "1 failed, 726 passed in 9.52s",
+      "seconds": 11.1
+    },
+    {
+      "id": "CZ2-sigma-floor-clip-removed",
+      "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+      "claim": "causal_rolling_z: _SIGMA_FLOOR lower bound must stop a zero-std window from dividing by zero",
+      "verdict": "CAUGHT",
+      "n_failed": 9,
+      "failed": [
+        "tests/dq/strategies/sdca/test_indicator_catalog.py::TestCausalRollingZ::test_constant_series_is_null_not_inf",
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestFastCrashVol::test_decays_back_to_zero_once_swings_shrink",
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestFastCrashVol::test_flat_price_is_flat_zero",
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestFearGreed::test_sparse_source_is_forward_filled",
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestNoLookAhead::test_independent_assertion_the_tail_moves",
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestNoLookAhead::test_truncated_history_matches_the_prefix[fast_crash_vol]",
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestNoLookAhead::test_truncated_history_matches_the_prefix[onchain_addr_ratio]",
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestOnchainRatioFamily::test_bounded_to_three",
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestOnchainRatioFamily::test_constant_ratio_is_flat_zero"
+      ],
+      "summary": "9 failed, 718 passed in 11.27s",
+      "seconds": 12.8
+    },
+    {
+      "id": "CZ3-z-clip-loosened",
+      "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+      "claim": "causal_rolling_z: the [-3, 3] bound is part of every family's contract",
+      "verdict": "CAUGHT",
+      "n_failed": 1,
+      "failed": [
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestFastCrashVol::test_bounded_to_three"
+      ],
+      "summary": "1 failed, 726 passed in 10.67s",
+      "seconds": 14.5
+    },
+    {
+      "id": "CZ4-rolling-mean-min-samples-1",
+      "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+      "claim": "causal_rolling_z: rolling_mean must honour min_samples (warmup contract)",
+      "verdict": "SURVIVED",
+      "n_failed": 0,
+      "failed": [],
+      "summary": "727 passed in 12.34s",
+      "seconds": 13.8
+    },
+    {
+      "id": "CZ5-lookahead-global-mean",
+      "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+      "claim": "LOOK-AHEAD: mu must be trailing-only. Replacing it with the global mean must be caught",
+      "verdict": "CAUGHT",
+      "n_failed": 13,
+      "failed": [
+        "tests/dq/strategies/sdca/test_indicator_catalog.py::TestCausalRollingZ::test_is_causal_later_spike_does_not_change_early_z",
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestFastCrashVol::test_decays_back_to_zero_once_swings_shrink",
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestFearGreed::test_window_two_pins_sign",
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestNoLookAhead::test_truncated_history_matches_the_prefix[fast_crash_vol]",
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestNoLookAhead::test_truncated_history_matches_the_prefix[fear_greed]",
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestNoLookAhead::test_truncated_history_matches_the_prefix[onchain_addr_ratio]",
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestNoLookAhead::test_truncated_history_matches_the_prefix[onchain_asopr]",
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestNoLookAhead::test_truncated_history_matches_the_prefix[onchain_mvrv]",
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestNoLookAhead::test_truncated_history_matches_the_prefix[onchain_puell]",
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestNoLookAhead::test_truncated_history_matches_the_prefix[onchain_rhodl]",
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestNoLookAhead::test_truncated_history_matches_the_prefix[rs_eth_confluence]",
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestOnchainRatioFamily::test_window_two_pins_std_semantics_and_sign",
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestRsEthConfluence::test_is_the_agreement_scaled_blend_of_two_rs_eth_legs"
+      ],
+      "summary": "13 failed, 714 passed in 16.49s",
+      "seconds": 18.8
+    },
+    {
+      "id": "AD1-keep-last-becomes-keep-first",
+      "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+      "claim": "align_to_dates: duplicate source dates must resolve to the LAST value",
+      "verdict": "SURVIVED",
+      "n_failed": 0,
+      "failed": [],
+      "summary": "727 passed in 21.90s",
+      "seconds": 25.2
+    },
+    {
+      "id": "AD2-left-join-becomes-inner",
+      "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+      "claim": "align_to_dates: must be a LEFT join so target dates with no source row still appear",
+      "verdict": "CAUGHT",
+      "n_failed": 1,
+      "failed": [
+        "tests/dq/strategies/sdca/test_indicator_catalog.py::TestNamedExtras::test_align_forward_fills_monthly_macro"
+      ],
+      "summary": "1 failed, 726 passed in 17.12s",
+      "seconds": 20.4
+    },
+    {
+      "id": "AD3-forward-fill-disabled",
+      "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+      "claim": "align_to_dates: forward_fill=True must actually forward-fill (weekly fear_greed, sparse onchain)",
+      "verdict": "CAUGHT",
+      "n_failed": 8,
+      "failed": [
+        "tests/dq/strategies/sdca/test_indicator_catalog.py::TestNamedExtras::test_align_forward_fills_monthly_macro",
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestFearGreed::test_sparse_source_is_forward_filled",
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestOnchainNonPositiveValues::test_gap_is_forward_filled_not_treated_as_minus_infinity",
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestSourcesFromOptionalPaths::test_loaded_source_drives_the_indicator[fear_greed_path-fear_greed]",
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestSourcesFromOptionalPaths::test_loaded_source_drives_the_indicator[onchain_asopr_path-onchain_asopr]",
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestSourcesFromOptionalPaths::test_loaded_source_drives_the_indicator[onchain_mvrv_path-onchain_mvrv]",
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestSourcesFromOptionalPaths::test_loaded_source_drives_the_indicator[onchain_puell_path-onchain_puell]",
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestSourcesFromOptionalPaths::test_loaded_source_drives_the_indicator[onchain_rhodl_path-onchain_rhodl]"
+      ],
+      "summary": "8 failed, 719 passed in 15.23s",
+      "seconds": 17.2
+    },
+    {
+      "id": "AD4-sort-dropped",
+      "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+      "claim": "align_to_dates: the source must be sorted by date before the join",
+      "verdict": "SURVIVED",
+      "n_failed": 0,
+      "failed": [],
+      "summary": "727 passed in 22.16s",
+      "seconds": 24.4
+    }
+  ]
+}

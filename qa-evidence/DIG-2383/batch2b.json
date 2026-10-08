@@ -1,0 +1,11 @@
+[
+  {
+    "id": "N3-stage-a-weights-valuerror-reraised",
+    "file": "digiquant/src/digiquant/strategies/sdca/stage_a.py",
+    "claim": "line 403 is never executed: no test reaches the ValueError catch in the ratio sweep (3rd site, line 399). Prove it is dead by re-raising.",
+    "occ": 2,
+    "find": "            try:\n                weights = SdcaCompositeWeights(valuation=float(val), **payload)\n            except ValueError:\n                continue",
+    "replace": "            try:\n                weights = SdcaCompositeWeights(valuation=float(val), **payload)\n            except ValueError:\n                raise",
+    "expect": 3
+  }
+]

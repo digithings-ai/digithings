@@ -1,0 +1,168 @@
+{
+  "head": "dbbbcc9fb3818701ae08b38676d786602e6d7afb",
+  "results": [
+    {
+      "id": "G1-calendar-delay-sign-flip",
+      "file": "digiquant/src/digiquant/strategies/sdca/curve_optimize.py",
+      "claim": "G1 re-inject: apply_calendar_delay adds instead of subtracting - frozen index includes future bars",
+      "verdict": "CAUGHT",
+      "n_failed": 5,
+      "failed": [
+        "tests/dq/strategies/sdca/test_curve_optimize.py::TestLoadFrozenIndex::test_a_larger_delay_trims_strictly_more[1-1]",
+        "tests/dq/strategies/sdca/test_curve_optimize.py::TestLoadFrozenIndex::test_a_larger_delay_trims_strictly_more[10-10]",
+        "tests/dq/strategies/sdca/test_curve_optimize.py::TestLoadFrozenIndex::test_a_larger_delay_trims_strictly_more[3-3]",
+        "tests/dq/strategies/sdca/test_curve_optimize.py::TestLoadFrozenIndex::test_signal_delay_trims_the_future_end_not_the_past_end",
+        "tests/dq/strategies/sdca/test_curve_optimize.py::TestLoadFrozenIndex::test_trade_start_never_reintroduces_delayed_rows"
+      ],
+      "summary": "5 failed, 722 passed in 33.00s",
+      "seconds": 37.0
+    },
+    {
+      "id": "G2-beats-baseline-inverted",
+      "file": "digiquant/src/digiquant/strategies/sdca/curve_optimize.py",
+      "claim": "G2 re-inject: beats_baseline_concentration epsilon sign flipped, buys may be worse than baseline",
+      "verdict": "CAUGHT",
+      "n_failed": 1,
+      "failed": [
+        "tests/dq/strategies/sdca/test_curve_optimize.py::TestConcentrationHelper::test_beats_baseline_tolerance_is_a_tie_band_not_a_licence"
+      ],
+      "summary": "1 failed, 726 passed in 29.81s",
+      "seconds": 34.3
+    },
+    {
+      "id": "G3-valuation-guard-disabled",
+      "file": "digiquant/src/digiquant/strategies/sdca/weight_search.py",
+      "claim": "G3 re-inject: the dedicated 'valuation is not an extra' branch is deleted",
+      "verdict": "CAUGHT",
+      "n_failed": 1,
+      "failed": [
+        "tests/dq/strategies/sdca/test_weight_search_periods.py::TestUnknownIndicatorNameIsRejected::test_by_backtest_rejects_the_dedicated_valuation_field"
+      ],
+      "summary": "1 failed, 726 passed in 22.63s",
+      "seconds": 26.5
+    },
+    {
+      "id": "G4-fast-crash-vol-dropped-from-derived-set",
+      "file": "digiquant/src/digiquant/strategies/sdca/weight_search.py",
+      "claim": "G4 re-inject: _extra_weight_names() drops fast_crash_vol from the searchable derived set",
+      "verdict": "CAUGHT",
+      "n_failed": 3,
+      "failed": [
+        "tests/dq/strategies/sdca/test_weight_search_periods.py::TestSearchableExtraNameSetIsPinned::test_the_derivation_is_not_a_filtration",
+        "tests/dq/strategies/sdca/test_weight_search_periods.py::TestSearchableExtraNameSetIsPinned::test_the_research_only_extras_are_in_the_set",
+        "tests/dq/strategies/sdca/test_weight_search_periods.py::TestSearchableExtraNameSetIsPinned::test_the_searchable_set_is_the_exact_expected_tuple"
+      ],
+      "summary": "3 failed, 724 passed in 24.95s",
+      "seconds": 28.7
+    },
+    {
+      "id": "G5-weekly-cutoff-strict-lt",
+      "file": "digiquant/src/digiquant/strategies/sdca/price_oscillators.py",
+      "claim": "G5 re-inject: completed_weekly_closes drops a week that ends exactly on the last daily bar",
+      "verdict": "CAUGHT",
+      "n_failed": 3,
+      "failed": [
+        "tests/dq/strategies/sdca/test_price_oscillators_confluence.py::TestCompletedPeriodBoundary::test_a_week_that_ends_on_the_last_bar_is_kept",
+        "tests/dq/strategies/sdca/test_price_oscillators_confluence.py::TestCompletedPeriodBoundary::test_the_boundary_is_the_sunday_not_the_data_end",
+        "tests/dq/strategies/sdca/test_price_oscillators_confluence.py::TestCompletedPeriodBoundary::test_the_last_complete_close_is_the_week_end_close_not_the_first"
+      ],
+      "summary": "3 failed, 724 passed in 22.71s",
+      "seconds": 27.2
+    },
+    {
+      "id": "G6a-wilder-avg-loss-min-periods-1",
+      "file": "digiquant/src/digiquant/strategies/sdca/price_oscillators.py",
+      "claim": "G6 re-inject (the survivor I reported): avg_loss min_periods length -> 1, avg_gain left alone",
+      "verdict": "SURVIVED",
+      "n_failed": 0,
+      "failed": [],
+      "summary": "727 passed in 17.46s",
+      "seconds": 20.3
+    },
+    {
+      "id": "G6b-wilder-avg-gain-min-periods-1",
+      "file": "digiquant/src/digiquant/strategies/sdca/price_oscillators.py",
+      "claim": "G6 mirror control: avg_gain min_periods length -> 1, avg_loss left alone",
+      "verdict": "SURVIVED",
+      "n_failed": 0,
+      "failed": [],
+      "summary": "727 passed in 17.72s",
+      "seconds": 20.1
+    },
+    {
+      "id": "G6c-wilder-both-sides-min-periods-1",
+      "file": "digiquant/src/digiquant/strategies/sdca/price_oscillators.py",
+      "claim": "G6 joint control: BOTH sides min_periods length -> 1 (author claims 16 failures)",
+      "verdict": "CAUGHT",
+      "n_failed": 18,
+      "failed": [
+        "tests/dq/strategies/sdca/test_asset_profile.py::TestSecondAssetSmoke::test_eth_or_synthetic_builds_risk_via_profile",
+        "tests/dq/strategies/sdca/test_price_oscillators.py::TestWeeklyRsiZ::test_clipped_to_unit_interval",
+        "tests/dq/strategies/sdca/test_price_oscillators_confluence.py::TestNoLookAhead::test_a_mid_week_date_never_sees_its_week_close",
+        "tests/dq/strategies/sdca/test_price_oscillators_confluence.py::TestNoLookAhead::test_truncating_the_tail_changes_nothing_earlier[daily_rsi_z]",
+        "tests/dq/strategies/sdca/test_price_oscillators_confluence.py::TestNoLookAhead::test_truncating_the_tail_changes_nothing_earlier[monthly_rsi_confluence_z]",
+        "tests/dq/strategies/sdca/test_price_oscillators_confluence.py::TestNoLookAhead::test_truncating_the_tail_changes_nothing_earlier[monthly_rsi_continuous_z]",
+        "tests/dq/strategies/sdca/test_price_oscillators_confluence.py::TestNoLookAhead::test_truncating_the_tail_changes_nothing_earlier[rsi_confluence_z]",
+        "tests/dq/strategies/sdca/test_price_oscillators_confluence.py::TestNoLookAhead::test_truncating_the_tail_changes_nothing_earlier[weekly_monthly_rsi_confluence_z]",
+        "tests/dq/strategies/sdca/test_price_oscillators_confluence.py::TestNoLookAhead::test_truncating_the_tail_changes_nothing_earlier[weekly_rsi_continuous_z]",
+        "tests/dq/strategies/sdca/test_price_oscillators_confluence.py::TestRsiConfluenceFamily::test_weekly_confluence_matches_its_two_legs",
+        "tests/dq/strategies/sdca/test_price_oscillators_confluence.py::TestRsiConfluenceFamily::test_weekly_monthly_pairing_uses_no_daily_leg",
+        "tests/dq/strategies/sdca/test_price_oscillators_confluence.py::TestWilderRsiWarmup::test_nothing_is_emitted_before_length_samples_exist",
+        "tests/dq/strategies/sdca/test_price_oscillators_confluence.py::TestWilderRsiWarmup::test_the_first_value_lands_exactly_on_the_length_th_bar[14]",
+        "tests/dq/strategies/sdca/test_price_oscillators_confluence.py::TestWilderRsiWarmup::test_the_first_value_lands_exactly_on_the_length_th_bar[2]",
+        "tests/dq/strategies/sdca/test_price_oscillators_confluence.py::TestWilderRsiWarmup::test_the_first_value_lands_exactly_on_the_length_th_bar[30]",
+        "tests/dq/strategies/sdca/test_price_oscillators_confluence.py::TestWilderRsiWarmup::test_the_first_value_lands_exactly_on_the_length_th_bar[5]",
+        "tests/dq/strategies/sdca/test_price_oscillators_confluence.py::TestWilderRsiWarmup::test_the_loss_average_needs_the_same_warmup_as_the_gain",
+        "tests/dq/strategies/sdca/test_price_oscillators_confluence.py::TestWilderRsiWarmup::test_the_warmup_length_scales_with_the_requested_length"
+      ],
+      "summary": "18 failed, 709 passed in 11.42s",
+      "seconds": 13.3
+    },
+    {
+      "id": "G7a-trough-frac-strict-lt",
+      "file": "digiquant/src/digiquant/strategies/sdca/stage_a.py",
+      "claim": "G7a re-inject: trough_frac accumulate band boundary off by one day (my old survivor S3i)",
+      "verdict": "CAUGHT",
+      "n_failed": 2,
+      "failed": [
+        "tests/dq/strategies/sdca/test_stage_a_combined.py::TestBandThresholdBoundaryIsInclusive::test_a_trough_exactly_on_the_accumulate_threshold_counts_as_accumulate",
+        "tests/dq/strategies/sdca/test_stage_a_combined.py::TestBandThresholdBoundaryIsInclusive::test_inclusive_edges_beat_exclusive_edges_on_the_objective"
+      ],
+      "summary": "2 failed, 725 passed in 10.71s",
+      "seconds": 12.1
+    },
+    {
+      "id": "G7b-peak-frac-strict-gt",
+      "file": "digiquant/src/digiquant/strategies/sdca/stage_a.py",
+      "claim": "G7b re-inject: peak_frac distribute band boundary off by one day",
+      "verdict": "CAUGHT",
+      "n_failed": 2,
+      "failed": [
+        "tests/dq/strategies/sdca/test_stage_a_combined.py::TestBandThresholdBoundaryIsInclusive::test_a_peak_exactly_on_the_distribute_threshold_counts_as_distribute",
+        "tests/dq/strategies/sdca/test_stage_a_combined.py::TestBandThresholdBoundaryIsInclusive::test_a_trough_exactly_on_the_accumulate_threshold_counts_as_accumulate"
+      ],
+      "summary": "2 failed, 725 passed in 8.67s",
+      "seconds": 10.2
+    },
+    {
+      "id": "F1a-continuous-ok-accepts-bad-sign",
+      "file": "digiquant/src/digiquant/strategies/sdca/curve_optimize.py",
+      "claim": "F1 control: continuous_shape_ok accepts a non-positive sell_max_rate (author says the line stays dead)",
+      "verdict": "SURVIVED",
+      "n_failed": 0,
+      "failed": [],
+      "summary": "727 passed in 11.01s",
+      "seconds": 12.6
+    },
+    {
+      "id": "F1b-bounds-ok-accepts-bad-sign",
+      "file": "digiquant/src/digiquant/strategies/sdca/curve_optimize.py",
+      "claim": "F1 control: shape_from_bounds_ok accepts a non-positive sell_max_rate (author says the line stays dead)",
+      "verdict": "SURVIVED",
+      "n_failed": 0,
+      "failed": [],
+      "summary": "727 passed in 9.05s",
+      "seconds": 10.4
+    }
+  ]
+}

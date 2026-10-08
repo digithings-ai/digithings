@@ -1,0 +1,33 @@
+{
+  "head": "dbbbcc9fb3818701ae08b38676d786602e6d7afb",
+  "results": [
+    {
+      "id": "O2b-valuation-default-doubled",
+      "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+      "claim": "SdcaCompositeWeights.valuation must default to exactly 1.0, not 2.0",
+      "verdict": "CAUGHT",
+      "n_failed": 5,
+      "failed": [
+        "tests/dq/strategies/sdca/test_indicator_catalog.py::TestSdcaCompositeWeights::test_default_is_valuation_only",
+        "tests/dq/strategies/sdca/test_indicator_catalog_research_extras.py::TestDefaultCompositeIsTheValuationRailAlone::test_valuation_is_the_only_non_zero_default",
+        "tests/dq/strategies/sdca/test_price_oscillators.py::TestCatalogWiring::test_price_oscillators_listed_and_default_off",
+        "tests/dq/strategies/sdca/test_price_oscillators_confluence.py::TestDevelopApiUnchanged::test_published_weight_fields_are_unchanged",
+        "tests/dq/strategies/sdca/test_weight_search_periods.py::TestSearchOscillatorPeriodsByCycleOverlap::test_valuation_is_the_special_case_on_develops_spelling"
+      ],
+      "summary": "5 failed, 722 passed in 13.59s",
+      "seconds": 15.6
+    },
+    {
+      "id": "O2e-at-least-one-positive-guard-off",
+      "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+      "claim": "SdcaCompositeWeights._at_least_one_positive must still reject an all-zero composite",
+      "verdict": "CAUGHT",
+      "n_failed": 1,
+      "failed": [
+        "tests/dq/strategies/sdca/test_indicator_catalog.py::TestSdcaCompositeWeights::test_all_zero_rejected"
+      ],
+      "summary": "1 failed, 726 passed in 18.13s",
+      "seconds": 20.3
+    }
+  ]
+}

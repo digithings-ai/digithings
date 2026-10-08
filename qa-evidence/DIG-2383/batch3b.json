@@ -1,0 +1,72 @@
+[
+  {
+    "id": "ON1-onchain-family-sign-flip",
+    "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+    "claim": "SIGN BLIND SPOT: _log_ratio_sign_flipped_z must stay sign-flipped (elevated ratio = sell). Covers all 4 Bitview families.",
+    "find": "    log_values = aligned.log()\n    return (-causal_rolling_z(log_values, window=window, min_samples=min_samples)).alias(name)",
+    "replace": "    log_values = aligned.log()\n    return causal_rolling_z(log_values, window=window, min_samples=min_samples).alias(name)"
+  },
+  {
+    "id": "ON2-onchain-log-transform-dropped",
+    "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+    "claim": "_log_ratio_sign_flipped_z must log-transform before the rolling std (a level-based std lets one spike dominate)",
+    "find": "    log_values = aligned.log()\n    return (-causal_rolling_z(log_values, window=window, min_samples=min_samples)).alias(name)",
+    "replace": "    log_values = aligned\n    return (-causal_rolling_z(log_values, window=window, min_samples=min_samples)).alias(name)"
+  },
+  {
+    "id": "ON3-non-positive-filter-loosened",
+    "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+    "claim": "_log_ratio_sign_flipped_z must null non-positive values BEFORE the log (log(0) = -inf)",
+    "find": "    positive_values = frame.select(\n        pl.when(pl.col(\"value\") > 0).then(pl.col(\"value\")).otherwise(None)\n    )[\"value\"]",
+    "replace": "    positive_values = frame.select(\n        pl.when(pl.col(\"value\") > -1.0).then(pl.col(\"value\")).otherwise(None)\n    )[\"value\"]"
+  },
+  {
+    "id": "AR1-addr-ratio-divides-raw-zeroes",
+    "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+    "claim": "onchain_addr_ratio_z must null zero active-address counts BEFORE the divide (pre-adoption days report 0)",
+    "find": "    ratio = (btc_price / positive_addr).alias(\"value\")",
+    "replace": "    ratio = (btc_price / addr_aligned).alias(\"value\")"
+  },
+  {
+    "id": "FG1-fear-greed-sign-flip",
+    "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+    "claim": "SIGN BLIND SPOT: fear_greed_z must stay contrarian (greed = sell-favourable)",
+    "find": "    return (-causal_rolling_z(aligned, window=window, min_samples=min_samples)).alias(\"fear_greed\")",
+    "replace": "    return causal_rolling_z(aligned, window=window, min_samples=min_samples).alias(\"fear_greed\")"
+  },
+  {
+    "id": "RSE1-rs-eth-sign-flip",
+    "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+    "claim": "SIGN BLIND SPOT: rs_eth_z must stay sign-flipped (BTC cheap vs ETH = +z)",
+    "find": "    ratio = (btc_price / eth).log()\n    return (-causal_rolling_z(ratio, window=window, min_samples=min_samples)).alias(\"rs_eth\")",
+    "replace": "    ratio = (btc_price / eth).log()\n    return causal_rolling_z(ratio, window=window, min_samples=min_samples).alias(\"rs_eth\")"
+  },
+  {
+    "id": "DXY1-dxy-sign-flip",
+    "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+    "claim": "SIGN BLIND SPOT: dxy_z must stay sign-flipped (strong dollar = -z). This is develop code - the PR must not have weakened its coverage.",
+    "find": "    return (-causal_rolling_z(aligned, window=window, min_samples=min_samples)).alias(\"dxy\")",
+    "replace": "    return causal_rolling_z(aligned, window=window, min_samples=min_samples).alias(\"dxy\")"
+  },
+  {
+    "id": "FCV1-fast-crash-vol-sign-flip",
+    "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+    "claim": "SIGN BLIND SPOT: fast_crash_vol_z must stay sign-flipped (vol spike = de-risk favourable)",
+    "find": "    z = causal_rolling_z(realized_vol, window=z_window, min_samples=z_min_samples)\n    return (-z).alias(\"fast_crash_vol\")",
+    "replace": "    z = causal_rolling_z(realized_vol, window=z_window, min_samples=z_min_samples)\n    return z.alias(\"fast_crash_vol\")"
+  },
+  {
+    "id": "FCV3-realized-vol-min-samples-1",
+    "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+    "claim": "fast_crash_vol_z: the realized-vol rolling_std must honour min_samples (its own warmup)",
+    "find": "    realized_vol = log_ret.rolling_std(window_size=window, min_samples=min_samples)",
+    "replace": "    realized_vol = log_ret.rolling_std(window_size=window, min_samples=1)"
+  },
+  {
+    "id": "M21-m2-roc-sign-flip",
+    "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+    "claim": "m2_liquidity_z: expanding liquidity must be +z. Develop code - the PR must not have weakened its coverage.",
+    "find": "    roc = aligned / aligned.shift(roc_days) - 1.0",
+    "replace": "    roc = 1.0 - aligned / aligned.shift(roc_days)"
+  }
+]

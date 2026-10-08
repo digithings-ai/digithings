@@ -1,0 +1,16 @@
+[
+  {
+    "id": "O2b-valuation-default-doubled",
+    "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+    "claim": "SdcaCompositeWeights.valuation must default to exactly 1.0, not 2.0",
+    "find": "    valuation: float = Field(1.0, ge=0.0)\n",
+    "replace": "    valuation: float = Field(2.0, ge=0.0)\n"
+  },
+  {
+    "id": "O2e-at-least-one-positive-guard-off",
+    "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+    "claim": "SdcaCompositeWeights._at_least_one_positive must still reject an all-zero composite",
+    "find": "        if sum(self.model_dump().values()) <= 0.0:\n            raise ValueError(\"at least one indicator weight must be positive\")",
+    "replace": "        if False:\n            raise ValueError(\"at least one indicator weight must be positive\")"
+  }
+]

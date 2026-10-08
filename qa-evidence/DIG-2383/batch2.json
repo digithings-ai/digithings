@@ -1,0 +1,88 @@
+[
+  {
+    "id": "O1a-rseth-fast-leg-reuses-slow-window",
+    "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+    "claim": "rs_eth_confluence_z: the fast leg must use fast_window/fast_min_samples, not the slow pair",
+    "find": "    fast = rs_eth_z(\n        dates, btc_price, eth_dates, eth_close, window=fast_window, min_samples=fast_min_samples\n    )",
+    "replace": "    fast = rs_eth_z(\n        dates, btc_price, eth_dates, eth_close, window=slow_window, min_samples=slow_min_samples\n    )"
+  },
+  {
+    "id": "O1b-rseth-slow-leg-uses-fast-window",
+    "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+    "claim": "rs_eth_confluence_z: the slow leg must use slow_window/slow_min_samples (collapses both legs onto the fast pair)",
+    "find": "    slow = rs_eth_z(\n        dates, btc_price, eth_dates, eth_close, window=slow_window, min_samples=slow_min_samples\n    )",
+    "replace": "    slow = rs_eth_z(\n        dates, btc_price, eth_dates, eth_close, window=fast_window, min_samples=fast_min_samples\n    )"
+  },
+  {
+    "id": "O1c-rseth-silently-clamps-min-samples",
+    "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+    "claim": "VACUITY CHECK: if the raise-tests are real, silently clamping min_samples to the window must break them",
+    "find": "    slow = rs_eth_z(\n        dates, btc_price, eth_dates, eth_close, window=slow_window, min_samples=slow_min_samples\n    )",
+    "replace": "    slow_min_samples = min(slow_min_samples, slow_window)\n    fast_min_samples = min(fast_min_samples, fast_window)\n    slow = rs_eth_z(\n        dates, btc_price, eth_dates, eth_close, window=slow_window, min_samples=slow_min_samples\n    )"
+  },
+  {
+    "id": "O1d-rseth-blend-name-changed",
+    "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+    "claim": "rs_eth_confluence_z: the blend result must stay aliased 'rs_eth'",
+    "find": "        name=\"rs_eth\",\n    )",
+    "replace": "        name=\"rs_eth_confluence\",\n    )"
+  },
+  {
+    "id": "O2a-m2-default-nonzero",
+    "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+    "claim": "SdcaCompositeWeights.m2 must default to 0.0 (develop weight, not a research extra)",
+    "find": "    m2: float = Field(0.0, ge=0.0)\n",
+    "replace": "    m2: float = Field(1.0, ge=0.0)\n"
+  },
+  {
+    "id": "O2b-valuation-default-doubled",
+    "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+    "claim": "SdcaCompositeWeights.valuation must default to exactly 1.0, not 2.0",
+    "find": "    valuation: float = Field(1.0, ge=0.0)\n",
+    "replace": "    valuation: float = Field(2.0, ge=0.0)\n"
+  },
+  {
+    "id": "O2c-valuation-default-halved",
+    "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+    "claim": "SdcaCompositeWeights.valuation must default to exactly 1.0, not 0.5",
+    "find": "    valuation: float = Field(1.0, ge=0.0)\n",
+    "replace": "    valuation: float = Field(0.5, ge=0.0)\n"
+  },
+  {
+    "id": "O2d-fast-crash-vol-default-nonzero",
+    "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+    "claim": "SdcaCompositeWeights.fast_crash_vol must default to 0.0 (dormant research extra)",
+    "find": "    fast_crash_vol: float = Field(0.0, ge=0.0)\n",
+    "replace": "    fast_crash_vol: float = Field(1.0, ge=0.0)\n"
+  },
+  {
+    "id": "O2e-at-least-one-positive-guard-off",
+    "file": "digiquant/src/digiquant/strategies/sdca/indicator_catalog.py",
+    "claim": "SdcaCompositeWeights._at_least_one_positive must still reject an all-zero composite",
+    "find": "        if sum(self.model_dump().values()) <= 0.0:\n            raise ValueError(\"at least one indicator weight must be positive\")",
+    "replace": "        if False:\n            raise ValueError(\"at least one indicator weight must be positive\")"
+  },
+  {
+    "id": "N1-continuous-shape-ok-guard-removed",
+    "file": "digiquant/src/digiquant/strategies/sdca/curve_optimize.py",
+    "claim": "line 352 is never executed: the continuous_shape_ok rejection in the trial builder is unexercised. Removing the guard must be visible.",
+    "find": "        if not continuous_shape_ok(params):\n            return\n        key = tuple(round(params[k], 6) for k in _SHAPE_KEYS)",
+    "replace": "        key = tuple(round(params[k], 6) for k in _SHAPE_KEYS)"
+  },
+  {
+    "id": "N2-shape-from-bounds-ok-guard-removed",
+    "file": "digiquant/src/digiquant/strategies/sdca/curve_optimize.py",
+    "claim": "line 467 is never executed: the shape_from_bounds_ok rejection in the wide-knee trial builder is unexercised. Removing the guard must be visible.",
+    "find": "        if not shape_from_bounds_ok(params, bounds=bounds):\n            return\n        key = tuple(round(params[k], 6) for k in _SHAPE_KEYS)",
+    "replace": "        key = tuple(round(params[k], 6) for k in _SHAPE_KEYS)"
+  },
+  {
+    "id": "N3-stage-a-weights-valuerror-reraised",
+    "file": "digiquant/src/digiquant/strategies/sdca/stage_a.py",
+    "claim": "line 403 is never executed: no test reaches the ValueError catch in the ratio sweep (3rd site, line 399). Prove it is dead by re-raising.",
+    "occ": 2,
+    "find": "            try:\n                weights = SdcaCompositeWeights(valuation=float(val), **payload)\n            except ValueError:\n                continue",
+    "replace": "            try:\n                weights = SdcaCompositeWeights(valuation=float(val), **payload)\n            except ValueError:\n                raise",
+    "expect": 3
+  }
+]
