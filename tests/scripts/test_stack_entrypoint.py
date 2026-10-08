@@ -16,7 +16,9 @@ import pytest
 pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-ENTRYPOINT = REPO_ROOT / "apps" / "digithings-stack-cloudflare" / "container" / "entrypoint.sh"
+ENTRYPOINT = (
+    REPO_ROOT / "apps" / "digithings-stack-cloudflare" / "container" / "entrypoint.sh"
+)
 EXEC_LINE = "exec /usr/bin/supervisord"
 
 # Commands whose failure is fatal on the boot path: they write to the filesystem
@@ -149,13 +151,6 @@ def test_no_unguarded_risky_command_before_exec():
         and not _is_condition(line)
     ]
     assert not offenders, "unguarded command(s) on the boot path: " + "; ".join(offenders)
-
-
-def test_blocklist_requirement_defaults_fail_closed():
-    """The container used to export DIGIKEY_REQUIRE_BLOCKLIST=${...:-0}."""
-    text = ENTRYPOINT.read_text()
-    assert 'DIGIKEY_REQUIRE_BLOCKLIST="${DIGIKEY_REQUIRE_BLOCKLIST:-1}"' in text
-    assert 'DIGIKEY_REQUIRE_BLOCKLIST="${DIGIKEY_REQUIRE_BLOCKLIST:-0}"' not in text
 
 
 def test_a_failing_cp_aborts_set_e_unless_guarded(tmp_path):

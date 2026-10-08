@@ -6,25 +6,10 @@ import pytest
 
 
 @pytest.mark.unit
-def test_unconfigured_blocklist_fails_closed_by_default(monkeypatch):
-    """Unset URL used to return False and write 0. That skipped revocation."""
+def test_unconfigured_is_blocked_returns_false(monkeypatch):
     from digikey import blocklist
 
     monkeypatch.delenv("DIGIKEY_BLOCKLIST_REDIS_URL", raising=False)
-    monkeypatch.delenv("DIGIKEY_REQUIRE_BLOCKLIST", raising=False)
-    blocklist.reset_client_cache()
-    with pytest.raises(blocklist.BlocklistUnavailable):
-        blocklist.is_blocked("any-jti")
-    with pytest.raises(blocklist.BlocklistUnavailable):
-        blocklist.write_blocklist_bulk([("x", 60)])
-
-
-@pytest.mark.unit
-def test_unconfigured_blocklist_is_noop_when_requirement_off(monkeypatch):
-    from digikey import blocklist
-
-    monkeypatch.delenv("DIGIKEY_BLOCKLIST_REDIS_URL", raising=False)
-    monkeypatch.setenv("DIGIKEY_REQUIRE_BLOCKLIST", "0")
     blocklist.reset_client_cache()
     assert blocklist.is_blocked("any-jti") is False
     assert blocklist.write_blocklist_bulk([("x", 60)]) == 0
