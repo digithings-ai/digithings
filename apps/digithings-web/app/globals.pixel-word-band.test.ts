@@ -17,6 +17,12 @@ import { describe, expect, it } from "vitest";
  * And `teeth` below replays the pre-fix declarations through the same model and
  * requires it to report the crop, so the assertions cannot pass by being
  * vacuous. The table that `teeth` reproduces is the review's measured table.
+ *
+ * These two rules are also the design seat's ruling (DIG-2353, verdict on
+ * DIG-2364): the footer mark stays inside the band, whole. So the band has no
+ * height of its own and the vertical space is padding, and the mark is never
+ * wider than the band. Both are asserted here so neither can come back
+ * unnoticed.
  */
 
 const CSS_PATH = join(__dirname, "globals.css");
@@ -261,6 +267,33 @@ describe("footer wordmark band (DIG-2304)", () => {
     expect(frame.contentWidth).toBe(1336);
     expect(frame.markWidth).toBe(1336);
     expect(frame.markHeight).toBeCloseTo(frame.contentHeight, 6);
+  });
+
+  // The ruling: the band's vertical space is padding, not a height. If padding
+  // went away the band would collapse onto the mark instead of holding it, and
+  // that is a different page, so it is pinned here too.
+  it("takes the band's vertical space from padding, not from a height", () => {
+    const band = declarations(css, ".pixel-word-band");
+    const padding = resolveKeyword(band, "padding");
+    expect(padding).toBe("clamp(3rem, 8vw, 6rem) var(--page-pad) 0");
+    // At the review's widths 8vw is between the 3rem floor and the 6rem ceiling.
+    for (const viewport of [1440, 1728, 1920]) {
+      const top = Math.min(Math.max(3 * REM, (8 / 100) * viewport), 6 * REM);
+      expect(top).toBeGreaterThanOrEqual(3 * REM);
+      expect(top).toBeLessThanOrEqual(6 * REM);
+    }
+  });
+
+  // The other half of the ruling: contained, not bleeding. The mark must not
+  // exceed the band's content box at any width, in either rule's terms.
+  it("keeps the mark inside the band rather than bleeding it", () => {
+    const mark = declarations(css, ".pixel-word.pixel-word-footer");
+    expect(resolveKeyword(mark, "width")).toBe("min(100%, 1400px)");
+    expect(resolveKeyword(mark, "margin")).toBe("0 auto");
+    for (const frame of measure(css)) {
+      expect(frame.cropX).toBe(0);
+      expect(frame.markWidth).toBeLessThanOrEqual(frame.contentWidth);
+    }
   });
 });
 

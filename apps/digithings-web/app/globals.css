@@ -942,10 +942,16 @@ html {
    A fixed band height with `overflow: clip` on both axes shaved the top and
    bottom glyph rows at every viewport wider than ~1280 — 7.8px at 1440, 26px at
    1600, 37.8px at 1728 — and the mark read as squashed (DIG-2304).
-   The mark stays at `min(100%, 1400px)` so it fits the padded band: a bleed
-   wider than the band loses the outer columns of the first and last letter
-   (3.8 of 88 cells a side at 1440), which is the same class of defect DIG-2304
-   is about. Whether the footer should bleed is a design call, not a bug fix. */
+
+   These two rules are the pre-PR `develop` state, restored deliberately, and
+   they are what the design seat ruled on (DIG-2353, verdict on DIG-2364):
+   the footer mark stays inside the band, whole. A bleed is not available on
+   this artwork — the end glyphs are 7 cells wide with ink in column 0, so at
+   1440 a bleed of the size PR #5264 asked for (118%) removes 6.71 of 88 cells
+   a side and the mark reads IGITHING with the D and the S gone. Bleed is earned
+   by the artwork, and this artwork has no quiet margin to earn it with.
+   Do not reintroduce a band height, an `overflow` shorthand, or a width above
+   100% without taking the ruling back to the design seat. */
 .pixel-word-band {
   padding: clamp(3rem, 8vw, 6rem) var(--page-pad) 0;
   overflow-x: clip;
