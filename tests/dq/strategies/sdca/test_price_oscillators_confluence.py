@@ -68,7 +68,9 @@ from digiquant.strategies.sdca.indicator_catalog import (
     SdcaCompositeWeights,
 )
 from digiquant.strategies.sdca.price_oscillators import (
+    _wilder_rsi,
     agreement_scaled_blend,
+    completed_weekly_closes,
     daily_macd_z,
     daily_rsi_z,
     macd_confluence_z,
@@ -664,3 +666,109 @@ class TestDevelopApiUnchanged:
         vectors = price_oscillator_z_vectors(dates, close)
         assert set(vectors) == set(PRICE_OSCILLATOR_NAMES)
         assert len(PRICE_OSCILLATOR_NAMES) == 3
+
+
+class TestCompletedPeriodBoundary:
+    """G5: *which day* the in-progress period is dropped on, not just that it is.
+
+    ``TestNoLookAhead`` already pins that the incomplete week is filtered out --
+    dropping the filter entirely fails the suite. What no test pinned was the
+    boundary itself: ``week_start + 6 days <= last_daily``. Flip ``<=`` to ``<``
+    and a week that ends exactly on the final cached bar gets discarded, which
+    silently costs the strategy its most recent week of signal.
+
+    The rule is: a week is complete when the data covers the whole ISO week,
+    Sunday included. A series whose last bar *is* that Sunday keeps the week. A
+    series one day short does not.
+    """
+
+    def test_a_week_that_ends_on_the_last_bar_is_kept(self) -> None:
+        dates = _dates(7)  # Monday 2020-01-06 .. Sunday 2020-01-12
+        close = _sawtooth(7)
+        assert dates[-1].isoweekday() == 7
+        weekly = completed_weekly_closes(dates, close)
+        assert len(weekly) == 1
+        assert weekly["week_end"][0] == dates[-1]
+
+    def test_the_same_week_one_day_short_is_dropped(self) -> None:
+        dates = _dates(6)
+        close = _sawtooth(6)
+        assert dates[-1] == date(2020, 1, 11)  # Saturday
+        weekly = completed_weekly_closes(dates, close)
+        assert len(weekly) == 0
+
+    def test_the_boundary_is_the_sunday_not_the_data_end(self) -> None:
+        """Two weeks of data; only the first is complete until the Sunday lands."""
+        dates = _dates(13)  # Monday .. Saturday of the second week
+        weekly = completed_weekly_closes(dates, _sawtooth(13))
+        assert dates[-1].isoweekday() == 6
+        assert len(weekly) == 1
+        assert weekly["week_start"][0] == dates[0]
+
+        dates_sunday = _dates(14)  # now includes the Sunday
+        weekly_sunday = completed_weekly_closes(dates_sunday, _sawtooth(14))
+        assert len(weekly_sunday) == 2
+        assert weekly_sunday["week_start"][-1] == dates_sunday[7]
+
+    def test_the_last_complete_close_is_the_week_end_close_not_the_first(self) -> None:
+        dates = _dates(7)
+        close = _sawtooth(7)
+        assert close[-1] != close[0]
+        weekly = completed_weekly_closes(dates, close)
+        assert weekly["close"][0] == close[-1]
+
+
+class TestWilderRsiWarmup:
+    """G6: RSI must emit nothing until ``length`` samples exist.
+
+    ``avg_gain``/``avg_loss`` use ``min_periods=length``. That warmup is what
+    makes the first published RSI value a real ``length``-sample average rather
+    than an artefact of whatever handful of bars came before it. Nothing
+    asserted it: ``min_periods=1`` survives the whole suite. Since every
+    RSI-derived leg -- ``weekly_rsi_z``, ``monthly_rsi_z``, the continuous map,
+    all the confluence pairings -- reads this function, a wrong warmup shifts
+    the entire family, and the shift is invisible in aggregate scores.
+
+    ``avg_loss`` alone was the measured survivor, so the loss side is named
+    explicitly below as well as the gain side.
+    """
+
+    def test_nothing_is_emitted_before_length_samples_exist(self) -> None:
+        close = _sawtooth(40)
+        rsi = _wilder_rsi(close, length=14)
+        # min_periods=length leaves the first `length - 1` positions null.
+        assert rsi.null_count() == 13
+        assert rsi[0] is None
+        assert rsi[12] is None
+        assert rsi[13] is not None
+
+    @pytest.mark.parametrize("length", [2, 5, 14, 30])
+    def test_the_first_value_lands_exactly_on_the_length_th_bar(self, length: int) -> None:
+        close = _sawtooth(80)
+        rsi = _wilder_rsi(close, length=length)
+        assert rsi.null_count() == length - 1
+        assert rsi[length - 2] is None
+        assert rsi[length - 1] is not None
+
+    def test_the_warmup_length_scales_with_the_requested_length(self) -> None:
+        """A short warmup is the mutation; a long one must not happen by accident."""
+        close = _sawtooth(60)
+        short = _wilder_rsi(close, length=5)
+        long = _wilder_rsi(close, length=30)
+        assert short.null_count() == 4
+        assert long.null_count() == 29
+        assert short[4] is not None
+        assert long[4] is None
+
+    def test_the_loss_average_needs_the_same_warmup_as_the_gain(self) -> None:
+        """``avg_loss`` is the side the mutation was injected into.
+
+        A series that only ever rises has no losses at all, so a warmup leak on
+        ``avg_loss`` alone shows up as an RSI published before there is any loss
+        data to average -- and then pinned at the ceiling.
+        """
+        rising_close = _rising(40, step=1.0)
+        rsi = _wilder_rsi(rising_close, length=14)
+        assert rsi.null_count() == 13
+        assert rsi[13] is not None
+        assert rsi[13] == pytest.approx(100.0)
