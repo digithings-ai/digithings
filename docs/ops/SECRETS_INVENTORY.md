@@ -107,7 +107,7 @@ Six repo secrets that no `.github` YAML read were deleted on 2026-09-17/18: `COP
 |---|---|---|---|---|---|---|
 | `DIGIQUANT_VAULT_MASTER_KEY` · `DIGIQUANT_VAULT_KEY_ID` | `digiquant/src/digiquant/vault/envelope.py:79,80` | `.env` (no default) | yes (`.env`) | every sealed broker credential unreadable | local secret store | AES-256-GCM, base64 32 bytes; `v1` label |
 | `ALPACA_OAUTH_CLIENT_ID` · `ALPACA_OAUTH_CLIENT_SECRET` | `digiquant/.../staging_secrets.py:28-29` | `.env`; `apps/dashboard/.env.local.example` | yes (`.env`) | broker OAuth connect fails | Supabase EF + `.env` | broker path — human gate |
-| `GLOOMBERB_SESSION_COOKIE` | `digiquant/src/digiquant/data/gloomberb/client.py:1450`; `digiquant/src/digiquant/data/gloomberb/agent_tools.py:194-197` | `.env`; stack Worker (`wrangler.toml:186`); forwarded `index.ts:222` | yes (`.env`) | session-gated digifetch tools off | `.env` + stack Worker | construction-time read, not import-time (`client.py:16-17`); in-process cache keys on the current env so a changed cookie builds a new client; hosted MCP still needs a container recycle (R5) |
+| `GLOOMBERB_SESSION_COOKIE` | `digiquant/src/digiquant/data/gloomberb/client.py:1450`; `digiquant/src/digiquant/data/gloomberb/agent_tools.py:194-197` | `.env`; stack Worker (`wrangler.toml:186`) — **deployment unverified, see R17**; forwarded `index.ts:222` | yes (`.env`) | session-gated digifetch tools off | `.env` + stack Worker | construction-time read, not import-time (`client.py:16-17`); in-process cache keys on the current env so a changed cookie builds a new client; hosted MCP still needs a container recycle (R5) |
 | `DIGIKEY_BLOCKLIST_REDIS_URL` · `DIGIKEY_REQUIRE_BLOCKLIST` | `digikey/src/digikey/blocklist.py:36,41` | `.env`; container env | yes | revoked JTIs stay valid / fail-closed 503 | code default is fail-closed; `DIGIKEY_REQUIRE_BLOCKLIST=0` is the local opt-out (`blocklist.py` `require_blocklist_enabled`). Compose default `1` (`docker-compose.yml:35`); `.env.example:226` | see [ADR-0007](../adr/0007-digikey-revocation.md) |
 | per-watch delivery secret (HMAC) | `digisearch/src/digisearch/server.py:1941`; `monitors/delivery.py:102` | monitor store (not a fixed env) | n/a | webhook signature verify fails | per-watch row | rotates per watch |
 | `DIGIQUANT_EXECUTION_ROUTING` | `digiquant/.../envcompat.py:14` | `.env` | yes (`.env`) | live-routing kill switch | local `.env` | alias `OLYMPUS_KAIROS_ROUTING`; broker path |
@@ -161,7 +161,7 @@ nothing at all about this copy. It is a **second live copy**, not a scratch file
 
 | Name | Where the second copy is | Read by | Readback? | **Owner** | Recorded refresh path |
 |---|---|---|---|---|---|
-| `PRIMEMARKET_SESSION_TOKEN` | GitHub **Actions repo secret** on `digithings-ai/twelve-x`; **and** this `.env` | `nodes/scrape.py:661`; `scripts/primemarket_session_heartbeat.py:59`; CI probes it | no for the secret, yes for `.env` | **Security** (agent `b14d7a18`), with Chris as the only human who can execute it | `twelve-x/scripts/refresh_session_cookie.sh` — verifies live, then `gh secret set PRIMEMARKET_SESSION_TOKEN --repo "$REPO" --body "$VALUE"` (`scripts/refresh_session_cookie.sh:81`). Source of the value is Chris signing in at `https://desk.prime-terminal.com` and copying `localStorage['pmt_auth_token']`. **Rotate on expiry detection, never on a calendar** — measured: an authenticated call at 2026-09-15T00:08Z did **not** extend the window that 401'd at 06:04Z (`docs/PRIMEMARKET_DESK_API.md:157-165`) |
+| `PRIMEMARKET_SESSION_TOKEN` | GitHub **Actions repo secret** on `digithings-ai/twelve-x`; **and** this `.env` | `nodes/scrape.py:661`; `scripts/primemarket_session_heartbeat.py:59`; CI probes it | no for the secret, yes for `.env` | **Security** (agent `b14d7a18`), with Chris as the only human who can execute it | `twelve-x/scripts/refresh_session_cookie.sh` — verifies live, then `gh secret set PRIMEMARKET_SESSION_TOKEN --repo "$REPO" --body "$VALUE"` (`scripts/refresh_session_cookie.sh:81`). Source of the value is a human operator's own sign-in at `https://desk.prime-terminal.com`. **The acquisition procedure is not published in this repo** — it is held in the private `twelve-x` repo, for the reason given in [Vendor terms and what this file may publish](#vendor-terms-and-what-this-file-may-publish-dig-1194). **Rotate on expiry detection, never on a calendar** — measured: an authenticated call at 2026-09-15T00:08Z did **not** extend the window that 401'd at 06:04Z (`docs/PRIMEMARKET_DESK_API.md:157-165`) |
 | `PRIMEMARKET_SESSION_COOKIE` | **only** here. Not in CI since DIG-249 (`8368932`, 2026-10-05) | `nodes/scrape.py:559,662` — legacy path, verified then used as a fallback | yes (`.env`) | **Security** | **NONE — this is the finding.** `refresh_session_cookie.sh` writes only the token; the cookie-paste branch was deleted by DIG-249 (`8368932`). Last write: **2026-09-14T10:33Z**, recorded at `docs/PRIMEMARKET_DESK_API.md:161` — the only refresh history that exists for it — and the same doc's 2026-09-17 follow-up records that the desk had moved to the Bearer scheme and **the cookie was never the session the pmt endpoints consult** (`:171-172`). So this is a copy nothing refreshes, of a mechanism the desk stopped accepting. Delete it; do not rotate it |
 
 Consequence to state plainly: **a `primemarket-session-expired` alert tells you
@@ -263,6 +263,134 @@ None of these are done here. This section records the owner and the refresh path
 the next person is not guessing, and every claim above carries a `file:line`, a
 commit, or a named command.
 
+## Vendor terms and what this file may publish (DIG-1194)
+
+Raised by the CTO from DIG-503. Counsel's finding on DIG-461/DIG-503 was that this
+file, public under our own name, described how to obtain and replay a session
+against a vendor whose Terms of Use prohibit automated and unauthorized access.
+Security owns the call on what an audit document in a public repo may contain,
+because the file's value is its provenance — it records what was found and when —
+and because it carries live rotation decisions that a docs edit would quietly
+overwrite. Three questions were put to Security. Answered 2026-10-05.
+
+**Q1 — Are the vendor-specific rows generalised, and at what level?**
+**No. The vendor name stays, and so do the `file:line` citations.** They are our own
+configuration identifiers: no secret inside a name, and no actionable step it enables,
+so deleting them would remove exactly zero attack surface. The audit needs them
+regardless — named owner, both storage locations, read-by path, refresh script and
+rotate-on-expiry state. Strip the names and every row becomes an unactionable rumour.
+`https://desk.prime-terminal.com` stays too: a public login page, and load-bearing —
+this credential authenticates **as a person**, which is why its refresh path is a human
+sign-in. What is generalisable here is the **method**, not the **name** — and the
+method is what is being removed.
+
+**Q2 — Is the session-acquisition procedure at the `PRIMEMARKET_SESSION_TOKEN`
+row a recipe that belongs out of a public repo?**
+**Yes, and it has been removed.** A session-acquisition procedure — a human sign-in at
+the vendor's desk, then reading the resulting credential out of a named browser storage
+slot — was the *session-acquisition* half of the prohibited pattern, and it was the most
+operational sentence in the file. The row now reads "a human operator's own sign-in",
+and **the acquisition procedure is not published in this repo**: the canonical copy is
+held in the private `twelve-x` repo, for the reason given in [Vendor terms and what
+this file may publish](#vendor-terms-and-what-this-file-may-publish-dig-1194) — the
+vendor's terms prohibit automated access. It is not restated here either. A removal is
+not an amendment: deleting a step from the operative document does not license
+republishing the step in the document that records the removal. Nothing was lost that
+the audit needs: the row still records the name, both storage locations, the reader,
+the owner, the refresh script, and the rotate-on-expiry rule.
+
+**Q3 — Does the `PRIMEMARKET_SESSION_COOKIE` finding survive in a public file?**
+**Yes, unchanged.** "Delete it; do not rotate it" and "an expiry alert tells you
+about the Actions secret only" are **negative** findings — they exist to stop
+someone doing the wrong thing. Removing a negative finding from a public audit
+removes the warning while leaving the secret in place, which is strictly worse
+than publishing it. The supporting citations (`docs/PRIMEMARKET_DESK_API.md:161`,
+`:171-172`) stay too: a `file:line` pointer into a private repo is not an
+operational recipe, and the citation is the only reason the claim is checkable.
+
+**Changed in this file on 2026-10-05:** the one sentence in Q2, nothing else. The
+vendor name, both storage locations, the three-place spread of the desk login pair,
+"a human's desk credentials", the delete-don't-rotate conclusion, the alert gap,
+and every `file:line` above are all as they were, because Security's judgement is
+that an audit which softens its own findings is worse than one that publishes them.
+
+**Corrected 2026-10-06 (DIG-1413, on Security's ruling at DIG-1418), in Q1 and Q2
+only.** Two of this section's own claims were wrong, and the corrections are to its
+reasoning, not to any finding. The Q2 narrative quoted the removed sentence back
+verbatim; it now describes the mechanism and points at the canonical copy instead.
+And Q1 rested on a claim that a later check disproved — that the `PRIMEMARKET_*` names
+are "already public and unavoidable" in `.env.example`, the twelve-x workflow files and
+the Python config. They are not: on the public `develop` every hit for those names is
+inside this file, and the `.env.example` that does carry them lives in the **private**
+`twelve-x` repo. That premise is withdrawn. The names stay anyway, on the reason that
+does hold — they are our own configuration identifiers, and an audit row without its
+name, owner, storage locations and rotation state is an unactionable rumour. **No row
+was edited, no owner changed, no rotation state changed, and no risk-register entry
+changed by this correction.** The general rule recorded for DIG-1415: *our own
+configuration identifiers and a public login page stay; names that locate a credential
+on someone else's system go.*
+
+**Vendor terms are now recorded separately, with artefacts.** A secret inventory
+cannot answer "are we allowed to use this at all" — that is a different question
+from "where does the value live and who owns it", and answering it here is how the
+2026-08-01 note went wrong. Terms, retrieval date, sha256 and classification live
+under `docs/vendor-terms/<vendor>/`, per `docs/VENDOR_CONTENT_BOUNDARY.md`.
+[`gloomber/INDEX.md`](../vendor-terms/gloomber/INDEX.md) is the first entry. Security
+classified it **Unclear** on 2026-10-05; Counsel's memo the same day concluded
+**Prohibited (confirmed)**. The record is additive — the memo sits beside Security's
+position, not over it.
+
+### Gloomberb: the accepted use, the custody blocker, and what is still unverified
+
+Written 2026-10-06 by Security, after Chris answered the four-question card on
+DIG-1194. Nothing here was previously in this file, and
+nothing above it changed.
+
+**The accepted use, in full.** Counsel classified the Gloomberb session-cookie method
+**PROHIBITED, CONFIRMED** on 2026-10-05. Chris was shown that finding and, on
+2026-10-06, chose to keep the 42 cookie-gated `digifetch_*` tools running, on the
+stated basis that *"our tools don't have clients yet, I'm just experimenting with the
+cookie method. I won't publish yet."* That is a deliberate acceptance of a prohibited
+use by the person who owns that decision, made with the finding in front of him. It
+is recorded here so that the next reader sees an accepted risk with a name on it, not
+a silent practice. **It is an acceptance of use, not of publication, and not of any
+client-facing surface.** It lapses — and this row, and R17, re-open — if any of these
+become true:
+
+| Tripwire | Why it lapses the acceptance |
+|---|---|
+| anything about this access method is published | Chris's own condition; it is also §12 exposure |
+| a hosted or client-facing surface can reach the gated tools | §12 permits apps "for yourself **or for users who have their own access**"; the acceptance covers only our own internal experiment |
+| the account's plan changes, or a team plan is bought | a team plan or written agreement (§21) is the one thing that makes method D permitted, so the analysis changes |
+| the account is closed, or the credential is destroyed | nothing left to accept |
+| Counsel's position changes | the finding is the basis of the acceptance |
+
+**Custody: authorised, and blocked.** Chris authorised moving the cookie into
+Bitwarden. It is **not** there. The `keymaster` machine account token is in the
+macOS Keychain and authenticates, but `bws project list` returns nothing while
+`bws project create` is refused with *"maximum number of projects (3) for this
+plan"* — the organisation is at its quota and the machine account has no grant on any
+of the three existing projects. Granting that is an owner action in Bitwarden, and
+the Bitwarden account itself is outside Security's red lines. Tracked on
+DIG-95; Security runs one command once it is granted.
+**Until then this credential exists in exactly one place — one line of a gitignored
+`.env` — and no inventory, no expiry and no owner sits behind it.** That is the whole
+remaining custody risk, and it is not mitigated by anything else in this file.
+
+**No money is at stake.** Chris confirmed there is **no payment method** on the
+Gloomberb account. That closes the §8/§15/§9 hazard Counsel flagged — no trial can
+have converted, and deletion cancels immediately with no refund owed. Closing the
+account is therefore money-safe whenever he chooses it; it is not money-safe-blocked,
+it is simply not authorised, because "keep it running" keeps the account.
+
+**One claim in this file is now unverified.** The inventory row for this name lists
+the stack Worker (`wrangler.toml:186`) as a second copy. Security could not confirm
+or refute it on 2026-10-06: `wrangler secret list` requires a `CLOUDFLARE_API_TOKEN`
+Security does not hold, and the connected Cloudflare tooling exposes no
+secret-binding listing. Treat the deployed copy as **unknown, not absent**. If it is
+set, then "keeping the tools running" is production traffic against a prohibited
+endpoint, not a local experiment — which is why R17 asks DevOps for one command.
+
 ## Review coverage for this section
 
 Reviewed in-session on 2026-10-05 by a fresh-context reviewer, which found and
@@ -315,6 +443,19 @@ repo before calling a shared name dead.**
 **R14 — one personal PAT is the only GitHub credential for every org-wide clock *and* for the alarm that reports on them.** Severity: high (accepted 2026-10-05, DIG-363). Evidence: `GH_DISPATCH_TOKEN` is a fine-grained **personal** access token on a human account (settings id 19179726, `digithings-ai/digithings` + `digithings-ai/twelve-x`, expires 2027-09-15); the `digithings-cron` Worker holds it as its only GitHub credential. It authorizes all **38** distinct cron expressions' `workflow_dispatch` POST (`apps/digithings-cron/wrangler.toml:37-76` `[triggers]`, posted at `apps/digithings-cron/src/dispatch.ts:289,295-298`), and the DIG-71 short-day alarm, which posts to `POST /repos/$ALERT_ISSUE_REPO/issues/$ALERT_ISSUE_NUMBER/comments` with the same token and no other. Why: the credential that reports "the clocks stopped" is the credential that stops the clocks, so **one event on one human account is a correlated outage of the workload and its own alarm in a single move** — 2FA re-enrolment, a lockout, a password change under account-wide PAT revocation, offboarding, or account deletion. Two aggravating properties: fine-grained PAT permissions are **not readable over any GitHub API**, so grant drift on this credential is invisible to tooling; and revocation is an **account-level** action, so rotation cannot be done by an agent or on a schedule — only reactively, by a human. Action: **accepted risk, not mitigated** — Chris chose B (keep the PAT) and the shared token on 2026-10-05, declining a GitHub App because that would add a second long-lived secret with power to mint dispatch and issue tokens. Re-open if any of: the PAT reaches its 2027-09-15 expiry (rotate reactively, [runbook](SECRETS_ROTATION.md#4-gh_dispatch_token)); the alarm lands on a second credential; or the token moves to Bitwarden (DIG-95), which changes custody but **not** this coupling. Adding a second credential for the alarm would reverse the deliberate `GH_ISSUE_TOKEN`-must-not-exist rule (`apps/digiquant-runner/wrangler.toml:14,20`) and would have to be argued on its own merits.
 
 **R15 — the twelve-x legacy `anon` / `service_role` JWTs cannot be revoked without breaking FX Hub session minting.** Severity: low now, **closing 2026** (Supabase deprecates both). Evidence: project `lfghjucjrsabiqwxerxv` (twelve-x, a **separate** Supabase project from the core `rwagjbkvxkdwqmouagad`); the Management API `POST /v1/projects/{ref}/api-keys` accepts only `type: publishable | secret`, so a legacy JWT key has **no in-place rotation**; `PUT /v1/projects/{ref}/api-keys/legacy` takes no body and returns a single `{"enabled": bool}`, i.e. **one flag over both `anon` and `service_role`**; in the **separate `digithings-ai/twelve-x` repo** (not this one) `supabase/functions/fx-hub-session/index.ts:72` reads the auto-injected `SUPABASE_ANON_KEY` and the same function uses the auto-injected `SUPABASE_SERVICE_ROLE_KEY`. Why: after the 2026-10-05 client-key rotation (DIG-258) the old legacy `anon` JWT **remains valid** — it is still accepted by the project and still inlines into any bundle built before that date, so "rotated" does not yet mean "old key rejected". Action: move `fx-hub-session` off the auto-injected `SUPABASE_ANON_KEY` to its supported replacement, `SUPABASE_PUBLISHABLE_KEYS` (the `anon` role's new key), and off `SUPABASE_SERVICE_ROLE_KEY` to `SUPABASE_SECRET_KEYS` — Supabase now lists the old names under *Legacy* keys — then disable legacy project-wide as one reversible step — never per-key, because the flag is not per-key. Not urgent: the anon role has **no read grant** on any of the 20 FX tables since the 2026-09-14 RLS cutover, so the residual exposure is a live-but-blind key, not a data path.
+
+**R16 — two vendors' access methods are published in public docs, and one of them has never had its terms read.** Severity: high. Evidence: the session-acquisition sentence removed from this file on 2026-10-05; the surviving PrimeMarket rows at the `PRIMEMARKET_SESSION_TOKEN`/`PRIMEMARKET_SESSION_COOKIE` table and the desk-login pair; [`gloomber/INDEX.md`](../vendor-terms/gloomber/INDEX.md) (artefact sha256 `6f781a39…`, terms effective 2026-09-26, classified **Unclear** 2026-10-05, Counsel sign-off **not yet given**); `docs/ops/gloomberb-session-cookie.md`; `digiquant/src/digiquant/data/gloomberb/client.py:405-406`. Why: the 2026-08-01 record that "PrimeMarket is fine with us using their data" was written on the belief that the terms "could not be retrieved", when they were served live the whole time — and Gloomber's terms, 3,072 words at a URL that returns 200, had never been read by anyone here. One failure mode, two vendors: **no retrievable, dated artefact to check a claim against.** Action: `docs/vendor-terms/<vendor>/` per `docs/VENDOR_CONTENT_BOUNDARY.md`; Counsel sign-off in writing before any new vendor access merges to a public repo; Gloomber's §14 team-plan licence question and §11 interface carve-out are with Counsel as of 2026-10-05.
+
+**R16 status — closed 2026-10-05/06.** Both halves are done. Gloomber's terms were
+retrieved, archived and read (artefact sha256 `6f781a39…`, effective 2026-09-26);
+Counsel's memo concluded **Prohibited, confirmed**, and Counsel gave written
+boundary sign-off for PR #5157. Security's own position had been **Unclear**, and the
+memo is filed beside it rather than over it — Security's reading that we do not
+*bypass* authentication survived, but the §14 licence gap, which Security had flagged
+as the sharpest point, is what Counsel put at the centre. The PrimeMarket half is
+DIG-461/DIG-478 and stays open there; nothing in this row is a clearance for it.
+
+**R17 — an accepted prohibited use, a credential with no custody, and a deployment state nobody can verify.** Severity: high. Evidence: the accepted-use record and custody blocker in [Vendor terms and what this file may publish](#gloomberb-the-accepted-use-the-custody-blocker-and-what-is-still-unverified); Counsel's memo (2026-10-05); Chris's acceptance and custody authorisation (2026-10-06, DIG-1194); `bws project list` → empty against `project create` → *"maximum number of projects (3) for this plan"*; `git grep GLOOMBERB -- .github/workflows/` → empty, so no scheduled ingest holds the cookie; `wrangler secret list` unrunnable for Security. Why: three separate weaknesses stack. (1) A Counsel-confirmed prohibited access method is in deliberate, documented use by decision — which is a legitimate state, but only while it stays internal, so its safety depends on tripwires nobody is watching. (2) The credential has no inventory entry with an owner or expiry and lives in one untracked `.env` line, because the Bitwarden write path is quota-blocked. (3) The inventory asserts a deployed Worker copy that cannot be confirmed, so the real blast radius of "keep it running" is unknown. Action: DevOps runs `wrangler secret list` on `digithings-stack` and reports whether `GLOOMBERB_SESSION_COOKIE` is set; owner grants the `keymaster` machine account a project so Security can complete the move on DIG-95; Security adds an expiry-bearing inventory row for this name as soon as it has a home; DIG-1233 keeps the deployed default off, which is now the only thing standing between an experiment and production traffic.
 
 ## Gaps and unknowns
 
