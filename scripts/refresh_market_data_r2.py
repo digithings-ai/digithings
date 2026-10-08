@@ -153,10 +153,9 @@ _MACRO_SUCCESS_MODES = frozenset({MODE_UP_TO_DATE, MODE_INCREMENTAL, MODE_FULL_R
 #: ``_macro_leg_dead`` needs unanimity over the whole exempt set, so one retired
 #: series among live ones was named by nothing (DIG-2405).
 #:
-#: ``MODE_ERROR`` is deliberately *not* here. It is never exempt -- the
-#: exemption clause requires ``MODE_HISTORY_ONLY`` -- so the soft-fail reduction
-#: already fails it whatever its seal says and measuring it could only name it
-#: twice.
+#: ``MODE_ERROR`` is left to the soft-fail reduction, which never exempts it
+#: whatever its seal says, so it is already loud and judging its age would add
+#: nothing.
 _MACRO_JUDGED_MODES = _MACRO_SUCCESS_MODES | {MODE_HISTORY_ONLY}
 
 LIVE_WINDOW_DAYS = 45
@@ -961,11 +960,11 @@ def _macro_as_of_stale(
     series is a finding rather than a coincidence -- and it can only ever *add*
     to ``failed``, never clear it.
 
-    Two limits, both accepted rather than hidden. ``MODE_ERROR`` outcomes are
-    left to the soft-fail reduction, which never exempts them whatever their
-    seal says, so judging their age could only name them twice. And the windows
-    are calendar days, not open trading days like ``staleness_gate``'s bound, so
-    a monthly series is judged against months.
+    Two limits, both accepted rather than hidden. ``MODE_ERROR`` is left to the
+    soft-fail reduction, which never exempts it whatever its seal says, so it is
+    already loud and judging its age would add nothing. And the windows are
+    calendar days, not open trading days like ``staleness_gate``'s bound, so a
+    monthly series is judged against months.
 
     ``MODE_HISTORY_ONLY`` used to be excluded here too, on the argument that a
     past-window series "has already emptied its live window, so its age adds
