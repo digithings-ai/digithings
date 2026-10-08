@@ -13,12 +13,23 @@
  * not only against wrangler.toml. A cron whose only owner is a deliberately
  * disabled job is a known retry slot, not drift, so it stays silent.
  */
-import { dispatch, type DispatchResult } from "./dispatch";
+import { buildPlan } from "./backfill";
+import { BackfillLedger, type RemediationState } from "./backfill-do";
+import { dispatch, dispatchWorkflow, type DispatchResult } from "./dispatch";
 import type { Env } from "./env";
 import { shouldDispatchAtOpen } from "./et-open";
 import { jobsForCron, type Job } from "./jobs";
 import { raiseViolationAlarms } from "./trigger-alarm";
 import { unrecognisedCronViolation } from "./trigger-contract";
+
+/**
+ * Wrangler.toml binds BACKFILL_LEDGER to class BackfillLedger, and a DO class
+ * only exists in a deployment if the entrypoint exports it as a value. A
+ * type-only import satisfies tsc and satisfies nothing at deploy time:
+ * `wrangler deploy` fails with "not exported in your entrypoint file", which no
+ * test or typecheck in CI sees.
+ */
+export { BackfillLedger };
 
 export type StartedRun = {
   job_id: string;
@@ -178,6 +189,228 @@ function parseStringArgs(value: unknown): Record<string, string> | null {
   return out;
 }
 
+/** Upstream twelve-x workflow this dispatches. Not a daily_run.yml `run_date`. */
+const BACKFILL_REPO = "digithings-ai/twelve-x";
+const BACKFILL_WORKFLOW = "maintenance.yml";
+const BACKFILL_REF = "develop";
+const BACKFILL_LEDGER_NAME = "backfill-ledger";
+
+/**
+ * POST /backfill — the Cloudflare-native dispatch surface for dated snapshot
+ * backfills (DIG-55 rework, DIG-753).
+ *
+ * Deliberately not a JOBS row and therefore not a clock: there is no cron, no
+ * `enabled` flag on a row, and nothing in wrangler.toml's [triggers] lists it.
+ * The only way a backfill starts is a request that names its dates.
+ *
+ * Ladder, all before the first outbound request: secret unset -> 404, bad
+ * bearer -> 401, BACKFILL_ENABLED != "1" -> 404, then buildPlan() refusals, then
+ * the ledger partition. A dispatch whose dates are all already remediated makes
+ * zero upstream requests and answers 200.
+ */
+async function handleBackfill(request: Request, env: Env): Promise<Response> {
+  if (!env.CRON_KICK_SECRET) {
+    return new Response("Not Found", { status: 404 });
+  }
+  if (!authorized(request, env)) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+  if (env.BACKFILL_ENABLED !== "1") {
+    return Response.json(
+      { error: "backfill_disabled", detail: "set BACKFILL_ENABLED=1 to enable" },
+      { status: 404 },
+    );
+  }
+
+  const plan = buildPlan(await request.text());
+  if (!plan.ok) {
+    return Response.json({ error: plan.code, detail: plan.detail }, { status: 400 });
+  }
+
+  if (!env.BACKFILL_LEDGER) {
+    return Response.json({ error: "backfill_unconfigured" }, { status: 503 });
+  }
+
+  const stub = env.BACKFILL_LEDGER.get(
+    env.BACKFILL_LEDGER.idFromName(BACKFILL_LEDGER_NAME),
+  ) as unknown as BackfillLedger;
+  const now = new Date().toISOString();
+
+  const split = await stub.claim(plan.dates, now, plan.force_dates);
+
+  /**
+   * The ledger's per-date state, read at response time so it describes what
+   * actually settled rather than what was claimed. Without it a caller cannot
+   * tell "nothing to do" from "stranded by a dead request" — `dispatched: []`
+   * and `already_remediated: true` looked identical either way.
+   *
+   * The read is guarded because it hits the same Durable Object that may be the
+   * thing failing: losing `states` is a far smaller harm than letting it replace
+   * the status the caller needs with an unhandled 500.
+   */
+  const readStates = async (): Promise<Record<string, RemediationState | "unknown"> | undefined> => {
+    try {
+      return await stub.status(plan.dates);
+    } catch (err) {
+      console.error(
+        JSON.stringify({
+          cron: "backfill",
+          job: BACKFILL_LEDGER_NAME,
+          error: "ledger_read_failed",
+          detail: err instanceof Error ? err.message : String(err),
+        }),
+      );
+      return undefined;
+    }
+  };
+
+  const respond = (
+    body: Record<string, unknown>,
+    status: number,
+    states: Record<string, RemediationState | "unknown"> | undefined,
+  ) => Response.json(states ? { ...body, states } : body, { status });
+
+  if (split.toDispatch.length === 0) {
+    // Every date is claimed by a live request or already remediated. This is the
+    // idempotence guarantee: a repeat dispatch is a no-op, not a second write.
+    const states = await readStates();
+    return respond(
+      {
+        ok: true,
+        dispatched: [],
+        skipped: split.skipped,
+        // `done` is the only state that means remediated. A date held by a live
+        // request is somebody else's turn, not a finished backfill, and calling
+        // it remediated is the false report this field used to make.
+        already_remediated: states
+          ? plan.dates.every((date) => states[date] === "done")
+          : false,
+      },
+      200,
+      states,
+    );
+  }
+
+  try {
+    const result = await dispatchWorkflow(env, {
+      cron: "backfill",
+      label: BACKFILL_LEDGER_NAME,
+      repo: BACKFILL_REPO,
+      workflow: BACKFILL_WORKFLOW,
+      ref: BACKFILL_REF,
+      inputs: {
+        backfill_snapshots: "true",
+        dates: split.toDispatch.join(","),
+      },
+    });
+
+    if (result.dry_run) {
+      // Nothing ran upstream, so nothing may be recorded as remediated.
+      const release_failed = !(await writeLedger("release", () =>
+        stub.release(split.toDispatch, split.claimedAt),
+      ));
+      return respond(
+        {
+          ok: true,
+          dry_run: true,
+          dispatched: [],
+          skipped: split.skipped,
+          would_dispatch: split.toDispatch,
+          release_failed,
+        },
+        200,
+        await readStates(),
+      );
+    }
+
+    if (result.status === 422) {
+      // GitHub declined to start a run — the maintenance workflow is disabled, or
+      // a run for this ref is already queued. No run exists for these dates, so
+      // this is NOT remediation: recording `done` is what let a later retry answer
+      // "already remediated" for a date that was never backfilled, forever. The
+      // dates settle as `dispatch_suppressed`, stay claimable for the next POST,
+      // and the caller gets 409 — not the 200 that claimed success.
+      const ledger_write_failed = !(
+        await writeLedger("markSuppressed", () =>
+          stub.markSuppressed(split.toDispatch, now, result.status, split.claimedAt),
+        )
+      );
+      return respond(
+        {
+          error: "dispatch_suppressed",
+          detail: "GitHub started no run for these dates; they stay dispatchable",
+          dispatched: [],
+          skipped: split.skipped,
+          github_status: result.status,
+          ledger_write_failed,
+        },
+        409,
+        await readStates(),
+      );
+    }
+
+    // GitHub accepted (204/200), so a run exists for these dates whatever this
+    // Worker does next. The ledger write is therefore not allowed to undo that:
+    // releasing here would re-dispatch dates that already ran — the DIG-48
+    // surplus — and answering 502 would report a GitHub success as a failure. If
+    // the write fails the claim stays `in_flight` and ages out via
+    // IN_FLIGHT_TTL_MS, which is the honest outcome: at most one extra dispatch,
+    // and the caller is told the ledger is behind.
+    const ledger_write_failed = !(
+      await writeLedger("markDone", () =>
+        stub.markDone(split.toDispatch, now, split.claimedAt),
+      )
+    );
+    return respond(
+      {
+        ok: true,
+        dispatched: split.toDispatch,
+        skipped: split.skipped,
+        github_status: result.status,
+        ledger_write_failed,
+      },
+      200,
+      await readStates(),
+    );
+  } catch (err) {
+    // A genuine dispatch failure: nothing ran upstream, so the claim goes back
+    // for the next request. If the release itself throws, the claim is left
+    // in_flight and ages out via IN_FLIGHT_TTL_MS rather than staying locked
+    // forever — which is why the failure is reported instead of swallowed, and
+    // why the status stays 502 rather than becoming an unhandled 500.
+    const release_failed = !(await writeLedger("release", () =>
+        stub.release(split.toDispatch, split.claimedAt),
+      ));
+    const detail = err instanceof Error ? err.message : String(err);
+    return respond({ error: "dispatch_failed", detail, release_failed }, 502, await readStates());
+  }
+}
+
+/**
+ * Run one ledger write and report whether it landed, instead of letting it
+ * throw. Each caller decides what a failure means — for `markDone` it must not
+ * undo an accepted dispatch, for `release` it must not replace a 502 with a 500
+ * — so the write is never silently retried and never silently swallowed: the
+ * caller-facing flag plus one log line naming the write is the record.
+ */
+async function writeLedger(op: "markDone" | "markSuppressed" | "release", write: () => Promise<void>) {
+  try {
+    await write();
+    return true;
+  } catch (err) {
+    console.error(
+      JSON.stringify({
+        cron: "backfill",
+        job: BACKFILL_LEDGER_NAME,
+        error: "ledger_write_failed",
+        op,
+        detail: err instanceof Error ? err.message : String(err),
+      }),
+    );
+    return false;
+  }
+}
+
 export default {
   async scheduled(
     controller: ScheduledController,
@@ -263,6 +496,10 @@ export default {
         includeDisabled: true,
       });
       return Response.json({ ok: true, cron, ...result }, { status: 200 });
+    }
+
+    if (request.method === "POST" && path === "/backfill") {
+      return handleBackfill(request, env);
     }
 
     return new Response("Not Found", { status: 404 });
