@@ -1,14 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import app, { type Env } from "../index";
 
-const CORE: Env = {
+const CORE: Env = { DASHBOARD_TRUST_IDENTITY_HEADERS: "1",
   DASHBOARD_DEV_CALLER: "enterprise+12x",
   SUPABASE_URL: "https://core.supabase.co",
   SUPABASE_SERVICE_ROLE_KEY: "core-key",
   TWELVEX_SUPABASE_URL: "https://tx.supabase.co",
   TWELVEX_SUPABASE_SERVICE_KEY: "tx-key",
 };
-const NO_GROUP: Env = { ...CORE, DASHBOARD_DEV_CALLER: "enterprise" };
+const NO_GROUP: Env = { DASHBOARD_TRUST_IDENTITY_HEADERS: "1", ...CORE, DASHBOARD_DEV_CALLER: "enterprise" };
 
 function mockFetch(handler: (url: string) => unknown): void {
   vi.stubGlobal("fetch", vi.fn(async (url: string) => Response.json(handler(String(url)))));

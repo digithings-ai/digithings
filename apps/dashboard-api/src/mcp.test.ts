@@ -9,8 +9,8 @@ import { governedRoutes } from "./access";
 import { ROUTE_MODULES } from "./routes";
 
 const KEY = "test-mcp-key";
-const ENV: Env = { MCP_EDGE_KEY: KEY, DASHBOARD_DEV_CALLER: "enterprise+12x" };
-const NO_ENV: Env = {};
+const ENV: Env = { DASHBOARD_TRUST_IDENTITY_HEADERS: "1", MCP_EDGE_KEY: KEY, DASHBOARD_DEV_CALLER: "enterprise+12x" };
+const NO_ENV: Env = { DASHBOARD_TRUST_IDENTITY_HEADERS: "1",};
 
 function post(body: unknown, headers: Record<string, string> = {}): Request {
   return new Request("https://x/mcp", {

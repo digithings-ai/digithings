@@ -27,7 +27,7 @@ export function buildRegistry(modules: readonly RouteModule<Env>[] = ROUTE_MODUL
 }
 
 /** Verified user id from the edge-injected `x-digi-user`; null when absent or malformed (fail closed). */
-export function userIdFor(request: Request, env: { DASHBOARD_EDGE_KEY?: string } = {}): string | null {
+export function userIdFor(request: Request, env: { DASHBOARD_EDGE_KEY?: string; DASHBOARD_TRUST_IDENTITY_HEADERS?: string } = {}): string | null {
   if (!identityTrusted(request, env)) return null;
   const v = (request.headers.get("x-digi-user") ?? "").trim();
   return v.length > 0 && v.length <= 128 && /^[\w@.:+-]+$/.test(v) ? v : null;

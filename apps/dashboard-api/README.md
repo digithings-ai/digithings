@@ -61,6 +61,13 @@ Tiers, lowest to highest: `free | brief | desk | studio | enterprise`.
 `12x` is the app-facing group name; the edge maps the product grant `fx_hub`
 to it. Local dev: `DASHBOARD_DEV_CALLER=enterprise+12x`.
 
+Identity headers (`x-digi-tier`, `x-digi-groups`, `x-digi-user`) are trusted only
+with an `x-digi-edge-key` equal to the `DASHBOARD_EDGE_KEY` secret. A deployed
+worker must have that secret set by the edge that injects identity. With no key,
+the headers are ignored and every caller is `free` (fail closed); local dev and
+tests opt back in with `DASHBOARD_TRUST_IDENTITY_HEADERS=1`, which must never be
+set on a deployed worker.
+
 MCP tools are generated from the catalog: one per GET route (the original
 eight names kept, plus `get_access_manifest`); `{param}` routes take the
 param as a tool argument. `get_access_manifest` is the discovery tool —

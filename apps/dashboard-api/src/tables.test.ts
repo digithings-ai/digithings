@@ -13,7 +13,7 @@ import {
   TablesQueryError,
 } from './tables';
 
-const ENV: Env = {
+const ENV: Env = { DASHBOARD_TRUST_IDENTITY_HEADERS: "1",
   SUPABASE_URL: 'https://test.supabase.co',
   SUPABASE_SERVICE_ROLE_KEY: 'test-service-key',
 };
@@ -135,7 +135,7 @@ describe('GET /v1/tables/:table', () => {
     mockFetch([]);
     const res = await app.fetch(
       new Request('https://api.test/v1/tables/positions?select=*', BRIEF),
-      {},
+      { DASHBOARD_TRUST_IDENTITY_HEADERS: '1' },
     );
     expect(res.status).toBe(502);
     expect(FETCHED).toHaveLength(0);

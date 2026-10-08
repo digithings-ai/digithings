@@ -7,7 +7,7 @@ import app, { type Env } from "./index";
 import { callerFor, routeMatches, routeVerdict, buildManifest } from "./access";
 
 const KEY = "k";
-const ENV: Env = { MCP_EDGE_KEY: KEY };
+const ENV: Env = { DASHBOARD_TRUST_IDENTITY_HEADERS: "1", MCP_EDGE_KEY: KEY };
 
 const get = (path: string, h: Record<string, string> = {}) => app.fetch(new Request(`https://x${path}`, { headers: h }), ENV);
 const rpc = (body: unknown, h: Record<string, string> = {}) =>
@@ -72,7 +72,7 @@ describe("MCP gate", () => {
 });
 
 describe("edge identity key", () => {
-  const E: Env = { MCP_EDGE_KEY: KEY, DASHBOARD_EDGE_KEY: "edge" };
+  const E: Env = { DASHBOARD_TRUST_IDENTITY_HEADERS: "1", MCP_EDGE_KEY: KEY, DASHBOARD_EDGE_KEY: "edge" };
   const call = (h: Record<string, string>) => app.fetch(new Request("https://x/performance", { headers: h }), E);
   it("ignores identity headers without the edge key (falls to free)", async () => {
     expect((await call({ "x-digi-tier": "enterprise" })).status).toBe(403);
@@ -99,9 +99,14 @@ describe("helpers", () => {
     expect(routeVerdict(buildManifest({ tier: "free", groups: [] }), "/v1/tables/x")).toBe("ungoverned");
   });
   it("dev caller applies only when no identity headers are sent", () => {
-    const env = { DASHBOARD_DEV_CALLER: "enterprise+12x" };
+    const env = { DASHBOARD_DEV_CALLER: "enterprise+12x", DASHBOARD_TRUST_IDENTITY_HEADERS: "1" };
     expect(callerFor(new Request("https://x/"), env)).toEqual({ tier: "enterprise", groups: ["12x"] });
     expect(callerFor(new Request("https://x/", { headers: { "x-digi-tier": "free" } }), env)).toEqual({ tier: "free", groups: [] });
     expect(callerFor(new Request("https://x/"), {})).toEqual({ tier: "free", groups: [] });
+  });
+  it("identity headers fail closed when no edge key is configured", () => {
+    const spoof = new Request("https://x/", { headers: { "x-digi-tier": "enterprise", "x-digi-groups": "12x" } });
+    expect(callerFor(spoof, {})).toEqual({ tier: "free", groups: [] });
+    expect(callerFor(spoof, { DASHBOARD_EDGE_KEY: "edge" })).toEqual({ tier: "free", groups: [] });
   });
 });
