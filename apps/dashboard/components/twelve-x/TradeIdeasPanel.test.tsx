@@ -2,7 +2,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { FxTradeIdeaRow } from '@/lib/twelve-x/types';
+import type { FxTradeIdeaRow, FxTradeLevels } from '@/lib/twelve-x/types';
 import TradeIdeasPanel, { IdeaDetail, ideaDetailBlocksClass } from './TradeIdeasPanel';
 import { TwelveXProvider } from './context';
 
@@ -66,6 +66,49 @@ const LEVELS_IDEA: FxTradeIdeaRow = {
     },
   ],
 };
+
+/**
+ * DIG-260: the real production shape — a broker target survived the guard, the
+ * entry band and stop did not. `partial` means never published as a bracket.
+ */
+const TARGET_ONLY_IDEA: FxTradeIdeaRow = {
+  ...IDEAS[0],
+  trade_levels: {
+    targets: [{ value: '1.18', provenance: 'broker_quoted', source_ref: 'ING.pdf' }],
+    risk_reward: null,
+    status: 'partial',
+  },
+};
+
+/** Shape-complete but still labelled non-complete: the guard dropped nothing. */
+const POPULATED_BUT_PARTIAL_IDEA: FxTradeIdeaRow = {
+  ...IDEAS[0],
+  trade_levels: {
+    ...(LEVELS_IDEA.trade_levels as FxTradeLevels),
+    status: 'partial',
+  },
+};
+
+const PUBLISHED_IDEA: FxTradeIdeaRow = {
+  ...IDEAS[0],
+  trade_levels: {
+    ...(LEVELS_IDEA.trade_levels as FxTradeLevels),
+    status: 'complete',
+  },
+};
+
+const PENDING_COPY =
+  'Not published — entry, stop and target appear together, or not at all.';
+
+function renderDetail(idea: FxTradeIdeaRow): string {
+  return renderToStaticMarkup(createElement(IdeaDetail, { idea }));
+}
+
+/** The pending element's class list, so a styling pin does not go substring-blind. */
+function pendingClass(html: string): string | undefined {
+  const tag = html.match(/<p[^>]*data-testid="trade-levels-pending"[^>]*>/)?.[0];
+  return tag?.match(/class="([^"]*)"/)?.[1];
+}
 
 function render(
   ideas: FxTradeIdeaRow[],
@@ -195,5 +238,83 @@ describe('TradeIdeasPanel', () => {
     expect(html).not.toContain('factors:');
     expect(html).toContain('aria-expanded="false"');
     expect(html).toContain('detail');
+  });
+});
+
+/**
+ * DIG-260: the pending trade-levels state, per the Designer's spec on DIG-2273 §1
+ * and the DIG-2352 refinement — one sentence, hairline-framed only when it fills
+ * one cell of the two-cell grid beside evidence, bare prose otherwise. No
+ * skeleton, no shimmer, no reserved height, no new tokens. A non-published
+ * bracket shows nothing actionable: no ladder row, no R:R, no level-vs-fix chart.
+ */
+describe('IdeaDetail — pending trade levels', () => {
+  it('frames the pending slot when a pending bracket sits beside evidence', () => {
+    const html = renderDetail({ ...TARGET_ONLY_IDEA, evidence: LEVELS_IDEA.evidence });
+    expect(html).toContain('data-testid="trade-levels-pending"');
+    expect(html).toContain(PENDING_COPY);
+    // The frame marks one cell of a two-cell grid, so it is what says
+    // "intentionally empty" next to the published evidence column.
+    expect(html).toContain('rounded-none border border-hair bg-surface/40');
+    // The copy must not echo the 'Levels' header directly above it.
+    expect(html).not.toContain('Levels pending');
+  });
+
+  it('drops the frame when the pending bracket is the only column', () => {
+    const html = renderDetail(TARGET_ONLY_IDEA);
+    expect(html).toContain('data-testid="trade-levels-pending"');
+    expect(html).toContain(PENDING_COPY);
+    // No second cell, so no slot to mark: with no grid position to reference the
+    // box would read as a callout, which is the opposite of the truth here.
+    expect(html).not.toContain('border border-hair');
+    expect(html).not.toContain('bg-surface/40');
+    // Pinned exactly: bare prose, matching the `Catalyst:` caption it now sits under.
+    expect(pendingClass(html)).toBe('text-[11px] leading-relaxed text-ink-mute');
+  });
+
+  it('replaces a populated-but-partial bracket with the same block, no ladder', () => {
+    const html = renderDetail(POPULATED_BUT_PARTIAL_IDEA);
+    expect(html).toContain('data-testid="trade-levels-pending"');
+    expect(html).toContain(PENDING_COPY);
+    // The shape was complete enough to build three rungs — none may reach the screen.
+    expect(html).not.toContain('>Entry<');
+    expect(html).not.toContain('>Stop<');
+    expect(html).not.toContain('>Target<');
+    expect(html).not.toContain('R:R');
+  });
+
+  it('renders no level-vs-fix section for a bracket that was not published', () => {
+    const html = renderDetail(TARGET_ONLY_IDEA);
+    expect(html).not.toContain('level-fix-');
+    // The chart's subject is published levels; a pending bracket has none.
+    expect(html).not.toContain('data-testid="level-fix-chart"');
+    expect(html).not.toContain('data-testid="level-fix-loading"');
+  });
+
+  it('still renders the full ladder and R:R once the bracket is published', () => {
+    const html = renderDetail(PUBLISHED_IDEA);
+    expect(html).not.toContain('data-testid="trade-levels-pending"');
+    expect(html).not.toContain(PENDING_COPY);
+    expect(html).toContain('>Entry<');
+    expect(html).toContain('>Stop<');
+    expect(html).toContain('>Target<');
+    expect(html).toContain('R:R 1.5');
+  });
+
+  it('keeps the detail grid two-column when a pending bracket sits beside evidence', () => {
+    const html = renderDetail({ ...TARGET_ONLY_IDEA, evidence: LEVELS_IDEA.evidence });
+    expect(html).toContain('data-testid="trade-levels-pending"');
+    expect(html).toContain('Market evidence');
+    expect(html).toContain('sm:grid-cols-2');
+  });
+
+  it('never reserves ladder height or animates the pending state', () => {
+    const html = renderDetail({ ...TARGET_ONLY_IDEA, evidence: LEVELS_IDEA.evidence });
+    expect(html).not.toContain('sk-shimmer');
+    expect(html).not.toContain('animate-');
+    expect(html).not.toContain('Skeleton');
+    expect(html).not.toContain('min-h-');
+    expect(html).not.toContain('aria-busy');
+    expect(html).not.toContain('aria-live');
   });
 });
