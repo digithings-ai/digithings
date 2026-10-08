@@ -72,9 +72,9 @@ the image, and `test_no_layer_fans_out_to_occ_tickets` guards all of it. Because
 no longer wired on `develop`, the masked default that #5159 and #5148 proposed has nothing left
 to protect, and the two halves can no longer be landed separately — see Consequences.
 
-`main` carried the same writer in the image until PR
-[#5226](https://github.com/digithings-ai/digithings/pull/5226) removed the `COPY` lines and
-inverted the `#4988` re-include guard. The two branches were not in the same state, and an
+`main` still carries the same writer in the image;
+[#5226](https://github.com/digithings-ai/digithings/pull/5226) (open, base `main`) removes the
+`COPY` lines and inverts the `#4988` re-include guard. The two branches were not in the same state, and an
 earlier revision of this ADR said "no longer copied into the image" without saying which
 branch. Recorded here so the next reader does not inherit the ambiguity.
 
@@ -119,7 +119,7 @@ configuration with a single accountable owner, the board, and no per-deployment 
 `scripts/check_pii_seed_payloads.py` (PR #5166) stops a new unmasked payload from being
 committed. It redacts nothing and blocks no runtime path; it is diff-scoped, prints counts
 and never values, and flags reserved domains only. It is deliberately **not** a required
-status check while the committed payload is still present — a check that is red on arrival
+status check yet — a check that is red on arrival
 teaches suppression rather than fixing.
 
 ## Consequences
@@ -177,4 +177,4 @@ teaches suppression rather than fixing.
 - PR [#5159](https://github.com/digithings-ai/digithings/pull/5159) — closed unmerged; the
   rejected masked default. Kept open as an unmerged branch because it is the record of the
   alternative that was weighed.
-- [`../../SECURITY.md`](../../SECURITY.md) — the commit-time payload gate.
+- PR [#5166](https://github.com/digithings-ai/digithings/pull/5166) (open) — the commit-time payload gate; it adds the `SECURITY.md` section.
