@@ -3,9 +3,18 @@
 > **Scope:** Production Next.js 16 BFF + React 19 chat UI at `apps/digichat/`.
 > Marketing parent is `apps/digithings-web` `/chat` → iframe `/embed` (not the deleted `cloudflare/website/`).
 
-> **Release line:** published package is **1.4.0**. This branch is **digichat 2.0**
-> (assistant-ui + AI SDK v7 + standard UI parts). Do **not** merge to `develop`
-> until the 2.0 cut. 1.5 on `develop` is non-UI only. See
+> **Release line:** the web package version is `apps/digichat/package.json`
+> `version` (also `.release-please-manifest.json`). Health and the license
+> heartbeat read `DIGICHAT_VERSION` when that env is set and non-empty, otherwise
+> the package version (`resolveDigichatVersion()` in
+> `src/lib/license/version.ts`). Container images bake the package version into
+> `DIGICHAT_VERSION` and `/etc/digichat-version`. The `ChatShell` sidebar
+> label is the hardcoded string `v0.1 · digithings`
+> (`src/components/chat-shell.tsx:458`); it does not
+> read `DIGICHAT_VERSION`. The Ink CLI is a
+> **separate package** that versions on its own line —
+> `@digithings/digichat-cli` is **1.4.0** (`apps/digichat/cli/package.json`).
+> Do not read the CLI version as the web app's. See
 > [ADR-0028](../../docs/adr/0028-digichat-web-foundation-and-opencode-distribution.md)
 > and [#3626](https://github.com/digithings-ai/digithings/issues/3626).
 > AG-UI is out of scope.
@@ -51,7 +60,7 @@ and [ADR-0018](../../docs/adr/0018-digichat-path-routing.md).
 | Foundry client adapter (`adapters/foundry/`) | Built |
 | Quant comparison strip (inline `BacktestResult` parsing) | Built |
 | Quant run persistence (`quant_runs` table) | Built |
-| Ecosystem side panel (service URLs + health badges) | Built |
+| Ecosystem side panel (service URLs + health badges) | Removed (`connections-sheet.tsx` gone; no client calls `/api/ecosystem/config`) |
 | Opt-in web search (tenant + user; External cites; embed session default ON) | Built |
 | Auto-migration on container boot (`DIGICHAT_AUTO_MIGRATE=1`) | Built |
 | Docker Compose profile (`digichat` + `digichat-db`) | Built |
@@ -119,11 +128,15 @@ assistant message parts for objects that look like `BacktestResult`
 (`run_id` + `sharpe_ratio` or `num_trades`). Renders a compact metrics table below the
 composer. No back-end call needed; parsing is client-side.
 
-**Ecosystem health badges** (`src/components/connections-sheet.tsx`): Side sheet that
-calls `GET /api/ecosystem/config` and `GET /api/health`, then renders color-coded
-badges (emerald = ok, amber = not ok) for digraph / digiquant / digitrace / digisearch
-/ database. Endpoint overrides are stored in an httpOnly cookie
-(`digichat-endpoints`, 180-day `maxAge`).
+**Ecosystem endpoint overrides** (`src/app/api/ecosystem/config/route.ts`,
+`src/lib/ecosystem.ts`): `GET` returns `{ effective, defaults,
+hasCustomEndpoints, persistence }` and `POST` writes the overrides. The
+side-sheet client that used to render color-coded health badges (emerald = ok,
+amber = not ok) for digigraph / digiquant / digitrace / digisearch / database
+was removed with its `src/components/connections-sheet.tsx`; **no client
+component calls this route any more**, so treat it as a server-side endpoint
+resolver rather than a live UI surface. Endpoint overrides are stored in an
+httpOnly cookie (`digichat-endpoints`, 180-day `maxAge`).
 
 **Auth.js OIDC** (`src/auth.ts`): Generic OIDC provider activated when
 `AUTH_OIDC_ISSUER` + `AUTH_OIDC_CLIENT_ID` + `AUTH_OIDC_CLIENT_SECRET` are set.
@@ -140,7 +153,7 @@ digikey). Both return a short-lived JWT + optional `litellm_proxy_api_key`.
 connection pool. Six tables: `tenants`, `user_tenants`, `api_keys`, `conversations`,
 `conversation_messages`, `quant_runs`. Managed by three migration files in `drizzle/`.
 
-**Design-canon theming** (`src/app/globals.css`, `src/app/layout.tsx`,
+**Design-canon theming** (`src/app/(digichat)/globals.css`, `src/app/(digichat)/layout.tsx`,
 `src/components/providers.tsx` — #1403, Phase 3 utilitarian-terminal v0.1):
 the app runs on the shared digithings token canon. `@digithings/design/tokens.css`
 defines `[data-theme="dark"|"light"]` semantic tokens; `@digithings/ui/styles/web-theme.css`
@@ -154,7 +167,10 @@ digichat's `globals.css` derives the shadcn variable set from those tokens under
 default button fill. Local `@theme` `--radius-*` pins to `0` (true circles
 keep `rounded-full`). Type is Geist Mono for claim, body, and chrome
 (`--font-sans`/`--font-display`/`--font-family` remap to `--font-geist-mono`).
-`<html>` ships `data-theme="dark"` + `.dark` as SSR defaults; the shared
+`<html>` sets `data-theme={theme}` from deployment `chrome.theme` via
+`deployChromeTheme()` in `src/app/(digichat)/layout.tsx` (dark is only the
+fallback when the deployment is missing or not `light`) and the matching
+`.dark` or `.light` class. The shared
 `themeInitScript` re-points both pre-paint (`dt-theme` localStorage key, shared
 with the marketing sites) and a `MutationObserver` (`ThemeClassSync` in
 `providers.tsx`) mirrors every later `[data-theme]` flip onto the `.dark`/`.light`
@@ -175,34 +191,41 @@ override a parent- or tenant-forced theme (#1434). Composer send (imported
 rect because `@digithings/digichat-ui` session.css still ships an 8px
 accent-tinted pill.
 
-**Shared controls layer** (`src/components/ui/*` — #1419, wave-3 re-point):
-nine of the fourteen shadcn-derived wrappers are now thin adapters over the
-canonical kit (`@digithings/ui/ui`) or the `@digithings/ui` controls family
-(`button`, `badge`, `card`, `input`, `label` pin `dress="chat"` over the kit —
-the kit's wave-3 `dress` axis emits the `ctl-*-chat` classes; `collapsible`,
-`dropdown-menu`, `sheet`, `tooltip` re-export bare — the shared default skin is
-digichat's dress). Import sites are unchanged
-(`@/components/ui/<x>`). `globals.css` imports
+**Shared controls layer** (`src/components/ui/*` — #1419, wave-3 re-point,
+wave-4 cleanup): the directory now holds exactly **four** thin adapters over
+the canonical kit (`@digithings/ui/ui`) — `button.tsx` and `card.tsx` pin
+`dress="chat"` over the kit (the kit's wave-3 `dress` axis emits the
+`ctl-*-chat` classes), `collapsible.tsx` re-exports the kit `Collapsible`
+bare, and `dropdown-menu.tsx` re-exports the `DropdownMenu` family bare (the
+shared default skin is digichat's dress). There are **no** local
+`badge` / `input` / `label` / `sheet` / `tooltip` wrappers — those files were
+deleted in wave 4. App call sites for the parts that remain import
+`@digithings/ui/ui` directly (`Input` and `Label` in `chat-shell.tsx`,
+`byok-cli-flow.tsx`, and `embed-composer-menu.tsx`; `TooltipProvider` in
+`src/components/providers.tsx`). They do **not** import `@/components/ui/<x>`.
+The four adapters that are still local (`button`, `card`, `collapsible`,
+`dropdown-menu`) are the ones whose call sites stay on `@/components/ui/<x>`.
+There are also no local `scroll-area` / `separator` / `sidebar` / `skeleton` /
+`textarea` files. `globals.css` imports
 `@digithings/ui/styles/controls-core.css` + `controls-overlay.css` before
 the digichat-ui sheets and `@source`s the shared controls directory
 (load-bearing — the behavioral controls carry token-backed utilities).
-`scroll-area`, `separator`, `sidebar`, `skeleton`, `textarea` stay local (no
-shared counterpart yet). Full swap/kept ledger, cascade contract, and
+Full swap/kept ledger, cascade contract, and
 browser-QA deltas: [`CONTROLS.md`](CONTROLS.md).
 
 **Source file reference table**
 
 | File | Purpose |
 |---|---|
-| `src/app/page.tsx` | Server component: bare `/` renders the mode menu (no chat); `?mode=product` runs the Option A flow (`DIGICHAT_REQUIRE_ROOT_AUTH=1` gates `ChatShell`, anonymous/session branches redirect to `/embed`); `?mode=embed\|catalog` replay the embed/catalog surfaces (`/baseline` redirects to `/?mode=catalog`) |
-| `src/lib/root-auth.ts` | `isRootAuthRequired()` — root `/` Auth.js wall (default OFF) |
-| `src/app/layout.tsx` | Root layout with `Providers` (session, tooltips) |
+| `src/app/(digichat)/page.tsx` | Server component: bare `/` renders the mode menu (no chat). `?mode=product` follows deployment `chrome.mode`, `auth`, and `persistence`: `chrome.mode: embed` (unless a layout skin owns the page) redirects to `/embed`; an anonymous app renders `HomeStockClient`; `ChatShell` only for a session, `persistence: server`, and a non-framed mode. `?mode=embed` renders `EmbedRouteShell`. `?mode=catalog` renders `BaselineClient` (production → `notFound`). `/baseline` is a separate route with the same client; it does not redirect |
+| `src/lib/root-auth.ts` | `isRootAuthRequired()` — only its unit test calls it. `DIGICHAT_REQUIRE_ROOT_AUTH` does not gate `/` or `ChatShell` |
+| `src/app/(digichat)/layout.tsx` | Root layout with `Providers` (session, tooltips) |
 | `src/app/api/chat/route.ts` | Primary BFF chat endpoint |
 | `src/app/api/v1/chat/route.ts` | Machine-client alias — re-exports the chat route |
 | `src/app/api/conversations/route.ts` | List + create conversations |
 | `src/app/api/conversations/[id]/route.ts` | Get + update + delete a conversation |
 | `src/app/api/conversations/[id]/quant-runs/route.ts` | List + insert quant runs |
-| `src/app/api/ecosystem/config/route.ts` | Read / write ecosystem endpoint cookie |
+| `src/app/api/ecosystem/config/route.ts` | Read / write ecosystem endpoint cookie (server-side; no client caller) |
 | `src/app/api/health/route.ts` | Readiness probe for all services |
 | `src/app/api/auth/[...nextauth]/route.ts` | Auth.js handler |
 | `src/app/actions/local-bootstrap.ts` | Server action: dev auto-sign-in |
@@ -231,14 +254,13 @@ browser-QA deltas: [`CONTROLS.md`](CONTROLS.md).
 | `src/lib/tenant.ts` | OIDC subject → tenant slug lookup |
 | `src/lib/api-key.ts` | Machine key validation (env bootstrap + bcrypt Postgres) |
 | `src/lib/migrate.ts` | Programmatic Drizzle migration runner |
-| `src/instrumentation.ts` | Next.js instrumentation hook: `DIGICHAT_AUTO_MIGRATE=1` + license verify/heartbeat startup |
+| `src/instrumentation.ts` | Next.js instrumentation hook: production `DIGICHAT_DEV_AUTH` assertion + `DIGICHAT_AUTO_MIGRATE=1` + license verify/heartbeat startup |
 | `src/app/healthz/route.ts` | Auth-exempt liveness probe (`GET /healthz`) |
 | `src/lib/license/state.ts` | Customer-license verify + revoke latch (`globalThis`, fail-open) |
 | `src/lib/license/heartbeat.ts` | 24h license heartbeat sender (Bearer raw JWT, fail-open backoff) |
 | `src/lib/license/version.ts` | Shared version resolver (health + heartbeat) |
 | `src/components/chat-shell.tsx` | Sidebar + thread state manager |
 | `src/components/chat-panel.tsx` | `useChat` + message list + composer |
-| `src/components/connections-sheet.tsx` | Ecosystem side sheet |
 | `src/components/quant-comparison-strip.tsx` | Backtest metrics table |
 | `src/components/providers.tsx` | Client providers wrapper |
 | `src/components/local-bootstrap-gate.tsx` | Dev auto-sign-in gate |
@@ -262,6 +284,7 @@ endpoint except `GET /api/health` (unauthenticated status probe) and
 - `maxDuration = 120` (Vercel/Next.js edge timeout).
 - **Rate limiting (two layers):** every request hits a shared per-`{tenantSlug}:{ownerUserSub}` sliding-window check (`checkBffRateLimit`, `DIGICHAT_CHAT_RATE_LIMIT_MAX`/`_WINDOW_MS`, default 30/min). Unauthenticated `/embed` requests all resolve to the *same* `ownerUserSub` (`embed:anonymous`, see below), so they'd share one bucket — a per-IP check (`checkEmbedIpRateLimit`, `DIGICHAT_EMBED_IP_RATE_LIMIT_MAX`/`_WINDOW_MS`, default 10/min) runs first for that case, so one visitor can't exhaust the shared quota for everyone (#1251). **Invariant:** the per-IP default must stay below the shared default, or the shared bucket's ceiling binds first and the per-IP layer becomes a no-op (caught in review on the first cut of #1251, which shipped 60 against a shared default of 30 — see the regression test in `embed-ip-rate-limit.test.ts`). When `DIGICHAT_TRUSTED_PROXIES` is unset, IP selection keeps the historical order: `cf-connecting-ip`, the leftmost `X-Forwarded-For` hop, then `unknown`. When configured with comma-separated IPs/CIDRs, only a TCP peer in that allowlist may supply a forwarded client-IP header; `x-digichat-peer-ip` is captured from the socket by the production entrypoint, which strips a caller-provided value before forwarding to the loopback-only Next server. Then `cf-connecting-ip` is preferred, or the XFF chain is walked from right to left past trusted proxy hops to the first valid non-trusted address. An untrusted or malformed boundary falls back to the captured peer. This mirrors digigraph's allowlist policy while accounting for Next.js Route Handlers' lack of socket access; rate-limit IPs remain non-identity signals.
 - **Per-tenant trial gate:** a `trial_form` tenant may set `gate.consumeUrl` to an operator-controlled HTTPS endpoint. When `X-Embed-Chat-Token` is present, the BFF sends `{ "token": "..." }` to that endpoint before applying the fallback per-IP turn quota. A 2xx response consumes the turn, any 4xx response denies it, and 5xx, timeout, or transport failures allow it so a quota-provider outage does not disable chat. The token is never logged or forwarded to a chat backend.
+- **Internal monitor identity (DIG-613):** an internal monitor can be exempt from the `trial_form` free-turn cap by presenting `X-Embed-Monitor-Token`, matched against a comma-separated allowlist in `DIGICHAT_MONITOR_TOKENS` (`embed-monitor-token.ts`, constant-time, entries under 32 chars ignored). This exists because the hourly DataTap answer-integrity check had no sanctioned path past the per-IP cap: it burned the 3-turn budget in its first hour and then returned `402 trial_gate` on every run, which reads as a client-side closed trial rather than our own gate. The compared value is a server-side secret and is deliberately **not** `X-Embed-Token`, which is a Stripe-style publishable key rendered into the embedding page on purpose (DIG-619) — a bypass keyed on it would be a public bypass. **Scope:** the free-turn cap only. It does not authenticate the caller; the caller must still resolve a tenant context and pass the rate-limit layers. The `requiredPlanTier` proof check runs earlier and is unaffected. The one check it does skip is the tenant's own `gate.consumeUrl` turn accounting, and only for a caller that presents the monitor header *without* an `X-Embed-Chat-Token` (the consume call is gated on that token, `route.ts`). **Fails open:** when the allowlist is unset the gate behaves exactly as before, so a missing deploy secret never becomes a reason to stop serving visitors. The gate itself remains best-effort anti-abuse, not an authorization boundary.
 - **Anonymous `/embed` requests** (`resolveEmbedChatTenant` in `embed-chat-tenant.ts`) resolve to `{ tenantSlug: "embed", ownerUserSub: "embed:anonymous" }` only when **no** `DIGICHAT_EMBED_TENANTS` are configured and `DIGICHAT_LEGACY_EMBED_ENABLED=1` (or deprecated `DIGICHAT_EMBED_ENABLED=1`, or a valid legacy `X-Embed-Token` matching `DIGICHAT_EMBED_TOKEN`). Registered tenants resolve via `DIGICHAT_EMBED_TENANTS` (their own token, or a first-party host **with a first-party browser-attested origin**). A configured tenant registry turns the legacy flag off and refuses unregistered hosts. Otherwise 503. This path never touches `conversations-repo` — no server-side persistence call exists in this route for any caller (persistence, when it happens, is client-initiated via the separate `/api/conversations` endpoints below, which require a real session).
 
 ### Conversations
@@ -369,8 +392,8 @@ present, allowing LiteLLM to route models per-tenant.
 ```
 src/app/
   layout.tsx            # Root layout (Providers, Geist Mono)
-  page.tsx              # Server component: default → /embed; optional root auth → ChatShell
-  login/                # Login page (only when DIGICHAT_REQUIRE_ROOT_AUTH=1)
+  page.tsx              # Menu at `/`; `?mode=product` follows chrome.mode, auth, persistence
+  login/                # No standalone login route ships
   api/
     auth/[...nextauth]/ # Auth.js handlers
     chat/               # BFF chat endpoint
@@ -387,17 +410,20 @@ src/instrumentation.ts  # Auto-migrate hook
 
 The root `page.tsx` is a **React Server Component**. Bare `/` renders the mode
 menu (brand + product/embed/catalog cards, zero JS) — no chat thread. `?mode=product`
-runs the Option A flow: per deployment chrome it serves the stock shell (or redirects
-to `/embed` for embed-mode deployments); `DIGICHAT_REQUIRE_ROOT_AUTH=1` (Option B —
-no shipped deployment uses this today) calls `auth()` and gates `ChatShell` — there
-is no standalone `/login` page; a session must come from an OIDC callback, a machine
-key, or the dev-only local-bootstrap credentials provider. `?mode=embed` replays the
-tenant iframe surface (same `EmbedRouteShell` as `/embed`, which keeps serving directly:
-production splits `/` (Pages) from `/embed*` (Container), so redirecting it would
-strand tenant iframes on Pages). `?mode=catalog` replays the skin catalog (`/baseline`
-redirects here; production → `notFound`). `ChatShell` is a
-`"use client"` component that owns all thread state as React state; the server
-renders nothing but the initial HTML shell for it.
+follows deployment `chrome.mode`, `auth`, and `persistence`. `chrome.mode: embed`
+redirects to `/embed` unless a layout skin owns the page. An anonymous app renders
+`HomeStockClient`. A session with `persistence: server` and a non-framed mode renders
+`ChatShell`; any other session branch renders `HomeStockClient`. `DIGICHAT_REQUIRE_ROOT_AUTH`
+does not choose either branch — `isRootAuthRequired()` is only used by
+`src/lib/root-auth.test.ts`. There is no standalone `/login` page; a session must
+come from an OIDC callback, a machine key, or the dev-only local-bootstrap credentials
+provider. `?mode=embed` replays the tenant iframe surface (same `EmbedRouteShell` as
+`/embed`, which keeps serving directly: production splits `/` (Pages) from `/embed*`
+(Container), so redirecting it would strand tenant iframes on Pages). `?mode=catalog`
+renders `BaselineClient` (production → `notFound`). `/baseline` is a separate route
+that also renders `BaselineClient`; it does not redirect to `/?mode=catalog`.
+`ChatShell` is a `"use client"` component that owns all thread state as React state;
+the server renders nothing but the initial HTML shell for it.
 
 ### BFF pattern (route handlers)
 
@@ -433,18 +459,22 @@ BFF route handler
 
 ### Auth.js session flow
 
-1. User visits `/` and gets the mode menu (no chat thread). `?mode=product` runs the
-   Option A flow (embed-mode deployments redirect to `/embed`, where tenant `gateMode`
-   applies — digithings dogfood uses `ungated`); `DIGICHAT_REQUIRE_ROOT_AUTH=1` gates
-   `?mode=product` behind the session wall instead.
-2. When root auth is required, the server component calls `auth()` — reads and decrypts
+1. User visits `/` and gets the mode menu (no chat thread). `?mode=product` follows
+   deployment `chrome.mode`, `auth`, and `persistence`. `chrome.mode: embed` (unless a
+   layout skin owns the page) redirects to `/embed`, where tenant `gateMode` applies —
+   digithings dogfood uses `ungated`. `DIGICHAT_REQUIRE_ROOT_AUTH` does not gate this
+   route.
+2. When `auth` is `session`, the server component calls `auth()` — reads and decrypts
    the session JWT from the httpOnly `__Secure-authjs.session-token` cookie.
-3. No session → `redirect("/embed")` (no standalone `/login` page ships).
+3. That session branch with no session → `redirect("/embed")` (no standalone `/login`
+   page ships). Anonymous `auth` does not redirect; an anonymous app renders
+   `HomeStockClient`. `ChatShell` is only the session + server-persistence + non-framed
+   branch.
 4. A session is established via `POST /api/auth/callback/credentials` (dev-only
    providers) or an OIDC redirect (production), not through a digichat-hosted page.
 5. Auth.js writes an encrypted session JWT cookie. `jwt` callback copies `user.id` →
    `token.sub`. `session` callback copies `token.sub` → `session.user.id`.
-5. On subsequent requests, `auth()` decrypts the cookie and returns the session. No
+6. On subsequent requests, `auth()` decrypts the cookie and returns the session. No
    database session store — stateless JWT only.
 
 ### digikey JWT exchange flow
@@ -490,7 +520,7 @@ with the full message array. This is a full-replace strategy — not an append �
 re-sends the entire conversation on every flush. For long threads this may be
 non-trivial in payload size.
 
-This entire dual-path is inapplicable to the anonymous `/embed` surface: `src/app/embed/page.tsx`
+This entire dual-path is inapplicable to the anonymous `/embed` surface: `src/app/(digichat)/embed/page.tsx`
 calls only `useChat` against `POST /api/chat` — it never imports `saveLocalThreads`,
 `flushServerSave`, or anything from `conversations-repo`. Even if it did, every
 `/api/conversations*` route calls `requiredigichatAuth()` first, which 401s a bare
@@ -548,7 +578,7 @@ On structured `free_quota_exceeded` / clear rate-limit errors, embed tenants wit
 the visitor activates a validated key, the failed turn is retried with existing
 `X-BYOK-*` headers. BYOK providers listed in the UI: OpenAI, OpenRouter,
 Anthropic, Gemini, x.ai (model required for all non-OpenAI providers).
-Provider list is defined by `config/byok-providers.json`.
+Provider list is defined by `../../config/byok-providers.json`.
 
 A non-2xx digigraph reply is **not** relayed to an embed visitor: the body is
 logged server-side and the stream fails the turn with a generic "unavailable
@@ -686,7 +716,7 @@ has **two sources** (#4994):
   in-process 10-minute bucket cache. OpenRouter stays live because its buckets
   derive from today's blended per-infra prices and its `:free` roster rotates.
 - **every other provider — the vendored catalog.** `openai`, `anthropic`,
-  `gemini`, and `xai` are served from `config/model-catalog.json`, normalized
+  `gemini`, and `xai` are served from `../../config/model-catalog.json`, normalized
   from models.dev by `scripts/refresh_model_catalog.py` and generated into
   `src/lib/model-catalog.generated.ts`. That branch performs **no fetch, no
   URL, no timeout, and no cache** — it is a module import, so the route cannot
@@ -719,7 +749,7 @@ strictly additive and never blocks the flow.
 The catalog is generated data, never hand-edited: `make model-catalog` refreshes
 it from models.dev, `make model-catalog-check` is the network-free CI drift
 guard, and `docs/MODEL_CATALOG.md` documents what it is **not** authoritative
-for. `config/byok-providers.json`'s `fallbackModels` are validated against the
+for. `../../config/byok-providers.json`'s `fallbackModels` are validated against the
 catalog by `tests/config/test_model_catalog.py` (strict) but are never generated
 from it, so `byokModelPresets` stays the hand-mirrored last resort it has
 always been.
@@ -769,7 +799,7 @@ AI SDK / `streamText` client (`lib/digigraph.ts` custom `fetch`), and
 `fetch-guarded.test.ts` stands up two local origins and asserts the X-* headers
 never reach the redirect target.
 
-`config/byok-providers.json`'s `keyPrefix` field is read by no runtime code, and
+`../../config/byok-providers.json`'s `keyPrefix` field is read by no runtime code, and
 `fallbackModels` is read only by `digigraph/src/digigraph/llm_auth.py` (whose loader
 takes `id`/`baseUrl`/`requiresModel` plus the first `fallbackModels` entry, used as
 the remediation example in `byok_default_model_refusal`). Each is pinned to a
@@ -785,7 +815,7 @@ counterpart in `byok-providers.ts`, which carries no model list; its in-app copy
 `use-byok-key.ts`'s `byokModelPresets`, pinned by the first of those two files. That
 is what keeps digigraph's refusal naming a model this UI actually offers. Since
 #4994 the list also has a *second*, independent pin: every `fallbackModels`
-entry must exist in the generated `config/model-catalog.json`
+entry must exist in the generated `../../config/model-catalog.json`
 (`tests/config/test_model_catalog.py`), so a pin retired upstream fails a test
 instead of sitting in the picker. That test is what surfaced the six retired
 ids documented in `docs/MODEL_CATALOG.md`; each needs a LiteLLM route rename
@@ -817,16 +847,16 @@ layout and contract:
 [`docs/architecture/digichat-modular-frontend.md`](../../docs/architecture/digichat-modular-frontend.md).
 
 **Tenant presentation is resolved server-side, before first paint.** `/embed`
-is a server component (`src/app/embed/page.tsx`, `dynamic = "force-dynamic"`)
+is a server component (`src/app/(digichat)/embed/page.tsx`, `dynamic = "force-dynamic"`)
 that reads the iframe URL's own `?token=`/`?host=` and resolves the tenant via
 `resolveEmbedClientConfigFromParams` (`src/lib/embed-client-config.ts`), then
 pins `<html data-theme>` with a pre-paint inline script and seeds the client
-hook through `initialTenantCfg`. This exists because the root layout hardcodes
-`data-theme="dark"` as its no-JS default (`src/app/layout.tsx`) and
+hook through `initialTenantCfg`. This exists because the root layout's no-JS
+`data-theme` is `deployChromeTheme()` (`src/app/(digichat)/layout.tsx`) — deployment
+`chrome.theme`, with dark only as the fallback — and
 `useEmbedTenantConfig` could previously only learn the tenant by fetching
-`/api/embed/tenant-config` after mount — so every light-themed tenant painted
-dark for a full round-trip and then flipped, a visible dark→light flash baked
-into the SSR HTML itself. Measured after the change: FCP at 44 ms with
+`/api/embed/tenant-config` after mount — so a light tenant whose deployment
+theme fell back to dark painted dark for a round-trip and then flipped. Measured after the change: FCP at 44 ms with
 `data-theme="light"` already applied, while the config fetch only settled at
 47.9 ms.
 
@@ -1007,7 +1037,7 @@ but omitted by the BFF, so it still beats a tenant default (#4724). digisearch /
 stay orchestrator tools (HTTP to the verticals), not browser MCP. DataTap-style installs add
 extra servers in YAML (see `config/examples/datatap-mcp.yaml`). The trial-tenant
 variant (per-tenant container + dev MCP server + `X-API-Key` static auth) is
-`config/examples/datatap-trial-test.yaml`, deployed per
+`config/datatap-trial-test.yaml`, deployed per
 `config/examples/datatap-trial-deploy.md` — that doc, not this section, is the
 tenant-rollout reference.
 
@@ -1016,8 +1046,9 @@ new chat / close and marketing footer attribution stay. Signed-in ChatShell keep
 `/history` `/scope` plus the same `/provider` / `/websearch` / `/settings` surface.
 
 **Sources on the transcript (#3419 / 2.0).** assistant-ui `Source` parts and tool
-output document lists render inline in `CliThread`. Vault note `body` may still
-sit on tool output JSON for clients that map it; digichat 2.0 does **not** mount
+output document lists render inline in `ThreadSkinView` (`ThreadSource` for
+`source` parts). Vault note `body` may still
+sit on tool output JSON for clients that map it; digichat does **not** mount
 `DocumentPane`. Paths without `http(s)` never become invented URLs. Human tool
 labels for legacy hydrate live in `activity-view.toolDisplayName`.
 
@@ -1108,7 +1139,7 @@ tenant registry theme.
 `digichat:ready`, `ChatEmbedShell` posts
 `{ type: "digichat:parent-error", code: "ready_timeout"|"embed_unloadable", ts }`
 into the iframe (same first-party allowlist as seed/theme). The embed formats a
-CLI-style CliThread error line (`error: …` via
+CLI-style error line (`error: …` via
 `formatParentErrorLine` in `src/lib/embed-parent-error-messages.ts`) — no
 parent-page banner. If the iframe never loads, the shell shows the same line in
 the iframe slot. Copy references `DIGICHAT_EMBED_ORIGIN` / Containers (not the
@@ -1131,7 +1162,7 @@ exactly like an unregistered host (generic gated defaults, or — only when no
 tenant's config or relay. The token is not secret from that tenant's own
 site visitors — it's provisioned out-of-band and baked into the tenant's
 embed snippet as a query param (`<iframe src=".../embed?token=...">`),
-read client-side in `src/app/embed/page.tsx` and forwarded as
+read client-side in `src/app/(digichat)/embed/page.tsx` and forwarded as
 `X-Embed-Token` — the same trust model as a Stripe publishable key or
 reCAPTCHA site key: not guessable by an unrelated caller, but not a bearer
 secret a real visitor needs to protect either.
@@ -1214,10 +1245,22 @@ protection alone is considered insufficient.
 The dev credentials provider checks `process.env.DIGICHAT_DEV_AUTH !== "1"` at module
 initialization time, not at request time. If `DIGICHAT_DEV_AUTH=1` is set in a
 production container (e.g., accidentally committed to a `.env` file or an
-orchestrator secret), password login with the default password `"dev"` is fully
-functional. The `DIGICHAT.md` explicitly forbids this but there is no runtime guard.
-**Recommendation:** add a startup assertion that throws when `NODE_ENV=production` and
-`DIGICHAT_DEV_AUTH=1`.
+orchestrator secret), password login with the default password `"dev"` would be
+fully functional, because the provider falls back to that literal when
+`DIGICHAT_DEV_PASSWORD` is unset.
+
+**Now guarded at startup.** `src/lib/startup-env-guards.ts` exports
+`assertDevAuthDisabledInProduction()`, which throws when `NODE_ENV=production` and
+`DIGICHAT_DEV_AUTH=1`, naming both variables in the message. It runs from two
+places: `src/instrumentation.ts` `register()`, ahead of the config, license and
+migration initializers, and `devProvider()` in `src/auth.ts`, so the provider
+cannot be registered in production even if instrumentation is bypassed.
+
+The refusal is a hard throw rather than the silent `return null` used by
+`localBootstrapProvider`: a deployment mistake should be a loud boot failure, not a
+login that mysteriously never succeeds. `DIGICHAT_DEV_AUTH=1` without
+`NODE_ENV=production` is unaffected — local development works exactly as before.
+`src/lib/startup-env-guards.test.ts` pins both the throw and the two call sites.
 
 ### DIGICHAT_LOCAL_AUTH_KEY
 
@@ -1462,9 +1505,12 @@ unlike `digisearchUrl`, `digigraphUrl`/`digiquantUrl`/`digitraceUrl` in
 the health route checks `isServiceCapabilityEnabled(...)` directly rather than URL
 presence — a deployment serving only `external-relay` embed tenants (no digigraph
 stack running at all) can omit them from `DIGICHAT_ENABLED_SERVICES` without
-`/api/health` reporting itself unhealthy. Note the `DIGICHAT_ENABLED_SERVICES=""`
-gotcha in `capabilities.ts`: an empty string falls back to the all-enabled default,
-so disabling every service requires a non-matching placeholder value instead.
+`/api/health` reporting itself unhealthy. In `capabilities.ts` the
+all-enabled default applies only when the variable is **unset**
+(`envVar === undefined`) — setting `DIGICHAT_ENABLED_SERVICES=""` splits to
+`[""]`, which `filter(Boolean)` drops, so it enables **no** service rather than
+all four. To disable everything, set it to the empty string (or to a list of
+unrecognized ids); leave it unset to get the default four.
 
 ### digiquant backtest result parsing
 
@@ -1575,11 +1621,12 @@ tenant. `/embed` first paint, `GET /api/embed/tenant-config`, and
 for a single client container. Multi-tenant host registries still win when
 the parent host is registered (token / first-party rules unchanged).
 
-Thread templates (`base`, the five clones, `base-assistant-ui`, `react-ink`)
-default to `chrome.mode: embed` so `/` redirects to `/embed` and chat is
-`POST /api/chat`. Layout templates (`webpage-assistant`, `product-page-assistant`,
-`expo-react-native`) own `/` (`chrome.mode: app`) so ChatShell / embed header
-do not wrap the catalog page; anonymous layout chat uses the same YAML
+Thread templates (`base`, the five clones, `base-assistant-ui`) ship
+`chrome.mode: embed` so `/` redirects to `/embed` and chat is
+`POST /api/chat`. `react-ink.yaml` ships `chrome.mode: app` (not `embed`), so it
+belongs with the layout templates (`webpage-assistant`,
+`product-page-assistant`, `expo-react-native`) that own `/` rather than being
+redirected to `/embed`; anonymous layout chat uses the same YAML
 install. `welcome` (headline string, or `{ title, body }`) / `placeholder` /
 `title` / `accent` from YAML are applied to the selected template at runtime.
 `suggestions` is opt-in per deployment YAML; omit it for no starter chips
@@ -1652,13 +1699,13 @@ Healthcheck: `curl -sf http://127.0.0.1:3000/api/health`.
 | `AUTH_OIDC_ISSUER` | OIDC provider issuer URL | If using OIDC |
 | `AUTH_OIDC_CLIENT_ID` | OIDC client ID | If using OIDC |
 | `AUTH_OIDC_CLIENT_SECRET` | OIDC client secret | If using OIDC |
-| `DIGICHAT_DEV_AUTH` | Enable dev password login (`1` = on) | Dev only |
+| `DIGICHAT_DEV_AUTH` | Enable dev password login (`1` = on). Refuses to start when combined with `NODE_ENV=production` | Dev only |
 | `DIGICHAT_DEV_PASSWORD` | Dev password (default: `dev`) | Dev only |
 | `DIGICHAT_LOCAL_AUTH_KEY` | Dev auto-sign-in key (non-production only) | Dev only |
 | `DIGICHAT_CONFIG_PATH` | Path to digichat deployment YAML (default `/app/config/digichat.yaml`). Zod-validated at startup; fail closed on invalid content. | Optional |
 | `DIGICHAT_EMBED_TOKEN` | Env overlay for `deployment.token` when omitted from the YAML file | Optional |
 | `DIGICHAT_CHROME_SKIN` | Overlay `chrome.skin` (11 catalog ids or first-party `digichat`) for a client container without editing YAML | Optional |
-| `DIGICHAT_REQUIRE_ROOT_AUTH` | Legacy Option B root wall. Prefer `chrome.mode: app` + `auth: session` in deploy config. | Optional |
+| `DIGICHAT_REQUIRE_ROOT_AUTH` | Read only by `isRootAuthRequired()`, which nothing but `src/lib/root-auth.test.ts` calls. It does not gate `ChatShell` or `/`. Prefer `chrome.mode` + `auth` + `persistence` in deploy config. | Unused by the app |
 | `DIGIGRAPH_INTERNAL_URL` | digigraph base URL (default: `http://127.0.0.1:8000`) | Yes |
 | `DIGIGRAPH_UPSTREAM_API_KEY` | Static Bearer to digigraph (fallback auth) | If not using digikey |
 | `DIGIKEY_URL` | digikey base URL | If using digikey |
@@ -1707,7 +1754,10 @@ dependencies. Image size is significantly smaller than a non-standalone build.
 ### Auto-migration
 
 `src/instrumentation.ts` is a Next.js instrumentation module. When `NEXT_RUNTIME=nodejs`
-(Node.js runtime, not edge) it runs, in order: `initDigichatConfigAtStartup()`,
+(Node.js runtime, not edge) it runs, in order: `assertDevAuthDisabledInProduction()`
+(`src/lib/startup-env-guards.ts` — throws when `NODE_ENV=production` and
+`DIGICHAT_DEV_AUTH=1`; see "DIGICHAT_DEV_AUTH=1 risk in production"),
+`initDigichatConfigAtStartup()`,
 `initLicenseStateAtStartup()` (pure local RS256 license verification — never touches
 the network, never throws, fail-open), and `startLicenseHeartbeat()` (24h sender plus
 one immediate fire-and-forget attempt; unlicensed containers never start a timer).

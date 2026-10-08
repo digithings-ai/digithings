@@ -2,6 +2,10 @@ import NextAuth from "next-auth";
 import type { NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { planTierFromOidcClaims } from "@/lib/oidc-plan-tier";
+import {
+  assertDevAuthDisabledInProduction,
+  isDevAuthEnabled,
+} from "@/lib/startup-env-guards";
 
 /** Single secret for signing/decrypting session JWT (must stay stable or users must clear cookies). */
 function resolveAuthSecret(): string | undefined {
@@ -40,8 +44,13 @@ function oidcProvider(): NextAuthConfig["providers"][number] | null {
 }
 
 function devProvider(): NextAuthConfig["providers"][number] | null {
+  // Production is a hard refusal, not a silent null like localBootstrapProvider
+  // below: this provider falls back to the literal password "dev" and issues a
+  // real session, so a deployed profile carrying the flag is a breach, and a
+  // confusing login failure would hide it. Throws naming NODE_ENV + the flag.
+  assertDevAuthDisabledInProduction();
   // Trim so values like "1\r" from CRLF .env files still enable dev login.
-  if (process.env.DIGICHAT_DEV_AUTH?.trim() !== "1") return null;
+  if (!isDevAuthEnabled()) return null;
   return Credentials({
     id: "dev",
     name: "Local dev",

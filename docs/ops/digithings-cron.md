@@ -31,3 +31,32 @@ Operator full refresh remains manual `workflow_dispatch` / `POST /kick` only.
 GHA `schedule:` stays off. Leftover sweep after #4970: develop YAML has
 zero `on.schedule` keys (`tests/scripts/test_no_gha_schedules.py`).
 `digisearch_parity` is not a digithings workflow.
+
+## Dated snapshot backfill
+
+`POST /backfill` is the Cloudflare-native dispatch path for dated
+`fx_confluence_snapshot` remediation in twelve-x. It is deliberately **not** a
+`JOBS` row and **not** on a clock: no cron expression, nothing self-firing. It
+exists because `jobs.ts` requires a known twelve-x cron for a twelve-x `wd()`
+row, and a dated remediation has no such cron — the earlier attempt faked one
+with a February 30 expression. Requests POST `{dates: "YYYY-MM-DD,..."}` (plus
+optional `force_dates`); every other key is refused, including `run_date`
+(which belongs to `daily_run.yml`, not `maintenance.yml` — sending it yields a
+silent GitHub `422` and zero runs) and `since`/`until` ranges (unbounded, and
+not idempotent per date). A `BackfillLedger` Durable Object makes a repeat POST
+for an already-remediated date a no-op with zero upstream requests, and a bare
+kick with no `dates` is refused before any request leaves the Worker.
+
+A date is only remediated when GitHub actually starts a run. A dispatch GitHub
+declines — `maintenance.yml` is `disabled_manually`, or a run is already queued —
+answers `409 dispatch_suppressed`, records nothing as remediated, and leaves the
+date dispatchable, so the next POST retries it instead of reporting a backfill
+that never happened. Every response carries a per-date `states` map, and an
+in-flight claim ages out after `IN_FLIGHT_TTL_MS` rather than locking its date
+out forever.
+
+Off by default (`BACKFILL_ENABLED = "0"`) and gated behind `CRON_KICK_SECRET`.
+Full contract, guard ladder and the `disabled_manually` prerequisite are in
+[`apps/digithings-cron/README.md`](../../apps/digithings-cron/README.md#snapshot-backfill-post-backfill).
+Note that any push touching `apps/digithings-cron/**` deploys this Worker to
+production, so a PR against `develop` is a production change.
