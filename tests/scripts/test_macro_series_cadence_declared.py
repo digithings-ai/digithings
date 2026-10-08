@@ -1,4 +1,3 @@
-"""Every macro series the cron fetches declares the cadence it is judged on.
 
 DIG-2406, out of the DIG-2381 review of #5248. Six of the 23 ids on
 ``KEPT_SERIES_IDS`` shipped a ``cadence:``; the other 17 were fetched all the
@@ -171,9 +170,7 @@ def test_declaring_daily_changed_no_window(refresh, fred_cadences, backfill_limi
     )
 
 
-def test_declaring_a_cadence_exempted_nothing(
-    refresh, shipped_specs, fred_cadences
-) -> None:
+def test_declaring_a_cadence_exempted_nothing(refresh, shipped_specs, fred_cadences) -> None:
     declared = {s: (c or "").lower() for s, c in fred_cadences.items()}
     slow = {f"fred__{s}" for s, c in declared.items() if c in refresh.SLOW_CADENCES}
     exempt = refresh._slow_macro_exempt_ids(shipped_specs)
