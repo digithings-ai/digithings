@@ -425,3 +425,102 @@ def test_cloudflare_worker_does_not_forward_the_retired_key() -> None:
         f"{pin} still pins FRED_API_KEY as an MCP-scoped var (DIG-335); the "
         "pin has to move in the same commit as the Worker envVars block."
     )
+
+# --- markdown surface (DIG-336) -------------------------------------------
+#
+# The code globs above cannot see prose, and prose is how a retired credential
+# comes back: `digiquant/ARCHITECTURE.md:436` on `main` still carries a
+# copy-pasteable `npx wrangler secret put FRED_API_KEY`. A reader following it
+# would re-create the very exposure DIG-335 removed, and no CI job could notice:
+# `ruff_and_scripts` in ci.yml path-filters `digiquant/**` and `tests/**` but
+# not `docs/**`, and no workflow names this guard.
+#
+# So the scan surface grows to `*.md`. The predicate stays NARROW on purpose --
+# it must fire on an instruction that SUPPLIES the key, never on a record that
+# merely mentions it. Measured 2026-10-08: `develop` has 53 markdown lines
+# naming FRED_API_KEY and exactly 1 supply instruction; `main` has 26 and 4.
+# A broad "mentions the name" rule would fail on 53 lines and teach the team to
+# ignore the guard. This one is silent on history and loud on instructions.
+
+LIVE_DOC_GLOBS = ("**/*.md",)
+
+PROVISIONING_PATTERNS = (
+    # `wrangler secret put FRED_API_KEY` / `gh secret set FRED_API_KEY`
+    ("secret-put", re.compile(r"secret\s+(?:put|add|set)\b[^|\n]*" + RETIRED_NAME, re.I)),
+    # "Owner actions: `FRED_API_KEY` + ..." -- an instruction to obtain it.
+    ("owner-action", re.compile(r"owner actions?[^\n]*" + RETIRED_NAME, re.I)),
+    # "`FRED_API_KEY` in GitHub Actions, `export`, or config/mcp.secrets.env"
+    # -- the "here is how you get the key" shape.
+    ("supply-instruction",
+     re.compile(RETIRED_NAME + r"[^\n|]{0,60}\b(?:in GitHub Actions|,\s*`?export`?"
+                r"|export it|set it|provide it|you (?:will|should|must) need)\b", re.I)),
+    # `FRED_API_KEY: ${{ secrets.FRED_API_KEY }}` / `FRED_API_KEY=` -- an
+    # assignment an operator can copy verbatim into a workflow or env block.
+    ("assignment",
+     re.compile(r"^\s*(?:#{1,6}\s*|[-*]\s*|>\s*)?`?" + RETIRED_NAME + r"`?\s*[:=]")),
+)
+
+# Exact (path, line text) rows, same shape as ALLOWED_LIVE_MENTIONS and for the
+# same reason: the exception is the line, never the path. A path-level skip is
+# a hole -- proven 2026-10-05, in ALLOWED_LIVE_MENTIONS' own comment.
+ALLOWED_DOC_MENTIONS = {
+    "docs/superpowers/plans/2026-09-09-r2-market-data-cache.md": {
+        "FRED_API_KEY: ${{ secrets.FRED_API_KEY }}":
+            "dated 2026-09-09 plan quoting the workflow env block it intended to "
+            "add; superseded by DIG-335. Kept as the historical record -- the "
+            "workflows it describes carry no such line.",
+    },
+}
+
+
+def _doc_supply_instructions() -> list[tuple[str, int, str, tuple[str, ...]]]:
+    """(path, line, text, matched rule names) for every markdown supply instruction."""
+    found = []
+    for path in _tracked_matching(LIVE_DOC_GLOBS):
+        for lineno, line in _lines_with_name(path):
+            rules = tuple(name for name, rx in PROVISIONING_PATTERNS if rx.search(line))
+            if rules:
+                found.append((path, lineno, line, rules))
+    return found
+
+
+@pytest.mark.unit
+def test_no_markdown_instructs_an_operator_to_supply_the_retired_key() -> None:
+    """No tracked markdown may tell a reader how to put FRED_API_KEY back.
+
+    Fail closed on every instruction and make each exception an explicit,
+    reviewed line -- the same contract as the code globs above, extended to the
+    surface where the retirement actually leaked back on `main`.
+    """
+    allowed = {(p, t) for p, rows in ALLOWED_DOC_MENTIONS.items() for t in rows}
+    offenders = [
+        f"{path}:{lineno}: [{', '.join(rules)}] {line}"
+        for path, lineno, line, rules in _doc_supply_instructions()
+        if (path, line) not in allowed
+    ]
+    assert not offenders, (
+        "Markdown still instructs an operator to supply the retired FRED_API_KEY "
+        "(DIG-335/DIG-336). Remove the instruction, or add an exact-line entry to "
+        "ALLOWED_DOC_MENTIONS with a reason:\n  " + "\n  ".join(offenders)
+    )
+
+
+@pytest.mark.unit
+def test_allowed_doc_mentions_are_all_documented() -> None:
+    """Every markdown exemption must be justified and still present.
+
+    A stale exemption is a silent hole, so this asserts both directions: the
+    reason is non-empty, the path exists, and the exact line still appears.
+    """
+    for path, allowed_lines in ALLOWED_DOC_MENTIONS.items():
+        assert (REPO_ROOT / path).exists(), (
+            f"{path} is exempt from the markdown FRED guard but no longer exists "
+            "-- drop the row"
+        )
+        present = {line for _, line in _lines_with_name(path)}
+        for line_text, reason in allowed_lines.items():
+            assert reason.strip(), f"{path}:{line_text!r} is exempt with no reason"
+            assert line_text in present, (
+                f"{path}: exempt line no longer appears in the file, so the "
+                f"exemption is stale -- drop it: {line_text!r}"
+            )
