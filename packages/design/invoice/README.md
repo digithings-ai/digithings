@@ -35,8 +35,16 @@ Headless Chromium (what CI/the design servers already have):
 
 ```bash
 chromium --headless --no-pdf-header-footer \
+  --virtual-time-budget=10000 \
   --print-to-pdf=invoice.pdf index.html
 ```
+
+`--virtual-time-budget` fast-forwards virtual time so the Geist Mono webfont
+fetch settles before Chromium writes the PDF. Without it the render is racy:
+1 in 5 runs fell back to Menlo/Times and still exited 0 (DIG-2519). After
+rendering, run the font-fallback assertion in
+`tests/scripts/test_invoice_render_determinism.py` (`assert_pdf_fonts`) against
+the PDF — it fails loud on Menlo/Times fallback.
 
 Or open `index.html` in a browser → **Print** → **Save as PDF** (A4, default
 margins). Being monochrome, it prints correctly whether or not "background
