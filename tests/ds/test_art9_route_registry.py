@@ -221,13 +221,22 @@ def test_registry_entry_with_no_route_is_reported(
 
 
 def test_a_trailing_slash_route_matches_its_registry_entry() -> None:
-    """FastAPI reports ``/ingest/`` for a route declared at ``"/"`` under the prefix.
+    """A route whose template carries a trailing slash matches its registry entry.
 
     This is the case the served-side normalisation exists for: production resolves
     ``routes.get(path) or routes.get(_normalize(path))``, so a route whose raw
     template is ``/ingest/`` is served and registered under ``/ingest``. Reporting
     it as unserved would be a false positive, and a false positive here trains the
     next reader to loosen the diff.
+
+    ``_probe_route`` builds this on a prefix-less router with ``"/ingest/"``
+    declared literally, so it pins the normalisation of the template value. It does
+    not pin how that value is *produced* — ``APIRouter(prefix="/ingest")`` with a
+    route declared at ``"/"`` also yields ``/ingest``, and this test does not cover
+    that composition. The distinction is deliberate: what is under test is the diff's
+    treatment of a trailing slash, not FastAPI's prefix arithmetic. Both routes are
+    covered by ``test_registry_and_running_app_agree_in_both_directions`` on the
+    real app.
     """
     trailing = _probe_route("/ingest/")
     with _attached(trailing):
