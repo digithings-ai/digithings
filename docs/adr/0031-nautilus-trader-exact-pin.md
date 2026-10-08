@@ -4,7 +4,7 @@
 **Date:** 2026-10-08
 **Author:** Architect
 **Raised by:** DIG-938 (Paperclip), itself raised by the duplicate-realized-PnL defect in DIG-920; gates the analyzer-shape matrix in DIG-937.
-**Supersedes:** nothing. **Amends:** the dependency posture recorded in `docs/agents/CODE_REVIEW_POLICY.md`'s neighbours — the root `AGENTS.md` rule that *"runtime dependencies are deliberately left unbounded"* (see Consequences).
+**Supersedes:** nothing. **Amends:** the root `AGENTS.md` rule, under *Context & compaction policy*, that *"runtime dependencies are deliberately left unbounded"* (see Consequences). That rule lives in `AGENTS.md`; `docs/agents/CODE_REVIEW_POLICY.md` carries the review-coverage policy and says nothing about dependency bounds.
 
 ## Context
 
@@ -17,24 +17,44 @@ exists, so it is recorded in full:
 | where | version | what actually reads it |
 |---|---|---|
 | `digiquant/.venv` — what runs local backtests | **1.228.0** | the developer |
-| root `uv.lock` | **1.230.0** | **all 43 `uv sync` invocations, of which 34 use `--frozen`** |
+| root `uv.lock` | **1.230.0** | **all 40 `uv sync` invocations in `.github/workflows/` across 29 workflow files, 35 of which use `--frozen`** |
 | `digiquant/uv.lock` | **1.223.0** | **nothing — see below** |
-| `digiquant/Dockerfile` → shipped container | **unpinned; floats to 1.231.0 today** | whatever PyPI serves at build time |
+| `digiquant/Dockerfile` → service container | **unpinned; floats to 1.231.0 today** | whatever PyPI serves at build time |
+| `Dockerfile.digiquant-runner` (repo root) | **1.230.0, already correct** | `uv sync --frozen --package digiquant --extra nautilus` — installs the engine from the root lock |
 | `digiquant/pyproject.toml` declared | `>=1.190,<2` | admits every 1.x minor |
 
-### Premise 1 corrected: production is *not* on 1.230.0 — it is on nothing
+Reproduce the count with `grep -ro "uv sync" .github/workflows/ | wc -l` (40) and
+`grep -rn "uv sync" .github/workflows/ | grep -c -- --frozen` (35); the file count is
+`grep -rl "uv sync" .github/workflows/ | wc -l` (29).
+
+### Premise 1 corrected: the service image is *not* on 1.230.0 — it is on nothing
 
 CI is genuinely frozen to the root lock. But `digiquant/Dockerfile` copies **only**
 `digiquant/pyproject.toml` and runs `uv pip install --system -e ".[nautilus]"`. No
-lockfile is copied, and `uv pip install` does not read `uv.lock` at all. The container
-therefore resolves the newest 1.x at image build time — 1.231.0 as of this ADR, and
-whatever is newest on the next rebuild. That image is what `docker-compose.yml`
-(`digiquant` service) and the Cloudflare Workers stack build, and it is the build that
-publishes service images.
+lockfile is copied, and `uv pip install` does not read `uv.lock` at all. The image
+therefore resolves the newest 1.x at build time — 1.231.0 as of this ADR, and whatever
+is newest on the next rebuild.
+
+Scope that claim precisely, because it is easy to overstate: the pin governs **one**
+build surface, `digiquant/Dockerfile`, which `docker-compose.yml` builds. It does **not**
+reach the two other digiquant images:
+
+- `apps/digithings-stack-cloudflare/wrangler.toml:115` builds `digiquant/Dockerfile.mcp`,
+  which installs `./digiquant[research,mcp]` — **no `nautilus` extra**, so no engine and
+  nothing for the pin to fix. The Workers stack was never on a nautilus_trader version.
+- `Dockerfile.digiquant-runner` (repo root) already ships the engine correctly:
+  `uv sync --frozen --package digiquant --extra nautilus`, i.e. straight from the root
+  lock. It is pinned by the lock both before and after this ADR.
+
+And nothing in the repository publishes the service image to GHCR:
+`.github/workflows/publish-service-images.yml` was removed in `f54af7052` (the
+strict-essentials cut, #4919) and `RELEASES.md` records the removal.
 
 This inverts the risk ordering in the original report. The stale local venv is an
-annoyance. The unpinned container is the defect: **the shipped artifact is the one
-build nobody pinned.**
+annoyance. The unpinned image is the defect: **the container that a developer
+actually runs backtests in is the one build nobody pinned.** (The image is not
+published to a registry any more, so "shipped" here means "what
+`docker compose up` builds and runs" — see *Scope of the fix* for the publisher.)
 
 ### Premise 2 corrected: `digiquant/uv.lock` was never a source of truth
 
@@ -103,14 +123,14 @@ alternative (an engine upgrade) would have dragged an unknown transitive set alo
 
 - One answer to "the build we ship": **1.230.0**, in the lock, in `pyproject.toml`,
   in `digiquant/AGENTS.md`, and in `digiquant/ARCHITECTURE.md`.
-- The shipped container's **engine** is now pinned. Since the Dockerfile copies no
+- The service container's **engine** is now pinned. Since the Dockerfile copies no
   lockfile, the `==1.230.0` in `pyproject.toml` is the *only* thing that pins
   `nautilus_trader` in it — which is the real fix for the defect Premise 1 found.
   Before this ADR the image tracked PyPI for the engine too.
 - The class of defect is named and cannot recur silently: a module-level lock that
   *reads* as a pin is now a written rule with a stated consequence.
 - `uv lock --check` passes from the repo root **and** from inside `digiquant/`, so the
-  34 `--frozen` lanes stay satisfied and an in-module `uv sync` cannot pick a stale set.
+  35 `--frozen` lanes stay satisfied and an in-module `uv sync` cannot pick a stale set.
 - A second, false source of truth is gone. It was actively misleading: 1.223.0 in
   `digiquant/uv.lock` looked authoritative to every reader and to uv's own resolution
   while pinning nothing.
@@ -149,15 +169,27 @@ package in the image is resolved from PyPI **at image build time**:
 - A rebuild of an **unchanged** commit can produce a **different** image. The
   failure mode is not "the pin broke" but "some transitive dependency moved
   under a tag that did not".
-- `.github/workflows/publish-service-images.yml` runs on every push to `main`
-  touching `digiquant/**` and republishes `:latest` **and** `:v<pyproject-version>`.
-  `digiquant`'s `pyproject.toml` version is `0.1.0` and does not move per release,
-  so **`ghcr.io/digithings-ai/digiquant:v0.1.0` is a mutable tag over a
-  non-reproducible build.** Rolling back to `v0.1.0` does not restore a known
-  build.
-- The same Dockerfile backs `docker-compose.yml`, the Cloudflare Workers stack,
-  `Dockerfile.mcp` and `Dockerfile.sandbox`, so the exposure is the whole surface
-  named in Premise 1 — only the engine's own version is now closed.
+- **No tag is republished, because there is no publisher.**
+  `.github/workflows/publish-service-images.yml` — which would have republished `:latest`
+  and `:v<pyproject-version>` on every `digiquant/**` push to `main` — was deleted in
+  `f54af7052` ("chore(gha): strict-essentials cut + pause CF→disabled traps", #4919) and
+  does not exist on `develop` or at this commit. `RELEASES.md` records the removal and
+  directs operators to `docker compose build` / `make up`. Nothing else in the tree
+  pushes an image either: no workflow, Makefile target, justfile, `scripts/`, `infra/` or
+  `.github/actions/` entry, and `renovate.json` only opens PRs.
+- The flip side is a **live** problem, not a hypothetical one:
+  `infra/self-host/compose.ghcr.yml:34-36` pulls
+  `ghcr.io/digithings-ai/digiquant:${DIGI_IMAGE_TAG:-latest}` with
+  `build: !reset null` and `pull_policy: always`. That tag nobody publishes, so
+  self-host deployments cannot resolve a digiquant image at all. This is separate
+  pre-existing rot, not something ADR-0031 introduced, but it is the concrete
+  consequence of the publisher's removal and belongs with whoever fixes the self-host
+  pull path.
+- The pin reaches exactly one build surface. `digiquant/Dockerfile` is built by
+  `docker-compose.yml`; that is all. `Dockerfile.mcp` (Workers) installs no nautilus
+  extra and `Dockerfile.digiquant-runner` already installs `--frozen` from the root
+  lock. Of the surfaces an earlier draft of this ADR named, the exposure is therefore
+  one image, not five — and the engine's own version is the only thing this ADR closes.
 
 Closing this needs a lock or a constraints file inside the image build, which is
 a change to how images are built rather than a pin change. It is deliberately
@@ -194,11 +226,20 @@ reproduce a CI-only defect class locally until they do.
      becomes a second lock and can drift — which is exactly the failure mode this
      ADR just deleted in `digiquant/uv.lock`. Prefer the first option.
    - **Stop publishing `:v<pyproject-version>` for digiquant, or bump that version
-     per release.** This does not fix the image, but it removes a mutable tag that
-     currently reads as an immutable version reference. Cheap, and worth doing
-     whichever option is chosen above.
-   Whatever is picked belongs to Platform/DevOps; it is an image-build change, not
-   a dependency decision.
+     per release.** Moot as written: nothing publishes it any more (see *Scope of the
+     fix*). It matters the moment a publisher returns, because `digiquant`'s static
+     `pyproject.toml` version `0.1.0` can never identify a distinct build.
+5. **Re-point the self-host pull path at something that exists.** This is the live
+   consequence of the publisher's removal and is more urgent than the reproducibility
+   work in follow-up 4: `infra/self-host/compose.ghcr.yml:34-36` pulls
+   `ghcr.io/digithings-ai/digiquant:${DIGI_IMAGE_TAG:-latest}` with
+   `build: !reset null` and `pull_policy: always`, and no workflow publishes that tag.
+   Either restore a publisher **that installs from the root lock**, or drop the GHCR
+   reference and let compose build locally again. Restoring a publisher is strictly
+   better only if it is lock-backed — otherwise it reintroduces a non-reproducible
+   `:latest` with an authoritative-looking name on it.
+   Items 4 and 5 both belong to Platform/DevOps; they are image-build and packaging
+   changes, not dependency decisions.
 
 ### Bump checklist (the next time)
 
