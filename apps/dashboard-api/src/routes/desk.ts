@@ -37,10 +37,7 @@ function ok(data: unknown, source: string, pin: string | null, asOf: string | nu
 }
 
 function notProvisioned(pin: string | null, what: string): Response {
-  return Response.json(
-    { error: { code: "not_provisioned", message: `${what} is ${NOT_PROVISIONED}`, details: { what }, retrieval_pin: pin } },
-    { status: 503 },
-  );
+  return errorResponse("not_provisioned", `${what} is ${NOT_PROVISIONED}`, pin, { what });
 }
 
 function chatClosed(pin: string | null): Response {
