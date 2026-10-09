@@ -318,7 +318,8 @@ def main(argv: list[str]) -> int:
 
     # 1. Our own two silences. A clock that stops turning must say so rather than quietly resume.
     last_check = parse(st.get("lastCheckAt"))
-    if last_check and (t0 - last_check).total_seconds() > self_gap and not st.get("selfGapReportedAt"):
+    gap_now = bool(last_check) and (t0 - last_check).total_seconds() > self_gap
+    if gap_now and not st.get("selfGapReportedAt"):
         hrs = round((t0 - last_check).total_seconds() / 3600, 1)
         print("SELF-GAP: last successful check was %.1fh ago" % hrs)
         file_issue(
@@ -491,6 +492,10 @@ def main(argv: list[str]) -> int:
 
     st["lastCheckAt"] = iso(t0)
     st["lastApiOkAt"] = iso(t0)
+    # Release the self-gap latch, but only on a tick that found the clock keeping time. This line
+    # refreshes lastCheckAt too, so clearing unconditionally would re-page every tick after any silence.
+    if st.get("selfGapReportedAt") and not gap_now:
+        st["selfGapReportedAt"] = None
     st["calls"] = api.calls
     save(state_path, st)
     print("checked %d watch(es) at %s%s" % (len(watches), iso(t0), " (dry)" if dry else ""))
