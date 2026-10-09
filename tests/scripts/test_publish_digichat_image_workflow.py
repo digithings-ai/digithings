@@ -463,3 +463,108 @@ def test_provenance_is_asserted_on_the_rehearsal_path_too() -> None:
     assert '[ "$revision" != "$COMMIT" ]' in probe
     # Not conditioned on the mode: a rehearsal build is held to the binding too.
     assert "mode" not in probe_step.get("if", "")
+
+
+DOCKERFILE = REPO_ROOT / "apps" / "digichat" / "Dockerfile"
+
+# Each environment-passing form docker accepts, anchored to a token start so
+# `-e` cannot match inside `--show-error` and `--env` cannot match inside
+# `--env-file`. A single alternation anchored once is how that goes wrong: from
+# the second hyphen of `--env-file` the `--env` arm needs two dashes it is not
+# standing on, so the whole thing silently matches nothing.
+ENV_FLAG = re.compile(r"(?:(?<=\s)|^)(?:--env(?:-file)?|--environment|-e)")
+
+
+def _docker_run_commands(script: str) -> list[str]:
+    """Every ``docker run`` invocation, with line continuations joined.
+
+    The flag check has to be scoped to the command it is about. Searching the
+    whole script for ``-e`` matches the ``-e`` in the script's own
+    ``set -euo pipefail``, which is how a guard that should never fire becomes
+    one that fires on every run.
+    """
+    commands: list[str] = []
+    for match in re.finditer(r"docker\s+run", script):
+        end = match.start()
+        while True:
+            newline = script.find("\n", end)
+            if newline == -1:
+                end = len(script)
+                break
+            line = script[end:newline]
+            end = newline + 1
+            if not line.rstrip().endswith("\\"):
+                break
+        commands.append(script[match.start() : end])
+    return commands
+
+
+def _runner_stage() -> str:
+    """The last ``FROM`` onwards — the stage the probe actually starts.
+
+    A multi-stage Dockerfile can carry any number of build-time settings. Only
+    the final stage is what the probe boots, so pinning the port means pinning it
+    where it is read, not where it happens to be declared.
+    """
+    text = DOCKERFILE.read_text()
+    return text[text.rindex("\nFROM ") :]
+
+
+def test_the_probe_starts_the_image_with_no_environment_at_all() -> None:
+    """The probe boots the image bare, and that has to stay deliberate.
+
+    The probe is the first thing in this repository that ever starts a digichat
+    container, so it is the first place someone would reach to hand the app a
+    secret when a probe goes red -- ``-e AUTH_SECRET=...``. That edit is silent in
+    review and fatal twice over: it puts a credential read into the one file that
+    deliberately holds none, and ``-e DIGICHAT_DEV_AUTH=1`` makes
+    ``assertDevAuthDisabledInProduction`` *throw* under the runner stage's
+    ``NODE_ENV=production``, so the "fix" turns the lane permanently red.
+
+    Bare is also the configuration that has to work. Production supplies two
+    ``secretRef``s this probe cannot have, so every assertion here is that the
+    image boots and serves ``/healthz`` with neither -- which is what makes the
+    probe's answer transferable to a Container App that has both.
+    """
+    doc = _doc()
+    probe_step = _step_by_id(doc, "probe")
+    probe = _no_comments(probe_step["run"])
+
+    # Scoping the assertions to the probe is only sound while the probe holds the
+    # lane's only container start. Per STEP, which is not the same as per
+    # invocation: a second start inside the probe escapes everything below.
+    starts = [
+        step.get("id")
+        for step in _steps(doc)
+        if "docker run" in _no_comments(step.get("run", "") or "")
+    ]
+    assert starts == ["probe"], (
+        f"expected the probe to be the lane's only container start, found {starts}"
+    )
+    commands = _docker_run_commands(probe)
+    assert len(commands) == 1, (
+        f"expected one 'docker run' in the probe, found {len(commands)}; only the "
+        "first is held to the no-environment and provenance assertions here"
+    )
+    for command in commands:
+        assert not ENV_FLAG.search(command), (
+            f"the probe passes an environment into the container: {command!r}. It "
+            "must boot the image bare so no credential can reach it and so the "
+            "boot exercises the configuration that has to survive without secrets"
+        )
+    assert "AUTH_SECRET" not in probe
+
+    # Its step env is exactly the three non-secret outputs of resolve.
+    assert set(probe_step["env"]) == {"IMAGE", "COMMIT", "VERSION"}
+    for name, value in probe_step["env"].items():
+        assert "secrets." not in str(value), f"probe env {name} reads a repository secret"
+
+    # The port the probe publishes is the port the image serves. A bare
+    # `--publish 127.0.0.1::3000` proves nothing about a runner stage that
+    # listens elsewhere.
+    assert "--publish 127.0.0.1::3000" in commands[0]
+    assert 'docker port "$container" 3000/tcp' in probe
+    assert "ENV PORT=3000" in _runner_stage(), (
+        "the probe hardcodes container port 3000; the runner stage of "
+        "apps/digichat/Dockerfile no longer declares it"
+    )
