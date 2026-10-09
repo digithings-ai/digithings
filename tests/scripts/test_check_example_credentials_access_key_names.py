@@ -171,6 +171,12 @@ NEWLY_MATCHED_NAMES = [
     "SSH_ACCESS_KEY_ID",
     "SSH_ACCESS_KEY_FILE",
     "GPG_ACCESS_KEY",
+    # Adjacency only: `ACCESS_KEY` is not a whole `_`-delimited word here, so this
+    # matches under the substring form and would NOT under a word-boundary regex.
+    # Every other name in this list matches either way, so without this one nothing
+    # pins *which* form the list is using - the comment in the script could claim
+    # substring semantics while the code did anything.
+    "AWS_ACCESS_KEYID",
 ]
 
 #: Neighbouring names that must *not* be dragged in. The first three are the ones
@@ -214,6 +220,11 @@ def test_name_is_newly_matched_by_access_key(name: str) -> None:
     The substring form does not stop at AWS. ``SSH_ACCESS_KEY_FILE`` and
     ``GPG_ACCESS_KEY`` are the two it is most likely to over-reach on, so they are
     pinned here rather than left to be discovered later.
+
+    ``AWS_ACCESS_KEYID`` is the falsifier for the *form* itself. Every other name in
+    this list has ``_`` on both sides of ``ACCESS_KEY`` and would match under a word
+    boundary regex too, which leaves the substring form asserted in the script's
+    comment but unfalsifiable by any test. This one would not.
     """
     assert cec.looks_cred_var(name) is True
     assert _without_access_key()(lambda: cec.looks_cred_var(name)) is False
