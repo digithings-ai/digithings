@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from contextlib import contextmanager
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -16,6 +17,7 @@ from digiquant.nautilus_runner import (
     _run_multi_symbol_backtest,
     run_nautilus_backtest,
 )
+from digiquant.stats import HonestRateBlock
 
 
 def _ohlcv_df() -> pl.DataFrame:
@@ -104,6 +106,10 @@ def _patched_single_run(engine):
         yield
 
 
+def _honest_block(k: int, n: int) -> HonestRateBlock:
+    return HonestRateBlock(k=k, n=n)
+
+
 def _symbol_result(
     symbol: str,
     *,
@@ -111,6 +117,7 @@ def _symbol_result(
     sharpe: float | None = 1.0,
     dd: float | None = -10.0,
     pnl: float = 100.0,
+    honest_rate: HonestRateBlock | None = None,
 ) -> BacktestResult:
     return BacktestResult(
         run_id=f"r-{symbol}",
@@ -123,6 +130,7 @@ def _symbol_result(
         sharpe_ratio=sharpe,
         max_drawdown_pct=dd,
         num_trades=3,
+        honest_rate=honest_rate,
         status=status,
         message=f"({symbol})",
     )
@@ -535,3 +543,60 @@ class TestMultiSymbolHonestStatus:
         assert result.status == "ok"
         assert result.sharpe_ratio == pytest.approx(2.0)
         assert result.max_drawdown_pct == pytest.approx(-30.0)
+
+    # -- L5: honest_rate_by_symbol, never pooled ------------------------------
+
+    def _run_rated(self):
+        """AAA has 20 round trips (12 wins), BBB has 30 (15) — pooling gives 50."""
+        return self._run(
+            {
+                "AAA": _symbol_result("AAA", honest_rate=_honest_block(12, 20)),
+                "BBB": _symbol_result("BBB", honest_rate=_honest_block(15, 30)),
+            }
+        )
+
+    def test_multi_symbol_result_carries_no_pooled_honest_rate(self) -> None:
+        result = self._run_rated()
+        assert result is not None
+        assert result.honest_rate is None
+
+    def test_one_block_per_included_symbol(self) -> None:
+        result = self._run(
+            {
+                "AAA": _symbol_result("AAA", honest_rate=_honest_block(2, 5)),
+                "BBB": _symbol_result("BBB", honest_rate=_honest_block(9, 12)),
+            }
+        )
+        assert result is not None
+        assert set(result.honest_rate_by_symbol) == {"AAA", "BBB"}
+        assert {(b.k, b.n) for b in result.honest_rate_by_symbol.values()} == {(2, 5), (9, 12)}
+
+    def test_k_and_n_are_never_pooled_across_symbols(self) -> None:
+        result = self._run_rated()
+        assert result is not None
+        assert {s: b.n for s, b in result.honest_rate_by_symbol.items()} == {"AAA": 20, "BBB": 30}
+        ns = [int(m) for m in re.findall(r'"n":\s*(\d+)', result.model_dump_json())]
+        assert sorted(ns) == [20, 30]
+
+    def test_degraded_symbol_has_no_block_exactly_like_per_symbol_pnl(self) -> None:
+        result = self._run(
+            {
+                "AAA": _symbol_result("AAA", honest_rate=_honest_block(12, 20)),
+                "BBB": _symbol_result("BBB", status="error", honest_rate=_honest_block(1, 4)),
+            }
+        )
+        assert result is not None
+        assert set(result.honest_rate_by_symbol) == set(result.per_symbol_pnl) == {"AAA"}
+
+    def test_message_names_the_per_symbol_basis(self) -> None:
+        result = self._run_rated()
+        assert result is not None
+        message = result.message.lower()
+        assert "honest_rate_by_symbol" in message
+        assert "per symbol" in message
+        assert "never pooled" in message
+
+    def test_no_symbol_with_a_series_yields_an_empty_mapping(self) -> None:
+        result = self._run({"AAA": _symbol_result("AAA"), "BBB": _symbol_result("BBB")})
+        assert result is not None
+        assert result.honest_rate_by_symbol == {}
