@@ -1,4 +1,4 @@
-"""Pin: the dependency freshness radar is monthly, clocked on the Worker, not on GitHub.
+"""Pin: the dependency freshness radar is weekly, clocked on the Worker, not on GitHub.
 
 The DIG-1515 design note first shipped this job with ``on: schedule`` plus
 ``cron: '0 6 1 * *'`` inside the workflow. develop cannot carry that:
@@ -9,8 +9,11 @@ default branch would double-fire with it. ``secret-staleness`` is the precedent:
 a ``workflow_dispatch``-only workflow whose clock is a ``wd()`` row plus a
 ``[triggers] crons`` entry in ``wrangler.toml``.
 
-Same outcome the idea asked for -- a monthly uv.lock-vs-PyPI comparison, posted
-as a tracking issue -- on the one clock the repo actually owns.
+Same outcome the idea asked for -- a uv.lock-vs-PyPI comparison, posted as a
+tracking issue -- on the one clock the repo actually owns. DIG-2277 moved the
+cadence from monthly to weekly: security-pip-audit and security-npm-audit
+already read the same lock every Monday, so monthly put new versions behind
+known vulnerabilities rather than in front of them.
 """
 
 from __future__ import annotations
@@ -30,7 +33,7 @@ JOBS_TEST = REPO_ROOT / "apps" / "digithings-cron" / "src" / "jobs.test.ts"
 WRANGLER = REPO_ROOT / "apps" / "digithings-cron" / "wrangler.toml"
 SCRIPT = REPO_ROOT / "scripts" / "dependency_freshness.py"
 
-CRON = "23 6 1 * *"
+CRON = "23 6 * * MON"
 JOB_ID = "dependency-freshness"
 
 
@@ -68,12 +71,19 @@ def test_the_workflow_is_workflow_dispatch_only() -> None:
     assert "workflow_dispatch" in rendered
 
 
-def test_the_clock_is_monthly() -> None:
-    """The finding was that nobody sees a major arriving. A weekly clock would
-    bury the report; monthly is the cadence the idea asked for.
+def test_the_clock_is_weekly() -> None:
+    """DIG-2277 flipped this from monthly, and the pin exists so the flip cannot
+    happen twice in either direction without a test failing.
+
+    The original argument was that a weekly clock would bury the report. That was
+    wrong about the cost: the publish step edits one standing issue in place, so
+    weekly costs 52 edits of a single issue, not 52 issues. The real argument for
+    weekly is the one below -- `security-pip-audit` (33 6 * * MON) already reads
+    this same lock every Monday, so a monthly freshness clock would report new
+    versions at a lower rate than we report known vulnerabilities in them.
 
     Read out of jobs.ts rather than asserted against the module literal, so this
-    fails if the registered row's day-of-month ever changes.
+    fails if the registered row's day-of-week ever changes.
     """
     row = re.search(
         rf'wd\(\s*"{re.escape(JOB_ID)}"\s*,\s*"([^"]+)"', JOBS_SOURCE.read_text(encoding="utf-8")
@@ -81,7 +91,7 @@ def test_the_clock_is_monthly() -> None:
     assert row, f'no wd("{JOB_ID}", "…") row in jobs.ts'
     registered = row.group(1)
     assert registered == CRON, f"jobs.ts registers {registered!r}, this suite pins {CRON!r}"
-    assert registered.endswith("1 * *"), f"{registered!r} is not monthly on the 1st"
+    assert registered.endswith("* * MON"), f"{registered!r} is not weekly on Mondays"
 
 
 def test_the_clock_is_registered_on_the_cron_worker() -> None:
@@ -127,7 +137,9 @@ def test_the_pinned_cron_set_is_updated() -> None:
 
 def test_the_new_clock_does_not_collide_with_an_existing_one() -> None:
     """Off-grid minutes only; two enabled jobs on one minute share a runner.
-    secret-staleness already holds 17 6 1 *, so this must not sit on :17."""
+    Now that the radar is Monday-weekly it shares a day with ci-pr-hygiene
+    (21 6 * * *), secret-staleness (17 6 1 * *) and both security audits
+    (33/37 6 * * MON), so 06:23 has to stay clear of all of them."""
     block = WRANGLER.read_text(encoding="utf-8").split("[triggers]", 1)[1]
     crons = [
         line.split("#")[0].strip() for line in block.splitlines() if line.strip().startswith('"')
@@ -165,8 +177,8 @@ def test_a_failed_scan_cannot_blank_the_standing_report() -> None:
 
     The publish step edits the single open radar issue in place, so `if: always()`
     on it meant any upstream failure — and the fragile step behind it is a 2.4 GB
-    `uv sync` plus 284 PyPI reads — published an empty table over a good monthly
-    report and reported success. The radar would have destroyed its own record
+    `uv sync` plus 284 PyPI reads — published an empty table over a good report
+    and reported success. The radar would have destroyed its own record
     once and had no way to explain why. It must fail loudly instead, and only
     ever edit a body it actually produced.
     """
@@ -191,8 +203,8 @@ def test_a_failed_scan_cannot_blank_the_standing_report() -> None:
 
 def test_the_radar_creates_its_own_label_before_using_it() -> None:
     """`gh issue create --label` is fatal on a label that does not exist, and
-    `radar` did not exist in this repo. Left alone, the first monthly run would
-    have died on a label lookup and reported nothing for a month."""
+    `radar` did not exist in this repo. Left alone, the first run would
+    have died on a label lookup and reported nothing."""
     body = WORKFLOW.read_text(encoding="utf-8")
     assert body.index("gh label create radar") < body.index('--label "radar,')
 
