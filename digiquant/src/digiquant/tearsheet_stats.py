@@ -4,26 +4,83 @@
 from __future__ import annotations
 
 import math
+from typing import NamedTuple
 
 from digiquant.models import BacktestResult
-from digiquant.stats.honesty import format_honest_rate
+from digiquant.stats.honesty import REFUSE_FLOOR, format_honest_rate
 
 
-def _honest_win_rate_text(value: object, n: int) -> str:
+class WinRateCounts(NamedTuple):
+    """Resolved ``(k, n)`` for one win-rate surface, plus what it renders.
+
+    ``counted`` records whether ``k`` was *counted* (``True`` — from the
+    honest block or from caller-counted round trips) or reconstructed from a
+    reported rate (``False`` — the legacy path, kept only for results built
+    before L3 carried an ``honest_rate`` block).
+    """
+
+    k: int
+    n: int
+    counted: bool
+    refused: bool
+    text: str
+
+
+def resolve_win_rate(
+    result: BacktestResult,
+    rate: object = None,
+    *,
+    wins: int | None = None,
+) -> WinRateCounts:
+    """Resolve the win rate a surface must render for ``result``.
+
+    ``result.honest_rate`` is authoritative: ``k``, ``n`` and the sample-size
+    floors come straight off the block, so no surface reconstructs ``k`` from
+    a rate and no surface uses the fill count as a denominator.
+
+    The fallback exists solely for results whose block is ``None`` — older
+    fixtures and any caller that has not been through L3. It prefers a
+    caller-counted ``wins``; failing that it reconstructs
+    ``round(rate * num_trades)`` exactly as before. That single ``round`` is
+    the module's last ``rate x n`` reconstruction and it never reaches a
+    rendered surface when a block is present.
+    """
+    block = result.honest_rate
+    if block is not None:
+        return WinRateCounts(
+            block.k,
+            block.n,
+            True,
+            block.refused,
+            format_honest_rate(block.k, block.n, warn=block.warn_floor, refuse=block.refuse_floor),
+        )
+
+    n = result.num_trades
+    usable = isinstance(rate, (int, float)) and not math.isnan(rate)
+    if wins is not None:
+        k, counted = min(n, max(0, wins)), True
+    elif usable:
+        wr = float(rate)
+        if wr > 1:  # tolerate percent-scale callers; Nautilus emits a fraction
+            wr /= 100.0
+        wr = max(0.0, min(1.0, wr))
+        k, counted = min(n, max(0, round(wr * n))), False
+    else:
+        k, counted = 0, False
+    text = format_honest_rate(k, n) if (usable or wins is not None) else "—"
+    return WinRateCounts(k, n, counted, n < REFUSE_FLOOR, text)
+
+
+def _honest_win_rate_text(value: object, result: BacktestResult) -> str:
     """Honest win-rate string for a Nautilus ``Win Rate`` stat (fraction).
 
-    Returns an em-dash for missing/non-numeric input, ``REFUSED`` below
-    the refuse floor, and ``"{pct}% (k/n, n=N, 95% CI …)"`` otherwise —
+    Delegates to :func:`resolve_win_rate`, so the denominator is the honest
+    block's ``n`` when one exists and the legacy fill-count fallback
+    otherwise. Returns an em-dash for missing/non-numeric input, ``REFUSED``
+    below the refuse floor, and ``"{pct}% (k/n, n=N, 95% CI …)"`` otherwise —
     never a bare percentage.
     """
-    if not isinstance(value, (int, float)) or math.isnan(value):
-        return "—"
-    wr = float(value)
-    if wr > 1:  # tolerate percent-scale callers; Nautilus emits a fraction
-        wr /= 100.0
-    wr = max(0.0, min(1.0, wr))
-    k = min(n, max(0, round(wr * n)))
-    return format_honest_rate(k, n)
+    return resolve_win_rate(result, value).text
 
 
 def _build_categorized_stats(
@@ -89,9 +146,10 @@ def _build_categorized_stats(
         + row("Volatility", "Returns Volatility (252 days)", ".4f")
         + row("Value at Risk", "Value at Risk", ".4f")
     )
-    win_rate_html = _honest_win_rate_text(combined.get("Win Rate"), result.num_trades)
+    win_rate_html = _honest_win_rate_text(combined.get("Win Rate"), result)
     trade_stats = (
-        row("# Trades", "Total Trades", ".0f")
+        # Nautilus counts fill rows here, not closed round trips — say so.
+        row("# Fills", "Total Trades", ".0f")
         + f'<tr><td class="sk">Win Rate</td><td class="sv">{win_rate_html}</td></tr>'
         + row("Avg Winner", "Avg Winner", ",.2f")
         + row("Avg Loser", "Avg Loser", ",.2f")
@@ -140,7 +198,7 @@ def _build_full_stats_table(
     for k, v in (stats_general or {}).items():
         if k == "Win Rate":
             if isinstance(v, (int, float)) and not math.isnan(v):
-                rows.append((k, _honest_win_rate_text(v, result.num_trades)))
+                rows.append((k, _honest_win_rate_text(v, result)))
         elif isinstance(v, (int, float)) and not math.isnan(v):
             rows.append((k, _fmt(v)))
     if result.max_drawdown_pct is not None and not any("Max Drawdown" in r[0] for r in rows):
@@ -185,7 +243,7 @@ def _build_risk_metrics_table(
         v = combined.get(k)
         if v is not None and isinstance(v, (int, float)) and not math.isnan(v):
             if k == "Win Rate":
-                rows.append((k, _honest_win_rate_text(v, result.num_trades)))
+                rows.append((k, _honest_win_rate_text(v, result)))
             else:
                 rows.append((k, _fmt(v)))
     if result.max_drawdown_pct is not None and not any("Max Drawdown" in r[0] for r in rows):

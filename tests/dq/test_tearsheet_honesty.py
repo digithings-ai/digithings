@@ -7,16 +7,23 @@ floors. African grey rule: every assertion names N.
 
 from __future__ import annotations
 
+import ast
+import inspect
+from pathlib import Path
+
 import pytest
 from digiquant.charts.trades import _build_win_rate_donut, count_winning_trades
 from digiquant.models import BacktestResult
-from digiquant.stats.honesty import DISCLAIMER
+from digiquant.stats.honesty import DISCLAIMER, HonestRateBlock
 from digiquant.tearsheet_page import _build_page
 from digiquant.tearsheet_stats import (
     _build_categorized_stats,
     _build_full_stats_table,
     _build_risk_metrics_table,
+    resolve_win_rate,
 )
+
+from digiquant import tearsheet as tearsheet_mod
 
 pytestmark = pytest.mark.unit
 
@@ -29,6 +36,19 @@ def _result(num_trades: int) -> BacktestResult:
         start_time="2020-01-01",
         end_time="2021-01-01",
         num_trades=num_trades,
+    )
+
+
+def _honest_result(k: int, n: int, num_trades: int, **block_kw) -> BacktestResult:
+    """A result whose honest block (k, n) deliberately differs from the fills."""
+    return BacktestResult(
+        run_id="r1",
+        strategy_name="ema_cross",
+        symbols=["BTC-USD"],
+        start_time="2020-01-01",
+        end_time="2021-01-01",
+        num_trades=num_trades,
+        honest_rate=HonestRateBlock(k=k, n=n, **block_kw),
     )
 
 
@@ -74,7 +94,7 @@ def test_full_stats_win_rate_carries_n_and_ci() -> None:
     assert "CI" in html  # n=50
 
 
-def _page(win_rate: float | None, num_trades: int, **kw) -> str:
+def _page(win_rate: float | None, num_trades: int, result=None, **kw) -> str:
     blanks = {
         "strategy_display": "EMA Cross",
         "symbols_str": "BTC-USD",
@@ -107,7 +127,7 @@ def _page(win_rate: float | None, num_trades: int, **kw) -> str:
         "underwater_html": "",
     }
     blanks.update(kw)
-    return _build_page(_result(num_trades), win_rate=win_rate, **blanks)
+    return _build_page(result or _result(num_trades), win_rate=win_rate, **blanks)
 
 
 def test_kpi_strip_win_rate_carries_n_and_ci() -> None:
@@ -249,3 +269,111 @@ def test_generate_log_win_rate_refused_below_floor() -> None:
     gt = _generator_module()
     s = gt._honest_win_rate_log(60.0, 5)
     assert "REFUSED" in s  # n=5
+
+
+# --- L7: surfaces read k/n off the honest block, never off the fill count ---
+
+
+def test_categorized_stats_n_comes_from_the_block() -> None:
+    """Block (30, 50) over 900 fills renders the block's n, not 900."""
+    html = _build_categorized_stats(None, None, {"Win Rate": 0.6}, _honest_result(30, 50, 900))
+    assert "60.0% (30/50" in html  # n=50
+    assert "n=900" not in html  # n=50: the fill count is not a denominator
+
+
+def test_risk_metrics_n_comes_from_the_block() -> None:
+    """Risk table uses the block's n when the honest block is present."""
+    html = _build_risk_metrics_table(None, {"Win Rate": 0.6}, _honest_result(30, 50, 900))
+    assert "60.0% (30/50" in html  # n=50
+    assert "n=900" not in html  # n=50
+
+
+def test_full_stats_n_comes_from_the_block() -> None:
+    """Full-stats dump uses the block's n when the honest block is present."""
+    html = _build_full_stats_table(None, None, {"Win Rate": 0.6}, _honest_result(30, 50, 900))
+    assert "60.0% (30/50" in html  # n=50
+    assert "n=900" not in html  # n=50
+
+
+def test_kpi_n_comes_from_the_block() -> None:
+    """KPI WIN RATE reads n off the block; the fills get their own card."""
+    html = _page(0.6, 900, result=_honest_result(30, 50, 900))
+    assert "60.0% (30/50" in html  # n=50
+    assert "n=900" not in html  # n=50
+    assert "TOTAL FILLS" in html  # n=50: fills still shown, under their own name
+    # The colour band is driven by wilson(k, n) on the same n. On the block's
+    # n=50 the lower bound is 0.46, which sits between the two thresholds and
+    # so carries no class; on the 900-fill denominator it would be 0.02 and
+    # paint the card negative. Pin the whole cell so the band travels with n.
+    assert '<span class="kpi-value ">60.0% (30/50' in html  # n=50
+
+
+def test_donut_denominator_is_the_block_n() -> None:
+    """Donut gets k and n from one source: the block, not the fill count."""
+    counts = resolve_win_rate(_honest_result(30, 50, 900), 0.6, wins=count_winning_trades(None))
+    assert (counts.k, counts.n, counts.counted) == (30, 50, True)  # n=50
+    fig = _build_win_rate_donut(0.6, counts.n, num_wins=counts.k)
+    assert fig is not None  # n=50
+    assert list(fig.data[0].values) == [30, 20]  # n=50
+    assert "n=50" in fig.layout.annotations[0].text  # n=50
+    src = inspect.getsource(tearsheet_mod.create_tearsheet)
+    assert "_build_win_rate_donut(win_rate, counts.n, num_wins=num_wins)" in src  # n=50
+
+
+def test_only_the_legacy_fallback_reconstructs_rate_times_n() -> None:
+    """`round(rate * n)` survives in the fallback only — AST, so docs don't count."""
+    from digiquant import tearsheet_page as page_mod
+    from digiquant import tearsheet_stats as stats_mod
+
+    def rounds(module) -> list[str]:
+        src = Path(inspect.getsourcefile(module)).read_text()
+        return [
+            ast.unparse(node)
+            for node in ast.walk(ast.parse(src))
+            if isinstance(node, ast.Call) and getattr(node.func, "id", None) == "round"
+        ]
+
+    assert rounds(stats_mod) == ["round(wr * n)"]  # n=50: one, inside resolve_win_rate
+    assert rounds(page_mod) == []  # n=50
+    assert rounds(tearsheet_mod) == []  # n=50
+
+
+def test_trade_count_rows_are_labelled_as_fills() -> None:
+    """The counts that read num_trades say they are fill counts."""
+    stats_html = _build_categorized_stats(None, None, {"Total Trades": 900}, _result(900))
+    assert "# Fills" in stats_html  # n=900
+    assert "# Trades" not in stats_html  # n=900
+    page_html = _page(0.6, 900)
+    assert "TOTAL FILLS" in page_html  # n=900
+    assert "TOTAL TRADES" not in page_html  # n=900
+
+
+def test_blockless_result_still_renders_via_the_fallback() -> None:
+    """A result with no honest block keeps rendering, off num_trades."""
+    counts = resolve_win_rate(_result(50), 0.6)
+    assert (counts.k, counts.n, counts.counted) == (30, 50, False)  # n=50
+    assert "60.0% (30/50" in counts.text  # n=50
+    assert "60.0% (30/50" in _page(0.6, 50)  # n=50
+
+
+def test_refused_block_renders_no_rate() -> None:
+    """A refused block refuses on every surface, whatever the rate says."""
+    refused = _honest_result(3, 5, 900)
+    assert refused.honest_rate is not None and refused.honest_rate.refused  # n=5
+    for html in (
+        _build_categorized_stats(None, None, {"Win Rate": 0.6}, refused),
+        _build_risk_metrics_table(None, {"Win Rate": 0.6}, refused),
+        _build_full_stats_table(None, None, {"Win Rate": 0.6}, refused),
+        _page(0.6, 900, result=refused),
+    ):
+        assert "REFUSED" in html  # n=5
+        assert "60.0%" not in html  # n=5: a refused block renders no rate
+
+
+def test_disclaimer_renders_once_inside_the_frequency_block() -> None:
+    """The block's own disclaimer appears once — not on the card, not on a PnL row."""
+    sentinel = "Closed round trips only; not a fill win rate."
+    html = _page(0.6, 900, result=_honest_result(30, 50, 900, disclaimer=sentinel))
+    assert html.count(sentinel) == 1  # n=50
+    assert f'<div class="disclaimer">{sentinel}</div>' in html  # n=50
+    assert '<div class="kpi"><span class="kpi-label">WIN RATE</span>' in html  # n=50
