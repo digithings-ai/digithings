@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable, Iterator, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from types import MappingProxyType
 from typing import Any, Literal
 
@@ -36,19 +36,25 @@ __all__ = [
     "ART9_CATEGORIES",
     "INGEST_PREFIXES",
     "INGEST_ROUTES",
+    "mask_token",
     "ROUTE_KIND_INGEST",
     "ROUTE_KIND_READ",
     "ROUTE_UNREGISTERED",
+    "Art9ConfigurationError",
     "RouteDecision",
     "ScreenResult",
+    "art9_event_type",
+    "audit_record",
     "category_order",
     "check_route",
     "field_names",
     "is_registered",
     "is_under_prefix",
     "iter_ingest_routes",
+    "mask_token",
     "no_match_reason",
     "route_kind",
+    "screen_and_apply",
     "screen_request",
     "screen_text",
     "value_patterns",
@@ -618,3 +624,225 @@ def screen_request(payload: Any, *, exception_ref: str | None = None) -> ScreenR
         reason=reason,
         exception_ref=exception_ref,
     )
+
+
+# ── masking, the audit record, and irreversibility ────────────────────────────
+
+#: Leaf L2 (DIG-1084). The value a masked field is replaced with. A **constant**,
+#: never a function of the value it replaced — see `mask_payload`.
+#:
+#: Lowercase because leaf L0's `test_module_exposes_no_public_name_outside_the_registry_surface`
+#: refuses every module-level global whose name is upper-case, so that nobody can
+#: add a runtime-switchable `ART9_MODE`. L1's `no_match_reason` is lowercase for
+#: the same reason. The decision this leaf needs to make configurable is therefore
+#: a **parameter** (`screen_and_apply`'s own default), not a global: a caller
+#: passes `decision=`, and there is no global for anyone to reassign.
+mask_token = "[ART9_MASKED]"
+
+#: ``event_type`` for the audit line a caller emits around a screening decision.
+art9_event_type = "art9_screening_decision"
+
+
+class Art9ConfigurationError(ValueError):
+    """`mask` was requested with no Art. 9(2) exception letter behind it.
+
+    Raised instead of falling back to `refuse`. A fallback would make a
+    misconfigured deployment look like a correctly refusing one: the caller sees
+    a working screen and never learns the mask it asked for cannot legally run.
+    §2.4 is explicit that masking a row requires already holding it, and holding
+    it is the processing Art. 9(1) prohibits — so a mask without a letter is not
+    a decision, it is a configuration error.
+    """
+
+
+def _resolve_decision(decision: str, exception_ref: str | None) -> str:
+    """Validate ``decision`` against the letter it depends on.
+
+    `refuse` is always legal — it is the floor and needs no authorisation.
+    `mask` requires a non-blank ``exception_ref``: a letter that is empty or
+    whitespace is not a citation, and accepting one would put the mask behind a
+    check that can be satisfied by a missing config value.
+    """
+    if decision == "refuse":
+        return decision
+    if decision != "mask":
+        raise Art9ConfigurationError(f"decision must be 'refuse' or 'mask', got {decision!r}")
+    if exception_ref is None or not exception_ref.strip():
+        raise Art9ConfigurationError(
+            "mask requires an Art. 9(2) exception_ref naming the authorising "
+            "letter; masking without one is refused, not silently downgraded"
+        )
+    return decision
+
+
+def _mask_key(key: Any, value: Any, out: dict[Any, Any], seen: dict[int, Any]) -> None:
+    """Mask ``value`` when ``key`` names a category, else recurse into it.
+
+    ``seen`` is threaded through rather than re-created per key: a caller-supplied
+    payload can point back at itself, and a fresh set at each hop would lose the
+    cycle guard exactly one level below where it was needed.
+    """
+    name = key if isinstance(key, str) else str(key)
+    if _match_key(name):
+        out[key] = mask_token
+        return
+    out[key] = mask_payload(value, _seen=seen)
+
+
+def mask_payload(payload: Any, *, _seen: dict[int, Any] | None = None) -> Any:
+    """Return a copy of ``payload`` with every Art. 9 value replaced by `mask_token`.
+
+    **Irreversible, and that is the point.** The replacement is a module
+    constant, never a function of the value it replaces, so there is nothing to
+    invert: no key store, no token, no digest, no original sidecar. A per-value
+    digest would be reversible in the only sense that matters — an attacker who
+    can guess candidate values recovers the original by recomputing, with no
+    access to anything this module holds. Two different secrets under the same
+    field name mask to the *same* token, which is what
+    ``test_mask_is_not_derived_from_the_value`` pins.
+
+    The whole value under a matching key is dropped, not just the matched span:
+    a §5.5 field name marks the *value* as the category, so masking the span and
+    keeping the rest would keep the data. Value-pattern hits on an otherwise
+    ordinary string replace that string.
+
+    Structure is preserved where it is safe to do so — a list stays a list, a
+    nested mapping stays a mapping — so a masked payload is still a valid payload
+    shape for the caller's own schema validation. Cycles terminate: an id already
+    being walked is left alone rather than recursed into.
+    """
+    seen: dict[int, Any] = {} if _seen is None else _seen
+    if isinstance(payload, _opaque_scalars):
+        return mask_token
+    if isinstance(payload, str):
+        return mask_token if _match_value(payload) else payload
+    if isinstance(payload, Mapping):
+        marker = id(payload)
+        if marker in seen:
+            return payload
+        seen[marker] = payload
+        out: dict[Any, Any] = {}
+        for key, value in payload.items():
+            _mask_key(key, value, out, seen)
+        return out
+    if isinstance(payload, (set, frozenset)):
+        marker = id(payload)
+        if marker in seen:
+            return payload
+        seen[marker] = payload
+        return type(payload)(mask_token for _ in payload)
+    if isinstance(payload, (list, tuple)):
+        marker = id(payload)
+        if marker in seen:
+            return payload
+        seen[marker] = payload
+        masked = [mask_payload(item, _seen=seen) for item in payload]
+        return type(payload)(masked) if isinstance(payload, tuple) else masked
+    if isinstance(payload, Iterable):
+        # A generator or other one-shot iterator: consumed into a list, because
+        # there is no in-place way to mask one and a partially consumed iterator
+        # is worse than a materialised copy.
+        return [mask_payload(item, _seen=seen) for item in payload]
+    return payload
+
+
+def _masked_field_names(payload: Any, *, _seen: dict[int, Any] | None = None) -> int:
+    """How many top-level-and-nested values `mask_payload` replaced.
+
+    A count, and only a count: the *names* of the affected keys can themselves
+    be category-bearing (`health_status` is a field name), so the audit stream
+    records how many, never which.
+    """
+    seen: dict[int, Any] = {} if _seen is None else _seen
+    if isinstance(payload, (str, bytes, bytearray, memoryview)):
+        return 1 if isinstance(payload, str) and _match_value(payload) else 0
+    if isinstance(payload, Mapping):
+        marker = id(payload)
+        if marker in seen:
+            return 0
+        seen[marker] = payload
+        total = 0
+        for key, value in payload.items():
+            name = key if isinstance(key, str) else str(key)
+            if _match_key(name):
+                total += 1
+            else:
+                total += _masked_field_names(value, _seen=seen)
+        return total
+    if isinstance(payload, (set, frozenset, list, tuple)):
+        marker = id(payload)
+        if marker in seen:
+            return 0
+        seen[marker] = payload
+        return sum(_masked_field_names(item, _seen=seen) for item in payload)
+    if isinstance(payload, Iterable):
+        return sum(_masked_field_names(item, _seen=seen) for item in payload)
+    return 0
+
+
+def screen_and_apply(
+    payload: Any,
+    *,
+    decision: str = "refuse",
+    exception_ref: str | None = None,
+) -> ScreenResult:
+    """Screen ``payload`` and apply ``decision`` to it. Leaf L2's entry point.
+
+    The single place the decision policy lives. `screen_request` and
+    `screen_text` remain detection-only and keep reporting `mask` for anything
+    handed an ``exception_ref``; this function is what actually performs the
+    mask, and it is the only one that can raise.
+
+    - ``allow``  → the payload is returned untouched, `redacted` stays `None`.
+    - ``refuse`` → `redacted` stays `None`. A refused payload is not handed
+      back: returning a partially masked copy of something we just refused would
+      invite the caller to persist it.
+    - ``mask``   → `redacted` holds the irreversibly masked copy, and only when
+      ``exception_ref`` names a letter. Without one this raises
+      `Art9ConfigurationError` rather than downgrading to `refuse`.
+
+    Raises `Art9ConfigurationError` before doing any work if ``decision`` is
+    ``mask`` with no letter, so a misconfigured caller learns about it on the
+    first request instead of at the first audit review.
+    """
+    _resolve_decision(decision, exception_ref)
+    screened = screen_request(payload)
+    if screened.decision == "allow":
+        return replace(screened, redacted=None, exception_ref=exception_ref)
+    if decision == "refuse":
+        return replace(screened, decision="refuse", redacted=None, exception_ref=exception_ref)
+    return replace(
+        screened,
+        decision="mask",
+        redacted=mask_payload(payload),
+        exception_ref=exception_ref,
+    )
+
+
+def audit_record(result: ScreenResult, *, payload: Any = None) -> dict[str, Any]:
+    """The audit stream's view of one screening decision.
+
+    Carries the category ids, the decision, the reason code and the letter — the
+    facts an auditor needs to reconstruct *why a request was handled this way*,
+    and none of the things they must not have. The matched value never appears:
+    `reason` is a machine code assembled from the tables above, and no value in
+    the returned mapping is derived from the payload.
+
+    **This is not the egress record.** Where the call went, and the digest of
+    what was sent, belong to the outbound seam (DIG-1139). Writing either here
+    would duplicate a record that has to stay consistent with the transport's
+    own view, and a duplicated digest is how an unkeyed fallback creeps back in.
+    ``test_audit_record_carries_no_destination_and_no_digest`` pins the boundary.
+
+    ``payload`` is the **original** request body, accepted only so the count of
+    replaced values can be taken from it. It is read, never stored and never
+    serialised: it contributes a number and nothing else. Omit it and the count
+    is 0, which is correct for every `refuse` — nothing was replaced.
+    """
+    return {
+        "art9_categories": list(result.categories),
+        "art9_decision": result.decision,
+        "art9_reason": result.reason,
+        "art9_masked_fields": _masked_field_names(payload) if payload is not None else 0,
+        "art9_exception_ref": result.exception_ref,
+    }
