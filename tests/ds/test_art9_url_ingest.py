@@ -27,11 +27,11 @@ from pathlib import Path
 
 import httpx
 import pytest
-
-from digibase import art9
 from digisearch.pipeline import url_ingest as url_ingest_module
 from digisearch.pipeline.url_ingest import UrlFetchError, ingest_url
 from digisearch.search._stub import get_stub_index
+
+from digibase import art9
 
 pytestmark = pytest.mark.unit
 
