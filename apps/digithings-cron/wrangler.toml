@@ -22,6 +22,11 @@ GITHUB_OVERRIDE_JOBS = ""
 # POST /backfill answers 404 while this is "0". Flip to "1" deliberately: a
 # backfill writes production snapshots, so the surface ships closed.
 BACKFILL_ENABLED = "0"
+# Production Supabase project `core` (rwagjbkvxkdwqmouagged) REST base URL. Used
+# by the supabase-egress-guard probe (DIG-1814) to detect a Fair Use Policy
+# restriction. Not a secret: it is a hostname. A var, not a secret, so the guard
+# is reviewable and the project ref is legible in the config.
+SUPABASE_CORE_URL = "https://rwagjbkvxkdwqmouagad.supabase.co"
 
 # Secrets (wrangler secret put; never commit values):
 #   GH_DISPATCH_TOKEN   — Actions write + Issues read/write on digithings-ai/digithings
@@ -30,6 +35,12 @@ BACKFILL_ENABLED = "0"
 #                         defaultBranchRef) fails with it. See docs/ops/SECRETS_INVENTORY.md.
 #   CRON_KICK_SECRET    — optional; enables POST /kick and GET /runs/:id
 #   RUNNER_AUTH_TOKEN   — Bearer for the digiquant-runner service binding
+#   SUPABASE_ANON_KEY   — scoped anon/publishable key for Supabase `core`
+#                         (rwagjbkvxkdwqmouagad), used only by the
+#                         supabase-egress-guard probe (DIG-1814). Security holds
+#                         the existing `digithings`-labelled PAT; the Worker
+#                         needs a scoped copy. Absent = the guard reports
+#                         UNKNOWN, never OK.
 #
 # printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put NAME
 
@@ -77,6 +88,7 @@ crons = [
   "17 6 1 * *",        # secret-staleness (monthly, DIG-248)
   "23 6 1 * *",        # dependency-freshness (monthly, DIG-1515)
   "17 6 * * *",        # smoke-site
+  "11 * * * *",        # supabase-egress-guard (DIG-1814)
   "17 * * * *",        # datatap-answer-check
   "7 0 * * MON-FRI",   # twelve-x-asia
   "12 7 * * MON-FRI",  # twelve-x-london

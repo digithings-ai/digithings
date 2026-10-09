@@ -1,9 +1,16 @@
+import type { Env } from "./env";
+import { EGRESS_PROBE_URLS, runEgressProbe } from "./supabase-egress";
+
 /**
  * Public GET probes for digithings-cron smoke jobs (#4761 CHR-E).
  * Site and stack checks run inside the Worker. They do not start a container
  * and they do not call api.github.com.
+ *
+ * The `egress` kind (DIG-1814) is the one exception to that last clause: the
+ * Supabase egress guard raises an alarm through the same GitHub Issues REST
+ * path as `trigger-alarm.ts` when it confirms a restriction.
  */
-export type ProbeKind = "site" | "stack";
+export type ProbeKind = "site" | "stack" | "egress";
 
 export type FreshnessLabel =
   | "WARN"
@@ -66,6 +73,10 @@ export function probeUrls(kind: ProbeKind): string[] {
       return [...SITE_ASSET_PROBES.map((row) => row.url), ...FRESHNESS_URLS];
     case "stack":
       return [...STACK_HEALTH_URLS];
+    case "egress":
+      // The egress target is a Worker binding, not a static asset. See
+      // supabase-egress.ts: the URL is read from env at run time.
+      return [...EGRESS_PROBE_URLS];
     default: {
       const _never: never = kind;
       return _never;
@@ -305,12 +316,18 @@ export async function runProbe(
   kind: ProbeKind,
   fetchImpl: ProbeFetch,
   now: Date,
+  env?: Env,
 ): Promise<{ ok: true }> {
   switch (kind) {
     case "site":
       return runSiteProbe(fetchImpl, now);
     case "stack":
       return runStackProbe(fetchImpl);
+    case "egress":
+      if (!env) {
+        throw new Error("probe egress requires the Worker env");
+      }
+      return runEgressProbe(env, fetchImpl, now);
     default: {
       const _never: never = kind;
       return _never;

@@ -26,6 +26,17 @@ export interface Env {
    * writes production snapshots; the endpoint must be turned on deliberately.
    */
   BACKFILL_ENABLED?: string;
+  /**
+   * Base URL of the production Supabase project `core`
+   * (rwagjbkvxkdwqmouagad). Used by probe kind "egress" (DIG-1814).
+   * Absent means the egress guard reports UNKNOWN, never OK.
+   */
+  SUPABASE_CORE_URL?: string;
+  /**
+   * Scoped anon/publishable key for `core`, used by probe kind "egress".
+   * Must be a secret, never a var, and never logged.
+   */
+  SUPABASE_ANON_KEY?: string;
 }
 
 declare namespace Cloudflare {
@@ -38,5 +49,7 @@ declare namespace Cloudflare {
     GITHUB_OVERRIDE_JOBS?: string;
     BACKFILL_LEDGER?: DurableObjectNamespace;
     BACKFILL_ENABLED?: string;
+    SUPABASE_CORE_URL?: string;
+    SUPABASE_ANON_KEY?: string;
   }
 }

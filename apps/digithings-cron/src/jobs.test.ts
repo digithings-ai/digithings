@@ -43,6 +43,7 @@ const PATH_A_ENABLED_IDS = [
   "dependency-freshness",
   "smoke-site",
   "datatap-answer-check",
+  "supabase-egress-guard",
 ] as const;
 
 const TWELVE_X_ENABLED_IDS = [

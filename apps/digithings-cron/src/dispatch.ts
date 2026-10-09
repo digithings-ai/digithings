@@ -191,8 +191,8 @@ async function dispatchContainer(
 }
 
 async function dispatchProbe(env: Env, job: Job, cron: string): Promise<DispatchResult> {
-  if (job.probe !== "site" && job.probe !== "stack") {
-    throw new Error(`job ${job.id}: probe requires probe "site" or "stack"`);
+  if (job.probe !== "site" && job.probe !== "stack" && job.probe !== "egress") {
+    throw new Error(`job ${job.id}: probe requires probe "site", "stack" or "egress"`);
   }
   const urls = probeUrls(job.probe);
   if (env.DRY_RUN === "1") {
@@ -207,7 +207,7 @@ async function dispatchProbe(env: Env, job: Job, cron: string): Promise<Dispatch
     });
     return { ok: true, status: 0, dry_run: true };
   }
-  await runProbe(job.probe, fetch, new Date());
+  await runProbe(job.probe, fetch, new Date(), env);
   logLine({
     cron,
     repo: job.repo,

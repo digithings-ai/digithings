@@ -23,7 +23,7 @@ export type Job = {
   /** Image pin. Phase 1 jobs use "main". */
   codeRef?: "main";
   /** Set when kind is "probe". Worker fetch; does not start the container. */
-  probe?: "site" | "stack";
+  probe?: "site" | "stack" | "egress";
 };
 
 const DIGITHINGS = "digithings-ai/digithings" as const;
@@ -54,12 +54,21 @@ function wd(
   };
 }
 
-/** Probe job. workflow + ref stay so GITHUB_OVERRIDE_JOBS can still dispatch. */
+/**
+ * A probe job: the Worker performs the check itself and never starts a
+ * container. `workflow` + `ref` stay on the Job so GITHUB_OVERRIDE_JOBS can
+ * still dispatch a probe that has a GitHub Actions counterpart.
+ *
+ * `workflow` is `undefined` for a probe with no counterpart. That keeps
+ * `workflow` off the Job, so there is nothing for GITHUB_OVERRIDE_JOBS to
+ * dispatch. The egress guard is pure Worker: it fetches Supabase and raises
+ * its own alarm.
+ */
 function pj(
   id: string,
   cron: string,
-  workflow: string,
-  probe: "site" | "stack",
+  workflow: string | undefined,
+  probe: "site" | "stack" | "egress",
   opts: { enabled?: boolean } = {},
 ): Job {
   return {
@@ -67,7 +76,7 @@ function pj(
     cron,
     repo: DIGITHINGS,
     kind: "probe",
-    workflow,
+    ...(workflow ? { workflow } : {}),
     ref: DEVELOP,
     enabled: opts.enabled ?? true,
     probe,
@@ -301,6 +310,11 @@ export const JOBS: readonly Job[] = [
   // only. Off :17 so it never shares a runner minute with the monthly sweep.
   wd("dependency-freshness", "23 6 1 * *", DIGITHINGS, "pipeline-dependency-freshness.yml"),
   pj("smoke-site", "17 6 * * *", "smoke-site.yml", "site"),
+  // Supabase egress restriction detector (DIG-1814). Hourly on :11, off :17 so
+  // it never shares a runner minute with smoke-site or datatap-answer-check.
+  // No workflow: the check is a Worker fetch of the Supabase REST endpoint and
+  // it raises its own alarm, so there is nothing for Actions to dispatch.
+  pj("supabase-egress-guard", "11 * * * *", undefined, "egress"),
   // Hourly answer-integrity probe against DataTap production. Clock lives here,
   // not on the workflow: develop carries no on.schedule (#DIG-306). Read-only.
   wd("datatap-answer-check", "17 * * * *", DIGITHINGS, "datatap-answer-check.yml"),
