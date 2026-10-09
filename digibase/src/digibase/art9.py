@@ -19,6 +19,14 @@ are guarded by tests in ``tests/db/test_art9_registry.py``:
   registry entry is refused naming the route, so it cannot ship unnoticed. This
   is what the wave-2 route-enumeration diff tests (L4a/L4b/L4c) build on.
 
+The same two questions have a second pair of answers for **control-plane**
+routes — reserved non-ingestion prefixes such as the Art. 9 screen endpoint
+itself. ``CONTROL_PLANE_PREFIXES``/``CONTROL_PLANE_ROUTES`` hold them,
+``is_control_plane`` is the scoping predicate, and the exemption is declared
+rather than silent: a route under a declared control-plane prefix with no
+registry entry fails the same diff. See the control-plane section below and
+``tests/db/test_art9_control_plane.py``.
+
 ``decision`` defaults to ``refuse`` and there is no module-level global that
 flips it. An ``exception_ref`` (leaf L1) is how a caller earns a narrower
 outcome, never a flag set at import time.
@@ -33,6 +41,8 @@ from typing import Any, Literal
 
 __all__ = [
     "ART9_CATEGORIES",
+    "CONTROL_PLANE_PREFIXES",
+    "CONTROL_PLANE_ROUTES",
     "INGEST_PREFIXES",
     "INGEST_ROUTES",
     "ROUTE_KIND_INGEST",
@@ -40,6 +50,7 @@ __all__ = [
     "ROUTE_UNREGISTERED",
     "RouteDecision",
     "check_route",
+    "is_control_plane",
     "is_registered",
     "is_under_prefix",
     "iter_ingest_routes",
@@ -138,6 +149,56 @@ INGEST_ROUTES: Mapping[str, Mapping[str, str]] = MappingProxyType(
 ROUTE_UNREGISTERED = "art9:route_unregistered"
 
 
+# ── the control-plane registry ───────────────────────────────────────────────
+#
+# Leaf 12a of DIG-1174, from the `plan` document §1.2 and §8 on DIG-1065.
+#
+# These routes are **not** ingestion routes, and the reason is the whole point of
+# keeping them in a separate table rather than adding an `ingest` kind to the one
+# above: `/internal/art9/screen` is the endpoint that *performs* Art. 9
+# adjudication. Registering it in `INGEST_ROUTES` would make the Art. 9
+# admission middleware screen the screening endpoint — the middleware would
+# inspect a transcript and refuse before the handler ever adjudicated it, so any
+# transcript containing an Art. 9 field name could never be adjudicated at all.
+# The gate would refuse to gate.
+#
+# The exemption is *declared*, not silent. A route under a declared control-plane
+# prefix with no entry here fails the same two-way diff an unregistered
+# ingestion route fails, so the next person to add `/internal/whatever` cannot
+# do it quietly — they have to say what it is, and the purpose code is what the
+# audit record carries.
+
+#: Reserved non-ingestion prefixes, per app. Scopes the control-plane side of
+#: the route diff, exactly as ``INGEST_PREFIXES`` scopes the ingestion side.
+#:
+#: ``/internal/`` is reserved fleet-wide for control-plane only and no service
+#: serves user data under it, ever — but only the **declared sub-prefix** scopes
+#: the diff. Declaring ``"/internal"`` here would make every internal route in
+#: the fleet a diff failure, and declaring ``"/"`` would re-create the
+#: full-route default scope this module exists to prevent.
+CONTROL_PLANE_PREFIXES: Mapping[str, tuple[str, ...]] = MappingProxyType(
+    {
+        "digisearch": ("/internal/art9",),
+    }
+)
+
+#: Control-plane routes per app: path template -> purpose code.
+#:
+#: The value is a **purpose**, not a kind. There is nothing to screen — that is
+#: the point — so what an audit record needs is what the route is *for*, and the
+#: reason a control-plane route is out of scope is carried in that code rather
+#: than in a comment that nobody reads at 3am.
+CONTROL_PLANE_ROUTES: Mapping[str, Mapping[str, str]] = MappingProxyType(
+    {
+        "digisearch": MappingProxyType(
+            {
+                "/internal/art9/screen": "art9_screen",
+            }
+        ),
+    }
+)
+
+
 @dataclass(frozen=True)
 class RouteDecision:
     """The refusal floor's verdict for one route.
@@ -206,6 +267,42 @@ def is_registered(app: str, path_template: str) -> bool:
     registered ingestion route and break the L4 two-way diff on both sides.
     """
     return route_kind(app, path_template) is not None
+
+
+def is_control_plane(app: str, path_template: str) -> bool:
+    """Whether ``(app, path_template)`` falls under a declared control-plane prefix.
+
+    The control-plane counterpart to ``is_under_prefix``, used by the Art. 9
+    admission middleware to treat a route as **out of scope** — not screened,
+    not refused, exactly like a route outside every declared ingestion prefix.
+
+    This answers *"is this route claimed by the control plane"*, which is a
+    scoping question, and it deliberately does **not** require a
+    ``CONTROL_PLANE_ROUTES`` entry. Two reasons, both load-bearing:
+
+    - If it required registration, the route diff could never report anything:
+      an undeclared route under ``/internal/art9`` would filter out of the
+      enumeration and the diff would be vacuously clean, which is the exact hole
+      this registry exists to close. ``iter_ingest_routes`` scopes by
+      ``INGEST_PREFIXES`` rather than by membership for the same reason.
+    - The refusal for an undeclared control-plane route is not this function's
+      job. It is the diff test's, and keeping the two separate means the
+      middleware cannot be talked into skipping a route by adding a table entry.
+
+    So ``is_control_plane`` and ``is_registered`` answer different questions
+    about different registries and never both return ``True`` for one route;
+    ``tests/db/test_art9_control_plane.py`` pins that non-overlap in both
+    directions.
+
+    Note that the two registries cannot overlap in practice either: a route
+    under a control-plane prefix is outside every declared ingestion prefix, so
+    ``check_route`` already allows it without consulting this function. This
+    predicate exists so the middleware and the diff can *name* the classification
+    rather than infer it.
+    """
+    return any(
+        is_under_prefix(path_template, prefix) for prefix in CONTROL_PLANE_PREFIXES.get(app, ())
+    )
 
 
 def route_kind(app: str, path_template: str) -> str | None:

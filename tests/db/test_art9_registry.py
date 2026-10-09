@@ -230,9 +230,19 @@ def test_module_exposes_no_public_name_outside_the_registry_surface() -> None:
     `decision` is a fixed default, not a switch someone can flip at runtime, and
     the way to keep it that way is to refuse new module-level globals by name —
     a guessed list of forbidden names (`ART9_MODE`, `FAIL_OPEN`, …) cannot.
+
+    The set stays exact, so the guard keeps its teeth: a name that is *not*
+    declared here still fails. `CONTROL_PLANE_PREFIXES`/`CONTROL_PLANE_ROUTES`
+    joined it in leaf 12a (DIG-1174) because the `plan` document §1.2/§8 on
+    DIG-1065 amends the art9 surface with exactly those two names. They are
+    registry data of the same shape as `INGEST_ROUTES` and, being read-only
+    mappings, cannot flip behaviour — which is what this guard is about. A
+    lowercase constant or a runtime switch would still fail here.
     """
     declared = {
         "ART9_CATEGORIES",
+        "CONTROL_PLANE_PREFIXES",
+        "CONTROL_PLANE_ROUTES",
         "INGEST_PREFIXES",
         "INGEST_ROUTES",
         "ROUTE_KIND_INGEST",
