@@ -37,12 +37,20 @@ jobs:
         # sync with conftest.py's collect_ignore AND the nautilus_smoke filter
         # in scripts/ci_paths.yaml. If a file reintroduces the Linux SIGABRT
         # (exit 134, #42), drop it here with a comment citing #42.
+      #
+      # test_charts.py and test_honesty_series.py are listed for the same reason
+      # but by a different route: they are NOT in collect_ignore, because they
+      # import nautilus inside the test (importorskip), so the plain lane
+      # collects them and skips those cases. Without this lane the
+      # analyzer-shape cases would execute in no CI lane at all (DIG-937).
         run: |
           uv run --frozen --no-sync pytest \
             tests/dq/test_api.py \
             tests/dq/test_audit.py \
             tests/dq/test_backtest.py \
             tests/dq/test_calibrations_loader.py \
+            tests/dq/test_charts.py \
+            tests/dq/test_honesty_series.py \
             tests/dq/test_nautilus_runner.py \
             tests/dq/test_pipeline_graph.py \
             tests/dq/test_strategies.py \

@@ -1,4 +1,4 @@
-"""The honest denominator (DIG-428, L1 of DIG-474).
+"""The honest denominator (DIG-428, L1 of DIG-474; analyzer records in DIG-937).
 
 One function decides which points of a returns/PnL series count toward a sample
 size, so a rate, a chart and a guard can never disagree about N. Non-finite and
@@ -8,35 +8,221 @@ null values are dropped: a NaN row would change the denominator. Stdlib only.
 from __future__ import annotations
 
 import math
+from datetime import datetime, timezone
 from typing import Any  # score:allow untyped any — duck-typed series boundary
+
+_NS_PER_SECOND = 1_000_000_000
+
+#: Floor below which an ``int`` is a row index, not a clock. 1000 s in nanoseconds.
+_MIN_NS_STAMP = 1_000_000_000_000
+
+
+def _ns_stamp(candidate: Any) -> int | None:
+    """candidate as a nanosecond timestamp, or None when it cannot plausibly be one."""
+    if not isinstance(candidate, int) or isinstance(candidate, bool):
+        return None
+    return candidate if abs(candidate) >= _MIN_NS_STAMP else None
 
 
 def _finite_or_none(value: Any) -> float | None:
-    """value as a finite float, or None if null, non-numeric or non-finite."""
-    if value is None or isinstance(value, bool):
+    """value as a finite float, or None if null, non-numeric or non-finite.
+
+    ``OverflowError`` belongs with the type and value errors: an ``int`` wider
+    than a float raises it, and such a row is as null as a NaN, so it drops one
+    row instead of blanking the series. ``bool`` is deliberately not
+    special-cased — the chart path casts Boolean to 1.0/0.0, so a boolean row
+    has to count here too or the rate and the chart disagree about N.
+
+    (Both of these arrived with PR #5126 for DIG-843. This branch re-creates
+    that commit rather than stacking on it, so the pair is repeated here
+    verbatim; see the note at the foot of the record test module.)
+    """
+    if value is None:
         return None
     try:
         number = float(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return None
     return number if math.isfinite(number) else None
 
 
-def normalize_series(series: Any) -> tuple[list[str], list[float]] | None:
-    """Normalise a PnL/returns series to (dates, finite float values).
+def _record_date(key: Any, ts_event: Any) -> str | None:
+    """``YYYY-MM-DD`` for a record's nanosecond timestamp, or None when it has none.
 
-    Duck-typing order matches the historical ``_extract_frame``: ``.values`` +
-    ``.index`` (pandas shape, read only — pandas is never imported), then
-    ``.to_list()`` (polars), then ``.tolist()``, then a plain iterable. Dates
-    are ``str(index)[:10]`` for the pandas shape, sequential position strings
-    otherwise. Returns None for None, an empty result, or any failure. No
-    polars, no pandas, no pyarrow. An iterable is consumed exactly once.
+    ``ts_event`` is Unix-epoch nanoseconds on every build that carries one, so the
+    date is derived from it. Truncating instead (``str(ns)[:10]``, as the pandas
+    shape does) would yield the first ten digits of the epoch, not a date.
+
+    An ``int`` counts as a timestamp only when it is large enough to be one. A
+    2-column ``(index, value)`` row is otherwise indistinguishable from a
+    ``(position_id, ts_event)`` row, and reading a row index as an epoch stamp
+    fabricates ``1970-01-01`` — a wrong date on the chart axis, where the honest
+    answer is a position label.
+
+    The conversion is integer floor division, not ``/``. A nanosecond stamp is
+    above 2^53, so ``/`` converts it to a float first, at a resolution of roughly
+    256 ns there; a stamp a nanosecond below midnight rounds *up* to the next
+    whole second and the date jumps to the next day. Measured over five years of
+    day boundaries, ``/`` mislabels 1826 of 1826 stamps one nanosecond before
+    midnight. Flooring is also the correct truncation before 1970.
+    """
+    stamp = _ns_stamp(ts_event)
+    if stamp is None:
+        stamp = _ns_stamp(key)
+    if stamp is None:
+        return None
+    try:
+        moment = datetime.fromtimestamp(stamp // _NS_PER_SECOND, tz=timezone.utc)
+    except (OverflowError, OSError, ValueError):
+        return None
+    return moment.strftime("%Y-%m-%d")
+
+
+def _records_from(rows: list[Any]) -> list[tuple[Any, Any, Any]] | None:
+    """Reinterpret a list of rows as ``(key, ts_event, value)`` records, or None.
+
+    The pyo3 ``PortfolioAnalyzer`` does not return a series. ``realized_pnls()``
+    was ``dict {position_id: pnl}`` through 1.228.0 and became
+    ``list[(position_id, ts_event, pnl)]`` on 1.230.0; ``returns()`` is a
+    ``{ts_ns: return}`` dict. All of them reach this function unconverted from
+    ``nautilus_runner.py``, so they are recognised here, before the series probes.
+
+    Only the 3-column ``(position_id, ts_event, pnl)`` row is accepted. A
+    2-column row is refused rather than guessed at: it could be
+    ``(position_id, pnl)`` or ``(position_id, ts_event)``, and those two readings
+    disagree — the second turns a timestamp into a ``1.7e18`` PnL that ``> 0``
+    then counts as a win. Fabricating a number is the one outcome this module
+    exists to prevent, so the honest answer to an ambiguous row is ``None``. No
+    build in reach emits one: 1.223.0 and 1.228.0 return a ``dict``, which is
+    handled above this function, and 1.230.0 returns 3-column rows.
+
+    Every row is checked, not just the first: a row of some other width would
+    otherwise be silently truncated to its last element, which reports a number
+    from a row the caller never meant as a record. An unrecognised row drops the
+    whole batch back to the series path, where it fails closed.
+    """
+    if not rows:
+        return None
+    records: list[tuple[Any, Any, Any]] = []
+    for row in rows:
+        if not isinstance(row, (tuple, list)) or len(row) != 3:
+            return None
+        records.append((row[0], row[1], row[2]))
+    return records
+
+
+def _from_records(records: list[tuple[Any, Any, Any]]) -> tuple[list[str], list[float]] | None:
+    """Collapse records to one row per closed position, two steps in this order.
+
+    1. **Drop repeated records.** One record per distinct ``(position_id,
+       ts_event)``, later occurrence winning. Mirrors the engine's own
+       bookkeeping, and is not a guess between builds: 1.223/1.228 key the whole
+       mapping by position id, and 1.230.0 already folds an ``add_trade`` into a
+       later ``record_trade`` for the same pair, so a repeated pair only survives
+       to this point when ``record_trade`` was called twice for it — and the
+       return value carries no provenance saying which of the two was the
+       recorded one.
+    2. **Sum each position's parts.** One row per distinct ``position_id``, worth
+       the sum of the PnL parts that survive step 1.
+
+    The order is load-bearing, and step 1 is why. Summing first would add one
+    close event twice for every repeated pair the engine emits, so a position's
+    value would grow with the engine's own duplication rather than with the
+    trading.
+
+    This makes N the number of **closed positions** on every build, which is what
+    a denominator has to mean: one position closed in two parts reports ``n=1``
+    whichever build ran the backtest, so the honest rate and its Wilson interval
+    are comparable across builds. Keying on ``(position_id, ts_event)`` instead
+    would report ``n=1`` on 1.228.0 and ``n=2`` on 1.230.0 for the same fills.
+
+    A position with a part that cannot be read is dropped whole rather than
+    summed from its remaining parts. A partial total is a fabricated number for
+    the position, which is the one outcome this module exists to prevent; the
+    same goes for a total that overflows to infinity. The position's date is the
+    ``ts_event`` of the part that arrives **last**, not the largest timestamp:
+    the label is whichever row was written to the mapping last. Both engine
+    builds that emit ``ts_event`` emit their rows in event order, so the two
+    readings agree there; out-of-order rows would take the earlier date. This is
+    stated as input order deliberately rather than sorted, because which of the
+    two a caller wants is a labelling decision this leaf was not given.
+    """
+    collapsed: dict[tuple[Any, Any], Any] = {}
+    for key, ts_event, value in records:
+        try:
+            collapsed[(key, ts_event)] = value
+        except TypeError:
+            # An unhashable key cannot identify a round trip, so this row cannot
+            # be one. Dropping just this row keeps N a real count; letting the
+            # TypeError escape would discard every good row alongside it and turn
+            # a guarded denominator into an absent one, which is the regression
+            # this leaf exists to remove.
+            continue
+
+    totals: dict[Any, float] = {}
+    stamps: dict[Any, Any] = {}
+    unreadable: set[Any] = set()
+    for (key, ts_event), value in collapsed.items():
+        number = _finite_or_none(value)
+        if number is None:
+            unreadable.add(key)
+            continue
+        total = totals.get(key, 0.0) + number
+        if not math.isfinite(total):
+            unreadable.add(key)
+            continue
+        totals[key] = total
+        stamps[key] = ts_event
+
+    kept: list[str] = []
+    values: list[float] = []
+    for key, total in totals.items():
+        if key in unreadable:
+            continue
+        kept.append(_record_date(key, stamps[key]) or str(len(kept)))
+        values.append(total)
+
+    return (kept, values) if values else None
+
+
+def normalize_series(series: Any) -> tuple[list[str], list[float]] | None:
+    """Normalise a PnL/returns series or analyzer records to (dates, finite floats).
+
+    Two input families:
+
+    1. **Analyzer records** — what the pyo3 analyzer actually hands back: the
+       ``{position_id: pnl}`` dict, the 1.230.0 ``(position_id, ts_event, pnl)``
+       rows, and the ``{ts_ns: return}`` mapping. Collapsed to one row per closed
+       position — repeated ``(position_id, ts_event)`` pairs first, then the
+       remaining parts of each position summed — so N counts closed positions on
+       every build and is never ``None`` merely because the shape was not
+       recognised. See :func:`_from_records` for the order and why it is
+       load-bearing.
+    2. **Series** — ``.values`` + ``.index`` (pandas shape, read only — pandas is
+       never imported), then ``.to_list()`` (polars), then ``.tolist()``, then a
+       plain iterable. Dates are ``str(index)[:10]`` for the pandas shape,
+       sequential position strings otherwise.
+
+    An object offering ``.values``/``.index``/``.to_list()``/``.tolist()`` has
+    declared itself a series by protocol, so only a mapping or a bare iterable is
+    probed for records. The cost of that exemption is stated here so it is not
+    rediscovered as a bug: records wrapped in such a container — a numpy array of
+    record rows, say — are read as a series and come back ``None`` unless every
+    element is itself floatable. No build in reach returns one.
+
+    Non-finite and null values are dropped in both. Returns None for None, an
+    empty result, or any failure. No polars, no pandas, no pyarrow. An iterable
+    is consumed exactly once.
     """
     if series is None:
         return None
 
     try:
+        if isinstance(series, dict):
+            return _from_records([(key, None, value) for key, value in series.items()])
+
         dates: list[str] | None = None
+        records: list[tuple[Any, Any, Any]] | None = None
         if hasattr(series, "values") and hasattr(series, "index"):
             raw_values = list(series.values)
             dates = [str(d)[:10] for d in series.index]
@@ -46,6 +232,10 @@ def normalize_series(series: Any) -> tuple[list[str], list[float]] | None:
             raw_values = series.tolist()
         else:
             raw_values = list(series)
+            records = _records_from(raw_values)
+
+        if records is not None:
+            return _from_records(records)
         if dates is None:
             dates = [str(i) for i in range(len(raw_values))]
 

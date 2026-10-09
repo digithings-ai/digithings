@@ -485,3 +485,115 @@ def test_to_pandas_series_is_never_routed_through_to_pandas() -> None:
     series = _NoPyarrow([1.0, -2.0, 3.0, float("nan")])
     assert len(_extract_frame(series)) == 3
     assert count_winning_trades(series) == 2
+
+
+# --- DIG-937: the same locks, on input the engine actually emits ----------------
+#
+# The locks above compare the chart path against normalize_series on fabricated
+# series. Both functions being blind to a shape cannot fail a lock between them,
+# so these two run on a real pyo3 analyzer's own ``realized_pnls()`` output and on
+# the 1.230.0 record rows. Constructing an analyzer is not running a backtest
+# (#42 does not apply).
+#
+# What this is, precisely: a smoke lock, not a two-reader drift lock. Both sides
+# reduce to normalize_series, so the equality cannot fail unless that function is
+# itself wrong. The signal is the non-empty assertion and the fact that neither
+# call raises — the fabricated-series locks above are the ones that would catch a
+# genuine disagreement between two independent readers.
+
+
+def _add_trade(analyzer, pyo3, usd, pid, pnl):
+    """``add_trade`` with the arity this build has: 2 args to 1.228, 3 from 1.230.
+
+    CI installs 1.230.0 from ``uv.lock``, where ``ts_event`` became a required third
+    argument; the local venvs run 1.223/1.228, where passing three is a TypeError.
+    Probing is the only way to be right on every build the repo allows
+    (``nautilus_trader>=1.190,<2``) without pinning a version it does not pin.
+    """
+    position_id, money = pyo3.PositionId(pid), pyo3.Money(float(pnl), usd)
+    try:
+        analyzer.add_trade(position_id, money)
+    except TypeError:
+        analyzer.add_trade(position_id, 1_700_000_000_000_000_000, money)
+
+
+def _analyzer_record_series():
+    """A real ``realized_pnls()`` return value, or skip when nautilus is absent."""
+    pyo3 = pytest.importorskip("nautilus_trader.core.nautilus_pyo3")
+    usd = pyo3.Currency.from_str("USD")
+    analyzer = pyo3.PortfolioAnalyzer()
+    # No NaN trade here: the engine refuses a non-finite amount outright
+    # ("invalid f64 for 'amount', was NaN"), so a non-finite *row* is only
+    # reachable as a literal — which is where the dropping rule is pinned.
+    for pid, pnl in (("P-1", 10.0), ("P-2", -4.0), ("P-3", 0.0)):
+        _add_trade(analyzer, pyo3, usd, pid, pnl)
+    return analyzer.realized_pnls(usd)
+
+
+#: The 1.230.0 shape, written out because the installed 1.228 build cannot emit it.
+_ANALYZER_ROWS_1230 = [
+    ("P-1", 1_700_000_000_000_000_000, 10.0),
+    ("P-2", 1_700_086_400_000_000_000, -4.0),
+    ("P-3", 1_700_172_800_000_000_000, 0.0),
+]
+
+
+@pytest.mark.unit
+def test_anti_drift_lock_holds_for_analyzer_built_records() -> None:
+    """The chart path and the model path must agree on the engine's own output."""
+    from digiquant.charts.common import _extract_frame
+    from digiquant.charts.trades import count_winning_trades
+
+    series = _analyzer_record_series()
+    model = _model_values(series)
+
+    assert model, "an analyzer holding trades must not normalize to an empty series"
+    assert count_winning_trades(series) == sum(1 for v in model if v > 0)
+    assert len(_extract_frame(series)) == len(model)
+
+
+@pytest.mark.unit
+def test_anti_drift_lock_holds_for_1230_record_rows() -> None:
+    """Same two locks on the record shape, including a breakeven close."""
+    from digiquant.charts.common import _extract_frame
+    from digiquant.charts.trades import count_winning_trades
+
+    model = _model_values(_ANALYZER_ROWS_1230)
+
+    assert len(model) == 3
+    assert count_winning_trades(_ANALYZER_ROWS_1230) == sum(1 for v in model if v > 0) == 1
+    assert len(_extract_frame(_ANALYZER_ROWS_1230)) == len(model)
+
+
+@pytest.mark.unit
+def test_all_realized_pnl_builders_render_the_engines_own_records() -> None:
+    """Every builder must survive the shape the analyzer actually returns.
+
+    Three of the four that take the series — the distribution, the per-trade bars
+    and the cumulative PnL — read their input themselves through
+    ``.values.tolist()``. On a ``dict`` that is a bound method, so they raised
+    ``AttributeError`` and returned ``ChartUnavailable`` on every real build,
+    while reading as covered callers. This pins all four on the engine's output.
+    """
+    from digiquant.charts.trades import (
+        _build_cumulative_trade_pnl,
+        _build_per_trade_pnl_bars,
+        _build_realized_pnl_chart,
+        _build_trade_pnl_distribution_chart,
+    )
+
+    realized = _analyzer_record_series()
+
+    builders = (
+        _build_realized_pnl_chart,
+        _build_trade_pnl_distribution_chart,
+        _build_per_trade_pnl_bars,
+        _build_cumulative_trade_pnl,
+    )
+    unavailable = {}
+    for builder in builders:
+        rendered = builder(realized)
+        if type(rendered).__name__ == "ChartUnavailable":
+            unavailable[builder.__name__] = rendered
+
+    assert unavailable == {}, f"a builder refused the engine's own output: {unavailable}"

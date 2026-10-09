@@ -207,6 +207,8 @@ nautilus_smoke:
   - tests/dq/test_audit.py
   - tests/dq/test_backtest.py
   - tests/dq/test_calibrations_loader.py
+  - tests/dq/test_charts.py
+  - tests/dq/test_honesty_series.py
   - tests/dq/test_nautilus_runner.py
   - tests/dq/test_pipeline_graph.py
   - tests/dq/test_strategies.py
