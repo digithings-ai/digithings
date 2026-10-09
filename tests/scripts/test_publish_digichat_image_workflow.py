@@ -104,6 +104,28 @@ def _build_step(doc: dict) -> dict:
     return steps[0]
 
 
+def _step_by_id(doc: dict, step_id: str) -> dict:
+    step = next((s for s in _steps(doc) if s.get("id") == step_id), None)
+    assert step is not None, f"no step with id {step_id!r}"
+    return step
+
+
+def _refuses(guards: str, marker: str) -> bool:
+    """True when the diagnostic ``marker`` is followed within a few lines by ``exit 1``.
+
+    A refusal that prints an error and keeps going is not a refusal. Asserting
+    only that the message exists is the trap this closes: a comment naming the
+    failure satisfies a substring check, and so does a diagnostic with no exit
+    behind it — in which case the step reports success and the push runs.
+    """
+    lines = guards.splitlines()
+    for index, line in enumerate(lines):
+        if marker in line:
+            if re.search(r"^\s*exit 1\s*$", "\n".join(lines[index : index + 3]), re.M):
+                return True
+    return False
+
+
 def test_lane_exists_with_the_documented_name() -> None:
     assert WORKFLOW.is_file(), (
         f"{WORKFLOW.name} is missing — without it a digichat release tag publishes "
@@ -166,11 +188,18 @@ def test_publishes_are_queued_not_cancelled() -> None:
 
 
 def test_the_image_is_built_from_the_repo_root() -> None:
-    """digichat is an npm workspace member; ``apps/digichat`` is not a build context."""
+    """digichat is an npm workspace member; ``apps/digichat`` is not a build context.
+
+    ``push: false`` is the design, not a regression. The image is loaded into the
+    runner so the boot probe can start it, and a separate step pushes only after
+    the probe has watched it serve. A build step that pushes publishes an image
+    nobody has booted.
+    """
     with_ = _build_step(_doc())["with"]
     assert with_["context"] == "."
     assert with_["file"] == "apps/digichat/Dockerfile"
-    assert with_["push"] is True
+    assert with_["push"] is False, "the build step must not push; the probed push step does"
+    assert with_["load"] is True, "the image must be in the runner's daemon for the probe to boot"
 
 
 def test_the_build_names_its_own_commit() -> None:
@@ -180,16 +209,14 @@ def test_the_build_names_its_own_commit() -> None:
     revision_arg = re.search(r"^DIGICHAT_REVISION=(.*)$", build_args, re.M)
     assert revision_arg is not None, "DIGICHAT_REVISION must be passed to the build"
     assert revision_arg.group(1) == "${{ steps.version.outputs.commit }}", (
-        "DIGICHAT_REVISION must come from the resolved tag commit, not from github.sha — "
+        "DIGICHAT_REVISION must come from the resolved commit, not from github.sha — "
         "on a workflow_dispatch those differ"
     )
     assert re.search(r"^DIGICHAT_VERSION=", build_args, re.M)
-    # One tag per line: splitting on whitespace would tear `${{ … }}` apart.
-    tags = [line.strip() for line in with_["tags"].splitlines() if line.strip()]
-    assert tags == [
-        "ghcr.io/digithings-ai/digichat:v${{ steps.version.outputs.version }}",
-        "ghcr.io/digithings-ai/digichat:latest",
-    ]
+    # The names are decided once, in the resolve step, and handed over whole.
+    # A step output is one line, so no consumer can tear a `${{ … }}` apart
+    # the way an inline multi-line tag list can.
+    assert with_["tags"] == "${{ steps.version.outputs.tags }}"
 
 
 def test_the_tag_must_resolve_to_a_commit() -> None:
@@ -266,9 +293,151 @@ def test_the_lane_proves_its_own_output() -> None:
 
 
 def test_the_checkout_can_resolve_the_tag() -> None:
-    """A shallow clone of a tag has no history, so ``git rev-list -n1`` cannot bind it."""
+    """A shallow clone of a tag has no history, so ``git rev-list -n1`` cannot bind it.
+
+    ``inputs.ref`` is in the chain for the same reason: a rehearsal build checks
+    out a branch, and the resolve step still needs the tree at that ref.
+    """
     checkout = next(
         step for step in _steps(_doc()) if step.get("uses", "").startswith("actions/checkout")
     )
     assert checkout["with"]["fetch-depth"] == 0
-    assert checkout["with"]["ref"] == "${{ inputs.tag || github.ref }}"
+    assert checkout["with"]["ref"] == "${{ inputs.tag || inputs.ref || github.ref }}"
+
+
+def test_a_rehearsal_image_can_be_requested_without_a_release_tag() -> None:
+    """The runbook's Step 1 rehearsal needs an artifact before ``digichat-v2.4.0`` exists.
+
+    That tag does not exist, and cutting it is a release decision, not a deploy
+    step. Without a ref input the rehearsal step has nothing to promote, so the
+    lane would only ever produce images for releases that already shipped.
+    """
+    inputs = _triggers(_doc())["workflow_dispatch"]["inputs"]
+    assert set(inputs) == {"tag", "ref"}
+    assert inputs["tag"]["required"] is False, "tag must be optional, or a ref build is unreachable"
+    assert inputs["ref"]["required"] is False, "ref must be optional, or a tag build is unreachable"
+    assert inputs["ref"]["type"] == "string"
+
+
+def test_tag_and_ref_cannot_both_be_set() -> None:
+    """Two inputs, two different claims about what is being published.
+
+    Both together is ambiguous: a release tag names one version and one commit,
+    a ref names neither. Whichever branch won, the image would carry a name that
+    does not describe it.
+    """
+    guards = _no_comments(_step_by_id(_doc(), "version")["run"])
+    assert _refuses(guards, "set 'tag' or 'ref', not both")
+    assert _refuses(guards, "to publish a release image, or 'ref'")
+
+
+def test_a_ref_build_cannot_claim_a_release_name() -> None:
+    """``:vX.Y.Z`` and ``:latest`` are release names; a ref build never takes one.
+
+    The release path publishes both names from one commit that a release tag
+    names. A ref path has neither property, so giving it a release name would
+    re-open the exact image→commit hole this lane exists to close — and would
+    make the idempotency guard skip the real tag build later.
+    """
+    guards = _no_comments(_step_by_id(_doc(), "version")["run"])
+    # Split on the branch boundary itself, not on a name or a mode: the
+    # release names and `mode="release"` sit before the `else`, and the ref
+    # path's `image=` line sits before `mode="ref"`, so anchoring on either
+    # would put half of one branch on the wrong side.
+    release_branch, sep, ref_branch = guards.partition("\nelse\n")
+    assert sep, "the resolve step no longer branches on tag vs ref"
+
+    # The release path keeps both of its names.
+    assert 'image="${image_repo}:v${version}"' in release_branch
+    assert ":latest" in release_branch
+    assert 'mode="release"' in release_branch
+
+    # The ref path gets exactly one name, and it is derived from the commit.
+    assert 'image="${image_repo}:sha-$(git rev-parse --short=12 HEAD)"' in ref_branch
+    assert 'tags="$image"' in ref_branch, "the ref path must publish one name, not two"
+    assert ":latest" not in ref_branch, "a rehearsal image must not move :latest"
+    assert "sha-" not in release_branch, "a release image must not carry a rehearsal name"
+
+
+def test_the_push_sends_every_name_the_resolve_step_chose() -> None:
+    """One name on the ref path, two on the release path; both must actually go out.
+
+    The names used to be hardcoded on the build step, which is why the build step
+    had to be split in two. Hardcoding them again would silently drop the ref
+    path's single name the moment a second name was added.
+    """
+    push = _no_comments(_step_by_id(_doc(), "push")["run"])
+    assert 'while IFS= read -r ref' in push
+    assert 'docker push "$ref"' in push
+    assert '<<< "$TAGS"' in push, "the push must read the names the resolve step chose"
+    assert ":latest" not in push and "digichat:v" not in push, (
+        "the push step must not hardcode names — the resolve step owns them"
+    )
+
+
+def test_the_image_is_probed_before_it_is_pushed() -> None:
+    """A boot failure must never reach a registry under a release name.
+
+    Prod digichat is a Single-revision Container App: no traffic shift, no
+    automatic rollback. And a release tag here is immutable — to replace a
+    broken image you cut a new patch version. So an image that cannot serve
+    ``/healthz``, pushed as ``v2.4.0``, is not recoverable by re-running this
+    lane; it can only be walked back by a human who knows it happened.
+    """
+    steps = _steps(_doc())
+    ids = [step.get("id") for step in steps]
+    for needed in ("check", "build", "probe", "push"):
+        assert needed in ids, f"the lane needs a {needed!r} step; step ids are {ids}"
+    assert (
+        ids.index("check") < ids.index("build") < ids.index("probe") < ids.index("push")
+    ), f"the probe must sit between the build and the push; step ids are {ids}"
+    assert "probe" in steps[ids.index("push")].get("if", ""), (
+        "the push must be gated on the probe's outcome — an unconditional push "
+        "publishes the image whether or not the probe passed"
+    )
+    # And the probe is not skipped when the probe's own precondition fails:
+    # both steps share the build's condition, so neither runs on an
+    # already-published version.
+    assert _step_by_id(_doc(), "probe").get("if") == _step_by_id(_doc(), "build").get("if")
+
+
+def test_the_probe_fails_closed() -> None:
+    """200 alone is not the contract, and every refusal has to actually exit.
+
+    ``/healthz`` is a fixed ``{"ok": true}``, so a catch-all route that shadows
+    it also returns 200. And the version the image *serves* must be the version
+    it was *built* as — that is what catches a stale layer or a tag that no
+    longer matches the tree, and nothing else in this lane would notice it.
+    """
+    probe = _no_comments(_step_by_id(_doc(), "probe")["run"])
+    assert "set -euo pipefail" in probe
+    assert "/healthz" in probe and '!= "200"' in probe
+    assert "jq -r '.ok'" in probe and '!= "true"' in probe, "the body must say ok=true, not just 200"
+    assert "/api/health" in probe and '!= "$VERSION"' in probe
+
+    for marker in (
+        "the container exited before it served one probe",
+        "never returned 200",
+        "did not report ok=true",
+        "but this image was built as",
+    ):
+        assert _refuses(probe, marker), (
+            f"the probe reports {marker!r} but no exit 1 follows it — a diagnostic "
+            "without an exit leaves the step successful and the push runs"
+        )
+
+
+def test_provenance_is_asserted_on_the_rehearsal_path_too() -> None:
+    """A rehearsal image gets its binding proof here and nowhere else.
+
+    ``check_digichat_image_binding.py`` runs only on the release path, because it
+    validates a version against a release tag. The probe is the only place a ref
+    build is held to the same commit it was built from — which is what makes a
+    rehearsal image safe to promote by hand afterwards.
+    """
+    probe_step = _step_by_id(_doc(), "probe")
+    probe = _no_comments(probe_step["run"])
+    assert "org.opencontainers.image.revision" in probe
+    assert '[ "$revision" != "$COMMIT" ]' in probe
+    # Not conditioned on the mode: a rehearsal build is held to the binding too.
+    assert "mode" not in probe_step.get("if", "")

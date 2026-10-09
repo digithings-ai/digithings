@@ -216,14 +216,30 @@ Record the current revision name and image digest. That is the rollback target.
 
 Requires the 2.4.0 image in the ACR. **There is none** — nothing has been pushed since `v2.3.3` (2026-09-21). Getting one there takes two steps, in this order, and the second one is the gap the build lane does not close:
 
-**1. Publish (CI, lane A).** Cut the release tag and push it; `publish-digichat-image.yml` builds and pushes to GHCR.
+**1. Publish (CI, lane A).** Two routes, and a rehearsal wants the first one.
+
+*Rehearsal — build from a ref, no release tag.* Dispatch the lane with `ref`
+set to the branch or sha holding the change (`gh workflow run
+publish-digichat-image.yml -f ref=develop`). It publishes exactly one name:
+
+```
+ghcr.io/digithings-ai/digichat:sha-<12 chars of the commit>
+```
+
+It never takes a `vX.Y.Z` name and never moves `:latest`. Every
+`--source`/`-t` in step 2 below then uses `sha-<commit>` in place of
+`v${VERSION}`.
+
+*Release — cut the tag.* A real release still goes through the tag, because a
+tag names one version and one commit and that is what makes the binding check
+meaningful:
 
 ```bash
 git tag digichat-v2.4.0 <commit carrying version 2.4.0 in apps/digichat/package.json>
 git push origin digichat-v2.4.0
 ```
 
-**No `digichat-v2.4.0` tag exists today** (`git tag -l 'digichat-v*'` stops at `digichat-v2.3.2`) even though `develop` already reads `2.4.0`. Cutting it is the release decision, not a deploy step, and the workflow refuses to publish without it.
+**No `digichat-v2.4.0` tag exists today** (`git tag -l 'digichat-v*'` stops at `digichat-v2.3.2`) even though `develop` already reads `2.4.0`. Cutting it is the release decision, not a deploy step, and it is why the rehearsal uses `ref` instead.
 
 **2. Import into the ACR (human, Azure write).** The Container Apps pull from `datatapchatregistry.azurecr.io`, **not** from GHCR. Nothing in this repository bridges those two registries: the old `datatap-web` lane that did the GHCR→ACR import was client-side and out of repo, and a `git grep` for `datatapchatregistry` / `azurecr.io` across `develop` returns 0 hits in any workflow. So the lane stops at GHCR, and a human runs the import:
 
@@ -335,9 +351,11 @@ Nothing newer. No 2.4.0 image exists in any registry.
 | **No probes on either ACA** | Open — DIG-1292. A production-affecting behavior change on a customer resource, with its own approval and its own rehearsal. Chosen as a prerequisite (`do_both`), not a follow-up: in `Single` mode with no probes a failed revision takes all traffic and there is nothing to demote it. |
 | **No owned Azure principal for the promotion** | Open — the other half of `do_both`. Security established that principal `44cfda92-…` is **dormant** (no credential at all) rather than a usable deploy identity, so the writes in §4 currently have no owned identity to run as. |
 | **No federated CI credential** | Moot. Scoped in PR #5179 for lane B; lane A was chosen, so DIG-1349 has no consumer. Revisit only if the ACA write is ever automated. |
-| **No GHCR→ACR import lane** | Open, and the honest limit of lane A. The build lane publishes to GHCR; the ACAs pull from ACR; the bridge is a human `az acr import` documented in §4 Step 1. Nothing in this repository can do that hop — the old importer was client-side and out of repo. Until it is automated, "build" and "available to promote" remain two human actions. |
+| **No GHCR→ACR import lane** | Open, and the honest limit of lane A. The build lane publishes to GHCR; the ACAs pull from ACR; the bridge is a human `az acr import` documented in §4 Step 1. Nothing in this repository can do that hop — the old importer was client-side and out of repo. Until it is automated, "build" and "available to promote" remain two human actions. The rehearsal path narrows this only in that it now produces an artifact to hand to that human: **§4 Step 1 promotes the image `ghcr.io/digithings-ai/digichat:sha-<commit>`, not a tag.** |
 | **`/healthz` 404s in both running builds** | Self-resolving: any deploy carrying `916c4b5d5` adds the route. Recorded so nobody reads the 404 as a regression. |
-| ~~**No build lane**~~ | **Closed by this PR** (DIG-1294). `.github/workflows/publish-digichat-image.yml` is back, tag-triggered, revision-labelled and self-verifying. |
+| ~~**No build lane**~~ | **Closed by PR #5214** (DIG-1294). `.github/workflows/publish-digichat-image.yml` is back, tag-triggered, revision-labelled and self-verifying. |
+| ~~**No rehearsal artifact before `digichat-v2.4.0` exists**~~ | **Closed.** The lane took only a release tag, and `digichat-v2.4.0` does not exist, so §4 Step 1 had nothing to promote. `workflow_dispatch` now also takes a `ref` and builds a rehearsal image named `sha-<12 chars of the commit>`. It never takes a `vX.Y.Z` name and never moves `:latest` — see the workflow header for why a build that is not the tag's commit must not take a release name. |
+| ~~**Nothing proves the image boots**~~ | **Closed.** Every build — release or rehearsal — is loaded into the runner, started, and watched until `/healthz` answers 200 with `ok=true` and `/api/health` reports the version it was built as. The push is a separate step gated on that probe. Prod is `Single` mode and a release tag is immutable, so an unbootable image published under a release name cannot be walked back by re-running the lane. |
 | ~~**Principal `44cfda92-…`**~~ | **Closed by DIG-1293** (2026-10-06, read-only). It is the service principal for app registration `datatap-digichat-deploy` (`be54468d-2f66-4aeb-a231-5db0b6e58789`), created 2026-08-09 by the shared account `datatap@datatapstream.onmicrosoft.com`. It holds `Contributor` on both ACAs and on the ACR, and it has **no credential at all** — 0 keys, 0 passwords, 0 federated credentials. Dormant, not deleted. Registered in [`credential-ownership.md`](credential-ownership.md) with the owner and the required roles for a future federated credential. |
 
 ---

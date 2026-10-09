@@ -32,6 +32,24 @@
 # digichat versions are hand-bumped on develop. So the tag is now cut by a
 # person with a real credential, and `push.tags` works as written.
 #
+# THE SECOND PATH: A REF BUILD IS NOT A RELEASE
+# -------------------------------------------
+# `workflow_dispatch` takes a `ref` as well as a `tag`, and the two build
+# different artifacts. A tag build is a release: one version, one commit, and
+# the two names `vX.Y.Z` and `latest`. A ref build is a rehearsal artifact, and
+# it publishes exactly one name, `sha-<12 chars of the commit>`. It never takes
+# a `vX.Y.Z` name and it never moves `latest`, for the reason the paragraph
+# above gives: a name that is not the release tag's must not claim to be.
+#
+# The path exists because the runbook's Step 1 rehearsal needs an artifact to
+# promote, and `digichat-v2.4.0` does not exist. Cutting that tag is a release
+# decision, not a deploy step, so without a ref path the only images this lane
+# could ever produce are for releases that have already shipped.
+#
+# What is NOT added is a branch trigger. A build on every merge to develop
+# would cost a full Next.js build per merge to publish an artifact nobody asked
+# for. The rehearsal is requested deliberately, by a person, when it is wanted.
+#
 # WHAT IT REFUSES TO DO
 # ---------------------
 # * Publish when the tag's version differs from apps/digichat/package.json — a
@@ -46,10 +64,21 @@
 # * Run on a schedule. develop has zero `on.schedule` keys, pinned by
 #   tests/scripts/test_no_gha_schedules.py.
 #
-# It also proves its own output before exiting: the published image is pulled
-# back and run through scripts/check_digichat_image_binding.py, so a Dockerfile
-# that silently stopped emitting `org.opencontainers.image.revision` fails this
-# lane instead of being discovered at the next promotion.
+# It also proves its own output before exiting, twice. Before the push: the
+# image is booted on the runner and watched until `/healthz` answers 200 with
+# `ok=true` and `/api/health` reports the version it was built as. After the
+# push: it is pulled back and run through
+# scripts/check_digichat_image_binding.py, so a Dockerfile that silently
+# stopped emitting `org.opencontainers.image.revision` fails this lane instead
+# of being discovered at the next promotion.
+#
+# That order is the point, and it is not defensive tidiness. Prod digichat is a
+# Single-revision Container App: there is no traffic shift and no automatic
+# rollback, so a bad revision is an outage until a person notices. And a
+# release tag here is immutable — to replace a broken image you cut a new patch
+# version — so CI cannot undo its own bad publish. An image that cannot serve
+# `/healthz` has to fail here, where the cost is a red run, and not in East US
+# 2, where the cost is the customer.
 #
 # OPERATOR NOTE — first publish after this lane lands
 # ---------------------------------------------------
@@ -68,8 +97,12 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag to build and publish (e.g. digichat-v2.4.0)"
-        required: true
+        description: "Release tag to build and publish (e.g. digichat-v2.4.0). Leave empty when using ref."
+        required: false
+        type: string
+      ref:
+        description: "Branch or sha to build a rehearsal image from (e.g. develop). Leave empty when using tag."
+        required: false
         type: string
 
 # Queue, do not cancel: a publish already halfway through pushing must not be
@@ -91,7 +124,7 @@ jobs:
       # clone of the tag would not have it.
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || inputs.ref || github.ref }}
           fetch-depth: 0
 
       - name: Log in to GHCR
@@ -101,38 +134,76 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Resolve release tag and version
+      - name: Resolve what to build, and what the image is called
         id: version
         env:
-          TAG: ${{ inputs.tag || github.ref_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+          INPUT_REF: ${{ inputs.ref }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           set -euo pipefail
-          tag="${TAG#refs/tags/}"
-          # Same shape as TAG_RE in scripts/check_digichat_image_binding.py, so
-          # the lane and the checker cannot disagree about what a release tag is.
-          if ! [[ "$tag" =~ ^digichat-v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::$tag is not a digichat-vX.Y.Z release tag — refusing to publish."
+          image_repo="ghcr.io/digithings-ai/digichat"
+          tag="${INPUT_TAG:-}"
+          ref="${INPUT_REF:-}"
+
+          if [ -n "$tag" ] && [ -n "$ref" ]; then
+            echo "::error::set 'tag' or 'ref', not both: a release tag names one version and one commit, a ref names neither."
             exit 1
           fi
-          # Read from the checked-out tree, which is pinned to the tag.
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ -z "$tag" ] && [ -z "$ref" ]; then
+            echo "::error::set 'tag' to publish a release image, or 'ref' (e.g. develop) to build a rehearsal image."
+            exit 1
+          fi
+
+          # Read from the checked-out tree, which is pinned to the tag or ref.
           version="$(jq -r .version apps/digichat/package.json)"
-          tag_version="${tag#digichat-v}"
-          if [ "$tag_version" != "$version" ]; then
-            echo "::error::$tag does not match apps/digichat/package.json ($version) — refusing to publish."
-            exit 1
+
+          if [ -n "$tag" ]; then
+            # Same shape as TAG_RE in scripts/check_digichat_image_binding.py, so
+            # the lane and the checker cannot disagree about what a release tag is.
+            if ! [[ "$tag" =~ ^digichat-v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "::error::$tag is not a digichat-vX.Y.Z release tag — refusing to publish."
+              exit 1
+            fi
+            tag_version="${tag#digichat-v}"
+            if [ "$tag_version" != "$version" ]; then
+              echo "::error::$tag does not match apps/digichat/package.json ($version) — refusing to publish."
+              exit 1
+            fi
+            # `|| true` so the emptiness check below is reachable: under `set -e` a
+            # bad ref would abort the step with git's own `fatal: ambiguous
+            # argument` before this diagnostic could explain what went wrong.
+            commit="$(git rev-list -n1 "$tag" 2>/dev/null || true)"
+            if [ -z "$commit" ]; then
+              echo "::error::$tag does not resolve to a commit — there is nothing to bind an image to."
+              exit 1
+            fi
+            image="${image_repo}:v${version}"
+            tags="${image}"$'\n'"${image_repo}:latest"
+            mode="release"
+            label="$tag"
+          else
+            # A ref build is a rehearsal artifact, named by the commit it was
+            # built from. It never takes `:vX.Y.Z` and never takes `:latest`:
+            # those are release names, and the header explains why a build that
+            # is not the tag's commit must not take one. The commit-derived name
+            # is also what makes a rehearsal image promotable by hand later —
+            # the runbook's Step 2 pins an image, not a tag.
+            commit="$(git rev-parse HEAD)"
+            image="${image_repo}:sha-$(git rev-parse --short=12 HEAD)"
+            tags="$image"
+            mode="ref"
+            label="${ref:-${GITHUB_REF_NAME}}"
           fi
-          # `|| true` so the emptiness check below is reachable: under `set -e` a
-          # bad ref would abort the step with git's own `fatal: ambiguous
-          # argument` before this diagnostic could explain what went wrong.
-          commit="$(git rev-list -n1 "$tag" 2>/dev/null || true)"
-          if [ -z "$commit" ]; then
-            echo "::error::$tag does not resolve to a commit — there is nothing to bind an image to."
-            exit 1
-          fi
-          echo "Publishing $tag (version $version) from commit $commit."
+
+          echo "Building $label (mode $mode, version $version) from commit $commit."
           {
+            echo "mode=$mode"
+            echo "label=$label"
             echo "version=$version"
             echo "commit=$commit"
+            echo "image=$image"
+            echo "tags=$tags"
           } >> "$GITHUB_OUTPUT"
 
       - name: Check if this version is already published
@@ -165,7 +236,13 @@ jobs:
         with:
           context: .
           file: apps/digichat/Dockerfile
-          push: true
+          # NOT pushed here. The image is loaded into this runner so the boot
+          # probe can start it and watch it serve; the separate push step runs
+          # only after that probe passes. A build step that pushes publishes an
+          # image nobody has booted, and the header explains why this lane
+          # cannot take it back afterwards.
+          push: false
+          load: true
           # The repo root is the build context, not apps/digichat: digichat is an
           # npm workspace member whose lockfile lives at the root and whose
           # private @digithings/design dependency resolves only through the
@@ -174,27 +251,117 @@ jobs:
             DIGICHAT_VERSION=${{ steps.version.outputs.version }}
             DIGICHAT_REVISION=${{ steps.version.outputs.commit }}
             DIGICHAT_SOURCE_URL=${{ github.server_url }}/${{ github.repository }}
-          tags: |
-            ghcr.io/digithings-ai/digichat:v${{ steps.version.outputs.version }}
-            ghcr.io/digithings-ai/digichat:latest
+          # The names are decided once, in the resolve step, and handed over
+          # whole. A step output is a single line, so no consumer can tear a
+          # `${{ … }}` apart the way an inline multi-line list can.
+          tags: ${{ steps.version.outputs.tags }}
+
+      - name: Boot the image and probe it
+        if: steps.check.outputs.exists == 'false'
+        id: probe
+        env:
+          IMAGE: ${{ steps.version.outputs.image }}
+          COMMIT: ${{ steps.version.outputs.commit }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          # Provenance first, and on BOTH paths. The release path also gets this
+          # from check_digichat_image_binding.py; asserting it here as well means
+          # a rehearsal image carries the same proof, and it is the assertion that
+          # fails first when a Dockerfile change drops the revision label.
+          revision="$(docker inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$IMAGE")"
+          if [ "$revision" != "$COMMIT" ]; then
+            echo "::error::$IMAGE carries org.opencontainers.image.revision '$revision', expected '$COMMIT'."
+            exit 1
+          fi
+
+          # An ephemeral host port, so the probe never collides with a runner
+          # service and never hardcodes a port the image does not listen on.
+          container="$(docker run --detach --rm --publish 127.0.0.1::3000 "$IMAGE")"
+          trap 'docker rm --force "$container" >/dev/null 2>&1 || true' EXIT
+          port="$(docker port "$container" 3000/tcp | head -n1 | sed 's/.*://')"
+          base="http://127.0.0.1:${port}"
+          echo "Probing $IMAGE on $base (container $container)."
+
+          code="000"
+          deadline=$(( SECONDS + 120 ))
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            if [ "$(docker inspect --format '{{ .State.Running }}' "$container" 2>/dev/null || true)" != "true" ]; then
+              echo "::error::the container exited before it served one probe. Logs:"
+              docker logs "$container" 2>&1 || true
+              exit 1
+            fi
+            code="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 5 "$base/healthz" || true)"
+            if [ "$code" = "200" ]; then
+              break
+            fi
+            sleep 3
+          done
+          if [ "$code" != "200" ]; then
+            echo "::error::/healthz never returned 200 within 120s (last status '$code'). Logs:"
+            docker logs "$container" 2>&1 || true
+            exit 1
+          fi
+
+          # 200 alone is not the contract: healthz is a fixed {"ok":true}, so the
+          # body has to say so, or a catch-all route that shadows it passes.
+          healthz="$(curl --silent --show-error --fail "$base/healthz")"
+          if [ "$(jq -r '.ok' <<< "$healthz")" != "true" ]; then
+            echo "::error::/healthz did not report ok=true: $healthz"
+            exit 1
+          fi
+
+          # And the version the image SERVES must be the version it was built
+          # from. This is the assertion that catches a stale layer, a wrong tag
+          # on the tree, or a build that silently published the previous release
+          # — none of which any other step in this lane would notice.
+          reported="$(curl --silent --show-error --fail "$base/api/health" | jq -r '.version')"
+          if [ "$reported" != "$VERSION" ]; then
+            echo "::error::/api/health reports version '$reported', but this image was built as '$VERSION'."
+            exit 1
+          fi
+
+          echo "Probed ok: /healthz ok=true, /api/health version=$reported, revision bound to $COMMIT."
+
+      - name: Push the probed image
+        # Gated on the probe's own outcome, not on success(): the image leaves
+        # this runner only if it was watched serving first.
+        if: steps.probe.outcome == 'success'
+        id: push
+        env:
+          IMAGE: ${{ steps.version.outputs.image }}
+          TAGS: ${{ steps.version.outputs.tags }}
+        run: |
+          set -euo pipefail
+          while IFS= read -r ref; do
+            [ -n "$ref" ] || continue
+            echo "Pushing $ref"
+            docker push "$ref"
+          done <<< "$TAGS"
+          {
+            echo "digest=$(docker image inspect --format '{{ if .RepoDigests }}{{ index .RepoDigests 0 }}{{ end }}' "$IMAGE")"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Verify the published image is bound to the tag's commit
         if: steps.check.outputs.exists == 'false'
         env:
+          IMAGE: ${{ steps.version.outputs.image }}
+          LABEL: ${{ steps.version.outputs.label }}
+          MODE: ${{ steps.version.outputs.mode }}
           TAG: ${{ inputs.tag || github.ref_name }}
           VERSION: ${{ steps.version.outputs.version }}
           COMMIT: ${{ steps.version.outputs.commit }}
-          DIGEST: ${{ steps.build.outputs.digest }}
+          DIGEST: ${{ steps.push.outputs.digest }}
         run: |
           set -euo pipefail
-          tag="${TAG#refs/tags/}"
-          image="ghcr.io/digithings-ai/digichat:v${VERSION}"
+          image="$IMAGE"
           docker pull -q "$image" > /dev/null
           # --format everywhere: a bare `docker inspect` emits a JSON array,
           # which the checker rejects as bad input (see the runbook §2).
-          # Guard the two index lookups — `index .RepoDigests 0` raises
-          # index out of range on an image with no repo digest, and that would
-          # fail this step *after* the push already succeeded.
+          # Guard the index lookups — `index .RepoDigests 0` raises index out of
+          # range on an image with no repo digest, and that would fail this step
+          # *after* the push already succeeded.
           revision="$(docker inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$image")"
           image_version="$(docker inspect --format '{{ index .Config.Labels "org.opencontainers.image.version" }}' "$image")"
           repo_digest="$(docker inspect --format '{{ if .RepoDigests }}{{ index .RepoDigests 0 }}{{ end }}' "$image")"
@@ -203,31 +370,46 @@ jobs:
             echo ""
             echo "| | |"
             echo "|---|---|"
-            echo "| tag | \`$tag\` |"
+            echo "| mode | \`$MODE\` |"
+            echo "| ref or tag | \`$LABEL\` |"
             echo "| commit | \`$COMMIT\` |"
             echo "| image | \`$image\` |"
             echo "| digest | \`$repo_digest\` |"
             echo "| pushed digest | \`$DIGEST\` |"
+            echo "| boot probe | \`/healthz\` 200 ok=true, \`/api/health\` version $VERSION |"
             echo ""
-            echo "Promote it with the steps in docs/ops/digichat-datatap-aca.md."
+            if [ "$MODE" = "release" ]; then
+              echo "Promote it with the steps in docs/ops/digichat-datatap-aca.md."
+            else
+              echo "This is a rehearsal image, not a release. It carries no \`vX.Y.Z\` name and"
+              echo "does not move \`:latest\`. Promote it only as the Step 1 rehearsal, and read"
+              echo "\`docs/ops/digichat-datatap-aca.md\` §4 before any prod write."
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
-          jq -n \
-            --arg version "$image_version" \
-            --arg package_version "$VERSION" \
-            --arg tag "$tag" \
-            --arg tag_commit "$COMMIT" \
-            --arg image_ref "$image" \
-            --arg image_revision "$revision" \
-            --arg image_digest "$repo_digest" \
-            '{version:$version, package_version:$package_version, tag:$tag,
-              tag_commit:$tag_commit, image_ref:$image_ref,
-              image_revision:$image_revision, image_digest:$image_digest}' \
-            | python3 scripts/check_digichat_image_binding.py --facts -
+          # The checker's contract is a release tag; a `sha-` name is not one and
+          # is refused by TAG_RE on purpose. So it runs on the release path only.
+          # The ref path's provenance was asserted by the probe step instead.
+          if [ "$MODE" = "release" ]; then
+            jq -n \
+              --arg version "$image_version" \
+              --arg package_version "$VERSION" \
+              --arg tag "${TAG#refs/tags/}" \
+              --arg tag_commit "$COMMIT" \
+              --arg image_ref "$image" \
+              --arg image_revision "$revision" \
+              --arg image_digest "$repo_digest" \
+              '{version:$version, package_version:$package_version, tag:$tag,
+                tag_commit:$tag_commit, image_ref:$image_ref,
+                image_revision:$image_revision, image_digest:$image_digest}' \
+              | python3 scripts/check_digichat_image_binding.py --facts -
+          else
+            echo "Ref build: checked provenance directly in the probe step (checker requires a release tag)."
+          fi
 
       - name: Report an already-published version
         if: steps.check.outputs.exists == 'true'
         env:
-          VERSION: ${{ steps.version.outputs.version }}
+          IMAGE: ${{ steps.version.outputs.image }}
         run: |
-          echo "ghcr.io/digichings-ai/digichat:v${VERSION} is already published — nothing to do."
+          echo "$IMAGE is already published - nothing to do."
           echo "Release tags are immutable here: to replace a broken image, cut a new patch version."
