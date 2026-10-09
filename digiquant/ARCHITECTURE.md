@@ -747,9 +747,28 @@ disclaimer (`DISCLAIMER`). Every HTML tearsheet win-rate surface renders N +
 95% CI via `format_honest_rate` — categorized/full/risk stats tables, the KPI
 strip (thresholds act on the CI lower bound, not the point estimate), and the
 win/loss donut (caller-counted `(k, n)` from realized fills, never
-`round(rate * n)`). `BacktestResult` is untouched, so no model versioning was
-needed. Tests: `tests/dq/test_honesty.py` (upstream golden vectors),
+`round(rate * n)`). Tests: `tests/dq/test_honesty.py` (upstream golden vectors),
 `tests/dq/test_tearsheet_honesty.py` (per-surface N + CI assertions).
+
+**Model versioning for `BacktestResult` (DIG-845 / L3).** The clause that stood
+here — "`BacktestResult` is untouched, so no model versioning was needed" —
+was true of the tearsheet 1.4 work and stopped being true once the honesty
+envelope reached the result model, so it is reworded here rather than dropped.
+Per `AGENTS.md` § Pre-Flight ("Confirm `BacktestResult` Pydantic model is
+unchanged or versioned if modified"), the decision is recorded: **additive,
+back-compatible, no version bump.** L3 adds exactly two fields to
+`models.BacktestResult`, both defaulting to an empty state —
+`honest_rate: HonestRateBlock | None` (default `None`) and
+`honest_rate_by_symbol: dict[str, HonestRateBlock]` (default `{}`) — so every
+payload that validated before still validates, and a consumer that has never
+heard of the envelope reads exactly what it read before. `num_trades` also
+gained a sharper description on the same leaf (a **fill** count, and explicitly
+*not* a win-rate denominator — `honest_rate.n` is the denominator), which is a
+description change and not a type or semantic change. No published surface
+depends on the old wording, so no migration, no `SCHEMA_VERSION` bump and no
+consumer notification are required. Consumers that want the envelope read
+`honest_rate`; they must never synthesize one from `num_trades` or from
+`round(rate * n)`.
 
 Existing published fixtures stay at older schema versions (no `ohlc_bars`, blank `entry_label`, no `signal_delay_days`) until regenerated, so consumers must tolerate all versions.
 
@@ -821,6 +840,8 @@ Defined in `models.py`. Returned by `run_backtest()`, the pipeline's backtest no
 | `max_drawdown_pct` | `float | None` | Negative percent (e.g. `-15` is −15%), from `get_performance_stats_pnls()` or returns series fallback |
 | `num_trades` | `int` | Row count of `generate_order_fills_report()` |
 | `per_symbol_pnl` | `dict[str, float]` | Populated for multi-symbol runs; empty for single-symbol |
+| `honest_rate` | `HonestRateBlock \| None` | Win rate with its denominator and interval. `None` when no realized-PnL series was extracted — never a fabricated zero and never `num_trades` |
+| `honest_rate_by_symbol` | `dict[str, HonestRateBlock]` | Per-symbol `honest_rate` blocks for multi-symbol backtests. Declared on the model by DIG-845 (L3); populated by DIG-847 (#5298), so it is `{}` until that leaf lands |
 | `status` | `str` | `ok` | `partial` | `error` |
 | `message` | `str` | Optional detail |
 
