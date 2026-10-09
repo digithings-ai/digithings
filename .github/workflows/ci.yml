@@ -251,6 +251,30 @@ jobs:
       - name: Frontend canon guard
         run: python3 scripts/check_frontend_canon.py
 
+  # ── Committed-credential guard (DIG-31) — UNCONDITIONAL ─────────────────────
+  # The digichat Postgres password and the digiquant provider keys were
+  # committed to tracked `.example` files before anyone scrubbed them (#5030).
+  # scripts/check_example_credentials.py is the durable half of that fix, and it
+  # shipped with no caller: it ran in nobody's CI, so it could never fail a
+  # build and the next pasted secret would have landed just as quietly. This job
+  # is the caller. Unconditional for the same reason as frontend-canon — the
+  # guard's verdict is a property of every tracked `.example`/`.template` file,
+  # not of the diff, so path-gating it would let a PR that edits one of those
+  # files *outside* the filter skip the check that is about those files.
+  # Stdlib-only; no npm/pip install needed.
+  example-credentials:
+    name: Committed credential guard
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Committed credential guard
+        run: python3 scripts/check_example_credentials.py
+
   # ── Per-component test suites (gated by paths) ───────────────────────────────
   digibase:
     needs: changes
@@ -632,6 +656,7 @@ jobs:
     needs:
       - changes
       - frontend-canon
+      - example-credentials
       - digibase
       - digikey
       - digitrace
