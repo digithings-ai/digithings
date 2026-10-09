@@ -4,7 +4,8 @@
 from __future__ import annotations
 
 from digiquant.models import BacktestResult
-from digiquant.stats.honesty import DISCLAIMER, format_honest_rate, wilson
+from digiquant.stats.honesty import DISCLAIMER, wilson
+from digiquant.tearsheet_stats import resolve_win_rate
 
 
 def _build_page(
@@ -48,20 +49,17 @@ def _build_page(
     md_val = result.max_drawdown_pct
     md = f"{md_val:.1f}%" if md_val is not None else "—"
     sharpe_str = f"{result.sharpe_ratio:.2f}" if result.sharpe_ratio is not None else "—"
-    n_trades = result.num_trades
-    if win_rate is None:
+    if win_rate is None and result.honest_rate is None:
         win_rate_str = "—"
         win_rate_cls = ""
     else:
-        # Nautilus emits Win Rate as a fraction; tolerate percent-scale callers.
-        wr = win_rate / 100.0 if win_rate > 1 else win_rate
-        wr = max(0.0, min(1.0, wr))
-        if win_rate_wins is None:
-            k_wins = min(n_trades, max(0, round(wr * n_trades)))
-        else:
-            k_wins = min(n_trades, max(0, win_rate_wins))
-        win_rate_str = format_honest_rate(k_wins, n_trades)
-        w = wilson(k_wins, n_trades)
+        # The honest block owns k, n and the sample-size floors; the fill count
+        # is only a fallback denominator for results that predate L3.
+        counts = resolve_win_rate(result, win_rate, wins=win_rate_wins)
+        win_rate_str = counts.text
+        # A refusal publishes no interval, so it publishes no band either:
+        # recolouring a REFUSED card red is a rate claim the block disclaimed.
+        w = None if counts.refused else wilson(counts.k, counts.n)
         lo = w.lo if w is not None else None
         # Thresholds act on the CI lower bound, never the point estimate.
         if lo is None:
@@ -72,6 +70,10 @@ def _build_page(
             win_rate_cls = "negative"
         else:
             win_rate_cls = ""
+    # The disclaimer belongs to the frequency block: when the honest block is
+    # present it carries its own, otherwise the module default. It is rendered
+    # once, here — never on a KPI card and never on a PnL or Sharpe row.
+    disclaimer_str = result.honest_rate.disclaimer if result.honest_rate is not None else DISCLAIMER
     pf_str = f"{profit_factor:.2f}" if profit_factor is not None else "—"
     sortino_str = f"{sortino:.2f}" if sortino is not None else "—"
     calmar_str = f"{calmar:.2f}" if calmar is not None else "—"
@@ -102,7 +104,8 @@ def _build_page(
             if profit_factor and profit_factor < 1
             else "",
         )
-        + kpi("TOTAL TRADES", str(result.num_trades))
+        # num_trades is the fill count, not closed round trips — label it so.
+        + kpi("TOTAL FILLS", str(result.num_trades))
         + kpi("CALMAR", calmar_str, "positive" if calmar and calmar > 1 else "")
     )
 
@@ -420,7 +423,7 @@ def _build_page(
     <div class="chart-wrap h-xl"><div class="chart-wrap-title">Price + Bollinger Bands + Entries &amp; Exits</div>{price_tab}</div>
   </div>
 
-  <div class="disclaimer">{DISCLAIMER}</div>
+  <div class="disclaimer">{disclaimer_str}</div>
 
   <div class="footer">
     <span>digiquant Backtest Report — Generated from NautilusTrader</span>
