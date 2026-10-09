@@ -15,6 +15,7 @@ import logging
 from pathlib import Path
 from typing import Any, Mapping
 
+from digibase.art9 import screen_request
 from pydantic import BaseModel, ConfigDict, Field
 
 from digisearch.core.models import Chunk, Document
@@ -98,6 +99,53 @@ def apply_embeddings(
         chunk.embedding = [float(v) for v in vector]
 
 
+ART9_REFUSED_CODE = "art9_special_category"
+ART9_REFUSED_STATUS = 422
+
+
+def _screen_art9(index_name: str, chunks: list[Chunk]) -> None:
+    """Refuse a batch whose chunks carry Art. 9 special-category data.
+
+    Screening happens here, at the entry of :func:`index_chunks`, because that
+    is the one seam every ingress path shares: filesystem ingest via
+    :func:`ingest_source`, research, both trackers feeds and the SDK client all
+    call :func:`index_chunks` for the backend write. Screening a request body
+    instead would miss file ingest entirely, because ``IngestRequest.source`` is
+    a *path*, and the bytes are only read from disk afterwards.
+
+    The whole batch is screened in one call so a refusal costs one pass, not one
+    pass per chunk. ``metadata`` is included as a mapping rather than as a string
+    so that *field names* are screened as well as values: §5.5 coverage is by
+    field name, and a chunk carrying a ``diagnosis`` key is refused even when its
+    text is clean.
+
+    ``id`` (a hash of doc id and chunk index) and ``embedding`` (a list of
+    floats) are excluded: neither can carry a special category, and screening a
+    float vector on every ingest would be pure cost.
+
+    Fails closed. Only ``allow`` proceeds, so a decision added later than this
+    leaf can only ever refuse more, never less. No exception reference is
+    accepted here: this seam has no bypass, and a screening path with an off
+    switch will be used as one.
+    """
+
+    if not chunks:
+        return
+
+    result = screen_request(
+        [{"content": c.content, "doc_id": c.doc_id, "metadata": c.metadata} for c in chunks]
+    )
+    if result.decision == "allow":
+        return
+
+    # `reason` is an art9:<category>:<signal> label and never the matched value.
+    raise IngestError(
+        f"index {index_name!r} refused: chunks carry Art. 9 special-category data ({result.reason})",
+        code=ART9_REFUSED_CODE,
+        http_status=ART9_REFUSED_STATUS,
+    )
+
+
 def index_chunks(
     index_name: str,
     chunks: list[Chunk],
@@ -105,7 +153,14 @@ def index_chunks(
     embedding_provider: EmbeddingProvider | None = None,
     auto_embed: bool = True,
 ) -> str | None:
-    """Optional embed hook, then write chunks via the search backend router.
+    """Refuse Art. 9 chunks, then optionally embed, then write via the router.
+
+    The Art. 9 screen runs first, before a provider is resolved and before
+    anything is embedded, so a refused chunk is never turned into a vector and
+    never reaches a backend. Placement matters: with ``auto_embed=False`` there is
+    no :func:`apply_embeddings` call at all and the backend embeds the chunk
+    itself (``indexes/backends/vectorize.py``), so a screen placed at that call
+    site would sit downstream of the embed it is meant to precede.
 
     When *embedding_provider* is omitted and *auto_embed* is True, resolves the
     configured EmbeddingCache → BatchEmbedder → EmbeddingProvider stack via
@@ -115,7 +170,12 @@ def index_chunks(
     Propagates ``RuntimeError`` from :func:`route_add_chunks` unchanged so
     callers (research / client) keep their prior exception contract. Filesystem
     ingest wraps that error in :class:`IngestError` inside :func:`ingest_source`.
+    An Art. 9 refusal is already an :class:`IngestError`, so
+    :func:`ingest_source` re-raises it unchanged instead of reporting a backend
+    outage.
     """
+
+    _screen_art9(index_name, chunks)
 
     provider = embedding_provider
     if provider is None and auto_embed:
