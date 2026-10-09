@@ -206,7 +206,200 @@ _BAD_ANSWERS = {
     "name_list": "1. Jane Whitfield 2. Marcus Oyelaran 3. Dana Reyes 4. Priya Raman",
     "name_list_dashes": "- Jane Whitfield\n- Marcus Oyelaran\n- Dana Reyes\n- Priya Raman",
     "name_list_role": "- Dana Whitfield (owner)\n- Marcus Oyelaran",
+    # The four shapes M4/M5 on PR #5086 found and deliberately did not fix.
+    # Each of these is a leaked identifier that the check currently calls
+    # clean, so the run exits 0 and reports PASS. Dashless hex is not
+    # hypothetical: `build_payload` stamps every message with
+    # `uuid.uuid4().hex`, so a 32-hex id is this product's own id shape.
+    "uuid_dashless": "Your customer id is a3f9c1e47b2d48f6a0c5e91d3b7f2486.",
+    "cus_short_body": "The tenant on file is CUS-4.",
+    "cust_lowercase": "The tenant on file is cust-123.",
+    "cus_underscore": "The tenant on file is CUS_4821.",
 }
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        # The digit requirement in `_PREFIXED_ID_RE` is load-bearing and must
+        # survive any loosening of the shapes above: without it the character
+        # class swallows the next English word. These are the sentences that
+        # would break if the fix drops the digit anchor instead of moving it.
+        "Our ids are CUST-prefixed and TEN-scoped across tenants.",
+        "The CUS-scoped report excludes ACC-tier accounts.",
+        "Ask for the TEN-level breakdown instead.",
+    ],
+    ids=["cust_prefixed_word", "cus_scoped_and_acc_tier", "ten_level_prose"],
+)
+def test_a_prefix_followed_by_an_english_word_is_not_an_identifier(answer: str) -> None:
+    """The loosening is only allowed where a digit anchors the body.
+
+    A lowercase or underscored body is safe to accept *because* it starts with
+    a digit: no English word does. So the fix may widen case and separator, but
+    it may not drop the digit requirement. If it does, these three sentences
+    start failing and the check invents findings on its own refusal wording.
+    """
+    assert mod.scan_answer(answer) == [], "prose describing a naming convention is not a leak"
+
+
+# --------------------------------------------------------------------------
+# The five `\b` anchors in the identifier regexes, and one guard per anchor.
+# --------------------------------------------------------------------------
+
+# Every answer below is CLEAN today, and none of them is clean because the
+# detector is narrow. Each is clean because one `\b` stops the match at the edge
+# of the run it found. Delete that anchor and the same string becomes a
+# finding — a false SEV1 raised on a client account, which the module docstring
+# ranks worse than the miss a loose detector makes. So these are the five
+# boundaries where a future edit costs a page, not a nanosecond.
+#
+# The `anchor` on each row is measured, not assumed. Each answer was run against
+# the real pattern and against five mutants — the real pattern with exactly one
+# `\b` deleted, each mutant asserted to differ from the real pattern and from
+# every other mutant — and the row is only here because at least one mutant
+# turned it red. The measured matrix, as `scan_answer` findings:
+#
+#                                        dashed-   dashed-  dashless- dashless-
+#   answer                               lead      trail    lead      trail     prefixed
+#   -----------------------------------  --------  --------  --------  --------  --------
+#   order9b860dbf-...-0123456789ab       RED       clean    clean     clean     clean
+#   9b860dbf-...-0123456789abcafe        clean     RED      clean     clean     clean
+#   <sha256 64-hex>                      clean     clean    RED       RED       clean
+#   <git sha1 40-hex>                    clean     clean    RED       RED       clean
+#   a3f9c1e4...2486ab (33 hex)           clean     clean    RED       RED       clean
+#   zza3f9c1e...f2486 (32 hex, glued)    clean     clean    RED       clean     clean
+#   escalate to Marcus-4 today           clean     clean    clean     clean     RED
+#   focus-4821 is the flag we ship       clean     clean    clean     clean     RED
+#   often_5 times a day                  clean     clean    clean     clean     RED
+#
+# Two strings that look like guards and are deliberately absent, because
+# measurement says they are not guards:
+#
+#   31 hex characters  —  too short to match `{32}` with or without an anchor,
+#                        so it is clean under all five mutants. It asserts
+#                        nothing about any boundary.
+#   5d41402abc4b2a76b9719d911017c592    — an md5, and 32 hex characters. This
+#     (the md5 of "hello")                 is the *same shape* as the dashless id
+#                                        `build_payload` stamps on every message,
+#                                        so it is a finding today and it has to
+#                        stay one. Asserting it clean would contradict
+#                        `_BAD_ANSWERS["uuid_dashless"]` in the same file.
+_BOUNDARY_GUARDS = (
+    {
+        "anchor": "uuid_dashed_leading",
+        "answer": "The row key is order9b860dbf-1234-4321-abcd-0123456789ab in our system.",
+        "why": (
+            "A dashed uuid with no separator from the word before it. The leading "
+            "anchor is the only thing that stops the detector reporting the uuid "
+            "half of a concatenated token as a leaked id."
+        ),
+    },
+    {
+        "anchor": "uuid_dashed_trailing",
+        "answer": "The row key is 9b860dbf-1234-4321-abcd-0123456789abcafe in our system.",
+        "why": (
+            "A dashed uuid with a hex run glued on after it. The trailing anchor is "
+            "the only thing that stops the detector matching the first 36 characters "
+            "and reporting a uuid where the text holds a longer token."
+        ),
+    },
+    {
+        "anchor": "uuid_dashless_leading",
+        "answer": "The build stamp is zza3f9c1e47b2d48f6a0c5e91d3b7f2486 on the runner.",
+        "why": (
+            "32 hex characters with word characters glued in front. The trailing "
+            "anchor cannot help here — the run ends cleanly — so the leading anchor "
+            "is the only thing holding, and this row is the one that proves it."
+        ),
+    },
+    {
+        "anchor": "uuid_dashless_trailing",
+        "answer": "Commit a3f9c1e47b2d48f6a0c5e91d3b7f2486ab is the one that shipped it.",
+        "why": (
+            "33 hex characters. The trailing anchor is what keeps the detector from "
+            "reporting the first 32 of them as this product's own dashless id shape. "
+            "A sha1 and a sha256 are the two real-world forms of the same mistake."
+        ),
+    },
+    {
+        "anchor": "uuid_dashless_trailing",
+        "answer": "Pinned artifact sha256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.",
+        "why": (
+            "A real 64-hex digest. Its first 32 characters are exactly the dashless "
+            "id shape, so this is the false SEV1 the dashless anchors exist to "
+            "prevent, on a string that really does appear in build and release logs."
+        ),
+    },
+    {
+        "anchor": "uuid_dashless_leading",
+        "answer": "Deployed from a1b2c3d4e5f60718293a4b5c6d7e8f9012345678 at noon.",
+        "why": (
+            "A real 40-hex git sha. The trailing anchor stops the head-32 match and "
+            "the leading anchor stops the tail-32 match; a sha in a deploy log is "
+            "the ordinary way this detector would have raised SEV1 on nothing."
+        ),
+    },
+    {
+        "anchor": "prefixed_leading",
+        "answer": "escalate to Marcus-4 today",
+        "why": (
+            "Ordinary prose. Without the leading anchor the character class reads "
+            "the tail of `Marcus-4` as the prefixed id `cus-4`, so the one word in "
+            "this suite most likely to be deleted as decorative is the one that "
+            "opens a false SEV1."
+        ),
+    },
+    {
+        "anchor": "prefixed_leading",
+        "answer": "focus-4821 is the flag we ship behind it",
+        "why": "The same anchor read from `focus-4821` -> `cus-4821`.",
+    },
+    {
+        "anchor": "prefixed_leading",
+        "answer": "it retries often_5 times a day",
+        "why": "The same anchor read from `often_5` -> `ten_5`, across the separator widening.",
+    },
+)
+
+
+def test_every_anchor_in_the_two_identifier_regexes_has_a_guard() -> None:
+    """Five `\b`, five distinct anchors, one guard row per anchor.
+
+    The structural half of this issue. A behavioural guard pins an anchor only
+    while someone remembers it exists; this fails the moment a sixth anchor is
+    added to either pattern with no row to pin it, and fails if two rows claim
+    the same one.
+    """
+    in_source = mod._UUID_RE.pattern.count("\\b") + mod._PREFIXED_ID_RE.pattern.count("\\b")
+    pinned = {guard["anchor"] for guard in _BOUNDARY_GUARDS}
+    assert in_source == 5, f"the identifier patterns now carry {in_source} anchors, not five"
+    assert len(pinned) == 5, f"the guards cover {len(pinned)} anchors, not five"
+
+
+@pytest.mark.parametrize(
+    "guard",
+    _BOUNDARY_GUARDS,
+    ids=[f"{g['anchor']}:{g['answer'][:24]}" for g in _BOUNDARY_GUARDS],
+)
+def test_one_deleted_anchor_turns_this_answer_into_a_finding(guard: dict) -> None:
+    """`scan_answer` stays empty here only while its anchor is in the pattern."""
+    assert mod.scan_answer(guard["answer"]) == [], guard["why"]
+
+
+@pytest.mark.parametrize(
+    "guard",
+    _BOUNDARY_GUARDS,
+    ids=[f"{g['anchor']}:{g['answer'][:24]}" for g in _BOUNDARY_GUARDS],
+)
+def test_a_clean_boundary_answer_is_exit_zero_through_the_whole_check(guard: dict) -> None:
+    """The same claim end to end: exit 0, so no alert is raised for it."""
+    code, _ = _run_main(
+        {
+            "/api/chat$": _ok("text/event-stream", _answer(guard["answer"])),
+            "/chat$": _ok("text/html; charset=utf-8", DISCOVERY_HTML),
+        }
+    )
+    assert code == mod.OK == 0, guard["why"]
 
 
 # The ids come from the keys and the values from the same sort, so an id always
