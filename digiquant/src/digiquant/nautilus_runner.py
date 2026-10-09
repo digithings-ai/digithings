@@ -612,6 +612,7 @@ def _run_multi_symbol_backtest(
     - sharpe_ratio as the *average* Sharpe (labelled as such in the message)
     - max_drawdown_pct as the worst per-symbol drawdown (never silently nil)
     - per_symbol_pnl dict keyed by symbol
+    - honest_rate_by_symbol dict of per-symbol HonestRateBlock, never pooled (honest_rate stays None)
 
     Symbols whose backtest failed (``None`` or ``status="error"``) are never
     silently averaged in as fabricated zeros; they are named and the result is
@@ -621,6 +622,7 @@ def _run_multi_symbol_backtest(
     per_symbol_return: dict[str, float] = {}
     per_symbol_sharpe: dict[str, float] = {}
     per_symbol_max_dd: dict[str, float] = {}
+    honest_rate_by_symbol: dict[str, HonestRateBlock] = {}
     skipped_symbols: list[str] = [s for s in symbols if s not in symbol_dfs]
     degraded_symbols: list[str] = []
     num_trades_total = 0
@@ -652,6 +654,8 @@ def _run_multi_symbol_backtest(
             continue
         per_symbol_pnl[sym] = result.total_pnl
         per_symbol_return[sym] = result.total_return_pct
+        if result.honest_rate is not None:
+            honest_rate_by_symbol[sym] = result.honest_rate
         if result.sharpe_ratio is not None:
             per_symbol_sharpe[sym] = result.sharpe_ratio
         if result.max_drawdown_pct is not None:
@@ -702,6 +706,11 @@ def _run_multi_symbol_backtest(
         message_bits.append(f"Symbols skipped: {', '.join(skipped_symbols)}.")
     if degraded_symbols:
         message_bits.append(f"Degraded symbols excluded: {', '.join(degraded_symbols)}.")
+    if honest_rate_by_symbol:
+        message_bits.append(
+            f"honest_rate is None on a multi-symbol run: honest_rate_by_symbol carries one "
+            f"block per symbol ({len(honest_rate_by_symbol)}/{n}), never pooled across symbols."
+        )
 
     bt_result = BacktestResult(
         run_id=combined_run_id,
@@ -715,6 +724,7 @@ def _run_multi_symbol_backtest(
         max_drawdown_pct=normalize_drawdown_pct(worst_dd),
         num_trades=num_trades_total,
         per_symbol_pnl={k: round(v, 4) for k, v in per_symbol_pnl.items()},
+        honest_rate_by_symbol=honest_rate_by_symbol,
         status=status,
         message=" ".join(message_bits),
     )
