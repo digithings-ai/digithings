@@ -30,6 +30,7 @@ STRATEGY_ALIASES: dict[str, str] = {
 # registry canonical → STRATEGY_PARAM_SPECS key (when they differ)
 PARAM_SPEC_NAMES: dict[str, str] = {
     "btc_sdca": "sdca",
+    "gold_sdca": "sdca",
 }
 
 

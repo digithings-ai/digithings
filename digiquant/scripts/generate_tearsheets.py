@@ -64,6 +64,7 @@ if TYPE_CHECKING:
     import polars as pl
 
     from digiquant.strategies.sdca.composite_risk import IndicatorWeight
+    from digiquant.strategies.sdca.risk_model import RiskModel
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -148,24 +149,37 @@ def materialize_sdca_risk_index(
     coefficients_path: Path | None = None,
     extra_indicators: list[IndicatorWeight] | None = None,
     valuation_weight: float = 1.0,
+    risk_model: str | RiskModel = "btc_power_law",
 ) -> pl.DataFrame:
     """Build the SDCA ``risk_path`` parquet from *this* OHLCV frame only (#1462).
 
     Callers must pass the already-``apply_signal_delay()``-truncated frame so
     the index cannot leak bars beyond the published window. Default
     ``valuation_weight=1`` and no extras matches the catalog model default.
-    Published ``btc_sdca`` extras come from ``settings.json``.
+    Published ``btc_sdca`` extras come from ``settings.json``. ``risk_model``
+    selects the valuation rails via ``resolve_sdca_risk_model`` — pass a
+    prebuilt ``RiskModel`` to reuse one fit. The ``"btc_power_law"`` default
+    resolves to the historical BTC power-law construction.
     """
     import polars as pl
 
-    from digiquant.strategies.sdca.btc_power_law import BtcPowerLawRiskModel, load_coefficients
+    from digiquant.strategies.sdca.providers import resolve_sdca_risk_model
     from digiquant.strategies.sdca.risk_index import build_risk_index, write_risk_index
 
     ts_col = "timestamp" if "timestamp" in ohlcv.columns else ohlcv.columns[0]
     dates = ohlcv[ts_col]
     if dates.dtype != pl.Date:
         dates = dates.cast(pl.Date)
-    model = BtcPowerLawRiskModel(load_coefficients(coefficients_path))
+    model = (
+        resolve_sdca_risk_model(
+            risk_model,
+            dates=dates,
+            price=ohlcv["close"],
+            coefficients_path=coefficients_path,
+        )
+        if isinstance(risk_model, str)
+        else risk_model
+    )
     index = build_risk_index(
         dates,
         ohlcv["close"],
@@ -777,27 +791,22 @@ def run_and_write(
 
         import polars as pl
 
-        from digiquant.strategies.sdca.btc_power_law import load_coefficients
         from digiquant.strategies.sdca.indicator_catalog import (
             SdcaCompositeWeights,
             build_extra_indicators,
             indicator_display_name,
         )
         from digiquant.strategies.sdca.presets import load_preset
+        from digiquant.strategies.sdca.providers import resolve_sdca_risk_model
 
         sdca_cfg = entry.get("sdca") or {}
         preset_name = str(sdca_cfg.get("preset") or "balanced")
         preset = load_preset(preset_name)
         tmp_risk = Path(tempfile.mkdtemp(prefix="sdca_risk_")) / "risk.parquet"
         raw_w = sdca_cfg.get("indicator_weights") or {}
+        known_weight_fields = set(SdcaCompositeWeights().model_dump())
         published_weights = SdcaCompositeWeights(
-            valuation=float(raw_w.get("valuation", 1.0)),
-            m2=float(raw_w.get("m2", 0.0)),
-            rs_eth=float(raw_w.get("rs_eth", 0.0)),
-            dxy=float(raw_w.get("dxy", 0.0)),
-            weekly_rsi=float(raw_w.get("weekly_rsi", 0.0)),
-            weekly_macd=float(raw_w.get("weekly_macd", 0.0)),
-            sma_band=float(raw_w.get("sma_band", 0.0)),
+            **{k: float(v) for k, v in raw_w.items() if k in known_weight_fields}
         )
         ts_col = "timestamp" if "timestamp" in ohlcv.columns else ohlcv.columns[0]
         idx_dates = ohlcv[ts_col]
@@ -813,8 +822,8 @@ def run_and_write(
         weights = drop_extras_missing_sources(published_weights, sources)
         dropped_this_run = [
             name
-            for name in ("m2", "dxy", "rs_eth")
-            if getattr(published_weights, name) > 0.0 and getattr(weights, name) == 0.0
+            for name, weight in published_weights.model_dump().items()
+            if name != "valuation" and weight > 0.0 and getattr(weights, name) == 0.0
         ]
         try:
             load_btc_optimized_provenance()
@@ -823,15 +832,18 @@ def run_and_write(
         # Public payload never claims an OOS beat (Stage 1 curve_simulator sidecar
         # is not a Nautilus walk-forward result).
         beats_flat_dca_oos = False
+        risk_model_name = str(sdca_cfg.get("risk_model") or "btc_power_law")
+        model = resolve_sdca_risk_model(risk_model_name, dates=idx_dates, price=ohlcv["close"])
         extras = build_extra_indicators(idx_dates, ohlcv["close"], weights, sources)
         index = materialize_sdca_risk_index(
             ohlcv,
             tmp_risk,
             extra_indicators=extras or None,
             valuation_weight=weights.valuation,
+            risk_model=model,
         )
         sdca_index = index
-        coefficients = load_coefficients()
+        coefficients = model.coefficients
         calibration = {
             "risk_path": str(tmp_risk),
             "curve_nodes": preset.curve_nodes,
@@ -840,27 +852,27 @@ def run_and_write(
             "preset": preset_name,
             "indicator_weights": weights.model_dump(),
         }
-        extra_weights = (
-            published_weights.m2,
-            published_weights.rs_eth,
-            published_weights.dxy,
-            published_weights.weekly_rsi,
-            published_weights.weekly_macd,
-            published_weights.sma_band,
+        extra_weights = tuple(
+            weight for name, weight in published_weights.model_dump().items() if name != "valuation"
         )
         extras_unused = all(w == 0.0 for w in extra_weights)
+        nonzero_weights = "/".join(
+            f"{name}:{weight}" for name, weight in weights.model_dump().items() if weight > 0.0
+        )
         provenance_notes.append(
             "SDCA risk index built from the signal-delayed OHLCV frame "
             f"{index['date'].min()} → {index['date'].max()} "
-            f"({index.height} rows, risk_model={sdca_cfg.get('risk_model', 'btc_power_law')}, "
-            f"weights=valuation:{weights.valuation}/m2:{weights.m2}/"
-            f"rs_eth:{weights.rs_eth}/dxy:{weights.dxy}/"
-            f"weekly_rsi:{weights.weekly_rsi}/weekly_macd:{weights.weekly_macd}/"
-            f"sma_band:{weights.sma_band})."
+            f"({index.height} rows, risk_model={risk_model_name}, "
+            f"weights={nonzero_weights})."
         )
+        risk_label = {
+            "btc_power_law": "power-law",
+            "generic_valuation": "generic-valuation",
+            "rolling_z": "rolling-z",
+        }.get(risk_model_name, risk_model_name)
         if extras_unused:
             provenance_notes.append(
-                "Published index is power-law only (valuation weight 1.0). Extra "
+                f"Published index is {risk_label} only (valuation weight 1.0). Extra "
                 "indicators (M2, DXY, weekly RSI/MACD, SMA band, BTC/ETH RS) are "
                 "unused (weight 0) — not a multi-indicator composite."
             )

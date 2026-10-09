@@ -81,6 +81,7 @@ def _metrics_from_fills(
         vs_flat_dca_pct=dca.vs_flat_dca_pct,
         vs_lump_pct=dca.vs_lump_pct,
         capital_deployed_pct=dca.capital_deployed_pct,
+        capital_deployed_peak_pct=dca.capital_deployed_peak_pct,
         max_drawdown_pct=max_drawdown_magnitude_pct(state["portfolio_values"]),
     )
 

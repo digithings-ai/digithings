@@ -71,6 +71,13 @@ class SdcaTrialMetrics(BaseModel):
     vs_flat_dca_pct: float
     vs_lump_pct: float
     capital_deployed_pct: float
+    capital_deployed_peak_pct: float = Field(
+        ...,
+        description=(
+            "Peak net deployed over the window — the floor measures capital once "
+            "at risk; net can go negative after take-profit sells."
+        ),
+    )
     max_drawdown_pct: float = Field(
         ...,
         description="Drawdown as a ×100 percent magnitude (15.0 = 15% peak-to-trough)",
@@ -285,8 +292,13 @@ def sensitivity_neighbors(
 
 
 def is_feasible(metrics: SdcaTrialMetrics, objective: SdcaOptimizeObjective) -> bool:
-    """Capital-deployed floor and drawdown cap. Drawdown is a positive magnitude."""
-    if metrics.capital_deployed_pct < objective.capital_deployed_floor_pct:
+    """Capital-deployed floor (on peak) and drawdown cap. Drawdown is a positive magnitude.
+
+    The floor compares ``capital_deployed_peak_pct``: net deployed can fall
+    below the floor after take-profit sells even though capital was once at
+    risk, so measuring the floor on net vetoed profitable folds.
+    """
+    if metrics.capital_deployed_peak_pct < objective.capital_deployed_floor_pct:
         return False
     if metrics.max_drawdown_pct > objective.max_drawdown_cap_pct:
         return False
