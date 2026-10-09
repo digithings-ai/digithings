@@ -2,14 +2,16 @@
 
 **Reviewer:** Claude consultant (seat 42609dd2), DIG-2664
 **Date:** 2026-10-09
-**Scope:** design doc `free-tracing-options.md` v2.1 (Chris-approved 2026-10-09 21:34 CEST), judged against digithings `develop` @ `203684dcf0`
+**Scope:** design doc `free-tracing-options.md` v2.1 (Chris-approved 2026-10-09 21:34 CEST), judged against digithings `develop` @ `203684dcf0`. Covers all 12 review items from the issue description, including the two scope additions posted after the original brief (§11 overall bar vs. community-leading OSS; §12 open standards / no lock-in / MCP server).
 **Gates:** DIG-2655–DIG-2663 (backlog, unassigned), parked pending this verdict
 
 ## Verdict: **APPROVE WITH CHANGES**
 
-Option E (Cloudflare-owned ingest/store, OSS UI on demand) is the right call, and the elimination of ClickHouse/Redis-dependent tools (Langfuse, Opik, SigNoz, Helicone, …) in favor of Postgres-only MLflow is sound reasoning the repo evidence doesn't contradict. But the design was written without reading three pieces of this repo's own history that each change scope or sequencing: an accepted ADR that rejected the exact pattern (separate Postgres schema) this design re-proposes, a still-in-tree Langfuse implementation this design silently supersedes, and digitrace's own architecture doc, which states a zero-dependency philosophy this design discards without updating. None of these are reasons to reject the plan — they're reasons the first ticket (DIG-2655) can't just be "close DIG-2644/DIG-2645" as drafted.
+Option E (Cloudflare-owned ingest/store, OSS UI on demand) is the right call, and the elimination of ClickHouse/Redis-dependent tools (Langfuse, Opik, SigNoz, Helicone, …) in favor of Postgres-only MLflow is sound reasoning the repo evidence doesn't contradict. But the design was written without reading four pieces of this repo's own history that each change scope or sequencing: an accepted ADR that rejected the exact pattern (separate Postgres schema) this design re-proposes, a still-in-tree Langfuse implementation this design silently supersedes, digitrace's own architecture doc (which states a zero-dependency philosophy this design discards without updating), and the house convention that every vertical capability with real data gets an MCP server — something none of the nine draft tickets add for the trace/eval data this design is about to create. None of these are reasons to reject the plan — they're reasons the first ticket (DIG-2655) can't just be "close DIG-2644/DIG-2645" as drafted, and why a tenth line of scope (MCP server) needs an owner before kickoff.
 
-Six **must** items gate DIG-2655–2658 before implementation starts; the rest are sequencing/consistency fixes that don't block starting work.
+Benchmarked against the community-leading OSS stack (Langfuse, 35.6k★) as the new scope item asked: this design knowingly trades one-command setup and everyday-UI polish for $0 marginal cost and MLflow's secondary-surface credibility — a defensible trade for an internal, cost-constrained tool, but one the ADR should state outright rather than let the scoring table imply was free.
+
+Seven **must** items gate DIG-2655/2656/2658/2661 before implementation starts; the rest are sequencing/consistency fixes that don't block starting work.
 
 ---
 
@@ -96,6 +98,28 @@ Where this item does need work: digitrace's own `ARCHITECTURE.md` states the des
 - **Name collision / in-flight work to retire:** `apps/digitrace-langfuse` already exists in-tree (code/config landed, never deployed — no secrets, DNS, or live Containers yet, per `docs/ops/digitrace-langfuse.md`'s own status line), built 8 days before this design under a *different*, earlier-approved plan (`docs/plans/digitrace-langfuse-swap-2026-10-01.md`, "digitrace = Langfuse default"). The v2.1 migration path (step 7) already says "retire apps/digitrace-langfuse" — good, this isn't a surprise to the design's author — but it's currently a prose aside inside a *different* ticket's migration section, not a named AC anywhere.
   - **Must (DIG-2655):** Make the Langfuse retirement an explicit, named AC on the ADR ticket: archive/delete `apps/digitrace-langfuse/`, its Dockerfiles, `docs/ops/digitrace-langfuse.md`, and add a one-line "superseded by DIG-2664/v2.1, 2026-10-09" banner at the top of `docs/plans/digitrace-langfuse-swap-2026-10-01.md` (the same courtesy the v2.1 design doc gave its own v1). Low cost (nothing live to tear down) but necessary — a half-retired competing implementation sitting next to the new Postgres schema named `digitrace` is a second, avoidable source of exactly the contradictory-canonical-doc problem flagged in §9.
 
+## 11. Overall bar — credibility vs. the community-leading OSS stack
+
+Benchmarked honestly: this design is not the same class of thing as the community's leading self-hosted LLM-observability stack (Langfuse, 35.6k★ — the design doc's own candidate table already ranks it #1 by stars). Two different bars are being compared and the design doc is implicit, not explicit, about which one it's optimizing for:
+
+- **Setup time / one-command deploy:** Langfuse is `docker compose up` — one command, no cloud account required, usable in minutes by anyone who clones the repo. This design requires a live Cloudflare account (Workers Paid, Queues, R2) and a live Supabase project before the always-on path works at all; local mode still needs Docker for MLflow plus `wrangler dev`/Miniflare for the Worker leg. That's a materially higher bar for a new contributor or outside adopter trying the stack cold, and it's not close to "one-command."
+- **Polished UI for the everyday path:** the always-on, $0 path (Workers/Queue/R2/Supabase/dashboard tab) is a **home-built** list/search/tree view, not a purpose-built trace-browsing UI — Langfuse and Phoenix are both purpose-built for exactly this and are more polished for it today. MLflow's tracing UI is real and Apache-2.0, but it's a feature retrofitted onto a broader experiment-tracking product, not a purpose-built LLM-trace UI — and in this design it's explicitly the *on-demand, secondary* surface, not the everyday one.
+- **Credibility to an outside user:** MLflow the brand carries real credibility (Databricks-backed, 28k★, widely known) — but an outside user evaluating "is digitrace's tracing any good" would be evaluating the home-built ingest/store/dashboard first (digithings-specific CF+Supabase glue), with MLflow as an occasional deep-dive, not the other way around. The credibility the design borrows from MLflow applies to maybe a third of what a user would actually touch day to day.
+
+None of this means the design is wrong — the design doc's own scoring table (§3) already deliberately downweights "OSS leadership" against "$0 fit," and that's a defensible choice **for an internal, cost-constrained, self-hosted tool that doesn't need to win external adoption**. But that trade-off should be stated as a trade-off, not implied to be free. If "leading, user-friendly, cheap" is genuinely all three required simultaneously (per the new scope item), the honest answer is: pick two. This design picks "cheap" and "eventually-credible-via-MLflow," and knowingly spends "easy setup / polished everyday UI" to get there.
+
+- **Should (DIG-2655):** Say this trade-off explicitly in the ADR rather than letting the scoring table's numbers imply all dimensions were satisfied equally. If a lower setup bar for outside contributors matters later, the biggest lever is making the ingest Worker + consumer generic (don't hard-require digikey/Supabase/CF specifically — see §12) so someone without digithings' specific accounts can still stand up the always-on path, not just the MLflow tail (see §12).
+
+## 12. Open standards & no lock-in (OTLP/gen_ai, MCP server, import/export, swappable layers)
+
+**OTLP/gen_ai:** already substantially satisfied by construction — ingest is OTLP/HTTP end to end (Workers-native traces, digitrace's own OTel leg, and MLflow's `/v1/traces` all speak OTLP), and DIG-2656 is specifically the ticket that adds `gen_ai.*`/OpenInference semantic-convention attributes. No gap here beyond what §1 already covers.
+
+**Import/export to other backends, swappable layers:** also substantially satisfied — the whole design is OTLP-mediated (R2 holds raw OTLP-JSON, replay re-emits OTLP to whichever backend), so swapping the on-demand UI (MLflow → Phoenix → something else) is a config change to the replay target, not a rewrite, and digibase's existing endpoint/header resolution (§9) already supports pointing at an arbitrary OTLP-compatible destination. This is a genuine strength of Option E over a vendor-API-shaped alternative.
+
+**MCP server for querying traces/evals — this is a real gap, not just unaddressed.** Every comparable vertical capability in this monorepo already exposes an MCP server so digigraph/agents can query it as a tool: `digiquant/src/digiquant/mcp_server.py`, `digigraph/src/digigraph/mcp_server.py`, `digivault` ships one too (`python -m digivault.mcp_server`), and `docs/vision/digiquant.md` states the house convention plainly: *"digigraph agents call [vertical service] tools... through the standard MCP tool registry."* digitrace's own `ARCHITECTURE.md` currently says it has no MCP server and that this is *"correct by design"* — but that line was written for the old, minimal, library-only digitrace (no DB, no traces to query). Once DIG-2657/2658 land, digitrace **becomes** a vertical capability with real data worth querying (trace trees, scores, token/cost rollups) — the same shape as digiquant's backtest data, which already gets an MCP surface. None of the nine draft tickets add one.
+
+- **Must (DIG-2655/2661 — new scope, not currently covered by any of DIG-2655..2663):** Add an MCP server for digitrace (`digitrace.mcp_server`, following the digivault/digiquant/digigraph precedent) exposing read-only tools for querying traces/spans/scores — e.g. `get_trace(trace_id)`, `search_traces(tenant, filters)`, `get_cost_summary(tenant, window)`. This is the concrete, in-house way to satisfy "queryable via MCP" (§12) and simultaneously closes the "digitrace does not expose an MCP server, by design" line in `ARCHITECTURE.md` that DIG-2655 already needs to update per §9. Scope it into DIG-2661 (which already owns the query/list/search surface for the dashboard) or split it into a tenth ticket — either way it needs an owner before implementation starts, since it's currently nowhere.
+
 ---
 
 ## Ranked changes
@@ -107,12 +131,14 @@ Where this item does need work: digitrace's own `ARCHITECTURE.md` states the des
 4. **DIG-2655:** ADR must explicitly supersede `digitrace/ARCHITECTURE.md`'s stated zero-dependency philosophy and `docs/vision/digitrace.md`'s roadmap, not just close DIG-2644/DIG-2645. (§9)
 5. **DIG-2655:** Make `apps/digitrace-langfuse` retirement (code, Dockerfiles, ops doc, superseding banner on the 2026-10-01 plan memo) a named AC on the ADR ticket, not a prose aside in DIG-2663's migration step. (§10)
 6. **DIG-2658:** State plainly that RLS is not the real tenant-isolation boundary under service-role access — the application-layer tenant filter in the consumer Worker/dashboard-api is — and make sure that filter is what DIG-2661 actually tests. (§4)
+7. **DIG-2655/2661 (new scope — not on any current ticket):** Add an MCP server for digitrace (`digitrace.mcp_server`), matching the digiquant/digigraph/digivault precedent, exposing read-only trace/score/cost-query tools. Needs an explicit owner — currently uncovered by DIG-2655..2663. (§12)
 
 ### Should (fix during implementation, don't need to gate kickoff)
 1. **DIG-2657:** Align ingest auth with digikey's verified/unverified tenant convention (`tenant_slug_verified`) rather than a bespoke scheme; add explicit `max_retries`/`dead_letter_queue` to the Queue config. (§2)
 2. **DIG-2658/2662:** Reconcile the 90-day Supabase retention vs. 180-day R2 lifecycle mismatch — decide and document whether post-90-day replay is supported. (§3)
 3. **DIG-2657/2661:** Timebox a WAE spike (query latency, cardinality, sampling at volume) before the dashboard depends on it as metrics source of record. (§5)
 4. **DIG-2656/2662:** Route OTLP endpoint/header resolution through `digibase.otel` rather than adding a third independent copy of the fallback chain. (§9)
+5. **DIG-2655:** State the "cheap + eventually-credible-via-MLflow, at the cost of one-command setup and everyday-UI polish" trade-off explicitly in the ADR, rather than letting the §3 scoring table imply Langfuse-level adoption/polish was matched. (§11)
 
 ### Could (polish, non-blocking)
 1. **DIG-2661:** Decide whether the Traces tab reuses or replaces the existing `/observability` redirect route. (§6)
