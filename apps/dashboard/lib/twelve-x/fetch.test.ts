@@ -15,6 +15,7 @@ import {
   getTradeIdeaArchive,
   getTradeIdeaHistory,
   getFxFixSeries,
+  resolveCanonicalRunDate,
 } from './fetch';
 import type {
   FxBriefRow,
@@ -1146,5 +1147,63 @@ describe('getTodayEvents / getUpcomingEvents over the mocked calendar', () => {
     // …in place, between its original neighbours — not hoisted to the front nor dropped
     // to the end, so the query's event_datetime_utc ordering downstream is unchanged.
     expect((await getUpcomingEvents()).map((e) => e.id)).toEqual([1, 3, 4]);
+  });
+});
+
+describe('resolveCanonicalRunDate', () => {
+  /**
+   * The Oct 7 2026 regression, verbatim. 35 briefs were stored and the digest and
+   * consensus both advanced to Oct 7, but `fx_confluence_snapshot` had NO Oct 7 row:
+   * `build_confluence()` only emits a setup when a session has a directional
+   * consensus, >= min_brokers distinct desks AND a catalyst inside horizon_days,
+   * so a legitimate flat/split session writes zero rows. The Today rail used to
+   * key off that table and rewound to Oct 6, hiding all 35 briefs.
+   */
+  const OCT_7_FLAT_SESSION = {
+    research: '2026-10-07',
+    digest: '2026-10-07',
+    consensus: '2026-10-07',
+    confluence: '2026-10-06',
+  };
+
+  it('takes the research run even when confluence lags a day behind', () => {
+    expect(resolveCanonicalRunDate(OCT_7_FLAT_SESSION)).toBe('2026-10-07');
+  });
+
+  it('ignores confluence even when it is the ONLY candidate', () => {
+    // With no base row at all there is nothing better to fall back to, so confluence
+    // is still returned rather than null — but it is now last, not first.
+    expect(resolveCanonicalRunDate({ confluence: '2026-10-06' })).toBe('2026-10-06');
+  });
+
+  it('falls back digest -> consensus -> confluence when research is absent', () => {
+    expect(resolveCanonicalRunDate({ digest: '2026-10-07', confluence: '2026-10-06' })).toBe(
+      '2026-10-07'
+    );
+    expect(resolveCanonicalRunDate({ consensus: '2026-10-07', confluence: '2026-10-06' })).toBe(
+      '2026-10-07'
+    );
+    expect(resolveCanonicalRunDate({ confluence: '2026-10-06' })).toBe('2026-10-06');
+  });
+
+  it('treats null and undefined as absent, and returns null when all are empty', () => {
+    expect(
+      resolveCanonicalRunDate({ research: null, digest: undefined, confluence: '2026-10-06' })
+    ).toBe('2026-10-06');
+    expect(resolveCanonicalRunDate({})).toBeNull();
+    expect(resolveCanonicalRunDate({})).toBeNull();
+  });
+
+  it('never returns a date that outranks its base table', () => {
+    // A stale digest/consensus from a LATER run than the base table must not win:
+    // the canonical day is the freshest day the briefs themselves can support.
+    expect(
+      resolveCanonicalRunDate({
+        research: '2026-10-07',
+        digest: '2026-10-09',
+        consensus: '2026-10-09',
+        confluence: '2026-10-09',
+      })
+    ).toBe('2026-10-07');
   });
 });
