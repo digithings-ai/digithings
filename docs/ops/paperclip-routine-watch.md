@@ -102,13 +102,23 @@ mode DIG-1220 is about. It was removed (DIG-2618). **Do not add a copy of the sc
 suite still has two homes and still one body, because a forked suite would be a second thing to
 forget to update; only the header comment differs and the 15 checks are byte-identical. Both homes
 resolve to the one canonical script — the relative candidate when the suite runs from the kit, the
-`$HOME` candidate when it runs from here — and the suite fails loudly when neither finds it, so a
-missing subject can never read as a passing run.
+`$HOME` candidate when it runs from here — and the shell suite exits non-zero when neither finds it,
+so a missing subject can never read as a passing run.
 
-That loud failure is also why the `ruff-and-scripts` CI lane can no longer run this suite: a GitHub
-runner has no `~/paperclip-workspace`, so it has no script to drive. The 15 checks are host-local and
-are run on the machine the observer runs on. Do not "fix" that by vendoring the script back into the
-repo; report it instead.
+The pytest wrapper `tests/scripts/test_dt_routine_watch.py` is the one place that narrows this. A
+GitHub runner has no `~/paperclip-workspace`, so it has no script to drive, and failing the
+`ruff-and-scripts` lane over a file the runner could never have had is noise rather than signal. On a
+CI runner the wrapper therefore `pytest.skip`s with the reason printed in the output, which is an
+explicit, visible skip and never a silent pass (board decision on DIG-2618).
+
+That exemption is deliberately narrow. On any host that is not a CI runner the wrapper still **fails
+loudly** when the script is missing, because such a host owns the observer and losing the script there
+silently retires all 15 checks. So:
+
+- host: 15 checks run for real, and a missing script is a failure
+- CI runner: one visible `SKIPPED` line, zero of the 15 checks run
+
+Do not widen the exemption, and do not "fix" it by vendoring the script back into the repo.
 
 ## Install
 
