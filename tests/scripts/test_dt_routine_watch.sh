@@ -262,5 +262,48 @@ printf '{"api":"http://127.0.0.1:3100/api","companyId":"nothing-here","watchAllS
 [ $? -ne 0 ] && ok "watchAllScheduleTriggers matching nothing exits non-zero" \
   || no "watchAllScheduleTriggers matching nothing exits non-zero"
 
+# 15-17. The self-gap report is a latch, not a tombstone: a first silence pages once, the next healthy
+#     tick releases the latch, and a later silence pages AGAIN (DIG-1397).
+rm -f "$WORK/s1517.json"
+fixture "$WORK/f15" "$DUE" null null "$TWO_MANUAL"
+python3 -c "
+import datetime, json
+old=(datetime.datetime.now(datetime.timezone.utc)-datetime.timedelta(hours=5)).strftime('%Y-%m-%dT%H:%M:%S.000Z')
+json.dump({'lastCheckAt':old,'boundaries':{}}, open('$WORK/s1517.json','w'))
+"
+run 15 "$WORK/f15" "$WORK/s1517.json"
+FIRST="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('selfGapReportedAt') or '')" "$WORK/s1517.json")"
+if [ "$PAGES" = 1 ] && printf '%s' "$OUT" | grep -q "kind=self-gap" && [ -n "$FIRST" ]; then
+  ok "a silence past the threshold pages once and latches"
+else
+  no "a silence past the threshold pages once and latches"
+fi
+
+# 16. the next healthy tick: the clock is turning, so nothing is filed and the latch is released.
+fixture "$WORK/f16" "$PAST" null null "$TWO_MANUAL"
+run 16 "$WORK/f16" "$WORK/s1517.json"
+if [ "$PAGES" = 0 ] && [ "$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('selfGapReportedAt') or '')" "$WORK/s1517.json")" = "" ]; then
+  ok "a healthy tick releases the latch and files nothing"
+else
+  no "a healthy tick releases the latch and files nothing"
+fi
+
+# 17. and a second silence pages again with a reportedAt of its own. iso() has second resolution, so the
+#     ticks are held a second apart or the two stamps could be equal by luck.
+sleep 1
+python3 -c "
+import datetime, json
+st=json.load(open('$WORK/s1517.json'))
+st['lastCheckAt']=(datetime.datetime.now(datetime.timezone.utc)-datetime.timedelta(hours=5)).strftime('%Y-%m-%dT%H:%M:%S.000Z')
+json.dump(st, open('$WORK/s1517.json','w'))
+"
+run 17 "$WORK/f15" "$WORK/s1517.json"
+SECOND="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('selfGapReportedAt') or '')" "$WORK/s1517.json")"
+if [ "$PAGES" = 1 ] && printf '%s' "$OUT" | grep -q "kind=self-gap" && [ -n "$SECOND" ] && [ "$SECOND" != "$FIRST" ]; then
+  ok "a second silence pages again with a reportedAt of its own"
+else
+  no "a second silence pages again with a reportedAt of its own"
+fi
+
 if [ "$fails" -eq 0 ]; then printf '\nall checks passed\n'; else printf '\n%s check(s) failed\n' "$fails"; fi
 exit $([ "$fails" -eq 0 ] && echo 0 || echo 1)
