@@ -52,8 +52,35 @@ jobs:
             exit 0
           fi
 
+          # Commits authored before this epoch are exempt. 1791072000 is
+          # 2026-10-04T00:00:00Z, the date CONTRIBUTING.md:101 promises the
+          # sign-off rule applies from; it also states that commits before that
+          # date are not retro-signed, so failing them would block a PR whose
+          # only remedy is the very amendment that promise forbids. DIG-1369
+          # step 1.
+          #
+          # The comparison is on the AUTHOR date (%at, unix epoch), never on a
+          # date string: %aI renders the author's own timezone, so a commit
+          # authored 2026-10-04T01:00:00+02:00 prints as being "on" the cutoff
+          # day while in UTC it is 2026-10-03T23:00Z, i.e. before it. A string
+          # comparison against the cutoff would exempt commits the rule does
+          # not cover and, at the other end of the range, fail pre-cutoff ones.
+          # Author date, not committer date (%ct): amending a pre-cutoff commit
+          # today moves only the committer date, and the exemption has to
+          # follow when the work was written, not when it was re-signed.
+          DCO_SIGNOFF_CUTOFF_EPOCH=1791072000
+          DCO_CUTOFF_UTC="2026-10-04T00:00:00Z"
+
           MISSING=0
+          CHECKED=0
+          EXEMPT=0
           for SHA in $COMMITS; do
+            AUTHORED_AT=$(git log -1 --format='%at' "$SHA")
+            if [ "$AUTHORED_AT" -lt "$DCO_SIGNOFF_CUTOFF_EPOCH" ]; then
+              EXEMPT=$((EXEMPT + 1))
+              continue
+            fi
+            CHECKED=$((CHECKED + 1))
             if ! git log -1 --format='%B' "$SHA" | grep -q '^Signed-off-by: '; then
               echo "ERROR: Commit $SHA is missing a Signed-off-by line."
               echo "  Commit message:"
@@ -63,12 +90,31 @@ jobs:
             fi
           done
 
+          # Verdict lines, one per fact, so a reader can grep any of them:
+          #   checked=N              commits the rule was applied to
+          #   skipped_pre_cutoff=N   commits exempt as authored before the cutoff
+          # Printed before the failure report so a red run states what it
+          # actually looked at; a count only printed on the pass path is a
+          # count you cannot read on the run you most want it.
+          echo "checked=$CHECKED skipped_pre_cutoff=$EXEMPT"
+          if [ "$EXEMPT" -gt 0 ]; then
+            echo "  ($EXEMPT commit(s) authored before $DCO_CUTOFF_UTC are exempt and were not checked.)"
+          fi
+
           if [ "$MISSING" -gt 0 ]; then
             echo ""
             echo "$MISSING commit(s) missing Signed-off-by."
             echo "All contributions to digithings require a DCO 1.1 sign-off."
             echo "See CONTRIBUTING.md for details."
             exit 1
+          fi
+
+          # When the range is entirely pre-cutoff, checked=0 and the pass line
+          # below would claim a pass having examined nothing, so the summary is
+          # conditioned on there being something to have checked.
+          if [ "$CHECKED" -eq 0 ]; then
+            echo "No in-scope commits to check; all $EXEMPT commit(s) predate $DCO_CUTOFF_UTC."
+            exit 0
           fi
 
           echo "All commits are signed off."
