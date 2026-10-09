@@ -45,8 +45,8 @@ So deleting `, "Segoe UI Symbol"` from the **mono** stack alone leaves `--font-s
 |---|---|
 | **M-C** drop `, "Segoe UI Symbol"` from the **first** occurrence only (`:63`, display — not the mono stack) | `Tests 6 passed (6)` — correct, nothing required it |
 | **M-C1** drop it from the **second** occurrence only (`:62`, the **mono** stack) | **`Tests 6 passed (6)` — FALSE PASS** |
-| **M-C2** drop it from **both** | `1 failed | 5 passed (6)` — fails test 5 |
-| **M-C3** drop it from `packages/ui/src/styles/digichat-app-theme.css` (the only mono stack in that file) | `1 failed | 5 passed (6)` — fails test 5 |
+| **M-C2** drop it from **both** | `1 failed \| 5 passed (6)` — fails test 5 |
+| **M-C3** drop it from `packages/ui/src/styles/digichat-app-theme.css` (the only mono stack in that file) | `1 failed \| 5 passed (6)` — fails test 5 |
 
 **Impact.** A regression that removes the glyph fallback — the one carrying U+25B8 ▸, U+25BE ▼ and U+2318 ⌘, which Geist Mono lacks — from the mono face on every shipped surface **passes the whole suite green**. That is precisely what acceptance criterion #3 exists to prevent, and the test reads as if it covers it. `digichat-app-theme.css` has a single mono stack, so it is covered; only `tokens.css` has the aliasing.
 
@@ -58,7 +58,7 @@ So deleting `, "Segoe UI Symbol"` from the **mono** stack alone leaves `--font-s
 
 This is **not reachable as a defect**. `:93-97` (test 1) independently asserts each of the five configs matches `/from ["']next\/font/`, `/Geist_Mono\(\{/` and `variable: "--font-mono-face"`. Proved by mutation:
 
-- **M-B** — stripped `next/font` from all five configs. Full suite: `1 failed | 5 passed (6)`; the failure is test 1, `gives every surface one config file that loads Geist Mono as the mono face`. Test 2 alone under M-B (`-t "keeps next/font out"`): `1 passed | 5 skipped`.
+- **M-B** — stripped `next/font` from all five configs. Full suite: `1 failed \| 5 passed (6)`; the failure is test 1, `gives every surface one config file that loads Geist Mono as the mono face`. Test 2 alone under M-B (`-t "keeps next/font out"`): `1 passed | 5 skipped`.
 
 Suggestion if it is ever worth a line: assert `expect(callers.length).toBeGreaterThan(0)`. Not required for approval.
 
@@ -85,13 +85,13 @@ All six `it` blocks printed with differing durations (2ms / 170ms / 58ms / 1ms /
 
 | Mutation | Result |
 |---|---|
-| **M-A** add `import { Geist_Mono } from "next/font/google"` in a NEW file `packages/ui/src/__probe_font_loader.ts` | `1 failed | 5 passed (6)` — fails test 2, `keeps next/font out of every file but the surface configs` |
-| **M-B** strip `next/font` imports from the five configs | `1 failed | 5 passed (6)` — fails test 1 |
+| **M-A** add `import { Geist_Mono } from "next/font/google"` in a NEW file `packages/ui/src/__probe_font_loader.ts` | `1 failed \| 5 passed (6)` — fails test 2, `keeps next/font out of every file but the surface configs` |
+| **M-B** strip `next/font` imports from the five configs | `1 failed \| 5 passed (6)` — fails test 1 |
 | **M-C1** drop `, "Segoe UI Symbol"` from `tokens.css` **mono** stack only (`:62`) | **`6 passed (6)` — NOT CAUGHT.** See the medium finding |
-| **M-C2** drop it from **both** `tokens.css` stacks (2 → 0 occurrences) | `1 failed | 5 passed (6)` — fails test 5 |
-| **M-C3** drop it from `digichat-app-theme.css` (its only mono stack) | `1 failed | 5 passed (6)` — fails test 5 |
-| **M-D** delete `--font-geist-mono: var(--font-mono-face, "Geist Mono");` from `chat-aui.css` | `1 failed | 5 passed (6)` — fails test 6 |
-| **M-E** gut the mono stack to `var(--font-mono-face, "Geist Mono");` (no fallbacks) | `1 failed | 5 passed (6)` — fails test 4 |
+| **M-C2** drop it from **both** `tokens.css` stacks (2 → 0 occurrences) | `1 failed \| 5 passed (6)` — fails test 5 |
+| **M-C3** drop it from `digichat-app-theme.css` (its only mono stack) | `1 failed \| 5 passed (6)` — fails test 5 |
+| **M-D** delete `--font-geist-mono: var(--font-mono-face, "Geist Mono");` from `chat-aui.css` | `1 failed \| 5 passed (6)` — fails test 6 |
+| **M-E** gut the mono stack to `var(--font-mono-face, "Geist Mono");` (no fallbacks) | `1 failed \| 5 passed (6)` — fails test 4 |
 
 M-A proves test 2 is not vacuous in the direction it is written for (a loader escaping to a non-config file). M-B proves the "no loader anywhere" case is caught by test 1. **M-C1 is the one break the suite missed**, and it is the medium finding above.
 
