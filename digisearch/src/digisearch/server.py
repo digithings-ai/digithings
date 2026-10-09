@@ -27,6 +27,7 @@ from digikey.integrations.service_middleware import DigiAuthMiddleware, digisear
 
 from digisearch import __version__
 from digisearch.agent.pipeline_models import ResearchTurnOutput
+from digisearch.art9_screen import router as art9_screen_router
 from digisearch.backend_require import require_real_search_backend
 from digisearch.core.models import Query
 from digisearch.indexes.backends.backend_errors import CorpusNotSeededError
@@ -164,6 +165,12 @@ install_metrics(app, service="digisearch", version=__version__)
 install_cors(app, service="digisearch")
 app.add_middleware(DigiAuthMiddleware, service="digisearch", path_scopes=_digisearch_path_scopes)
 
+# Art. 9 transcript screening (DIG-1176). One route, mounted on the existing app.
+# The route is authenticated by default: _digisearch_path_scopes falls through to
+# digisearch:query for an unknown path, so no digikey change is needed and no
+# public-path exemption is added. The digisearch middleware mount is leaf 10's.
+app.include_router(art9_screen_router)
+
 
 _rl_windows: dict[str, _deque] = {}
 _rl_lock = _Lock()
@@ -180,6 +187,9 @@ _RATE_LIMITS: dict[str, tuple[int, int]] = {
     # § Interfaces websets statics (creation is a DoS surface); the
     # parameterized webset routes follow the same two-tier mechanism (D17).
     "/v1/websets": (10, 60),
+    # Art. 9 transcript screening (DIG-1176). The caller is digichat screening
+    # each conversation turn before it is stored, so the budget is per-transcript.
+    "/internal/art9/screen": (120, 60),
 }
 _DEFAULT_RATE_LIMIT = (30, 60)
 _UNLIMITED_PATHS = {"/health", "/healthz"}
