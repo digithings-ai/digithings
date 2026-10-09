@@ -393,16 +393,16 @@ field_names: Mapping[str, tuple[str, ...]] = MappingProxyType(
 #   word on its own.
 
 _nhs_number_re = re.compile(
-    r"\b(?:nhs|health)\s*(?:record\s*)?(?:number|no\.?|#)\s*[:#]?\s*\d[\d\s-]{7,}\d",
+    r"\b(?:nhs|health)\s*(?:record\s*)?(?:number|no\.?|#)\s*(?:[:#]\s*)?\d[\d\s-]{7,}\d",
     re.IGNORECASE,
 )
 _record_number_re = re.compile(
     r"\b(?:medical|patient|health)\s*(?:record|file)\s*(?:number|no\.?|#)"
-    r"\s*[:#]?\s*\d[\d\s-]{4,}\d",
+    r"\s*(?:[:#]\s*)?\d[\d\s-]{4,}\d",
     re.IGNORECASE,
 )
 _date_of_birth_re = re.compile(
-    r"\b(?:date\s*of\s*birth|birth\s*date|d\.?o\.?b\.?)\s*[:#=]?\s*"
+    r"\b(?:date\s*of\s*birth|birth\s*date|d\.?o\.?b\.?)\s*(?:[:#=]\s*)?"
     r"(?:(?:19|20)\d{2}[-/.](?:0?[1-9]|1[0-2])[-/.](?:0?[1-9]|[12]\d|3[01])"
     r"|(?:0?[1-9]|[12]\d|3[01])[-/.](?:0?[1-9]|1[0-2])[-/.](?:19|20)\d{2})",
     re.IGNORECASE,
@@ -411,7 +411,7 @@ _brca_marker_re = re.compile(r"\bbrca[12]\b", re.IGNORECASE)
 _rs_id_re = re.compile(r"\brs\d{3,}\b", re.IGNORECASE)
 _genotype_call_re = re.compile(
     r"\b(?:(?:chr)?[0-9]{1,2}|x|y|mt)[:.][0-9]+[:. ]?[acgt]*[acgt]>[acgt]"
-    r"|c\.[0-9]+_?[0-9]*(?:del|dup|ins|inv|[acgt]>)[a-z]*",
+    r"|c\.[0-9]+(?:_[0-9]*)?(?:del|dup|ins|inv|[acgt]>)[a-z]*",
     re.IGNORECASE,
 )
 _biometric_template_re = re.compile(
