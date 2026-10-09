@@ -9,7 +9,10 @@ import pytest
 from digivoice.cli import Runtime, run
 from digivoice.paths import resolve_paths
 from digivoice.settings import (
+    REWRITE_TIMEOUT_PRESETS,
     VoiceSettings,
+    cycle_rewrite_timeout,
+    format_rewrite_timeout,
     load_settings,
     parse_setting_value,
     save_settings,
@@ -27,7 +30,21 @@ def test_defaults_keep_rewrite_disabled(tmp_path: Path) -> None:
     settings = load_settings(paths)
     assert settings.rewrite_enabled is False
     assert settings.rewrite_preset == "none"
+    assert settings.rewrite_timeout_seconds is None
     assert settings.paste_on_stop is True
+    assert settings.word_detection is False
+    assert settings.spelling_detection is False
+
+
+def test_detection_flags_set_get_round_trip(tmp_path: Path) -> None:
+    paths = resolve_paths("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)})
+    set_setting(paths, "word_detection", "true")
+    set_setting(paths, "spelling_detection", "on")
+    saved = load_settings(paths)
+    assert saved.word_detection is True
+    assert saved.spelling_detection is True
+    set_setting(paths, "word_detection", "off")
+    assert load_settings(paths).word_detection is False
 
 
 def test_save_and_load_round_trip(tmp_path: Path) -> None:
@@ -35,9 +52,10 @@ def test_save_and_load_round_trip(tmp_path: Path) -> None:
     settings = VoiceSettings(
         rewrite_enabled=True,
         rewrite_preset="email",
-        rewrite_model="qwen2.5:3b",
-        rewrite_runner="ollama",
+        rewrite_model="qwen2.5-1.5b-instruct-q4_k_m.gguf",
+        rewrite_runner="llama.cpp",
         rewrite_auto_route=True,
+        rewrite_timeout_seconds=30.0,
     )
     target = save_settings(paths, settings)
     assert target == settings_path(paths)
@@ -45,8 +63,9 @@ def test_save_and_load_round_trip(tmp_path: Path) -> None:
     loaded = load_settings(paths)
     assert loaded.rewrite_enabled is True
     assert loaded.rewrite_preset == "email"
-    assert loaded.rewrite_model == "qwen2.5:3b"
+    assert loaded.rewrite_model == "qwen2.5-1.5b-instruct-q4_k_m.gguf"
     assert loaded.rewrite_auto_route is True
+    assert loaded.rewrite_timeout_seconds == 30.0
 
 
 def test_corrupt_settings_file_falls_back_to_defaults(tmp_path: Path) -> None:
@@ -62,6 +81,44 @@ def test_parse_bool_and_null() -> None:
     assert parse_setting_value("rewrite_model", "none") is None
     with pytest.raises(ValueError):
         parse_setting_value("rewrite_enabled", "maybe")
+
+
+def test_timeout_presets_only_and_off_by_default() -> None:
+    assert REWRITE_TIMEOUT_PRESETS == (15.0, 30.0, 60.0)
+    assert parse_setting_value("rewrite_timeout_seconds", "off") is None
+    assert parse_setting_value("rewrite_timeout_seconds", "disabled") is None
+    assert parse_setting_value("rewrite_timeout_seconds", "15") == 15.0
+    assert parse_setting_value("rewrite_timeout_seconds", "30") == 30.0
+    assert parse_setting_value("rewrite_timeout_seconds", "60") == 60.0
+    with pytest.raises(ValueError):
+        parse_setting_value("rewrite_timeout_seconds", "45")
+    with pytest.raises(ValueError):
+        parse_setting_value("rewrite_timeout_seconds", "12.5")
+    assert cycle_rewrite_timeout(None) == 15.0
+    assert cycle_rewrite_timeout(15.0) == 30.0
+    assert cycle_rewrite_timeout(30.0) == 60.0
+    assert cycle_rewrite_timeout(60.0) is None
+    assert format_rewrite_timeout(None) == "off"
+    assert format_rewrite_timeout(15.0) == "15s"
+
+
+def test_cli_timeout_off_and_presets(tmp_path: Path) -> None:
+    runtime = Runtime(
+        platform="linux",
+        home=tmp_path,
+        env={"DIGIVOICE_DATA_DIR": str(tmp_path)},
+        probe=FakeProbe(),
+    )
+    shown = json.loads(run(["settings", "--json"], runtime).stdout)
+    assert shown["rewrite_timeout_seconds"] is None
+    assert run(["settings", "set", "rewrite_timeout_seconds", "30"], runtime).code == 0
+    paths = resolve_paths("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)})
+    assert load_settings(paths).rewrite_timeout_seconds == 30.0
+    bad = run(["settings", "set", "rewrite_timeout_seconds", "45"], runtime)
+    assert bad.code == 2
+    assert load_settings(paths).rewrite_timeout_seconds == 30.0
+    assert run(["settings", "set", "rewrite_timeout_seconds", "off"], runtime).code == 0
+    assert load_settings(paths).rewrite_timeout_seconds is None
 
 
 def test_cli_settings_show_and_json(tmp_path: Path) -> None:
@@ -107,6 +164,30 @@ def test_cli_settings_set_get(tmp_path: Path) -> None:
     )
 
 
+def test_cli_rejects_remote_rewrite_model(tmp_path: Path) -> None:
+    runtime = Runtime(
+        platform="linux",
+        home=tmp_path,
+        env={"DIGIVOICE_DATA_DIR": str(tmp_path)},
+        probe=FakeProbe(),
+    )
+    for remote in (
+        "https://openrouter.ai/api/v1",
+        "http://127.0.0.1:11434/model",
+        "openrouter/qwen",
+        "qwen2.5:3b",
+    ):
+        bad = run(["settings", "set", "rewrite_model", remote], runtime)
+        assert bad.code == 2, remote
+    ok = run(
+        ["settings", "set", "rewrite_model", "qwen2.5-1.5b-instruct-q4_k_m.gguf"],
+        runtime,
+    )
+    assert ok.code == 0
+    paths = resolve_paths("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)})
+    assert load_settings(paths).rewrite_model == "qwen2.5-1.5b-instruct-q4_k_m.gguf"
+
+
 def test_cli_setup_alias(tmp_path: Path) -> None:
     runtime = Runtime(
         platform="linux",
@@ -142,10 +223,12 @@ def test_banner_defaults_and_knobs(tmp_path: Path) -> None:
     shown = json.loads(run(["settings", "--json"], runtime).stdout)
     assert shown["live_banner"] is True
     assert shown["banner_position"] == "top-center"
-    assert shown["banner_density"] == "peek"
+    assert "banner_density" not in shown
     assert shown["banner_animations"] is True
     assert run(["settings", "set", "banner_position", "bottom-right"], runtime).code == 0
-    assert run(["settings", "set", "banner_density", "full"], runtime).code == 0
+    refused = run(["settings", "set", "banner_density", "full"], runtime)
+    assert refused.code == 2
+    assert "banner_density" in refused.stderr
     assert run(["settings", "set", "banner_animations", "off"], runtime).code == 0
     assert run(["settings", "set", "live_banner", "false"], runtime).code == 0
     paths = resolve_paths("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)})
@@ -157,25 +240,29 @@ def test_banner_defaults_and_knobs(tmp_path: Path) -> None:
         saved.live_banner,
     ) == (
         "bottom-right",
-        "full",
+        "retract",
         False,
         False,
     )
     on_disk = json.loads((tmp_path / "settings.json").read_text(encoding="utf-8"))
     assert on_disk["banner_position"] == "bottom-right"
-    assert on_disk["banner_density"] == "full"
+    assert "banner_density" not in on_disk
+    text = run(["settings"], runtime).stdout
+    assert "banner_density" not in text
+    assert "banner_pinned" in text
 
 
-def test_banner_density_rejects_unknown_values(tmp_path: Path) -> None:
-    runtime = Runtime(
-        platform="linux",
-        home=tmp_path,
-        env={"DIGIVOICE_DATA_DIR": str(tmp_path)},
-        probe=FakeProbe(),
-    )
-    bad = run(["settings", "set", "banner_density", "huge"], runtime)
-    assert bad.code == 2
-    assert not (tmp_path / "settings.json").exists()
+def test_old_banner_density_loads_and_is_ignored(tmp_path: Path) -> None:
+    paths = resolve_paths("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)})
+    settings_path(paths).parent.mkdir(parents=True, exist_ok=True)
+    for leftover in ("mini", "peek", "full", "huge"):
+        settings_path(paths).write_text(
+            json.dumps({"banner_density": leftover, "banner_pinned": True}),
+            encoding="utf-8",
+        )
+        loaded = load_settings(paths)
+        assert loaded.banner_density == "retract"
+        assert loaded.banner_pinned is True
 
 
 def test_banner_position_rejects_unknown_values(tmp_path: Path) -> None:
@@ -188,3 +275,16 @@ def test_banner_position_rejects_unknown_values(tmp_path: Path) -> None:
     bad = run(["settings", "set", "banner_position", "middle-ish"], runtime)
     assert bad.code == 2
     assert not (tmp_path / "settings.json").exists()
+
+
+def test_banner_position_accepts_middle_anchors(tmp_path: Path) -> None:
+    runtime = Runtime(
+        platform="linux",
+        home=tmp_path,
+        env={"DIGIVOICE_DATA_DIR": str(tmp_path)},
+        probe=FakeProbe(),
+    )
+    assert run(["settings", "set", "banner_position", "middle-left"], runtime).code == 0
+    assert run(["settings", "set", "banner_position", "middle-right"], runtime).code == 0
+    paths = resolve_paths("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)})
+    assert load_settings(paths).banner_position == "middle-right"
