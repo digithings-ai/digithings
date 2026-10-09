@@ -19,6 +19,7 @@ from typing import (
     Any,  # score:allow untyped any — frontmatter / orchestrator argument maps are arbitrary
 )
 
+from digibase import art9
 from digibase.cors import install_cors
 from digibase.errors import json_error_response, register_fastapi_error_handlers
 from digibase.http import install_request_id_logging, install_request_id_middleware
@@ -47,6 +48,7 @@ from digivault.path_scopes import SCOPE_WRITE, digivault_path_scopes
 from digivault.supabase_store import SupabaseStore, SupabaseStoreError, _first_env
 from digivault.tenant_scope import enforce_tenant_path_prefix, mapped_tenant_path_prefix
 from digivault.tool_dispatch import (
+    ART9_REFUSED,
     VAULT_HANDLERS,
     dispatch_vault_tool,
     register_runtime_handler,
@@ -626,7 +628,18 @@ def get_note(name: str, request: Request) -> Note:
 
 
 def _write_note_request(vault: Vault, req: CreateNoteRequest) -> Note:
-    """Write one validated request through an already-open vault."""
+    """Write one validated request through an already-open vault.
+
+    Art. 9 seam 1 of 2 (DIG-1081). The screen sits in this funnel, not in the
+    two route handlers, so a write route added later inherits it: POST
+    /v1/notes and POST /v1/notes/batch both come through here. The refusal
+    precedes vault.write_note, so nothing reaches disk, and it is raised as an
+    HTTPException that both routes' `except VaultError` does not catch, so it
+    reaches the caller as a plain 403.
+    """
+    screen = art9.screen_request(req.model_dump(mode="json"))
+    if screen.decision != "allow":
+        raise HTTPException(status_code=403, detail=f"{ART9_REFUSED}: {screen.reason}")
     fm: dict[str, Any] = dict(req.frontmatter or {})
     if req.title:
         fm["title"] = req.title
