@@ -1,0 +1,371 @@
+{
+  "_note": "Vendor-content allowlist for scripts/check_vendor_content.py (DIG-2583, lane S of DIG-1415). Read this file the way you read code: it is the record of who decided to keep a string, so deleting an entry is the diff that removes a keep.",
+  "_approved": "Security + Counsel recorded an exception (DIG-1418 rule 2). ONLY the PRIMEMARKET_* env names and the desk login URL are approved. Naming a method rule (M*) here is a hard error the loader raises: method-shaped content is removed, not approved.",
+  "_pending": "NOT approved. Every entry here is content this gate surfaces that nobody has ruled on, in two kinds: a method-shaped violation that PR #5157 (DIG-1434) removes, and a vendor identifier added to develop since the merge base. Each entry prints as 'allowlisted: NO', does not fail the build, and prints RETIRED once its content is gone so the entry is deleted in the same diff. Moving an entry from here to 'approved' is a Security + Counsel decision, never a maintainer's.",
+  "_fields": "rule: M1-M7 or V1-V5 from the gate's rule table. path: glob, exact path today. match: the substring that must still be present for the entry to apply (pending only). symbol: the substring an approved entry covers (approved only). owner and ticket: who still owes the decision.",
+  "schema_version": 1,
+  "approved": [
+    {
+      "rule": "V1",
+      "path": "docs/ops/SECRETS_INVENTORY.md",
+      "symbol": "PRIMEMARKET_",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-1418 rule 2",
+      "reason": "Security rule 2 keeps our own PRIMEMARKET_* env names for the vendor session: they are ours, not the vendor's, and the code cannot run without them."
+    },
+    {
+      "rule": "V2",
+      "path": "docs/ops/SECRETS_INVENTORY.md",
+      "symbol": "https://desk.prime-terminal.com",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-1418 rule 2",
+      "reason": "Security rule 2 keeps the desk login URL: the login page is load-bearing provenance for where the session is obtained."
+    }
+  ],
+  "pending": [
+    {
+      "rule": "M1",
+      "path": "docs/ops/SECRETS_INVENTORY.md",
+      "match": "localStorage[",
+      "owner": "Security b14d7a18",
+      "ticket": "DIG-1434 / PR #5157",
+      "reason": "method-shaped: reads a named browser storage slot. Security b14d7a18 rule 3 - a redaction is not an amendment. Content removed by PR #5157."
+    },
+    {
+      "rule": "M2",
+      "path": "docs/ops/gloomberb-session-cookie.md",
+      "match": "devtools",
+      "owner": "Security b14d7a18",
+      "ticket": "DIG-1434 / PR #5157",
+      "reason": "method-shaped: names the devtools route to the credential. Security b14d7a18 rule 3. Content removed by PR #5157."
+    },
+    {
+      "rule": "M2",
+      "path": "docs/superpowers/plans/2026-09-16-gloomberb-session-cookie-runbook.md",
+      "match": "devtools",
+      "owner": "Security b14d7a18",
+      "ticket": "DIG-1434 / PR #5157",
+      "reason": "method-shaped: names the devtools route to the credential. Security b14d7a18 rule 3. Content removed by PR #5157."
+    },
+    {
+      "rule": "M3",
+      "path": "docs/superpowers/plans/2026-09-16-gloomberb-session-cookie-runbook.md",
+      "match": "Application/Storage",
+      "owner": "Security b14d7a18",
+      "ticket": "DIG-1434 / PR #5157",
+      "reason": "method-shaped: spells the click path to the cookie jar. Content removed by PR #5157."
+    },
+    {
+      "rule": "M5",
+      "path": "docs/ops/gloomberb-session-cookie.md",
+      "match": "Extract the session",
+      "owner": "Security b14d7a18",
+      "ticket": "DIG-1434 / PR #5157",
+      "reason": "method-shaped: names the acquisition act instead of the mechanism. Security b14d7a18 rule 3. Content removed by PR #5157."
+    },
+    {
+      "rule": "M5",
+      "path": "docs/superpowers/plans/2026-09-16-gloomberb-session-cookie-runbook.md",
+      "match": "Extract the session",
+      "owner": "Security b14d7a18",
+      "ticket": "DIG-1434 / PR #5157",
+      "reason": "method-shaped: names the acquisition act instead of the mechanism. Security b14d7a18 rule 3. Content removed by PR #5157."
+    },
+    {
+      "rule": "M5",
+      "path": "docs/superpowers/specs/2026-09-16-gloomberb-session-cookie-runbook-design.md",
+      "match": "extract the session",
+      "owner": "Security b14d7a18",
+      "ticket": "DIG-1434 / PR #5157",
+      "reason": "method-shaped: names the acquisition act instead of the mechanism. Security b14d7a18 rule 3. Content removed by PR #5157."
+    },
+    {
+      "rule": "V1",
+      "path": "digiquant/src/digiquant/stages/contracts.py",
+      "match": "PMT_BANK_TRADE",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-1418",
+      "reason": "our own vendor session env name, added since the merge base. DIG-1418 rule 2 approved PRIMEMARKET_* only; this one is still undecided."
+    },
+    {
+      "rule": "V1",
+      "path": "digiquant/src/digiquant/stages/contracts.py",
+      "match": "PMT_POSITION_CLUSTER",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-1418",
+      "reason": "our own vendor session env name, added since the merge base. DIG-1418 rule 2 approved PRIMEMARKET_* only; this one is still undecided."
+    },
+    {
+      "rule": "V1",
+      "path": "digiquant/src/digiquant/stages/contracts.py",
+      "match": "PMT_RETAIL_BOOK",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-1418",
+      "reason": "our own vendor session env name, added since the merge base. DIG-1418 rule 2 approved PRIMEMARKET_* only; this one is still undecided."
+    },
+    {
+      "rule": "V1",
+      "path": "digiquant/src/digiquant/stages/contracts.py",
+      "match": "PMT_SEASONALITY_TARGET",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-1418",
+      "reason": "our own vendor session env name, added since the merge base. DIG-1418 rule 2 approved PRIMEMARKET_* only; this one is still undecided."
+    },
+    {
+      "rule": "V2",
+      "path": "digiquant/AGENTS.md",
+      "match": "https://api.gloom.sh",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-1418",
+      "reason": "the vendor's public endpoint, added since the merge base. Kept for provenance in some cases, but rule 2 approved the desk login URL only."
+    },
+    {
+      "rule": "V2",
+      "path": "digiquant/ARCHITECTURE.md",
+      "match": "https://api.gloom.sh",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-1418",
+      "reason": "the vendor's public endpoint, added since the merge base. Kept for provenance in some cases, but rule 2 approved the desk login URL only."
+    },
+    {
+      "rule": "V2",
+      "path": "docs/VENDOR_CONTENT_BOUNDARY.md",
+      "match": "https://prime-terminal.com",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-1418",
+      "reason": "the vendor's public endpoint, added since the merge base. Kept for provenance in some cases, but rule 2 approved the desk login URL only."
+    },
+    {
+      "rule": "V2",
+      "path": "docs/plans/adr-0030/HOLD-Primarket.md",
+      "match": "https://prime-terminal.com",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-1418",
+      "reason": "the vendor's public endpoint, added since the merge base. Kept for provenance in some cases, but rule 2 approved the desk login URL only."
+    },
+    {
+      "rule": "V2",
+      "path": "docs/superpowers/plans/2026-09-30-gloomberb-endpoint-probes.md",
+      "match": "https://api.gloom.sh",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-1418",
+      "reason": "the vendor's public endpoint, added since the merge base. Kept for provenance in some cases, but rule 2 approved the desk login URL only."
+    },
+    {
+      "rule": "V2",
+      "path": "docs/superpowers/plans/2026-09-30-gloomberb-full-function-coverage.md",
+      "match": "https://gloom.sh",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-1418",
+      "reason": "the vendor's public endpoint, added since the merge base. Kept for provenance in some cases, but rule 2 approved the desk login URL only."
+    },
+    {
+      "rule": "V2",
+      "path": "docs/superpowers/plans/2026-09-30-gloomberb-function-matrix.md",
+      "match": "https://gloom.sh",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-1418",
+      "reason": "the vendor's public endpoint, added since the merge base. Kept for provenance in some cases, but rule 2 approved the desk login URL only."
+    },
+    {
+      "rule": "V3",
+      "path": "docs/ops/SECRETS_INVENTORY.md",
+      "match": "pmt_auth_token",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-1418",
+      "reason": "a storage-slot NAME that exists only on the vendor's own page. The brief never allows this shape at any tier; it is listed so the decision is owed in writing."
+    },
+    {
+      "rule": "V3",
+      "path": "docs/superpowers/plans/2026-09-30-gloomberb-endpoint-probes.md",
+      "match": "__Secure-gloomberb.session_token",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-1418",
+      "reason": "a storage-slot NAME that exists only on the vendor's own page. The brief never allows this shape at any tier; it is listed so the decision is owed in writing."
+    },
+    {
+      "rule": "V3",
+      "path": "tests/dq/data/test_gloomberb_calc_tools.py",
+      "match": "gloomberb.session_token",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-1418",
+      "reason": "a storage-slot NAME that exists only on the vendor's own page. The brief never allows this shape at any tier; it is listed so the decision is owed in writing."
+    },
+    {
+      "rule": "V3",
+      "path": "tests/dq/data/test_gloomberb_probe_tools.py",
+      "match": "gloomberb.session_token",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-1418",
+      "reason": "a storage-slot NAME that exists only on the vendor's own page. The brief never allows this shape at any tier; it is listed so the decision is owed in writing."
+    },
+    {
+      "rule": "V3",
+      "path": "tests/dq/data/test_gloomberb_workspace_broker_tools.py",
+      "match": "gloomberb.session_token",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-1418",
+      "reason": "a storage-slot NAME that exists only on the vendor's own page. The brief never allows this shape at any tier; it is listed so the decision is owed in writing."
+    },
+    {
+      "rule": "V4",
+      "path": "apps/digithings-cron/README.md",
+      "match": "primemarket",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-1418",
+      "reason": "a new mention of the vendor's public brand word. The pmt_* rename is out of scope for this leaf, so the occurrence is recorded rather than removed."
+    },
+    {
+      "rule": "V4",
+      "path": "apps/digithings-cron/src/jobs.test.ts",
+      "match": "primemarket",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-1418",
+      "reason": "a new mention of the vendor's public brand word. The pmt_* rename is out of scope for this leaf, so the occurrence is recorded rather than removed."
+    },
+    {
+      "rule": "V4",
+      "path": "apps/digithings-cron/src/required-triggers.ts",
+      "match": "primemarket",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-1418",
+      "reason": "a new mention of the vendor's public brand word. The pmt_* rename is out of scope for this leaf, so the occurrence is recorded rather than removed."
+    },
+    {
+      "rule": "V4",
+      "path": "apps/digithings-cron/src/trigger-contract.test.ts",
+      "match": "primemarket",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-1418",
+      "reason": "a new mention of the vendor's public brand word. The pmt_* rename is out of scope for this leaf, so the occurrence is recorded rather than removed."
+    },
+    {
+      "rule": "V4",
+      "path": "apps/digithings-cron/wrangler.toml",
+      "match": "primemarket",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-1418",
+      "reason": "a new mention of the vendor's public brand word. The pmt_* rename is out of scope for this leaf, so the occurrence is recorded rather than removed."
+    },
+    {
+      "rule": "V4",
+      "path": "docs/VENDOR_CONTENT_BOUNDARY.md",
+      "match": "PrimeMarket",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-1418",
+      "reason": "a new mention of the vendor's public brand word. The pmt_* rename is out of scope for this leaf, so the occurrence is recorded rather than removed."
+    },
+    {
+      "rule": "V4",
+      "path": "docs/adr/0030-swappable-digiquant-stage-modules.md",
+      "match": "Prime Market",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-1418",
+      "reason": "a new mention of the vendor's public brand word. The pmt_* rename is out of scope for this leaf, so the occurrence is recorded rather than removed."
+    },
+    {
+      "rule": "V4",
+      "path": "docs/ops/SECRETS_INVENTORY.md",
+      "match": "PRIMEMARKET",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-1418",
+      "reason": "a new mention of the vendor's public brand word. The pmt_* rename is out of scope for this leaf, so the occurrence is recorded rather than removed."
+    },
+    {
+      "rule": "V4",
+      "path": "docs/plans/adr-0030/HOLD-Primarket.md",
+      "match": "PrimeMarket",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-1418",
+      "reason": "a new mention of the vendor's public brand word. The pmt_* rename is out of scope for this leaf, so the occurrence is recorded rather than removed."
+    },
+    {
+      "rule": "V4",
+      "path": "docs/vendor-terms/INDEX.md",
+      "match": "PrimeMarket",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-1418",
+      "reason": "a new mention of the vendor's public brand word. The pmt_* rename is out of scope for this leaf, so the occurrence is recorded rather than removed."
+    },
+    {
+      "rule": "V4",
+      "path": "docs/vendor-terms/bloomberg/INDEX.md",
+      "match": "PrimeMarket",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-1418",
+      "reason": "a new mention of the vendor's public brand word. The pmt_* rename is out of scope for this leaf, so the occurrence is recorded rather than removed."
+    },
+    {
+      "rule": "V5",
+      "path": "digiquant/AGENTS.md",
+      "match": "https://api.gloom.sh",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-1418",
+      "reason": "vendor cookie/endpoint surface added since the merge base. Rule 2 did not name this host, so no approver exists yet."
+    },
+    {
+      "rule": "V5",
+      "path": "digiquant/ARCHITECTURE.md",
+      "match": "https://api.gloom.sh",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-1418",
+      "reason": "vendor cookie/endpoint surface added since the merge base. Rule 2 did not name this host, so no approver exists yet."
+    },
+    {
+      "rule": "V5",
+      "path": "docs/superpowers/plans/2026-09-30-gloomberb-endpoint-probes.md",
+      "match": "__Secure-gloomberb.session_token",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-1418",
+      "reason": "vendor cookie/endpoint surface added since the merge base. Rule 2 did not name this host, so no approver exists yet."
+    },
+    {
+      "rule": "V5",
+      "path": "docs/superpowers/plans/2026-09-30-gloomberb-endpoint-probes.md",
+      "match": "https://api.gloom.sh",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-1418",
+      "reason": "vendor cookie/endpoint surface added since the merge base. Rule 2 did not name this host, so no approver exists yet."
+    },
+    {
+      "rule": "V5",
+      "path": "docs/superpowers/plans/2026-09-30-gloomberb-full-function-coverage.md",
+      "match": "https://gloom.sh",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-1418",
+      "reason": "vendor cookie/endpoint surface added since the merge base. Rule 2 did not name this host, so no approver exists yet."
+    },
+    {
+      "rule": "V5",
+      "path": "docs/superpowers/plans/2026-09-30-gloomberb-function-matrix.md",
+      "match": "https://gloom.sh",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-1418",
+      "reason": "vendor cookie/endpoint surface added since the merge base. Rule 2 did not name this host, so no approver exists yet."
+    },
+    {
+      "rule": "V5",
+      "path": "tests/dq/data/test_gloomberb_calc_tools.py",
+      "match": "gloomberb.session_token",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-1418",
+      "reason": "vendor cookie/endpoint surface added since the merge base. Rule 2 did not name this host, so no approver exists yet."
+    },
+    {
+      "rule": "V5",
+      "path": "tests/dq/data/test_gloomberb_probe_tools.py",
+      "match": "gloomberb.session_token",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-1418",
+      "reason": "vendor cookie/endpoint surface added since the merge base. Rule 2 did not name this host, so no approver exists yet."
+    },
+    {
+      "rule": "V5",
+      "path": "tests/dq/data/test_gloomberb_workspace_broker_tools.py",
+      "match": "gloomberb.session_token",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-1418",
+      "reason": "vendor cookie/endpoint surface added since the merge base. Rule 2 did not name this host, so no approver exists yet."
+    }
+  ]
+}
