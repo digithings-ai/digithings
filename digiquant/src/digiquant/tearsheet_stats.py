@@ -9,6 +9,21 @@ from typing import NamedTuple
 from digiquant.models import BacktestResult
 from digiquant.stats.honesty import REFUSE_FLOOR, format_honest_rate
 
+#: A counted ``k`` cannot be paired with a fill count. Kept as a named string
+#: so every surface refuses it in the same words, and so the refusal is
+#: assertable rather than an implied consequence of a floor.
+MIXED_POPULATION = "REFUSED — counted wins and the fill count are different populations"
+
+#: Nautilus emits this count under a trades name, but it counts fill rows.
+#: Only the displayed label changes — the dict key it is looked up by is
+#: untouched, so nothing downstream has to learn a new key.
+FILL_COUNT_LABELS = {"Total Trades": "Total Fills"}
+
+
+def _label(key: str) -> str:
+    """Display label for a stats key, with fill counts named as fill counts."""
+    return FILL_COUNT_LABELS.get(key, key)
+
 
 class WinRateCounts(NamedTuple):
     """Resolved ``(k, n)`` for one win-rate surface, plus what it renders.
@@ -58,17 +73,22 @@ def resolve_win_rate(
     n = result.num_trades
     usable = isinstance(rate, (int, float)) and not math.isnan(rate)
     if wins is not None:
-        k, counted = min(n, max(0, wins)), True
-    elif usable:
+        # A counted k is closed round trips; the only n a blockless result
+        # carries is a fill count. Publishing the pair is the
+        # mixed-population rate this resolver exists to remove, and it is
+        # live: nautilus_runner.py:706 builds the multi-symbol aggregate
+        # with num_trades summed over fills and no honest_rate block. So the
+        # pair is refused rather than rendered, and counted stays False so
+        # the donut is handed no k to slice out of the fill count either.
+        return WinRateCounts(min(n, max(0, wins)), n, False, True, MIXED_POPULATION)
+    if usable:
         wr = float(rate)
         if wr > 1:  # tolerate percent-scale callers; Nautilus emits a fraction
             wr /= 100.0
         wr = max(0.0, min(1.0, wr))
-        k, counted = min(n, max(0, round(wr * n))), False
-    else:
-        k, counted = 0, False
-    text = format_honest_rate(k, n) if (usable or wins is not None) else "—"
-    return WinRateCounts(k, n, counted, n < REFUSE_FLOOR, text)
+        k = min(n, max(0, round(wr * n)))
+        return WinRateCounts(k, n, False, n < REFUSE_FLOOR, format_honest_rate(k, n))
+    return WinRateCounts(0, n, False, n < REFUSE_FLOOR, "—")
 
 
 def _honest_win_rate_text(value: object, result: BacktestResult) -> str:
@@ -191,16 +211,16 @@ def _build_full_stats_table(
         pnl = pnl.get("USD", pnl) if "USD" in pnl else next(iter(pnl.values()), {})
     for k, v in (pnl or {}).items():
         if isinstance(v, (int, float)) and not math.isnan(v):
-            rows.append((k, _fmt(v)))
+            rows.append((_label(k), _fmt(v)))
     for k, v in (stats_returns or {}).items():
         if isinstance(v, (int, float)) and not math.isnan(v):
-            rows.append((k, _fmt(v)))
+            rows.append((_label(k), _fmt(v)))
     for k, v in (stats_general or {}).items():
         if k == "Win Rate":
             if isinstance(v, (int, float)) and not math.isnan(v):
                 rows.append((k, _honest_win_rate_text(v, result)))
         elif isinstance(v, (int, float)) and not math.isnan(v):
-            rows.append((k, _fmt(v)))
+            rows.append((_label(k), _fmt(v)))
     if result.max_drawdown_pct is not None and not any("Max Drawdown" in r[0] for r in rows):
         rows.append(("Max Drawdown %", f"{result.max_drawdown_pct:.1f}%"))
     trs = "".join(f"<tr><td>{k}</td><td>{v}</td></tr>" for k, v in rows)

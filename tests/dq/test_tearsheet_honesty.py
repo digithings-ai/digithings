@@ -17,6 +17,7 @@ from digiquant.models import BacktestResult
 from digiquant.stats.honesty import DISCLAIMER, HonestRateBlock
 from digiquant.tearsheet_page import _build_page
 from digiquant.tearsheet_stats import (
+    MIXED_POPULATION,
     _build_categorized_stats,
     _build_full_stats_table,
     _build_risk_metrics_table,
@@ -383,16 +384,26 @@ def test_only_the_legacy_fallback_reconstructs_rate_times_n() -> None:
     assert rounds(tearsheet_mod) == []  # n=50
 
 
-def test_caller_counted_wins_beat_the_reconstruction() -> None:
-    """A counted k is kept as counted; only an uncounted one is reconstructed."""
-    counted = resolve_win_rate(_result(50), 0.6, wins=40)
-    assert (counted.k, counted.n, counted.counted) == (
-        40,
-        50,
+def test_caller_counted_wins_are_refused_not_paired_with_fills() -> None:
+    """A counted k is closed round trips; n on a blockless result is fills.
+
+    Publishing the pair is the mixed-population rate this leaf exists to
+    remove, and it is live: nautilus_runner.py:706 builds the multi-symbol
+    aggregate with num_trades summed over fills and no honest_rate block.
+    30 round trips over 900 fills must not read "3.3% (30/900)".
+    """
+    mixed = resolve_win_rate(_result(900), 0.6, wins=30)
+    assert (mixed.k, mixed.n, mixed.counted, mixed.refused) == (
+        30,
+        900,
+        False,
         True,
-    )  # n=50: the 0.6 rate is ignored
-    assert "80.0% (40/50" in counted.text  # n=50
-    assert counted.refused is False  # n=50
+    )  # n=900: the count is kept, the pairing refused
+    assert mixed.text == MIXED_POPULATION  # n=900
+    assert "30/900" not in mixed.text  # n=900
+    # count_win_rate keeps nothing that a rate could be read off: no k is
+    # handed on, so the donut reconstructs and says so out loud.
+    assert "wins uncounted" in _donut_annotation(0.6, mixed.n, None)  # n=900
     # An absent rate must not be back-filled from n: no wins, no rate, no guess.
     uncounted = resolve_win_rate(_result(50), None)
     assert (uncounted.k, uncounted.counted) == (0, False)  # n=50
@@ -409,6 +420,11 @@ def test_trade_count_rows_are_labelled_as_fills() -> None:
     page_html = _page(0.6, 900)
     assert "TOTAL FILLS" in page_html  # n=900
     assert "TOTAL TRADES" not in page_html  # n=900
+    # The full-stats table prints Nautilus' key straight through, so a fill
+    # count sat beside a win rate reading n=50 under the name "Total Trades".
+    full_html = _build_full_stats_table(None, None, {"Total Trades": 900}, _result(900))
+    assert "Total Fills" in full_html  # n=900
+    assert "Total Trades" not in full_html  # n=900
 
 
 def test_blockless_result_still_renders_via_the_fallback() -> None:
