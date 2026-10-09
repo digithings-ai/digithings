@@ -88,7 +88,10 @@ _EXTRACTED_CONSTS = (
     "MODE_UP_TO_DATE",
     "MODE_INCREMENTAL",
     "MODE_FULL_REPULL",
-    # `_macro_as_of_stale` reads the success set and both window constants.
+    # `_macro_as_of_stale` reads the judged set (success modes plus the
+    # `history-only` the cadence exemption forgives -- DIG-2405), the success set
+    # it is built from, and both window constants.
+    "_MACRO_JUDGED_MODES",
     "_MACRO_SUCCESS_MODES",
     "_CADENCE_WINDOW_DAYS",
     "LIVE_WINDOW_DAYS",
@@ -103,6 +106,10 @@ RUN = "2026-09-23"
 #: 240d quarterly one. A vendor that stopped publishing a monthly series this
 #: long ago has left the panel frozen, not slow.
 RETIRED_MONTHLY_SEAL = "2026-05-01"
+
+#: 34 calendar days before ``RUN``. The same retired panel shape with a *fresh*
+#: seal is a quiet release cycle, which is what the cadence exemption exists for.
+QUIET_MONTHLY_SEAL = "2026-08-20"
 
 
 @pytest.fixture(scope="module")
@@ -658,30 +665,303 @@ def test_an_undeclared_cadence_is_judged_at_the_daily_window(r2: dict[str, Any])
     assert _named("2026-08-08") == ["fred__DGS10"]
 
 
-def test_soft_fail_modes_are_left_to_the_leg_guard(r2: dict[str, Any]) -> None:
-    """Age does not second-guess ``_macro_leg_dead``'s territory.
+def test_a_quiet_release_cycle_is_left_to_the_leg_guard(r2: dict[str, Any]) -> None:
+    """Age does not second-guess ``_macro_leg_dead``'s territory on a *fresh* seal.
 
-    A ``history-only`` series has an *empty live window* at any age, young or
-    old, so its age cannot separate a quiet release cycle from a dead feed --
-    the window already did, and the #4621 exemption already forgives the quiet
-    case. Re-judging those modes here would fail every monthly series that sits
-    out a month, which is precisely the false page #4621 removed.
+    A ``history-only`` series whose seal is still inside its window is a #4621
+    quiet release cycle or a one-call vendor refusal, and age cannot separate
+    those two. The exemption already forgives it, and re-judging it here would
+    page for every monthly series that sits out a month -- the exact false page
+    #4621 removed.
+
+    DIG-2405 corrected the *other* half of this test's original argument. It read
+    as "one of them answering is a #4621 quiet month, at the same 145-day age",
+    which is wrong: at 145 days against a 120-day monthly window the seal is
+    outside the window, so the store and the vendor agree there is nothing to
+    fetch and the series is retired rather than slow. That shape has to be
+    named; ``test_one_retired_slow_series_among_live_ones_fails_loud`` is where
+    it is pinned.
     """
     specs = [("fred", "M2SL", "monthly"), ("fred", "PCEPI", "monthly")]
+
+    # Both silent at once: the leg guard fires, on unanimity -- and the age guard
+    # agrees, but adds nothing the leg guard has not already named.
     dead = [
         r2["_outcome"](name, r2["MODE_HISTORY_ONLY"], as_of=RETIRED_MONTHLY_SEAL, note="empty")
         for name in ("fred__M2SL", "fred__PCEPI")
     ]
-
-    # Both silent at once: the leg guard fires, on unanimity -- never on age,
-    # though these seals are 145 days old and every window in the table.
     failed = _real_failed_with_age(r2, _healthy_run(r2) + dead, specs, RUN)
     assert {o["ticker"] for o in failed} == {"fred__M2SL", "fred__PCEPI"}
     assert {o["mode"] for o in failed} == {r2["MODE_HISTORY_ONLY"]}
+    assert len(failed) == 2, (
+        f"a series the leg guard already named must not be named twice: {failed}"
+    )
 
-    # One of them answering is a #4621 quiet month, at the same 145-day age.
-    partial = [dead[0], r2["_outcome"]("fred__PCEPI", r2["MODE_UP_TO_DATE"], as_of=RUN, rows=8)]
-    assert _real_failed_with_age(r2, _healthy_run(r2) + partial, specs, RUN) == []
+    # The quiet side, at a seal still inside the window: one silent among live
+    # ones stays exempt, at whatever age a real release cycle produces.
+    quiet = [r2["_outcome"]("fred__M2SL", r2["MODE_HISTORY_ONLY"], as_of=QUIET_MONTHLY_SEAL)]
+    quiet.append(r2["_outcome"]("fred__PCEPI", r2["MODE_UP_TO_DATE"], as_of=RUN, rows=8))
+    assert _real_failed_with_age(r2, _healthy_run(r2) + quiet, specs, RUN) == []
+
+
+# -- DIG-2405: the one retired slow series that fell between both guards -------
+#
+# The gap this section pins is a shape both guards step over. `fred__M2SL`'s
+# vendor retired the series: its live window is empty, so the fetch reports
+# `history-only` carrying a 145-day-old seal, and the other four monthly series
+# answered normally.
+#
+#   * `_macro_leg_dead` needs `len(silent) > 1` and unanimity over the exempt
+#     set. One silent series among five is not a dead leg, so it returns False.
+#   * The #4621 exemption then *removes* the soft fail: cadence-exempt AND
+#     `history-only` AND the leg is not unanimously dead. All three hold, so
+#     `history-only` contributes nothing to `failed`.
+#   * `_macro_as_of_stale` skipped every mode outside `_MACRO_SUCCESS_MODES`, so
+#     the 145-day-old seal was never measured at all.
+#
+# `staleness_gate` cannot cover it either: it takes the max `as_of` across all
+# datasets, and healthy price tickers pin that at the run date.
+
+
+#: The series this section retires. A real member of the shipped manifest rather
+#: than an invented id: `M2SL` is declared `monthly` there, so the fixture cannot
+#: drift onto a cadence the panel does not carry.
+RETIRED_SERIES = "M2SL"
+
+
+def _monthly_panel_specs(
+    specs: list[tuple[str, str, str | None]],
+) -> list[tuple[str, str, str | None]]:
+    """The manifest's monthly series -- the panel the finding was filed against.
+
+    Taken from the shipped specs so the count is whatever the cron actually runs.
+    The mechanism does not care about the exact number (only that it is two or
+    more, so ``_macro_leg_dead``'s floor has something to reject); pinning the
+    manifest's own list is what stops this section from asserting a panel that
+    does not exist.
+    """
+    monthly = [s for s in specs if (s[2] or "").lower() == "monthly"]
+    assert any(s[1] == RETIRED_SERIES for s in monthly), (
+        f"{RETIRED_SERIES} is no longer a monthly series in the manifest: {monthly}"
+    )
+    return monthly
+
+
+def _retired_monthly_panel(
+    r2: dict[str, Any], specs: list[tuple[str, str, str | None]], seal: str
+) -> list[dict[str, Any]]:
+    """The finding's panel: one monthly series retired, every other series fresh."""
+    outcomes = _healthy_run(r2)
+    outcomes += [
+        r2["_outcome"](
+            f"fred__{series}",
+            r2["MODE_HISTORY_ONLY"] if series == RETIRED_SERIES else r2["MODE_UP_TO_DATE"],
+            as_of=seal if series == RETIRED_SERIES else RUN,
+            rows=250,
+            note="empty live window, serving history" if series == RETIRED_SERIES else "",
+        )
+        for _source, series, _cadence in specs
+    ]
+    return outcomes
+
+
+def test_one_retired_slow_series_among_live_ones_fails_loud(
+    r2: dict[str, Any], shipped_specs: list[tuple[str, str, str | None]]
+) -> None:
+    """THE FINDING, inverted: a single retired monthly series now fails loud.
+
+    Nothing here is the shape #5248 guards. The healthy series report
+    ``up-to-date`` and the dead one reports ``history-only``, so the age guard's
+    success-mode filter missed it; and one silent series is not a leg, so the
+    unanimity rule missed it too. Before DIG-2405 the run reported itself fresh
+    with ``failed == []``.
+    """
+    specs = _monthly_panel_specs(shipped_specs)
+    retired_id = f"fred__{RETIRED_SERIES}"
+    outcomes = _retired_monthly_panel(r2, specs, RETIRED_MONTHLY_SEAL)
+    exempt = r2["_slow_macro_exempt_ids"](specs)
+
+    # Preconditions -- the shape really is invisible to the DIG-694 reduction,
+    # and this series really is the only soft fail in the run.
+    assert not r2["_macro_leg_dead"](outcomes, exempt), (
+        "precondition: one silent series is not a dead leg"
+    )
+    assert _real_failed(r2, outcomes, specs) == [], (
+        "precondition: the cadence exemption forgives the only soft fail here"
+    )
+    assert [o["ticker"] for o in outcomes if o["mode"] in r2["_SOFT_FAIL_MODES"]] == [retired_id], (
+        "precondition: the retired series is the run's only soft fail"
+    )
+
+    failed = _real_failed_with_age(r2, outcomes, specs, RUN)
+
+    assert [o["ticker"] for o in failed] == [retired_id], (
+        "a slow series sealed past its own window is retired, not slow, and must "
+        f"be named even when its neighbours are fresh; got {[o['ticker'] for o in failed]}"
+    )
+
+
+def test_the_same_panel_at_a_fresh_seal_still_runs_quiet(
+    r2: dict[str, Any], shipped_specs: list[tuple[str, str, str | None]]
+) -> None:
+    """The fuse for the fix: a quiet release cycle in the same panel is silent.
+
+    Identical to the finding above except the seal is 34 days old. The vendor is
+    healthy, the series simply has not published yet this cycle, and #4621
+    exists so nobody is paged for that. A fix that keyed on the mode rather than
+    on the seal would page here on every monthly panel every month.
+    """
+    specs = _monthly_panel_specs(shipped_specs)
+    outcomes = _retired_monthly_panel(r2, specs, QUIET_MONTHLY_SEAL)
+
+    assert _real_failed_with_age(r2, outcomes, specs, RUN) == []
+
+
+def test_a_retired_daily_series_is_named_once_not_twice(r2: dict[str, Any]) -> None:
+    """A non-exempt soft fail is already loud; the age guard must not name it again.
+
+    A daily series with an empty window fails through the soft-fail reduction
+    regardless of cadence. Age may also see it -- 145 days is outside the 45-day
+    daily window -- but a duplicate in ``artifact["failed"]`` reads as two
+    findings and trains operators to distrust the list.
+    """
+    specs = [("fred", "DGS10", None)]
+    outcomes = [
+        r2["_outcome"]("fred__DGS10", r2["MODE_HISTORY_ONLY"], as_of=RETIRED_MONTHLY_SEAL, rows=250)
+    ]
+
+    failed = _real_failed_with_age(r2, outcomes, specs, RUN)
+
+    assert [o["ticker"] for o in failed] == ["fred__DGS10"], (
+        f"expected exactly one name, got {[o['ticker'] for o in failed]}"
+    )
+
+
+def test_an_error_outcome_is_not_re_judged_on_age(r2: dict[str, Any]) -> None:
+    """``error`` is never exempt, so it is already loud without an age judgement.
+
+    ``MODE_ERROR`` is in ``_SOFT_FAIL_MODES`` and the #4621 exemption clause
+    requires ``MODE_HISTORY_ONLY``, so an error fails the run whatever its seal
+    says. Measuring it would add no finding -- not because of the ``already``
+    de-duplication, which would handle a duplicate name fine, but because
+    there is nothing left to decide.
+    """
+    specs = [("fred", "M2SL", "monthly")]
+    outcomes = [
+        r2["_outcome"](
+            "fred__M2SL", r2["MODE_ERROR"], as_of=RETIRED_MONTHLY_SEAL, note="live fetch raised"
+        )
+    ]
+
+    assert r2["_macro_as_of_stale"](outcomes, specs, RUN) == [], (
+        "an error outcome is left to the soft-fail reduction that already fails it"
+    )
+    assert _real_failed_with_age(r2, outcomes, specs, RUN) == outcomes
+
+
+def test_the_retired_slow_series_shape_is_reachable_through_the_real_fetch(
+    r2: dict[str, Any], shipped_specs: list[tuple[str, str, str | None]]
+) -> None:
+    """The panel above is built here by real code, not asserted as hypothetical.
+
+    An age guard tested only against invented outcomes could pass while
+    describing a state the script cannot produce. A retired FRED series is the
+    reachable path: the vendor stops publishing, the live window comes back
+    empty, and ``refresh_macro_series`` reports ``history-only`` carrying the
+    old seal.
+    """
+    from scripts.refresh_market_data_r2 import refresh_macro_series
+    from tests.scripts.test_market_data_restatement_4621 import FakeStore
+
+    store = FakeStore()
+    store.macros[("fred", RETIRED_SERIES)] = [
+        {
+            "source": "fred",
+            "series_id": RETIRED_SERIES,
+            "obs_date": RETIRED_MONTHLY_SEAL,
+            "value": 21.0,
+        },
+    ]
+    # The vendor has published nothing since. `macro_empty` is the empty-window
+    # seam, the same one #4621's own fixtures use.
+    store.macro_empty.add(("fred", RETIRED_SERIES))
+
+    outcome = refresh_macro_series(
+        "fred", RETIRED_SERIES, store, store.manifest, as_of=RUN, cadence="monthly"
+    )
+
+    assert outcome["mode"] == r2["MODE_HISTORY_ONLY"], (
+        f"expected a retired series to report history-only, got {outcome}"
+    )
+    assert outcome["as_of"] == RETIRED_MONTHLY_SEAL, "the seal must be the retired one"
+    specs = _monthly_panel_specs(shipped_specs)
+    assert _real_failed_with_age(r2, [outcome], specs, RUN) == [outcome]
+
+
+def test_main_run_exits_nonzero_for_one_retired_slow_series(
+    r2: dict[str, Any],
+    shipped_specs: list[tuple[str, str, str | None]],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """End to end through ``main()``: the exit code and the published artifact.
+
+    The other tests in this section execute the reduction against a namespace
+    they build themselves, so none of them exercise ``main``'s own ``exempt``
+    binding or the ``stale`` flag the workflow reads. This is the
+    operator-facing shape: one retired monthly series in a five-series panel, a
+    healthy price book alongside it, rc 1 naming that one id and nothing else.
+    """
+    from tests.scripts.test_market_data_restatement_4621 import (
+        HIST,
+        FakeStore,
+        _run_main,
+        price_frame,
+        price_rows,
+    )
+
+    store = FakeStore()
+    store.histories["SPY"] = price_frame(price_rows(HIST))
+    store.lives["SPY"] = price_frame(price_rows(HIST))
+    specs = _monthly_panel_specs(shipped_specs)
+    for source, series, _cadence in specs:
+        if series == RETIRED_SERIES:
+            # Sealed history stops in May and the vendor has published nothing
+            # since: retired, reported as `history-only` on the old seal.
+            store.macros[(source, series)] = [
+                {
+                    "source": source,
+                    "series_id": series,
+                    "obs_date": RETIRED_MONTHLY_SEAL,
+                    "value": 21.0,
+                },
+            ]
+            store.macro_empty.add((source, series))
+        else:
+            store.macros[(source, series)] = [
+                {"source": source, "series_id": series, "obs_date": "2026-09-18", "value": 84.0},
+            ]
+            store.macro_lives[(source, series)] = [
+                {
+                    "source": source,
+                    "series_id": series,
+                    "obs_date": "2026-09-18",
+                    "value": 84.0,
+                },
+            ]
+
+    rc, artifact = _run_main(monkeypatch, tmp_path, store, specs, RUN)
+
+    retired_id = f"fred__{RETIRED_SERIES}"
+    by_ticker = {o["ticker"]: o for o in artifact["outcomes"]}
+    assert by_ticker[retired_id]["mode"] == r2["MODE_HISTORY_ONLY"], (
+        f"precondition: a retired series reports history-only; got {by_ticker[retired_id]}"
+    )
+    assert rc == 1, "one retired series among live ones must exit non-zero"
+    assert artifact["stale"] is True
+    assert artifact["failed"] == [retired_id], (
+        "the artifact must name the retired series and nothing else, exactly once"
+    )
 
 
 def test_an_undated_outcome_is_skipped_not_guessed(r2: dict[str, Any]) -> None:
