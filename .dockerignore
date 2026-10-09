@@ -23,15 +23,10 @@ scripts
 # Zammad MCP server (scripts/zammad_mcp/Dockerfile.mcp) also builds from the
 # root context; re-include just that package.
 !scripts/zammad_mcp
-# OCC ticket-search seeding (#4987): seed_chroma.sh runs
-# `python3 -m scripts.build_occ_tickets_seed --ingest /seed/occ_tickets.jsonl`,
-# which imports scripts.index_occ_tickets. Both COPY lines were added to the
-# stack Dockerfile without these re-includes, so the image build failed with
-# "failed to calculate checksum ... /scripts/build_occ_tickets_seed.py: not
-# found" (#4988). tests/scripts/test_stack_dockerignore_context.py pins every
-# `COPY scripts/<file>` in the stack Dockerfile against this list.
-!scripts/index_occ_tickets.py
-!scripts/build_occ_tickets_seed.py
+# The #4988 re-include pair for scripts/index_occ_tickets.py and
+# scripts/build_occ_tickets_seed.py is gone with the COPY lines that needed it
+# (DIG-1210). The occ_tickets corpus is retired; the writer stays out of the
+# production image, so there is nothing to re-include.
 agents
 apps/digithings-web
 apps/digiquant-web
