@@ -27,6 +27,7 @@ import polars as pl
 
 from digiquant.constraints import normalize_drawdown_pct
 from digiquant.models import BacktestResult
+from digiquant.stats import HonestRateBlock, normalize_series, stability_split
 
 if TYPE_CHECKING:
     pass
@@ -393,6 +394,34 @@ def _extract_perf_stats(engine: Any, USD: Any) -> dict[str, Any]:
     return result
 
 
+def _honest_rate_block(realized_pnls: Any) -> HonestRateBlock | None:
+    """Build the win-rate envelope from one realized-PnL series.
+
+    ``None`` when the series is missing, empty or unreadable — never a
+    fabricated zero and never a ``num_trades`` stand-in. ``k``, ``n`` and both
+    halves of ``stability`` come from the same normalized series: a breakeven
+    close (``pnl == 0``) is counted in ``n`` and not in ``k``.
+    """
+    normalized = normalize_series(realized_pnls)
+    if not normalized:
+        return None
+    values = normalized[1]
+    n = len(values)
+    if n == 0:
+        return None
+    mid = n // 2
+    return HonestRateBlock(
+        k=sum(1 for pnl in values if pnl > 0.0),
+        n=n,
+        stability=stability_split(
+            mid,
+            sum(1 for pnl in values[:mid] if pnl > 0.0),
+            n - mid,
+            sum(1 for pnl in values[mid:] if pnl > 0.0),
+        ),
+    )
+
+
 def _build_result(
     run_id: str,
     strategy_name: str,
@@ -455,6 +484,7 @@ def _build_result(
         sharpe_ratio=perf["sharpe"],
         max_drawdown_pct=normalize_drawdown_pct(perf["max_dd"]),
         num_trades=num_trades,
+        honest_rate=_honest_rate_block(perf.get("realized_pnls_series")),
         status=status,
         message=message,
     )
@@ -582,6 +612,7 @@ def _run_multi_symbol_backtest(
     - sharpe_ratio as the *average* Sharpe (labelled as such in the message)
     - max_drawdown_pct as the worst per-symbol drawdown (never silently nil)
     - per_symbol_pnl dict keyed by symbol
+    - honest_rate_by_symbol dict of per-symbol HonestRateBlock, never pooled (honest_rate stays None)
 
     Symbols whose backtest failed (``None`` or ``status="error"``) are never
     silently averaged in as fabricated zeros; they are named and the result is
@@ -591,6 +622,7 @@ def _run_multi_symbol_backtest(
     per_symbol_return: dict[str, float] = {}
     per_symbol_sharpe: dict[str, float] = {}
     per_symbol_max_dd: dict[str, float] = {}
+    honest_rate_by_symbol: dict[str, HonestRateBlock] = {}
     skipped_symbols: list[str] = [s for s in symbols if s not in symbol_dfs]
     degraded_symbols: list[str] = []
     num_trades_total = 0
@@ -622,6 +654,8 @@ def _run_multi_symbol_backtest(
             continue
         per_symbol_pnl[sym] = result.total_pnl
         per_symbol_return[sym] = result.total_return_pct
+        if result.honest_rate is not None:
+            honest_rate_by_symbol[sym] = result.honest_rate
         if result.sharpe_ratio is not None:
             per_symbol_sharpe[sym] = result.sharpe_ratio
         if result.max_drawdown_pct is not None:
@@ -672,6 +706,11 @@ def _run_multi_symbol_backtest(
         message_bits.append(f"Symbols skipped: {', '.join(skipped_symbols)}.")
     if degraded_symbols:
         message_bits.append(f"Degraded symbols excluded: {', '.join(degraded_symbols)}.")
+    if honest_rate_by_symbol:
+        message_bits.append(
+            f"honest_rate is None on a multi-symbol run: honest_rate_by_symbol carries one "
+            f"block per symbol ({len(honest_rate_by_symbol)}/{n}), never pooled across symbols."
+        )
 
     bt_result = BacktestResult(
         run_id=combined_run_id,
@@ -685,6 +724,7 @@ def _run_multi_symbol_backtest(
         max_drawdown_pct=normalize_drawdown_pct(worst_dd),
         num_trades=num_trades_total,
         per_symbol_pnl={k: round(v, 4) for k, v in per_symbol_pnl.items()},
+        honest_rate_by_symbol=honest_rate_by_symbol,
         status=status,
         message=" ".join(message_bits),
     )
