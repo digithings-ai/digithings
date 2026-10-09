@@ -1,0 +1,743 @@
+{
+  "evaluator": "curve_simulator",
+  "baseline_name": "power_law_solo",
+  "survivors": [
+    "valuation",
+    "m2",
+    "dxy"
+  ],
+  "solos": [
+    {
+      "code_id": "valuation",
+      "display_name": "power law",
+      "evaluator": "curve_simulator",
+      "mean_is_vs_flat_dca_pct": 915.4254476758982,
+      "mean_oos_vs_flat_dca_pct": -7.787838707761549,
+      "beats_named_baseline_oos": false,
+      "baseline_name": "power_law_solo",
+      "baseline_oos_vs_flat_dca_pct": -7.787838707761549,
+      "feasible_oos": true,
+      "buy_days": 662,
+      "sell_days": 0,
+      "capital_deployed_pct": 99.99999946367949,
+      "max_drawdown_pct": 39.69515763270724,
+      "keep": true,
+      "drop_reason": null,
+      "best_params": {
+        "buy_max_rate": 3.0,
+        "buy_knee_risk": 25.0,
+        "sell_knee_risk": 70.0,
+        "sell_max_rate": 3.0,
+        "buy_curvature": 1.0,
+        "sell_curvature": 2.0,
+        "valuation_weight": 1.0,
+        "m2_weight": 0.0,
+        "rs_eth_weight": 0.0,
+        "dxy_weight": 0.0,
+        "weekly_rsi_weight": 0.0,
+        "weekly_macd_weight": 0.0,
+        "sma_band_weight": 0.0
+      },
+      "num_evaluations": 2,
+      "fold_scores": [
+        {
+          "fold": {
+            "fold": 0,
+            "is_start": "2015-07-20",
+            "is_end": "2017-10-08",
+            "oos_start": "2017-10-09",
+            "oos_end": "2019-12-29"
+          },
+          "in_sample": {
+            "vs_flat_dca_pct": 55.51712143465532,
+            "vs_lump_pct": -23.576503841987773,
+            "capital_deployed_pct": -618.5275461523447,
+            "max_drawdown_pct": 28.94410338950399
+          },
+          "out_of_sample": {
+            "vs_flat_dca_pct": -4.512587162237736,
+            "vs_lump_pct": -31.72919453363151,
+            "capital_deployed_pct": 99.99999837809487,
+            "max_drawdown_pct": 60.93171747927475
+          },
+          "feasible": false
+        },
+        {
+          "fold": {
+            "fold": 1,
+            "is_start": "2015-07-20",
+            "is_end": "2019-12-29",
+            "oos_start": "2019-12-30",
+            "oos_end": "2022-03-20"
+          },
+          "in_sample": {
+            "vs_flat_dca_pct": 956.9107343746065,
+            "vs_lump_pct": 181.87189624217615,
+            "capital_deployed_pct": -3868.0127926974606,
+            "max_drawdown_pct": 36.25028034351975
+          },
+          "out_of_sample": {
+            "vs_flat_dca_pct": -29.97709625174342,
+            "vs_lump_pct": -70.73707989462986,
+            "capital_deployed_pct": -67.38502728642739,
+            "max_drawdown_pct": 10.848832340348459
+          },
+          "feasible": false
+        },
+        {
+          "fold": {
+            "fold": 2,
+            "is_start": "2015-07-20",
+            "is_end": "2022-03-20",
+            "oos_start": "2022-03-21",
+            "oos_end": "2024-06-09"
+          },
+          "in_sample": {
+            "vs_flat_dca_pct": 1733.8484872184329,
+            "vs_lump_pct": 235.96080204646034,
+            "capital_deployed_pct": -48306.6324602535,
+            "max_drawdown_pct": 62.18987307024173
+          },
+          "out_of_sample": {
+            "vs_flat_dca_pct": 11.12616729069651,
+            "vs_lump_pct": 61.175419451466915,
+            "capital_deployed_pct": 99.99999946367949,
+            "max_drawdown_pct": 39.69515763270724
+          },
+          "feasible": true
+        }
+      ]
+    },
+    {
+      "code_id": "m2",
+      "display_name": "M2 liquidity",
+      "evaluator": "curve_simulator",
+      "mean_is_vs_flat_dca_pct": 116.7116238592195,
+      "mean_oos_vs_flat_dca_pct": 65.72108149007404,
+      "beats_named_baseline_oos": true,
+      "baseline_name": "power_law_solo",
+      "baseline_oos_vs_flat_dca_pct": -7.787838707761549,
+      "feasible_oos": true,
+      "buy_days": 234,
+      "sell_days": 188,
+      "capital_deployed_pct": 98.54909154123216,
+      "max_drawdown_pct": 20.18224385576185,
+      "keep": true,
+      "drop_reason": null,
+      "best_params": {
+        "buy_max_rate": 5.0,
+        "buy_knee_risk": 30.0,
+        "sell_knee_risk": 75.0,
+        "sell_max_rate": 5.0,
+        "buy_curvature": 1.0,
+        "sell_curvature": 2.0,
+        "valuation_weight": 0.0,
+        "m2_weight": 1.0,
+        "rs_eth_weight": 0.0,
+        "dxy_weight": 0.0,
+        "weekly_rsi_weight": 0.0,
+        "weekly_macd_weight": 0.0,
+        "sma_band_weight": 0.0
+      },
+      "num_evaluations": 2,
+      "fold_scores": [
+        {
+          "fold": {
+            "fold": 0,
+            "is_start": "2015-07-20",
+            "is_end": "2017-10-08",
+            "oos_start": "2017-10-09",
+            "oos_end": "2019-12-29"
+          },
+          "in_sample": {
+            "vs_flat_dca_pct": -14.234948332342324,
+            "vs_lump_pct": -57.85373960018293,
+            "capital_deployed_pct": -235.45686690793838,
+            "max_drawdown_pct": 28.39624728617315
+          },
+          "out_of_sample": {
+            "vs_flat_dca_pct": 29.572091416438262,
+            "vs_lump_pct": -7.359611240154374,
+            "capital_deployed_pct": 98.54986245762646,
+            "max_drawdown_pct": 47.90749856855089
+          },
+          "feasible": true
+        },
+        {
+          "fold": {
+            "fold": 1,
+            "is_start": "2015-07-20",
+            "is_end": "2019-12-29",
+            "oos_start": "2019-12-30",
+            "oos_end": "2022-03-20"
+          },
+          "in_sample": {
+            "vs_flat_dca_pct": 100.68062147054965,
+            "vs_lump_pct": -46.4796548343948,
+            "capital_deployed_pct": 86.71134233726337,
+            "max_drawdown_pct": 47.97107214039671
+          },
+          "out_of_sample": {
+            "vs_flat_dca_pct": 170.6028074100957,
+            "vs_lump_pct": 13.08626048984225,
+            "capital_deployed_pct": -467.038308853049,
+            "max_drawdown_pct": 30.2539764285988
+          },
+          "feasible": false
+        },
+        {
+          "fold": {
+            "fold": 2,
+            "is_start": "2015-07-20",
+            "is_end": "2022-03-20",
+            "oos_start": "2022-03-21",
+            "oos_end": "2024-06-09"
+          },
+          "in_sample": {
+            "vs_flat_dca_pct": 263.68919843945116,
+            "vs_lump_pct": -33.372186603767894,
+            "capital_deployed_pct": -8510.42462800232,
+            "max_drawdown_pct": 60.94234944244501
+          },
+          "out_of_sample": {
+            "vs_flat_dca_pct": -3.0116543563118547,
+            "vs_lump_pct": 40.67017402060635,
+            "capital_deployed_pct": 98.54909154123216,
+            "max_drawdown_pct": 20.18224385576185
+          },
+          "feasible": true
+        }
+      ]
+    },
+    {
+      "code_id": "rs_eth",
+      "display_name": "BTC/ETH relative strength",
+      "evaluator": "curve_simulator",
+      "mean_is_vs_flat_dca_pct": -53.941405561131724,
+      "mean_oos_vs_flat_dca_pct": -20.871337080889955,
+      "beats_named_baseline_oos": false,
+      "baseline_name": "power_law_solo",
+      "baseline_oos_vs_flat_dca_pct": -7.787838707761549,
+      "feasible_oos": true,
+      "buy_days": 45,
+      "sell_days": 236,
+      "capital_deployed_pct": 19.944625494599794,
+      "max_drawdown_pct": 7.354416158787726,
+      "keep": false,
+      "drop_reason": "OOS vs-flat -20.8713 did not beat power_law_solo -7.7878",
+      "best_params": {
+        "buy_max_rate": 3.0,
+        "buy_knee_risk": 25.0,
+        "sell_knee_risk": 70.0,
+        "sell_max_rate": 3.0,
+        "buy_curvature": 1.0,
+        "sell_curvature": 2.0,
+        "valuation_weight": 0.0,
+        "m2_weight": 0.0,
+        "rs_eth_weight": 1.0,
+        "dxy_weight": 0.0,
+        "weekly_rsi_weight": 0.0,
+        "weekly_macd_weight": 0.0,
+        "sma_band_weight": 0.0
+      },
+      "num_evaluations": 2,
+      "fold_scores": [
+        {
+          "fold": {
+            "fold": 0,
+            "is_start": "2015-07-20",
+            "is_end": "2017-10-08",
+            "oos_start": "2017-10-09",
+            "oos_end": "2019-12-29"
+          },
+          "in_sample": {
+            "vs_flat_dca_pct": -65.56034373841845,
+            "vs_lump_pct": -83.07582526148967,
+            "capital_deployed_pct": 61.4911139122424,
+            "max_drawdown_pct": 29.907057841672614
+          },
+          "out_of_sample": {
+            "vs_flat_dca_pct": -11.702749814086866,
+            "vs_lump_pct": -36.869957918958185,
+            "capital_deployed_pct": 11.493244078431497,
+            "max_drawdown_pct": 19.47208621948199
+          },
+          "feasible": true
+        },
+        {
+          "fold": {
+            "fold": 1,
+            "is_start": "2015-07-20",
+            "is_end": "2019-12-29",
+            "oos_start": "2019-12-30",
+            "oos_end": "2022-03-20"
+          },
+          "in_sample": {
+            "vs_flat_dca_pct": -38.90402910647804,
+            "vs_lump_pct": -83.7060627653631,
+            "capital_deployed_pct": -272.6168088169163,
+            "max_drawdown_pct": 57.33379311515253
+          },
+          "out_of_sample": {
+            "vs_flat_dca_pct": 0.14641603609966136,
+            "vs_lump_pct": -58.148314131053034,
+            "capital_deployed_pct": 68.47968402854843,
+            "max_drawdown_pct": 48.607856561663304
+          },
+          "feasible": true
+        },
+        {
+          "fold": {
+            "fold": 2,
+            "is_start": "2015-07-20",
+            "is_end": "2022-03-20",
+            "oos_start": "2022-03-21",
+            "oos_end": "2024-06-09"
+          },
+          "in_sample": {
+            "vs_flat_dca_pct": -57.35984383849868,
+            "vs_lump_pct": -92.18832899050837,
+            "capital_deployed_pct": -43.14861928781882,
+            "max_drawdown_pct": 57.33379311515253
+          },
+          "out_of_sample": {
+            "vs_flat_dca_pct": -51.05767746468266,
+            "vs_lump_pct": -29.014924604358573,
+            "capital_deployed_pct": 19.944625494599794,
+            "max_drawdown_pct": 7.354416158787726
+          },
+          "feasible": true
+        }
+      ]
+    },
+    {
+      "code_id": "dxy",
+      "display_name": "DXY",
+      "evaluator": "curve_simulator",
+      "mean_is_vs_flat_dca_pct": 61.63323271867938,
+      "mean_oos_vs_flat_dca_pct": 20.443561398805322,
+      "beats_named_baseline_oos": true,
+      "baseline_name": "power_law_solo",
+      "baseline_oos_vs_flat_dca_pct": -7.787838707761549,
+      "feasible_oos": true,
+      "buy_days": 145,
+      "sell_days": 148,
+      "capital_deployed_pct": -25.15834742993979,
+      "max_drawdown_pct": 15.3826550105847,
+      "keep": true,
+      "drop_reason": null,
+      "best_params": {
+        "buy_max_rate": 5.0,
+        "buy_knee_risk": 30.0,
+        "sell_knee_risk": 75.0,
+        "sell_max_rate": 5.0,
+        "buy_curvature": 1.0,
+        "sell_curvature": 2.0,
+        "valuation_weight": 0.0,
+        "m2_weight": 0.0,
+        "rs_eth_weight": 0.0,
+        "dxy_weight": 1.0,
+        "weekly_rsi_weight": 0.0,
+        "weekly_macd_weight": 0.0,
+        "sma_band_weight": 0.0
+      },
+      "num_evaluations": 2,
+      "fold_scores": [
+        {
+          "fold": {
+            "fold": 0,
+            "is_start": "2015-07-20",
+            "is_end": "2017-10-08",
+            "oos_start": "2017-10-09",
+            "oos_end": "2019-12-29"
+          },
+          "in_sample": {
+            "vs_flat_dca_pct": -26.444839301923693,
+            "vs_lump_pct": -63.85386709094044,
+            "capital_deployed_pct": 91.4189040817124,
+            "max_drawdown_pct": 33.899621536100106
+          },
+          "out_of_sample": {
+            "vs_flat_dca_pct": -3.8231027434692866,
+            "vs_lump_pct": -31.23623263188002,
+            "capital_deployed_pct": 53.813291149533306,
+            "max_drawdown_pct": 33.803610832374055
+          },
+          "feasible": true
+        },
+        {
+          "fold": {
+            "fold": 1,
+            "is_start": "2015-07-20",
+            "is_end": "2019-12-29",
+            "oos_start": "2019-12-30",
+            "oos_end": "2022-03-20"
+          },
+          "in_sample": {
+            "vs_flat_dca_pct": 94.24706435697856,
+            "vs_lump_pct": -48.195446796956034,
+            "capital_deployed_pct": -476.5278870931733,
+            "max_drawdown_pct": 65.2506993115516
+          },
+          "out_of_sample": {
+            "vs_flat_dca_pct": 64.00176418377315,
+            "vs_lump_pct": -31.46284621809906,
+            "capital_deployed_pct": -174.79049657342503,
+            "max_drawdown_pct": 40.57812720687765
+          },
+          "feasible": false
+        },
+        {
+          "fold": {
+            "fold": 2,
+            "is_start": "2015-07-20",
+            "is_end": "2022-03-20",
+            "oos_start": "2022-03-21",
+            "oos_end": "2024-06-09"
+          },
+          "in_sample": {
+            "vs_flat_dca_pct": 117.09747310098328,
+            "vs_lump_pct": -60.22777143607141,
+            "capital_deployed_pct": -4003.468449951145,
+            "max_drawdown_pct": 65.2506993115516
+          },
+          "out_of_sample": {
+            "vs_flat_dca_pct": 1.1520227561121033,
+            "vs_lump_pct": 46.70909735807651,
+            "capital_deployed_pct": -25.15834742993979,
+            "max_drawdown_pct": 15.3826550105847
+          },
+          "feasible": false
+        }
+      ]
+    },
+    {
+      "code_id": "weekly_rsi",
+      "display_name": "weekly RSI",
+      "evaluator": "curve_simulator",
+      "mean_is_vs_flat_dca_pct": -89.90140545850547,
+      "mean_oos_vs_flat_dca_pct": -42.40766596140791,
+      "beats_named_baseline_oos": false,
+      "baseline_name": "power_law_solo",
+      "baseline_oos_vs_flat_dca_pct": -7.787838707761549,
+      "feasible_oos": false,
+      "buy_days": 0,
+      "sell_days": 155,
+      "capital_deployed_pct": 0.0,
+      "max_drawdown_pct": 0.0,
+      "keep": false,
+      "drop_reason": "no OOS fold passed Stage B capital floor / drawdown cap",
+      "best_params": {
+        "buy_max_rate": 3.0,
+        "buy_knee_risk": 25.0,
+        "sell_knee_risk": 70.0,
+        "sell_max_rate": 3.0,
+        "buy_curvature": 1.0,
+        "sell_curvature": 2.0,
+        "valuation_weight": 0.0,
+        "m2_weight": 0.0,
+        "rs_eth_weight": 0.0,
+        "dxy_weight": 0.0,
+        "weekly_rsi_weight": 1.0,
+        "weekly_macd_weight": 0.0,
+        "sma_band_weight": 0.0
+      },
+      "num_evaluations": 2,
+      "fold_scores": [
+        {
+          "fold": {
+            "fold": 0,
+            "is_start": "2015-07-20",
+            "is_end": "2017-10-08",
+            "oos_start": "2017-10-09",
+            "oos_end": "2019-12-29"
+          },
+          "in_sample": {
+            "vs_flat_dca_pct": -87.62280780653603,
+            "vs_lump_pct": -93.91765812459677,
+            "capital_deployed_pct": 0.0,
+            "max_drawdown_pct": 0.0
+          },
+          "out_of_sample": {
+            "vs_flat_dca_pct": -9.667407375760284,
+            "vs_lump_pct": -35.41474551415119,
+            "capital_deployed_pct": 0.0,
+            "max_drawdown_pct": 0.0
+          },
+          "feasible": false
+        },
+        {
+          "fold": {
+            "fold": 1,
+            "is_start": "2015-07-20",
+            "is_end": "2019-12-29",
+            "oos_start": "2019-12-30",
+            "oos_end": "2022-03-20"
+          },
+          "in_sample": {
+            "vs_flat_dca_pct": -85.78324326415554,
+            "vs_lump_pct": -96.20847433069416,
+            "capital_deployed_pct": 0.0,
+            "max_drawdown_pct": 0.0
+          },
+          "out_of_sample": {
+            "vs_flat_dca_pct": -58.166569416862515,
+            "vs_lump_pct": -82.5176010796556,
+            "capital_deployed_pct": 0.0,
+            "max_drawdown_pct": 0.0
+          },
+          "feasible": false
+        },
+        {
+          "fold": {
+            "fold": 2,
+            "is_start": "2015-07-20",
+            "is_end": "2022-03-20",
+            "oos_start": "2022-03-21",
+            "oos_end": "2024-06-09"
+          },
+          "in_sample": {
+            "vs_flat_dca_pct": -96.29816530482482,
+            "vs_lump_pct": -99.32182436995062,
+            "capital_deployed_pct": 0.0,
+            "max_drawdown_pct": 0.0
+          },
+          "out_of_sample": {
+            "vs_flat_dca_pct": -59.38902109160094,
+            "vs_lump_pct": -41.09855743721052,
+            "capital_deployed_pct": 0.0,
+            "max_drawdown_pct": 0.0
+          },
+          "feasible": false
+        }
+      ]
+    },
+    {
+      "code_id": "weekly_macd",
+      "display_name": "weekly MACD",
+      "evaluator": "curve_simulator",
+      "mean_is_vs_flat_dca_pct": -89.11338013594086,
+      "mean_oos_vs_flat_dca_pct": -35.8890096359839,
+      "beats_named_baseline_oos": false,
+      "baseline_name": "power_law_solo",
+      "baseline_oos_vs_flat_dca_pct": -7.787838707761549,
+      "feasible_oos": true,
+      "buy_days": 49,
+      "sell_days": 133,
+      "capital_deployed_pct": -6.114379971518604,
+      "max_drawdown_pct": 8.695701590723575,
+      "keep": false,
+      "drop_reason": "OOS vs-flat -35.8890 did not beat power_law_solo -7.7878",
+      "best_params": {
+        "buy_max_rate": 3.0,
+        "buy_knee_risk": 25.0,
+        "sell_knee_risk": 70.0,
+        "sell_max_rate": 3.0,
+        "buy_curvature": 1.0,
+        "sell_curvature": 2.0,
+        "valuation_weight": 0.0,
+        "m2_weight": 0.0,
+        "rs_eth_weight": 0.0,
+        "dxy_weight": 0.0,
+        "weekly_rsi_weight": 0.0,
+        "weekly_macd_weight": 1.0,
+        "sma_band_weight": 0.0
+      },
+      "num_evaluations": 2,
+      "fold_scores": [
+        {
+          "fold": {
+            "fold": 0,
+            "is_start": "2015-07-20",
+            "is_end": "2017-10-08",
+            "oos_start": "2017-10-09",
+            "oos_end": "2019-12-29"
+          },
+          "in_sample": {
+            "vs_flat_dca_pct": -87.45630014552506,
+            "vs_lump_pct": -93.83583370890439,
+            "capital_deployed_pct": -0.9991716974720621,
+            "max_drawdown_pct": 0.22972499499438817
+          },
+          "out_of_sample": {
+            "vs_flat_dca_pct": -19.218316533979753,
+            "vs_lump_pct": -42.243376029836234,
+            "capital_deployed_pct": 40.55326782311833,
+            "max_drawdown_pct": 41.72741598793928
+          },
+          "feasible": true
+        },
+        {
+          "fold": {
+            "fold": 1,
+            "is_start": "2015-07-20",
+            "is_end": "2019-12-29",
+            "oos_start": "2019-12-30",
+            "oos_end": "2022-03-20"
+          },
+          "in_sample": {
+            "vs_flat_dca_pct": -87.06119888698686,
+            "vs_lump_pct": -96.54929760271246,
+            "capital_deployed_pct": 39.513414014560176,
+            "max_drawdown_pct": 41.76624415173089
+          },
+          "out_of_sample": {
+            "vs_flat_dca_pct": -54.181769077886614,
+            "vs_lump_pct": -80.85233317853394,
+            "capital_deployed_pct": 74.11638607118032,
+            "max_drawdown_pct": 40.44292497590373
+          },
+          "feasible": true
+        },
+        {
+          "fold": {
+            "fold": 2,
+            "is_start": "2015-07-20",
+            "is_end": "2022-03-20",
+            "oos_start": "2022-03-21",
+            "oos_end": "2024-06-09"
+          },
+          "in_sample": {
+            "vs_flat_dca_pct": -92.82264137531067,
+            "vs_lump_pct": -98.68510884245232,
+            "capital_deployed_pct": 58.02909256778983,
+            "max_drawdown_pct": 41.76624415173089
+          },
+          "out_of_sample": {
+            "vs_flat_dca_pct": -34.26694329608533,
+            "vs_lump_pct": -4.6619419675829725,
+            "capital_deployed_pct": -6.114379971518604,
+            "max_drawdown_pct": 8.695701590723575
+          },
+          "feasible": false
+        }
+      ]
+    },
+    {
+      "code_id": "sma_band",
+      "display_name": "SMA band",
+      "evaluator": "curve_simulator",
+      "mean_is_vs_flat_dca_pct": -82.02615391145548,
+      "mean_oos_vs_flat_dca_pct": -19.324641769860314,
+      "beats_named_baseline_oos": false,
+      "baseline_name": "power_law_solo",
+      "baseline_oos_vs_flat_dca_pct": -7.787838707761549,
+      "feasible_oos": true,
+      "buy_days": 79,
+      "sell_days": 247,
+      "capital_deployed_pct": -18.204808157543,
+      "max_drawdown_pct": 18.617462830558026,
+      "keep": false,
+      "drop_reason": "OOS vs-flat -19.3246 did not beat power_law_solo -7.7878",
+      "best_params": {
+        "buy_max_rate": 3.0,
+        "buy_knee_risk": 25.0,
+        "sell_knee_risk": 70.0,
+        "sell_max_rate": 3.0,
+        "buy_curvature": 1.0,
+        "sell_curvature": 2.0,
+        "valuation_weight": 0.0,
+        "m2_weight": 0.0,
+        "rs_eth_weight": 0.0,
+        "dxy_weight": 0.0,
+        "weekly_rsi_weight": 0.0,
+        "weekly_macd_weight": 0.0,
+        "sma_band_weight": 1.0
+      },
+      "num_evaluations": 2,
+      "fold_scores": [
+        {
+          "fold": {
+            "fold": 0,
+            "is_start": "2015-07-20",
+            "is_end": "2017-10-08",
+            "oos_start": "2017-10-09",
+            "oos_end": "2019-12-29"
+          },
+          "in_sample": {
+            "vs_flat_dca_pct": -84.08847462419565,
+            "vs_lump_pct": -92.18083264911229,
+            "capital_deployed_pct": -22.761514077189656,
+            "max_drawdown_pct": 3.307231265899179
+          },
+          "out_of_sample": {
+            "vs_flat_dca_pct": 16.13090989118944,
+            "vs_lump_pct": -16.96967671242269,
+            "capital_deployed_pct": 28.90874725412497,
+            "max_drawdown_pct": 20.97142300129687
+          },
+          "feasible": true
+        },
+        {
+          "fold": {
+            "fold": 1,
+            "is_start": "2015-07-20",
+            "is_end": "2019-12-29",
+            "oos_start": "2019-12-30",
+            "oos_end": "2022-03-20"
+          },
+          "in_sample": {
+            "vs_flat_dca_pct": -75.64777471909932,
+            "vs_lump_pct": -93.50540429348008,
+            "capital_deployed_pct": 5.596845053803263,
+            "max_drawdown_pct": 21.109799110189606
+          },
+          "out_of_sample": {
+            "vs_flat_dca_pct": -33.764978145612815,
+            "vs_lump_pct": -72.32005459712694,
+            "capital_deployed_pct": -3.109608417313182,
+            "max_drawdown_pct": 18.679710777937363
+          },
+          "feasible": false
+        },
+        {
+          "fold": {
+            "fold": 2,
+            "is_start": "2015-07-20",
+            "is_end": "2022-03-20",
+            "oos_start": "2022-03-21",
+            "oos_end": "2024-06-09"
+          },
+          "in_sample": {
+            "vs_flat_dca_pct": -86.34221239107147,
+            "vs_lump_pct": -97.49789510351773,
+            "capital_deployed_pct": -130.05421563313547,
+            "max_drawdown_pct": 26.38675064372717
+          },
+          "out_of_sample": {
+            "vs_flat_dca_pct": -40.339857055157566,
+            "vs_lump_pct": -13.469988229545605,
+            "capital_deployed_pct": -18.204808157543,
+            "max_drawdown_pct": 18.617462830558026
+          },
+          "feasible": false
+        }
+      ]
+    }
+  ],
+  "beats_flat_dca_oos": false,
+  "notes": "Stage 0 solo books; evaluator=curve_simulator; gate=power_law_solo OOS vs-flat plus Stage B capital/drawdown; IS vs-flat is diagnostic. kept extras=['m2', 'dxy']. beats_flat_dca_oos is not a combined-book claim. Do not --push-supabase.",
+  "folds": [
+    {
+      "fold": 0,
+      "is_start": "2015-07-20",
+      "is_end": "2017-10-08",
+      "oos_start": "2017-10-09",
+      "oos_end": "2019-12-29"
+    },
+    {
+      "fold": 1,
+      "is_start": "2015-07-20",
+      "is_end": "2019-12-29",
+      "oos_start": "2019-12-30",
+      "oos_end": "2022-03-20"
+    },
+    {
+      "fold": 2,
+      "is_start": "2015-07-20",
+      "is_end": "2022-03-20",
+      "oos_start": "2022-03-21",
+      "oos_end": "2024-06-09"
+    }
+  ]
+}

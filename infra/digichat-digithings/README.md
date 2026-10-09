@@ -90,11 +90,17 @@ Pages: `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=https://digithings.ai` (same host).
 
 ### OCC corpus
 
-Production `DIGICHAT_EMBED_TENANTS` must include OCC:
+Production `DIGICHAT_EMBED_TENANTS` must include OCC. The `token` in that entry is the OCC invite
+key — a bearer capability, never committed, and **not** the `MCP_EDGE_KEY` literal in the nested
+`mcp.servers` entry (that one is a separate credential; see
+[`docs/ops/SECRETS_ROTATION.md` §1](../../docs/ops/SECRETS_ROTATION.md)). Mint, rotate, revoke and
+verify it with [`docs/ops/OCC_INVITE_KEY.md`](../../docs/ops/OCC_INVITE_KEY.md), which is also the
+rollback for taking OCC off the first-party allowlist:
 
 ```json
 "occ.digithings.ai": {
   "slug": "occ",
+  "token": "<the OCC invite key, from the secret store — never a literal in this file>",
   "backend": {
     "type": "digigraph",
     "digisearchIndex": "occ_help",
@@ -103,11 +109,16 @@ Production `DIGICHAT_EMBED_TENANTS` must include OCC:
 }
 ```
 
+`token` is **required** — the registry validator rejects a tenant entry without a non-empty one
+(`apps/digichat/src/lib/embed-tenants.ts:511`). A placeholder like `unused-for-first-party` is a
+real key to anyone who has read this README, and OCC reaches live customer data, so the OCC entry
+carries a minted secret and not a placeholder.
+
 digichat forwards `X-Digi-Corpus-Index` / `X-Digi-Vault-Prefix`; digigraph
 `corpus_routing` applies them to digisearch / digivault tools.
 
 The OCC tenant also gets the read-only Zammad ticket MCP (`search_tickets` /
-`list_tickets` / `get_ticket` / `ticket_report`) via the `mcp.servers` entry in the live tenant
+`list_tickets` / `get_ticket` / `ticket_report` / `aggregate_tickets`) via the `mcp.servers` entry in the live tenant
 JSON below. `zammad-mcp` is not a separate Cloudflare container — it runs as a
 program inside the `digithings-stack` container (see
 [`scripts/zammad_mcp/README.md`](../../scripts/zammad_mcp/README.md), §
@@ -215,7 +226,7 @@ The Pages Function OpenRouter digivault loop is **retired**.
 1. `curl -sf https://graph.digithings.ai/healthz` and `https://key.digithings.ai/healthz`
 2. Open https://digithings.ai/chat — no `/login` wall
 3. Ask a vault-grounded question; expect digigraph tool activity
-4. OCC: https://digithings.ai/chat/occ — activity should show digisearch against `occ_help`
+4. OCC: https://digithings.ai/chat/occ — activity should show digisearch against the `occ_help` index
 
 ## Onboard corpus
 

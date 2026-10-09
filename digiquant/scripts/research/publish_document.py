@@ -48,7 +48,8 @@ def _sb():
 def _render_markdown(payload: dict) -> str:
     # Keep backend renderer in one place for now (also used by update_tearsheet).
     # Import locally to avoid importing heavy deps at module import time.
-    from scripts.update_tearsheet import _render_markdown_from_payload  # type: ignore
+    # Sibling import stays local: update_tearsheet pulls yfinance at import.
+    from update_tearsheet import _render_markdown_from_payload  # type: ignore
 
     return _render_markdown_from_payload(payload)
 

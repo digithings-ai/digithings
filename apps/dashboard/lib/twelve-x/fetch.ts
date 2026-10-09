@@ -313,6 +313,50 @@ async function getLatestConfluenceDate(): Promise<string | null> {
 }
 
 /**
+ * The canonical "as-of" run the FX workspace reports, and the candidates it is
+ * derived from.
+ *
+ * The candidates are the latest `run_date` of each table the page reads, ordered
+ * BASE TABLE FIRST — `fx_research_history` is where every run lands its briefs
+ * before any projection is computed, so it is the only one guaranteed to have a
+ * row for a session that actually ran. Each later candidate is a derived
+ * projection that can legitimately be absent:
+ *
+ * - `fx_daily_digest` — written once per run, but a run that dies between storing
+ *   briefs and digesting leaves the digest a day behind.
+ * - `fx_consensus_snapshot` — written whenever any currency view scores.
+ * - `fx_confluence_snapshot` — the WORST clock of the four, and must never lead.
+ *   `build_confluence()` (twelve-x `intelligence.py`) only emits a setup when the
+ *   session has a directional consensus (|score| >= min_tilt 0.35), at least
+ *   `min_brokers=2` distinct desks agreeing, AND a catalyst inside
+ *   `horizon_days=14`. A legitimate flat/split session therefore writes ZERO rows.
+ *   Keying the page on it silently rewinds "Today" to the last day that happened
+ *   to produce a setup — which is exactly the Oct 7 2026 regression: 35 briefs
+ *   stored, 0 confluence setups, and the Today rail rewound to Oct 6.
+ *
+ * PURE — no client, no query. Every call site resolves through this one function
+ * so the briefs rail and the date pager can never disagree about "today" again.
+ */
+export function resolveCanonicalRunDate(candidates: {
+  /** Latest `run_date` in `fx_research_history` (the base table). */
+  research?: string | null;
+  /** Latest `run_date` in `fx_daily_digest`. */
+  digest?: string | null;
+  /** Latest `run_date` in `fx_consensus_snapshot`. */
+  consensus?: string | null;
+  /** Latest `run_date` in `fx_confluence_snapshot` — LAST resort only. */
+  confluence?: string | null;
+}): string | null {
+  return (
+    candidates.research ??
+    candidates.digest ??
+    candidates.consensus ??
+    candidates.confluence ??
+    null
+  );
+}
+
+/**
  * Ranked confluence trade ideas for the Intelligence tab. Defaults to the latest
  * run_date in `fx_confluence_snapshot`; pass `runDate` to pin a specific session.
  * Returns the full ranked set (rank 1 = strongest). `[]` when unconfigured/empty.
