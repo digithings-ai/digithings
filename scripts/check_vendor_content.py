@@ -268,6 +268,23 @@ VENDOR_RULES = tuple(r for r in RULES if r.cls == "vendor")
 # Allowlist
 # --------------------------------------------------------------------------
 
+#: Finding statuses that a pending allowlist entry can produce. Neither is
+#: blocking unless ``--enforce-pending`` is passed (board, 2026-10-09, DIG-2583).
+#:
+#: ``pending``       — a pending entry covers the hit and its recorded text is
+#:                    still there. Report-only, decision still owed.
+#: ``pending-drift`` — a pending entry covers the hit but the recorded ``match``
+#:                    text no longer appears in what the rule matched, so the
+#:                    entry has gone stale. Still report-only; reported loudly
+#:                    because a stale entry is how an allowlist silently outlives
+#:                    what it excuses.
+PENDING_STATUSES = ("pending", "pending-drift")
+
+DRIFT_NOTE = (
+    " [DRIFT: the recorded 'match' text no longer appears here. Still report-only "
+    "until Security rules, but this entry is stale and should be re-checked.]"
+)
+
 
 @dataclass
 class Allowlist:
@@ -284,16 +301,45 @@ class Allowlist:
                 return entry
         return None
 
-    def pending_for(self, rule_id: str, path: str, matched: str) -> dict | None:
+    def resolve_pending(
+        self, rule_id: str, path: str, matched: str
+    ) -> tuple[dict | None, bool]:
+        """Find the pending entry covering ``rule_id`` at ``path``.
+
+        Scope is **rule + path**. The ``match`` needle is *evidence*, not a
+        condition of suppression.
+
+        Why (board, 2026-10-09, DIG-2583): a pending entry records content nobody
+        has ruled on yet, so it is report-only until Security rules. Scoping the
+        suppression to a literal substring of the matched text meant that a
+        cosmetic reword by an unrelated PR — ``localStorage['pmt_auth_token']``
+        becoming ``localStorage.getItem('pmt_auth_token')``, which matches the same
+        rule through a different alternative — silently ended the suppression and
+        turned the recorded finding into a hard FAIL. That is exactly the cascade
+        the board asked to be prevented: an undecided record blocking whatever PR
+        happened to touch the line.
+
+        A stale entry is therefore *reported* (``pending-drift``), never converted
+        into a block. ``--enforce-pending`` restores the blocking behaviour in one
+        flag when Security is ready to rule.
+
+        Returns ``(entry, drifted)``. ``entry is None`` means no pending entry
+        covers this rule at this path and the caller must fail the finding.
+        """
+        scoped: dict | None = None
         for entry in self.pending:
             if entry.get("rule") != rule_id:
                 continue
             if not _path_covers(entry, path):
                 continue
             needle = entry.get("match")
-            if not needle or needle.lower() in matched.lower():
-                return entry
-        return None
+            if needle and needle.lower() in matched.lower():
+                return entry, False
+            if scoped is None:
+                scoped = entry
+        if scoped is None:
+            return None, False
+        return scoped, True
 
 
 def _glob_to_re(glob: str) -> re.Pattern[str]:
@@ -348,7 +394,7 @@ class Finding:
     path: str
     lineno: int
     matched: str
-    status: str  # "allowlisted" | "pending" | "FAIL"
+    status: str  # "allowlisted" | "pending" | "pending-drift" | "FAIL"
     note: str = ""
 
 
@@ -450,11 +496,18 @@ def scan(base: str, allowlist: Allowlist) -> tuple[list[Finding], list[str]]:
             if rule.id not in method_hits:
                 continue
             lineno, matched = method_hits[rule.id]
-            entry = allowlist.pending_for(rule.id, rel, matched)
+            entry, drifted = allowlist.resolve_pending(rule.id, rel, matched)
             if entry is not None:
                 findings.append(
-                    Finding(rule, rel, lineno, matched, "pending",
-                            f"{entry['ticket']} ({entry['owner']}): {entry['reason']}")
+                    Finding(
+                        rule,
+                        rel,
+                        lineno,
+                        matched,
+                        "pending-drift" if drifted else "pending",
+                        f"{entry['ticket']} ({entry['owner']}): {entry['reason']}"
+                        + (DRIFT_NOTE if drifted else ""),
+                    )
                 )
             else:
                 findings.append(Finding(rule, rel, lineno, matched, "FAIL"))
@@ -470,11 +523,18 @@ def scan(base: str, allowlist: Allowlist) -> tuple[list[Finding], list[str]]:
                             f"{entry['owner']} — {entry['ticket']}: {entry['reason']}")
                 )
                 continue
-            entry = allowlist.pending_for(rule.id, rel, matched)
+            entry, drifted = allowlist.resolve_pending(rule.id, rel, matched)
             if entry is not None:
                 findings.append(
-                    Finding(rule, rel, lineno, matched, "pending",
-                            f"{entry['ticket']} ({entry['owner']}) owes the decision: {entry['reason']}")
+                    Finding(
+                        rule,
+                        rel,
+                        lineno,
+                        matched,
+                        "pending-drift" if drifted else "pending",
+                        f"{entry['ticket']} ({entry['owner']}) owes the decision: "
+                        f"{entry['reason']}" + (DRIFT_NOTE if drifted else ""),
+                    )
                 )
             else:
                 findings.append(Finding(rule, rel, lineno, matched, "FAIL"))
@@ -602,26 +662,71 @@ VENDOR_CONTEXT = re.compile(
 # --------------------------------------------------------------------------
 
 
-def report(findings: list[Finding], notes: list[str], base: str) -> None:
+def _gh_escape(text: str) -> str:
+    """Escape a value for a GitHub Actions workflow command.
+
+    ``%``, ``\\r`` and ``\\n`` are the documented escapes; an unescaped newline
+    would terminate the command early and the rest of the message would be
+    printed as plain log output, which is the one place an annotation would
+    silently stop being an annotation.
+    """
+    return text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+
+def annotations(findings: list[Finding], enforce_pending: bool) -> None:
+    """Emit a workflow-command annotation for every non-allowlisted finding.
+
+    A report-only finding that only appears in the log is invisible on the PR
+    page, which is the whole reason the board accepted it. ``::error`` when
+    ``--enforce-pending`` is set (it is blocking then), ``::warning`` otherwise.
+    """
+    level = "error" if enforce_pending else "warning"
+    for f in findings:
+        if f.status not in PENDING_STATUSES:
+            continue
+        title = (
+            "PENDING-DRIFT" if f.status == "pending-drift" else "PENDING"
+        )
+        print(
+            f"::{level} title={title} {_gh_escape(f.rule.id)} {_gh_escape(f.rule.name)}::"
+            f"{_gh_escape(f.path)}:{f.lineno}: {_gh_escape(f.matched)}"
+        )
+
+
+def report(
+    findings: list[Finding], notes: list[str], base: str, enforce_pending: bool = False
+) -> None:
     fails = [f for f in findings if f.status == "FAIL"]
     pending = [f for f in findings if f.status == "pending"]
+    drift = [f for f in findings if f.status == "pending-drift"]
     allowed = [f for f in findings if f.status == "allowlisted"]
     print(f"vendor-content gate: baseline {base[:12]} (merge-base with main)")
     print(
         f"  {len(fails)} failing, {len(pending)} pending a decision, "
+        f"{len(drift)} pending-drift (recorded text no longer matches), "
         f"{len(allowed)} allowlisted"
     )
+    if (pending or drift) and not enforce_pending:
+        print(
+            "  pending entries are REPORT-ONLY (board, 2026-10-09, DIG-2583): they do not fail"
+        )
+        print(
+            "  this check and do not block the PR. --enforce-pending makes every one of them fail."
+        )
     for f in sorted(findings, key=lambda x: (x.status != "FAIL", x.path, x.lineno)):
-        if f.status == "pending":
+        if f.status in PENDING_STATUSES:
             continue
         print(f"  {f.path}:{f.lineno}  {f.status.upper()}  [{f.rule.id} {f.rule.name}]")
         print(f"      matched: {f.matched!r}")
         if f.note:
             print(f"      {f.note}")
-    if pending:
+    if pending or drift:
         print("\n  pending — NOT approved, printed so the decision stays visible:")
-        for f in sorted(pending, key=lambda x: (x.path, x.lineno)):
-            print(f"    {f.path}:{f.lineno}  allowlisted: NO  [{f.rule.id} {f.rule.name}]")
+        for f in sorted(pending + drift, key=lambda x: (x.path, x.lineno)):
+            marker = "  PENDING-DRIFT" if f.status == "pending-drift" else ""
+            print(
+                f"    {f.path}:{f.lineno}  allowlisted: NO  [{f.rule.id} {f.rule.name}]{marker}"
+            )
             print(f"        matched: {f.matched!r}")
             print(f"        {f.note}")
     if notes:
@@ -636,6 +741,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--allowlist", default=str(ALLOWLIST_PATH))
     parser.add_argument("--warn", action="store_true")
     parser.add_argument("--json", action="store_true")
+    parser.add_argument(
+        "--enforce-pending",
+        action="store_true",
+        help="treat pending allowlist findings as failures (off by default: board "
+        "decision 2026-10-09, DIG-2583 — pending entries are report-only until "
+        "Security rules on them, so they must not block the weekend push)",
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -648,11 +760,16 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     fails = [f for f in findings if f.status == "FAIL"]
+    pending_blocking: list[Finding] = (
+        [f for f in findings if f.status in PENDING_STATUSES] if args.enforce_pending else []
+    )
     if args.json:
         print(
             json.dumps(
                 {
                     "base": base,
+                    "enforce_pending": args.enforce_pending,
+                    "blocking_count": len(fails) + len(pending_blocking),
                     "fails": [
                         {
                             "rule": f.rule.id,
@@ -671,10 +788,11 @@ def main(argv: list[str] | None = None) -> int:
                             "line": f.lineno,
                             "matched": f.matched,
                             "allowlisted": False,
+                            "drift": f.status == "pending-drift",
                             "note": f.note,
                         }
                         for f in findings
-                        if f.status == "pending"
+                        if f.status in PENDING_STATUSES
                     ],
                     "allowlisted": [
                         {
@@ -695,15 +813,27 @@ def main(argv: list[str] | None = None) -> int:
             )
         )
     else:
-        report(findings, notes, base)
+        report(findings, notes, base, enforce_pending=args.enforce_pending)
+        annotations(findings, args.enforce_pending)
 
-    if fails:
-        print(
-            "\nA method-shaped hit (M*) is never allowlistable: remove the step.\n"
-            "A vendor-identifier hit (V*) that is new since the merge base with main\n"
-            "needs either removal or an entry in scripts/vendor_content_allowlist.json\n"
-            "naming Security and Counsel as approvers. No nolint, no baseline bypass."
-        )
+    blocking = list(fails) + pending_blocking
+    if blocking:
+        # `--json` output is only parseable while it is the only thing on stdout.
+        # The advisory is a human sentence; a consumer calling json.loads(stdout)
+        # would fail on exactly the run that has the most to say.
+        if not args.json:
+            if fails:
+                print(
+                    "\nA method-shaped hit (M*) is never allowlistable: remove the step.\n"
+                    "A vendor-identifier hit (V*) that is new since the merge base with main\n"
+                    "needs either removal or an entry in scripts/vendor_content_allowlist.json\n"
+                    "naming Security and Counsel as approvers. No nolint, no baseline bypass."
+                )
+            if pending_blocking:
+                print(
+                    f"\n--enforce-pending is set: {len(pending_blocking)} pending "
+                    "finding(s) are being treated as failures."
+                )
         return 0 if args.warn else 1
     return 0
 
