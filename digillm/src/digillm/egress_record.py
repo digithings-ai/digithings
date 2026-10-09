@@ -9,10 +9,10 @@ digest of what was sent.
 The record deliberately never carries the payload. A copy of the outbound
 messages in a log file is not an audit trail, it is a second copy of the data
 with weaker access control than the database it came from. What the record
-does carry is ``HMAC-SHA256`` over the canonical outbound payload under a
+does carry is ``HMAC-SHA256`` over the canonical outbound messages under a
 pepper that never leaves the deployment, so two records can be compared for
-"same bytes on the wire" while a reader holding a candidate list cannot rank
-it. If the pepper is missing the record says ``digest_algorithm: "absent"``
+"the same outbound messages" while a reader holding a candidate list cannot
+rank it. If the pepper is missing the record says ``digest_algorithm: "absent"``
 rather than quietly falling back to an unkeyed hash, which would be a lookup
 table for every value that has ever been sent.
 
@@ -22,7 +22,7 @@ That is the honest current value, and it is the evidence a later filter will be
 judged against: the day ``unscreened`` stops appearing, someone has to justify
 it.
 
-Three limits of the record, stated here so no reader over-reads it:
+Four limits of the record, stated here so no reader over-reads it:
 
 * Granularity is one digillm provider attempt, not one HTTP packet. The OpenAI
   SDK retries a single ``create()`` internally (429 / 5xx / connect errors), so
@@ -32,12 +32,22 @@ Three limits of the record, stated here so no reader over-reads it:
   the request is accepted, before the stream is read, because the payload has
   already left at that point and a later edit is impossible on a frozen record.
   The terminal result of the stream is in the telemetry record, joinable on
-  ``call_id``. Reporting ``succeeded`` here would be a lie for the streams that
+  ``call_id`` -- but only if some process registered a ``TelemetryObserver``.
+  Telemetry delivery is a callback and not a durable sink, so the far end of
+  that join may not exist. This module writes a file; telemetry does not.
+  Reporting ``succeeded`` here would be a lie for the streams that
   die mid-flight, which is precisely the case counsel asks about.
 * A failed attempt is recorded even when it failed before the wire (DNS, local
   serialization). That over-counts rather than under-counts on purpose: an
   egress ledger that misses the calls it could not prove went is worse than one
   that lists the ones it could not prove did not.
+* The digest covers the outbound *messages* only, not the whole request. The same
+  ``create()`` call also carries ``model``, ``temperature``, ``max_tokens``,
+  ``tools``, ``tool_choice`` and ``response_format``, and none of those are in
+  the digest. Two calls with identical messages but different tool schemas
+  therefore produce identical digests. The narrower input is deliberate:
+  ``kwargs`` can carry a BYOK key in ``extra_body``, and a digest covering it
+  would put a credential inside a keyed-hash oracle.
 
 Configuration (environment):
 
@@ -216,7 +226,15 @@ def set_egress_observer(observer: EgressObserver | None) -> None:
 
 
 def canonical_payload_bytes(payload: Any) -> bytes:
-    """Serialize a payload deterministically, so digests compare across runs."""
+    """Serialize a payload deterministically, so digests compare across runs.
+
+    Deterministic holds for JSON-native values only. ``default=str`` coerces
+    anything else with ``str()``, which embeds a memory address and so makes
+    the digest differ between processes. The coercion stays because removing
+    it makes ``json.dumps`` raise on the same payload and the caller swallows
+    that: the record would be lost rather than imprecise. Outbound messages
+    are dicts of strings, so the limit is latent today.
+    """
     return json.dumps(
         payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str
     ).encode("utf-8")
