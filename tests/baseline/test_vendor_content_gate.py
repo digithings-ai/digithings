@@ -430,3 +430,161 @@ def test_repository_allowlist_loads_and_approves_no_method_rule() -> None:
     for entry in loaded.pending:
         assert entry["match"], entry
         assert entry["owner"] and entry["ticket"], entry
+# --------------------------------------------------------------------------
+# pending is report-only, including when its recorded text drifts
+# --------------------------------------------------------------------------
+#
+# Board decision 2026-10-09 (DIG-2583): a pending entry is content nobody has
+# ruled on, so it must never block a PR. It used to be suppressed only while its
+# `match` needle was a substring of the text the rule matched, so a cosmetic
+# reword by an unrelated PR ended the suppression and the recorded finding became
+# a hard FAIL. The fix scopes suppression to rule + path and reports a stale
+# entry as `pending-drift` instead of blocking on it.
+#
+# The teeth are the other half and are pinned here too: a hit with NO pending
+# entry for that rule at that path is new content and still fails.
+
+#: The reword. M5 matches `\bextract(?:s|ed|ing)?\s+the\s+(?:session|cookie|...)s?\b`,
+#: so "Extracting the session cookie" still trips it — but the recorded needle
+#: "Extract the session" is no longer a substring of the matched text. That is the
+#: whole scenario: a docs edit no one would think twice about, same rule, and the
+#: old suppression ends. Derived by substitution rather than retyped, so it cannot
+#: silently stop being a reword if the fixture above it changes.
+DRIFTED_STEPS = SESSION_STEPS.replace("Extract the session cookie", "Extracting the session cookie")
+
+DRIFT_ENTRY = {
+    "rule": "M5",
+    "path": "docs/ops/session.md",
+    "match": "Extract the session",
+    "owner": "Security b14d7a18",
+    "ticket": "DIG-1434 / PR #5157",
+    "reason": "removed by PR #5157",
+}
+
+
+def _drift_fixture(tmp_path: Path) -> Path:
+    """A repo whose pending entry for M5 has gone stale against the content."""
+    assert "Extract the session" not in DRIFTED_STEPS, (
+        "the drifted fixture must NOT contain the recorded needle, or the drift "
+        "tests below would pass without ever exercising drift"
+    )
+    assert "Extract the session" in SESSION_STEPS, (
+        "the un-drifted fixture must contain the recorded needle, or test 1 "
+        "would be measuring drift and calling it a match"
+    )
+    repo = _make_repo(tmp_path)
+    _write_allowlist(repo, pending=[dict(DRIFT_ENTRY)])
+    _stage(repo, "docs/ops/session.md", DRIFTED_STEPS)
+    return repo
+
+
+def test_pending_entry_matches_when_its_recorded_text_is_present(tmp_path: Path) -> None:
+    """The control: needle present is `pending`, not `pending-drift`."""
+    repo = _make_repo(tmp_path)
+    _write_allowlist(repo, pending=[dict(DRIFT_ENTRY)])
+    _stage(repo, "docs/ops/session.md", SESSION_STEPS)
+    proc = _run(repo)
+    assert proc.returncode == 0, proc.stdout
+    assert "allowlisted: NO" in proc.stdout
+    assert "PENDING-DRIFT" not in proc.stdout, proc.stdout
+
+
+def test_pending_entry_does_not_block_when_its_recorded_text_drifts(tmp_path: Path) -> None:
+    """The load-bearing case: a reword must not turn a record into a block."""
+    proc = _run(_drift_fixture(tmp_path))
+    assert proc.returncode == 0, proc.stdout
+    assert "FAIL" not in proc.stdout
+    assert "PENDING-DRIFT" in proc.stdout, proc.stdout
+
+
+def test_pending_drift_still_reports_allowlisted_no(tmp_path: Path) -> None:
+    """Drift changes the urgency of the report, never its approval."""
+    proc = _run(_drift_fixture(tmp_path))
+    assert "allowlisted: NO" in proc.stdout, proc.stdout
+    assert "DIG-1434" in proc.stdout, proc.stdout
+
+
+def test_pending_drift_emits_a_workflow_annotation(tmp_path: Path) -> None:
+    """Report-only means visible on the PR page, not buried in the log."""
+    proc = _run(_drift_fixture(tmp_path))
+    assert "::warning title=PENDING-DRIFT" in proc.stdout, proc.stdout
+    assert "::error" not in proc.stdout, proc.stdout
+
+
+def test_drift_does_not_weaken_a_hit_with_no_pending_entry(tmp_path: Path) -> None:
+    """The teeth. Identical content, no pending entry: still a hard failure."""
+    repo = _make_repo(tmp_path)
+    _write_allowlist(repo)
+    _stage(repo, "docs/ops/session.md", DRIFTED_STEPS)
+    proc = _run(repo)
+    assert proc.returncode == 1, proc.stdout
+    assert "docs/ops/session.md" in proc.stdout, proc.stdout
+
+
+def test_drift_does_not_weaken_a_hit_on_an_uncovered_path(tmp_path: Path) -> None:
+    """A pending entry covers rule + path, and nothing outside them."""
+    repo = _make_repo(tmp_path)
+    _write_allowlist(repo, pending=[dict(DRIFT_ENTRY)])
+    _stage(repo, "docs/ops/elsewhere.md", DRIFTED_STEPS)
+    proc = _run(repo)
+    assert proc.returncode == 1, proc.stdout
+    assert "docs/ops/elsewhere.md" in proc.stdout, proc.stdout
+
+
+def test_enforce_pending_makes_a_drifting_pending_entry_block(tmp_path: Path) -> None:
+    """Security's restore path is one flag, and it really blocks."""
+    proc = _run(_drift_fixture(tmp_path), "--enforce-pending")
+    assert proc.returncode == 1, proc.stdout
+    assert "::error title=PENDING-DRIFT" in proc.stdout, proc.stdout
+
+
+def test_enforce_pending_makes_a_matched_pending_entry_block(tmp_path: Path) -> None:
+    repo = _make_repo(tmp_path)
+    _write_allowlist(repo, pending=[dict(DRIFT_ENTRY)])
+    _stage(repo, "docs/ops/session.md", SESSION_STEPS)
+    proc = _run(repo, "--enforce-pending")
+    assert proc.returncode == 1, proc.stdout
+    assert "--enforce-pending is set" in proc.stdout, proc.stdout
+
+
+def test_enforce_pending_does_not_block_an_allowlisted_entry(tmp_path: Path) -> None:
+    """An approved entry is a decision already taken; the flag must not undo it."""
+    repo = _make_repo(tmp_path)
+    _write_allowlist(
+        repo,
+        approved=[
+            {
+                "rule": "V1",
+                "path": "docs/vendor.md",
+                "symbol": "PMT_",
+                "owner": "Security b14d7a18",
+                "ticket": "DIG-1418 rule 2",
+                "reason": "our own stage id; rule 2 keeps our own names",
+            }
+        ],
+    )
+    _stage(repo, "docs/vendor.md", ENV_NAME_ONLY)
+    proc = _run(repo, "--enforce-pending")
+    assert proc.returncode == 0, proc.stdout
+
+
+def test_json_marks_pending_report_only_and_carries_the_drift_flag(tmp_path: Path) -> None:
+    proc = _run(_drift_fixture(tmp_path), "--json")
+    assert proc.returncode == 0, proc.stdout
+    payload = json.loads(proc.stdout[proc.stdout.index("{") :])
+    assert payload["enforce_pending"] is False
+    assert payload["fails"] == []
+    drifted = [p for p in payload["pending"] if p["rule"] == "M5"]
+    assert drifted, proc.stdout
+    assert drifted[0]["drift"] is True
+    assert drifted[0]["allowlisted"] is False
+
+
+def test_json_under_enforce_pending_still_reports_pending_as_pending(tmp_path: Path) -> None:
+    """`--json` describes what was found; the exit code is what enforces."""
+    proc = _run(_drift_fixture(tmp_path), "--json", "--enforce-pending")
+    assert proc.returncode == 1
+    payload = json.loads(proc.stdout[proc.stdout.index("{") :])
+    assert payload["enforce_pending"] is True
+    assert payload["fails"] == []
+    assert any(p["drift"] for p in payload["pending"])
