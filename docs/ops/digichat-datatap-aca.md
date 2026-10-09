@@ -18,7 +18,7 @@ DIG-1242 asked for three things: decide the lane, bind tag to commit, rehearse o
 | `v0.4.0` … `v2.3.3` | 15 | clean release names |
 | `-error1`…`-error3`, `-welcome1/2`, `-boot1`, `-textleak-…`, `-counter1`…`-counter9` | 15 | **hand-built, hand-debugged images** |
 
-Half the registry is ad-hoc debugging under names no workflow produced. The one tag that embeds a git SHA — `v2.0.0-main.7263272` — shows commit binding was attempted once and abandoned. `ghcr.io/digithings-ai/digichat` **does not exist** (verified three ways: anonymous token `401`, `GET /v2/…/tags/list` `401`, `gh api /orgs/digithings-ai/packages?package_type=container` empty), so the ACR images are not mirrors of a published artifact either. They were built on someone's laptop and pushed by hand.
+Half the registry is ad-hoc debugging under names no workflow produced. The one tag that embeds a git SHA — `v2.0.0-main.7263272` — shows commit binding was attempted once and abandoned. ~~`ghcr.io/digithings-ai/digichat` **does not exist** (verified three ways: anonymous token `401`, `GET /v2/…/tags/list` `401`, `gh api /orgs/digithings-ai/packages?package_type=container` empty)~~ **CORRECTED 2026-10-09 — the package exists.** All three probes were non-discriminating: the two `401`s are unauthenticated and a *private* package answers `401` exactly like an absent one, and the org package **list** route omits this package under every `visibility` filter even for an org admin. Measured with the by-name route: id `13179652`, `visibility: private`, `version_count: 28`, created 2026-07-05, last published 2026-09-21 (`v2.3.2`, `latest`). Whether any ACR image is a mirror of its GHCR counterpart has **not** been checked — that needs a digest comparison, which is separate work and is not claimed here.
 
 So the lane being absent is not a missing workflow to restore. It is the absence of the whole chain, and the drift is the bill for it:
 
@@ -249,7 +249,7 @@ git push origin digichat-v2.4.0
 # runs server-side and has no GitHub session to borrow. Use a classic PAT with
 # read:packages. If the package is public these can be omitted, but do not
 # assume that — org default visibility decides, and `ghcr.io/digithings-ai/digichat`
-# does not exist yet.
+# is private (verified 2026-10-09), so assume the credentials are required.
 az acr import -n datatapchatregistry --subscription "$SUB" \
   --source "ghcr.io/digithings-ai/digichat:v${VERSION}" \
   --username "$GHCR_USER" --password "$GHCR_PAT" \
@@ -367,7 +367,7 @@ The false claim — that `ghcr.io/digithings-ai/digichat` is published — was *
 Restoring the lane splits those claims in two, and the distinction matters:
 
 - **Claims that a lane was removed and never replaced** are now false — the lane is back. Corrected.
-- **Claims that the GHCR package exists** are still false. Restoring a workflow does not create a package: nothing publishes until a `digichat-v*` tag is pushed, and the ladder stops at `digichat-v2.3.2`. So `ghcr.io/digithings-ai/digichat` does not exist today, and will not until someone cuts the next release tag.
+- ~~**Claims that the GHCR package exists** are still false.~~ **Also corrected 2026-10-09: the package exists** — id `13179652`, `visibility: private`, `version_count: 28`, created 2026-07-05, last published 2026-09-21 with `v2.3.2` and `latest`. The 2026-10-06 check that said otherwise could not tell a *private* package from an absent one: two of its three probes were unauthenticated (`401` = "auth required", which a private package returns identically), and the third, `gh api /orgs/digithings-ai/packages?package_type=container`, returns `[]` for this package under every `visibility` filter even for an org admin. The discriminating route is the by-name one: `gh api /orgs/digithings-ai/packages/container/digichat`. What the earlier check got *right* is that nothing has published since 2026-09-21 and the tag ladder still stops at `digichat-v2.3.2`. Restoring a workflow does not create a package: nothing publishes until a `digichat-v*` tag is pushed, and the ladder stops at `digichat-v2.3.2`. So `ghcr.io/digithings-ai/digichat` does not exist today, and will not until someone cuts the next release tag.
 
 Any doc corrected in this PR that tells a reader to `docker pull ghcr.io/digithings-ai/digichat` must keep saying **that this works once the tag lands**, not that it works now.
 
