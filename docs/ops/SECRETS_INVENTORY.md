@@ -80,7 +80,7 @@ Six repo secrets that no `.github` YAML read were deleted on 2026-09-17/18: `COP
 | `DIGISEARCH_SMTP_USER` · `DIGISEARCH_SMTP_PASS` | `digisearch/src/digisearch/monitors/delivery.py:320` | `.env.example:109` | yes (`.env`) | monitor email delivery fails | local `.env` | |
 | `FRED_API_KEY` · `COINGECKO_API_KEY` · `ALPHA_VANTAGE_API_KEY` · `SEC_EDGAR_USER_AGENT` | `digiquant/.../research ingest` | `digiquant/src/digiquant/research/config/mcp.secrets.env.example:5-12`; history-only `digiquant/src/digiquant/olympus/atlas/config/mcp.secrets.env.example` (absent at HEAD, byte-identical literals, verified 2026-10-04) | n/a | research ingest fails | committed example, gitleaks-allowlisted | `plaintext-literal`; owner-confirmed dead 2026-06-18 |
 | `OMNIROUTE_API_KEY` · `OMNIROUTE_AUTH_PASSWORD` | `docker-compose.yml:358,384-385` | `.env.example:14-15` | yes (`.env`) | omniroute profile breaks | local `.env` | vendor default forbidden |
-| `DIGILLM_EGRESS_DIGEST_KEY` | `digillm/src/digillm/egress_record.py:78` (`DIGEST_KEY_ENV`), read per record at `:235` | `.env.example:194-241` (commented, no value) | yes, once stored in `.env` or a secret store | no outage: records keep emitting with `digest_algorithm: "absent"` and `payload_digest: null` | none — one value per environment, never shared across them | HMAC pepper over the canonical outbound **messages** for the GDPR egress ledger. Floor 32 chars, no unkeyed fallback by design. **Unset in every environment as of 2026-10-06** — on a production request path this is the one secret in this inventory whose absence is silent, because the ledger still fills and nothing alerts (contrast `LANGSMITH_API_KEY`, `AZURE_SEARCH_API_KEY`, `COHERE_API_KEY`, `EXA_API_KEY`: all optional, all dormant-or-degraded when missing). **Must not be co-located with the ledger it protects** — see [the digillm egress pepper](#the-digillm-egress-pepper--not-a-normal-api-key-dig-1184) |
+| `DIGILLM_EGRESS_DIGEST_KEY` | `digillm/src/digillm/egress_record.py:78` (`DIGEST_KEY_ENV`), read per record at `:235` | `.env.example:244` (commented, no value) | yes (`.env`) / no — write-only (secret store) | no outage: records keep emitting with `digest_algorithm: "absent"` and `payload_digest: null` | none — one value per environment, never shared across them | HMAC pepper over the canonical outbound **messages** for the GDPR egress ledger. Floor 32 chars, no unkeyed fallback by design. **Unset in every environment as of 2026-10-06** — on a production request path this is the one secret in this inventory whose absence is silent, because the ledger still fills and nothing alerts (contrast `LANGSMITH_API_KEY`, `AZURE_SEARCH_API_KEY`, `COHERE_API_KEY`, `EXA_API_KEY`: all optional, all dormant-or-degraded when missing). **Must not be co-located with the ledger it protects** — see [the digillm egress pepper](#the-digillm-egress-pepper--not-a-normal-api-key-dig-1184) |
 
 ### (c) infrastructure tokens (Cloudflare / Supabase / DB)
 
@@ -296,23 +296,29 @@ Three rules that differ from every other row here:
    the same operator. That is fine for local development and wrong anywhere a
    second person can read. **This is not yet enforceable in this stack, and an
    operator must not record it as done on the strength of a file mode.** No service
-   in `docker-compose.yml` declares a `user:`, and no Dockerfile in the repo has a
-   `USER` directive, so every service runs as uid 0 and root ignores file mode
+   in `docker-compose.yml` declares a `user:`, and none of the Dockerfiles behind
+   the five digillm-importing compose services (`digiclaw`, `digigraph`,
+   `digiquant`, `digisearch`, `digitrace`) has a `USER` directive, so those
+   services run as uid 0 and root ignores file mode
    bits: a ledger chmod-ed `0222` on a volume is separated from other operators but
    not from the process that also holds the pepper in its environment. A GitHub
    *org secret* is workflow-scoped and does not reach compose either, and Bitwarden
    Secrets Manager is still an open migration here (DIG-95), so today neither is an
    available delivery path. Real separation needs a sink the app cannot read back —
-   a syslog/OTLP collector, a named pipe to one, or a file on a volume owned by a uid
-   the service does not hold, which requires adding the non-root `user:` first.
+   and `DIGILLM_EGRESS_LOG_PATH` only reaches a regular file (the sink opens the
+   path for append; the module has no syslog/OTLP branch, so a FIFO would block
+   the request path and a socket cannot be written at all). Genuine separation is
+   unavailable until `egress_record` grows a collector transport, or the deployment
+   consumes records through the in-process observer with `DIGILLM_EGRESS_LOG_PATH=off`.
    Same mount, same backup, or same read grant defeats the mechanism: an HMAC next
    to its own ledger is a dictionary for any candidate list the reader holds.
 2. **Set both variables on every service that imports digillm.** `digiclaw`,
    `digigraph`, `digiquant`, `digisearch`, `digiskills` and `digitrace` all declare
-   the dependency. A per-service compose `environment:` entry is per-service, so a
+   the dependency (`digiskills` ships no compose service of its own, so its vars
+   ride with whichever service hosts it). A per-service compose `environment:` entry is per-service, so a
    pepper on one service leaves the rest emitting `absent` into the same ledger —
    which looks like the exact silent failure this section is about. And leave
-   `DIGILLM_EGRESS_LOG_PATH` set in containers: no image copies `digiquant/` or
+   `DIGILLM_EGRESS_LOG_PATH` set in containers (`off` for the observer route): no image copies `digiquant/` or
    `.git`, so the default resolves inside the container's writable layer and the
    GDPR ledger is destroyed on the next recreate while every health check stays
    green.
@@ -331,16 +337,20 @@ Three rules that differ from every other row here:
 # 1. the pepper is present AND long enough to produce a digest, without ever
 #    printing it. `-n` is not enough: a truncated paste or a placeholder is
 #    non-empty and still yields digest_algorithm "absent" on every record. Test the
-#    length, not the shape. Never list a secret store here — `bws secret list`
+#    length, not the shape — after stripping, as the code does
+#    (`pepper.strip()` before measuring, so padding does not count). Never list
+#    a secret store here — `bws secret list`
 #    prints values, and this file's rule is that verification means behaviour,
 #    never readback (docs/ops/SECRETS_ROTATION.md:12).
 #    Run this on EVERY service listed above, not one.
 docker compose exec <digillm-service> sh -c \
-  '[ ${#DIGILLM_EGRESS_DIGEST_KEY} -ge 32 ] && echo len-ok || echo TOO-SHORT-OR-MISSING'
+  'k=$(printf "%s" "$DIGILLM_EGRESS_DIGEST_KEY" | sed "s/^[[:space:]]*//;s/[[:space:]]*$//"); [ ${#k} -ge 32 ] && echo len-ok || echo TOO-SHORT-OR-MISSING'
 
-# 2. the separation actually holds. MUST print "ok".
-docker compose exec <digillm-service> sh -c 'cat "$DIGILLM_EGRESS_LOG_PATH"' \
-  && echo LEAK || echo ok
+# 2. the separation actually holds. This check is necessary, not proof: it shows
+#    the process cannot read that file, not that records are being written.
+#    NO-SINK and LEAK are both failures (an unset or stale path must not read
+#    as "ok").
+docker compose exec <digillm-service> sh -c '[ -e "$DIGILLM_EGRESS_LOG_PATH" ] || { echo NO-SINK; exit 1; }; [ -r "$DIGILLM_EGRESS_LOG_PATH" ] && echo LEAK || echo ok'
 
 # 3. the ledger is not 100% "absent" — a count, no payload content. Two filters,
 #    both necessary: unit-test records (digillm/tests/test_digillm.py does not
@@ -364,13 +374,17 @@ fresh-context reviewers — once on an operational lens, once adversarially on p
 security. The second pass found the load-bearing defect in the whole change: **the
 prescribed separation is unenforceable as written.** The docs told an operator to put
 the ledger where digillm could "append to but not read back", but no service in
-`docker-compose.yml` declares a `user:` and no Dockerfile in the repo has a `USER`
-directive, so every service is uid 0 and root ignores file mode bits — a `0222` ledger on
+`docker-compose.yml` declares a `user:` and none of the Dockerfiles behind the five
+digillm-importing compose services has a `USER` directive, so those services run as
+uid 0 and root ignores file mode bits — a `0222` ledger on
 a volume separates it from other operators and not from the process holding the pepper. An
 operator following the first draft would have marked that rule done while holding no
-separation at all. Both docs now state the constraint, name a sink type that genuinely
-satisfies it, and ship the behavioural check that proves it (`cat` the ledger from inside
-the service; it must fail).
+separation at all. All four docs now state the constraint and the honest consequence:
+`DIGILLM_EGRESS_LOG_PATH` only reaches a regular file, so genuine separation is
+unavailable until `egress_record` grows a collector transport (or the deployment
+uses the observer with the path `off`) — and they ship the necessary (not
+sufficient) in-service check that reports `NO-SINK`/`LEAK`/`ok` without hanging
+on a FIFO.
 
 The same pass also forced: `absent` no longer being described as proof a pepper was
 missing (the `completion()` cache-hit record is `absent` with or without one, and a partly
