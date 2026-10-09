@@ -209,7 +209,13 @@ jobs:
       - name: Check if this version is already published
         id: check
         env:
-          IMAGE_TAG: "ghcr.io/digithings-ai/digichat:v${{ steps.version.outputs.version }}"
+          # The name the build will actually publish, taken from the resolve step
+          # rather than rebuilt here. On the release path that is :vX.Y.Z; on the
+          # ref path it is :sha-<commit>. Rebuilding it from the version alone
+          # would make this guard ask about a release name during a rehearsal,
+          # so the first rehearsal run after any release of that version would
+          # see exists=true and skip the build it was dispatched to make.
+          IMAGE_TAG: ${{ steps.version.outputs.image }}
         run: |
           set -euo pipefail
           # Three outcomes, not two. `docker manifest inspect` exits non-zero for

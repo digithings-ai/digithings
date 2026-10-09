@@ -243,6 +243,28 @@ def test_the_tag_version_must_match_package_json() -> None:
     assert re.search(r"\^digichat-v\[0-9\]\+\\\.\[0-9\]\+\\\.\[0-9\]\+\$", guards)
 
 
+def test_the_published_check_probes_the_name_the_build_actually_publishes() -> None:
+    """The idempotency guard must ask about the name this run will publish.
+
+    On the release path the two agree (`:vX.Y.Z`). On the ref path they do not:
+    the build publishes `:sha-<commit>`. If the guard rebuilt the release name
+    from the version, a rehearsal dispatched after that version was released
+    would read `exists=true` and skip the build it was dispatched to make.
+    """
+    doc = _doc()
+    check = _step_by_id(doc, "check")
+    assert check["env"]["IMAGE_TAG"] == "${{ steps.version.outputs.image }}", (
+        "the check step must probe the resolve step's own image name, not one "
+        "reconstructed from the version"
+    )
+
+    # Discriminates rather than restating: the resolve step emits two different
+    # names on the two paths, so a single literal could never satisfy both.
+    guards = _no_comments(_step_by_id(doc, "version")["run"])
+    assert 'image="${image_repo}:v${version}"' in guards
+    assert 'image="${image_repo}:sha-$(git rev-parse --short=12 HEAD)"' in guards
+
+
 def test_publishing_an_existing_version_is_a_no_op() -> None:
     """Release tags are immutable here: re-pushing one would change the digest under its name."""
     doc = _doc()
