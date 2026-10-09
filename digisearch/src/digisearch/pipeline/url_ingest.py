@@ -196,7 +196,7 @@ def ingest_url(
         page = os.path.join(tmpdir, "page.md")
         try:
             with open(page, "w", encoding="utf-8") as handle:
-                handle.write(markdown)
+                pass
         except OSError as exc:
             raise UrlFetchError(
                 f"failed to stage download for {url!r}: {exc}",
