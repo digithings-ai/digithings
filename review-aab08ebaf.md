@@ -8,7 +8,7 @@
 | **Verification** | every finding reproduced or refuted by the author session with its own command |
 | **Reviewer policy** | `AGENTS.md` → "Every review run produces a review file" / "Author session must not review its own work" |
 | **Reviewed** | 2026-10-09 |
-| **Verdict** | **APPROVE** — no blocking defects. 2 informational, 2 reviewer claims refuted. |
+| **Verdict** | **APPROVE** — no blocking defects. 1 medium guard gap (non-blocking), 2 informational, 2 reviewer claims refuted. |
 
 ## Severity counts
 
@@ -16,15 +16,41 @@
 |---|---|
 | Critical | 0 |
 | High | 0 |
-| Medium | 0 |
+| Medium | 1 |
 | Low / informational | 2 |
 | Refuted reviewer claims | 2 |
 
 ## Verdict
 
-The commit does what the ticket asked: five per-surface `fonts.ts` configs each calling `next/font` once, `packages/design/tokens.css` owning the stacks, and a 143-line contract guard that pins the arrangement. The guard is **not decorative** — I broke it four ways and it caught every break I intended it to catch (evidence below). Two suspicions I started with (`tokens.css:378`, the digiquant-web `--font-sans` override) are both **refuted by measurement**; both are deliberate and documented in-source.
+The commit does what the ticket asked: five per-surface `fonts.ts` configs each calling `next/font` once, `packages/design/tokens.css` owning the stacks, and a 143-line contract guard that pins the arrangement. The guard is **not decorative** — I broke it five ways and it caught every break except one (evidence below). Two suspicions I started with (`tokens.css:378`, the digiquant-web `--font-sans` override) are both **refuted by measurement**; both are deliberate and documented in-source.
+
+**The shipped CSS is correct.** Every finding below is about the *guard* not fully covering the code, not about a font being wrong on any surface.
 
 ## Findings
+
+### [medium] `font-tokens.contract.test.ts:123-132` (test 5) checks the fallback chain per FILE, not per stack
+
+Test 5 asserts each `FALLBACK_CHAIN` entry is **present somewhere in** `tokens.css` and in `digichat-app-theme.css`. It does not check that each entry is present on **every** mono stack in the file.
+
+`packages/design/tokens.css` uses the identical fallback chain on **two** declarations — `:62` `--font-stack-mono` and `:63` `--font-stack-display`:
+
+```css
+--font-stack-mono:    var(--font-mono-face, "Geist Mono"), ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", "Segoe UI Symbol", monospace;
+--font-stack-display: var(--font-mono-face, "Geist Mono"), ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", "Segoe UI Symbol", monospace;
+```
+
+So deleting `, "Segoe UI Symbol"` from the **mono** stack alone leaves `--font-stack-display` satisfying the assertion. Measured:
+
+| Mutation | Result |
+|---|---|
+| **M-C** drop `, "Segoe UI Symbol"` from the **first** occurrence only (`:63`, display — not the mono stack) | `Tests 6 passed (6)` — correct, nothing required it |
+| **M-C1** drop it from the **second** occurrence only (`:62`, the **mono** stack) | **`Tests 6 passed (6)` — FALSE PASS** |
+| **M-C2** drop it from **both** | `1 failed | 5 passed (6)` — fails test 5 |
+| **M-C3** drop it from `packages/ui/src/styles/digichat-app-theme.css` (the only mono stack in that file) | `1 failed | 5 passed (6)` — fails test 5 |
+
+**Impact.** A regression that removes the glyph fallback — the one carrying U+25B8 ▸, U+25BE ▼ and U+2318 ⌘, which Geist Mono lacks — from the mono face on every shipped surface **passes the whole suite green**. That is precisely what acceptance criterion #3 exists to prevent, and the test reads as if it covers it. `digichat-app-theme.css` has a single mono stack, so it is covered; only `tokens.css` has the aliasing.
+
+**Not blocking.** It is a gap in a *guard*, not in the shipped CSS — `:62` currently carries the full chain, and the by-eye glyph screenshots on the issue thread show ▸ ▼ ⌘ rendering. Fix by asserting the chain on the `--font-stack-mono` declaration specifically (slice the `--font-stack-mono:` line and test that string) rather than on the whole file.
 
 ### [informational] `font-tokens.contract.test.ts` L102-106 — test 2 is narrower than it reads
 
@@ -61,8 +87,13 @@ All six `it` blocks printed with differing durations (2ms / 170ms / 58ms / 1ms /
 |---|---|
 | **M-A** add `import { Geist_Mono } from "next/font/google"` in a NEW file `packages/ui/src/__probe_font_loader.ts` | `1 failed | 5 passed (6)` — fails test 2, `keeps next/font out of every file but the surface configs` |
 | **M-B** strip `next/font` imports from the five configs | `1 failed | 5 passed (6)` — fails test 1 |
+| **M-C1** drop `, "Segoe UI Symbol"` from `tokens.css` **mono** stack only (`:62`) | **`6 passed (6)` — NOT CAUGHT.** See the medium finding |
+| **M-C2** drop it from **both** `tokens.css` stacks (2 → 0 occurrences) | `1 failed | 5 passed (6)` — fails test 5 |
+| **M-C3** drop it from `digichat-app-theme.css` (its only mono stack) | `1 failed | 5 passed (6)` — fails test 5 |
+| **M-D** delete `--font-geist-mono: var(--font-mono-face, "Geist Mono");` from `chat-aui.css` | `1 failed | 5 passed (6)` — fails test 6 |
+| **M-E** gut the mono stack to `var(--font-mono-face, "Geist Mono");` (no fallbacks) | `1 failed | 5 passed (6)` — fails test 4 |
 
-M-A proves test 2 is not vacuous in the direction it is written for (a loader escaping to a non-config file). M-B proves the "no loader anywhere" case is caught by test 1.
+M-A proves test 2 is not vacuous in the direction it is written for (a loader escaping to a non-config file). M-B proves the "no loader anywhere" case is caught by test 1. **M-C1 is the one break the suite missed**, and it is the medium finding above.
 
 Mutation runs used a `git worktree add --detach` at `HEAD` (not `git archive`), so the guard's recursive walker had a real working tree and index. Both trees verified clean afterwards (`git status --porcelain` empty in scratch and main).
 
