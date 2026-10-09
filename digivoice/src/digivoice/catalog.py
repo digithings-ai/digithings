@@ -183,7 +183,9 @@ def _load_rewrite_catalog(path: Path) -> tuple[tuple[CatalogModel, ...], Catalog
     try:
         raw: Any = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
-        raise ValueError(f"digivoice rewrite-model catalog at {path} is not valid JSON: {exc}") from exc
+        raise ValueError(
+            f"digivoice rewrite-model catalog at {path} is not valid JSON: {exc}"
+        ) from exc
     entries = raw.get("models") if isinstance(raw, Mapping) else None
     if not isinstance(entries, list) or not entries:
         raise ValueError(f"digivoice rewrite-model catalog at {path} declares no models")
