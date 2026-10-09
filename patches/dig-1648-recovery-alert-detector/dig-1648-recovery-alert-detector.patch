@@ -1,0 +1,55 @@
+--- a/bin/dt-it-watch
++++ b/bin/dt-it-watch
+@@ -2635,14 +2635,33 @@
+             + handoff.get("selfRecovery", 0)
+         )
+         breached = alert.get("breached", False)
+-        if breached and resolution_sum == 0:
+-            # Condition met: alert breached AND no resolution paths
++        # DIG-1648 (2026-10-09): this used to key on `resolution_sum == 0` alone.
++        # That field is still 0 while the ceiling patch is live and working, because
++        # the platform never writes those columns: `sum(byCause[].resolvedCount)`
++        # reports ~38k "resolved" on rows that carry no recorded outcome, and every
++        # `perCauseRouting` outcome column is 0 except `cancelled` (CTO item 5). So
++        # `resolution_sum == 0` measured the metric, not the condition, and this rule
++        # was eligible to fire on a backlog already down from 16,738 to 41 active.
++        # Key instead on what is actually stuck: board-owned actions that are STILL
++        # active, from the same `byCause` breakdown the dashboard is built on.
++        # `handoff.boardOwned` is a cumulative lifetime count and never falls, so
++        # using it would pin the rule on forever once it trips.
++        active_board = sum((b.get("activeCount") or 0) for b in (ro.get("byCause") or []))
++        per_cause_active = sorted(
++            ((b.get("cause"), b.get("activeCount") or 0)
++             for b in (ro.get("byCause") or []) if (b.get("activeCount") or 0) > 0),
++            key=lambda kv: -kv[1],
++        )
++        top = ", ".join(f"{c}={n}" for c, n in per_cause_active[:5])
++        if breached and active_board >= 25:
++            # Condition met: alert breached AND a material backlog is still stuck.
+             first_seen = st["recovery_alert"].get(key)
+             if not first_seen:
+                 st["recovery_alert"][key] = now
+                 first_seen = now
+-                log(st, "system", "recovery_alert", "condition detected: alert breached with zero resolution paths", None,
+-                    f"alert.breached={breached}, resolution_sum={resolution_sum}, boardOwned={handoff.get('boardOwned', 0)}")
++                log(st, "system", "recovery_alert", "condition detected: alert breached with board-owned actions still active", None,
++                    f"alert.breached={breached}, activeBoardOwned={active_board}, "
++                    f"resolution_sum={resolution_sum} (NOT used, see DIG-1648), boardOwnedLifetime={handoff.get('boardOwned', 0)}")
+             # Check if persisted for >1 week (7 days = 604800 seconds)
+             if now - first_seen > 7 * 86400:
+                 # Persisted for >1 week: create incident
+@@ -2650,8 +2669,12 @@
+                     "system",
+                     "recovery_alert_zero_resolution",
+                     None,
+-                    f"Recovery rate exceeded threshold ({alert.get('thresholdPercent')}%) with zero resolution paths for >1 week. "
+-                    f"Board owns {handoff.get('boardOwned', 0)} recovery actions but resolvedTakeovers+handedBack+ownerCompleted+otherTakeover+selfRecovery = 0.",
++                    f"Recovery rate exceeded threshold ({alert.get('thresholdPercent')}%) with no resolution path for >1 week. "
++                    f"{active_board} board-owned recovery actions are STILL ACTIVE: {top}. "
++                    f"Lifetime boardOwned is {handoff.get('boardOwned', 0)} (cumulative, does not fall). "
++                    f"The endpoint's outcome counters are unwritten "
++                    f"(resolvedTakeovers+handedBack+ownerCompleted+otherTakeover+selfRecovery = {resolution_sum}), "
++                    f"so do not read that as 'nothing happened' -- read activeCount in byCause. See DIG-1648.",
+                     None
+                 ))
+         else:
