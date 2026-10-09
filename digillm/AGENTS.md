@@ -99,6 +99,8 @@ Beyond root `AGENTS.md`:
   unkeyed `sha256`, never to a default key, never to "only if it's long enough to
   look like one". An unkeyed hash of a low-entropy payload is a table lookup, and
   the silent fallback is what hides that. Absent-and-honest beats present-and-lying.
+  Length is not entropy either: the 32-character gate passes 32 × `a`, so peppers
+  must be CSPRNG-generated per environment, never hand-invented.
 - ❌ **Accepting a caller-supplied pre-computed digest.** `record_egress` deliberately
   takes no such parameter: any caller-supplied string is indistinguishable from a
   keyed one, which is exactly the hole it refuses to offer. (`compute_payload_digest`'s

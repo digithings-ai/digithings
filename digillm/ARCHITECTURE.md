@@ -440,7 +440,10 @@ digest; the digest answers "same messages", not "same request".
 **The digest is off by default, and that is visible on purpose.** With no pepper (or one
 under `MIN_DIGEST_KEY_LENGTH`), records still emit, with `digest_algorithm: "absent"` and
 `payload_digest: null`. There is no unkeyed fallback: `sha256` of a low-entropy payload is
-the payload, found by table lookup, and a silent fallback would hide that. Measured on
+the payload, found by table lookup, and a silent fallback would hide that. That length
+gate is not an entropy gate: 32 characters of `aaaa…` passes it, so a hand-invented
+pepper degrades the digest back into a lookup table — generate with a CSPRNG per
+environment (`.env.example` carries the command), never by hand. Measured on
 `task/1139-digillm-egress-record` at `1c3346585`, `pytest digillm/tests/test_digillm.py`
 produced 83 records and the full `pytest digillm/tests` produced 156, every one of them
 `absent`. So read the ledger's `digest_algorithm` distribution before relying on it: a
@@ -461,7 +464,7 @@ registered, because a callback nobody registers is not evidence.
 
 ### Reading limits
 
-Five, so no reader over-reads the ledger:
+Eight, so no reader over-reads the ledger:
 
 - **Granularity is one digillm provider attempt, not one HTTP packet.** The OpenAI SDK
   retries a single `create()` internally, so one record can stand for more than one
@@ -482,6 +485,21 @@ Five, so no reader over-reads the ledger:
 - **The digest answers "same messages", not "same request".** `model`, `tools`,
   `temperature` and `response_format` are outside the digest (see above). Do not use a
   matching digest as evidence that two requests were configured identically.
+- **Digests reproduce across runs only for JSON-native payloads.**
+  `canonical_payload_bytes` serializes with `default=str`, which coerces an exotic
+  value via `str()` and can embed a memory address — so such digests may not match
+  across processes. Outbound messages are dicts of strings, so this is latent, not
+  live. The `default=str` stays on purpose: without it `json.dumps` raises,
+  `record_egress` drops the record, and a missing record is worse than a
+  non-reproducible digest.
+- **The `call_id` join needs persisted telemetry.** The ledger is durable by design
+  (JSONL sink, written whether or not an observer registers), but telemetry delivery
+  is observer-only — `telemetry.py` has no sink, so the `call_id` →
+  `ProviderCallRecord.node_run_id` hop (`telemetry.py:143-144`) resolves only where
+  the deployment persists telemetry. A ledger alone proves egress happened, where it
+  went, and (with a pepper) what messages went; attributing that to a node run
+  needs the other half of the join stored somewhere. Making telemetry durable is
+  out of scope for this ticket.
 
 On the API surface: `record_egress` takes no pre-computed digest — the record computes its
 own from the payload it is given, so a caller cannot hand in a digest that disagrees with
