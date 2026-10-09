@@ -294,7 +294,9 @@ async function cash(req: Request, ctx: RouteCtx<Env>): Promise<Response> {
       balance: num(r.balance),
     }))
     .filter((e) => e.date !== "");
-  const entries = [...fromPeriods, ...fromEvents];
+  // Each source is independently date-desc from its own query, but a straight concat
+  // interleaves the two lists out of order; sort the merged set to restore it.
+  const entries = [...fromPeriods, ...fromEvents].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
   return ok({ entries }, "core:accounting_periods+position_events", pinR.pin, maxDate(entries.map((e) => ({ date: e.date })), "date"));
 }
 
