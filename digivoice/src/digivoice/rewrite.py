@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Protocol
 from urllib.request import urlopen
 
-from digivoice.catalog import find_rewrite, install_catalog_model
+from digivoice.catalog import default_rewrite_model, find_rewrite, install_catalog_model
 from digivoice.models import CheckStatus, RewriteResult, VoicePaths
 from digivoice.probe import CommandProbe
 from digivoice.runner import CommandRunner, error_tail
@@ -69,10 +69,9 @@ def cleanup_prompt(system: str, user: str) -> str:
 
 
 REWRITE_TIMEOUT_DEFAULT = 30.0
-LOCAL_REWRITE_MODEL_URL = (
-    "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/"
-    "qwen2.5-1.5b-instruct-q4_k_m.gguf"
-)
+# Read from config/digivoice-rewrite-models.json (#5029) via digivoice.catalog, so
+# this URL is not a string literal here.
+LOCAL_REWRITE_MODEL_URL = default_rewrite_model().url
 
 
 class LocalRewriteRunner(Protocol):

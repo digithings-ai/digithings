@@ -13,6 +13,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
+from digivoice.catalog import default_rewrite_model
 from digivoice.models import VoicePaths
 from digivoice.paths import DEFAULT_MODEL, resolve_paths
 
@@ -26,7 +27,9 @@ BannerDensity = Literal["retract", "full"]
 
 REWRITE_TIMEOUT_PRESETS: tuple[float, ...] = (15.0, 30.0, 60.0)
 _TIMEOUT_OFF = frozenset({"", "off", "disabled", "none", "null", "0", "0.0"})
-LOCAL_REWRITE_MODEL_FILE = "qwen2.5-1.5b-instruct-q4_k_m.gguf"
+# Read from config/digivoice-rewrite-models.json (#5029) via digivoice.catalog, so
+# this id is not a string literal here.
+LOCAL_REWRITE_MODEL_FILE = default_rewrite_model().filename
 
 # Old settings.json files may still name a density. It is ignored and not shown.
 _IGNORED_SETTING_KEYS: frozenset[str] = frozenset({"banner_density"})

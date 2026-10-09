@@ -6,7 +6,9 @@ on this machine — no cloud, URL, or user-hosted OpenAI-style endpoints.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import json
+import os
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -14,7 +16,6 @@ from urllib.request import urlopen
 
 from digivoice.models import VoicePaths
 from digivoice.paths import DEFAULT_MODEL
-from digivoice.settings import LOCAL_REWRITE_MODEL_FILE
 
 Kind = Literal["stt", "rewrite", "voice"]
 ProgressFn = Callable[[int, int | None], None]
@@ -131,86 +132,89 @@ STT_CATALOG: tuple[CatalogModel, ...] = (
     ),
 )
 
-REWRITE_CATALOG: tuple[CatalogModel, ...] = (
-    CatalogModel(
-        id="qwen2.5-0.5b-instruct-q4_k_m",
-        filename="qwen2.5-0.5b-instruct-q4_k_m.gguf",
-        kind="rewrite",
-        url=(
-            "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/"
-            "qwen2.5-0.5b-instruct-q4_k_m.gguf"
-        ),
-        title="Qwen2.5 0.5B",
-        best_for="fastest on-device rewrite",
-        languages="multilingual",
-        size_hint="~400 MB",
-    ),
-    CatalogModel(
-        id="qwen2.5-1.5b-instruct-q4_k_m",
-        filename=LOCAL_REWRITE_MODEL_FILE,
-        kind="rewrite",
-        url=(
-            "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/"
-            "qwen2.5-1.5b-instruct-q4_k_m.gguf"
-        ),
-        title="Qwen2.5 1.5B (default)",
-        best_for="everyday rewrite (default)",
-        languages="multilingual",
-        size_hint="~1.1 GB",
-    ),
-    CatalogModel(
-        id="qwen2.5-3b-instruct-q4_k_m",
-        filename="qwen2.5-3b-instruct-q4_k_m.gguf",
-        kind="rewrite",
-        url=(
-            "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/"
-            "qwen2.5-3b-instruct-q4_k_m.gguf"
-        ),
-        title="Qwen2.5 3B",
-        best_for="stronger rewrite when you can wait",
-        languages="multilingual",
-        size_hint="~2.0 GB",
-    ),
-    CatalogModel(
-        id="qwen2.5-7b-instruct-q4_k_m",
-        filename="Qwen2.5-7B-Instruct-Q4_K_M.gguf",
-        kind="rewrite",
-        url=(
-            "https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF/resolve/main/"
-            "Qwen2.5-7B-Instruct-Q4_K_M.gguf"
-        ),
-        title="Qwen2.5 7B",
-        best_for="larger rewrite when you have the disk",
-        languages="multilingual",
-        size_hint="~4.7 GB",
-    ),
-    CatalogModel(
-        id="llama-3.2-3b-instruct-q4_k_m",
-        filename="Llama-3.2-3B-Instruct-Q4_K_M.gguf",
-        kind="rewrite",
-        url=(
-            "https://huggingface.co/bartowski/Llama-3.2-3B-Instruct-GGUF/resolve/main/"
-            "Llama-3.2-3B-Instruct-Q4_K_M.gguf"
-        ),
-        title="Llama 3.2 3B",
-        best_for="another small instruct model",
-        languages="multilingual",
-        size_hint="~2.0 GB",
-    ),
-    CatalogModel(
-        id="gemma-2-2b-it-q4_k_m",
-        filename="gemma-2-2b-it-Q4_K_M.gguf",
-        kind="rewrite",
-        url=(
-            "https://huggingface.co/bartowski/gemma-2-2b-it-GGUF/resolve/main/"
-            "gemma-2-2b-it-Q4_K_M.gguf"
-        ),
-        title="Gemma 2 2B",
-        best_for="small instruct model",
-        languages="multilingual",
-        size_hint="~1.7 GB",
-    ),
-)
+#: digivoice/AGENTS.md-equivalent note: the rewrite catalog's model ids, filenames
+#: and huggingface URLs live in ``config/digivoice-rewrite-models.json``, not here
+#: (#5029 — no provider/model id as a string literal in production code). Edit that
+#: file to add, remove or re-default a rewrite model.
+_REWRITE_CATALOG_FILENAME = "digivoice-rewrite-models.json"
+
+
+def _resolve_rewrite_catalog_path() -> Path:
+    """Where the rewrite-model catalog lives: ``DIGI_CONFIG_PATH`` override, else repo ``config/``.
+
+    Same convention as digigraph's ``model-policy.json`` resolution: this file is
+    required, so resolution must not depend on the process's working directory.
+    """
+    override = os.environ.get("DIGI_CONFIG_PATH")
+    if override:
+        return Path(override) / _REWRITE_CATALOG_FILENAME
+    return Path(__file__).resolve().parents[3] / "config" / _REWRITE_CATALOG_FILENAME
+
+
+def _parse_rewrite_entry(raw: object) -> tuple[CatalogModel, bool]:
+    """One ``models[]`` entry, or a raised ``ValueError`` when it is malformed."""
+    if not isinstance(raw, Mapping):
+        raise ValueError(f"rewrite model catalog entry is not an object: {raw!r}")
+    try:
+        model = CatalogModel(
+            id=str(raw["id"]),
+            filename=str(raw["filename"]),
+            kind="rewrite",
+            url=str(raw["url"]),
+            title=str(raw["title"]),
+            best_for=str(raw["best_for"]),
+            languages=str(raw["languages"]),
+            size_hint=str(raw["size_hint"]),
+        )
+    except KeyError as exc:
+        raise ValueError(f"rewrite model catalog entry missing {exc}: {raw!r}") from exc
+    return model, bool(raw.get("default", False))
+
+
+def _load_rewrite_catalog(path: Path) -> tuple[tuple[CatalogModel, ...], CatalogModel]:
+    """The rewrite catalog and its default entry, read from *path*.
+
+    Fail-loud: this is what setup offers for the local rewrite model, so a missing,
+    malformed, or mis-defaulted config file must not silently narrow or empty it
+    (the opposite of a telemetry-only config, which can degrade to nothing).
+    """
+    if not path.is_file():
+        raise FileNotFoundError(f"digivoice rewrite-model catalog not found at {path}")
+    try:
+        raw: Any = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"digivoice rewrite-model catalog at {path} is not valid JSON: {exc}") from exc
+    entries = raw.get("models") if isinstance(raw, Mapping) else None
+    if not isinstance(entries, list) or not entries:
+        raise ValueError(f"digivoice rewrite-model catalog at {path} declares no models")
+
+    models: list[CatalogModel] = []
+    default: CatalogModel | None = None
+    for entry in entries:
+        model, is_default = _parse_rewrite_entry(entry)
+        models.append(model)
+        if is_default:
+            if default is not None:
+                raise ValueError(
+                    f"digivoice rewrite-model catalog at {path} marks more than one model default"
+                )
+            default = model
+    if default is None:
+        raise ValueError(f"digivoice rewrite-model catalog at {path} marks no model default")
+    return tuple(models), default
+
+
+REWRITE_CATALOG, _DEFAULT_REWRITE_MODEL = _load_rewrite_catalog(_resolve_rewrite_catalog_path())
+
+
+def default_rewrite_model() -> CatalogModel:
+    """The rewrite model setup preselects and downloads by default.
+
+    Read from ``config/digivoice-rewrite-models.json`` at import time — the single
+    source for what ``digivoice.settings.LOCAL_REWRITE_MODEL_FILE`` and
+    ``digivoice.rewrite.LOCAL_REWRITE_MODEL_URL`` both resolve to.
+    """
+    return _DEFAULT_REWRITE_MODEL
 
 
 def stt_model_path(models_dir: str | Path, model_id: str | None) -> Path:
@@ -388,6 +392,7 @@ __all__ = [
     "VOICE_CATALOG",
     "CatalogModel",
     "catalog_public",
+    "default_rewrite_model",
     "download_partial",
     "find_rewrite",
     "find_stt",
