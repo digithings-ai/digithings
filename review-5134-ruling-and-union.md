@@ -2,10 +2,10 @@
 
 - **Reviewer:** subagent (fresh context, did not author this code)
 - **Subject:** the board ruling (a) and the #5126 union carried onto this branch
-- **Head reviewed:** `30c1f9757`
+- **Head reviewed:** `53f6a58cc8` (the two fixes for review 2's findings are inside it)
 - **Worktree:** `.worktrees/task/937-l1-corrective`, branch `task/937-l1-corrective-normalizer-sees-analyzer-records`
 - **Scope:** two narrow single-question reviews, run as separate sessions so neither anchors on the other.
-- **Verdict:** review 1 (union commits) **CLEAN, 0 blockers**. Review 2 (the ruling's ordered steps) **in flight at the time of writing — no verdict recorded, deliberately.**
+- **Verdict:** review 1 (union commits) **CLEAN, 0 blockers**. Review 2 (the ruling's ordered steps) **BLOCKER — the ruling's test file was untracked — plus one false docstring claim. Both findings are now fixed and verified; see Review 2 below.
 
 ---
 
@@ -50,11 +50,57 @@ The other two are prose-only and would require rewriting commits CI has already 
 
 ## Review 2 — the ruling's ordered steps, `19baa0c31` + `4a663234a`
 
-**No verdict is recorded here because none has returned.** The review was asked to:
+**Reviewer:** subagent, fresh context. **Verdict returned: BLOCKER** — one blocker and one false claim, both fixed. The mutations all came back CAUGHT, so the blocker was not a gap in the tests: it was that the tests were not in the repository.
 
-- mutation-test `_from_records` five ways — sum-before-dedupe, dedupe-keep-first, keep-partial-total, first-leg-date, no-summing — and record for each whether the committed tests **catch** it (fail) or **miss** it (pass);
-- check the reading rules: `n` is the number of closed positions, `k` counts positions whose summed value is `> 0`, a summed `0` is a loss, `k <= n` holds by construction;
-- confirm both board-required tests exist and **fail against pre-ruling code** (`4a663234a~1`);
-- hunt false docstring claims in the changed files.
+### The blocker — `tests/dq/test_honesty_series.py` was untracked
 
-This is the review of the most significant commits in the leaf. It is owed before the leaf is called reviewed, and this section will be filled in when it returns — not before.
+The reviewer ran the mutants twice: once against the file on disk, and once against **only the tracked digiquant tests** that CI was actually selecting (`test_charts.py`, `test_honesty.py`, `test_tearsheet_honesty.py`).
+
+```
+against this file on disk     pristine 41 passed;  a,b,e -> 3 failed;  c -> 1 failed;  d -> 1 failed
+against the tracked set only  73 passed  for every mutant, including all five
+```
+
+So the ruling's semantics were sound and its tests killed all five mutants — and none of that was enforced, because `git ls-files --error-unmatch tests/dq/test_honesty_series.py` failed. `CI` selected that path from `scripts/ci_paths.yaml`; every mutation the ruling exists to prevent would have merged green.
+
+**Cause, established from timestamps rather than guessed.** `5b7160bc3` (a docstring-only commit) recorded `D` for that path and nothing else. The working copy was on disk the whole time: its mtime is `15:26:13` and the commit is stamped `15:26:28`, fifteen seconds later, and the on-disk file differed from `a88e6b55e` by exactly the docstring hunk that commit was meant to contain. The file was present, so this was not a missing file — the index did not carry the path at commit time. I cannot reconstruct which command did that from the repository, and I am not going to invent one.
+
+**Fixed** in `2d61ffaebf`: the file is restored byte-for-byte and tracked. `git ls-files --error-unmatch` now succeeds, the tracked test count is back to 532, and the four mutants were re-run against the **tracked tree** to confirm coverage is real rather than restored-on-paper:
+
+| mutation | against this file (now tracked) | against the three pre-existing tracked files |
+|---|---|---|
+| M1 sum before dedupe | **4 failed**, 37 passed | 0 failed, 73 passed |
+| M2 dedupe keeps first | **3 failed**, 38 passed | 0 failed, 73 passed |
+| M4 first leg's stamp | **3 failed**, 38 passed | 0 failed, 73 passed |
+| M5 no summing | **6 failed**, 35 passed | 0 failed, 73 passed |
+
+### The false claim — the position date is input order, not chronology
+
+The `_from_records` docstring justified the label with *"a position's realized PnL is only complete when the final leg closes"*, but `stamps[key] = ts_event` overwrites per record, so the **last row in the input** wins regardless of timestamp. Measured: rows in event order give `2023-11-15`; the same rows reversed give `2023-11-14`. Both engine builds that emit `ts_event` emit rows in event order, so the divergence is latent, not live.
+
+**Fixed** in `53f6a58cc8`: the docstring now says input order, and `test_a_summed_position_is_labelled_by_input_order_not_by_timestamp` pins it with literal rows and no analyzer, so it runs in every lane including the one that installs without the nautilus extra. Red confirmed — changing the code to `max(ts_event, ...)` fails it. Sorting was **not** chosen: which of the two a caller wants is a labelling decision this leaf was not given, and the ruling was about the denominator.
+
+### Reviewer's other measurements, accepted as reported
+
+- Both board-required tests present and correct. `test_case_9` fails on pre-ruling code with `assert 3 == 2` on `len([6.0, 4.0, -5.0])` — the exact prediction the EM made when answering card `622e0016`.
+- Reading rules hold on a fixture with two winning legs cancelling to `0.0`, a `0.0` row, a negative row and a repeated pair: `n=5`, `k=2` computed by production's own `count_winning_trades`, `k <= n`, summed zero uncounted, repeated pair taking the recorded value.
+- `honest_rate(6, 5)` raises `ValueError`, so `k > n` cannot render.
+- The 1.228.0 shapes the docstrings cite were verified against the real build: `realized_pnls` → `dict`, `returns()` → `dict` of ns→float, `record_trade` absent. All three local skips are genuine 1.230.0-only gates.
+
+### Residual, recorded not fixed
+
+- `normalize_series` ends in `except Exception: return None`, so a bug in either ruling step would present as an **absent** denominator rather than a wrong one. Fail-closed is right and `honest_rate` refuses on `n=0`, so nothing is fabricated — but a regression would degrade silently in production.
+- `_build_win_rate_donut` clamps `wins = min(num_trades, max(0, num_wins))`, which would shrink `k` rather than surface a disagreement if the rate path and the chart path ever diverged again.
+
+### Severity counts
+
+| Severity | Count |
+|---|---|
+| blocker | 1 (found by review, fixed in `2d61ffaebf`) |
+| important | 0 |
+| minor | 1 (found by review, fixed in `53f6a58cc8`) |
+| nit | 0 |
+
+### Disposition
+
+**APPROVE.** Review 1 was already CLEAN. Review 2's two findings are both fixed and both verified red-then-green. Two residuals above are recorded rather than fixed, for the reasons given.
