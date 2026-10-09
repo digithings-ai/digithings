@@ -13,37 +13,66 @@ declare global {
   }
 }
 
-function loadStylesheet(href: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const existing = document.querySelector(`link[data-swagger-href="${href}"]`);
-    if (existing) {
-      resolve();
-      return;
-    }
-    const link = document.createElement("link");
-    link.rel = "stylesheet";
-    link.href = href;
-    link.dataset.swaggerHref = href;
-    link.onload = () => resolve();
-    link.onerror = () => reject(new Error(`Failed to load ${href}`));
-    document.head.appendChild(link);
-  });
-}
+/**
+ * Load one vendored Swagger asset.
+ *
+ * An existing tag is not a finished load. A failed tag stays in the document
+ * after `error`, and treating it as ready makes the next mount resolve before
+ * `SwaggerUIBundle` exists — the explorer then stays broken until a full reload.
+ * `ready` reuses the tag. `loading` waits on it. Anything else is removed and
+ * fetched again.
+ */
+export function loadSwaggerAsset(
+  kind: "script" | "stylesheet",
+  url: string,
+  doc: Document = document,
+): Promise<void> {
+  const isScript = kind === "script";
+  const attr = isScript ? "data-swagger-src" : "data-swagger-href";
+  const selector = `${isScript ? "script" : "link"}[${attr}="${url}"]`;
 
-function loadScript(src: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    const existing = document.querySelector(`script[data-swagger-src="${src}"]`);
+    const fail = (node: Element) => {
+      node.remove();
+      reject(new Error(`Failed to load ${url}`));
+    };
+    const existing = doc.querySelector(selector);
     if (existing) {
+      const status = existing.getAttribute("data-swagger-status");
+      if (status === "ready") {
+        resolve();
+        return;
+      }
+      if (status === "loading") {
+        existing.addEventListener("load", () => resolve(), { once: true });
+        existing.addEventListener("error", () => fail(existing), { once: true });
+        return;
+      }
+      existing.remove();
+    }
+
+    const node = isScript ? doc.createElement("script") : doc.createElement("link");
+    node.setAttribute(attr, url);
+    node.setAttribute("data-swagger-status", "loading");
+    node.addEventListener("load", () => {
+      node.setAttribute("data-swagger-status", "ready");
       resolve();
+    });
+    node.addEventListener("error", () => {
+      node.setAttribute("data-swagger-status", "error");
+      fail(node);
+    });
+    if (node instanceof HTMLScriptElement) {
+      node.src = url;
+      node.async = true;
+      doc.body.appendChild(node);
       return;
     }
-    const script = document.createElement("script");
-    script.src = src;
-    script.async = true;
-    script.dataset.swaggerSrc = src;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error(`Failed to load ${src}`));
-    document.body.appendChild(script);
+    if (node instanceof HTMLLinkElement) {
+      node.rel = "stylesheet";
+      node.href = url;
+      doc.head.appendChild(node);
+    }
   });
 }
 
@@ -54,6 +83,7 @@ function loadScript(src: string): Promise<void> {
 export function SwaggerExplorer({ serviceId }: { serviceId: string }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -62,9 +92,9 @@ export function SwaggerExplorer({ serviceId }: { serviceId: string }) {
 
     (async () => {
       try {
-        await loadStylesheet("/swagger-ui/swagger-ui.css");
-        await loadScript("/swagger-ui/swagger-ui-bundle.js");
-        await loadScript("/swagger-ui/swagger-ui-standalone-preset.js");
+        await loadSwaggerAsset("stylesheet", "/swagger-ui/swagger-ui.css");
+        await loadSwaggerAsset("script", "/swagger-ui/swagger-ui-bundle.js");
+        await loadSwaggerAsset("script", "/swagger-ui/swagger-ui-standalone-preset.js");
         if (cancelled || !hostRef.current) return;
         const Bundle = window.SwaggerUIBundle;
         const Standalone = window.SwaggerUIStandalonePreset;
@@ -98,27 +128,38 @@ export function SwaggerExplorer({ serviceId }: { serviceId: string }) {
       cancelled = true;
       if (mount) mount.innerHTML = "";
     };
-  }, [serviceId]);
-
-  if (error) {
-    return (
-      <p className="m-0 text-[0.9rem] text-danger" role="alert">
-        {error}. Spec still available at{" "}
-        <a className="doc-inline-link" href={openApiSpecPath(serviceId)}>
-          {openApiSpecPath(serviceId)}
-        </a>
-        .
-      </p>
-    );
-  }
+  }, [serviceId, attempt]);
 
   return (
-    <div
-      ref={hostRef}
-      className="docs-swagger"
-      aria-label={`${serviceId} OpenAPI`}
-      // Swagger UI injects its own markup; keep a min height so layout doesn't jump.
-      style={{ minHeight: "24rem" }}
-    />
+    <div>
+      {error ? (
+        <p className="m-0 text-[0.9rem] text-danger" role="alert">
+          {error}.{" "}
+          <button
+            type="button"
+            className="doc-inline-link"
+            onClick={() => {
+              setError(null);
+              setAttempt((n) => n + 1);
+            }}
+          >
+            Try again
+          </button>
+          . Spec still available at{" "}
+          <a className="doc-inline-link" href={openApiSpecPath(serviceId)}>
+            {openApiSpecPath(serviceId)}
+          </a>
+          .
+        </p>
+      ) : null}
+      <div
+        ref={hostRef}
+        className="docs-swagger"
+        hidden={error != null}
+        aria-label={`${serviceId} OpenAPI`}
+        // Swagger UI injects its own markup; keep a min height so layout doesn't jump.
+        style={{ minHeight: "24rem" }}
+      />
+    </div>
   );
 }

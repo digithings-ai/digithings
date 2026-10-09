@@ -197,6 +197,17 @@ function ensureToolInput(
   ctx.inputAvailable.add(id);
 }
 
+function failedToolErrorText(span: ActivitySpan): string {
+  const result = span.toolResult;
+  if (typeof result === "string" && result.trim()) return result;
+  if (result && typeof result === "object" && !Array.isArray(result)) {
+    const record = result as Record<string, unknown>;
+    if (typeof record.content === "string" && record.content.trim()) return record.content;
+    if (typeof record.error === "string" && record.error.trim()) return record.error;
+  }
+  return "Tool failed.";
+}
+
 function writeToolOutput(
   writer: UiStreamWriter,
   ctx: StandardActivityContext,
@@ -204,6 +215,16 @@ function writeToolOutput(
   span: ActivitySpan,
   extra: Record<string, unknown> = {},
 ): void {
+  // `tool-output-available` renders as success even when output.status is
+  // "failed". assistant-ui flips the row only on `tool-output-error`.
+  if (span.status === "failed") {
+    writer.write({
+      type: "tool-output-error",
+      toolCallId: id,
+      errorText: failedToolErrorText(span),
+    });
+    return;
+  }
   const output: Record<string, unknown> = {
     ...rememberInput(ctx, id, span),
     ...extra,
@@ -215,7 +236,6 @@ function writeToolOutput(
   if (started !== undefined) {
     output.durationMs = Math.max(0, Date.now() - started);
   }
-  if (span.status === "failed") output.status = "failed";
   writer.write({
     type: "tool-output-available",
     toolCallId: id,

@@ -3,6 +3,13 @@
 **Status:** Accepted (2026-09-29)
 **Date:** 2026-09-29
 **Accept:** Human Gate via One / Chris on [#4763](https://github.com/digithings-ai/digithings/pull/4763).
+**Partial hold (2026-10-05, DIG-503):** the stage boundaries below stand and are
+not reopened. What is held is *publishing the twelve-x research-producer scrape
+path from this public repository* — package P22 and the mapping in the ADR-0030
+plan. The vendor's Terms prohibit the access method. Read
+[`../plans/adr-0030/HOLD-Primarket.md`](../plans/adr-0030/HOLD-Primarket.md) before
+implementing anything under the twelve-x research stage. This hold does not
+amend the Accepted text below; it annotates it.
 **Related epic:** [#4762](https://github.com/digithings-ai/digithings/issues/4762)
 **Amends (reading only; historical bodies stay):** [ADR-0015](0015-atlas-vs-hermes.md), [ADR-0026](0026-retire-olympus-atlas-hermes-kairos.md)
 **Extends:** [ADR-0014](0014-atlas-in-digiquant.md) (finance graphs live in `digiquant/`), [docs/VISION.md](../VISION.md) (research / portfolio / execution under digiquant)
@@ -83,6 +90,7 @@ Org clocks (`apps/digithings-cron/src/jobs.ts`) dispatch these twelve-x workflow
 | `twelve-x-session-catchup` | `session_catchup.yml` | Weekday catch-up |
 | `twelve-x-performance-eval` | `performance_eval.yml` | Idea / consensus evaluation |
 | `twelve-x-archive-maintenance` | `archive_maintenance.yml` | Archive prune (not a stage) |
+| `twelve-x-digisearch-parity` | `digisearch_parity_check.yml` | Weekly digisearch parity check (Mon 09:08 UTC) |
 
 The hub's "How it works" copy locks the daily run to seven steps. This ADR maps them onto stages. The mapping is a reading of that copy, not a verified split inside the producer:
 

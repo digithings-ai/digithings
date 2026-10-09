@@ -71,6 +71,20 @@ def _proxy_request(value: str | None) -> _Req:
     return _Req(_Headers(h))
 
 
+def _catalog_examples() -> dict[str, str]:
+    """``provider -> its first fallbackModels`` entry, read from the shipped catalog.
+
+    Read here rather than imported from ``llm_auth`` so these assertions cannot be
+    satisfied by the module agreeing with itself: the expectation is the config file.
+    """
+    catalog = json.loads((_REPO_ROOT / "config" / "byok-providers.json").read_text())
+    return {
+        entry["id"]: entry["fallbackModels"][0]
+        for entry in catalog
+        if entry.get("requiresModel") and entry.get("fallbackModels")
+    }
+
+
 @pytest.mark.unit
 class TestLiteLlmProxyHeader:
     """X-LiteLLM-Proxy-Key parsing → digillm proxy-key override."""
@@ -279,6 +293,31 @@ class TestByokGuardOverHttp:
         )
         assert res.status_code == 400, res.text
         assert "byok_model_required" in str(res.json())
+
+    @pytest.mark.parametrize("provider", ["gemini", "anthropic", "openrouter", "xai"])
+    def test_model_required_body_offers_that_providers_own_catalog_example(
+        self, provider: str
+    ) -> None:
+        """The 400's example must come from *this* provider's ``fallbackModels`` entry.
+
+        It used to be one hand-written sentence naming three ids for every provider at
+        once, so an x.ai caller was offered nothing it could send and an Anthropic
+        caller was offered two models their key cannot serve. Same defect, same fix as
+        the sibling ``byok_default_model_refusal``: read the catalog, name the first
+        entry the provider itself declares.
+        """
+        res = self._client().get(
+            "/healthz", headers={"x-byok-key": "sk-ok", "x-byok-provider": provider}
+        )
+        assert res.status_code == 400, res.text
+        body = str(res.json())
+        assert "byok_model_required" in body
+        assert _catalog_examples()[provider] in body
+        for other, example in _catalog_examples().items():
+            if other != provider:
+                assert example not in body, (
+                    f"{provider} refusal advertises {other}'s model {example!r}"
+                )
 
     @pytest.mark.parametrize(
         "provider,model",

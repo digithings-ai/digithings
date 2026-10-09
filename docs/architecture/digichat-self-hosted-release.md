@@ -37,12 +37,12 @@ Bite-sized tasks (release packaging → Profile A/B → install guide → gap fi
 
 | Artifact | Status | Notes |
 |---|---|---|
-| **Git tag** `digichat-vX.Y.Z` | Exists | the former `release-please-digichat.yml` workflow on `develop` (removed in the strict-essentials cut); see [RELEASES.md](../../RELEASES.md) for the current tagging process. Changelog in `apps/digichat/CHANGELOG.md`. Current app version: `2.3.2` (`private: true` in package.json). `v0.9.3` remains on GHCR for DataTap / existing clients. |
-| **GHCR image** `ghcr.io/digithings-ai/digichat:vX.Y.Z` (+ `:latest`) | Exists | the former `publish-digichat-image.yml` workflow (removed in the strict-essentials cut); see [RELEASES.md](../../RELEASES.md) for the current artifact path. `/embed` CSP `frame-ancestors` is set at **runtime** from `DIGICHAT_EMBED_HOSTS` / `DIGICHAT_EMBED_TENANTS` (not baked at publish). |
+| **Git tag** `digichat-vX.Y.Z` | Exists | cut on `develop`; see [RELEASES.md](../../RELEASES.md) for the current tagging process (the `release-please-digichat.yml` workflow was removed in the strict-essentials cut). Changelog in `apps/digichat/CHANGELOG.md`. Current app version: `2.4.0` (`private: true` in package.json). A tag resolves to exactly one commit — `digichat-v2.3.2` → `14639ac0c`. |
+| **GHCR image** `ghcr.io/digithings-ai/digichat:vX.Y.Z` (+ `:latest`) | **Lane restored, nothing published yet** | `publish-digichat-image.yml` is back (DIG-1294, lane A of [docs/ops/digichat-datatap-aca.md](../ops/digichat-datatap-aca.md)) and publishes on a `digichat-vX.Y.Z` tag — the trigger glob is `digichat-v*`, but a tag that is not exactly `digichat-v<major>.<minor>.<patch>` is refused, so this lane publishes nothing else. The package itself is still absent from GHCR (verified 2026-10-06 — anonymous pull `401`, org package list empty): restoring a workflow does not create a package, and the tag ladder stops at `digichat-v2.3.2`. The first push creates the package and it inherits the org's default visibility, so check it is public if the anonymous pull is to work. `/embed` CSP `frame-ancestors` is set at **runtime** from `DIGICHAT_EMBED_HOSTS` / `DIGICHAT_EMBED_TENANTS` (not baked at publish). |
 | **npm package for digichat Node** | Does **not** exist | App is `private: true`; clients do not `npm install digichat`. |
 | **`@digithings/digichat-ui`** | Workspace / site embed | Shared React UI for marketing shells and digichat itself — **not** the self-host install unit. |
 | **Compose local image** `digi-digichat:latest` | Dev / operator | Root `docker-compose.yml` **builds** from repo context; does not pull GHCR by default. |
-| **DataTap path** | Client-side (out of repo) | Pulls same GHCR image into client Azure (ACA); GHCR→ACR mirror is a **manual** client ops step (documented in phase plans, not a digithings workflow). |
+| **DataTap path** | Client-side (out of repo) | Runs in the client's Azure Container App, fed by `datatapchatregistry.azurecr.io`. Nothing in this repo copies from GHCR into that registry: a `git grep` for `datatapchatregistry` / `azurecr.io` in any workflow returns **0 hits**. So the hop from a published image to a promotable one is a human `az acr import` ([docs/ops/digichat-datatap-aca.md](../ops/digichat-datatap-aca.md) §4 Step 1), which is an Azure write and therefore an owned-principal action. What *is* verified is that the images now in that registry were hand-built and hand-pushed: half its tags are ad-hoc debug names (`-error1`…`-error3`, `-counter1`…`-counter9`, `-boot1`, `-welcome1/2`, `-textleak-…`) that no workflow produced, and none carries an OCI annotation naming its build commit. |
 
 ### Target (what we want operators / clients to use)
 
@@ -53,10 +53,12 @@ Bite-sized tasks (release packaging → Profile A/B → install guide → gap fi
 5. **Not an install path:** publishing digichat Node to npm.
 
 ```text
-release-please (develop) → digichat-vX.Y.Z tag + CHANGELOG → publish-digichat-image → ghcr.io/.../digichat:vX.Y.Z
+hand bump (develop) → digichat-vX.Y.Z tag + CHANGELOG → publish-digichat-image → ghcr.io/.../digichat:vX.Y.Z
 promote develop → main   → cut release/vX.Y.Z from main (that version's patch line)
 client / digithings ops  → pull image + set env + choose profile A or B
 ```
+
+The middle arrow now works, with one gap between it and the third: nothing in **this** repo copies from GHCR into `datatapchatregistry`, so promoting to DataTap's Container App needs a human `az acr import` ([docs/ops/digichat-datatap-aca.md](../ops/digichat-datatap-aca.md) §4 Step 1). No arrow is aspirational today; the third line cannot run until the next `digichat-v*` tag is cut.
 
 ---
 

@@ -130,6 +130,7 @@ jobs:
               - 'apps/digitrace-langfuse/**'
               - 'Dockerfile.digitrace-langfuse-web'
               - 'Dockerfile.digitrace-langfuse-worker'
+              - 'apps/dashboard-api/**'
               - 'package.json'
               - 'package-lock.json'
               - '.github/workflows/test-web.yml'
@@ -187,6 +188,7 @@ jobs:
               - 'agents/**'
               - '.github/workflows/ci.yml'
               - 'scripts/ci_paths.yaml'
+              - 'apps/digichat/src/lib/model-catalog.generated.ts'
               - 'apps/digithings-cron/**'
               - 'apps/dashboard-api/**'
               - 'config/**'
@@ -410,6 +412,18 @@ jobs:
             echo "::error::validate_model_routing.py --ping --strict exited $code without the STRICT: diagnosis — the ping path crashed rather than enforcing the skip guard."
             exit 1
           fi
+
+      # Model catalog drift guard (#4994). config/model-catalog.json and
+      # apps/digichat/src/lib/model-catalog.generated.ts are both written by
+      # scripts/refresh_model_catalog.py. --check is network-free by contract:
+      # it re-renders the TS module from the committed JSON, asserts the
+      # data-model invariants, and compares byte-for-byte, so it fails fast
+      # instead of re-fetching 5.7 MB on every build. It catches a stale
+      # artifact, NOT a hand-edited one -- an offline guard cannot tell a
+      # fabricated price from a real one; that is what the review of the
+      # refresh PR is for.
+      - name: Model catalog drift guard
+        run: uv run --frozen --no-sync python scripts/refresh_model_catalog.py --check
 
       - name: Ruff (all src + tests)
         run: |

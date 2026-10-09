@@ -526,7 +526,6 @@ READ_SCOPE_TOOLS: frozenset[str] = frozenset(
         "digifetch_yield_curve",
         "digifetch_cds",
         "digifetch_research_search",
-        "digifetch_congress_trades",
         "digifetch_transcripts",
         "digifetch_statements",
         "digifetch_ticker_tweets",
@@ -650,14 +649,20 @@ def create_mcp_server(
     from digiquant.data.luxalgo.entitlements import with_entitlement_note as _luxalgo_note
 
     def _maybe_tool(name: str):
-        """Register the tool unless a read scope excludes it.
+        """Register the tool unless a read scope excludes it or it is refused.
 
         A digifetch/luxalgo tool with a declared entitlement gets
         ``fn.entitlement`` and an entitlement sentence appended to the
         registered description.
+
+        A refused tool (:mod:`digiquant.tool_refusals`) is never registered —
+        on either scope, so ``scope="full"`` cannot reopen it.
         """
+        from digiquant.tool_refusals import is_refused
 
         def _register(fn):
+            if is_refused(name):
+                return fn
             entitlement = _GLOOMBERB_ENTITLEMENTS.get(name)
             note_fn = _gloomberb_note
             if entitlement is None:
@@ -1359,10 +1364,13 @@ def create_mcp_server(
     def digifetch_congress_trades(year: int | None = None, limit: int = 50) -> str:
         """US House disclosure trades (Gloomberb Cloud; anonymous).
 
-        The upstream OCR dependency is currently failing (HTTP 500, Mistral
-        monthly spend cap), surfaced as a typed `upstream_error`; the tool is
-        exposed so coverage is complete when upstream recovers. `year`/`limit`
-        filter the tape; unknown row fields are preserved.
+        REFUSED and never registered on any scope (5 U.S.C. 13107(c)(1)(B) — a
+        House/Senate disclosure report is not ours to obtain or use for a
+        commercial purpose; DIG-1057, Counsel's ruling on the inert feed
+        DIG-1029). The upstream is live — `GET /cloud/congress/house` answers
+        200 with parsed house-clerk rows — which is why this is refused rather
+        than left inert. The client call is retained only so the route can be
+        restored if Counsel clears it; see :mod:`digiquant.tool_refusals`.
         """
         try:
             envelope = _build_gloomberb_client().congress_trades({"year": year, "limit": limit})

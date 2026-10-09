@@ -382,26 +382,52 @@ def _nav_for_as_of(client: SupabaseClient, *, as_of_date: date) -> dict[str, Any
     return snapshot
 
 
+_THESIS_ROW_CAP = 100
+_TERMINAL_THESIS_STATUSES = frozenset({"CLOSED", "INVALIDATED"})
+
+
 def _theses_for_as_of(client: SupabaseClient, *, as_of_date: date) -> list[dict[str, Any]]:
+    """Active theses on the latest date at or before ``as_of_date``.
+
+    The date is resolved first, then that date's rows are fetched. One ordered
+    ``limit`` across dates lets older rows consume the cap and drop the date
+    the caller asked for (#1835). ``row_cap`` bounds a single date and warns
+    when that date itself is clipped.
+    """
+    date_resp = (
+        client.table("theses")
+        .select("date")
+        .lte("date", as_of_date.isoformat())
+        .order("date", desc=True)
+        .limit(1)
+        .execute()
+    )
+    date_rows = list(getattr(date_resp, "data", None) or [])
+    if not date_rows:
+        return []
+    top_date = str(date_rows[0].get("date") or "")
+    if not top_date:
+        return []
     resp = (
         client.table("theses")
         .select("date, thesis_id, name, vehicle, invalidation, status, notes")
-        .lte("date", as_of_date.isoformat())
-        .order("date", desc=True)
-        .limit(100)
+        .eq("date", top_date)
+        .limit(_THESIS_ROW_CAP)
         .execute()
     )
     rows = list(getattr(resp, "data", None) or [])
-    if not rows:
-        return []
-    rows.sort(key=lambda row: str(row.get("date") or ""), reverse=True)
-    top_date = str(rows[0].get("date") or "")
-    terminal = {"CLOSED", "INVALIDATED"}
+    if len(rows) >= _THESIS_ROW_CAP:
+        logger.warning(
+            "_theses_for_as_of: %d rows for %s hit row_cap=%d — the thesis "
+            "register may be truncated (#1835)",
+            len(rows),
+            top_date,
+            _THESIS_ROW_CAP,
+        )
     return [
         row
         for row in rows
-        if str(row.get("date") or "") == top_date
-        and str(row.get("status") or "ACTIVE").upper() not in terminal
+        if str(row.get("status") or "ACTIVE").upper() not in _TERMINAL_THESIS_STATUSES
     ]
 
 

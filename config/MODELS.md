@@ -11,6 +11,21 @@
 | `config/litellm.omniroute.yaml` | Optional OmniRoute overlay — **not** loaded by default (#3413). |
 | `config/litellm.cheaperinference.yaml` | Hosted Cheaper Inference overlay — merged over `litellm.yaml` when `CHEAPERINFERENCE_API_KEY` is set (merge via `scripts/merge_litellm_cheaperinference.py` / stack boot), otherwise not loaded. |
 | `config/model_modes.yaml` | Mode → default model and full lists for test / medium / best. Update when adding models. |
+| `config/model-policy.json` | digigraph **policy**, not defaults: the model-id markers that classify a slug as a blocked frontier model, the subset cleared for `balanced`, and `fallback_model` (the mode ladder's last resort). Loaded once at import by `model_config.py` and **fail-loud** — a missing/malformed file, a blank marker, or an empty flagship set raises rather than degrading, because the failure mode is silent: no markers means *nothing* is flagship, so frontier models quietly become eligible on tiers never cleared for them. Add a frontier family's marker here, not in Python. |
+| `config/byok-providers.json` | BYOK provider allowlist + each provider's `fallbackModels` (the ids the digigraph refusals quote). Mirrored into digichat; see [docs/MODEL_CATALOG.md](../docs/MODEL_CATALOG.md). |
+
+Per-model metadata (price, context window, modalities, tool-call / structured-output
+/ reasoning / vision capability) is **not** hand-listed anywhere — it comes from
+[`docs/MODEL_CATALOG.md`](../docs/MODEL_CATALOG.md), a vendored models.dev snapshot
+(`config/model-catalog.json`, plus a generated TypeScript module for digichat).
+Refresh it with `make model-catalog`; CI runs `make model-catalog-check` as a
+drift guard. `tests/config/test_model_catalog.py` validates the ids pinned here
+against it — **strictly** for `config/byok-providers.json` `fallbackModels` (they
+are user-visible digichat options) and **advisorily** for the `litellm*.yaml`
+routes, because models.dev is a curated database rather than a live route
+registry and does not carry our `:free` / `:cloud` route spellings. Read the
+"what this is **not** authoritative for" section before treating a miss as a bug
+or a hit as proof a route exists.
 
 ## Caching (two layers)
 
@@ -64,6 +79,41 @@ runs in both the digigraph `web_search` handler and the digiquant research
 grounding pre-pass. There are no synthesis-model pins and no fallback: a
 requested search must succeed or raise. Monitor tool error rates alongside
 per-engine 403/CAPTCHA rates to see the cost win.
+
+## Keeping model names out of code (#5029)
+
+A model name the stack routes on belongs in a file in this directory, not in a
+string literal in Python or TypeScript. `scripts/check_model_name_literals.py`
+enforces that and runs in CI (`ci-docs.yml`, on every PR — it reads the whole
+production tree, so it is deliberately not behind a path filter).
+
+```
+python scripts/check_model_name_literals.py
+```
+
+It catches a name two ways: by **shape** (`gpt-4o-mini`, `claude-sonnet-4-6`,
+`grok-4.3`, … — so a name that has *not* reached config yet still trips it) and
+by **configured id** (read from `model-policy.json`, so promoting a name into
+config and then hardcoding it fails). Python is matched through `ast`, so only
+real string constants count; TypeScript is matched after comments are masked, so
+a commented-out example never trips it but a string literal always does.
+
+Where names legitimately still appear in code, and why:
+
+| Place | Why it is allowed |
+|-------|-------------------|
+| `packages/ui/src/components/chat/skins/**` | `@digithings/ui` is a workspace package consumed as TypeScript source, so it is not *technically* prevented from reaching root `config/` — a relative import would resolve. This is a recorded judgement, not a technical wall: a chat skin *is* a provider binding, existing to present one provider's model, and it ships to consumers who never see this repo's `config/`. |
+| `apps/digichat/src/lib/model-catalog.generated.ts` | Generated output — and the file must say so on its first line, so a hand-written file cannot claim the exemption by filename alone. |
+| `apps/digichat/reference/**` | Vendored third-party templates (excluded from `tsconfig.json`, provenance in `reference/assistant-ui-templates/SOURCE.md`). |
+| `scripts/check_model_name_literals.py` | This file. It holds `MODEL_ID_PATTERN`, which necessarily spells out the families it looks for. |
+| Test fixtures | A test that names a model is testing that the name works. |
+| `KNOWN_REMAINING` in the script | The phase-2 backlog. Entries are meant to be **deleted**, not added — each records a file and how many literals it holds, and a mismatch in either the count or the number of distinct names is reported as stale. |
+
+That last row is the one to read twice. The allowlist records **counts**, and a
+file whose count has changed is reported as stale rather than tidied away — so
+the list shrinks as phase 2 lands instead of becoming a permanent exemption
+wearing a comment. Adding an entry to silence a failure is how this check would
+stop meaning anything; the entries are meant to be deleted.
 
 ## Future: router (Claw-style)
 
