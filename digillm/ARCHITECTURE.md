@@ -517,8 +517,9 @@ person can read.
 
 **One precondition decides whether any of this is possible: the digillm process must not
 be able to read the ledger.** As of this writing it can. No service in `docker-compose.yml`
-declares a `user:`, and no Dockerfile in the repo has a `USER` directive, so every service
-runs as uid 0 — and root ignores file mode bits. Chmod-ing the ledger to `0222`, or
+declares a `user:`, and none of the Dockerfiles behind the five digillm-importing
+compose services (`digiclaw`, `digigraph`, `digiquant`, `digisearch`, `digitrace`)
+has a `USER` directive, so those services run as uid 0 — and root ignores file mode bits. Chmod-ing the ledger to `0222`, or
 root-owning it on a volume, separates the ledger from *other operators*, not from *this
 process*, which also holds the pepper in its environment. That is the exact co-location
 the rule exists to prevent, and it looks like compliance while providing none. Set
@@ -527,23 +528,31 @@ use a sink where the answer is already yes.
 
 Required separation in staging and production:
 
-- **Put the ledger somewhere the digillm process genuinely cannot read back.** In order of
-  strength: a syslog / OTLP / log-collector sink that accepts the records and never serves
-  them to the app; a named pipe or socket to such a collector; or a file on a volume owned
-  by a uid the service does not hold — which requires adding a non-root `user:` to the
-  compose service first, or nothing changes. **Then prove it**, because the recipe is
-  silently satisfiable by a mount that grants nothing:
+- **Put the ledger somewhere the digillm process genuinely cannot read back.**
+  `DIGILLM_EGRESS_LOG_PATH` only reaches a regular file: the sink opens the path
+  for append (`path.open("a")`) and the module has no syslog/OTLP branch, so a
+  FIFO would block the request path and a socket cannot be written at all.
+  Genuine separation is unavailable in this stack until `egress_record` grows a
+  collector transport — or the deployment consumes records through the in-process
+  observer with `DIGILLM_EGRESS_LOG_PATH=off`. **Then run this necessary (not
+  sufficient) check**, because the recipe is silently satisfiable by a mount
+  that grants nothing — `NO-SINK` and `LEAK` are both failures:
 
   ```bash
-  # MUST NOT print the ledger. If it prints, the separation is not in place.
-  docker compose exec <service> sh -c 'cat "$DIGILLM_EGRESS_LOG_PATH"' && echo LEAK || echo ok
+  # MUST print "ok". It shows the process cannot read that file, not that
+  # records are actually being written.
+  docker compose exec <service> sh -c '[ -e "$DIGILLM_EGRESS_LOG_PATH" ] || { echo NO-SINK; exit 1; }; [ -r "$DIGILLM_EGRESS_LOG_PATH" ] && echo LEAK || echo ok'
   ```
 - Set `DIGILLM_EGRESS_LOG_PATH` **explicitly in every service that imports digillm** —
   `digiclaw`, `digigraph`, `digiquant`, `digisearch`, `digiskills` and `digitrace` all
-  declare the dependency. Unset, it does not resolve to a host path: no image copies
+  declare the dependency (`digiskills` ships no compose service of its own, so its
+  vars ride with whichever service hosts it). Unset, it does not resolve to a host path: no image copies
   `digiquant/` or `.git`, so the checkout walk falls through to `$CWD` and the ledger lands
-  at `/app/digiquant/results/egress/records.jsonl` **inside the container's writable
+  under `$CWD/digiquant/results/egress/records.jsonl` (`/app/...` for `digiclaw`,
+  `digigraph` and `digiquant`; `/app/digisearch/...` and `/app/digitrace/...` for those
+  two, whose runtime `WORKDIR`s differ) **inside the container's writable
   layer**, where it is destroyed on the next recreate while every health check stays green.
+  (For the observer route, set it to `off` instead.)
 - Inject `DIGILLM_EGRESS_DIGEST_KEY` into each of those services' environments, from
   whatever secret store the deployment uses — `env_file` for the whole stack, or a
   per-service `environment:` entry (which is per-service, so one service's pepper does not
