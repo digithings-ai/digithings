@@ -61,8 +61,12 @@ def test_sox_argv_is_16k_mono_and_self_bounding() -> None:
     assert str(CHANNELS) in argv
     assert str(BITS) in argv
     assert "/tmp/a.wav" in argv
-    # `rec … trim 0 N` closes the file at N seconds instead of being killed.
-    assert argv[argv.index("rec") :] == ["rec", "trim", "0", "15"]
+    # Effects follow the output file. `trim 0 N` bounds the take. `rec` is the sox
+    # *command* alias, not an effect — putting it here makes real sox fail with
+    # "no such effect 'rec'" and breaks --hold / default dictation.
+    wav_at = argv.index("/tmp/a.wav")
+    assert argv[wav_at + 1 :] == ["trim", "0", "15"]
+    assert "rec" not in argv
 
 
 def test_ffmpeg_argv_bounds_the_clip_and_targets_the_mac_mic() -> None:

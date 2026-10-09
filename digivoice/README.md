@@ -73,7 +73,7 @@ Without an install, the module entry is `PYTHONPATH=digivoice/src python -m digi
 
 | Command | Behavior |
 | --- | --- |
-| `digivoice doctor` | Checks `whisper-cli`, `piper`, `sox`, `ffmpeg`, `ggml-base.en.bin`, settings validity, hotkey docs, and the Hammerspoon adapter. Prints the history path, the recordings directory, and the macOS and Linux defaults. Exit 0 when whisper-cli, piper, sox or ffmpeg, and the default model file are all present. |
+| `digivoice doctor` | Checks `whisper-cli`, `piper`, `sox`, `ffmpeg`, the configured `stt_model` file (default `ggml-base.en.bin`), settings validity, hotkey docs, and the Hammerspoon adapter. Prints the history path, the recordings directory, and the macOS and Linux defaults. Exit 0 when whisper-cli, piper, sox or ffmpeg, and that model file are all present. |
 | `digivoice dict [--hold\|--toggle] [--seconds N] [--stop-file PATH] [--no-paste]` | Records the microphone to `recordings/*.wav`, runs `whisper-cli`, prints the transcript on stdout, appends `{ts, kind:"dict", text, wav}` to the history file, and pastes into the focused app on macOS. `--toggle` stops early when the stop-file is touched or SIGINT/SIGTERM arrives. Exit 0 once a transcript exists. |
 | `digivoice speak [text\|--clipboard\|--selection\|--clipboard-or-history]` | Piper synthesis + local playback. Appends `{kind:"speak", text}`. Exit 0 on success. |
 | `digivoice history [--last N] [--grep PATTERN] [--copy-last] [--json]` | Lists entries, newest last. `--copy-last` copies the latest dict transcript to the clipboard. `--json` is agent-readable. |

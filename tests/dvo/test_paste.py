@@ -77,3 +77,24 @@ def test_blank_text_is_never_pasted_or_copied(blank: str) -> None:
     assert (copied.attempted, copied.pasted) == (False, False)
     assert "empty" in pasted.detail
     assert runner.calls == []
+
+
+def test_copy_to_clipboard_linux_uses_wl_copy_then_xclip() -> None:
+    runner = FakeRunner({"wl-copy": FakeReply()})
+    result = copy_to_clipboard(
+        "linux",
+        FakeProbe(commands={"wl-copy": "/usr/bin/wl-copy", "xclip": "/usr/bin/xclip"}),
+        runner,
+        TEXT,
+    )
+    assert result.pasted is True
+    assert "wl-copy" in result.detail
+    assert runner.programs == ["wl-copy"]
+    assert runner.calls[0].stdin == TEXT
+
+    xclip = FakeRunner({"xclip": FakeReply()})
+    copied = copy_to_clipboard(
+        "linux", FakeProbe(commands={"xclip": "/usr/bin/xclip"}), xclip, TEXT
+    )
+    assert copied.pasted is True
+    assert xclip.calls[0].argv[1:3] == ["-selection", "clipboard"]
