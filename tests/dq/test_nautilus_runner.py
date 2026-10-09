@@ -214,7 +214,7 @@ class TestBuildResult:
     _BASE_NS = 1_700_000_000_000_000_000  # ~2023-11 in nanoseconds
     _END_NS = _BASE_NS + 86_400 * int(1e9)  # +1 day
 
-    def _perf(self, sharpe=None, max_dd=None):
+    def _perf(self, sharpe=None, max_dd=None, realized=None):
         return {
             "sharpe": sharpe,
             "max_dd": max_dd,
@@ -222,8 +222,22 @@ class TestBuildResult:
             "stats_pnls": None,
             "stats_general": None,
             "returns_series": None,
-            "realized_pnls_series": None,
+            "realized_pnls_series": realized,
         }
+
+    def _result(self, realized=None, num_trades=0):
+        return _build_result(
+            run_id="h",
+            strategy_name="s",
+            symbols_echo=["AAPL"],
+            symbol="AAPL",
+            start_ts=self._BASE_NS,
+            end_ts=self._END_NS,
+            total_pnl=0.0,
+            total_return_pct=0.0,
+            num_trades=num_trades,
+            perf=self._perf(realized=realized),
+        )
 
     def test_basic_fields(self) -> None:
         r = _build_result(
@@ -309,6 +323,56 @@ class TestBuildResult:
             perf=self._perf(),
         )
         assert r.symbols == ["MSFT"]
+
+    # --- honest_rate population (DIG-845 L3) ---
+
+    def test_k_and_n_come_from_one_normalized_series(self) -> None:
+        r = self._result(realized={"p1": 120.5, "p2": -40.0, "p3": 3.0})
+        assert (r.honest_rate.k, r.honest_rate.n) == (2, 3)
+
+    def test_k_never_exceeds_n(self) -> None:
+        for series in ({"p1": 5.0}, {"p1": -5.0}, {"p1": 5.0, "p2": -5.0, "p3": 0.0}):
+            hr = self._result(realized=series).honest_rate
+            assert 0 <= hr.k <= hr.n
+
+    def test_n_is_not_the_fill_count(self) -> None:
+        # 4 closed positions, 2 fills each -> num_trades=8, n=4.
+        r = self._result(realized={"p1": 1.0, "p2": -1.0, "p3": 2.0, "p4": -2.0}, num_trades=8)
+        assert r.honest_rate.n == 4
+        assert r.num_trades == 8
+        assert r.honest_rate.n != r.num_trades
+
+    def test_breakeven_close_counts_as_a_loss(self) -> None:
+        r = self._result(realized={"p1": 5.0, "p2": 0.0, "p3": -5.0})
+        assert (r.honest_rate.k, r.honest_rate.n) == (1, 3)
+
+    def test_missing_or_empty_series_gives_none(self) -> None:
+        assert self._result(realized=None).honest_rate is None
+        assert self._result(realized={}).honest_rate is None
+
+    def test_small_sample_is_refused(self) -> None:
+        hr = self._result(realized={f"p{i}": 1.0 if i % 2 else -1.0 for i in range(9)}).honest_rate
+        assert hr.n == 9
+        assert hr.refused is True
+        assert hr.estimate is None
+
+    def test_low_sample_flag_below_thirty(self) -> None:
+        hr = self._result(realized={f"p{i}": 1.0 if i % 2 else -1.0 for i in range(20)}).honest_rate
+        assert hr.n == 20
+        assert hr.low_sample is True
+        assert hr.refused is False
+
+    def test_stability_halves_partition_the_same_series(self) -> None:
+        # Values chosen so the win at index 6 is the ONLY thing separating
+        # first_half.k=3 from first_half.k=4: the halves must be the halves of
+        # THIS series, so the counts are asserted, not just their sum.
+        values = [1.0 if i < 3 or i == 6 else -1.0 for i in range(12)]
+        hr = self._result(realized={f"p{i}": v for i, v in enumerate(values)}).honest_rate
+        s = hr.stability
+        assert s.first_half.n + s.second_half.n == hr.n == 12
+        assert s.first_half.k + s.second_half.k == hr.k == 4
+        assert (s.first_half.n, s.first_half.k) == (6, 3)
+        assert (s.second_half.n, s.second_half.k) == (6, 1)
 
 
 # ---------------------------------------------------------------------------

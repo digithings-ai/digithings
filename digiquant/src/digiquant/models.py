@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field, computed_field
 
+from digiquant.stats import HonestRateBlock
+
 
 class BacktestResult(BaseModel):
     """Result of a single backtest run. Used by digigraph and MCP."""
@@ -20,10 +22,23 @@ class BacktestResult(BaseModel):
         None,
         description="Max drawdown as negative percent, e.g. -15 for -15%",
     )
-    num_trades: int = Field(0, description="Number of trades")
+    num_trades: int = Field(
+        0,
+        description="Fill count: rows in generate_order_fills_report(). NOT a trade count "
+        "and NOT a win-rate denominator — use honest_rate.n.",
+    )
     per_symbol_pnl: dict[str, float] = Field(
         default_factory=dict,
         description="Per-symbol PnL breakdown for multi-symbol backtests",
+    )
+    honest_rate: HonestRateBlock | None = Field(
+        None,
+        description="Win rate with its denominator and interval. None when no realized-PnL "
+        "series was extracted — never a fabricated zero and never num_trades.",
+    )
+    honest_rate_by_symbol: dict[str, HonestRateBlock] = Field(
+        default_factory=dict,
+        description="Per-symbol honest_rate blocks for multi-symbol backtests",
     )
     status: str = Field("ok", description="ok | partial | error")
     message: str = Field("", description="Optional message or error")
