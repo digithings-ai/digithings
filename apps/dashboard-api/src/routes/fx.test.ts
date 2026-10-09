@@ -75,6 +75,49 @@ describe("phase 3 fx and rates", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("pairs and levels age on the snapshot run_date instead of dropping it", async () => {
+    mockFetch((url) =>
+      url.includes("fx_trade_ideas_snapshot")
+        ? [
+            { pair: "USD/JPY", direction: "long", run_date: "2026-09-02T06:00:00Z" },
+            { pair: "EUR/USD", direction: "short", run_date: "2026-09-01" },
+          ]
+        : [],
+    );
+    const pairsRes = await app.fetch(new Request("https://x/fx/pairs"), CORE);
+    const pairsBody = (await pairsRes.json()) as { as_of: string | null; provenance: { tip_date: string | null; marks: string } };
+    expect(pairsBody.as_of).toBe("2026-09-02");
+    expect(pairsBody.provenance.tip_date).toBe("2026-09-02");
+
+    const levelsRes = await app.fetch(new Request("https://x/fx/levels"), CORE);
+    const levelsBody = (await levelsRes.json()) as { as_of: string | null; provenance: { tip_date: string | null; marks: string } };
+    expect(levelsBody.as_of).toBe("2026-09-02");
+    expect(levelsBody.provenance.tip_date).toBe("2026-09-02");
+  });
+
+  it("pairs and levels report marks unavailable, because none are fetched", async () => {
+    mockFetch((url) =>
+      url.includes("fx_trade_ideas_snapshot") ? [{ pair: "USD/JPY", direction: "long", run_date: "2026-09-02" }] : [],
+    );
+    const pairsRes = await app.fetch(new Request("https://x/fx/pairs"), CORE);
+    const pairsBody = (await pairsRes.json()) as { provenance: { marks: string } };
+    expect(pairsBody.provenance.marks).toBe("unavailable");
+
+    const levelsRes = await app.fetch(new Request("https://x/fx/levels"), CORE);
+    const levelsBody = (await levelsRes.json()) as { provenance: { marks: string } };
+    expect(levelsBody.provenance.marks).toBe("unavailable");
+  });
+
+  it("pairs and levels send as_of null when the rows carry no run_date", async () => {
+    mockFetch((url) =>
+      url.includes("fx_trade_ideas_snapshot") ? [{ pair: "USD/JPY", direction: "long", run_date: null }] : [],
+    );
+    for (const path of ["/fx/pairs", "/fx/levels"]) {
+      const body = (await (await app.fetch(new Request(`https://x${path}`), CORE)).json()) as { as_of: string | null };
+      expect(body.as_of).toBeNull();
+    }
+  });
+
   it("curve reads FRED tenors and leaves a missing yield null", async () => {
     mockFetch((url) => (url.includes("macro_series_observations")
       ? [{ series_id: "DGS10", obs_date: "2026-09-02", value: "4.2", unit: "Percent" }, { series_id: "DGS10", obs_date: "2026-09-01", value: "4.1", unit: "Percent" }]
