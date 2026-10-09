@@ -80,14 +80,23 @@
 # `/healthz` has to fail here, where the cost is a red run, and not in East US
 # 2, where the cost is the customer.
 #
-# OPERATOR NOTE — first publish after this lane lands
-# ---------------------------------------------------
-# `ghcr.io/digithings-ai/digichat` does not exist yet (verified 2026-10-06:
-# anonymous pull 401, org package list empty). The first tag push creates it.
-# A GHCR package created by GITHUB_TOKEN inherits the org's default visibility,
-# so check `gh api /orgs/digithings-ai/packages/container/digichat` after the
-# first run and set it public if the documented anonymous install path
-# (`docker pull ghcr.io/digithings-ai/digichat:v2.4.0`) is to work.
+# OPERATOR NOTE - the GHCR package already exists, and it is private
+# -------------------------------------------------------------------
+# Measured 2026-10-09 with `gh api /orgs/digithings-ai/packages/container/digichat`:
+# id 13179652, package_type container, visibility `private`, 28 versions,
+# created 2026-07-05, last published 2026-09-21 (tags `v2.3.2` and `latest`).
+#
+# An earlier revision of this note claimed the package did not exist, on the
+# strength of a 401 from an anonymous `docker pull` and an empty package list
+# filtered to `visibility=public`. Neither measurement can tell a PRIVATE
+# package from an ABSENT one: a 401 means "authentication required", not "no
+# such package". Do not repeat that inference; check the authenticated route.
+#
+# So this lane appends to an existing private package rather than creating one.
+# Do not change that package's visibility from here: publishing it would put
+# 28 existing release digests behind anonymous pull, and whether an anonymous
+# install path is wanted at all is the repository owner's call - not a side
+# effect of this lane landing.
 name: "Publish: digichat image"
 
 on:
