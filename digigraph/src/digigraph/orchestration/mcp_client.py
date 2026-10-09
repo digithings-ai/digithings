@@ -74,6 +74,16 @@ _RAW_TOOL_NAME_KEY = "x_digi_mcp_raw_tool_name"
 _PRIVATE_HOST_ALLOWLIST_ENV = "DIGIGRAPH_MCP_PRIVATE_HOST_ALLOWLIST"
 
 _cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
+# The names the MCP servers actually advertise, captured at list time beside
+# _cache under the same key. The offered name ``<server_id>_<safe>`` is lossy:
+# every character outside [a-zA-Z0-9_-] collapses to "_" and the remainder is
+# capped at 64 chars, so the advertised name cannot be recovered from it (the
+# capture also keeps names longer than 64 chars callable). Written in
+# _list_tools_async, the only place the advertised name exists, so it is always
+# the same snapshot as _cache. Deliberately has no TTL of its own: expiring it
+# while _cache still serves the same offered names would put the call path back
+# on the broken behaviour with nothing to compensate (DIG-507).
+_raw_names_cache: dict[str, list[str]] = {}
 _pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="digi-mcp")
 
 
@@ -685,6 +695,37 @@ def openai_tools_for_servers(servers: list[dict[str, str]]) -> list[dict[str, An
     return out
 
 
+def raw_tool_names_for_server(server: dict[str, str]) -> list[str] | None:
+    """Advertised tool names captured for ``server`` at list time.
+
+    ``None`` means no ``list_tools`` snapshot has been captured for this server
+    key. That is not the same as "the server advertises no tools": a caller must
+    not guess a remote name when the capture is absent.
+    """
+    return _raw_names_cache.get(mcp_list_cache_key(server))
+
+
+def resolve_remote_tool_name(server_id: str, offered: str, raw_names: list[str]) -> str | None:
+    """Recover the advertised name behind ``offered``; ``None`` when not unique.
+
+    ``offered`` is the whole name the model chose, server prefix included --
+    what ``prefixed_tool_name`` produced at list time.
+
+    ``prefixed_tool_name`` is lossy, so several advertised names can collapse
+    onto one offered name -- any two sharing their first 64 safe characters.
+    Refusing on ambiguity is deliberate: picking either one would call a tool
+    the model did not ask for (DIG-507).
+    """
+    match: str | None = None
+    for raw in raw_names:
+        if prefixed_tool_name(server_id, raw) != offered:
+            continue
+        if match is not None:
+            return None
+        match = raw
+    return match
+
+
 def call_prefixed_tool(
     name: str,
     args: dict[str, Any],
@@ -693,10 +734,33 @@ def call_prefixed_tool(
     split = split_prefixed_tool_name(name)
     if not split:
         return {"error": "unknown_mcp_tool", "tool": name}
-    sid, tool = split
+    sid, offered = split
     server = next((s for s in servers if s["id"] == sid), None)
     if not server or not server.get("url"):
         return {"error": "unknown_mcp_server", "tool": name}
+    # Call the name the server advertised, not the lossy offered name we handed
+    # the model (DIG-507). ``name`` is the whole prefixed name, which is what
+    # prefixed_tool_name() rebuilds; ``offered`` is only its prefix-stripped tail.
+    raw_names = raw_tool_names_for_server(server)
+    if raw_names is None:
+        tool = offered
+    else:
+        tool = resolve_remote_tool_name(sid, name, raw_names)
+        if tool is None:
+            log.error(
+                "offered MCP tool %s for server %s matches no unique advertised name; refusing",
+                name,
+                sid,
+            )
+            return {
+                "error": "mcp_tool_name_unresolved",
+                "tool": name,
+                "server": sid,
+                "message": (
+                    f"Offered tool {name!r} does not map to exactly one tool advertised by "
+                    f"server {sid!r}; refusing to call rather than guess a remote tool name."
+                ),
+            }
     setup_raw = server.get("setup")
     # State carries the decoded mapping (workflow.py dumps McpServerRef.setup);
     # a raw parsed-header row carries the JSON-encoded form.
@@ -757,6 +821,11 @@ async def _list_tools_async(server: dict[str, str]) -> list[dict[str, Any]]:
             await session.initialize()
             listed = await session.list_tools()
     out: list[dict[str, Any]] = []
+    # Capture the advertised names before prefixed_tool_name() discards them
+    # (DIG-507). De-duplicated, order preserved, so resolve_remote_tool_name()
+    # reads ambiguity as ambiguity and not as a repeated entry.
+    advertised: list[str] = []
+    seen: set[str] = set()
     for t in listed.tools:
         if t.name not in seen:
             seen.add(t.name)
