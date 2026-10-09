@@ -251,6 +251,34 @@ jobs:
       - name: Frontend canon guard
         run: python3 scripts/check_frontend_canon.py
 
+  # ── Plaintext credential guard (DIG-179) — UNCONDITIONAL ────────────────────
+  # A live client mailbox password sat in plain text in a committed chat
+  # transcript and every existing guard missed it: gitleaks has no rule for the
+  # shape, and check_example_credentials.py only reads VAR=value lines out of
+  # .example/.template files. This job reads the whole tracked tree, so its
+  # verdict is a property of the tree rather than of the diff and a path filter
+  # would be the wrong tool for it -- the same argument as frontend-canon above,
+  # and it fires on every pull_request including workflow-only diffs.
+  #
+  # DIG-42 owns CI wiring for check_example_credentials.py. This job is separate
+  # and shares no code with it so that DIG-179 could land without waiting on an
+  # unmerged guard rewrite; the two unify once DIG-50/DIG-42 merge. The script
+  # prints path:line and rule id only, never a value, so this job's log is safe
+  # to paste into a ticket.
+  # Stdlib-only; no npm/pip install needed.
+  plaintext-credential-guard:
+    name: Plaintext credential guard
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Plaintext credential guard
+        run: python3 scripts/check_plaintext_credentials.py
+
   # ── Per-component test suites (gated by paths) ───────────────────────────────
   digibase:
     needs: changes
@@ -632,6 +660,7 @@ jobs:
     needs:
       - changes
       - frontend-canon
+      - plaintext-credential-guard
       - digibase
       - digikey
       - digitrace

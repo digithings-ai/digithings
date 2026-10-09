@@ -34,6 +34,8 @@ Six repo secrets that no `.github` YAML read were deleted on 2026-09-17/18: `COP
 
 **Plaintext literal committed in config.** A real value committed to the repo. Two exist: the FRED / CoinGecko / Alpha Vantage keys, in a gitleaks-allowlisted path ([`.gitleaks.toml:14`](../../.gitleaks.toml)); and the `local-dev-unused-first-party` embed token, which the allowlist does **not** cover — the default ruleset simply does not detect it.
 
+**macOS Keychain, service `digithings` (interim, DIG-179).** `security add-generic-password -U -s digithings -a <account>`. This is the interim store that `keymaster-ops` sanctions while the Bitwarden bootstrap (DIG-95) is absent and `dt-login` is not installed: values are written by script straight from the source blob and read back in-process to compare, never printed. It holds interim keys that move to Bitwarden once DIG-95 lands. `dt-keys` writes the same service but only covers the key shapes it generates (`add opencode-go`, `gen`), so a credential recovered from an arbitrary file is written by a one-off script rather than by `dt-keys`.
+
 ## Inventory
 
 ### (a) identity, auth & signing
@@ -56,6 +58,7 @@ Six repo secrets that no `.github` YAML read were deleted on 2026-09-17/18: `COP
 | `AUTH_OIDC_CLIENT_SECRET` | Auth.js OIDC flow | `apps/digichat/.env.example:24` | yes (`.env`) | OIDC login breaks | IdP + digichat env | empty default |
 | `DIGISEARCH_SEED_API_KEY` | `scripts/seed_digisearch_local.py:7` | shell export (`Makefile:159`) | n/a | local seed ingest 403 | dev only | needs `digisearch:ingest` |
 | `E2E_BEARER_TOKEN` | minted in `test-e2e.yml` from the compose stack (`digikey.cli issue-key` → `/v1/oauth/token`) | not stored at any level, by design (#4357) | n/a | protected-route e2e skips | CI only | test fixture; a stored JWT would expire |
+| `proton.twelve-x.mailbox.pass-a` · `proton.twelve-x.mailbox.pass-b` | none — a human mailbox, no service reads it | digithings-books `inbox/chat/twelve-x/2026-05-28.txt` (committed `82122ae6`; redacted in `13c1662` on every branch tip) | yes (macOS Keychain `digithings`, interim until DIG-95) | **Chris is the only holder** — a rotation is a human step with a CAPTCHA/2FA gate, not an agent one | 1 (two candidate values in one commit; which is live is unconfirmed) | **Client credential, not a digithings secret.** Live mailbox per Chris 2026-10-04. Values in Keychain only; never in this file. Rotation pending a recovery method on the mailbox — see Paperclip issue DIG-179. Guarded by `scripts/check_plaintext_credentials.py` (DIG-179) |
 
 ### (b) provider / LLM API keys
 
