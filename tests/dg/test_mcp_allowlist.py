@@ -595,6 +595,79 @@ def test_offered_name_collision_offers_zero_tools_and_audits(monkeypatch):
 
 
 @pytest.mark.unit
+def test_truncated_offered_name_collision_offers_zero_tools_and_audits(monkeypatch):
+    """Two allowlisted raw names that agree for 64 characters offer neither.
+
+    The sibling test above covers one half of the hazard ``prefixed_tool_name``
+    creates: two raw names that differ in a character it substitutes away. This is
+    the half substitution cannot catch. The two raw names here are identical up to
+    and past the truncation width and differ only beyond it, so substitution
+    leaves them distinguishable and the truncation is the only thing that loses
+    them. A brake that detected collisions on substituted names alone would offer
+    one of the pair; the bar says zero, because picking either hands the choice of
+    which approved tool runs to whichever the server happened to list first.
+
+    The names are synthetic, and Security's correction to the bar is why: the real
+    Atlassian catalog cannot reach this state — its longest offered name is 35
+    characters, well inside the width — so against real data this case proves
+    nothing. That is an argument for the fixture being synthetic, not for the
+    width-boundary behaviour going untested: ``MAX_TOOL_NAME_LENGTH`` is a
+    property of the offered name, and a rule only ever exercised below the width
+    is a rule whose boundary is unproven.
+
+    Every precondition is asserted rather than assumed. A fixture that stopped
+    colliding would otherwise fail one assertion later for a reason that reads
+    like a gate defect.
+    """
+    from unittest.mock import patch
+
+    from digigraph.orchestration.mcp_client import prefixed_tool_name
+
+    # One stem, two tails. The stem is doubled so the substituted name is longer
+    # than the truncation width, which places the entire difference between the
+    # two names strictly after the point where the offered name is cut.
+    stem = "atlassian." + "searchIssuesOnProjectByJqlAndExpand" * 2
+    raw_a, raw_b = stem + "WithCursorAlpha", stem + "WithCursorBeta"
+
+    offered_a = prefixed_tool_name("atlassian", raw_a)
+    offered_b = prefixed_tool_name("atlassian", raw_b)
+    assert raw_a != raw_b, "the fixture must hold two genuinely distinct raw names"
+    assert offered_a == offered_b, "the fixture must actually collide at the width"
+    # The name is genuinely being cut, not merely long: appending more characters
+    # to the stem does not lengthen the offered name. This pins the fixture at the
+    # truncation boundary without re-implementing the substitution under test.
+    assert offered_a == prefixed_tool_name("atlassian", stem)
+    assert offered_a == prefixed_tool_name("atlassian", stem + "YetMoreTailText")
+    assert len(offered_a) == len("atlassian_") + MAX_TOOL_NAME_LENGTH
+
+    _install_catalog(
+        monkeypatch,
+        {"atlassian": _records("atlassian", (raw_a, raw_b, ATLASSIAN_READ_TOOL))},
+    )
+    row = _atlassian_row(allowedTools=[raw_a, raw_b, ATLASSIAN_READ_TOOL])
+
+    with patch("digigraph.audit.audit_log") as audit:
+        offered = _research_chain([row])
+
+    # Neither member of the pair is offered; the unrelated allowed tool survives,
+    # so the refusal stays confined to the one name that cannot be resolved.
+    assert offered == [f"atlassian_{ATLASSIAN_READ_TOOL}"]
+
+    reasons = {
+        (c.kwargs.get("payload") or {}).get("tool"): (c.kwargs.get("payload") or {}).get("reason")
+        for c in audit.call_args_list
+        if c.args and c.args[0] == "tool_denied"
+    }
+    # Both participants, keyed on their raw names — not on the offered name they
+    # share, which is the whole point: the audit has to name what was refused.
+    assert reasons.get(raw_a) == "offered_name_collision"
+    assert reasons.get(raw_b) == "offered_name_collision"
+    assert ATLASSIAN_READ_TOOL not in reasons, (
+        "the truncation must not drag down an unrelated allowed tool"
+    )
+
+
+@pytest.mark.unit
 def test_offered_name_is_a_function_of_one_approved_raw_name(monkeypatch):
     """CTO bar item 10 — naming a different tool must be unrepresentable.
 
