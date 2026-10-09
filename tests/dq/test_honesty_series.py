@@ -768,3 +768,28 @@ def test_bools_are_kept_as_one_and_zero_in_every_container() -> None:
     assert normalize_series([True, False, True]) == expected
     assert normalize_series(_FakePolars([True, False, True])) == expected
     assert normalize_series(_FakePandasShape([True, False, True], [0, 1, 2])) == expected
+
+
+def test_a_summed_position_is_labelled_by_input_order_not_by_timestamp() -> None:
+    """The date label is whichever row was written last, not the latest one.
+
+    Found by review: the docstring used to justify the label with chronology
+    ("realized PnL is only complete when the final leg closes"), but the code
+    overwrites ``stamps[key]`` per record, so the **last row in the input** wins
+    whatever its timestamp says. Both engine builds that emit ``ts_event`` emit
+    their rows in event order, so the two readings agree on real input and only
+    diverge on hand-built rows -- which is exactly what this pins.
+
+    Literal rows, no analyzer, so this runs in every lane including the one that
+    installs without the nautilus extra.
+    """
+    in_order = normalize_series([("P-1", _TS_1, 6.0), ("P-1", _TS_2, 4.0)])
+    assert in_order == (["2023-11-15"], [10.0]), "in event order the later leg labels it"
+
+    reversed_rows = normalize_series([("P-1", _TS_2, 4.0), ("P-1", _TS_1, 6.0)])
+    assert reversed_rows == (["2023-11-14"], [10.0]), (
+        "the label follows input order, not the largest ts_event"
+    )
+
+    assert in_order is not None and reversed_rows is not None
+    assert in_order[1] == reversed_rows[1], "only the label depends on row order, not the sum"

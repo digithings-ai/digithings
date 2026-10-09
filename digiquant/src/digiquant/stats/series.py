@@ -139,9 +139,13 @@ def _from_records(records: list[tuple[Any, Any, Any]]) -> tuple[list[str], list[
     A position with a part that cannot be read is dropped whole rather than
     summed from its remaining parts. A partial total is a fabricated number for
     the position, which is the one outcome this module exists to prevent; the
-    same goes for a total that overflows to infinity. The position's date is its
-    **last** part's ``ts_event``: a position's realized PnL is only complete when
-    the final leg closes.
+    same goes for a total that overflows to infinity. The position's date is the
+    ``ts_event`` of the part that arrives **last**, not the largest timestamp:
+    the label is whichever row was written to the mapping last. Both engine
+    builds that emit ``ts_event`` emit their rows in event order, so the two
+    readings agree there; out-of-order rows would take the earlier date. This is
+    stated as input order deliberately rather than sorted, because which of the
+    two a caller wants is a labelling decision this leaf was not given.
     """
     collapsed: dict[tuple[Any, Any], Any] = {}
     for key, ts_event, value in records:
