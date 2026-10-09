@@ -423,12 +423,12 @@ export function ModuleGrid({
     return () => ro.disconnect();
   }, [focus]);
 
-  /* A tile's inside, shared by both faces. The body is keyed by `rev` so it
-     re-mounts and crossfades when its content changes — only the tile gaining
-     focus and the one losing it; resting tiles keep their key and just glide,
-     so a step never blanks the whole grid. The focus overlay sits under the
-     body (a button cannot contain the tile's own controls). */
-  const tileContent = (index: number, on: boolean, rev: number) => {
+  /* A tile's inside, shared by both faces. The body stays mounted: resting
+     tiles glide their rects, and the focus-only detail enters and leaves in
+     place (`.dg-mosaic-enter`) instead of remounting the name. The focus
+     overlay sits under the body (a button cannot contain the tile's own
+     controls). */
+  const tileContent = (index: number, on: boolean) => {
     const item = ordered[index];
     const m = item.module;
     const dockerCmd = m.dockerCmd;
@@ -442,7 +442,7 @@ export function ModuleGrid({
             stepper ? setStackActive(index) : focusModule(trackRef.current, index, count)
           }
         />
-        <div className="dg-cell-body" key={rev}>
+        <div className="dg-cell-body">
           <span className="dg-mosaic-head">
             <span className="dg-mosaic-name">
               <span className="text-ink-mute">digi</span>
@@ -455,19 +455,17 @@ export function ModuleGrid({
 
           <span className="dg-mosaic-role">{m.role}</span>
 
-          {on ? (
-            <span className="dg-mosaic-detail">
-              <span className="dg-mosaic-facts">{factsLine(item)}</span>
-              {m.summary[0] ? <span className="dg-mosaic-serves">{m.summary[0]}</span> : null}
-            </span>
-          ) : null}
+          <span className="dg-mosaic-detail dg-mosaic-enter" aria-hidden={on ? undefined : true}>
+            <span className="dg-mosaic-facts">{factsLine(item)}</span>
+            {m.summary[0] ? <span className="dg-mosaic-serves">{m.summary[0]}</span> : null}
+          </span>
 
           <span className="dg-mosaic-stack">
             <StackRow items={m.stack} className={on ? "stack-row" : "stack-row compact"} />
           </span>
 
-          {on ? (
-            <span className="dg-mosaic-foot">
+          {dockerCmd || onAsk ? (
+            <span className="dg-mosaic-foot dg-mosaic-enter" aria-hidden={on ? undefined : true}>
               {dockerCmd ? (
                 <CopyCommand
                   inline
@@ -621,7 +619,7 @@ export function ModuleGrid({
             width: FOCUS_MIN.minW,
           }}
         >
-          {tileContent(requestedFocus, true, -2)}
+          {tileContent(requestedFocus, true)}
         </div>
       ) : null}
       <div
@@ -651,7 +649,7 @@ export function ModuleGrid({
                         className={`dg-cell${on ? " on" : ""}`}
                         aria-current={on ? "true" : undefined}
                       >
-                        {tileContent(i, true, -1)}
+                        {tileContent(i, true)}
                       </div>
                     </Reveal>
                   </div>
@@ -682,7 +680,7 @@ export function ModuleGrid({
                     aria-current={on ? "true" : undefined}
                     style={style}
                   >
-                    {tileContent(i, on, on ? focus : -1)}
+                    {tileContent(i, on)}
                   </div>
                 );
               })}

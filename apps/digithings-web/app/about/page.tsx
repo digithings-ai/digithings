@@ -2,14 +2,13 @@ import type { Metadata } from "next";
 import {
   CtaLink,
   DocumentFrame,
-  GlyphList,
-  GlyphRow,
   PageTitle,
   Prose,
   Section,
 } from "@digithings/ui";
 import { DtFooter } from "@/components/DtFooter";
 import { DtNav } from "@/components/DtNav";
+import { SecondaryCard, SecondaryGrid } from "@/components/SecondaryCard";
 
 export const metadata: Metadata = {
   title: "about — open AI infrastructure you can host",
@@ -69,13 +68,13 @@ export default function AboutPage() {
           </div>
 
           <Section id="properties" title="Four properties" lede="Each one you can check in the repository.">
-            <GlyphList>
-              {PROPERTIES.map((r) => (
-                <GlyphRow key={r.label} label={r.label}>
+            <SecondaryGrid>
+              {PROPERTIES.map((r, i) => (
+                <SecondaryCard key={r.label} label={r.label} index={i}>
                   {r.body}
-                </GlyphRow>
+                </SecondaryCard>
               ))}
-            </GlyphList>
+            </SecondaryGrid>
           </Section>
 
           <Section
@@ -83,13 +82,13 @@ export default function AboutPage() {
             title="Built to compose"
             lede="The tools the code is built on. Take one piece and leave the rest."
           >
-            <GlyphList>
-              {COMPOSES_WITH.map((r) => (
-                <GlyphRow key={r.label} label={r.label}>
+            <SecondaryGrid cols="three">
+              {COMPOSES_WITH.map((r, i) => (
+                <SecondaryCard key={r.label} label={r.label} index={i} size="sm">
                   {r.body}
-                </GlyphRow>
+                </SecondaryCard>
               ))}
-            </GlyphList>
+            </SecondaryGrid>
             <div className="mt-[1.6rem]">
               <Prose>
                 <p>

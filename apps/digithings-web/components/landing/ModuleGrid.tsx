@@ -11,11 +11,11 @@ import { ModuleManifest } from "./ModuleManifest";
  * `ModuleGrid` fed this repo's line counts, versions and endpoint/tool counts.
  * "ask digichat" hands the question to `/chat`.
  *
- * Below the mosaic, the shared `<TerminalManifest>` process list
- * (`ModuleManifest`) stays on the home page so the Deploy dist/ contract
- * (`aria-label="digithings module manifest"`) keeps matching — the mosaic
- * replaced the old sole listing, but the pane marker is still the contract
- * for folded `/modules/*` and `/architecture` routes.
+ * The dist/ contract is the mosaic's `aria-label="digithings modules, sized by
+ * lines of code"`, checked by `scripts/build-digithings.sh`. It is the only
+ * one: the folded `/modules/*` and `/architecture` routes this pane used to
+ * back are gone, so `ModuleManifest` stays for the module prose it still
+ * carries, not as a contract marker.
  *
  * Band eyebrows (`SectionHead`) above the mosaic were dropped in #4898;
  * the `#architecture` id on the section remains the jump target.
