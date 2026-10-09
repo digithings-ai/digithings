@@ -115,7 +115,7 @@ export type FxLevels = {
 };
 
 /** GET /fx/flags/:pair */
-export type FxFlag = { pair: string; flagged: boolean; level?: number | null; text?: string | null; scope_note?: string | null };
+export type FxFlag = { pair: string; flagged: boolean | null; level?: number | null; text?: string | null; scope_note?: string | null };
 
 /** GET /fx/paper-exposure */
 export type FxPaperExposure = {

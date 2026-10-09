@@ -133,11 +133,16 @@ async function trace(req: Request, ctx: RouteCtx<Env>): Promise<Response> {
   const out = await read(
     ctx.env,
     "run_event_trace",
-    "select=run_id,run_date,name,operation,status,duration_ms,sequence&order=run_date.desc,sequence.desc&limit=200",
+    // created_at is a global timestamp; sequence is only unique within a run, so it
+    // cannot break ties between two runs that share a run_date.
+    "select=run_id,attempt,run_date,name,operation,status,duration_ms,sequence,created_at&order=created_at.desc&limit=200",
   );
   if ("error" in out) return out.error;
   const runId = str(out.rows[0]?.run_id);
-  const latest = runId === null ? [] : out.rows.filter((r) => str(r.run_id) === runId);
+  // The PK is (run_id, attempt, sequence): a retried run reuses run_id across attempts,
+  // so pin to the latest row's attempt too or a retry's rows would mix into the trace.
+  const attempt = out.rows[0]?.attempt;
+  const latest = runId === null ? [] : out.rows.filter((r) => str(r.run_id) === runId && r.attempt === attempt);
   const rows = latest.map((r) => {
     const ms = num(r.duration_ms);
     return {

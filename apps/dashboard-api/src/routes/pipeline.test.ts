@@ -69,16 +69,50 @@ describe("phase 2 pipeline routes", () => {
   });
 
   it("trace maps run_event_trace columns for the latest run", async () => {
-    mockFetch((url) => (url.includes("run_event_trace")
-      ? [
-          { run_id: "r2", run_date: "2026-09-02", name: "atlas.publish", status: "ok", duration_ms: 1500 },
-          { run_id: "r1", run_date: "2026-09-01", name: "old", status: "ok", duration_ms: 10 },
-        ]
-      : []));
+    const urls: string[] = [];
+    mockFetch((url) => {
+      urls.push(url);
+      return url.includes("run_event_trace")
+        ? [
+            { run_id: "r2", run_date: "2026-09-02", name: "atlas.publish", status: "ok", duration_ms: 1500, created_at: "2026-09-02T09:00:00Z" },
+            { run_id: "r1", run_date: "2026-09-01", name: "old", status: "ok", duration_ms: 10, created_at: "2026-09-01T09:00:00Z" },
+          ]
+        : [];
+    });
     const res = await app.fetch(new Request("https://x/pipeline/runs/latest/trace"), ENV);
     const body = (await res.json()) as { data: { rows: { node: string; duration_s: number; calls: null; state: string }[] }; as_of: string };
     expect(body.data.rows).toEqual([{ node: "atlas.publish", calls: null, duration_s: 1.5, state: "ok" }]);
     expect(body.as_of).toBe("2026-09-02");
+    expect(urls.find((u) => u.includes("run_event_trace")) ?? "").toContain("order=created_at.desc");
+  });
+
+  it("trace picks the latest run by created_at, not by per-run sequence, when two runs share a run_date", async () => {
+    mockFetch((url) => (url.includes("run_event_trace")
+      ? [
+          // Rows arrive as the API's own order=created_at.desc would return them: r_new
+          // (later created_at) first, even though r_old has the higher per-run sequence.
+          // Ordering by sequence instead of created_at would wrongly surface r_old as "latest".
+          { run_id: "r_new", run_date: "2026-09-02", name: "new.step1", status: "ok", duration_ms: 20, sequence: 1, created_at: "2026-09-02T10:00:00Z" },
+          { run_id: "r_old", run_date: "2026-09-02", name: "old.step1", status: "ok", duration_ms: 10, sequence: 5, created_at: "2026-09-02T01:00:00Z" },
+        ]
+      : []));
+    const res = await app.fetch(new Request("https://x/pipeline/runs/latest/trace"), ENV);
+    const body = (await res.json()) as { data: { rows: { node: string }[] } };
+    expect(body.data.rows).toEqual([{ node: "new.step1", calls: null, duration_s: 0.02, state: "ok" }]);
+  });
+
+  it("trace does not mix a retry's rows into the latest attempt of the same run_id", async () => {
+    mockFetch((url) => (url.includes("run_event_trace")
+      ? [
+          // Same run_id, two attempts (a retry): rows must be pinned to attempt 2, not
+          // just run_id, or attempt 1's rows would leak into the trace.
+          { run_id: "r1", attempt: 2, run_date: "2026-09-02", name: "retry.step1", status: "ok", duration_ms: 20, created_at: "2026-09-02T10:00:00Z" },
+          { run_id: "r1", attempt: 1, run_date: "2026-09-02", name: "first.step1", status: "failed", duration_ms: 10, created_at: "2026-09-02T09:00:00Z" },
+        ]
+      : []));
+    const res = await app.fetch(new Request("https://x/pipeline/runs/latest/trace"), ENV);
+    const body = (await res.json()) as { data: { rows: { node: string }[] } };
+    expect(body.data.rows).toEqual([{ node: "retry.step1", calls: null, duration_s: 0.02, state: "ok" }]);
   });
 
   it("narrative is the house Daily Digest split into paragraphs", async () => {

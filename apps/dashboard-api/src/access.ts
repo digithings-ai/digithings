@@ -128,8 +128,9 @@ export interface Manifest { caller: Caller; desks: DeskEntry[] }
 const isTier = (v: string): v is Tier => Object.hasOwn(TIER_RANK, v);
 
 /**
- * Local-dev impersonation (`DASHBOARD_DEV_CALLER=enterprise+12x` in .dev.vars): used only
- * when the request carries no identity headers at all. Never set it on a deployed worker.
+ * Local-dev impersonation (`DASHBOARD_DEV_CALLER=enterprise+12x` in .dev.vars): used
+ * whenever identity headers are untrusted (even if present — see `identityTrusted`), or
+ * trusted but absent. Never set it on a deployed worker.
  */
 export function devCaller(spec: string | undefined): Caller | null {
   if (!spec) return null;
