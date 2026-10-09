@@ -1,7 +1,8 @@
 """Pytest entry for tests/scripts/test_dt_routine_watch.sh (DIG-1220).
 
-The shell suite is the source of truth: 15 checks, no network, driving
-``scripts/dt-routine-watch`` with fixture files standing in for the routines API.
+The shell suite is the source of truth: 15 checks, no network, driving the canonical
+``~/paperclip-workspace/kit/bin/dt-routine-watch`` with fixture files standing in for the
+routines API.
 This wrapper makes it run under the existing ``pytest tests/scripts/`` CI lane
 without editing the protected ``ci.yml``.
 
