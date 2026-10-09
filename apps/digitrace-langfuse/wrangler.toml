@@ -23,11 +23,17 @@ enabled = true
 binding = "LANGFUSE_EVENTS"
 bucket_name = "digitrace-langfuse-events"
 
-# HUMAN GATE — infra/network: uncomment after DNS + secret puts are ready.
-# [[routes]]
-# pattern = "trace.digithings.ai"
-# zone_name = "digithings.ai"
-# custom_domain = true
+# HUMAN GATE — infra/network. DIG-2645 (2026-10-09): uncommented in-repo as a
+# prepared config change. INERT until a `wrangler deploy` runs — no CI workflow
+# deploys this Worker (test-web.yml only typechecks/tests it), so merging this
+# PR creates no DNS record and no route. The gate moves to the DEPLOY:
+# `custom_domain = true` makes wrangler CREATE the Cloudflare-managed DNS record
+# for trace.digithings.ai. Deploy order: docs/ops/digitrace-langfuse.md.
+# DNS, secrets and the deploy itself are Chris's.
+[[routes]]
+pattern = "trace.digithings.ai"
+zone_name = "digithings.ai"
+custom_domain = true
 
 [[containers]]
 class_name = "LangfuseWebContainer"
