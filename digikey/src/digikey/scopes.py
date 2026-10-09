@@ -22,12 +22,12 @@ def _one_required(granted: list[str], required: str) -> bool:
             continue
         if g == required:
             return True
+        # A granted component:* covers that component's children. The reverse
+        # is not a grant: a narrower scope must not satisfy a requested prefix:*.
         if g.endswith(":*"):
             prefix = g[:-2]
             if required == prefix or required.startswith(prefix + ":"):
                 return True
-        if required.endswith(":*") and g.startswith(required[:-2] + ":"):
-            return True
     return False
 
 

@@ -22,13 +22,15 @@ chat app.
 
 ## Install unit
 
-> **No published digichat image exists today.** `ghcr.io/digithings-ai/digichat`
-> was removed with `publish-digichat-image.yml` in the strict-essentials cut
-> (`f54af7052`, #4919) and has not been replaced — the package is absent from GHCR
-> (verified 2026-10-06: anonymous pull `401`, org package list empty). Until a
-> build lane is restored, build from the repo root and record the digest you
-> deploy. Restoration is tracked in DIG-1242; see
-> [`docs/ops/digichat-datatap-aca.md`](../ops/digichat-datatap-aca.md).
+> **No published digichat image exists today.** The build lane is back —
+> `publish-digichat-image.yml` publishes `ghcr.io/digithings-ai/digichat:vX.Y.Z`
+> on a `digichat-vX.Y.Z` tag (the trigger is the `digichat-v*` glob, but a tag
+> that is not exactly `digichat-v<major>.<minor>.<patch>` is refused) — but the
+> package is still absent from GHCR
+> (verified 2026-10-06: anonymous pull `401`, org package list empty), because
+> the tag ladder stops at `digichat-v2.3.2` and nothing publishes until a tag
+> lands. Until then, build from the repo root and record the digest you deploy.
+> See [`docs/ops/digichat-datatap-aca.md`](../ops/digichat-datatap-aca.md).
 >
 > The **intended** primary install unit is a pinned published image — not npm
 > (`private: true`), not `:latest` in production.

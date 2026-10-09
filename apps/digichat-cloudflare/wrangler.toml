@@ -59,6 +59,7 @@ new_sqlite_classes = ["DigiChatContainer"]
 #   DIGIKEY_URL
 #   DIGIKEY_BFF_TOKEN
 #   DIGICHAT_PLAN_PROOF_SECRET
+#   DIGICHAT_MONITOR_TOKENS   # monitor free-turn bypass (DIG-613); optional, fails open
 #   DIGICHAT_DASHBOARD_SUPABASE_URL
 #   DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY
 # Optional: DIGICHAT_DATABASE_URL if you enable Auth.js / conversations DB.
