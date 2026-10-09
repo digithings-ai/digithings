@@ -27,6 +27,7 @@ import polars as pl
 
 from digiquant.constraints import normalize_drawdown_pct
 from digiquant.models import BacktestResult
+from digiquant.stats import HonestRateBlock, normalize_series, stability_split
 
 if TYPE_CHECKING:
     pass
@@ -393,6 +394,34 @@ def _extract_perf_stats(engine: Any, USD: Any) -> dict[str, Any]:
     return result
 
 
+def _honest_rate_block(realized_pnls: Any) -> HonestRateBlock | None:
+    """Build the win-rate envelope from one realized-PnL series.
+
+    ``None`` when the series is missing, empty or unreadable — never a
+    fabricated zero and never a ``num_trades`` stand-in. ``k``, ``n`` and both
+    halves of ``stability`` come from the same normalized series: a breakeven
+    close (``pnl == 0``) is counted in ``n`` and not in ``k``.
+    """
+    normalized = normalize_series(realized_pnls)
+    if not normalized:
+        return None
+    values = normalized[1]
+    n = len(values)
+    if n == 0:
+        return None
+    mid = n // 2
+    return HonestRateBlock(
+        k=sum(1 for pnl in values if pnl > 0.0),
+        n=n,
+        stability=stability_split(
+            mid,
+            sum(1 for pnl in values[:mid] if pnl > 0.0),
+            n - mid,
+            sum(1 for pnl in values[mid:] if pnl > 0.0),
+        ),
+    )
+
+
 def _build_result(
     run_id: str,
     strategy_name: str,
@@ -455,6 +484,7 @@ def _build_result(
         sharpe_ratio=perf["sharpe"],
         max_drawdown_pct=normalize_drawdown_pct(perf["max_dd"]),
         num_trades=num_trades,
+        honest_rate=_honest_rate_block(perf.get("realized_pnls_series")),
         status=status,
         message=message,
     )
