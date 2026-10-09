@@ -58,7 +58,7 @@ import shutil
 import subprocess
 import sys
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -414,7 +414,7 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         today = parsed
     else:
-        today = date.today()
+        today = datetime.now(tz=timezone.utc).date()
 
     try:
         report = run(args.lock, args.offline, today, args.az_bin)
