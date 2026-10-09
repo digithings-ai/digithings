@@ -57,7 +57,9 @@ def _build_page(
         # is only a fallback denominator for results that predate L3.
         counts = resolve_win_rate(result, win_rate, wins=win_rate_wins)
         win_rate_str = counts.text
-        w = wilson(counts.k, counts.n)
+        # A refusal publishes no interval, so it publishes no band either:
+        # recolouring a REFUSED card red is a rate claim the block disclaimed.
+        w = None if counts.refused else wilson(counts.k, counts.n)
         lo = w.lo if w is not None else None
         # Thresholds act on the CI lower bound, never the point estimate.
         if lo is None:

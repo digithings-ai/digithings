@@ -320,22 +320,85 @@ def test_donut_denominator_is_the_block_n() -> None:
     assert "_build_win_rate_donut(win_rate, counts.n, num_wins=num_wins)" in src  # n=50
 
 
+def test_donut_reconstruction_is_delegated_and_bounded() -> None:
+    """No counted k -> None, so only the L6 donut may reconstruct; say so out loud.
+
+    `_build_win_rate_donut` itself still does `round(wr * num_trades)` when
+    handed `num_wins=None` (charts/trades.py, owned by L6/DIG-848). This leaf
+    cannot remove it from an allowed file, so it pins the boundary instead:
+    a block always counts, and a fallback is honest about not counting.
+    """
+    # With a block, the donut is handed a counted k — its reconstruction is dead.
+    with_block = resolve_win_rate(_honest_result(30, 50, 900), 0.6, wins=None)
+    assert with_block.counted is True  # n=50
+    assert "wins uncounted" not in _donut_annotation(0.6, with_block.n, with_block.k)  # n=50
+    # Without a block and without a counted series we decline to guess, and the
+    # donut says so on its face rather than presenting a reconstruction as k.
+    fallback = resolve_win_rate(_result(50), 0.6, wins=count_winning_trades(None))
+    assert fallback.counted is False  # n=50
+    assert fallback.n == 50  # n=50
+    assert "wins uncounted" in _donut_annotation(0.6, fallback.n, None)  # n=50
+    # `counted` is the only thing standing between a reconstruction and the
+    # donut: flips True and the guess is presented as a counted k. Assert the
+    # flag on the reconstruction itself, since the wiring above reads nothing else.
+    assert fallback.k == round(0.6 * 50)  # n=50: it IS a rate x n guess...
+    assert fallback.counted is False  # n=50: ...and it must never claim otherwise
+
+
+def _donut_annotation(rate: float, n: int, wins: int | None) -> str:
+    """The donut's centre label for a given (rate, n, num_wins) hand-off."""
+    fig = _build_win_rate_donut(rate, n, num_wins=wins)
+    assert fig is not None
+    return str(fig.layout.annotations[0].text)
+
+
 def test_only_the_legacy_fallback_reconstructs_rate_times_n() -> None:
     """`round(rate * n)` survives in the fallback only — AST, so docs don't count."""
     from digiquant import tearsheet_page as page_mod
     from digiquant import tearsheet_stats as stats_mod
 
-    def rounds(module) -> list[str]:
-        src = Path(inspect.getsourcefile(module)).read_text()
-        return [
-            ast.unparse(node)
-            for node in ast.walk(ast.parse(src))
-            if isinstance(node, ast.Call) and getattr(node.func, "id", None) == "round"
-        ]
+    def rounds(module) -> list[tuple[str, str]]:
+        """Every ``round(...)`` in a module, paired with the function holding it.
 
-    assert rounds(stats_mod) == ["round(wr * n)"]  # n=50: one, inside resolve_win_rate
+        Pairing with the *enclosing* function is what makes this falsifiable:
+        the pre-fix module also unparsed to ``['round(wr * n)']`` because its
+        lone round sat in ``_honest_win_rate_text``. Reverted, this reports
+        ``_honest_win_rate_text`` and the assertion fires.
+        """
+        src = Path(inspect.getsourcefile(module)).read_text()
+        tree = ast.parse(src)
+        sites: list[tuple[str, str]] = []
+        for outer in ast.walk(tree):
+            if not isinstance(outer, ast.FunctionDef):
+                continue
+            for node in ast.walk(outer):
+                if isinstance(node, ast.Call) and getattr(node.func, "id", None) == "round":
+                    sites.append((outer.name, ast.unparse(node)))
+        return sites
+
+    assert rounds(stats_mod) == [
+        ("resolve_win_rate", "round(wr * n)")
+    ]  # n=50: one, in the fallback
     assert rounds(page_mod) == []  # n=50
     assert rounds(tearsheet_mod) == []  # n=50
+
+
+def test_caller_counted_wins_beat_the_reconstruction() -> None:
+    """A counted k is kept as counted; only an uncounted one is reconstructed."""
+    counted = resolve_win_rate(_result(50), 0.6, wins=40)
+    assert (counted.k, counted.n, counted.counted) == (
+        40,
+        50,
+        True,
+    )  # n=50: the 0.6 rate is ignored
+    assert "80.0% (40/50" in counted.text  # n=50
+    assert counted.refused is False  # n=50
+    # An absent rate must not be back-filled from n: no wins, no rate, no guess.
+    uncounted = resolve_win_rate(_result(50), None)
+    assert (uncounted.k, uncounted.counted) == (0, False)  # n=50
+    assert uncounted.text == "—"  # n=50
+    # n below the refuse floor is a refusal, not a small percentage.
+    assert resolve_win_rate(_result(5), 0.6).refused is True  # n=5
 
 
 def test_trade_count_rows_are_labelled_as_fills() -> None:
@@ -368,6 +431,17 @@ def test_refused_block_renders_no_rate() -> None:
     ):
         assert "REFUSED" in html  # n=5
         assert "60.0%" not in html  # n=5: a refused block renders no rate
+
+
+def test_refused_card_carries_no_colour_band() -> None:
+    """REFUSED is a refusal — recolouring it would publish the rate it withheld."""
+    html = _page(0.6, 900, result=_honest_result(3, 5, 900))
+    assert "REFUSED" in html  # n=5
+    assert 'WIN RATE</span><span class="kpi-value negative">' not in html  # n=5
+    assert 'WIN RATE</span><span class="kpi-value ">' in html  # n=5: unbanded
+    # The band still works wherever the sample earns one.
+    confident = _page(0.9, 1000, result=_honest_result(900, 1000, 9999))
+    assert 'WIN RATE</span><span class="kpi-value positive">' in confident  # n=1000
 
 
 def test_disclaimer_renders_once_inside_the_frequency_block() -> None:
