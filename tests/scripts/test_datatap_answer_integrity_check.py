@@ -1083,3 +1083,56 @@ def m_discovery_html(config: str) -> str:
     """Rebuild the page with a different config object in place of the live one."""
     original = '{\\"embedUrl\\":\\"' + EMBED_BASE + '/embed\\",\\"token\\":\\"' + "t" * 48 + '\\"}'
     return DISCOVERY_HTML.replace(original, "{" + config.replace('"', '\\"') + "}")
+
+
+# --------------------------------------------------------------------------
+# Leaf A3: the token must come from the object that holds embedUrl, at any
+# nesting depth, and from no other object.
+#
+# #5086 replaced a forward regex with a rfind/find brace pair, which fixed the
+# case of a token *preceding* embedUrl inside its own object but left two holes:
+# a nested object between embedUrl and token hides the token entirely (the
+# check goes permanently blind, exit 2 every hour), and a sibling object that
+# *precedes* embedUrl wins the rfind and hands back the wrong token. The wrong
+# token is the worse of the two: it 401s, and a 401 from a client platform
+# reads like their fault rather than like our bug.
+# --------------------------------------------------------------------------
+
+
+def test_discovery_reads_the_token_past_a_nested_object() -> None:
+    """A nested object between embedUrl and token must not hide the token.
+
+    Real RSC payloads nest. A window bounded by the *first* closing brace after
+    embedUrl truncates at the nested object's own brace, so the token falls
+    outside it and discovery raises. Fails closed, which is the safe direction,
+    but it is still a check that can never pass again, and nothing distinguishes
+    that from a client outage in the reader's eyes.
+    """
+    target = mod.discover_embed_target(
+        m_discovery_html(
+            '{"embedUrl":"' + EMBED_BASE + '/embed",'
+            '"features":{"deep":{"x":1}},'
+            '"token":"' + "t" * 48 + '"}'
+        )
+    )
+    assert target.token == "t" * 48
+
+
+def test_discovery_never_takes_a_token_from_a_neighbouring_object() -> None:
+    """The token must be the embedUrl object's own, not a sibling's.
+
+    This is the invariant, and it is what #5086 set out to restore. Bounding
+    the window backwards with rfind picks the sibling's opening brace when a
+    previous object closes before embedUrl, so the first "token" in the window
+    belongs to that sibling. Pairing it with the real one in the page makes the
+    failure unambiguous: the wrong token must not win.
+    """
+    real, decoy = "r" * 48, "d" * 48
+    target = mod.discover_embed_target(
+        m_discovery_html(
+            '{"other":{"token":"' + decoy + '"},'
+            '"embedUrl":"' + EMBED_BASE + '/embed",'
+            '"token":"' + real + '"}'
+        )
+    )
+    assert target.token == real, "discovery returned a token from a different object"
