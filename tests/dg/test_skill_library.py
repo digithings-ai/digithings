@@ -261,7 +261,13 @@ def test_research_appends_the_bundle_and_unions_the_names():
     from digigraph.graph import research
 
     source = inspect.getsource(research)
-    assert "skill_ids.append(SKILL_LIBRARY_SKILL_ID)" in source, "bundle id not appended"
+    # Assert the GUARDED form. An earlier version of this pin asserted only the
+    # append, and a mutant that replaced the guard with `if False:` still left
+    # the append in the source — so the pin was satisfied by dead code.
+    assert (
+        "if SKILL_LIBRARY_SKILL_ID not in skill_ids:\n"
+        "        skill_ids.append(SKILL_LIBRARY_SKILL_ID)" in source
+    ), "bundle id is not appended behind a membership guard"
     assert "_allowed_names | SESSION_TOOL_NAMES | SKILL_LIBRARY_TOOL_NAMES" in source, (
         "the always-on names are not unioned into a request-scoped allowlist"
     )
