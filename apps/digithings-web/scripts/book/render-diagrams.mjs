@@ -100,6 +100,8 @@ function terminalThemeCss(t) {
     `.edgeLabel text,.edgeLabel tspan{fill:${t["ink-soft"]} !important}`,
     // Sequence diagrams: participant labels sit inside a <text class="actor">
     // whose own fill is the box colour; pin the label colour on both levels.
+    // Step numbers: a filled accent disc with the canvas colour on top.
+    `marker circle{fill:${t.accent} !important;stroke:none !important}.sequenceNumber{fill:${t.bg} !important}`,
     `text.actor,text.actor>tspan,.messageText,.noteText,.labelText,.loopText{fill:${t.ink} !important;stroke:none !important}`,
   ].join("");
 }
