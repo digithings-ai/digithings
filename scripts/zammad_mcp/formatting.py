@@ -74,6 +74,10 @@ class _HtmlToText(HTMLParser):
         return "\n".join(lines)
 
 
+# Tag that marks an internal (agent-only) article in rendered ticket detail.
+INTERNAL_TAG = "[internal]"
+
+
 def html_to_text(value: Any) -> str:
     """Convert an HTML article body to readable plain text."""
     raw = "" if value is None else str(value)
@@ -215,7 +219,7 @@ def _format_article(index: int, article: dict[str, Any]) -> list[str]:
     kind = _field(article.get("type")) or "unknown"
     header_bits.append(f"{sender}/{kind}")
     if article.get("internal"):
-        header_bits.append("[internal]")
+        header_bits.append(INTERNAL_TAG)
     author = _field(article.get("from"))
     if author:
         header_bits.append(f"from {author}")

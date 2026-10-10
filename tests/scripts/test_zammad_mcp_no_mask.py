@@ -132,7 +132,7 @@ def test_ticket_line_shows_the_full_customer_email() -> None:
 def test_ticket_detail_returns_internal_articles() -> None:
     detail = formatting.format_ticket_detail(dict(TICKET), [dict(a) for a in ARTICLES])
 
-    assert "[internal]" in detail
+    assert formatting.INTERNAL_TAG in detail
     assert "Internal triage" in detail
     assert "Account flagged after three failed payments." in detail
     assert f"Articles ({len(ARTICLES)})" in detail
@@ -262,7 +262,11 @@ def test_no_masking_symbols_under_scripts_zammad_mcp() -> None:
 
     found = {
         pr: sorted(
-            {f"{name}: {symbol}" for name, text in sources.items() for symbol in _scan(text, symbols)}
+            {
+                f"{name}: {symbol}"
+                for name, text in sources.items()
+                for symbol in _scan(text, symbols)
+            }
         )
         for pr, symbols in MASKING_SYMBOLS.items()
     }
