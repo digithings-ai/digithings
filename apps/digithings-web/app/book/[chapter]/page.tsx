@@ -1,64 +1,62 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import ChapterNav from "@/components/book/ChapterNav";
-import ChapterRail from "@/components/book/ChapterRail";
-import { chapterRefs, loadChapter, loadChapters } from "@/lib/book/chapters.server";
-import { join } from "node:path";
+import BookPage from "@/components/book/BookPage";
+import { chapterRefs, loadChapters } from "@/lib/book/chapters.server";
+import { readingOrder } from "@/lib/book/toc";
 
-/** Every chapter is a static page: `output: "export"` has no server to ask. */
-export function generateStaticParams(): Array<{ slug: string }> {
-  return loadChapters(process.cwd()).map((c) => ({ slug: c.slug }));
+/** Every chapter opener is a static page: `output: "export"` has no server. */
+export function generateStaticParams(): Array<{ chapter: string }> {
+  return loadChapters(process.cwd()).map((c) => ({ chapter: c.slug }));
 }
 
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}): Promise<Metadata> {
-  const { slug } = await params;
-  const chapter = loadChapter(join(process.cwd(), "content/book", `${slug}.mdx`), `${slug}.mdx`);
-  return { title: `${chapter.title} — the digithings book`, description: chapter.summary };
+export async function generateMetadata({ params }: { params: Promise<{ chapter: string }> }): Promise<Metadata> {
+  const { chapter } = await params;
+  const c = loadChapters(process.cwd()).find((x) => x.slug === chapter);
+  return c ? { title: `${c.title} — the digithings book`, description: c.summary } : {};
 }
 
 /**
- * One chapter (DIG-2821).
- *
- * The body is imported from `content/book/` through the MDX loader, not read
- * as text: the chapters are MDX, and the anchors come from the rehype plugin
- * (`lib/book/rehypeBookIds.mjs`), so the ids are in the static HTML the print
- * step paginates.
+ * A chapter's opener (DIG-2821): its introduction and the list of its sections.
+ * Each section is its own page; "next" goes to the first of them.
  */
-export default async function ChapterPage({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params;
+export default async function ChapterPage({ params }: { params: Promise<{ chapter: string }> }) {
+  const { chapter: slug } = await params;
   const chapters = loadChapters(process.cwd());
   const chapter = chapters.find((c) => c.slug === slug);
   if (!chapter) notFound();
 
-  // The static prefix keeps webpack's dynamic import a real context module, so
-  // every chapter is bundled at build rather than fetched at request time.
-  const { default: Body } = (await import(
-    `../../../content/book/${slug}.mdx`
-  )) as { default: () => React.JSX.Element };
-
+  const { default: Body } = (await import(`../../../content/book/${slug}/index.mdx`)) as {
+    default: () => React.JSX.Element;
+  };
   const refs = chapterRefs(chapters);
-  return (
-    <article className="book-chapter pt-[clamp(3rem,7vw,5rem)]">
-      <p className="m-0 font-mono text-[0.8rem] text-accent">{String(chapter.order).padStart(2, "0")}</p>
-      <h1 className="mb-2 font-display text-[clamp(2rem,4vw,3rem)] leading-[1.05] tracking-[-0.02em] text-ink">
-        {chapter.title}
-      </h1>
-      <p className="max-w-[64ch] text-[1.05rem] leading-[1.7] text-ink-soft">{chapter.summary}</p>
+  const flat = readingOrder(refs);
+  const first = flat.findIndex((s) => s.chapter === slug);
+  const previous = first > 0 ? flat[first - 1] : null;
 
-      <div className="mt-10 grid gap-12 md:grid-cols-[minmax(0,1fr)_14rem]">
-        <div className="min-w-0">
-          <Body />
-          <ChapterNav chapters={refs} slug={slug} />
-        </div>
-        <aside className="book-screen-only md:sticky md:top-[calc(var(--dq-nav-h)+2rem)] md:self-start">
-          <ChapterRail entries={chapter.toc} />
-        </aside>
-      </div>
-    </article>
+  return (
+    <BookPage
+      chapters={refs}
+      chapter={slug}
+      kicker={`chapter ${String(chapter.order).padStart(2, "0")}`}
+      title={chapter.title}
+      summary={chapter.summary}
+      toc={chapter.toc}
+      previous={previous}
+      next={first >= 0 ? flat[first] : null}
+    >
+      <Body />
+      <ol className="mt-8 list-none border-hair border-t p-0">
+        {chapter.sections.map((s) => (
+          <li key={s.slug} className="border-hair border-b py-3">
+            <Link href={s.href} className="font-mono text-[0.9rem] text-ink">
+              {String(chapter.order).padStart(2, "0")}.{s.order} {s.title}
+            </Link>
+            <p className="m-0 mt-1 max-w-[64ch] text-ink-soft">{s.summary}</p>
+          </li>
+        ))}
+      </ol>
+    </BookPage>
   );
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { extractHeadings } from "./headings";
-import { chapterHref, chapterNeighbours, nestToc, orderChapters, tocEntries } from "./toc";
+import { chapterHref, chapterNeighbours, nestToc, orderChapters, readingOrder, sectionNeighbours, tocEntries } from "./toc";
 
 const REF = (slug: string, order: number, title = slug) => ({
   slug,
@@ -90,5 +90,26 @@ describe("chapterNeighbours", () => {
       previous: null,
       next: null,
     });
+  });
+});
+describe("sectionNeighbours", () => {
+  const s = (chapter: string, slug: string, order: number) => ({
+    chapter, slug, order, title: slug, summary: "", href: `/book/${chapter}/${slug}/`,
+  });
+  const ch = (slug: string, order: number, sections: ReturnType<typeof s>[]) => ({
+    slug, order, title: slug, summary: "", href: `/book/${slug}/`, headingCount: sections.length, sections,
+  });
+  const book = [ch("02-b", 2, [s("02-b", "y", 2), s("02-b", "x", 1)]), ch("01-a", 1, [s("01-a", "p", 1), s("01-a", "q", 2)])];
+
+  it("walks reading order across chapter boundaries", () => {
+    expect(readingOrder(book).map((x) => x.slug)).toEqual(["p", "q", "x", "y"]);
+    const mid = sectionNeighbours(book, "01-a", "q");
+    expect(mid.previous?.slug).toBe("p");
+    expect(mid.next?.slug).toBe("x");
+  });
+
+  it("returns null at either end", () => {
+    expect(sectionNeighbours(book, "01-a", "p").previous).toBeNull();
+    expect(sectionNeighbours(book, "02-b", "y").next).toBeNull();
   });
 });

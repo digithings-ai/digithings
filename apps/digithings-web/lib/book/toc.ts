@@ -103,3 +103,46 @@ export function chapterNeighbours(
     next: at < chapters.length - 1 ? chapters[at + 1] : null,
   };
 }
+// ---------------------------------------------------------------------------
+// Sections: every topic is its own page (owner rule, 2026-10-11).
+//
+// A chapter is a directory; each section in it is one MDX file and one route,
+// `/book/<chapter>/<section>/`. Reading order is chapters by `order`, then each
+// chapter's sections by `order`, and previous/next walks that flat list, so the
+// buttons cross chapter boundaries. The printed book flows the same list.
+// ---------------------------------------------------------------------------
+
+export interface SectionRef {
+  chapter: string;
+  slug: string;
+  title: string;
+  summary: string;
+  order: number;
+  href: string;
+}
+
+export interface ChapterWithSections extends ChapterRef {
+  sections: SectionRef[];
+}
+
+/** The URL of a section page. */
+export function sectionHref(chapter: string, slug: string): string {
+  return `/book/${chapter}/${slug}/`;
+}
+
+/** Every section of the book, in reading order. */
+export function readingOrder(chapters: readonly ChapterWithSections[]): SectionRef[] {
+  return orderChapters(chapters).flatMap((c) => orderChapters(c.sections));
+}
+
+/** Previous/next SECTION in reading order, across chapter boundaries. */
+export function sectionNeighbours(
+  chapters: readonly ChapterWithSections[],
+  chapter: string,
+  slug: string,
+): { previous: SectionRef | null; next: SectionRef | null } {
+  const flat = readingOrder(chapters);
+  const at = flat.findIndex((s) => s.chapter === chapter && s.slug === slug);
+  if (at === -1) return { previous: null, next: null };
+  return { previous: at > 0 ? flat[at - 1] : null, next: at < flat.length - 1 ? flat[at + 1] : null };
+}
