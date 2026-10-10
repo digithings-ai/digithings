@@ -322,6 +322,56 @@ def test_contract_arm_passes_when_every_name_is_declared(tmp_path, monkeypatch):
     assert parity.mode_contract() == 0
 
 
+# wrangler.toml names a container by `class_name` and never by a binding key, and
+# the contract records that same fact under the same key. Both tests above stub
+# the surface with plain vars, so neither can see a class_name being dropped --
+# which is precisely how the real tree ended up reporting six declared Durable
+# Object classes as unmapped.
+def test_contract_arm_accepts_a_binding_declared_only_by_class_name(tmp_path, monkeypatch):
+    monkeypatch.setattr(parity, "CONTRACT_DIR", tmp_path)
+    (tmp_path / "contract.yaml").write_text(
+        "bindings:\n"
+        "  - class_name: DigiStackContainer\n"
+        "    type: container\n"
+        "    image: ghcr.io/digithings-ai/digithings-stack\n"
+    )
+    monkeypatch.setattr(
+        parity,
+        "surface_signature",
+        lambda: {
+            "wrangler": {"apps/x/wrangler.toml": {"DigiStackContainer": "container"}},
+            "composeEnv": {},
+            "envExample": {},
+        },
+    )
+    assert parity.mode_contract() == 0
+
+
+def test_contract_arm_still_fails_when_the_declared_class_name_differs(
+    tmp_path, monkeypatch, capsys
+):
+    """Non-vacuity for the test above: same row shape, different class.
+
+    A check that ignored class_name altogether would also return 0 here, so if
+    this ever passed the pair above would prove nothing.
+    """
+    monkeypatch.setattr(parity, "CONTRACT_DIR", tmp_path)
+    (tmp_path / "contract.yaml").write_text(
+        "bindings:\n  - class_name: SomeOtherContainer\n    type: container\n"
+    )
+    monkeypatch.setattr(
+        parity,
+        "surface_signature",
+        lambda: {
+            "wrangler": {"apps/x/wrangler.toml": {"DigiStackContainer": "container"}},
+            "composeEnv": {},
+            "envExample": {},
+        },
+    )
+    assert parity.mode_contract() == 1
+    assert "DigiStackContainer" in capsys.readouterr().out
+
+
 # --------------------------------------------------------------- runner guards
 def _run_runner(args, env_extra=None):
     import os
