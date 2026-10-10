@@ -282,6 +282,16 @@ export const JOBS: readonly Job[] = [
   // Daily, not weekly: an expired credential should surface in <=24h, which is
   // the point of the canary (#3522).
   wd("token-canary", "41 6 * * *", MONOREPO, "token-canary.yml"),
+  // Ported from main's GitHub schedule (Oct 2026 release). Weekly OpenWiki refresh.
+  wd("openwiki-update", "0 8 * * MON", MONOREPO, "openwiki-update.yml"),
+  // Ported from main's GitHub schedule. Alerts when a production deployment waits
+  // on the environment gate too long (DIG-1569); every 30 minutes.
+  wd(
+    "production-deploy-gate-watchdog",
+    "17,47 * * * *",
+    MONOREPO,
+    "production-deploy-gate-watchdog.yml",
+  ),
   // Monthly environment-gate drift check (#248). NOT an ageing sweep: DIG-477
   // option D (Chris, 2026-10-05) took the secret ageing out of this job, because the
   // Actions secrets endpoints need a token with the `repo` scope that a workflow's
