@@ -305,5 +305,71 @@ else
   no "a second silence pages again with a reportedAt of its own"
 fi
 
+# 18-19. Lane S: a healthy firing must be judgeable at all (DIG-1397 leaf 2). The scheduler rewrites
+#     nextRunAt the moment it fires, so on the next tick the only CLOSED boundary left is the last
+#     firing itself. Reading nothing but the live pointer is what made ok unreachable.
+eval "$(python3 - "$TID" <<'PY'
+import datetime, json, sys
+
+tid = sys.argv[1]
+now = datetime.datetime.now(datetime.timezone.utc)
+
+
+def iso(t):
+    return t.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+
+fire = now - datetime.timedelta(hours=2)
+ok_run = json.dumps(
+    [{"id": "r1", "triggeredAt": iso(fire), "source": "schedule", "triggerId": tid, "status": "succeeded"}],
+    separators=(",", ":"),
+)
+print("FIRE='%s'" % iso(fire))
+print("FUTURE='%s'" % iso(now + datetime.timedelta(hours=26)))
+print("STALE='%s'" % iso(now - datetime.timedelta(hours=30)))
+print("OK_RUN='%s'" % ok_run)
+PY
+)"
+for v in FIRE FUTURE STALE OK_RUN; do
+  eval "got=\$$v"
+  if [ -z "$got" ]; then printf 'harness bug: %s came back empty\n' "$v"; exit 99; fi
+done
+
+# 18. The production shape: fired 2h ago, next window tomorrow, so nextRunAt is still in the future.
+#     The boundary to judge is the last firing, and it must come out ok exactly once, with no page.
+#     Before the fix this tick printed "not yet due" and never reached a verdict.
+rm -f "$WORK/s18.json"
+fixture "$WORK/f18" "$FUTURE" "$FIRE" "succeeded" "$OK_RUN"
+run 18 "$WORK/f18" "$WORK/s18.json"
+OK_OUT="$OUT"
+OK_LINES="$(printf '%s' "$OK_OUT" | grep -c ' -> ok {')"
+LAST_VERDICT="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['boundaries']['$RID'].get('lastVerdict') or '')" "$WORK/s18.json" 2>/dev/null)"
+if [ "$PAGES" = 0 ] && [ "$OK_LINES" = 1 ] && printf '%s' "$OK_OUT" | grep -q '(last-fired)' && [ "$LAST_VERDICT" = ok ]; then
+  ok "a healthy firing is judged ok once off the last-fired boundary, and pages nothing"
+else
+  no "a healthy firing is judged ok once off the last-fired boundary, and pages nothing"
+fi
+
+# 18b. ...and the very next tick must say nothing about that boundary again: judged, so recorded.
+run 18b "$WORK/f18" "$WORK/s18.json"
+if [ "$(printf '%s' "$OUT" | grep -c ' -> ')" = 0 ]; then
+  ok "the same last-fired boundary is judged once, not re-reported every tick"
+else
+  no "the same last-fired boundary is judged once, not re-reported every tick"
+fi
+
+# 19. The other half, and the reason this lane is safe: a window that closed with nothing in the run
+#     history must still page. nextRunAt claims a firing 2h ago while the last real firing was 30h
+#     ago, so the most recent closed boundary is the next-due one and only that one is falsifiable.
+#     A picker that preferred lastFiredAt here would read coalesce and page nothing.
+rm -f "$WORK/s19.json"
+fixture "$WORK/f19" "$DUE" "$STALE" "Skipped" "$MANUAL_RUN"
+run 19 "$WORK/f19" "$WORK/s19.json"
+if [ "$PAGES" = 1 ] && printf '%s' "$OUT" | grep -q 'kind=missed' && printf '%s' "$OUT" | grep -q '(next-due)'; then
+  ok "a closed window with no firing still pages missed off the next-due boundary"
+else
+  no "a closed window with no firing still pages missed off the next-due boundary"
+fi
+
 if [ "$fails" -eq 0 ]; then printf '\nall checks passed\n'; else printf '\n%s check(s) failed\n' "$fails"; fi
 exit $([ "$fails" -eq 0 ] && echo 0 || echo 1)
