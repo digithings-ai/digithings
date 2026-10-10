@@ -101,31 +101,9 @@ async function failText(res: Response, route: string): Promise<string> {
   return `${route} failed (${res.status})${detail}`;
 }
 
-const STUB_NAV = [99.909, 204.04];
-const STUB_NAV_TEXT = new Set(['99.909', '204.04', '204.040']);
+import { isStubPayload as isStubEnvelope } from '../../../packages/ui/src/lib/stub-payload';
 
-/** The worker double's NAV figures, as values. A longer number that only contains those digits is not the fixture. */
-function hasExactStubNav(value: unknown): boolean {
-  if (typeof value === 'number' && Number.isFinite(value)) return STUB_NAV.some((n) => Math.abs(value - n) < 1e-6);
-  if (typeof value === 'string') return STUB_NAV_TEXT.has(value);
-  if (Array.isArray(value)) return value.some(hasExactStubNav);
-  if (value !== null && typeof value === 'object') return Object.values(value).some(hasExactStubNav);
-  return false;
-}
-
-/**
- * Secretless worker doubles. Same rule as digiquant-web lib/official-api.ts isStubPayload:
- * NAV 99.909 / 204.04 matched as values, plus the paired return series. A house figure
- * that merely contains those digits, or a `legacy_estimate` label on an older point,
- * is real data. A hit is withheld. It is never painted as the house book.
- */
-export function isStubEnvelope(body: unknown): boolean {
-  if (hasExactStubNav(body)) return true;
-  const text = JSON.stringify(body ?? null);
-  if (text.includes('103.040192') || text.includes('104.44808') || text.includes('3.040191838399986')) return true;
-  if (text.includes('"close":500') && text.includes('2026-08-20') && text.includes('"close":515')) return true;
-  return false;
-}
+export { isStubEnvelope };
 
 export const STUB_READ = 'The official API returned a stub envelope, not a house-book read.';
 
