@@ -26,7 +26,7 @@ export type Job = {
   probe?: "site" | "stack";
 };
 
-const DIGITHINGS = "digithings-ai/digithings" as const;
+const MONOREPO = "digithings-ai/digithings" as const;
 const TWELVE_X = "digithings-ai/twelve-x" as const;
 const DEVELOP = "develop" as const;
 
@@ -65,7 +65,7 @@ function pj(
   return {
     id,
     cron,
-    repo: DIGITHINGS,
+    repo: MONOREPO,
     kind: "probe",
     workflow,
     ref: DEVELOP,
@@ -91,7 +91,7 @@ function cj(
   return {
     id,
     cron,
-    repo: DIGITHINGS,
+    repo: MONOREPO,
     kind: "container",
     workflow,
     inputs: opts.inputs,
@@ -256,32 +256,32 @@ export const JOBS: readonly Job[] = [
     "execution-cron-check",
     600,
   ),
-  wd("continuous-improvement", "8 22 * * SUN", DIGITHINGS, "pipeline-continuous-improvement.yml"),
-  wd("maintenance", "8 8 * * MON", DIGITHINGS, "pipeline-maintenance.yml"),
-  wd("provider-review", "9 0 * * SUN", DIGITHINGS, "pipeline-provider-review.yml"),
+  wd("continuous-improvement", "8 22 * * SUN", MONOREPO, "pipeline-continuous-improvement.yml"),
+  wd("maintenance", "8 8 * * MON", MONOREPO, "pipeline-maintenance.yml"),
+  wd("provider-review", "9 0 * * SUN", MONOREPO, "pipeline-provider-review.yml"),
 
   // --- digithings: ops / agent / smoke (off-grid minutes) ---
   // Path A traps restored after #4967 (Approve-full). YAML is workflow_dispatch
   // only; clocks live here. dry_run must be false: workflow defaults dispatch
   // to dry_run=true and only forced live on the old GHA schedule event.
-  wd("agent-pr-finalizer", "11 7 * * *", DIGITHINGS, "agent-pr-finalizer.yml", {
+  wd("agent-pr-finalizer", "11 7 * * *", MONOREPO, "agent-pr-finalizer.yml", {
     inputs: { dry_run: "false" },
   }),
-  wd("agent-backlog-snapshot", "13 6 * * MON", DIGITHINGS, "agent-backlog-snapshot.yml"),
-  wd("ci-pr-hygiene", "21 6 * * *", DIGITHINGS, "ci-pr-hygiene.yml"),
-  wd("refresh-repo-activity", "10 6 * * MON", DIGITHINGS, "refresh-repo-activity.yml"),
+  wd("agent-backlog-snapshot", "13 6 * * MON", MONOREPO, "agent-backlog-snapshot.yml"),
+  wd("ci-pr-hygiene", "21 6 * * *", MONOREPO, "ci-pr-hygiene.yml"),
+  wd("refresh-repo-activity", "10 6 * * MON", MONOREPO, "refresh-repo-activity.yml"),
   wd(
     "project-enforce-assignment",
     "23 9 * * *",
-    DIGITHINGS,
+    MONOREPO,
     "project-enforce-assignment.yml",
   ),
   pj("smoke-stack", "27 7 * * *", "smoke-stack.yml", "stack"),
-  wd("security-pip-audit", "33 6 * * MON", DIGITHINGS, "security-pip-audit.yml"),
-  wd("security-npm-audit", "37 6 * * MON", DIGITHINGS, "security-npm-audit.yml"),
+  wd("security-pip-audit", "33 6 * * MON", MONOREPO, "security-pip-audit.yml"),
+  wd("security-npm-audit", "37 6 * * MON", MONOREPO, "security-npm-audit.yml"),
   // Daily, not weekly: an expired credential should surface in <=24h, which is
   // the point of the canary (#3522).
-  wd("token-canary", "41 6 * * *", DIGITHINGS, "token-canary.yml"),
+  wd("token-canary", "41 6 * * *", MONOREPO, "token-canary.yml"),
   // Monthly environment-gate drift check (#248). NOT an ageing sweep: DIG-477
   // option D (Chris, 2026-10-05) took the secret ageing out of this job, because the
   // Actions secrets endpoints need a token with the `repo` scope that a workflow's
@@ -291,7 +291,7 @@ export const JOBS: readonly Job[] = [
   // The clock lives here and not on the workflow: develop carries no on.schedule, and
   // the workflow is workflow_dispatch only. Off :00 and off the smoke-site minute
   // so nothing lands on a shared runner's worst moment.
-  wd("secret-staleness", "17 6 1 * *", DIGITHINGS, "secret-staleness-check.yml"),
+  wd("secret-staleness", "17 6 1 * *", MONOREPO, "secret-staleness-check.yml"),
   // Monthly uv.lock-vs-PyPI version radar (DIG-1515). This monorepo's floors are
   // `>=`, so the floor is not what runs: the lock already sits majors past several
   // stated floors with nobody having approved the jump. This makes that gap visible
@@ -299,11 +299,11 @@ export const JOBS: readonly Job[] = [
   // The clock lives here and not on the workflow, for the same reason as the row
   // above: develop carries no on.schedule, and the workflow is workflow_dispatch
   // only. Off :17 so it never shares a runner minute with the monthly sweep.
-  wd("dependency-freshness", "23 6 1 * *", DIGITHINGS, "pipeline-dependency-freshness.yml"),
+  wd("dependency-freshness", "23 6 1 * *", MONOREPO, "pipeline-dependency-freshness.yml"),
   pj("smoke-site", "17 6 * * *", "smoke-site.yml", "site"),
   // Hourly answer-integrity probe against DataTap production. Clock lives here,
   // not on the workflow: develop carries no on.schedule (#DIG-306). Read-only.
-  wd("datatap-answer-check", "17 * * * *", DIGITHINGS, "datatap-answer-check.yml"),
+  wd("datatap-answer-check", "17 * * * *", MONOREPO, "datatap-answer-check.yml"),
 
   // --- twelve-x (FX Hub) — resumed 2026-10-01 (Human Gate unlock) ---
   // digisearch_parity is not a digithings workflow (leftover sweep after #4970).

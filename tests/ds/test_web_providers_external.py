@@ -19,6 +19,7 @@ from digisearch.web_providers.base import WebProviderError, request_json, requir
 from digisearch.web_search.models import WebSearchRequest
 from fastapi.testclient import TestClient
 
+import digifetch
 from tests.digi_test_jwt import auth_headers
 
 pytestmark = pytest.mark.unit
@@ -427,25 +428,28 @@ def test_exa_statusless_errors_use_payload_taxonomy():
 def test_web_exa_post_attaches_status_to_http_errors(monkeypatch):
     """Root of the taxonomy: _post must carry the HTTP status on ExaError so
     _translate can classify it (regression guard for MAJOR #4711-review)."""
+    from digifetch import FetchResult
     from digisearch import web_exa
 
-    class _Resp:
-        status_code = 403
-        text = "forbidden"
+    # _post posts through the digifetch seam (DIG-912 §5.3). The seam raises on
+    # 4xx/5xx via raise_for_status and returns a FetchResult with a text body on
+    # success, so an HTTP status has to be simulated by raising
+    # httpx.HTTPStatusError — a returned object with .status_code never reaches
+    # _post's status mapping.
+    def _forbidden(self, url, **kwargs):
+        request = httpx.Request("POST", url)
+        response = httpx.Response(403, text="forbidden", request=request)
+        raise httpx.HTTPStatusError("forbidden", request=request, response=response)
 
-    monkeypatch.setattr(web_exa.httpx, "post", lambda *args, **kwargs: _Resp())
+    monkeypatch.setattr(digifetch.HttpFetcher, "fetch", _forbidden)
     with pytest.raises(web_exa.ExaError) as excinfo:
         web_exa._post("/search", {"query": "q"}, api_key="bad-key")
     assert excinfo.value.status_code == 403
 
-    class _Ok:
-        status_code = 200
+    def _not_json(self, url, **kwargs):
+        return FetchResult(status_code=200, url=url, text="<html>not json</html>")
 
-        @staticmethod
-        def json():
-            raise ValueError("not json")
-
-    monkeypatch.setattr(web_exa.httpx, "post", lambda *args, **kwargs: _Ok())
+    monkeypatch.setattr(digifetch.HttpFetcher, "fetch", _not_json)
     with pytest.raises(web_exa.ExaError) as malformed:
         web_exa._post("/search", {"query": "q"}, api_key="k")
     assert malformed.value.status_code is None

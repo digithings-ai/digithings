@@ -100,12 +100,23 @@ CI check enforces this. The full text is at <https://developercertificate.org/>.
 
 This applies from 2026-10-04 forward. Commits before that date are not retro-signed.
 
-Pull requests are squash-merged, and a squash keeps the commit subjects but not
-the message bodies where `Signed-off-by` lives. The sign-off therefore stays on
-the pull request's commits, which GitHub keeps after the branch is deleted. If
-you sub-license or re-license a file that arrived through a pull request, cite
-the pull request and the commit sha — that is where the sign-off is on the
-record.
+Pull requests are squash-merged. A GitHub squash keeps the full message body of
+each squashed commit, separated by `---------`, so the `Signed-off-by` trailers
+of a pull request's commits land on the squash commit itself, on `develop`.
+Squash commit `cd54873e4` ("feat(root): land DCO 1.1 sign-off and
+TRADEMARKS.md") is the worked example: it carries four
+`Signed-off-by: Chris Stefan <chris.stefan@proton.me>` trailers.
+
+The trail is not continuous, so read it rather than assume it. A branch whose
+commits were never signed off squashes to a commit with no trailer, and a merge
+commit never carries one because git writes it. Find the commit that introduced
+a file, then read its body:
+
+    git log -1 --format='%H%n%B' -- <path>
+
+If that commit has no `Signed-off-by` line, fall back to the pull request and
+the commit shas — GitHub keeps those after the branch is deleted. So: cite
+`develop` when the trailer is there, and the pull request when it is not.
 
 MIT covers copyright only. See [TRADEMARKS.md](TRADEMARKS.md) for what you may
 not reuse.

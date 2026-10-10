@@ -202,3 +202,22 @@ canvases/
 **/ggml-*.bin
 **/history.jsonl
 **/recordings/*.wav
+
+# Customer data artifacts (DIG-1498 R5, DIG-2607).
+#
+# `scripts/index_occ_tickets.py` writes full non-anonymized Zammad ticket
+# bodies into the digisearch `occ_tickets` index — customer names, customer
+# emails and internal-only staff notes, unmasked by design in demo mode. The
+# retired `seed_occ_tickets` supervisor program wrote the same shape and was
+# removed for it (see apps/digithings-stack-cloudflare/container/supervisor/
+# supervisord.conf). Anything it produces is customer data, never source.
+#
+# Anchored on the file name so the real source scripts stay committable:
+# `scripts/index_occ_tickets.py` does not begin with `occ_tickets`, and
+# tests/scripts/test_gitignore_build_artifacts.py pins that.
+occ_tickets/
+occ_tickets*.json
+occ_tickets*.jsonl
+occ_tickets*.ndjson
+seed_occ_tickets*
+*_occ_tickets_snapshot*.json

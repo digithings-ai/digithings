@@ -3,16 +3,24 @@
 --- Holds everything the status banner decides:
 ---   * the square status-grid animations (a port of the digichat 5x5 grid states)
 ---   * which state to show (local phase vs the CLI's status.json)
----   * density (mini/peek/full), text wrapping/clipping, box size, screen position
+---   * box size and screen position
 ---   * banner settings from settings.json
---- init.lua only draws what this module computes. No chrome: no titles, no hints.
+---   * theme chrome (digichat light/dark flips; RYG status colors stay)
+---   * drag/snap anchors and reanchoring
+--- init.lua only draws what this module computes. The surface is one status icon.
+--- No status word, copy, close, pin button, transcript, or fact line.
+--- Recording is a level meter on that same grid. The other marks stay and move.
+--- The icon shows for recording, dictating, processing, a current error, or a
+--- current warning. Pending, idle, and nothing-to-show hide it. banner_pinned
+--- keeps the idle icon up. Density is ignored. banner_animations false holds
+--- one frame.
 
 local M = {}
 
 M.GRID = 5
 M.ESC_KEYCODE = 53
 
--- Hammerspoon launch toast is the only place a notification is allowed.
+-- Ship model: no launch toast / menubar. COMMANDS stays for docs and doctor text.
 M.COMMANDS = {
   "Right Option = dictate (press again to stop)",
   "Esc = cancel the take",
@@ -23,31 +31,29 @@ M.POSITIONS = {
   ["top-center"] = true,
   ["top-left"] = true,
   ["top-right"] = true,
+  ["middle-left"] = true,
+  ["middle-right"] = true,
   ["bottom-center"] = true,
   ["bottom-left"] = true,
   ["bottom-right"] = true,
   ["center"] = true,
 }
 
-M.DENSITIES = {
-  ["mini"] = true,
-  ["peek"] = true,
-  ["full"] = true,
-}
-
 M.DEFAULTS = {
   live_banner = true,
   banner_position = "top-center",
-  banner_density = "peek",
   banner_animations = true,
+  banner_pinned = false,
 }
 
 function M.parse_settings(raw)
   local out = {
     live_banner = M.DEFAULTS.live_banner,
     banner_position = M.DEFAULTS.banner_position,
-    banner_density = M.DEFAULTS.banner_density,
     banner_animations = M.DEFAULTS.banner_animations,
+    banner_pinned = M.DEFAULTS.banner_pinned,
+    theme_mode = "system",
+    theme_palette = "",
   }
   if type(raw) ~= "table" then
     return out
@@ -61,20 +67,16 @@ function M.parse_settings(raw)
   if type(raw.banner_position) == "string" and M.POSITIONS[raw.banner_position] then
     out.banner_position = raw.banner_position
   end
-  if type(raw.banner_density) == "string" and M.DENSITIES[raw.banner_density] then
-    out.banner_density = raw.banner_density
+  if type(raw.banner_pinned) == "boolean" then
+    out.banner_pinned = raw.banner_pinned
+  end
+  if raw.theme_mode == "dark" or raw.theme_mode == "light" or raw.theme_mode == "system" then
+    out.theme_mode = raw.theme_mode
+  end
+  if type(raw.theme_palette) == "string" then
+    out.theme_palette = raw.theme_palette
   end
   return out
-end
-
---- Click cycles density mini → peek → full → mini (no dedicated expand button).
-function M.next_density(density)
-  if density == "mini" then
-    return "peek"
-  elseif density == "peek" then
-    return "full"
-  end
-  return "mini"
 end
 
 function M.launch_notice(bin)
@@ -98,14 +100,6 @@ end
 --------------------------------------------------------------------------------
 
 local GRID = M.GRID
-local CENTER = (GRID - 1) / 2
-
--- Deterministic bit-mixing hash, same as the TSX original. Returns seconds.
-local function hash(n, salt, range)
-  local h = ((n * 374761393) + (salt * 668265263)) & 0xFFFFFFFF
-  h = ((h ~ (h >> 13)) * 1274126177) & 0xFFFFFFFF
-  return ((h ~ (h >> 16)) % range) / 1000
-end
 
 local function glyph(dots)
   local set = {}
@@ -115,126 +109,356 @@ local function glyph(dots)
   return set
 end
 
-local CHECK = glyph({ { 1, 4 }, { 2, 3 }, { 3, 0 }, { 3, 2 }, { 4, 1 } })
 local CROSS =
   glyph({ { 0, 0 }, { 0, 4 }, { 1, 1 }, { 1, 3 }, { 2, 2 }, { 3, 1 }, { 3, 3 }, { 4, 0 }, { 4, 4 } })
 local BANG = glyph({ { 0, 2 }, { 1, 2 }, { 2, 2 }, { 4, 2 } })
 local STOP =
   glyph({ { 1, 1 }, { 1, 2 }, { 1, 3 }, { 2, 1 }, { 2, 2 }, { 2, 3 }, { 3, 1 }, { 3, 2 }, { 3, 3 } })
 
-local TEAL = { red = 0.08, green = 0.72, blue = 0.65 }
 local RED = { red = 0.94, green = 0.27, blue = 0.27 }
-local GREEN = { red = 0.20, green = 0.78, blue = 0.45 }
 local AMBER = { red = 0.96, green = 0.65, blue = 0.14 }
+local INK = { red = 0.78, green = 0.80, blue = 0.82 }
 local GRAY = { red = 0.62, green = 0.66, blue = 0.68 }
+local DIM = 0.15
 
--- Matrix states. `wave` = recording, `speak`, `load` family = everything in flight.
+-- The marks stay on the grid. Recording is the level meter below.
+local DICTATE = glyph({ { 1, 1 }, { 1, 3 }, { 2, 1 }, { 2, 2 }, { 2, 3 }, { 3, 1 }, { 3, 3 } })
+-- Diamond, clockwise from the top, so a highlight can chase the outline.
+local RING_RC = {
+  { 0, 2 },
+  { 1, 3 },
+  { 2, 4 },
+  { 3, 3 },
+  { 4, 2 },
+  { 3, 1 },
+  { 2, 0 },
+  { 1, 1 },
+}
+local PROCESS = glyph(RING_RC)
+local RING = {}
+local RING_AT = {}
+for n, rc in ipairs(RING_RC) do
+  local cell = rc[1] * GRID + rc[2]
+  RING[n] = cell
+  RING_AT[cell] = n - 1
+end
+
+local function clamp01(x)
+  if x < 0 then
+    return 0
+  end
+  if x > 1 then
+    return 1
+  end
+  return x
+end
+
+-- Stable 0..1 mix. Columns do not share a phase, and tests can replay a frame.
+local function hash01(n)
+  local x = (n * 1103515245 + 12345) % 2147483648
+  return x / 2147483648
+end
+
+--- Turn a clock into 0..1. Wall-clock seconds are ~1e9; sin of that raw angle
+--- sticks on some libm builds, which froze the recording meter.
+local function cycle(t, period, phase)
+  return ((t / period) + (phase or 0)) % 1
+end
+
+local function wave(turns)
+  return 0.5 + 0.5 * math.sin(turns * (2 * math.pi))
+end
+
+local function meter_level(col, t)
+  local period_a = 0.42 + hash01(col * 17 + 3) * 0.36
+  local period_b = 0.28 + hash01(col * 29 + 11) * 0.22
+  local wobble = wave(cycle(t, period_a, hash01(col * 13 + 5)))
+  local flutter = wave(cycle(t, period_b, hash01(col * 19 + 7)))
+  local flow = wave(cycle(t, 1.35, -col * 0.22))
+  return clamp01(0.08 + 0.92 * (0.46 * wobble + 0.24 * flutter + 0.30 * flow))
+end
+
+-- Row 0 is the top of the icon. A bar fills upward from row 4.
+local function meter_alpha(row, col, t)
+  local covered = meter_level(col, t) * GRID - (GRID - 1 - row)
+  if covered >= 1 then
+    return 1
+  end
+  if covered <= 0 then
+    return 0.10
+  end
+  return 0.10 + 0.90 * covered
+end
+
+local function sweep_glyph(mark, i, col, t, period)
+  if not mark[i] then
+    return DIM
+  end
+  -- Stay on the mark (columns 1..3) so the band never parks off to the side.
+  local pos = 1 + cycle(t, period, 0) * 2
+  local d = math.abs(col - pos)
+  local peak = math.exp(-(d * d) / 0.42)
+  return 0.32 + 0.68 * peak
+end
+
+local function chase(i, t, period)
+  local idx = RING_AT[i]
+  if idx == nil then
+    return DIM
+  end
+  local n = #RING
+  local head = cycle(t, period, 0) * n
+  local dist = math.abs(idx - head)
+  if dist > n / 2 then
+    dist = n - dist
+  end
+  local peak = math.max(0, 1 - dist / 1.65)
+  return 0.34 + 0.66 * peak
+end
+
+local function ripple_glyph(mark, i, row, col, t, period)
+  if not mark[i] then
+    return DIM
+  end
+  local dist = math.max(math.abs(row - 2), math.abs(col - 2))
+  local x = cycle(t, period, -dist * 0.18)
+  local f = 0.5 * (1 + math.cos(2 * math.pi * x))
+  return 0.30 + 0.70 * f
+end
+
+local function warn_motion(i, row, _, t)
+  if not BANG[i] then
+    return DIM
+  end
+  local turn = cycle(t, 1.15, 0)
+  if row == 4 then
+    local f = 0
+    if turn >= 0.58 then
+      local u = (turn - 0.58) / 0.42
+      f = math.sin(math.pi * math.min(1, u))
+    end
+    return 0.25 + 0.75 * f
+  end
+  local head = 2
+  if turn < 0.58 then
+    head = (turn / 0.58) * 2
+  end
+  local d = math.abs(row - head)
+  local peak = math.max(0, 1 - d / 1.05)
+  return 0.34 + 0.66 * peak
+end
+
+local function idle_motion(i, row, col, t)
+  if not STOP[i] then
+    return DIM
+  end
+  local dist = math.abs(row - 2) + math.abs(col - 2)
+  local x = cycle(t, 2.6, -dist * 0.07)
+  local f = 0.5 * (1 + math.cos(2 * math.pi * x))
+  return 0.20 + 0.42 * f
+end
+
 local MATRIX = {
-  load = {
-    color = TEAL,
-    blink = function(i)
-      return { duration = 0.9 + hash(i, 2, 700), delay = -hash(i, 1, 1200), lo = 0.15 }
-    end,
-  },
-  think = {
-    color = TEAL,
-    blink = function(_, row, col)
-      return { duration = 1.2, delay = -(row + col) * 0.09, lo = 0.2 }
-    end,
-  },
-  sync = {
-    color = TEAL,
-    blink = function(_, row, col)
-      local turn = (math.atan(row - CENTER, col - CENTER) + math.pi) / (2 * math.pi)
-      return { duration = 1.3, delay = -turn * 1.3, lo = 0.2 }
-    end,
-  },
-  paste = {
-    color = TEAL,
-    blink = function(_, row)
-      return { duration = 1, delay = -row * 0.12, lo = 0.2 }
-    end,
-  },
-  wave = {
+  record = {
     color = RED,
-    blink = function(_, _, col)
-      return { duration = 0.7 + hash(col, 4, 500), delay = -hash(col, 5, 900), lo = 0.25 }
+    meter = true,
+    motion = function(_, row, col, t)
+      return meter_alpha(row, col, t)
     end,
   },
-  speak = {
-    color = TEAL,
-    blink = function(_, _, col)
-      return { duration = 0.4 + hash(col, 6, 350), delay = -hash(col, 7, 700), lo = 0.2 }
+  dictate = {
+    color = INK,
+    glyph = DICTATE,
+    motion = function(i, _, col, t)
+      return sweep_glyph(DICTATE, i, col, t, 0.9)
     end,
   },
-  success = { color = GREEN, glyph = CHECK },
+  process = {
+    color = INK,
+    glyph = PROCESS,
+    motion = function(i, _, _, t)
+      return chase(i, t, 1.15)
+    end,
+  },
   error = {
     color = RED,
     glyph = CROSS,
-    blink = function()
-      return { duration = 1.1, delay = 0, lo = 0.4 }
+    motion = function(i, row, col, t)
+      return ripple_glyph(CROSS, i, row, col, t, 1.05)
     end,
   },
   warn = {
     color = AMBER,
     glyph = BANG,
-    blink = function()
-      return { duration = 1.6, delay = 0, lo = 0.45 }
+    motion = function(i, row, col, t)
+      return warn_motion(i, row, col, t)
     end,
   },
-  stopped = { color = GRAY, glyph = STOP },
+  idle = {
+    color = GRAY,
+    glyph = STOP,
+    base = 0.35,
+    motion = function(i, row, col, t)
+      return idle_motion(i, row, col, t)
+    end,
+  },
 }
 
 M.MATRIX = MATRIX
 
--- Banner state -> matrix state.
+-- Existing pipeline states only. Dictating is the transcribe step after capture.
 M.STATE_MATRIX = {
-  loading = "load",
-  recording = "wave",
-  transcribing = "think",
-  rewriting = "sync",
-  pasting = "paste",
-  speaking = "speak",
-  done = "success",
-  cancelled = "stopped",
-  cancelling = "stopped",
-  empty = "warn",
+  loading = "process",
+  recording = "record",
+  transcribing = "dictate",
+  rewriting = "process",
+  pasting = "process",
+  speaking = "process",
+  done = "idle",
+  cancelled = "idle",
+  cancelling = "idle",
+  empty = "idle",
+  pending = "idle",
+  warning = "warn",
   error = "error",
+  idle = "idle",
 }
 
-M.LABELS = {
-  loading = "loading",
+--- Names drawn as icons. Idle is the calm mark for an always-visible banner.
+M.ICON_PHASE = {
+  recording = "recording",
+  transcribing = "dictating",
+  loading = "processing",
+  rewriting = "processing",
+  pasting = "processing",
+  speaking = "processing",
+  error = "error",
+  warning = "warning",
+  empty = "",
+  pending = "",
+  idle = "idle",
+  done = "idle",
+  cancelled = "idle",
+  cancelling = "idle",
+}
+
+local ALWAYS_SHOW = {
+  recording = true,
+  dictating = true,
+  processing = true,
+  error = true,
+  warning = true,
+}
+
+function M.icon_phase(state)
+  return M.ICON_PHASE[state] or ""
+end
+
+--- Recording, dictating, processing, and a current error or warning draw.
+--- Pending, idle, empty, and a finished take hide. Pin keeps the idle icon.
+function M.should_draw(state, pinned, pending)
+  if pending == true or state == "pending" or state == "empty" then
+    return false
+  end
+  local phase = M.icon_phase(state)
+  if ALWAYS_SHOW[phase] then
+    return true
+  end
+  if phase == "idle" then
+    return pinned == true
+  end
+  return false
+end
+
+--- One rule for every banner path. `pending` hides even a pinned idle icon.
+local PATH_STATE = {
+  launch = "idle",
+  pin_on = "idle",
+  pin_off = "idle",
+  show = "recording",
+  hide = "idle",
+  toggle = "recording",
+  take_start = "pending",
   recording = "recording",
   transcribing = "transcribing",
+  loading = "loading",
   rewriting = "rewriting",
   pasting = "pasting",
   speaking = "speaking",
-  done = "done",
-  cancelled = "cancelled",
-  cancelling = "cancelling",
-  empty = "nothing heard",
+  empty = "empty",
   error = "error",
+  warning = "warning",
+  take_end = "done",
+  pending = "pending",
 }
+
+function M.route_banner(path, opts)
+  opts = opts or {}
+  if path == "hide" then
+    return false
+  end
+  if path == "toggle" and opts.showing == true then
+    return false
+  end
+  local pinned = opts.pinned == true
+  if path == "pin_on" then
+    pinned = true
+  elseif path == "pin_off" then
+    pinned = false
+  end
+  local pending = opts.pending == true or path == "pending" or path == "take_start"
+  if path == "show" or path == "toggle" then
+    pending = opts.pending == true
+  end
+  return M.should_draw(PATH_STATE[path] or path, pinned, pending)
+end
+
+--- Click focuses a digivoice terminal that is already open, otherwise opens one.
+function M.focus_action(already_open)
+  if already_open then
+    return "focus"
+  end
+  return "open"
+end
+
+--- A pid file with one integer means the terminal UI is already up.
+function M.tui_is_open(pid_text)
+  if type(pid_text) ~= "string" then
+    return false
+  end
+  return pid_text:match("^%s*%d+%s*$") ~= nil
+end
 
 function M.matrix_for(state)
   return MATRIX[M.STATE_MATRIX[state] or "load"]
 end
 
---- Opacity of dot `i` (0-based, row-major) at time `t` seconds.
---- With animations off the same function is frozen at t = 0 (a still frame).
+local function glyph_alpha(cfg, i)
+  local on = (cfg.glyph == nil) or (cfg.glyph[i] == true)
+  if on then
+    return cfg.base or 1
+  end
+  return cfg.dim or DIM
+end
+
+--- Opacity of cell `i` (0-based, row-major) at time `t` seconds.
+--- Animations off holds one frame: the meter at t = 0, or the full mark.
 function M.dot_alpha(state, i, t, animate)
   local cfg = M.matrix_for(state)
-  local row, col = i // GRID, i % GRID
-  local on = (cfg.glyph == nil) or (cfg.glyph[i] == true)
-  local hi = on and (cfg.base or 1) or (cfg.dim or 0.15)
-  local blink = on and cfg.blink and cfg.blink(i, row, col) or nil
-  if not blink then
-    return hi
+  if type(cfg) ~= "table" then
+    return 0
   end
-  local now = animate and t or 0
-  local x = ((now - blink.delay) / blink.duration) % 1
-  local f = 0.5 * (1 + math.cos(2 * math.pi * x))
-  return blink.lo + (hi - blink.lo) * f
+  local row, col = i // GRID, i % GRID
+  if not animate then
+    if cfg.meter then
+      return meter_alpha(row, col, 0)
+    end
+    return glyph_alpha(cfg, i)
+  end
+  if cfg.motion then
+    return cfg.motion(i, row, col, t or 0)
+  end
+  return glyph_alpha(cfg, i)
 end
 
 --------------------------------------------------------------------------------
@@ -328,97 +552,256 @@ function M.final_view(code, snapshot, session, stdout, stderr, cancelling)
   return { state = "error", text = "", detail = detail }
 end
 
-function M.linger_seconds(state, density)
-  -- Full density stays until collapsed or removed: no auto-hide timer.
-  if density == "full" then
+function M.linger_seconds(state, pinned)
+  -- banner_pinned is the always-on mode. There is no full-vs-retract density.
+  local phase = M.icon_phase(state)
+  if pinned and (phase == "error" or phase == "warning" or phase == "idle") then
+    if state == "done" or state == "cancelled" or state == "cancelling" then
+      return 1.2
+    end
     return nil
   end
-  if state == "error" then
+  if pinned and (phase == "recording" or phase == "dictating" or phase == "processing") then
+    return nil
+  end
+  if pinned then
+    return nil
+  end
+  -- Retract: a finished take is not a current update. Error and warning linger
+  -- only while they are still the thing to show.
+  if state == "done" or state == "cancelled" or state == "cancelling" or state == "idle" then
+    return 0
+  end
+  if state == "error" or state == "warning" then
     return 4.0
-  elseif state == "empty" then
-    return 2.0
-  elseif state == "cancelled" then
-    return 1.2
   end
-  -- Peek (and mini) auto-dismiss a few seconds after idle/done.
-  return 4.0
+  if state == "empty" or state == "pending" then
+    return 0
+  end
+  return nil
 end
 
 --------------------------------------------------------------------------------
--- text, layout, position
+-- layout, position
 --------------------------------------------------------------------------------
 
-M.FONT_SIZE = 13
-M.LINE_HEIGHT = 17
-M.PAD = 12
-M.ICON = 28
-M.HEAD_HEIGHT = 28
-M.WIDTH_COLLAPSED = 380
-M.WIDTH_EXPANDED = 580
-M.LINES_COLLAPSED = 3
-M.LINES_EXPANDED = 14
-M.MARGIN = 12
--- Conservative average glyph width so our wrapping is never re-wrapped by AppKit.
-M.CHAR_WIDTH = M.FONT_SIZE * 0.6
+M.PAD = 10
+M.ICON = 18
+M.MARGIN = 16
+M.SNAP_PX = 36
 
-function M.body_for(view)
-  if view.state == "error" then
-    return view.detail ~= "" and view.detail or "see the Hammerspoon console"
-  elseif view.state == "cancelled" or view.state == "cancelling" then
-    return "take discarded; nothing pasted or saved"
-  elseif view.state == "empty" then
-    return "no speech detected; nothing pasted"
+--- DigiChat light/dark flips. Status (RYG) colors stay; only chrome flips.
+--- Dark ground is the digiquant remock canvas (docs/dashboard-mocks/canvas/mock.css
+--- on the remock branch): --bg #000, --ink #ededed, --hair white at 0.16.
+--- That sheet is dark-only. Light ground is the paired ivory paper for
+--- digithings.ai / digiquant in packages/design/spec/index.html
+--- (--paper #F9F8F6, --paper-ink #141413, --paper-hair #E8E6DC).
+--- Neither pair is the live tokens.css canvas (#0A0E0C / #FBFBF9).
+M.CHROME = {
+  dark = {
+    bg = { red = 0, green = 0, blue = 0, alpha = 1 },
+    text = { red = 0xED / 255, green = 0xED / 255, blue = 0xED / 255, alpha = 1 },
+    border = { red = 1, green = 1, blue = 1, alpha = 0.16 },
+  },
+  light = {
+    bg = { red = 0xF9 / 255, green = 0xF8 / 255, blue = 0xF6 / 255, alpha = 1 },
+    text = { red = 0x14 / 255, green = 0x14 / 255, blue = 0x13 / 255, alpha = 1 },
+    border = { red = 0xE8 / 255, green = 0xE6 / 255, blue = 0xDC / 255, alpha = 1 },
+  },
+}
+
+local function json_decode(str)
+  local i, n = 1, #str
+  local function peek()
+    return str:sub(i, i)
   end
-  return view.text or ""
-end
-
---- Greedy word wrap to `cols` columns. Hard-splits words longer than a line.
-function M.wrap(text, cols)
-  local lines = {}
-  cols = math.max(8, cols)
-  for paragraph in (tostring(text or "") .. "\n"):gmatch("(.-)\r?\n") do
-    local line = ""
-    for w in paragraph:gmatch("%S+") do
-      local word = w
-      while #word > cols do
-        if line ~= "" then
-          lines[#lines + 1] = line
-          line = ""
-        end
-        lines[#lines + 1] = word:sub(1, cols)
-        word = word:sub(cols + 1)
-      end
-      if line == "" then
-        line = word
-      elseif #line + 1 + #word <= cols then
-        line = line .. " " .. word
+  local function skip()
+    while i <= n do
+      local c = peek()
+      if c == " " or c == "\n" or c == "\r" or c == "\t" then
+        i = i + 1
       else
-        lines[#lines + 1] = line
-        line = word
+        break
       end
     end
-    if line ~= "" then
-      lines[#lines + 1] = line
-    end
   end
-  return lines
+  local parse_value
+  local function parse_string()
+    i = i + 1
+    local out = {}
+    while i <= n do
+      local c = peek()
+      if c == '"' then
+        i = i + 1
+        return table.concat(out)
+      end
+      if c == "\\" then
+        local e = str:sub(i + 1, i + 1)
+        local map = { n = "\n", t = "\t", r = "\r", ['"'] = '"', ["\\"] = "\\", ["/"] = "/" }
+        if e == "u" then
+          out[#out + 1] = utf8.char(tonumber(str:sub(i + 2, i + 5), 16) or 0)
+          i = i + 6
+        else
+          out[#out + 1] = map[e] or e
+          i = i + 2
+        end
+      else
+        out[#out + 1] = c
+        i = i + 1
+      end
+    end
+    return nil
+  end
+  local function parse_array()
+    i = i + 1
+    local arr = {}
+    skip()
+    if peek() == "]" then
+      i = i + 1
+      return arr
+    end
+    while i <= n do
+      arr[#arr + 1] = parse_value()
+      skip()
+      if peek() == "]" then
+        i = i + 1
+        return arr
+      end
+      if peek() ~= "," then
+        return nil
+      end
+      i = i + 1
+      skip()
+    end
+    return nil
+  end
+  local function parse_object()
+    i = i + 1
+    local obj = {}
+    skip()
+    if peek() == "}" then
+      i = i + 1
+      return obj
+    end
+    while i <= n do
+      skip()
+      if peek() ~= '"' then
+        return nil
+      end
+      local key = parse_string()
+      skip()
+      if peek() ~= ":" then
+        return nil
+      end
+      i = i + 1
+      obj[key] = parse_value()
+      skip()
+      if peek() == "}" then
+        i = i + 1
+        return obj
+      end
+      if peek() ~= "," then
+        return nil
+      end
+      i = i + 1
+    end
+    return nil
+  end
+  function parse_value()
+    skip()
+    local c = peek()
+    if c == '"' then
+      return parse_string()
+    end
+    if c == "{" then
+      return parse_object()
+    end
+    if c == "[" then
+      return parse_array()
+    end
+    if str:sub(i, i + 3) == "true" then
+      i = i + 4
+      return true
+    end
+    if str:sub(i, i + 4) == "false" then
+      i = i + 5
+      return false
+    end
+    if str:sub(i, i + 3) == "null" then
+      i = i + 4
+      return nil
+    end
+    local start = i
+    while i <= n and peek():match("[%d%+%-%.eE]") do
+      i = i + 1
+    end
+    if i > start then
+      return tonumber(str:sub(start, i - 1))
+    end
+    return nil
+  end
+  local ok, value = pcall(parse_value)
+  if ok and type(value) == "table" then
+    return value
+  end
+  return nil
 end
 
---- Keep `max` lines; the last kept line ends in an ellipsis when text was cut.
-function M.clip_lines(lines, max, cols)
-  if #lines <= max then
-    return lines, false
+local function load_theme_registry()
+  local script_dir = debug.getinfo(1, "S").source:sub(2):match("(.*/)") or "./"
+  local path = script_dir .. "theme_registry.json"
+  local f = io.open(path, "r")
+  if not f then
+    return nil
   end
-  local out = {}
-  for i = 1, max do
-    out[i] = lines[i]
+  local content = f:read("*a")
+  f:close()
+  local data = json_decode(content)
+  if type(data) == "table" and type(data.palettes) == "table" then
+    return data.palettes
   end
-  local last = out[max]
-  if #last > cols - 1 then
-    last = last:sub(1, cols - 1)
+  return nil
+end
+
+local THEME_REGISTRY = load_theme_registry()
+
+local function hex_to_rgb(hex)
+  hex = (hex or ""):gsub("#", "")
+  if #hex == 3 then
+    hex = hex:sub(1, 1) .. hex:sub(1, 1) .. hex:sub(2, 2) .. hex:sub(2, 2) .. hex:sub(3, 3) .. hex:sub(3, 3)
   end
-  out[max] = (last:gsub("%s+$", "")) .. "…"
-  return out, true
+  if #hex ~= 6 then
+    return nil
+  end
+  return {
+    red = tonumber(hex:sub(1, 2), 16) / 255,
+    green = tonumber(hex:sub(3, 4), 16) / 255,
+    blue = tonumber(hex:sub(5, 6), 16) / 255,
+    alpha = 1,
+  }
+end
+
+function M.theme_colors(theme, palette_id)
+  if palette_id == nil or palette_id == "" then
+    if theme == "light" then
+      return M.CHROME.light
+    end
+    return M.CHROME.dark
+  end
+  local palette = THEME_REGISTRY and THEME_REGISTRY[palette_id]
+  local variant = palette and (palette[theme] or palette.dark)
+  if not variant then
+    if theme == "light" then
+      return M.CHROME.light
+    end
+    return M.CHROME.dark
+  end
+  return {
+    bg = hex_to_rgb(variant.neutral) or M.CHROME.dark.bg,
+    text = hex_to_rgb(variant.ink) or M.CHROME.dark.text,
+    border = hex_to_rgb(variant.accent) or M.CHROME.dark.border,
+    accent = hex_to_rgb(variant.primary) or M.CHROME.dark.text,
+  }
 end
 
 --- Square frame for status-grid cell `i` (0-based, row-major): DigiChat-style
@@ -432,49 +815,21 @@ function M.cell_box(i)
   return { x = cx - side / 2, y = cy - side / 2, w = side, h = side }
 end
 
---- Box geometry for a view at a density. No chrome: no title line, no hints —
---- state reads from the grid symbol/animation alone. Mini is grid only.
---- Peek is a short glimpse; full widens and shows the whole transcript.
-function M.layout(view, kind, density)
-  kind = kind -- kind no longer changes geometry; kept for call shape.
-  if density ~= "peek" and density ~= "full" then
-    density = "mini"
+--- Square icon only. Transcript length and a leftover density do not change the box.
+function M.layout(view)
+  local state = ""
+  if type(view) == "table" then
+    state = view.state or ""
   end
-  local text_x = M.PAD + M.ICON + 10
-  local function columns(width)
-    return math.floor((width - text_x - M.PAD) / M.CHAR_WIDTH)
-  end
-  if density == "mini" then
-    local side = M.PAD * 2 + M.ICON
-    return {
-      w = side,
-      h = side,
-      text_x = text_x,
-      text_w = 0,
-      cols = 0,
-      lines = {},
-      body = "",
-      clipped = false,
-    }
-  end
-  local body = M.body_for(view)
-  local width = density == "full" and M.WIDTH_EXPANDED or M.WIDTH_COLLAPSED
-  local cols = columns(width)
-  local limit = density == "full" and M.LINES_EXPANDED or M.LINES_COLLAPSED
-  local lines, clipped = M.clip_lines(M.wrap(body, cols), limit, cols)
-  local height = M.PAD * 2 + M.ICON
-  if #lines > 0 then
-    height = math.max(height, M.PAD + M.HEAD_HEIGHT + #lines * M.LINE_HEIGHT + M.PAD)
-  end
+  local grid_side = M.PAD * 2 + M.ICON
   return {
-    w = width,
-    h = height,
-    text_x = text_x,
-    text_w = width - text_x - M.PAD,
-    cols = cols,
-    lines = lines,
-    body = table.concat(lines, "\n"),
-    clipped = clipped,
+    w = grid_side,
+    h = grid_side,
+    lines = {},
+    body = "",
+    phase = M.icon_phase(state),
+    clipped = false,
+    raw = "",
   }
 end
 
@@ -494,9 +849,116 @@ function M.resolve_position(position, frame, size, margin)
   elseif position:find("bottom", 1, true) then
     y = frame.y + frame.h - size.h - margin
   else
+    -- center, middle-left, middle-right: vertically centered.
     y = frame.y + (frame.h - size.h) / 2
   end
   return { x = x, y = y }
+end
+
+--- Anchor id (tl|tc|tr|ml|c|mr|bl|bc|br) for a banner_position setting.
+function M.anchor_for_position(position)
+  local map = {
+    ["top-left"] = "tl",
+    ["top-center"] = "tc",
+    ["top-right"] = "tr",
+    ["middle-left"] = "ml",
+    ["center"] = "c",
+    ["middle-right"] = "mr",
+    ["bottom-left"] = "bl",
+    ["bottom-center"] = "bc",
+    ["bottom-right"] = "br",
+  }
+  return map[position] or "tc"
+end
+--- Ids: tl | tc | tr | ml | c | mr | bl | bc | br.
+function M.anchors(frame, size, margin)
+  margin = margin or M.MARGIN
+  local min_x, min_y = frame.x + margin, frame.y + margin
+  local max_x = math.max(min_x, frame.x + frame.w - size.w - margin)
+  local max_y = math.max(min_y, frame.y + frame.h - size.h - margin)
+  local mid_x, mid_y = (min_x + max_x) / 2, (min_y + max_y) / 2
+  return {
+    { id = "tl", x = min_x, y = min_y },
+    { id = "tc", x = mid_x, y = min_y },
+    { id = "tr", x = max_x, y = min_y },
+    { id = "ml", x = min_x, y = mid_y },
+    { id = "c", x = mid_x, y = mid_y },
+    { id = "mr", x = max_x, y = mid_y },
+    { id = "bl", x = min_x, y = max_y },
+    { id = "bc", x = mid_x, y = max_y },
+    { id = "br", x = max_x, y = max_y },
+  }
+end
+
+--- Clamp a free position inside the screen with the edge margin kept.
+function M.clamp_position(x, y, frame, size, margin)
+  margin = margin or M.MARGIN
+  local max_x = math.max(frame.x + margin, frame.x + frame.w - size.w - margin)
+  local max_y = math.max(frame.y + margin, frame.y + frame.h - size.h - margin)
+  return {
+    x = math.min(max_x, math.max(frame.x + margin, x)),
+    y = math.min(max_y, math.max(frame.y + margin, y)),
+  }
+end
+
+--- Snap a free position to the nearest anchor within `threshold` px.
+--- Returns {x, y, anchor} where anchor is nil when nothing is near.
+function M.snap_position(x, y, frame, size, margin, threshold)
+  threshold = threshold or M.SNAP_PX
+  local best, best_d
+  for _, a in ipairs(M.anchors(frame, size, margin)) do
+    local d = math.sqrt((x - a.x) * (x - a.x) + (y - a.y) * (y - a.y))
+    if best_d == nil or d < best_d then
+      best, best_d = a, d
+    end
+  end
+  if best ~= nil and best_d <= threshold then
+    return { x = best.x, y = best.y, anchor = best.id }
+  end
+  local clamped = M.clamp_position(x, y, frame, size, margin)
+  return { x = clamped.x, y = clamped.y, anchor = nil }
+end
+
+--- Resolve a persisted {x, y, anchor} position: clamp it onto the current
+--- screen. Returns nil when there is nothing persisted worth keeping.
+function M.resolve_saved(saved, frame, size, margin)
+  if type(saved) ~= "table" or type(saved.x) ~= "number" or type(saved.y) ~= "number" then
+    return nil
+  end
+  local clamped = M.clamp_position(saved.x, saved.y, frame, size, margin)
+  return { x = clamped.x, y = clamped.y, anchor = saved.anchor }
+end
+
+--- Keep the anchor when the box size changes: center stays centered, left grows
+--- right, right grows left, and a free float keeps its top-left.
+function M.reanchor(prev, size, anchor)
+  anchor = anchor or "free"
+  local cx, cy = prev.x + prev.w / 2, prev.y + prev.h / 2
+  if anchor == "c" or anchor == "tc" or anchor == "bc" then
+    if anchor == "tc" then
+      return { x = cx - size.w / 2, y = prev.y }
+    elseif anchor == "bc" then
+      return { x = cx - size.w / 2, y = prev.y + prev.h - size.h }
+    end
+    return { x = cx - size.w / 2, y = cy - size.h / 2 }
+  elseif anchor == "tl" or anchor == "ml" or anchor == "bl" then
+    local y = prev.y
+    if anchor == "ml" then
+      y = cy - size.h / 2
+    elseif anchor == "bl" then
+      y = prev.y + prev.h - size.h
+    end
+    return { x = prev.x, y = y }
+  elseif anchor == "tr" or anchor == "mr" or anchor == "br" then
+    local y = prev.y
+    if anchor == "mr" then
+      y = cy - size.h / 2
+    elseif anchor == "br" then
+      y = prev.y + prev.h - size.h
+    end
+    return { x = prev.x + prev.w - size.w, y = y }
+  end
+  return { x = prev.x, y = prev.y }
 end
 
 return M

@@ -1,44 +1,60 @@
-"""digivoice command line. doctor, dict, speak, history, settings, cancel, and status are live."""
+"""digivoice command line. doctor, dict, speak, history, settings, logs, cancel, and status are live."""
 
 from __future__ import annotations
 
 import argparse
 import json
 import os
+import platform
 import sys
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import NoReturn
+from typing import NoReturn, TextIO
 
 from digivoice import history as history_log
 from digivoice.capture import default_stop_file, discard_wav, record
 from digivoice.doctor import doctor_checks, render_doctor
 from digivoice.errors import CancelledError, EmptyTranscriptError, VoiceError
+from digivoice.focus import FocusTarget, capture_frontmost, focus_target
+from digivoice.install import render_install, run_install, run_install_wizard
+from digivoice.menu_tree import rows_at
 from digivoice.models import CliResult, PasteResult, VoicePaths
+from digivoice.nav import norm_path, section_of
+from digivoice.opentui import launch_opentui, tui_root
+from digivoice.panels import SYSTEM_BLOCKS, restart_digivoice
 from digivoice.paste import copy_to_clipboard, paste
 from digivoice.paths import DEFAULT_MODEL, resolve_paths
 from digivoice.probe import CommandProbe, real_probe
+from digivoice.reload import restart_hammerspoon, stop_home_control
 from digivoice.rewrite import rewrite_transcript
 from digivoice.runner import CommandRunner, cancellable_runner, run_command
 from digivoice.settings import (
     VoiceSettings,
+    default_settings,
     format_settings_text,
     load_settings,
+    save_settings,
     set_setting,
     settings_path,
     settings_public_dict,
+    visible_setting_keys,
 )
-from digivoice.speak import read_clipboard, read_selection, speak
+from digivoice.speak import read_clipboard, read_selection, speak, speak_stop_path
 from digivoice.status import (
     CANCELLED_EXIT,
     CancelToken,
     StatusKind,
     StatusReporter,
+    banner_flag_path,
     default_cancel_file,
+    read_banner_flag,
     read_status,
+    read_system_log,
     request_cancel,
     status_path,
+    system_log_path,
+    write_banner_flag,
 )
 from digivoice.transcribe import transcribe
 
@@ -117,6 +133,16 @@ def build_parser() -> _Parser:
         action="store_true",
         help="Skip post-STT local rewrite even when enabled in settings",
     )
+    dictate.add_argument(
+        "--focus-name",
+        default="",
+        help="Name of the app that had focus when dictation started",
+    )
+    dictate.add_argument(
+        "--focus-bundle",
+        default="",
+        help="Bundle id of the app that had focus when dictation started",
+    )
 
     speak_cmd = sub.add_parser("speak", help="Speak text with Piper")
     source = speak_cmd.add_mutually_exclusive_group()
@@ -131,6 +157,16 @@ def build_parser() -> _Parser:
         ),
     )
     speak_cmd.add_argument("text", nargs="*", help="Text to speak")
+    speak_cmd.add_argument(
+        "--focus-name",
+        default="",
+        help="Name of the app that had focus when speak started",
+    )
+    speak_cmd.add_argument(
+        "--focus-bundle",
+        default="",
+        help="Bundle id of the app that had focus when speak started",
+    )
 
     history = sub.add_parser("history", help="List dictation history entries")
     history.add_argument("--last", type=int, default=None, help="Limit to the last N entries")
@@ -154,6 +190,23 @@ def build_parser() -> _Parser:
         "--cancel-file", default=None, help="Cancel-file path (default under the data dir)"
     )
     sub.add_parser("status", help="Print the live status.json the banner reads")
+
+    banner_cmd = sub.add_parser(
+        "banner",
+        help="Show or hide the Hammerspoon banner preview (no dictation needed)",
+    )
+    banner_cmd.add_argument(
+        "action",
+        nargs="?",
+        default="show",
+        choices=["show", "hide", "toggle"],
+        help="show (default), hide, or toggle the preview banner",
+    )
+    banner_cmd.add_argument(
+        "--text",
+        default="",
+        help="Preview text to typeset (show only)",
+    )
 
     settings_cmd = sub.add_parser(
         "settings",
@@ -188,8 +241,35 @@ def build_parser() -> _Parser:
         dest="print_only",
         help="Print current settings + menu tree (no prompts; same as env noninteractive)",
     )
-    sub.add_parser("update", help="Reinstall hint (not wired yet)")
+    install_cmd = sub.add_parser(
+        "install",
+        help="Install the local toolchain and models (a wizard on a terminal)",
+    )
+    install_cmd.add_argument(
+        "--auto",
+        action="store_true",
+        help="Install the default local models with no prompts",
+    )
+    sub.add_parser(
+        "update",
+        help="Refresh the local install and copy the Hammerspoon adapter",
+    )
     sub.add_parser("uninstall", help="Removal hint (not wired yet)")
+    sub.add_parser("quit", help="Stop digivoice and quit Hammerspoon")
+    sub.add_parser("reset", help="Restore settings defaults; history and models stay")
+    sub.add_parser("restart", help="Quit Hammerspoon and open digivoice again")
+    sub.add_parser("system", help="Doctor, reload, reset, restart, update, and logs")
+    sub.add_parser("logs", help="Print the system log without opening the TUI")
+    reload_cmd = sub.add_parser(
+        "reload",
+        help="Refresh local control: CLI path, settings, Lua adapter, Hammerspoon",
+    )
+    reload_cmd.add_argument(
+        "--json",
+        action="store_true",
+        dest="as_json",
+        help="Print the reload report as JSON (no prompts)",
+    )
     return parser
 
 
@@ -197,10 +277,17 @@ def _usage(message: str) -> CliResult:
     return CliResult(code=2, stdout="", stderr=f"{message}\n")
 
 
+def _tui(runtime: Runtime, start: str) -> CliResult:
+    """TTY screens are the OpenTUI process. This returns only if it cannot start."""
+    code = launch_opentui(runtime.platform, runtime.home, runtime.env, start=start)
+    return CliResult(code=code, stdout="", stderr="")
+
+
 def _doctor(runtime: Runtime) -> CliResult:
-    report = render_doctor(
-        doctor_checks(runtime.platform, runtime.home, dict(runtime.env), runtime.probe)
-    )
+    checks = doctor_checks(runtime.platform, runtime.home, dict(runtime.env), runtime.probe)
+    report = render_doctor(checks)
+    if sys.stdin.isatty():
+        return _tui(runtime, "/doctor")
     return CliResult(code=0 if report.ok else 1, stdout=report.text, stderr="")
 
 
@@ -242,10 +329,108 @@ def _setup(args: argparse.Namespace, runtime: Runtime) -> CliResult:
     return CliResult(code=code, stdout="", stderr="")
 
 
-def _update() -> CliResult:
+def _reload(args: argparse.Namespace, runtime: Runtime) -> CliResult:
+    from digivoice.reload import run_reload
+
+    return run_reload(
+        runtime.platform,
+        runtime.home,
+        dict(runtime.env),
+        runner=runtime.runner,
+        as_json=bool(getattr(args, "as_json", False)),
+    )
+
+
+def _home(runtime: Runtime) -> CliResult:
+    """Bare `digivoice`: TUI home on a TTY, printed overview otherwise.
+
+    Either way, try to bring Hammerspoon and the banner up on a short budget.
+    """
+    from digivoice.home import (
+        _context_with_control,
+        build_context_lines,
+        render_home_overview,
+        run_home,
+    )
+    from digivoice.reload import ensure_home_control
+    from digivoice.settings import format_settings_text, load_settings
+
+    report = ensure_home_control(
+        runtime.platform, runtime.home, dict(runtime.env), runner=runtime.runner
+    )
+    if not sys.stdin.isatty():
+        # Never hang an agent/pipe: print the overview instead of the shell.
+        paths = resolve_paths(runtime.platform, runtime.home, runtime.env)
+        context = _context_with_control(
+            build_context_lines(
+                runtime.platform, runtime.home, dict(runtime.env), probe=runtime.probe
+            ),
+            report.summary,
+        )
+        text = render_home_overview(
+            format_settings_text(load_settings(paths), paths), context_lines=context
+        )
+        return CliResult(code=0, stdout=text + "\n", stderr="")
+    code = run_home(
+        runtime.platform,
+        runtime.home,
+        dict(runtime.env),
+        runner=runtime.runner,
+        launch=report,
+    )
+    return CliResult(code=code, stdout="", stderr="")
+
+
+def _install_prompts(args: argparse.Namespace, runtime: Runtime, stdin: TextIO) -> bool:
+    """A terminal gets the wizard. Scripts, --auto, and update do not."""
+    if bool(getattr(args, "auto", False)):
+        return False
+    if runtime.env.get("DIGIVOICE_INSTALL_NONINTERACTIVE", ""):
+        return False
+    try:
+        return bool(stdin.isatty())
+    except (AttributeError, OSError, ValueError):
+        return False
+
+
+def _install(args: argparse.Namespace, runtime: Runtime) -> CliResult:
+    paths = resolve_paths(runtime.platform, runtime.home, runtime.env)
+    models_dir = Path(paths.models_dir)
+    selection = None
+    if _install_prompts(args, runtime, sys.stdin):
+        selection = run_install_wizard(sys.stdin, sys.stdout, models_dir=models_dir)
+        if selection is None:
+            return CliResult(code=0, stdout="digivoice install: cancelled\n", stderr="")
+    report = run_install(
+        home=runtime.home,
+        platform=runtime.platform,
+        machine=platform.machine(),
+        probe=runtime.probe,
+        runner=runtime.runner or run_command,
+        models_dir=models_dir,
+        tui_root=tui_root(),
+        selection=selection,
+    )
+    code = 0 if report.ok else 1
+    return CliResult(code=code, stdout=render_install(report), stderr="")
+
+
+def _update(runtime: Runtime) -> CliResult:
+    paths = resolve_paths(runtime.platform, runtime.home, runtime.env)
+    report = run_install(
+        home=runtime.home,
+        platform=runtime.platform,
+        machine=platform.machine(),
+        probe=runtime.probe,
+        runner=runtime.runner or run_command,
+        models_dir=Path(paths.models_dir),
+        tui_root=tui_root(),
+        refresh=True,
+    )
+    code = 0 if report.ok else 1
     return CliResult(
-        code=0,
-        stdout="digivoice update: not wired yet — reinstall via uv / brew when available\n",
+        code=code,
+        stdout=render_install(report, heading="digivoice update"),
         stderr="",
     )
 
@@ -316,6 +501,8 @@ def _dict_take(
     runner = _runner(runtime)
     stage_runner = cancellable_runner(runner, cancel.requested)
     notes: list[str] = []
+    will_paste = not args.no_paste and settings.paste_on_stop
+    focus = _resolve_focus(args, runtime) if will_paste else FocusTarget()
     stop_file = args.stop_file
     if mode == "toggle" and not stop_file:
         stop_file = str(default_stop_file(paths))
@@ -346,7 +533,15 @@ def _dict_take(
     notes.append(note)
     reporter.update("transcribing")
     try:
-        transcript = transcribe(paths, runtime.probe, stage_runner, recording.wav_path)
+        transcript = transcribe(
+            paths,
+            runtime.probe,
+            stage_runner,
+            recording.wav_path,
+            model_id=settings.stt_model,
+            home=runtime.home,
+            env=runtime.env,
+        )
     except VoiceError as exc:
         if cancel.requested():
             return _cancelled(reporter, recording.wav_path)
@@ -367,7 +562,6 @@ def _dict_take(
         return _cancelled(reporter, recording.wav_path)
     notes.append(f"transcribed with {transcript.model}")
     text_out = transcript.text
-    will_paste = not args.no_paste and settings.paste_on_stop
     if args.no_rewrite:
         notes.append("rewrite skipped (--no-rewrite)")
     else:
@@ -422,13 +616,24 @@ def _dict_take(
             detail="skipped (paste_on_stop=false in settings)",
         )
     else:
-        pasted = paste(runtime.platform, runtime.probe, runner, text_out)
+        pasted = paste(runtime.platform, runtime.probe, runner, text_out, focus)
     notes.append(f"paste {pasted.detail}")
     reporter.update("done", text=text_out, detail=pasted.detail)
     return CliResult(code=0, stdout=f"{text_out}\n", stderr=_notes(notes))
 
 
-def _resolve_speak_text(args: argparse.Namespace, runtime: Runtime) -> str:
+def _resolve_focus(args: argparse.Namespace, runtime: Runtime) -> FocusTarget:
+    """Use the app captured at the hotkey. Otherwise read the frontmost process now."""
+    named = focus_target(
+        str(getattr(args, "focus_name", "") or runtime.env.get("DIGIVOICE_FOCUS_NAME", "")),
+        str(getattr(args, "focus_bundle", "") or runtime.env.get("DIGIVOICE_FOCUS_BUNDLE", "")),
+    )
+    if named.known:
+        return named
+    return capture_frontmost(runtime.platform, runtime.probe, _runner(runtime))
+
+
+def _resolve_speak_text(args: argparse.Namespace, runtime: Runtime, focus: FocusTarget) -> str:
     text = " ".join(args.text).strip()
     source_flags = sum(
         1 for flag in (args.clipboard, args.selection, args.clipboard_or_history) if flag
@@ -441,7 +646,7 @@ def _resolve_speak_text(args: argparse.Namespace, runtime: Runtime) -> str:
     if args.clipboard:
         return read_clipboard(runtime.platform, runtime.probe, runner)
     if args.selection:
-        return read_selection(runtime.platform, runtime.probe, runner)
+        return read_selection(runtime.platform, runtime.probe, runner, focus)
     if args.clipboard_or_history:
         # Kept for CLI callers; does NOT fall back to history (esp. not kind:dict).
         return read_clipboard(runtime.platform, runtime.probe, runner)
@@ -454,8 +659,9 @@ def _speak(args: argparse.Namespace, runtime: Runtime) -> CliResult:
     paths = resolve_paths(runtime.platform, runtime.home, runtime.env)
     reporter = _banner_reporter(paths, load_settings(paths), "speak")
     reporter.update("loading")
+    focus = _resolve_focus(args, runtime) if args.selection else FocusTarget()
     try:
-        text = _resolve_speak_text(args, runtime)
+        text = _resolve_speak_text(args, runtime, focus)
     except UsageError as exc:
         return _usage(exc.message)
     except VoiceError as exc:
@@ -463,6 +669,10 @@ def _speak(args: argparse.Namespace, runtime: Runtime) -> CliResult:
         return CliResult(code=1, stdout="", stderr=f"digivoice speak: {exc}\n")
     reporter.update("speaking", text=text)
     runner = _runner(runtime)
+    # A stop left over from an earlier readout must not cancel this one.
+    # A stop written while this process is playing still kills the player.
+    stop = CancelToken(speak_stop_path(paths))
+    stop.clear()
     notes: list[str] = []
     try:
         spoken = speak(
@@ -473,7 +683,11 @@ def _speak(args: argparse.Namespace, runtime: Runtime) -> CliResult:
             platform=runtime.platform,
             home=runtime.home,
             env=runtime.env,
+            cancelled=stop.requested,
         )
+    except CancelledError:
+        reporter.update("cancelled")
+        return CliResult(code=CANCELLED_EXIT, stdout="", stderr="digivoice speak: stopped\n")
     except VoiceError as exc:
         reporter.update("error", detail=str(exc))
         return CliResult(code=1, stdout="", stderr=f"digivoice speak: {exc}\n")
@@ -516,12 +730,38 @@ def _status(runtime: Runtime) -> CliResult:
     return CliResult(code=0, stdout=snapshot.model_dump_json(indent=2) + "\n", stderr="")
 
 
+def _banner(args: argparse.Namespace, runtime: Runtime) -> CliResult:
+    """Spawn-flag for the banner preview. The adapter polls it; no dictation."""
+    paths = resolve_paths(runtime.platform, runtime.home, runtime.env)
+    flag = banner_flag_path(paths)
+    action = args.action
+    if action == "toggle":
+        current = read_banner_flag(flag)
+        action = "hide" if current and current.get("visible") else "show"
+    try:
+        if action == "hide":
+            write_banner_flag(flag, visible=False)
+            return CliResult(code=0, stdout=f"{flag}\n", stderr="digivoice: banner hidden\n")
+        write_banner_flag(flag, visible=True, text=args.text or "")
+    except OSError as exc:
+        return CliResult(code=1, stdout="", stderr=f"digivoice banner: {exc}\n")
+    return CliResult(code=0, stdout=f"{flag}\n", stderr="digivoice: banner shown\n")
+
+
 def _history(args: argparse.Namespace, runtime: Runtime) -> CliResult:
     if args.last is not None and args.last < 1:
         return _usage("--last expects a positive integer")
     if args.grep is not None and not args.grep:
         return _usage("--grep expects a pattern")
     paths = resolve_paths(runtime.platform, runtime.home, runtime.env)
+    plain = (
+        args.last is None
+        and not args.grep
+        and not args.copy_last
+        and not getattr(args, "as_json", False)
+    )
+    if plain and sys.stdin.isatty():
+        return _tui(runtime, "/history")
     reading = history_log.read_history(paths.history_file)
     if args.copy_last:
         text = history_log.last_dict_text(paths.history_file)
@@ -587,8 +827,8 @@ def _settings(args: argparse.Namespace, runtime: Runtime) -> CliResult:
         return CliResult(code=0, stdout=f"{settings_path(paths)}\n", stderr="")
     if sub == "get":
         settings = load_settings(paths)
-        if args.key not in VoiceSettings.model_fields:
-            known = ", ".join(sorted(VoiceSettings.model_fields))
+        if args.key not in visible_setting_keys():
+            known = ", ".join(visible_setting_keys())
             return _usage(f"unknown setting {args.key!r}; known: {known}")
         value = getattr(settings, args.key)
         if as_json:
@@ -606,7 +846,7 @@ def _settings(args: argparse.Namespace, runtime: Runtime) -> CliResult:
         try:
             settings = set_setting(paths, args.key, args.value)
         except KeyError:
-            known = ", ".join(sorted(VoiceSettings.model_fields))
+            known = ", ".join(visible_setting_keys())
             return _usage(f"unknown setting {args.key!r}; known: {known}")
         except (ValueError, Exception) as exc:
             return CliResult(code=2, stdout="", stderr=f"digivoice settings: {exc}\n")
@@ -623,6 +863,8 @@ def _settings(args: argparse.Namespace, runtime: Runtime) -> CliResult:
         )
     # show
     settings = load_settings(paths)
+    if sys.stdin.isatty() and not as_json:
+        return _tui(runtime, "/settings")
     if as_json:
         return CliResult(
             code=0,
@@ -632,10 +874,124 @@ def _settings(args: argparse.Namespace, runtime: Runtime) -> CliResult:
     return CliResult(code=0, stdout=format_settings_text(settings, paths), stderr="")
 
 
+def _quit(runtime: Runtime) -> CliResult:
+    report = stop_home_control(
+        runtime.platform, runtime.home, dict(runtime.env), runner=runtime.runner
+    )
+    text = "\n".join(report.lines) if report.lines else report.summary
+    return CliResult(code=0, stdout=text + "\n", stderr="")
+
+
+def _reset(runtime: Runtime) -> CliResult:
+    paths = resolve_paths(runtime.platform, runtime.home, runtime.env)
+    save_settings(paths, default_settings())
+    return CliResult(code=0, stdout="settings reset\n", stderr="")
+
+
+def _restart(runtime: Runtime) -> CliResult:
+    report = restart_hammerspoon(
+        runtime.platform, runtime.home, dict(runtime.env), runner=runtime.runner
+    )
+    text = "\n".join(report.lines) + "\n"
+    failed = report.summary.endswith("failed")
+    if sys.stdin.isatty() and not failed:
+        sys.stdout.write(text)
+        sys.stdout.flush()
+        restart_digivoice()
+    return CliResult(code=1 if failed else 0, stdout=text, stderr="")
+
+
+def _system(runtime: Runtime) -> CliResult:
+    if not sys.stdin.isatty():
+        lines = [f"{block.action}\n{block.path}" for block in SYSTEM_BLOCKS]
+        return CliResult(code=0, stdout="\n".join(lines) + "\n", stderr="")
+    return _tui(runtime, "/system")
+
+
+def _settings_at(runtime: Runtime, path: str) -> CliResult:
+    """Print a settings path, or open it when stdin is a TTY."""
+    paths = resolve_paths(runtime.platform, runtime.home, runtime.env)
+    normal = norm_path(path)
+    if sys.stdin.isatty():
+        return _tui(runtime, normal)
+    settings = load_settings(paths)
+    if normal == "/settings":
+        rows = rows_at(settings, normal)
+        text = "\n".join(f"{row.name}  {normal}/{row.name}" for row in rows)
+        return CliResult(code=0, stdout=text + "\n", stderr="")
+    parent, _, name = normal.rpartition("/")
+    rows = rows_at(settings, parent or "/settings")
+    match = next((row for row in rows if row.name == name), None)
+    if match is None:
+        return CliResult(code=2, stdout="", stderr=f"unknown path {normal}\n")
+    if match.kind in {"dir", "pick"}:
+        children = rows_at(settings, normal)
+        text = "\n".join(f"{row.name}  {normal}/{row.name}" for row in children)
+        return CliResult(code=0, stdout=text + "\n", stderr="")
+    shown = match.value or match.explain
+    return CliResult(code=0, stdout=f"{shown}\n", stderr="")
+
+
+def _print_system_log(runtime: Runtime) -> CliResult:
+    """Print system.log. This path never opens the TUI."""
+    paths = resolve_paths(runtime.platform, runtime.home, runtime.env)
+    text = read_system_log(system_log_path(paths)).strip()
+    if not text:
+        text = "No log yet"
+    return CliResult(code=0, stdout=text + "\n", stderr="")
+
+
+def _logs(runtime: Runtime) -> CliResult:
+    if sys.stdin.isatty():
+        return _tui(runtime, "/system/logs")
+    return _print_system_log(runtime)
+
+
+def _dispatch_path(raw: str, runtime: Runtime) -> CliResult:
+    path = norm_path(raw)
+    kind = section_of(path)
+    if kind == "quit":
+        return _quit(runtime)
+    if kind == "doctor":
+        return _doctor(runtime)
+    if kind == "history":
+        args = argparse.Namespace(last=None, grep=None, copy_last=False, as_json=False)
+        return _history(args, runtime)
+    if kind == "history-copy":
+        args = argparse.Namespace(last=None, grep=None, copy_last=True, as_json=False)
+        return _history(args, runtime)
+    if kind == "settings":
+        return _settings_at(runtime, path)
+    if kind == "system":
+        return _system(runtime)
+    if kind == "reload":
+        args = argparse.Namespace(as_json=False)
+        return _reload(args, runtime)
+    if kind == "reset":
+        return _reset(runtime)
+    if kind == "restart":
+        return _restart(runtime)
+    if kind == "update":
+        return _update(runtime)
+    if kind == "logs":
+        return _logs(runtime)
+    if kind == "history-delete":
+        return CliResult(
+            code=2,
+            stdout="",
+            stderr="digivoice: open a take in history to delete it\n",
+        )
+    return _usage(f"unknown path {path}")
+
+
 def run(argv: Sequence[str], runtime: Runtime) -> CliResult:
     parser = build_parser()
-    if not argv or argv[0] in {"help", "-h", "--help"}:
+    if argv and argv[0] in {"help", "-h", "--help"}:
         return CliResult(code=0, stdout=parser.format_help(), stderr="")
+    if not argv:
+        return _home(runtime)
+    if argv[0].startswith("/"):
+        return _dispatch_path(argv[0], runtime)
     try:
         args = parser.parse_args(list(argv))
     except UsageError as exc:
@@ -651,6 +1007,8 @@ def run(argv: Sequence[str], runtime: Runtime) -> CliResult:
         return _cancel(args, runtime)
     if command == "status":
         return _status(runtime)
+    if command == "banner":
+        return _banner(args, runtime)
     if command == "history":
         return _history(args, runtime)
     if command in {"settings", "setup"}:
@@ -665,10 +1023,26 @@ def run(argv: Sequence[str], runtime: Runtime) -> CliResult:
         if not hasattr(args, "as_json"):
             args.as_json = False
         return _settings(args, runtime)
+    if command == "quit":
+        return _quit(runtime)
+    if command == "reset":
+        return _reset(runtime)
+    if command == "restart":
+        return _restart(runtime)
+    if command == "system":
+        return _system(runtime)
+    if command == "logs":
+        return _print_system_log(runtime)
+    if command == "install":
+        return _install(args, runtime)
     if command == "update":
-        return _update()
+        return _update(runtime)
     if command == "uninstall":
         return _uninstall()
+    if command == "reload":
+        if not hasattr(args, "as_json"):
+            args.as_json = False
+        return _reload(args, runtime)
     return _usage(f"unknown command: {command}")
 
 

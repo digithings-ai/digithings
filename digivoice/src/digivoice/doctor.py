@@ -4,12 +4,12 @@ settings validity, hotkey docs, and the Hammerspoon adapter."""
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
 
 from digivoice.models import DoctorCheck, DoctorReport, VoicePaths
 from digivoice.paths import (
     DEFAULT_MODEL,
-    DEFAULT_MODEL_FILE,
     linux_data_dir,
     mac_data_dir,
     piper_fallback,
@@ -19,6 +19,7 @@ from digivoice.probe import CommandProbe
 from digivoice.rewrite import rewrite_doctor_detail
 from digivoice.runner import run_command
 from digivoice.settings import HOTKEYS_DOCS, VoiceSettings, load_settings, settings_path
+from digivoice.transcribe import model_file, select_whisper
 
 _REQUIRED = frozenset({"whisper-cli", "piper", "capture", "models"})
 
@@ -29,25 +30,37 @@ def _tool(check_id: str, found: str | None, missing: str) -> DoctorCheck:
     return DoctorCheck(id=check_id, status="missing", detail=missing)
 
 
-def _models(paths: VoicePaths, probe: CommandProbe) -> DoctorCheck:
+def _models(
+    paths: VoicePaths,
+    probe: CommandProbe,
+    *,
+    home: Path | None = None,
+    env: Mapping[str, str] | None = None,
+) -> DoctorCheck:
     models_dir = paths.models_dir
-    model_path = str(Path(models_dir) / DEFAULT_MODEL_FILE)
-    if not probe.is_dir(models_dir):
+    try:
+        settings = load_settings(paths)
+        model_id = settings.stt_model
+    except Exception:
+        model_id = DEFAULT_MODEL
+    resolved = model_file(paths, model_id, home=home, env=env)
+    model_path = str(resolved)
+    if probe.is_file(model_path) or resolved.is_file():
         return DoctorCheck(
             id="models",
-            status="missing",
-            detail=f"default model {DEFAULT_MODEL}: directory missing: {models_dir}",
+            status="ok",
+            detail=f"{model_id} at {model_path}",
         )
-    if not probe.is_file(model_path):
+    if not probe.is_dir(models_dir) and not Path(models_dir).is_dir():
         return DoctorCheck(
             id="models",
             status="missing",
-            detail=f"default model {DEFAULT_MODEL} missing: {model_path}",
+            detail=f"model {model_id}: directory missing: {models_dir}",
         )
     return DoctorCheck(
         id="models",
-        status="ok",
-        detail=f"{DEFAULT_MODEL} at {model_path}",
+        status="missing",
+        detail=f"model {model_id} is not installed locally: {model_path}",
     )
 
 
@@ -90,7 +103,7 @@ def _settings_check(paths: VoicePaths) -> DoctorCheck:
         status="ok",
         detail=(
             f"valid settings.json ({target}; "
-            f"banner_density={settings.banner_density}, "
+            f"banner_pinned={str(settings.banner_pinned).lower()}, "
             f"banner_position={settings.banner_position}, "
             f"rewrite_enabled={str(settings.rewrite_enabled).lower()})"
         ),
@@ -138,10 +151,42 @@ def _paths(home: Path, paths: VoicePaths) -> DoctorCheck:
     return DoctorCheck(id="paths", status="info", detail=detail)
 
 
+def _detection_check(paths: VoicePaths) -> DoctorCheck:
+    """Word/spelling detection stubs: settings only, never required for ok."""
+    try:
+        settings = load_settings(paths)
+        word = bool(settings.word_detection)
+        spelling = bool(settings.spelling_detection)
+    except Exception:
+        word, spelling = False, False
+    if not word and not spelling:
+        return DoctorCheck(
+            id="detection",
+            status="info",
+            detail=(
+                "word_detection=false spelling_detection=false "
+                "(stubs; not wired to STT yet — settings only)"
+            ),
+        )
+    return DoctorCheck(
+        id="detection",
+        status="info",
+        detail=(
+            f"word_detection={str(word).lower()} spelling_detection={str(spelling).lower()} "
+            "(stub; STT pipeline still uses whisper as today — no behavior change yet)"
+        ),
+    )
+
+
 def _rewrite_check(paths: VoicePaths, probe: CommandProbe) -> DoctorCheck:
     settings = load_settings(paths)
     status, detail = rewrite_doctor_detail(paths, settings, probe, run_command)
     return DoctorCheck(id="rewrite", status=status, detail=detail)
+
+
+def _whisper_binary(home: Path, probe: CommandProbe) -> str | None:
+    """Same binary transcribe will run: whisper-cli, else whisper-cpp, else ~/.local/bin."""
+    return select_whisper(probe, home)
 
 
 def doctor_checks(
@@ -160,20 +205,21 @@ def doctor_checks(
     return [
         _tool(
             "whisper-cli",
-            probe.lookup("whisper-cli"),
-            "not on PATH (whisper.cpp binary name is whisper-cli)",
+            _whisper_binary(home, probe),
+            "not on PATH (whisper.cpp binary name is whisper-cli, whisper-cpp also accepted)",
         ),
         _tool("piper", piper, f"not on PATH and not executable at {piper_home}"),
         _tool("sox", sox, "not on PATH"),
         _tool("ffmpeg", ffmpeg, "not on PATH"),
         _tool("capture", sox or ffmpeg, "need sox or ffmpeg for microphone capture"),
-        _models(paths, probe),
+        _models(paths, probe, home=home, env=env),
         _settings_check(paths),
         _hotkeys_check(),
         _hammerspoon_check(home, paths, probe),
         _history(paths, probe),
         _paths(home, paths),
         _rewrite_check(paths, probe),
+        _detection_check(paths),
         DoctorCheck(
             id="tcc",
             status="info",
@@ -196,8 +242,13 @@ def doctor_checks(
     ]
 
 
+def doctor_ready(checks: list[DoctorCheck]) -> bool:
+    """True when every required check is ok. Info rows do not block it."""
+    return all(check.status == "ok" for check in checks if check.id in _REQUIRED)
+
+
 def render_doctor(checks: list[DoctorCheck]) -> DoctorReport:
-    ok = all(check.status == "ok" for check in checks if check.id in _REQUIRED)
+    ok = doctor_ready(checks)
     lines = ["digivoice doctor", ""]
     lines.extend(f"[{check.status}] {check.id}  {check.detail}" for check in checks)
     lines.append("")

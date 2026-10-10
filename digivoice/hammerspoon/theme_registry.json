@@ -1,0 +1,134 @@
+{
+  "source": "anomalyco/opencode packages/ui/src/theme/themes (dev) desktop-theme.json",
+  "modes": ["dark", "light", "system"],
+  "palettes": {
+    "aura": {
+      "light": {"neutral": "#f5f0ff", "ink": "#2d2640", "primary": "#a277ff", "accent": "#d94f4f"},
+      "dark": {"neutral": "#15141b", "ink": "#edecee", "primary": "#a277ff", "accent": "#ff6767"}
+    },
+    "ayu": {
+      "light": {"neutral": "#fdfaf4", "ink": "#4f5964", "primary": "#4aa8c8", "accent": "#ef7d71"},
+      "dark": {"neutral": "#0f1419", "ink": "#d6dae0", "primary": "#3fb7e3", "accent": "#f2856f"}
+    },
+    "catppuccin": {
+      "light": {"neutral": "#f5e0dc", "ink": "#4c4f69", "primary": "#7287fd", "accent": "#d20f39"},
+      "dark": {"neutral": "#1e1e2e", "ink": "#cdd6f4", "primary": "#b4befe", "accent": "#f38ba8"}
+    },
+    "catppuccin-frappe": {
+      "light": {"neutral": "#303446", "ink": "#c6d0f5", "primary": "#8da4e2", "accent": "#f4b8e4"},
+      "dark": {"neutral": "#303446", "ink": "#c6d0f5", "primary": "#8da4e2", "accent": "#f4b8e4"}
+    },
+    "catppuccin-macchiato": {
+      "light": {"neutral": "#24273a", "ink": "#cad3f5", "primary": "#8aadf4", "accent": "#f5bde6"},
+      "dark": {"neutral": "#24273a", "ink": "#cad3f5", "primary": "#8aadf4", "accent": "#f5bde6"}
+    },
+    "cobalt2": {
+      "light": {"neutral": "#ffffff", "ink": "#193549", "primary": "#0066cc", "accent": "#00acc1"},
+      "dark": {"neutral": "#193549", "ink": "#ffffff", "primary": "#0088ff", "accent": "#2affdf"}
+    },
+    "cursor": {
+      "light": {"neutral": "#fcfcfc", "ink": "#141414", "primary": "#6f9ba6", "accent": "#6f9ba6"},
+      "dark": {"neutral": "#181818", "ink": "#e4e4e4", "primary": "#88c0d0", "accent": "#88c0d0"}
+    },
+    "dracula": {
+      "light": {"neutral": "#f8f8f2", "ink": "#1f1f2f", "primary": "#7c6bf5", "accent": "#d16090"},
+      "dark": {"neutral": "#1d1e28", "ink": "#f8f8f2", "primary": "#bd93f9", "accent": "#ff79c6"}
+    },
+    "everforest": {
+      "light": {"neutral": "#fdf6e3", "ink": "#5c6a72", "primary": "#8da101", "accent": "#df69ba"},
+      "dark": {"neutral": "#2d353b", "ink": "#d3c6aa", "primary": "#a7c080", "accent": "#d699b6"}
+    },
+    "flexoki": {
+      "light": {"neutral": "#FFFCF0", "ink": "#100F0F", "primary": "#205EA6", "accent": "#BC5215"},
+      "dark": {"neutral": "#100F0F", "ink": "#CECDC3", "primary": "#DA702C", "accent": "#8B7EC8"}
+    },
+    "github": {
+      "light": {"neutral": "#ffffff", "ink": "#24292f", "primary": "#0969da", "accent": "#1b7c83"},
+      "dark": {"neutral": "#0d1117", "ink": "#c9d1d9", "primary": "#58a6ff", "accent": "#39c5cf"}
+    },
+    "gruvbox": {
+      "light": {"neutral": "#fbf1c7", "ink": "#3c3836", "primary": "#076678", "accent": "#9d0006"},
+      "dark": {"neutral": "#282828", "ink": "#ebdbb2", "primary": "#83a598", "accent": "#fb4934"}
+    },
+    "kanagawa": {
+      "light": {"neutral": "#F2E9DE", "ink": "#54433A", "primary": "#2D4F67", "accent": "#D27E99"},
+      "dark": {"neutral": "#1F1F28", "ink": "#DCD7BA", "primary": "#7E9CD8", "accent": "#D27E99"}
+    },
+    "material": {
+      "light": {"neutral": "#fafafa", "ink": "#263238", "primary": "#6182b8", "accent": "#39adb5"},
+      "dark": {"neutral": "#263238", "ink": "#eeffff", "primary": "#82aaff", "accent": "#89ddff"}
+    },
+    "matrix": {
+      "light": {"neutral": "#eef3ea", "ink": "#203022", "primary": "#1cc24b", "accent": "#c770ff"},
+      "dark": {"neutral": "#0a0e0a", "ink": "#62ff94", "primary": "#2eff6a", "accent": "#c770ff"}
+    },
+    "mercury": {
+      "light": {"neutral": "#ffffff", "ink": "#363644", "primary": "#5266eb", "accent": "#8da4f5"},
+      "dark": {"neutral": "#171721", "ink": "#dddde5", "primary": "#8da4f5", "accent": "#8da4f5"}
+    },
+    "monokai": {
+      "light": {"neutral": "#fdf8ec", "ink": "#292318", "primary": "#bf7bff", "accent": "#d9487c"},
+      "dark": {"neutral": "#272822", "ink": "#f8f8f2", "primary": "#ae81ff", "accent": "#f92672"}
+    },
+    "nightowl": {
+      "light": {"neutral": "#f0f0f0", "ink": "#403f53", "primary": "#4876d6", "accent": "#aa0982"},
+      "dark": {"neutral": "#011627", "ink": "#d6deeb", "primary": "#82aaff", "accent": "#f78c6c"}
+    },
+    "nord": {
+      "light": {"neutral": "#eceff4", "ink": "#2e3440", "primary": "#5e81ac", "accent": "#bf616a"},
+      "dark": {"neutral": "#2e3440", "ink": "#e5e9f0", "primary": "#88c0d0", "accent": "#d57780"}
+    },
+    "one-dark": {
+      "light": {"neutral": "#fafafa", "ink": "#383a42", "primary": "#4078f2", "accent": "#0184bc"},
+      "dark": {"neutral": "#282c34", "ink": "#abb2bf", "primary": "#61afef", "accent": "#56b6c2"}
+    },
+    "osaka-jade": {
+      "light": {"neutral": "#F6F5DD", "ink": "#111c18", "primary": "#1faa90", "accent": "#3d7a52"},
+      "dark": {"neutral": "#111c18", "ink": "#C1C497", "primary": "#2DD5B7", "accent": "#549e6a"}
+    },
+    "orng": {
+      "light": {"neutral": "#ffffff", "ink": "#1a1a1a", "primary": "#EC5B2B", "accent": "#c94d24"},
+      "dark": {"neutral": "#0a0a0a", "ink": "#eeeeee", "primary": "#EC5B2B", "accent": "#FFF7F1"}
+    },
+    "lucent-orng": {
+      "light": {"neutral": "#fff5f0", "ink": "#1a1a1a", "primary": "#EC5B2B", "accent": "#c94d24"},
+      "dark": {"neutral": "#2a1a15", "ink": "#eeeeee", "primary": "#EC5B2B", "accent": "#FFF7F1"}
+    },
+    "palenight": {
+      "light": {"neutral": "#fafafa", "ink": "#292d3e", "primary": "#4976eb", "accent": "#00acc1"},
+      "dark": {"neutral": "#292d3e", "ink": "#a6accd", "primary": "#82aaff", "accent": "#89ddff"}
+    },
+    "rosepine": {
+      "light": {"neutral": "#faf4ed", "ink": "#575279", "primary": "#31748f", "accent": "#d7827e"},
+      "dark": {"neutral": "#191724", "ink": "#e0def4", "primary": "#9ccfd8", "accent": "#ebbcba"}
+    },
+    "solarized": {
+      "light": {"neutral": "#fdf6e3", "ink": "#586e75", "primary": "#268bd2", "accent": "#d33682"},
+      "dark": {"neutral": "#002b36", "ink": "#93a1a1", "primary": "#6c71c4", "accent": "#d33682"}
+    },
+    "synthwave84": {
+      "light": {"neutral": "#fafafa", "ink": "#262335", "primary": "#00bcd4", "accent": "#9c27b0"},
+      "dark": {"neutral": "#262335", "ink": "#ffffff", "primary": "#36f9f6", "accent": "#b084eb"}
+    },
+    "tokyonight": {
+      "light": {"neutral": "#e1e2e7", "ink": "#273153", "primary": "#2e7de9", "accent": "#b15c00"},
+      "dark": {"neutral": "#1a1b26", "ink": "#c0caf5", "primary": "#7aa2f7", "accent": "#ff9e64"}
+    },
+    "vesper": {
+      "light": {"neutral": "#F0F0F0", "ink": "#101010", "primary": "#FFC799", "accent": "#B30000"},
+      "dark": {"neutral": "#101010", "ink": "#FFFFFF", "primary": "#FFC799", "accent": "#FF8080"}
+    },
+    "vercel": {
+      "light": {"neutral": "#FFFFFF", "ink": "#171717", "primary": "#0070F3", "accent": "#8E4EC6"},
+      "dark": {"neutral": "#000000", "ink": "#EDEDED", "primary": "#0070F3", "accent": "#8E4EC6"}
+    },
+    "zenburn": {
+      "light": {"neutral": "#ffffef", "ink": "#3f3f3f", "primary": "#5f7f8f", "accent": "#5f8f8f"},
+      "dark": {"neutral": "#3f3f3f", "ink": "#dcdccc", "primary": "#8cd0d3", "accent": "#93e0e3"}
+    },
+    "carbonfox": {
+      "light": {"neutral": "#8e8e8e", "ink": "#161616", "primary": "#0072c3", "accent": "#da1e28"},
+      "dark": {"neutral": "#393939", "ink": "#f2f4f8", "primary": "#33b1ff", "accent": "#ff8389"}
+    }
+  }
+}

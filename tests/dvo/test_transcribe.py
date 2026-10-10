@@ -9,6 +9,7 @@ from digivoice.errors import EmptyTranscriptError, TranscribeError
 from digivoice.models import VoicePaths
 from digivoice.paths import DEFAULT_MODEL_FILE, resolve_paths
 from digivoice.probe import real_probe
+from digivoice.settings import VoiceSettings, save_settings
 from digivoice.transcribe import (
     LANGUAGE,
     clean_transcript,
@@ -58,7 +59,8 @@ def test_a_fake_whisper_in_a_path_dir_is_found_with_no_override(tmp_path: Path) 
     binary.write_text("#!/bin/sh\necho hi\n", encoding="utf-8")
     binary.chmod(0o755)
     assert real_probe(str(tmp_path)).lookup("whisper-cli") == str(binary)
-    assert real_probe(None).lookup("whisper-cli") is None
+    # No PATH and no fallback dirs: nothing to find.
+    assert real_probe(None, fallback_dirs=()).lookup("whisper-cli") is None
 
 
 def test_clean_transcript_drops_segment_timestamps() -> None:
@@ -125,3 +127,116 @@ def test_silence_markers_are_an_empty_take(paths: VoicePaths, raw: str) -> None:
 
 def test_silence_marker_next_to_speech_is_dropped() -> None:
     assert clean_transcript("[BLANK_AUDIO] ship it. [ Silence ]") == "ship it."
+
+
+def test_transcribe_opens_a_catalog_copy_under_an_install_root(
+    paths: VoicePaths, tmp_path: Path
+) -> None:
+    weight = tmp_path / ".lmstudio" / "models" / "whisper" / "ggml-small.en.bin"
+    weight.parent.mkdir(parents=True)
+    weight.write_bytes(b"fake weights")
+    runner = FakeRunner({"whisper-cli": FakeReply(stdout="ship the notes\n")})
+    result = transcribe(
+        paths,
+        WHISPER,
+        runner,
+        "/tmp/a.wav",
+        model_id="ggml-small.en",
+        home=tmp_path,
+        env={},
+    )
+    assert result.text == "ship the notes"
+    assert result.model_path == str(weight)
+    call = runner.call_for("whisper-cli")
+    assert call is not None
+    assert call.argv[call.argv.index("-m") + 1] == str(weight)
+    assert call.argv[call.argv.index("-l") + 1] == "en"
+
+
+def test_absolute_model_id_is_that_file_not_the_models_dir(
+    paths: VoicePaths, tmp_path: Path
+) -> None:
+    """A selected absolute path is the file itself, even when models_dir has the same name."""
+    weight = tmp_path / "Library" / "Models" / "ggml-small.en"
+    weight.parent.mkdir(parents=True)
+    weight.write_bytes(b"installed weights")
+    models = Path(paths.models_dir)
+    models.mkdir(parents=True)
+    decoy = models / "ggml-small.en.bin"
+    decoy.write_bytes(b"not this copy")
+    found = model_file(paths, str(weight), home=tmp_path, env={})
+    assert found == weight
+    assert found != decoy
+
+
+def test_transcribe_opens_a_catalog_copy_under_mlx(paths: VoicePaths, tmp_path: Path) -> None:
+    weight = tmp_path / ".mlxstudio" / "models" / "whisper" / "GGML-small.en.bin"
+    weight.parent.mkdir(parents=True)
+    weight.write_bytes(b"mlx weights")
+    runner = FakeRunner({"whisper-cli": FakeReply(stdout="ship the notes\n")})
+    result = transcribe(
+        paths,
+        WHISPER,
+        runner,
+        "/tmp/a.wav",
+        model_id="ggml-small.en",
+        home=tmp_path,
+        env={},
+    )
+    assert result.model_path == str(weight)
+    call = runner.call_for("whisper-cli")
+    assert call is not None
+    assert call.argv[call.argv.index("-m") + 1] == str(weight)
+
+
+def test_transcribe_keeps_a_missing_absolute_bin(paths: VoicePaths, tmp_path: Path) -> None:
+    missing = tmp_path / "gone.bin"
+    decoy = tmp_path / ".ollama" / "models" / "gone.bin"
+    decoy.parent.mkdir(parents=True)
+    decoy.write_bytes(b"not this one")
+    with pytest.raises(TranscribeError, match="not installed locally") as excinfo:
+        transcribe(
+            paths,
+            WHISPER,
+            FakeRunner(),
+            "/tmp/a.wav",
+            model_id=str(missing),
+            home=tmp_path,
+        )
+    assert str(missing) in str(excinfo.value)
+    assert str(decoy) not in str(excinfo.value)
+
+
+def test_transcribe_runs_the_saved_stt_model_not_the_default(paths: VoicePaths) -> None:
+    models = Path(paths.models_dir)
+    models.mkdir(parents=True, exist_ok=True)
+    saved = models / "ggml-small.en.bin"
+    saved.write_bytes(b"small weights")
+    default = models / DEFAULT_MODEL_FILE
+    default.write_bytes(b"default weights")
+    save_settings(paths, VoiceSettings(stt_model="ggml-small.en"))
+    runner = FakeRunner({"whisper-cli": FakeReply(stdout="ship the notes\n")})
+    result = transcribe(paths, WHISPER, runner, "/tmp/a.wav")
+    assert result.model == "ggml-small.en"
+    assert result.model_path == str(saved)
+    call = runner.call_for("whisper-cli")
+    assert call is not None
+    assert call.argv[call.argv.index("-m") + 1] == str(saved)
+    assert str(default) not in call.argv
+
+
+def test_transcribe_uses_configured_stt_model(paths: VoicePaths) -> None:
+    models = Path(paths.models_dir)
+    models.mkdir(parents=True, exist_ok=True)
+    tiny = models / "ggml-tiny.bin"
+    tiny.write_bytes(b"fake weights")
+    runner = FakeRunner({"whisper-cli": FakeReply(stdout="hola mundo\n")})
+    result = transcribe(paths, WHISPER, runner, "/tmp/a.wav", model_id="ggml-tiny")
+    assert result.text == "hola mundo"
+    assert result.model == "ggml-tiny"
+    assert result.model_path == str(tiny)
+    call = runner.call_for("whisper-cli")
+    assert call is not None
+    argv = call.argv
+    assert argv[argv.index("-m") + 1] == str(tiny)
+    assert argv[argv.index("-l") + 1] == "auto"
