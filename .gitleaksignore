@@ -1,0 +1,7 @@
+# Reviewed false positives (2026-10-09, run 37979577270). Format: commit:file:rule:line.
+# 27642e68: throwaway test key in the DIG-1381 local fixture (PR #5308 branch), not a real invite key.
+27642e68c4ada0f886c97d805feb4c4a53935da4:scripts/test_verify_occ_invite_key.sh:generic-api-key:19
+# dea33606: Next.js per-build dev preview-mode keys in a committed .next/dev tree; local-only, no service access.
+dea336062146a8c3893645b28cde2febe581c828:apps/digiquant-app/.next/dev/prerender-manifest.json:generic-api-key:8
+dea336062146a8c3893645b28cde2febe581c828:apps/digiquant-app/.next/dev/prerender-manifest.json:generic-api-key:9
+e3dc6e7f8555229a537dc907cbb8110c252c7891:cloudflare/digithings-stack-cloudflare/src/index.ts:gloomberb-deployer-session-cookie:181

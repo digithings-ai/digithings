@@ -11,6 +11,7 @@ the typed-error paths), and the client's cache/breaker locks.
 from __future__ import annotations
 
 import json
+import os
 import re
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -38,14 +39,50 @@ from digiquant.data.gloomberb import (  # noqa: E402
     agent_tools,
     available_digifetch_tools,
     build_digifetch_tool_dispatcher,
+    session_gate,
 )
+from digiquant.data.gloomberb.session_gate import SessionGateStatus  # noqa: E402
 from digiquant.orchestrator_tools import build_orchestrator_tool_manifest  # noqa: E402
+from digiquant.tool_refusals import REFUSED_TOOLS  # noqa: E402
 
 from digifetch import HttpFetcher, RateLimiter, RetryPolicy  # noqa: E402
 
 MANIFEST = {t["function"]["name"]: t for t in build_orchestrator_tool_manifest()}
 
+#: Declared-entitlement names on Counsel's refusal list keep their declaration but
+#: are advertised nowhere (DIG-1057), so every manifest-parity assertion below is
+#: stated over the live names.
+REFUSED_DIGIFETCH = {name for name in REFUSED_TOOLS if name.startswith("digifetch_")}
+LIVE_ENTITLEMENTS = {n: v for n, v in TOOL_ENTITLEMENTS.items() if n not in REFUSED_DIGIFETCH}
+
 _REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+@pytest.fixture(autouse=True)
+def _gate_stubbed_to_presence(monkeypatch: pytest.MonkeyPatch):
+    """Keep the tool-list filter offline after the secret gate landed (#2752).
+
+    `available_digifetch_tools` no longer asks "is a cookie set?" but "does the
+    secret gate accept the session?", and answering that costs one request to
+    api.gloom.sh. This module is about the FILTER — which names drop for which
+    entitlement — so the verdict is stubbed to follow the cookie's presence,
+    which is what the filter used to decide for itself. The real contract
+    (presence alone is not enough; the cookie must validate) is pinned in
+    `tests/dq/data/test_gloomberb_session_gate.py`.
+    """
+    session_gate.reset_session_gate_cache()
+    monkeypatch.setattr(
+        agent_tools,
+        "session_gate_status",
+        lambda *a, **k: SessionGateStatus(
+            bool((os.environ.get(GLOOMBERB_SESSION_COOKIE_ENV) or "").strip()),
+            "presence_stub",
+            "presence stands in for validation in the filter tests",
+        ),
+    )
+    yield
+    session_gate.reset_session_gate_cache()
+
 
 AAPL_QUOTE = {
     "symbol": "AAPL",
@@ -73,6 +110,7 @@ def make_client(handler: Any, **kwargs: Any) -> GloomberbClient:
     )
     kwargs.setdefault("rate_limiter", RateLimiter(0))
     kwargs.setdefault("retry_policy", RetryPolicy(attempts=1))
+    kwargs.setdefault("enabled", True)
     return GloomberbClient(fetcher=fetcher, **kwargs)
 
 
@@ -113,15 +151,26 @@ def test_schemas_are_the_manifest_entries_for_the_entitled_names() -> None:
     # declaration fails here instead of being silently dropped from the
     # in-process surface (#4146 review F4).
     manifest_digifetch = {name for name in MANIFEST if name.startswith("digifetch_")}
-    assert set(TOOL_ENTITLEMENTS) == manifest_digifetch
+    # A refused tool keeps its declaration but is advertised nowhere (DIG-1057),
+    # so the manifest is the live names.
+    assert set(LIVE_ENTITLEMENTS) == manifest_digifetch
     assert set(names) == manifest_digifetch
+    assert REFUSED_DIGIFETCH <= set(TOOL_ENTITLEMENTS)
+    assert not REFUSED_DIGIFETCH & manifest_digifetch
     for tool in DIGIFETCH_TOOLS:
         assert tool == MANIFEST[tool["function"]["name"]]
 
 
 def test_dispatch_table_covers_every_schema_and_matches_its_parameters() -> None:
-    assert set(DIGIFETCH_DISPATCH) == {t["function"]["name"] for t in DIGIFETCH_TOOLS}
+    # The dispatch table keeps its refused rows on purpose (the client code stays
+    # in-tree for a possible Counsel clearance), so parity is stated over the
+    # live names and the refused rows are checked separately below.
+    assert set(DIGIFETCH_DISPATCH) - REFUSED_DIGIFETCH == {
+        t["function"]["name"] for t in DIGIFETCH_TOOLS
+    }
     for name, spec in DIGIFETCH_DISPATCH.items():
+        if name in REFUSED_DIGIFETCH:
+            continue
         params = MANIFEST[name]["function"]["parameters"]
         assert set(params.get("properties", {})) == set(spec.input_model.model_fields), name
         required = {f for f, v in spec.input_model.model_fields.items() if v.is_required()}
@@ -192,6 +241,8 @@ def test_subsets_are_real_distinct_and_prompt_budgeted() -> None:
 def test_available_digifetch_tools_drops_exactly_the_gated_names(
     subset: tuple[str, ...], monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    # Enable the family first (default is OFF in deployed environments).
+    monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, "1")
     without_cookie = [t["function"]["name"] for t in available_digifetch_tools(subset)]
     monkeypatch.setenv(GLOOMBERB_SESSION_COOKIE_ENV, "gloomberb.session_token=test")
     with_cookie = [t["function"]["name"] for t in available_digifetch_tools(subset)]
@@ -203,9 +254,13 @@ def test_available_digifetch_tools_drops_exactly_the_gated_names(
 def test_available_digifetch_tools_defaults_to_every_schema(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # No cookie → every free tool, in manifest order.
-    free = [n for n in TOOL_ENTITLEMENTS if TOOL_ENTITLEMENTS[n] == "free"]
+    # Enable the family first (default is OFF).
+    monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, "1")
+    # No cookie → every free tool, in manifest order. Refused names keep their
+    # entitlement declaration but are never advertised (DIG-1057).
+    free = [n for n, v in LIVE_ENTITLEMENTS.items() if v == "free"]
     assert [t["function"]["name"] for t in available_digifetch_tools()] == free
+    assert not REFUSED_DIGIFETCH & set(free)
     monkeypatch.setenv(GLOOMBERB_SESSION_COOKIE_ENV, "token")
     # The venue_session reader needs its own venue cookie, not the Gloomberb one.
     assert len(available_digifetch_tools()) == len(DIGIFETCH_TOOLS) - 1
@@ -213,13 +268,22 @@ def test_available_digifetch_tools_defaults_to_every_schema(
     assert len(available_digifetch_tools()) == len(DIGIFETCH_TOOLS)
 
 
-def test_pro_tool_gate_is_cookie_presence(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_pro_tool_needs_the_gate_to_be_open(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Enable the family first (default is OFF in deployed environments). The
+    # gate verdict is stubbed to the cookie's presence by the autouse fixture;
+    # `test_gloomberb_session_gate.py` pins that an unvalidated cookie is not
+    # enough on its own.
+    monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, "1")
     assert available_digifetch_tools(("digifetch_transcripts",)) == []
     monkeypatch.setenv(GLOOMBERB_SESSION_COOKIE_ENV, "token")
     assert len(available_digifetch_tools(("digifetch_transcripts",))) == 1
 
 
-def test_available_digifetch_tools_rejects_an_unknown_name() -> None:
+def test_available_digifetch_tools_rejects_an_unknown_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Enable the family first (default is OFF in deployed environments).
+    monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, "1")
     with pytest.raises(KeyError):
         available_digifetch_tools(("digifetch_not_a_tool",))
 
@@ -227,17 +291,17 @@ def test_available_digifetch_tools_rejects_an_unknown_name() -> None:
 def test_available_digifetch_tools_respects_the_family_kill_switch(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Default ON (env unset) → schemas; disabled → never advertise a tool whose
-    # every call can only return the typed disabled envelope (#4146 review F1).
+    # Default OFF (env unset) → no schemas; explicit opt-in → schemas.
+    assert available_digifetch_tools() == []
+    monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, "1")
     assert available_digifetch_tools()
+    assert available_digifetch_tools(EQUITY_TOOLS)
     monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, "0")
     assert available_digifetch_tools() == []
     assert available_digifetch_tools(EQUITY_TOOLS) == []
     # A typo fails closed, same as the client's kill switch.
     monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, "ture")
     assert available_digifetch_tools() == []
-    monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, "1")
-    assert available_digifetch_tools()
 
 
 # ── dispatcher routing + envelope ─────────────────────────────────────────────

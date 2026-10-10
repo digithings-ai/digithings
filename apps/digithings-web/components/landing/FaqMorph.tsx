@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { FaqList } from "./Sections";
+import { FaqList } from "./LandingSections";
 import { LiveAsk } from "./LiveAsk";
 import { SectionHead } from "./SectionHead";
 

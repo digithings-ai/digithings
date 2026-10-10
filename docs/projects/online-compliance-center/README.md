@@ -17,7 +17,7 @@ Digi product names are always lowercase in prose.
 | Tenant slug | `occ` (digichat / digikey); manifest `client: online-compliance-center` |
 | Crawl host | `help.online-compliance-center.com` only (no demo/portal) |
 | Sinks | Dual-sink: digivault + digisearch |
-| digisearch index | `occ_help` docs + `occ_tickets` fan-out |
+| digisearch index | `occ_help` |
 | Vault / Supabase | Same `architecture_notes` table; path prefix `clients/online-compliance-center/…` |
 | Auth | Ungated embed; operator may set `llmAccess: free_then_byok` (on develop via #2048) |
 | digiproject | `llm_mode: free`; research prompt for OCC help corpus |
@@ -49,7 +49,7 @@ docs/projects/online-compliance-center/
 
 ```text
 digithings.ai/chat      → embed host digithings.ai     → tenant digithings → digithings_docs
-digithings.ai/chat/occ  → embed host occ.digithings.ai → tenant occ       → occ_help,occ_tickets
+digithings.ai/chat/occ  → embed host occ.digithings.ai → tenant occ       → occ_help
 ```
 
 ## Embed (operator env)
@@ -66,13 +66,13 @@ digithings.ai/chat/occ  → embed host occ.digithings.ai → tenant occ       �
 ```bash
 DIGICHAT_REQUIRE_ROOT_AUTH=0
 DIGICHAT_EMBED_HOSTS=digithings.ai,www.digithings.ai,occ.digithings.ai
-DIGICHAT_EMBED_TENANTS='{"digithings.ai":{"slug":"digithings","aliases":["www.digithings.ai"],"gateMode":"ungated","showByok":true,"showStatusBar":true,"layout":"page","activityDetail":"full","attribution":true,"token":"<schema-required>","backend":{"type":"digigraph"}},"occ.digithings.ai":{"slug":"occ","gateMode":"ungated","showByok":true,"showStatusBar":true,"layout":"page","activityDetail":"full","title":"OCC help assistant","welcome":"Ask about Online Compliance Center policies, procedures, and help articles.","attribution":false,"token":"<schema-required>","backend":{"type":"digigraph","digisearchIndex":"occ_help,occ_tickets","vaultPathPrefix":"clients/online-compliance-center"}}}'
+DIGICHAT_EMBED_TENANTS='{"digithings.ai":{"slug":"digithings","aliases":["www.digithings.ai"],"gateMode":"ungated","showByok":true,"showStatusBar":true,"layout":"page","activityDetail":"full","attribution":true,"token":"<schema-required>","backend":{"type":"digigraph"}},"occ.digithings.ai":{"slug":"occ","gateMode":"ungated","showByok":true,"showStatusBar":true,"layout":"page","activityDetail":"full","title":"OCC help assistant","welcome":"Ask about Online Compliance Center policies, procedures, and help articles.","attribution":false,"token":"<schema-required>","backend":{"type":"digigraph","digisearchIndex":"occ_help","vaultPathPrefix":"clients/online-compliance-center"}}}'
 ```
 
 Optional digigraph fallback map (when headers are absent):
 
 ```bash
-DIGI_TENANT_CORPUS_MAP='{"occ":{"digisearchIndex":"occ_help,occ_tickets","vaultPathPrefix":"clients/online-compliance-center"},"digithings":{"digisearchIndex":"digithings_docs","vaultPathPrefix":"clients/digithings"}}'
+DIGI_TENANT_CORPUS_MAP='{"occ":{"digisearchIndex":"occ_help","vaultPathPrefix":"clients/online-compliance-center"},"digithings":{"digisearchIndex":"digithings_docs","vaultPathPrefix":"clients/digithings"}}'
 ```
 
 ## digigraph project config

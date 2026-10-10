@@ -1,8 +1,8 @@
-"""Append-only JSONL history: one `HistoryEntry` per line, plus read and filter.
+"""JSONL history: one `HistoryEntry` per line, plus read, filter, and delete.
 
-The file is the record of a session, so it is only ever appended to. Reads are
-lenient — a line written by a future digivoice, or a truncated write, is counted
-in `skipped` rather than taking the whole listing down.
+Takes only append. The history screen may remove one line by rewriting the
+file. Reads are lenient — a line written by a future digivoice, or a truncated
+write, is counted in `skipped` rather than taking the whole listing down.
 """
 
 from __future__ import annotations
@@ -99,3 +99,30 @@ def last_speakable_text(path: str | Path) -> str | None:
 
 def format_entry(entry: HistoryEntry) -> str:
     return f"{entry.ts}  {entry.kind}  {entry.text}"
+
+
+def delete_entry(path: str | Path, entry: HistoryEntry) -> bool:
+    """Remove one matching line. Other lines, including unreadable ones, stay."""
+    target = Path(path)
+    if not target.is_file():
+        return False
+    needle = entry.model_dump(mode="json")
+    removed = False
+    kept: list[str] = []
+    for line in target.read_text(encoding="utf-8").splitlines():
+        candidate = line.strip()
+        if not candidate:
+            continue
+        if not removed:
+            try:
+                parsed = HistoryEntry.model_validate_json(candidate)
+            except ValidationError:
+                kept.append(candidate)
+                continue
+            if parsed.model_dump(mode="json") == needle:
+                removed = True
+                continue
+        kept.append(candidate)
+    text = ("\n".join(kept) + "\n") if kept else ""
+    target.write_text(text, encoding="utf-8")
+    return removed

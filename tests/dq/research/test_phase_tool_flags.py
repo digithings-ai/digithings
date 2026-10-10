@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from pathlib import Path
 
 import pytest
+import yaml
 from digiquant.data.gloomberb import EQUITY_TOOLS, MACRO_TOOLS
 from digiquant.research.phases import _node_factory
 from digiquant.research.phases.phase1_altdata import _SPECS as ALT_SPECS
@@ -362,3 +364,105 @@ def test_non_fallback_live_search_ignores_freshness(monkeypatch):
         segment="international",
     )
     assert grounding is not None and grounding["summary"] == "always"
+
+
+# --- DIG-1252 publish-side guard (Counsel, DIG-1251 ruling eca4b9a9 edits 1-6) ---
+#
+# Containment: the alt-politician-signals segment must not source, prompt for, or
+# publish STOCK Act trade-level content from a commercial aggregator. 5 U.S.C.
+# 13107(c)(1)(B) bars obtaining or using such a "report" for a non-news-media
+# commercial purpose; Counsel ruled that collection stops the statutory breach, and
+# that what remains is a narrower accuracy / consumer-protection exposure from the
+# prompt still asserting trades it can no longer verify.
+#
+# The refused domains are written as literals here on purpose: this guard must hold
+# on any branch, including ones that predate a REFUSED_SEARCH_DOMAINS constant. It
+# reads the *prompt* and the *domain list*, not the search call path, because the
+# prompt is what survives the flag being turned off.
+
+_REFUSED_POLITICIAN_DOMAINS = ("capitoltrades.com", "quiverquant.com")
+
+
+def _politician_skill_text() -> str:
+    import digiquant.research as _research
+
+    skill = (
+        Path(_research.__file__).resolve().parent / "skills" / "alt-politician-signals" / "SKILL.md"
+    )
+    assert skill.is_file(), f"segment skill file missing: {skill}"
+    return skill.read_text(encoding="utf-8")
+
+
+@pytest.mark.unit
+def test_politician_skill_prompts_no_refused_domain():
+    text = _politician_skill_text().lower()
+    for domain in _REFUSED_POLITICIAN_DOMAINS:
+        assert domain not in text, f"SKILL.md still names the refused source {domain}"
+
+
+@pytest.mark.unit
+def test_politician_skill_has_no_trade_disclosure_step():
+    # Counsel edit 1: delete the STOCK Act Trade Disclosures step outright -- do not
+    # soften it and do not gate it on web_grounding being present.
+    #
+    # Assert on the removed *step*, not on the phrase: the scope-limit paragraph still
+    # names STOCK Act in order to forbid it, and forbidding the word would forbid the
+    # prohibition.
+    text = _politician_skill_text().lower()
+    assert "stock act trade disclosures" not in text, "SKILL.md still carries the trade step"
+    assert "congressional trades disclosed" not in text, "SKILL.md still instructs the trade search"
+    for trade_term in ("quiver quantitative", "capitol trades"):
+        assert trade_term not in text, f"SKILL.md still instructs searching {trade_term}"
+
+
+@pytest.mark.unit
+def test_politician_skill_output_skeleton_has_no_trades_section():
+    # Counsel edit 4: the "## Congressional trades" block is gone from the skeleton.
+    assert "## congressional trades" not in _politician_skill_text().lower()
+
+
+@pytest.mark.unit
+def test_politician_segment_domain_list_names_no_refused_domain():
+    """Activate once DIG-1133's deny layer lands; assert nothing until then.
+
+    search_domains.yaml still lists the refused domains on branches that predate
+    DIG-1133, and Counsel assigned that edit to that branch so the two do not
+    conflict. Importing the constant means this assertion switches itself on the
+    moment the deny layer exists, with no edit here.
+    """
+    try:
+        from digiquant.research.data.web_grounding import REFUSED_SEARCH_DOMAINS
+    except ImportError:
+        pytest.skip("no REFUSED_SEARCH_DOMAINS yet; DIG-1133 deny layer not merged")
+
+    from digiquant.research.graph import _research_config_root
+
+    config = yaml.safe_load(
+        (_research_config_root() / "search_domains.yaml").read_text(encoding="utf-8")
+    )
+    domains = config.get("per_segment", {}).get("alt-politician-signals", []) or []
+    for domain in domains:
+        assert domain not in REFUSED_SEARCH_DOMAINS, f"domain list still carries refused {domain}"
+
+
+def test_politician_skill_steps_have_no_trade_step():
+    """Guard the step headings, not just the exact wording we removed (review SF3).
+
+    A re-introduction titled e.g. "### 1. Congressional Trading Activity" passes all three
+    wording guards above, so assert on the headings themselves.
+    """
+    import re as _re
+
+    text = _politician_skill_text()
+    headings = _re.findall(r"^###\s*\d+\.\s*(.+)$", text, flags=_re.MULTILINE)
+    assert headings, "no numbered steps found; the prompt structure changed shape"
+    for heading in headings:
+        # "Tariff & Trade Actions" is lawful policy work, so trade/tariff is allowed only
+        # when the heading says trade-POLICY. Filing/disclosure/congressional is never allowed.
+        assert not _re.search(r"filing|disclosure|congress", heading, _re.IGNORECASE), (
+            f"step heading reintroduces trade-level content: {heading!r}"
+        )
+        if _re.search(r"\btrade\b", heading, _re.IGNORECASE):
+            assert _re.search(r"tariff|policy", heading, _re.IGNORECASE), (
+                f"step heading names trades without saying policy/tariff: {heading!r}"
+            )

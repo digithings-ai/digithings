@@ -145,6 +145,7 @@ jobs:
               - 'tests/dq/conftest.py'
               - 'tests/dq/test_api.py'
               - 'tests/dq/test_audit.py'
+              - 'tests/dq/test_balance_path_metrics.py'
               - 'tests/dq/test_backtest.py'
               - 'tests/dq/test_calibrations_loader.py'
               - 'tests/dq/test_nautilus_runner.py'
@@ -250,6 +251,61 @@ jobs:
           python-version: "3.12"
       - name: Frontend canon guard
         run: python3 scripts/check_frontend_canon.py
+
+# GLOOMBERB_ENABLED is the kill switch for the Gloomberb tool family, and
+  # GLOOMBERB_SESSION_COOKIE is the per-deployer credential the family is now
+  # gated on (DIG-2752). This job makes both enforceable in the configs that
+  # ship, and fails closed rather than trusting a markdown list:
+  #   * an enabling value (1/true/yes/on) committed into a deployed config --
+  #     a wrangler [vars], a Dockerfile ENV, a workflow env: block, a compose
+  #     environment: entry;
+  #   * a committed cookie VALUE for GLOOMBERB_SESSION_COOKIE or
+  #     SUBSTACK_SESSION_COOKIE, in any tracked file, local ones included --
+  #     the local exemption is for running the tools, not for committing the
+  #     credential that authorises them;
+  #   * a deployed config that advertises the family without a secret slot
+  #     for the cookie, or that names the cookie in a plaintext carrier such
+  #     as [vars] where a per-deployer secret belongs.
+  # An access path Counsel ruled prohibited must not come back through a line
+  # that looks like configuration, not like a credential.
+  # Not path-filtered on purpose: the file that regresses is a config file, and
+  # a guard that only runs when scripts/ or .github/ changes cannot see a value
+  # added to apps/*/wrangler.toml. Stdlib-only; no pip or npm install needed.
+  gloomberb-ci-guard:
+    name: GLOOMBERB deployed-config guard
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: GLOOMBERB deployed-config guard
+        run: python3 scripts/check_gloomberb_ci_guard.py
+
+  # Vendor-content gate (DIG-1415 Lane S, DIG-2583). Unconditional, same shape
+  # as frontend-canon above: no `needs:`, no path filter, so the job name is
+  # always reported and can be required on develop.
+  #
+  # `fetch-depth: 0` is load-bearing, not a convenience: the gate answers "is
+  # this vendor identifier NEW since the merge base with main?", and a shallow
+  # checkout has no merge base. The script fails closed (exit 2) when it cannot
+  # compute one rather than reporting a clean tree.
+  vendor-content-gate:
+    name: Vendor-content gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Vendor-content gate
+        run: python3 scripts/check_vendor_content.py
 
   # ── Per-component test suites (gated by paths) ───────────────────────────────
   digibase:
@@ -632,6 +688,8 @@ jobs:
     needs:
       - changes
       - frontend-canon
+      - gloomberb-ci-guard
+      - vendor-content-gate
       - digibase
       - digikey
       - digitrace

@@ -39,6 +39,7 @@ def main() -> None:
 
 # Register subcommand groups.
 def _register_subgroups() -> None:
+    from digiquant.cli.gloomberb import gloomberb as _gloomberb_group
     from digiquant.cli.onchain import onchain as _onchain_group
     from digiquant.cli.prices import prices as _prices_group
     from digiquant.cli.strategy import strategy as _strategy_group
@@ -47,6 +48,7 @@ def _register_subgroups() -> None:
 
     main.add_command(_prices_group)
     main.add_command(_onchain_group)
+    main.add_command(_gloomberb_group)
     main.add_command(_strategy_group)
     main.add_command(_web_search_group)
     main.add_command(_policy_replay_group)
@@ -198,6 +200,51 @@ def optimize(
     sharpe = opt.best_backtest.sharpe_ratio if opt.best_backtest else None
     click.echo(f"Evaluations: {opt.num_evaluations} | Best Sharpe: {sharpe}")
     click.echo(f"Best params: {json.dumps(opt.best_params)}")
+
+
+@main.command("sdca-stage0")
+@click.option(
+    "--data-path",
+    "-d",
+    type=click.Path(exists=True, path_type=Path),
+    default=None,
+    help="BTC OHLCV CSV; FRED/ETH siblings load from the same directory",
+)
+@click.option(
+    "--out-dir",
+    type=click.Path(path_type=Path),
+    default=Path("digiquant/src/digiquant/strategies/sdca"),
+    help="Provenance sidecar directory",
+)
+@click.option(
+    "--stage0-only",
+    is_flag=True,
+    help="Skip Stage 1 / Stage B even if extras survive",
+)
+@click.option(
+    "--persist-settings",
+    is_flag=True,
+    help=(
+        "Overwrite strategies/settings.json only when combined OOS is not worse. "
+        "Default writes sidecars only."
+    ),
+)
+def sdca_stage0(
+    data_path: Path | None, out_dir: Path, stage0_only: bool, persist_settings: bool
+) -> None:
+    """Solo-indicator SDCA Stage 0 (curve_simulator). Gate extras on OOS vs power law."""
+    from digiquant.strategies.sdca.stage_0 import operator_stage_0
+
+    path = data_path or Path("data/price-history/BTC-USD.csv")
+    if not path.exists():
+        raise click.UsageError(f"OHLCV not found: {path}")
+    result = operator_stage_0(
+        data_path=path,
+        out_dir=out_dir,
+        combine=not stage0_only,
+        persist_settings=persist_settings,
+    )
+    click.echo(result.model_dump_json(indent=2))
 
 
 @main.command()

@@ -61,6 +61,8 @@ def _patch_client(monkeypatch: pytest.MonkeyPatch, handler: Any, **kwargs: Any) 
     )
     kwargs.setdefault("rate_limiter", RateLimiter(0))
     kwargs.setdefault("retry_policy", RetryPolicy(attempts=1))
+    # Don't set enabled=True by default; let the client read from GLOOMBERB_ENABLED
+    # unless the test explicitly passes enabled=True/False.
     gloomberb = GloomberbClient(fetcher=fetcher, **kwargs)
     monkeypatch.setattr(agent_tools, "build_gloomberb_client", lambda: gloomberb)
 
@@ -77,7 +79,7 @@ def _fail_handler(request: httpx.Request) -> httpx.Response:
 def test_digifetch_quote_returns_the_attributed_envelope(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _patch_client(monkeypatch, _quote_handler)
+    _patch_client(monkeypatch, _quote_handler, enabled=True)
     r = client.post(
         "/v1/orchestrator_invoke",
         json={"tool": "digifetch_quote", "arguments": {"symbol": "AAPL"}},
@@ -115,7 +117,7 @@ def test_gated_tool_without_cookie_is_typed_auth_required(
 ) -> None:
     # Both session- and pro-gated names answer the typed envelope (the cookie
     # gate runs first), never a 400 and never a wire request.
-    _patch_client(monkeypatch, _fail_handler)
+    _patch_client(monkeypatch, _fail_handler, enabled=True)
     r = client.post(
         "/v1/orchestrator_invoke",
         json={"tool": tool, "arguments": arguments},
@@ -133,7 +135,7 @@ def test_pro_tool_with_free_session_is_typed_pro_required(
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, text="Pro plan required")
 
-    _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
+    _patch_client(monkeypatch, handler, session_cookie="test-session=test", enabled=True)
     r = client.post(
         "/v1/orchestrator_invoke",
         json={"tool": "digifetch_transcripts", "arguments": {"ticker": "AAPL"}},
@@ -177,7 +179,7 @@ def test_price_history_date_window_dispatches_through_the_endpoint(
             },
         )
 
-    _patch_client(monkeypatch, handler)
+    _patch_client(monkeypatch, handler, enabled=True)
     r = client.post(
         "/v1/orchestrator_invoke",
         json={
@@ -232,3 +234,61 @@ def test_client_fault_returns_error_not_an_envelope(
     assert body["ok"] is False
     assert body["error"].startswith("RuntimeError")
     assert body["data"] == {"error": "RuntimeError: boom"}
+
+
+def test_section12_hosted_surface_tripwire_cookie_gated_tools_unreachable_when_switch_unset(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    §12 tripwire: with the family switch unset (default OFF in every
+    environment), cookie-gated tools MUST NOT be reachable from routed/hosted
+    surfaces. Because the default is unconditional, the deployed configuration
+    is this same unset state.
+
+    This test fails if a future change re-enables the family without an explicit
+    opt-in, which would violate the boundary policy (DIG-1233, DIG-1232).
+    The tripwire covers the orchestrator_invoke surface (digigraph hub dispatch).
+    """
+    # Default state: GLOOMBERB_ENABLED is unset (default OFF), so a deployed
+    # environment with no secret set lands here too.
+    # No GLOOMBERB_SESSION_COOKIE is configured (no credential in CI/worker secrets).
+    monkeypatch.delenv(GLOOMBERB_ENABLED_ENV, raising=False)
+    monkeypatch.delenv(GLOOMBERB_SESSION_COOKIE_ENV, raising=False)
+
+    # The client should short-circuit on the kill switch, making zero HTTP requests.
+    # We patch with a handler that would fail if called, proving no request is made.
+    _patch_client(monkeypatch, _fail_handler)
+
+    # A session-gated tool (holders) must be blocked at the kill switch.
+    r = client.post(
+        "/v1/orchestrator_invoke",
+        json={"tool": "digifetch_holders", "arguments": {"symbol": "AAPL"}},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is False, "Cookie-gated tool must not succeed in deployed env"
+    # The kill switch returns a typed upstream_error envelope.
+    assert body["data"]["data"]["code"] == "upstream_error"
+    assert "kill switch" in body["data"]["data"]["message"].lower()
+
+    # A pro-gated tool (transcripts) must also be blocked at the kill switch.
+    r = client.post(
+        "/v1/orchestrator_invoke",
+        json={"tool": "digifetch_transcripts", "arguments": {"ticker": "AAPL"}},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is False, "Pro-gated tool must not succeed in deployed env"
+    assert body["data"]["data"]["code"] == "upstream_error"
+    assert "kill switch" in body["data"]["data"]["message"].lower()
+
+    # Even a free tool must be blocked when the family is OFF.
+    r = client.post(
+        "/v1/orchestrator_invoke",
+        json={"tool": "digifetch_quote", "arguments": {"symbol": "AAPL"}},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is False, "Free tool must not succeed when family is OFF"
+    assert body["data"]["data"]["code"] == "upstream_error"
+    assert "kill switch" in body["data"]["data"]["message"].lower()

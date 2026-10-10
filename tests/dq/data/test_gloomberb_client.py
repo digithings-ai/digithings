@@ -71,6 +71,11 @@ def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def make_client(handler: Any, **kwargs: Any) -> GloomberbClient:
+    """Create a test client with the family enabled by default.
+
+    Tests that need to exercise the kill switch via env var should pass
+    ``enabled=None`` to force reading from ``GLOOMBERB_ENABLED``.
+    """
     allowed_hosts = kwargs.pop("allowed_hosts", ["api.gloom.sh"])
     fetcher = HttpFetcher(
         transport=httpx.MockTransport(handler),
@@ -78,12 +83,111 @@ def make_client(handler: Any, **kwargs: Any) -> GloomberbClient:
     )
     kwargs.setdefault("rate_limiter", RateLimiter(0))
     kwargs.setdefault("retry_policy", RetryPolicy(attempts=1))
+    kwargs.setdefault("enabled", True)
     return GloomberbClient(fetcher=fetcher, **kwargs)
 
 
 def envelope(data: Any, status: str = "success", **extra: Any) -> httpx.Response:
     payload = {"status": status, "data": data, **extra}
     return httpx.Response(200, json=payload)
+
+
+# -- session validation probe (DIG-2752) -------------------------------------
+# `_RawResponse.status` is a MAPPED STATE, not an HTTP code: `success`,
+# `partial`, `empty`, `unsupported`, `retryable_error`, `fatal_error`. A first
+# version of `check_session` compared it to "200", which would have rejected
+# every genuinely valid cookie and hidden all 41 session tools forever. These
+# cases pin the branch itself, because the gate is only as good as it.
+
+
+def _probe_handler(seen: list[httpx.Request], response: httpx.Response) -> Any:
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return response
+
+    return handler
+
+
+def test_check_session_accepts_a_success_envelope_and_carries_the_cookie() -> None:
+    """The positive control: a live session answers HTTP 200 with
+    ``status: success`` and the request carries the caller's cookie, which is
+    the whole discriminator (anonymous callers get 401)."""
+    seen: list[httpx.Request] = []
+    client = make_client(
+        _probe_handler(seen, envelope(GBP_QUOTE)),
+        session_cookie="session-a",
+    )
+    verdict = client.check_session()
+    assert verdict.valid is True
+    assert verdict.code == "ok"
+    assert len(seen) == 1
+    cookie_header = seen[0].headers.get("cookie", "")
+    assert "session-a" in cookie_header, cookie_header
+    assert seen[0].url.path == "/market/quote"
+    assert dict(seen[0].url.params)["symbol"] == "AAPL"
+
+
+def test_check_session_refuses_every_mapped_state_other_than_success() -> None:
+    """`partial` is not proof of a clean probe and the error states are
+    refusals: all of them must fail closed rather than advertise the tools."""
+    for state, code in (("partial", "auth_required"), ("empty", "auth_required")):
+        seen: list[httpx.Request] = []
+        client = make_client(
+            _probe_handler(seen, envelope(GBP_QUOTE, status=state)),
+            session_cookie="session-a",
+        )
+        verdict = client.check_session()
+        assert verdict.valid is False, state
+        assert verdict.code == code, (state, verdict)
+        assert state in verdict.detail, (state, verdict.detail)
+
+
+def test_check_session_refuses_an_unauthenticated_answer() -> None:
+    seen: list[httpx.Request] = []
+    client = make_client(
+        _probe_handler(seen, httpx.Response(401, json={"error": "unauthorized"})),
+        session_cookie="session-a",
+    )
+    verdict = client.check_session()
+    assert verdict.valid is False
+    assert verdict.code == "auth_required"
+    assert "session-a" not in verdict.detail
+
+
+def test_check_session_without_a_cookie_makes_no_request() -> None:
+    seen: list[httpx.Request] = []
+    client = make_client(_probe_handler(seen, envelope(GBP_QUOTE)))
+    verdict = client.check_session()
+    assert verdict.valid is False
+    assert verdict.code == "no_secret"
+    assert seen == []
+
+
+def test_check_session_under_the_kill_switch_makes_no_request() -> None:
+    seen: list[httpx.Request] = []
+    client = make_client(
+        _probe_handler(seen, envelope(GBP_QUOTE)),
+        enabled=False,
+        session_cookie="session-a",
+    )
+    verdict = client.check_session()
+    assert verdict.valid is False
+    assert verdict.code == "disabled"
+    assert seen == []
+
+
+def test_check_session_spends_exactly_one_request() -> None:
+    """One attempt: a probe must not burn the shared rate limit (the same
+    reason `_SINGLE_ATTEMPT_POLICY` exists for the diagnostic POST)."""
+    seen: list[httpx.Request] = []
+    client = make_client(
+        _probe_handler(seen, httpx.Response(500, json={"error": "boom"})),
+        session_cookie="session-a",
+        retry_policy=RetryPolicy(attempts=3),
+    )
+    verdict = client.check_session()
+    assert verdict.valid is False
+    assert len(seen) == 1, [str(r.url) for r in seen]
 
 
 def test_quote_success_normalizes_gbp_and_reports_delayed() -> None:
@@ -287,12 +391,12 @@ def test_kill_switch_reads_the_env_flag_at_construction(
         return envelope(AAPL_QUOTE)
 
     monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, "0")
-    disabled = make_client(handler)
+    disabled = make_client(handler, enabled=None)
     assert disabled.enabled is False
     assert disabled.quote({"symbol": "AAPL"}).data.code == "upstream_error"  # type: ignore[union-attr]
 
     monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, "1")
-    enabled = make_client(handler)
+    enabled = make_client(handler, enabled=None)
     assert enabled.enabled is True
     assert isinstance(enabled.quote({"symbol": "AAPL"}).data, QuoteResult)
     assert len(calls) == 1
@@ -865,7 +969,7 @@ def test_kill_switch_env_allowlist_fails_closed(
         return envelope(AAPL_QUOTE)
 
     monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, value)
-    client = make_client(handler)
+    client = make_client(handler, enabled=None)
     assert client.enabled is expected
     if not expected:
         result = client.quote({"symbol": "AAPL"})

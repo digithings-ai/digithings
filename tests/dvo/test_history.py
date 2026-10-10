@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 from digivoice.history import (
     append_entry,
+    delete_entry,
     dict_entry,
     format_entry,
     last_dict_text,
@@ -83,6 +84,20 @@ def test_unreadable_lines_are_skipped_not_fatal(tmp_path: Path) -> None:
     reading = read_history(target)
     assert [entry.text for entry in reading.entries] == ["good"]
     assert reading.skipped == 2
+
+
+def test_delete_removes_one_line_and_keeps_unreadable_lines(tmp_path: Path) -> None:
+    target = tmp_path / "history.jsonl"
+    first = _entry("one")
+    second = _entry("two")
+    append_entry(target, first)
+    append_entry(target, second)
+    target.write_text(target.read_text(encoding="utf-8") + "{not json\n", encoding="utf-8")
+    assert delete_entry(target, second) is True
+    reading = read_history(target)
+    assert [entry.text for entry in reading.entries] == ["one"]
+    assert "{not json" in target.read_text(encoding="utf-8")
+    assert delete_entry(target, second) is False
 
 
 def test_last_keeps_the_newest_entries() -> None:
