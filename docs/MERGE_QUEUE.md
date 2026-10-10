@@ -11,6 +11,24 @@ This document is the merge path for `develop`. It answers three questions:
 If you are here because you need a merge and you do not want to open a card asking for
 permission: you do not need one. Run the queue.
 
+## Scope: `develop` merges, and how this meets AGENTS.md
+
+This document governs **merges whose base is `develop`**, in every repo of this org. It
+does not govern merges into a stacked `module/<component>` base, and it does not govern
+promotions into `main` — for those, [AGENTS.md § Merge-when-ready](../AGENTS.md#merge-when-ready)
+still tells the authoring agent to merge its own task PR, and still applies its
+"still stop and ask" list.
+
+`AGENTS.md` is the file every adapter loads as canonical rules, and its
+[Merge-when-ready](../AGENTS.md#merge-when-ready) section predates this queue. It has
+carried the same rule in prose ever since: **when a task PR is merge-ready, merge it.**
+Left alone that sentence and the roster below are a direct contradiction — one tells
+DevOps to run `gh pr merge` on a `develop` PR, the other refuses that same agent with
+exit 2 — and an agent picking the wrong one fails silently either way. So
+`AGENTS.md` § Merge-when-ready now carries this roster and points at `merge_queue.py`
+for `develop` bases, and this document is the authority on what that queue requires.
+Both files agree; neither needs to be read with the other in mind.
+
 ---
 
 ## The problem this solves
@@ -35,7 +53,9 @@ an answer that can be computed, so it does not need a human.
 
 `scripts/merge_queue_policy.json` is the machine-readable roster. QA reviews. QA does not
 merge — a reviewer cannot be the one who signs off on their own pass, and the CEO's
-instruction was that the EM and the CTO are the merge path.
+instruction was that the EM and the CTO are the merge path. The same table is in
+[AGENTS.md § `develop` merges go through the merge queue](../AGENTS.md#develop-merges-go-through-the-merge-queue),
+so an agent that only ever loads `AGENTS.md` still learns who merges.
 
 **One GitHub login, two roles.** Both authorities merge with the same org credential, so
 GitHub records the same committer for either. The role is an *assertion*, not something
