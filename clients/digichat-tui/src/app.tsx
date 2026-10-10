@@ -22,20 +22,22 @@ import {
   ROUTES,
   CREDIT,
   WELCOME,
-  assembleScreen,
-  messageRoute,
+  assembleFromBff,
+  chatBaseUrl,
+  conversationRoute,
+  postChat,
   postRoute,
+  putRoute,
   readRoute,
-  replyText,
   sessionId,
-  sessionRoute,
+  toUiMessages,
   type ChatMessage,
   type ChatScreen,
 } from "./read";
 import { ATTACH, BG, DANGER, FILL, HAIR, INK, MUTE, NEW_CHAT, SCROLL, SEND, SOFT, STOP, VOICE } from "./theme";
 import { DigichatWordmark, WORDMARK_ROWS } from "./wordmark";
 
-const API = (process.env.DQ_API_URL ?? "http://127.0.0.1:8788").replace(/\/+$/, "");
+const API = chatBaseUrl();
 
 const TONE: Record<Tone, string> = { ink: INK, soft: SOFT, mute: MUTE, danger: DANGER };
 
@@ -117,13 +119,18 @@ export function App() {
 
   const load = async (id?: string) => {
     const ticket = ++gen.current;
-    const [sessions, current, messages] = await Promise.all([
-      readRoute(API, ROUTES.sessions),
-      readRoute(API, id ? sessionRoute(id) : ROUTES.current),
-      readRoute(API, id ? messageRoute(id) : ROUTES.messages),
-    ]);
+    const list = await readRoute(API, ROUTES.conversations);
     if (ticket !== gen.current) return null;
-    const next = assembleScreen(sessions, current, messages);
+    const preferred =
+      id ??
+      (list.kind === "data"
+        ? (list.data as { conversations?: Array<{ id?: string }> })?.conversations?.[0]?.id
+        : null) ??
+      null;
+    const preferredId = typeof preferred === "string" && preferred.length > 0 ? preferred : null;
+    const current = preferredId ? await readRoute(API, conversationRoute(preferredId)) : null;
+    if (ticket !== gen.current) return null;
+    const next = assembleFromBff(list, current, preferredId);
     setScreen(next);
     return next;
   };
@@ -183,7 +190,7 @@ export function App() {
     try {
       let id = screenRef.current?.currentId ?? null;
       if (!id) {
-        const created = await postRoute(API, "/chat/sessions", {}, controller.signal);
+        const created = await postRoute(API, ROUTES.conversations, {}, controller.signal);
         if (controller.signal.aborted) return;
         if (created.kind !== "data") {
           applyClosed(created.kind, created.note);
@@ -195,21 +202,35 @@ export function App() {
           return;
         }
       }
-      const sent = await postRoute(API, messageRoute(id), { text: body }, controller.signal);
+      const prior = screenRef.current?.messages ?? [];
+      const userId = `u-${Date.now()}`;
+      const uiMessages = [
+        ...toUiMessages(prior),
+        { id: userId, role: "user" as const, parts: [{ type: "text" as const, text: body }] },
+      ];
+      const sent = await postChat(API, id, uiMessages, controller.signal);
       if (controller.signal.aborted) return;
-      if (sent.kind !== "data") {
-        applyClosed(sent.kind, sent.note);
+      if (sent.kind !== "text") {
+        applyClosed("error", sent.detail);
         return;
       }
-      const next = await load(id);
-      const reply = replyText(sent.data);
-      if (!next || !reply || next.messages.some((message) => message.text === reply)) return;
-      if (next.status === "empty" && next.note) return;
+      const assistantId = `a-${Date.now()}`;
+      const nextMessages: ChatMessage[] = [
+        ...prior,
+        { id: userId, role: "user", text: body, tool: null, reasoning: "", at: "" },
+        { id: assistantId, role: "assistant", text: sent.text, tool: null, reasoning: "", at: "" },
+      ];
+      void putRoute(API, conversationRoute(id), {
+        messages: toUiMessages(nextMessages),
+      }, controller.signal);
       setScreen({
-        ...next,
         status: "ok",
+        sessions: screenRef.current?.sessions ?? [{ id, title: DASH }],
+        currentId: id,
+        messages: nextMessages,
+        note: "",
         welcome: false,
-        messages: [...next.messages, { id: `reply-${id}`, role: "assistant", text: reply, tool: null, reasoning: "", at: "" }],
+        canSend: true,
       });
     } finally {
       if (abortRef.current === controller) abortRef.current = null;
@@ -223,7 +244,7 @@ export function App() {
     busyRef.current = true;
     setBusy(true);
     try {
-      const created = await postRoute(API, "/chat/sessions", {});
+      const created = await postRoute(API, ROUTES.conversations, {});
       if (created.kind !== "data") {
         const kind = created.kind === "error" ? "error" : "empty";
         setScreen((prev) => (prev ? { ...prev, note: created.note } : blank(created.note, kind)));

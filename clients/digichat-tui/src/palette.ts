@@ -100,6 +100,7 @@ const COMMANDS: readonly Command[] = [
   { id: "redo", names: ["/redo"], hint: "Regenerate last answer", kind: "action" },
   { id: "copy", names: ["/copy"], hint: "Copy last answer as markdown", kind: "action" },
   { id: "export", names: ["/export"], hint: "Download thread as markdown", kind: "action" },
+  { id: "charts", names: ["/charts"], hint: "Open charts in the DigiChat web UI", kind: "action" },
   { id: "help", names: ["/help"], hint: "Show commands", kind: "action" },
 ];
 
@@ -288,6 +289,12 @@ export function runCommand(id: string, prefs: ChatPrefs, arg: string): CommandRe
   if (id === "redo") return { type: "redo", note: "" };
   if (id === "copy") return { type: "copy", note: "" };
   if (id === "export") return { type: "export", note: "" };
+  if (id === "charts") {
+    return {
+      type: "note",
+      note: "charts: open in web (ASCII render may slip) — see DigiChat at the chat endpoint",
+    };
+  }
   if (id === "help") return { type: "draft", draft: "/", note: "" };
   return { type: "note", note: command.hint };
 }

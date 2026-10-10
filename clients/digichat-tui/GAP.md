@@ -1,6 +1,6 @@
 # digichat web thread vs OpenTUI
 
-Compared with the digichat thread in `packages/ui` (`DigichatThread`, `DigichatThreadList`, the gallery composer, and the product slash palette in `packages/digichat-ui`). The desk page mounts that same thread. Reads stay on the official chat routes. A down service, a 502, or a 503 still paints no sessions and no messages.
+Compared with the digichat thread in `packages/ui` (`DigichatThread`, `DigichatThreadList`, the gallery composer, and the product slash palette in `packages/digichat-ui`). Surfaces 1.0 C1: this TUI reads the DigiChat BFF (`/api/conversations`, `/api/v1/chat`) via `endpoint("chat")`, not the digiquant runner. A down service, a 502, or a 503 still paints no sessions and no messages.
 
 | Item | Web | Terminal | Status |
 | --- | --- | --- | --- |
