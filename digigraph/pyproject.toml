@@ -62,7 +62,10 @@ dev = ["pytest>=8,<10", "pytest-cov>=4,<8", "ruff>=0.16,<0.17"]
 where = ["src"]
 
 [tool.setuptools.package-data]
-digigraph = ["schemas/*.json"]
+# SKILL.md folders ship with the package, the same way digiquant ships its
+# skills/**/*.md (see issue #486 there): a pip-install must be self-contained
+# or an installed digigraph silently has no skills to serve.
+digigraph = ["schemas/*.json", "skill_library/*/*.md"]
 
 [tool.ruff]
 line-length = 100
