@@ -161,16 +161,26 @@ jobs:
       #   - an unrecognised OCC_ROLLOUT_AUTH stops rather than defaulting to `login`
       #   - every wrangler call runs inside apps/digichat-cloudflare, the only
       #     directory with a wrangler.toml for the digichat Worker
+      #   - the retrieval-corpus scope guard refuses any put that is not exactly
+      #     {occ.digithings.ai.token, occ.digithings.ai.backend.digisearchIndex},
+      #     and refuses a put that moves only one of the two (DIG-2779)
       - name: Dry run — offline preflight and auth guard (no Cloudflare calls)
         if: ${{ inputs.dry_run || inputs.confirm != 'ROLLOUT' }}
         run: |
           set -euo pipefail
           python3 scripts/check_occ_rollout_auth_guard.py
+          bash scripts/test_occ_rollout_scope_guard.sh
           {
             echo "## OCC invite key rollout — dry run"
             echo
             echo "No Cloudflare API call was made and nothing was written."
             echo "Offline auth guard: \`scripts/check_occ_rollout_auth_guard.py\` passed."
+            echo "Offline scope guard: \`scripts/test_occ_rollout_scope_guard.sh\` passed."
+            echo
+            echo "A real run rewrites exactly two fields on the OCC tenant entry:"
+            echo "\`occ.digithings.ai.token\` and \`occ.digithings.ai.backend.digisearchIndex\`."
+            echo "The second narrows the retrieval corpus to \`occ_help\`. Both are required,"
+            echo "so a token rotation on its own cannot report a compliant rollout."
             echo
             echo "To run for real: set \`dry_run\` to false and type \`ROLLOUT\` in"
             echo "\`confirm\`, then clear the \`production\` environment approval."
