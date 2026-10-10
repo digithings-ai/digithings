@@ -1,0 +1,11 @@
+{
+  "source": "config/contract/contract.yaml",
+  "vars": {
+    "CLICKHOUSE_CLUSTER_ENABLED": "false",
+    "LANGFUSE_S3_EVENT_UPLOAD_BUCKET": "digitrace-langfuse-events",
+    "LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE": "true",
+    "LANGFUSE_S3_EVENT_UPLOAD_PREFIX": "events/",
+    "LANGFUSE_S3_EVENT_UPLOAD_REGION": "auto"
+  },
+  "worker": "digitrace-langfuse"
+}

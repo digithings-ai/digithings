@@ -1,0 +1,1611 @@
+# GENERATED ONCE by config/contract/bootstrap_contract.py, then maintained by hand.
+# This file is the SOURCE OF TRUTH. check_contract.py proves every wrangler var,
+# every wrangler binding and every compose interpolation maps to an entry here.
+# Never paste a secret value into this file.
+version: 1
+description: 'Self-host stack contract: services, ports, env, secrets and bindings. Source of truth for
+  config/contract generators and for check_contract.py.'
+generated_by: config/contract/bootstrap_contract.py (checked in; edit the YAML, not the script)
+notes:
+- The brief cited ~/local-stack-plan.md sections 0/1/8. That file does not exist; this contract was derived
+  from the repository itself.
+- wrangler.toml does not declare secrets. The secrets section is transcribed from the documented per-worker
+  checklists and is NOT mechanically verified by check_contract.py.
+services:
+- name: digikey-blocklist-redis
+  compose_file: docker-compose.yml
+  image: redis:7-alpine
+  build_context: null
+  ports: []
+  profiles: []
+- name: digikey
+  compose_file: docker-compose.yml
+  image: digi-digikey:latest
+  build_context:
+    context: .
+    dockerfile: digikey/Dockerfile
+  ports:
+  - 127.0.0.1:8005:8005
+  profiles: []
+- name: ollama
+  compose_file: docker-compose.yml
+  image: ollama/ollama:latest
+  build_context: null
+  ports:
+  - 127.0.0.1:11435:11434
+  profiles: []
+- name: digitrace
+  compose_file: docker-compose.yml
+  image: digi-digitrace:latest
+  build_context:
+    context: .
+    dockerfile: digitrace/Dockerfile
+  ports:
+  - 127.0.0.1:8003:8003
+  profiles: []
+- name: digigraph
+  compose_file: docker-compose.yml
+  image: digi-digigraph:latest
+  build_context:
+    context: .
+    dockerfile: digigraph/Dockerfile
+  ports:
+  - 127.0.0.1:8000:8000
+  profiles: []
+- name: digiquant
+  compose_file: docker-compose.yml
+  image: digi-digiquant:latest
+  build_context:
+    context: .
+    dockerfile: digiquant/Dockerfile
+  ports:
+  - 127.0.0.1:8001:8001
+  profiles: []
+- name: digisearch
+  compose_file: docker-compose.yml
+  image: digi-digisearch:latest
+  build_context:
+    context: .
+    dockerfile: digisearch/Dockerfile
+  ports:
+  - 127.0.0.1:8002:8002
+  profiles: []
+- name: searxng
+  compose_file: docker-compose.yml
+  image: searxng/searxng:latest
+  build_context: null
+  ports:
+  - 127.0.0.1:8080:8080
+  profiles: []
+- name: valkey
+  compose_file: docker-compose.yml
+  image: valkey/valkey:9-alpine
+  build_context: null
+  ports: []
+  profiles: []
+- name: digivault
+  compose_file: docker-compose.yml
+  image: digi-digivault:latest
+  build_context:
+    context: .
+    dockerfile: digivault/Dockerfile
+  ports:
+  - 127.0.0.1:8004:8004
+  profiles:
+  - digivault
+- name: litellm
+  compose_file: docker-compose.yml
+  image: docker.litellm.ai/berriai/litellm:main-stable
+  build_context: null
+  ports:
+  - 127.0.0.1:4000:4000
+  profiles: []
+- name: redis
+  compose_file: docker-compose.yml
+  image: redis:7-alpine
+  build_context: null
+  ports: []
+  profiles:
+  - litellm-cache
+- name: omniroute-auth-guard
+  compose_file: docker-compose.yml
+  image: busybox:1.36
+  build_context: null
+  ports: []
+  profiles:
+  - omniroute
+- name: omniroute
+  compose_file: docker-compose.yml
+  image: diegosouzapw/omniroute:3.8.50@sha256:085c57adf499a8aaa9f35ccde95c0df9c11bd9ecd18d6c9edbf3b68b8079ba9d
+  build_context: null
+  ports:
+  - 127.0.0.1:20128:20128
+  profiles:
+  - omniroute
+- name: digisearch-mcp
+  compose_file: docker-compose.yml
+  image: digi-digisearch:latest
+  build_context:
+    context: .
+    dockerfile: digisearch/Dockerfile
+  ports:
+  - 127.0.0.1:8765:8765
+  profiles:
+  - digisearch-mcp
+- name: digivault-mcp
+  compose_file: docker-compose.yml
+  image: digi-digivault-mcp:latest
+  build_context:
+    context: .
+    dockerfile: digivault/Dockerfile.mcp
+  ports:
+  - 127.0.0.1:8769:8769
+  profiles:
+  - digivault-mcp
+- name: zammad-mcp
+  compose_file: docker-compose.yml
+  image: digi-zammad-mcp:latest
+  build_context:
+    context: .
+    dockerfile: scripts/zammad_mcp/Dockerfile.mcp
+  ports:
+  - 127.0.0.1:8770:8770
+  profiles:
+  - zammad-mcp
+- name: heartbeat
+  compose_file: docker-compose.yml
+  image: digi-digiclaw:latest
+  build_context:
+    context: .
+    dockerfile: digiclaw/Dockerfile
+  ports: []
+  profiles:
+  - heartbeat
+- name: digichat-db
+  compose_file: docker-compose.yml
+  image: postgres:16-alpine
+  build_context: null
+  ports:
+  - 127.0.0.1:5433:5432
+  profiles:
+  - digichat
+- name: digichat
+  compose_file: docker-compose.yml
+  image: digi-digichat:latest
+  build_context:
+    context: .
+    dockerfile: apps/digichat/Dockerfile
+  ports:
+  - ${DIGICHAT_PUBLISH_HOST:-127.0.0.1}:${DIGICHAT_PUBLISH_PORT:-3005}:3000
+  profiles:
+  - digichat
+- name: prometheus
+  compose_file: docker-compose.yml
+  image: prom/prometheus:latest
+  build_context: null
+  ports:
+  - 127.0.0.1:9090:9090
+  profiles:
+  - observability
+- name: grafana
+  compose_file: docker-compose.yml
+  image: grafana/grafana:latest
+  build_context: null
+  ports:
+  - 127.0.0.1:3001:3000
+  profiles:
+  - observability
+- name: otel-collector
+  compose_file: docker-compose.yml
+  image: otel/opentelemetry-collector-contrib:0.109.0
+  build_context: null
+  ports:
+  - 127.0.0.1:4317:4317
+  - 127.0.0.1:4318:4318
+  profiles:
+  - otel
+- name: clickhouse
+  compose_file: apps/digitrace-langfuse/docker-compose.local.yml
+  image: clickhouse/clickhouse-server:25.12
+  build_context: null
+  ports:
+  - 8123:8123
+  - 9000:9000
+  profiles: []
+  note: local dev only
+- name: redis
+  compose_file: apps/digitrace-langfuse/docker-compose.local.yml
+  image: redis:7
+  build_context: null
+  ports:
+  - 6379:6379
+  profiles: []
+  note: local dev only
+ports:
+- name: digigraph
+  container_port: 8000
+  host_port: 8000
+  note: public route graph.digithings.ai
+- name: digiquant
+  container_port: 8001
+  host_port: 8001
+- name: digisearch
+  container_port: 8002
+  host_port: 8002
+  note: public route search.digithings.ai; binds 0.0.0.0 in-container so the Worker can proxy (#4071)
+- name: digitrace
+  container_port: 8003
+  host_port: 8003
+- name: digivault
+  container_port: 8004
+  host_port: 8004
+- name: digikey
+  container_port: 8005
+  host_port: 8005
+  note: public route key.digithings.ai
+- name: litellm
+  container_port: 4000
+  host_port: 4000
+- name: ollama
+  container_port: 11434
+  host_port: 11435
+  note: host port is remapped
+- name: digichat
+  container_port: 3000
+  host_port: 3005
+  note: host port is DIGICHAT_PUBLISH_PORT, default 3005
+- name: digichat-db
+  container_port: 5432
+  host_port: 5433
+  note: host port is remapped
+- name: digisearch-mcp
+  container_port: 8765
+  host_port: 8765
+- name: digivault-mcp
+  container_port: 8769
+  host_port: 8769
+- name: zammad-mcp
+  container_port: 8770
+  host_port: 8770
+- name: searxng
+  container_port: 8080
+  host_port: 8080
+- name: omniroute
+  container_port: 20128
+  host_port: 20128
+- name: prometheus
+  container_port: 9090
+  host_port: 9090
+- name: grafana
+  container_port: 3000
+  host_port: 3001
+  note: host port is remapped
+- name: otel-collector
+  container_port: 4317
+  host_port: 4317
+  note: gRPC 4317 and HTTP 4318
+- name: digiquant-mcp-container
+  container_port: 8767
+  host_port: null
+  note: FastMCP inside the stack Worker, not published
+env:
+- name: AUDIT_LOG_PATH
+  description: Where the audit log is written.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files: []
+    compose_literal:
+    - AUDIT_LOG_PATH
+- name: AUTH_OIDC_CLIENT_ID
+  description: OIDC client id for DigiChat SSO.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files:
+    - apps/digichat/.env.example
+    compose_literal: []
+- name: AUTH_OIDC_CLIENT_SECRET
+  description: OIDC client secret for DigiChat SSO.
+  secret: true
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files:
+    - apps/digichat/.env.example
+    compose_literal: []
+- name: AUTH_OIDC_ISSUER
+  description: OIDC issuer for DigiChat SSO.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files:
+    - apps/digichat/.env.example
+    compose_literal: []
+- name: AUTH_SECRET
+  description: DigiChat session-signing secret. Never printed; rotate invalidates every session.
+  secret: true
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files:
+    - .env.example
+    - apps/digichat/.env.example
+    compose_literal: []
+- name: AUTH_TRUST_HOST
+  description: Trust the Host header for DigiChat URL building.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files:
+    - apps/digichat/.env.example
+    compose_literal: []
+- name: AUTH_URL
+  description: DigiChat public auth origin.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files:
+    - .env.example
+    - apps/digichat/.env.example
+    compose_literal: []
+- name: BACKFILL_ENABLED
+  description: '`0` keeps POST /backfill returning 404; `1` exposes a production-writing surface.'
+  secret: false
+  sources:
+    wrangler_workers:
+    - digithings-cron
+    compose_files: []
+    env_example_files: []
+    compose_literal: []
+  wrangler_values:
+    digithings-cron: '0'
+- name: CHROMA_PATH
+  description: Chroma persistence directory inside the container.
+  secret: false
+  sources:
+    wrangler_workers:
+    - digithings-stack
+    compose_files: []
+    env_example_files: []
+    compose_literal:
+    - CHROMA_PATH
+  wrangler_values:
+    digithings-stack: /data/chroma
+- name: CLICKHOUSE_CLUSTER_ENABLED
+  description: '`false` runs single-node ClickHouse without ON CLUSTER.'
+  secret: false
+  sources:
+    wrangler_workers:
+    - digitrace-langfuse
+    compose_files: []
+    env_example_files: []
+    compose_literal: []
+  wrangler_values:
+    digitrace-langfuse: 'false'
+- name: CLOUDFLARE_ACCOUNT_ID
+  description: Canonical Cloudflare account id for both Vectorize and D1.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files:
+    - .env.example
+    compose_literal: []
+- name: CLOUDFLARE_EMAIL_API_TOKEN
+  description: Credential for the Cloudflare transactional email API.
+  secret: true
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files:
+    - .env.example
+    compose_literal: []
+- name: DIGICHAT_AUTO_MIGRATE
+  description: '`1` runs digichat migrations at boot.'
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files:
+    - apps/digichat/.env.example
+    compose_literal:
+    - DIGICHAT_AUTO_MIGRATE
+- name: DIGICHAT_BOOTSTRAP_API_KEY
+  description: API key minted for the bootstrap tenant.
+  secret: true
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files:
+    - apps/digichat/.env.example
+    compose_literal: []
+- name: DIGICHAT_BOOTSTRAP_TENANT_SLUG
+  description: Tenant created at first boot.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files:
+    - apps/digichat/.env.example
+    compose_literal: []
+- name: DIGICHAT_CHROME_SKIN
+  description: Chrome skin used by digichat-dev.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal: []
+- name: DIGICHAT_CONFIG_PATH
+  description: Path to the digichat config document.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal: []
+- name: DIGICHAT_DATABASE_URL
+  description: digichat Postgres DSN. Deliberately unset in the DB-less Cloudflare deployment.
+  secret: true
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files:
+    - apps/digichat/.env.example
+    compose_literal:
+    - DIGICHAT_DATABASE_URL
+- name: DIGICHAT_DEFAULT_TENANT_SLUG
+  description: Tenant used when a request carries none.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files:
+    - apps/digichat/.env.example
+    compose_literal: []
+- name: DIGICHAT_DEV_AUTH
+  description: Enables the local dev auth bypass.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files:
+    - apps/digichat/.env.example
+    compose_literal: []
+- name: DIGICHAT_DEV_PASSWORD
+  description: Password for the local dev auth bypass.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files:
+    - apps/digichat/.env.example
+    compose_literal: []
+- name: DIGICHAT_EMBED_HOSTS
+  description: Origins allowed to embed digichat. A closed list.
+  secret: false
+  sources:
+    wrangler_workers:
+    - digithings-digichat
+    - digithings-stack
+    compose_files: []
+    env_example_files: []
+    compose_literal: []
+  wrangler_values:
+    digithings-digichat: digithings.ai,www.digithings.ai,occ.digithings.ai,digiquant.io,www.digiquant.io
+    digithings-stack: digithings.ai,www.digithings.ai,occ.digithings.ai,digiquant.io,www.digiquant.io
+- name: DIGICHAT_ENABLED_SERVICES
+  description: Backends digichat may call. Deployed workers set `digigraph`; local dev enables four.
+  secret: false
+  sources:
+    wrangler_workers:
+    - digithings-digichat
+    - digithings-stack
+    compose_files: []
+    env_example_files:
+    - apps/digichat/.env.example
+    compose_literal: []
+  wrangler_values:
+    digithings-digichat: digigraph
+    digithings-stack: digigraph
+- name: DIGICHAT_MODEL
+  description: Default model slug for digichat replies.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files:
+    - apps/digichat/.env.example
+    compose_literal: []
+- name: DIGICHAT_OPENWEBUI_FORMAT
+  description: Emit OpenWebUI-compatible message envelopes.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files:
+    - apps/digichat/.env.example
+    compose_literal: []
+- name: DIGICHAT_POSTGRES_PASSWORD
+  description: digichat-db Postgres password.
+  secret: true
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal: []
+- name: DIGICHAT_PUBLISH_HOST
+  description: Host interface digichat's published port binds to.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal: []
+- name: DIGICHAT_PUBLISH_PORT
+  description: Host port for digichat (3005 by default; the container listens on 3000).
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal: []
+- name: DIGICHAT_REQUIRE_ROOT_AUTH
+  description: '`0` allows the anonymous embed path.'
+  secret: false
+  sources:
+    wrangler_workers:
+    - digithings-digichat
+    - digithings-stack
+    compose_files: []
+    env_example_files: []
+    compose_literal: []
+  wrangler_values:
+    digithings-digichat: '0'
+    digithings-stack: '0'
+- name: DIGICHAT_TRACE_UI
+  description: Render the trace panel in digichat.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files:
+    - apps/digichat/.env.example
+    compose_literal: []
+- name: DIGICLAW_AGENTS_DIR
+  description: Directory holding digiclaw agent definitions.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files: []
+    compose_literal:
+    - DIGICLAW_AGENTS_DIR
+- name: DIGICLAW_DIGIKEY_API_KEY
+  description: Long-lived API key the digiclaw heartbeat agent uses.
+  secret: true
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal: []
+- name: DIGICLAW_SCHEDULER_STATE
+  description: File holding the digiclaw scheduler cursor.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files: []
+    compose_literal:
+    - DIGICLAW_SCHEDULER_STATE
+- name: DIGIGRAPH_HOST
+  description: Host the digigraph dev server binds to.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files:
+    - .env.example
+    compose_literal: []
+- name: DIGIGRAPH_INTERNAL_URL
+  description: digigraph base URL as called by digichat.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files:
+    - apps/digichat/.env.example
+    compose_literal:
+    - DIGIGRAPH_INTERNAL_URL
+- name: DIGIGRAPH_PORT
+  description: Port the digigraph dev server binds to.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files:
+    - .env.example
+    compose_literal: []
+- name: DIGIGRAPH_UPSTREAM_API_KEY
+  description: digigraph's credential for its own upstream LLM.
+  secret: true
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files:
+    - apps/digichat/.env.example
+    compose_literal: []
+- name: DIGIGRAPH_URL
+  description: digigraph base URL as set inside compose.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files: []
+    compose_literal:
+    - DIGIGRAPH_URL
+- name: DIGIKEY_ADMIN_TOKEN
+  description: Optional digikey admin token for key management calls.
+  secret: true
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal: []
+- name: DIGIKEY_ALLOW_DEV_GLOBAL
+  description: Allows one global dev key. `0` in production.
+  secret: false
+  sources:
+    wrangler_workers:
+    - digithings-stack
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal: []
+  wrangler_values:
+    digithings-stack: '0'
+- name: DIGIKEY_ALLOW_EPHEMERAL_KEY
+  description: '`0` in production; `1` only for local Docker via make stack-local.'
+  secret: false
+  sources:
+    wrangler_workers:
+    - digithings-stack
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal: []
+  wrangler_values:
+    digithings-stack: '0'
+- name: DIGIKEY_AUDIENCE
+  description: Expected `aud` claim for every digikey-issued token.
+  secret: false
+  sources:
+    wrangler_workers:
+    - digithings-stack
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal: []
+  wrangler_values:
+    digithings-stack: digi-ecosystem
+- name: DIGIKEY_BFF_TOKEN
+  description: Server-to-server token DigiChat uses to call digikey.
+  secret: true
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files:
+    - apps/digichat/.env.example
+    compose_literal: []
+- name: DIGIKEY_BLOCKLIST_REDIS_URL
+  description: Redis holding the JWT revocation blocklist.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal: []
+- name: DIGIKEY_DATABASE_URL
+  description: digikey Postgres DSN. Required in the stack Worker; a sqlite path is the local default.
+  secret: true
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal: []
+- name: DIGIKEY_ISSUER
+  description: Expected `iss` claim. Must match the URL services fetch JWKS from.
+  secret: false
+  sources:
+    wrangler_workers:
+    - digithings-stack
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal: []
+  wrangler_values:
+    digithings-stack: https://key.digithings.ai
+- name: DIGIKEY_JWKS_URL
+  description: JWKS endpoint every protected service fetches to verify JWTs.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal: []
+- name: DIGIKEY_LITELLM_PROXY_KEY
+  description: digikey's key into LiteLLM; falls back to LITELLM_MASTER_KEY.
+  secret: true
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal: []
+- name: DIGIKEY_PUBLIC_KEY_PEM
+  description: Pinned digikey public key, used when JWKS is unreachable.
+  secret: true
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal: []
+- name: DIGIKEY_REQUIRE_BLOCKLIST
+  description: '`1` refuses token issuance when the blocklist is unreachable (production default).'
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal: []
+- name: DIGIKEY_URL
+  description: Base URL clients use to reach digikey.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files:
+    - apps/digichat/.env.example
+    compose_literal: []
+- name: DIGIQUANT_DATA_DIR
+  description: digiquant data directory inside the container.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files: []
+    compose_literal:
+    - DIGIQUANT_DATA_DIR
+- name: DIGIQUANT_HOST
+  description: Host the digiquant dev server binds to.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files:
+    - .env.example
+    compose_literal: []
+- name: DIGIQUANT_INTERNAL_URL
+  description: digiquant base URL as called by digichat.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files:
+    - apps/digichat/.env.example
+    compose_literal:
+    - DIGIQUANT_INTERNAL_URL
+- name: DIGIQUANT_MARKET_DATA_BACKEND
+  description: '`r2` makes containers read the R2 market seam; `127` drops the Supabase tables.'
+  secret: false
+  sources:
+    wrangler_workers:
+    - digithings-stack
+    compose_files: []
+    env_example_files: []
+    compose_literal: []
+  wrangler_values:
+    digithings-stack: r2
+- name: DIGIQUANT_PORT
+  description: Port the digiquant dev server binds to.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files:
+    - .env.example
+    compose_literal: []
+- name: DIGIQUANT_URL
+  description: digiquant base URL. Empty in the chat-only Profile A deployment.
+  secret: false
+  sources:
+    wrangler_workers:
+    - digithings-stack
+    compose_files: []
+    env_example_files:
+    - .env.example
+    compose_literal:
+    - DIGIQUANT_URL
+  wrangler_values:
+    digithings-stack: ''
+- name: DIGISEARCH_EMBEDDING_PROVIDER
+  description: Embedding model id. All three call sites must agree exactly (384 dims) or retrieval silently
+    misses.
+  secret: false
+  sources:
+    wrangler_workers:
+    - digithings-stack
+    compose_files: []
+    env_example_files: []
+    compose_literal: []
+  wrangler_values:
+    digithings-stack: Xenova/paraphrase-multilingual-MiniLM-L12-v2
+- name: DIGISEARCH_INDEX
+  description: digisearch collection name. Must agree across ingest, backfill and query.
+  secret: false
+  sources:
+    wrangler_workers:
+    - digithings-stack
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal: []
+  wrangler_values:
+    digithings-stack: digithings_docs
+- name: DIGISEARCH_INTERNAL_URL
+  description: digisearch base URL as called by digichat.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files:
+    - apps/digichat/.env.example
+    compose_literal:
+    - DIGISEARCH_INTERNAL_URL
+- name: DIGISEARCH_SEARXNG_URL
+  description: SearxNG endpoint digisearch calls for web search.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal: []
+- name: DIGISEARCH_URL
+  description: digisearch base URL as seen from its caller.
+  secret: false
+  sources:
+    wrangler_workers:
+    - digithings-stack
+    compose_files: []
+    env_example_files:
+    - .env.example
+    compose_literal:
+    - DIGISEARCH_URL
+  wrangler_values:
+    digithings-stack: http://127.0.0.1:8002
+- name: DIGITRACE_INTERNAL_URL
+  description: digitrace base URL as called by digichat.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files:
+    - apps/digichat/.env.example
+    compose_literal:
+    - DIGITRACE_INTERNAL_URL
+- name: DIGITRACE_URL
+  description: digitrace base URL. Empty in the chat-only Profile A deployment.
+  secret: false
+  sources:
+    wrangler_workers:
+    - digithings-stack
+    compose_files: []
+    env_example_files: []
+    compose_literal:
+    - DIGITRACE_URL
+  wrangler_values:
+    digithings-stack: ''
+- name: DIGIVAULT_ROOT
+  description: digivault storage root inside the container.
+  secret: false
+  sources:
+    wrangler_workers:
+    - digithings-stack
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal: []
+  wrangler_values:
+    digithings-stack: /data/vault
+- name: DIGIVAULT_URL
+  description: digivault base URL as seen from its caller.
+  secret: false
+  sources:
+    wrangler_workers:
+    - digithings-stack
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal: []
+  wrangler_values:
+    digithings-stack: http://127.0.0.1:8004
+- name: DIGI_ALLOWED_ORIGINS
+  description: CORS allowlist for the digigraph dev server.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files:
+    - .env.example
+    compose_literal: []
+- name: DIGI_CONFIG_PATH
+  description: Path to the digi config document.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files: []
+    compose_literal:
+    - DIGI_CONFIG_PATH
+- name: DIGI_ENABLE_DEBUG_ENDPOINTS
+  description: Exposes debug endpoints.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal: []
+- name: DIGI_ENABLE_THREAD_API
+  description: Exposes the thread API.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal: []
+- name: DIGI_LLM_MODE
+  description: LiteLLM routing mode. `test` keeps local runs off paid upstreams.
+  secret: false
+  sources:
+    wrangler_workers:
+    - digithings-stack
+    compose_files:
+    - docker-compose.yml
+    env_example_files:
+    - .env.example
+    compose_literal: []
+  wrangler_values:
+    digithings-stack: test
+- name: DIGI_OTEL_ENDPOINT
+  description: OTLP endpoint services export spans to.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal: []
+- name: DIGI_PROJECT_CONFIG
+  description: Path to the project config document.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal: []
+- name: DIGI_TENANT_CORPUS_MAP
+  description: Per-tenant digisearch index and digivault prefix. Value copied verbatim from the stack
+    Worker.
+  secret: false
+  sources:
+    wrangler_workers:
+    - digithings-stack
+    compose_files: []
+    env_example_files: []
+    compose_literal: []
+  wrangler_values:
+    digithings-stack: '{"digithings": {"digisearchIndex": "digithings_docs", "vaultPathPrefix": "clients/digithings"},
+      "occ": {"digisearchIndex": "occ_help", "vaultPathPrefix": "clients/online-compliance-center", "researchSystemPrompt":
+      "You are the Online Compliance Center (OCC) help assistant for digithings.ai/chat/occ.\nAnswer only
+      from what you retrieve. You get several tool rounds per question.\n\nGround every answer in retrieved
+      corpus from the digisearch index `occ_help` (help docs)\nand/or digivault_search_notes under `clients/online-compliance-center/`.\nAlways
+      cite help article URLs or PDF source paths from metadata.\n\nSearch results are excerpts, not whole
+      documents. A row marked \"truncated\": true\nmeans you have not seen that note \u2014 call digivault_get_note
+      with its doc_id and read\nthe whole thing before answering. An unmarked row is not a promise of
+      completeness:\nevery row is a preview. Always do this when the question involves a\nprocedure, a
+      list of steps, a table, a count, or the words every, all, or which:\nhelp PDFs are stored one page
+      per note, and an excerpt routinely stops before the\nstep that answers the question.\n\nNever say
+      a policy, step, or exception does not exist unless you loaded the full note\nand looked. If all
+      you saw was a truncated excerpt, say what it showed and that the\nrest was not loaded.\n\nAnswer
+      questions about OCC policies, procedures, FAQ topics, and public help\nPDFs. Do not invent product
+      features, pricing, or portal capabilities not\npresent in the retrieved sources. E-learning / YouTube
+      videos are out of\nscope for this corpus \u2014 say so if asked.\n\nDo not cite digithings or digiquant
+      internal architecture docs. If the\ncorpus has no grounded answer, say so clearly.\n\nTicket content
+      is not part of this corpus. For ticket questions use the read-only zammad tools, and say so clearly
+      if they do not ground the answer."}}'
+- name: DIGI_WORKSPACE
+  description: Workspace root for digiclaw.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files: []
+    compose_literal:
+    - DIGI_WORKSPACE
+- name: DRY_RUN
+  description: '`1` makes cron jobs compute without writing.'
+  secret: false
+  sources:
+    wrangler_workers:
+    - digithings-cron
+    compose_files: []
+    env_example_files: []
+    compose_literal: []
+  wrangler_values:
+    digithings-cron: '0'
+- name: EXPORT_OUTPUT_DIR
+  description: Directory exports are written to.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files: []
+    compose_literal:
+    - EXPORT_OUTPUT_DIR
+- name: GF_ANALYTICS_REPORTING_ENABLED
+  description: Grafana usage reporting toggle.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files: []
+    compose_literal:
+    - GF_ANALYTICS_REPORTING_ENABLED
+- name: GF_USERS_ALLOW_SIGN_UP
+  description: Grafana self sign-up toggle.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files: []
+    compose_literal:
+    - GF_USERS_ALLOW_SIGN_UP
+- name: GITHUB_OVERRIDE_JOBS
+  description: Comma-separated job ids that regain workflow_dispatch. Empty means none.
+  secret: false
+  sources:
+    wrangler_workers:
+    - digithings-cron
+    compose_files: []
+    env_example_files: []
+    compose_literal: []
+  wrangler_values:
+    digithings-cron: ''
+- name: GRAFANA_ADMIN_PASSWORD
+  description: Grafana admin password.
+  secret: true
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files:
+    - .env.example
+    compose_literal: []
+- name: GRAFANA_ADMIN_USER
+  description: Grafana admin user.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal: []
+- name: LANGFUSE_S3_EVENT_UPLOAD_BUCKET
+  description: R2 bucket receiving Langfuse events.
+  secret: false
+  sources:
+    wrangler_workers:
+    - digitrace-langfuse
+    compose_files: []
+    env_example_files: []
+    compose_literal: []
+  wrangler_values:
+    digitrace-langfuse: digitrace-langfuse-events
+- name: LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE
+  description: R2 path-style addressing.
+  secret: false
+  sources:
+    wrangler_workers:
+    - digitrace-langfuse
+    compose_files: []
+    env_example_files: []
+    compose_literal: []
+  wrangler_values:
+    digitrace-langfuse: 'true'
+- name: LANGFUSE_S3_EVENT_UPLOAD_PREFIX
+  description: Key prefix for Langfuse event objects.
+  secret: false
+  sources:
+    wrangler_workers:
+    - digitrace-langfuse
+    compose_files: []
+    env_example_files: []
+    compose_literal: []
+  wrangler_values:
+    digitrace-langfuse: events/
+- name: LANGFUSE_S3_EVENT_UPLOAD_REGION
+  description: '`auto` is the R2 region convention.'
+  secret: false
+  sources:
+    wrangler_workers:
+    - digitrace-langfuse
+    compose_files: []
+    env_example_files: []
+    compose_literal: []
+  wrangler_values:
+    digitrace-langfuse: auto
+- name: LITELLM_MASTER_KEY
+  description: LiteLLM master key. An empty value makes litellm exit 3.
+  secret: true
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal: []
+- name: LITELLM_PROXY_API_KEY
+  description: Credential services present to LiteLLM as a proxy.
+  secret: true
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal: []
+- name: NEXT_PUBLIC_DIGICHAT_TRACE_UI
+  description: Browser-visible twin of DIGICHAT_TRACE_UI.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files:
+    - apps/digichat/.env.example
+    compose_literal: []
+- name: NODE_ENV
+  description: Node runtime mode.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files: []
+    compose_literal:
+    - NODE_ENV
+- name: NOTIFY_FROM
+  description: From address for notifications sent by the cron Worker.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files:
+    - .env.example
+    compose_literal: []
+- name: OLLAMA_API_KEY
+  description: Credential for a non-local Ollama endpoint.
+  secret: true
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files:
+    - .env.example
+    compose_literal: []
+- name: OMNIROUTE_API_KEY
+  description: Omniroute credential.
+  secret: true
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal: []
+- name: OMNIROUTE_AUTH_PASSWORD
+  description: Omniroute auth-guard password.
+  secret: true
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal: []
+- name: OPENAI_API_BASE
+  description: OpenAI-compatible base URL, pointing at LiteLLM inside the stack.
+  secret: false
+  sources:
+    wrangler_workers:
+    - digithings-stack
+    compose_files: []
+    env_example_files: []
+    compose_literal:
+    - OPENAI_API_BASE
+  wrangler_values:
+    digithings-stack: http://127.0.0.1:4000/v1
+- name: OPENAI_API_KEY
+  description: OpenAI credential.
+  secret: true
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files:
+    - .env.example
+    compose_literal: []
+- name: OPENROUTER_API_KEY
+  description: OpenRouter credential.
+  secret: true
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files:
+    - .env.example
+    compose_literal: []
+- name: OTEL_EXPORTER_OTLP_ENDPOINT
+  description: Standard OTLP exporter endpoint.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal: []
+- name: PORT
+  description: Port a service listens on, set literally in compose.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files: []
+    compose_literal:
+    - PORT
+- name: PYTHONUNBUFFERED
+  description: Unbuffered Python stdout.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files: []
+    compose_literal:
+    - PYTHONUNBUFFERED
+- name: SUPABASE_URL
+  description: Shared Supabase project URL.
+  secret: false
+  sources:
+    wrangler_workers:
+    - dashboard-api
+    - digithings-stack
+    compose_files: []
+    env_example_files: []
+    compose_literal: []
+  wrangler_values:
+    dashboard-api: https://rwagjbkvxkdwqmouagad.supabase.co
+    digithings-stack: https://rwagjbkvxkdwqmouagad.supabase.co
+- name: XAI_API_KEY
+  description: xAI credential.
+  secret: true
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files:
+    - .env.example
+    compose_literal: []
+- name: ZAMMAD_BASE_URL
+  description: Zammad desk base URL for the read-only ticketing MCP.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal: []
+- name: ZAMMAD_MCP_ALLOWED_HOSTS
+  description: Hosts the Zammad MCP will proxy to.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files: []
+    compose_literal:
+    - ZAMMAD_MCP_ALLOWED_HOSTS
+- name: ZAMMAD_MCP_HOST
+  description: Bind address for the Zammad MCP.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files: []
+    compose_literal:
+    - ZAMMAD_MCP_HOST
+secrets:
+- name: DIGIKEY_DATABASE_URL
+  worker: digithings-stack
+  required: true
+  note: a var fallback would lose every issued key and the revocation blocklist on the next instance replace
+    (#4080)
+- name: DIGIKEY_PRIVATE_KEY_PEM
+  worker: digithings-stack
+  required: true
+  note: stable RS256 key; no ephemeral keys in production
+- name: DIGIKEY_BFF_TOKEN
+  worker: digithings-stack, digithings-digichat
+  required: true
+- name: DIGIKEY_ADMIN_TOKEN
+  worker: digithings-stack
+  required: false
+- name: LITELLM_PROXY_API_KEY
+  worker: digithings-stack
+  required: true
+- name: GROQ_API_KEY
+  worker: digithings-stack
+  required: false
+- name: OPENROUTER_API_KEY
+  worker: digithings-stack
+  required: false
+- name: OPENAI_API_KEY
+  worker: digithings-stack
+  required: false
+- name: CHEAPERINFERENCE_API_KEY
+  worker: digithings-stack
+  required: false
+- name: ZAMMAD_API_TOKEN
+  worker: digithings-stack
+  required: false
+  note: read-only ticketing MCP
+- name: GLOOMBERB_SESSION_COOKIE
+  worker: digithings-stack
+  required: false
+  note: not a shared digithings credential; owner is the deployer
+- name: R2_ACCOUNT_ID
+  worker: digithings-stack, digiquant-runner
+  required: true
+- name: R2_BUCKET
+  worker: digithings-stack, digiquant-runner
+  required: true
+- name: R2_ACCESS_KEY_ID
+  worker: digithings-stack, digiquant-runner
+  required: true
+- name: R2_SECRET_ACCESS_KEY
+  worker: digithings-stack, digiquant-runner
+  required: true
+- name: CLOUDFLARE_ACCOUNT_ID
+  worker: digithings-stack, digiquant-runner
+  required: true
+- name: CLOUDFLARE_API_TOKEN
+  worker: digithings-stack, digiquant-runner
+  required: true
+  note: same account as CLOUDFLARE_ACCOUNT_ID; also wrangler's own auth var, so unset it before any wrangler
+    secret put
+- name: D1_DATABASE_MAP
+  worker: digithings-stack
+  required: true
+  note: tenant -> D1 id JSON
+- name: SUPABASE_SERVICE_ROLE_KEY
+  worker: dashboard-api
+  required: true
+  note: worker secret; never in the static bundle
+- name: RUNNER_AUTH_TOKEN
+  worker: digiquant-runner, digithings-cron
+  required: true
+- name: CORE_POSTGRES_URI
+  worker: digiquant-runner
+  required: true
+- name: CORE_SUPABASE_URL
+  worker: digiquant-runner
+  required: true
+- name: CORE_SUPABASE_SERVICE_KEY
+  worker: digiquant-runner
+  required: true
+- name: CLOUDFLARE_EMAIL_API_TOKEN
+  worker: digiquant-runner
+  required: false
+- name: NOTIFY_FROM
+  worker: digiquant-runner
+  required: false
+- name: GH_DISPATCH_TOKEN
+  worker: digithings-cron
+  required: true
+  note: Actions write + Issues read/write; no Contents grant, so use REST not the GraphQL gh CLI
+- name: CRON_KICK_SECRET
+  worker: digithings-cron
+  required: false
+  note: enables POST /kick and GET /runs/:id
+- name: AUTH_SECRET
+  worker: digithings-digichat, digithings-stack
+  required: true
+- name: DIGICHAT_EMBED_TENANTS
+  worker: digithings-digichat, digithings-stack
+  required: true
+- name: DIGIGRAPH_INTERNAL_URL
+  worker: digithings-digichat, digithings-stack
+  required: true
+- name: DIGIKEY_URL
+  worker: digithings-digichat, digithings-stack
+  required: true
+- name: DIGICHAT_PLAN_PROOF_SECRET
+  worker: digithings-digichat, digithings-stack
+  required: true
+- name: DIGICHAT_MONITOR_TOKENS
+  worker: digithings-digichat
+  required: false
+- name: DATABASE_URL
+  worker: digitrace-langfuse
+  required: true
+- name: NEXTAUTH_SECRET
+  worker: digitrace-langfuse
+  required: true
+- name: SALT
+  worker: digitrace-langfuse
+  required: true
+- name: ENCRYPTION_KEY
+  worker: digitrace-langfuse
+  required: true
+  note: openssl rand -hex 32
+- name: NEXTAUTH_URL
+  worker: digitrace-langfuse
+  required: true
+- name: CLICKHOUSE_URL
+  worker: digitrace-langfuse
+  required: true
+- name: CLICKHOUSE_MIGRATION_URL
+  worker: digitrace-langfuse
+  required: true
+- name: CLICKHOUSE_USER
+  worker: digitrace-langfuse
+  required: true
+- name: CLICKHOUSE_PASSWORD
+  worker: digitrace-langfuse
+  required: true
+- name: REDIS_CONNECTION_STRING
+  worker: digitrace-langfuse
+  required: false
+  note: preferred over REDIS_HOST/PORT/AUTH
+- name: LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID
+  worker: digitrace-langfuse
+  required: true
+- name: LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY
+  worker: digitrace-langfuse
+  required: true
+bindings:
+- worker: digiquant-runner
+  type: container
+  class_name: DigiQuantRunnerContainer
+  image: ../../Dockerfile.digiquant-runner
+  max_instances: 1
+  instance_type: standard-2
+  source: apps/digiquant-runner/wrangler.toml
+- worker: digiquant-runner
+  type: durable_object
+  name: RUNNER_CONTAINER
+  class_name: DigiQuantRunnerContainer
+  source: apps/digiquant-runner/wrangler.toml
+- worker: digiquant-runner
+  type: r2_bucket
+  name: ARCHIVE
+  bucket_name: digithings-archive
+  source: apps/digiquant-runner/wrangler.toml
+- worker: digithings-cron
+  type: durable_object
+  name: BACKFILL_LEDGER
+  class_name: BackfillLedger
+  source: apps/digithings-cron/wrangler.toml
+- worker: digithings-cron
+  type: service
+  name: RUNNER
+  service: digiquant-runner
+  source: apps/digithings-cron/wrangler.toml
+- worker: digithings-digichat
+  type: container
+  class_name: DigiChatContainer
+  image: ../../Dockerfile.digichat-cloudflare
+  max_instances: 5
+  instance_type: null
+  source: apps/digichat-cloudflare/wrangler.toml
+- worker: digithings-digichat
+  type: durable_object
+  name: DIGICHAT
+  class_name: DigiChatContainer
+  source: apps/digichat-cloudflare/wrangler.toml
+- worker: digithings-stack
+  type: container
+  class_name: DigiStackContainer
+  image: ../../Dockerfile.digithings-stack-cloudflare
+  max_instances: 5
+  instance_type: standard-2
+  source: apps/digithings-stack-cloudflare/wrangler.toml
+- worker: digithings-stack
+  type: container
+  class_name: DigiQuantMcpContainer
+  image: ../../digiquant/Dockerfile.mcp
+  max_instances: 1
+  instance_type: standard-2
+  source: apps/digithings-stack-cloudflare/wrangler.toml
+- worker: digithings-stack
+  type: container
+  class_name: DigiChatContainer
+  image: ../../Dockerfile.digichat-cloudflare
+  max_instances: 5
+  instance_type: standard-2
+  source: apps/digithings-stack-cloudflare/wrangler.toml
+- worker: digithings-stack
+  type: durable_object
+  name: STACK
+  class_name: DigiStackContainer
+  source: apps/digithings-stack-cloudflare/wrangler.toml
+- worker: digithings-stack
+  type: durable_object
+  name: MCP_STACK
+  class_name: DigiQuantMcpContainer
+  source: apps/digithings-stack-cloudflare/wrangler.toml
+- worker: digithings-stack
+  type: durable_object
+  name: DIGICHAT
+  class_name: DigiChatContainer
+  source: apps/digithings-stack-cloudflare/wrangler.toml
+- worker: digithings-stack
+  type: r2_bucket
+  name: MARKET_DATA
+  bucket_name: digithings-archive
+  source: apps/digithings-stack-cloudflare/wrangler.toml
+- worker: digitrace-langfuse
+  type: container
+  class_name: LangfuseWebContainer
+  image: ../../Dockerfile.digitrace-langfuse-web
+  max_instances: 2
+  instance_type: standard-2
+  source: apps/digitrace-langfuse/wrangler.toml
+- worker: digitrace-langfuse
+  type: container
+  class_name: LangfuseWorkerContainer
+  image: ../../Dockerfile.digitrace-langfuse-worker
+  max_instances: 1
+  instance_type: standard-2
+  source: apps/digitrace-langfuse/wrangler.toml
+- worker: digitrace-langfuse
+  type: durable_object
+  name: LANGFUSE_WEB
+  class_name: LangfuseWebContainer
+  source: apps/digitrace-langfuse/wrangler.toml
+- worker: digitrace-langfuse
+  type: durable_object
+  name: LANGFUSE_WORKER
+  class_name: LangfuseWorkerContainer
+  source: apps/digitrace-langfuse/wrangler.toml
+- worker: digitrace-langfuse
+  type: r2_bucket
+  name: LANGFUSE_EVENTS
+  bucket_name: digitrace-langfuse-events
+  source: apps/digitrace-langfuse/wrangler.toml
