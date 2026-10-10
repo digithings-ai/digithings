@@ -74,6 +74,8 @@ crons = [
   "33 6 * * MON",      # security-pip-audit
   "37 6 * * MON",      # security-npm-audit
   "41 6 * * *",        # token-canary
+  "0 8 * * MON",       # openwiki-update
+  "17,47 * * * *",     # production-deploy-gate-watchdog
   "17 6 1 * *",        # secret-staleness (monthly, DIG-248)
   "23 6 1 * *",        # dependency-freshness (monthly, DIG-1515)
   "17 6 * * *",        # smoke-site
