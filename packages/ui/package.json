@@ -6,6 +6,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./chart-scale": "./src/components/finance-charts/chart-scale.ts",
     "./styles/web-theme.css": "./src/styles/web-theme.css",
     "./styles/docs.css": "./src/styles/docs.css",
     "./styles/diagrams.css": "./src/styles/diagrams.css",
@@ -44,7 +45,6 @@
     "./styles/finance-tearsheet.css": "./src/styles/finance-tearsheet.css",
     "./styles/finance-tearsheet-overlay.css": "./src/styles/finance-tearsheet-overlay.css",
     "./styles/data-layout.css": "./src/styles/data-layout.css",
-    "./styles/card-rail.css": "./src/styles/card-rail.css",
     "./styles/repo-activity.css": "./src/styles/repo-activity.css",
     "./styles/deck.css": "./src/styles/deck.css",
     "./styles/effects-chrome.css": "./src/styles/effects-chrome.css",

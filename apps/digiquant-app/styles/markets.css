@@ -1,0 +1,14 @@
+/* markets group — imported by the coordinator. All selectors prefixed mk-. */
+.mk-strip { display: flex; flex-wrap: nowrap; align-items: baseline; gap: 0; overflow-x: auto; overflow-y: hidden; white-space: nowrap; font: 11px/1 var(--mono); scrollbar-width: none; }
+.mk-strip::-webkit-scrollbar { display: none; }
+.mk-q { flex: none; display: inline-flex; gap: 6px; align-items: baseline; padding: 7px 12px; border-right: 1px solid var(--hair); font-variant-numeric: tabular-nums; }
+.mk-q-s { color: var(--ink-mute); }
+.mk-q-v { color: var(--ink); }
+.mk-q .pos { color: var(--up); }
+.mk-q .neg { color: var(--down); }
+.mk-path { display: inline-block; width: 5rem; vertical-align: middle; }
+.mk-note { padding: 4px 12px 8px; color: var(--ink-mute); font-size: 11px; overflow-wrap: anywhere; }
+.mk-result { padding: 4px 12px 8px; font: 11px/1.4 var(--mono); overflow-wrap: anywhere; }
+.mk-result.ok { color: var(--up); }
+.mk-result.err { color: var(--down); }
+.mk-acts { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; padding: 6px 12px; }

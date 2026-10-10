@@ -109,6 +109,13 @@ dashboard:
 web:
   - apps/digithings-web/**
   - apps/digiquant-web/**
+  # Terminal app. Pages does not build it. This lane's root npm ci resolves the
+  # manifest, so a bad range here must fire the lane (deploy checks name the
+  # same manifest when those workflow files can be edited).
+  - apps/digiquant-app/**
+  # digiquant-web's desk reads the TUI page catalog and response presenter from
+  # source (components/desk/public-surface.ts, read-block.ts).
+  - clients/digiquant-tui/src/**
   # digiquant-web's pipeline-data pin re-reads this file at test time and asserts the
   # site's portfolio chips match its `phases.append(...)` sequence in order (#4441).
   # Without this entry the pin only runs when the APP changes — a backend-only phase
@@ -190,6 +197,23 @@ web:
   - package.json
   - package-lock.json
   - .github/workflows/test-web.yml
+
+# Bun TUI clients. One lane (test-clients-tui.yml) covers all three, so this is a
+# single key with three directory globs rather than three keys (#2072). Before it,
+# `clients/**` matched no filter and no workflow mentioned bun: each client has
+# `"test": "bun test"` in its manifest (147 tests in digiquant-tui, 11 in
+# digichat-tui, 11 in digichat-devkit) and none of them ran in CI, so every green
+# number reported for these clients was developer-local.
+#
+# `clients/**` rather than three per-directory globs: these are private client
+# packages, not repo-root components, so the tree is the unit and a new client/
+# should fire the lane by default. The lane's own matrix-completeness step fails
+# if a client with a bun test script is missing from the matrix, so this cannot
+# silently under-cover a new client — the filter says "something under clients/
+# changed", the matrix guard says "and it is covered".
+clients_tui:
+  - clients/**
+  - .github/workflows/test-clients-tui.yml
 
 e2e_contract:
   - tests/test_e2e.py

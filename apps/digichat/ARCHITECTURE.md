@@ -166,7 +166,8 @@ digichat's `globals.css` derives the shadcn variable set from those tokens under
 `--chart-1`, `--sidebar-primary`, live dots, transcript markers — never the
 default button fill. Local `@theme` `--radius-*` pins to `0` (true circles
 keep `rounded-full`). Type is Geist Mono for claim, body, and chrome
-(`--font-sans`/`--font-display`/`--font-family` remap to `--font-geist-mono`).
+(`--font-sans`/`--font-display`/`--font-family` remap to the mono stack built on
+`--font-mono-face`, which `src/app/fonts.ts` loads once).
 `<html>` sets `data-theme={theme}` from deployment `chrome.theme` via
 `deployChromeTheme()` in `src/app/(digichat)/layout.tsx` (dark is only the
 fallback when the deployment is missing or not `light`) and the matching
@@ -391,7 +392,7 @@ present, allowing LiteLLM to route models per-tenant.
 
 ```
 src/app/
-  layout.tsx            # Root layout (Providers, Geist Mono)
+  layout.tsx            # Root layout (Providers, font variables)
   page.tsx              # Menu at `/`; `?mode=product` follows chrome.mode, auth, persistence
   login/                # No standalone login route ships
   api/
@@ -1697,7 +1698,7 @@ dashboard popup merge chrome (labels/hotkeys) from that API.
 force-tool values and model ids are catalog/allowlist-gated on the BFF
 (fail closed).
 
-**Product CSS isolation:** `(digichat)/globals.css` mirrors the `(baseline)` stock sheet (Inter / IBM Plex Mono) plus thin `product-chrome.css` for paywall/BYOK/attribution. `assistant-ui-cli.css`, digichat-ui `session.css`/`cursor.css`, and terminal-loader sheets load only via `chat-shell-cli.css` on `ChatShell` (`persistence: server`).
+**Product CSS isolation:** `(digichat)/globals.css` mirrors the `(baseline)` stock sheet (Inter / Geist Mono, both loaded once by `src/app/fonts.ts`) plus thin `product-chrome.css` for paywall/BYOK/attribution. `assistant-ui-cli.css`, digichat-ui `session.css`/`cursor.css`, and terminal-loader sheets load only via `chat-shell-cli.css` on `ChatShell` (`persistence: server`).
 
 ## 11. Docker & MCP Composition
 

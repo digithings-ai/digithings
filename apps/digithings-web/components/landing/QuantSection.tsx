@@ -3,6 +3,7 @@
 import { useState } from "react";
 import {
   CardRail,
+  DigiquantMark,
   LOOKBACK_OPTIONS,
   MultiTimeSeries,
   SegToggle,
@@ -18,18 +19,11 @@ import {
   type TearsheetSeriesPoint,
   type ViewWindow,
 } from "@digithings/ui";
-import {
-  cagrPct,
-  isDcaStrategy,
-  useLiveBand,
-  type NavPoint,
-  type PricePoint,
-  type StrategyRead,
-} from "@/lib/live/useLiveBand";
+import { cagrPct } from "@/lib/live/portfolio";
+import { useOfficialBand, type OfficialBandRead } from "@/lib/live/useOfficialBand";
+import type { NavPoint, PricePoint, TearsheetCardRead } from "@/lib/live/officialBand";
 import { GROUPED_LABEL } from "./label";
 import { windowAlpha, windowBeta } from "@/lib/bookMath";
-import { QuantWordmark } from "./QuantWordmark";
-import { PIPELINE_ENGINES } from "@/lib/digiquantPipeline";
 
 /**
  * The digiquant band (v15 point 9, #4429; reworked across rounds 3–5).
@@ -51,9 +45,9 @@ import { PIPELINE_ENGINES } from "@/lib/digiquantPipeline";
  * So the band reads, top to bottom: the digiquant.io brand header with the two
  * ways into the product (the dashboard and the tearsheets); the title with the
  * strategy library rail beside it and the MCP tooling line under it; the
- * pipeline as one horizontal rail of the real phase-folder cards; the book
- * (portfolio against benchmark, with the lookback controls, the chart
- * compressed and the window's three reads beside it). No positions blotter — that surface belongs to digiquant.io — and no lead
+ * pipeline as one thin row; the book (portfolio against benchmark, with the
+ * lookback controls, the chart compressed and the window's three reads beside
+ * it). No positions blotter — that surface belongs to digiquant.io — and no lead
  * paragraph or closing footnote: the owner asked for the title on its own,
  * "simple and clean".
  *
@@ -81,246 +75,133 @@ import { PIPELINE_ENGINES } from "@/lib/digiquantPipeline";
  * would be if we place the DigiQuant dashboard logo behind this DigiQuant section
  * and have it animated. A bit faded and animated."
  *
- * Brand (#4900, digiquant.io's solid-black craft). The band wears no livery of
- * its own: no teal accent scope, no tinted gradient, no animated dashboard-mark
- * watermark. It sits on the page's own canvas between hairline rails like every
- * other band, in the page's Inter + JetBrains Mono, with ink as the only accent
- * (the chart's "accent" tone resolves to ink here). The one brand element is the
- * digiquant pixel wordmark from digiquant.io, which is also the link to it.
+ * The band is full-bleed — the section in LandingPage carries no horizontal
+ * padding, so this component paints digiquant's own livery and tinted background
+ * (`accent-digiquant` + `.quant-band`) edge to edge while the content stays on
+ * the page's frame.
  *
- * HONESTY (binding). With the market tape gone, EVERY figure on this band is
- * synthetic and badged as such — the performance pair, the three window reads
- * and the strategy cards. No figure here is a digiquant result, and the two
- * series are a deterministic example, not a reported return.
- *
- * LIVE WIRING (approved, in progress). The owner authorised wiring these to the
- * dashboard's own backend: "we need to do the same architecture as we have for
- * the DigiQuant website. We'll just duplicate it from there, so copy it over. We
- * will copy all the secrets and all the permissions. And they should share the
- * same canonical backend for getting all that data." The real series live in
- * digiquant's Supabase tables (`public_accounting_nav_history`,
- * `public_portfolio_positions`, `strategy_tearsheets`) — there is no public
- * no-auth endpoint — so this means a Supabase client here plus
- * `NEXT_PUBLIC_SUPABASE_URL`/`ANON_KEY` at build and a CSP `connect-src` entry.
- * That is a new external service dependency: flagged for the owner, not merged
- * autonomously. Until the env is set the band keeps the badged example series.
+ * HONESTY (binding). Figures come from the official digiquant API
+ * (`GET /performance`, `GET /benchmarks`, `GET /strategies`,
+ * `GET /strategies/default/performance`). A stub envelope, a withheld read, or
+ * a missing field renders an em dash. This band does not draw an example book.
  */
 
 const DIGIQUANT_URL = "https://digiquant.io";
 
-/** Years of weekly closes in the example pair. */
-const SERIES_WEEKS = 156;
-
 /**
- * The example performance pair: portfolio against benchmark, both indexed to 100
- * at the start.
+ * The pipeline, in the dashboard's own categories.
  *
- * Synthetic and deterministic — two drifting walks with fixed periodic terms and
- * no random source, so the drawn chart is identical on every build and nobody can
- * read a change into a redeploy. This is the one figure on the page whose absence
- * of a real source is worth stating plainly: the real portfolio series lives in
- * digiquant's own tearsheet store, and reading it from here would mean giving
- * this static-export site a second service dependency. When that trade is worth
- * making, this function is the seam: it returns the shape the chart already
- * takes.
+ * The owner asked for the simple presentation version rather than every folder:
+ * the six stages the dashboard's pipeline page shows — inputs → research →
+ * synthesis → selection → decision → learning — as one thin row, with each
+ * stage's one-line mechanism under its name. No diagnostics: this is the
+ * pipeline as a *definition*, not a completed run, so there is no wall time or
+ * token count to report.
  */
-function performance(): { portfolio: TearsheetSeriesPoint[]; benchmark: TearsheetSeriesPoint[] } {
-  const start = Date.UTC(2023, 0, 6);
-  const week = 7 * 24 * 60 * 60 * 1000;
-  const portfolio: TearsheetSeriesPoint[] = [];
-  const benchmark: TearsheetSeriesPoint[] = [];
-  let p = 100;
-  let b = 100;
-  for (let i = 0; i < SERIES_WEEKS; i += 1) {
-    const t = new Date(start + i * week).toISOString().slice(0, 10);
-    p *= 1 + 0.0018 + 0.014 * Math.sin(i / 7.3);
-    b *= 1 + 0.0009 + 0.011 * Math.sin(i / 5.1 + 1.2);
-    portfolio.push({ t, v: p });
-    benchmark.push({ t, v: b });
-  }
-  return { portfolio, benchmark };
-}
-
-const EXAMPLE = performance();
-
-const PERFORMANCE_SERIES: OverlaySeries[] = [
-  { id: "portfolio", label: "digiquant portfolio", points: EXAMPLE.portfolio, tone: "accent", fill: true },
-  { id: "benchmark", label: "benchmark", points: EXAMPLE.benchmark, tone: "mute", dotted: true },
+const STAGES: { id: string; label: string; detail: string; steps: string[] }[] = [
+  {
+    id: "inputs",
+    label: "Inputs",
+    detail: "Market and reference data validated before any research runs.",
+    steps: ["preflight", "attention plan"],
+  },
+  {
+    id: "research",
+    label: "Research",
+    detail: "Independent specialist reads, before any of them are combined.",
+    steps: ["alt-data", "institutional", "macro", "asset classes", "sectors"],
+  },
+  {
+    id: "synthesis",
+    label: "Synthesis",
+    detail: "The reads reconciled into one directional call and a narrative.",
+    steps: ["consolidate", "digest"],
+  },
+  {
+    id: "selection",
+    label: "Selection",
+    detail: "Challenged, screened and risk-sized portfolio candidates.",
+    steps: ["thesis", "screener", "analysts", "deliberation", "PM direction", "risk sizing"],
+  },
+  {
+    id: "decision",
+    label: "Decision",
+    detail: "The recommendation, with the evidence chain that produced it.",
+    steps: ["commit"],
+  },
+  {
+    id: "learning",
+    label: "Learning",
+    detail: "Resolved outcomes folded back in on the next run.",
+    steps: ["beliefs"],
+  },
 ];
 
-const FULL_SPAN: [string, string] = [
-  EXAMPLE.portfolio[0].t,
-  EXAMPLE.portfolio[EXAMPLE.portfolio.length - 1].t,
-];
-
 /**
- * The pipeline, in the dashboard's own phase folders.
- *
- * Real phase-folder cards from `apps/digiquant-web/.../PipelineScene.tsx`
- * (via the `digiquantPipeline.ts` copy): research preflight → publish (10) and
- * portfolio thesis review → commit run (9), with execution honestly marked "in
- * development" — routing is off by default and no live venue is wired, so the
- * band shows the stage and says so rather than drawing folders that do not
- * exist. Same card grammar as the digiquant site's `dqp-step`: mono folder id,
- * phase name, one-line mechanism; hairline border on the page surface; ink
- * only, no module livery. One horizontal rail with engine divider chips, so
- * the band stays at a readable height instead of growing a detail panel.
+ * The six stages as one thin row — the simple version the owner asked for over
+ * the kit's `Pipeline` panel. It stays readable at band height and never adds a
+ * detail panel's worth of vertical space.
  */
-function PipelineRail() {
+function StageStrip() {
   return (
-    <div
-      className="flex min-w-0 snap-x snap-proximity gap-[0.5rem] overflow-x-auto pb-[0.2rem]"
-      role="list"
-      aria-label="digiquant pipeline phases"
-      /* The rail is far wider than the viewport, so it is the only way through
-         the phases. Focusable, or keyboard readers lose 16 of the 19. Same
-         contract as the kit CardRail track. */
-      tabIndex={0}
+    <ol
+      className="m-0 flex list-none flex-wrap items-stretch gap-[0.4rem] p-0"
+      aria-label="digiquant pipeline stages"
     >
-      {PIPELINE_ENGINES.map((engine) => (
-        <div
-          key={engine.id}
-          role="listitem"
-          aria-label={engine.label}
-          className="flex shrink-0 items-stretch gap-[0.5rem]"
-        >
-          <span
-            aria-hidden="true"
-            className="flex items-center font-mono text-[0.62rem] uppercase tracking-[0.08em] text-ink-mute"
-          >
-            {engine.label}
-          </span>
-          {engine.phases.map((phase) => (
-            <div
-              key={phase.id}
-              title={`Phase folder ${phase.id}`}
-              className="flex w-[10.5rem] shrink-0 snap-start flex-col gap-[0.2rem] border border-hair bg-surface p-[0.6rem]"
-            >
-              <span className="font-mono text-[0.6rem] tracking-[0.06em] text-ink-mute">
-                {phase.id}
-              </span>
-              <span className="font-mono text-[0.78rem] text-ink">{phase.name}</span>
-              <span className="text-[0.7rem] leading-[1.45] text-ink-mute">{phase.detail}</span>
-            </div>
-          ))}
-          {engine.phases.length === 0 ? (
-            <div
-              className="flex w-[10.5rem] shrink-0 snap-start flex-col gap-[0.2rem] border border-dashed border-hair bg-surface p-[0.6rem]"
-            >
-              <span className="font-mono text-[0.6rem] uppercase tracking-[0.06em] text-ink-mute">
-                in development
-              </span>
-              <span className="text-[0.7rem] leading-[1.45] text-ink-mute">
-                Research and portfolio run today. Live execution is next.
-              </span>
-            </div>
+      {STAGES.map((stage, index) => (
+        <li key={stage.id} className="flex min-w-[9rem] flex-1 items-stretch gap-[0.4rem]">
+          <div className="flex flex-1 flex-col gap-[0.25rem] border border-hair bg-surface p-[0.6rem]">
+            <span className="font-mono text-[0.6rem] tracking-[0.06em] text-ink-mute">
+              {String(index + 1).padStart(2, "0")}
+            </span>
+            <span className="font-mono text-[0.8rem] text-ink">{stage.label}</span>
+            <span className="text-[0.72rem] leading-[1.45] text-ink-mute">{stage.detail}</span>
+          </div>
+          {index < STAGES.length - 1 ? (
+            <span aria-hidden="true" className="self-center font-mono text-[0.8rem] text-ink-mute">
+              →
+            </span>
           ) : null}
-        </div>
+        </li>
       ))}
-    </div>
+    </ol>
   );
 }
 
-/**
- * The strategies the library shipped, as the *library* card — the same
- * composition digiquant.io/strategies renders.
- *
- * `slug` is the real public slug, so the card links to that strategy's own
- * tearsheet, where the figures are the real ones. The reads here are examples:
- * the owner asked for the library cards without the live badge, and a live mark
- * over figures that are not live would be the one dishonest pixel on the page.
- * Values are also deliberately untinted — the up/down money classes are reserved
- * for figures that are somebody's result, and none of these is.
- */
-const STRATEGIES: {
+/** The card shape the rail renders. Every value is an API field or an em dash. */
+type StrategyCardData = {
   slug: string;
   name: string;
   symbol: string;
   kind: string;
   kpis: { label: string; value: string }[];
-}[] = [
-  {
-    slug: "btc_slapper",
-    name: "BTC L/S",
-    symbol: "BTC",
-    kind: "long / short",
-    kpis: [
-      { label: "CAGR", value: "+24.6%" },
-      { label: "Max DD", value: "−18.2%" },
-      { label: "Profit factor", value: "1.72" },
-      { label: "Win rate", value: "56.0%" },
-      { label: "Avg trade", value: "+0.31%" },
-      { label: "Trades", value: "1,204" },
-    ],
-  },
-  {
-    slug: "eth_slapper",
-    name: "ETH L/S",
-    symbol: "ETH",
-    kind: "long / short",
-    kpis: [
-      { label: "CAGR", value: "+19.4%" },
-      { label: "Max DD", value: "−22.6%" },
-      { label: "Profit factor", value: "1.48" },
-      { label: "Win rate", value: "53.1%" },
-      { label: "Avg trade", value: "+0.27%" },
-      { label: "Trades", value: "986" },
-    ],
-  },
-  {
-    slug: "sol_slapper",
-    name: "SOL L/S",
-    symbol: "SOL",
-    kind: "long / short",
-    kpis: [
-      { label: "CAGR", value: "+31.2%" },
-      { label: "Max DD", value: "−29.8%" },
-      { label: "Profit factor", value: "1.61" },
-      { label: "Win rate", value: "51.7%" },
-      { label: "Avg trade", value: "+0.38%" },
-      { label: "Trades", value: "842" },
-    ],
-  },
-  {
-    slug: "btc_sdca",
-    name: "BTC-SDCA",
-    symbol: "BTC",
-    kind: "accumulation",
-    kpis: [
-      { label: "Total return", value: "+41.8%" },
-      { label: "Max DD", value: "−15.4%" },
-      { label: "Vs buy & hold", value: "+6.2%" },
-      { label: "Allocated", value: "62.0%" },
-      { label: "Deployed", value: "88.0%" },
-      { label: "Fills", value: "214" },
-    ],
-  },
-];
-
-/**
- * The four cards the band shows, in order — also the live read's membership, so
- * an unexpected row in the table can never add a card here.
- */
-const STRATEGY_SLUGS = STRATEGIES.map((strategy) => strategy.slug);
-
-/** The card shape, whether the reads are the live index or the example set. */
-type StrategyCardData = (typeof STRATEGIES)[number];
+};
 
 function fmtPctValue(value: number | null): string {
   if (value === null) return "—";
   return `${value >= 0 ? "+" : "−"}${Math.abs(value).toFixed(1)}%`;
 }
 
+function isDcaCard(read: TearsheetCardRead): boolean {
+  if (read.kind && /accumul|dca/i.test(read.kind)) return true;
+  return /sdca|dca/.test(read.id);
+}
+
 /**
- * The six reads a card shows, computed from the stored tearsheet payload.
+ * The six reads a card shows, from the stored tearsheet payload.
  *
  * A DCA strategy carries different headline fields than a long/short one (it has
  * no win rate or profit factor), so the card shows the DCA set — the same split
- * digiquant.io's own library card makes.
+ * digiquant.io's own library card makes. A missing field stays an em dash.
  */
-function liveStrategyCard(read: StrategyRead): StrategyCardData {
-  const dca = isDcaStrategy(read.strategy);
-  const cagr = cagrPct(read.netProfitPct, read.periodStart, read.periodEnd);
+function liveStrategyCard(read: TearsheetCardRead): StrategyCardData {
+  const dca = isDcaCard(read);
+  const cagr =
+    read.netProfitPct !== null && read.periodStart && read.periodEnd
+      ? cagrPct(read.netProfitPct, read.periodStart, read.periodEnd)
+      : null;
+  const trades = read.totalTrades === null ? "—" : read.totalTrades.toLocaleString("en-US");
+  const since = read.periodStart ? read.periodStart.slice(0, 7) : "—";
   const kpis = dca
     ? [
         { label: "Total return", value: fmtPctValue(read.netProfitPct) },
@@ -330,8 +211,8 @@ function liveStrategyCard(read: StrategyRead): StrategyCardData {
           label: "Allocated",
           value: read.allocatedPct === null ? "—" : `${read.allocatedPct.toFixed(1)}%`,
         },
-        { label: "Trades", value: read.totalTrades.toLocaleString("en-US") },
-        { label: "Since", value: read.periodStart.slice(0, 7) },
+        { label: "Trades", value: trades },
+        { label: "Since", value: since },
       ]
     : [
         { label: "CAGR", value: fmtPctValue(cagr) },
@@ -341,14 +222,14 @@ function liveStrategyCard(read: StrategyRead): StrategyCardData {
           value: read.profitFactor === null ? "—" : read.profitFactor.toFixed(2),
         },
         { label: "Win rate", value: fmtPctValue(read.winRatePct) },
-        { label: "Trades", value: read.totalTrades.toLocaleString("en-US") },
-        { label: "Since", value: read.periodStart.slice(0, 7) },
+        { label: "Trades", value: trades },
+        { label: "Since", value: since },
       ];
   return {
-    slug: read.strategy,
-    name: read.label ?? read.strategy,
-    symbol: read.symbol.replace(/-USD$/, ""),
-    kind: dca ? "accumulation" : "long / short",
+    slug: read.id,
+    name: read.name,
+    symbol: (read.symbol ?? "—").replace(/-USD$/, ""),
+    kind: read.kind ?? (dca ? "accumulation" : "long / short"),
     kpis,
   };
 }
@@ -479,18 +360,33 @@ function ReadRows({ rows }: { rows: { label: string; value: string; title?: stri
  * so the whole progression of the period fills the pane.
  *
  * Values are deliberately untinted: the up/down money classes are reserved for
- * figures that are somebody's result, and none of these is.
+ * figures that are somebody's result.
  */
 function Book({
   series,
   fullSpan,
-  live,
 }: {
-  series: OverlaySeries[];
-  fullSpan: [string, string];
-  live: boolean;
+  series: OverlaySeries[] | null;
+  fullSpan: [string, string] | null;
 }) {
   const [view, setView] = useState<ViewWindow | null>(null);
+  if (!series || !fullSpan) {
+    return (
+      <div className="flex min-w-0 flex-col gap-[0.8rem]">
+        <span className={GROUPED_LABEL}>the book</span>
+        <p className="m-0 font-mono text-[0.78rem] text-ink-mute">
+          The official API has not published the baseline portfolio.
+        </p>
+        <ReadRows
+          rows={[
+            { label: "net return", value: "—" },
+            { label: "CAGR (ann.)", value: "—" },
+            { label: "alpha", value: "—" },
+          ]}
+        />
+      </div>
+    );
+  }
   const active: LookbackPreset = (view && matchLookbackPreset(view, fullSpan)) || "1y";
   const window: ViewWindow = view ?? viewWindowForPreset("1y", fullSpan);
   /* Percent from the window's own start, so the drawn curves always begin at
@@ -536,7 +432,7 @@ function Book({
 
   return (
     <div className="flex min-w-0 flex-col gap-[0.8rem]">
-      <span className={GROUPED_LABEL}>{live ? "the book · live" : "the book · example"}</span>
+      <span className={GROUPED_LABEL}>the book</span>
       {/* Single column at the base for the same reason as the block above: an
           SVG chart measures its own pane, so an implicit `auto` track would size
           from that min-content and push the page wider than the viewport. */}
@@ -551,11 +447,7 @@ function Book({
             view={view ?? undefined}
             onView={setView}
             fullSpan={fullSpan}
-            ariaLabel={
-              live
-                ? "digiquant portfolio percent return against a benchmark, rebased to zero at the start of the visible window"
-                : "Example performance, digiquant portfolio percent return against a benchmark, rebased to zero at the start of the visible window (synthetic series)"
-            }
+            ariaLabel="digiquant portfolio percent return against a benchmark, rebased to zero at the start of the visible window"
           />
         </div>
 
@@ -588,19 +480,23 @@ function Book({
 }
 
 export function QuantSection({ className }: { className?: string }) {
-  /* The dashboard's own backend, when this build has the public env. Without it
-     every read returns empty and the band keeps its badged example series. */
-  const live = useLiveBand(STRATEGY_SLUGS);
-  const liveIndex = live.nav.length > 1 ? indexLive(live.nav, live.benchmark) : null;
-  const book = liveIndex ?? { series: PERFORMANCE_SERIES, fullSpan: FULL_SPAN };
-  const cards: StrategyCardData[] =
-    live.strategies.length > 0 ? live.strategies.map(liveStrategyCard) : STRATEGIES;
-  /* Honesty: the fallback cards are deterministic examples, not live reads —
-     badge them as such and never show a live mark over them. */
-  const showExampleBadge = live.strategies.length === 0;
+  const live: OfficialBandRead = useOfficialBand();
+  const book = live.nav.length > 1 ? indexLive(live.nav, live.benchmark) : null;
+  const cards: StrategyCardData[] = live.cards.map(liveStrategyCard);
 
   return (
-    <div className={`relative ${className ?? ""}`}>
+    <div className={`accent-digiquant quant-band relative overflow-hidden ${className ?? ""}`}>
+      {/* The dashboard mark, behind everything, faded and animated — the
+          section's branding without a bar the owner has to maintain. */}
+      <span
+        aria-hidden="true"
+        className="quant-mark pointer-events-none absolute -top-[6%] end-[-4%] w-[58%] max-w-[46rem] select-none text-accent"
+      >
+        <DigiquantMark size={720} className="h-auto w-full" />
+      </span>
+
+      {/* Full width is the band's, not the content's: the background bleeds to
+          the viewport edges and the frame below keeps the page grid. */}
       <div className="relative px-[var(--page-pad)] py-[var(--page-step)]">
         <div className="mx-auto flex max-w-[var(--frame-w)] flex-col gap-[2rem]">
           {/* Title on the left, the strategy library rail beside it. The rail
@@ -610,50 +506,60 @@ export function QuantSection({ className }: { className?: string }) {
               from that min-content and push the page wider than the viewport.
               `minmax(0,1fr)` + `min-w-0` pin the track to the container. */}
           <div className="grid grid-cols-[minmax(0,1fr)] gap-[2rem] min-[980px]:grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)] min-[980px]:gap-[2.4rem]">
-            {/* Left: the digiquant pixel wordmark and its domain as one link to
-                digiquant.io, with the claim below. The wordmark is the same mark
-                digiquant.io draws, in ink; the visible domain stays under it
-                because the owner asked for the text to be visible. */}
+            {/* Left: the product name as a link to digiquant.io, with the claim
+                below it. Round 16 (owner): "top of the digiquant.io seciton
+                should have a hyperlink to the website that serves as the section
+                title too" and then "I want the text digiquant.io visible that was
+                suposed to be the hyperlink" — so the visible title is the domain,
+                linking to the product site, and the slogan sits under it. The two
+                CTA buttons were removed in the same pass ("remove the open
+                dashboard and tearsheet buttons"). */}
             <div className="flex min-w-0 flex-col justify-center gap-[1rem]">
               {/* `h2`, not `h3`: this band has no other heading, so an `h3` left
                   the document outline skipping a level between `#open-source`
                   and `#pricing`. The band's heading is its product name; the
                   slogan under it carries the claim. */}
-              <h2 className="m-0">
+              <h2 className="m-0 font-display text-[clamp(1.4rem,2.6vw,2rem)] font-medium leading-[1.2] tracking-[-0.02em] text-ink">
                 <a
                   href={DIGIQUANT_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="group flex w-full max-w-[22rem] flex-col gap-[0.7rem] text-ink no-underline"
+                  className="text-ink underline decoration-hair decoration-1 underline-offset-[0.2em] transition-colors hover:decoration-accent focus-visible:decoration-accent"
                 >
-                  <QuantWordmark className="block h-auto w-full" />
-                  <span className="font-mono text-[0.78rem] tracking-[0.04em] text-ink-mute underline decoration-hair decoration-1 underline-offset-[0.2em] transition-colors group-hover:text-ink group-focus-visible:text-ink">
-                    digiquant.io
-                  </span>
+                  digiquant.io
                 </a>
               </h2>
               <p className="m-0 max-w-[var(--measure-prose)] text-[0.92rem] leading-[1.6] text-ink-soft">
-                A quant research desk in a glass box you own.
+                Quant research you can read end to end, on hardware you run.
+              </p>
+              <p className="m-0 max-w-[var(--measure-prose)] text-[0.78rem] leading-[1.55] text-ink-mute">
+                Published figures are a record from the API. They are not a forecast, and this is
+                not a fund.
               </p>
             </div>
 
             {/* Right: the library, in the kit's horizontal rail — the element
                 promoted from the design reference's changelog rail. */}
-            <div className="flex min-w-0 flex-col justify-center gap-[0.5rem]">
-              <span className={GROUPED_LABEL}>
-                {showExampleBadge ? "flagship strategies · example" : "flagship strategies"}
-              </span>
-              <CardRail ariaLabel="Flagship digiquant strategies">
-                {cards.map((strategy) => (
-                  <div key={strategy.slug} role="listitem" className="flex-[0_0_17rem] snap-start">
-                    <TearsheetCard href={`${DIGIQUANT_URL}/strategies/${strategy.slug}`}>
+            <div className="flex min-w-0 flex-col justify-center">
+              {cards.length === 0 ? (
+                <p className="m-0 px-6 py-4 font-mono text-[0.78rem] text-ink-mute">
+                  {live.loading
+                    ? "Reading published tearsheets."
+                    : "The official API has not published these tearsheets."}
+                </p>
+              ) : (
+                <CardRail ariaLabel="Flagship digiquant strategies" itemClassName="w-[17rem]">
+                  {cards.map((strategy) => (
+                    <TearsheetCard
+                      key={strategy.slug}
+                      href={`${DIGIQUANT_URL}/strategies/${strategy.slug}`}
+                    >
                       <div className="ts-card-head">
                         <div className="ts-card-title">
                           <div className="ts-card-title-text">
                             <span className="ts-card-name">{strategy.name}</span>
                             <span className="ts-card-period">
                               {strategy.symbol} · {strategy.kind}
-                              {showExampleBadge ? " · example" : ""}
                             </span>
                           </div>
                         </div>
@@ -664,18 +570,18 @@ export function QuantSection({ className }: { className?: string }) {
                         ))}
                       </TearsheetCardKpis>
                     </TearsheetCard>
-                  </div>
-                ))}
-              </CardRail>
+                  ))}
+                </CardRail>
+              )}
             </div>
           </div>
 
           <div className="flex min-w-0 flex-col gap-[0.7rem]">
-            <span className={GROUPED_LABEL}>the pipeline · 19 phase folders</span>
-            <PipelineRail />
+            <span className={GROUPED_LABEL}>the pipeline</span>
+            <StageStrip />
           </div>
 
-          <Book series={book.series} fullSpan={book.fullSpan} live={Boolean(liveIndex)} />
+          <Book series={book?.series ?? null} fullSpan={book?.fullSpan ?? null} />
         </div>
       </div>
     </div>

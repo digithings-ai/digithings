@@ -4,11 +4,13 @@
  */
 import { describe, expect, it } from "vitest";
 import app, { type Env } from "./index";
-import { MCP_TOOLS } from "./mcp";
+import { MCP_TOOLS, toolNameFor } from "./mcp";
+import { governedRoutes } from "./access";
+import { ROUTE_MODULES } from "./routes";
 
 const KEY = "test-mcp-key";
-const ENV: Env = { MCP_EDGE_KEY: KEY };
-const NO_ENV: Env = {};
+const ENV: Env = { DASHBOARD_TRUST_IDENTITY_HEADERS: "1", MCP_EDGE_KEY: KEY, DASHBOARD_DEV_CALLER: "enterprise+12x" };
+const NO_ENV: Env = { DASHBOARD_TRUST_IDENTITY_HEADERS: "1",};
 
 function post(body: unknown, headers: Record<string, string> = {}): Request {
   return new Request("https://x/mcp", {
@@ -118,5 +120,59 @@ describe("POST /mcp tools", () => {
     );
     const badMethodBody = (await badMethod.json()) as { error: { code: number } };
     expect(badMethodBody.error.code).toBe(-32601);
+  });
+});
+
+const rpc = async (method: string, params: unknown, env: Env = ENV, headers: Record<string, string> = auth) => {
+  const res = await app.fetch(post({ jsonrpc: "2.0", id: 9, method, params }, headers), env);
+  return (await res.json()) as any;
+};
+
+describe("generated tools", () => {
+  it("keeps the original names and the manifest tool", () => {
+    const names = MCP_TOOLS.map((t) => t.name);
+    for (const n of ["get_access_manifest", "get_portfolio", "get_allocations", "get_nav_series", "get_brief", "get_performance", "get_kpis_live", "get_benchmarks", "get_ledger"]) {
+      expect(names).toContain(n);
+    }
+  });
+  it("covers every catalog route exactly once, with unique names", () => {
+    const names = MCP_TOOLS.map((t) => t.name);
+    expect(new Set(names).size).toBe(names.length);
+    const paths = new Set(MCP_TOOLS.map((t) => t.path));
+    for (const r of governedRoutes()) expect(paths.has(r)).toBe(true);
+    expect(toolNameFor("/fx/pairs/{pair}/path")).toBe("get_fx_pairs_pair_path");
+  });
+  it("template tools require their path argument", () => {
+    const t = MCP_TOOLS.find((x) => x.path === "/fx/pairs/{pair}/path")!;
+    expect(t.inputSchema).toMatchObject({ required: ["pair"] });
+  });
+  it("tools/list is gated per caller", async () => {
+    const names = (r: any) => r.result.tools.map((t: { name: string }) => t.name);
+    const free = names(await rpc("tools/list", {}, { MCP_EDGE_KEY: KEY }, { ...auth, "x-digi-tier": "free" }));
+    expect(free).toContain("get_access_manifest");
+    expect(free).not.toContain("get_fx_pairs_pair_path");
+    expect(free).not.toContain("get_performance");
+    const full = names(await rpc("tools/list", {}));
+    expect(full).toContain("get_fx_pairs_pair_path");
+    expect(full).toContain("get_access_manifest");
+  });
+  it("a generated tool dispatches through the shared route with path args filled", async () => {
+    const saved = ROUTE_MODULES.splice(0, ROUTE_MODULES.length);
+    ROUTE_MODULES.push((reg) => reg.get("/fx/pairs/{pair}/path", async (_r, ctx) => Response.json({ pair: ctx.params.pair })));
+    try {
+      const ok = await rpc("tools/call", { name: "get_fx_pairs_pair_path", arguments: { pair: "EURUSD" } });
+      expect(ok.result.isError).toBe(false);
+      expect(JSON.parse(ok.result.content[0].text)).toEqual({ pair: "EURUSD" });
+      const missing = await rpc("tools/call", { name: "get_fx_pairs_pair_path", arguments: {} });
+      expect(missing.error.code).toBe(-32602);
+      const dots = await rpc("tools/call", { name: "get_fx_pairs_pair_path", arguments: { pair: ".." } });
+      expect(dots.error.code).toBe(-32602);
+    } finally {
+      ROUTE_MODULES.splice(0, ROUTE_MODULES.length, ...saved);
+    }
+  });
+  it("a gated-out generated tool is -32003", async () => {
+    const res = await app.fetch(post({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "get_fx_summary", arguments: {} } }, { ...auth, "x-digi-tier": "enterprise" }), ENV);
+    expect(((await res.json()) as any).error.code).toBe(-32003);
   });
 });

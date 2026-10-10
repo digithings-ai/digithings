@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "digichat",
-    "version": "0.9.3",
+    "version": "2.4.0",
     "description": "digichat Next.js BFF — stable HTTP routes for health, chat, conversations, and Auth.js. This spec is authored (not FastAPI-generated). Path existence is checked in tests/contracts/test_digichat_openapi_paths.py."
   },
   "servers": [
@@ -22,22 +22,33 @@
     "/api/health": {
       "get": {
         "tags": ["health"],
-        "summary": "Liveness probe",
+        "summary": "Public readiness. 503 when a required check fails. license_status does not decide ok.",
         "operationId": "digichatHealth",
         "responses": {
           "200": {
-            "description": "Service is up",
+            "description": "Required checks passed",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "properties": { "ok": { "type": "boolean" } },
-                  "required": ["ok"]
+                  "properties": {
+                    "ok": { "type": "boolean" },
+                    "checks": { "type": "object", "additionalProperties": { "type": "string" } },
+                    "version": { "type": "string" },
+                    "license_status": { "type": "string" }
+                  },
+                  "required": ["ok", "checks", "version", "license_status"]
                 },
-                "example": { "ok": true }
+                "example": {
+                  "ok": true,
+                  "checks": { "service": "ok" },
+                  "version": "2.4.0",
+                  "license_status": "valid"
+                }
               }
             }
-          }
+          },
+          "503": { "description": "A required downstream check failed" }
         }
       }
     },
@@ -46,7 +57,7 @@
         "tags": ["chat"],
         "summary": "Chat (streaming / agentic)",
         "operationId": "digichatChat",
-        "description": "BFF chat endpoint. Docker installs authenticate via NextAuth session and exchange a digikey BFF JWT for digigraph. Public Pages Function installs may be auth-free and rate-limited.",
+        "description": "Streams one chat turn. Requires a session, a verified embed, or an allowed anonymous install. The body is messages. Retrieval is a tool, not a field on every reply.",
         "requestBody": {
           "required": true,
           "content": {
@@ -174,10 +185,11 @@
     "/api/ecosystem/config": {
       "get": {
         "tags": ["ecosystem"],
-        "summary": "Ecosystem config for UI",
+        "summary": "Ecosystem config for the chat shell. Session required.",
         "operationId": "ecosystemConfig",
         "responses": {
-          "200": { "description": "Public-ish config blob for the chat shell" }
+          "200": { "description": "Effective endpoints for the signed-in shell" },
+          "401": { "description": "No session" }
         }
       }
     },

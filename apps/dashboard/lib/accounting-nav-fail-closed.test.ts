@@ -34,28 +34,35 @@ describe('accounting NAV fail-closed wiring (#3029)', () => {
 
   it('digiquant-web live book uses typed contract error and surfaces it', () => {
     const hook = join(repoRoot, 'apps/digiquant-web/lib/live/useLivePortfolio.ts');
-    const panel = join(
-      repoRoot,
-      'apps/digiquant-web/components/landing/DashboardPortfolioPanel.tsx'
-    );
+    const island = join(repoRoot, 'apps/digiquant-web/components/live/portfolio-island.tsx');
+    const view = join(repoRoot, 'apps/digiquant-web/components/dashboard/book-view.tsx');
     const contract = join(
       repoRoot,
       'apps/digiquant-web/lib/live/accounting-nav-contract.ts'
     );
     expect(existsSync(hook)).toBe(true);
-    expect(existsSync(panel)).toBe(true);
+    expect(existsSync(island)).toBe(true);
+    expect(existsSync(view)).toBe(true);
     expect(existsSync(contract)).toBe(true);
     const hookSrc = readFileSync(hook, 'utf8');
-    const panelSrc = readFileSync(panel, 'utf8');
+    const islandSrc = readFileSync(island, 'utf8');
+    const viewSrc = readFileSync(view, 'utf8');
     expect(hookSrc).toContain('AccountingNavContractError');
     expect(hookSrc).toContain('ACCOUNTING_NAV_VIEW');
     expect(hookSrc).toContain('navContractError');
     expect(hookSrc).not.toMatch(/from\(["']public_nav_history["']\)/);
     expect(hookSrc).toContain('computeLivePerformanceKpis');
-    expect(panelSrc).not.toContain('momentarily unavailable');
-    expect(panelSrc).toContain('navContractError');
-    expect(panelSrc).toContain('ContractBanner');
-    expect(panelSrc).toContain('PositionsTable');
+    expect(islandSrc).not.toContain('momentarily unavailable');
+    expect(islandSrc).toContain('navContractError');
+    expect(islandSrc).toMatch(
+      /if \(live\.navContractError\) return <BookView state="empty" notice=\{live\.navContractError\} \/>/
+    );
+    const contractAt = islandSrc.indexOf('if (live.navContractError)');
+    const liveAt = islandSrc.indexOf('state="live"');
+    expect(contractAt).toBeGreaterThan(-1);
+    expect(liveAt).toBeGreaterThan(contractAt);
+    expect(viewSrc).toContain('notice');
+    expect(viewSrc).not.toContain('momentarily unavailable');
   });
 
   it('tearsheet bundle paginates benchmark history via fetchComparablePriceHistory', () => {
