@@ -1,8 +1,13 @@
 import createMDX from "@next/mdx";
 
-import rehypeBookIds from "./lib/book/rehypeBookIds.mjs";
-import remarkFrontmatter from "remark-frontmatter";
-import remarkBookDiagrams from "./lib/book/remarkBookDiagrams.mjs";
+import { fileURLToPath } from "node:url";
+
+// MDX plugins are named by MODULE PATH, not passed as functions. `next dev`
+// runs Turbopack, which hands loader options across a process boundary and
+// rejects functions ("does not have serializable options"); that failure is why
+// chapters did not render under `next dev`. Strings work for both Turbopack
+// (dev) and webpack (`next build --webpack`).
+const local = (p) => fileURLToPath(new URL(p, import.meta.url));
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -43,7 +48,7 @@ const withMDX = createMDX({
     // contents links to and the printed book resolves its page numbers from.
     // The plugin's slug rules are pinned to lib/book/headings.ts by
     // rehypeBookIds.test.ts.
-    rehypePlugins: [rehypeBookIds],
+    rehypePlugins: [local("./lib/book/rehypeBookIds.mjs")],
     // Mermaid fences become `<img>` pointing at the static SVG, so the chapter
     // never asks a browser to run mermaid and the printed page loads the same
     // file the page does. See lib/book/remarkBookDiagrams.mjs.
@@ -52,7 +57,10 @@ const withMDX = createMDX({
     // as YAML makes it a `yaml` node, which renders nothing. The book reads the
     // same fields itself (lib/book/frontmatter.ts), so this plugin only has to
     // stop the header being printed.
-    remarkPlugins: [remarkFrontmatter, remarkBookDiagrams],
+    // `remark-gfm`: MDX is CommonMark only, so without it every pipe table in a
+    // chapter rendered as a paragraph of `| --- | --- |` — the "rows of
+    // horizontal bars" in the first review. Tables are GFM; so is the book.
+    remarkPlugins: ["remark-frontmatter", "remark-gfm", local("./lib/book/remarkBookDiagrams.mjs")],
   },
 });
 

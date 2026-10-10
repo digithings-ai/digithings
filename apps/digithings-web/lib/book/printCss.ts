@@ -25,8 +25,30 @@ export const PRINT_CSS = `
 }
 @media screen { .book-print-only { display: none; } }
 
+/* Diagrams: one file per theme, picked by the page's data-theme. Light is the
+   default and the only one print ever shows. */
+.book-figure__dark { display: none; }
+:root[data-theme="dark"] .book-figure__light { display: none; }
+:root[data-theme="dark"] .book-figure__dark { display: block; }
+.book-figure:fullscreen { background: var(--bg); display: flex; flex-direction: column; padding: 1.5rem; }
+.book-figure:fullscreen .book-figure__viewport { flex: 1; }
+.book-figure__viewport[data-active] { outline: 1px solid var(--ink-soft); }
+
+/* Tables (GFM) in the house long-form grammar. */
+.book-chapter table { width: 100%; border-collapse: collapse; margin: 0 0 1.5rem; font-size: 0.92rem; }
+.book-chapter th, .book-chapter td { border-bottom: 1px solid var(--hair); padding: 0.45rem 0.6rem; text-align: left; vertical-align: top; color: var(--ink-soft); }
+.book-chapter th { font-family: var(--font-mono); font-size: 0.78rem; letter-spacing: 0.02em; color: var(--ink); }
+
+/* The book's mono voice is Geist Mono (owner rule for digibook), scoped here
+   so the rest of digithings.ai keeps its JetBrains Mono chrome. */
+.book-root { --font-mono: var(--font-geist-mono), ui-monospace, monospace; }
+
+
 @media print {
   html, body { background: transparent; }
+  .book-figure__dark { display: none !important; }
+  .book-figure__light { display: block !important; }
+  .book-figure__viewport { border: 0; }
   /* The screen chrome is not part of the book. */
   .site-rails, header[data-dt-nav], footer[data-dt-footer], .book-screen-only { display: none !important; }
 
@@ -112,6 +134,11 @@ li { margin: 0 0 3pt; }
 code, pre { font-family: var(--font-mono), monospace; }
 pre { white-space: pre-wrap; font-size: 8.5pt; margin: 0 0 10pt; }
 img { max-width: 100%; }
+.book-figure__dark { display: none !important; }
+.book-figure__light { display: block !important; }
+table { width: 100%; border-collapse: collapse; font-size: 8.5pt; margin: 0 0 10pt; }
+th, td { border-bottom: 0.4pt solid var(--hair); padding: 2pt 4pt; text-align: left; vertical-align: top; }
+pre { line-height: 1.25; }
 h1, h2, h3, h4 { break-after: avoid; }
 p, pre, img, li { break-inside: avoid; }
 a { color: inherit; text-decoration: none; }
