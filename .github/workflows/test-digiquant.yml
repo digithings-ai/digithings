@@ -72,3 +72,19 @@ jobs:
         # collection by tests/dq/conftest.py when the extra isn't installed.
         # Those files run in test-nautilus.yml instead (#1501).
         run: uv run --frozen --no-sync pytest tests/dq/ -m unit -v --tb=short
+
+  # The Edge Functions under digiquant/supabase/functions are Deno, so the pytest
+  # lane below never loads a line of them. This lane is the only place they run.
+  # Kept separate from `test` on purpose: no uv sync, no extras, seconds.
+  deno-functions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: denoland/setup-deno@v2
+        with:
+          # Pinned so a local `deno task test` and this lane are the same run.
+          deno-version: "v2.9.7"
+
+      - name: Edge Function unit tests
+        run: deno task --cwd digiquant/supabase/functions test
