@@ -366,10 +366,19 @@ export async function putRoute(
   return interpretStatus(res.status, await readJson(res));
 }
 
+export type UiTextPart = { type: "text"; text: string };
+export type UiFilePart = {
+  type: "file";
+  filename: string;
+  mediaType: string;
+  url: string;
+};
+export type UiPart = UiTextPart | UiFilePart;
+
 export type UiChatMessage = {
   id: string;
   role: "user" | "assistant";
-  parts: Array<{ type: "text"; text: string }>;
+  parts: UiPart[];
 };
 
 export function toUiMessages(messages: readonly ChatMessage[]): UiChatMessage[] {
@@ -380,6 +389,123 @@ export function toUiMessages(messages: readonly ChatMessage[]): UiChatMessage[] 
       role: m.role,
       parts: [{ type: "text" as const, text: m.text }],
     }));
+}
+
+const MAX_ATTACH_BYTES = 2_000_000;
+
+function guessMediaType(name: string): string {
+  const lower = name.toLowerCase();
+  if (lower.endsWith(".png")) return "image/png";
+  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+  if (lower.endsWith(".gif")) return "image/gif";
+  if (lower.endsWith(".webp")) return "image/webp";
+  if (lower.endsWith(".pdf")) return "application/pdf";
+  if (lower.endsWith(".md")) return "text/markdown";
+  if (lower.endsWith(".json")) return "application/json";
+  if (lower.endsWith(".html") || lower.endsWith(".htm")) return "text/html";
+  if (lower.endsWith(".txt") || lower.endsWith(".csv")) return "text/plain";
+  return "application/octet-stream";
+}
+
+export function basename(path: string): string {
+  return path.split(/[\\/]/).pop() || path;
+}
+
+/** Read local paths into AI SDK file parts (data URLs). Skips missing/oversized files. */
+export async function filePartsFromPaths(
+  paths: readonly string[],
+): Promise<{ parts: UiFilePart[]; skipped: string[] }> {
+  const parts: UiFilePart[] = [];
+  const skipped: string[] = [];
+  for (const path of paths) {
+    const trimmed = path.trim();
+    if (!trimmed) continue;
+    try {
+      const file = Bun.file(trimmed);
+      const size = file.size;
+      if (!Number.isFinite(size) || size <= 0 || size > MAX_ATTACH_BYTES) {
+        skipped.push(basename(trimmed));
+        continue;
+      }
+      const buf = new Uint8Array(await file.arrayBuffer());
+      const mediaType = file.type || guessMediaType(trimmed);
+      const b64 = Buffer.from(buf).toString("base64");
+      parts.push({
+        type: "file",
+        filename: basename(trimmed),
+        mediaType,
+        url: `data:${mediaType};base64,${b64}`,
+      });
+    } catch {
+      skipped.push(basename(trimmed));
+    }
+  }
+  return { parts, skipped };
+}
+
+export type ByokModel = { id: string; label: string };
+
+/** Parse GET /api/byok/models buckets into a flat pick list (ids only, no secrets). */
+export function modelRowsFromByok(body: unknown): ByokModel[] {
+  const rec = row(body);
+  if (!rec || rec.ok === false) return [];
+  const out: ByokModel[] = [];
+  const seen = new Set<string>();
+  for (const key of ["free", "flagship", "opensource", "other", "models"] as const) {
+    const bucket = rec[key];
+    if (!Array.isArray(bucket)) continue;
+    for (const item of bucket) {
+      const m = row(item);
+      const id = typeof m?.id === "string" ? m.id.trim() : "";
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      const name = typeof m?.name === "string" ? m.name.trim() : "";
+      out.push({ id, label: name || id });
+    }
+  }
+  return out;
+}
+
+export async function fetchByokModels(
+  api: string,
+  provider: string,
+  signal?: AbortSignal,
+): Promise<{ kind: "ok"; models: ByokModel[] } | { kind: "error"; detail: string }> {
+  const id = provider.trim().toLowerCase() || "openrouter";
+  const interpreted = await readRoute(api, `/api/byok/models?provider=${encodeURIComponent(id)}`, signal);
+  if (interpreted.kind !== "data") {
+    return { kind: "error", detail: interpreted.note || "models unavailable" };
+  }
+  return { kind: "ok", models: modelRowsFromByok(interpreted.data) };
+}
+
+export type McpServerRow = { id: string; label: string };
+
+export function mcpRowsFromTenantConfig(body: unknown): McpServerRow[] {
+  const mcp = row(row(body)?.mcp);
+  const servers = mcp?.servers;
+  if (!Array.isArray(servers)) return [];
+  const out: McpServerRow[] = [];
+  for (const item of servers) {
+    const rec = row(item);
+    const id = typeof rec?.id === "string" ? rec.id.trim() : "";
+    if (!id) continue;
+    const label = typeof rec?.label === "string" && rec.label.trim() ? rec.label.trim() : id;
+    out.push({ id, label });
+  }
+  return out;
+}
+
+/** MCP ids/labels from embed tenant-config (URLs never projected). */
+export async function fetchMcpServers(
+  api: string,
+  signal?: AbortSignal,
+): Promise<{ kind: "ok"; servers: McpServerRow[] } | { kind: "error"; detail: string }> {
+  const interpreted = await readRoute(api, "/api/embed/tenant-config", signal);
+  if (interpreted.kind !== "data") {
+    return { kind: "error", detail: interpreted.note || "mcp list unavailable" };
+  }
+  return { kind: "ok", servers: mcpRowsFromTenantConfig(interpreted.data) };
 }
 
 function parseLoose(raw: string): unknown {

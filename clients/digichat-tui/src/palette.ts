@@ -340,7 +340,15 @@ export function activateSetting(id: string, prefs: ChatPrefs): CommandResult {
   return runCommand(id, prefs, "");
 }
 
-export function paneRows(pane: Pane, prefs: ChatPrefs): PaletteRow[] {
+export type PaneCatalog = {
+  models?: readonly { id: string; label: string }[];
+  mcp?: readonly { id: string; label: string }[];
+  tools?: readonly string[];
+  modelsNote?: string;
+  mcpNote?: string;
+};
+
+export function paneRows(pane: Pane, prefs: ChatPrefs, catalog: PaneCatalog = {}): PaletteRow[] {
   if (pane === "settings") {
     return settingsRows(prefs).map((row) => ({
       id: row.id,
@@ -355,17 +363,54 @@ export function paneRows(pane: Pane, prefs: ChatPrefs): PaletteRow[] {
         label: id,
         description: prefs.provider === id ? "selected" : "API provider",
       })),
-      { id: "keys", label: "key", description: "not entered — this route accepts text only" },
+      {
+        id: "keys",
+        label: "key",
+        description: "not entered in the TUI — use DIGICHAT_API_KEY / web BYOK",
+      },
     ];
   }
-  if (pane === "models") return [{ id: "empty", label: "No models returned.", description: "" }];
+  if (pane === "models") {
+    const models = catalog.models ?? [];
+    if (models.length === 0) {
+      return [
+        {
+          id: "empty",
+          label: catalog.modelsNote?.trim() || "No models returned.",
+          description: "",
+        },
+      ];
+    }
+    return models.map((model) => ({
+      id: model.id,
+      label: model.label,
+      description: prefs.model === model.id ? "selected" : model.id,
+    }));
+  }
   if (pane === "mcp") {
-    return [
-      { id: "empty", label: "No MCP servers.", description: "" },
-      { id: "new", label: "new", description: "OAuth needs a browser" },
-    ];
+    const servers = catalog.mcp ?? [];
+    const rows: PaletteRow[] =
+      servers.length === 0
+        ? [
+            {
+              id: "empty",
+              label: catalog.mcpNote?.trim() || "No MCP servers.",
+              description: "",
+            },
+          ]
+        : servers.map((server) => ({
+            id: server.id,
+            label: server.label,
+            description: "connected",
+          }));
+    rows.push({ id: "new", label: "new", description: "OAuth needs a browser" });
+    return rows;
   }
-  if (pane === "tools") return [{ id: "empty", label: "No connected tools.", description: "" }];
+  if (pane === "tools") {
+    const tools = catalog.tools ?? [];
+    if (tools.length === 0) return [{ id: "empty", label: "No connected tools.", description: "" }];
+    return tools.map((name) => ({ id: name, label: name, description: "from thread" }));
+  }
   if (pane === "help") return allRows(prefs);
   if (pane === "more") return [{ id: "export", label: "export", description: "Export as Markdown" }];
   return [];
@@ -373,7 +418,12 @@ export function paneRows(pane: Pane, prefs: ChatPrefs): PaletteRow[] {
 
 export function selectProvider(id: string, prefs: ChatPrefs): CommandResult {
   if (!(PROVIDERS as readonly string[]).includes(id)) return { type: "note", note: "" };
-  return withPrefs({ ...prefs, provider: id }, `provider ${id}`);
+  return withPrefs({ ...prefs, provider: id, model: "" }, `provider ${id}`);
+}
+
+export function selectModel(id: string, prefs: ChatPrefs): CommandResult {
+  if (!id.trim() || id === "empty") return { type: "note", note: "" };
+  return withPrefs({ ...prefs, model: id.trim() }, `model ${id.trim()}`);
 }
 
 export function nextIndex(current: number, delta: number, length: number): number {

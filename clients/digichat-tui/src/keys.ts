@@ -9,11 +9,13 @@ import {
   paletteRows,
   paneRows,
   pickPalette,
+  selectModel,
   selectProvider,
   submitDraft,
   type ChatPrefs,
   type CommandResult,
   type Pane,
+  type PaneCatalog,
 } from "./palette";
 
 export type Tray = "input" | "attach" | "voice" | "send";
@@ -47,16 +49,18 @@ export type KeyCtx = {
   lastUserText: string;
   lastFoldable: string | null;
   toolNames: readonly string[];
+  catalog?: PaneCatalog;
 };
 
 export type KeyEffect =
   | { type: "quit" }
-  | { type: "submit"; text: string; note: string }
+  | { type: "submit"; text: string; note: string; attachments: string[] }
   | { type: "abort" }
   | { type: "new-session" }
   | { type: "move-session"; delta: number }
   | { type: "redo" }
-  | { type: "copy" };
+  | { type: "copy" }
+  | { type: "load-catalog"; pane: Pane };
 
 export type KeyResult = { state: UiState; effect: KeyEffect | null };
 
@@ -101,8 +105,19 @@ function apply(state: UiState, result: CommandResult): KeyResult {
   }
   if (result.type === "pane") {
     return {
-      state: { ...state, pane: result.pane, paneIndex: 0, draft: "", choice: null, focus: "thread", note: result.note },
-      effect: null,
+      state: {
+        ...state,
+        pane: result.pane,
+        paneIndex: 0,
+        draft: "",
+        choice: null,
+        focus: "thread",
+        note: result.note,
+      },
+      effect:
+        result.pane === "models" || result.pane === "mcp" || result.pane === "tools"
+          ? { type: "load-catalog", pane: result.pane }
+          : null,
     };
   }
   if (result.type === "new-session") {
@@ -125,8 +140,22 @@ function apply(state: UiState, result: CommandResult): KeyResult {
   }
   if (result.type === "send") {
     return {
-      state: { ...state, draft: "", editing: false, pane: null, note: result.note, paletteIndex: 0, scroll: 0 },
-      effect: { type: "submit", text: result.text, note: result.note },
+      state: {
+        ...state,
+        draft: "",
+        editing: false,
+        pane: null,
+        note: result.note,
+        paletteIndex: 0,
+        scroll: 0,
+        attachments: [],
+      },
+      effect: {
+        type: "submit",
+        text: result.text,
+        note: result.note,
+        attachments: state.attachments,
+      },
     };
   }
   if (result.type === "block") return { state: { ...state, note: result.note }, effect: null };
@@ -188,7 +217,7 @@ export function reduceKey(state: UiState, key: KeyIn, ctx: KeyCtx): KeyResult {
   const name = key.name ?? "";
 
   if (state.pane) {
-    const rows = paneRows(state.pane, state.prefs);
+    const rows = paneRows(state.pane, state.prefs, ctx.catalog);
     if (name === "escape") return { state: { ...state, pane: null, paneIndex: 0 }, effect: null };
     if (name === "up" || name === "k") {
       return { state: { ...state, paneIndex: nextIndex(state.paneIndex, -1, Math.max(rows.length, 1)) }, effect: null };
@@ -201,7 +230,14 @@ export function reduceKey(state: UiState, key: KeyIn, ctx: KeyCtx): KeyResult {
       if (!row) return { state, effect: null };
       if (state.pane === "settings") return finishCommand(state, activateSetting(row.id, state.prefs), ctx);
       if (state.pane === "provider" && row.id !== "keys") {
-        return finishCommand(state, selectProvider(row.id, state.prefs), ctx);
+        const next = finishCommand(state, selectProvider(row.id, state.prefs), ctx);
+        return {
+          state: { ...next.state, pane: "models", paneIndex: 0 },
+          effect: { type: "load-catalog", pane: "models" },
+        };
+      }
+      if (state.pane === "models" && row.id !== "empty") {
+        return finishCommand(state, selectModel(row.id, state.prefs), ctx);
       }
       if (state.pane === "more" && row.id === "export") {
         return { state: { ...state, pane: "export", paneIndex: 0 }, effect: null };
@@ -209,7 +245,13 @@ export function reduceKey(state: UiState, key: KeyIn, ctx: KeyCtx): KeyResult {
       if (state.pane === "help") return finishCommand(state, pickPalette(row.id, state.prefs), ctx);
       if (row.id === "new") return { state: { ...state, note: "OAuth needs a browser" }, effect: null };
       if (row.id === "keys") {
-        return { state: { ...state, note: "keys are not entered — this route accepts text only" }, effect: null };
+        return {
+          state: {
+            ...state,
+            note: "keys are not entered in the TUI — set DIGICHAT_API_KEY or use web BYOK",
+          },
+          effect: null,
+        };
       }
     }
     return { state, effect: null };
@@ -232,10 +274,16 @@ export function reduceKey(state: UiState, key: KeyIn, ctx: KeyCtx): KeyResult {
     if (name === "escape") return { state: { ...state, pathing: false, path: "", tray: "input" }, effect: null };
     if (name === "return" || name === "enter") {
       const path = state.path.trim();
-      const nameOnly = path.split(/[\\/]/).pop() ?? path;
-      const attachments = path ? [...state.attachments, nameOnly] : state.attachments;
+      const attachments = path ? [...state.attachments, path] : state.attachments;
       return {
-        state: { ...state, pathing: false, path: "", attachments, tray: "input", note: path ? "" : state.note },
+        state: {
+          ...state,
+          pathing: false,
+          path: "",
+          attachments,
+          tray: "input",
+          note: path ? "" : state.note,
+        },
         effect: null,
       };
     }
@@ -270,14 +318,7 @@ export function reduceKey(state: UiState, key: KeyIn, ctx: KeyCtx): KeyResult {
       if (rows.length > 0) return onPaletteEnter(state, ctx);
       const mention = onMentionEnter(state, ctx);
       if (mention) return mention;
-      const sent = finishCommand(state, submitDraft(state.draft, state.prefs), ctx);
-      if (state.attachments.length > 0 && sent.effect?.type === "submit") {
-        return {
-          state: { ...sent.state, attachments: [], note: "attachment not sent — this route accepts text only" },
-          effect: sent.effect,
-        };
-      }
-      return sent;
+      return finishCommand(state, submitDraft(state.draft, state.prefs), ctx);
     }
     if (name === "backspace") {
       if (!state.draft && state.attachments.length > 0) {

@@ -30,16 +30,16 @@ Compared with the digichat thread in `packages/ui` (`DigichatThread`, `DigichatT
 | Citations | Source rows when the part exists | Not in this payload, so not drawn | Closed |
 | Scroll to bottom | Cube button once the viewport leaves the end | `↓ Scroll to bottom` after page up. `b` or End returns | Closed |
 | Composer | Bordered field, placeholder `Ask digichat…`, block caret, Enter sends | Same placeholder, blinking block, Enter sends | Closed |
-| Attach | Plus cube, chips `name · file`, remove cube. Files reach the model | `+` (Tab, then Enter, or `a`). Chip is `name · file  x`. Backspace on an empty draft removes it | The chip is kept. This route accepts `{ text }` only, so a send says the attachment was not uploaded. No drag-and-drop and no image lightbox |
+| Attach | Plus cube, chips `name · file`, remove cube. Files reach the model | `+` (Tab, then Enter, or `a`). Chip is `name · file  x`. Backspace on an empty draft removes it | Closed for BFF send: full path is kept, file parts go on `/api/v1/chat` as data URLs (2 MB cap). No drag-and-drop and no image lightbox |
 | Voice | Mic cube, then a stop cube while dictating | `mic` on the tray. Enter on it says voice input is not available | Terminal limit. There is no Web Speech API here. The control stays |
 | Send / stop | Send cubes, brighter when text is present. Stop cubes while running | `↑` mute or brighter. `■` aborts the request | Closed |
 | Credit | Centered `powered by digichat — a digithings product.` with a link on digithings | The same sentence, centered, always | The link is not clickable in this cell. The words match |
 | Slash palette | Flat list above the composer: label and hint, highlight, empty state `No matching commands`. Opens on `/` | Same list, same empty line, same placement. Up/down, Enter, Escape | Closed |
 | Configure commands | Toggles, choices, and panes for search, view, thinking, language, effort, provider, models, MCP, tools, sessions, new, clear, compact, undo, redo, copy, export, help | Same commands. Toggles and choices update a local session. `/settings` opens that list | Local only. This route has no force-tool or prefs headers, so a query is sent as text and the status says so |
 | Language rows | Featured `/english` … `/french` plus the choice list | Those five rows and the choice list | The long ISO picker is a separate web menu. The slash list is these five |
-| Models | Model list from the deployment | `No models returned.` | Closed. None are invented |
-| Provider | Provider catalog and a key field | openrouter, openai, anthropic, gemini, xai. The key row says keys are not entered | Secrets are not read or printed. This route cannot take a key |
-| MCP | Server list, JSON, OAuth | `No MCP servers.` and `new`, which says OAuth needs a browser | Terminal limit for the browser handoff. No servers are invented |
+| Models | Model list from the deployment | `/api/byok/models?provider=` for the selected provider | Closed for list. None are invented |
+| Provider | Provider catalog and a key field | openrouter, openai, anthropic, gemini, xai. Key stays out of the TUI | Secrets are not read or printed. Use `DIGICHAT_API_KEY` or web BYOK |
+| MCP | Server list, JSON, OAuth | ids/labels from `/api/embed/tenant-config`; `new` still needs a browser | List first. OAuth hop may slip |
 | Tools | Connected catalog | `No connected tools.` Names that already arrived on a tool row show up in `@` | Closed |
 | Mentions | `@` list, or `No matching tools` | Same | Closed |
 | Help | The slash list is the help | `/` and `?` show that list | Closed |

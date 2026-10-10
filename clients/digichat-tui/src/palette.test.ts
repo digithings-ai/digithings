@@ -47,7 +47,7 @@ test("enter on / opens a command, and a plain line submits", () => {
   const typed = reduceKey(INITIAL_UI, { sequence: "h" }, ctx);
   const more = reduceKey(typed.state, { sequence: "i" }, ctx);
   const sent = reduceKey(more.state, { name: "return" }, ctx);
-  expect(sent.effect).toEqual({ type: "submit", text: "hi", note: "" });
+  expect(sent.effect).toEqual({ type: "submit", text: "hi", note: "", attachments: [] });
 });
 
 test("voice stays on the tray and a failed read can retry", () => {

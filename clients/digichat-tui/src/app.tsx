@@ -15,7 +15,7 @@ import {
   type Tone,
 } from "./chrome";
 import { INITIAL_UI, reduceKey, type KeyEffect, type UiState } from "./keys";
-import { choiceOptions, mentionRows, paletteRows, paneRows } from "./palette";
+import { choiceOptions, mentionRows, paletteRows, paneRows, type PaneCatalog } from "./palette";
 import {
   DASH,
   PLACEHOLDER,
@@ -23,8 +23,12 @@ import {
   CREDIT,
   WELCOME,
   assembleFromBff,
+  basename,
   chatBaseUrl,
   conversationRoute,
+  fetchByokModels,
+  fetchMcpServers,
+  filePartsFromPaths,
   postChat,
   postRoute,
   putRoute,
@@ -33,6 +37,7 @@ import {
   toUiMessages,
   type ChatMessage,
   type ChatScreen,
+  type UiChatMessage,
 } from "./read";
 import { ATTACH, BG, DANGER, FILL, HAIR, INK, MUTE, NEW_CHAT, SCROLL, SEND, SOFT, STOP, VOICE } from "./theme";
 import { DigichatWordmark, WORDMARK_ROWS } from "./wordmark";
@@ -108,14 +113,17 @@ export function App() {
   const [tick, setTick] = useState(0);
   const [caretOn, setCaretOn] = useState(true);
   const [reveal, setReveal] = useState(0);
+  const [catalog, setCatalog] = useState<PaneCatalog>({});
   const gen = useRef(0);
   const screenRef = useRef(screen);
   const uiRef = useRef(ui);
   const busyRef = useRef(busy);
+  const catalogRef = useRef(catalog);
   const abortRef = useRef<AbortController | null>(null);
   screenRef.current = screen;
   uiRef.current = ui;
   busyRef.current = busy;
+  catalogRef.current = catalog;
 
   const load = async (id?: string) => {
     const ticket = ++gen.current;
@@ -180,9 +188,9 @@ export function App() {
     });
   };
 
-  const submitText = async (text: string) => {
+  const submitText = async (text: string, attachmentPaths: string[] = []) => {
     const body = text.trim();
-    if (!body || busyRef.current) return;
+    if ((!body && attachmentPaths.length === 0) || busyRef.current) return;
     const controller = new AbortController();
     abortRef.current = controller;
     busyRef.current = true;
@@ -204,10 +212,24 @@ export function App() {
       }
       const prior = screenRef.current?.messages ?? [];
       const userId = `u-${Date.now()}`;
-      const uiMessages = [
-        ...toUiMessages(prior),
-        { id: userId, role: "user" as const, parts: [{ type: "text" as const, text: body }] },
+      const { parts: fileParts, skipped } = await filePartsFromPaths(attachmentPaths);
+      if (controller.signal.aborted) return;
+      if (skipped.length > 0) {
+        setUi((prev) => ({
+          ...prev,
+          note: `skipped attach: ${skipped.join(", ")}`,
+        }));
+      }
+      const userParts = [
+        ...(body ? [{ type: "text" as const, text: body }] : []),
+        ...fileParts,
       ];
+      if (userParts.length === 0) {
+        applyClosed("empty", "nothing to send");
+        return;
+      }
+      const userMsg: UiChatMessage = { id: userId, role: "user", parts: userParts };
+      const uiMessages = [...toUiMessages(prior), userMsg];
       const sent = await postChat(API, id, uiMessages, controller.signal);
       if (controller.signal.aborted) return;
       if (sent.kind !== "text") {
@@ -215,9 +237,11 @@ export function App() {
         return;
       }
       const assistantId = `a-${Date.now()}`;
+      const displayText =
+        body || (fileParts.length > 0 ? fileParts.map((p) => p.filename).join(", ") : DASH);
       const nextMessages: ChatMessage[] = [
         ...prior,
-        { id: userId, role: "user", text: body, tool: null, reasoning: "", at: "" },
+        { id: userId, role: "user", text: displayText, tool: null, reasoning: "", at: "" },
         { id: assistantId, role: "assistant", text: sent.text, tool: null, reasoning: "", at: "" },
       ];
       void putRoute(API, conversationRoute(id), {
@@ -236,6 +260,37 @@ export function App() {
       if (abortRef.current === controller) abortRef.current = null;
       busyRef.current = false;
       setBusy(false);
+    }
+  };
+
+  const loadCatalog = async (pane: "models" | "mcp" | "tools") => {
+    if (pane === "tools") {
+      setCatalog((prev) => ({ ...prev, tools: toolNames(screenRef.current?.messages ?? []) }));
+      return;
+    }
+    if (pane === "models") {
+      const provider = uiRef.current.prefs.provider || "openrouter";
+      const result = await fetchByokModels(API, provider);
+      if (result.kind === "ok") {
+        setCatalog((prev) => ({
+          ...prev,
+          models: result.models,
+          modelsNote: result.models.length === 0 ? "No models returned." : "",
+        }));
+      } else {
+        setCatalog((prev) => ({ ...prev, models: [], modelsNote: result.detail }));
+      }
+      return;
+    }
+    const result = await fetchMcpServers(API);
+    if (result.kind === "ok") {
+      setCatalog((prev) => ({
+        ...prev,
+        mcp: result.servers,
+        mcpNote: result.servers.length === 0 ? "No MCP servers." : "",
+      }));
+    } else {
+      setCatalog((prev) => ({ ...prev, mcp: [], mcpNote: result.detail }));
     }
   };
 
@@ -289,12 +344,18 @@ export function App() {
       return;
     }
     if (effect.type === "submit") {
-      void submitText(effect.text);
+      void submitText(effect.text, effect.attachments);
       return;
     }
     if (effect.type === "copy") {
       const text = lastText(screenRef.current?.messages ?? [], "assistant");
       if (text) writeClipboard(text);
+      return;
+    }
+    if (effect.type === "load-catalog") {
+      if (effect.pane === "models" || effect.pane === "mcp" || effect.pane === "tools") {
+        void loadCatalog(effect.pane);
+      }
       return;
     }
     if (effect.type === "redo") {
@@ -316,6 +377,7 @@ export function App() {
       lastUserText: lastText(messages, "user"),
       lastFoldable: lastFoldable(messages),
       toolNames: toolNames(messages),
+      catalog: catalogRef.current,
     });
     uiRef.current = result.state;
     setUi(result.state);
@@ -373,7 +435,7 @@ export function App() {
     pane === "export"
       ? exportMarkdown(messages).split("\n").map((text) => ({ text: text || " ", tone: "soft" as const }))
       : pane
-        ? paneRows(pane, ui.prefs).map((row, index) => ({
+        ? paneRows(pane, ui.prefs, catalog).map((row, index) => ({
             text: `${index === ui.paneIndex ? ">" : " "} ${row.label}${row.description ? `  ${row.description}` : ""}`,
             tone: index === ui.paneIndex ? "ink" : "soft",
           }))
@@ -449,9 +511,9 @@ export function App() {
             )}
           </box>
         ) : null}
-        {ui.attachments.map((name) => (
-          <box key={name} height={1} backgroundColor={BG}>
-            <text fg={SOFT}>{attachmentLine(name)}</text>
+        {ui.attachments.map((path) => (
+          <box key={path} height={1} backgroundColor={BG}>
+            <text fg={SOFT}>{attachmentLine(basename(path))}</text>
           </box>
         ))}
         <box border borderColor={HAIR} backgroundColor={BG} flexDirection="column" paddingLeft={1} paddingRight={1}>

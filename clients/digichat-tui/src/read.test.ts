@@ -6,6 +6,8 @@ import {
   WELCOME,
   assembleFromBff,
   chatBaseUrl,
+  mcpRowsFromTenantConfig,
+  modelRowsFromByok,
   interpretChatStream,
   interpretStatus,
   messageRows,
@@ -138,4 +140,34 @@ test("chat stream text-deltas join into a reply", () => {
 test("chat base URL is the surface-config chat endpoint, not the desk runner", () => {
   expect(chatBaseUrl({ DQ_API_URL: "http://127.0.0.1:8788" })).toBe("http://127.0.0.1:3000");
   expect(chatBaseUrl({ DIGI_CHAT_URL: "http://127.0.0.1:3005/" })).toBe("http://127.0.0.1:3005");
+});
+
+test("BYOK model buckets flatten to ids without inventing names", () => {
+  expect(
+    modelRowsFromByok({
+      ok: true,
+      free: [{ id: "a/free", name: "Free A" }, { id: "a/free" }],
+      flagship: [{ id: "b/paid" }],
+    }),
+  ).toEqual([
+    { id: "a/free", label: "Free A" },
+    { id: "b/paid", label: "b/paid" },
+  ]);
+});
+
+test("MCP tenant-config projects ids and labels only", () => {
+  expect(
+    mcpRowsFromTenantConfig({
+      mcp: {
+        servers: [
+          { id: "datatap", label: "DataTap", url: "https://secret.example/mcp" },
+          { id: "" },
+          { id: "vault" },
+        ],
+      },
+    }),
+  ).toEqual([
+    { id: "datatap", label: "DataTap" },
+    { id: "vault", label: "vault" },
+  ]);
 });
