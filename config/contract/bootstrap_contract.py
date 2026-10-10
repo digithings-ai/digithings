@@ -496,7 +496,12 @@ def port_rows() -> list[dict]:
             "host_port": 8005,
             "note": "public route key.digithings.ai",
         },
-        {"name": "litellm", "container_port": 4000, "host_port": 4000},
+        {
+            "name": "digillm",
+            "container_port": 4000,
+            "host_port": 4000,
+            "note": "network alias litellm (OPENAI_API_BASE=http://litellm:4000/v1)",
+        },
         {
             "name": "ollama",
             "container_port": 11434,
