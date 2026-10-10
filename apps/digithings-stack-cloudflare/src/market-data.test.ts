@@ -44,6 +44,30 @@ describe("market-data helpers", () => {
     ]);
   });
 
+  it("keeps open, high, low, and volume when the generation stored them", () => {
+    expect(
+      shapeCloses([
+        {
+          date: "2026-09-11",
+          ticker: "SPY",
+          open: 100,
+          high: 110,
+          low: 90,
+          close: 105,
+          volume: 12,
+        },
+      ]),
+    ).toEqual([
+      { date: "2026-09-11", ticker: "SPY", open: 100, high: 110, low: 90, close: 105, volume: 12 },
+    ]);
+  });
+
+  it("omits a missing open so a close is not dressed up as a candle", () => {
+    expect(shapeCloses([{ date: "2026-09-11", ticker: "SPY", close: 105 }])).toEqual([
+      { date: "2026-09-11", ticker: "SPY", close: 105 },
+    ]);
+  });
+
   it("normalizes Parquet DATE values (JS Date) to ISO days", () => {
     // The producer writes `date` as a Parquet DATE (pl.Date), so hyparquet
     // yields a JS Date here -- String(date).slice(0, 10) would say "Thu Sep 10".

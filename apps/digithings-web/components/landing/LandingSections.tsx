@@ -47,7 +47,7 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "Where does my provider key live?",
-    a: "In the page's memory for the current tab, and nowhere else. The stack writes your provider and model choice to local storage and never persists the key; it is forwarded per request and gone when the tab closes.",
+    a: "In the page's memory for the current tab. The chat frame remembers the provider and model in a cookie on the chat origin, and never writes the key. The key is forwarded per request and gone when the tab closes.",
   },
   {
     q: "Do I have to run every module?",
@@ -55,7 +55,7 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "What is not built?",
-    a: "Two modules are roadmap rather than shipped, there is no hosted product, and the broker adapters raise NotImplementedError — live trading is guarded by a human review gate, not a runtime interlock. The security page lists the known limits.",
+    a: "Two modules are roadmap rather than shipped, and there is no hosted product. Broker adapters are stubs and refuse to connect. Live trading stays behind a human review, not a switch in the software. The security page lists the known limits.",
   },
   {
     q: "Does it need NautilusTrader?",

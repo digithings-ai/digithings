@@ -40,6 +40,10 @@ jobs:
       e2e_contract: ${{ steps.filter.outputs.e2e_contract }}
       nautilus_smoke: ${{ steps.filter.outputs.nautilus_smoke }}
       research_graph: ${{ steps.filter.outputs.research_graph }}
+      # Added by hand for #2072 — as with digillm/digifetch above,
+      # generate_ci_path_filters.py rewrites only the embedded block, not this
+      # outputs map.
+      clients_tui: ${{ steps.filter.outputs.clients_tui }}
       ruff_and_scripts: ${{ steps.filter.outputs.ruff_and_scripts }}
       workflows: ${{ steps.filter.outputs.workflows }}
       compose: ${{ steps.filter.outputs.compose }}
@@ -116,6 +120,8 @@ jobs:
             web:
               - 'apps/digithings-web/**'
               - 'apps/digiquant-web/**'
+              - 'apps/digiquant-app/**'
+              - 'clients/digiquant-tui/src/**'
               - 'digiquant/src/digiquant/portfolio/graph.py'
               - 'apps/digithings-cron/**'
               - 'apps/digiquant-runner/**'
@@ -134,6 +140,9 @@ jobs:
               - 'package.json'
               - 'package-lock.json'
               - '.github/workflows/test-web.yml'
+            clients_tui:
+              - 'clients/**'
+              - '.github/workflows/test-clients-tui.yml'
             e2e_contract:
               - 'tests/test_e2e.py'
               - 'tests/test_e2e_contract.py'
@@ -396,6 +405,14 @@ jobs:
     needs: changes
     if: needs.changes.outputs.research_graph == 'true'
     uses: ./.github/workflows/test-research-graph.yml
+
+  # Bun TUI clients (#2072). Before this, clients/digiquant-tui,
+  # clients/digichat-tui and clients/digichat-devkit each declared
+  # `"test": "bun test"` and none of it ran anywhere in CI.
+  clients-tui:
+    needs: changes
+    if: needs.changes.outputs.clients_tui == 'true'
+    uses: ./.github/workflows/test-clients-tui.yml
 
   # ── Dependency CVE audit (pip-audit / OSV) ──────────────────────────────────
   pip-audit:
@@ -707,6 +724,7 @@ jobs:
       - e2e-contract
       - nautilus-smoke
       - research-graph
+      - clients-tui
       - pip-audit
       - npm-audit
       - ruff-and-scripts

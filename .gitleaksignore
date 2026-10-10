@@ -4,3 +4,5 @@
 # dea33606: Next.js per-build dev preview-mode keys in a committed .next/dev tree; local-only, no service access.
 dea336062146a8c3893645b28cde2febe581c828:apps/digiquant-app/.next/dev/prerender-manifest.json:generic-api-key:8
 dea336062146a8c3893645b28cde2febe581c828:apps/digiquant-app/.next/dev/prerender-manifest.json:generic-api-key:9
+dea336062146a8c3893645b28cde2febe581c828:apps/digiquant-app/.next/dev/cache/.rscinfo:generic-api-key:1
+dea336062146a8c3893645b28cde2febe581c828:apps/digiquant-app/.next/dev/server/server-reference-manifest.json:generic-api-key:4

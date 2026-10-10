@@ -26,10 +26,26 @@ export interface SkinHostContract {
     hostStylesheet: string;
     sourceDirective: string;
   };
-  /** Font variables the grammar references (else the declaration is invalid). */
+  /**
+   * Font variables the grammar references (else the declaration is invalid).
+   *
+   * DIG-2375 moved the `next/font` call out of the layout into the surface's one
+   * font config, so the host now has two files to satisfy: the config that
+   * loads the face, and the layout that applies `fontVariables` to `<html>`.
+   */
   fontVariables: {
-    variable: "--font-geist-mono";
+    /** Face variable the host font config sets. */
+    variable: "--font-mono-face";
+    /** The single file allowed to call `next/font` for this host. */
+    hostFontConfig: string;
+    /** Layout that applies `fontVariables` from that config. */
     hostLayout: string;
+    /**
+     * Retired-name alias the skin CSS still reads. It is a plain CSS alias in
+     * `digichat-app-theme.css`, not a loader, so swapping the face never
+     * re-ships a second font file.
+     */
+    alias: "--font-geist-mono";
   };
   /** Theme dataset + classes the first-party palette hangs off. */
   themeRoot: {
@@ -64,8 +80,10 @@ export const DIGICHAT_SKIN_HOST_CONTRACT: SkinHostContract = {
     sourceDirective: '@source "../../../../../packages/ui/src/components/chat"',
   },
   fontVariables: {
-    variable: "--font-geist-mono",
+    variable: "--font-mono-face",
+    hostFontConfig: "src/app/fonts.ts",
     hostLayout: "src/app/(baseline)/layout.tsx",
+    alias: "--font-geist-mono",
   },
   themeRoot: {
     dataset: "theme",

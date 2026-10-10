@@ -34,7 +34,9 @@ export function corsHeaders(origin: string | null, allowlist: string[]): Record<
   const headers: Record<string, string> = { Vary: "Origin" };
   if (origin && allowlist.map((o) => o.trim()).includes(origin)) {
     headers["Access-Control-Allow-Origin"] = origin;
-    headers["Access-Control-Allow-Methods"] = "GET, OPTIONS";
+    // Writes exist only for registered routes; the dispatcher gates them (x-digi-user + catalog).
+    headers["Access-Control-Allow-Methods"] = "GET, PUT, POST, DELETE, OPTIONS";
+    headers["Access-Control-Allow-Headers"] = "content-type, x-digi-user, x-digi-tier, x-digi-groups";
     headers["Access-Control-Max-Age"] = "86400";
   }
   return headers;

@@ -124,7 +124,7 @@
 }
 
 .dboot-composer[data-solid="true"] {
-  background: var(--bg);
+  background: transparent;
   border-color: color-mix(in srgb, var(--ink) 12%, transparent);
 }
 
