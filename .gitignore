@@ -119,9 +119,9 @@ projects/*/.env*
 .dev.vars*
 !.dev.vars.example
 secrets.yaml
-# The contract manifest is names-only and MUST be tracked: both variants read it,
-# and parity CI compares them against it. The rule above is an unanchored net with
-# no other referent in the tree, so this is its one intended exception.
+# Exception: the config-contract secrets MANIFEST carries names only (no values)
+# and MUST be tracked: both variants read it (`dt secrets render` input),
+# and parity CI compares live config against it.
 !/config/contract/secrets.yaml
 digikey/examples/vault.yaml
 
