@@ -1,0 +1,41 @@
+# digillm service image — digithings' LiteLLM proxy (DIG-1780).
+#
+# LiteLLM stays the routing backbone; digithings ships it ONLY from the pinned
+# PyPI wheel, never the vendor Docker image (ratified red line, DIG-1768/DIG-1780).
+# This image installs litellm[proxy] at the single house version plus the repo's
+# digillm package. It adds no routing or hook features yet: the full DigiLLM
+# service (callbacks, digikey auth, telemetry) is a post-release follow-up.
+#
+# The litellm version MUST match Dockerfile.digithings-stack-cloudflare;
+# tests/scripts/test_compose_litellm_pinned.py enforces that.
+#
+# Build context: monorepo root.
+
+FROM python:3.12.12-slim-bookworm@sha256:593bd06efe90efa80dc4eee3948be7c0fde4134606dd40d8dd8dbcade98e669c
+
+ARG LITELLM_VERSION=1.83.14
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /app
+
+COPY digillm/pyproject.toml digillm/ARCHITECTURE.md ./digillm/
+COPY digillm/src ./digillm/src
+RUN pip install "litellm[proxy]==${LITELLM_VERSION}" ./digillm \
+    && python -c "import litellm, digillm; import importlib.metadata as m; assert m.version('litellm') == '${LITELLM_VERSION}'"
+
+RUN useradd --system --uid 10001 --home-dir /app --shell /usr/sbin/nologin digillm \
+    && chown -R digillm /app
+USER digillm
+
+EXPOSE 4000
+
+# Python probe: the slim base has no curl.
+HEALTHCHECK --interval=15s --timeout=5s --start-period=25s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness', timeout=4)"
+
+ENTRYPOINT ["litellm"]
+CMD ["--config", "/app/config/litellm.yaml", "--host", "0.0.0.0", "--port", "4000"]
