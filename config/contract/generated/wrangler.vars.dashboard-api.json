@@ -1,6 +1,9 @@
 {
   "source": "config/contract/contract.yaml",
   "vars": {
+    "DT_BASE_URL": null,
+    "DT_TARGET": null,
+    "DT_VARIANT": null,
     "SUPABASE_URL": "https://rwagjbkvxkdwqmouagad.supabase.co"
   },
   "worker": "dashboard-api"

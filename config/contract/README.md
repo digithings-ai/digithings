@@ -71,3 +71,27 @@ is the production default, bind everything to 127.0.0.1) that a generator cannot
 reproduce. Instead `generated/env.example` is the contract-derived skeleton and
 the checker proves every **live** assignment in the hand-curated file maps to
 the contract — a stronger property than regenerating it.
+
+## S1 additions (DIG-2759): variant identity + inventory
+
+- `variants.yaml` — variant identity (`DT_VARIANT` / `DT_TARGET` /
+  `DT_BASE_URL`) plus verified hosted routes. Nothing else defines these:
+  Cloudflare is prod-only and always runs `hosted`; the local compose
+  stack always runs `selfhost`.
+- `services.yaml` — prod inventory snapshot at `develop@404b816c`: shared
+  env, compose port/profile table, worker binding table.
+- `scripts/render_config_contract.py` (`make config-contract`,
+  `make config-contract-check`): renders marked `# BEGIN/END
+  config-contract` blocks in place — root `.env.example` (identity vars),
+  `[vars]` in the wrangler.toml files that have one (hosted identity
+  vars), `config/generated/compose-contract.env` (selfhost env set).
+  Never hand-edit inside the blocks; edit the YAML and re-render.
+
+Relationship between the two systems: `contract.yaml` is the acceptance
+authority — every live wrangler var/binding and compose env must map to
+an entry, so the `DT_*` identity keys the renderer emits carry entries
+there. `variants.yaml` / `services.yaml` are the identity + inventory
+source the renderer reads. `config/generated/compose-contract.env` is
+the render output S4 wires via `env_file`; `config/contract/generated/`
+is `generate.py`'s output. The two generators cover different artifacts
+and both must stay green.
