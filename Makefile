@@ -1,7 +1,7 @@
 # Digi Ecosystem – common targets (Phase 0+)
 # Use: make build, make test, make test-e2e, make up, make down
 
-.PHONY: build up down test test-unit test-e2e test-baseline doc-check adr-check vault-check package up-heartbeat up-digichat down-digichat digichat-release-up digichat-release-down digichat-profile-a-up digichat-profile-a-down digichat-profile-a-bundle-up digichat-profile-a-bundle-down digichat-dev digichat-health digichat-config-check stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init model-catalog model-catalog-check clean-imports find-stale commit pr task new-task status batch-candidates parse-error hooks-install up-observability down-observability research-validate supabase-migrations-check datatap-answer-check
+.PHONY: build up down test test-unit test-e2e test-baseline doc-check adr-check vault-check package up-heartbeat up-digichat down-digichat digichat-release-up digichat-release-down digichat-profile-a-up digichat-profile-a-down digichat-profile-a-bundle-up digichat-profile-a-bundle-down digichat-dev digichat-health digichat-config-check stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init model-catalog model-catalog-check clean-imports find-stale commit pr task new-task status batch-candidates parse-error hooks-install up-observability down-observability research-validate supabase-migrations-check datatap-answer-check seed-local seed-local-no-r2
 
 build:
 	docker compose build
@@ -188,6 +188,17 @@ down-digichat-db:
 # Ingest digisearch/seeds/* via POST /ingest (needs DIGISEARCH_SEED_API_KEY=dgk_live_... with digisearch:ingest). See docs/LOCAL_STACK.md.
 seed-digisearch-local:
 	@python3 scripts/seed_digisearch_local.py
+
+# DIG-2774: full synthetic seed for the self-host reference stack (plan section 5).
+# Deterministic (--seed 42) and idempotent, synthetic only, never writes to a
+# non-loopback target. Steps whose service is not running report `skipped`.
+# Use SEED=43 to prove the seed is load-bearing; SEED_ARGS='--dry-run' to preview.
+seed-local:
+	@python3 -m scripts.seed.seed_all --seed $(or $(SEED),42) $(SEED_ARGS)
+
+# Same, minus the R2 objects that need a running Miniflare bucket.
+seed-local-no-r2:
+	@python3 -m scripts.seed.seed_all --seed $(or $(SEED),42) $(SEED_ARGS) --skip r2
 
 # EDGAR-CORPUS dev slice → digisearch/devdata/edgar_sample (needs: pip install -e "./digisearch[edgar-corpus]").
 export-edgar-digisearch-dev:
