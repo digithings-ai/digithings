@@ -1665,6 +1665,14 @@ def _create_with_retry(
         # The digest covers the messages as they go on the wire, which is after any
         # DIGI_TOOL_MESSAGE_MAX_CHARS compaction -- and only the messages, never the
         # whole kwargs dict, which can carry a BYOK key in extra_body.
+        #
+        # "As they go on the wire" is not this binding on its own. The screen
+        # substitutes the redacted copy *inside* create, on a fresh dict built by
+        # the **kwargs expansion, so on a masked attempt this binding still holds
+        # the text the screen withheld. Every record therefore digests through
+        # wire_payload(), which substitutes the copy the provider actually
+        # received; digests against the binding and the ledger describes an egress
+        # that did not happen.
         outbound_payload = kwargs.get("messages")
         destination = _egress_destination(client)
         # Set by the client's egress screen during the attempt below. Bound before
@@ -1702,7 +1710,7 @@ def _create_with_retry(
                     outcome="refused",
                     decision=EgressDecision.REFUSED,
                     category_ids=refusal.categories,
-                    payload=outbound_payload,
+                    payload=wire_payload(client, outbound_payload),
                 )
                 _emit_attempt(
                     scope=scope,
@@ -1727,7 +1735,7 @@ def _create_with_retry(
                     outcome=ProviderAttemptOutcome.CANCELLED.value,
                     decision=screen_decision,
                     category_ids=screen_categories,
-                    payload=outbound_payload,
+                    payload=wire_payload(client, outbound_payload),
                 )
                 _emit_attempt(
                     scope=scope,
@@ -1751,7 +1759,7 @@ def _create_with_retry(
                     outcome=ProviderAttemptOutcome.FAILED.value,
                     decision=screen_decision,
                     category_ids=screen_categories,
-                    payload=outbound_payload,
+                    payload=wire_payload(client, outbound_payload),
                 )
                 _emit_attempt(
                     scope=scope,
@@ -1792,7 +1800,7 @@ def _create_with_retry(
                 ),
                 decision=screen_decision,
                 category_ids=screen_categories,
-                payload=outbound_payload,
+                payload=wire_payload(client, outbound_payload),
             )
             if _defer_success:
                 return response, scope, attempt_number, retry_reason, started_at

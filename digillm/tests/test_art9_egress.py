@@ -503,3 +503,92 @@ def test_local_minilm_never_reaches_this_leaf() -> None:
     assert "digillm" not in source
     assert "screened_client" not in source
     assert "art9" not in source
+
+
+# ── the digest describes what left, not what was withheld ─────────────────────
+
+
+def _allow_screen(payload: Any, *, exception_ref: str | None = None) -> Any:
+    from digibase.art9 import ScreenResult
+
+    return ScreenResult(
+        categories=(), redacted=None, decision="allow", reason="art9:clear", exception_ref=None
+    )
+
+
+def _mask_screen(redacted: Any) -> Any:
+    def screen(payload: Any, *, exception_ref: str | None = None) -> Any:
+        from digibase.art9 import ScreenResult
+
+        return ScreenResult(
+            categories=("health",),
+            redacted=redacted,
+            decision="mask",
+            reason="art9:health:nhs_number",
+            exception_ref="exception-1",
+        )
+
+    return screen
+
+
+def test_a_masked_egress_record_digests_the_masked_copy_not_the_original(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A masked record must describe the bytes the provider received.
+
+    The retry loop binds ``outbound_payload = kwargs.get("messages")`` *before*
+    the attempt, but the screen substitutes the redacted copy *inside*
+    ``create`` on a fresh dict built by the ``**kwargs`` expansion. So the two
+    are not the same object graph, and the pre-call binding keeps the copy that
+    was withheld. An egress ledger that then reports a digest of the withheld
+    text describes an egress that did not happen.
+    """
+    redacted = [{"role": "user", "content": "[REDACTED]"}]
+
+    # With no pepper the ledger deliberately records ``payload_digest: null``,
+    # and then ``masked == plain`` would hold because both are ``None`` -- the
+    # whole comparison satisfied by absent data. Set a real key so a missing
+    # digest cannot make this test pass for the wrong reason.
+    monkeypatch.setenv(egress_record_mod.DIGEST_KEY_ENV, "k" * 32)
+
+    def _call(screen: Any, messages: Any) -> Any:
+        monkeypatch.setattr(client_mod, "get_egress_screen", lambda: screen)
+        client_mod.set_egress_screen(screen)
+        digillm.clear_caches()
+        fake = _fake_client()
+        # A real base_url, not a bare MagicMock attribute: the retry loop reads it
+        # through ``_egress_destination`` before it attempts anything, and an
+        # unresolvable one takes the attempt out of the loop entirely -- which
+        # reads as "create was never called" rather than as the wiring fault.
+        fake.base_url = "https://api.example.test/v1"
+        with patch.object(client_mod, "OpenAI", side_effect=lambda **kw: fake):
+            with patch.object(client_mod, "_client_cache", {}):
+                digillm.completion("gpt-4o-mini", list(messages))
+        return fake.chat.completions.create.call_args.kwargs["messages"]
+
+    masked_sent = _call(_mask_screen(redacted), REFUSING_MESSAGES)
+    plain_sent = _call(_allow_screen, redacted)
+    original_sent = _call(_allow_screen, REFUSING_MESSAGES)
+
+    # What actually went on the wire, per call.
+    assert masked_sent == redacted
+    assert plain_sent == redacted
+    assert original_sent == list(REFUSING_MESSAGES)
+
+    rows = _records(tmp_path)
+    assert len(rows) == 3, f"expected one record per call, got {len(rows)}"
+    assert [r["decision"] for r in rows] == ["masked", "pass", "pass"]
+    masked_digest, plain_digest, original_digest = (r["payload_digest"] for r in rows)
+
+    # Non-vacuity first: an absent digest is not a comparison.
+    assert masked_digest and plain_digest and original_digest, (
+        f"records carry no digest to compare: {masked_digest!r} "
+        f"{plain_digest!r} {original_digest!r}"
+    )
+
+    # Same bytes on the wire, same digest -- the masked record describes the
+    # egress rather than the intent.
+    assert masked_digest == plain_digest
+    # And it is NOT the digest of the copy the screen withheld. Without this the
+    # assertion above could pass for the wrong reason.
+    assert masked_digest != original_digest
