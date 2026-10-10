@@ -1333,6 +1333,20 @@ class _RawResponse(NamedTuple):
     currency: str | None
 
 
+class SessionCheck(NamedTuple):
+    """The verdict of one cookie validation probe against api.gloom.sh.
+
+    ``valid`` is True only when the probe was actually answered with the
+    cookie attached. Every other outcome — disabled kill switch, no cookie,
+    HTTP 401, upstream 5xx, transport failure, unparseable body — is False,
+    so the caller fails closed and hides the gated tools (#2752).
+    """
+
+    valid: bool
+    code: str
+    detail: str
+
+
 EnvT = TypeVar("EnvT", bound=DigifetchEnvelope[Any])
 InputT = TypeVar("InputT", bound=BaseModel)
 
@@ -1498,6 +1512,52 @@ class GloomberbClient:
 
     def __exit__(self, *exc: object) -> None:
         self.close()
+
+    # -- session cookie validation (§2752) --------------------------------
+
+    def check_session(self) -> SessionCheck:
+        """Validate ``GLOOMBERB_SESSION_COOKIE`` with ONE authenticated read.
+
+        The deployer owns the credential (Chris, 10 Oct 2026), so the cookie
+        is only a usable secret if the upstream account behind it is still
+        live. Gloomberb publishes no ``/me`` or ``/session`` route, so the
+        probe reuses the cheapest side-effect-free read, ``/market/quote``,
+        and forces it ``gated=True``: anonymous callers get HTTP 401, a live
+        session gets HTTP 200. Pinning one attempt keeps a probe from
+        spending the shared rate limit, for the same reason as
+        ``_SINGLE_ATTEMPT_POLICY``.
+
+        The cookie itself is never logged, never returned and never stored:
+        callers key any cache on :func:`session_cache_fingerprint`.
+        """
+        if not self._enabled:
+            return SessionCheck(False, "disabled", "GLOOMBERB_ENABLED is not set")
+        if self._session_cookie is None:
+            return SessionCheck(
+                False, "no_secret", "GLOOMBERB_SESSION_COOKIE is not set"
+            )
+        try:
+            raw = self._request_json(
+                "GET",
+                ENDPOINTS["quote"],
+                params={"symbol": "AAPL"},
+                gated=True,
+                retry_policy=_SINGLE_ATTEMPT_POLICY,
+                label="Gloomberb session check",
+            )
+        except Exception as exc:  # fail closed: never advertise on a transport fault
+            return SessionCheck(
+                False, "probe_failed", f"validation could not complete ({type(exc).__name__})"
+            )
+        if isinstance(raw, DigifetchError):
+            return SessionCheck(False, raw.code, raw.message)
+        if raw.status == "200":
+            return SessionCheck(True, "ok", "the session cookie is accepted by api.gloom.sh")
+        return SessionCheck(
+            False,
+            raw.reason_code or "auth_required",
+            f"api.gloom.sh answered HTTP {raw.status} to an authenticated probe",
+        )
 
     # -- public tools (§5.1) ----------------------------------------------
 
