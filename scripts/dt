@@ -1,0 +1,222 @@
+#!/usr/bin/env python3
+"""dt - one-command bring-up and health gate for the local self-host stack.
+
+Subcommands (local-stack plan sections 3 and 6):
+
+    dt up [--profile core|quant|chat|trace|all]   preflight, secrets, supabase,
+                                                 compose, wrangler dev, proxy,
+                                                 seed, health gate, URL table
+    dt down [--profile ...]                       stop, keep data
+    dt reset [--profile ...]                      destructive: rebuild the local db
+    dt seed [--seed 42]                           synthetic seed only
+    dt status [--require-all]                     health gate (plan section 6)
+    dt preflight                                  tool and disk checks only
+    dt urls [--profile ...]                       the URL table on its own
+
+Every subcommand accepts ``--json`` for machine output and ``--dry-run`` for the
+orchestration subcommands.  Exit codes: 0 ok, 1 a check or a step failed, 2
+usage error.  ``dt status`` exits 1 on a failed check; ``--require-all`` also
+exits 1 when any check was skipped, which is how CI demands zero unknowns.
+
+This script is a sibling of ``scripts/dt-secrets`` (S5) and the entry point the
+Makefile's ``local-stack*`` targets call; it does not replace either.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from scripts.localstack import contracts, health, orchestrate, preflight, render
+
+DEFAULT_TIMEOUT = 5.0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="dt", description=__doc__.splitlines()[0] if __doc__ else None
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    def common(p: argparse.ArgumentParser, *, orchestration: bool) -> None:
+        p.add_argument(
+            "--profile",
+            default="core",
+            choices=list(contracts.PROFILES),
+            help="which slice of the stack to act on (default: core)",
+        )
+        p.add_argument("--json", action="store_true", help="machine-readable output")
+        if orchestration:
+            p.add_argument(
+                "--dry-run",
+                action="store_true",
+                help="print the plan without running any command",
+            )
+            p.add_argument(
+                "--yes",
+                action="store_true",
+                help="confirm a destructive command (dt reset)",
+            )
+            p.add_argument("--seed", default="42", help="deterministic seed value (default: 42)")
+
+    for name, orchestration in (
+        ("up", True),
+        ("down", True),
+        ("reset", True),
+        ("seed", True),
+        ("status", False),
+        ("preflight", False),
+        ("urls", False),
+    ):
+        common(sub.add_parser(name, help=f"{name}"), orchestration=orchestration)
+
+    status = sub.choices["status"]
+    status.add_argument(
+        "--require-all",
+        action="store_true",
+        help="fail when any check was skipped, not only when one failed",
+    )
+    status.add_argument(
+        "--timeout", type=float, default=DEFAULT_TIMEOUT, help="per-check timeout seconds"
+    )
+    return parser
+
+
+def repo_root() -> Path:
+    """The repository root: the parent of ``scripts/``."""
+    return Path(__file__).resolve().parent.parent
+
+
+def emit(payload: object, as_json: bool, text: str) -> None:
+    """Print either representation; both come from the same measured object."""
+    print(json.dumps(payload, indent=2, sort_keys=True) if as_json else text)
+
+
+def _env() -> dict[str, str]:
+    return dict(os.environ)
+
+
+def cmd_preflight(args: argparse.Namespace, root: Path) -> int:
+    # `path` is the PATH string `which` searches: pass this process's own PATH
+    # so the report describes the environment dt will really run in.
+    report = preflight.run_preflight(env=_env(), path=os.environ.get("PATH"))
+    emit(
+        report.to_dict(),
+        args.json,
+        render.render_preflight_table(report),
+    )
+    return 0 if report.ok else 1
+
+
+def _gate(args: argparse.Namespace, root: Path) -> tuple[int, object, str]:
+    checks, origin = contracts.load_checks(root)
+    selected = contracts.select(checks, args.profile)
+    report = health.run_gate(
+        selected,
+        profile=args.profile,
+        origin=origin,
+        config=_env(),
+        timeout=getattr(args, "timeout", DEFAULT_TIMEOUT),
+        require_all=getattr(args, "require_all", False),
+    )
+    return (0 if report.ok else 1), report, render.render_gate_table(report)
+
+
+def cmd_status(args: argparse.Namespace, root: Path) -> int:
+    code, report, text = _gate(args, root)
+    emit(report.to_dict(), args.json, text)
+    return code
+
+
+def cmd_urls(args: argparse.Namespace, root: Path) -> int:
+    checks, origin = contracts.load_checks(root)
+    selected = contracts.select(checks, args.profile)
+    emit(
+        {"profile": args.profile, "catalogue": origin},
+        args.json,
+        render.render_url_table(selected, _env(), args.profile),
+    )
+    return 0
+
+
+def cmd_plan(args: argparse.Namespace, root: Path) -> int:
+    env = _env()
+    steps = orchestrate.steps_for(args.command, args.profile, env, args.seed)
+    destructive = args.command == "reset"
+    if destructive and not args.dry_run and not args.yes:
+        print(
+            "dt reset drops and rebuilds the local database. Re-run with --yes to confirm.",
+            file=sys.stderr,
+        )
+        return 2
+
+    # Plan step 1 is the preflight; steps 2-7 are the commands; step 8 is the gate.
+    banner = ""
+    if args.command in ("up", "reset", "seed"):
+        pre = preflight.run_preflight(env=env, path=env.get("PATH"))
+        if not pre.ok:
+            banner = render.render_preflight_table(pre)
+            if not args.dry_run:
+                emit(
+                    {"preflight": pre.to_dict()},
+                    args.json,
+                    banner
+                    + f"\npreflight failed; not bringing up the stack.\nmissing: {', '.join(pre.missing)}",
+                )
+                return 1
+            # A dry run exists to show the plan on a host that cannot run it, so
+            # a failed preflight is reported and the plan is still printed.
+            banner += f"\npreflight failed (dry run continues): {', '.join(pre.missing)}\n"
+
+    report = orchestrate.run_steps(args.command, steps, root, env, dry_run=args.dry_run)
+    text = banner + render.render_step_table(report)
+    code = 0 if report.ok else 1
+
+    if report.ok and args.command == "up" and not args.dry_run:
+        gate_code, gate, gate_text = _gate(args, root)
+        code = gate_code or code
+        emit(
+            {"steps": report.to_dict(), "gate": gate.to_dict()},
+            args.json,
+            "\n".join(
+                [
+                    text,
+                    "",
+                    gate_text,
+                    "",
+                    render.render_url_table(
+                        contracts.select(contracts.load_checks(root)[0], args.profile),
+                        env,
+                        args.profile,
+                    ),
+                ]
+            ),
+        )
+        return code
+
+    emit(report.to_dict(), args.json, text)
+    return code
+
+
+def main(argv: "list[str] | None" = None) -> int:
+    args = build_parser().parse_args(argv)
+    root = repo_root()
+    handlers = {
+        "preflight": cmd_preflight,
+        "status": cmd_status,
+        "urls": cmd_urls,
+        "up": cmd_plan,
+        "down": cmd_plan,
+        "seed": cmd_plan,
+        "reset": cmd_plan,
+    }
+    return handlers[args.command](args, root)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
