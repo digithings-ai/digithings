@@ -287,3 +287,25 @@ and live customer PII anyway.
   whether the new value went live.
 - Owner: Platform (Cloudflare operator) for the value, Security for custody.
 - Inventory: `docs/ops/SECRETS_INVENTORY.md` (R10 covers `DIGICHAT_EMBED_TENANTS`).
+## Cloudflare-side rotation (decision 2026-10-10)
+
+The invite key is rotated on Cloudflare only. Do **not** store the current
+`DIGICHAT_EMBED_TENANTS` value (it contains the live `MCP_EDGE_KEY`) or the new
+invite key as GitHub secrets. `.github/workflows/occ-invite-key-rollout.yml`
+runs the offline guards only and has no production write path.
+
+Run it as a staged-deploy step, after the release merge to main is approved, from a
+terminal logged in with `wrangler login`. Values come from the local
+secrets manager and are never echoed:
+
+```sh
+OCC_ROLLOUT_AUTH=login \
+OCC_EMBED_TENANTS_CURRENT="$(security find-generic-password -s digichat-embed-tenants -w)" \
+OCC_INVITE_KEY="$(security find-generic-password -s occ-invite-key -w)" \
+  bash scripts/occ_invite_key_rollout.sh    # type ROLLOUT when prompted
+```
+
+Mint the key once with `openssl rand -hex 32` straight into the keychain
+(`security add-generic-password -s occ-invite-key -a occ -w "$(openssl rand -hex 32)"`).
+The rotation **changes production behaviour** (it turns the `/chat/occ` gate on and
+redeploys the digichat Worker), so it is never a background secret update.
