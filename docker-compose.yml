@@ -304,9 +304,9 @@ services:
       start_period: 10s
 
   # ─── LiteLLM router (Phase 1: digigraph uses this for all LLM calls) ───
-  # Image: see DOCKER.md § LiteLLM upgrades (pin digest in production).
+  # Image pinned by tag+digest (#5337): bump on purpose in a reviewed PR, never a floating tag.
   litellm:
-    image: docker.litellm.ai/berriai/litellm:main-stable
+    image: ghcr.io/berriai/litellm:v1.83.14-stable.patch.3@sha256:f12d528d4a05add56cb09e54c5126088f2edc6bdf3a2f943bcd3a32b08769da2
     container_name: digi-litellm
     ports:
       - "127.0.0.1:4000:4000"
