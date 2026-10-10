@@ -39,9 +39,12 @@ Three traps to know:
 - `model_modes.yaml` — digigraph `DIGI_LLM_MODE` defaults (`test` / `medium` / `best`).
 - `digiproject.yaml` — **D1 / Cloudflare stack** digigraph project (`research_rag`,
   research agent, `digisearch` + `digivault_search_notes` + `digivault_get_note`).
-- `digiproject.profile-a-local.yaml` — **stock Profile A compose** (no D1): same
-  chat-only profile but omits `digivault_get_note` (D1-only tool). Compose defaults
-  `DIGI_PROJECT_CONFIG` to this file.
+- `digiproject.profile-a-local.yaml` — **multi-image Profile A compose** (no D1,
+  no digisearch service): omits `digivault_get_note` and `digisearch`.
+  `compose.profile-a.yml` defaults `DIGI_PROJECT_CONFIG` to this file.
+- `digiproject.profile-a-bundle.yaml` — **stack image** (`compose.profile-a-bundle.yml`):
+  same chat-only profile, still omits `digivault_get_note`, and keeps `digisearch`
+  because that image starts it on `127.0.0.1:8002`.
 - `byok-providers.json` — BYOK provider allowlist for `llm_auth.py`. A vendored
   copy of the repo-root `config/byok-providers.json`; the two must stay in sync
   (see `tests/dg/test_llm_auth.py::TestByokCatalogVendoredCopy`, which compares

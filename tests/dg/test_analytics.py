@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
-from digigraph.tools.analytics import load_dataset, plot_distribution, summary_stats
+from digigraph.tools.analytics import filter_dataset, load_dataset, plot_distribution, summary_stats
 
 
 @pytest.fixture
@@ -35,6 +35,35 @@ def test_summary_stats(sample_dataset_path: str) -> None:
     assert "stats" in out
     assert "score" in out["stats"]
     assert out["stats"]["score"].get("mean") is not None
+
+
+@pytest.mark.unit
+def test_filter_dataset_unknown_op_returns_error_and_does_not_write(
+    sample_dataset_path: str,
+) -> None:
+    out = filter_dataset(
+        sample_dataset_path,
+        [{"field": "score", "op": "contains", "value": 0.5}],
+    )
+    assert out["error"] == "unknown filter op 'contains'"
+    assert out["dataset_ref"] is None
+    assert out["rows"] == 0
+    assert not (Path(sample_dataset_path).parent / "filtered.json").exists()
+
+
+@pytest.mark.unit
+def test_filter_dataset_missing_op_defaults_to_eq(sample_dataset_path: str) -> None:
+    out = filter_dataset(sample_dataset_path, [{"field": "score", "value": 0.5}])
+    assert out["rows"] == 1
+    assert "error" not in out
+    assert Path(out["dataset_ref"]).is_file()
+
+
+@pytest.mark.unit
+def test_filter_dataset_empty_filters_returns_the_frame(sample_dataset_path: str) -> None:
+    out = filter_dataset(sample_dataset_path, [])
+    assert out["rows"] == 2
+    assert "error" not in out
 
 
 @pytest.mark.unit

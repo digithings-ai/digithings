@@ -162,9 +162,11 @@ services:
       # keeps digiproject.yaml (with digivault_get_note). Override via DIGI_PROJECT_CONFIG.
       DIGI_PROJECT_CONFIG: ${DIGI_PROJECT_CONFIG:-/app/config/digiproject.profile-a-local.yaml}
       DIGI_WORKFLOW_PROFILE: ${DIGI_WORKFLOW_PROFILE:-research_rag}
-      # Multi-image Profile A has digivault only (no digisearch service).
+      # Fallback only. The mounted yaml is the allowlist, and it does not offer
+      # digisearch — this compose does not start that service. web_search stays
+      # in the yaml and is stripped unless the request opts in.
       # digivault_get_note is D1-only; stock Profile A sets DIGIVAULT_ROOT only.
-      DIGI_ALLOWED_TOOLS: ${DIGI_ALLOWED_TOOLS:-digisearch,digivault_search_notes}
+      DIGI_ALLOWED_TOOLS: ${DIGI_ALLOWED_TOOLS:-digivault_search_notes}
       DIGI_LLM_MODE: ${DIGI_LLM_MODE:-test}
       DIGI_ENABLE_DEBUG_ENDPOINTS: ${DIGI_ENABLE_DEBUG_ENDPOINTS:-0}
       DIGI_ENABLE_THREAD_API: ${DIGI_ENABLE_THREAD_API:-0}

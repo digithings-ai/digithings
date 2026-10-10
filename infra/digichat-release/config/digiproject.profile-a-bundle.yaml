@@ -1,21 +1,20 @@
-# Profile A digiproject — local / docker Profile A without Cloudflare D1.
-# Mounted when compose.profile-a.yml sets DIGI_PROJECT_CONFIG to this file.
+# Profile A digiproject — stack image (compose.profile-a-bundle.yml).
+# That image starts digisearch on 127.0.0.1:8002, so this file keeps the tool.
 # digivault_get_note is D1-only and omitted here; the shared digiproject.yaml
 # (used by digithings-stack-cloudflare) keeps digivault_get_note for D1 deploys.
+# The multi-image compose does not start digisearch and uses
+# digiproject.profile-a-local.yaml instead.
 #
 # Intentional omissions:
 #   - digiquant / backtest / optimize (no DIGIQUANT_DATA_DIR, no :8001)
 #   - digitrace HTTP (tracing library only)
-#   - digisearch (this compose does not start it; an empty DIGISEARCH_URL
-#     would make the tool return nothing). The stack image keeps it in
-#     digiproject.profile-a-bundle.yaml.
 #   - digivault_get_note (requires D1; stock Profile A sets DIGIVAULT_ROOT only)
 #
 # Spec: docs/spec/project-spec-v1alpha1.md
 
 project:
-  name: digithings-profile-a-local
-  description: "Profile A chat-only digigraph without D1 (vault search only)"
+  name: digithings-profile-a-bundle
+  description: "Profile A chat-only digigraph without D1 (search tools only)"
   version: "0.1.0"
 
 graph:
@@ -32,6 +31,7 @@ agents:
   llm_mode: test
   research_brief: false
   allowed_tools:
+    - digisearch
     - digivault_search_notes
     # Present so request opt-in can activate it; stripped unless enable_web_search (#3420).
     - web_search
@@ -41,13 +41,19 @@ agents:
 
     ## Tools
 
+    digisearch — semantic search. Matches on meaning, so phrase the query as the idea
+    you are looking for. A hit is one CHUNK of a document, not the whole document, and
+    its content is an excerpt. A vault-sourced hit carries metadata.vault_path.
+
     digivault_search_notes — keyword search over whole vault notes. Terms are matched
     literally and ranked, so distinctive nouns work better than a full sentence. Each
     hit's doc_id IS the vault path. Its content is an excerpt of the note.
 
-    This deployment does not expose digisearch or digivault_get_note. You cannot run a
-    semantic search, and you cannot load a whole note beyond the search excerpt — do
-    not invent those tool calls.
+    This deployment does not expose digivault_get_note. You cannot load a whole note
+    beyond the search excerpt — do not invent that tool call.
+
+    The two searches are two views of one corpus — by meaning, and by wording. If one
+    returns nothing useful, try the other before concluding the corpus is silent.
 
     ## How to research
 
@@ -88,6 +94,6 @@ indexes:
     backend: chroma
 
 services:
-  digisearch_url: ${DIGISEARCH_URL:-}
+  digisearch_url: ${DIGISEARCH_URL:-http://127.0.0.1:8002}
   digivault_url: ${DIGIVAULT_URL:-http://127.0.0.1:8004}
   digiquant_url: ""

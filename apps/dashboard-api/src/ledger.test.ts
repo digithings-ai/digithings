@@ -213,6 +213,8 @@ describe('parseLedgerQuery', () => {
       { asOf: '2026-13-01' },
       { cursor: 'broken' },
       { retrieval_pin: 'x'.repeat(129) },
+      { ticker: 'XLF&select=*' },
+      { ticker: 'XLF,or' },
     ]) {
       const parsed = parseLedgerQuery(input);
       expect('error' in parsed && parsed.error.body.error.code).toBe('bad_request');
@@ -446,6 +448,28 @@ describe('tryHandleLedger (mount function)', () => {
     };
     expect(secondBody.data.events).toHaveLength(1);
     expect(secondBody.data.next_cursor).toBeNull();
+  });
+
+  it('sends a dotted ticker as an unquoted eq value', async () => {
+    const book = fakeBook();
+    const res = await tryHandleLedger(get('/ledger?ticker=BRK.B'), book);
+    expect(res?.status).toBe(200);
+    const events = book.seen.filter((path) => path.startsWith('position_events?'));
+    expect(events.length).toBeGreaterThan(0);
+    for (const path of events) {
+      const value = new URLSearchParams(path.split('?')[1] ?? '').get('ticker');
+      expect(value).toBe('eq.BRK.B');
+    }
+  });
+
+  it('rejects an injected ticker before the book is read', async () => {
+    const book = fakeBook();
+    const res = await tryHandleLedger(get('/ledger?ticker=XLF%26select%3D*'), book);
+    expect(res?.status).toBe(400);
+    const body = (await res?.json()) as { error: { code: string; message: string } };
+    expect(body.error.code).toBe('bad_request');
+    expect(body.error.message).toBe('malformed ticker');
+    expect(book.seen).toEqual([]);
   });
 
   it('fails closed with the error envelope on bad params', async () => {

@@ -50,7 +50,7 @@ services:
       DIGITRACE_URL: ""
       OPENAI_API_BASE: http://127.0.0.1:4000/v1
       DIGI_CONFIG_PATH: /app/config
-      DIGI_PROJECT_CONFIG: /app/config/digiproject.profile-a-local.yaml
+      DIGI_PROJECT_CONFIG: /app/config/digiproject.profile-a-bundle.yaml
       DIGI_WORKFLOW_PROFILE: research_rag
       # digivault_get_note is D1-only; stock Profile A sets DIGIVAULT_ROOT only.
       DIGI_ALLOWED_TOOLS: digisearch,digivault_search_notes
