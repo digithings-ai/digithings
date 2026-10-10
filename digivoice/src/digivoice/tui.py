@@ -455,29 +455,13 @@ def _stray_set(width: int, blocked: set[tuple[int, int]], frac: float) -> set[tu
     return found
 
 
-# Landing pixel-build runs out by ~1.1s; strays finish a little later.
+# The lockup no longer builds in place: it paints settled on the first frame.
+# Kept as the launch glint clock so the intro frame keeps its motion.
 _BUILD_MS = 1400
 # Blank rows between the wordmark and the menu on the home frame.
 _HERO_GAP = 2
 # Set by play_intro so the home frame continues that same landing clock.
 _hero_origin: float | None = None
-
-
-def _reveal_alpha(
-    delay_ms: int, duration_ms: int, t_ms: int, final: float, a: float, b: float, c: float
-) -> float:
-    """Stepped opacity from the landing ``pixel-build`` keyframes."""
-    if t_ms < delay_ms:
-        return 0.0
-    span = max(1, duration_ms)
-    if t_ms >= delay_ms + span:
-        return final
-    progress = (t_ms - delay_ms) / span
-    if progress < 0.33:
-        return a
-    if progress < 0.66:
-        return b
-    return c
 
 
 # Landing opacities → xterm cube grays (k=1..5). These indexes are the ones
@@ -514,25 +498,6 @@ def _landing_flash(cell: PixelCell, t_ms: int) -> bool:
     return elapsed < max(80, int(0.05 * cell.glint_period_ms))
 
 
-def _timed_pixels(
-    word: str, cols: int, t_ms: int
-) -> tuple[dict[tuple[int, int], float], set[tuple[int, int]]]:
-    """Letter alphas and the strays that are flickering at ``t_ms``."""
-    gap = _letter_gap(cols, max(1, len(word)))
-    letters, stray = word_cells(word, gap)
-    alphas: dict[tuple[int, int], float] = {}
-    for cell in letters:
-        alpha = _reveal_alpha(cell.delay_ms, cell.duration_ms, t_ms, cell.f, cell.a, cell.b, cell.c)
-        if alpha > 0:
-            alphas[(cell.x, cell.y)] = alpha
-    flickering = {
-        (cell.x, cell.y)
-        for cell in stray
-        if cell.delay_ms <= t_ms < cell.delay_ms + max(1, cell.duration_ms)
-    }
-    return alphas, flickering
-
-
 def render_wordmark_lines(
     word: str = "DIGIVOICE",
     *,
@@ -543,25 +508,22 @@ def render_wordmark_lines(
     t_ms: int | None = None,
     truecolor: bool = False,
 ) -> list[str]:
-    """Five half-block rows. `frac` reveals cells; `t_ms` plays the landing build."""
+    """Five half-block rows. `frac` reveals cells; `t_ms` drives the glint only.
+
+    The lockup paints settled on the first frame: there is no landing build.
+    """
     letters = word.upper()
     gap = _letter_gap(cols, max(1, len(letters)))
     grid = _pixel_grid(letters, gap)
     if not grid or not grid[0]:
         return []
     cells = _filled_cells(grid)
-    building = t_ms is not None and t_ms < _BUILD_MS
-    alphas: dict[tuple[int, int], float] = {}
-    if building and t_ms is not None:
-        alphas, strays = _timed_pixels(letters, cols, t_ms)
-        lit = set(alphas)
-    else:
-        lit = _lit_set(cells, frac)
-        strays = _stray_set(len(grid[0]), set(cells), frac)
-    settled: dict[tuple[int, int], PixelCell] = {}
-    if not building:
-        gap_cells, _unused = word_cells(letters, gap)
-        settled = {(cell.x, cell.y): cell for cell in gap_cells}
+    lit = _lit_set(cells, frac)
+    strays = _stray_set(len(grid[0]), set(cells), frac)
+    gap_cells, _unused = word_cells(letters, gap)
+    settled: dict[tuple[int, int], PixelCell] = {
+        (cell.x, cell.y): cell for cell in gap_cells
+    }
     clock = phase * 160 if t_ms is None else t_ms
     lines: list[str] = []
     width = len(grid[0])
@@ -599,8 +561,6 @@ def render_wordmark_lines(
                 )
                 if stray_only:
                     sgr = _alpha_sgr(0.36, truecolor=truecolor)
-                elif building:
-                    sgr = _alpha_sgr(alphas.get((sx, sy), 0.0), truecolor=truecolor)
                 elif any(_landing_flash(cell, clock) for cell in cells_here):
                     sgr = _alpha_sgr(1.0, truecolor=truecolor)
                 elif primary is not None:
