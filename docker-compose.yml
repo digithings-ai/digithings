@@ -443,6 +443,48 @@ services:
     volumes:
       - digivault_data:/data/vault
 
+  # ─── digiquant runner (optional: run with docker compose --profile quant up) ───
+  # Backs the DigiQuantRunnerContainer class in scripts/selfhost/container_shim.ts,
+  # which answers 503 for that class until a compose service exists for it. The
+  # image is real today (Dockerfile.digiquant-runner: EXPOSE 8080, CMD
+  # `python /opt/runner/exec_job.py serve`) and serves HTTP on 8080
+  # (exec_job.py `serve()` -> ThreadingHTTPServer).
+  #
+  # NO published host port, on purpose: 8080 is already published by searxng
+  # (`127.0.0.1:8080:8080`), so publishing it here would make `docker compose up`
+  # fail with a port conflict for every developer and in CI (smoke-stack.yml runs
+  # a bare `up`). The shim routes over the compose network
+  # (http://digiquant-runner:8080), which needs no published port at all.
+  #
+  # Healthcheck: exec_job.py `_Handler.do_GET` serves `/healthz`. The probe uses
+  # python rather than curl because python is what the image's own CMD runs, so
+  # it is the only interpreter its presence is guaranteed by.
+  # No credentials are set here: R2_* and RUNNER_* come from env_file .env,
+  # rendered by `dt secrets render` (slice S5). Never inline a secret.
+  digiquant-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.digiquant-runner
+    image: digi-digiquant-runner:latest
+    container_name: digi-digiquant-runner
+    profiles: [quant, core, all]
+    env_file: .env
+    environment:
+      PYTHONUNBUFFERED: "1"
+    depends_on:
+      digikey:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz').read()"
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
   # ─── digiquant MCP server (optional: run with docker compose --profile quant up) ───
   # Backs the DigiQuantMcpContainer class in scripts/selfhost/container_shim.ts,
   # which answers 503 for that class until a compose service publishes 8767.
