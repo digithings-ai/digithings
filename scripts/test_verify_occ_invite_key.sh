@@ -23,8 +23,11 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 cd "$HERE/.."
 
-KEY="a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90"   # throwaway
-WRONG="0000000000000000000000000000000000000000000000000000000000000000"
+# Test keys are generated per run (DIG-2779): no key-shaped literal is ever
+# committed, so secret scanners have nothing to flag and nothing is reusable.
+KEY="$(openssl rand -hex 32)"
+WRONG="$(openssl rand -hex 32)"
+[ "$KEY" != "$WRONG" ] || { echo "FAIL: generated test keys collided" >&2; exit 1; }
 PORT="${PORT:-8791}"
 FIXT="scripts/occ_invite_key_fixture_server.mjs"
 rc=0

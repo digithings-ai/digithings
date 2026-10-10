@@ -32,14 +32,10 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 cd "$HERE/.."
 
 SCRIPT="scripts/occ_invite_key_rollout.sh"
-# Rotation values for the cases. Named and shaped so no secret scanner can read
-# them as a credential: the CI gitleaks lane flagged the earlier 64-hex literals
-# as `generic-api-key` (scripts/test_occ_rollout_scope_guard.sh:35-36, commit
-# 28bcbc590). Nothing here is secret, and nothing here may look like it is — the
-# suite's whole argument is that the guard can be exercised without a real key.
-# They stay above the rollout script's 16-character minimum and carry none of the
-# words is_placeholder_key() rejects (changeme/placeholder/dummy/example/...).
-NEW_KEY="fixture rotation value for the OCC scope guard suite, case one"
+# The rollout key is generated per run (DIG-2779) with the same command the
+# rollout script tells operators to use, so no key-shaped literal is committed
+# and secret scanners have nothing to flag.
+NEW_KEY="$(openssl rand -hex 32)"
 HOST="occ.digithings.ai"
 BLOCK=""
 rc=0
