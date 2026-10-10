@@ -352,6 +352,13 @@ def _run_document_rag_path(
     # change language/model/effort/tools/MCP; the client applies the result.
     if "session" not in skill_ids:
         skill_ids.append("session")
+    # Skill documents (DIG-2637) — always on, same trust as session: the agent
+    # lists the ids and fetches one into context on demand, so no instruction
+    # is ever baked into the prompt.
+    from digigraph.skill_library.tools import SKILL_LIBRARY_SKILL_ID
+
+    if SKILL_LIBRARY_SKILL_ID not in skill_ids:
+        skill_ids.append(SKILL_LIBRARY_SKILL_ID)
 
     # Distinguish None (unrestricted) from [] (deny-all). A falsy check coerces
     # empty allowlist → None and silently opens every tool — the documented
@@ -359,8 +366,9 @@ def _run_document_rag_path(
     _allowed_names = frozen_from_state_list(state.get("allowed_tool_names"))
     if _allowed_names is not None:
         from digigraph.orchestration.session_prefs_tools import SESSION_TOOL_NAMES
+        from digigraph.skill_library.tools import SKILL_LIBRARY_TOOL_NAMES
 
-        _allowed_names = _allowed_names | SESSION_TOOL_NAMES
+        _allowed_names = _allowed_names | SESSION_TOOL_NAMES | SKILL_LIBRARY_TOOL_NAMES
     _ctx_rid = state.get("request_id")
     _ctx_wid = state.get("workflow_id")
     # Normalize before constructing ToolContext (#2295 review): an empty or
