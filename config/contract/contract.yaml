@@ -93,10 +93,12 @@ services:
   - 127.0.0.1:8004:8004
   profiles:
   - digivault
-- name: litellm
+- name: digillm
   compose_file: docker-compose.yml
-  image: ghcr.io/berriai/litellm:v1.83.14-stable.patch.3@sha256:f12d528d4a05add56cb09e54c5126088f2edc6bdf3a2f943bcd3a32b08769da2
-  build_context: null
+  image: ghcr.io/digithings-ai/digillm:0.1.0
+  build_context:
+    context: .
+    dockerfile: Dockerfile.digillm
   ports:
   - 127.0.0.1:4000:4000
   profiles: []
@@ -243,9 +245,10 @@ ports:
   container_port: 8005
   host_port: 8005
   note: public route key.digithings.ai
-- name: litellm
+- name: digillm
   container_port: 4000
   host_port: 4000
+  note: network alias litellm (OPENAI_API_BASE=http://litellm:4000/v1)
 - name: ollama
   container_port: 11434
   host_port: 11435
@@ -1182,6 +1185,55 @@ env:
     compose_literal: []
   wrangler_values:
     digithings-cron: '0'
+- name: DT_BASE_URL
+  description: Variant base URL (S1 identity, DIG-2759). Rendered by
+    scripts/render_config_contract.py into wrangler [vars] (hosted value)
+    and the root .env.example.
+  secret: false
+  sources:
+    wrangler_workers:
+    - dashboard-api
+    - digithings-cron
+    - digithings-digichat
+    - digithings-stack
+    - digitrace-langfuse
+    compose_files: []
+    env_example_files:
+    - .env.example
+    compose_literal: []
+- name: DT_TARGET
+  description: Variant selector for UIs (selfhost|hosted, S1 identity,
+    DIG-2759). Rendered by scripts/render_config_contract.py into wrangler
+    [vars] (hosted value) and the root .env.example.
+  secret: false
+  sources:
+    wrangler_workers:
+    - dashboard-api
+    - digithings-cron
+    - digithings-digichat
+    - digithings-stack
+    - digitrace-langfuse
+    compose_files: []
+    env_example_files:
+    - .env.example
+    compose_literal: []
+- name: DT_VARIANT
+  description: Variant identity (selfhost|hosted, S1 identity, DIG-2759).
+    Code branches on it (S3 container shim). Rendered by
+    scripts/render_config_contract.py into wrangler [vars] (hosted value)
+    and the root .env.example.
+  secret: false
+  sources:
+    wrangler_workers:
+    - dashboard-api
+    - digithings-cron
+    - digithings-digichat
+    - digithings-stack
+    - digitrace-langfuse
+    compose_files: []
+    env_example_files:
+    - .env.example
+    compose_literal: []
 - name: EXPORT_OUTPUT_DIR
   description: Directory exports are written to.
   secret: false
