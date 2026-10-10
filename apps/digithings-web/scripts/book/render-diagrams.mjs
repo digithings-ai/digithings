@@ -98,6 +98,9 @@ function terminalThemeCss(t) {
     `marker path,.arrowheadPath,.arrowMarkerPath{fill:${t.accent} !important;stroke:${t.accent} !important}`,
     `.edgeLabel rect,.labelBkg{fill:${t.bg} !important;opacity:1}`,
     `.edgeLabel text,.edgeLabel tspan{fill:${t["ink-soft"]} !important}`,
+    // Sequence diagrams: participant labels sit inside a <text class="actor">
+    // whose own fill is the box colour; pin the label colour on both levels.
+    `text.actor,text.actor>tspan,.messageText,.noteText,.labelText,.loopText{fill:${t.ink} !important;stroke:none !important}`,
   ].join("");
 }
 
