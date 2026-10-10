@@ -8,7 +8,8 @@
  * Stripe returns and scripts/build-digiquant.sh. A splat would shadow them.
  *
  * Keep LEGACY_DESK_PATHS equal to the public catalog pages plus the web-only
- * slots. Invite-only FX Hub paths are not public routes.
+ * slots. Invite-only FX Hub paths are not public routes. The desk /settings
+ * pages are left out: /dashboard/settings is still the account page.
  * lib/legacy-dashboard.test.ts pins that.
  */
 
