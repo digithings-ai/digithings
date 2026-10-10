@@ -268,8 +268,16 @@ services:
       dockerfile: digivault/Dockerfile
     image: digi-digivault:latest
     container_name: digi-digivault
+    # `core` and `quant` mirror scripts/localstack/contracts.py, which probes this
+    # service's 8004 /healthz in exactly those profiles; `all` is what
+    # `dt up --profile all` resolves to. `digivault` is kept so the old
+    # `--profile digivault` spelling still works. Adding a profile to a service
+    # that already had one does not change a bare `docker compose up`.
     profiles:
       - digivault
+      - core
+      - quant
+      - all
     ports:
       - "127.0.0.1:8004:8004"
     env_file:
@@ -435,6 +443,85 @@ services:
     volumes:
       - digivault_data:/data/vault
 
+  # ─── digiquant runner (optional: run with docker compose --profile quant up) ───
+  # Backs the DigiQuantRunnerContainer class in scripts/selfhost/container_shim.ts,
+  # which answers 503 for that class until a compose service exists for it. The
+  # image is real today (Dockerfile.digiquant-runner: EXPOSE 8080, CMD
+  # `python /opt/runner/exec_job.py serve`) and serves HTTP on 8080
+  # (exec_job.py `serve()` -> ThreadingHTTPServer).
+  #
+  # NO published host port, on purpose: 8080 is already published by searxng
+  # (`127.0.0.1:8080:8080`), so publishing it here would make `docker compose up`
+  # fail with a port conflict for every developer and in CI (smoke-stack.yml runs
+  # a bare `up`). The shim routes over the compose network
+  # (http://digiquant-runner:8080), which needs no published port at all.
+  #
+  # Healthcheck: exec_job.py `_Handler.do_GET` serves `/healthz`. The probe uses
+  # python rather than curl because python is what the image's own CMD runs, so
+  # it is the only interpreter its presence is guaranteed by.
+  # No credentials are set here: R2_* and RUNNER_* come from env_file .env,
+  # rendered by `dt secrets render` (slice S5). Never inline a secret.
+  digiquant-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.digiquant-runner
+    image: digi-digiquant-runner:latest
+    container_name: digi-digiquant-runner
+    profiles: [quant, core, all]
+    env_file: .env
+    environment:
+      PYTHONUNBUFFERED: "1"
+    depends_on:
+      digikey:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz').read()"
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ─── digiquant MCP server (optional: run with docker compose --profile quant up) ───
+  # Backs the DigiQuantMcpContainer class in scripts/selfhost/container_shim.ts,
+  # which answers 503 for that class until a compose service publishes 8767.
+  # FastMCP over streamable-http; the entrypoint defaults to DIGIQUANT_MCP_PORT
+  # 8767, the port the shim routes to. The host must be 0.0.0.0 inside the
+  # container, or the shim cannot reach it (same reason as zammad-mcp below).
+  # No healthcheck: streamable-http has no plain GET probe. MCP reachability is
+  # checked by the tools/list probe in the self-host health gate (slice S7).
+  digiquant-mcp:
+    build:
+      context: .
+      dockerfile: digiquant/Dockerfile
+    image: digi-digiquant-mcp:latest
+    container_name: digi-digiquant-mcp
+    # `core` added because scripts/localstack/contracts.py runs the
+    # mcp-tools-list probe in `core`, `quant` and `all`.
+    profiles:
+      - quant
+      - core
+      - all
+    ports:
+      - "127.0.0.1:8767:8767"
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DIGIQUANT_MCP_HOST=0.0.0.0
+      - DIGIQUANT_MCP_PORT=8767
+      - DIGIQUANT_DATA_DIR=/app/data
+      - DIGIKEY_JWKS_URL=${DIGIKEY_JWKS_URL:-http://digikey:8005/.well-known/jwks.json}
+    volumes:
+      - ./digiquant/data:/app/data:ro
+    depends_on:
+      digikey:
+        condition: service_healthy
+    command: ["python", "-m", "digiquant.mcp_server", "--host", "0.0.0.0", "--port", "8767"]
+
   # ─── zammad-mcp: read-only Zammad helpdesk MCP for the OCC embed (profile: zammad-mcp) ───
   # Operator MCP server for the occ tenant (config/examples/occ-embed.yaml,
   # `mcp.servers[].url: http://zammad-mcp:8770/mcp`): URLs stay on the BFF, the
@@ -509,8 +596,13 @@ services:
   digichat-db:
     image: postgres:16-alpine
     container_name: digi-digichat-db
+    # Paired with `digichat`; both follow scripts/localstack/contracts.py, which
+    # probes digichat's 3000 /api/health in the `core` and `chat` profiles.
     profiles:
       - digichat
+      - core
+      - chat
+      - all
     environment:
       POSTGRES_USER: digichat
       POSTGRES_PASSWORD: ${DIGICHAT_POSTGRES_PASSWORD:-digichat}
@@ -534,8 +626,13 @@ services:
       dockerfile: apps/digichat/Dockerfile
     image: digi-digichat:latest
     container_name: digi-digichat
+    # `core` and `chat` mirror scripts/localstack/contracts.py (3000 /api/health
+    # is probed in those profiles). `digichat` is kept for the old spelling.
     profiles:
       - digichat
+      - core
+      - chat
+      - all
     # Bind host: default loopback; set DIGICHAT_PUBLISH_HOST=0.0.0.0 in .env for LAN (see SECURITY.md).
     ports:
       - "${DIGICHAT_PUBLISH_HOST:-127.0.0.1}:${DIGICHAT_PUBLISH_PORT:-3005}:3000"
