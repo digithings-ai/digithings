@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { DASH, EMPTY_READ, STUB_READ, fieldLines, graphLines, isEmptyPayload, isStubEnvelope, presentResponse } from "./read";
+import { DASH, EMPTY_READ, NOT_PUBLISHED, STUB_READ, fieldLines, graphLines, isEmptyPayload, isStubEnvelope, presentResponse } from "./read";
 
 test("stub fingerprints are withheld, including the fixture ledger", () => {
   expect(isStubEnvelope({ data: { nav: 99.909 } })).toBe(true);
@@ -100,6 +100,24 @@ test("a presented stub envelope does not paint the house book", () => {
   const missing = presentResponse("/rates/watchlist", 200, { data: { names: [] }, provenance: { source: "core:macro_series_observations" } }, "fields");
   expect(missing.status).toBe("empty");
   expect(missing.lines).toContain("names  no rows");
+});
+
+test("a route the API does not publish yet is an empty slot, not the raw 400", () => {
+  const unknown = { error: { code: "bad_request", message: "unknown route /fx/levels", details: { path: "/fx/levels" }, retrieval_pin: null } };
+  const read = presentResponse("/fx/levels", 400, unknown, "fields");
+  expect(read).toEqual({ status: "empty", lines: [NOT_PUBLISHED], asOf: null });
+  expect(read.lines.join(" ")).not.toContain("400");
+  expect(presentResponse("/pipeline/graph", 400, unknown, "graph").status).toBe("empty");
+
+  const write = presentResponse("/chat/sessions", 400, unknown, "fields", { write: true });
+  expect(write.status).toBe("error");
+  expect(write.lines[0]).toContain("(400)");
+
+  const badParam = { error: { code: "bad_request", message: "pair must be six letters", details: {}, retrieval_pin: null } };
+  expect(presentResponse("/fx/pair-path", 400, badParam, "fields").status).toBe("error");
+  const forbidden = { error: { code: "forbidden", message: "unknown route /x", details: {}, retrieval_pin: null } };
+  expect(presentResponse("/x", 403, forbidden, "fields").status).toBe("error");
+  expect(presentResponse("/x", 400, null, "fields").status).toBe("error");
 });
 
 test("a pipeline graph is a node list", () => {

@@ -3,6 +3,7 @@ import type { BlockKind } from "./catalog";
 export const DASH = "—";
 export const STUB_READ = "The official API returned a stub envelope, not a house-book read.";
 export const EMPTY_READ = "This read returned no values.";
+export const NOT_PUBLISHED = "Not available yet.";
 
 export type ReadResult = {
   status: "ok" | "empty" | "stub" | "error";
@@ -147,8 +148,27 @@ function provenance(body: unknown): { asOf: string | null; head: string[] } {
   return { asOf, head };
 }
 
-/** Paint one official response. Stub envelopes stay a sentence. The website uses this too. */
-export function presentResponse(route: string, status: number, body: unknown, kind: BlockKind): ReadResult {
+/** The API's 400 for a route it does not serve yet: `bad_request`, "unknown route /path". */
+export function isUnpublishedRoute(status: number, body: unknown): boolean {
+  if (status !== 400 || !body || typeof body !== "object") return false;
+  const code = (body as { error?: { code?: unknown } }).error?.code;
+  return code === "bad_request" && errorMessage(body).startsWith("unknown route ");
+}
+
+/**
+ * Paint one official response. Stub envelopes stay a sentence. The website uses this too.
+ * A read of a route the API does not publish yet is an empty slot. A write to one stays an error.
+ */
+export function presentResponse(
+  route: string,
+  status: number,
+  body: unknown,
+  kind: BlockKind,
+  options: { write?: boolean } = {},
+): ReadResult {
+  if (!options.write && isUnpublishedRoute(status, body)) {
+    return { status: "empty", lines: [NOT_PUBLISHED], asOf: null };
+  }
   if (status < 200 || status >= 300) {
     const message = errorMessage(body);
     const why = message ? `: ${message}` : "";
