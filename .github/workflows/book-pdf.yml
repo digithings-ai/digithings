@@ -56,10 +56,23 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
-      # `prebuild` renders every mermaid fence into public/book/diagrams/. The
-      # book pages and the PDF then load those files; nothing renders mermaid at
-      # request time, which is how the printed copy is the same object as the
-      # read copy.
+      # The editorial lint: digibook stays high level (no env names, loopback
+      # hosts, ports or secret-like words). `prebuild` runs it too; it is its
+      # own step here so the failure is named.
+      - name: Lint the book
+        run: npm run book:lint --workspace digithings-web
+
+      # Every mermaid fence becomes two static SVGs (light + dark) under
+      # public/book/diagrams/. The pages and the PDF load those files; nothing
+      # renders mermaid at request time. Rendered here, not in `prebuild`, so a
+      # site build without a browser (Cloudflare Pages) still works from the
+      # committed files.
+      - name: Render diagrams
+        run: npm run render-diagrams --workspace digithings-web
+
+      - name: Diagrams are committed
+        run: git diff --exit-code -- apps/digithings-web/public/book/diagrams
+
       - name: Build the site
         run: npm run build --workspace digithings-web
 
