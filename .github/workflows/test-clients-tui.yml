@@ -53,6 +53,7 @@ jobs:
           - digichat-devkit
           - digichat-tui
           - digiquant-tui
+          - digivoice-tui
     steps:
       - uses: actions/checkout@v4
 
