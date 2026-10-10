@@ -1,0 +1,45 @@
+---
+title: "What you can build"
+summary: "The same parts support a research assistant, a domain vertical of your own, or an agent product built on top — and the choice between them is mostly about how much you want to own."
+---
+
+The architecture is modular in a practical sense: the modules are separable in
+the order you would expect, and so are the products you can build from them.
+There are three shapes, and they differ mainly in how much you want to own.
+
+**A research assistant.** This is the smallest useful thing here, and the one the
+system is arranged to make easiest. You get the hub, the retrieval vertical, the
+model layer and the chat surface. You connect a corpus, and you have an assistant
+that searches your material, reasons over it and shows its work through tracing.
+Almost nothing in the product layer is yours, because almost nothing needs to be.
+
+**A domain vertical of your own.** This is where the design pays off. You write
+one service that owns a capability your domain needs — insurance claims,
+clinical guidelines, a proprietary dataset — and expose it through the open
+protocol. The hub discovers it at runtime, so your capability becomes available
+to every surface that talks to the hub, with no change to the hub itself. You own
+one service. You do not own routing, identity, model selection, tracing or the
+chat surface.
+
+**An agent product.** This is the same thing with a product surface on top. If
+you are building something people use directly, the chat surface is already
+written, already handles identity, and already knows how to reach everything the
+hub can reach. What remains is your own product logic and your own vertical or
+verticals.
+
+The honest difference between the three is not capability — it is how much you
+want to operate. A vertical you write is a service you run, secure and keep
+alive. That is a real cost, and it is the point at which the hosted option
+becomes worth comparing against self-hosting rather than a detail to defer.
+
+The one thing that does not change between them: whatever you build, it is
+yours. The modules are open source under a permissive licence, the protocols are
+open, and nothing in this chapter requires a commercial arrangement to run. The
+hosted path is a convenience with usage-based pricing, not a prerequisite.
+
+> **Where to start**
+>
+> Self-host, run the verification the system expects before a release, and
+> connect one vertical of your own. That is the shortest path from reading this
+> chapter to owning something, and it is the same path the system's own first
+> vertical took.

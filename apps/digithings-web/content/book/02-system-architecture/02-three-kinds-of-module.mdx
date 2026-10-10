@@ -1,0 +1,37 @@
+---
+title: "Three kinds of module"
+summary: "Services, libraries and surfaces are different kinds of thing, and confusing them is the most common misreading of the system."
+---
+
+The modules in this repository look similar from the outside. Internally they
+fall into three groups, and reading one as if it were another is the most common
+way to get stuck.
+
+| Kind | What it is | How you meet it |
+| --- | --- | --- |
+| Service | A long-running process with a network interface | You start it, it has a health check, it can be reached over the network |
+| Library | Code you import into something else | It has no process and nothing to start; it changes behaviour only inside the program that imports it |
+| Surface | A user-facing application | It is what a person sees and operates |
+
+The middle row is the one that causes trouble. Several of the names that look
+like services are libraries, and the archive itself says so for the shared HTTP
+and audit helpers: they are imported as a library and are not deployed as a
+service. If you go looking for an address to health-check one of them, you will
+not find it, and the absence is not a fault.
+
+Why does the distinction matter in practice? Because the two kinds fail
+differently. A service that will not start is visible immediately — the process
+is gone and something reports it. A library that is wired in the wrong place is
+invisible: it imports cleanly, it runs, and the capability is simply missing
+somewhere downstream. Knowing which kind you are looking at tells you where to
+start looking for the problem.
+
+It also decides where changes belong. A library's public shape is consumed by
+several services at once, so changing it is a cross-module decision. A service's
+interface is consumed by the hub and by the surfaces, so changing that is also a
+cross-module decision, but it is a decision about a network contract rather than
+about code. This chapter's author, as the seat that owns interface contracts,
+treats both as deliberate acts rather than as refactoring.
+
+Once the three kinds are separated, the map becomes easy to read, because each
+one behaves predictably.

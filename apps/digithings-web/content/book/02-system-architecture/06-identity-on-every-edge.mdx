@@ -1,0 +1,38 @@
+---
+title: "Identity on every edge"
+summary: "Identity is checked at every hop rather than once at the front door, so the network is never the security boundary."
+---
+
+Most systems check a person once, at the front door, and trust everything
+behind it. digithings checks on every hop. When the hub calls a vertical, the
+vertical verifies the caller itself.
+
+That is more work, and it is worth being precise about why. A front-door check
+makes the entire internal network a trusted zone. Everything reachable from the
+hub is reachable by anything that can reach the hub. A per-hop check does not
+need that zone to be trustworthy, because no component inherits trust from the
+component that called it. The cost is a verification and a cache on each call;
+the benefit is that a single compromised internal path does not become
+unauthenticated access to everything behind it.
+
+Identity is a short-lived signed assertion rather than a standing permission. A
+client presents a key once and exchanges it for an assertion that expires. That
+keeps long-lived material out of the services that use it, and it means
+revocation is a matter of refusing to issue rather than a matter of chasing down
+copies already distributed. Assertions carry scopes, so a caller authorised for
+one thing is not thereby authorised for everything.
+
+Verification is deliberately decentralised. Each service can check an assertion
+on its own, using published signing material, without calling back to the issuing
+service on every request. The issuing service therefore stays out of the hot path,
+and a service that depends on it does not inherit its availability.
+
+This is why the chat surface cannot be a shortcut. It holds a session for a
+person, and it can obtain an assertion, but it cannot present a person's
+authority to a vertical on its own — because a vertical would check the surface's
+authority, not the person's. The routing is not a limitation; it is what makes
+the check meaningful.
+
+> The practical consequence for anyone building on this: you do not need a
+> gateway to be safe. A vertical you call directly enforces the same rules as one
+> the hub calls for you.

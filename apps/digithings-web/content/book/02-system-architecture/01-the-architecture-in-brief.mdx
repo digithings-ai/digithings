@@ -1,0 +1,39 @@
+---
+title: "The architecture in brief"
+summary: "One hub, many verticals, shared libraries and a single chat surface, held together by three principles."
+---
+
+At the centre is one service, the hub. Everything a user can do enters through
+it, and everything the system can do on the user's behalf is decided by it. The
+hub does not implement the capabilities itself. It delegates them to services
+that each own one domain, which the book calls verticals. One of them retrieves
+information. Another handles quantitative research. A third manages the system's
+knowledge base. Each is independently useful and independently replaceable.
+
+Around those sit libraries rather than services. The model access layer, the
+tracing layer, the shared HTTP and audit helpers and the web-fetching engine are
+all code you import, not processes you deploy. That distinction sounds pedantic
+until you try to find a port for something that has never listened on one.
+
+In front of all of it sits a single chat surface. It is the only way in for a
+person. It authenticates the session and then talks to the hub, and it does not
+call a vertical directly — so every capability is reachable only through one
+audited path, and the surface stays thin no matter how many verticals exist.
+
+Three principles explain nearly every design choice that follows. The system is
+protocol-first, meaning capabilities are exposed through an open standard rather
+than a private interface. Its structure is federated, meaning the hub
+orchestrates while the verticals keep their own pipelines and tools rather than
+being dissolved into it. And it is private by default, meaning a component
+listens only where it is needed and exposes nothing to the network unless
+someone deliberately opens it.
+
+> **Why digithings**
+>
+> The stack is open source under a permissive licence, and it is built from
+> modules you can take, change or drop. Nothing in the architecture requires you
+> to buy anything to use it, and nothing binds you to one vendor once you are
+> running it.
+
+The next page separates the three kinds of module, which is the distinction most
+worth making early.

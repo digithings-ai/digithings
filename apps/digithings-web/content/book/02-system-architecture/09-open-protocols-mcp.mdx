@@ -1,0 +1,47 @@
+---
+title: "Open protocols: MCP"
+summary: "Capabilities are exposed through an open protocol rather than a private interface, so any compatible client can use digithings and digithings can use any compatible server."
+---
+
+The system exposes its capabilities through the Model Context Protocol, an open
+standard for describing tools to a model or an agent. This is the decision that
+determines who is able to use the system, so it is worth being clear about what
+it actually buys.
+
+In one direction, anything that speaks the protocol can drive digithings. An
+agent you already have, a tool you wrote, a client from another vendor — if it
+speaks the protocol, the verticals' capabilities are available to it. Nobody has
+to adopt this architecture in order to use it.
+
+In the other direction, the system consumes the protocol too. External tool
+servers can be connected, and the hub will use them the same way it uses its own
+verticals. The same interface on both sides means the boundary between
+first-party and third-party capability is a configuration question rather than a
+code change.
+
+There is a nuance worth knowing, because it surprises people who assume the
+protocol is used everywhere internally. For ordinary requests, the hub talks to
+its verticals over its own ordinary interface, not over the protocol. The
+protocol is used where it earns its keep: when you want one place that decides
+which tools are allowed and records one trace across everything they touch, or
+when you deliberately want to bypass the hub and address a vertical directly.
+Both are reasons to choose the protocol, and neither is "because it is the
+protocol".
+
+The hub resolves what a connected server can do at runtime, which is what makes
+the ecosystem extensible. A newly published server becomes usable without
+changing the hub. This also means the set of available capabilities is a runtime
+fact rather than a compile-time one, which is the right way round: it is what
+allows a deployment to decide what it exposes.
+
+> **Why digithings**
+>
+> Standards instead of private interfaces, in both directions. Bring your own
+> agent and your own tools, and neither side needs a rewrite. The same openness
+> applies to tracing, which also uses a standard format rather than a proprietary
+> one.
+
+Because the hub mediates, it also mediates permission. A deployment can name the
+tools it is willing to offer and withhold the rest, which means a system that is
+broadly capable by default can still be narrowed deliberately at the point where
+it is deployed.

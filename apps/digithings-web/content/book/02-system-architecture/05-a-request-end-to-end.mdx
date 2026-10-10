@@ -1,0 +1,56 @@
+---
+title: "A request, end to end"
+summary: "Following one chat message shows every principle in the system at once: one entry point, checked identity on each hop, and delegation outward."
+---
+
+One message in a chat is enough to exercise most of the architecture. What
+follows is the whole path, drawn without addresses or interface names, because
+none of them matter to the shape of the flow.
+
+```mermaid
+sequenceDiagram
+  participant P as Person
+  participant C as Chat surface
+  participant I as Identity
+  participant H as Hub
+  participant V as Vertical
+  participant T as Tracing
+
+  P->>C: a message
+  C->>I: exchange the session
+  I-->>C: a short-lived signed assertion
+  C->>H: the request, with that assertion
+  H->>I: check who is calling
+  H->>V: what can you do?
+  V-->>H: your capabilities
+  H->>V: do this one
+  V-->>H: the result
+  H->>T: record what happened
+  H-->>C: the answer, streamed back
+  C-->>P: the reply
+```
+
+Four things are worth pulling out.
+
+The person never talks to a vertical. The chat surface performs an exchange with
+the identity service, receives a short-lived assertion, and hands that to the
+hub. The surface holds nothing long-lived about the person, so a compromised
+chat surface yields a session and not a set of long-lived material.
+
+The hub checks identity even though the surface already did. This looks
+redundant and is the single most deliberate redundancy in the system. Identity
+is checked at every hop because a check performed once at the front door is a
+check that every internal path silently depends on.
+
+Capabilities are discovered, not hard-coded. The hub asks a vertical what it can
+do, immediately before using it. A vertical can therefore gain a capability
+without the hub being aware of it in advance, and the hub does not need a
+release to keep up.
+
+The answer streams back through the same path it arrived on. There is no separate
+channel for results, which keeps the ordering guarantees simple: what the person
+reads arrives in the order the hub produced it.
+
+Read together with the previous two pages, this is the whole system. What
+follows are the parts that deserve a page each — identity, models, data and
+protocols.

@@ -1,0 +1,41 @@
+---
+title: "Data, memory and observability"
+summary: "Each store has exactly one job, which is why there are several of them, and tracing uses an open standard so the data is not locked to one viewer."
+---
+
+A system with four kinds of data should not pretend one storage technology holds
+all of it well. Each store here has a single job, chosen so that the data stays
+usable in the way its readers need.
+
+| Store | Holds | Chosen because |
+| --- | --- | --- |
+| Relational database | Research results, positions and theses, configuration | Queries are relational and the data must survive restarts with consistency |
+| Object storage | Large read-only archives, including historical market data | It is written once and read many times, and it is cheap at that ratio |
+| Knowledge vault | Documents, notes and links between them | It is meant to be read, edited and versioned by people, not queried by a service |
+| Traces | What each request did, step by step | Volume is high, shape changes, and it is only ever queried by time range |
+
+The archive is worth a sentence of its own, because it is the clearest example
+of the principle. Historical market data is large, append-mostly and read far
+more often than it is written. Serving it directly from object storage at the
+edge, without a computation hop, is both faster and cheaper than routing reads
+through a service. It is also read-only, which is what makes it safe to serve
+without a login.
+
+The knowledge vault is deliberately the opposite choice. It stores documents as
+files with links between them, in a form people can open, edit and diff. A
+database would be better at querying and worse at everything that matters here,
+which is that a human can read and change the knowledge without asking anyone.
+The system's own documentation is the first thing stored this way.
+
+Tracing covers all of it, and it speaks an open standard rather than a private
+format. That choice is mostly about the reader: because the format is open,
+anything that understands it can display what your system did, and you are not
+asking people to buy your tooling in order to inspect their own requests. Traces
+record which model handled a call, how long each step took, and what each hop
+checked — which is what makes the previous section's claims checkable rather
+than merely stated.
+
+> A note on what is not stored: the trace path records that a call happened and
+> how it went. It is not a place to keep material the system should not retain,
+> and the client library's own audit trail is built to pass through redacted
+> values only.

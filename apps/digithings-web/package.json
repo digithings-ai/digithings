@@ -11,7 +11,8 @@
     "lint": "eslint .",
     "test": "vitest run",
     "write-csp-headers": "node ./lib/write-csp-headers.mjs",
-    "sync-openapi": "node ./lib/sync-openapi.mjs"
+    "sync-openapi": "node ./lib/sync-openapi.mjs",
+    "book:lint": "node scripts/book-lint.mjs"
   },
   "dependencies": {
     "@assistant-ui/react": "^0.15.18",

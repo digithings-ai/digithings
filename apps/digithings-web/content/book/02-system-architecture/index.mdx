@@ -1,0 +1,26 @@
+---
+title: "How digithings fits together"
+summary: "The shape of the system: small replaceable modules, one hub that ties them together, and the same code running on a laptop and on Cloudflare."
+---
+
+digithings is not one large program. It is a set of small modules, each with a
+single job, and a hub that ties them together. Replace any one of them and the
+rest keep working. That property is the reason the system is understandable at
+all: when something behaves strangely, there is usually exactly one place to
+look, and replacing it does not mean rewriting the parts around it.
+
+The same code runs in two places. On your own machine it runs as a set of local
+processes you start and stop yourself. In production it runs as a hosted service
+built on Cloudflare. The modules, the wiring and the configuration contract are
+identical in both cases. Only the supervisor changes — what starts the processes,
+how they reach each other, and where the boundary of the machine sits.
+
+This chapter explains that shape and the reasoning behind it. It stays at the
+level of design: which parts exist, who talks to whom, and why the edges are
+where they are. Anything more specific — configuration names, addresses,
+interfaces — belongs in the reference material that accompanies the book, and is
+linked from the sections that need it.
+
+The chapters that follow take each part in turn. The next section gives the
+whole architecture on a single page, for readers who want the map before the
+detail.

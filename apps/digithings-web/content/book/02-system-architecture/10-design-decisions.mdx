@@ -1,0 +1,40 @@
+---
+title: "Design decisions"
+summary: "The eight decisions behind the shape of the system, each with its reason, so a reader can predict when a decision should change."
+---
+
+The previous pages described a shape. This one gives the decisions behind it,
+because a shape without reasons cannot be reasoned about later. Each row names
+the decision and the reason, and the reason is the part that matters: a reader
+who disagrees with the decision can usually predict from the reason when it
+would become wrong.
+
+| Decision | Reason |
+| --- | --- |
+| Cloudflare is for production; self-hosting is where work is verified | A second complete hosted stack would duplicate infrastructure cost to buy very little, because a local run already exercises every path that matters. Verification happens before deployment, not after it |
+| Both environments read one configuration contract | If an environment could introduce its own names, running locally would test a different system and a release would only ever be tested against itself |
+| The hub resolves what verticals can do, at runtime | Hard-coding capabilities couples the orchestrator's release to every vertical's feature set. Adding a capability should be a change to one component |
+| Access to models is a library; selection is a routing layer | Provider choice is an operational concern and provider access is a code concern. Separating them makes changing provider a configuration edit |
+| Identity is checked on every hop | A single check at the front door makes the whole internal network a trusted zone. Per-hop checking means no component inherits trust from the component that called it |
+| Capabilities are published over an open protocol | It fixes who can use the system: any compatible client can use digithings, and digithings can use any compatible server, without a rewrite on either side |
+| Large read-only archives are served directly from storage | Written once and read many times, the data does not need a computation hop to be read, and read-only is what makes serving it without a login defensible |
+| The chat surface runs without a database in production | A database in the request path adds a pool, a migration path and a failure mode to every message, for a surface whose conversational state does not require it |
+
+Two of these deserve a note on how they were reached, because both look like
+oversights and are not.
+
+The absence of a database in the chat surface is enforced, not merely
+configured. The deployment deliberately does not pass one, the health check
+reports the absence rather than hiding it, and a test pins that the setting is not
+added by accident. That turns an apparent gap into a deliberate, reversible
+choice — and it means enabling it later is a change somebody makes on purpose.
+
+Publishing capabilities over an open protocol, while using an ordinary internal
+interface for ordinary requests, looks inconsistent until you ask what the
+protocol is for. It is chosen where it adds something — one place to decide what
+is allowed, one trace across everything, or a deliberate bypass of the hub — and
+not used merely because it exists.
+
+> If you are evaluating the system against a different set of constraints, read
+> the reasons column rather than the decisions column. Several of these would
+> change under different constraints, and the reasons are what tell you which.
