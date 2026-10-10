@@ -1,0 +1,39 @@
+---
+title: The architecture in brief
+order: 1
+summary: >-
+  digithings is an open-source, modular stack for conversational agents: one
+  hub, a set of vertical services, shared libraries and one chat surface,
+  governed by three principles.
+---
+
+digithings is an open-core, modular stack for building conversational agents
+that research, search, analyse and act. Its flagship vertical is quantitative
+finance, but nothing in the core is specific to finance; the same parts serve
+any domain that needs an agent with real tools behind it.
+
+At the centre is **digigraph**, a hub that speaks the same chat-completions
+dialect as the major model providers. A request arrives at the hub, the hub
+confirms who is asking with **digikey**, discovers which tools the request
+needs, and calls the vertical services that own those tools: **digisearch** for
+retrieval and **digiquant** for market research, with **digivault** as a
+long-lived knowledge vault. Around them sit libraries that every service shares,
+for model access (**digillm**), tracing (**digitrace**), common service
+plumbing (**digibase**) and web fetching (**digifetch**). People meet all of
+this through **digichat**, a chat interface that only ever talks to the hub.
+
+Three principles decide most of the questions that follow. The system is
+**MCP-first**: every capability is exposed as a tool through the Model Context
+Protocol, so agents built elsewhere can use it. It is a **federated hub**: the
+hub coordinates but does not own the verticals, which ship on their own
+schedule. And it is **private by default**: every service listens only on the
+machine it runs on until someone deliberately exposes it.
+
+> **Why digithings.** The whole stack is open source under the MIT licence.
+> You can read every line that handles your data, run it on hardware you
+> control, and swap any module for your own. Nothing in the architecture
+> depends on a feature that only exists in a hosted product.
+
+<Reference kind="guide" href="repo:docs/VISION.md" title="The digithings vision">
+  What each module is for, what is shipped and what is still designed but not built.
+</Reference>
