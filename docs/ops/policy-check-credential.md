@@ -1,4 +1,4 @@
-# `policy-check-reader` — the branch-protection read credential
+# `POLICY_CHECK_READER_TOKEN` — the branch-protection read credential
 
 > **Rule** (from [`credential-ownership.md`](credential-ownership.md)): *Any credential we hold by hand needs one owner, one refresh path, and a check that fails loudly when it is stale.*
 
@@ -8,91 +8,87 @@ protection. It exists for a single call: the planned drift guard
 written), which compares the committed inventory against the **real**
 required-set. It is not a general CI token and must never become one.
 
+The credential is a **fine-grained personal access token** with one repository
+and one read-only permission. There is no App, no manifest and no minting
+script: a PAT is already the thing it is, and the guard's whole need is one
+`GET`. See [Decision record](#decision-record--a-github-app-was-recommended-and-was-not-chosen)
+for why that is the choice rather than a fallback.
+
 ---
 
 ## What it is
 
 | Field | Value |
 |---|---|
-| **Owner** | **Security** (KeyMaster). One human backstop: Chris Stefan — creating the App is an owner action (see [Why I did not create it](#why-i-did-not-create-it)). |
-| **Identity** | GitHub App **`policy-check-reader`**, repository-scoped, `public: false` |
-| **Installation** | `digithings-ai/digithings` only |
-| **Grants** | **`Administration: read`** — one permission, the minimum the branch-protection endpoint accepts |
-| **Canonical store** | The App's **private key**, as GitHub Actions repo secret `POLICY_CHECK_APP_PRIVATE_KEY`, `cron` environment scope |
-| **Identifiers** | `POLICY_CHECK_APP_ID` and `POLICY_CHECK_INSTALLATION_ID` as repo **variables** — identifiers, not secrets, so they travel in `vars.` and never touch `secrets.` |
-| **Manifest** | [`.github/policy-check-reader-app.json`](../../.github/policy-check-reader-app.json) — the exact `default_permissions` to register |
-| **Smoke call** | `python3 scripts/mint_policy_check_token.py --verify` — mints and performs the one read the guard needs ([`mint_policy_check_token.py`](../../scripts/mint_policy_check_token.py)) |
+| **Owner** | **Security** (KeyMaster). One human backstop: Chris Stefan — creating and revoking a token on his own account is his step, never an agent's (see [Why an agent does not create it](#why-an-agent-does-not-create-it)). |
+| **Identity** | Fine-grained PAT named **`digithings-policy-check-reader`**, owned by the `chrizefan` account |
+| **Repository** | `digithings-ai/digithings` only — selected one, not "all repositories" |
+| **Permission** | **`Administration` → `Read-only`** — one permission, the minimum the branch-protection endpoint accepts |
+| **Canonical store** | The token value, as GitHub Actions repo secret `POLICY_CHECK_READER_TOKEN`, `cron` environment scope |
+| **Identifiers** | **None.** A PAT needs no app id and no installation id, so nothing travels in `vars.`. There is no separate identity to name. |
+| **Lifetime** | **90 days, set on the token.** Fine-grained PATs expire on their own, so the house cadence is enforced by GitHub rather than by discipline |
+| **Smoke call** | One authenticated `GET` on `branches/develop/protection/required_status_checks` — see [Provisioning](#provisioning-chris-five-steps) |
 | **Staleness detector** | The drift guard's own `--live` run, which exits non-zero when the snapshot and the live set disagree; plus the daily `token-canary` dispatch — see [Staleness detector](#staleness-detector) |
-| **Refresh path** | [Rotation](#rotation-90-days-and-immediately-after-a-suspected-leak) below |
-| **Rotation owner** | Security (KeyMaster). Rotate without asking, per the standing mandate. |
-| **Review horizon** | 90 days — re-verify the grant set and re-issue the key. **There is no automatic expiry; see the caveat.** |
-
-**Manifest at a URL.** The repo is **public** (`repos/digithings-ai/digithings`
-`.private == false`), so the manifest route works: raw URL is
-`https://raw.githubusercontent.com/digithings-ai/digithings/develop/.github/policy-check-reader-app.json`.
-`hook_attributes.url` and `redirect_url` are **required by GitHub's manifest
-schema and are not used** by this credential — `default_events` is empty and no
-OAuth flow exists. They point at the repo's issue URL rather than being invented
-as live endpoints.
+| **Refresh path** | [Reissue](#reissue-every-90-days-and-immediately-after-a-suspected-leak) below |
+| **Rotation owner** | Security (KeyMaster). Reissue without asking, per the standing mandate. |
+| **Review horizon** | 90 days — the same date the token expires. There is no earlier expiry to miss, because expiry *is* the review. |
 
 ---
 
-## Why a GitHub App, and not a fine-grained PAT
+## Decision record: a GitHub App was recommended, and was not chosen
 
-The house precedent is fine-grained PATs — `GH_DISPATCH_TOKEN` is
-`digithings-cron-dispatch`, recorded in
-[`SECRETS_INVENTORY.md`](SECRETS_INVENTORY.md) §(a). This credential is the one
-place I would not follow it, and the reason is the org's shape:
+The original design for this credential was a **GitHub App** named
+`policy-check-reader`, with a committed manifest and a minting script. I
+recommended it and it was **rejected on 2026-10-07** on review: *"GitHub app is
+to much, can we run the policy checks with GitHub Actions instead."* A PAT card
+put the alternative in the same run and was **accepted**. The App manifest, the
+minting script and its tests are deleted by the same change that rewrites this
+document, so the repo carries exactly one design and this section is the record
+of why.
 
-> `GET /orgs/digithings-ai/members` returns **one** member: `chrizefan`, who is the
-> org **owner** (`memberships/chrizefan` → `role: admin`). A fine-grained PAT is
-> issued by and bound to a *user account*. Putting one in a scheduled job means
-> every run authenticates **as the sole org owner**. Handing a person's account
-> token to automation is exactly what my red lines put with Chris, so I am not
-> doing it for a *read-only* convenience.
+**What the App would have bought, stated so the tradeoff is legible:**
 
-An App installation token is a separate, non-human identity, and it is short-lived:
-
-| | Fine-grained PAT | App installation token |
+| | Fine-grained PAT (**chosen**) | App installation token (**recommended, declined**) |
 |---|---|---|
-| Identity | `chrizefan` — the org owner | `policy-check-reader` — an App |
-| Lifetime | Until expiry or manual revoke (the house record shows 12-month PATs) | **≤ 1 hour**, minted per run |
-| Leak from a runner | Live until someone notices and revokes it | Dead within the hour, on its own |
-| Revocation | Revoke a token attached to a **person's** account | Uninstall the App — kills every token, touches no human account |
-| Audit attribution | Reads as the owner | Reads as `policy-check-reader` |
+| Identity | `chrizefan` — a human account, and on this org the owner | `policy-check-reader` — an App |
+| Lifetime | 90 days, **expires on its own** | ≤ 1 hour per run, but the **private key has no expiry at all** |
+| Revocation | Revoke on a person's account — **a Chris-only step** | Uninstall the App — one call, touches no human account |
+| Audit attribution | Reads as the org owner | Reads as `policy-check-reader` |
+| Movable parts | **None.** One `GET` | Manifest, private key, two identifiers, a minting script, a verifier |
+| Capability if leaked | `Administration: read` on one repo, until expiry (≤ 90 days) | Mint `Administration: read` tokens on one repo, **indefinitely**, until uninstall |
 
-The grant itself is **demonstrably available**: two installations on this org
-already hold `administration: read` — `cursor` (id `108847534`) and
-`graphite-app` (id `143386878`). Both are vendor apps whose private keys are
-theirs, so neither is reusable; the point is that the permission is grantable to
-an App at all, which no PAT claim can prove.
+Neither row favours itself across the whole table. The App is better on
+identity and on revocation. The PAT is better on the one axis that most often
+gets skipped — **the expiry is real** — and it deletes three files instead of
+maintaining them. Chris chose the PAT. That is a decision, it is recorded, and
+this document describes the chosen design only.
 
-**Cost, stated honestly:** an App needs its private key as a second secret and a
-minting step. That is ~150 lines of script that [`mint_policy_check_token.py`](../../scripts/mint_policy_check_token.py)
-already covers and that `actions/create-github-app-token` covers in CI.
+**The overlap with R14, stated rather than hidden.**
+[`SECRETS_INVENTORY.md`](SECRETS_INVENTORY.md) **R14** (DIG-363, accepted
+2026-10-05) is the accepted risk that `digithings-cron`'s only GitHub credential
+is a fine-grained PAT on a human account — and Chris declined a GitHub App there
+too, precisely because it "would add a second long-lived secret with power to
+mint dispatch and issue tokens." This credential is the **second** such PAT, so
+the shape of the objection lands a second time. Two things are worth keeping
+straight about that:
 
-**One overlap to state, not to hide.** [`SECRETS_INVENTORY.md`](SECRETS_INVENTORY.md)
-**R14** (DIG-363, accepted 2026-10-05) is the accepted risk that
-`digithings-cron`'s only GitHub credential is a fine-grained PAT on a human
-account, and Chris declined a GitHub App there precisely because it "would add a
-second long-lived secret with power to mint dispatch and issue tokens." This App
-private key **is** a second long-lived secret with power to mint tokens, so the
-shape of the objection lands. The differences that make it a different case:
-`GH_DISPATCH_TOKEN` can `workflow_dispatch` all 38 cron runs and comment on the
-alarm with no expiry, while this key mints a token that can read branch
-administration on **one repository** and nothing else — no events, no dispatch,
-no issue writes, tokens capped at nine minutes, revocable by uninstalling the
-App without touching a human account. If Chris reads R14 as covering Apps
-generally, the PAT fallback below is the live option and nothing else changes.
+- The PAT has **strictly less power** than the App private key would have had:
+  no minting, no events, no dispatch, no issue writes, one repository, one
+  read-only permission, and a fixed expiry. R14's objection was to *power*, and
+  this token has less of it than the alternative.
+- **The boundary that holds the red line is the writer, not the reader.** An agent
+  may publish a value Chris hands over and prove the grant with one `GET`. An
+  agent may not create, mint, extend or revoke a credential on a personal
+  account — that is Chris's step, every time, on a one-member org where the
+  personal account *is* the org owner. Nothing below asks an agent to do it, and
+  nothing below can be reordered to make it possible.
 
-**The fallback, if the CTO prefers house precedent over a non-human identity:** a
-fine-grained PAT named `digithings-policy-check-reader` with
-`Administration: read` on `digithings-ai/digithings` satisfies the permission
-identically and needs no minting — `gh` consumes it directly. Then the App
-manifest is not used, the script is not used, and the manifest path in the table
-above is struck. I recommend the App, but this is a defensible preference
-difference, not a correctness one, and I would rather it be a decision than a
-silent default.
+**A consequence to record with the choice:** revoking this token is a
+personal-account action, so the leak response in
+[Reissue](#reissue-every-90-days-and-immediately-after-a-suspected-leak) is
+**not** self-service. Under the App design, uninstalling was one unauthenticated
+-feeling `DELETE` against the org. Here it is Chris in his own settings. That is
+a real reduction in response speed, and it is the price of the decision.
 
 ---
 
@@ -103,7 +99,8 @@ silent default.
 The guard's failure mode is *"the snapshot is stale"*, not *"someone broke
 something"*. Wired as a required context, a credential outage becomes an outage
 of **every merge in the repo** — an availability incident manufactured by a
-safety check.
+safety check. An **expired token** is the most likely way this happens: at day
+91 the read returns 401 and the guard has nothing to say.
 
 This is the same trade the repo already declined twice, and both precedents are
 on the record:
@@ -126,7 +123,8 @@ issue on failure, the shape `token-canary.yml` already uses.
 No deploy workflow reads this credential, and the secret is `cron`-environment
 scoped. Two honest caveats about that scoping, because it is weaker than it looks:
 
-- **`cron` is not a private environment.** `grep -rln 'environment: cron'
+- **`cron` is not a private environment.** `GET /repos/digithings-ai/digithings/environments/cron`
+  returns `protection_rules: []`, and `grep -rln 'environment: cron'
   .github/workflows/` returns **19 files** — every cron pipeline, plus
   `agent-backlog-snapshot`, `agent-pr-finalizer`, `pipeline-*`,
   `secret-staleness-check`, `token-canary`, `sync-digiquant-runner-*`. A
@@ -136,19 +134,22 @@ scoped. Two honest caveats about that scoping, because it is weaker than it look
 - **The gate is real but currently empty.** `SECRETS_INVENTORY.md` R13 §2 records
   that environment-scoped secrets stay invisible to jobs that do not declare that
   environment, and that the values are still at repo/org scope pending re-entry.
-  So a `secrets.*` name added to a `cron` job resolves to empty exactly as it
-  would with no environment at all. **Whoever wires the job must declare
-  `environment: cron` on it**, or the read fails as "no key" and never as
-  "permission denied".
+  `gh secret list --env cron` returns nothing today. So a `secrets.*` name added
+  to a `cron` job resolves to empty exactly as it would with no environment at
+  all. **Whoever wires the job must declare `environment: cron` on it**, or the
+  read fails as "no key" and never as "permission denied" — and provisioning step
+  3 below ends by proving the name actually landed at that scope.
 
 The `deploy-*-cloudflare.yml` pair is untouched: they are `pull_request` build
 checks with `paths:` filters, not deploys on the PR path, and they gain nothing
 here.
 
-### 3. One repo, one permission
+### 3. One repo, one permission, one human account
 
-Installation on `digithings-ai/digithings` only. If the credential ever needs a
-write, that is a new issue and a new decision — not a permission edit.
+`digithings-ai/digithings` only, `Administration: read` only, and the token is
+pinned to a single named account rather than issued to whatever identity happens
+to be configured. If the credential ever needs a write, that is a new issue and a
+new decision — not a permission edit on the token.
 
 ---
 
@@ -193,68 +194,148 @@ Two wiring details that follow from the existing file, not from the issue:
 
 ---
 
-## Rotation: 90 days, and immediately after a suspected leak
+## Provisioning (Chris, five steps)
 
-House cadence is 90 days ([`SECRETS_INVENTORY.md`](SECRETS_INVENTORY.md)), plus
-immediately on a suspected leak.
+**An agent does not create this token, and the reason is a red line rather than
+a technical limit.** A fine-grained PAT is issued from a **personal account**,
+and on this one-member org the personal account *is* the org owner
+(`GET /orgs/digithings-ai/members` returns one member, `chrizefan`, `role:
+admin`). Owner accounts and Chris's personal accounts are out of bounds for
+agents, so creating, extending and revoking this token are all Chris's steps.
+An agent's part is steps 3–5: publish a value Chris hands over, prove it, record
+it. None of that needs the token to be created by anything but a browser.
 
-**The caveat, because it is the whole point of choosing an App:** an App private
-key has **no expiry**. A PAT's 90-day clock enforces itself; this one does not.
-"Rotate every 90 days" therefore means *generate a new key on the App, publish it,
-prove it, delete the old one* — a real rotation under a real discipline, but one
-that depends on the owner doing it rather than on the credential expiring. What
-compensates is that the credential is scoped to one repo with one read-only
-permission and is revocable in one action (below).
+**To provision, in order:**
 
-### Routine rotation
+1. **Create the token** at
+   `https://github.com/settings/personal-access-tokens/new` —
 
-1. Generate a new private key on the App (`POST /app/{slug}/keys`), downloaded to a
-   `0600` file.
-2. Publish it — `gh secret set` reads the value from **stdin**, there is no
-   `--body-file` flag:
-   `gh secret set POLICY_CHECK_APP_PRIVATE_KEY --env cron --repo digithings-ai/digithings < <pem>`
-3. **Smoke call** — prove the new key before the old one dies:
-   `POLICY_CHECK_APP_ID=… POLICY_CHECK_INSTALLATION_ID=… POLICY_CHECK_APP_PRIVATE_KEY=… python3 scripts/mint_policy_check_token.py --verify`
-   It prints the token's expiry and the required contexts it read. It never prints
-   the token. **Exit `1` is the only outcome that authorises step 4** — exit `2`
-   means the probe could not tell, and deleting the old key on a `2` is how a
-   working credential gets destroyed.
-4. Delete the **old** key last (`DELETE /app/{slug}/keys/{key_id}`).
+   | Field | Value |
+   |---|---|
+   | Token name | `digithings-policy-check-reader` |
+   | Expiration | **90 days** — the house cadence, and the reason the expiry is real |
+   | Resource owner | `digithings-ai` (if the page offers only your own account, that is the same shape `GH_DISPATCH_TOKEN` has and is acceptable) |
+   | Repository access | **Only select repositories** → `digithings` |
+   | Repository permissions | `Administration` → **Read-only**. Nothing else. |
 
-Old key last on purpose: if step 3 fails, the working credential is still in place
-and nothing has stopped.
+   **The value is shown exactly once.** Save it straight into the command in
+   step 2. Never paste it into a comment, an issue, a chat, or a prompt — values
+   never pass through a model.
+2. Publish it as a secret. `gh secret set` reads the value from **stdin**; there
+   is no `--body-file` flag (`gh` 2.102.0). Run it under `umask 077` so a staged
+   copy lands `0600` rather than world-readable:
+   ```bash
+   umask 077
+   gh secret set POLICY_CHECK_READER_TOKEN --env cron \
+     --repo digithings-ai/digithings < <pat-file>
+   ```
+   If you would rather not stage it in a file at all, run the same command with
+   no redirect and paste the value into it, then press Ctrl-D. Do **not** put the
+   value in `GH_TOKEN` here — that variable is `gh`'s *own* login, and pointing
+   it at the PAT would publish the secret while authenticating the write as the
+   credential it is publishing.
+3. **Prove the secret landed at the scope you think it did.** This is the step
+   R13 §2 makes load-bearing, and `gh secret list --env cron` is empty today, so
+   it proves nothing until you have set something:
+   ```bash
+   gh secret list --env cron --repo digithings-ai/digithings
+   ```
+   The name must appear. If it does not, the guard will read **empty** and fail
+   as "no key" — not as "permission denied" — and that is indistinguishable
+   from a mis-wired job.
+4. **Smoke call**, which proves the grant and not just the plumbing. Setting
+   `GH_TOKEN` makes `gh` authenticate **as the PAT**, so this call fails if the
+   token does — which is the point. The value stays in the environment for the
+   life of the command and is never an argv value:
+   ```bash
+   GH_TOKEN="$(cat <pat-file>)" gh api \
+     repos/digithings-ai/digithings/branches/develop/protection/required_status_checks
+   ```
+   Expect a JSON body, and expect these three contexts in it — `Required checks
+   passed`, `doc-links + agents-init`, `mypy — digibase + digikey`. **Then delete
+   the staged file.**
+5. **Only then** add the inventory row in
+   [`SECRETS_INVENTORY.md`](SECRETS_INVENTORY.md) §(a), with the expiry date from
+   step 1, and the reissue procedure in
+   [`SECRETS_ROTATION.md`](SECRETS_ROTATION.md). This document deliberately
+   carries **no** inventory row for a credential that does not exist yet: until
+   step 3 prints the name, the row would be a claim rather than a record.
 
-### Suspected leak — uninstall first
+**Reading the smoke call's outcome.** `gh api` exits `0` on 200 and non-zero
+otherwise, and the three failures mean different things:
 
-1. **Uninstall the App** (`DELETE /app/installations/{id}`). This revokes every
-   installation token the App has minted.
-2. Reinstall, mint a new key, publish, smoke-call per the routine above.
+| Outcome | Means | What it authorises |
+|---|---|---|
+| `200`, three contexts listed | **Proved.** The grant works. | Continue to step 5. |
+| `401`, `403` or `404` on that path | **Proven wrong.** Token invalid or expired, or `Administration: read` was not actually granted. | Fix the token. Do **not** record it as live. |
+| Transport error, DNS failure, `gh` could not reach the API | **Could not tell.** | Nothing. Re-run before changing anything. |
 
-**Uninstall first, not a key delete.** A stolen PEM can mint a fresh token at any
-time while the App is installed; deleting only the exposed key leaves the App able
-to issue more. Uninstall is the action that actually stops the bleeding.
+"Could not tell" is not a stale snapshot and must never be treated as one —
+deleting a working credential on an unproven failure is how a good credential
+gets destroyed.
 
-### If the App is ever deleted outright
+---
 
-Recreate from the manifest, reinstall on the one repo, re-grant
-`Administration: read`, publish a fresh key, smoke-call. Nothing else in the repo
-reads this credential (see [Blast radius](#blast-radius)).
+## Reissue: every 90 days, and immediately after a suspected leak
+
+Because the token carries its own expiry, the 90-day cadence is **not a
+discipline, it is a date**. This is the one place the PAT is strictly better
+than the App design it replaced: an App private key has no expiry at all, so its
+90 days was a promise. Here GitHub enforces it, and the expiry **is** the
+review date recorded in the inventory row.
+
+### Routine reissue
+
+1. Chris creates a new `digithings-policy-check-reader` token, 90-day expiry, the
+   same single repository and the same single read-only permission.
+2. Publish it — step 2 above, from **stdin**, then re-run step 3.
+3. **Smoke call** — step 4 above. Prove the new token before the old one dies.
+4. **Revoke the old token** — Settings → Developer settings → Fine-grained
+   tokens → `digithings-policy-check-reader` → **Revoke**. Revoke is
+   per-token, so `GH_DISPATCH_TOKEN` and this one are independent: revoking
+   either does not touch the other.
+
+Old token last on purpose: if step 3 fails, the working credential is still in
+place and nothing has stopped.
+
+### Suspected leak — revoke first, and it is not self-service
+
+1. **Revoke the token** on the `chrizefan` account, in its settings page.
+2. Create a new one, publish, prove, per the routine above.
+
+**Revoke first, and expect to wait for Chris.** There is no "uninstall" one step
+away here: the credential belongs to a human account, so an agent cannot revoke
+it, and the *account* is the unit of risk. The compensating control is not
+speed, it is the ceiling — a leaked token carries `Administration: read` on one
+repository, expires on its own within 90 days, and is not the `GH_DISPATCH_TOKEN`
+that can dispatch every cron run. So the honest statement is: **the blast radius
+of a leak is small, but the time to stop it depends on a person.** That is the
+residual this design accepts.
+
+### If the token is deleted or expires outright
+
+Create a new one with the same name, same repository and same single
+read-only permission, publish, prove. Nothing else in the repo reads this
+credential (see [Blast radius](#blast-radius)), so there is no second call site
+to update.
 
 ---
 
 ## Staleness detector
 
 `token-canary.yml` already probes the other scheduled credentials with
-`scripts/check_workflow_tokens.py`, which validates a **static** secret — a PAT
-via `GET /user` or an Actions-gated read. **This credential is not that shape, and
-the canary must not be extended naively:**
+[`scripts/check_workflow_tokens.py`](../../scripts/check_workflow_tokens.py),
+which validates a **static** secret — and a PAT is exactly that shape, which is
+new for this credential and worth being careful with:
 
-- The liveness question is *"does the private key still mint, and does the minted
-  token still carry `Administration: read`?"* — which is exactly
-  `mint_policy_check_token.py --verify`.
-- A canary that starts failing because **it** cannot read a secret is how #2541
-  became a silent stop. If the canary job is given
-  `secrets.POLICY_CHECK_APP_PRIVATE_KEY`, its absence must be reported as
+- A fine-grained PAT is probeable by an authenticated `GET /user`, and by the one
+  endpoint this credential exists to read. The liveness question is *"does this
+  token still carry `Administration: read` on `digithings-ai/digithings`?"* —
+  which is the [smoke call](#provisioning-chris-five-steps) verbatim, not a
+  generic probe.
+- **A canary that starts failing because *it* cannot read a secret is how #2541
+  became a silent stop.** If the canary job is given
+  `secrets.POLICY_CHECK_READER_TOKEN`, its absence must be reported as
   *unvalidated*, never as a credential failure — the shape
   `check_workflow_tokens.py` already uses for `CLAUDE_CODE_OAUTH_TOKEN` and
   `CURSOR_API_KEY`.
@@ -288,69 +369,14 @@ stale/unreferenced-secret check to CI"* — which is the same detector work as
 
 | Event | Effect | Not affected |
 |---|---|---|
-| App uninstalled, or key deleted | The drift guard stops running. | Every merge, every deploy, every other workflow. Nothing else reads this credential. |
-| Key leaked | Attacker can mint tokens with `Administration: read` on one repo until the App is uninstalled. | Contents, secrets, other repos, and every human account. Read-only, one repo. |
-| Secret missing from the environment | The guard's mint step fails; the job exits non-zero and files a tracker. | Merge — by design (constraint 1). |
+| Token revoked, deleted, or expired | The drift guard stops reading and fails loudly. Reissue to restore. | Every merge, every deploy, every other workflow. Nothing else reads this credential. |
+| Token leaked | Attacker can read branch administration on **one** repo, with **no writes**, until the token expires (≤ 90 days) or is revoked. | Contents, secrets, other repos, the dispatch cron, and `GH_DISPATCH_TOKEN`. Stopping it needs Chris on his own account. |
+| Secret missing from the environment | The guard's read fails; the job exits non-zero and files a tracker. | Merge — by design (constraint 1). |
 
 The credential can **read** branch protection. It cannot write anything, cannot
-read secrets, and cannot reach another repo.
-
----
-
-## Why I did not create it
-
-**Creating a GitHub App is an owner action and my red lines put it with Chris.**
-`POST /orgs/digithings-ai/apps` needs `Administration: write` on the org, and on a
-one-member org that is the owner account itself.
-
-So this issue delivers the credential *defined* — type decided, manifest written,
-scope fixed, rotation and detection specified, and the minting path implemented and
-tested — and hands the one act of creation to Chris. Creating the App does **not**
-raise any approval gate: it touches no auth or crypto code, no
-`digikey/`, no broker path, and no deploy path. It is the 6th step of a
-documented runbook.
-
-**To provision, in order:**
-
-1. Chris creates the App from the manifest URL (Install on `digithings-ai/digithings`
-   only; permissions defaulted from the manifest).
-2. Download the private key once, into a file only you can read, and delete that
-   file the moment step 3 finishes. Never paste it into a comment, an issue, a
-   chat, or a prompt — values never pass through a model.
-   ```bash
-   umask 077            # the key lands 0600; a default umask writes it 0644
-   open -a TextEdit <pem> && chmod 600 <pem>
-   ```
-3. Publish it and set the two identifiers. `gh secret set` reads the value from
-   **stdin** — there is no `--body-file` flag:
-   ```bash
-   gh secret set POLICY_CHECK_APP_PRIVATE_KEY --env cron --repo digithings-ai/digithings < <pem>
-   gh variable set POLICY_CHECK_APP_ID           --repo digithings-ai/digithings --body <app id>
-   gh variable set POLICY_CHECK_INSTALLATION_ID  --repo digithings-ai/digithings --body <installation id>
-   ```
-4. Smoke call, which proves the credential end to end. The key stays in an
-   environment variable for the life of the command and is never an argv value:
-   ```bash
-   POLICY_CHECK_APP_ID=… POLICY_CHECK_INSTALLATION_ID=… \
-     POLICY_CHECK_APP_PRIVATE_KEY="$(cat <pem>)" \
-     python3 scripts/mint_policy_check_token.py --verify
-   ```
-   Expect, literally:
-   ```
-   OK mint: installation token valid, expires <an hour from now>
-   OK verify: digithings-ai/digithings@develop requires 3 context(s)
-     - Required checks passed
-     - doc-links + agents-init
-     - mypy — digibase + digikey
-   ```
-   Exit `0`. Any other exit is loud, and the three exit codes do not mean the
-   same thing: `0` proved it, `1` means the credential was **proven wrong** (the
-   key was rejected, or the grant is missing), `2` means the probe could not
-   **tell** (no key, unparsable key, network blip). A `2` is never filed as a
-   stale snapshot — deleting the previous key on a `2` is how a good credential
-   gets destroyed.
-5. Add the inventory row in [`SECRETS_INVENTORY.md`](SECRETS_INVENTORY.md) §(a),
-   and the rotation procedure in [`SECRETS_ROTATION.md`](SECRETS_ROTATION.md).
+read secrets, and cannot reach another repo. What it *is* — a token on the org
+owner's personal account — is the real residual, and it is recorded rather than
+argued away.
 
 ---
 
@@ -375,8 +401,8 @@ credential question. Neither belongs here.
 
 The obvious objection to all of this is that `digithings-ai/digithings` is **public**,
 so maybe the branch-protection gate is readable with no credential at all and the
-whole App is unnecessary. That is worth settling rather than assuming, so it was
-measured. First attempt failed to settle it: this machine's unauthenticated API quota
+whole exercise is unnecessary. That is worth settling rather than assuming, so it
+was measured. First attempt failed to settle it: this machine's unauthenticated API quota
 was exhausted (`GET /rate_limit` → `limit 60, remaining 0`) and the 403s came back
 carrying `API rate limit exceeded` — a rate-limit answer, not a permission answer.
 Reading those as a denial would have been the exact error this issue is about.
@@ -391,15 +417,22 @@ Re-measured on 2026-10-07 at 20:03 UTC with the quota freshly reset to 60/60, no
 | `GET /repos/digithings-ai/digithings/rulesets` | 200 — one ruleset listed |
 | `GET /repos/digithings-ai/digithings/rulesets/15270439` | 200 — but the wrong object, see below |
 
-So the branch-protection read genuinely needs a credential. GitHub does publish
-*some* protection state anonymously on a public repo, and that is the trap: the one
-ruleset that is readable without authentication is `module-branch-protection`
-(id 15270439), and it is **not develop's gate**. Its conditions are
-`refs/heads/module/**` and its rules are `deletion`, `non_fast_forward` and
-`pull_request` — there is no `required_status_checks` rule in it at all. develop's
-three contexts live in classic branch protection, which is the 401.
+So the branch-protection read genuinely needs a credential, and `GITHUB_TOKEN`
+cannot be it: `administration` is **not** among the permission keys a workflow
+token can be granted, so no amount of workflow permission configuration reaches
+this endpoint. The check does already run in GitHub Actions
+([`ci-pr-hygiene.yml`](../../.github/workflows/ci-pr-hygiene.yml)); it is the
+*API read* inside it that needs a credential, and no anonymous substitute exists
+for that.
 
-So there is no anonymous substitute, and the guard would be reading a different
-branch's ruleset if it settled for the one that is readable. **Provision the
-credential.** If somebody later finds an unauthenticated route to develop's
-protection state, the right follow-up is a note on DIG-2098, not an unwind of the App.
+GitHub does publish *some* protection state anonymously on a public repo, and
+that is the trap: the one ruleset that is readable without authentication is
+`module-branch-protection` (id 15270439), and it is **not develop's gate**. Its
+conditions are `refs/heads/module/**` and its rules are `deletion`,
+`non_fast_forward` and `pull_request` — there is no `required_status_checks`
+rule in it at all. develop's three contexts live in classic branch protection,
+which is the 401.
+
+So **provision the credential.** If somebody later finds an unauthenticated
+route to develop's protection state, the right follow-up is a note on DIG-2098,
+not an unwind of this credential.
