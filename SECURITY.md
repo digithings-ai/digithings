@@ -41,7 +41,8 @@ We are **not** designing for public internet exposure by default. Running digith
 
 Controls cited in the Mitigation column are already landed on `develop`; see the
 [Non-negotiable defaults](#non-negotiable-defaults), [Rate limiting](#rate-limiting-auth-paths),
-[CORS policy](#cors-policy), [Secrets scanning](#secrets-scanning), and
+[CORS policy](#cors-policy), [Secrets scanning](#secrets-scanning),
+[Personal data in tracked payloads](#personal-data-in-tracked-payloads), and
 [Dependency-audit policy](#dependency-audit-policy) sections for implementation detail.
 STRIDE categories: **S**poofing, **T**ampering, **R**epudiation, **I**nformation disclosure,
 **D**enial of service, **E**levation of privilege.
@@ -60,7 +61,7 @@ STRIDE categories: **S**poofing, **T**ampering, **R**epudiation, **I**nformation
 | Malicious LLM output (prompt injection) | Outbound HTTP from tools | I — data exfiltration via crafted tool args | `digibase.http_client` enforces bounded timeouts; `.claude/settings.json` PreToolUse hooks block network calls to non-allowlisted hosts during agent development. | No runtime egress allowlist for service-to-service traffic in production paths. |
 | Malicious LLM output (prompt injection) | Audit / span payloads | I — smuggle user secrets into observability | `digibase.audit.redact_mapping` strips prompts, JWTs, keys, doc bodies before persistence; `/v1/status` kept secret-free by contract. | Redaction is pattern-based — novel secret formats may pass through until a rule is added. |
 | Insider / developer with repo write access | `SECURITY.md`, `.github/workflows/`, live-trading code | T/E — silently weaken controls | `.claude/settings.json` PreToolUse hooks block edits to protected paths off a `task-N-*` branch; pre-push hook blocks live-trading pushes without `Human-Approved-By:` trailer; CI PR-linkage workflow rejects orphan commits. | Hooks run in the developer's local environment — a determined insider bypassing the harness still needs to clear PR review and branch protection. |
-| Insider / developer with repo write access | Client / pilot material | I — accidental commit of confidential data | `projects/` is gitignored and never pushed to public remotes; `gitleaks` CI on every PR and push with pinned SHA. | `gitleaks` allowlist entries require discipline — an incorrectly scoped entry could mask a real leak. |
+| Insider / developer with repo write access | Client / pilot material | I — accidental commit of confidential data | `projects/` is gitignored and never pushed to public remotes; `gitleaks` CI on every PR and push with pinned SHA; [seed-payload PII gate](#personal-data-in-tracked-payloads) on every PR diff. | `gitleaks` allowlist entries require discipline — an incorrectly scoped entry could mask a real leak. The PII gate only reads addresses, and only in payloads; names have no reliable shape and stay out of scope. |
 | Insider / developer with repo write access | `main` branch | T — unreviewed merge | `main` pushes require `ALLOW_MAIN_PUSH=1`; branch protection + PR scoring gate (Security ≥ 8, Accuracy ≥ 9). | Relies on GitHub branch protection being correctly configured — audited out-of-band. |
 | Compromised dependency (supply-chain) | Any Python component | T/E — malicious transitive package | `pip-audit` workflow on every PR, every `develop`/`main` push, and weekly; fails merge on HIGH/CRITICAL (CVSS ≥ 7); acceptances require a justified `pip-audit-ignore.txt` entry. | MEDIUM/LOW findings are warn-only; `digiquant[nautilus]` is excluded (tracked in #42); `digichat/` Node audit is a sibling follow-up job. |
 | Compromised dependency (supply-chain) | GitHub Actions runners | T — malicious action version | `gitleaks` and other third-party actions are pinned to commit SHAs in `.github/workflows/`. | Not every action in the repo is SHA-pinned — audited on change to any workflow file. |
@@ -142,6 +143,49 @@ Every pull request and every push to `develop`/`main` runs
   future scans without removing the live credential. Once rotated, the
   allowlist entry (ideally a path + regex scoped to the specific value or a
   commit SHA pin) documents that the historical reference is safe.
+
+## Personal data in tracked payloads
+
+`gitleaks` looks for credentials. It does not look for **personal data**, and
+the two are not the same problem: a seed payload (`apps/*/container/seed/*.jsonl`)
+is copied wholesale into a running vector store, so one committed address
+reaches every person the tenant talks to. On 2026-10-02 (#4987) a 1.5 MB
+payload carrying 791 rows that quote a customer email address and 372
+`[internal]` staff-only notes landed on `main` in this **public** repository,
+and every check was green.
+
+- **The gate.** `scripts/check_pii_seed_payloads.py` fails a commit that adds
+  or modifies a tracked `.jsonl`/`.json` payload containing an email address
+  outside the RFC 2606 / 6761 reserved domains (`.test`, `.example`,
+  `.invalid`, `.localhost`, and the `example.com|net|org` names). It runs in
+  `.github/workflows/security-gitleaks.yml` on every PR diff.
+- **Local reproduction.** `make pii-scan` scans the working tree (the form to
+  run before committing a new seed payload); `make pii-scan-all` scans every
+  tracked payload.
+- **Reserved domains, not an allowlist.** Fixtures stay writable using
+  `jane.doe@example.test`; a real-looking domain such as `gmail.com` or
+  `acme.example.com` is a finding. There is deliberately no exemption list to
+  widen.
+- **Diff-scoped by default.** Introducing the gate cannot retroactively fail
+  on the payload that is already committed — the same reasoning as
+  `BASELINE_SHA` in `scripts/check_review_coverage.py`. `--all` scans the whole
+  tree, and is the mode to run once containment has landed. It is not a
+  required status check until then: a required check that is red on arrival
+  teaches people to bypass it.
+- **It prints counts, never addresses.** A guard whose output can be pasted
+  into a CI log is a second disclosure channel, and this repo is public. The
+  finding is `path:line: count`.
+- **What it does not catch.** Display names and `[internal]` tags have no
+  reliable shape; a name in free text is only removable by a product decision
+  (German and Spanish prose need real name detection), not by a lint rule. The
+  masking default that keeps them out of the corpus lives in
+  `scripts/zammad_mcp/privacy.py` — see
+  `docs/ops/ZAMMAD_MCP_CUSTOMER_DISCLOSURE.md`. Free-text names remain an open
+  item on DIG-1230.
+- **If a payload leaks.** Mask before committing, not after. The retrieval-side
+  decision is recorded in `docs/adr/0031-mask-occ-tickets-corpus-by-default.md`;
+  whether a committed payload counts as a notifiable breach is Counsel's call,
+  not a code reviewer's (DIG-1229).
 
 ## Remote access
 
