@@ -163,6 +163,20 @@ def test_from_nautilus_duck_types_result() -> None:
     assert ts.total_trades == 12
 
 
+def test_from_nautilus_missing_drawdown_uses_the_equity_curve() -> None:
+    """A missing max_drawdown_pct is not a 0% drawdown when the curve fell."""
+
+    class _NoDrawdown(_FakeResult):
+        max_drawdown_pct = None
+
+    ts = from_nautilus(
+        _NoDrawdown(),
+        equity_curve=[("t1", 1000.0), ("t2", 800.0), ("t3", 900.0)],
+    )
+    assert ts.max_drawdown_pct == pytest.approx(-20.0)
+    assert ts.drawdown_curve[1].v == pytest.approx(-20.0)
+
+
 # ── Schema 1.1: ohlc_bars + signal-type entry_label ──────────────────────────
 
 
