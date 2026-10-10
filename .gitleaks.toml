@@ -92,6 +92,15 @@ regexes = [
   '''changeme''',
   # Angle-bracket placeholders, e.g. `<slug>`, `<your-api-key>`, `<uuid>`.
   '''<[A-Za-z0-9][A-Za-z0-9 _./:@-]*>''',
+  # OCC test-script dummy keys (scripts/test_verify_occ_invite_key.sh,
+  # scripts/test_occ_rollout_scope_guard.sh on the DIG-2781/DIG-2779 OCC
+  # branches). Obviously patterned throwaway values, never real invite keys.
+  # Matched by exact literal (not by commit) because those branches get
+  # rebased, and every rebase minted new SHAs that defeated the exact-fingerprint
+  # .gitleaksignore entries (runs 38066108442, 38067884838). Reviewed 2026-10-10.
+  '''a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90''',
+  '''2222bbbb3333cccc4444dddd5555eeee6666ffff7777aaaa8888bbbb9999''',
+  '''111122223333444455556666777788889999aaaabbbbccccddddeeeeffff0000''',
 ]
 
 # Commit-level allowlist. Entries must be full SHAs with a dated comment
