@@ -23,8 +23,8 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 cd "$HERE/.."
 
-KEY="a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90"   # throwaway
-WRONG="0000000000000000000000000000000000000000000000000000000000000000"
+KEY="fixture invite key for the OCC verify suite, correct case"   # throwaway
+WRONG="fixture invite key for the OCC verify suite, wrong case"
 PORT="${PORT:-8791}"
 FIXT="scripts/occ_invite_key_fixture_server.mjs"
 rc=0
