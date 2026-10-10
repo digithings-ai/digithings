@@ -1,9 +1,9 @@
 /** Homepage desk: the shared page, and how the reveal handle sits. */
 
 import { deskPathFromPathname } from "@/components/desk/paths";
-import { publicCatalogPages } from "@/components/desk/public-surface";
+import { isAccountSurface, publicCatalogPages } from "@/components/desk/public-surface";
 
-const PAGES = publicCatalogPages();
+const PAGES = publicCatalogPages().filter((page) => !isAccountSurface(page.path));
 
 export const TERMINAL_TITLE = "terminal UI";
 export const TERMINAL_COPY =
