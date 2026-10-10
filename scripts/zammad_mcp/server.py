@@ -21,12 +21,8 @@ from scripts.zammad_mcp.aggregate import (
     is_automation_login,
     state_category,
 )
+from scripts.zammad_mcp.artifact_store import export_if_large
 from scripts.zammad_mcp.client import ZammadClient, ZammadError, keyword_terms
-from scripts.zammad_mcp.exports import (
-    EXPORT_ROW_LIMIT,
-    render_metadata_only,
-    write_export,
-)
 from scripts.zammad_mcp.formatting import (
     REPORT_GROUP_BYS,
     format_aggregate,
@@ -76,21 +72,15 @@ def _export_if_large(
     """Return a metadata-only summary when the result set is too large to inline.
 
     Above ``EXPORT_ROW_LIMIT`` the rows stop going back through the MCP
-    response, so they cannot reach the model.  They are spooled instead and the
-    download sits behind the same ``x-digi-mcp-key`` edge gate as these tools
-    (DIG-2638).  Returns None when the set is small enough to render normally, so
-    callers keep their existing path unchanged.  A spool failure never loses the
-    rows: the caller falls back to the full render and logs it.
+    response, so they cannot reach the model.  They are written instead as ONE
+    session-scoped artifact in the DigiChat artifact store, and the model is
+    told only the metadata and a short labelled preview (DIG-2638).  Returns
+    None when the set is small enough to render normally, so callers keep their
+    existing path unchanged.  A store failure never loses the rows: the caller
+    falls back to the full render and logs it.
     """
-    if len(tickets) <= EXPORT_ROW_LIMIT:
-        return None
-    try:
-        manifest = write_export(tickets, tool=tool, query=query)
-        preview = [format_ticket_line(ticket) for ticket in tickets[: max(0, sample)]]
-        return render_metadata_only(manifest, sample=preview)
-    except OSError as exc:
-        logger.warning("ticket export write failed for %s: %s", tool, exc)
-        return None
+    preview = [format_ticket_line(ticket) for ticket in tickets[: max(0, sample)]]
+    return export_if_large(tickets, tool=tool, query=query, preview=preview)
 
 
 @mcp.tool()

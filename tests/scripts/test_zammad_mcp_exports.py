@@ -1,491 +1,469 @@
-"""Oversized Zammad retrievals go to an expiring download, not to the model.
+"""Oversized Zammad retrievals go to the artifact store, not to the model.
 
-Two halves:
+When a listing tool returns more than ``EXPORT_ROW_LIMIT`` rows the rows stop
+going back through the MCP response. The model receives metadata only -- count,
+id list, created/updated ranges, state/priority/group histograms and field
+coverage -- plus a few rows as an explicitly labelled preview. The full set
+becomes ONE ``table`` artifact in the DigiChat artifact store, reached through a
+conversation-scoped ingest grant.
 
-* behaviour, exercised against the real spool files and a real bound socket --
-  ``exports`` never hands rows back to the model above the limit, and the TTL is
-  enforced when the file is read rather than when it is written;
-* wiring pins, because ``server.py`` cannot be imported here (it needs ``mcp``,
-  which the CI lane does not install). Those assert on source text, the pattern
-  the sibling stack test already uses.
+The first cut of this (DIG-2638, ``82395706``) spooled the rows inside the
+container and served them from a second stdlib HTTP server on :8771 behind the
+Worker's ``zammad-export`` edge route under a fixed 24h TTL. Chris reversed that
+on DIG-2638: a fixed TTL keeps serving a link after the session that owns it is
+gone. Those tests travelled with the code and pinned the transport; they are
+gone here and replaced by pins that assert the reversal.
+
+Two kinds of test live in this file:
+
+  * behaviour, against real bytes and a real bound socket;
+  * *wiring pins* asserted on SOURCE TEXT. ``server.py`` cannot be imported in
+    this lane -- it imports ``mcp``, which CI does not install -- so the wiring
+    is pinned by reading the file rather than by calling it.
 """
 
 from __future__ import annotations
 
-import csv
-import http.client
-import io
 import json
+import re
 import threading
-from datetime import datetime, timedelta, timezone
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlsplit
 
 import pytest
 
-from scripts.zammad_mcp.export_server import build_server, parse_download_path
+from scripts.zammad_mcp import artifact_store
 from scripts.zammad_mcp.exports import (
-    EXPORT_FORMATS,
+    ARTIFACT_KIND,
+    ARTIFACT_MEDIA_TYPE,
     EXPORT_ID_LIST_LIMIT,
     EXPORT_ROW_LIMIT,
-    EXPORT_TTL_SECONDS,
-    ExportExpired,
-    ExportNotFound,
-    is_valid_export_id,
-    load_export,
-    new_export_id,
-    purge_expired,
+    ExportError,
+    artifact_name,
+    build_artifact,
+    new_artifact_token,
     render_metadata_only,
     summarize,
-    write_export,
 )
-
-pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SERVER = REPO_ROOT / "scripts" / "zammad_mcp" / "server.py"
+EXPORTS_PY = REPO_ROOT / "scripts" / "zammad_mcp" / "exports.py"
+STORE_PY = REPO_ROOT / "scripts" / "zammad_mcp" / "artifact_store.py"
 STACK_DIR = REPO_ROOT / "apps" / "digithings-stack-cloudflare"
 STACK_INDEX = STACK_DIR / "src" / "index.ts"
 SUPERVISORD = STACK_DIR / "container" / "supervisor" / "supervisord.conf"
 MCP_DOCKERFILE = REPO_ROOT / "scripts" / "zammad_mcp" / "Dockerfile.mcp"
 
-#: Values that exist only in the rows. The metadata-only render must carry none
-#: of them: this is the property the whole leaf exists to create.
+# Markers that must never reach model-visible text. Every test that asserts an
+# absence quotes these, so a render that grows a new leak has a value to trip on.
 SECRET_TITLE = "Quarterly escalation for acme"
 SECRET_CUSTOMER = "acme-billing@example.com"
 
 
-def _row(index: int) -> dict[str, object]:
+def _row(index: int) -> dict:
     return {
         "id": 1000 + index,
-        "number": f"8801{index:02d}",
-        "title": SECRET_TITLE if index == 0 else f"Routine request {index}",
-        "state": "open" if index % 2 else "new",
-        "priority": "3 normal" if index % 3 else "2 high",
-        "group": "users",
-        "customer": SECRET_CUSTOMER if index == 0 else {"id": index, "name": f"Person {index}"},
-        "owner": {"id": 7, "login": "agent7"},
-        "created_at": f"2026-09-{1 + index:02d}T08:00:00Z",
-        "updated_at": f"2026-10-{1 + index % 9:02d}T09:30:00Z",
+        "number": f"T-{index:05d}",
+        "title": SECRET_TITLE if index == 0 else f"Routine ticket {index}",
+        "state": "open" if index % 2 else "closed",
+        "priority": "2 normal" if index % 3 else "3 high",
+        "group": "sales" if index % 2 else "billing",
+        "customer": SECRET_CUSTOMER if index == 1 else f"user{index}@example.com",
+        "owner": "agent@example.com",
+        "created_at": f"2026-09-{(index % 27) + 1:02d}T10:00:00Z",
+        "updated_at": f"2026-10-{(index % 9) + 1:02d}T08:30:00Z",
+        "close_at": None,
+        "custom_field": f"value-{index}",
     }
 
 
-def _rows(count: int) -> list[dict[str, object]]:
+def _rows(count: int) -> list[dict]:
     return [_row(i) for i in range(count)]
 
 
+def _oversized() -> list[dict]:
+    return _rows(EXPORT_ROW_LIMIT + 5)
+
+
 def _code_lines(path: Path) -> str:
-    """File body with full-line comments stripped, so pins target code."""
-    return "\n".join(
-        line for line in path.read_text().splitlines() if not line.lstrip().startswith("#")
-    )
+    return path.read_text(encoding="utf-8")
 
 
 # --------------------------------------------------------------------------
-# summarisation: what the model is allowed to see
+# summarize() - unchanged from the first cut, and still the model's whole view
 # --------------------------------------------------------------------------
 
 
 def test_summary_counts_ids_and_bounds_the_id_list():
-    summary = summarize(_rows(EXPORT_ID_LIST_LIMIT + 300))
-    assert summary["count"] == EXPORT_ID_LIST_LIMIT + 300
+    summary = summarize(_rows(EXPORT_ID_LIST_LIMIT + 25))
+    assert summary["count"] == EXPORT_ID_LIST_LIMIT + 25
+    assert len(summary["ids"]) == EXPORT_ID_LIST_LIMIT
     assert summary["ids_shown"] == EXPORT_ID_LIST_LIMIT
-    assert summary["ids_omitted"] == 300
-    # The ids really are the ticket ids, in order.
-    assert summary["ids"][0] == "1000"
+    assert summary["ids_omitted"] == 25
 
 
 def test_summary_reports_histograms_ranges_and_field_coverage():
-    summary = summarize(_rows(30))
-    assert summary["histograms"]["state"] == {"new": 15, "open": 15}
-    assert summary["histograms"]["group"] == {"users": 30}
-    assert summary["histograms"]["priority"]["2 high"] == 10
-    assert summary["created_range"] == ("2026-09-01T08:00:00Z", "2026-09-30T08:00:00Z")
-    assert summary["updated_range"] == ("2026-10-01T09:30:00Z", "2026-10-09T09:30:00Z")
-    assert "  customer: 30/30" in summary["field_coverage"]
+    summary = summarize(_rows(40))
+    assert summary["histograms"]["state"] == {"open": 20, "closed": 20}
+    # Ranges are (first, last) tuples.
+    assert summary["created_range"] == ("2026-09-01T10:00:00Z", "2026-09-27T10:00:00Z")
+    assert summary["updated_range"] == ("2026-10-01T08:30:00Z", "2026-10-09T08:30:00Z")
+    # Coverage is preformatted, one line per field that carries a value.
+    coverage = summary["field_coverage"]
+    assert "  id: 40/40" in coverage
+    assert not any(line.startswith("  close_at:") for line in coverage), (
+        "a field that is None in every row must not claim coverage"
+    )
 
 
 def test_summary_claims_nothing_beyond_the_rows_it_was_given():
-    summary = summarize(_rows(30))
-    # Coverage counts only the rows handed in: no total is inferred from a query.
-    assert all(line.endswith("/30") for line in summary["field_coverage"])
+    summary = summarize(_rows(3))
+    assert summary["count"] == 3
+    assert len(summary["ids"]) == 3
+    assert summary["ids_omitted"] == 0
 
 
 # --------------------------------------------------------------------------
-# the metadata-only render
+# build_artifact() - ONE table artifact, both formats, no transport
 # --------------------------------------------------------------------------
 
 
-def test_metadata_only_render_carries_metadata_and_no_row_values(tmp_path: Path):
-    manifest = write_export(
-        _rows(EXPORT_ROW_LIMIT + 5), tool="search_tickets", query="escalation", directory=tmp_path
+def test_build_artifact_carries_both_formats_in_one_blob():
+    artifact = build_artifact(_rows(30), tool="search_tickets", query="kind: complaint")
+    assert artifact["kind"] == ARTIFACT_KIND == "table"
+    assert artifact["mediaType"] == ARTIFACT_MEDIA_TYPE
+    assert artifact["bytes"]
+    envelope = json.loads(artifact["bytes"].decode("utf-8"))
+    assert envelope["tool"] == "search_tickets"
+    assert envelope["query"] == "kind: complaint"
+    assert len(envelope["json"]) == 30
+    # The CSV half is the same rows, so a reader gets the whole set either way.
+    csv_lines = envelope["csv"].strip().splitlines()
+    assert csv_lines[0].startswith("id,number,title")
+    assert len(csv_lines) == 31  # header + 30 rows
+
+
+def test_build_artifact_keeps_the_rows_out_of_its_own_metadata():
+    artifact = build_artifact(_oversized(), tool="list_tickets")
+    # Everything the model is shown comes from `summary`; the bytes stay in
+    # `bytes`. A summary carrying a row value would leak through the render.
+    assert SECRET_TITLE not in json.dumps(artifact["summary"])
+    assert SECRET_CUSTOMER not in json.dumps(artifact["summary"])
+    assert SECRET_TITLE in artifact["bytes"].decode("utf-8")
+
+
+def test_build_artifact_refuses_an_empty_result():
+    with pytest.raises(ExportError):
+        build_artifact([], tool="search_tickets")
+
+
+def test_artifact_name_is_derived_from_the_tool_and_says_json():
+    assert artifact_name("search_tickets") == "zammad-tickets-search-tickets.json"
+    assert artifact_name("list_tickets") == "zammad-tickets-list-tickets.json"
+
+
+def test_artifact_token_is_unguessable_and_carries_no_row_value():
+    tokens = {new_artifact_token() for _ in range(200)}
+    assert len(tokens) == 200
+    for token in tokens:
+        assert re.fullmatch(r"[0-9a-f]{32}", token)
+        assert SECRET_TITLE not in token and SECRET_CUSTOMER not in token
+
+
+# --------------------------------------------------------------------------
+# render_metadata_only() - the model-visible contract
+# --------------------------------------------------------------------------
+
+
+def test_metadata_only_render_carries_metadata_and_no_row_values():
+    artifact = build_artifact(_oversized(), tool="search_tickets")
+    text = render_metadata_only(artifact, link="/api/conversations/c1/artifacts/blob?token=abc")
+    assert (
+        f"{artifact['summary']['count']} tickets" in text
+        or str(artifact["summary"]["count"]) in text
     )
-    text = render_metadata_only(manifest)
-
-    # Non-vacuity: the render is real, so a positive control must hit.
-    assert manifest["summary"]["count"] == EXPORT_ROW_LIMIT + 5
-    assert "1000" in text
-    assert "/_stack/mcp/zammad-export/" + manifest["export_id"] in text
-    assert manifest["expires_at"] in text
-
-    # The property the leaf exists for.
+    assert "/api/conversations/c1/artifacts/blob?token=abc" in text
     assert SECRET_TITLE not in text
     assert SECRET_CUSTOMER not in text
-    assert "Routine request 7" not in text
 
 
-def test_metadata_only_render_states_that_other_ids_were_omitted(tmp_path: Path):
-    manifest = write_export(
-        _rows(EXPORT_ID_LIST_LIMIT + 5), tool="list_tickets", directory=tmp_path
-    )
-    text = render_metadata_only(manifest)
-    assert "and 5 more id(s), all present in the download" in text
+def test_metadata_only_render_states_that_other_ids_were_omitted():
+    artifact = build_artifact(_rows(EXPORT_ID_LIST_LIMIT + 7), tool="list_tickets")
+    assert artifact["summary"]["ids_omitted"] == 7
+    text = render_metadata_only(artifact, link="/x")
+    assert f"Ticket ids ({EXPORT_ID_LIST_LIMIT} shown)" in text
+    # The omitted count is carried in the summary, not printed as prose: the
+    # render must not invite the model to reconstruct rows it was not given.
+    assert str(artifact["summary"]["count"]) in text
 
 
-def test_metadata_only_render_lists_the_histograms(tmp_path: Path):
-    manifest = write_export(_rows(30), tool="search_tickets", directory=tmp_path)
-    text = render_metadata_only(manifest)
-    assert "State: new 15, open 15" in text
-    assert "Group: users 30" in text
-    assert "Priority: " in text
-
-
-def test_metadata_only_render_lists_field_coverage(tmp_path: Path):
-    manifest = write_export(_rows(30), tool="search_tickets", directory=tmp_path)
-    text = render_metadata_only(manifest)
+def test_metadata_only_render_lists_the_histograms_and_field_coverage():
+    artifact = build_artifact(_rows(40), tool="list_tickets")
+    text = render_metadata_only(artifact, link="/x")
+    assert "State: closed 20, open 20" in text
+    assert "Priority: 2 normal 26, 3 high 14" in text
+    assert "Group: billing 20, sales 20" in text
     assert "Field coverage:" in text
-    assert "  state: 30/30" in text
-    assert "  customer: 30/30" in text
+    assert "  id: 40/40" in text
+    # A field outside SUMMARY_FIELDS is not part of the model's contract.
+    assert "custom_field" not in text
 
 
-def test_rendered_sample_rows_are_only_rows_the_caller_passed_in(tmp_path: Path):
-    manifest = write_export(_rows(30), tool="search_tickets", directory=tmp_path)
-    text = render_metadata_only(manifest, sample=["preview only"])
-    assert "First rows only (preview, not the full set):" in text
-    assert "preview only" in text
+def test_metadata_only_render_never_names_an_expiry_time():
+    """The decision on DIG-2638: no fixed TTL, so nothing may promise one."""
+    artifact = build_artifact(_oversized(), tool="list_tickets")
+    text = render_metadata_only(artifact, link="/x").lower()
+    assert "expires" not in text
+    assert "ttl" not in text
+    assert "24h" not in text
 
 
-# --------------------------------------------------------------------------
-# the spool files
-# --------------------------------------------------------------------------
+def test_metadata_only_render_states_the_session_scope():
+    artifact = build_artifact(_oversized(), tool="list_tickets")
+    text = render_metadata_only(artifact, link="/x").lower()
+    assert "session" in text
+    assert "reload" in text
 
 
-def test_write_export_splits_rows_into_json_and_csv_and_keeps_them_out_of_the_manifest(
-    tmp_path: Path,
-):
-    manifest = write_export(
-        _rows(30), tool="search_tickets", query="escalation", directory=tmp_path
-    )
-    export_id = manifest["export_id"]
-
-    payload, read_manifest = load_export(export_id, "json", directory=tmp_path)
-    rows = json.loads(payload)
-    assert len(rows) == 30
-    assert rows[0]["title"] == SECRET_TITLE
-    assert read_manifest["export_id"] == export_id
-
-    csv_payload, _ = load_export(export_id, "csv", directory=tmp_path)
-    table = list(csv.DictReader(io.StringIO(csv_payload.decode("utf-8"))))
-    assert len(table) == 30
-    assert table[0]["id"] == "1000"
-
-    # The manifest the model sees must not embed the rows.
-    assert SECRET_TITLE not in json.dumps(manifest)
-    assert SECRET_CUSTOMER not in json.dumps(manifest)
-
-
-def test_export_id_is_unguessable_and_the_download_path_is_gated(tmp_path: Path):
-    manifest = write_export(_rows(30), tool="search_tickets", directory=tmp_path)
-    ids = {
-        write_export(_rows(30), tool="search_tickets", directory=tmp_path)["export_id"]
-        for _ in range(5)
-    }
-    assert len(ids) == 5
-    assert is_valid_export_id(manifest["export_id"])
-
-
-def test_write_export_refuses_an_empty_result(tmp_path: Path):
-    from scripts.zammad_mcp.exports import ExportError
-
-    with pytest.raises(ExportError):
-        write_export([], tool="search_tickets", directory=tmp_path)
+def test_rendered_sample_rows_are_only_rows_the_caller_passed_in():
+    artifact = build_artifact(_oversized(), tool="list_tickets")
+    good = render_metadata_only(artifact, link="/x", sample=["line one", "line two"])
+    assert "line one" in good and "line two" in good
+    # Positive control: the marker values ARE in the bytes, so a render that
+    # showed nothing because the sample was empty would read identically. This
+    # arm proves the sample is what put text in the output.
+    without = render_metadata_only(artifact, link="/x", sample=[])
+    assert "line one" not in without
 
 
 # --------------------------------------------------------------------------
-# the expiry and the id guard
+# artifact_store - the grant, the POST, and the fallback
 # --------------------------------------------------------------------------
 
 
-def test_ttl_is_enforced_when_the_file_is_read_not_when_it_is_written(tmp_path: Path):
-    written_at = datetime(2026, 10, 10, 9, 0, tzinfo=timezone.utc)
-    manifest = write_export(_rows(30), tool="search_tickets", directory=tmp_path, now=written_at)
-    assert manifest["ttl_seconds"] == EXPORT_TTL_SECONDS == 24 * 60 * 60
+class _Capture(BaseHTTPRequestHandler):
+    received: dict = {}
 
-    before = written_at + timedelta(seconds=EXPORT_TTL_SECONDS - 1)
-    payload, _ = load_export(manifest["export_id"], "json", directory=tmp_path, now=before)
-    assert json.loads(payload)
+    def do_POST(self):
+        length = int(self.headers.get("Content-Length") or 0)
+        raw = self.rfile.read(length)
+        type(self).received = {
+            "path": self.path,
+            "authorization": self.headers.get("Authorization"),
+            "content_type": self.headers.get("Content-Type"),
+            "conversation": self.headers.get("X-Conversation-Id"),
+            "body": json.loads(raw.decode("utf-8")),
+        }
+        payload = json.dumps(
+            {"link": "/api/conversations/c1/artifacts/blob?token=deadbeef"}
+        ).encode()
+        self.send_response(201)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
 
-    after = written_at + timedelta(seconds=EXPORT_TTL_SECONDS)
-    with pytest.raises(ExportExpired):
-        load_export(manifest["export_id"], "json", directory=tmp_path, now=after)
-
-
-def test_expired_export_is_unreadable_even_while_its_files_remain(tmp_path: Path):
-    written_at = datetime(2026, 10, 10, 9, 0, tzinfo=timezone.utc)
-    manifest = write_export(_rows(30), tool="search_tickets", directory=tmp_path, now=written_at)
-    later = written_at + timedelta(days=2)
-    with pytest.raises(ExportExpired):
-        load_export(manifest["export_id"], "csv", directory=tmp_path, now=later)
-    # Still on disk: read-time refusal, not a delete-on-read.
-    assert (tmp_path / f"{manifest['export_id']}.csv").exists()
-
-
-def test_purge_expired_removes_the_files_it_reports(tmp_path: Path):
-    written_at = datetime(2026, 10, 10, 9, 0, tzinfo=timezone.utc)
-    stale = write_export(_rows(30), tool="search_tickets", directory=tmp_path, now=written_at)
-    fresh = write_export(
-        _rows(30), tool="search_tickets", directory=tmp_path, now=written_at + timedelta(days=5)
-    )
-
-    removed = purge_expired(directory=tmp_path, now=written_at + timedelta(days=1))
-    assert removed == 1
-    assert not (tmp_path / f"{stale['export_id']}.json").exists()
-    assert (tmp_path / f"{fresh['export_id']}.json").exists()
+    def log_message(self, *_args):
+        return
 
 
-@pytest.mark.parametrize(
-    "hostile",
-    ["../../etc/passwd", "..", "not-hex-0000000000000000000000000000", "abc", "", "A" * 32],
-)
-def test_a_hostile_export_id_never_reaches_the_filesystem(hostile: str, tmp_path: Path):
-    assert not is_valid_export_id(hostile)
-    with pytest.raises(ExportNotFound):
-        load_export(hostile, "json", directory=tmp_path)
-
-
-def test_unknown_export_id_is_not_found(tmp_path: Path):
-    with pytest.raises(ExportNotFound):
-        load_export(new_export_id(), "json", directory=tmp_path)
-
-
-def test_unsupported_format_is_not_found(tmp_path: Path):
-    manifest = write_export(_rows(30), tool="search_tickets", directory=tmp_path)
-    with pytest.raises(ExportNotFound):
-        load_export(manifest["export_id"], "xlsx", directory=tmp_path)
-
-
-# --------------------------------------------------------------------------
-# the download route
-# --------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    ("path", "expected"),
-    [
-        ("/abc", ("abc", "json")),
-        ("/abc/", ("abc", "json")),
-        ("/abc.json", ("abc", "json")),
-        ("/abc.csv", ("abc", "csv")),
-        ("/abc.meta.json", None),
-        ("/abc.xlsx", None),
-        ("/abc/def", None),
-        ("/", None),
-    ],
-)
-def test_download_path_parsing(path: str, expected):
-    parsed = parse_download_path(path)
-    if expected is None:
-        assert parsed is None
-    else:
-        assert parsed == expected
-
-
-def test_download_path_unquotes_before_matching():
-    assert parse_download_path("/%61bc.csv") == ("abc", "csv")
-
-
-@pytest.fixture
-def route(tmp_path: Path):
-    """A real bound download route over a real spool."""
-    server = build_server("127.0.0.1", 0, spool=tmp_path)
+@pytest.fixture()
+def store_env(monkeypatch):
+    """A live loopback store, and the three env names that reach it."""
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _Capture)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
+    host, port = server.server_address[0], server.server_address[1]
+    monkeypatch.setenv("DIGICHAT_ARTIFACT_INGEST_URL", f"http://{host}:{port}/api/artifact-ingest")
+    monkeypatch.setenv("DIGICHAT_ARTIFACT_CONVERSATION", "c1")
+    monkeypatch.setenv("DIGICHAT_ARTIFACT_GRANT", "grant-token-value")
     try:
-        yield f"127.0.0.1:{server.server_address[1]}", tmp_path
+        yield f"http://{host}:{port}/api/artifact-ingest"
     finally:
         server.shutdown()
         server.server_close()
-        thread.join(timeout=5)
 
 
-def _request(route, path: str, method: str = "GET"):
-    host, _ = route
-    conn = http.client.HTTPConnection(host, timeout=10)
-    try:
-        conn.request(method, path)
-        response = conn.getresponse()
-        return response.status, response.read(), dict(response.getheaders())
-    finally:
-        conn.close()
+def test_ingest_posts_one_table_artifact_with_the_grant(store_env):
+    _Capture.received = {}
+    text = artifact_store.export_if_large(_oversized(), tool="search_tickets", query="q")
+    assert text is not None
+    got = _Capture.received
+    assert got["path"] == "/api/artifact-ingest"
+    assert got["authorization"] == "Bearer grant-token-value"
+    assert got["content_type"] == "application/json"
+    assert got["conversation"] == "c1"
+    body = got["body"]
+    assert body["conversationId"] == "c1"
+    assert body["kind"] == "table"
+    assert body["mediaType"] == ARTIFACT_MEDIA_TYPE
+    assert re.fullmatch(r"[0-9a-f]{32}", body["token"])
+    assert body["bytes"] and isinstance(body["bytes"], list)
+    assert SECRET_TITLE not in json.dumps(body["summary"])
 
 
-def test_route_serves_the_full_set_as_an_attachment(route):
-    _, spool = route
-    manifest = write_export(_rows(30), tool="search_tickets", query="escalation", directory=spool)
-    export_id = manifest["export_id"]
+def test_ingest_returns_the_link_and_the_model_sees_only_metadata(store_env):
+    _Capture.received = {}
+    text = artifact_store.export_if_large(_oversized(), tool="list_tickets")
+    assert "/api/conversations/c1/artifacts/blob?token=deadbeef" in text
+    assert SECRET_TITLE not in text
+    assert SECRET_CUSTOMER not in text
+    assert "ticket" in text.lower()
 
-    # The Worker's proxy forces a trailing slash; both spellings must work.
-    for path in (f"/{export_id}", f"/{export_id}/"):
-        status, body, headers = _request(route, path)
-        assert status == 200, path
-        assert len(json.loads(body)) == 30
-        assert headers["Content-Type"] == "application/json; charset=utf-8"
-        assert (
-            headers["Content-Disposition"]
-            == f'attachment; filename="zammad-tickets-{export_id}.json"'
+
+def test_the_cut_is_opt_in_below_the_limit_and_never_calls_the_store(store_env):
+    _Capture.received = {}
+    assert artifact_store.export_if_large(_rows(EXPORT_ROW_LIMIT), tool="list_tickets") is None
+    assert artifact_store.export_if_large(_rows(1), tool="list_tickets") is None
+    assert _Capture.received == {}
+
+
+def test_a_store_failure_falls_back_to_the_full_render_so_rows_are_never_lost(
+    store_env, monkeypatch
+):
+    """A dead store must not lose rows: the caller falls back to the full render."""
+    monkeypatch.setenv("DIGICHAT_ARTIFACT_INGEST_URL", "http://127.0.0.1:9/api/artifact-ingest")
+    # The direct call surfaces the failure...
+    with pytest.raises(artifact_store.ArtifactStoreError):
+        artifact_store._ingest(
+            build_artifact(_rows(3), tool="list_tickets"),
+            tool="list_tickets",
+            query="",
+            timeout=0.5,
         )
-        assert headers["Cache-Control"] == "no-store, private"
-        assert headers["X-Content-Type-Options"] == "nosniff"
-        assert headers["X-Export-Expires-At"] == manifest["expires_at"]
+    # ...and the path the MCP tools actually take returns None instead, which
+    # server.py reads as "render the rows normally". That is the property that
+    # keeps rows from ever being dropped.
+    assert artifact_store.export_if_large(_oversized(), tool="list_tickets") is None
 
 
-def test_route_serves_csv_on_request(route):
-    _, spool = route
-    export_id = write_export(_rows(30), tool="search_tickets", directory=spool)["export_id"]
-    status, body, headers = _request(route, f"/{export_id}.csv")
-    assert status == 200
-    assert headers["Content-Type"] == "text/csv; charset=utf-8"
-    assert SECRET_TITLE in body.decode("utf-8")
+def test_the_grant_names_no_object_store_credential(monkeypatch, caplog):
+    """The container gains a grant, not a key: three names, all required."""
+    accessors = {
+        "DIGICHAT_ARTIFACT_INGEST_URL": artifact_store.ingest_url,
+        "DIGICHAT_ARTIFACT_CONVERSATION": artifact_store.conversation_id,
+        "DIGICHAT_ARTIFACT_GRANT": artifact_store.ingest_grant,
+    }
+    # Positive control first: with the env set, every accessor returns it. A
+    # zero-length assertion that passed for a broken accessor would be vacuous.
+    for name, accessor in accessors.items():
+        monkeypatch.setenv(name, "value-for-" + name)
+        assert accessor() == "value-for-" + name
+    for name in accessors:
+        monkeypatch.delenv(name, raising=False)
 
+    with caplog.at_level("WARNING", logger="scripts.zammad_mcp.artifact_store"):
+        # Unconfigured is not fatal: the tools fall back to the full render.
+        assert artifact_store.export_if_large(_oversized(), tool="list_tickets") is None
 
-def test_route_head_reports_the_size_without_a_body(route):
-    _, spool = route
-    export_id = write_export(_rows(30), tool="search_tickets", directory=spool)["export_id"]
-    status, body, headers = _request(route, f"/{export_id}", method="HEAD")
-    assert status == 200
-    assert body == b""
-    assert int(headers["Content-Length"]) > 0
-
-
-def test_route_expired_export_is_gone_not_not_found(route):
-    _, spool = route
-    written_at = datetime(2026, 10, 10, 9, 0, tzinfo=timezone.utc)
-    export_id = write_export(_rows(30), tool="search_tickets", directory=spool, now=written_at)[
-        "export_id"
-    ]
-
-    # The route reads wall-clock time, so age the manifest instead.
-    manifest_path = spool / f"{export_id}.meta.json"
-    stored = json.loads(manifest_path.read_text())
-    stored["expires_at"] = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
-    manifest_path.write_text(json.dumps(stored))
-
-    status, _, _ = _request(route, f"/{export_id}")
-    assert status == 410
-
-
-def test_route_unknown_export_is_not_found(route):
-    status, _, _ = _request(route, f"/{new_export_id()}")
-    assert status == 404
-
-
-def test_route_never_serves_the_manifest(route):
-    _, spool = route
-    export_id = write_export(_rows(30), tool="search_tickets", directory=spool)["export_id"]
-    status, _, _ = _request(route, f"/{export_id}.meta.json")
-    assert status == 404
-
-
-def test_route_refuses_writes(route):
-    _, spool = route
-    export_id = write_export(_rows(30), tool="search_tickets", directory=spool)["export_id"]
-    for method in ("POST", "PUT", "DELETE"):
-        status, _, _ = _request(route, f"/{export_id}", method=method)
-        assert status == 405, method
-
-
-def test_route_traversal_attempt_is_not_found(route):
-    status, _, _ = _request(route, "/../../etc/passwd")
-    assert status in (400, 404)
+    # Each missing name is named in the warning, so a misconfigured container
+    # says which one rather than "store unavailable".
+    for name in accessors:
+        assert name in caplog.text, f"{name} is not named in the warning"
 
 
 # --------------------------------------------------------------------------
-# wiring pins (server.py needs mcp, which the CI lane does not install)
+# Wiring pins -- source text, because server.py needs `mcp` and CI lacks it
 # --------------------------------------------------------------------------
 
 
 def test_both_listing_tools_go_through_the_export_cut():
-    body = _code_lines(SERVER)
-    assert body.count("_export_if_large(") == 3  # the helper plus its two call sites
-    assert 'tool="search_tickets"' in body
-    assert 'tool="list_tickets"' in body
+    source = _code_lines(SERVER)
+    assert source.count("_export_if_large(") >= 3  # def + two call sites
+    assert "from scripts.zammad_mcp.artifact_store import export_if_large" in source
 
 
 def test_the_export_cut_precedes_the_full_render():
-    body = _code_lines(SERVER)
-    for render in ("format_search_results(built", "format_ticket_list(tickets"):
-        guard = body.index("_export_if_large(")
-        assert body.index(render) > guard
+    source = _code_lines(SERVER).splitlines()
+    for tool, renderer in (
+        ("search_tickets", "format_search_results"),
+        ("list_tickets", "format_ticket_list"),
+    ):
+        start = next(i for i, line in enumerate(source) if line.startswith(f"def {tool}("))
+        body = "\n".join(source[start : start + 70])
+        cut = body.index("_export_if_large(")
+        assert body.index(renderer) > cut, f"{tool} renders rows before the cut runs"
+        # And the render is reachable only when the cut declined.
+        assert "if exported is not None:" in body
 
 
-def test_the_export_helper_is_opt_in_below_the_limit_and_falls_back_on_failure():
-    """Below the limit nothing changes; on a spool failure the rows are not lost."""
-    body = _code_lines(SERVER)
-    helper = body[body.index("def _export_if_large(") : body.index("@mcp.tool()")]
-    assert "if len(tickets) <= EXPORT_ROW_LIMIT:" in helper
-    assert "return None" in helper
-    # The failure arm returns None (caller renders the full list), not a raise.
-    failure = helper[helper.index("except OSError as exc:") :]
-    assert "return None" in failure
-    assert "raise" not in failure
+def test_the_preview_is_formatted_by_the_tools_own_line_formatter():
+    source = _code_lines(SERVER)
+    assert "preview = [format_ticket_line(ticket) for ticket in tickets[" in source
+    assert "preview=preview" in source
 
 
-def test_worker_routes_the_download_through_the_same_gate():
-    body = _code_lines(STACK_INDEX)
-    assert '"zammad-export": 8771' in body
-    # The map is the gate: an entry gets the identical x-digi-mcp-key check.
-    assert "const port = MCP_EDGE_SERVERS[serverId];" in body
-    assert 'request.headers.get("x-digi-mcp-key")' in body
-    assert body.index("const port = MCP_EDGE_SERVERS[serverId];") < body.index(
-        'request.headers.get("x-digi-mcp-key")'
-    )
+# --------------------------------------------------------------------------
+# The reversal: the superseded transport must not come back
+# --------------------------------------------------------------------------
 
 
-def test_container_serves_the_download_alongside_the_mcp():
+def test_no_fixed_ttl_constant_survives_anywhere_in_the_zammad_package():
+    """A TTL is the thing Chris reversed. One occurrence anywhere is a defect."""
+    for path in (EXPORTS_PY, STORE_PY, SERVER, EXPORTS_PY.parent / "export_server.py"):
+        if not path.exists():
+            continue
+        text = _code_lines(path)
+        assert "EXPORT_TTL_SECONDS" not in text, f"{path} still carries a TTL"
+
+
+def test_the_container_local_spool_and_its_server_are_gone():
+    package = EXPORTS_PY.parent
+    assert not (package / "export_server.py").exists(), "the :8771 download server is back"
+    for name in ("ZAMMAD_EXPORT_DIR", "DEFAULT_SPOOL_DIR", "purge_expired", "load_export"):
+        for path in package.glob("*.py"):
+            if path.name == __file__.rsplit("/", 1)[-1]:
+                continue
+            assert name not in _code_lines(path), f"{name} survived in {path.name}"
+
+
+def test_the_worker_no_longer_maps_a_ticket_download_port():
+    source = _code_lines(STACK_INDEX)
+    assert "zammad-export" not in source
+    assert "8771" not in source
+
+
+def test_the_container_no_longer_runs_a_ticket_download_program():
     supervisor = _code_lines(SUPERVISORD)
-    assert "[program:zammad-export]" in supervisor
-    assert "python -m scripts.zammad_mcp.export_server --port 8771" in supervisor
-    assert "ZAMMAD_EXPORT_DIR=" in supervisor
+    assert "zammad-export" not in supervisor
+    assert "export_server" not in supervisor
+    assert "ZAMMAD_EXPORT_DIR" not in supervisor
 
 
-def test_download_port_is_exposed_and_the_image_still_copies_the_module():
+def test_the_image_no_longer_exposes_the_download_port():
     dockerfile = _code_lines(MCP_DOCKERFILE)
     assert "EXPOSE 8770" in dockerfile
-    assert "EXPOSE 8771" in dockerfile
-    assert "COPY scripts/zammad_mcp ./scripts/zammad_mcp" in dockerfile
+    assert "8771" not in dockerfile
 
 
-def test_the_download_server_does_not_import_mcp():
-    """An mcp upgrade must not be able to take the download route down."""
-    source = (REPO_ROOT / "scripts" / "zammad_mcp" / "export_server.py").read_text()
-    assert "import mcp" not in source
-    assert "from mcp" not in source
+def test_the_grant_lands_on_a_digichat_route_that_rechecks_ownership():
+    """The write must pass through the store's own ownership guard."""
+    ingest = (
+        REPO_ROOT / "apps" / "digichat" / "src" / "app" / "api" / "artifact-ingest" / "route.ts"
+    )
+    assert ingest.exists()
+    text = _code_lines(ingest)
+    assert "insertArtifact" in text, "the ingest route bypasses the ownership guard"
+    assert "requireDigiChatAuth" in text
+    assert "bindLink" in text and "registerSession" in text
 
 
-def test_every_supported_format_round_trips(route):
-    _, spool = route
-    export_id = write_export(_rows(30), tool="search_tickets", directory=spool)["export_id"]
-    for fmt in EXPORT_FORMATS:
-        status, _, _ = _request(route, f"/{export_id}.{fmt}")
-        assert status == 200, fmt
-
-
-def test_the_quoted_link_is_a_path_on_the_already_gated_worker_route():
-    """The model quotes a path, never a bare id: the gate lives in front of it."""
-    from scripts.zammad_mcp.exports import download_path
-
-    quoted = download_path("a" * 32)
-    assert quoted == "/_stack/mcp/zammad-export/" + "a" * 32
-    # Relative on purpose: the container cannot know its public host, and a host
-    # the model invented would be a link the edge gate does not cover.
-    assert urlsplit(quoted).netloc == ""
+def test_the_download_link_is_gated_by_the_live_session():
+    blob = (
+        REPO_ROOT
+        / "apps"
+        / "digichat"
+        / "src"
+        / "app"
+        / "api"
+        / "conversations"
+        / "[id]"
+        / "artifacts"
+        / "blob"
+        / "route.ts"
+    )
+    assert blob.exists()
+    text = _code_lines(blob)
+    assert "isLiveSessionLink" in text, "the download route does not check the session"
+    assert "serveArtifact" in text
