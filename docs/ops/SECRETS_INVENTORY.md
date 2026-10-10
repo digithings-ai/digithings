@@ -2,6 +2,13 @@
 
 Names and locations only. **This file never contains secret values.** Cloudflare Worker secrets are stored as `secret_text`, which is write-only: `wrangler secret list` returns each name and its type but never the value, so no readback path exists even for the operator. Local `.env` files and committed example templates are referenced by path and line; any literal found committed is masked `***` and labelled `plaintext-literal`. Every claim below carries a `file:line` or a named command.
 
+Every row below is a **name**, and a name is all that belongs in this file, on a ticket,
+a comment, or a chat. The rule that keeps it that way — including the "report the branch
+the tool took, never the value" wording agents use when a refresh fails — is in
+[`credential-ownership.md`](credential-ownership.md#never-paste-a-credential-value). It is
+stated there rather than here because it binds humans and agents equally, and an inventory
+is the file people read while holding a value.
+
 Rebuilt from four read-only sweeps (cloudflare / python / plumbing / docs) plus a live `wrangler secret list` against the three Workers, at `origin/develop` commit `35d91f641`. Two sweep claims were rechecked and corrected here: `.env.example:240` and `.env.example:278` are `replace-with-…` placeholders (not live values). A later recount of `.github/workflows` (53 workflow files, recounted 2026-10-08) found **1** job declaring `environment: production` (`deploy-digiquant-runner.yml`); the 2026-09 audit's "four workflows" list named files that are not in the tree. That gap is now closed for CI: **DIG-248 (2026-10-04)** added a third environment, `cron` (no reviewers, no wait timer, no branch policy), and declared it on **all 32 jobs that read a non-automatic `secrets.*` name**, so the only two job shapes left without a gate are `deploy-digiquant-runner.yml:deploy` (still `production`, deliberately) and jobs that read nothing but the automatic `GITHUB_TOKEN`. See [R13](#risk-register).
 
 ## How to read this table
