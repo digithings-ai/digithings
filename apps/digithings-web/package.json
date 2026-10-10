@@ -6,7 +6,7 @@
     "predev": "node ./lib/sync-openapi.mjs",
     "dev": "next dev --hostname 127.0.0.1",
     "render-diagrams": "node ./scripts/book/render-diagrams.mjs",
-    "prebuild": "node ./lib/write-csp-headers.mjs && node ./lib/sync-openapi.mjs && npm run render-diagrams",
+"prebuild": "node ./lib/write-csp-headers.mjs && node ./lib/sync-openapi.mjs",
     "build": "next build --webpack",
     "start": "next start",
     "book:pdf": "node ./scripts/book/print-pdf.mjs",
