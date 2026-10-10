@@ -149,13 +149,28 @@ Do **not** use `chat.digithings.ai` as the marketing host. Customer digichat `/e
 (DataTap etc.) is separate from digithings’ own marketing chat. Path routing:
 [ADR-0018](adr/0018-digichat-path-routing.md).
 
-The digithings Containers scaffold (`apps/digichat-cloudflare/` +
-`Dockerfile.digichat-cloudflare`) was **removed on 2026-08-06** — it had no deploy path in
-the repo (Containers need Workers Paid, digithings is on Free; routes stayed commented out
-and no workflow built the image) and its `wrangler` devDependency was pulling five `workerd`
-platform binaries into the root lockfile. Recover it from git history if digithings ever
-adopts Workers Paid. digichat Node for digithings runs on operator Compose + Cloudflare Tunnel
-instead.
+The digichat Containers deployment (`apps/digichat-cloudflare/` +
+`Dockerfile.digichat-cloudflare`) is present and routed: the Worker
+`digithings-digichat` serves digichat on `digithings.ai` through seven live
+zone routes (`/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`,
+`/api/plan-proof*`, `/api/health`, `/_dtchat*`) fronting the
+`DigiChatContainer` Container (see
+[`apps/digichat-cloudflare/wrangler.toml`](../apps/digichat-cloudflare/wrangler.toml)).
+Containers require Workers Paid. Deploy is manual — no workflow deploys this
+Worker: run `npx wrangler deploy` from `apps/digichat-cloudflare/` (build
+context is the monorepo root; see
+[`apps/digichat-cloudflare/README.md`](../apps/digichat-cloudflare/README.md)).
+CI covers it with a dry-run build check (`build-cloudflare-workers.yml`) plus
+the test/typecheck lanes. The sibling Profile A stack
+(`apps/digithings-stack-cloudflare/`, `graph.`/`key.`/`search.digithings.ai`),
+`dashboard-api`, and `digitrace-langfuse` likewise have no CI deploy lane. The
+only Workers with one are `digithings-cron`
+(`.github/workflows/deploy-digithings-cron.yml`, on push to `develop` and
+`main`) and `digiquant-runner`
+(`.github/workflows/deploy-digiquant-runner.yml`, on push to `main`).
+digichat Node for digithings additionally runs on operator Compose +
+Cloudflare Tunnel — see
+[`infra/digichat-digithings/README.md`](../infra/digichat-digithings/README.md).
 
 ### digithings.ai — static landing page
 
