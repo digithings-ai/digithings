@@ -17,6 +17,11 @@ Design rules this file follows deliberately:
   out committed state) and is documented rather than worked around.
 * The pin is an exact per-host mapping, not a total. "Something moved" has to
   name what moved. Updating the pin is the migration step, in the open.
+* The scan EXCLUDES this file. Every key of the pin is itself a host literal,
+  so counting this file makes the pin unsatisfiable by construction and makes
+  the number move whenever a fixture is edited. A ratchet must not count its
+  own ruler; ``test_census_excludes_its_own_source`` pins that arithmetic in
+  both directions so the exclusion cannot silently stop excluding.
 
 Scope note: the pattern covers company-owned hosts only. Third-party hosts,
 ``example.com``-shaped placeholders, local ports and the client's own domains
@@ -37,6 +42,15 @@ pytestmark = pytest.mark.baseline
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 
+# This file's own path, relative to the repo root. It is the one tracked file
+# whose content is a FUNCTION of the census, so the census skips it.
+GUARD_SOURCE = pathlib.Path(__file__).resolve().relative_to(REPO_ROOT).as_posix()
+
+# The exclusion set is pinned by the tests to be exactly this one path. It is a
+# named constant, not an inline literal, so a widened exclusion is a visible
+# diff instead of a silent hole in the baseline.
+EXCLUDED = frozenset({GUARD_SOURCE})
+
 # A company-owned endpoint host. The first label may not be "*", so wildcard
 # templates such as ``https://*.digithings.ai`` do not match. Matched anywhere
 # in the line, not only after a scheme, so CSP directives - the single largest
@@ -53,6 +67,8 @@ _HOST_RE = re.compile(
 # 50398869 bytes scanned. Per top directory: apps 269, docs 196, infra 30,
 # scripts 15, packages 6, tests 6, .github 5, digiquant 4, openwiki 3,
 # digibase/digisearch/digitrace 1 each. 537 occurrences over 17 hosts.
+# These are the develop numbers: this file is excluded from the scan, so it is
+# not part of its own baseline.
 PINNED_CENSUS = {
     "api.digithings.ai": 1,
     "atlas.digiquant.io": 3,
@@ -115,15 +131,28 @@ def _tracked_paths(root: pathlib.Path) -> list[str]:
     return paths
 
 
-def census(root: pathlib.Path = REPO_ROOT) -> tuple[collections.Counter[str], int, int]:
-    """Return (per-host counts, tracked files walked, bytes scanned)."""
+def census(
+    root: pathlib.Path = REPO_ROOT,
+    *,
+    exclude: frozenset[str] | None = None,
+) -> tuple[collections.Counter[str], int, int]:
+    """Return (per-host counts, tracked files walked, bytes scanned).
+
+    ``exclude`` defaults to this file's own path (see ``GUARD_SOURCE``). Pass
+    an explicit set to scan the guard too, which is how the exclusion is
+    proved rather than asserted.
+    """
     paths = _tracked_paths(root)
     root = pathlib.Path(root)
+    if exclude is None:
+        exclude = EXCLUDED
 
     counts: collections.Counter[str] = collections.Counter()
     scanned_bytes = 0
     walked = 0
     for rel in paths:
+        if rel in exclude:
+            continue
         path = root / rel
         try:
             raw = path.read_bytes()
@@ -191,6 +220,30 @@ def test_enumeration_walks_files_and_reads_bytes() -> None:
     assert walked > 1000, f"only walked {walked} tracked files"
     assert scanned_bytes > 1_000_000, f"only scanned {scanned_bytes} bytes"
     assert sum(counts.values()) > 0, "scan found no company endpoint literals"
+
+
+def test_census_excludes_its_own_source() -> None:
+    """Pin both halves of the self-exclusion, so it cannot stop excluding.
+
+    Half 1: this file really does hold host literals, otherwise excluding it
+    hides nothing and the exclusion is decoration.
+    Half 2: scanning WITH this file really does add exactly those literals and
+    exactly one walked file, which is why the pin below is the develop numbers
+    rather than develop-plus-this-file.
+    """
+    own_counts = hosts_in((REPO_ROOT / GUARD_SOURCE).read_text(encoding="utf-8"))
+    assert own_counts, "this file holds no host literals, so the exclusion hides nothing"
+    assert GUARD_SOURCE in _tracked_paths(REPO_ROOT), "the guard's own source is untracked"
+    assert EXCLUDED == frozenset({GUARD_SOURCE}), (
+        "the baseline skips exactly one file. A second excluded path removes real "
+        "endpoints from the count without changing anything else."
+    )
+
+    counts, walked, _ = census()
+    counts_with_self, walked_with_self, _ = census(exclude=frozenset())
+
+    assert walked_with_self == walked + 1
+    assert counts_with_self - counts == own_counts
 
 
 def test_census_matches_pinned_baseline() -> None:
