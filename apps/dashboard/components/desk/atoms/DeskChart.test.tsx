@@ -42,8 +42,8 @@ afterEach(() => {
 describe('DeskChart', () => {
   it('draws no placeholder prices when bars are absent', () => {
     const html = renderToStaticMarkup(createElement(DeskChart, { bars: [], symbol: 'XLK' }));
-    expect(html).toContain('No series is drawn');
-    expect(html).toContain('O —');
+    expect(html).toContain('data-testid="desk-state-empty"');
+    expect(html).toContain('No bars');
     expect(html).not.toContain('610.40');
     expect(html).not.toContain('613.80');
     expect(html).not.toContain('desk-chart-host');

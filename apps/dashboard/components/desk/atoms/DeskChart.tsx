@@ -1,120 +1,112 @@
 'use client';
 
-/**
- * TODO(slice-b): replace with Slice B's `DeskChart`. This mount exists so
- * the LuxAlgo pane can draw digiquant bars before that atom lands.
- * Colors are explicit (`upColor` / `downColor` plus a `VelaTheme` object).
- * `theme: 'dark'` is not the color source — stock green/red must not ship.
- */
 import { useEffect, useRef, useState } from 'react';
 import { getChartColors } from '@/lib/chart-colors';
-import { dominantVerticalWheel } from './chart-wheel';
+import { VELA_PROJECT_URL, deskChartWheelAction, deskVelaOptions } from '@/lib/desk/vela-theme';
+import type { VelaSpikeBar } from '@/components/research/VelaSpikeChart';
+import { DeskState } from './DeskState';
 
-export interface DeskChartBar {
-  t: number;
-  o: number;
-  h: number;
-  l: number;
-  c: number;
-  v?: number;
+export interface DeskChartProps {
+  bars: readonly VelaSpikeBar[];
+  /** Shown as data on the host. Brief panes pass the book symbol. */
+  symbol?: string;
+  timeframe?: string;
+  hostTestId?: string;
+  hostClassName?: string;
+  emptyMessage?: string;
 }
 
-const EMPTY_OHLC = 'O —  H —  L —  C —';
+function paneScroller(host: HTMLElement): HTMLElement | null {
+  const found = host.closest('[data-desk-pane-scroll]');
+  if (found instanceof HTMLElement && found !== host) return found;
+  return null;
+}
 
+/**
+ * Price pane. Candles use digiquant teal and red. A vertical wheel scrolls
+ * the pane column; a horizontal wheel is left to Vela.
+ *
+ * Vela is imported inside the effect so the static export does not evaluate
+ * the chart runtime on the server.
+ */
 export function DeskChart({
   bars,
   symbol,
-  timeframe = '1d',
-}: {
-  bars: DeskChartBar[];
-  symbol: string;
-  timeframe?: string;
-}) {
+  timeframe = '1D',
+  hostTestId = 'desk-chart-host',
+  hostClassName = 'h-full min-h-[240px] w-full',
+  emptyMessage = 'No bars',
+}: DeskChartProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [mountError, setMountError] = useState<string | null>(null);
+  const hasBars = bars.length > 0;
 
   useEffect(() => {
     const host = hostRef.current;
-    if (!host || bars.length === 0) return;
-    let chart: { destroy(): void } | null = null;
-    let cancelled = false;
-
+    if (!host) return;
     const onWheel = (event: WheelEvent) => {
-      if (!dominantVerticalWheel(event.deltaX, event.deltaY)) return;
-      const scroller = host.closest('[data-pane-scroll]');
-      if (!(scroller instanceof HTMLElement)) return;
+      if (deskChartWheelAction(event) !== 'scroll-pane') return;
+      const scroller = paneScroller(host);
+      if (!scroller) return;
       event.preventDefault();
+      event.stopPropagation();
       scroller.scrollTop += event.deltaY;
     };
     host.addEventListener('wheel', onWheel, { passive: false });
+    return () => host.removeEventListener('wheel', onWheel);
+  }, [hasBars]);
 
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host || !hasBars) return;
+    let chart: { destroy(): void } | null = null;
+    let cancelled = false;
+    const colors = getChartColors();
     (async () => {
       try {
         const { Vela } = await import('@luxalgo/vela');
-        if (cancelled) return;
-        const colors = getChartColors();
-        chart = new Vela(host, {
-          data: bars.map((bar) => ({
-            time: bar.t,
-            open: bar.o,
-            high: bar.h,
-            low: bar.l,
-            close: bar.c,
-            ...(bar.v === undefined ? {} : { volume: bar.v }),
-          })),
-          timeframe,
-          live: false,
-          drawings: false,
-          animations: { intro: false },
-          nativeBackend: 'canvas2d',
-          upColor: colors.up,
-          downColor: colors.down,
-          theme: {
+        if (cancelled || !hostRef.current) return;
+        chart = new Vela(
+          host,
+          deskVelaOptions(bars, timeframe, {
             background: colors.bg,
-            textColor: colors.ink,
-            gridColor: colors.hair,
-            borderColor: colors.hair,
-            upColor: colors.up,
-            downColor: colors.down,
-            fontFamily: 'ui-monospace, monospace',
-          },
-        });
-        setMountError(null);
+            text: colors.ink,
+            grid: colors.hair,
+          }),
+        );
       } catch (err) {
-        if (!cancelled) {
-          setMountError(err instanceof Error ? err.message : 'Chart failed to mount.');
-        }
+        if (!cancelled) setMountError(err instanceof Error ? err.message : String(err));
       }
     })();
-
     return () => {
       cancelled = true;
-      host.removeEventListener('wheel', onWheel);
       chart?.destroy();
+      chart = null;
     };
-  }, [bars, timeframe]);
+  }, [bars, hasBars, timeframe]);
 
   if (bars.length === 0) {
     return (
-      <div data-testid="desk-chart-empty" className="px-3 py-3 text-xs text-ink-mute">
-        <p>No series is drawn in this state.</p>
-        <p className="mt-2 font-mono">{EMPTY_OHLC}</p>
-        {symbol ? <p className="mt-2 font-mono text-ink">{symbol}</p> : null}
+      <div data-testid="desk-chart" data-symbol={symbol ?? ''}>
+        <DeskState state="empty" emptyMessage={emptyMessage} />
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-0 flex-col">
-      <p className="px-3 pt-2 font-mono text-[10px] text-ink-mute">
-        digiquant bars · {symbol} · {timeframe} · not a LuxAlgo feed
-      </p>
+    <div data-testid="desk-chart" data-symbol={symbol ?? ''}>
+      <div ref={hostRef} data-testid={hostTestId} className={hostClassName} />
       {mountError ? (
-        <p data-testid="desk-chart-error" className="px-3 py-2 text-xs text-ink-mute">
-          {mountError}
+        <p className="px-3 py-1 font-mono text-[10px] text-warn" data-testid="desk-chart-mount-error">
+          Vela failed to mount: {mountError}
         </p>
       ) : null}
-      <div ref={hostRef} data-testid="desk-chart-host" className="h-[220px] w-full" />
+      <p className="px-3 py-1 font-mono text-[10px] text-ink-mute" data-testid="desk-chart-attribution">
+        Chart by{' '}
+        <a href={VELA_PROJECT_URL} target="_blank" rel="noreferrer" className="underline">
+          Vela (LuxAlgo)
+        </a>
+      </p>
     </div>
   );
 }

@@ -184,7 +184,7 @@ describe('Brief panes', () => {
     const html = renderToStaticMarkup(
       createElement(BriefDeskView, { panes: buildBriefPanes(failed, '1d') }),
     );
-    expect(html).toContain('Withheld. The run failed.');
+    expect(html).toContain('upstream_empty');
     expect(html).toContain('The quote strip stays in the brief layout. This state does not print closes.');
     expect(html).not.toContain('110.00');
     expect(html).toContain('No book symbol to chart.');

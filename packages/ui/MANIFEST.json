@@ -638,12 +638,6 @@
         "summary": "Feature cell — a feature block pairing an eyebrow / outcome / mechanism copy column with a scaled product frame."
       },
       {
-        "name": "ModuleGridReference",
-        "id": "module-grid",
-        "path": "apps/reference/components/module-grid-reference.tsx",
-        "summary": "Module grid — the scroll-walked treemap mosaic."
-      },
-      {
         "name": "NumberedStagesReference",
         "id": "numbered-stages",
         "path": "apps/reference/components/numbered-stages-reference.tsx",
@@ -1016,7 +1010,7 @@
         "name": "Table",
         "id": "table",
         "path": "packages/ui/src/ui/table.tsx",
-        "summary": "`compact` halves the header/cell padding for dense ledgers; `dense` drops the fixed header height and runs rows at a hairline's breath, for a small aside table that shares its column with other content."
+        "summary": "`compact` halves the header/cell padding for dense ledgers."
       },
       {
         "name": "Tabs",

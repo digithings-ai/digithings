@@ -142,14 +142,15 @@ export const guides: Guide[] = [
       {
         kind: "code",
         lang: "bash",
-        code: "docker pull ghcr.io/digithings-ai/digichat:v2.4.0",
+        code: "docker build -f apps/digichat/Dockerfile \\\n  --build-arg DIGICHAT_VERSION=2.4.0 \\\n  --build-arg DIGICHAT_REVISION=\"$(git rev-parse HEAD)\" \\\n  -t digichat:2.4.0 .",
       },
       {
         kind: "list",
         items: [
           "Git tag: `digichat-vX.Y.Z`",
-          "GHCR image: `ghcr.io/digithings-ai/digichat:vX.Y.Z` (package version `2.4.0`, released 2026-09-29). Pin a tag the release workflow has published from `main`; do not assume `v2.4.0` is on GHCR until that workflow has run.",
+          "Published image: not yet. The publish workflow is back and builds an image from each `digichat-vX.Y.Z` tag, but no tag after `digichat-v2.3.2` has been cut, so there is nothing published to pull. Until the next release, digichat builds from source.",
           "Changelog: `apps/digichat/CHANGELOG.md`",
+          "Pin by digest once you publish the image yourself — do not rely on `:latest`.",
         ],
       },
       { kind: "h", text: "Profiles" },

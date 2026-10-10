@@ -129,6 +129,9 @@
     position: sticky;
     /* Same offset as .docs-side, so "on this page" lines up with Guides. */
     top: calc(var(--docs-nav-h, 62px) + 1.2rem);
+    max-height: calc(100vh - var(--docs-nav-h, 62px) - 2rem);
+    overflow-y: auto;
+    scrollbar-width: thin;
   }
 }
 

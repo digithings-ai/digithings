@@ -1,49 +1,61 @@
-/**
- * TODO(slice-b): replace with `components/desk/atoms/DeskState.tsx` from
- * Slice B. Same states: loading, empty, error, ready.
- */
 import type { ReactNode } from 'react';
+import type { PaneState } from '@/lib/desk/types';
 
-export type PaneState = 'loading' | 'empty' | 'error' | 'ready';
+export type { PaneState };
 
-const EMPTY = 'Empty until a run commits.';
-const LOADING = 'Waiting on the run.';
-const ERROR = 'Withheld. The run failed.';
+export interface DeskStateProps {
+  state: PaneState;
+  errorMessage?: string;
+  emptyMessage?: string;
+  /** Brief panes pass this name. Same text as `emptyMessage`. */
+  emptyLabel?: string;
+  loadingMessage?: string;
+  /** Brief panes pass this name. Same text as `loadingMessage`. */
+  loadingLabel?: string;
+  children?: ReactNode;
+}
 
+/**
+ * Loading, empty, and error frames for a desk pane.
+ * Ready renders children. The other states never invent a zero.
+ */
 export function DeskState({
   state,
   errorMessage,
-  emptyLabel = EMPTY,
-  loadingLabel = LOADING,
+  emptyMessage,
+  emptyLabel,
+  loadingMessage,
+  loadingLabel,
   children,
-}: {
-  state: PaneState;
-  errorMessage?: string;
-  emptyLabel?: string;
-  loadingLabel?: string;
-  children?: ReactNode;
-}) {
+}: DeskStateProps) {
+  const emptyText = emptyMessage ?? emptyLabel ?? 'Nothing here yet';
+  const loadingText = loadingMessage ?? loadingLabel ?? 'Loading';
+  if (state === 'ready') return <>{children}</>;
+
   if (state === 'loading') {
     return (
-      <p data-testid="pane-loading" role="status" className="px-3 py-3 text-xs text-ink-mute">
-        {loadingLabel}
-      </p>
-    );
-  }
-  if (state === 'error') {
-    return (
-      <div data-testid="pane-error" className="px-3 py-3 text-xs text-ink">
-        <p>{ERROR}</p>
-        {errorMessage ? <p className="mt-1 text-ink-mute">{errorMessage}</p> : null}
+      <div
+        className="px-3 py-6 font-mono text-[11px] text-ink-mute"
+        data-testid="desk-state-loading"
+        role="status"
+        aria-busy="true"
+      >
+        {loadingText}
       </div>
     );
   }
+
   if (state === 'empty') {
     return (
-      <p data-testid="pane-empty" className="px-3 py-3 text-xs text-ink-mute">
-        {emptyLabel}
-      </p>
+      <div className="px-3 py-6 font-mono text-[11px] text-ink-mute" data-testid="desk-state-empty">
+        {emptyText}
+      </div>
     );
   }
-  return <>{children}</>;
+
+  return (
+    <div className="px-3 py-6 font-mono text-[11px] text-down" data-testid="desk-state-error" role="alert">
+      {errorMessage && errorMessage.length > 0 ? errorMessage : 'Request failed'}
+    </div>
+  );
 }

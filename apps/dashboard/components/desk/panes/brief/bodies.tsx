@@ -162,7 +162,7 @@ export function BriefPaneContent({
       );
     case 'breaks':
       return (
-        <DeskState state={pane.state} errorMessage={pane.errorMessage} emptyLabel={pane.emptyLabel}>
+        <DeskState state={pane.state} errorMessage={pane.errorMessage} emptyMessage={pane.emptyLabel}>
           <ul className="space-y-2 px-3 py-3 text-xs">
             {body.lines.map((line) => (
               <li key={line}>{line}</li>
@@ -227,7 +227,7 @@ export function BriefPaneContent({
             Display-only. Bars do not feed validate, backtest, optimize, or export.
           </p>
           {body.delayNote ? <p className="px-3 text-[10px] text-ink-mute">{body.delayNote}</p> : null}
-          <DeskState state={pane.state} errorMessage={pane.errorMessage} emptyLabel={pane.emptyLabel}>
+          <DeskState state={pane.state} errorMessage={pane.errorMessage} emptyMessage={pane.emptyLabel}>
             <DeskChart bars={body.bars} symbol={body.symbol ?? ''} timeframe={body.timeframe} />
           </DeskState>
         </div>
