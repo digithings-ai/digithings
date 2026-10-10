@@ -1,0 +1,625 @@
+[
+ {
+  "tool": "digifetch_13f_funds",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "thirteen_f_funds",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_13f_holdings",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "thirteen_f_holdings",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_alert_add",
+  "entitlement": "session",
+  "tag": "cookie",
+  "method": "alert_add",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_alert_list",
+  "entitlement": "session",
+  "tag": "cookie",
+  "method": "alert_list",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_analyst_research",
+  "entitlement": "session",
+  "tag": "cookie",
+  "method": "analyst_research",
+  "method_gated": true
+ },
+ {
+  "tool": "digifetch_bond_calculator",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "bond_calculator",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_broker_positions",
+  "entitlement": "session",
+  "tag": "cookie",
+  "method": "broker_positions",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_cds",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "cds",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_cdx",
+  "entitlement": "session",
+  "tag": "cookie",
+  "method": "cdx",
+  "method_gated": true
+ },
+ {
+  "tool": "digifetch_central_bank_rates",
+  "entitlement": "session",
+  "tag": "cookie",
+  "method": "central_bank_rates",
+  "method_gated": true
+ },
+ {
+  "tool": "digifetch_compare_performance",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "compare_performance",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_congress_trades",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "congress_trades",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_corporate_actions",
+  "entitlement": "session",
+  "tag": "cookie",
+  "method": "corporate_actions",
+  "method_gated": true
+ },
+ {
+  "tool": "digifetch_correlation_matrix",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "correlation_matrix",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_cot",
+  "entitlement": "session",
+  "tag": "cookie",
+  "method": "cot",
+  "method_gated": true
+ },
+ {
+  "tool": "digifetch_crypto_markets",
+  "entitlement": "session",
+  "tag": "cookie",
+  "method": "crypto_markets",
+  "method_gated": true
+ },
+ {
+  "tool": "digifetch_custom_chart",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "custom_chart",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_debt_maturities",
+  "entitlement": "session",
+  "tag": "cookie",
+  "method": "debt_maturities",
+  "method_gated": true
+ },
+ {
+  "tool": "digifetch_dividend_yield",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "dividend_yield",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_earnings_calendar",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "earnings_calendar",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_econ_calendar",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "econ_calendar",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_econ_series",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "econ_series",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_equity_diagnostic",
+  "entitlement": "preview",
+  "tag": "cookie",
+  "method": "equity_diagnostic",
+  "method_gated": true
+ },
+ {
+  "tool": "digifetch_estimate_revisions",
+  "entitlement": "session",
+  "tag": "cookie",
+  "method": "estimate_revisions",
+  "method_gated": true
+ },
+ {
+  "tool": "digifetch_exchange_rate",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "exchange_rate",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_fear_greed",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "fear_greed",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_filing_events",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "filing_events",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_fundamental_graph",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "fundamental_graph",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_fx_cross_rates",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "fx_cross_rates",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_hacker_news",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "hacker_news",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_hiring",
+  "entitlement": "session",
+  "tag": "cookie",
+  "method": "hiring",
+  "method_gated": true
+ },
+ {
+  "tool": "digifetch_holders",
+  "entitlement": "session",
+  "tag": "cookie",
+  "method": "holders",
+  "method_gated": true
+ },
+ {
+  "tool": "digifetch_ibkr_execute_order",
+  "entitlement": "session",
+  "tag": "cookie",
+  "method": "ibkr_execute_order",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_ibkr_preview_order",
+  "entitlement": "session",
+  "tag": "cookie",
+  "method": "ibkr_preview_order",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_ipo_calendar",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "ipo_calendar",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_iv_history",
+  "entitlement": "session",
+  "tag": "cookie",
+  "method": "iv_history",
+  "method_gated": true
+ },
+ {
+  "tool": "digifetch_iv_screen",
+  "entitlement": "session",
+  "tag": "cookie",
+  "method": "iv_screen",
+  "method_gated": true
+ },
+ {
+  "tool": "digifetch_iv_surface",
+  "entitlement": "session",
+  "tag": "cookie",
+  "method": "iv_surface",
+  "method_gated": true
+ },
+ {
+  "tool": "digifetch_kelly_sizer",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "kelly_sizer",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_market_halts",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "market_halts",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_market_valuation",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "market_valuation",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_money_markets",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "money_markets",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_news",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "news",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_note_add",
+  "entitlement": "session",
+  "tag": "cookie",
+  "method": "note_add",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_options_calculator",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "options_calculator",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_options_chain",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "options_chain",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_options_flow",
+  "entitlement": "pro",
+  "tag": "cookie",
+  "method": "options_flow",
+  "method_gated": true
+ },
+ {
+  "tool": "digifetch_options_scenario",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "options_scenario",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_polls",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "polls",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_portfolio_add",
+  "entitlement": "session",
+  "tag": "cookie",
+  "method": "portfolio_add",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_portfolio_remove",
+  "entitlement": "session",
+  "tag": "cookie",
+  "method": "portfolio_remove",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_portfolio_view",
+  "entitlement": "session",
+  "tag": "cookie",
+  "method": "portfolio_view",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_prediction_markets",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "prediction_markets",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_price_history",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "price_history",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_proxy_statements",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "proxy_statements",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_quote",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "quote",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_quote_recap",
+  "entitlement": "session",
+  "tag": "cookie",
+  "method": "quote_recap",
+  "method_gated": true
+ },
+ {
+  "tool": "digifetch_quotes_batch",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "quotes_batch",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_rate_path",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "rate_path",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_relationship_graph",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "relationship_graph",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_relative_valuation",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "relative_valuation",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_research_search",
+  "entitlement": "session",
+  "tag": "cookie",
+  "method": "research_search",
+  "method_gated": true
+ },
+ {
+  "tool": "digifetch_risk_reports",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "risk_reports",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_saved_searches",
+  "entitlement": "session",
+  "tag": "cookie",
+  "method": "saved_searches",
+  "method_gated": true
+ },
+ {
+  "tool": "digifetch_screener",
+  "entitlement": "pro",
+  "tag": "cookie",
+  "method": "screener",
+  "method_gated": true
+ },
+ {
+  "tool": "digifetch_search",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "search",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_sec_filings",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "sec_filings",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_session_movers",
+  "entitlement": "session",
+  "tag": "cookie",
+  "method": "session_movers",
+  "method_gated": true
+ },
+ {
+  "tool": "digifetch_shiller",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "shiller",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_short_interest",
+  "entitlement": "session",
+  "tag": "cookie",
+  "method": "short_interest",
+  "method_gated": true
+ },
+ {
+  "tool": "digifetch_short_volume",
+  "entitlement": "session",
+  "tag": "cookie",
+  "method": "short_volume",
+  "method_gated": true
+ },
+ {
+  "tool": "digifetch_sovereign_cds",
+  "entitlement": "session",
+  "tag": "cookie",
+  "method": "sovereign_cds",
+  "method_gated": true
+ },
+ {
+  "tool": "digifetch_statements",
+  "entitlement": "session",
+  "tag": "cookie",
+  "method": "statements",
+  "method_gated": true
+ },
+ {
+  "tool": "digifetch_substack",
+  "entitlement": "venue_session",
+  "tag": "venue_session",
+  "method": "substack",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_thesis_add",
+  "entitlement": "session",
+  "tag": "cookie",
+  "method": "thesis_add",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_ticker_financials",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "ticker_financials",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_ticker_tweets",
+  "entitlement": "session",
+  "tag": "cookie",
+  "method": "ticker_tweets",
+  "method_gated": true
+ },
+ {
+  "tool": "digifetch_time_and_sales",
+  "entitlement": "session",
+  "tag": "cookie",
+  "method": "time_and_sales",
+  "method_gated": true
+ },
+ {
+  "tool": "digifetch_transcripts",
+  "entitlement": "pro",
+  "tag": "cookie",
+  "method": "transcripts",
+  "method_gated": true
+ },
+ {
+  "tool": "digifetch_treasury_auctions",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "treasury_auctions",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_trending",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "trending",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_tweet_search",
+  "entitlement": "session",
+  "tag": "cookie",
+  "method": "tweet_search",
+  "method_gated": true
+ },
+ {
+  "tool": "digifetch_valuation_graph",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "valuation_graph",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_venues",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "venues",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_view_add",
+  "entitlement": "session",
+  "tag": "cookie",
+  "method": "view_add",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_vix_term_structure",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "vix_term_structure",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_watchlist_add",
+  "entitlement": "session",
+  "tag": "cookie",
+  "method": "watchlist_add",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_watchlist_remove",
+  "entitlement": "session",
+  "tag": "cookie",
+  "method": "watchlist_remove",
+  "method_gated": false
+ },
+ {
+  "tool": "digifetch_yield_curve",
+  "entitlement": "free",
+  "tag": "public",
+  "method": "yield_curve",
+  "method_gated": false
+ }
+]
