@@ -135,7 +135,7 @@ def test_pro_tool_with_free_session_is_typed_pro_required(
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, text="Pro plan required")
 
-    _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test", enabled=True)
+    _patch_client(monkeypatch, handler, session_cookie="test-session=test", enabled=True)
     r = client.post(
         "/v1/orchestrator_invoke",
         json={"tool": "digifetch_transcripts", "arguments": {"ticker": "AAPL"}},
