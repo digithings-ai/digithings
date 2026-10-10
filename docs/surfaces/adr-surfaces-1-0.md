@@ -1,6 +1,6 @@
 # ADR: Surfaces 1.0 architecture
 
-- Status: accepted 2026-10-10 (board confirmation on DIG-2694). The public MCP hostname (D5) stays a human gate.
+- Status: accepted 2026-10-10 (board confirmation on DIG-2694). Amended 2026-10-10 with Chris's locked picks (DIG-2693 `surfaces-brief`): the Brief desk is the one digiquant app (D2), and the DigiChat devkit is TUI-first with a full CLI (D9). The public MCP hostname (D5) stays a human gate.
 - Date: 2026-10-10
 - Scope: DigiChat, digiquant, DigiVoice and the dashboard, on the TUI and the web.
 - Companion: [`parity-matrix.md`](parity-matrix.md). The matrix is the source of truth for scope; this ADR fixes the shape every row is built on.
@@ -13,7 +13,7 @@ Code-presence audit, not run-tested:
 - **Three TUIs, two OpenTUI flavours, one non-TUI.** `clients/digichat-tui`, `clients/digiquant-tui` and `clients/digichat-devkit` use `@opentui/react` 0.5.14 on Bun. `digivoice/tui` uses `@opentui/core` ^0.5.10 in plain JS. `digiquant/src/digiquant/cli/` is a Python argparse CLI. It is not a TUI and it is not a parity surface.
 - **Shared render models already work.** `clients/digichat-tui/src/wordmark.tsx` imports `packages/ui/src/components/chat/digichat-wordmark.ts`, which is the same cell model the web `DigichatWordmark.tsx` draws. The digiquant TUI tearsheet renders from the shared `finance-tearsheet` model. The pattern is proven. It is just not applied everywhere.
 - **The wordmark glyph table is copied four times:** `digivoice/tui/src/hero.js`, `clients/digiquant-tui/src/mark.ts`, `apps/digiquant-web/app/_chrome/QuantWordmark.tsx` and `apps/digithings-web/components/landing/PixelWordmark.tsx`, plus `digiquant-web/components/integrations/digivoice-wordmark.js`. They have the same 7x10 cells and different code.
-- **There are two digiquant web desks.** `apps/digiquant-web/app/app/*` imports the TUI catalog, so its pages match by construction. `apps/digiquant-app` (catch-all `[[...path]]`) hand-copies it in `lib/pages.ts` and `lib/nav.ts`, and it drifts (DIG-2700 audit: 1 block TUI-only, 23 web-only).
+- **There are two digiquant web desks.** `apps/digiquant-web/app/app/*` imports the TUI catalog, so its pages match by construction. `apps/digiquant-app` (catch-all `[[...path]]`) hand-copies it in `lib/pages.ts` and `lib/nav.ts`, and it drifts (DIG-2700 audit: 1 block TUI-only, 23 web-only). Resolved in D2: the desk stays, the terminal app folds into it.
 - **Fonts.** Five `app/fonts.ts` files. Four load `Inter` and `Geist_Mono`. The dashboard loads only `Geist_Mono`. `packages/design/tokens.css` already remaps `--font-sans` to the mono stack on themed surfaces, so on those surfaces `Inter` is loaded and never painted.
 - **Endpoints.** `DQ_API_URL ?? "http://127.0.0.1:8788"` is repeated in 8 TUI files. `DIGICHAT_DEVKIT_URL` defaults to `:3000`. The web apps each carry their own. The cloud hosts that exist today are `digithings.ai/api/chat*` and `/api/embed*` (`apps/digichat-cloudflare`), `graph.digithings.ai` and `key.digithings.ai` (`apps/digithings-stack-cloudflare`) and `dashboard-api.chris-stefan.workers.dev`. The dashboard-api `POST /mcp` (`apps/dashboard-api/src/mcp.ts`) is **local `wrangler dev` only**. Its header says that a public hostname is a human gate.
 - **Motion.** On the web: `--ease` / `--ease-glide` `cubic-bezier(0.22,1,0.36,1)` with a `linear()` twin, `--duration-hover` 0.18s, `--duration-reveal` 0.6s and `--duration-copied` 1.5s, plus a reduced-motion contract test (`packages/ui/src/styles/reduced-motion.contract.test.ts`). In the TUIs: literal numbers (spinner 80 ms, caret 530 ms, wordmark tick 40 ms, DigiVoice `BUILD_MS` 1400, desk clock 100 ms, welcome type-on 16 ms/char), and **no reduced-motion switch**. The only escape is `DIGICHAT_WORDMARK_MS`, which freezes one wordmark.
@@ -31,9 +31,11 @@ Code-presence audit, not run-tested:
 
 ### D2. Web layer: one web surface per product, and the catalog is the contract
 
-- Parity pairs: DigiChat TUI ↔ `apps/digichat`. digiquant TUI ↔ `apps/digiquant-app`. DigiVoice TUI ↔ none (TUI-only, with the web hero only on marketing). The dashboard is web-only, and it previews the others.
-- `apps/digiquant-web` is the marketing site. Its `/app/*` desk is a preview embed of the same catalog, not a second parity target.
-- **The digiquant page/block catalog has one copy.** Move `clients/digiquant-tui/src/catalog.ts` to `packages/ui` (or a `packages/digiquant-catalog`). The TUI, `digiquant-app` and `digiquant-web` all import it. `apps/digiquant-app/lib/pages.ts` and `lib/nav.ts` then derive from it. That removes the drift class instead of fixing rows one by one (DIG-2700).
+- Parity pairs: DigiChat TUI ↔ `apps/digichat`. digiquant TUI ↔ **the Brief desk** (`apps/digiquant-web` `/app/*`, pixel logo top-right, tiles). DigiVoice TUI ↔ none (TUI-only, with the web hero only on marketing). The dashboard is web-only, and it previews the others until it retires (below).
+- **The Brief desk is the one digiquant app** (locked by Chris, 2026-10-10). `apps/digiquant-web` serves the marketing site at `/` (the #4986 pixel-logo hero replaces the live digiquant.io landing) and the desk at `/app/*`. There is no second digiquant web app.
+- **`apps/digiquant-app` (the "terminal" web app) folds into the desk, then retires.** It is the same product. The desk takes over what only the terminal has: `/fx/*` (summary, ideas, rates, watch, settings), `/settings` and `/settings/paper`, and the desk access/tier ladder (including the twelve-x group lock). When those pages render on the desk with live data, `apps/digiquant-app` is deleted in its own PR. Nothing new is built on it in the meantime.
+- **`apps/dashboard` retires** once the Brief desk has live data. Until then it keeps the D7 previews; after that the desk is the operator surface.
+- **The digiquant page/block catalog has one copy.** Move `clients/digiquant-tui/src/catalog.ts` to `packages/ui` (or a `packages/digiquant-catalog`). The TUI and the desk both import it. The hand copies in `apps/digiquant-app/lib/pages.ts` and `lib/nav.ts` go away with that app, which removes the drift class instead of fixing rows one by one (DIG-2700).
 - The web keeps Next.js and the existing apps. No new framework.
 
 ### D3. Chat backend: the DigiChat BFF, for both TUIs (matrix C1, Q6)
@@ -75,7 +77,7 @@ Code-presence audit, not run-tested:
 
 ### D7. Dashboard previews: live iframes for web surfaces, recorded frames for TUIs
 
-- The web previews (DigiChat, digiquant-app) are iframes. Each origin is named exactly in `frame-src` (D5), and the change is approved as its own security PR.
+- The web previews (DigiChat, the Brief desk) are iframes. Each origin is named exactly in `frame-src` (D5), and the change is approved as its own security PR.
 - **TUI previews are not live sockets in 1.0.** The three TUIs are on different runtimes, and a live render needs a `connect-src` host and a server-side PTY. Instead, each TUI exports recorded frames with OpenTUI `captureCharFrame()` (already used in `clients/digiquant-tui` tests). The dashboard renders them as text in Geist Mono. This needs no CSP change, works offline and is safe for screenshots. A live TUI preview is a post-1.0 decision.
 
 ### D8. Gloomberb and LuxAlgo/Vela (matrix Q7)
@@ -83,8 +85,15 @@ Code-presence audit, not run-tested:
 - On the web: they stay behind their flags. Gloomberb is default-off since #5245. Featuring them waits on the DIG-2704 legal and vendor-terms review.
 - On the TUI: **link out, no text-mode re-implementation** in 1.0. The page shows its catalog entry, a one-line status and the web URL from `endpoint("desk")`. A text-mode chart is a separate, post-1.0 decision.
 
+### D9. DigiChat devkit: TUI-first, with a full CLI; web devkit is phase 2
+
+- `clients/digichat-devkit` is a **TUI** with the same look as the digiquant and DigiVoice TUIs (D1 foundation, shared wordmark and motion). It is for local deployment: configure an instance (sessions, UI theme/layout, tools, connectors, MCP servers, prompts, skills, tenant, invite link) and export it as a config file or a Docker setup that launches locally with all MCP tooling and APIs connected.
+- **Every TUI function has a CLI subcommand** in the same binary, so an agent or a human drives the same app: non-interactive flags, JSON output (`--json`), non-zero exit on failure. The TUI and the CLI call one command layer; the TUI holds no logic the CLI cannot reach.
+- Endpoints come from D5 (`endpoint("chat")`, `endpoint("mcp")`); the old `DIGICHAT_DEVKIT_URL` is an alias for one release.
+- **No web devkit in 1.0.** The web version (clients customize a chat and deploy it on a ~2-week trial tenant / Cloudflare Worker) is phase 2, on its own parked ticket.
+
 ## Consequences
 
-- DIG-2695 owns D4 and D6 (the fonts contract, `motion.json` and the TUI reduced-motion switch). DIG-2703 owns D5. DIG-2700 owns the catalog move in D2. DIG-2699 owns D3. DIG-2698 owns D7 and the exact-origin CSP PR. DIG-2702 builds on the shared wordmark model (D1) and the motion tokens (D6). DIG-2704 owns D8.
-- Rejected: one web terminal render for all TUIs (three runtimes, CSP cost). A shared `fonts.ts` import (`next/font` needs literal options). Keeping the runner as the DigiChat TUI backend (it duplicates BYOK, MCP and attachments). A CSS-first motion source (TUIs cannot read CSS).
-- Open, not decided here: whether `apps/digiquant-web` `/app/*` is eventually removed in favour of linking to `digiquant-app` (CTO). The public MCP hostname (Chris, human gate).
+- DIG-2695 owns D4 and D6 (the fonts contract, `motion.json` and the TUI reduced-motion switch). DIG-2703 owns D5. DIG-2700 owns the catalog move in D2 and the digiquant TUI ↔ desk parity. The fold of `apps/digiquant-app` into the desk and its retirement are Claude-bench slices on DIG-2693. DIG-2699 owns D3. DIG-2698 owns D7 and the exact-origin CSP PR. DIG-2702 builds on the shared wordmark model (D1) and the motion tokens (D6). DIG-2704 owns D8. DIG-2696 owns D9.
+- Rejected: one web terminal render for all TUIs (three runtimes, CSP cost). A shared `fonts.ts` import (`next/font` needs literal options). Keeping the runner as the DigiChat TUI backend (it duplicates BYOK, MCP and attachments). A CSS-first motion source (TUIs cannot read CSS). Keeping `apps/digiquant-app` as a second digiquant web app (it duplicates the desk and its catalog drifts). A web devkit in 1.0 (phase 2).
+- Open, not decided here: the public MCP hostname (Chris, human gate).

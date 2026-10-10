@@ -20,17 +20,17 @@ Source of truth for Surfaces 1.0 scope (DIG-2693). Architecture: [`adr-surfaces-
 | C7 | Settings (lang, view, thinking, effort, search) | yes (palette) | yes (session-prefs) | `chat` | — | check against the web prefs schema | DIG-2699 |
 | C8 | Charts (echarts, quant strip) | none | yes | `chat` | — | "open in web" link. ASCII render may slip | DIG-2699 |
 | C9 | Voice | n/a ("not available in the terminal") | 1 reference | — | — | n/a by design: DigiVoice owns voice | — |
-| C10 | Tenant, embed config, auth | none | yes (`/api/embed/tenant-config`, NextAuth) | `chat` | — | dev-env builder | DIG-2696 |
+| C10 | Tenant, embed config, auth | none | yes (`/api/embed/tenant-config`, NextAuth) | `chat` | — | devkit: TUI + full CLI (ADR D9); web devkit is phase 2 | DIG-2696 |
 | C11 | Export, `@` mentions, `/` palette | yes | yes | — | — | probably equal; check | DIG-2699 |
 | C12 | Wordmark/hero, font | truecolor wordmark (shared `digichat-wordmark.ts`) | Geist Mono via `fonts.ts` | — | — | shared tokens + banner | DIG-2695, DIG-2702 |
 
-## 2. digiquant: `clients/digiquant-tui` ↔ `apps/digiquant-app`
+## 2. digiquant: `clients/digiquant-tui` ↔ the Brief desk (`apps/digiquant-web` `/app/*`)
 
-`apps/digiquant-web` is the marketing site. Its `/app/*` desk imports the TUI catalog and is a preview, not a parity target (ADR D2). The root fix for drift is the single catalog in ADR D2. DIG-2700's audit (document `digiquant-parity-audit`) has the per-block detail.
+The Brief desk is the one digiquant app (ADR D2, locked 2026-10-10). The Web column below was audited on `apps/digiquant-app`, which folds into the desk and then retires: every `yes` there that the desk lacks is a carry-over for the desk (`/fx/*`, `/settings`, `/settings/paper`, the access/tier ladder). The root fix for drift is the single catalog in ADR D2. DIG-2700's audit (document `digiquant-parity-audit`) has the per-block detail.
 
-| # | Page / feature | TUI | Web (`digiquant-app`) | Data / API | MCP | Gap | Owner ticket |
+| # | Page / feature | TUI | Web (audited on `digiquant-app`; target: the desk) | Data / API | MCP | Gap | Owner ticket |
 |---|---|---|---|---|---|---|---|
-| Q0 | Page/block catalog | `src/catalog.ts` | hand copy in `lib/pages.ts`, `lib/nav.ts` | — | — | one catalog, imported by all (ADR D2) | DIG-2700 |
+| Q0 | Page/block catalog | `src/catalog.ts` | desk imports it; `digiquant-app` hand copy in `lib/pages.ts`, `lib/nav.ts` | — | — | one catalog for TUI + desk; hand copy retires with the app (ADR D2) | DIG-2700 |
 | Q1 | Brief | yes (`brief.tsx`) | yes | `desk` | `mcp` brief tool | check that the blocks match | DIG-2700 |
 | Q2 | Portfolio, holdings, attribution, ledger, theses, tearsheet | yes (#5047: as-of, staleness) | yes | `desk` | `mcp` per route | check that the blocks match | DIG-2700 |
 | Q2b | Performance page | yes (`/performance`) | none | `desk` | `mcp` | add to the web | DIG-2700 |
@@ -62,7 +62,7 @@ Source of truth for Surfaces 1.0 scope (DIG-2693). Architecture: [`adr-surfaces-
 
 ## 4. Dashboard: `apps/dashboard` (web-only)
 
-The dashboard has no TUI. Its parity question is real data (DIG-2697) and previews of the other surfaces (DIG-2698).
+The dashboard has no TUI. Its parity question is real data (DIG-2697) and previews of the other surfaces (DIG-2698). It retires once the Brief desk has live data (ADR D2).
 
 | # | Page / feature | TUI | Web | Data / API | MCP | Gap | Owner ticket |
 |---|---|---|---|---|---|---|---|
@@ -73,7 +73,7 @@ The dashboard has no TUI. Its parity question is real data (DIG-2697) and previe
 | D5 | Settings, broker callback | n/a | yes | Supabase | — | real data | DIG-2697 |
 | D6 | Auth (login, signup, callback, invite) | n/a | yes | Supabase auth | — | — | DIG-2697 |
 | D7 | DigiChat popup | n/a | yes (`digichat-popup.ts`; `frame-src` allows `digichat.digithings.ai`, `:3005`) | `chat` | — | align the local port with the profile (ADR D5) | DIG-2703 |
-| D8 | Live preview: DigiChat, digiquant-app | n/a | none | iframe | — | exact-origin `frame-src` PR, its own security review (ADR D7) | DIG-2698 |
+| D8 | Live preview: DigiChat, the Brief desk | n/a | none | iframe | — | exact-origin `frame-src` PR, its own security review (ADR D7) | DIG-2698 |
 | D9 | Live preview: TUIs | n/a | none | recorded `captureCharFrame()` frames | — | no live socket in 1.0 (ADR D7) | DIG-2698 |
 | D10 | Mark, Gloomberb mark, font | n/a | `dashboard-mark.tsx`, `gloomberb-mark.tsx`; Geist Mono only (canonical `fonts.ts`) | — | — | shared wordmark model; the dashboard's `fonts.ts` is the canonical file (ADR D4) | DIG-2695, DIG-2702 |
 
