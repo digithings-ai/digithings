@@ -15,6 +15,7 @@ import polars as pl
 import pytest
 from digiquant.backtest import run_backtest
 from digiquant.data.loader import generate_synthetic_ohlcv
+from digiquant.nautilus_runner import RETURNS_SERIES_MISSING
 from digiquant.strategies import get_strategy, list_strategies
 
 from tests.dq.conftest import SKIP_NATIVE_CRASH
@@ -102,7 +103,21 @@ class TestStrategyBacktestSmoke:
                 data_dir=tmp,
             )
         assert result is not None
-        assert result.status == "ok"
+        # Partial is the expected status here. Two causes, both known: the pinned
+        # nautilus_trader's returns() alias cannot be confirmed against
+        # portfolio_returns(), so the chart series is withheld rather than charted;
+        # and rsi_momentum (1 trade) and bollinger_mr (0 trades) have too few balance
+        # rows for a Sharpe, which is the pre-existing partial cause. Nothing else may
+        # appear on the list.
+        assert result.status == "partial"
+        assert RETURNS_SERIES_MISSING in result.missing
+        assert set(result.missing) <= {RETURNS_SERIES_MISSING, "sharpe_ratio"}, (
+            f"{strategy_name} lost something else: {result.missing}"
+        )
+        # missing names the metrics that really are absent — asserted both ways so a
+        # run cannot claim a metric it dropped, or drop one it did not.
+        assert ("sharpe_ratio" in result.missing) == (result.sharpe_ratio is None)
+        assert result.success
 
     def test_ema_cross_smoke(self) -> None:
         self._run_smoke("ema_cross")

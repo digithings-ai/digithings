@@ -6,10 +6,24 @@ Internal structure
 ------------------
 _prepare_bar_data      — Polars OHLCV -> pandas + Nautilus BarType + bars list
 _build_engine          — configure BacktestEngine with venue/instrument/data/strategy
+_account_balance_path  — whole account report -> (balance series, timestamps)
+_balance_path_metrics  — Sharpe + max drawdown from that balance series
 _extract_pnl           — parse account report -> (total_pnl, total_return_pct)
-_extract_perf_stats    — pull Sharpe, max-drawdown, series from portfolio analyzer
+_extract_perf_stats    — balance-path Sharpe/drawdown + verified returns series
 _build_result          — assemble BacktestResult from raw engine outputs
 _run_backtest_ohlcv    — orchestrates the above; writes tearsheet if requested
+
+Sharpe and max drawdown come from the account-report balance path, NOT from the
+portfolio analyzer: ``analyzer.returns()`` holds one observation per *closed
+position*, so annualising it by 252 trading days produced numbers like -76 Sharpe
+and -76% drawdown next to a -3.1% total return. The balance path already in hand
+is the equity curve, and deriving all three metrics from it makes them mutually
+consistent by construction.
+
+The returns *series* the tearsheet charts are read from that same alias, so it is
+verified rather than trusted: ``_verified_returns_series`` only publishes it when it
+matches ``analyzer.portfolio_returns()``, and withholds it otherwise. See that
+function for why the alias cannot be believed on its own.
 """
 
 from __future__ import annotations
@@ -50,6 +64,32 @@ BACKTEST_RESULTS_DIR = "backtest_results"
 # Venue starting cash. Single source of truth for sizing + PnL baseline.
 STARTING_BALANCE_USD = 1_000_000.0
 
+# Balance columns in precedence order: first column present with a non-null cell wins.
+BALANCE_COLUMNS = ("total", "balance", "equity")
+
+# Timestamp column names to look for after pl.from_pandas() has folded a *named*
+# pandas index into a column. The Nautilus account report index is unnamed, so this
+# is a runtime fallback, never an assumption.
+_ACCOUNT_TIMESTAMP_COLUMNS = ("ts_event", "timestamp", "index")
+
+# 365.25 days in seconds — the year length used to annualise the balance path.
+_YEAR_SECONDS = 365.25 * 86400.0
+
+# Marker appended to ``missing`` when ``analyzer.returns()`` cannot be confirmed to be
+# the portfolio return series. Tracked separately from the metric markers because a
+# missing *chart* series must not cost a symbol its place in a multi-symbol aggregate
+# (see _degraded_symbol_reason): the aggregates use no series at all.
+RETURNS_SERIES_MISSING = "returns_series"
+
+# Marker prefix for the per-symbol accounting inside a multi-symbol aggregate, matching
+# the existing "sharpe_ratio (k/n symbols)" wording already emitted by that function.
+RETURNS_SERIES_MISSING_SYMBOLS = f"{RETURNS_SERIES_MISSING} ("
+
+# Elementwise tolerance for the alias-vs-portfolio comparison. The two series are the
+# same objects when the alias is in sync, so the only differences seen in practice are
+# float round-trips; anything larger than this is a genuinely different series.
+_SERIES_MATCH_TOLERANCE = 1e-12
+
 # Default position size, as a fraction of starting balance, expressed in notional.
 # trade_size (units) = floor(STARTING_BALANCE_USD * fraction / first_price), min 1.
 # Notional-based so a fixed unit count doesn't over-leverage high-priced instruments
@@ -57,6 +97,20 @@ STARTING_BALANCE_USD = 1_000_000.0
 # AccountBalanceNegative after a handful of bars). 2% of $1M ≈ 1 BTC at ~$13.6k, a
 # size known to complete the full BTC-USD run.
 DEFAULT_NOTIONAL_FRACTION = 0.02
+
+# Drawdown invariant, stated for tests and reviewers. Given a balance path that
+# starts at STARTING_BALANCE_USD, the worst peak-to-trough fall can never be milder
+# than the end-state loss: |dd| <= |total_return_pct| whenever the peak IS the
+# starting balance (the path never rose above its start), and in the general case
+# the weaker but unconditional bound is dd <= total_return_pct.
+#
+# The CTO brief proposed |dd| <= |total_return_pct| unconditionally. That is false
+# for its own golden AAPL row (max_dd -5.11 against total_return_pct -3.10): once the
+# account trades up, the peak exceeds the start and the trough-to-peak fall is
+# legitimately larger than the start-to-end loss. The unconditional bound used in
+# the regression tests is dd <= total_return_pct, which still forbids the original
+# -76.53% drawdown beside a -3.10% return.
+DRAWDOWN_NOT_MILDER_THAN_END_LOSS = "dd <= total_return_pct"
 
 
 def _default_trade_size(first_price: float, balance: float, fraction: float) -> Decimal:
@@ -274,12 +328,168 @@ def _build_engine(
     return engine
 
 
+def _to_float(value: Any) -> float | None:
+    """Parse one account-report cell into a float, or ``None`` when unusable.
+
+    Nautilus emits the account total either as a number or as ``"1000000.00 USD"``;
+    a leading ``1.05e6 USD`` form is also accepted.
+    """
+    if value is None:
+        return None
+    if isinstance(value, str):
+        parts = value.strip().split()
+        if not parts:
+            return None
+        try:
+            return float(parts[0])
+        except ValueError:
+            return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return None if math.isnan(parsed) else parsed
+
+
+def _account_timestamps(account_report: Any, df: pl.DataFrame) -> list[float] | None:
+    """Epoch seconds for each report row, or ``None`` when no usable index exists.
+
+    ``pl.from_pandas`` keeps a *named* pandas index as a column and drops an unnamed
+    one. The Nautilus account report index is unnamed, so the fallback reads the
+    pandas index directly rather than guessing a column name.
+    """
+    index = getattr(account_report, "index", None)
+    index_name = getattr(index, "name", None)
+    values: list[Any] | None = None
+    if isinstance(index_name, str) and index_name in df.columns:
+        values = df.get_column(index_name).to_list()
+    elif index is not None and len(index) == df.height:
+        values = list(index)
+    else:
+        for candidate in _ACCOUNT_TIMESTAMP_COLUMNS:
+            if candidate in df.columns:
+                values = df.get_column(candidate).to_list()
+                break
+    if values is None:
+        return None
+    seconds: list[float] = []
+    for value in values:
+        if isinstance(value, datetime):
+            # Naive timestamps are read as UTC; only differences are used downstream.
+            seconds.append(
+                (value if value.tzinfo else value.replace(tzinfo=timezone.utc)).timestamp()
+            )
+        elif isinstance(value, bool):
+            return None
+        elif isinstance(value, int | float) and not math.isnan(float(value)):
+            # A bare RangeIndex carries no elapsed time: annualising on it is wrong.
+            return None
+        else:
+            return None
+    return seconds
+
+
+def _account_balance_path(account_report: Any) -> tuple[list[float], list[float] | None]:
+    """Read the *whole* account-report balance path: ``(balances, epoch_seconds)``.
+
+    ``epoch_seconds`` is ``None`` when the report carries no usable timestamps, which
+    leaves the annualised Sharpe ``None`` while still allowing max drawdown. Rows
+    whose balance cell cannot be parsed are dropped from both lists.
+    """
+    if account_report is None:
+        return [], None
+    try:
+        df = pl.from_pandas(account_report)
+    except _PNL_PARSE_ERRORS:
+        return [], None
+    column = next((name for name in BALANCE_COLUMNS if name in df.columns), None)
+    if column is None:
+        return [], None
+    stamps = _account_timestamps(account_report, df)
+    balances: list[float] = []
+    seconds: list[float] = []
+    for row, cell in enumerate(df.get_column(column).to_list()):
+        value = _to_float(cell)
+        if value is None:
+            continue
+        balances.append(value)
+        if stamps is not None and row < len(stamps):
+            seconds.append(stamps[row])
+    if not balances:
+        return [], None
+    if stamps is None or len(seconds) != len(balances):
+        return balances, None
+    return balances, seconds
+
+
+def _sharpe_from_balance_path(balances: list[float], seconds: list[float] | None) -> float | None:
+    """Annualised Sharpe of the balance path, risk-free rate 0.
+
+    ``mean(returns) / stdev(returns) * sqrt(n_returns / years)``. The scaler is the
+    observation count over elapsed years and deliberately *not* ``sqrt(252)``: the
+    balance path has one observation per fill, so it is irregular in time and a
+    trading-day scaler would misstate it by an order of magnitude.
+
+    Returns ``None`` whenever the value is undefined — fewer than two returns, no
+    timestamps, non-positive elapsed time, or zero dispersion — instead of a
+    fabricated 0.0.
+    """
+    if seconds is None or len(balances) < 3:
+        return None
+    returns: list[float] = []
+    for previous, current in zip(balances, balances[1:]):
+        if previous == 0:
+            return None
+        returns.append((current - previous) / previous)
+    years = (seconds[-1] - seconds[0]) / _YEAR_SECONDS
+    if years <= 0:
+        return None
+    mean = sum(returns) / len(returns)
+    # Sample standard deviation (ddof=1), matching the convention the golden values
+    # were measured with.
+    variance = sum((value - mean) ** 2 for value in returns) / (len(returns) - 1)
+    if variance <= 0:
+        return None
+    return mean / math.sqrt(variance) * math.sqrt(len(returns) / years)
+
+
+def _max_drawdown_from_balance_path(balances: list[float]) -> float | None:
+    """Worst peak-to-trough fall of the balance path as a negative percent.
+
+    ``min((bal - cummax(bal)) / cummax(bal)) * 100``. ``None`` only when there is no
+    balance path at all; a flat or single-row path legitimately draws down 0.0.
+    """
+    if not balances:
+        return None
+    peak = balances[0]
+    worst = 0.0
+    for value in balances:
+        peak = max(peak, value)
+        if peak > 0:
+            worst = min(worst, (value - peak) / peak)
+    return normalize_drawdown_pct(worst * 100.0)
+
+
+def _balance_path_metrics(account_report: Any) -> dict[str, float | None]:
+    """Sharpe and max drawdown derived from the account-report balance path.
+
+    The single source of truth for both metrics, so ``total_return_pct`` (the change
+    of the final balance), ``max_drawdown_pct`` and ``sharpe_ratio`` cannot disagree.
+    """
+    balances, seconds = _account_balance_path(account_report)
+    return {
+        "sharpe": _sharpe_from_balance_path(balances, seconds),
+        "max_dd": _max_drawdown_from_balance_path(balances),
+    }
+
+
 def _extract_pnl(account_report: Any, errors: list[str] | None = None) -> tuple[float, float]:
     """Parse Nautilus account report -> (total_pnl, total_return_pct).
 
-    Returns (0.0, 0.0) when the report cannot be parsed. Any failure message is
-    appended to ``errors`` so callers can surface an error status rather than a
-    fabricated zero-PnL success.
+    Reads the final balance only; ``_balance_path_metrics`` derives Sharpe and max
+    drawdown from the same series. Returns (0.0, 0.0) when the report cannot be
+    parsed. Any failure message is appended to ``errors`` so callers can surface an
+    error status rather than a fabricated zero-PnL success.
     """
 
     def _fail(msg: str) -> tuple[float, float]:
@@ -296,28 +506,107 @@ def _extract_pnl(account_report: Any, errors: list[str] | None = None) -> tuple[
             return _fail("PnL extraction failed: account report is empty")
         last_row = df.row(-1, named=True)
         initial = STARTING_BALANCE_USD
-        raw_balance = None
-        for col_name in ("total", "balance", "equity"):
+        final_balance = None
+        for col_name in BALANCE_COLUMNS:
             if col_name in last_row and last_row[col_name] is not None:
-                raw_balance = last_row[col_name]
+                final_balance = _to_float(last_row[col_name])
                 break
-        if raw_balance is None:
+        if final_balance is None:
             return _fail(
-                "PnL extraction failed: no recognised balance column in %s" % list(last_row.keys())
+                "PnL extraction failed: no usable balance column in %s" % list(last_row.keys())
             )
-        # Nautilus may return "1000000.00 USD" or a numeric value
-        if isinstance(raw_balance, str):
-            final_balance = float(raw_balance.strip().split()[0])
-        else:
-            final_balance = float(raw_balance)
         total_pnl = final_balance - initial
         return total_pnl, (total_pnl / initial) * 100.0
     except _PNL_PARSE_ERRORS as e:
         return _fail(f"PnL extraction failed: {e}")
 
 
-def _extract_perf_stats(engine: Any, USD: Any) -> dict[str, Any]:
-    """Extract Sharpe, max-drawdown and raw series from the portfolio analyzer.
+def _series_is_portfolio_returns(alias: Any, portfolio: Any) -> bool:
+    """True only when ``alias`` *is* the portfolio series, value for value.
+
+    Length alone proves nothing: a per-position series can match the portfolio one
+    in length by coincidence. Index and dtype are ignored on purpose — only the
+    ordered values decide what the charts would draw.
+    """
+    if alias is None or portfolio is None:
+        return False
+    try:
+        if len(alias) == 0 or len(alias) != len(portfolio):
+            return False
+        left = [float(v) for v in alias]
+        right = [float(v) for v in portfolio]
+    except (TypeError, ValueError):
+        return False
+    for a, b in zip(left, right):
+        if math.isnan(a) and math.isnan(b):
+            continue
+        if abs(a - b) > _SERIES_MATCH_TOLERANCE:
+            return False
+    return True
+
+
+def _verified_returns_series(analyzer: Any) -> tuple[Any, str | None]:
+    """The analyzer returns series worth publishing, and why it was withheld.
+
+    ``analyzer.returns()`` is an *alias*, not the portfolio series. Where Nautilus
+    exposes ``_sync_returns_alias``, it repoints ``_returns`` at the portfolio
+    returns when those are non-empty and otherwise at the per-position returns —
+    silently, with no warning. DigiQuant never calls ``analyze_statistics``, so the
+    portfolio series is populated only by Nautilus' own post-run venue loop, and it
+    is empty whenever ``_calculate_portfolio_returns`` sees fewer than two account
+    state events, more than one balance currency on any event, a currency change
+    between events, or fewer than two distinct calendar days of balance data.
+
+    Publishing the fallback is how ``charts/equity.py`` came to compound a
+    per-position series as ``(1 + r).cum_prod() * initial_balance`` under a
+    ``Daily Equity`` label: roughly -78% compounded next to a real final balance of
+    968,989.60 on 1,000,000. So the alias is compared against
+    ``portfolio_returns()`` and anything that cannot be confirmed is withheld.
+
+    Three separate ways to fail, all refused, because all three leave the alias
+    indistinguishable from a per-position series: no ``portfolio_returns`` to
+    compare against (nautilus_trader below the release that added it — including
+    the 1.223.0 pin), an empty portfolio series (the silent fallback), or values
+    that differ. Building a correct daily series instead is DIG-1834's job; here a
+    blank chart is honest and a wrong curve is not.
+    """
+    if not hasattr(analyzer, "portfolio_returns"):
+        return None, (
+            f"analyzer has no portfolio_returns() to confirm the alias against "
+            f"(nautilus_trader {getattr(analyzer, '__class__', type(analyzer)).__module__})"
+        )
+    try:
+        portfolio = analyzer.portfolio_returns()
+    except _ANALYZER_ERRORS as e:
+        return None, f"portfolio_returns() failed: {e}"
+    if portfolio is None or len(portfolio) == 0:
+        return None, "portfolio_returns() is empty, so returns() is the per-position fallback"
+    alias = analyzer.returns()
+    if not _series_is_portfolio_returns(alias, portfolio):
+        return None, (
+            f"returns() has {0 if alias is None else len(alias)} values against "
+            f"{len(portfolio)} in portfolio_returns() and does not match them"
+        )
+    return alias, None
+
+
+def _extract_perf_stats(
+    engine: Any,
+    USD: Any,
+    account_report: Any = None,
+) -> dict[str, Any]:
+    """Sharpe and max drawdown from the balance path, series only when verified.
+
+    ``sharpe`` and ``max_dd`` are derived from ``account_report``'s balance path by
+    ``_balance_path_metrics``. The analyzer is read for the series the tearsheet
+    renders, but never for a metric: its returns are per closed position, not an
+    equity curve.
+
+    ``returns_series`` is published only when ``_verified_returns_series`` can
+    confirm it against ``analyzer.portfolio_returns()``. An alias that cannot be
+    confirmed is withheld rather than drawn, and ``RETURNS_SERIES_MISSING`` is
+    appended to ``missing`` so the result lands ``partial`` instead of advertising a
+    chart it cannot stand behind.
 
     ``errors`` records analyzer/parse failures and ``missing`` names metrics that
     remained ``None``, so callers can mark a result ``partial`` instead of
@@ -334,54 +623,23 @@ def _extract_perf_stats(engine: Any, USD: Any) -> dict[str, Any]:
         "errors": [],
         "missing": [],
     }
+    result.update(_balance_path_metrics(account_report))
     try:
         analyzer = engine.portfolio.analyzer
-        stats_returns = analyzer.get_performance_stats_returns()
-        result["stats_returns"] = stats_returns
-        if stats_returns:
-            raw = stats_returns.get("Sharpe Ratio (252 days)")
-            if raw is not None:
-                v = float(raw)
-                result["sharpe"] = v if not math.isnan(v) else None
-
-        stats_pnls = analyzer.get_performance_stats_pnls()
-        result["stats_pnls"] = stats_pnls
-        if stats_pnls:
-            dd = None
-            for key in ("Max Drawdown %", "Max Drawdown"):
-                if stats_pnls.get(key) is not None:
-                    dd = stats_pnls[key]
-                    break
-            if dd is not None:
-                v = float(dd)
-                normalized = normalize_drawdown_pct(v if not math.isnan(v) else None)
-                result["max_dd"] = normalized
-
+        result["stats_returns"] = analyzer.get_performance_stats_returns()
+        result["stats_pnls"] = analyzer.get_performance_stats_pnls()
         if hasattr(analyzer, "get_performance_stats_general"):
             result["stats_general"] = analyzer.get_performance_stats_general()
-
         if hasattr(analyzer, "returns"):
-            result["returns_series"] = analyzer.returns()
-
+            series, refusal = _verified_returns_series(analyzer)
+            if series is None:
+                logger.warning("Withholding returns series: %s", refusal)
+                result["missing"].append(RETURNS_SERIES_MISSING)
+            else:
+                result["returns_series"] = series
         if hasattr(analyzer, "realized_pnls"):
             rp = analyzer.realized_pnls(USD)
             result["realized_pnls_series"] = rp if rp is not None and len(rp) > 0 else None
-
-        # Fallback max-drawdown from returns series
-        if (
-            result["max_dd"] is None
-            and result["returns_series"] is not None
-            and len(result["returns_series"]) > 0
-        ):
-            try:
-                cum = (1 + result["returns_series"]).cumprod()
-                peak = cum.cummax()
-                dd_pct = (peak - cum) / peak.replace(0, 1) * 100
-                result["max_dd"] = normalize_drawdown_pct(
-                    float(dd_pct.max()) if not dd_pct.empty else None
-                )
-            except _PNL_PARSE_ERRORS as e:
-                logger.debug("Failed to compute max drawdown from returns series: %s", e)
     except _ANALYZER_ERRORS as e:
         logger.warning("Failed to extract performance stats from Nautilus analyzer: %s", e)
         result["errors"].append(f"performance stats unavailable: {e}")
@@ -455,6 +713,7 @@ def _build_result(
         sharpe_ratio=perf["sharpe"],
         max_drawdown_pct=normalize_drawdown_pct(perf["max_dd"]),
         num_trades=num_trades,
+        missing=missing,
         status=status,
         message=message,
     )
@@ -521,7 +780,7 @@ def _run_backtest_ohlcv(
 
     pnl_errors: list[str] = []
     total_pnl, total_return_pct = _extract_pnl(account_report, errors=pnl_errors)
-    perf = _extract_perf_stats(engine, USD)
+    perf = _extract_perf_stats(engine, USD, account_report)
 
     engine.dispose()
 
@@ -567,6 +826,27 @@ def _run_backtest_ohlcv(
     return bt_result
 
 
+def _degraded_symbol_reason(result: BacktestResult) -> str | None:
+    """Why this symbol cannot be averaged in, or ``None`` when it can be.
+
+    The aggregates use PnL, total return, Sharpe, drawdown and the trade count. A
+    withheld returns series is none of those, so a symbol that is ``partial``
+    *only* because ``RETURNS_SERIES_MISSING`` is present still has honest numbers to
+    contribute and stays in. Excluding it would drop real trades from every average
+    to avoid a chart that is not drawn here anyway (multi-symbol tearsheets are
+    skipped), and because the refusal fires on every run under the pinned
+    nautilus_trader, excluding on it would empty the aggregate entirely.
+
+    Every other reason still excludes: a partial missing a real metric, or any
+    error. That is unchanged behaviour.
+    """
+    if result.status == "ok":
+        return None
+    if result.status == "partial" and set(result.missing) == {RETURNS_SERIES_MISSING}:
+        return None
+    return result.status
+
+
 def _run_multi_symbol_backtest(
     symbol_dfs: dict[str, pl.DataFrame],
     strategy_name: str,
@@ -585,7 +865,9 @@ def _run_multi_symbol_backtest(
 
     Symbols whose backtest failed (``None`` or ``status="error"``) are never
     silently averaged in as fabricated zeros; they are named and the result is
-    marked ``partial``.
+    marked ``partial``. A symbol ``partial`` only because its returns series was
+    withheld is still averaged in — see ``_degraded_symbol_reason`` — and counted
+    under ``missing`` so the reader can see the charts were not drawn.
     """
     per_symbol_pnl: dict[str, float] = {}
     per_symbol_return: dict[str, float] = {}
@@ -593,6 +875,7 @@ def _run_multi_symbol_backtest(
     per_symbol_max_dd: dict[str, float] = {}
     skipped_symbols: list[str] = [s for s in symbols if s not in symbol_dfs]
     degraded_symbols: list[str] = []
+    withheld_series_symbols: list[str] = []
     num_trades_total = 0
     combined_run_id = f"multi-{uuid.uuid4().hex[:8]}"
     start_time: str | None = None
@@ -612,14 +895,17 @@ def _run_multi_symbol_backtest(
             logger.warning("Multi-symbol: backtest returned None for symbol %s — skipping", sym)
             skipped_symbols.append(sym)
             continue
-        if result.status != "ok":
+        degraded = _degraded_symbol_reason(result)
+        if degraded is not None:
             logger.warning(
                 "Multi-symbol: backtest status=%s for symbol %s — excluding from aggregates",
-                result.status,
+                degraded,
                 sym,
             )
-            degraded_symbols.append(f"{sym} ({result.status})")
+            degraded_symbols.append(f"{sym} ({degraded})")
             continue
+        if RETURNS_SERIES_MISSING in result.missing:
+            withheld_series_symbols.append(sym)
         per_symbol_pnl[sym] = result.total_pnl
         per_symbol_return[sym] = result.total_return_pct
         if result.sharpe_ratio is not None:
@@ -652,6 +938,10 @@ def _run_multi_symbol_backtest(
         missing.append("max_drawdown_pct")
     elif len(per_symbol_max_dd) < n:
         missing.append(f"max_drawdown_pct ({len(per_symbol_max_dd)}/{n} symbols)")
+    if withheld_series_symbols:
+        missing.append(
+            f"{RETURNS_SERIES_MISSING_SYMBOLS}{len(withheld_series_symbols)}/{n} symbols)"
+        )
 
     status = "partial" if (skipped_symbols or degraded_symbols or missing) else "ok"
 
@@ -685,6 +975,7 @@ def _run_multi_symbol_backtest(
         max_drawdown_pct=normalize_drawdown_pct(worst_dd),
         num_trades=num_trades_total,
         per_symbol_pnl={k: round(v, 4) for k, v in per_symbol_pnl.items()},
+        missing=missing,
         status=status,
         message=" ".join(message_bits),
     )
