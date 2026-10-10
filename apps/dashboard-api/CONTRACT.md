@@ -163,15 +163,19 @@ Response `data`:
 
 ```json
 {
-  "book_as_of": "2026-09-24",
-  "invested_pct": 35.13,
-  "cash_pct": 64.87,
+  "book_as_of": "2026-09-28",
+  "invested_pct": 83.6,
+  "cash_pct": 16.4,
   "invested_definition": "accounting_nav_tip",
   "rows": [
     {
       "ticker": "DBO",
-      "weight_pct": 5.0031,
-      "scaled_weight_pct": 5.0031,
+      "weight_pct": 10.0,
+      "scaled_weight_pct": 23.8857,
+      "positions_weight_pct": 4.7194,
+      "weight_source": "ledger",
+      "ledger_weight_pct": 10.0,
+      "weight_drift_pp": -5.2806,
       "entry_price": 22.14,
       "current_price": null,
       "unrealized_pct": null,
@@ -179,9 +183,29 @@ Response `data`:
       "marks_as_of": null
     }
   ],
-  "marks_unstamped": true
+  "marks_unstamped": true,
+  "ledger_as_of": "2026-09-25",
+  "weights_reconciled": 3,
+  "weights_drifted": 3,
+  "ledger_conflicts": []
 }
 ```
+
+`weight_pct` vs `scaled_weight_pct` (DIG-2803) — two different quantities,
+both on the wire:
+
+- `weight_pct` is the row's own book weight as a % of NAV: the `position_events`
+  target where the ledger covers the ticker, else `positions.weight_pct`.
+- `scaled_weight_pct` is that weight laid inside the §6.1 envelope:
+  `weight_pct * (invested / heldSum)`. When `invested` comes from the NAV tip
+  rather than the book, the two differ by a factor (`scale`), and the factor is
+  large when the committed book's weights do not sum to `invested`.
+
+`positions_weight_pct` always preserves the raw `positions.weight_pct` that
+would have been used before DIG-2803, and `weight_drift_pp` is
+`positions_weight_pct - weight_pct` in percentage points (null when the ledger
+does not cover the ticker). Anchoring to the ledger therefore never hides the
+positions value: both are always reported.
 
 Rules: rows scale into the §6.1 envelope (`invested = min(100,
 investedPct ?? heldSum)`, CASH excluded, `scale = invested/heldSum`).
@@ -195,6 +219,29 @@ no Supabase fallback); fail closed to null without basis or mark.
 `invested_definition` names the §6.1 precedence winner
 (`accounting_nav_tip | book_weights | portfolio_metrics | unavailable`).
 Mid-session NULL marks affect marks only, never weights.
+
+Weights are ledger-anchored (DIG-2803): the route replays every
+`position_events` row dated on or before `book_as_of` into a per-ticker
+target — `OPEN`/`ADD`/`TRIM` set the target from `weight_pct`, `EXIT` clears
+it — and emits that target as `weight_pct` when the ticker is covered, before
+the envelope is computed, so `heldSum`/`scale`/`scaled_weight_pct` are all
+derived from the corrected book. `weight_source` is:
+
+- `ledger` — the emitted weight came from a replayed `position_events` target;
+- `positions` — the ticker has no target (never opened in the window), or the
+  ledger says it exited while the book still holds it, which is also reported
+  by name in `ledger_conflicts`;
+- `positions_no_ledger` — the ledger could not be read at all, or replayed to
+  an empty set; every row keeps its `positions` weight.
+
+Fail closed, degrade loudly: an absent, unreadable or unrecognised ledger never
+rejects the book and never invents or zeroes a weight. A `null`/negative/NaN
+event weight is skipped and the previous target is kept; an event dated after
+`book_as_of` is ignored (a committed snapshot is never reconciled against a
+later decision). `weights_reconciled` counts rows whose weight came from the
+ledger and `weights_drifted` counts those the book disagrees with — a conflict
+row is never counted as reconciled. `ledger_as_of` is the newest event date
+applied, or `null`.
 
 ### 6.3 `GET /brief`
 
