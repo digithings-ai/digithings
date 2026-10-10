@@ -1,0 +1,28 @@
+{
+  "seed": 42,
+  "state_id": "89390572-4b6e-5e6e-86c2-ebb8518f0873",
+  "synthetic": true,
+  "thread_id": "seed-thread-brief",
+  "turns": [
+    {
+      "content": "Synthetic seed-thread-brief turn 0. Deterministic from --seed 42 (draw 6159).",
+      "index": 0,
+      "role": "user"
+    },
+    {
+      "content": "Synthetic seed-thread-brief turn 1. Deterministic from --seed 42 (draw 666).",
+      "index": 1,
+      "role": "assistant"
+    },
+    {
+      "content": "Synthetic seed-thread-brief turn 2. Deterministic from --seed 42 (draw 4324).",
+      "index": 2,
+      "role": "user"
+    },
+    {
+      "content": "Synthetic seed-thread-brief turn 3. Deterministic from --seed 42 (draw 9034).",
+      "index": 3,
+      "role": "assistant"
+    }
+  ]
+}
