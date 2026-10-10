@@ -87,3 +87,145 @@ def test_runbook_never_contains_a_literal_cookie_value() -> None:
         assert value.startswith(PLACEHOLDER_PREFIXES), value
     assert "never log" in text.lower()
     assert not re.search(r"eyJ[A-Za-z0-9_-]{10,}", text)
+
+
+# --- DIG-2752: the deployer owns the cookie, and nothing committed holds one ----
+#
+# Two halves, and they are not the same claim. The runbook must describe the
+# deployer-owned model; and the *repo* must carry no cookie value anywhere a
+# deployment could pick one up. gitleaks cannot be the second gate: this repo's
+# allowlist exempts ``^tests/`` and ``^docs/.*\.md$``, so a cookie committed in
+# either would never be reported. These assertions are the real gate; the
+# gitleaks rule added alongside them is defence in depth.
+
+#: Deployment config that could carry a cookie value, by glob from the repo root.
+CONFIG_GLOBS = (
+    ".env",
+    ".env.*",
+    "**/.env",
+    "**/.env.*",
+    "**/wrangler.toml",
+    "**/docker-compose*.yml",
+    "**/docker-compose*.yaml",
+    ".github/workflows/*.yml",
+    ".github/workflows/*.yaml",
+)
+
+#: Values that carry no secret: empty, quoted-empty, or an obvious reference.
+_NON_VALUES = frozenset(
+    {
+        "",
+        "''",
+        '""',
+        "<your-cookie>",
+        "<cookie>",
+        "<value>",
+        "<paste-it-here>",
+        "${GLOOMBERB_SESSION_COOKIE}",
+        "$GLOOMBERB_SESSION_COOKIE",
+        "secrets.GLOOMBERB_SESSION_COOKIE",
+    }
+)
+
+#: The cookie's own env name is not a secret, so it is stripped before matching.
+_ENV_NAME = "GLOOMBERB_SESSION_COOKIE"
+
+
+def _config_files() -> list[Path]:
+    """Every committed deployment-config file, de-duplicated, existing only."""
+    seen: dict[str, Path] = {}
+    for pattern in CONFIG_GLOBS:
+        for candidate in REPO_ROOT.glob(pattern):
+            if candidate.is_file():
+                seen.setdefault(str(candidate), candidate)
+    return sorted(seen.values())
+
+
+def _cookie_value_hits(text: str) -> list[str]:
+    """Assignments of the cookie env name whose right-hand side is a value.
+
+    Skips comments, and accepts only the placeholder forms in
+    :data:`_NON_VALUES`, so a real pasted cookie in a committed file fails here.
+    """
+    hits: list[str] = []
+    for lineno, line in enumerate(text.splitlines(), start=1):
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            continue
+        # Only the tail of the name may carry a value, so ``env.NAME`` used as a
+        # lookup does not read as an assignment.
+        for match in re.finditer(re.escape(_ENV_NAME) + r"(?![A-Z0-9_])([=:])(\S+)", stripped):
+            raw = match.group(2).strip().strip("\"'")
+            if raw not in _NON_VALUES:
+                hits.append(f"line {lineno}: {stripped}")
+    return hits
+
+
+def test_no_committed_deployment_config_carries_a_cookie_value() -> None:
+    """The tripwire: a deployer's secret must never land in the repository."""
+    offenders: dict[str, list[str]] = {}
+    for config in _config_files():
+        try:
+            text = config.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):  # pragma: no cover - binary or unreadable
+            continue
+        hits = _cookie_value_hits(text)
+        if hits:
+            offenders[str(config.relative_to(REPO_ROOT))] = hits
+    assert not offenders, offenders
+
+
+def test_the_config_scan_can_actually_fail() -> None:
+    """Positive control: a planted cookie value must be caught.
+
+    Without this, an empty ``_config_files()`` would make the guard above pass
+    for the wrong reason, which is the failure mode this guard exists to avoid.
+    """
+    sample = f'{_ENV_NAME}="pasted-value-that-must-be-caught"\n'
+    assert _cookie_value_hits(sample), "the config scanner no longer detects a value"
+    assert not _cookie_value_hits(f"{_ENV_NAME}=\n")
+    assert not _cookie_value_hits(f"# {_ENV_NAME}=a-commented-secret-is-not-live\n")
+    assert not _cookie_value_hits(f'wrangler.EnvVars.get("{_ENV_NAME}")\n')
+    assert _config_files(), "no deployment config was found to scan"
+
+
+def test_gitleaks_carries_a_cookie_rule_as_defence_in_depth() -> None:
+    """gitleaks is the second line, not the first (see the allowlist above)."""
+    config = (REPO_ROOT / ".gitleaks.toml").read_text(encoding="utf-8")
+    assert _ENV_NAME in config
+    assert "session_token" in config
+
+
+def test_runbook_states_the_deployer_owns_the_cookie() -> None:
+    """The ownership model inverted on 10 Oct 2026; the doc must say so."""
+    text = _text()
+    assert "whoever deploys the digithings stack" in text
+    assert "Bring your own Gloomberb account" in text
+    # The retired store must be named as retired, not as the source of truth.
+    assert "retired" in text.lower()
+    assert "single-owner rule" in text
+
+
+def test_runbook_documents_the_validation_gate_and_its_fail_closed_rule() -> None:
+    text = _text()
+    for marker in ("DIG-2752", "fails closed", "no HTTP request"):
+        assert marker in text, marker
+
+
+def test_runbook_documents_the_onboarding_cli_end_to_end() -> None:
+    text = _text()
+    for command in (
+        "digiquant gloomberb login",
+        "digiquant gloomberb status",
+        "digiquant gloomberb logout",
+        "digiquant gloomberb shell",
+    ):
+        assert command in text, command
+    assert "--store cloudflare" in text
+
+
+def test_runbook_documents_rotation_and_the_terms_note() -> None:
+    text = _text()
+    assert "Rotate or expire" in text
+    assert "npx wrangler secret delete GLOOMBERB_SESSION_COOKIE" in text
+    assert "DIG-1233" in text

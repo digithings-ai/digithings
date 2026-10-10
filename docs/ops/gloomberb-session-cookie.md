@@ -11,9 +11,116 @@ is absent. It is a follow-up to #4069 (the family landed in PR #4085) and was
 last widened by #4837 (130-function coverage: 15 probe-backed Cloud reads and
 13 inert workspace/broker tools joined the gated set).
 
-> **Credential ownership**: See `docs/ops/credential-ownership.md` for the single-owner rule.
-> Canonical store = GitHub Actions `cron` environment secret `GLOOMBERB_SESSION_COOKIE`.
-> Local `.env` is developer convenience only. Refresh path = manual `gh secret set`.
+> **Credential ownership (changed 10 Oct 2026, DIG-2752)**: the cookie belongs to
+> **whoever deploys the digithings stack**, and to their own Gloomberb account. digithings
+> does not hold one, mints one, shares one or replays one on anyone's behalf. A deployer
+> who wants the 41 gated tools supplies their own secret through their own store — their
+> Cloudflare Worker secret, their own gitignored `.env`, or their own macOS Keychain.
+> See `docs/ops/credential-ownership.md` for the general single-owner rule and
+> **"Bring your own Gloomberb account"** below for the deployer guide.
+>
+> The GitHub Actions `cron` environment secret described in earlier revisions of this
+> runbook is **retired as the canonical store**. A pipeline that still holds a copy is
+> carrying a credential nobody owns: rotate it and delete it (see **Rotate or expire**).
+
+## Tools are advertised only when the cookie is authenticated
+
+Before this change the family was gated on **presence**: any non-empty value in
+`GLOOMBERB_SESSION_COOKIE` advertised all 41 gated tools, and an expired or
+mistyped value only discovered itself when a call came back `auth_required`.
+Advertising a tool the deployment cannot use is a lie the operator pays for in a
+failed call, so the gate now **validates** (DIG-2752).
+
+The rules, in order:
+
+1. **No secret, no tools, no request.** With no cookie the gated tools are simply not
+   listed, and **no HTTP request is made** to decide that. The 47 free tools are
+   untouched.
+2. **A secret is probed once per cache window.** When a cookie *is* configured, one
+   authenticated read of `/market/quote` is made to confirm api.gloom.sh accepts it.
+   Gloomberb publishes no `/me` or `/session` route, so the probe reuses the cheapest
+   side-effect-free read and pins a single attempt, so a probe never spends the shared
+   rate limit. The verdict is cached for the client's normal TTL (900 s), keyed on a
+   non-reversible fingerprint of the cookie, so repeated listings make no further
+   requests and swapping the cookie invalidates the verdict immediately.
+3. **Anything unproven hides the tools.** A rejected cookie, a transport failure, a
+   timeout or an unparseable answer all hide the family and log one warning that names
+   the remediation below. The gate fails closed: there is no path where an
+   unvalidated cookie advertises a tool.
+
+Run `digiquant gloomberb status` at any time to see which of these you are in. It
+prints the kill switch, which local stores hold a cookie, a non-reversible
+fingerprint of the value, the validation verdict and whether the gated tools are
+currently advertised — and never the value itself.
+
+`GLOOMBERB_ENABLED` stays an **independent kill switch that overrides**: off means
+the whole family is disabled regardless of the cookie, and a typo in its value fails
+closed. The cookie gate and the kill switch are two separate gates, and a
+deployment needs both open.
+
+## Bring your own Gloomberb account
+
+You need an account to get a cookie; there is no shared digithings account to sign
+into. Follow **Get a free account** below, then extract your own cookie with
+**Extract the session cookie**. What differs from the old shared-cookie model is only
+whose credential it is:
+
+- **It is yours.** It comes from your Gloomberb login, it is stored in your own
+  deployment's secret store, and it is removed when you revoke it.
+- **We never ask you for it.** No agent, comment or ticket ever needs the value. If
+  something asks you to paste a Gloomberb cookie into a conversation, that is not
+  digithings.
+- **Terms of service (DIG-1233, Counsel).** Counsel's finding is that a hosted
+  digithings surface must **not replay a shared cookie** on your behalf, and that
+  anonymous, credential-free reads are the supported hosted behaviour. That is why
+  this is your cookie in your deployment and never a company-held credential: the
+  arrangement has to match the account's terms, and it is yours to accept. If your
+  use is not an ordinary personal or single-tenant use of the account you created,
+  ask Counsel before deploying.
+- **Access class.** Counsel recorded the service as an **"Unclear"** class-B
+  integration (DIG-1232): anonymous reads are fine, and anything that depends on
+  cookie replay has an open licence question. This runbook does not resolve it.
+
+### Onboarding with `digiquant gloomberb login`
+
+The command walks you through the whole flow and never prints, echoes or logs the
+value — the paste is a hidden prompt, and `status` shows only a fingerprint.
+
+```bash
+digiquant gloomberb login                 # sign in at term.gloom.sh, copy the cookie,
+                                          # paste it here (input is hidden), it is
+                                          # validated before anything is stored
+digiquant gloomberb login --store env     # ...and written to a gitignored .env at 0600
+digiquant gloomberb login --store keychain  # ...and written to the macOS Keychain
+digiquant gloomberb login --store cloudflare  # ...and NOT stored: prints the exact
+                                          # wrangler command to run in your shell
+digiquant gloomberb status                # which stores hold a cookie, and the verdict
+digiquant gloomberb shell digiquant prices quote --symbol AAPL
+                                          # run a command with the cookie injected into
+                                          # its environment, without writing it to a file
+digiquant gloomberb logout --yes          # remove it from the Keychain and .env, and
+                                          # print the commands that remove it elsewhere
+```
+
+Nothing is stored until api.gloom.sh has accepted the value, and nothing is stored
+outside a 0600 file or the OS Keychain. For a shared host prefer `--store env` (or
+`shell`): the Keychain path hands the value to `/usr/bin/security` as a command-line
+argument, which is visible to any process listing arguments on that machine.
+
+### Rotate or expire
+
+A cookie is as good as the login behind it, so treat it like one:
+
+- **Rotate** when you are asked to, when you suspect it leaked, or on your own
+  schedule: sign in again, run `digiquant gloomberb login` again, and
+  `digiquant gloomberb logout` in the store you are replacing.
+- **Expire it for real** at `term.gloom.sh` (sign out, or revoke the session), not
+  only locally. Deleting the local copy does not end the session.
+- **In Cloudflare**, remove the Worker secret with
+  `npx wrangler secret delete GLOOMBERB_SESSION_COOKIE`. Until it is replaced the
+  deployer has no gated tools, which is the intended fail-closed state.
+- **In CI**, delete the retired `cron` environment secret if a pipeline still holds a
+  copy, then store the new cookie through whatever secret store that pipeline uses.
 
 ## What happens without the cookie
 
