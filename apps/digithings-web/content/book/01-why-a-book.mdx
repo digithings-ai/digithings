@@ -1,0 +1,47 @@
+---
+title: Why the book exists
+order: 1
+summary: >-
+  The prose pages answer "how do I use this"; the book answers "why is it built
+  this way", in the order that makes the answer readable.
+---
+
+The site has a docs section, and the docs section is good at its job: it tells
+you the flags, the endpoints, and the order to type things in. What it does not
+do is explain the shape. Every question of the form *why is it like this* ends
+either unanswered or answered in a comment thread where the next reader cannot
+find it.
+
+## What a book is for here
+
+A book is not documentation. Documentation is indexed by the thing you are
+trying to do; a book is indexed by the thing you are trying to understand. The
+same fact appears in both, but the book is allowed to spend a page on it.
+
+Three things follow from that:
+
+- **It is versioned as prose.** A chapter is a file with a header, not a row in
+  a table that a migration can rewrite out from under you.
+- **It is printable.** A chapter is read on a screen and on paper, from one
+  file, so the diagrams are the same objects in both.
+- **It has an order that the author chose.** The `order` field in the chapter
+  header decides the sequence. Renaming a file does not move a chapter.
+
+## What it is not
+
+The book is not a second home for the API reference. That surface changes when
+a route changes, and it is generated. Prose that has to be regenerated is not
+prose.
+
+Nor is the book a place for anything we cannot show. Every claim here is about
+code in the repository, and every diagram is rendered from the same source the
+page is written against.
+
+## How to read it
+
+Start at the first chapter. The later ones assume the vocabulary the early
+ones introduce, which is the ordinary price of a book and the reason it is
+ordered rather than indexed.
+
+If you are looking for a flag, you want [the docs](/docs/). If you are looking
+for a reason, stay here.

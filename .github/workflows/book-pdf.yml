@@ -1,0 +1,74 @@
+name: "Book: print the PDF"
+
+# The book's printed edition, as a build artifact (DIG-2821).
+#
+# Its own workflow rather than a step in `test-web.yml` for three reasons:
+# it needs a browser, it needs a full `next build` (which no lane in this repo
+# runs for digithings-web), and it is not a test — nothing here can fail a PR
+# because the book is prose. It runs on pushes to `develop` that touch the book
+# and on demand, so the artifact is always available for the branch that needs
+# it.
+#
+# No paid service: Playwright downloads a Chromium, everything else is in the
+# lockfile.
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - "apps/digithings-web/content/book/**"
+      - "apps/digithings-web/lib/book/**"
+      - "apps/digithings-web/components/book/**"
+      - "apps/digithings-web/app/book/**"
+      - "apps/digithings-web/scripts/book/**"
+      - "apps/digithings-web/package.json"
+      - "package-lock.json"
+      - ".github/workflows/book-pdf.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: book-pdf-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  print:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ./package-lock.json
+
+      # Root, not the workspace: npm needs the workspaces list to link
+      # @digithings/ui and @digithings/design.
+      - name: Install (root workspaces)
+        run: npm ci --no-audit --no-fund
+
+      # The same browser the build step renders diagrams with. Installing it
+      # here means `render-diagrams` and `print-pdf` cannot disagree about
+      # which engine draws the book.
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      # `prebuild` renders every mermaid fence into public/book/diagrams/. The
+      # book pages and the PDF then load those files; nothing renders mermaid at
+      # request time, which is how the printed copy is the same object as the
+      # read copy.
+      - name: Build the site
+        run: npm run build --workspace digithings-web
+
+      - name: Print the PDF
+        run: npm run book:pdf --workspace digithings-web -- book.pdf
+
+      - name: Upload the PDF
+        uses: actions/upload-artifact@v4
+        with:
+          name: digithings-book-${{ github.sha }}
+          path: apps/digithings-web/book.pdf
+          if-no-files-found: error
