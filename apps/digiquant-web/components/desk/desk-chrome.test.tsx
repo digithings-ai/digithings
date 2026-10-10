@@ -61,8 +61,9 @@ describe("desk chrome", () => {
       group.items.flatMap((item) => [item.path, ...(item.children ?? []).map((child) => child.path)]),
     );
     expect(paths).toContain("/fx/settings");
-    expect(paths).not.toContain("/settings");
-    expect(paths).not.toContain("/settings/paper");
+    expect(paths).toContain("/settings");
+    const settings = groups.flatMap((group) => group.items).find((item) => item.path === "/settings");
+    expect(settings?.children?.map((child) => child.path)).toEqual(["/settings/paper"]);
     expect(deskHomeHref(baseline)).toBe("/app/brief/");
     expect(deskHomeHref(fx)).toBeNull();
     expect(deskHomeHref({ ...fx, access: "granted", pages: [{ path: "/fx", label: "FX Hub", access: "granted" }] })).toBeNull();
@@ -98,10 +99,7 @@ describe("desk chrome", () => {
     expect(html).toContain(">/tools/terminal<");
     expect(html).not.toContain(">/fx/settings<");
     expect(html).not.toContain(">/fx<");
-    expect(html).not.toContain(">/settings<");
-    expect(html).not.toContain(">/settings/paper<");
-    expect(html).not.toContain('href="/app/settings"');
-    expect(html).not.toContain('href="/app/settings/');
+    expect(linked("/app/settings/")).toBe(true);
     expect(html).not.toContain("luxalgo");
     expect(html).toContain("desk: Baseline");
     expect(html).not.toMatch(/fx hub|12x/i);
