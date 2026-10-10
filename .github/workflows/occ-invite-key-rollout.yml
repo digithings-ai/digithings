@@ -74,12 +74,19 @@ on:
         type: string
         default: ""
 
-# Per-run group with no cancel. Two rollouts must not interleave, and a cancelled
-# run could be cancelled between `secret put` and `deploy` — which is the exact
-# half-applied state the script exists to prevent. Same reasoning as
-# deploy-digiquant-runner.yml's concurrency block.
+# Per-run group, no cancel (#2541). A shared static group is wrong here: this job
+# is gated on `environment: production`, so one run can sit unapproved and hold the
+# group, and every later rollout queues behind that wait indefinitely. The
+# alternative — cancel-in-progress: true — is worse for this workflow: a cancelled
+# run can be cancelled between `secret put` and `deploy`, which is exactly the
+# half-applied state this script exists to prevent. Same trade, same shape, as
+# deploy-digiquant-runner.yml.
+#
+# The cost of a per-run group is that two approved rollouts are no longer mutually
+# excluded by the queue. The real mutexes are the `production` approval and the
+# script's own pre-put guards, which refuse a diff outside the two allowed fields.
 concurrency:
-  group: occ-invite-key-rollout
+  group: occ-invite-key-rollout-${{ github.run_id }}
   cancel-in-progress: false
 
 permissions:
