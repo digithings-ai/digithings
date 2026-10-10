@@ -42,7 +42,7 @@ The platform integrates with and extends the open-source tools clients may alrea
 Shipped and in active use:
 
 ### digigraph — agent orchestration hub
-LangGraph-based workflow engine with a supervisor node, research and analysis sub-graphs, dynamic tool registry, OpenAI-compatible API, server-sent event (SSE) streaming, JWT auth, per-IP rate limiting, LLM routing (LiteLLM today, migrating to the shared digillm library), digitrace tracing, and an MCP server. Parallel tool execution and tool allowlist/policy enforcement included.
+LangGraph-based workflow engine with a supervisor node, research and analysis sub-graphs, dynamic tool registry, OpenAI-compatible API, server-sent event (SSE) streaming, JWT auth, per-IP rate limiting, LLM routing through the shared [[digillm|digillm]] library, digitrace tracing, and an MCP server. Parallel tool execution and tool allowlist/policy enforcement included.
 
 ### digiquant — quantitative finance platform
 NautilusTrader-backed strategy engine with backtest and optimisation nodes wired into digigraph. Connects to OpenBB for market data. Research, portfolio, and execution sub-graphs are in active development.
