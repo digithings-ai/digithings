@@ -13,6 +13,7 @@ Copy or symlink each `SKILL.md` into a Cursor skill folder your build recognizes
 | [digithings-backlog/SKILL.md](digithings-backlog/SKILL.md) | Update INDEX, align with GitHub Issues |
 | [digithings-doc-pr/SKILL.md](digithings-doc-pr/SKILL.md) | Doc-only PR checklist and auto-merge allowlist |
 | [digithings-component-touch/SKILL.md](digithings-component-touch/SKILL.md) | Before editing code: doc + test commands |
+| [paperclip-local-work/SKILL.md](paperclip-local-work/SKILL.md) | Local session + Paperclip org in parallel without interference |
 
 ## Conventions
 
