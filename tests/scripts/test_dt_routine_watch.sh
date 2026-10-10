@@ -328,9 +328,20 @@ print("FIRE='%s'" % iso(fire))
 print("FUTURE='%s'" % iso(now + datetime.timedelta(hours=26)))
 print("STALE='%s'" % iso(now - datetime.timedelta(hours=30)))
 print("OK_RUN='%s'" % ok_run)
+
+# Still inside the grace window: the firing exists but the run may not be readable yet, so this
+# boundary is not yet claimable. Without this pair, dropping the grace test on the last-fired
+# candidate would be invisible -- check 1 has no lastFiredAt at all.
+early = now - datetime.timedelta(minutes=5)
+early_run = json.dumps(
+    [{"id": "r1", "triggeredAt": iso(early), "source": "schedule", "triggerId": tid, "status": "succeeded"}],
+    separators=(",", ":"),
+)
+print("EARLY='%s'" % iso(early))
+print("EARLY_RUN='%s'" % early_run)
 PY
 )"
-for v in FIRE FUTURE STALE OK_RUN; do
+for v in FIRE FUTURE STALE OK_RUN EARLY EARLY_RUN; do
   eval "got=\$$v"
   if [ -z "$got" ]; then printf 'harness bug: %s came back empty\n' "$v"; exit 99; fi
 done
@@ -369,6 +380,19 @@ if [ "$PAGES" = 1 ] && printf '%s' "$OUT" | grep -q 'kind=missed' && printf '%s'
   ok "a closed window with no firing still pages missed off the next-due boundary"
 else
   no "a closed window with no firing still pages missed off the next-due boundary"
+fi
+
+# 20. The grace window has to apply to the last firing too. Five minutes after firing is inside the
+#     20-minute grace: the run may not be readable yet, so the boundary is not claimable and the
+#     original not-yet-due line is the honest answer. Judge it early and the next tick would read
+#     coalesce (or worse) for a firing that had simply not landed in the run history yet.
+rm -f "$WORK/s20.json"
+fixture "$WORK/f20" "$FUTURE" "$EARLY" "succeeded" "$EARLY_RUN"
+run 20 "$WORK/f20" "$WORK/s20.json"
+if [ "$PAGES" = 0 ] && [ "$(printf '%s' "$OUT" | grep -c ' -> ')" = 0 ] && printf '%s' "$OUT" | grep -q 'not yet due'; then
+  ok "a firing still inside the grace window is not judged yet"
+else
+  no "a firing still inside the grace window is not judged yet"
 fi
 
 if [ "$fails" -eq 0 ]; then printf '\nall checks passed\n'; else printf '\n%s check(s) failed\n' "$fails"; fi
