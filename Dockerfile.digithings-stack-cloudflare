@@ -118,8 +118,11 @@ COPY digivault/pyproject.toml digivault/ARCHITECTURE.md ./digivault/
 COPY digivault/src ./digivault/src
 RUN uv pip install --system -e "./digivault[service]"
 
-# LiteLLM proxy — pin below fastapi breakage (get_flat_dependant removed).
-RUN uv pip install --system "litellm[proxy]==1.72.6" "fastapi<0.116"
+# LiteLLM proxy from the pinned PyPI wheel (DIG-1780). Same version as
+# Dockerfile.digillm (enforced by tests/scripts/test_compose_litellm_pinned.py).
+# 1.83.x no longer imports fastapi's removed get_flat_dependant, so the old
+# "fastapi<0.116" cap is gone; litellm pins its own compatible fastapi.
+RUN uv pip install --system "litellm[proxy]==1.83.14"
 
 # Profile A LiteLLM + digigraph config
 COPY infra/digichat-release/config /app/config

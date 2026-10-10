@@ -147,7 +147,7 @@ services:
         condition: service_healthy
       digisearch:
         condition: service_healthy
-      litellm:
+      digillm:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/healthz"]
@@ -303,26 +303,35 @@ services:
       retries: 3
       start_period: 10s
 
-  # ─── LiteLLM router (Phase 1: digigraph uses this for all LLM calls) ───
-  # Image pinned by tag+digest (#5337): bump on purpose in a reviewed PR, never a floating tag.
-  litellm:
-    image: ghcr.io/berriai/litellm:v1.83.14-stable.patch.3@sha256:f12d528d4a05add56cb09e54c5126088f2edc6bdf3a2f943bcd3a32b08769da2
-    container_name: digi-litellm
+  # ─── digillm: digithings' LiteLLM proxy (DIG-1780) ───
+  # LiteLLM from the pinned PyPI wheel inside a digithings image (Dockerfile.digillm),
+  # never the vendor image. The `litellm` network alias and port 4000 keep every
+  # existing OPENAI_API_BASE=http://litellm:4000/v1 caller working unchanged.
+  digillm:
+    image: ghcr.io/digithings-ai/digillm:0.1.0
+    build:
+      context: .
+      dockerfile: Dockerfile.digillm
+    container_name: digi-digillm
+    networks:
+      default:
+        aliases:
+          - litellm
     ports:
       - "127.0.0.1:4000:4000"
     env_file:
       - .env
     # Do not inject REDIS_URL with an empty default: an empty string makes
-    # LiteLLM main-stable treat Redis as configured and exit 3
+    # LiteLLM treat Redis as configured and exit 3
     # (ValueError: Redis URL must specify one of the following schemes).
     # Leave the var unset for the default local cache. When using
     # --profile litellm-cache, set REDIS_URL=redis://redis:6379 in .env so
     # env_file passes a real URL through.
-    command: ["--config", "/app/config/litellm.yaml", "--port", "4000"]
+    command: ["--config", "/app/config/litellm.yaml", "--host", "0.0.0.0", "--port", "4000"]
     volumes:
       - ./config:/app/config:ro
-    # LiteLLM can start without Ollama; Ollama models fail until ollama is healthy
-    # main-stable image has no curl/wget — probe with the bundled Python.
+    # LiteLLM can start without Ollama; Ollama models fail until ollama is healthy.
+    # The slim image has no curl/wget — probe with the bundled Python.
     healthcheck:
       test:
         [
