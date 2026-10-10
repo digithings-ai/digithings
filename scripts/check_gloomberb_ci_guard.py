@@ -1,17 +1,29 @@
 #!/usr/bin/env python3
-"""GLOOMBERB_ENABLED deployed-config guard (DIG-1322, sibling of DIG-1233).
+"""Gloomberb deployed-config guard (DIG-1322, sibling of DIG-1233, per DIG-2752).
 
-``GLOOMBERB_ENABLED`` is the kill switch for the whole Gloomberb tool family.
-DIG-1233 makes it default OFF; this guard makes that default enforceable, so the
-other half of the switch -- an *explicit* opt-in -- cannot be committed into a
-deployed config by accident.
+**What this guard gates is the session cookie, not the flag.** Chris's decision
+of 2026-10-10 (DIG-2752) is that gating is *per tool*: the public Gloomberb tools
+stay on everywhere, and only the cookie-required tools are gated, on a
+per-deployer ``GLOOMBERB_SESSION_COOKIE`` secret. A deployed
+``GLOOMBERB_ENABLED = "1"`` is therefore an intended configuration -- the public
+tools are supposed to be reachable -- and this guard must not block on it.
 
-Why the guard exists: flipping the default to OFF only helps while nobody writes
-``GLOOMBERB_ENABLED = "1"`` into a file that ships. Cloudflare ``[vars]``,
-Dockerfile ``ENV``, a workflow ``env:`` block and a compose ``environment:`` entry
-all reach a deployed process without ever passing through review as "a credential
-change", and an enabling value in any of them silently re-opens a path Counsel
-ruled prohibited (browser-session-cookie replay against ``api.gloom.sh``).
+So ``GLOOMBERB_ENABLED`` is **reported** (``flag-on``) and never blocks, anywhere.
+That supersedes DIG-1322's original "never set to an enabling value in a deployed
+config" line, which was written against a family-wide default-off posture that no
+longer holds. The reason it is still reported rather than dropped is that the flag
+is the switch the cookie half is read next to, and a reviewer looking at a diff
+that turns it on should be able to see the gate say so without stopping the build.
+
+Why the cookie half exists: ``GLOOMBERB_SESSION_COOKIE`` is a real credential --
+a browser session cookie replayed against ``api.gloom.sh``, the access method
+Counsel ruled prohibited without an organisational licence. The flag decides
+whether the family is reachable; the cookie decides whether it is *authenticated*.
+Watching only the flag left the second half free to regress just as silently, and
+DIG-2752 makes the cookie the one thing a deployer supplies out of band. Cloudflare
+``[vars]``, Dockerfile ``ENV``, a workflow ``env:`` block and a compose
+``environment:`` entry all reach a deployed process without ever passing through
+review as "a credential change".
 
 What is checked:
   * Only **git-tracked** files are scanned. An untracked local ``.env`` is not a
@@ -19,11 +31,13 @@ What is checked:
     machines for something CI cannot control.
   * A line whose first non-space character is ``#`` is a comment and is skipped.
   * An inline comment is stripped before the value is judged, so
-    ``GLOOMBERB_ENABLED = "0"  # was "1" in staging`` passes.
-  * Only an **enabling** value fails. A disabled or empty value is defence in
-    depth and is allowed to stay committed -- that is the point of it.
+    ``GLOOMBERB_SESSION_COOKIE = "abc"  # not a real one`` is still judged on
+    ``"abc"`` and fails. A comment is never a way to talk the cookie half down.
+  * For the cookie, a value that is not provably a placeholder or a secret
+    reference **fails**, in every scanned file. For the flag, only the shape of
+    the assignment is reported.
 
-The cookie half (DIG-2752) -- three further checks on the same file set:
+The cookie half (DIG-2752) -- the three checks that are the gate:
 
 ``GLOOMBERB_SESSION_COOKIE`` is the per-deployer credential the Gloomberb family
 is now gated on. Per DIG-2752 it belongs to whoever deploys the stack, it is
@@ -46,12 +60,20 @@ half regress just as silently, so three checks were added:
      That is its whole job: ``GLOOMBERB_SESSION_COOKIE = ""`` in ``[vars]`` is a
      slot in git that invites the value, and a per-deployer secret belongs in
      ``wrangler secret put`` / ``secrets.*``, never in a file.
-  3. ``advertised_without_secret`` -- a deployed file that turns the family on
-     through an **indirection** (``${{ vars.X }}``, ``$VAR``, ``env.X``,
-     ``process.env.X``, ``os.environ``) while the file carries no secret slot for
-     the cookie also fails. A repository variable is a settings field, not a
-     secret store, so this is the "advertises the tools without a secret" case
-     that a literal enabling value would otherwise have masked.
+  3. ``advertised_without_secret`` -- a **deployed** file that points the cookie
+     at an **indirection which is not a secret store** (``$VAR`` / ``${VAR}``,
+     ``vars.X``, ``${{ vars.X }}``, ``process.env.X``, ``os.environ``,
+     ``Deno.env``) also fails. This is Chris's "none advertised without a
+     ``GLOOMBERB_SESSION_COOKIE`` secret" case: a repository variable is a
+     settings field, and a shell passthrough baked into a Dockerfile ``ENV`` is a
+     committed value wearing a disguise. The gate is on the *cookie*, not on the
+     flag turning the family on -- so a deployed config that turns the family on
+     for the public tools, and says nothing at all about the cookie, passes.
+
+     ``env.X`` is deliberately **accepted** here. On a Cloudflare Worker
+     ``env.GLOOMBERB_SESSION_COOKIE`` *is* the binding a ``wrangler secret put``
+     produces, so it is the sanctioned path and it is the one a real deployment
+     writes.
 
 Bound of this cookie half, stated so it is not over-read: it covers **config
 surfaces** -- the deployed and local file sets listed below -- because that is
@@ -72,7 +94,8 @@ exact failure the guard exists to catch. If the client cannot be parsed the guar
 FALLS BACK to the literal set and says so on stdout -- it does not silently scan
 with a set it invented, and it does not pass by being unable to read anything.
 
-Deployed surfaces — an enabling value fails the build:
+Deployed surfaces — a cookie in a plaintext carrier, or a committed cookie value,
+fails the build:
   * ``apps/**/wrangler.toml|json|jsonc``  — Workers deployment config; ``[vars]``
     is shipped to the edge.
   * ``**/Dockerfile*`` at any depth, by basename — ``ENV`` is baked into the image.
@@ -84,9 +107,10 @@ Deployed surfaces — an enabling value fails the build:
     ``workflows/pipeline-digiquant.yml`` loads into ``$GITHUB_ENV`` from outside
     ``.github/workflows/``, which path filtering cannot see.
 
-Local / dev surfaces (``LOCAL_PATTERNS``) — an enabling value is ALLOWED, because
-this is the stated exemption the issue asks for. Local development keeps the family
-reachable; only deployed configs are policed:
+Local / dev surfaces (``LOCAL_PATTERNS``) — a cookie *value* still fails here,
+because the exemption authorises a developer to RUN the tools with their own
+cookie in an untracked ``.env``, not to commit it. Local development keeps the
+family reachable; only deployed cookie *slots* are policed:
   * ``.env``, ``.env.*`` (except ``.env.example``, which is documentation)
   * ``docker-compose.override.yml``, ``compose/**``, ``dev/**``, ``scripts/**``
   * ``docker-compose.local.yml`` — the Langfuse bring-up compose, which its own
@@ -340,28 +364,19 @@ SECRET_REFERENCE_RE = re.compile(
     """
 )
 
-#: An *enabling* value reached without a literal — the third check's subject.
-INDIRECTION_RE = re.compile(
+#: A value that resolves at deploy time but is **not** a secret store -- the third
+#: check's subject. Deliberately narrower than the arm it replaced: every other
+#: indirection (``env.NAME``, ``secrets.NAME``, ``process.env.NAME``,
+#: ``os.environ``, ``Deno.env``) genuinely reads a secret store and is the
+#: sanctioned path, so it is accepted and never reaches this. What is left are the
+#: two that resolve to somewhere real but readable: a repository variable, and a
+#: shell variable, which a Dockerfile ``ENV`` bakes into the image.
+NOT_A_SECRET_STORE_RE = re.compile(
     r"""(?ix)
-      \$\{\{?[\s]*vars\.[A-Za-z_]                # ${{ vars.NAME }}
-    | \bsecrets\.[A-Za-z_]                       # secrets.NAME
-    | \bvars\.[A-Za-z_]                          # Cloudflare vars.NAME
-    | \bprocess\.env\.[A-Za-z_]
-    | \benv\.[A-Za-z_]
-    | \bos\.environ(?:\.get)?\s*[\[(]
-    | \bDeno\.env(?:\.get)?\s*[\[(]
-    | \$\{?[A-Z][A-Z0-9_]*\}?$                   # shell $NAME / ${NAME}
+      \$\{\{?\s*vars\.[A-Za-z_]               # ${{ vars.NAME }} / ${vars.NAME}
+    | \bvars\.[A-Za-z_]                       # Cloudflare vars.NAME
+    | \$\{?[A-Z][A-Z0-9_]*\}?$                # shell $NAME / ${NAME}
     """
-)
-
-#: A file that supplies the cookie through a secret store says so somewhere.
-#: The cookie name is concatenated in, never interpolated with ``str.format``:
-#: the quantifier braces in a regex would collide with the format field syntax,
-#: and the name must not be written twice into this file's own source.
-SECRET_SLOT_PREFIXES = (
-    r"(?ix)wrangler\s+secret[\s\S]{0,120}?",
-    r"(?ix)secrets\.[A-Za-z_]*",
-    r"(?ix)secret\s+bindings?[\s\S]{0,240}?",
 )
 
 
@@ -372,22 +387,24 @@ class Finding:
     ``kind`` is what makes a finding blocking, so the reason is a property of the
     row rather than of the caller that filters it:
 
-    * ``enabled`` -- an enabling ``GLOOMBERB_ENABLED`` value. Blocks when deployed;
-      the local exemption is the whole point of the local file class.
+    * ``flag-on`` -- an enabling ``GLOOMBERB_ENABLED`` value. **Never blocks**,
+      deployed or local: per-tool gating means the public tools are meant to be
+      on. Reported because a reviewer should see the flag being turned on
+      alongside whatever the cookie half says about the same file.
     * ``cookie_value`` -- a committed cookie value. **Always blocks**, local files
       included: the exemption authorises running the tools, not committing the
       credential that authenticates them.
     * ``plaintext_cookie_slot`` -- the cookie named in a deployed plaintext
       carrier with no secret reference, empty value included.
-    * ``advertised_without_secret`` -- a deployed file advertising the family
-      through an indirection while carrying no cookie secret slot.
+    * ``advertised_without_secret`` -- a deployed file pointing the cookie at
+      something that is not a secret store.
     """
 
     path: str
     line_no: int
     line: str
     deployed: bool
-    kind: str = "enabled"
+    kind: str = "flag-on"
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -401,7 +418,10 @@ class Finding:
 
 #: Why each kind blocks, in one place, so `render` and `main` cannot disagree.
 FINDING_REASONS: dict[str, str] = {
-    "enabled": "GLOOMBERB_ENABLED must never be enabled in a deployed config",
+    "flag-on": (
+        "GLOOMBERB_ENABLED is on, so the public Gloomberb tools are reachable; "
+        "that is intended under DIG-2752 per-tool gating and does not fail the build"
+    ),
     "cookie_value": (
         "a session cookie value must never be committed; the per-deployer cookie "
         "belongs in that deployment's secret store (DIG-2752)"
@@ -412,8 +432,9 @@ FINDING_REASONS: dict[str, str] = {
         "is a slot in git that invites the value"
     ),
     "advertised_without_secret": (
-        "this config advertises the Gloomberb family without a secret slot for "
-        "GLOOMBERB_SESSION_COOKIE, so the tools would run unauthenticated"
+        "this deployed config points the cookie at something that is not a secret "
+        "store, so the cookie-required tools would be advertised without a "
+        "GLOOMBERB_SESSION_COOKIE secret"
     ),
 }
 
@@ -535,39 +556,45 @@ def is_secret_reference(value: str) -> bool:
     return bool(SECRET_REFERENCE_RE.search(value.strip()))
 
 
-def is_indirection(value: str) -> bool:
-    """True when ``value`` resolves at deploy time rather than naming a literal."""
-    return bool(INDIRECTION_RE.search(value.strip()))
+def is_not_a_secret_store(value: str) -> bool:
+    """True when ``value`` resolves at deploy time but *not* through a secret store.
 
-
-def has_cookie_secret_slot(text: str) -> bool:
-    """True when ``text`` supplies the cookie through a secret store.
-
-    Checked per cookie name so the match cannot depend on a spelling that only
-    appears in this file's own source.
+    The narrow arm of the indirection check it replaced: a shell variable and a
+    repository variable. Both resolve somewhere real at deploy time, and neither
+    of those places is a secret store -- a shell passthrough in a Dockerfile
+    ``ENV`` is baked into the image, and ``vars.NAME`` is a settings field that
+    anybody with repo settings can read. Split out from the arms that genuinely
+    are secret stores (``env.NAME``, ``secrets.NAME``, ``process.env.NAME``,
+    ``os.environ``, ``Deno.env``) because those are the sanctioned path and the
+    caller has already accepted them by the time this is consulted.
     """
-    for name in COOKIE_VARS:
-        if any(re.search(prefix + name, text) for prefix in SECRET_SLOT_PREFIXES):
-            return True
-    return False
+    return bool(NOT_A_SECRET_STORE_RE.search(value.strip()))
 
 
 def scan_text(path: str, text: str, values: frozenset[str]) -> list[Finding]:
     """Every guard finding in ``text``.
 
-    Two independent halves, one pass. The flag half keeps its original rule: an
-    enabling ``GLOOMBERB_ENABLED`` value fails when the file is deployed. The
-    cookie half (DIG-2752) adds ``cookie_value`` (a committed credential, always
-    blocking), ``plaintext_cookie_slot`` (a deployed plaintext carrier with no
-    secret reference, empty value included) and ``advertised_without_secret`` (a
-    deployed file enabling the family through an indirection with no cookie
-    secret slot anywhere in the file).
+    Two halves that answer different questions.
+
+    The flag half is **report-only**. Since DIG-2752's per-tool gating decision
+    (2026-10-10) the public Gloomberb tools are meant to be reachable everywhere,
+    so an enabling ``GLOOMBERB_ENABLED`` value is emitted as ``flag-on`` and
+    blocks nowhere -- not deployed, not local. It is still emitted because a
+    reviewer turning the flag on in a diff should see the gate acknowledge it in
+    the same run that judges the cookie next to it.
+
+    The cookie half is the only gate, and it has three rules:
+    ``cookie_value`` (a committed credential -- always blocking),
+    ``plaintext_cookie_slot`` (a deployed plaintext carrier holding a literal or
+    an empty value) and ``advertised_without_secret`` (a deployed cookie line
+    pointing at ``$VAR`` / ``vars.X``, i.e. at anything that is not a secret
+    store). Ordering matters: ``is_secret_reference`` runs first, so a line that
+    *does* name a secret store is never re-litigated by the two rules below it.
     """
     deployed = is_deployed(path)
     if not deployed and not is_local(path):
         return []
 
-    secret_slot = has_cookie_secret_slot(text)
     findings: list[Finding] = []
     for line_no, line in enumerate(text.splitlines(), start=1):
         if line.lstrip().startswith("#"):
@@ -581,20 +608,28 @@ def scan_text(path: str, text: str, values: frozenset[str]) -> list[Finding]:
         if name == FLAG:
             if value.lower() in values:
                 findings.append(Finding(path=path, line_no=line_no, line=line, deployed=deployed))
-            elif deployed and not secret_slot and is_indirection(value):
-                findings.append(
-                    Finding(
-                        path=path,
-                        line_no=line_no,
-                        line=line,
-                        deployed=deployed,
-                        kind="advertised_without_secret",
-                    )
-                )
             continue
 
         if name in COOKIE_VARS:
             if is_secret_reference(value):
+                continue
+            if is_not_a_secret_store(value):
+                # An indirection is neither a placeholder nor a literal, so it is
+                # classified before the two rules below -- otherwise `$VAR` would
+                # be reported as a committed credential, which is the wrong reason
+                # for what is actually a config pointing at the wrong place.
+                if deployed:
+                    findings.append(
+                        Finding(
+                            path=path,
+                            line_no=line_no,
+                            line=line,
+                            deployed=deployed,
+                            kind="advertised_without_secret",
+                        )
+                    )
+                # Local: nothing is committed and nothing is deployed, so there is
+                # nothing to gate. The file is still read either way.
                 continue
             if not is_placeholder(value):
                 findings.append(
@@ -671,13 +706,16 @@ def scan(repo_root: Path | None = None) -> tuple[list[Finding], list[Gap], froze
 def is_blocking(finding: Finding) -> bool:
     """True when a finding must fail the build.
 
-    Two arms, and the second one is the change DIG-2752 asked for: a committed
-    cookie value blocks wherever it is, including in a local config. The local
-    exemption exists so a developer can *run* the tools with their own cookie in
-    an untracked ``.env``; it is not a licence to commit the credential.
+    Two arms, both there for DIG-2752. A committed cookie value blocks wherever it
+    is, local files included: the exemption exists so a developer can *run* the
+    tools with their own cookie in an untracked ``.env``, not to commit it. And
+    ``flag-on`` blocks nowhere -- since the per-tool gating decision the public
+    tools are meant to be on, so the flag is reported and the cookie is the gate.
     """
     if finding.kind == "cookie_value":
         return True
+    if finding.kind == "flag-on":
+        return False
     return finding.deployed
 
 
@@ -686,9 +724,11 @@ def render(findings: list[Finding], gaps: list[Gap], source: str, values: frozen
         f"gloomberb-ci-guard: enabling values = {sorted(values)} ({source})",
         f"gloomberb-ci-guard: cookie vars = {list(COOKIE_VARS)}"
         " (committed values fail everywhere; deployed slots need a secret reference)",
+        "gloomberb-ci-guard: GLOOMBERB_ENABLED is reported, not gated (per-tool gating, DIG-2752)",
     ]
     blocking = [f for f in findings if is_blocking(f)]
-    local_ok = [f for f in findings if not is_blocking(f)]
+    flag_on = [f for f in findings if f.kind == "flag-on"]
+    local_ok = [f for f in findings if not is_blocking(f) and f.kind != "flag-on"]
 
     for gap in gaps:
         lines.append(
@@ -702,11 +742,19 @@ def render(findings: list[Finding], gaps: list[Gap], source: str, values: frozen
             f"  {label:<13} {finding.path}:{finding.line_no}: {finding.line.strip()}"
             f"  -- {FINDING_REASONS[finding.kind]}"
         )
+    for finding in flag_on:
+        lines.append(
+            f"  flag-on       {finding.path}:{finding.line_no}: {finding.line.strip()}"
+            f"  -- {FINDING_REASONS['flag-on']}"
+        )
     for finding in local_ok:
         lines.append(f"  local-ok      {finding.path}:{finding.line_no}: {finding.line.strip()}")
 
     if not blocking and not gaps:
-        lines.append(f"gloomberb-ci-guard: PASS ({len(local_ok)} local exemption(s), 0 deployed)")
+        lines.append(
+            f"gloomberb-ci-guard: PASS ({len(local_ok)} local exemption(s),"
+            f" {len(flag_on)} flag-on report(s), 0 blocking)"
+        )
     return "\n".join(lines)
 
 
