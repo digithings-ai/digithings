@@ -326,13 +326,25 @@ def check(
     branch_name: str | None = None,
     env: Mapping[str, str] | None = None,
     base: str = BASE_REF,
+    is_update: bool = False,
 ) -> Decision:
-    """Decide whether ``candidate`` may be pushed as a new branch.
+    """Decide whether ``candidate`` may be pushed.
 
     ``branch_name`` is the name the ref will have on the remote, when the caller
     knows it; it excludes the candidate from its own sibling set. ``env``
     supplies ``RESUME_FROM`` and ``RESTART_REASON``.
+
+    ``is_update`` says the remote already holds this ref, which the caller reads
+    from a non-zero remote sha. The guard is about *creation*: a second branch
+    holding work already in flight. Once a branch exists, its unmerged stack
+    keeps overlapping the same siblings at every later commit, so a sibling
+    check on an update would refuse ordinary follow-up work. That is why this
+    returns before the first git call and says nothing — there is no decision to
+    report, and a note on every update push would bury the refusals that matter.
     """
+    if is_update:
+        return Decision(allowed=True)
+
     environ = os.environ if env is None else env
     try:
         tip = _git(repo, "rev-parse", "--verify", f"{candidate}^{{commit}}").strip()
@@ -410,6 +422,16 @@ def check(
         )
     except _Unknown as exc:
         return _fail_open(f"branch-restart-check: duplicate-work guard skipped — {exc}.")
+    except Exception as exc:
+        # The guard must never be the reason a push fails. `_Unknown` above is
+        # the failure we expected; anything else is a bug in this file or an
+        # unexpected shape from git, and the hook reads a non-zero exit as a
+        # deliberate refusal. Failing open here costs a duplicate leaf once; a
+        # traceback reaching the hook costs every agent a blocked push.
+        return _fail_open(
+            f"branch-restart-check: the duplicate-work guard could not decide, "
+            f"so it did not block the push — {type(exc).__name__}: {exc}."
+        )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -423,9 +445,48 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("candidate", help="the branch ref (or any commit-ish) being pushed")
     parser.add_argument("--branch-name", default=None, help="name the ref will have on the remote")
     parser.add_argument("--repo", default=".", help="repository to inspect (default: cwd)")
-    args = parser.parse_args(list(argv) if argv is not None else None)
+    # Both spellings are accepted so the caller states which kind of push this
+    # is. Leaving it implicit in the checker is what made the arm refuse every
+    # update to an unmerged branch.
+    push_kind = parser.add_mutually_exclusive_group()
+    push_kind.add_argument(
+        "--is-create",
+        dest="is_update",
+        action="store_false",
+        default=False,
+        help="the remote does not hold this ref yet, so this push creates it (default)",
+    )
+    push_kind.add_argument(
+        "--is-update",
+        dest="is_update",
+        action="store_true",
+        help="the remote already holds this ref, so this push updates it and is not refused",
+    )
+    try:
+        args = parser.parse_args(list(argv) if argv is not None else None)
+    except SystemExit as exc:
+        # argparse exits 2 on a usage error, and the hook reads any non-zero exit
+        # as a deliberate refusal — so an argument it cannot parse would block the
+        # push. The reachable case is a version skew: install-hooks.sh installs the
+        # hook from origin/develop while this file is resolved from the working
+        # tree, so a checkout that has not pulled yet pairs the new hook with a
+        # checker that does not know --is-update. Fail open and say why; `git pull`
+        # is the fix.
+        if not exc.code:
+            raise
+        print(
+            "branch-restart-check: the duplicate-work guard could not read its "
+            "arguments, so it did not block the push — run 'git pull' so the hook "
+            "and this checker are the same revision."
+        )
+        return 0
 
-    decision = check(args.repo, args.candidate, branch_name=args.branch_name)
+    decision = check(
+        args.repo,
+        args.candidate,
+        branch_name=args.branch_name,
+        is_update=args.is_update,
+    )
     for note in decision.notes:
         print(note)
     if not decision.allowed:

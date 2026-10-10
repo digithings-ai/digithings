@@ -24,6 +24,9 @@
 #         • RESUME_FROM=<sibling> and RESTART_REASON both permit the push
 #         • patches already merged into develop never trip the guard
 #         • re-pushing an unmerged branch at its own tip is not a self-refusal
+#         • an update to a branch the remote already holds is never refused, even
+#           when it still overlaps a sibling: the guard is about creation, and an
+#           update signal that is never read refuses ordinary follow-up work
 #
 # Usage: bash tests/scripts/test_pre_push_hook.sh
 # CI: pytest wrapper tests/scripts/test_pre_push_hook.py under ruff-and-scripts.
@@ -395,6 +398,46 @@ assert_exit 1 "new-branch live tip without trailer (zero remote sha)" \
   "$FIXTURE" "$ORIGIN_URL" \
   "refs/heads/task/2483-new $LIVE_BLOCKED refs/heads/task/2483-new $ZERO40"
 
+# ── an update push is still scanned for live paths ───────────────────────────
+# The duplicate-work arm treats an update as not-refusable, and it must not have
+# done that by skipping the rest of the hook. The base sha below is real — the
+# branch is genuinely pushed — so this is an update rather than a create wearing
+# a sha the remote does not hold.
+LIVE_UPD_BASE="$(make_live_tip <<'EOF'
+feat: touch live path
+
+Human-Approved-By: A Human
+EOF
+)"
+git -C "$FIXTURE" push -q origin task/2483-cosign-tmp
+
+# Built on top rather than by make_live_tip, which resets its branch to develop
+# and would leave the new tip a sibling of the pushed base instead of a child.
+git -C "$FIXTURE" checkout -q task/2483-cosign-tmp
+echo "order-update-$RANDOM" > "$FIXTURE/digiquant/src/digiquant/live/place_order.py"
+git -C "$FIXTURE" add -A
+git -C "$FIXTURE" commit -q -F - <<'EOF'
+feat: touch a live path on an update push
+
+Co-Authored-By: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+EOF
+LIVE_UPD_TIP="$(git -C "$FIXTURE" rev-parse HEAD)"
+assert_exit 1 "an update push to a live path without the trailer still refuses" \
+  "$FIXTURE" "$ORIGIN_URL" \
+  "refs/heads/task/2483-cosign-tmp $LIVE_UPD_TIP refs/heads/task/2483-cosign-tmp $LIVE_UPD_BASE"
+
+echo "order-update-signed-$RANDOM" > "$FIXTURE/digiquant/src/digiquant/live/place_order.py"
+git -C "$FIXTURE" add -A
+git -C "$FIXTURE" commit -q -F - <<'EOF'
+feat: touch a live path on an update push, signed off
+
+Human-Approved-By: A Human
+EOF
+LIVE_UPD_SIGNED="$(git -C "$FIXTURE" rev-parse HEAD)"
+assert_exit 0 "an update push to a live path with the trailer is allowed" \
+  "$FIXTURE" "$ORIGIN_URL" \
+  "refs/heads/task/2483-cosign-tmp $LIVE_UPD_SIGNED refs/heads/task/2483-cosign-tmp $LIVE_UPD_BASE"
+
 # ── #2483: fail-closed when no diff base ─────────────────────────────────────
 cd "$FIXTURE"
 git checkout -q --orphan orphan-unrelated
@@ -471,6 +514,34 @@ assert_exit 0 "re-push of an unmerged branch at its own tip is allowed" \
   "$FIXTURE" "$ORIGIN_URL" \
   "refs/heads/task/1589-sibling $SIBLING_TIP refs/heads/task/1589-sibling $SIBLING_TIP"
 
+# ── an update to an already-pushed, already-overlapping branch is allowed ────
+# The guard refuses *creation*. Once the remote holds the ref, the branch keeps
+# overlapping the same siblings at every later commit, so a sibling check on an
+# update push refuses ordinary follow-up work — with the stranded branches this
+# repo carries, that is most pushes. This is the reviewer's reproduction: two
+# pushed branches sharing 3 patch-ids, then one unrelated commit on top of one
+# of them, pushed as an ordinary update.
+#
+# A second patch family keeps this fixture's branches from becoming siblings of
+# the shared/ cases: one stray shared patch-id here would turn the RESUME_FROM
+# and merged cases below into accidental refusals.
+SAVED_SHARED=("${SHARED_COMMITS[@]}")
+make_shared_patches follow 3 task/1589-followup
+git push -q origin task/1589-followup
+git fetch -q origin
+FOLLOW_TIP="$(rebuild_from task/1589-followup-rebuild 3)"
+git push -q origin task/1589-followup-rebuild
+git fetch -q origin
+echo "follow-up note" > digiquant/src/digiquant/dashboard/followup-note.txt
+git add -A
+git commit -q -m "docs(dashboard): unrelated follow-up note on an existing branch"
+FOLLOW_UPDATE_TIP="$(git rev-parse HEAD)"
+SHARED_COMMITS=("${SAVED_SHARED[@]}")
+
+assert_exit 0 "update push to an already-pushed, already-overlapping branch is allowed" \
+  "$FIXTURE" "$ORIGIN_URL" \
+  "refs/heads/task/1589-followup-rebuild $FOLLOW_UPDATE_TIP refs/heads/task/1589-followup-rebuild $FOLLOW_TIP"
+
 # ── 1 and 2 shared patches is parallel work, not a rebuild ───────────────────
 REBUILD_ONE_TIP="$(rebuild_from task/1589-rebuild-one 1)"
 assert_exit 0 "overlap of 1 patch-id does not refuse" \
@@ -527,12 +598,18 @@ git checkout -q develop
 git merge -q --no-ff -m "merge: fold the sibling into develop" task/1589-sibling
 git push -q origin develop
 git fetch -q origin develop:refs/remotes/origin/develop
-DEV_SHA="$(git rev-parse develop)"
+# A zero remote sha, not develop's: this branch was never pushed, so this is a
+# creation push. Naming a real sha here would make it an update push, which the
+# guard skips before it looks at siblings — and this case would then pass for
+# the wrong reason and stop testing the merged-sibling filter at all.
 assert_exit 0 "overlap with a branch already merged into develop does not refuse" \
   "$FIXTURE" "$ORIGIN_URL" \
-  "refs/heads/task/1589-merged-rebuild $MERGED_TIP refs/heads/task/1589-merged-rebuild $DEV_SHA"
+  "refs/heads/task/1589-merged-rebuild $MERGED_TIP refs/heads/task/1589-merged-rebuild $ZERO40"
 
 # ── a protected branch is never treated as a sibling ─────────────────────────
+# Zero remote sha again, for the same reason: if this were an update push the
+# guard would allow it before consulting the sibling list, and dropping
+# `module/` from PROTECTED_BRANCH_PREFIXES would go unnoticed.
 make_shared_patches mod 3 module/dashboard
 git push -q origin module/dashboard
 git fetch -q origin
@@ -543,7 +620,7 @@ done
 MOD_REBUILD_TIP="$(git rev-parse HEAD)"
 assert_exit 0 "a protected module/* branch is not a duplicate-work sibling" \
   "$FIXTURE" "$ORIGIN_URL" \
-  "refs/heads/task/1589-mod-rebuild $MOD_REBUILD_TIP refs/heads/task/1589-mod-rebuild $DEV_SHA"
+  "refs/heads/task/1589-mod-rebuild $MOD_REBUILD_TIP refs/heads/task/1589-mod-rebuild $ZERO40"
 
 # ── structural guards ────────────────────────────────────────────────────────
 if grep -nE 'is_zero_sha\(\)' "$HOOK" >/dev/null \
@@ -717,6 +794,25 @@ if awk '
   pass=$((pass + 1))
 else
   echo "FAIL [structure] duplicate-work arm must be gated on refs/heads"
+  fail=$((fail + 1))
+fi
+
+# The same arm must tell the checker whether this push creates the ref. git
+# reports a ref the remote does not have as an all-zero sha, so that is the
+# creation signal — and the hook already computes it for the diff base. Reading
+# it in the arm, not somewhere else, is the difference between refusing a
+# rebuild and refusing every follow-up commit to an unmerged branch.
+if awk '
+  /^[[:space:]]*#/ { next }
+  /is_deletion.*-eq 0/ && /refs\/heads/ { gate = NR; signal = 0 }
+  /is_zero_sha "\$remote_sha"/ && gate && !signal { signal = NR }
+  /branch_restart_check\.py/ && !anchor { anchor = NR }
+  END { exit (gate && anchor && signal && signal > gate && signal < anchor) ? 0 : 1 }
+' "$HOOK"; then
+  echo "PASS [structure] duplicate-work arm passes the create-vs-update signal"
+  pass=$((pass + 1))
+else
+  echo "FAIL [structure] duplicate-work arm must read is_zero_sha \"\$remote_sha\" before the checker"
   fail=$((fail + 1))
 fi
 
