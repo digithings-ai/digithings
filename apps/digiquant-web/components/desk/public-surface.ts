@@ -29,8 +29,35 @@ export function publicCatalogPages(): Page[] {
   return PAGES.filter((page) => !isInviteSurface(page.path, page.label));
 }
 
+type GrantView = {
+  access: "granted" | "locked";
+  pages: { path: string; access: "granted" | "locked" }[];
+};
+
+/**
+ * An invite page the caller's access manifest grants, on a granted desk.
+ * Only then does the desk draw it or name it. The static HTML never does.
+ */
+export function inviteGranted(desks: readonly GrantView[] | null | undefined, path: string): boolean {
+  if (!desks) return false;
+  return desks.some(
+    (desk) => desk.access === "granted" && desk.pages.some((page) => page.path === path && page.access === "granted"),
+  );
+}
+
 /** A desk the public rail and picker may name. Invite desks stay off this site. */
 export function isPublicDeskChrome(desk: { id: string; label: string; blurb?: string; reason?: string }): boolean {
   if (desk.id === "fx") return false;
   return !INVITE.test(`${desk.label} ${desk.blurb ?? ""} ${desk.reason ?? ""}`);
+}
+
+/** Public desks, plus an invite desk once the manifest grants it to this caller. */
+export function isVisibleDesk(desk: {
+  id: string;
+  label: string;
+  blurb?: string;
+  reason?: string;
+  access: "granted" | "locked";
+}): boolean {
+  return isPublicDeskChrome(desk) || desk.access === "granted";
 }
