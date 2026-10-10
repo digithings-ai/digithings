@@ -115,7 +115,14 @@ apps/digithings-web/public/openwiki/
 # Secrets and credentials
 .env*
 projects/*/.env*
+# Wrangler dev vars. Rendered by `dt secrets render`; never committed.
+.dev.vars*
+!.dev.vars.example
 secrets.yaml
+# The contract manifest is names-only and MUST be tracked: both variants read it,
+# and parity CI compares them against it. The rule above is an unanchored net with
+# no other referent in the tree, so this is its one intended exception.
+!/config/contract/secrets.yaml
 digikey/examples/vault.yaml
 
 # Local stack (scripts/run_stack_local.sh)
