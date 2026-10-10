@@ -486,7 +486,7 @@ and [`docs/adr/0021-digiquant-supabase-project-topology.md`](../docs/adr/0021-di
 It is the **only** place the `api.gloom.sh` URL/site logic lives — `digifetch`
 stays a generic transport engine (no URLs, no env reads).
 
-- **89 tools, read scope, default ON (#4069, #4110, #4813, #4837
+- **89 tools, read scope, default OFF (#4069, #4110, #4813, #4837
   130-coverage).** `digifetch_quote`, `digifetch_quotes_batch`,
   `digifetch_price_history`, `digifetch_ticker_financials`, `digifetch_options_chain`,
   `digifetch_sec_filings`, `digifetch_holders`, `digifetch_analyst_research`,
@@ -509,9 +509,9 @@ stays a generic transport engine (no URLs, no env reads).
   `orchestrator_tools.py`. Keep them read-scope — every digifetch tool is
   read-scope, including the 13 inert write-shaped workspace/broker tools
   (inert by verdict, not by scope: read-scope membership is not a read-only
-  guarantee); the family is default-ON behind
+  guarantee); the family is default-OFF behind
   `GLOOMBERB_ENABLED` — only `1`/`true`/`yes`/`on` enable it, and any other value
-  (a typo included) disables the family, returning a typed `upstream_error`
+  (a typo included) leaves the family off, returning a typed `upstream_error`
   without a request.
   - **Calculators + compositions (local math, no transport).**
     `digifetch_options_calculator`, `digifetch_bond_calculator`,

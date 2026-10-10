@@ -80,6 +80,7 @@ def make_client(handler: Any, **kwargs: Any) -> GloomberbClient:
     )
     kwargs.setdefault("rate_limiter", RateLimiter(0))
     kwargs.setdefault("retry_policy", RetryPolicy(attempts=1))
+    kwargs.setdefault("enabled", True)
     return GloomberbClient(fetcher=fetcher, **kwargs)
 
 
@@ -210,6 +211,8 @@ def test_subsets_are_real_distinct_and_prompt_budgeted() -> None:
 def test_available_digifetch_tools_drops_exactly_the_gated_names(
     subset: tuple[str, ...], monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    # Enable the family first (default is OFF in deployed environments).
+    monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, "1")
     without_cookie = [t["function"]["name"] for t in available_digifetch_tools(subset)]
     monkeypatch.setenv(GLOOMBERB_SESSION_COOKIE_ENV, "gloomberb.session_token=test")
     with_cookie = [t["function"]["name"] for t in available_digifetch_tools(subset)]
@@ -221,6 +224,8 @@ def test_available_digifetch_tools_drops_exactly_the_gated_names(
 def test_available_digifetch_tools_defaults_to_every_schema(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # Enable the family first (default is OFF).
+    monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, "1")
     # No cookie → every free tool, in manifest order. Refused names keep their
     # entitlement declaration but are never advertised (DIG-1057).
     free = [n for n, v in LIVE_ENTITLEMENTS.items() if v == "free"]
@@ -234,12 +239,18 @@ def test_available_digifetch_tools_defaults_to_every_schema(
 
 
 def test_pro_tool_gate_is_cookie_presence(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Enable the family first (default is OFF in deployed environments).
+    monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, "1")
     assert available_digifetch_tools(("digifetch_transcripts",)) == []
     monkeypatch.setenv(GLOOMBERB_SESSION_COOKIE_ENV, "token")
     assert len(available_digifetch_tools(("digifetch_transcripts",))) == 1
 
 
-def test_available_digifetch_tools_rejects_an_unknown_name() -> None:
+def test_available_digifetch_tools_rejects_an_unknown_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Enable the family first (default is OFF in deployed environments).
+    monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, "1")
     with pytest.raises(KeyError):
         available_digifetch_tools(("digifetch_not_a_tool",))
 
@@ -247,17 +258,17 @@ def test_available_digifetch_tools_rejects_an_unknown_name() -> None:
 def test_available_digifetch_tools_respects_the_family_kill_switch(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Default ON (env unset) → schemas; disabled → never advertise a tool whose
-    # every call can only return the typed disabled envelope (#4146 review F1).
+    # Default OFF (env unset) → no schemas; explicit opt-in → schemas.
+    assert available_digifetch_tools() == []
+    monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, "1")
     assert available_digifetch_tools()
+    assert available_digifetch_tools(EQUITY_TOOLS)
     monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, "0")
     assert available_digifetch_tools() == []
     assert available_digifetch_tools(EQUITY_TOOLS) == []
     # A typo fails closed, same as the client's kill switch.
     monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, "ture")
     assert available_digifetch_tools() == []
-    monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, "1")
-    assert available_digifetch_tools()
 
 
 # ── dispatcher routing + envelope ─────────────────────────────────────────────
