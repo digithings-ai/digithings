@@ -1,0 +1,210 @@
+# Config contract — services, ports, env, bindings (epic DIG-2758 §8).
+#
+# Prod inventory verified 2026-10-10 at base develop@404b816c:
+#   compose services/ports/profiles <- docker-compose.yml
+#   workers/bindings/routes/vars   <- apps/*/wrangler.toml (7 files)
+#
+# `shared_env` lists vars that MUST be identical everywhere consumed. A var
+# lands here only if its value was verified in at least one artifact; hosted
+# values are recorded ONLY where inventoried from prod wrangler [vars] —
+# otherwise hosted is null (prod topology differs; S3/S9 fill gaps, never guess).
+# `services` is the port/endpoint inventory. `workers` is the binding inventory.
+
+shared_env:
+  - name: DIGIKEY_JWKS_URL
+    selfhost: http://digikey:8005/.well-known/jwks.json
+    hosted: null
+    consumers: [digigraph, digiquant, digisearch, digivault, digisearch-mcp]
+  - name: DIGIKEY_ISSUER
+    selfhost: http://digikey:8005
+    hosted: null
+    consumers: [digigraph, digiquant, digisearch, digivault, digikey, digisearch-mcp]
+  - name: DIGIKEY_AUDIENCE
+    selfhost: digi-ecosystem
+    hosted: null
+    consumers: [digigraph, digiquant, digisearch, digivault, digisearch-mcp]
+  - name: DIGIQUANT_URL
+    selfhost: http://digiquant:8001
+    hosted: null
+    consumers: [digigraph, heartbeat]
+  - name: DIGISEARCH_URL
+    selfhost: http://digisearch:8002
+    hosted: null
+    consumers: [digigraph, heartbeat]
+  - name: DIGITRACE_URL
+    selfhost: http://digitrace:8003
+    hosted: null
+    consumers: [digigraph]
+  - name: DIGIKEY_URL
+    selfhost: http://digikey:8005
+    hosted: null
+    consumers: [digichat, heartbeat]
+  - name: DIGIGRAPH_URL
+    selfhost: http://digigraph:8000
+    hosted: null
+    consumers: [heartbeat]
+  - name: DIGIGRAPH_INTERNAL_URL
+    selfhost: http://digigraph:8000
+    hosted: null
+    consumers: [digichat]
+  - name: DIGIQUANT_INTERNAL_URL
+    selfhost: http://digiquant:8001
+    hosted: null
+    consumers: [digichat]
+  - name: DIGITRACE_INTERNAL_URL
+    selfhost: http://digitrace:8003
+    hosted: null
+    consumers: [digichat]
+  - name: DIGISEARCH_INTERNAL_URL
+    selfhost: http://digisearch:8002
+    hosted: null
+    consumers: [digichat]
+  - name: OPENAI_API_BASE
+    selfhost: http://litellm:4000/v1
+    hosted: null
+    consumers: [digigraph]
+  - name: DIGISEARCH_SEARXNG_URL
+    selfhost: http://searxng:8080
+    hosted: null
+    consumers: [digisearch]
+  - name: SUPABASE_URL
+    selfhost: null # S2 (Supabase local) sets the local value
+    hosted: https://rwagjbkvxkdwqmouagad.supabase.co
+    consumers: [dashboard-api worker, digithings-stack worker]
+
+services:
+  # name: compose service name. profile: compose profile, or "core" (always on).
+  # host_bind: verified "host:port" from docker-compose.yml ports (all loopback).
+  - name: digikey
+    container_port: 8005
+    host_bind: 127.0.0.1:8005
+    profile: core
+  - name: digikey-blocklist-redis
+    container_port: 6379
+    host_bind: null # internal only
+    profile: core
+  - name: ollama
+    container_port: 11434
+    host_bind: 127.0.0.1:11435
+    profile: core
+  - name: digitrace
+    container_port: 8003
+    host_bind: 127.0.0.1:8003
+    profile: core
+  - name: digigraph
+    container_port: 8000
+    host_bind: 127.0.0.1:8000
+    profile: core
+  - name: digiquant
+    container_port: 8001
+    host_bind: 127.0.0.1:8001
+    profile: core
+  - name: digisearch
+    container_port: 8002
+    host_bind: 127.0.0.1:8002
+    profile: core
+  - name: searxng
+    container_port: 8080
+    host_bind: 127.0.0.1:8080
+    profile: core
+  - name: valkey
+    container_port: 6379
+    host_bind: null # internal only (searxng dependency)
+    profile: core
+  - name: litellm
+    container_port: 4000
+    host_bind: 127.0.0.1:4000
+    profile: core
+  - name: digivault
+    container_port: 8004
+    host_bind: 127.0.0.1:8004
+    profile: digivault
+  - name: redis
+    container_port: 6379
+    host_bind: null # internal only
+    profile: litellm-cache
+  - name: omniroute
+    container_port: 20128
+    host_bind: 127.0.0.1:20128
+    profile: omniroute
+  - name: digisearch-mcp
+    container_port: 8765
+    host_bind: 127.0.0.1:8765
+    profile: digisearch-mcp
+  - name: digivault-mcp
+    container_port: 8769
+    host_bind: 127.0.0.1:8769
+    profile: digivault-mcp
+  - name: zammad-mcp
+    container_port: 8770
+    host_bind: 127.0.0.1:8770
+    profile: zammad-mcp
+  - name: heartbeat
+    container_port: null # no published port
+    host_bind: null
+    profile: heartbeat
+  - name: digichat-db
+    container_port: 5432
+    host_bind: 127.0.0.1:5433
+    profile: digichat
+    note: postgres:16-alpine; S2 may converge on Supabase local PG17
+  - name: digichat
+    container_port: 3000
+    host_bind: ${DIGICHAT_PUBLISH_HOST:-127.0.0.1}:${DIGICHAT_PUBLISH_PORT:-3005}
+    profile: digichat
+  - name: prometheus
+    container_port: 9090
+    host_bind: 127.0.0.1:9090
+    profile: observability
+  - name: grafana
+    container_port: 3000
+    host_bind: 127.0.0.1:3001
+    profile: observability
+  - name: otel-collector
+    container_port: 4317
+    host_bind: 127.0.0.1:4317+4318
+    profile: otel
+
+workers:
+  # Cloudflare = production only. workers_dev/miniflare use is S3's scope;
+  # this table pins the PROD topology so S3/S9 can diff against it.
+  - name: digithings-digichat
+    file: apps/digichat-cloudflare/wrangler.toml
+    containers: [DigiChatContainer]
+    durable_objects: [DIGICHAT]
+    contract_vars: true # generator manages DT_* block in [vars]
+  - name: digithings-stack
+    file: apps/digithings-stack-cloudflare/wrangler.toml
+    containers: [DigiStackContainer, DigiQuantMcpContainer, DigiChatContainer]
+    durable_objects: [STACK]
+    r2_buckets: [MARKET_DATA]
+    contract_vars: true
+  - name: dashboard-api
+    file: apps/dashboard-api/wrangler.toml
+    workers_dev: true
+    durable_objects: []
+    contract_vars: true
+  - name: digitrace-langfuse
+    file: apps/digitrace-langfuse/wrangler.toml
+    containers: [LangfuseWebContainer, LangfuseWorkerContainer]
+    durable_objects: [LANGFUSE_WEB, LANGFUSE_WORKER]
+    r2_buckets: [LANGFUSE_EVENTS]
+    contract_vars: true
+  - name: digithings-cron
+    file: apps/digithings-cron/wrangler.toml
+    workers_dev: true
+    services_binding: [RUNNER -> digiquant-runner]
+    durable_objects: [BACKFILL_LEDGER]
+    contract_vars: true
+  - name: digiquant-runner
+    file: apps/digiquant-runner/wrangler.toml
+    containers: [DigiQuantRunnerContainer]
+    durable_objects: [RUNNER_CONTAINER]
+    r2_buckets: [ARCHIVE]
+    contract_vars: false # no [vars]/env table; container-only worker, no public hostname.
+      # S3's container shim passes DT_VARIANT into the container env at dev time.
+  - name: digithings-web
+    file: apps/digithings-web/wrangler.toml
+    note: Pages project (static export + functions/). No [vars], no secrets by
+      design; nothing for the generator to manage.
+    contract_vars: false
