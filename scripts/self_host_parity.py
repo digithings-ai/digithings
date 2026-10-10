@@ -104,6 +104,11 @@ BINDING_KINDS = {
     "hyperdrive": "hyperdrive",
     "mtls_certificates": "mtls_certificate",
 }
+# Kinds whose recorded name is a Durable Object class name, not an env var or
+# binding name. The contract maps runtime names; the class is reachable only
+# through the DO binding that names it (see durable_object_classes). Drift mode
+# still records these, so a new or removed container class is still surfaced.
+CLASS_NAME_KINDS = frozenset({"container"})
 # Container and DO namespacing tables: key is a table name, value is a per-entry key.
 NAMESPACED_BINDING_TABLES = {
     "durable_objects": "bindings",
@@ -201,6 +206,13 @@ def wrangler_surface() -> dict[str, dict[str, str]]:
                     entries[str(row[inner])] = kind
         surface[rel] = dict(sorted(entries.items()))
     return surface
+
+
+def durable_object_classes(path: Path) -> set[str]:
+    """Class names that a `[[durable_objects.bindings]]` row binds in one wrangler file."""
+    data = read_toml(path)
+    rows = (data.get("durable_objects") or {}).get("bindings") or []
+    return {str(r["class_name"]) for r in rows if isinstance(r, dict) and r.get("class_name")}
 
 
 # ---------------------------------------------------------------- compose side
@@ -451,7 +463,22 @@ def mode_contract() -> int:
     surface = surface_signature()
     unmapped: list[str] = []
     for path, entries in surface["wrangler"].items():
-        for name in entries:
+        do_classes: set[str] | None = None
+        for name, kind in entries.items():
+            if kind in CLASS_NAME_KINDS:
+                # A `[[containers]]` row names a Durable Object CLASS, not an
+                # env var or binding a runtime reads, so it has no contract env
+                # entry. It is still held to account: the class must be bound by
+                # a `[[durable_objects.bindings]]` row in the same file, and that
+                # binding NAME is what has to be in the contract. A container
+                # class nothing binds is a hard failure, never a silent skip.
+                if do_classes is None:
+                    do_classes = durable_object_classes(REPO_ROOT / path)
+                if name not in do_classes:
+                    unmapped.append(
+                        f"wrangler {path}: container class {name} has no durable_objects binding"
+                    )
+                continue
             if name not in declared and name not in secrets:
                 unmapped.append(f"wrangler {path}: {name}")
     for path, keys in surface["composeEnv"].items():

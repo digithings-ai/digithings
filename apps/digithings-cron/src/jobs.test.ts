@@ -39,6 +39,8 @@ const PATH_A_ENABLED_IDS = [
   "security-pip-audit",
   "security-npm-audit",
   "token-canary",
+  "openwiki-update",
+  "production-deploy-gate-watchdog",
   "secret-staleness",
   "dependency-freshness",
   "smoke-site",
