@@ -1185,6 +1185,55 @@ env:
     compose_literal: []
   wrangler_values:
     digithings-cron: '0'
+- name: DT_BASE_URL
+  description: Variant base URL (S1 identity, DIG-2759). Rendered by
+    scripts/render_config_contract.py into wrangler [vars] (hosted value)
+    and the root .env.example.
+  secret: false
+  sources:
+    wrangler_workers:
+    - dashboard-api
+    - digithings-cron
+    - digithings-digichat
+    - digithings-stack
+    - digitrace-langfuse
+    compose_files: []
+    env_example_files:
+    - .env.example
+    compose_literal: []
+- name: DT_TARGET
+  description: Variant selector for UIs (selfhost|hosted, S1 identity,
+    DIG-2759). Rendered by scripts/render_config_contract.py into wrangler
+    [vars] (hosted value) and the root .env.example.
+  secret: false
+  sources:
+    wrangler_workers:
+    - dashboard-api
+    - digithings-cron
+    - digithings-digichat
+    - digithings-stack
+    - digitrace-langfuse
+    compose_files: []
+    env_example_files:
+    - .env.example
+    compose_literal: []
+- name: DT_VARIANT
+  description: Variant identity (selfhost|hosted, S1 identity, DIG-2759).
+    Code branches on it (S3 container shim). Rendered by
+    scripts/render_config_contract.py into wrangler [vars] (hosted value)
+    and the root .env.example.
+  secret: false
+  sources:
+    wrangler_workers:
+    - dashboard-api
+    - digithings-cron
+    - digithings-digichat
+    - digithings-stack
+    - digitrace-langfuse
+    compose_files: []
+    env_example_files:
+    - .env.example
+    compose_literal: []
 - name: EXPORT_OUTPUT_DIR
   description: Directory exports are written to.
   secret: false
