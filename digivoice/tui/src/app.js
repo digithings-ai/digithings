@@ -26,14 +26,15 @@ const HERO_FACE = 5
 const HERO_SLOT = 6
 const MAX_SLOT = slotRowsFor(3)
 const FADE_MS = 200
-const STATUS_ROWS = 1
-const FOOTER_ROWS = 1
+const FOOTER_ROWS = 2
 const MIN_MENU_ROWS = 3
 const STATUS_MARK = "─"
+const RAIL_MIN = 16
+const RAIL_MAX = 28
 
 export function heroOffset(rows, slot = HERO_SLOT) {
   const height = Math.max(0, Math.floor(Number(rows) || 0))
-  const chrome = slot + HERO_GAP + STATUS_ROWS + MIN_MENU_ROWS + FOOTER_ROWS + HERO_GAP
+  const chrome = slot + HERO_GAP + MIN_MENU_ROWS + FOOTER_ROWS + HERO_GAP
   const room = height - chrome
   if (room <= 0) return 0
   return Math.min(Math.floor(height / 3), room)
@@ -61,22 +62,6 @@ function rgbaFromChannels(channels) {
   if (!channels) return null
   if (channels.cube != null) return RGBA.fromIndex(channels.cube)
   return RGBA.fromInts(channels[0], channels[1], channels[2])
-}
-
-function statusLine(text, truecolor) {
-  const parts = statusParts(text)
-  const paint = menuPaint(activeTheme, truecolor)
-  const ink = rgbaFromChannels(paint.statusText)
-  const plain = (value) =>
-    value && ink ? fg(ink)(value) : { __isChunk: true, text: value }
-  const chunks = [fg(ink || mutedColor(truecolor))(`${parts.mark} `)]
-  if (parts.head) chunks.push(plain(`${parts.head} · `))
-  if (!parts.summary || parts.kind === "info") chunks.push(plain(parts.summary))
-  else {
-    const status = rgbaFromChannels(paint.status) || statusColor(truecolor, parts.kind)
-    chunks.push(fg(status)(parts.summary))
-  }
-  return new StyledText(chunks)
 }
 
 function rgbaOf(color) {
@@ -160,6 +145,17 @@ function barColor(truecolor, theme = activeTheme) {
 function shadowColor(truecolor) {
   if (truecolor) return RGBA.fromInts(68, 68, 68)
   return RGBA.fromIndex(238)
+}
+
+function hairColor(truecolor) {
+  if (truecolor) return RGBA.fromInts(42, 46, 51)
+  return RGBA.fromIndex(240)
+}
+
+function center(text, width) {
+  const value = String(text || "")
+  const pad = Math.max(0, Math.floor((width - value.length) / 2))
+  return `${" ".repeat(pad)}${value}`
 }
 
 function inSettings(path) {
@@ -298,7 +294,7 @@ export function mountDigivoice(renderer, session, options = {}) {
   let downloadJob = null
   let downloadGen = 0
   let finished = false
-  let statusText = ""
+  let homeContext = []
   let homeRows = []
   let resolveDone = () => {}
   const done = new Promise((resolve) => {
@@ -375,22 +371,27 @@ export function mountDigivoice(renderer, session, options = {}) {
     flexShrink: 0,
   })
   const wordGap = new BoxRenderable(renderer, { height: HERO_GAP, flexShrink: 0 })
-  const statusBox = new BoxRenderable(renderer, {
+  const railWidth = Math.max(RAIL_MIN, Math.min(RAIL_MAX, Math.floor(frameWidth * 0.3)))
+  const paneWidth = Math.max(16, frameWidth - railWidth - 2)
+  const body = new BoxRenderable(renderer, {
     width: "100%",
-    height: STATUS_ROWS,
+    flexGrow: 1,
+    flexShrink: 1,
+    minHeight: 0,
+    flexDirection: "row",
+    alignItems: "stretch",
+  })
+  const railBox = new BoxRenderable(renderer, {
+    width: railWidth,
     flexShrink: 0,
+    flexDirection: "column",
     alignItems: "flex-start",
+    border: ["right"],
+    borderStyle: "single",
+    borderColor: hairColor(truecolor),
+    paddingLeft: 1,
   })
-  const statusNode = new TextRenderable(renderer, {
-    content: "",
-    height: 1,
-    width: frameWidth,
-    truncate: true,
-    wrapMode: "none",
-  })
-  statusBox.add(statusNode)
   const page = new ScrollBoxRenderable(renderer, {
-    width: "100%",
     flexGrow: 1,
     flexShrink: 1,
     minHeight: 0,
@@ -422,8 +423,15 @@ export function mountDigivoice(renderer, session, options = {}) {
   let historyMounted = false
   const pager = new BoxRenderable(renderer, { flexDirection: "column", alignItems: "flex-start" })
   const bottomGap = new BoxRenderable(renderer, { height: HERO_GAP, flexShrink: 0 })
-  const footerBox = new BoxRenderable(renderer, { width: "100%", flexShrink: 0, alignItems: "center" })
-  const footer = new TextRenderable(renderer, { content: FOOTER })
+  const footerBox = new BoxRenderable(renderer, {
+    width: "100%",
+    flexShrink: 0,
+    alignItems: "center",
+    border: ["top"],
+    borderStyle: "single",
+    borderColor: hairColor(truecolor),
+  })
+  const footer = new TextRenderable(renderer, { content: mutedLine(FOOTER, truecolor) })
   footer.onMouseUp = () => {
     goBack()
   }
@@ -431,11 +439,12 @@ export function mountDigivoice(renderer, session, options = {}) {
   column.add(list)
   column.add(pager)
   page.add(column)
+  body.add(railBox)
+  body.add(page)
   frame.add(lift)
   frame.add(heroBox)
   frame.add(wordGap)
-  frame.add(statusBox)
-  frame.add(page)
+  frame.add(body)
   frame.add(bottomGap)
   frame.add(footerBox)
   root.add(frame)
@@ -443,6 +452,7 @@ export function mountDigivoice(renderer, session, options = {}) {
 
   const rowNodes = []
   const pageNodes = []
+  const railNodes = []
 
   let heroSlot = HERO_SLOT
 
@@ -567,8 +577,84 @@ export function mountDigivoice(renderer, session, options = {}) {
     }
   }
 
+  function openRail(index) {
+    if (finished || working || !screen) return
+    if (screen.kind === "home") {
+      screen.selected = index
+      chooseCurrent()
+      return
+    }
+    // A rail click from inside a section goes back to the top level first,
+    // then opens the picked section. Leaving settings still writes them.
+    const leavingSettings = inSettings(screen.path)
+    stack.length = 0
+    screen = homeScreen()
+    screen.selected = index
+    renderList()
+    if (leavingSettings) {
+      persistSettings().catch(() => {})
+    }
+    chooseCurrent()
+  }
+
+  function activeSectionIndex() {
+    if (!screen || screen.kind === "home") return -1
+    const path = String(screen.path || "")
+    if (path.startsWith("/history")) return 0
+    if (path.startsWith("/settings")) return 1
+    if (path.startsWith("/system") || path === "/doctor") return 2
+    return -1
+  }
+
+  function renderRail() {
+    clear(railBox, railNodes)
+    const paint = menuPaint(activeTheme, truecolor)
+    const soft = rgbaFromChannels(paint.value)
+    const accent = rgbaFromChannels(paint.row)
+    const focusRail = Boolean(screen && screen.kind === "home")
+    const selected = screen ? screen.selected || 0 : 0
+    const active = activeSectionIndex()
+    const heading = new TextRenderable(renderer, {
+      content: mutedLine("digivoice", truecolor),
+      height: 1,
+      width: railWidth - 2,
+      truncate: true,
+      wrapMode: "none",
+    })
+    railBox.add(heading)
+    railNodes.push(heading)
+    homeRows.forEach((row, index) => {
+      const on = focusRail ? index === selected : index === active
+      const cursor = on ? "▶ " : "  "
+      const label = clip(rowLabel(row, { kind: "home", path: "/" }), Math.max(1, railWidth - 4))
+      const text = `${cursor}${label}`
+      const color = on ? accent : soft
+      const node = new TextRenderable(renderer, {
+        content: color ? new StyledText([fg(color)(text)]) : text,
+        height: 1,
+        width: railWidth - 2,
+        truncate: true,
+        wrapMode: "none",
+      })
+      node.onMouseUp = () => openRail(index)
+      railBox.add(node)
+      railNodes.push(node)
+    })
+  }
+
+  function renderHomePane() {
+    const line = (content) =>
+      addLine(list, rowNodes, content, null, { width: paneWidth, truncate: true, wrapMode: "none" })
+    line("/digivoice")
+    line(mutedLine("local speech · stays on this machine", truecolor))
+    line("")
+    for (const entry of homeContext.length ? homeContext : ["select a section on the left"]) {
+      line(mutedLine(entry, truecolor))
+    }
+  }
+
   function wrap(text) {
-    const width = Math.max(24, cols - 4)
+    const width = Math.max(24, paneWidth)
     const raw = String(text || "").replace(/\r/g, "")
     if (!raw.trim()) return []
     const out = []
@@ -606,7 +692,7 @@ export function mountDigivoice(renderer, session, options = {}) {
       color = statusColor(truecolor, "missing")
     }
     const tail = statusText ? `  ${statusText}` : ""
-    const head = middleEllipsis(words ? `${name}  ${words}` : name, Math.max(4, frameWidth - tail.length))
+    const head = middleEllipsis(words ? `${name}  ${words}` : name, Math.max(4, paneWidth - tail.length))
     if (!color) return `${head}${tail}`.trimEnd()
     return new StyledText([
       { __isChunk: true, text: `${head}${statusText ? "  " : ""}` },
@@ -671,7 +757,7 @@ export function mountDigivoice(renderer, session, options = {}) {
       if (!capturing) gray = rowValue(row)
     }
     const mark = row.downloaded ? 1 : 0
-    const room = Math.max(4, frameWidth - label.length - 2 - mark)
+    const room = Math.max(4, paneWidth - label.length - 2 - mark)
     const rowColor = rgbaFromChannels(menuPaint(activeTheme, truecolor).row)
     const action = new TextRenderable(renderer, {
       content: label ? ` ${label}` : "",
@@ -747,9 +833,15 @@ export function mountDigivoice(renderer, session, options = {}) {
     clear(pager, pageNodes)
     mountHistory(false)
     hoverIndex = null
-    statusNode.content = statusLine(statusText, truecolor)
+    renderRail()
     if (!screen) {
       paintHero()
+      return
+    }
+    if (screen.kind === "home") {
+      renderHomePane()
+      paintHero()
+      fadePane(screen.path || "")
       return
     }
     const header = headerFor(screen)
@@ -764,7 +856,7 @@ export function mountDigivoice(renderer, session, options = {}) {
     } else if (screen.kind === "doctor") {
       for (const row of screen.rows || []) {
         addLine(list, rowNodes, doctorLine(row), null, {
-          width: frameWidth,
+          width: paneWidth,
           truncate: true,
           wrapMode: "none",
         })
@@ -778,7 +870,6 @@ export function mountDigivoice(renderer, session, options = {}) {
           heroOffset(renderer.height || 24, heroSlot) +
           heroSlot +
           HERO_GAP +
-          STATUS_ROWS +
           HERO_GAP +
           FOOTER_ROWS
         const room = Math.max(1, (renderer.height || 24) - used)
@@ -797,7 +888,7 @@ export function mountDigivoice(renderer, session, options = {}) {
   }
 
   function pinSelection() {
-    if (!screen || !["home", "settings", "system", "logs"].includes(screen.kind)) return
+    if (!screen || !["settings", "system", "logs"].includes(screen.kind)) return
     const target = (headerFor(screen) ? 1 : 0) + (screen.selected || 0)
     const view = page.viewport ? page.viewport.height : 0
     if (view <= 0) return
@@ -898,7 +989,7 @@ export function mountDigivoice(renderer, session, options = {}) {
     const boot = await session.call({ op: "boot", start: options.start || "/" })
     takeTheme(boot)
     const opened = boot.screen || {}
-    statusText = boot.status || ""
+    homeContext = Array.isArray(boot.context) ? boot.context.map((entry) => oneLine(entry)).filter(Boolean) : []
     homeRows = boot.home || opened.rows || []
     const path = opened.path || boot.start || "/"
     const kind =

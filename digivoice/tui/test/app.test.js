@@ -22,6 +22,7 @@ const HOME_ROWS = [
 ]
 
 const STATUS = "ggml-base.en · paste · ok"
+const HOME = "local speech · stays on this machine"
 
 function session(extra = {}) {
   const calls = []
@@ -294,37 +295,32 @@ test("home pins the hero and esc does not quit", async () => {
   try {
     const app = mount(setup, api)
     const frame = await setup.waitForFrame(
-      (value) => value.includes("│ /history") && value.includes(FOOTER) && value.includes(STATUS),
+      (value) => value.includes(HOME) && value.includes(FOOTER),
     )
     const lines = frame.split("\n")
     const heroAt = lines.findIndex((line) => /[█▀▄]/.test(line))
     assert.equal(heroAt, heroOffset(56))
-    const statusAt = lines.findIndex((line) => line.includes("ggml-base.en"))
-    assert.equal(statusAt, heroAt + 8)
-    const statusRow = lines[statusAt]
-    assert.match(statusRow, /─/)
-    assert.doesNotMatch(statusRow, /\//)
     assert.match(frame, /\/digivoice/)
     assert.match(frame, /\/settings/)
     assert.match(frame, /\/system/)
     assert.match(frame, /\/quit/)
     assert.doesNotMatch(frame, /History/)
     assert.doesNotMatch(frame, /\[\*\]|\[ \]/)
-    const historyAt = lines.findIndex((line) => line.includes("│ /history"))
+    const historyAt = lines.findIndex((line) => line.includes("/history"))
     assert.equal((lines[historyAt].match(/\/history/g) || []).length, 1)
     const footerAt = lines.findIndex((line) => line.includes(FOOTER))
     assert.ok(footerAt > 40, "the footer stays at the bottom")
     assert.ok(footerAt > historyAt)
     const pathCol = (token) => lines.find((line) => line.includes(token)).indexOf(token)
     assert.equal(pathCol("/history"), pathCol("/quit"))
-    assert.equal(lines[historyAt][pathCol("/history") - 2], "│")
+    assert.equal(lines[historyAt][pathCol("/history") - 2], "▶")
     const quitLine = lines.find((line) => line.includes("/quit"))
     assert.equal(quitLine[pathCol("/quit") - 2], " ")
     const heroCol = lines.find((line) => /[█▀▄]/.test(line)).search(/\S/)
     assert.ok(heroCol > pathCol("/history") - 2)
     setup.mockInput.pressArrow("down")
     await setup.renderOnce()
-    assert.match(setup.captureCharFrame(), /│ \/settings/)
+    assert.match(setup.captureCharFrame(), /▶ \/settings/)
     setup.mockInput.pressEscape()
     assert.equal(await app.done, 0)
     assert.equal(app.exitCode, 0)
@@ -342,7 +338,7 @@ test("a short window lifts the wordmark less than a tall one", async () => {
   try {
     const tallApp = mount(tallSetup, session())
     const shortApp = mount(shortSetup, session())
-    const tallFrame = await tallSetup.waitForFrame((value) => value.includes("│ /history"))
+    const tallFrame = await tallSetup.waitForFrame((value) => value.includes(HOME))
     const shortFrame = await shortSetup.waitForFrame((value) => value.includes(FOOTER))
     const tallHero = tallFrame.split("\n").findIndex((line) => /[█▀▄]/.test(line))
     const shortHero = shortFrame.split("\n").findIndex((line) => /[█▀▄]/.test(line))
@@ -357,7 +353,7 @@ test("a short window lifts the wordmark less than a tall one", async () => {
   }
 })
 
-test("the menu scrolls while the wordmark and status stay", async () => {
+test("the wordmark and footer stay while a long pane scrolls", async () => {
   const setup = await createTestRenderer({ width: 100, height: 20 })
   const rows = Array.from({ length: 14 }, (_, index) => ({
     action: `Item ${index}`,
@@ -371,31 +367,26 @@ test("the menu scrolls while the wordmark and status stay", async () => {
       return {
         footer: FOOTER,
         context: [],
-        status: STATUS,
-        start: "/",
-        home: rows,
-        screen: { title: "Actions", path: "/", rows },
+        start: "/settings/long",
+        home: HOME_ROWS,
+        screen: { title: "long", path: "/settings/long", rows, selected: 0 },
       }
     },
   })
   try {
-    const app = mount(setup, api)
-    const before = await setup.waitForFrame((value) => value.includes("│ /item-0"))
+    const app = mount(setup, api, { start: "/settings/long" })
+    const before = await setup.waitForFrame((value) => value.includes("/Item 0"))
     const beforeLines = before.split("\n")
     const heroAt = beforeLines.findIndex((line) => /[█▀▄]/.test(line))
-    const statusAt = beforeLines.findIndex((line) => line.includes("ggml-base.en"))
     assert.equal(heroAt, heroOffset(20))
-    assert.ok(before.includes("│ /item-0"))
-    assert.equal(before.includes("│ /item-10"), false)
-    app.scrollMenu(8)
-    await setup.renderOnce()
+    assert.ok(before.includes("/Item 0"))
+    for (let i = 0; i < 8; i += 1) {
+      setup.mockInput.pressArrow("down")
+      await setup.renderOnce()
+    }
     const after = setup.captureCharFrame()
-    const afterLines = after.split("\n")
-    assert.equal(afterLines.findIndex((line) => /[█▀▄]/.test(line)), heroAt)
-    assert.equal(afterLines.findIndex((line) => line.includes("ggml-base.en")), statusAt)
-    assert.equal(after.includes("│ /item-0"), false)
-    assert.ok(after.includes("/item-"))
-    assert.match(after, /↑↓ move · enter select · esc back · click/)
+    assert.equal(after.split("\n").findIndex((line) => /[█▀▄]/.test(line)), heroAt)
+    assert.ok(after.includes(FOOTER))
     app.destroy()
   } finally {
     setup.renderer.destroy()
@@ -407,7 +398,7 @@ test("a click opens settings", async () => {
   const api = session()
   try {
     const app = mount(setup, api, { truecolor: true })
-    await setup.waitForFrame((value) => value.includes("│ /history"))
+    await setup.waitForFrame((value) => value.includes(HOME))
     const lines = setup.captureCharFrame().split("\n")
     const settingsRow = lines.findIndex((line) => line.includes("/settings"))
     assert.ok(settingsRow >= 0)
@@ -434,7 +425,7 @@ test("enter on quit asks the bridge to stop", async () => {
   const api = session()
   try {
     const app = mount(setup, api)
-    await setup.waitForFrame((value) => value.includes("│ /history"))
+    await setup.waitForFrame((value) => value.includes(HOME))
     setup.mockInput.pressArrow("down")
     setup.mockInput.pressArrow("down")
     setup.mockInput.pressArrow("down")
@@ -484,7 +475,7 @@ test("a settings choice returns to the same row", async () => {
   })
   try {
     const app = mount(setup, api)
-    await setup.waitForFrame((value) => value.includes("│ /history"))
+    await setup.waitForFrame((value) => value.includes(HOME))
     setup.mockInput.pressArrow("down")
     setup.mockInput.pressEnter()
     await setup.waitForFrame((value) => value.includes("/speech"))
@@ -537,7 +528,7 @@ function modelListSession(extra = {}) {
 }
 
 async function openModelList(setup) {
-  await setup.waitForFrame((value) => value.includes("│ /history"))
+  await setup.waitForFrame((value) => value.includes(HOME))
   setup.mockInput.pressArrow("down")
   setup.mockInput.pressEnter()
   await setup.waitForFrame((value) => value.includes("/speech"))
@@ -723,7 +714,7 @@ test("leaving settings writes settings before the screen changes", async () => {
   })
   try {
     const app = mount(setup, api)
-    await setup.waitForFrame((value) => value.includes("│ /history"))
+    await setup.waitForFrame((value) => value.includes(HOME))
     setup.mockInput.pressArrow("down")
     setup.mockInput.pressEnter()
     await setup.waitForFrame((value) => value.includes("/speech"))
@@ -735,7 +726,7 @@ test("leaving settings writes settings before the screen changes", async () => {
     assert.match(setup.captureCharFrame(), /\/settings/)
     setup.mockInput.pressEscape()
     await settle(setup)
-    await setup.waitForFrame((value) => value.includes("│ /settings") && value.includes("/digivoice"))
+    await setup.waitForFrame((value) => value.includes(HOME))
     const saveAt = api.calls.findIndex((call) => call.op === "save")
     assert.ok(saveAt > api.calls.findIndex((call) => call.op === "rows"))
     assert.equal(api.calls.filter((call) => call.op === "save").length, 1)
@@ -785,7 +776,7 @@ test("a hotkey is stored only when enter locks it in", async () => {
   })
   try {
     const app = mount(setup, api)
-    await setup.waitForFrame((value) => value.includes("│ /history"))
+    await setup.waitForFrame((value) => value.includes(HOME))
     setup.mockInput.pressArrow("down")
     setup.mockInput.pressEnter()
     await setup.waitForFrame((value) => value.includes("/hotkeys"))
@@ -882,7 +873,7 @@ test("capturing a hotkey suspends digivoice shortcuts", async () => {
   })
   try {
     const app = mount(setup, api)
-    await setup.waitForFrame((value) => value.includes("│ /history"))
+    await setup.waitForFrame((value) => value.includes(HOME))
     setup.mockInput.pressArrow("down")
     setup.mockInput.pressEnter()
     await setup.waitForFrame((value) => value.includes("/hotkeys"))
@@ -954,7 +945,7 @@ test("an unparseable hotkey keeps the previous binding", async () => {
   })
   try {
     const app = mount(setup, api)
-    await setup.waitForFrame((value) => value.includes("│ /history"))
+    await setup.waitForFrame((value) => value.includes(HOME))
     setup.mockInput.pressArrow("down")
     setup.mockInput.pressEnter()
     await setup.waitForFrame((value) => value.includes("/hotkeys"))
@@ -1002,7 +993,7 @@ test("reload reset restart and update stay in the page", async () => {
   })
   try {
     const app = mount(setup, api)
-    await setup.waitForFrame((value) => value.includes("│ /history"))
+    await setup.waitForFrame((value) => value.includes(HOME))
     setup.mockInput.pressArrow("down")
     setup.mockInput.pressArrow("down")
     setup.mockInput.pressEnter()
@@ -1012,10 +1003,6 @@ test("reload reset restart and update stay in the page", async () => {
     await settle(setup)
     await settle(setup)
     await setup.waitForFrame((value) => value.includes("reloaded"))
-    assert.match(
-      setup.captureCharFrame().split("\n").find((line) => line.includes("ggml-base.en")),
-      /ggml-base\.en/,
-    )
     setup.mockInput.pressEscape()
     await settle(setup)
     await setup.waitForFrame((value) => value.includes("/reset"))
@@ -1024,7 +1011,7 @@ test("reload reset restart and update stay in the page", async () => {
     await setup.waitForFrame((value) => value.includes("resetting"))
     await settle(setup)
     await settle(setup)
-    await setup.waitForFrame((value) => value.includes("│ /history") && value.includes("/digivoice"))
+    await setup.waitForFrame((value) => value.includes(HOME) && value.includes("/digivoice"))
     assert.ok(api.calls.some((call) => call.op === "reset"))
     app.destroy()
   } finally {
@@ -1045,7 +1032,7 @@ test("restart paints then re-execs", async () => {
   })
   try {
     const app = mount(setup, api)
-    await setup.waitForFrame((value) => value.includes("│ /history"))
+    await setup.waitForFrame((value) => value.includes(HOME))
     setup.mockInput.pressArrow("down")
     setup.mockInput.pressArrow("down")
     setup.mockInput.pressEnter()
@@ -1064,7 +1051,7 @@ test("restart paints then re-execs", async () => {
   }
 })
 
-test("update progress stays off the status line and then restarts", async () => {
+test("update progress paints in the pane and then restarts", async () => {
   const setup = await createTestRenderer({ width: 100, height: 56 })
   const api = session({
     system() {
@@ -1080,7 +1067,7 @@ test("update progress stays off the status line and then restarts", async () => 
   })
   try {
     const app = mount(setup, api)
-    await setup.waitForFrame((value) => value.includes("│ /history"))
+    await setup.waitForFrame((value) => value.includes(HOME))
     setup.mockInput.pressArrow("down")
     setup.mockInput.pressArrow("down")
     setup.mockInput.pressEnter()
@@ -1090,10 +1077,7 @@ test("update progress stays off the status line and then restarts", async () => 
     await settle(setup)
     await settle(setup)
     await setup.waitForFrame((value) => value.includes("digivoice update"))
-    const lines = setup.captureCharFrame().split("\n")
-    const status = lines.find((line) => line.includes("ggml-base.en"))
-    assert.match(status, /ggml-base\.en/)
-    assert.doesNotMatch(status, /hammerspoon|digivoice update/)
+    assert.match(setup.captureCharFrame(), /hammerspoon/)
     assert.equal(await app.done, 0)
     assert.equal(app.restarting, true)
     assert.ok(api.calls.some((call) => call.op === "restart"))
@@ -1119,7 +1103,7 @@ test("a failed update stays in the page", async () => {
   })
   try {
     const app = mount(setup, api)
-    await setup.waitForFrame((value) => value.includes("│ /history"))
+    await setup.waitForFrame((value) => value.includes(HOME))
     setup.mockInput.pressArrow("down")
     setup.mockInput.pressArrow("down")
     setup.mockInput.pressEnter()
@@ -1129,10 +1113,7 @@ test("a failed update stays in the page", async () => {
     await settle(setup)
     await settle(setup)
     await setup.waitForFrame((value) => value.includes("update broke"))
-    const lines = setup.captureCharFrame().split("\n")
-    const status = lines.find((line) => line.includes("ggml-base.en"))
-    assert.match(status, /ggml-base\.en/)
-    assert.doesNotMatch(status, /update broke/)
+    assert.match(setup.captureCharFrame(), /update broke/)
     assert.equal(app.restarting, false)
     assert.ok(!api.calls.some((call) => call.op === "restart"))
     app.destroy()
@@ -1218,7 +1199,7 @@ test("history logs and doctor stay inside the page", async () => {
   })
   try {
     const app = mount(setup, api)
-    await setup.waitForFrame((value) => value.includes("│ /history"))
+    await setup.waitForFrame((value) => value.includes(HOME))
     setup.mockInput.pressEnter()
     await setup.waitForFrame((value) => value.includes("2026-10-02T12:00:00Z") && value.includes("ship it"))
     let frame = setup.captureCharFrame()
@@ -1238,7 +1219,7 @@ test("history logs and doctor stay inside the page", async () => {
     assert.doesNotMatch(setup.captureCharFrame(), /Back/)
     setup.mockInput.pressEscape()
     await settle(setup)
-    await setup.waitForFrame((value) => value.includes("│ /history"))
+    await setup.waitForFrame((value) => value.includes(HOME))
     setup.mockInput.pressArrow("down")
     setup.mockInput.pressEnter()
     await setup.waitForFrame((value) => value.includes("/speech"))
@@ -1248,7 +1229,7 @@ test("history logs and doctor stay inside the page", async () => {
     assert.doesNotMatch(frame, /\/settings\/speech/)
     setup.mockInput.pressEscape()
     await settle(setup)
-    await setup.waitForFrame((value) => value.includes("│ /settings") && value.includes("/system"))
+    await setup.waitForFrame((value) => value.includes("/settings") && value.includes("/system"))
     setup.mockInput.pressArrow("down")
     setup.mockInput.pressEnter()
     await setup.waitForFrame((value) => value.includes("│ /doctor"))
@@ -1315,7 +1296,7 @@ test("a chooser opens on the saved row", async () => {
   })
   try {
     const app = mount(setup, api)
-    await setup.waitForFrame((value) => value.includes("│ /history"))
+    await setup.waitForFrame((value) => value.includes(HOME))
     setup.mockInput.pressArrow("down")
     setup.mockInput.pressEnter()
     await setup.waitForFrame((value) => value.includes("/speech"))
@@ -1348,7 +1329,7 @@ test("a failed reload shows the report", async () => {
   })
   try {
     const app = mount(setup, api)
-    await setup.waitForFrame((value) => value.includes("│ /history"))
+    await setup.waitForFrame((value) => value.includes(HOME))
     setup.mockInput.pressArrow("down")
     setup.mockInput.pressArrow("down")
     setup.mockInput.pressEnter()
@@ -1383,7 +1364,7 @@ test("an update that is not ok stays in the page", async () => {
   })
   try {
     const app = mount(setup, api)
-    await setup.waitForFrame((value) => value.includes("│ /history"))
+    await setup.waitForFrame((value) => value.includes(HOME))
     setup.mockInput.pressArrow("down")
     setup.mockInput.pressArrow("down")
     setup.mockInput.pressEnter()
