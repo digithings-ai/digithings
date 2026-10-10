@@ -193,11 +193,13 @@ export default function SvgPanZoom({ src, alt }: SvgPanZoomProps) {
         }}
         onKeyDown={onKeyDown}
       >
-        <div style={{ transform, transformOrigin: "0 0", willChange: "transform" }}>
+        {/* A narrow diagram is not stretched to the column width: it keeps its
+            natural proportions, capped to the viewport height, and centres. */}
+        <div className="flex justify-center" style={{ transform, transformOrigin: "0 0", willChange: "transform" }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img className="book-figure__light block w-full select-none" src={src} alt="" draggable={false} />
+          <img className="book-figure__light block h-auto max-h-[min(75vh,48rem)] w-auto max-w-full select-none" src={src} alt="" draggable={false} />
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img className="book-figure__dark block w-full select-none" src={darkVariant(src)} alt="" draggable={false} />
+          <img className="book-figure__dark block h-auto max-h-[min(75vh,48rem)] w-auto max-w-full select-none" src={darkVariant(src)} alt="" draggable={false} />
         </div>
       </div>
       <figcaption className="mt-2 flex flex-wrap items-center justify-between gap-2 font-mono text-[0.75rem] text-ink-soft">
