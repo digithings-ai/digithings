@@ -105,7 +105,13 @@ def _labeled(label: str, value: Any) -> str:
 
 
 def _display_customer(value: Any) -> str:
-    """Full customer display for the OCC demo: no masking.
+    """Full customer display. There is no masking layer and never was one here.
+
+    Chris rejected masking on 2026-10-06 (card 34a86696, DIG-1498): the OCC
+    demo is an internal support surface and returns customer data in full.
+    Two masking implementations (#5148, #5155) were closed unmerged. Do not
+    reintroduce one behind an env flag — ``tests/scripts/
+    test_zammad_mcp_no_mask.py`` fails on both the symbols and the output.
 
     Returns the raw name/email as-is (``_field`` handles dict payloads).
     """
@@ -233,8 +239,9 @@ def format_ticket_detail(
 ) -> str:
     """Render one ticket with its articles for the model.
 
-    Demo mode (#4944): all articles are shown, including internal notes
-    (tagged ``[internal]``), and customer names/emails render in full.
+    Every article is shown, including internal notes (tagged ``[internal]``),
+    and customer names/emails render in full — no masking layer exists here
+    (card 34a86696, 2026-10-06; see ``_display_customer``).
     ``owner_name`` is the ``resolve_user`` display name for the raw owner
     value; ``category`` is the open|closed|pending state category.
     """
@@ -393,8 +400,9 @@ def format_aggregate(
     """Render a windowed ranking for the model.
 
     Customer entries prefer the server-enriched full-name/email + id
-    ``name`` (raw values pass through in full, never masked); owner
-    entries prefer the resolved ``name`` enrichment.
+    ``name`` (raw values pass through in full, never masked — see
+    ``_display_customer``); owner entries prefer the resolved ``name``
+    enrichment.
     """
     scope = f"created in the last {since_days} day(s)" if since_days is not None else "all visible"
     if not ranked:
