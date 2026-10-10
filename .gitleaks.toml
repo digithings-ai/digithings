@@ -172,28 +172,68 @@ commits = [
 # --- Gloomberb deployer cookie (DIG-2752) --------------------------------------
 #
 # DEFENCE IN DEPTH, NOT THE GATE. The allowlist above exempts `^tests/` and
-# `^docs/.*\.md$`, so a cookie committed in either would never reach this rule
+# `^docs/.*\.md$`, so a cookie committed in either would never reach these rules
 # at all. The enforcement point for "no cookie value in the repo" is
 # `tests/scripts/test_gloomberb_session_cookie_runbook.py`
 # (`test_no_committed_deployment_config_carries_a_cookie_value`), which scans
-# every committed deployment-config file. This rule covers everything the
-# allowlist does not exempt.
+# every committed deployment-config file and is quoting-agnostic. These rules
+# cover everything the allowlist does not exempt.
 #
-# The pattern is written so it cannot match its own source line: after the env
-# name it requires an optional quote then `=` or `:`, and the literal next
-# character in this file is `?`, the quantifier that belongs to that quote.
-# The pattern matches our own env name only. An earlier draft also matched the
-# vendor's own cookie-slot spellings so a shell snippet wiring the cookie
-# directly would be caught, but spelling the vendor's storage slot in this file
-# is itself a DIG-1415 vendor-content finding, and an agent seat cannot approve
-# that exception (only `approved` entries may suppress a V rule, and one that
-# named a vendor symbol would be self-approval). The gap is named on DIG-2752;
-# the pytest guard is the enforcement point, and this rule is defence in depth
-# for the env-var spelling only.
+# TWO ARMS, split on 2026-10-10 after a measured false positive. The first
+# version was one rule whose value class allowed `.`, so a config that merely
+# FORWARDS the env var by name matched on the name itself: a 29-character
+# identifier reference was reported as a cookie value. Reproduced with this
+# file's own config under gitleaks 8.30.1. It cost one develop-breaking
+# suppression and stayed live, because that suppression pins one exact
+# fingerprint at the file's pre-rename path (the `cloudflare/` tree moved under
+# `apps/` the next day), so the same code at its current path cannot match the
+# ignored fingerprint.
+#
+# The split is the only expressible fix. RE2 has no lookahead, so "this value is
+# not an identifier reference" cannot be stated negatively, and a
+# rule-local allowlist with `regexTarget = match` silenced every arm under
+# 8.30.1 (measured, rejected). Requiring the closing quote on the quoted arm and
+# dropping `.` from the unquoted arm is what actually discriminates.
+#
+# Measured matrix (gitleaks 8.30.1, this file, `--no-git`). Every row is a
+# control, positive or negative, and the same matrix is asserted in
+# `tests/scripts/test_gloomberb_session_cookie_runbook.py` so CI needs no
+# scanner binary:
+#   NAME: env.NAME                     env passthrough, no secret -> silent
+#   NAME: "cookie"                     quoted value               -> FIRE
+#   NAME=cookie                        unquoted value             -> FIRE
+#   NAME="cookie"                      .env quoted value          -> FIRE
+#   process.env.NAME                   bare read                  -> silent
+#   ctx.env.NAME                       identifier reference       -> silent
+#   NAME, then a real quoted cookie on the same line                -> FIRE
+#   a near-miss identifier ending in the name                       -> silent
+# The single rule fired on five of those eight. Splitting loses no cookie
+# shape and removes five false-positive classes.
+#
+# DECLARED GAP: an UNQUOTED assignment whose cookie value contains a `.` is no
+# longer matched by the unquoted arm, because a `.` is what separates an
+# identifier reference from a value in every shape measured here. Such a value
+# is still matched when quoted, and the pytest gate above scans every committed
+# deployment-config file regardless of quoting.
+#
+# An earlier draft also matched the vendor's own cookie-slot spellings so a
+# shell snippet wiring the cookie directly would be caught, but spelling the
+# vendor's storage slot in this file is itself a DIG-1415 vendor-content
+# finding, and an agent seat cannot approve that exception (only `approved`
+# entries may suppress a V rule, and one that named a vendor symbol would be
+# self-approval). The gap is named on DIG-2752; the pytest guard is the
+# enforcement point, and these rules are defence in depth for the env-var
+# spelling only.
 # History note: the old "canonical store" was the GitHub Actions `cron`
 # environment secret, now retired; a pipeline copy is a credential nobody owns.
 [[rules]]
 id = "gloomberb-deployer-session-cookie"
-description = "A Gloomberb session cookie value committed to the repository (DIG-2752)"
-regex = '''GLOOMBERB_SESSION_COOKIE"?[ \t]*[=:][ \t]*"?[A-Za-z0-9_\-\.]{20,}'''
+description = "A quoted Gloomberb session cookie value committed to the repository (DIG-2752)"
+regex = '''GLOOMBERB_SESSION_COOKIE"?[ \t]*[=:][ \t]*"[A-Za-z0-9_\-\.]{20,}"'''
+keywords = ["GLOOMBERB_SESSION_COOKIE"]
+
+[[rules]]
+id = "gloomberb-deployer-session-cookie-unquoted"
+description = "An unquoted Gloomberb session cookie value committed to the repository (DIG-2752)"
+regex = '''GLOOMBERB_SESSION_COOKIE[ \t]*=[ \t]*[A-Za-z0-9_\-]{20,}'''
 keywords = ["GLOOMBERB_SESSION_COOKIE"]
