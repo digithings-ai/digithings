@@ -210,6 +210,7 @@ function PortfolioHome() {
               focused={panes.focus === placement.id}
               onFocus={() => panes.focusAt(placement.id)}
               onNext={panes.next}
+              panel={view.status === "ok" ? { id: placement.id, data: reads[placement.id]?.data } : undefined}
             />
           </div>
         );
@@ -273,6 +274,7 @@ function HoldingsHome() {
               focused={panes.focus === placement.id}
               onFocus={() => panes.focusAt(placement.id)}
               onNext={panes.next}
+              panel={view.status === "ok" ? { id: placement.id, data: reads[placement.id]?.data } : undefined}
             />
           </div>
         );
@@ -343,6 +345,7 @@ function AttributionHome() {
               focused={panes.focus === placement.id}
               onFocus={() => panes.focusAt(placement.id)}
               onNext={panes.next}
+              panel={view.status === "ok" ? { id: placement.id, data: reads[placement.id]?.data } : undefined}
             />
           </div>
         );
@@ -483,6 +486,7 @@ function TearsheetHome() {
               focused={panes.focus === placement.id}
               onFocus={() => panes.focusAt(placement.id)}
               onNext={panes.next}
+              panel={view.status === "ok" ? { id: placement.id, data: reads[placement.id]?.data } : undefined}
             />
           </div>
         );

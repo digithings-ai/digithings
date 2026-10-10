@@ -5,6 +5,7 @@ import { Button, Dialog, DialogContent, DialogDescription, DialogTitle } from "@
 import { asOfStatus, toneOf } from "../../../../../clients/digiquant-tui/src/format";
 import { shapeLines, type PaneBody, type PaneBlock } from "../../../../../clients/digiquant-tui/src/pages/shape";
 import { CHAR_PX, COMPACT_ROWS, compactBody, hiddenLabel } from "./pane-fit";
+import { PanelView } from "../panel-view";
 
 export const PANE_HINT = "[tab] next";
 
@@ -139,6 +140,7 @@ export function DeskPane({
   focused,
   onFocus,
   onNext,
+  panel,
 }: {
   title: string;
   route: string;
@@ -151,8 +153,11 @@ export function DeskPane({
   focused: boolean;
   onFocus: () => void;
   onNext: () => void;
+  /** The read's data, for a block that can also draw as a chart. Pass it only on an ok read. */
+  panel?: { id: string; data: unknown };
 }) {
   const body = blocks ?? shapeLines(lines ?? []);
+  const painted = body.blocks.map((block, index) => <BlockView key={index} block={block} />);
   const status = asOfStatus(route, asOf, dataAsOf);
   const dates = status.age ? status.label.slice(0, status.label.indexOf(` · ${status.age}`)) : status.label;
   const [open, setOpen] = useState(false);
@@ -210,7 +215,13 @@ export function DeskPane({
             <DialogTitle className={`truncate ${PANE_META} text-ink`}>{title}</DialogTitle>
           </header>
           <div className={`flex min-h-0 flex-1 flex-col gap-1.5 overflow-auto px-3 py-2 ${PANE_COPY} ${tone}`}>
-            {body.blocks.map((block, index) => <BlockView key={index} block={block} />)}
+            {panel ? (
+              <PanelView id={panel.id} title={title} data={panel.data}>
+                {painted}
+              </PanelView>
+            ) : (
+              painted
+            )}
           </div>
           <DialogDescription className={`flex h-8 shrink-0 items-center border-t border-hair px-3 text-ink-mute ${PANE_META}`}>{status.label}</DialogDescription>
         </DialogContent>

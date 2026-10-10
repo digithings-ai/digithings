@@ -11,7 +11,7 @@ import { useDeskAccess } from "./desk-access";
 import { inviteGranted, isInviteSurface } from "./public-surface";
 import { PortfolioPages, isPortfolioPath } from "./pages/portfolio";
 import { StrategiesPages } from "./pages/strategies";
-import { readDeskBlock } from "./read-block";
+import { readOfficial } from "./read-block";
 
 const STRATEGY_PATHS = new Set(["/strategies", "/strategies/detail", "/strategies/deploy"]);
 
@@ -51,6 +51,7 @@ export function DeskBody({ path }: { path: string }): ReactNode {
 /** Catalog pages that have no dedicated component. Same blocks as the web desk. */
 export function DeskCatalogLive({ path }: { path: string }) {
   const [reads, setReads] = useState<Record<string, ReadResult>>({});
+  const [data, setData] = useState<Record<string, unknown>>({});
 
   useEffect(() => {
     const placements = layoutFor(path);
@@ -58,9 +59,10 @@ export function DeskCatalogLive({ path }: { path: string }) {
     let cancel = false;
     for (const placement of placements) {
       const def = BLOCKS[placement.id];
-      void readDeskBlock(def.route, def.kind, ac.signal).then((result) => {
+      void readOfficial(def.route, def.kind, ac.signal).then((read) => {
         if (cancel) return;
-        setReads((prev) => ({ ...prev, [placement.id]: result }));
+        setReads((prev) => ({ ...prev, [placement.id]: read.result }));
+        setData((prev) => ({ ...prev, [placement.id]: read.data }));
       });
     }
     return () => {
@@ -69,7 +71,7 @@ export function DeskCatalogLive({ path }: { path: string }) {
     };
   }, [path]);
 
-  return <DeskReadout path={path} reads={reads} />;
+  return <DeskReadout path={path} reads={reads} data={data} />;
 }
 
 /** An invite page draws only for a caller the manifest grants. Static HTML never names it. */

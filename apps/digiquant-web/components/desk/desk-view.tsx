@@ -1,6 +1,7 @@
 import { BLOCKS, PAGES, layoutFor } from "../../../../clients/digiquant-tui/src/catalog";
 import type { ReadResult } from "../../../../clients/digiquant-tui/src/read";
 import { DeskFrame } from "./desk-frame";
+import { PanelView } from "./panel-view";
 import { PANE_GRID } from "./pages/pane";
 import { asOfStatus } from "../../../../clients/digiquant-tui/src/format";
 
@@ -17,7 +18,16 @@ function pageFor(path: string) {
 }
 
 /** Catalog blocks for one page. The web desk and the terminal frame both paint this grid. */
-export function DeskReadout({ path, reads }: { path: string; reads: Record<string, ReadResult | undefined> }) {
+export function DeskReadout({
+  path,
+  reads,
+  data = {},
+}: {
+  path: string;
+  reads: Record<string, ReadResult | undefined>;
+  /** Read payloads by block id. A block with a panel shape and an ok read gets the table/chart toggle. */
+  data?: Record<string, unknown>;
+}) {
   const page = pageFor(path);
   const layout = layoutFor(page.path);
   return (
@@ -35,9 +45,17 @@ export function DeskReadout({ path, reads }: { path: string; reads: Record<strin
             className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-surface"
           >
             <h2 className="m-0 flex h-7 shrink-0 items-center border-b border-hair px-2.5 font-mono text-[0.6875rem] font-normal tracking-[0.04em] text-ink-mute">{def.title}</h2>
-            <p className={`desk-pane-body m-0 min-h-0 flex-1 overflow-auto whitespace-pre-wrap px-2.5 py-1.5 font-mono text-[0.75rem] leading-[1.45] tabular-nums ${tone[status]}`}>
-              {lines.slice(0, 14).join("\n")}
-            </p>
+            {status === "ok" && data[placement.id] !== undefined ? (
+              <div className={`desk-pane-body flex min-h-0 flex-1 flex-col overflow-auto px-2.5 py-1.5 font-mono text-[0.75rem] leading-[1.45] tabular-nums ${tone[status]}`}>
+                <PanelView id={placement.id} title={def.title} data={data[placement.id]}>
+                  <p className="m-0 whitespace-pre-wrap">{lines.slice(0, 14).join("\n")}</p>
+                </PanelView>
+              </div>
+            ) : (
+              <p className={`desk-pane-body m-0 min-h-0 flex-1 overflow-auto whitespace-pre-wrap px-2.5 py-1.5 font-mono text-[0.75rem] leading-[1.45] tabular-nums ${tone[status]}`}>
+                {lines.slice(0, 14).join("\n")}
+              </p>
+            )}
             <p className="m-0 flex h-7 shrink-0 items-center truncate border-t border-hair px-2.5 font-mono text-[0.6875rem] tracking-[0.04em] text-ink-mute tabular-nums">
               {asOfStatus(def.route, read?.asOf, read?.dataAsOf).label}
             </p>
