@@ -50,6 +50,12 @@ doc-check:
 adr-check:
 	python3 scripts/check_adr_numbering.py
 
+# Every agent skill link in a skills home must resolve. Read-only (DIG-2284).
+# Override the target, e.g. `make skills-links-check SKILLS_HOME=~/.claude/skills`.
+SKILLS_HOME ?= .claude/skills
+skills-links-check:
+	python3 scripts/check_agent_skills_links.py --skills-home "$(SKILLS_HOME)" --strict
+
 # Lint the digivault-managed docs/vision vault (wikilinks, frontmatter, taxonomy,
 # orphans) against docs/vision/.digivault.yml. Uses the digivault core (pydantic +
 # pyyaml only); -P keeps cwd off sys.path so the real package under digivault/src
