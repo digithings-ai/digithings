@@ -1,6 +1,6 @@
 # ADR: Surfaces 1.0 architecture
 
-- Status: proposed (DIG-2694). The CTO accepts or amends it in review.
+- Status: accepted 2026-10-10 (board confirmation on DIG-2694). The public MCP hostname (D5) stays a human gate.
 - Date: 2026-10-10
 - Scope: DigiChat, digiquant, DigiVoice and the dashboard, on the TUI and the web.
 - Companion: [`parity-matrix.md`](parity-matrix.md). The matrix is the source of truth for scope; this ADR fixes the shape every row is built on.
