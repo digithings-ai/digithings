@@ -9,6 +9,8 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+import secrets
+import threading
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -197,6 +199,252 @@ def get_tools(
     return out_summary if mode is ToolExposureMode.SUMMARY else out_detailed
 
 
+# --- 284.4: a mutating MCP call stops and asks ---------------------------------
+#
+# 284.3 refuses to OFFER a tool the operator did not allow. That stops a
+# well-behaved model, because the model only ever sees the offered set. It does
+# not stop a write: an allowed tool whose operation changes remote state is
+# offered happily and then executed unattended on the next round. This gate sits
+# at the one point where a name becomes an action, and it is downstream of
+# 284.3's allowlist refusal on purpose -- the refusal must not depend on a human
+# saying yes.
+#
+# Where the recorded call lives. NOT in the LangGraph state:
+# graph/mcp_checkpoint_redact.py redacts the ``mcp_servers`` channel only, so
+# every other state key is written to the durable checkpoint verbatim and
+# archived. ``WorkflowState["pending_mcp_decision"]`` therefore carries a lean
+# event -- pending id, server, tool -- and never the arguments. The payload lives
+# here, in process memory, beside the credential the ToolContext already holds.
+
+
+class MetaToolConfirmationRefused(RuntimeError):
+    """A meta tool was handed to the confirm path.
+
+    ``discover`` / ``executeRead`` / ``executeWrite`` / ``executeDestructive``
+    decide for themselves what to call next, so a consent box naming one asks a
+    human to approve an unknown call. 284.3 refuses them before they are
+    offered, which is why this is unreachable in production and only a test can
+    hold it.
+    """
+
+
+@dataclass(frozen=True)
+class PendingMcpCall:
+    """One recorded call that is waiting for a human decision.
+
+    ``offered_name`` and ``args`` are the call, stored as they were offered and
+    as the model wrote them. A decision carries only approve-or-deny: the
+    consuming function below has no parameter for a tool name or for arguments,
+    so a substituted payload cannot be spelled, let alone executed.
+    """
+
+    pending_id: str
+    session_id: str | None
+    server_id: str
+    remote_tool: str
+    offered_name: str
+    args: dict[str, Any]
+
+    @property
+    def target_arguments(self) -> list[str]:
+        """Which argument carries the target. Values may be client data."""
+        return sorted(str(key) for key in self.args)
+
+    def as_public_event(self) -> dict[str, Any]:
+        """The lean event safe to surface, checkpoint, and render."""
+        return {
+            "pending_id": self.pending_id,
+            "server_id": self.server_id,
+            "tool": self.remote_tool,
+            "target_arguments": self.target_arguments,
+            "decided": False,
+        }
+
+
+_pending_mcp_calls: dict[tuple[str | None, str], PendingMcpCall] = {}
+_pending_mcp_lock = threading.Lock()
+
+
+def _remote_operation(
+    name: str, servers: list[dict[str, Any]]
+) -> tuple[str, str, dict[str, Any]] | None:
+    """Resolve ``name`` to the remote operation ``call_prefixed_tool`` would run.
+
+    Mirrors that function's resolution exactly -- including the whole prefixed
+    name it passes to ``resolve_remote_tool_name`` (DIG-507) and the tail it uses
+    when no list-time snapshot exists -- so the gate decides on the same string
+    the transport will be handed. Returns ``None`` when the name resolves to no
+    unique advertised tool; ``call_prefixed_tool`` refuses there, so there is no
+    execution to gate.
+    """
+    from digigraph.orchestration.mcp_client import (
+        raw_tool_names_for_server,
+        resolve_remote_tool_name,
+        split_prefixed_tool_name,
+    )
+
+    split = split_prefixed_tool_name(name)
+    if not split:
+        return None
+    server_id, offered = split
+    row = next(
+        (s for s in servers if isinstance(s, dict) and s.get("id") == server_id),
+        None,
+    )
+    if row is None:
+        return None
+    raw_names = raw_tool_names_for_server(row)
+    if raw_names is None:
+        return server_id, offered, row
+    remote = resolve_remote_tool_name(server_id, name, raw_names)
+    if remote is None:
+        return None
+    return server_id, remote, row
+
+
+def _requires_human_approval(
+    name: str, servers: list[dict[str, Any]]
+) -> tuple[str, str, dict[str, Any]] | None:
+    """Return the remote operation when this call must not run unattended.
+
+    ``mutatingTools`` is the operator's own row (284.1), never a server-supplied
+    annotation: rule 5 makes an absent list mean every allowed tool mutates.
+    """
+    from digigraph.orchestration.mcp_client import _refused_meta_tool, mcp_server_mutating_tools
+
+    resolved = _remote_operation(name, servers)
+    if resolved is None:
+        return None
+    server_id, remote, row = resolved
+    if _refused_meta_tool(remote):
+        raise MetaToolConfirmationRefused(
+            f"Refusing to ask for approval of meta tool {remote!r} on server {server_id!r}: "
+            "it selects its own operation, so no consent box can describe what it will call."
+        )
+    if remote not in mcp_server_mutating_tools(row):
+        return None
+    return server_id, remote, row
+
+
+def _refuse_for_human_approval(
+    name: str, args: dict[str, Any], context: ToolContext, server_id: str, remote: str
+) -> dict[str, Any]:
+    """Record the call once, audit it once, and refuse it without executing it."""
+    from digigraph.audit import audit_log
+
+    record = PendingMcpCall(
+        pending_id=secrets.token_hex(16),
+        session_id=context.session_id,
+        server_id=server_id,
+        remote_tool=remote,
+        offered_name=name,
+        args=dict(args),
+    )
+    key = (record.session_id, record.pending_id)
+    with _pending_mcp_lock:
+        _pending_mcp_calls[key] = record
+
+    audit_log(
+        "mcp_call_pending_human_approval",
+        agent_id="digigraph",
+        payload={
+            "tool": remote,
+            "offered_tool": name,
+            "server_id": server_id,
+            "pending_id": record.pending_id,
+            "target_arguments": record.target_arguments,
+            "request_id": context.request_id or "",
+            "workflow_id": context.workflow_id or "",
+        },
+        redact=["args", "body", "text", "comment"],
+    )
+    if isinstance(context.state, dict):
+        context.state["pending_mcp_decision"] = record.as_public_event()
+
+    targets = ", ".join(record.target_arguments) or "none"
+    return {
+        "error": "mcp_call_requires_human_approval",
+        "pending_id": record.pending_id,
+        "server_id": record.server_id,
+        "tool": record.remote_tool,
+        "target_arguments": record.target_arguments,
+        "message": (
+            f"Tool {record.remote_tool!r} on server {record.server_id!r} changes remote state, "
+            f"so it was not called. It was called as {record.offered_name!r} with the target "
+            f"argument(s) {targets}; no argument value was evaluated. A human must decide "
+            f"pending decision {record.pending_id!r} before anything runs. Stop this turn and "
+            "report that decision as pending."
+        ),
+    }
+
+
+def pending_mcp_decision(
+    pending_id: str, *, session_id: str | None = None
+) -> PendingMcpCall | None:
+    """The recorded call behind a pending id, or ``None``.
+
+    Session-scoped on purpose: a pending id is a handle inside one session, and
+    a decision route must not be able to read another session's recorded call.
+    """
+    with _pending_mcp_lock:
+        return _pending_mcp_calls.get((session_id, pending_id))
+
+
+def decide_mcp_call(
+    pending_id: str,
+    approve: bool,
+    *,
+    session_id: str | None = None,
+    servers: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Consume a pending decision. The only path that can execute a recorded call.
+
+    There is no parameter for a tool name or for arguments, and none may be
+    added: what runs is ``record.offered_name`` and ``record.args`` as they were
+    recorded. The record is consumed before the call leaves, so an approval
+    replays as unknown rather than running twice -- at-most-once is the correct
+    bias for a brake on unattended writes.
+
+    ``servers`` carries the transport only. The row that executes must be the one
+    the call was recorded against; a different row is refused rather than
+    substituted. Nothing is consumed unless the call is actually dispatched.
+    """
+    with _pending_mcp_lock:
+        record = _pending_mcp_calls.pop((session_id, pending_id), None)
+    if record is None:
+        return {"error": "unknown_pending_mcp_decision", "pending_id": pending_id}
+
+    from digigraph.audit import audit_log
+
+    if not approve:
+        audit_log(
+            "mcp_call_denied_by_human",
+            agent_id="digigraph",
+            payload={
+                "tool": record.remote_tool,
+                "server_id": record.server_id,
+                "pending_id": record.pending_id,
+            },
+        )
+        return {
+            "status": "denied",
+            "pending_id": record.pending_id,
+            "tool": record.remote_tool,
+            "server_id": record.server_id,
+        }
+
+    if not servers:
+        return {"error": "mcp_call_requires_servers", "pending_id": record.pending_id}
+    if not any(
+        isinstance(s, dict) and s.get("id") == record.server_id and s.get("url") for s in servers
+    ):
+        return {"error": "mcp_server_not_available", "pending_id": record.pending_id}
+
+    from digigraph.orchestration.mcp_client import call_prefixed_tool
+
+    return call_prefixed_tool(record.offered_name, record.args, servers)
+
+
 def execute(name: str, args: dict[str, Any], context: ToolContext) -> str | dict[str, Any]:
     """Dispatch to the handler for the given tool name. Returns handler result (str or dict)."""
     from digigraph.orchestration.mcp_client import call_prefixed_tool, split_prefixed_tool_name
@@ -247,7 +495,12 @@ def execute(name: str, args: dict[str, Any], context: ToolContext) -> str | dict
             ),
         }
     if is_extra and not has_tool(name):
-        return call_prefixed_tool(name, args, context.extra_mcp_servers or [])
+        extra_servers = context.extra_mcp_servers or []
+        gated = _requires_human_approval(name, extra_servers)
+        if gated is not None:
+            server_id, remote, _row = gated
+            return _refuse_for_human_approval(name, args, context, server_id, remote)
+        return call_prefixed_tool(name, args, extra_servers)
     _, _, handler, _ = _tools[name]
     return handler(args, context)
 

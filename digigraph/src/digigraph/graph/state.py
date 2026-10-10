@@ -96,6 +96,14 @@ class WorkflowState(TypedDict, total=False):
     # as digisearch_index / response_language). Underscore prefix matches the
     # CompactionMiddleware-style `_compaction_event` contract from the issue.
     _compaction_event: dict[str, Any] | None
+    # A mutating MCP call refused by the 284.4 gate and waiting for a human.
+    # Must be declared (same LangGraph pitfall as _compaction_event above).
+    # Lean event only: the recorded tool name, server, pending id and target
+    # argument NAMES, never the argument values. graph/mcp_checkpoint_redact.py
+    # redacts the mcp_servers channel only, so any other key is checkpointed
+    # verbatim and archived -- and the payload the approval would execute lives
+    # in orchestration.registry's pending store, in process memory.
+    pending_mcp_decision: dict[str, Any] | None
     # Optional LLM-facing message list for multi-turn / research sessions.
     # Compaction mutates the view handed to digillm; checkpoint callers that need
     # the pre-compaction transcript should reload from workspace refs on the event.
