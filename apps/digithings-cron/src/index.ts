@@ -324,9 +324,13 @@ async function handleBackfill(request: Request, env: Env): Promise<Response> {
     }
 
     if (result.status === 422) {
-      // GitHub declined to start a run — the maintenance workflow is disabled, or
-      // a run for this ref is already queued. No run exists for these dates, so
-      // this is NOT remediation: recording `done` is what let a later retry answer
+      // GitHub declined to start a run benignly — the body said a run for this
+      // ref is already queued or already running, which `isBenign422` in
+      // dispatch.ts is the only way to reach here. A disabled maintenance
+      // workflow is NOT one of those cases: its 422 body matches no benign
+      // substring, so `postGithub` throws and the catch below answers 502
+      // instead. No run exists for these dates either way, so this is NOT
+      // remediation: recording `done` is what let a later retry answer
       // "already remediated" for a date that was never backfilled, forever. The
       // dates settle as `dispatch_suppressed`, stay claimable for the next POST,
       // and the caller gets 409 — not the 200 that claimed success.

@@ -182,12 +182,9 @@ export function LandingPage({ embedOrigin }: { embedOrigin: string }) {
         </div>
       </section>
 
-      {/* No horizontal padding here: the digiquant band paints its own tinted
-          background and the owner asked for it full width ("make the background
-          of the digiquant section expand the full width… its own background").
-          QuantSection owns both the padding and the frame, so the background
-          reaches the viewport edges while the content stays on the page grid. */}
-      <section id="digiquant" className="relative">
+      {/* QuantSection owns its padding and frame, like the other bands; the
+          section only carries the anchor and the closing rail. */}
+      <section id="digiquant" className="line-b relative">
         <QuantSection />
       </section>
 

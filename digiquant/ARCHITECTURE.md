@@ -869,12 +869,33 @@ Defined in `models.py`. Returned by `run_backtest()`, the pipeline's backtest no
 | `end_time` | `str` | ISO 8601 UTC, derived from last bar `ts_init` |
 | `total_pnl` | `float` | `final_balance - 1_000_000.0` (hardcoded starting capital) |
 | `total_return_pct` | `float` | `total_pnl / 1_000_000.0 * 100` |
-| `sharpe_ratio` | `float | None` | Annualised (252 days) from Nautilus portfolio analyzer |
-| `max_drawdown_pct` | `float | None` | Negative percent (e.g. `-15` is −15%), from `get_performance_stats_pnls()` or returns series fallback |
+| `sharpe_ratio` | `float | None` | Annualised from the account-report **balance path**, never from the analyzer (DIG-462) |
+| `max_drawdown_pct` | `float | None` | Negative percent (e.g. `-15` is −15%), from the same balance path |
 | `num_trades` | `int` | Row count of `generate_order_fills_report()` |
 | `per_symbol_pnl` | `dict[str, float]` | Populated for multi-symbol runs; empty for single-symbol |
+| `missing` | `list[str]` | Names that could not be produced — the machine-readable form of the "missing metrics" clause in `message`. Empty when `status` is `ok` |
 | `status` | `str` | `ok` | `partial` | `error` |
 | `message` | `str` | Optional detail |
+
+`sharpe_ratio`, `max_drawdown_pct` and `total_return_pct` all derive from one
+source: the balance column of `generate_account_report(Venue("SIM"))`, one row
+per fill. Returns are the percent change between consecutive balance rows,
+`years = (last_ts - first_ts) / 365.25 days`, and the annualisation factor is
+`sqrt(n_returns / years)` — **not** `sqrt(252)`. The fill path is irregular in
+time, so the observation count is the only correct scaler; `sqrt(252)` on a
+per-position series produced `sharpe_ratio = -76.34` against a true `-3.10%`
+return. `sharpe_ratio` stays `None` rather than a fabricated `0.0` when there
+are fewer than two returns, when dispersion is zero, or when no usable
+timestamps exist; such results are `partial`.
+
+Two of those `missing` names are worth knowing: `returns_series` (the chart
+return series could not be confirmed against `analyzer.portfolio_returns()`
+and was withheld rather than published unverified — see
+`_verified_returns_series`) and `returns_series (k/n symbols)` (same, counted
+for a multi-symbol run). **Never take a metric from a Nautilus stats dict
+without confirming the key exists**: `get_performance_stats_pnls()` has no
+`Max Drawdown %` key, and the missing key used to fall through to a wrong
+fallback silently.
 
 ### OptimizationConstraints
 

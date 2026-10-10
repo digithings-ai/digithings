@@ -229,6 +229,7 @@ nautilus_smoke:
   - tests/dq/conftest.py
   - tests/dq/test_api.py
   - tests/dq/test_audit.py
+  - tests/dq/test_balance_path_metrics.py
   - tests/dq/test_backtest.py
   - tests/dq/test_calibrations_loader.py
   - tests/dq/test_nautilus_runner.py

@@ -938,13 +938,33 @@ html {
 }
 
 .pixel-word-band {
-  padding: clamp(3rem, 8vw, 6rem) var(--page-pad) 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  /* min-height, not height: the mark is an 88:10 SVG, so at the enlarged
+     footer width it outgrows a fixed band and a fixed box would clip its top
+     and bottom glyph rows. The band grows with the mark instead. */
+  min-height: clamp(4.5rem, 12vw, 9rem);
+  padding-left: var(--page-pad);
+  padding-right: var(--page-pad);
+  /* x only: the mark deliberately bleeds past the gutters, but it must never
+     be clipped top or bottom. */
   overflow-x: clip;
 }
 
 .pixel-word.pixel-word-footer {
-  width: min(100%, 1400px);
-  margin: 0 auto;
+  width: min(118%, 1600px);
+  height: auto;
+  margin: 0;
+  margin-top: 0;
+  /* A flex item shrinks by default, which would fold 118% straight back to the
+     band width and make the enlargement a no-op below the 1600px cap. */
+  flex-shrink: 0;
+  /* …and `packages/design/site/site.css` puts `max-width: 100%` on every svg,
+     which caps the used width at the band's content box. flex-shrink cannot
+     lift a max-width; only this can. The site sheet arrives inside
+     layer(components), so this has to stay unlayered to outrank it. */
+  max-width: none;
 }
 
 .pixel-word .c { opacity: var(--f); }

@@ -1000,16 +1000,40 @@ list when the provider requires one. PaywallCard / ChatShell still use `ByokCliF
 (tools ON + English — not localStorage); catalog and auth toggles persist to
 localStorage. No sign-in is required for these session prefs.
 
-**Operator MCP (`mcp.servers` in deploy YAML).** Each `{ id, url, label?, default?, setup? }` is
-forwarded by the BFF as `X-Digi-Mcp-Servers` (JSON `{id,url,auth?,token?,authHeader?,setup?}`). `setup` is the
+**Operator MCP (`mcp.servers` in deploy YAML).** Each `{ id, url, label?, default?, setup?, allowedTools?, mutatingTools? }` is
+forwarded by the BFF as `X-Digi-Mcp-Servers` (JSON `{id,url,auth?,token?,authHeader?,setup?,allowedTools?,mutatingTools?}`). `setup` is the
 operator's tool-registration values (digisearch `index_name`, digivault `path_prefix`); digigraph merges it over the
 model's tool args. **Operator URLs never reach the
-browser** (`toDigichatClientConfig` / `toEmbedClientConfig` strip `url`/`token`/`tokenEnv`/`authHeader`/`setup`, keeping only
+browser** (`toDigichatClientConfig` / `toEmbedClientConfig` strip `url`/`token`/`tokenEnv`/`authHeader`/`setup`/`allowedTools`/`mutatingTools`, keeping only
 `id`/`label`/`default`). An operator server may set a static `token` (inline) or `tokenEnv` (resolved from the
 deploy environment by `loader.ts`, inline `token` wins if both are set) plus an optional `authHeader` — the outbound
 header name for that token, e.g. `X-API-Key` for MCP servers that don't speak `Authorization: Bearer` (DataTap's,
 `#3841`). `authHeader` is operator-only: it has no counterpart on the session-overlay schema, so a client can never
 set or override it — only the operator/token pairing on the same YAML row can.
+A server row may also carry an **operator tool allowlist**: `allowedTools` (the exact remote tool names the model may
+call on that server) and `mutatingTools` (the subset of those that write). Both are bounded to
+`MAX_MCP_TOOL_ENTRIES` (256) entries of at most `MAX_MCP_TOOL_NAME_LENGTH` (64) characters — the same width as
+digigraph's `prefixed_tool_name` truncation — with `MAX_UPSTREAM_JSON` as the backstop. The entry bound clears the widest
+read-scope surface this repo ships (digiquant's `scope="read"` server, 113 tools) because a bound below it would reject a
+correct config and take the whole `X-Digi-Mcp-Servers` header down with it. The two limits are independent, and the byte cap
+is the one that binds first at the top of the range: the real 113-name row is about 6 KB, but a maximal row (256 names at 64
+characters, both lists) is about 34 KB against a 16 KB cap — legal by both bounds here, refused by the header guard. Either
+overshoot drops the whole header unlogged, so a row that disappears is a config to look at, not a server to debug. Semantics: **deny-by-default**
+(absent and `[]` both mean zero tools, and neither is forwarded), **exact match only** (no globs; digigraph compares
+the remote name literally, so a glob could only ever never match), and an over-budget list is dropped whole rather
+than truncated, because a partial allowlist denies tools while still looking configured. `allowedTools`/`mutatingTools`
+are **operator-only** exactly like `authHeader`: they have no counterpart on the session-overlay schema, so a client
+can neither set nor override them, and the overlay merge copies them from the operator row only. The bounds live in
+`mcp-servers.ts` and are imported by `schema.ts` so the zod bound and the header guard cannot disagree — a
+disagreement would silently drop the whole header, which is the failure mode `DIG-284` removes. `.strict()` still
+holds, so a misspelled `allowdTools` fails the parse rather than becoming a no-op allowlist.
+**digigraph does not enforce these keys yet** — see `DIG-284` leaf 284.1. Until that lands they are
+accepted by this app, forwarded on the header, and then **silently ignored** in digigraph: `parse_mcp_servers_json`
+rebuilds each row from scratch (`id`/`url` plus auth and `setup` only) and drops unknown keys, and `context.py`
+constructs `McpServerRef` field-by-field, so `extra="forbid"` never sees them. Two consequences worth being explicit
+about: configuring the field today grants no protection, and a server row that *omits* it keeps **full** tool access
+rather than dropping to zero. Absence is deny-by-default from leaf 284.1 onward, not before — do not read the
+digichat-side semantics below as a live gate today.
 The `DIGICHAT_EMBED_TENANTS` env registry accepts the same operator-only fields on a tenant's
 `mcp.servers` entry (`token`/`tokenEnv`/`authHeader`), merged through the same loader and stripped
 by the same browser projections. `/tools` lists every

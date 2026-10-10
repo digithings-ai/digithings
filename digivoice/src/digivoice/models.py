@@ -35,6 +35,50 @@ class CliResult(BaseModel):
     stderr: str
 
 
+InstallStatus = Literal["present", "installed", "failed"]
+
+
+class InstallStep(BaseModel):
+    """One piece of a local digivoice install. Never a cloud STT or TTS host."""
+
+    id: str
+    status: InstallStatus
+    detail: str
+
+
+class InstallReport(BaseModel):
+    steps: list[InstallStep] = Field(default_factory=list)
+
+    @property
+    def ok(self) -> bool:
+        return all(step.status != "failed" for step in self.steps)
+
+
+class InstallStamp(BaseModel):
+    """Versions `digivoice install` last wrote. Update refreshes a step that differs."""
+
+    bun: str = ""
+    opentui: str = ""
+    whisper: str = ""
+    piper: str = ""
+    sox: str = ""
+    espeak: str = ""
+    stt: str = ""
+    voice: str = ""
+
+
+class InstallSelection(BaseModel):
+    """What `digivoice install` should fetch. Auto is the current default set.
+
+    A pick lists catalog ids. It never names a cloud STT or TTS service.
+    """
+
+    auto: bool = True
+    speech: list[str] = Field(default_factory=list)
+    voice: list[str] = Field(default_factory=list)
+    rewrite: list[str] = Field(default_factory=list)
+
+
 class HistoryEntry(BaseModel):
     """One JSONL line. `ts` is ISO-8601 UTC; `wav` is null when there is no file."""
 

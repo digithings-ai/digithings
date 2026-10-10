@@ -28,8 +28,9 @@ import os
 import re
 import socket
 import time
+from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any  # score:allow untyped any — MCP JSON payloads / tool results
+from typing import Any, overload  # score:allow untyped any — MCP JSON payloads / tool results
 from urllib.parse import urlparse
 
 import anyio
@@ -63,12 +64,34 @@ _MAX_MCP_JSON = 16384
 _MAX_TOKEN = 4096
 _AUTH_KINDS = frozenset({"bearer", "oauth"})
 _AUTH_HEADER_RE = re.compile(r"^[A-Za-z][A-Za-z0-9-]{0,40}$")
+# Raw remote tool name carried alongside a listed tool (DIG-284). The offered
+# name `prefixed_tool_name` builds substitutes non-identifier characters and
+# truncates at 64, so it cannot be matched back to the name an operator put in
+# `allowedTools`. Stripped before the record reaches a model provider.
+_RAW_TOOL_NAME_KEY = "x_digi_mcp_raw_tool_name"
 # Opt-in hardening (#3879): when set, only these hostnames (comma-separated,
 # typically dotless Docker service names) may resolve into private space.
 _PRIVATE_HOST_ALLOWLIST_ENV = "DIGIGRAPH_MCP_PRIVATE_HOST_ALLOWLIST"
 
 _cache: dict[str, tuple[float, list[dict[str, Any]]]] = {}
+# The names the MCP servers actually advertise, captured at list time beside
+# _cache under the same key. The offered name ``<server_id>_<safe>`` is lossy:
+# every character outside [a-zA-Z0-9_-] collapses to "_" and the remainder is
+# capped at 64 chars, so the advertised name cannot be recovered from it (the
+# capture also keeps names longer than 64 chars callable). Written in
+# _list_tools_async, the only place the advertised name exists, so it is always
+# the same snapshot as _cache. Deliberately has no TTL of its own: expiring it
+# while _cache still serves the same offered names would put the call path back
+# on the broken behaviour with nothing to compensate (DIG-507).
+_raw_names_cache: dict[str, list[str]] = {}
 _pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="digi-mcp")
+
+# Which (catalog, allowlist) pairs have already been audited this run, keyed by the
+# cache key plus the allowlist signature. One research turn reads the catalog twice
+# — once for the policy path and once for the provider projection — so without this
+# every refusal would be counted twice and "20 tools refused" would read as 40.
+# The narrowing itself is never cached; only the duplicate audit is suppressed.
+_audited: set[tuple[str, tuple[str, ...] | None]] = set()
 
 
 def _ip_is_blocked(
@@ -452,6 +475,17 @@ def parse_mcp_servers_json(raw: str | None) -> list[dict[str, str]]:
             }
             if clean:
                 row["setup"] = json.dumps(clean, sort_keys=True)
+        # Operator tool allowlists (DIG-284). Carried, not validated: the shape
+        # check below is deliberate, because a non-list value must read as
+        # absent (deny everything) rather than be coerced into something that
+        # looks configured. An explicit [] is carried as "[]" so the empty list
+        # survives to the model field, where rule 1 and rule 5 read it and its
+        # absence as two different answers. Bounds live in digigraph.models and
+        # are enforced there (and by `_mcp_tool_names`), so they cannot drift.
+        for key in ("allowedTools", "mutatingTools"):
+            names = item.get(key)
+            if isinstance(names, list):
+                row[key] = json.dumps(names)
         out.append(row)
     return out
 
@@ -492,6 +526,287 @@ def merge_mcp_servers(
 def prefixed_tool_name(server_id: str, tool_name: str) -> str:
     safe = re.sub(r"[^a-zA-Z0-9_-]", "_", tool_name)[:64]
     return f"{server_id}_{safe}"
+
+
+def _tool_record(
+    server_id: str,
+    name: str,
+    description: str | None = None,
+    schema: Any = None,
+) -> dict[str, Any]:
+    """One listed tool: the offered name plus the raw name it came from.
+
+    Keeping the raw name is the only way an allowlist written in real remote
+    names can be matched at all (DIG-284) — the offered name is lossy. The
+    sidecar is stripped in :func:`openai_tools_for_servers`, so what a model
+    provider receives is byte-identical to before this key existed.
+    """
+    return {
+        "type": "function",
+        "function": {
+            "name": prefixed_tool_name(server_id, name),
+            "description": (description or "")[:2000],
+            "parameters": (
+                schema if isinstance(schema, dict) else {"type": "object", "properties": {}}
+            ),
+        },
+        _RAW_TOOL_NAME_KEY: name,
+    }
+
+
+@overload
+def raw_tool_names_for_server(server: dict[str, str]) -> list[str] | None: ...
+
+
+@overload
+def raw_tool_names_for_server(server_id: str, tools: Iterable[Any] | None) -> list[str]: ...
+
+
+def raw_tool_names_for_server(
+    server_or_id: str | dict[str, str],
+    tools: Iterable[Any] | None = None,
+) -> list[str] | None:
+    """Advertised remote tool names for one server.
+
+    Two call shapes share this name because both answer "what did the server
+    actually advertise?":
+
+    - ``raw_tool_names_for_server(server)`` — DIG-507 cache lookup of names
+      captured at list time. ``None`` means no snapshot yet (not "zero tools").
+    - ``raw_tool_names_for_server(server_id, tools)`` — DIG-284 extract from
+      listed records' raw-name sidecars. ``prefixed_tool_name`` replaces every
+      character outside ``[a-zA-Z0-9_-]`` and cuts the result at 64, so an
+      allowlist written in real names needs the real name beside the record.
+      Only records carrying a raw name *and* addressed to *server_id* are
+      reported; order-preserving, de-duplicated.
+    """
+    if isinstance(server_or_id, dict):
+        return _raw_names_cache.get(mcp_list_cache_key(server_or_id))
+    server_id = server_or_id
+    prefix = f"{server_id}_"
+    out: list[str] = []
+    for td in tools or ():
+        if not isinstance(td, dict):
+            continue
+        raw = td.get(_RAW_TOOL_NAME_KEY)
+        fn = td.get("function")
+        offered = fn.get("name") if isinstance(fn, dict) else None
+        if not isinstance(raw, str) or not raw or not isinstance(offered, str):
+            continue
+        if not offered.startswith(prefix):
+            continue
+        if raw not in out:
+            out.append(raw)
+    return out
+
+
+def _server_tool_names(server: Any, *keys: str) -> list[str] | None:
+    """One tool-name list off a server row or ref; ``None`` means absent.
+
+    Accepts an ``McpServerRef`` and the flat rows that reach graph state — wire
+    spelling (``allowedTools``, from ``model_dump(by_alias=True)``) or the snake
+    attribute name — so the gate reads the row it was handed instead of demanding
+    a re-projection. A non-list value reads as absent.
+    """
+    for key in keys:
+        value = server.get(key) if isinstance(server, dict) else getattr(server, key, None)
+        if isinstance(value, (list, tuple)):
+            return [name for name in value if isinstance(name, str)]
+    return None
+
+
+def mcp_server_allows_raw_tool(server: Any, raw_name: str) -> bool:
+    """Rule 2: exact equality against the allowlist. No glob, no prefix, ever.
+
+    Every near-miss denies, on purpose: a glob, a case-folded hit, or a longer
+    name that merely starts with an allowed one each widen one approved tool
+    into a family of unapproved ones. Absent and ``[]`` both deny everything
+    (rule 1), so this is safe to call before the allowlist has been checked for
+    presence.
+    """
+    allowed = _server_tool_names(server, "allowedTools", "allowed_tools")
+    if not allowed:
+        return False
+    return isinstance(raw_name, str) and raw_name in allowed
+
+
+def mcp_server_mutating_tools(server: Any) -> set[str]:
+    """Rule 5: an absent ``mutatingTools`` means every allowed tool mutates.
+
+    An explicit ``[]`` is the operator saying nothing mutates. The two are
+    different answers, which is why the wire keeps them distinguishable — and why
+    only a row that allows something can tell the difference. This set never
+    grants: it is an advisory, and ``allowedTools`` is the only list that grants
+    (review #5061 S2 — a stale name here is inert, not an accidental grant).
+    """
+    mutating = _server_tool_names(server, "mutatingTools", "mutating_tools")
+    if mutating is not None:
+        return set(mutating)
+    return set(_server_tool_names(server, "allowedTools", "allowed_tools") or ())
+
+
+# The four remote-control meta tools, refused before any allowlist is consulted.
+# Held as normalised single segments rather than literal names: the brake keys on
+# the raw name an operator writes, and ``atlassian.executeWrite`` is not
+# byte-equal to ``executeWrite`` — a literal set would wave every namespaced
+# spelling straight through (review #5074 S2).
+_REFUSED_META_SEGMENTS = frozenset(
+    {"discover", "executeread", "executewrite", "executedestructive"}
+)
+
+
+def _refused_meta_tool(raw_name: str) -> bool:
+    """True when *raw_name* is one of the meta tools under any spelling.
+
+    The normalisation is the same substitution ``prefixed_tool_name`` applies to
+    build the offered name, then case-folded, so a check cannot drift from the
+    name it is checking. The deny then tests whole segments: after substitution
+    every run of ``.``/``:``/whitespace/``-``/``_`` is a segment boundary, so
+    ``executeWrite``, ``executewrite``, ``atlassian.executeWrite`` and
+    ``confluence-executeWrite`` all deny while ``getJiraIssue`` does not.
+
+    This fails towards refusal, which is the cheap direction to fail in: the cost
+    of denying a legitimate tool is that the operator notices a name they wrote
+    is refused, and the cost of granting a meta tool is a server the operator did
+    not choose decides which tools the model gets to call.
+    """
+    if not isinstance(raw_name, str):
+        return False
+    normalised = re.sub(r"[^a-zA-Z0-9_-]", "_", raw_name).casefold()
+    return any(segment in _REFUSED_META_SEGMENTS for segment in re.split(r"[._-]", normalised))
+
+
+def _tool_denied(tool: str, reason: str) -> None:
+    """Record one refusal. Audit, not log: a denied tool is an answer, not a fault."""
+    from digigraph.audit import audit_log
+
+    audit_log(
+        "tool_denied",
+        agent_id="digigraph",
+        payload={"tool": tool, "reason": reason, "source": "mcp"},
+    )
+
+
+def filter_tools_for_server(
+    server: dict[str, str],
+    tools: list[dict[str, Any]],
+    *,
+    audit_key: str | None = None,
+) -> list[dict[str, Any]]:
+    """Rule 1-4: narrow one server's listed tools to what its row allows.
+
+    The offer is already prefixed, substituted and truncated by
+    ``prefixed_tool_name``, so an allowlist entry can never be compared against it —
+    the raw name is not recoverable from the offered one. The raw name travels
+    beside each record in the ``_RAW_TOOL_NAME_KEY`` sidecar, which is why the
+    filter reads the sidecar and not the function name.
+
+    Four rules, in the order they can refuse:
+
+    * the meta tools are refused first, before the allowlist is read, so an
+      operator who allowlists one still does not get it;
+    * everything else needs exact equality against ``allowedTools`` — absent and
+      ``[]`` both deny, and a row with no usable allowlist has every tool denied;
+    * a record without a sidecar cannot be matched to anything the operator
+      wrote, so it is refused rather than offered unattributed;
+    * two approved tools that collapse to one offered name offer neither, because
+      picking either would let the server's listing order decide which approved
+      tool the model actually runs.
+
+    A row whose allowlist is missing fails loudly (id, host, count) as well as
+    refusing: a silently dark row is indistinguishable from a server that offered
+    nothing, and the config mistake that caused it goes unnoticed.
+
+    *audit_key* suppresses a repeated audit for the same catalog under the same
+    allowlist. The narrowing is always recomputed; only the duplicate refusal
+    record is dropped, so a count read off the audit trail is a count of tools.
+    """
+    if not tools:
+        return []
+
+    declared = _server_tool_names(server, "allowedTools", "allowed_tools")
+    # A missing key and an explicit ``[]`` are the same deny (rule 1) but they are
+    # not the same config, so they must not share a dedup key: `if declared` would
+    # collapse both to ``()`` and let whichever arrived first swallow the other's
+    # refusals. The absent case would then be audited, the empty case would report
+    # nothing, and "I wrote the key out and it still went dark" has no trace.
+    signature = None if declared is None else tuple(sorted(declared))
+    audit = audit_key is None or (audit_key, signature) not in _audited
+    if audit and audit_key is not None:
+        _audited.add((audit_key, signature))
+
+    if not declared:
+        # Loud on every turn, never deduplicated: the audit dedup exists to keep
+        # a count of *tools* off the trail, but a dark row is a config mistake
+        # the operator has to see, and suppressing the second occurrence would
+        # read as "already told them" for a row they never saw a warning about.
+        _warn_allowlist_missing(server, tools)
+    # Absent and empty both deny everything, so the membership test below needs
+    # no None branch — only the *record* of which spelling was used, kept above.
+    allowed: frozenset[str] = frozenset(declared or ())
+
+    kept: list[dict[str, Any]] = []
+    # Offered name -> the raw name that produced it. Two approved tools that
+    # collapse to one offered name are a conflict the gate cannot resolve: the
+    # model's choice of name would decide which approved tool runs.
+    owner: dict[str, str] = {}
+    collided: set[str] = set()
+
+    for td in tools:
+        if not isinstance(td, dict):
+            continue
+        fn = (td.get("function") or {}).get("name")
+        raw = td.get(_RAW_TOOL_NAME_KEY)
+        if not fn or not isinstance(raw, str):
+            if audit:
+                _tool_denied(str(fn or raw or "?"), "unattributed")
+            continue
+        if _refused_meta_tool(raw):
+            if audit:
+                _tool_denied(raw, "meta_tool")
+            continue
+        if raw not in allowed:
+            if audit:
+                _tool_denied(raw, "not_allowlisted")
+            continue
+        if str(fn) in collided:
+            if audit:
+                _tool_denied(raw, "offered_name_collision")
+            continue
+        if str(fn) in owner and owner[str(fn)] != raw:
+            collided.add(str(fn))
+            first_raw = owner[str(fn)]
+            for dropped in list(kept):
+                if (dropped.get("function") or {}).get("name") == fn:
+                    kept.remove(dropped)
+            if audit:
+                # Both approved tools lose the name, so both are recorded. The
+                # operator wrote two rows and must see two refusals; recording
+                # only the later arrival also makes the trail depend on the
+                # order the server happened to list them in.
+                _tool_denied(first_raw, "offered_name_collision")
+                _tool_denied(raw, "offered_name_collision")
+            continue
+        owner[str(fn)] = raw
+        kept.append(td)
+
+    return kept
+
+
+def _warn_allowlist_missing(server: Any, tools: list[dict[str, Any]]) -> None:
+    """Name the row, its host and how much it just lost."""
+    server_id = str(server.get("id") if isinstance(server, dict) else getattr(server, "id", "?"))
+    raw_url = str(
+        server.get("url") if isinstance(server, dict) else getattr(server, "url", "") or ""
+    )
+    host = urlparse(raw_url).netloc or raw_url or "?"
+    log.warning(
+        "MCP server %s (%s) has no allowedTools: refusing all %d advertised tools. "
+        "Add an explicit allowedTools list to the server row to enable any of them.",
+        server_id,
+        host,
+        len(tools),
+    )
 
 
 def resolve_mcp_force_id(raw: str | None, servers: list[dict[str, str]]) -> str | None:
@@ -540,21 +855,62 @@ def expand_mcp_disabled_tokens(
 
 
 def list_tools_cached(server: dict[str, str]) -> list[dict[str, Any]]:
+    """Listed tools for one server, narrowed to what that row allows.
+
+    The cache holds the full advertised catalog and the narrowing happens on
+    every call. That split is deliberate: ``mcp_list_cache_key`` keys on id, URL,
+    token and header name — not on the allowlist — so baking the filter into the
+    cache entry would let one row's allowlist answer another row's, or let a
+    tightened row keep serving the wider answer for the rest of the 60s TTL. The
+    allowlist is a property of the row, so it is read per call.
+    """
     key = mcp_list_cache_key(server)
     now = time.monotonic()
     hit = _cache.get(key)
     if hit and now - hit[0] < _CACHE_TTL_S:
-        return hit[1]
-    tools = _list_tools_blocking(server)
-    _cache[key] = (now, tools)
-    return tools
+        tools = hit[1]
+    else:
+        tools = _list_tools_blocking(server)
+        _cache[key] = (now, tools)
+    return filter_tools_for_server(server, tools, audit_key=key)
 
 
 def openai_tools_for_servers(servers: list[dict[str, str]]) -> list[dict[str, Any]]:
+    """Listed tools for a model provider: raw-name sidecars removed.
+
+    The only path from the cache to a provider, so it is where the sidecar has to
+    go. A copy is returned rather than the cached dict mutated, or the raw name
+    would be gone for the next caller inside the 60s TTL.
+    """
     out: list[dict[str, Any]] = []
     for s in servers:
-        out.extend(list_tools_cached(s))
+        for td in list_tools_cached(s):
+            if isinstance(td, dict) and _RAW_TOOL_NAME_KEY in td:
+                out.append({k: v for k, v in td.items() if k != _RAW_TOOL_NAME_KEY})
+            else:
+                out.append(td)
     return out
+
+
+def resolve_remote_tool_name(server_id: str, offered: str, raw_names: list[str]) -> str | None:
+    """Recover the advertised name behind ``offered``; ``None`` when not unique.
+
+    ``offered`` is the whole name the model chose, server prefix included --
+    what ``prefixed_tool_name`` produced at list time.
+
+    ``prefixed_tool_name`` is lossy, so several advertised names can collapse
+    onto one offered name -- any two sharing their first 64 safe characters.
+    Refusing on ambiguity is deliberate: picking either one would call a tool
+    the model did not ask for (DIG-507).
+    """
+    match: str | None = None
+    for raw in raw_names:
+        if prefixed_tool_name(server_id, raw) != offered:
+            continue
+        if match is not None:
+            return None
+        match = raw
+    return match
 
 
 def call_prefixed_tool(
@@ -565,10 +921,33 @@ def call_prefixed_tool(
     split = split_prefixed_tool_name(name)
     if not split:
         return {"error": "unknown_mcp_tool", "tool": name}
-    sid, tool = split
+    sid, offered = split
     server = next((s for s in servers if s["id"] == sid), None)
     if not server or not server.get("url"):
         return {"error": "unknown_mcp_server", "tool": name}
+    # Call the name the server advertised, not the lossy offered name we handed
+    # the model (DIG-507). ``name`` is the whole prefixed name, which is what
+    # prefixed_tool_name() rebuilds; ``offered`` is only its prefix-stripped tail.
+    raw_names = raw_tool_names_for_server(server)
+    if raw_names is None:
+        tool = offered
+    else:
+        tool = resolve_remote_tool_name(sid, name, raw_names)
+        if tool is None:
+            log.error(
+                "offered MCP tool %s for server %s matches no unique advertised name; refusing",
+                name,
+                sid,
+            )
+            return {
+                "error": "mcp_tool_name_unresolved",
+                "tool": name,
+                "server": sid,
+                "message": (
+                    f"Offered tool {name!r} does not map to exactly one tool advertised by "
+                    f"server {sid!r}; refusing to call rather than guess a remote tool name."
+                ),
+            }
     setup_raw = server.get("setup")
     # State carries the decoded mapping (workflow.py dumps McpServerRef.setup);
     # a raw parsed-header row carries the JSON-encoded form.
@@ -629,21 +1008,19 @@ async def _list_tools_async(server: dict[str, str]) -> list[dict[str, Any]]:
             await session.initialize()
             listed = await session.list_tools()
     out: list[dict[str, Any]] = []
+    # Capture the advertised names before prefixed_tool_name() discards them
+    # (DIG-507). De-duplicated, order preserved, so resolve_remote_tool_name()
+    # reads ambiguity as ambiguity and not as a repeated entry.
+    advertised: list[str] = []
+    seen: set[str] = set()
     for t in listed.tools:
-        if isinstance(t.inputSchema, dict):
-            schema = t.inputSchema
-        else:
-            schema = {"type": "object", "properties": {}}
-        out.append(
-            {
-                "type": "function",
-                "function": {
-                    "name": prefixed_tool_name(server_id, t.name),
-                    "description": (t.description or "")[:2000],
-                    "parameters": schema,
-                },
-            }
-        )
+        if t.name not in seen:
+            seen.add(t.name)
+            advertised.append(t.name)
+        # DIG-284: keep the raw name beside the offered one for the allowlist.
+        # DIG-507: also capture advertised names for call-time recovery.
+        out.append(_tool_record(server_id, t.name, t.description, t.inputSchema))
+    _raw_names_cache[mcp_list_cache_key(server)] = advertised
     return out
 
 

@@ -21,6 +21,7 @@ from pathlib import Path
 import pytest
 from digiquant.nautilus_runner import (
     DEFAULT_NOTIONAL_FRACTION,
+    RETURNS_SERIES_MISSING,
     STARTING_BALANCE_USD,
     _default_trade_size,
 )
@@ -65,7 +66,14 @@ class TestDefaultTradeSizeBacktest:
             data_path=str(DATA),
         )
         assert result is not None
-        assert result.status == "ok", f"backtest did not complete: status={result.status}"
+        # Partial over the withheld chart series only — see nautilus_runner.
+        # _verified_returns_series. Every metric came from the balance path.
+        assert result.status in {"ok", "partial"}, (
+            f"backtest did not complete: status={result.status}"
+        )
+        assert set(result.missing) <= {RETURNS_SERIES_MISSING}, (
+            f"backtest lost a metric: {result.missing}"
+        )
         # Before the fix this was exactly 1 (account blew up after ~48 of 2974 bars).
         # A run that completes the full series trades many times.
         assert result.num_trades > 1, (

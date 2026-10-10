@@ -134,7 +134,39 @@ function failClosed(handler: RouteHandler): RouteHandler {
   };
 }
 
-function buildRouteTable(env: Env): { routes: Map<string, RouteHandler>; ledgerBook: SupabaseSource["ledger"] } {
+/** Provenance marker for the no-credential stub branch (see buildRouteTable). */
+export const STUB_PROVENANCE_SOURCE = "stub-doubles-no-supabase-env";
+
+/**
+ * Rewrite a stub-served success envelope so its provenance names the stub
+ * branch instead of a real table. Only success envelopes carrying a
+ * `provenance` object are touched; error envelopes (§2), `/healthz`, and
+ * non-JSON bodies pass through byte-for-byte.
+ */
+async function markStubProvenance(res: Response): Promise<Response> {
+  if (res.status < 200 || res.status >= 300) return res;
+  if (!(res.headers.get("content-type") ?? "").includes("application/json")) return res;
+  let body: unknown;
+  try {
+    body = await res.clone().json();
+  } catch {
+    return res;
+  }
+  if (body === null || typeof body !== "object" || Array.isArray(body)) return res;
+  const rec = body as Record<string, unknown>;
+  const provenance = rec.provenance;
+  if (provenance === null || typeof provenance !== "object" || Array.isArray(provenance)) return res;
+  return Response.json(
+    { ...rec, provenance: { ...(provenance as Record<string, unknown>), source: STUB_PROVENANCE_SOURCE } },
+    { status: res.status, headers: res.headers },
+  );
+}
+
+function buildRouteTable(env: Env): {
+  routes: Map<string, RouteHandler>;
+  ledgerBook: SupabaseSource["ledger"];
+  stubbed: boolean;
+} {
   const routes = new Map<string, RouteHandler>();
   const addRoute: AddRoute = (method, path, handler) => {
     routes.set(`${method} ${path}`, failClosed(handler));
@@ -147,20 +179,25 @@ function buildRouteTable(env: Env): { routes: Map<string, RouteHandler>; ledgerB
     registerPerformanceRoutes(onGet, source.performance);
     registerLiveRoutes(onGet, source.live);
     registerBenchmarksRoutes(onGet, source.benchmarks);
-    return { routes, ledgerBook: source.ledger };
+    return { routes, ledgerBook: source.ledger, stubbed: false };
   }
-  mountEnvelopeRoutes(addRoute, stubEnvelopeSource());
-  const onGet = adaptOnGet(addRoute);
-  registerBriefRoutes(onGet, stubBriefDeps());
-  registerPerformanceRoutes(onGet, stubPerformanceDeps());
-  registerLiveRoutes(onGet, stubLiveDeps());
-  registerBenchmarksRoutes(onGet, stubBenchmarksDeps());
-  return { routes, ledgerBook: stubLedgerBook() };
+  // Stub branch: every mounted success is stamped so fabricated numbers can
+  // never claim a committed-accounting provenance (DIG-2697).
+  const addStubRoute: AddRoute = (method, path, handler) => {
+    routes.set(`${method} ${path}`, failClosed(async (req: Request) => markStubProvenance(await handler(req))));
+  };
+  mountEnvelopeRoutes(addStubRoute, stubEnvelopeSource());
+  const stubOnGet = adaptOnGet(addStubRoute);
+  registerBriefRoutes(stubOnGet, stubBriefDeps());
+  registerPerformanceRoutes(stubOnGet, stubPerformanceDeps());
+  registerLiveRoutes(stubOnGet, stubLiveDeps());
+  registerBenchmarksRoutes(stubOnGet, stubBenchmarksDeps());
+  return { routes, ledgerBook: stubLedgerBook(), stubbed: true };
 }
 
 /** GET dispatch shared by HTTP and the MCP tools (same builders, one path). */
 async function routeGet(request: Request, env: Env): Promise<Response> {
-  const { routes, ledgerBook } = buildRouteTable(env);
+  const { routes, ledgerBook, stubbed } = buildRouteTable(env);
   const url = new URL(request.url);
   const path = normalizePath(url.pathname);
   if (request.method === "GET" && path === "/healthz") return handleHealthz();
@@ -188,7 +225,9 @@ async function routeGet(request: Request, env: Env): Promise<Response> {
   if (request.method === "GET" && path === "/ledger") {
     try {
       const res = await tryHandleLedger(request, ledgerBook);
-      if (res) return res;
+      // /ledger resolves its own book, bypassing the mounted route table, so
+      // the stub stamp is applied here (DIG-2697).
+      if (res) return stubbed ? markStubProvenance(res) : res;
     } catch (err) {
       if (err instanceof UpstreamError) {
         return errorResponse("upstream_empty", err.message, url.searchParams.get("retrieval_pin"), {

@@ -11,7 +11,9 @@ from pathlib import Path
 import pytest
 from digivoice.cli import Runtime, main, run
 from digivoice.history import append_entry, dict_entry
+from digivoice.paths import resolve_paths
 from digivoice.probe import real_probe
+from digivoice.settings import VoiceSettings, save_settings
 
 from tests.dvo.fakes import FakeProbe, FakeReply, FakeRunner, writes_wav
 
@@ -142,6 +144,62 @@ def test_dict_keeps_stdout_clean_when_paste_is_denied(tmp_path: Path) -> None:
     assert len((tmp_path / "history.jsonl").read_text(encoding="utf-8").splitlines()) == 1
 
 
+def test_dict_paste_on_stop_false_does_not_paste(tmp_path: Path) -> None:
+    paths = resolve_paths("darwin", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)})
+    save_settings(paths, VoiceSettings(paste_on_stop=False))
+    runner = FakeRunner(
+        {
+            "sox": writes_wav(),
+            "whisper-cli": FakeReply(stdout=TRANSCRIPT),
+            "pbcopy": FakeReply(),
+            "osascript": FakeReply(),
+        }
+    )
+    runtime = _dict_runtime(
+        tmp_path,
+        platform="darwin",
+        runner=runner,
+        commands={"pbcopy": "/usr/bin/pbcopy", "osascript": "/usr/bin/osascript"},
+    )
+    result = run(["dict"], runtime)
+    assert result.code == 0
+    assert "paste_on_stop=false" in result.stderr
+    assert "pbcopy" not in runner.programs
+    assert "osascript" not in runner.programs
+
+
+def test_dict_pastes_into_the_captured_app(tmp_path: Path) -> None:
+    def osascript(_call: object) -> FakeReply:
+        return FakeReply()
+
+    runner = FakeRunner(
+        {
+            "sox": writes_wav(),
+            "whisper-cli": FakeReply(stdout=TRANSCRIPT),
+            "pbcopy": FakeReply(),
+            "osascript": osascript,
+        }
+    )
+    runtime = _dict_runtime(
+        tmp_path,
+        platform="darwin",
+        runner=runner,
+        commands={"pbcopy": "/usr/bin/pbcopy", "osascript": "/usr/bin/osascript"},
+    )
+    result = run(
+        ["dict", "--focus-name", "Notes", "--focus-bundle", "com.apple.Notes"],
+        runtime,
+    )
+    assert result.code == 0
+    assert "pasted into Notes" in result.stderr
+    typed = next(call for call in runner.calls if call.program == "osascript")
+    assert typed.argv[3:] == ["com.apple.Notes", "Notes"]
+    assert "-" not in typed.argv[3:]
+    assert TRANSCRIPT not in " ".join(typed.argv)
+    copied = next(call for call in runner.calls if call.program == "pbcopy")
+    assert copied.stdin == TRANSCRIPT
+
+
 def test_dict_no_paste_skips_the_clipboard(tmp_path: Path) -> None:
     runner = FakeRunner({"sox": writes_wav(), "whisper-cli": FakeReply(stdout=TRANSCRIPT)})
     runtime = _dict_runtime(
@@ -169,6 +227,54 @@ def test_dict_without_capture_tools_fails_soft(tmp_path: Path) -> None:
     assert "digivoice dict:" in result.stderr
     assert "sox or ffmpeg" in result.stderr
     assert result.stdout == ""
+    assert not (tmp_path / "history.jsonl").exists()
+
+
+@pytest.mark.parametrize(
+    ("model_id", "root"),
+    [
+        ("ggml-tiny.en", "models"),
+        ("ggml-small.en", ".lmstudio"),
+        ("ggml-tiny", ".ollama"),
+    ],
+)
+def test_dict_finishes_for_each_installed_local_model(
+    tmp_path: Path, model_id: str, root: str
+) -> None:
+    paths = resolve_paths("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)})
+    save_settings(paths, VoiceSettings(stt_model=model_id))
+    if root == "models":
+        weight = Path(paths.models_dir) / f"{model_id}.bin"
+    elif root == ".lmstudio":
+        weight = tmp_path / ".lmstudio" / "models" / "whisper" / f"{model_id}.bin"
+    else:
+        weight = tmp_path / ".ollama" / "models" / f"{model_id}.bin"
+    weight.parent.mkdir(parents=True, exist_ok=True)
+    weight.write_bytes(b"fake weights")
+    runner = FakeRunner({"sox": writes_wav(), "whisper-cli": FakeReply(stdout=TRANSCRIPT)})
+    runtime = _dict_runtime(tmp_path, runner=runner)
+    result = run(["dict", "--hold"], runtime)
+    assert result.code == 0
+    assert result.stdout == f"{TRANSCRIPT}\n"
+    call = next(item for item in runner.calls if item.program == "whisper-cli")
+    assert call.argv[call.argv.index("-m") + 1] == str(weight)
+    lines = (tmp_path / "history.jsonl").read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 1
+    assert json.loads(lines[0])["text"] == TRANSCRIPT
+
+
+def test_dict_missing_model_logs_the_error(tmp_path: Path) -> None:
+    paths = resolve_paths("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)})
+    save_settings(paths, VoiceSettings(stt_model="ggml-small.en"))
+    runtime = _dict_runtime(tmp_path)
+    result = run(["dict", "--hold"], runtime)
+    assert result.code == 1
+    assert "ggml-small.en" in result.stderr
+    assert "not installed locally" in result.stderr
+    log = (tmp_path / "system.log").read_text(encoding="utf-8")
+    assert "error" in log
+    assert "ggml-small.en" in log
+    assert "not installed locally" in log
     assert not (tmp_path / "history.jsonl").exists()
 
 
@@ -243,6 +349,44 @@ def test_history_lists_appended_entries(tmp_path: Path) -> None:
     empty = run(["history", "--grep", "absent"], runtime)
     assert empty.code == 0
     assert "no matching entries" in empty.stdout
+
+
+def _banner_runtime(tmp_path: Path) -> Runtime:
+    return Runtime(
+        platform="linux",
+        home=tmp_path,
+        env={"DIGIVOICE_DATA_DIR": str(tmp_path)},
+        probe=FakeProbe(),
+    )
+
+
+def test_banner_show_hide_toggle(tmp_path: Path) -> None:
+    runtime = _banner_runtime(tmp_path)
+    flag = tmp_path / "banner.show"
+
+    shown = run(["banner", "show", "--text", "hello preview"], runtime)
+    assert shown.code == 0
+    payload = json.loads(flag.read_text(encoding="utf-8"))
+    assert payload == {"visible": True, "text": "hello preview"}
+
+    toggled = run(["banner", "toggle"], runtime)
+    assert toggled.code == 0
+    assert json.loads(flag.read_text(encoding="utf-8"))["visible"] is False
+
+    toggled_again = run(["banner", "toggle"], runtime)
+    assert toggled_again.code == 0
+    assert json.loads(flag.read_text(encoding="utf-8"))["visible"] is True
+
+    hidden = run(["banner", "hide"], runtime)
+    assert hidden.code == 0
+    assert json.loads(flag.read_text(encoding="utf-8")) == {"visible": False, "text": ""}
+
+
+def test_banner_show_defaults_to_empty_text(tmp_path: Path) -> None:
+    runtime = _banner_runtime(tmp_path)
+    assert run(["banner", "show"], runtime).code == 0
+    payload = json.loads((tmp_path / "banner.show").read_text(encoding="utf-8"))
+    assert payload == {"visible": True, "text": ""}
 
 
 def test_module_doctor_runs(tmp_path: Path) -> None:

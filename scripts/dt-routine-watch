@@ -228,6 +228,35 @@ def verdict(trigger: dict, runs, tid: str | None, boundary: datetime):
     }
 
 
+def closed_boundary(trigger: dict, t0: datetime, grace: int):
+    """Pick the most recent boundary that has already closed, or None if none has.
+
+    DIG-1220 only ever read trigger.nextRunAt. That field is a LIVE pointer: the scheduler
+    rewrites it the instant it fires, so a healthy firing's boundary is gone before the next
+    tick looks, and verdict() could only ever return coalesce or missed - never ok. Silence
+    was indistinguishable from never having looked.
+
+    Two candidates can have closed: the last firing the scheduler recorded (lastFiredAt) and
+    the window it has just passed (nextRunAt). Judge the MOST RECENT one only: judging both
+    would count a single firing opportunity twice and double the coalesce skip streak, so a
+    routine that coalesces every day would page on the wrong tick.
+
+    A lastFiredAt boundary can only ever yield ok or coalesce - by construction it never
+    yields missed - which is exactly the point: health becomes emittable, while a genuinely
+    past nextRunAt with an older lastFiredAt still pages as missed.
+
+    Returns (boundary, origin) where origin is "last-fired" or "next-due".
+    """
+    candidates = []
+    fired = parse(trigger.get("lastFiredAt"))
+    if fired is not None and (t0 - fired).total_seconds() > grace:
+        candidates.append((fired, "last-fired"))
+    due = parse(trigger.get("nextRunAt"))
+    if due is not None and (t0 - due).total_seconds() > grace:
+        candidates.append((due, "next-due"))
+    return max(candidates) if candidates else None
+
+
 def load(path: Path, default):
     try:
         return json.loads(path.read_text())
@@ -318,7 +347,8 @@ def main(argv: list[str]) -> int:
 
     # 1. Our own two silences. A clock that stops turning must say so rather than quietly resume.
     last_check = parse(st.get("lastCheckAt"))
-    if last_check and (t0 - last_check).total_seconds() > self_gap and not st.get("selfGapReportedAt"):
+    gap_now = bool(last_check) and (t0 - last_check).total_seconds() > self_gap
+    if gap_now and not st.get("selfGapReportedAt"):
         hrs = round((t0 - last_check).total_seconds() / 3600, 1)
         print("SELF-GAP: last successful check was %.1fh ago" % hrs)
         file_issue(
@@ -415,12 +445,19 @@ def main(argv: list[str]) -> int:
         if not boundary:
             print("%s: no nextRunAt, nothing claimed" % rid)
             continue
-        if (t0 - boundary).total_seconds() <= grace:
+
+        # Judge the most recent CLOSED boundary, which may be the last firing rather than the
+        # live nextRunAt pointer. Without this a healthy firing is never judged and ok is
+        # unreachable (DIG-1220 / DIG-1397 leaf 2). When nothing has closed yet, keep the
+        # original not-yet-due message unchanged.
+        picked = closed_boundary(trigger, t0, grace)
+        if picked is None:
             print(
                 "%s: boundary %s not yet due, judged from %s"
                 % (rid, trigger["nextRunAt"], iso(boundary + timedelta(seconds=grace)))
             )
             continue
+        boundary, origin = picked
 
         key = iso(boundary)
         rec = st["boundaries"].setdefault(rid, {"judged": [], "skipStreak": 0})
@@ -437,7 +474,7 @@ def main(argv: list[str]) -> int:
         rec.setdefault("judged", []).append(key)
         rec["lastVerdict"] = state
         rec["lastEvidence"] = ev
-        print("%s: boundary %s -> %s %s" % (rid, key, state, json.dumps(ev)))
+        print("%s: boundary %s (%s) -> %s %s" % (rid, key, origin, state, json.dumps(ev)))
 
         name = w.get("note") or routine.get("name") or routine.get("title") or rid
         if state == "missed":
@@ -491,6 +528,10 @@ def main(argv: list[str]) -> int:
 
     st["lastCheckAt"] = iso(t0)
     st["lastApiOkAt"] = iso(t0)
+    # Release the self-gap latch, but only on a tick that found the clock keeping time. This line
+    # refreshes lastCheckAt too, so clearing unconditionally would re-page every tick after any silence.
+    if st.get("selfGapReportedAt") and not gap_now:
+        st["selfGapReportedAt"] = None
     st["calls"] = api.calls
     save(state_path, st)
     print("checked %d watch(es) at %s%s" % (len(watches), iso(t0), " (dry)" if dry else ""))

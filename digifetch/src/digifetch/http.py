@@ -1,11 +1,10 @@
 """HTTP fetch / download helpers (the non-browser fetch path).
 
-Covers the lightweight HTTP seam twelve-x uses *alongside* the browser:
-- ``nodes/scrape.py`` captures Playwright session cookies, then issues a plain
-  ``requests.post(AJAX_URL, data=..., cookies=..., timeout=30)`` to resolve a
-  pre-signed S3 URL, with ``raise_for_status()``.
-- The downstream step then downloads PDF *bytes* from that URL (the byte fetch
-  is generic; PDF text extraction with pdfplumber stays site-specific).
+Covers the lightweight HTTP seam a consumer uses *alongside* the browser:
+- the browser session's cookies are handed to a plain-HTTP call, which resolves
+  a pre-signed URL and raises on a non-2xx response;
+- a downstream step then fetches *bytes* from that URL (the byte fetch is
+  generic; parsing the fetched document stays site-specific).
 
 This module provides a small ``HttpFetcher`` over ``httpx`` (not ``requests`` —
 the monorepo HTTP convention, async-capable, and it dodges the venv's
@@ -100,8 +99,8 @@ def cookies_from_playwright(cookies: Iterable[Mapping[str, Any]]) -> dict[str, s
 
     Playwright returns a list of cookie dicts (``name``/``value``/``domain``/...);
     an HTTP client only needs name→value to replay the authenticated session.
-    This is exactly the hand-off twelve-x's ``scrape_research`` does inline
-    before its AJAX call.
+    This is the hand-off a consumer does inline when it wants to continue an
+    authenticated browser session over plain HTTP.
     """
     out: dict[str, str] = {}
     for cookie in cookies:
@@ -214,7 +213,7 @@ class HttpFetcher:
     ) -> FetchResult:
         """Issue an HTTP request and return the decoded text body.
 
-        Generalizes twelve-x's ``requests.post(AJAX_URL, data=..., cookies=...)``
+        Generalizes an ad-hoc ``requests.post(AJAX_URL, data=..., cookies=...)``
         → it raises on a 4xx/5xx (``raise_for_status``) and returns a typed
         :class:`FetchResult`. Per-call ``headers``/``cookies`` merge over the
         fetcher defaults.

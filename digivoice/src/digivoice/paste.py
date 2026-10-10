@@ -9,17 +9,47 @@ already on stdout.
 
 from __future__ import annotations
 
+from digivoice.focus import FocusTarget
 from digivoice.models import PasteResult
 from digivoice.probe import CommandProbe
 from digivoice.runner import CommandRunner, error_tail
 
 KEYSTROKE_SCRIPT = 'tell application "System Events" to keystroke "v" using command down'
+# Bundle id and name arrive as argv. The transcript never enters this script.
+ACTIVATE_AND_PASTE_SCRIPT = """on run argv
+  set targetId to item 1 of argv
+  set targetName to item 2 of argv
+  tell application "System Events"
+    if targetId is not "" then
+      set proc to first process whose bundle identifier is targetId
+    else
+      set proc to first process whose name is targetName
+    end if
+    set frontmost of proc to true
+  end tell
+  delay 0.2
+  tell application "System Events" to keystroke "v" using command down
+end run"""
 ACCESSIBILITY_HINT = "grant Accessibility in System Settings > Privacy & Security > Accessibility"
 PASTE_TIMEOUT = 5.0
 EMPTY_TEXT_DETAIL = "nothing to paste (empty text)"
 
 
-def paste(platform: str, probe: CommandProbe, runner: CommandRunner, text: str) -> PasteResult:
+def _paste_argv(osascript: str, focus: FocusTarget | None) -> list[str]:
+    # `osascript -e` does not treat a later `-` as end of options. That dash
+    # became AppleScript argv item 1, so Command-V never reached the focused app.
+    if focus is not None and focus.known:
+        return [osascript, "-e", ACTIVATE_AND_PASTE_SCRIPT, focus.bundle_id, focus.name]
+    return [osascript, "-e", KEYSTROKE_SCRIPT]
+
+
+def paste(
+    platform: str,
+    probe: CommandProbe,
+    runner: CommandRunner,
+    text: str,
+    focus: FocusTarget | None = None,
+) -> PasteResult:
     if not text.strip():
         return PasteResult(attempted=False, pasted=False, detail=EMPTY_TEXT_DETAIL)
     if platform != "darwin":
@@ -41,7 +71,7 @@ def paste(platform: str, probe: CommandProbe, runner: CommandRunner, text: str) 
     if copied.code != 0:
         reason = error_tail(copied.stderr) or f"exit {copied.code}"
         return PasteResult(attempted=True, pasted=False, detail=f"pbcopy failed ({reason})")
-    typed = runner([str(osascript), "-e", KEYSTROKE_SCRIPT], timeout=PASTE_TIMEOUT)
+    typed = runner(_paste_argv(str(osascript), focus), timeout=PASTE_TIMEOUT)
     if typed.code != 0:
         reason = error_tail(typed.stderr) or f"exit {typed.code}"
         return PasteResult(
@@ -49,7 +79,8 @@ def paste(platform: str, probe: CommandProbe, runner: CommandRunner, text: str) 
             pasted=False,
             detail=f"keystroke failed ({reason}); {ACCESSIBILITY_HINT}",
         )
-    return PasteResult(attempted=True, pasted=True, detail="pasted into the focused app")
+    target = focus.name if focus is not None and focus.name else "the focused app"
+    return PasteResult(attempted=True, pasted=True, detail=f"pasted into {target}")
 
 
 def copy_to_clipboard(

@@ -202,6 +202,65 @@ describe("mergeMcpSessionOverlay", () => {
     expect(merged).toEqual([{ id: "evil", url: "https://mcp.evil.example/mcp" }]);
   });
 
+  it("a session overlay item can never carry allowedTools or mutatingTools through to upstream", () => {
+    // McpSessionOverlayItem has no allowedTools/mutatingTools fields at the type
+    // level; this asserts the runtime behavior matches — an overlay-only id
+    // (no operator entry) never gets a tool allowlist even if injected via a
+    // loose object. Deny-by-default: a session connector starts with zero
+    // tools and can only ever narrow, never widen, the operator allowlist.
+    const merged = mergeMcpSessionOverlay({
+      operator: [],
+      overlay: [
+        {
+          id: "evil",
+          url: "https://mcp.evil.example/mcp",
+          allowedTools: ["*"],
+          mutatingTools: ["deleteEverything"],
+        } as { id: string; url?: string },
+      ],
+      allowSessionUrls: true,
+    });
+    expect(merged).toEqual([{ id: "evil", url: "https://mcp.evil.example/mcp" }]);
+    expect(merged[0]).not.toHaveProperty("allowedTools");
+    expect(merged[0]).not.toHaveProperty("mutatingTools");
+  });
+
+  it("a session overlay entry cannot override the operator allowlist", () => {
+    // Operator-only by construction: the overlay is merged onto an existing
+    // operator row, and mergeMcpSessionOverlay only ever writes `auth` and
+    // `token` onto it. The operator allowlist survives untouched, and the
+    // overlay cannot introduce a `mutatingTools` the operator did not declare.
+    const merged = mergeMcpSessionOverlay({
+      operator: [
+        {
+          id: "atlassian",
+          url: "https://mcp.atlassian.com/v1/sse",
+          allowedTools: ["addOrEditJiraIssueComment"],
+        },
+      ],
+      overlay: [
+        {
+          id: "atlassian",
+          auth: "oauth",
+          token: "visitor-oauth-token",
+          allowedTools: ["executeWrite"],
+          mutatingTools: ["executeWrite"],
+        } as { id: string; auth?: string; token?: string },
+      ],
+      allowSessionUrls: false,
+    });
+    expect(merged).toEqual([
+      {
+        id: "atlassian",
+        url: "https://mcp.atlassian.com/v1/sse",
+        allowedTools: ["addOrEditJiraIssueComment"],
+        auth: "oauth",
+        token: "visitor-oauth-token",
+      },
+    ]);
+    expect(merged[0]).not.toHaveProperty("mutatingTools");
+  });
+
   it("rejects http session URLs even when host would otherwise pass SSRF (#3795)", () => {
     expect(
       mergeMcpSessionOverlay({
@@ -234,6 +293,117 @@ describe("mergeMcpSessionOverlay", () => {
         allowSessionUrls: true,
       }),
     ).toEqual([]);
+  });
+});
+
+describe("mcpServersHeaderValue operator tool allowlist (DIG-284)", () => {
+  it("forwards allowedTools and mutatingTools to the upstream header", () => {
+    // The digigraph side reads these exact spellings off the X-Digi-Mcp-Servers
+    // JSON rows, so the key names are the wire contract — pin them literally.
+    const dep = {
+      slug: "acme",
+      mcp: {
+        servers: [
+          {
+            id: "atlassian",
+            url: "https://mcp.atlassian.com/v1/sse",
+            label: "Atlassian",
+            allowedTools: ["addOrEditJiraIssueComment"],
+            mutatingTools: ["addOrEditJiraIssueComment"],
+          },
+        ],
+      },
+    } as unknown as DigichatDeployment;
+    const header = mcpServersHeaderValue(dep);
+    expect(header).toBeDefined();
+    const rows = JSON.parse(header ?? "[]") as Record<string, unknown>[];
+    expect(rows).toHaveLength(1);
+    expect(Object.keys(rows[0] ?? {})).toEqual(
+      expect.arrayContaining(["id", "url", "allowedTools", "mutatingTools"]),
+    );
+    expect(rows[0]?.allowedTools).toEqual(["addOrEditJiraIssueComment"]);
+    expect(rows[0]?.mutatingTools).toEqual(["addOrEditJiraIssueComment"]);
+    // Never client-projected: only id/url and the two allowlists reach the row.
+    expect(rows[0]?.label).toBeUndefined();
+  });
+
+  it("omits both keys entirely when the operator sets neither", () => {
+    // Do not forward `allowedTools: []`. An empty array and an absent key mean
+    // the same thing to digigraph (zero tools), but shipping the key would add
+    // bytes to every row and invite a reader to think [] widens the allowlist.
+    const dep = {
+      slug: "acme",
+      mcp: {
+        servers: [
+          {
+            id: "datatap",
+            url: "https://mcp.datatap.example/mcp",
+            label: "DataTap",
+          },
+        ],
+      },
+    } as unknown as DigichatDeployment;
+    const header = mcpServersHeaderValue(dep);
+    expect(header).toBeDefined();
+    const rows = JSON.parse(header ?? "[]") as Record<string, unknown>[];
+    expect(rows).toEqual([{ id: "datatap", url: "https://mcp.datatap.example/mcp" }]);
+    expect(rows[0]).not.toHaveProperty("allowedTools");
+    expect(rows[0]).not.toHaveProperty("mutatingTools");
+  });
+
+  it("omits an over-budget allowlist whole rather than truncating it", () => {
+    // The projection half of the same bound (review #5061 round 2, S1). The dep
+    // literal bypasses zod on purpose, because zod is the check that runs first
+    // in production: the loader parses, then we project, so this layer only ever
+    // sees an over-budget list if the two bounds have drifted apart — which is
+    // exactly what the shared-constant import exists to prevent, and exactly what
+    // this assertion catches if it ever happens. Truncating here instead of
+    // dropping would produce an allowlist that lost tools the operator named and
+    // still looked configured, so the whole list goes.
+    const overBudget = Array.from({ length: 257 }, (_, i) => `digifetch_read_${i}`);
+    const dep = {
+      slug: "acme",
+      mcp: {
+        servers: [
+          {
+            id: "digiquant",
+            url: "https://mcp.digithings.ai/mcp",
+            allowedTools: overBudget,
+            mutatingTools: overBudget,
+          },
+        ],
+      },
+    } as unknown as DigichatDeployment;
+    const header = mcpServersHeaderValue(dep);
+    expect(header).toBeDefined();
+    const rows = JSON.parse(header ?? "[]") as Record<string, unknown>[];
+    // The row itself still ships — only the unforwardable lists are gone.
+    expect(rows).toEqual([{ id: "digiquant", url: "https://mcp.digithings.ai/mcp" }]);
+  });
+
+  it("omits an allowlist carrying one over-long name, whole", () => {
+    // The other branch of `boundedToolAllowlist`, and the name-bound counterpart
+    // of the test above. A single 65th character disqualifies the whole list: it
+    // is a name digigraph truncates, and a truncated name can collide with a
+    // different tool, which is precisely the ambiguity the bound exists to
+    // prevent. Dropping only the offending entry would grant the rest of a list
+    // that was wrong about something.
+    const dep = {
+      slug: "acme",
+      mcp: {
+        servers: [
+          {
+            id: "atlassian",
+            url: "https://mcp.atlassian.com/v1/sse",
+            allowedTools: ["search_tickets", "t".repeat(65)],
+          },
+        ],
+      },
+    } as unknown as DigichatDeployment;
+    const header = mcpServersHeaderValue(dep);
+    expect(header).toBeDefined();
+    const rows = JSON.parse(header ?? "[]") as Record<string, unknown>[];
+    expect(rows).toEqual([{ id: "atlassian", url: "https://mcp.atlassian.com/v1/sse" }]);
   });
 });
 
