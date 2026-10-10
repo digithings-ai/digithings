@@ -445,6 +445,46 @@ env:
     env_example_files:
     - .env.example
     compose_literal: []
+- name: DIGICHAT_ARTIFACT_CONVERSATION
+  description: >-
+    Conversation an oversized Zammad retrieval is filed under (DIG-2785).
+    Empty by default and honestly so - the conversation is per-session, so
+    no static default can name a live one.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal:
+    - DIGICHAT_ARTIFACT_CONVERSATION
+- name: DIGICHAT_ARTIFACT_GRANT
+  description: >-
+    Bearer grant the zammad-mcp container presents to the artifact-ingest
+    door (DIG-2785). Names one conversation and authorises one write; it is
+    not an object-store key and not a database credential. Empty until a
+    conversation issues one.
+  secret: true
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal:
+    - DIGICHAT_ARTIFACT_GRANT
+- name: DIGICHAT_ARTIFACT_INGEST_URL
+  description: >-
+    DigiChat artifact-ingest door the zammad-mcp container posts an oversized
+    retrieval to (DIG-2785). In-network URL: service name plus the digichat
+    container port, same shape as DIGIGRAPH_INTERNAL_URL.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal:
+    - DIGICHAT_ARTIFACT_INGEST_URL
 - name: DIGICHAT_ALLOW_LOCAL_EMBED_PARENTS
   description: Allow localhost parents to embed digichat (local profile-a bundle override only).
   secret: false
@@ -1794,6 +1834,14 @@ secrets:
 - name: AUTH_SECRET
   worker: digithings-digichat, digithings-stack
   required: true
+- name: DIGICHAT_ARTIFACT_GRANT
+  worker: digithings-digichat, digithings-stack
+  required: false
+  note: >-
+    Per-conversation ingest grant the zammad-mcp container presents to
+    POST /api/artifact-ingest (DIG-2785). Names one conversation and
+    authorises one write; artifacts-repo re-checks ownership. Not an
+    object-store key and not a database credential.
 - name: DIGICHAT_EMBED_TENANTS
   worker: digithings-digichat, digithings-stack
   required: true
