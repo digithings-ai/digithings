@@ -317,7 +317,10 @@ def test_local_exemption_still_reported(guard: Any) -> None:
         "# GLOOMBERB_ENABLED: true  # reference only",
         'GLOOMBERB_ENABLED = "0"  # was "1" in staging',
         'GLOOMBERB_ENABLED="0"   # intentionally off (DIG-1233)',
-        'GLOOMBERB_SESSION_COOKIE = "abc"',
+        # NOT here: GLOOMBERB_SESSION_COOKIE used to be listed here as an
+        # "unrelated line". DIG-2752 made it the opposite — a committed cookie
+        # value is a finding in every file, this one included. Its cases live in
+        # the cookie-half section below.
         'DIGIKEY_ALLOW_DEV_GLOBAL = "1"',
     ],
 )
@@ -656,3 +659,357 @@ def test_guard_job_is_in_required_checks_needs() -> None:
     for item in needs:
         flat.extend(item if isinstance(item, list) else [item])
     assert _JOB in flat, f"{_JOB} must be in required-checks needs; got {flat}"
+
+
+# ── DIG-2752: the cookie half ─────────────────────────────────────────────────
+#
+# The flag half above answers "is the family reachable?". These answer "is it
+# authenticated, and is the credential safe where it lives?". Three checks, and
+# each one has a negative control in the block below it: a rule that cannot be
+# shown to fire measures nothing, which is the exact failure mode this suite was
+# written to avoid in the first place.
+
+
+COOKIE = "GLOOMBERB_SESSION_COOKIE"
+SUBSTACK = "SUBSTACK_SESSION_COOKIE"
+
+#: A value shaped like a real paste: the upstream ``name=value`` form, a
+#: separator, and a high-entropy blob. The name is deliberately NEUTRAL rather
+#: than the vendor's real cookie name, for two reasons that each cost a run to
+#: learn:
+#:   * `scripts/check_vendor_content.py` rules V3/V5 fire on the vendor's own
+#:     storage-slot name, and this repo's vendor gate then fails the PR. That
+#:     gate is right and this file must not argue with it.
+#:   * the guard never pattern-matches the value -- it asks whether the value is
+#:     a placeholder or a secret reference. A fixture pinned to the real name
+#:     would keep passing if the guard grew a name-pattern arm, which would stop
+#:     testing what it claims to test.
+#: Nothing here inspects entropy; the point is that a real-looking value is
+#: classified as a value.
+REAL_COOKIE = "gl-session=Kx9pQm2vT7wR4yU8nB1sD5gF0hJ3lZ6aCeJ"
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        (COOKIE, REAL_COOKIE),
+        (COOKIE, "gl-session=abc123def456ghi789"),
+        (COOKIE, "bare-token-value"),
+        (SUBSTACK, "substack.sid=eyJhbGciOiJIUzI1NiJ9abc"),
+    ],
+)
+@pytest.mark.parametrize(
+    "path",
+    [
+        "apps/digichat-cloudflare/wrangler.toml",
+        "Dockerfile.digithings-stack-cloudflare",
+        "docker-compose.yml",
+        ".github/workflows/deploy-digithings-cloudflare.yml",
+        ".env",
+        ".env.local",
+        "docker-compose.override.yml",
+        "dev/env.sh",
+        "scripts/some_helper.sh",
+    ],
+)
+def test_committed_cookie_value_fails_everywhere(
+    guard: Any, path: str, name: str, value: str
+) -> None:
+    """DIG-2752: a committed cookie is an exposure wherever it sits.
+
+    The local paths are the point of the check. The local exemption exists so a
+    developer can *run* the tools with their own cookie in an untracked ``.env``;
+    it was never an authorisation to commit the credential that authenticates
+    them. A tracked cookie in a local file is a leaked cookie, not a dev
+    convenience, so there is no local pass for this kind.
+    """
+    findings = _scan(guard, path, f'{name} = "{value}"\n')
+    kinds = [f.kind for f in findings]
+    assert "cookie_value" in kinds, f"{path} must reject a committed {name}; got {kinds}"
+    for finding in findings:
+        if finding.kind == "cookie_value":
+            assert guard.is_blocking(finding), "a cookie value blocks even in a local file"
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "",
+        "<cookie-value>",
+        "<paste-value-here>",
+        "{paste-here}",
+        "[redacted]",
+        "REDACTED",
+        "CHANGEME",
+        "placeholder",
+    ],
+)
+def test_placeholder_or_empty_cookie_value_passes(guard: Any, value: str) -> None:
+    """A value the guard can *prove* is a stand-in is not a credential.
+
+    An empty value passes in a local file (already tested above); in a deployed
+    file it is caught by the plaintext-slot check instead, which is what makes
+    that check worth having.
+    """
+    assert guard.is_placeholder(value) is True, value
+    findings = _scan(guard, "dev/env.sh", f"{COOKIE}={value}\n")
+    assert findings == [], f"{value!r} is a placeholder, not a cookie; got {findings}"
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        f'{COOKIE} = "${{{{ secrets.{COOKIE} }}}}"',
+        f'{COOKIE} = "${{{{ secrets.{SUBSTACK} }}}}"',
+        f"{COOKIE}: env.{COOKIE}",
+        f"{COOKIE} = os.environ.get('{COOKIE}', '')",
+    ],
+)
+def test_a_deployed_config_may_name_the_cookie_through_a_secret(guard: Any, line: str) -> None:
+    """The sanctioned shape must pass, or the guard would force people to invent one.
+
+    A bare ``$NAME`` / ``${NAME}`` is deliberately NOT in this list. It is the
+    shape a Dockerfile ``ENV`` uses to bake a shell passthrough into an image, and
+    ``wrangler.toml`` does not expand shell variables at all — it would ship the
+    literal string to the edge. A secret reference points at a store, not at a
+    variable.
+    """
+    findings = _scan(guard, "apps/digichat-cloudflare/wrangler.toml", line + "\n")
+    assert findings == [], f"{line!r} is a secret reference; got {findings}"
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        f"{COOKIE} = $GLOOMBERB_SESSION_COOKIE",
+        f"{COOKIE} = ${{GLOOMBERB_SESSION_COOKIE}}",
+    ],
+)
+def test_a_shell_passthrough_is_not_a_secret_reference(guard: Any, line: str) -> None:
+    """Fail-closed: the guard cannot tell where ``$NAME`` came from, so it refuses it.
+
+    This is a judgement call and it is recorded as one, because the alternative
+    reading — "$NAME is an indirection, therefore it is fine" — is what lets a
+    Dockerfile bake a cookie into a layer. The sanctioned forward is ``env.NAME``
+    (a Worker binding) or ``${{ secrets.NAME }}``.
+    """
+    assert guard.is_secret_reference(line.split("=", 1)[1].strip()) is False, line
+    findings = _scan(guard, "Dockerfile.digithings-stack-cloudflare", line + "\n")
+    kinds = [f.kind for f in findings]
+    assert kinds == ["cookie_value"], f"{line!r} must fail; got {kinds}"
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        f'{COOKIE} = ""',
+        f"{COOKIE} =",
+        f"{COOKIE}=",
+        f'{COOKIE} = "<cookie-value>"',
+        f"{COOKIE} = CHANGEME",
+    ],
+)
+def test_a_deployed_plaintext_cookie_slot_fails_even_when_empty(guard: Any, line: str) -> None:
+    """The empty-slot case the cookie-value check cannot see.
+
+    ``GLOOMBERB_SESSION_COOKIE = ""`` in ``[vars]`` leaks nothing today and is
+    still wrong: it is a slot in git that invites the value, and a per-deployer
+    secret belongs in ``wrangler secret put`` / ``secrets.*``.
+    """
+    findings = _scan(guard, "apps/digichat-cloudflare/wrangler.toml", line + "\n")
+    kinds = [f.kind for f in findings]
+    assert "plaintext_cookie_slot" in kinds, f"{line!r} must fail; got {kinds}"
+    assert all(guard.is_blocking(f) for f in findings)
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        f"{COOKIE} = {REAL_COOKIE}",
+        "GLOOMBERB_ENABLED=1",
+    ],
+)
+@pytest.mark.parametrize(
+    "path",
+    [
+        "apps/digichat-cloudflare/wrangler.toml",
+        "Dockerfile.digithings-stack-cloudflare",
+        "docker-compose.yml",
+        ".github/workflows/deploy-digithings-cloudflare.yml",
+        ".env",
+        "docker-compose.override.yml",
+    ],
+)
+def test_a_workflow_env_block_cannot_hold_a_cookie_either(guard: Any, path: str, line: str) -> None:
+    """A workflow ``env:`` block is a deployed surface: it runs in CI and in deploys."""
+    assert guard.is_deployed(path) or guard.is_local(path), path
+    findings = _scan(guard, path, f"        {line}\n")
+    assert findings, f"{line!r} in {path} must be caught"
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        'GLOOMBERB_ENABLED: "${{ vars.GLOOMBERB_ENABLED }}"',
+        "GLOOMBERB_ENABLED: $GLOOMBERB_ENABLED",
+        "GLOOMBERB_ENABLED = ${GLOOMBERB_ENABLED}",
+        "GLOOMBERB_ENABLED = $GLOOMBERB_ENABLED",
+        "GLOOMBERB_ENABLED = env.GLOOMBERB_ENABLED",
+        "GLOOMBERB_ENABLED = process.env.GLOOMBERB_ENABLED",
+        "GLOOMBERB_ENABLED = os.environ.get('GLOOMBERB_ENABLED')",
+    ],
+)
+def test_a_deployed_config_advertising_without_a_secret_fails(guard: Any, line: str) -> None:
+    """A repository variable is a settings field, not a secret store.
+
+    This is the "advertises the tools without a secret" case. A literal enabling
+    value is already caught by the original rule; what only this one sees is a
+    family switched on through an indirection, with nothing in the file that
+    supplies the cookie through a secret store.
+    """
+    findings = _scan(guard, "apps/digichat-cloudflare/wrangler.toml", line + "\n")
+    kinds = [f.kind for f in findings]
+    assert "advertised_without_secret" in kinds, f"{line!r} must fail; got {kinds}"
+
+
+def test_advertising_with_a_secret_slot_in_the_file_passes(guard: Any) -> None:
+    """The fix the rule points at has to be reachable, or the rule is a dead end."""
+    text = (
+        'GLOOMBERB_ENABLED: "${{ vars.GLOOMBERB_ENABLED }}"\n'
+        f"# npx wrangler secret put {COOKIE}\n"
+    )
+    findings = _scan(guard, "apps/digichat-cloudflare/wrangler.toml", text)
+    assert findings == [], (
+        f"a file that names wrangler secret put {COOKIE} supplies it; got {findings}"
+    )
+
+
+def test_an_indirect_flag_in_a_local_config_is_not_deployed(guard: Any) -> None:
+    """Local stays local: the exemption is about deployment, not about indirection."""
+    findings = _scan(guard, ".env.local", "GLOOMBERB_ENABLED=$GLOOMBERB_ENABLED\n")
+    assert findings == [], f"a local config is not a deployed surface; got {findings}"
+
+
+def test_a_literal_enabling_value_is_still_reported_as_enabled(guard: Any) -> None:
+    """The original rule keeps its own kind, so its reason string is unchanged."""
+    findings = _scan(guard, "apps/digichat-cloudflare/wrangler.toml", 'GLOOMBERB_ENABLED = "1"\n')
+    assert [f.kind for f in findings] == ["enabled"]
+
+
+def test_cookie_names_are_the_two_the_client_reads(guard: Any) -> None:
+    """The names are a contract with the runbook, so they are asserted, not implied."""
+    assert set(guard.COOKIE_VARS) == {COOKIE, SUBSTACK}
+    text = (REPO_ROOT / "digiquant/src/digiquant/data/gloomberb/client.py").read_text(
+        encoding="utf-8"
+    )
+    for name in guard.COOKIE_VARS:
+        assert f'"{name}"' in text, f"{name} is not an env name the client reads"
+
+
+def test_the_runbook_and_this_guard_agree_on_the_cookie_names(guard: Any) -> None:
+    """Cross-check against the sibling suite rather than duplicating its list.
+
+    The runbook suite pins the Gloomberb names an operator-facing document may
+    carry. This guard has its own list because it answers a different question
+    (what must never be *committed*, not what may be *written about*), and the
+    two are only kept honest if something asserts they agree.
+    """
+    from tests.scripts.test_gloomberb_session_cookie_runbook import (
+        ALLOWED_ENV_NAMES,
+    )
+
+    # ALLOWED_ENV_NAMES is scoped to `GLOOMBERB_*` names (the sibling suite's own
+    # regex only matches that prefix), so the cross-check can only speak for the
+    # GLOOMBERB half. SUBSTACK_SESSION_COOKIE is held to the client's constants
+    # by test_cookie_names_are_the_two_the_client_reads instead.
+    gloomberb_names = {n for n in guard.COOKIE_VARS if n.startswith("GLOOMBERB_")}
+    assert gloomberb_names <= ALLOWED_ENV_NAMES, sorted(gloomberb_names - ALLOWED_ENV_NAMES)
+
+
+def test_findings_render_their_own_reason(guard: Any) -> None:
+    """Each kind must say what to do; a bare path is a finding nobody can act on."""
+    for kind, reason in guard.FINDING_REASONS.items():
+        assert reason and reason.strip(), f"{kind} needs a reason string"
+    # The three cookie kinds are the ones DIG-2752 added; `enabled` is unchanged
+    # from the original guard and is pinned by exact text.
+    assert {
+        "enabled",
+        "cookie_value",
+        "plaintext_cookie_slot",
+        "advertised_without_secret",
+    } <= set(guard.FINDING_REASONS)
+    assert guard.FINDING_REASONS["enabled"] == (
+        "GLOOMBERB_ENABLED must never be enabled in a deployed config"
+    )
+    rendered = guard.render(
+        [
+            guard.Finding(".env", 3, f"{COOKIE}=x", False, "cookie_value"),
+            guard.Finding(
+                "apps/x/wrangler.toml", 9, f'{COOKIE} = ""', True, "plaintext_cookie_slot"
+            ),
+            guard.Finding(
+                "apps/x/wrangler.toml",
+                10,
+                "GLOOMBERB_ENABLED: $GLOOMBERB_ENABLED",
+                True,
+                "advertised_without_secret",
+            ),
+        ],
+        [],
+        "parsed from client.py",
+        VALUES,
+    )
+    assert "COOKIE" in rendered
+    for kind in ("cookie_value", "plaintext_cookie_slot", "advertised_without_secret"):
+        assert guard.FINDING_REASONS[kind] in rendered, f"{kind} reason missing from the render"
+
+
+def test_json_output_names_the_cookie_vars(guard: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A machine consumer has to be able to see which names the guard policed."""
+    import io
+    import json as json_mod
+
+    monkeypatch.setattr(guard, "scan", lambda *a, **k: ([], [], VALUES, "parsed from client.py"))
+    buf = io.StringIO()
+    monkeypatch.setattr("sys.stdout", buf)
+    assert guard.main(["--json"]) == 0
+    payload = json_mod.loads(buf.getvalue())
+    assert payload["cookieVars"] == list(guard.COOKIE_VARS)
+    assert payload["ok"] is True
+
+
+def test_the_cookie_checks_are_not_vacuous_on_this_repo(guard: Any) -> None:
+    """``test_repo_passes`` proves nothing unless the repo can also fail.
+
+    Each new rule is exercised against the real repository by seeding one line
+    into a real tracked config, so the control cannot pass for the wrong reason
+    (a rule that never fires, a path class that does not exist here, or a file
+    the guard does not read). The file is restored byte-for-byte afterwards.
+    """
+
+    target = REPO_ROOT / "apps/digichat-cloudflare/wrangler.toml"
+    assert target.is_file(), f"the control needs a real deployed config; {target} is gone"
+    original = target.read_bytes()
+
+    def seed(line: str) -> list[Any]:
+        target.write_bytes(original + line.encode("utf-8"))
+        try:
+            return guard.scan_text(
+                "apps/digichat-cloudflare/wrangler.toml",
+                original.decode("utf-8") + line + "\n",
+                VALUES,
+            )
+        finally:
+            target.write_bytes(original)
+
+    try:
+        assert [f.kind for f in seed(f'{COOKIE} = "{REAL_COOKIE}"\n')] == ["cookie_value"]
+        assert [f.kind for f in seed(f'{COOKIE} = ""\n')] == ["plaintext_cookie_slot"]
+        assert [f.kind for f in seed("GLOOMBERB_ENABLED = $GLOOMBERB_ENABLED\n")] == [
+            "advertised_without_secret"
+        ]
+        assert [f.kind for f in seed('GLOOMBERB_ENABLED = "1"\n')] == ["enabled"]
+        assert seed(f'{COOKIE} = "${{{{ secrets.{COOKIE} }}}}"\n') == []
+    finally:
+        target.write_bytes(original)
+    assert target.read_bytes() == original, "the control must leave the file byte-identical"
