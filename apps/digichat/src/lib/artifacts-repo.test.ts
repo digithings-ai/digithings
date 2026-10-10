@@ -28,13 +28,21 @@ const ROW = {
  */
 function fakeDb(options: { owned?: boolean; selectRows?: unknown[]; returning?: unknown[] } = {}) {
   const owned = options.owned ?? true;
-  const selectRows = options.selectRows ?? [{ id: "conv-1" }];
+  const selectRows = (options.selectRows ?? [{ id: "conv-1" }]) as Record<string, unknown>[];
   const returningRows = options.returning ?? [{ id: "art-1" }];
-  const select = vi.fn(() => ({
+  // Honour the select projection the way drizzle does. Without this the fake
+  // hands back every column, and a test asserting "the repo never selects the
+  // storage key" would pass or fail for reasons that have nothing to do with
+  // the repo.
+  const project = (projection: Record<string, unknown>) =>
+    (owned ? selectRows : []).map((row) =>
+      Object.fromEntries(Object.keys(projection).map((alias) => [alias, row[alias]]))
+    );
+  const select = vi.fn((projection: Record<string, unknown> = {}) => ({
     from: () => ({
       where: () => ({
-        limit: async () => (owned ? selectRows : []),
-        orderBy: () => ({ limit: async () => selectRows }),
+        limit: async () => project(projection),
+        orderBy: () => ({ limit: async () => project(projection) }),
       }),
     }),
   }));
