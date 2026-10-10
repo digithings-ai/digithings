@@ -403,18 +403,32 @@ export function createSupabaseSource(env: SupabaseEnv): SupabaseSource {
       if (!book) return null;
       const w = navWindow(book.navRows.map((r) => ({ date: r.date, nav: r.nav })));
       const history = w == null ? [] : await loadBenchmarkHistory(env, 'SPY', w.from, w.to);
+      const held = book.positions.filter((p) => p.ticker !== 'CASH');
+      // Live lane (contract §6.5): `effectivePrice` is the best price the server
+      // can see — a market close at least as fresh as the published mark, else
+      // the mark itself. `isLive` is what `derivePriceAsOfDate` and
+      // `computeLiveVsMarkPct` key on, so it must be earned, never assumed.
+      const needy = held.filter((p) => p.entryPrice != null).map((p) => p.ticker);
+      const closes =
+        w == null || needy.length === 0
+          ? new Map<string, MarketCloseFill>()
+          : await loadMarketClosesMap(env, needy, w.from, w.to);
       return {
-        positions: book.positions
-          .filter((p) => p.ticker !== 'CASH')
-          .map((p) => ({
+        positions: held.map((p) => {
+          const mark = p.currentPrice ?? null;
+          const markAsOf = p.metricsAsOf ?? null;
+          const close = closes.get(p.ticker);
+          const isLive = close != null && (markAsOf == null || close.asOf >= markAsOf);
+          return {
             ticker: p.ticker,
             weightPct: typeof p.weightActual === 'number' ? p.weightActual : 0,
-            markPrice: p.currentPrice ?? null,
-            effectivePrice: p.currentPrice ?? null,
-            isLive: false,
-            metricsAsOf: p.metricsAsOf ?? null,
-            livePriceDate: null,
-          })),
+            markPrice: mark,
+            effectivePrice: isLive && close ? close.price : mark,
+            isLive,
+            metricsAsOf: markAsOf,
+            livePriceDate: isLive && close ? close.asOf : null,
+          };
+        }),
         navHistory: book.navRows.map((r) => ({ date: r.date, nav: r.nav })),
         benchmarkHistory: history,
         benchmarkTicker: 'SPY',

@@ -224,6 +224,93 @@ describe('market closes', () => {
   });
 });
 
+/** Production shape: the published book carries no `current_price` marks. */
+const POSITIONS_NO_MARK = POSITIONS.map((p) =>
+  p.ticker === 'CASH' ? p : { ...p, current_price: null, metrics_as_of: null },
+);
+
+/**
+ * Routes the committed-book reads plus the two market-API reads. `closes: null`
+ * stands for a market API that answers non-OK (the honest-empty arm).
+ */
+function mockLiveFetch(
+  closes: { date: string; ticker: string; close: number }[] | null,
+  positions: readonly unknown[] = POSITIONS_NO_MARK,
+): void {
+  (globalThis as Record<string, unknown>).fetch = vi.fn(async (input: unknown) => {
+    const url = String(input);
+    if (url.includes('/v1/market/closes')) {
+      if (closes === null) return new Response('nope', { status: 500 });
+      return Response.json({ rows: closes });
+    }
+    if (url.includes('/v1/market/tickers')) return Response.json({ tickers: ['XLV'] });
+    if (url.includes('/daily_snapshots')) return Response.json([{ date: '2026-09-24' }]);
+    if (url.includes('/positions?')) return Response.json(positions);
+    if (url.includes('/public_accounting_nav_history')) return Response.json(NAV_ROWS);
+    if (url.includes('/portfolio_metrics')) {
+      return Response.json([{ date: '2026-09-23', as_of_date: '2026-09-23', invested_pct: 35.13 }]);
+    }
+    if (url.includes('/position_events')) return Response.json([]);
+    throw new Error(`unexpected fetch ${url}`);
+  });
+}
+
+describe('live source', () => {
+  it('fills the live lane from the market API when the book carries no marks', async () => {
+    mockLiveFetch([{ date: '2026-10-10', ticker: 'XLV', close: 110 }]);
+    const withMarket: SupabaseEnv = { ...ENV, MARKET_DATA_URL: 'https://m.test' };
+    const book = await createSupabaseSource(withMarket).live.loadLiveBook();
+    expect(book?.positions).toHaveLength(1);
+    expect(book?.positions[0]).toMatchObject({
+      ticker: 'XLV',
+      markPrice: null,
+      effectivePrice: 110,
+      isLive: true,
+      livePriceDate: '2026-10-10',
+    });
+  });
+
+  it('keeps the published mark when the close is not fresher than it', async () => {
+    mockLiveFetch([{ date: '2026-09-01', ticker: 'XLV', close: 90 }], POSITIONS);
+    const withMarket: SupabaseEnv = { ...ENV, MARKET_DATA_URL: 'https://m.test' };
+    const book = await createSupabaseSource(withMarket).live.loadLiveBook();
+    expect(book?.positions[0]).toMatchObject({
+      markPrice: 105,
+      effectivePrice: 105,
+      isLive: false,
+      livePriceDate: null,
+    });
+  });
+
+  it('honest-empty on market failure — the mark still stands, no live date', async () => {
+    mockLiveFetch(null, POSITIONS);
+    const withMarket: SupabaseEnv = { ...ENV, MARKET_DATA_URL: 'https://m.test' };
+    const book = await createSupabaseSource(withMarket).live.loadLiveBook();
+    expect(book?.positions[0]).toMatchObject({
+      markPrice: 105,
+      effectivePrice: 105,
+      isLive: false,
+      livePriceDate: null,
+    });
+  });
+
+  it('never calls the market API when it is unset', async () => {
+    mockFetch((url: string) => {
+      if (url.includes('/daily_snapshots')) return [{ date: '2026-09-24' }];
+      if (url.includes('/positions?')) return POSITIONS;
+      if (url.includes('/public_accounting_nav_history')) return NAV_ROWS;
+      if (url.includes('/portfolio_metrics')) {
+        return [{ date: '2026-09-23', as_of_date: '2026-09-23', invested_pct: 35.13 }];
+      }
+      if (url.includes('/position_events')) return [];
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    const book = await createSupabaseSource(ENV).live.loadLiveBook();
+    expect(book?.positions[0]).toMatchObject({ effectivePrice: 105, isLive: false });
+    expect(FETCHED.some((u) => u.includes('/v1/market/'))).toBe(false);
+  });
+});
+
 describe('ledger book', () => {
   it('reads PostgREST paths with the service key', async () => {
     mockFetch(() => [{ date: '2026-09-24', ticker: 'XLV', event: 'HOLD' }]);
