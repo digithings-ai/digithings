@@ -75,13 +75,11 @@ export const apiDocs: Record<string, ModuleApiDoc> = {
   digigraph: {
     baseUrlVar: "DIGIGRAPH_URL",
     authNote:
-      "Protected routes require a digikey-issued RS256 JWT in `Authorization: Bearer`. " +
-      "If neither `DIGIKEY_JWKS_URL` nor `DIGIKEY_PUBLIC_KEY_PEM` is set, those routes return 503 `auth_not_configured`. " +
-      "There is no anonymous passthrough. Compose sets `DIGIKEY_JWKS_URL`. " +
-      "Auth-exempt paths are `/health`, `/healthz`, `/metrics`, `/docs`, `/redoc`, and `/openapi.json`. " +
-      "`GET /v1/status` requires `digigraph:workflow`.",
+      "Endpoints accept a digikey-issued RS256 JWT in `Authorization: Bearer`. " +
+      "When no JWKS is configured the service runs in passthrough mode (dev/test only). " +
+      "`/healthz` and `/v1/status` are auth-exempt.",
     scopes: [
-      { scope: "digigraph:workflow", grants: "POST /workflow, GET /v1/status, debug routes, and the default fallback" },
+      { scope: "digigraph:workflow", grants: "POST /workflow + debug routes (default fallback)" },
       { scope: "digigraph:chat", grants: "/v1/chat/completions, /v1/models, /v1/model-info" },
       { scope: "digigraph:mcp", grants: "/threads/*, /files/* (when enabled)" },
     ],
@@ -96,7 +94,7 @@ export const apiDocs: Record<string, ModuleApiDoc> = {
       { name: "DIGIKEY_JWKS_URL", description: "JWT public-key (JWKS) endpoint." },
       { name: "OPENAI_API_BASE", description: "LiteLLM proxy base URL." },
       { name: "DIGI_LLM_MODE", def: "test", description: "Model tier: test / medium / best." },
-      { name: "DIGI_CHECKPOINTER", description: "LangGraph state backend: memory / sqlite / postgres / none. Unset uses sqlite when a digiproject.yaml is active, otherwise memory." },
+      { name: "DIGI_CHECKPOINTER", def: "memory", description: "LangGraph state backend: memory / sqlite / postgres / none." },
       { name: "DIGI_ENABLE_THREAD_API", def: "0", description: "Gate /threads/* and /files/*." },
       { name: "DIGI_ENABLE_DEBUG_ENDPOINTS", def: "0", description: "Gate /test_llm and /v1/debug/*." },
     ],
@@ -112,8 +110,8 @@ export const apiDocs: Record<string, ModuleApiDoc> = {
       {
         method: "GET",
         path: "/v1/status",
-        summary: "Secret-free project status. Requires digigraph:workflow. digitrace's /v1/status is the public one.",
-        auth: "digigraph:workflow",
+        summary: "Public, secret-free project status.",
+        auth: "none",
         rateLimit: "30/min/IP",
         responseExample: `{
   "service": "digigraph",
@@ -123,13 +121,13 @@ export const apiDocs: Record<string, ModuleApiDoc> = {
   "mcp_enabled": true,
   "workflow_profile": "default"
 }`,
-        examples: [{ lang: "bash", code: `curl $DIGIGRAPH_URL/v1/status ${BEARER("JWT")}` }],
+        examples: [{ lang: "bash", code: `curl $DIGIGRAPH_URL/v1/status` }],
       },
       {
         method: "POST",
         path: "/workflow",
         summary: "Run the full research + backtest graph (digiclaw custom skill).",
-        auth: "digigraph:workflow",
+        auth: "digigraph:workflow (optional)",
         rateLimit: "10/min/IP",
         request: [
           { name: "prompt", type: "string", required: true, description: "The user request to route through the supervisor." },
@@ -180,10 +178,10 @@ const { message } = await r.json();`,
         method: "POST",
         path: "/v1/chat/completions",
         summary: "OpenAI-compatible chat. Set stream:true for SSE (events: tool_call, content, done).",
-        auth: "digigraph:chat",
-        rateLimit: "60/min/IP",
+        auth: "digigraph:chat (optional)",
+        rateLimit: "10/min/IP",
         request: [
-          { name: "model", type: "string", description: 'Advertised id; default "digigraph-rag". It does not select the upstream model — project config does.' },
+          { name: "model", type: "string", description: 'Model id; default "digigraph-rag".' },
           { name: "messages", type: "{role,content}[]", required: true, description: "Chat messages." },
           { name: "stream", type: "boolean", description: "Stream tokens as SSE." },
         ],
@@ -210,7 +208,7 @@ resp = client.chat.completions.create(
         method: "GET",
         path: "/v1/models",
         summary: "OpenAI-style model list.",
-        auth: "digigraph:chat",
+        auth: "digigraph:chat (optional)",
         rateLimit: "30/min/IP",
         examples: [{ lang: "bash", code: `curl $DIGIGRAPH_URL/v1/models ${BEARER("JWT")}` }],
       },
@@ -228,11 +226,11 @@ resp = client.chat.completions.create(
   digiquant: {
     baseUrlVar: "DIGIQUANT_URL",
     authNote:
-      "Protected routes require a digikey JWT. If neither `DIGIKEY_JWKS_URL` nor `DIGIKEY_PUBLIC_KEY_PEM` is set, they return 503 `auth_not_configured`. " +
-      "There is no anonymous passthrough. `GET /bars` is the read-only chart exemption. Async jobs stream progress over SSE.",
+      "Backtest/optimize/pipeline routes accept a digikey JWT (optional in passthrough mode). " +
+      "Async jobs stream progress over SSE.",
     scopes: [
-      { scope: "digiquant:backtest", grants: "/strategies, /run_backtest, /backtest/*, /v1/jobs/*, /v1/orchestrator_tools" },
-      { scope: "digiquant:optimize", grants: "/run_optimize. /run_pipeline and /v1/workflow also require digiquant:backtest" },
+      { scope: "digiquant:backtest", grants: "/run_backtest, /backtest/*, /v1/jobs/*, /v1/orchestrator_tools" },
+      { scope: "digiquant:optimize", grants: "/run_optimize, /run_pipeline, /v1/workflow" },
     ],
     run: {
       compose: "docker compose up -d digiquant",
@@ -248,16 +246,16 @@ resp = client.chat.completions.create(
         method: "GET",
         path: "/strategies",
         summary: "List registered NautilusTrader strategies.",
-        auth: "digiquant:backtest",
+        auth: "none",
         rateLimit: "30/min/IP",
         responseExample: `[{ "name": "mean_reversion_tech", "aliases": [], "description": "...", "default_params": {} }]`,
-        examples: [{ lang: "bash", code: `curl $DIGIQUANT_URL/strategies ${BEARER("JWT")}` }],
+        examples: [{ lang: "bash", code: `curl $DIGIQUANT_URL/strategies` }],
       },
       {
         method: "POST",
         path: "/run_backtest",
         summary: "Synchronous backtest. Returns a BacktestResult.",
-        auth: "digiquant:backtest",
+        auth: "digiquant:backtest (optional)",
         rateLimit: "10/min/IP",
         request: [
           { name: "strategy_name", type: "string", required: true, description: "Registered strategy id." },
@@ -282,9 +280,7 @@ resp = client.chat.completions.create(
           },
           {
             lang: "python",
-            code: `import os, httpx
-
-r = httpx.post(
+            code: `r = httpx.post(
     f"{os.environ['DIGIQUANT_URL']}/run_backtest",
     headers={"Authorization": f"Bearer {os.environ['DIGI_JWT']}"},
     json={"strategy_name": "mean_reversion_tech", "symbols": ["AAPL"]},
@@ -298,22 +294,22 @@ print(r.json()["sharpe_ratio"])`,
         method: "POST",
         path: "/backtest/start",
         summary: "Submit an async backtest job; returns {job_id}. Poll progress over SSE.",
-        auth: "digiquant:backtest",
-        rateLimit: "30/min/IP",
+        auth: "none",
+        rateLimit: "10/min/IP",
         responseExample: `{ "job_id": "..." }`,
       },
       {
         method: "GET",
         path: "/backtest/{job_id}/progress",
         summary: "SSE stream of backtest progress events (JSON frames).",
-        auth: "digiquant:backtest",
-        examples: [{ lang: "bash", code: `curl -N $DIGIQUANT_URL/backtest/$JOB_ID/progress ${BEARER("JWT")}` }],
+        auth: "none",
+        examples: [{ lang: "bash", code: `curl -N $DIGIQUANT_URL/backtest/$JOB_ID/progress` }],
       },
       {
         method: "POST",
         path: "/run_optimize",
         summary: "Parameter optimization (grid / bayesian / random). Returns best params.",
-        auth: "digiquant:optimize",
+        auth: "digiquant:optimize (optional)",
         rateLimit: "10/min/IP",
         request: [
           { name: "strategy_name", type: "string", required: true, description: "Registered strategy id." },
@@ -332,7 +328,7 @@ print(r.json()["sharpe_ratio"])`,
         method: "POST",
         path: "/run_pipeline",
         summary: "Full pipeline: backtest → optimize → export.",
-        auth: "digiquant:backtest and digiquant:optimize",
+        auth: "digiquant:optimize (optional)",
         rateLimit: "10/min/IP",
       },
     ],
@@ -371,7 +367,7 @@ print(r.json()["sharpe_ratio"])`,
           { name: "text", type: "string", required: true, description: "Query text." },
           { name: "index_name", type: "string", description: 'Target index (default "default").' },
           { name: "top_k", type: "integer", description: "Results to return, 1–100 (default 10)." },
-          { name: "mode", type: "string", description: '"keyword" | "vector" | "hybrid" (default hybrid). Chroma, Vectorize, and the stub coerce keyword and hybrid to vector-only search.' },
+          { name: "mode", type: "string", description: '"keyword" | "vector" | "hybrid" (default hybrid).' },
           { name: "filters", type: "{field,op,value}[]", description: "Structured metadata filters." },
         ],
         responseFields: [
@@ -388,9 +384,7 @@ print(r.json()["sharpe_ratio"])`,
           },
           {
             lang: "python",
-            code: `import os, httpx
-
-r = httpx.post(
+            code: `r = httpx.post(
     f"{os.environ['DIGISEARCH_URL']}/query",
     headers={"Authorization": f"Bearer {os.environ['DIGI_JWT']}"},
     json={"text": "momentum factor", "top_k": 5},
@@ -572,43 +566,36 @@ for hit in r.json()["results"]:
   digichat: {
     baseUrlVar: "DIGICHAT_URL",
     authNote:
-      "`POST /api/chat` requires a digichat session, unless the request is a verified embed or an anonymous install the deployment allows. " +
-      "The body is `{ messages }`. The response is a stream, not a JSON object of content and tool calls. " +
-      "`GET /api/health` is public readiness and can return 503 with `{ ok, checks, version, license_status }`. " +
-      "`GET /api/ecosystem/config` requires a session. " +
-      "Profile A secrets are `AUTH_SECRET` and `DIGIKEY_BFF_TOKEN`. `OPENROUTER_API_KEY` and `CORE_SUPABASE_*` are not required to boot the Docker BFF. " +
-      "Auth.js exchanges a BFF session for a digikey JWT when the deployment calls digigraph.",
+      "The deployed digithings.ai chat is an agentic Cloudflare Pages Function (no login) that " +
+      "grounds answers in the digivault docs. The full Docker BFF additionally authenticates users " +
+      "via NextAuth and exchanges a BFF session for a digikey JWT to call digigraph.",
     run: {
       compose: "docker compose --profile digichat up -d",
       cli: "make digichat-dev   # Next.js dev server with hot reload",
     },
     env: [
-      { name: "AUTH_SECRET", required: true, description: "Auth.js secret (Profile A): openssl rand -base64 32." },
-      { name: "DIGIKEY_BFF_TOKEN", required: true, description: "Bearer for grant_type=bff_session (Profile A)." },
-      { name: "OPENROUTER_API_KEY", description: "Optional. Not required to boot the Docker BFF." },
-      { name: "CORE_SUPABASE_URL", description: "Optional vault Supabase project URL. Not required to boot the Docker BFF." },
-      { name: "CORE_SUPABASE_ANON_KEY", description: "Optional anon key. Not required to boot the Docker BFF." },
+      { name: "OPENROUTER_API_KEY", required: true, description: "LLM calls via OpenRouter free models." },
+      { name: "CORE_SUPABASE_URL", required: true, description: "Vault Supabase project URL (RLS read)." },
+      { name: "CORE_SUPABASE_ANON_KEY", required: true, description: "Anon key for RLS-gated vault reads." },
+      { name: "AUTH_SECRET", description: "NextAuth secret (Docker BFF): openssl rand -base64 32." },
+      { name: "DIGIKEY_BFF_TOKEN", description: "Bearer for grant_type=bff_session (Docker BFF)." },
     ],
     endpoints: [
-      {
-        method: "GET",
-        path: "/api/health",
-        summary: "Public readiness. 200 when required checks pass, otherwise 503.",
-        auth: "none",
-        responseExample: `{ "ok": true, "checks": { "service": "ok" }, "version": "2.4.0", "license_status": "valid" }`,
-      },
+      { method: "GET", path: "/api/health", summary: "Liveness probe.", auth: "none", responseExample: `{ "ok": true }` },
       {
         method: "POST",
         path: "/api/chat",
-        summary: "Streams one chat turn. Retrieval tools are available to the assistant; they are not called on every reply.",
-        auth: "session, verified embed, or allowed anonymous install",
+        summary: "Agentic chat grounded in digivault (single tool: search_digivault).",
+        auth: "none (public, rate-limited)",
         request: [
-          { name: "messages", type: "UIMessage[]", required: true, description: "Conversation so far." },
+          { name: "messages", type: "{role,content}[]", required: true, description: "Conversation so far." },
+          { name: "model", type: "string", description: "OpenRouter free model id." },
         ],
+        responseExample: `{ "content": "…grounded answer…", "tool_calls": [] }`,
         examples: [
           {
             lang: "bash",
-            code: `curl -N -X POST $DIGICHAT_URL/api/chat \\
+            code: `curl -X POST $DIGICHAT_URL/api/chat \\
   -H "content-type: application/json" \\
   -d '{"messages":[{"role":"user","content":"What does digigraph do?"}]}'`,
           },
@@ -642,7 +629,7 @@ for hit in r.json()["results"]:
         method: "GET",
         path: "/api/ecosystem/config",
         summary: "Ecosystem config for the chat shell.",
-        auth: "session",
+        auth: "none / session",
       },
       {
         method: "POST",

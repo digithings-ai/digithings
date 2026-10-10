@@ -1,14 +1,31 @@
 import type { Metadata } from "next";
 import Script from "next/script";
+import { Geist_Mono, IBM_Plex_Mono, Inter } from "next/font/google";
 import "./globals.css";
 import { themeInitScript } from "@digithings/ui";
-import { fontVariables, sans } from "@/app/fonts";
 import { auth } from "@/auth";
 import { Providers } from "@/components/providers";
 import {
   getDigichatConfig,
   getPrimaryDeployment,
 } from "@/lib/deploy-config/loader";
+
+/** Catalog skins stay Inter / IBM Plex. `--font-geist-mono` is for `chrome.skin: digichat` only. */
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+});
+
+const ibmPlexMono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  variable: "--font-ibm-plex-mono",
+});
+
+const geistMono = Geist_Mono({
+  subsets: ["latin"],
+  variable: "--font-geist-mono",
+});
 
 export const metadata: Metadata = {
   title: "digichat · digithings",
@@ -52,10 +69,10 @@ export default async function RootLayout({
       lang="en"
       data-theme={theme}
       suppressHydrationWarning
-      className={`${fontVariables} ${theme === "light" ? "light" : "dark"} h-full antialiased`}
+      className={`${inter.variable} ${ibmPlexMono.variable} ${geistMono.variable} ${theme === "light" ? "light" : "dark"} h-full antialiased`}
     >
       <body
-        className={`${sans.className} accent-digichat flex min-h-full flex-col bg-background text-foreground`}
+        className={`${inter.className} accent-digichat flex min-h-full flex-col bg-background text-foreground`}
       >
         <Script
           id="digichat-theme-init"
