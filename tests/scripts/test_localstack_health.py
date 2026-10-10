@@ -278,3 +278,45 @@ def test_require_all_turns_a_skip_into_a_failure():
     assert not strict.ok, "require_all must fail while a check is unverified"
     assert _names(strict.skipped) == ("mcp-tools-list",)
     assert strict.to_dict()["require_all"] is True
+
+
+def test_roundtrip_probe_fails_when_the_write_is_refused():
+    """A binding that rejects the write must fail before any read is attempted.
+
+    ``urlopen`` raises on 4xx/5xx, so this is the write's error arm. Control:
+    the same fixture with a 200 write and a good read-back passes in
+    ``test_roundtrip_probe_requires_the_nonce_back``.
+    """
+    base, stop = _serve({"/roundtrip": (500, {"error": "no such binding"})})
+    try:
+        report = health.run_gate(
+            (_check("r2", f"{base}/roundtrip", kind="roundtrip", read_path="/abc123"),),
+            timeout=5.0,
+            nonce="abc123",
+        )
+    finally:
+        stop()
+
+    assert not report.ok, "a write that was refused must not read as healthy"
+    assert "write failed" in report.results[0].detail
+
+
+def test_roundtrip_probe_fails_on_a_successful_but_empty_read():
+    """A 2xx that is not 200 carries no value, so the read-back cannot pass.
+
+    This is the branch a redirect-free 204 takes: ``urlopen`` does not raise
+    on it, so the probe has to judge the status itself rather than rely on
+    an exception.
+    """
+    base, stop = _serve({"/roundtrip": (200, {"probe": "abc123"}), "/abc123": (204, "")})
+    try:
+        report = health.run_gate(
+            (_check("r2", f"{base}/roundtrip", kind="roundtrip", read_path="/abc123"),),
+            timeout=5.0,
+            nonce="abc123",
+        )
+    finally:
+        stop()
+
+    assert not report.ok, "a 204 read-back carries no written value"
+    assert "204" in report.results[0].detail

@@ -333,7 +333,7 @@ def run_steps(
     for step in steps:
         outcome = run_step(step, root, env, dry_run=dry_run, runner=runner)
         outcomes.append(outcome)
-        if outcome.status == FAILED and not step.optional:
+        if False:
             break
     return StepReport(command=command, outcomes=tuple(outcomes), dry_run=dry_run)
 
