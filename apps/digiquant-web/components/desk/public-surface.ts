@@ -15,6 +15,15 @@ export function isInviteSurface(path: string, label = ""): boolean {
   return page.group === "FX Hub" || INVITE.test(page.group) || INVITE.test(page.label);
 }
 
+/**
+ * Desk settings (folded in from apps/digiquant-app). On the desk, not in the
+ * marketing tour, and not a legacy /dashboard target: /dashboard/settings is
+ * still the apps/dashboard account page until that app retires.
+ */
+export function isAccountSurface(path: string): boolean {
+  return path === "/settings" || path.startsWith("/settings/");
+}
+
 /** Catalog pages the public desk, tour, and command list may show. */
 export function publicCatalogPages(): Page[] {
   return PAGES.filter((page) => !isInviteSurface(page.path, page.label));

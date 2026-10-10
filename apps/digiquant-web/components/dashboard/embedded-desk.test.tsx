@@ -18,7 +18,7 @@ import {
   shouldYieldToUser,
   stopFromPath,
 } from "./desk-walk";
-import { publicCatalogPages } from "@/components/desk/public-surface";
+import { isAccountSurface, publicCatalogPages } from "@/components/desk/public-surface";
 import { screenKind, TerminalScreen } from "./terminal-screen";
 import {
   REVEAL_REST,
@@ -254,7 +254,7 @@ describe("surface tour", () => {
     expect(nextWebPath("/app")).toBe("/portfolio");
     expect(nextWebPath("/app/brief/")).toBe("/portfolio");
     expect(nextWebPath("/app/strategies/")).toBe("/strategies/detail");
-    const pages = publicCatalogPages();
+    const pages = publicCatalogPages().filter((page) => !isAccountSurface(page.path));
     const seen = new Set<string>();
     let path = "/brief";
     for (let i = 0; i < pages.length; i += 1) {
@@ -264,6 +264,7 @@ describe("surface tour", () => {
     expect(seen.size).toBe(pages.length);
     expect(path).toBe("/brief");
     expect(seen.has("/fx")).toBe(false);
+    expect(seen.has("/settings")).toBe(false);
   });
 
   it("draws a real screen for every public page and not for a web-only or invite path", () => {

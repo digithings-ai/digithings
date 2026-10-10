@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { publicCatalogPages } from "../components/desk/public-surface";
+import { isAccountSurface, publicCatalogPages } from "../components/desk/public-surface";
 import { WEB_SLOTS } from "../components/desk/web-slots";
 import { deskHref } from "../components/desk/paths";
 import {
@@ -16,7 +16,8 @@ import {
 
 describe("legacy dashboard redirects", () => {
   it("covers every desk path and no extra ones", () => {
-    const expected = [...publicCatalogPages().map((page) => page.path), ...WEB_SLOTS.map((slot) => slot.path)];
+    const desk = publicCatalogPages().filter((page) => !isAccountSurface(page.path));
+    const expected = [...desk.map((page) => page.path), ...WEB_SLOTS.map((slot) => slot.path)];
     expect(new Set(LEGACY_DESK_PATHS)).toEqual(new Set(expected));
     expect(LEGACY_DESK_PATHS).toHaveLength(expected.length);
   });

@@ -30,6 +30,8 @@ export const PAGES: Page[] = [
   { path: "/fx/watch", label: "Watch", group: "FX Hub" },
   { path: "/fx/rates", label: "Rates", group: "FX Hub" },
   { path: "/fx/settings", label: "Settings", group: "FX Hub" },
+  { path: "/settings", label: "Settings", group: "Desk" },
+  { path: "/settings/paper", label: "Paper", group: "Settings" },
 ];
 
 const tearsheet = L([
@@ -100,6 +102,15 @@ export const PAGE_LAYOUTS: Record<string, Layout> = {
     ["fx-directives", 7, 1, 6, 12],
     ["se-brokers", 1, 7, 6, 6],
   ]),
+  "/settings": L([
+    ["se-prefs", 1, 1, 6, 6],
+    ["se-integrations", 7, 1, 6, 6],
+    ["se-keys", 1, 7, 6, 6],
+    ["se-desk", 7, 7, 6, 2],
+    ["sh-desks", 7, 9, 6, 2],
+    ["sh-features", 7, 11, 6, 2],
+  ]),
+  "/settings/paper": L([["se-brokers", 1, 1, 12, 12]]),
   "/pipeline": L([
     ["pl-run-health", 1, 1, 4, 4],
     ["pl-narrative", 5, 1, 4, 4],
@@ -187,6 +198,12 @@ export const BLOCKS: Record<string, BlockDef> = {
   "rt-theses": block("rt-theses", "Rates · theses", "/rates/theses"),
   "se-fx-feed": block("se-fx-feed", "Settings · FX feed", "/settings/fx-feed"),
   "se-brokers": block("se-brokers", "Settings · brokers", "/settings/brokers"),
+  "se-prefs": block("se-prefs", "Settings · prefs", "/settings/prefs"),
+  "se-desk": block("se-desk", "Settings · desk", "/settings/desk"),
+  "se-integrations": block("se-integrations", "Settings · integrations", "/settings/integrations"),
+  "se-keys": block("se-keys", "Settings · API keys", "/settings/keys"),
+  "sh-desks": block("sh-desks", "Desks", "/desks"),
+  "sh-features": block("sh-features", "Features", "/features"),
 };
 
 export function pageByPath(path: string): Page | undefined {
