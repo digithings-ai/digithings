@@ -51,67 +51,169 @@ const { chromium } = await import("playwright");
 const outDir = join(APP_ROOT, "public", "book", "diagrams");
 mkdirSync(outDir, { recursive: true });
 
+// ---------------------------------------------------------------------------
+// Theme: one SVG per colour scheme, both from packages/design/tokens.css.
+//
+// An SVG loaded through <img> cannot read the page's CSS custom properties, so
+// "follow the theme" means rendering the diagram once per theme with that
+// theme's token values baked in, and letting the page show the matching file.
+// The values are READ from tokens.css, not copied, so a palette change reaches
+// the diagrams on the next build. The light file is the one the PDF prints.
+// ---------------------------------------------------------------------------
+const TOKENS_CSS = readFileSync(resolve(APP_ROOT, "..", "..", "packages", "design", "tokens.css"), "utf8");
+
+function themeTokens(theme) {
+  const block = new RegExp(`:root\\[data-theme="${theme}"\\]\\s*\\{([\\s\\S]*?)\\n\\}`).exec(TOKENS_CSS);
+  if (!block) throw new Error(`tokens.css has no :root[data-theme="${theme}"] block`);
+  const out = {};
+  for (const name of ["bg", "surface", "surface-2", "ink", "ink-soft", "accent"]) {
+    const m = new RegExp(`--${name}:\\s*(#[0-9A-Fa-f]{6})`).exec(block[1]);
+    if (!m) throw new Error(`tokens.css ${theme} block has no hex --${name}`);
+    out[name] = m[1];
+  }
+  return out;
+}
+
+const FONT_FAMILY = '"Geist Mono", ui-monospace, monospace';
+// Geist Mono is embedded in every SVG as a data: URI. An <img>-loaded SVG may
+// not fetch external fonts, so without this the browser falls back to whatever
+// monospace it has, whose metrics differ from the ones mermaid measured with —
+// labels then overflow their boxes. Embedding makes measure == display.
+// `geist` does not export its font files, so resolve the package root.
+const GEIST_MONO = join(dirname(dirname(require.resolve("geist/font/mono"))), "dist", "fonts", "geist-mono", "GeistMono-Regular.woff2");
+const FONT_B64 = readFileSync(GEIST_MONO).toString("base64");
+const FONT_FACE = `@font-face{font-family:"Geist Mono";src:url(data:font/woff2;base64,${FONT_B64}) format("woff2");font-weight:100 900;font-style:normal;}`;
+
+// The digibook mermaid theme: the terminal look of the UI kit. Sharp corners,
+// hairline rules, monospace labels, the kit's accent for the things a reader
+// follows (edges' heads, cluster titles), everything else in ink. Applied to
+// EVERY diagram through the one init call below, so a chapter cannot opt out,
+// and the same files feed the web page and the PDF.
+function terminalThemeCss(t) {
+  return [
+    "rect,polygon,.node path,.cluster rect,.actor,.note,.labelBox{rx:0 !important;ry:0 !important;stroke-width:1px !important}",
+    `.cluster rect{fill:${t["surface-2"]} !important;stroke:${t["ink-soft"]} !important;stroke-dasharray:3 3}`,
+    `.cluster-label text,.cluster-label tspan{fill:${t.accent} !important;letter-spacing:.04em;text-transform:lowercase}`,
+    ".flowchart-link,.messageLine0,.messageLine1,.relation{stroke-width:1px !important}",
+    `marker path,.arrowheadPath,.arrowMarkerPath{fill:${t.accent} !important;stroke:${t.accent} !important}`,
+    `.edgeLabel rect,.labelBkg{fill:${t.bg} !important;opacity:1}`,
+    `.edgeLabel text,.edgeLabel tspan{fill:${t["ink-soft"]} !important}`,
+  ].join("");
+}
+
+function mermaidConfig(t) {
+  return {
+    themeCSS: terminalThemeCss(t),
+    // 8px grid, the kit's spacing step.
+    flowchart: { htmlLabels: false, useMaxWidth: false, curve: "linear", padding: 16, nodeSpacing: 40, rankSpacing: 48 },
+    startOnLoad: false,
+    theme: "base",
+    darkMode: false, // colours below are explicit per theme; no page detection
+    look: "classic", // literal fills that travel with the file (see git history)
+    // TOP-LEVEL htmlLabels. Mermaid 11 ignores `flowchart.htmlLabels` for
+    // node and subgraph labels, which then come out as <foreignObject> HTML
+    // containing `<br>` — not well-formed XML, so an <img> refuses to decode
+    // the whole file and the figure is blank. That was "some diagrams don't
+    // render". SVG <text> labels have no such failure mode.
+    htmlLabels: false,
+    sequence: { useMaxWidth: false, boxMargin: 8, messageMargin: 32, mirrorActors: false },
+    securityLevel: "strict",
+    themeVariables: {
+      fontFamily: FONT_FAMILY,
+      fontSize: "14px",
+      background: t.bg,
+      mainBkg: t.surface,
+      primaryColor: t.surface,
+      primaryTextColor: t.ink,
+      primaryBorderColor: t["ink-soft"],
+      secondaryColor: t["surface-2"],
+      tertiaryColor: t["surface-2"],
+      secondaryTextColor: t.ink,
+      tertiaryTextColor: t.ink,
+      lineColor: t["ink-soft"],
+      textColor: t.ink,
+      nodeTextColor: t.ink,
+      titleColor: t.ink,
+      edgeLabelBackground: t.bg,
+      clusterBkg: t["surface-2"],
+      clusterBorder: t["ink-soft"],
+      actorBkg: t.surface,
+      actorBorder: t["ink-soft"],
+      actorTextColor: t.ink,
+      actorLineColor: t["ink-soft"],
+      signalColor: t.ink,
+      signalTextColor: t.ink,
+      labelBoxBkgColor: t.surface,
+      labelBoxBorderColor: t["ink-soft"],
+      labelTextColor: t.ink,
+      loopTextColor: t.ink,
+      noteBkgColor: t["surface-2"],
+      noteTextColor: t.ink,
+      noteBorderColor: t["ink-soft"],
+      activationBkgColor: t["surface-2"],
+      activationBorderColor: t["ink-soft"],
+      sequenceNumberColor: t.bg,
+    },
+  };
+}
+
+const THEMES = [
+  { name: "light", suffix: "" },
+  { name: "dark", suffix: ".dark" },
+];
+
 const browser = await chromium.launch();
 let written = 0;
 try {
-  const page = await browser.newPage();
-  await page.setContent("<!doctype html><html><body></body></html>");
-  await page.addScriptTag({ content: readFileSync(MERMAID_UMD, "utf8") });
-  await page.evaluate(() => {
-    window.mermaid.initialize({
-      startOnLoad: false,
-      // `base` + a short variable map, not `neutral` + a long one. Both were
-      // measured here: the long neutral map made mermaid emit
-      // `fill:#F` — the first character of a colour, sliced out of a value it
-      // had already consumed — and every node rectangle rendered black-on-black.
-      // A diagram that looks right in mermaid's preview and is a row of black
-      // boxes in the book is the failure this step exists to prevent.
-      //
-      // `darkMode: false` is explicit: mermaid otherwise detects the page's
-      // `data-theme`, and the site's default is dark.
-      //
-      // A static SVG cannot follow the reader's theme, so these are literals by
-      // necessity. They are the light reading surface the book uses, matching
-      // the ivory long-form mode /docs already defaults to.
-      theme: "base",
-      darkMode: false,
-      // The "neo" look resolves node fills through CSS custom properties, which
-      // resolve against the PAGE's theme — so a light-surface SVG rendered on the
-      // site's dark theme came out with dark nodes. "classic" emits literal
-      // fills and travels with the file, which is the only thing a static SVG
-      // can rely on.
-      look: "classic",
-      flowchart: { htmlLabels: false, useMaxWidth: false },
-      securityLevel: "strict",
-      themeVariables: {
-        background: "#FBFBF9",
-        primaryColor: "#EFEBE3",
-        primaryTextColor: "#16181A",
-        primaryBorderColor: "#9C9891",
-        lineColor: "#3F4448",
-        fontFamily: "ui-monospace, monospace",
-      },
-    });
-  });
+  for (const theme of THEMES) {
+    const tokens = themeTokens(theme.name);
+    const page = await browser.newPage();
+    await page.setContent(`<!doctype html><html><head><style>${FONT_FACE}</style></head><body></body></html>`);
+    // Measure with the real font: wait until Geist Mono is usable before any
+    // getBBox call, or mermaid sizes boxes for the fallback face.
+    await page.evaluate(async (family) => {
+      await document.fonts.load(`14px ${family}`);
+      await document.fonts.ready;
+    }, FONT_FAMILY);
+    await page.addScriptTag({ content: readFileSync(MERMAID_UMD, "utf8") });
+    await page.evaluate((cfg) => window.mermaid.initialize(cfg), mermaidConfig(tokens));
 
-  for (const diagram of diagrams) {
-    const svg = await page.evaluate(
-      ([id, source]) => window.mermaid.render(id, source).then((r) => r.svg),
-      [diagram.id, diagram.source],
-    );
-    if (typeof svg !== "string" || !svg.includes("<svg")) {
-      throw new Error(`renderer returned no svg markup for ${diagram.id}`);
+    for (const diagram of diagrams) {
+      const result = await page.evaluate(
+        async ([id, source, fontFace, bg]) => {
+          const { svg } = await window.mermaid.render(`d${id}`, source);
+          // Re-serialise through the XML parser so the file is well-formed XML
+          // whatever mermaid emitted; a parse error fails the build here rather
+          // than shipping a figure an <img> silently cannot decode.
+          const doc = new DOMParser().parseFromString(svg, "image/svg+xml");
+          const err = doc.querySelector("parsererror");
+          if (err) return { error: err.textContent };
+          const root = doc.documentElement;
+          if (root.querySelector("foreignObject")) return { error: "foreignObject label survived htmlLabels:false" };
+          const style = doc.createElementNS("http://www.w3.org/2000/svg", "style");
+          style.textContent = `${fontFace} svg{background:${bg}} text,tspan{font-family:"Geist Mono",ui-monospace,monospace !important;}`;
+          root.insertBefore(style, root.firstChild);
+          root.removeAttribute("style"); // drop max-width; the viewer sizes it
+          root.setAttribute("width", "100%");
+          return { svg: new XMLSerializer().serializeToString(root) };
+        },
+        [`${diagram.id}${theme.suffix.replace(".", "_")}`, diagram.source, FONT_FACE, tokens.bg],
+      );
+      if (result.error || typeof result.svg !== "string") {
+        throw new Error(`diagram ${diagram.id} (${theme.name}) did not render: ${result.error ?? "no svg"}`);
+      }
+      // A viewBox is what lets an SVG scale under the pan-and-zoom viewport.
+      if (!/<svg[^>]*\bviewBox=/.test(result.svg)) {
+        throw new Error(`diagram ${diagram.id} (${theme.name}) has no viewBox`);
+      }
+      const file = diagram.file.replace(/\.svg$/, `${theme.suffix}.svg`);
+      writeFileSync(join(APP_ROOT, "public", file), result.svg, "utf8");
+      written += 1;
     }
-    // A viewBox is what lets an SVG scale. Without it the image renders at its
-    // intrinsic size and the pan-and-zoom control has nothing to scale.
-    const sized = /<svg[^>]*\bviewBox=/.test(svg)
-      ? svg
-      : svg.replace(/<svg/, '<svg viewBox="0 0 1 1" preserveAspectRatio="xMidYMid meet"');
-    writeFileSync(join(APP_ROOT, "public", diagram.file), sized, "utf8");
-    written += 1;
+    await page.close();
   }
 } finally {
   await browser.close();
 }
 
-console.log(`book: rendered ${written} diagram(s) into public/book/diagrams`);
+console.log(`book: rendered ${written} diagram file(s) (light + dark) into public/book/diagrams`);
