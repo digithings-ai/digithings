@@ -1,13 +1,34 @@
 # Digi Ecosystem – common targets (Phase 0+)
 # Use: make build, make test, make test-e2e, make up, make down
 
-.PHONY: build up down test test-unit test-e2e test-baseline doc-check adr-check vault-check package up-heartbeat up-digichat down-digichat digichat-release-up digichat-release-down digichat-profile-a-up digichat-profile-a-down digichat-profile-a-bundle-up digichat-profile-a-bundle-down digichat-dev digichat-health digichat-config-check stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init model-catalog model-catalog-check clean-imports find-stale commit pr task new-task status batch-candidates parse-error hooks-install up-observability down-observability research-validate supabase-migrations-check datatap-answer-check
+.PHONY: build up down test test-unit test-e2e test-baseline doc-check adr-check vault-check package up-core up-chat up-trace up-edge up-all proxy-validate up-heartbeat up-digichat down-digichat digichat-release-up digichat-release-down digichat-profile-a-up digichat-profile-a-down digichat-profile-a-bundle-up digichat-profile-a-bundle-down digichat-dev digichat-health digichat-config-check stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init model-catalog model-catalog-check clean-imports find-stale commit pr task new-task status batch-candidates parse-error hooks-install up-observability down-observability research-validate supabase-migrations-check datatap-answer-check
 
 build:
 	docker compose build
 
 up:
 	docker compose up -d
+
+# Service groups (S4 / DIG-2772). Table + rationale in docker-compose.yml and docs/LOCAL_STACK.md.
+# The always-on backends (digikey, digigraph, digisearch, digiquant, digitrace, ollama, ...)
+# are NOT gated by these -- ADR-0001 keeps `make up` the zero-config path.
+# NOTE: there is deliberately no `quant` profile. digiquant + ollama are the whole of it and
+# they are always-on; giving them a profile would make `make up` silently skip them.
+.PHONY: up-core up-chat up-trace up-edge up-all proxy-validate
+up-core:
+	docker compose --profile core up -d
+up-chat:
+	docker compose --profile chat up -d
+up-trace:
+	docker compose --profile trace up -d
+up-edge:
+	docker compose --profile edge up -d
+up-all:
+	docker compose --profile core --profile chat --profile trace --profile edge up -d
+# Parse-check the Caddyfile with the image that will run it. Needs the Docker daemon.
+proxy-validate:
+	docker run --rm -v $(CURDIR)/infra/local-proxy/Caddyfile:/etc/caddy/Caddyfile:ro \
+		caddy:2.8-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 
 # Pull prebuilt GHCR images (no local Dockerfile build). See infra/self-host/ and docs/DEPLOYMENT.md.
 .PHONY: up-ghcr up-ghcr-digichat pull-ghcr

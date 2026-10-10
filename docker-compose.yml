@@ -1,6 +1,21 @@
 # Digi Ecosystem – Docker Compose (Phase 0+)
 # See ARCHITECTURE.md, SECURITY.md. For hardened deploy: docker compose --profile hardened up
 # Usage: docker compose up --build
+#
+# Service groups (S4 / DIG-2772). Compose profiles select what starts:
+#   core   digivault, litellm-cache, omniroute(+guard), digisearch-mcp, digivault-mcp, zammad-mcp
+#   quant  (digiquant + ollama) -- always-on, see note
+#   chat   digichat, digichat-db
+#   trace  digitrace (always-on) + otel-collector
+#   edge   the *.digithings.localhost reverse proxy (infra/local-proxy/Caddyfile)
+#   all    everything above, including heartbeat + observability
+#   e.g. docker compose --profile core --profile edge up -d
+#
+# ADR-0001 constraint: the root file and `make up` stay the ZERO-CONFIG path, so the
+# always-on backends (digikey, digigraph, digisearch, searxng, valkey, litellm, ollama,
+# digitrace, digiquant) deliberately carry NO `profiles:`. The named groups above tag the
+# OPT-IN services; they never gate the core. Do not add `profiles:` to an always-on
+# service -- it would make `make up` and `make build` start/build nothing.
 # For testing without OpenAI: set OLLAMA_MODEL=ollama/deepseek-r1:14b in .env; Ollama runs in Docker below.
 
 services:
@@ -270,6 +285,9 @@ services:
     container_name: digi-digivault
     profiles:
       - digivault
+      # core group (S4): what graph.digithings.localhost proxies
+      - core
+      - all
     ports:
       - "127.0.0.1:8004:8004"
     env_file:
@@ -332,6 +350,8 @@ services:
     container_name: digi-litellm-redis
     profiles:
       - litellm-cache
+      - core
+      - all
     # Internal only; no host port. Use REDIS_URL=redis://redis:6379 in .env when this profile is active.
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -356,6 +376,8 @@ services:
     container_name: digi-omniroute-auth-guard
     profiles:
       - omniroute
+      - core
+      - all
     environment:
       - OMNIROUTE_AUTH_PASSWORD=${OMNIROUTE_AUTH_PASSWORD:-}
     command:
@@ -376,6 +398,8 @@ services:
     container_name: digi-omniroute
     profiles:
       - omniroute
+      - core
+      - all
     depends_on:
       omniroute-auth-guard:
         condition: service_completed_successfully
@@ -397,6 +421,8 @@ services:
     container_name: digi-digisearch-mcp
     profiles:
       - digisearch-mcp
+      - core
+      - all
     ports:
       - "127.0.0.1:8765:8765"
     env_file:
@@ -424,6 +450,8 @@ services:
     container_name: digi-digivault-mcp
     profiles:
       - digivault-mcp
+      - core
+      - all
     ports:
       - "127.0.0.1:8769:8769"
     env_file:
@@ -449,6 +477,8 @@ services:
     container_name: digi-zammad-mcp
     profiles:
       - zammad-mcp
+      - core
+      - all
     ports:
       - "127.0.0.1:8770:8770"
     env_file:
@@ -472,6 +502,7 @@ services:
     container_name: digi-heartbeat
     profiles:
       - heartbeat
+      - all
     env_file:
       - .env
     environment:
@@ -511,6 +542,9 @@ services:
     container_name: digi-digichat-db
     profiles:
       - digichat
+      # chat group (S4)
+      - chat
+      - all
     environment:
       POSTGRES_USER: digichat
       POSTGRES_PASSWORD: ${DIGICHAT_POSTGRES_PASSWORD:-digichat}
@@ -536,6 +570,8 @@ services:
     container_name: digi-digichat
     profiles:
       - digichat
+      - chat
+      - all
     # Bind host: default loopback; set DIGICHAT_PUBLISH_HOST=0.0.0.0 in .env for LAN (see SECURITY.md).
     ports:
       - "${DIGICHAT_PUBLISH_HOST:-127.0.0.1}:${DIGICHAT_PUBLISH_PORT:-3005}:3000"
@@ -590,6 +626,7 @@ services:
     container_name: digi-prometheus
     profiles:
       - observability
+      - all
     ports:
       - "127.0.0.1:9090:9090"
     volumes:
@@ -613,6 +650,7 @@ services:
     container_name: digi-grafana
     profiles:
       - observability
+      - all
     ports:
       - "127.0.0.1:3001:3000"
     environment:
@@ -640,11 +678,38 @@ services:
   # Off by default. Start with: docker compose --profile otel up otel-collector
   # Then set DIGI_OTEL_ENDPOINT=http://otel-collector:4318 in .env so services
   # export spans via digibase.otel.setup_otel_fastapi (no-op when unset).
+  # ─── Reverse proxy: *.digithings.localhost -> the compose services, mirroring prod path routing (S4 / DIG-2772) ───
+  # Route table: infra/local-proxy/Caddyfile. Host port is configurable so it never
+  # collides with the 3000-3005 / 8000-8005 service ports on the dev Mac.
+  proxy:
+    image: caddy:2.8-alpine
+    container_name: digi-proxy
+    profiles:
+      - edge
+      - all
+    ports:
+      - "127.0.0.1:${DT_PROXY_PORT:-8088}:80"
+    volumes:
+      - ./infra/local-proxy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    # Deliberately NO depends_on: every upstream is optional, and Caddy dials lazily.
+    # A missing profile must 502 on that one route, not stop the proxy from booting.
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:2019/config/"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.109.0
     container_name: digi-otel-collector
     profiles:
       - otel
+      # trace group (S4)
+      - trace
+      - all
     command: ["--config=/etc/otelcol/config.yaml"]
     ports:
       - "127.0.0.1:4317:4317"   # OTLP gRPC
@@ -664,3 +729,5 @@ volumes:
   digiclaw_state:
   prometheus_data:
   grafana_data:
+  caddy_data:
+  caddy_config:
