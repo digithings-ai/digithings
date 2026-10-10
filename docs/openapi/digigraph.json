@@ -159,6 +159,25 @@
         "additionalProperties": false,
         "description": "Trusted Streamable HTTP MCP server forwarded by the BFF (#3736).",
         "properties": {
+          "allowedTools": {
+            "anyOf": [
+              {
+                "items": {
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "pattern": "^\\S+$",
+                  "type": "string"
+                },
+                "maxItems": 256,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Operator allowlist of full remote MCP tool names for this server (exact match, no globs). Absent or empty offers zero tools. Operator-only \u2014 never settable via the session overlay.",
+            "title": "Allowedtools"
+          },
           "auth": {
             "anyOf": [
               {
@@ -190,6 +209,25 @@
             "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
             "title": "Id",
             "type": "string"
+          },
+          "mutatingTools": {
+            "anyOf": [
+              {
+                "items": {
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "pattern": "^\\S+$",
+                  "type": "string"
+                },
+                "maxItems": 256,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Operator-marked subset of allowedTools that mutates remote state. Absent means every allowed tool mutates; [] means none do. Advisory only \u2014 it never grants a tool. Operator-only.",
+            "title": "Mutatingtools"
           },
           "setup": {
             "anyOf": [

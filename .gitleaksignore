@@ -1,0 +1,13 @@
+# Pre-existing findings in the OCC rollout fixture commits carried by PR #5308
+# (branch DIG-2781-occ-release-candidate, the OCC-only release candidate for
+# main). Every value below is a throwaway test literal in a shell fixture; the
+# file's own comment records that they were cured later in the same branch.
+#
+# These three fingerprints are reachable here and nowhere else: this RC branch
+# cherry-picks #5308 commit-by-commit, so the pre-fix commits enter main's
+# history with their original SHAs. #5308 merges to develop as a SQUASH, so
+# develop never carries these blobs and needs no ignore file. Fingerprints are
+# exact (commit:file:rule:line) so nothing live or future is suppressed.
+85337d2c039d679066b8f2f4bdf91849191ad785:scripts/test_verify_occ_invite_key.sh:generic-api-key:19
+9981d8c1f94ffe84e074b44301f4f35eb92561a1:scripts/test_occ_rollout_scope_guard.sh:generic-api-key:35
+9981d8c1f94ffe84e074b44301f4f35eb92561a1:scripts/test_occ_rollout_scope_guard.sh:generic-api-key:36

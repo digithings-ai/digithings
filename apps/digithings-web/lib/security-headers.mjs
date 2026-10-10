@@ -114,6 +114,8 @@ export function renderCloudflareHeaders(frameSrc = frameSrcForCsp()) {
     "# /openwiki/* inherits /* and Cloudflare joins headers, so the browser would",
     "# enforce the INTERSECTION of both CSPs and block jsDelivr. Detach the",
     "# inherited CSP first (documented `!` syntax), then attach the wiki policy.",
+    "# /chat/occ* drops Referrer-Policy to no-referrer: its invite key rides in",
+    "# the query, and a same-origin request would otherwise send the full URL.",
     "/*",
     "  X-Content-Type-Options: nosniff",
     "  X-Frame-Options: DENY",
@@ -128,6 +130,15 @@ export function renderCloudflareHeaders(frameSrc = frameSrcForCsp()) {
     "  Referrer-Policy: strict-origin-when-cross-origin",
     "  Permissions-Policy: camera=(), microphone=(), geolocation=()",
     `  Content-Security-Policy: ${wikiCsp}`,
+    "",
+    // /chat/occ carries an invite key in its own query (DIG-1210). The /* policy
+    // already strips path and query on cross-origin navigations, so the key does
+    // not reach third parties, but a same-origin request still sends the full
+    // URL — every first-party asset or analytics call on the page would see it.
+    // Splat so it also covers /chat/occ.html and /chat/occ/ from the export.
+    "/chat/occ*",
+    "  ! Referrer-Policy",
+    "  Referrer-Policy: no-referrer",
     "",
   ].join("\n");
 }
