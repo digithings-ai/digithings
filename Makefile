@@ -371,3 +371,45 @@ secrets-audit:
 .PHONY: secrets-staleness
 secrets-staleness:
 	python3 scripts/secret_staleness_check.py --open-issue
+
+# --- local self-host stack (DIG-2775, S7) ------------------------------------
+# One command: `make local-stack` (alias `dt up`) brings up the local
+# self-host stack and refuses to report success unless the health gate passes.
+#
+# This block is additive and self-contained. The targets delegate to
+# `scripts/dt`; the preflight, secrets render, supabase, compose, wrangler
+# dev, proxy and seed artefacts it calls are owned by slices S1-S6 and are
+# SKIPPED (never failed) while they are still open PRs.
+#
+# Local check only, like the other stack targets above. CI parity is S9
+# (DIG-2777); the gate reuses this same code path via `local-stack-health`.
+.PHONY: local-stack local-stack-down local-stack-status local-stack-seed
+.PHONY: local-stack-reset local-stack-health local-stack-preflight local-stack-urls
+local-stack:
+	./scripts/dt up --profile $(or $(PROFILE),core)
+
+local-stack-down:
+	./scripts/dt down --profile $(or $(PROFILE),core)
+
+local-stack-status:
+	./scripts/dt status --profile $(or $(PROFILE),core)
+
+local-stack-seed:
+	./scripts/dt seed --profile $(or $(PROFILE),core)
+
+# Destructive: drops and rebuilds the local database. Requires SEED=... to set
+# the deterministic seed; RESET_YES=1 confirms, because `dt reset` otherwise
+# exits 2 without it.
+local-stack-reset:
+	./scripts/dt reset --profile $(or $(PROFILE),core) $(if $(SEED),--seed $(SEED),) $(if $(RESET_YES),--yes,)
+
+# The gate alone. Exits nonzero on any failure; `--require-all` additionally
+# fails on a skipped check, so CI can demand that nothing went unverified.
+local-stack-health:
+	./scripts/dt status --profile $(or $(PROFILE),core) $(if $(REQUIRE_ALL),--require-all,)
+
+local-stack-preflight:
+	./scripts/dt preflight
+
+local-stack-urls:
+	./scripts/dt urls --profile $(or $(PROFILE),core)
