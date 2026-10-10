@@ -39,7 +39,7 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-# The three deployed Next.js app-router trees. Section 7's "53 routes" is these.
+# The three deployed Next.js app-router trees. Section 7's "56 routes" is these.
 DEPLOYED_APPS = ("dashboard", "digithings-web", "digiquant-web")
 
 # `reference` ships template apps that are never deployed. It is enumerated
