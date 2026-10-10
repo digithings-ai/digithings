@@ -1,23 +1,47 @@
-"""Large ticket-result exports for the OCC help chat (DIG-2638).
+"""Large ticket-result exports for the OCC help chat (DIG-2788).
 
 A retrieval that returns more rows than ``EXPORT_ROW_LIMIT`` must not put those
-rows in front of the model.  The full set is written to a spool directory in
-this container and only metadata travels back through the MCP response: count,
-id list, date range, state/priority/group histograms and field coverage.  The
-file itself is served by :mod:`scripts.zammad_mcp.export_server` on the
-container's :8771, which the Cloudflare Worker proxies under the *same*
-fail-closed ``x-digi-mcp-key`` edge gate as the tools themselves
-(``zammad-export`` in the Worker's ``MCP_EDGE_SERVERS`` map).  A download link
-therefore works for exactly the callers that can already reach ``search_tickets``.
+rows in front of the model.  The full set becomes ONE artifact in the DigiChat
+artifact store and only metadata travels back through the MCP response: count,
+id list, date range, state/priority/group histograms and field coverage.
 
-The spool is deliberately container-local: this container holds no object-store
-credential, and adding one would put a second secret inside the very thing the
-OCC invite-key gate protects.  The export id is an unguessable token, not an
-authorisation -- authorisation is the edge gate in front of the download route.
+What changed from the first cut of this path, and why
+----------------------------------------------------
+The first version spooled the rows inside this container and served them from a
+second stdlib HTTP server on :8771, behind the Worker's ``zammad-export`` edge
+route, with a fixed 24h TTL.  Chris reversed that on DIG-2638:
 
-Both formats are written under one id (``<id>.json`` and ``<id>.csv``) plus a
-small ``<id>.meta.json`` manifest that carries the expiry and the metadata the
-model sees, so the download route can answer from the manifest alone.
+* a fixed TTL keeps serving a link after the session that owns it is gone; the
+  link is now bound to the chat session and dies with it;
+* the artifact belongs in the store the rest of digichat already uses, not in a
+  spool that only this process can read.
+
+So this module no longer owns a directory, a port, a TTL or a download route.
+It owns three things and nothing else:
+
+1. the model-visible contract - :func:`summarize`, :func:`render_metadata_only`
+   and :func:`_csv_bytes`, unchanged in behaviour;
+2. :func:`build_artifact`, which turns a row set into the exact bytes and
+   metadata ONE ``table`` artifact is made of, transport-agnostically;
+3. the conversation-scoped ingest grant, which is what lets this container write
+   into the store *without* gaining a storage credential.
+
+Credential boundary
+-------------------
+This container holds no object-store credential and gains none.  What it is
+given is a single-use **ingest grant** for one conversation, minted by digichat
+for the turn and carrying no storage authority of its own: it names the
+conversation the artifact must belong to, and the store rejects any write whose
+conversation the caller does not own.  The grant is a capability scoped to one
+write in one conversation, not a key to the object store, and it dies with the
+session that issued it - the same lifetime as the link.
+
+Expiry
+------
+There is deliberately no TTL constant in this file.  The artifact's lifetime is
+the conversation's: the ``artifacts`` row is removed by ``ON DELETE CASCADE``
+when the conversation goes, and the link stops validating when the session
+stops.  Nothing here schedules, reads or writes a time-to-live.
 """
 
 from __future__ import annotations
@@ -25,31 +49,24 @@ from __future__ import annotations
 import csv
 import io
 import json
-import os
-import re
-import secrets
 from collections import Counter
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
+from datetime import datetime, timezone
 from typing import Any
 
 from scripts.zammad_mcp.formatting import _counts_line, _field, _parse_timestamp
 
-#: Rows above this count go to an export instead of the model.  25 mirrors
+#: Rows above this count go to an artifact instead of the model.  25 mirrors
 #: ``MAX_TICKETS`` in the Worker's market-data handler, so both surfaces cap the
 #: model-visible set at the same size.
 EXPORT_ROW_LIMIT = 25
 
-#: Default lifetime of a download, in seconds (24h).
-EXPORT_TTL_SECONDS = 24 * 60 * 60
-
 #: Ids listed in the model-visible summary.  A 500-row retrieval would otherwise
 #: push ~5 KB of bare numbers into the context, which is the thing this module
-#: exists to prevent; the rest are in the download and the summary says so.
+#: exists to prevent; the rest are in the artifact and the summary says so.
 EXPORT_ID_LIST_LIMIT = 200
 
-#: Fields the coverage line reports, in this order.  Any other key a row carries
-#: still reaches the JSON/CSV export -- this only bounds the summary.
+#: The columns the summary names first.  Everything else a row carries is kept,
+#: sorted, after these.
 SUMMARY_FIELDS = (
     "id",
     "number",
@@ -64,56 +81,21 @@ SUMMARY_FIELDS = (
     "close_at",
 )
 
+#: Fields summarised as a histogram rather than a range or a count.
 HISTOGRAM_FIELDS = ("state", "priority", "group")
 
-EXPORT_FORMATS = ("json", "csv")
+#: ``kind`` on the artifact row.  ``artifacts/route.ts`` maps a .json name to the
+#: same kind, so this and the store agree on what "a table" is.
+ARTIFACT_KIND = "table"
 
-EXPORT_ID_RE = re.compile(r"\A[0-9a-f]{32}\Z")
-
-DEFAULT_SPOOL_DIR = "/var/tmp/zammad-exports"
+#: The artifact's media type.  A .json artifact is served inline by the store's
+#: ``INLINE_PREFIXES``, so the browser shows the rows rather than downloading a
+#: file the user then has to open.
+ARTIFACT_MEDIA_TYPE = "application/json"
 
 
 class ExportError(Exception):
-    """Base class for export failures."""
-
-
-class ExportNotFound(ExportError):
-    """No export exists under that id."""
-
-
-class ExportExpired(ExportError):
-    """The export existed but its TTL has passed."""
-
-
-def spool_dir() -> Path:
-    """Directory holding the exports.  ``ZAMMAD_EXPORT_DIR`` overrides it."""
-    return Path(os.environ.get("ZAMMAD_EXPORT_DIR") or DEFAULT_SPOOL_DIR)
-
-
-def ttl_seconds() -> int:
-    """Export lifetime.  ``ZAMMAD_EXPORT_TTL_SECONDS`` overrides the 24h default."""
-    raw = os.environ.get("ZAMMAD_EXPORT_TTL_SECONDS")
-    if raw is None or not str(raw).strip():
-        return EXPORT_TTL_SECONDS
-    try:
-        value = int(str(raw).strip())
-    except ValueError:
-        return EXPORT_TTL_SECONDS
-    return value if value > 0 else EXPORT_TTL_SECONDS
-
-
-def new_export_id() -> str:
-    """Unguessable, filename-safe token.  This is a locator, not a credential."""
-    return secrets.token_hex(16)
-
-
-def is_valid_export_id(export_id: str) -> bool:
-    """True for ids this module is willing to touch on disk.
-
-    The hex-only alphabet is the path-traversal guard: ``..``, ``/`` and
-    friends cannot pass, so a hostile id cannot escape the spool directory.
-    """
-    return bool(EXPORT_ID_RE.match(export_id or ""))
+    """Any failure building an export.  Never carries row values."""
 
 
 def ticket_ref(ticket: dict[str, Any]) -> str:
@@ -186,75 +168,78 @@ def _csv_bytes(tickets: list[dict[str, Any]]) -> bytes:
     return buffer.getvalue().encode("utf-8")
 
 
-def _write_atomic(path: Path, payload: bytes) -> None:
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_bytes(payload)
-    os.replace(tmp, path)
+def artifact_name(tool: str) -> str:
+    """The store's ``name`` for one oversized result set."""
+    return f"zammad-tickets-{(tool or 'export').replace('_', '-')}.json"
 
 
-def export_paths(export_id: str, directory: Path | None = None) -> dict[str, Path]:
-    """Manifest and payload paths for one id.  Callers must validate the id."""
-    base = directory or spool_dir()
-    return {
-        "meta": base / f"{export_id}.meta.json",
-        "json": base / f"{export_id}.json",
-        "csv": base / f"{export_id}.csv",
-    }
-
-
-def write_export(
+def build_artifact(
     tickets: list[dict[str, Any]],
     *,
     tool: str,
     query: str = "",
-    directory: Path | None = None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
-    """Write the full set to the spool and return its manifest.
+    """Turn a row set into the ONE artifact the store will hold.
 
-    Returns the manifest dict; the caller renders *metadata only* from it.  The
-    full rows never appear in the returned structure, so a caller that only
-    renders the manifest cannot leak them by accident.
+    The returned dict is exactly what an ingest needs and nothing more: a
+    ``token``, ``name``, ``mediaType``, ``kind``, ``bytes`` and the
+    model-visible ``summary``.  The rows live in ``bytes`` and nowhere else, so
+    a caller that renders only ``summary`` cannot leak them by accident.
+
+    Both formats the export has always produced live inside the one artifact:
+    ``csv`` carries the same rows rendered as CSV, and ``json`` carries them
+    rendered as JSON, under a single envelope.  One artifact, one link, both
+    formats - which is what the store's one-blob-per-row shape allows.
     """
     rows = list(tickets or [])
     if not rows:
-        raise ExportError("refusing to write an empty export")
-
-    export_id = new_export_id()
-    base = directory or spool_dir()
-    base.mkdir(parents=True, exist_ok=True)
-    paths = export_paths(export_id, base)
+        raise ExportError("refusing to build an empty artifact")
 
     created = now or datetime.now(timezone.utc)
-    expires = created + timedelta(seconds=ttl_seconds())
-
-    manifest = {
-        "export_id": export_id,
+    envelope = {
         "tool": tool,
         "query": query,
         "created_at": created.isoformat(),
-        "expires_at": expires.isoformat(),
-        "ttl_seconds": ttl_seconds(),
-        "formats": list(EXPORT_FORMATS),
         "summary": summarize(rows),
+        "csv": _csv_bytes(rows).decode("utf-8"),
+        "json": rows,
+    }
+    return {
+        "token": new_artifact_token(),
+        "name": artifact_name(tool),
+        "mediaType": ARTIFACT_MEDIA_TYPE,
+        "kind": ARTIFACT_KIND,
+        "bytes": json.dumps(envelope, indent=2, sort_keys=True, default=str).encode("utf-8"),
+        "summary": envelope["summary"],
     }
 
-    _write_atomic(
-        paths["json"], json.dumps(rows, indent=2, sort_keys=True, default=str).encode("utf-8")
-    )
-    _write_atomic(paths["csv"], _csv_bytes(rows))
-    _write_atomic(paths["meta"], json.dumps(manifest, indent=2, sort_keys=True).encode("utf-8"))
-    return manifest
+
+def new_artifact_token() -> str:
+    """An opaque, filename-safe token for one artifact.
+
+    This is a locator, not a credential: it names the artifact inside a
+    conversation, and the store still refuses a read from a conversation the
+    caller does not own.
+    """
+    import secrets
+
+    return secrets.token_hex(16)
 
 
-def download_path(export_id: str) -> str:
-    """Worker-relative download path, behind the same edge gate as the tools."""
-    return f"/_stack/mcp/zammad-export/{export_id}"
+def render_metadata_only(
+    artifact: dict[str, Any],
+    *,
+    link: str = "",
+    sample: list[str] | None = None,
+) -> str:
+    """The model-visible string: metadata plus the link, never the rows.
 
-
-def render_metadata_only(manifest: dict[str, Any], *, sample: list[str] | None = None) -> str:
-    """The model-visible string: metadata plus the download path, never the rows."""
-    summary = manifest.get("summary") or {}
+    ``artifact`` is what :func:`build_artifact` returned.  Only ``summary`` is
+    read out of it, so no row value can reach the model by way of this string
+    unless it is already in the summary - and the summary carries none.
+    """
+    summary = artifact.get("summary") or {}
     count = int(summary.get("count") or 0)
     lines = [
         f"{count} ticket(s) matched; the full set was not returned inline.",
@@ -266,7 +251,7 @@ def render_metadata_only(manifest: dict[str, Any], *, sample: list[str] | None =
         lines.append(f"Ticket ids ({len(ids)} shown): " + ", ".join(ids))
     omitted = int(summary.get("ids_omitted") or 0)
     if omitted:
-        lines.append(f"  ... and {omitted} more id(s), all present in the download.")
+        lines.append(f"  ... and {omitted} more id(s), all present in the artifact.")
 
     created_range = summary.get("created_range")
     if created_range:
@@ -288,81 +273,16 @@ def render_metadata_only(manifest: dict[str, Any], *, sample: list[str] | None =
         lines.append("First rows only (preview, not the full set):")
         lines.extend(f"  {line}" for line in sample)
 
-    expires_at = manifest.get("expires_at") or "unknown"
-    lines.extend(
-        [
-            "",
-            f"Full set (JSON and CSV): {download_path(manifest.get('export_id'))}",
-            "  The link needs the same OCC invite-key credential as these tools and "
-            f"expires at {expires_at}.",
-            "  Quote numbers from the metadata above, or fetch a single ticket with "
-            "get_ticket; do not claim to have read the rows you were not given.",
-        ]
-    )
+    if link:
+        lines.extend(
+            [
+                "",
+                f"Full set (CSV and JSON in one artifact): {link}",
+                "  The link belongs to this chat session: it stops working when the "
+                "session is reloaded or ended, and needs the same OCC invite-key "
+                "credential as these tools.",
+                "  Quote numbers from the metadata above, or fetch a single ticket "
+                "with get_ticket; do not claim to have read the rows you were not given.",
+            ]
+        )
     return "\n".join(lines)
-
-
-def load_export(
-    export_id: str,
-    fmt: str = "json",
-    *,
-    directory: Path | None = None,
-    now: datetime | None = None,
-) -> tuple[bytes, dict[str, Any]]:
-    """Read one export, enforcing the TTL at read time.
-
-    Raises ExportNotFound for an unknown id and ExportExpired once the TTL has
-    passed -- the download route maps those to 404 and 410 respectively.
-    """
-    if not is_valid_export_id(export_id):
-        raise ExportNotFound(f"malformed export id: {export_id!r}")
-    if fmt not in EXPORT_FORMATS:
-        raise ExportNotFound(f"unsupported export format: {fmt!r}")
-
-    paths = export_paths(export_id, directory)
-    try:
-        manifest = json.loads(paths["meta"].read_text(encoding="utf-8"))
-    except (OSError, ValueError) as exc:
-        raise ExportNotFound(f"no export {export_id}") from exc
-
-    reference = now or datetime.now(timezone.utc)
-    expires_raw = str(manifest.get("expires_at") or "")
-    try:
-        expires = datetime.fromisoformat(expires_raw)
-    except ValueError as exc:
-        raise ExportNotFound(f"export {export_id} has no usable expiry") from exc
-    if expires.tzinfo is None:
-        expires = expires.replace(tzinfo=timezone.utc)
-    if reference >= expires:
-        raise ExportExpired(f"export {export_id} expired at {expires_raw}")
-
-    payload = paths[fmt]
-    try:
-        return payload.read_bytes(), manifest
-    except OSError as exc:
-        raise ExportNotFound(f"export {export_id} has no {fmt} payload") from exc
-
-
-def purge_expired(*, directory: Path | None = None, now: datetime | None = None) -> int:
-    """Delete expired exports.  Returns how many were removed."""
-    base = directory or spool_dir()
-    if not base.is_dir():
-        return 0
-    reference = now or datetime.now(timezone.utc)
-    removed = 0
-    for manifest_path in base.glob("*.meta.json"):
-        export_id = manifest_path.name[: -len(".meta.json")]
-        if not is_valid_export_id(export_id):
-            continue
-        try:
-            load_export(export_id, "json", directory=base, now=reference)
-        except ExportExpired:
-            for path in export_paths(export_id, base).values():
-                try:
-                    path.unlink()
-                except OSError:
-                    pass
-            removed += 1
-        except ExportError:
-            continue
-    return removed

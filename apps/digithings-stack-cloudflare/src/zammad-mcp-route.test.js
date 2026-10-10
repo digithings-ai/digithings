@@ -27,15 +27,22 @@ describe("MCP edge paths", () => {
     expect(source).toContain("digivault: 8769");
   });
 
-  // DIG-2638: oversized Zammad retrievals are served as an expiring download
-  // instead of being returned to the model. The download is a port in the same
-  // map, so it inherits the identical fail-closed key check rather than growing
-  // a second gate that could drift away from the tools' one.
-  it("maps the ticket download route so the same edge key gates it", () => {
-    expect(source).toContain('"zammad-export": 8771');
+  // DIG-2785 (reverses the DIG-2638 download port): oversized Zammad
+  // retrievals are now session-scoped artifacts in the DigiChat artifact store,
+  // served by digichat behind its own invite-key gate. Nothing is served off a
+  // second port here, so the map must NOT carry one - a regression would reopen
+  // the fixed-TTL download this leaf removed.
+  it("no longer maps a ticket-download port (DIG-2785)", () => {
+    expect(source).not.toContain('"zammad-export"');
+    expect(source).not.toContain("8771");
     const mapAt = source.indexOf("const MCP_EDGE_SERVERS: Record<string, number> = {");
-    const entryAt = source.indexOf('"zammad-export": 8771');
-    expect(entryAt).toBeGreaterThan(mapAt);
+    const mapEnd = source.indexOf("};", mapAt);
+    expect(mapEnd).toBeGreaterThan(mapAt);
+    const mapBody = source.slice(mapAt, mapEnd);
+    for (const entry of ["zammad: 8770", "digisearch: 8765", "digivault: 8769"]) {
+      expect(mapBody).toContain(entry);
+    }
+    expect(mapBody.split(":").length - 1).toBe(3);
   });
 
   it("routes every mapped prefix fail-closed on a missing or wrong key", () => {
@@ -88,25 +95,30 @@ describe("in-container MCP program binds", () => {
     expect(supervisor).toContain("python -m digivault.mcp_server --port 8769 --host 0.0.0.0");
   });
 
-  it("zammad-export serves the download spool on 127.0.0.1:8771 (DIG-2638)", () => {
-    expect(supervisor).toContain("[program:zammad-export]");
-    expect(supervisor).toContain("scripts.zammad_mcp.export_server --port 8771");
-    expect(supervisor).toContain("ZAMMAD_EXPORT_DIR");
-    // It is reachable only through the Worker's edge gate, so it does not need
-    // the 0.0.0.0 bind the three MCP servers need for the digraph dial.
-    expect(supervisor).not.toContain('ZAMMAD_EXPORT_HOST="0.0.0.0"');
+  it("runs no ticket-download program: the cut goes to the artifact store (DIG-2785)", () => {
+    expect(supervisor).not.toContain("zammad-export");
+    expect(supervisor).not.toContain("export_server");
+    expect(supervisor).not.toContain("ZAMMAD_EXPORT_DIR");
   });
 });
 
-describe("ticket export image surface", () => {
+describe("zammad MCP image surface", () => {
   const dockerfile = readFileSync(
     join(stackDir, "..", "..", "scripts", "zammad_mcp", "Dockerfile.mcp"),
     "utf-8",
   );
 
-  it("exposes the download port and still copies the whole module (DIG-2638)", () => {
+  it("exposes only the MCP port and still copies the whole module (DIG-2785)", () => {
     expect(dockerfile).toContain("EXPOSE 8770");
-    expect(dockerfile).toContain("EXPOSE 8771");
+    expect(dockerfile).not.toContain("EXPOSE 8771");
     expect(dockerfile).toContain("COPY scripts/zammad_mcp ./scripts/zammad_mcp");
+  });
+
+  it("ships no object-store credential to reach the artifact store (DIG-2785)", () => {
+    // The oversized cut is written through the DigiChat ingest route, which owns
+    // the blob store and re-checks conversation ownership. A storage credential
+    // in this image would make zammad a second, ungated writer.
+    expect(dockerfile).not.toMatch(/R2_SECRET|S3_SECRET|AWS_SECRET|BUCKET_SECRET|STORAGE_KEY/);
+    expect(dockerfile).not.toContain("DIGICHAT_SUPABASE");
   });
 });
