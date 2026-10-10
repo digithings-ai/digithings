@@ -95,7 +95,7 @@ services:
   - digivault
 - name: litellm
   compose_file: docker-compose.yml
-  image: docker.litellm.ai/berriai/litellm:main-stable
+  image: ghcr.io/berriai/litellm:v1.83.14-stable.patch.3@sha256:f12d528d4a05add56cb09e54c5126088f2edc6bdf3a2f943bcd3a32b08769da2
   build_context: null
   ports:
   - 127.0.0.1:4000:4000
@@ -368,6 +368,17 @@ env:
     compose_literal: []
   wrangler_values:
     digithings-cron: '0'
+- name: CHEAPERINFERENCE_API_BASE
+  description: OpenAI-compatible base URL for the CheaperInference upstream in the profile-a bundle.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files: []
+    compose_literal:
+    - CHEAPERINFERENCE_API_BASE
+  compose_literal_files:
+    - infra/digichat-release/compose.profile-a-bundle.yml
 - name: CHROMA_PATH
   description: Chroma persistence directory inside the container.
   secret: false
@@ -391,6 +402,27 @@ env:
     compose_literal: []
   wrangler_values:
     digitrace-langfuse: 'false'
+- name: CLICKHOUSE_DB
+  description: ClickHouse database name for the local Langfuse stack (container-internal, literal).
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files: []
+    compose_literal:
+    - CLICKHOUSE_DB
+  compose_literal_files:
+    - apps/digitrace-langfuse/docker-compose.local.yml
+- name: CLICKHOUSE_MIGRATION_SSL
+  description: Whether Langfuse uses TLS for the ClickHouse migration connection.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - apps/digitrace-langfuse/docker-compose.local.yml
+    env_example_files: []
+    compose_literal:
+    - CLICKHOUSE_MIGRATION_SSL
 - name: CLOUDFLARE_ACCOUNT_ID
   description: Canonical Cloudflare account id for both Vectorize and D1.
   secret: false
@@ -409,6 +441,17 @@ env:
     env_example_files:
     - .env.example
     compose_literal: []
+- name: DIGICHAT_ALLOW_LOCAL_EMBED_PARENTS
+  description: Allow localhost parents to embed digichat (local profile-a bundle override only).
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files: []
+    compose_literal:
+    - DIGICHAT_ALLOW_LOCAL_EMBED_PARENTS
+  compose_literal_files:
+    - infra/digichat-release/compose.profile-a-bundle.override.yml
 - name: DIGICHAT_AUTO_MIGRATE
   description: '`1` runs digichat migrations at boot.'
   secret: false
@@ -492,6 +535,19 @@ env:
     env_example_files:
     - apps/digichat/.env.example
     compose_literal: []
+- name: DIGICHAT_EMBED_ENABLED
+  description: Enable the digichat embeddable widget routes (default 0).
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files: []
+    compose_literal:
+    - DIGICHAT_EMBED_ENABLED
+  compose_literal_files:
+    - infra/digichat-release/compose.profile-a.yml
+    - infra/digichat-release/compose.profile-a-bundle.yml
+    - infra/digichat-release/compose.profile-b.yml
 - name: DIGICHAT_EMBED_HOSTS
   description: Origins allowed to embed digichat. A closed list.
   secret: false
@@ -830,6 +886,26 @@ env:
     compose_literal: []
   wrangler_values:
     digithings-stack: r2
+- name: DIGIQUANT_MCP_HOST
+  description: Bind address for the DigiQuant MCP server.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal:
+    - DIGIQUANT_MCP_HOST
+- name: DIGIQUANT_MCP_PORT
+  description: Port for the DigiQuant MCP server.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal:
+    - DIGIQUANT_MCP_PORT
 - name: DIGIQUANT_PORT
   description: Port the digiquant dev server binds to.
   secret: false
@@ -963,6 +1039,18 @@ env:
     env_example_files:
     - .env.example
     compose_literal: []
+- name: DIGI_ALLOWED_TOOLS
+  description: Comma-separated tool allowlist for the digichat release profiles.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files: []
+    compose_literal:
+    - DIGI_ALLOWED_TOOLS
+  compose_literal_files:
+    - infra/digichat-release/compose.profile-a.yml
+    - infra/digichat-release/compose.profile-a-bundle.yml
 - name: DIGI_CONFIG_PATH
   description: Path to the digi config document.
   secret: false
@@ -990,6 +1078,17 @@ env:
     - docker-compose.yml
     env_example_files: []
     compose_literal: []
+- name: DIGI_HOUSE_UPSTREAM
+  description: Optional house model upstream URL for the profile-a bundle.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files: []
+    compose_literal:
+    - DIGI_HOUSE_UPSTREAM
+  compose_literal_files:
+    - infra/digichat-release/compose.profile-a-bundle.yml
 - name: DIGI_LLM_MODE
   description: LiteLLM routing mode. `test` keeps local runs off paid upstreams.
   secret: false
@@ -1051,6 +1150,18 @@ env:
       internal architecture docs. If the\ncorpus has no grounded answer, say so clearly.\n\nTicket content
       is not part of this corpus. For ticket questions use the read-only zammad tools, and say so clearly
       if they do not ground the answer."}}'
+- name: DIGI_WORKFLOW_PROFILE
+  description: Workflow profile the digichat release runs (default research_rag).
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files: []
+    compose_literal:
+    - DIGI_WORKFLOW_PROFILE
+  compose_literal_files:
+    - infra/digichat-release/compose.profile-a.yml
+    - infra/digichat-release/compose.profile-a-bundle.yml
 - name: DIGI_WORKSPACE
   description: Workspace root for digiclaw.
   secret: false
@@ -1089,6 +1200,28 @@ env:
     env_example_files: []
     compose_literal:
     - GF_ANALYTICS_REPORTING_ENABLED
+- name: GF_SECURITY_ADMIN_PASSWORD
+  description: Grafana admin password, fed from GRAFANA_ADMIN_PASSWORD (observability profile).
+  secret: true
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files: []
+    compose_literal:
+    - GF_SECURITY_ADMIN_PASSWORD
+  compose_literal_files:
+    - docker-compose.yml
+- name: GF_SECURITY_ADMIN_USER
+  description: Grafana admin user, fed from GRAFANA_ADMIN_USER (default admin).
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files: []
+    compose_literal:
+    - GF_SECURITY_ADMIN_USER
+  compose_literal_files:
+    - docker-compose.yml
 - name: GF_USERS_ALLOW_SIGN_UP
   description: Grafana self sign-up toggle.
   secret: false
@@ -1128,6 +1261,37 @@ env:
     - docker-compose.yml
     env_example_files: []
     compose_literal: []
+- name: INITIAL_PASSWORD
+  description: OmniRoute initial admin password, fed from OMNIROUTE_AUTH_PASSWORD.
+  secret: true
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files: []
+    compose_literal:
+    - INITIAL_PASSWORD
+  compose_literal_files:
+    - docker-compose.yml
+- name: LANGFUSE_INIT_USER_EMAIL
+  description: Email of the first Langfuse user created at boot.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - apps/digitrace-langfuse/docker-compose.local.yml
+    env_example_files: []
+    compose_literal:
+    - LANGFUSE_INIT_USER_EMAIL
+- name: LANGFUSE_INIT_USER_PASSWORD
+  description: Password of the first Langfuse user created at boot.
+  secret: true
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - apps/digitrace-langfuse/docker-compose.local.yml
+    env_example_files: []
+    compose_literal:
+    - LANGFUSE_INIT_USER_PASSWORD
 - name: LANGFUSE_S3_EVENT_UPLOAD_BUCKET
   description: R2 bucket receiving Langfuse events.
   secret: false
@@ -1292,6 +1456,48 @@ env:
     env_example_files: []
     compose_literal:
     - PORT
+- name: POSTGRES_DB
+  description: digichat-db database name (container-internal, literal digichat).
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files: []
+    compose_literal:
+    - POSTGRES_DB
+  compose_literal_files:
+    - docker-compose.yml
+    - infra/digichat-release/compose.profile-a.yml
+    - infra/digichat-release/compose.profile-a-bundle.yml
+    - infra/digichat-release/compose.profile-b.yml
+- name: POSTGRES_PASSWORD
+  description: digichat-db Postgres password inside the container, fed from DIGICHAT_POSTGRES_PASSWORD.
+  secret: true
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files: []
+    compose_literal:
+    - POSTGRES_PASSWORD
+  compose_literal_files:
+    - docker-compose.yml
+    - infra/digichat-release/compose.profile-a.yml
+    - infra/digichat-release/compose.profile-a-bundle.yml
+    - infra/digichat-release/compose.profile-b.yml
+- name: POSTGRES_USER
+  description: digichat-db Postgres user (container-internal, literal digichat).
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files: []
+    env_example_files: []
+    compose_literal:
+    - POSTGRES_USER
+  compose_literal_files:
+    - docker-compose.yml
+    - infra/digichat-release/compose.profile-a.yml
+    - infra/digichat-release/compose.profile-a-bundle.yml
+    - infra/digichat-release/compose.profile-b.yml
 - name: PYTHONUNBUFFERED
   description: Unbuffered Python stdout.
   secret: false
@@ -1301,6 +1507,26 @@ env:
     env_example_files: []
     compose_literal:
     - PYTHONUNBUFFERED
+- name: REDIS_HOST
+  description: Redis host for the Langfuse stack.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - apps/digitrace-langfuse/docker-compose.local.yml
+    env_example_files: []
+    compose_literal:
+    - REDIS_HOST
+- name: REDIS_PORT
+  description: Redis port for the Langfuse stack.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - apps/digitrace-langfuse/docker-compose.local.yml
+    env_example_files: []
+    compose_literal:
+    - REDIS_PORT
 - name: SUPABASE_URL
   description: Shared Supabase project URL.
   secret: false
@@ -1314,6 +1540,16 @@ env:
   wrangler_values:
     dashboard-api: https://rwagjbkvxkdwqmouagad.supabase.co
     digithings-stack: https://rwagjbkvxkdwqmouagad.supabase.co
+- name: TELEMETRY_ENABLED
+  description: Whether Langfuse sends anonymous telemetry.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - apps/digitrace-langfuse/docker-compose.local.yml
+    env_example_files: []
+    compose_literal:
+    - TELEMETRY_ENABLED
 - name: XAI_API_KEY
   description: xAI credential.
   secret: true

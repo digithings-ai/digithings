@@ -46,8 +46,9 @@ import {
   type SupabaseSource,
 } from "./supabase";
 import { MCP_PATH, handleMcp } from "./mcp";
-
-export const HOUSE_WORKSPACE_ID = "6b753576-ced9-5319-9bfa-c5d0aacd9319" as const;
+// Section 1/2 primitives live in ./responses: this module is the worker
+// entrypoint and may export only `default` (see the header of ./responses).
+import { errorResponse } from "./responses";
 
 export interface Env {
   SUPABASE_URL?: string;
@@ -57,77 +58,6 @@ export interface Env {
   /** Comma-separated CORS allowlist override (issue #4679); defaults cover
    * the production dashboard plus local dashboard dev servers. */
   DASHBOARD_API_ALLOWED_ORIGINS?: string;
-}
-
-export type ErrorCode = "bad_request" | "not_found" | "upstream_empty" | "internal";
-
-export interface Provenance {
-  source: string;
-  tip_date: string | null;
-  contract: "finalized_accounting" | "legacy_estimate" | null;
-  seam: boolean;
-  marks: "stored" | "market_api" | "unavailable";
-}
-
-const ERROR_STATUS: Record<ErrorCode, number> = {
-  bad_request: 400,
-  not_found: 404,
-  upstream_empty: 502,
-  internal: 500,
-};
-
-/** Contract section 2 error envelope — the only failure shape. */
-export function errorResponse(
-  code: ErrorCode,
-  message: string,
-  retrievalPin: string | null,
-  details: Record<string, unknown> = {},
-): Response {
-  return Response.json(
-    { error: { code, message, details, retrieval_pin: retrievalPin } },
-    { status: ERROR_STATUS[code] },
-  );
-}
-
-/** Contract section 1 provenance object — every success carries one. */
-export function buildProvenance(partial: Partial<Provenance> & Pick<Provenance, "source">): Provenance {
-  return {
-    tip_date: null,
-    contract: null,
-    seam: false,
-    marks: "unavailable",
-    ...partial,
-  };
-}
-
-export interface CommonParams {
-  asOf: string | null;
-  retrievalPin: string | null;
-}
-
-const AS_OF_RE = /^\d{4}-\d{2}-\d{2}$/;
-
-/**
- * Contract section 1 common query params. Throws a Response (the error
- * envelope) on malformed input so handlers can `catch (e) return e`.
- */
-export function parseCommonParams(url: URL): CommonParams {
-  const retrievalPin = url.searchParams.get("retrieval_pin");
-  if (retrievalPin !== null && retrievalPin.length > 128) {
-    throw errorResponse("bad_request", "retrieval_pin exceeds 128 characters", null, {
-      max_length: 128,
-    });
-  }
-  const asOf = url.searchParams.get("asOf");
-  if (asOf !== null) {
-    const d = new Date(`${asOf}T00:00:00Z`);
-    if (!AS_OF_RE.test(asOf) || Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== asOf) {
-      throw errorResponse("bad_request", "asOf must be a calendar date YYYY-MM-DD", retrievalPin, {
-        asOf,
-      });
-    }
-  }
-  return { asOf, retrievalPin };
 }
 
 function normalizePath(pathname: string): string {
@@ -162,7 +92,7 @@ function failClosed(handler: RouteHandler): RouteHandler {
 }
 
 /** Provenance marker for the no-credential stub branch (see buildRouteTable). */
-export const STUB_PROVENANCE_SOURCE = "stub-doubles-no-supabase-env";
+const STUB_PROVENANCE_SOURCE = "stub-doubles-no-supabase-env";
 
 /**
  * Rewrite a stub-served success envelope so its provenance names the stub
