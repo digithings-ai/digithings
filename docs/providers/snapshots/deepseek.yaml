@@ -1,5 +1,5 @@
 provider: deepseek
-last_checked: 2026-08-30
+last_checked: 2026-10-04
 source: agent-research
 
 free_tier:
@@ -35,9 +35,9 @@ free_tier:
       max_output_tokens: 8192
       status: deprecated
       verified: false
-      last_verified: 2026-08-30
-      last_verified_latency_ms: 676
-      verification_error: "Error code: 402 - {'error': {'message': 'Insufficient Balance', 'type': 'unknown_error', 'param': None, 'code': 'invalid_request_error'}}"
+      last_verified: 2026-10-04
+      last_verified_latency_ms: 722
+      verification_error: "Error code: 402 - {'error': {'message': 'Insufficient Balance (request_id: 3430a4ae-954e-44ac-842d-0a0e9d492a5f)', 'type': 'unknown_error', 'param': None, 'code': 'invalid_request_error'}}"
     - name: deepseek-reasoner   # deprecated → deepseek-v4-pro (July 24 2026)
       context_window: 65536
       max_input_tokens: 65536

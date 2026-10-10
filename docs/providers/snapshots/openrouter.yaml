@@ -1,5 +1,5 @@
 provider: openrouter
-last_checked: 2026-08-30
+last_checked: 2026-10-04
 source: agent-research
 
 free_tier:
@@ -44,8 +44,8 @@ free_tier:
       max_output_tokens: 8192
       status: paid-only         # confirmed removed from free tier; probe error names the paid replacement slug directly
       verified: false
-      last_verified: 2026-08-30
-      last_verified_latency_ms: 1634
+      last_verified: 2026-10-04
+      last_verified_latency_ms: 77
       verification_error: "Error code: 404 - {'error': {'message': 'This model is unavailable for free. The paid version is available now - use this slug instead: meta-llama/llama-3.3-70b-instruct', 'code': 404}, 'user_id': 'user_39VqjYY9ILDK33RaFifdSj9boBt'}"
     - name: google/gemini-2.0-flash-exp:free
       context_window: 1048576

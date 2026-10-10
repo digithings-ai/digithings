@@ -1,5 +1,5 @@
 provider: cerebras
-last_checked: 2026-08-30
+last_checked: 2026-10-04
 source: agent-research
 
 free_tier:
@@ -17,8 +17,8 @@ free_tier:
       max_output_tokens: 8192
       status: deprecated        # second consecutive cycle absent from official free-tier rate-limits page; probe still 404s
       verified: false
-      last_verified: 2026-08-30
-      last_verified_latency_ms: 294
+      last_verified: 2026-10-04
+      last_verified_latency_ms: 165
       verification_error: "Error code: 404 - {'message': 'Model does not exist or you do not have access to it.', 'type': 'not_found_error', 'param': 'model', 'code': 'model_not_found'}"
     - name: llama-4-scout
       context_window: 131072

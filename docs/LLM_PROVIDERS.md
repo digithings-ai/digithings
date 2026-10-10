@@ -58,7 +58,7 @@ Common confusion — these are **chat-only** and cannot be used as a LiteLLM bac
 
 - **URL:** https://console.groq.com
 - **⚠️ `llama-3.3-70b-versatile` hit its hard cutover in August 2026** and now 404s on the free/developer tier (Groq announced this 2026-06-17). **Do not route new traffic to it** — migrate to `openai/gpt-oss-120b` or `qwen/qwen3.6-27b`.
-- **Free tier:** Standing. 30 RPM, **1,000 RPD (binding constraint)**, TPM varies by model (gpt-oss-120b/qwen3.6-27b TPM not yet independently reconfirmed post-migration).
+- **Free tier:** Standing. 30 RPM, **1,000 RPD (binding constraint)**, `gpt-oss-120b` is 8,000 TPM / 200K TPD per third-party trackers (qwen3.6-27b TPM not yet independently reconfirmed post-migration).
 - **Best free models:** `openai/gpt-oss-120b`, `qwen/qwen3.6-27b`. Plus Whisper STT. `llama-4-scout-17b-16e-instruct` was also **deprecated from the free/developer tier 2026-06-17**.
 - **Paid:** gpt-oss-120b ~$0.15 / $0.60 (prompt caching $0.075/1M); Llama 4 Scout ~$0.11 / $0.34 (paid-only now); `llama-3.3-70b-versatile` ~$0.59 / $0.79 remains listed on the pricing page for enterprise committed-spend contracts only.
 - **LiteLLM:** `groq/openai/gpt-oss-120b`. Env: `GROQ_API_KEY`.

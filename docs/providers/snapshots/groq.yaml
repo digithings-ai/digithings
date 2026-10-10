@@ -1,5 +1,5 @@
 provider: groq
-last_checked: 2026-08-30
+last_checked: 2026-10-04
 source: agent-research
 
 free_tier:
@@ -17,8 +17,8 @@ free_tier:
       max_output_tokens: 32768
       status: deprecated        # hard cutover reached; Groq's own June 17 2026 notice said "by August 2026 requests will no longer be served" for free/developer tier
       verified: false
-      last_verified: 2026-08-30
-      last_verified_latency_ms: 112
+      last_verified: 2026-10-04
+      last_verified_latency_ms: 71
       verification_error: "Error code: 404 - {'error': {'message': 'The model `llama-3.3-70b-versatile` does not exist or you do not have access to it.', 'type': 'invalid_request_error', 'code': 'model_not_found'}}"
     - name: llama-4-scout-17b-16e-instruct
       context_window: 131072
@@ -50,7 +50,7 @@ free_tier:
   rate_limits:
     rpm: 30              # default; varies by model
     rpd: 1000            # RPD is the binding constraint (dropped from 14,400 in 2026)
-    tpm: 12000           # corrected 2026-07-19: llama-3.3-70b-versatile is 12,000 TPM (6,000 was llama-3.1-8b-instant, mixed up in prior snapshot)
+    tpm: 8000            # updated 2026-10-04: openai/gpt-oss-120b free tier is 8,000 TPM / 200k TPD (third-party trackers; llama-3.3-70b-versatile's 12,000 is moot, model is dead)
     input_tpm: null
     concurrent_requests: null
     reset_window: rolling_24h
