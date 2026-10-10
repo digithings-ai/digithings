@@ -66,29 +66,38 @@ def run(*argv: str, expect: int | None = None):
 
 
 def test_manifest_is_tracked_and_dev_vars_is_ignored():
-    """The negation works and the rendered file stays uncommittable."""
-    added = subprocess.run(
-        ["git", "add", "-n", "config/contract/secrets.yaml"],
-        capture_output=True,
-        text=True,
-        cwd=REPO,
-        check=False,
-    )
-    assert added.returncode == 0 and "secrets.yaml" in added.stdout
+    """The negation works and the rendered file stays uncommittable.
 
-    (REPO / ".dev.vars").write_text("X=1\n")
-    try:
-        proc = subprocess.run(
-            ["git", "check-ignore", "-v", ".dev.vars"],
-            capture_output=True,
-            text=True,
-            cwd=REPO,
-            check=False,
-        )
-        assert proc.returncode == 0, "git must refuse .dev.vars"
-        assert ":!/" not in proc.stdout.split("\t")[0], ".dev.vars must not be negated"
-    finally:
-        (REPO / ".dev.vars").unlink()
+    `git add -n` is deliberately NOT the assertion. It prints nothing for a path
+    that is already tracked, so it passed locally (the manifest was untracked)
+    and failed in CI (the manifest is committed). `git ls-files --error-unmatch`
+    does not depend on the index state.
+    """
+
+    def git(*argv: str):
+        return subprocess.run(["git", *argv], capture_output=True, text=True, cwd=REPO, check=False)
+
+    assert git("ls-files", "--error-unmatch", "config/contract/secrets.yaml").returncode == 0, (
+        "the contract manifest must be tracked"
+    )
+
+    # Firing control: the same command must reject a path that is not in the index.
+    assert git("ls-files", "--error-unmatch", "config/contract/never-added.yaml").returncode != 0, (
+        "ls-files must be able to report a path as untracked"
+    )
+
+    proc = git("check-ignore", "-v", ".dev.vars")
+    assert proc.returncode == 0, "git must refuse .dev.vars"
+    # <source>:<linenum>:<pattern> TAB <path>; a negation would start with "!".
+    pattern = proc.stdout.split("\t")[0].split(":", 2)[2]
+    assert not pattern.startswith("!"), f".dev.vars is negated by {pattern!r}"
+
+    # NOTE: `git check-ignore` cannot be used to prove the manifest's negation.
+    # Measured here: it returns rc=1 with EMPTY stdout for
+    # `config/contract/secrets.yaml` BOTH with and without the negation rule, so
+    # it cannot tell "negated" from "matched no rule at all". The negation is
+    # pinned by reading the rules in
+    # test_gitignore_has_no_unanchored_secrets_yaml_without_exception instead.
 
 
 def test_gitignore_has_no_unanchored_secrets_yaml_without_exception():
