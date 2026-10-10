@@ -18,7 +18,7 @@ DIG-1242 asked for three things: decide the lane, bind tag to commit, rehearse o
 | `v0.4.0` … `v2.3.3` | 15 | clean release names |
 | `-error1`…`-error3`, `-welcome1/2`, `-boot1`, `-textleak-…`, `-counter1`…`-counter9` | 15 | **hand-built, hand-debugged images** |
 
-Half the registry is ad-hoc debugging under names no workflow produced. The one tag that embeds a git SHA — `v2.0.0-main.7263272` — shows commit binding was attempted once and abandoned. `ghcr.io/digithings-ai/digichat` **does not exist** (verified three ways: anonymous token `401`, `GET /v2/…/tags/list` `401`, `gh api /orgs/digithings-ai/packages?package_type=container` empty), so the ACR images are not mirrors of a published artifact either. They were built on someone's laptop and pushed by hand.
+Half the registry is ad-hoc debugging under names no workflow produced. The one tag that embeds a git SHA — `v2.0.0-main.7263272` — shows commit binding was attempted once and abandoned. ~~`ghcr.io/digithings-ai/digichat` **does not exist** (verified three ways: anonymous token `401`, `GET /v2/…/tags/list` `401`, `gh api /orgs/digithings-ai/packages?package_type=container` empty)~~ **CORRECTED 2026-10-09 — the package exists.** All three probes were non-discriminating: the two `401`s are unauthenticated and a *private* package answers `401` exactly like an absent one, and the org package **list** route omits this package under every `visibility` filter even for an org admin. Measured with the by-name route: id `13179652`, `visibility: private`, `version_count: 28`, created 2026-07-05, last published 2026-09-21 (`v2.3.2`, `latest`). Whether any ACR image is a mirror of its GHCR counterpart has **not** been checked — that needs a digest comparison, which is separate work and is not claimed here.
 
 So the lane being absent is not a missing workflow to restore. It is the absence of the whole chain, and the drift is the bill for it:
 
@@ -216,14 +216,30 @@ Record the current revision name and image digest. That is the rollback target.
 
 Requires the 2.4.0 image in the ACR. **There is none** — nothing has been pushed since `v2.3.3` (2026-09-21). Getting one there takes two steps, in this order, and the second one is the gap the build lane does not close:
 
-**1. Publish (CI, lane A).** Cut the release tag and push it; `publish-digichat-image.yml` builds and pushes to GHCR.
+**1. Publish (CI, lane A).** Two routes, and a rehearsal wants the first one.
+
+*Rehearsal — build from a ref, no release tag.* Dispatch the lane with `ref`
+set to the branch or sha holding the change (`gh workflow run
+publish-digichat-image.yml -f ref=develop`). It publishes exactly one name:
+
+```
+ghcr.io/digithings-ai/digichat:sha-<12 chars of the commit>
+```
+
+It never takes a `vX.Y.Z` name and never moves `:latest`. Every
+`--source`/`-t` in step 2 below then uses `sha-<commit>` in place of
+`v${VERSION}`.
+
+*Release — cut the tag.* A real release still goes through the tag, because a
+tag names one version and one commit and that is what makes the binding check
+meaningful:
 
 ```bash
 git tag digichat-v2.4.0 <commit carrying version 2.4.0 in apps/digichat/package.json>
 git push origin digichat-v2.4.0
 ```
 
-**No `digichat-v2.4.0` tag exists today** (`git tag -l 'digichat-v*'` stops at `digichat-v2.3.2`) even though `develop` already reads `2.4.0`. Cutting it is the release decision, not a deploy step, and the workflow refuses to publish without it.
+**No `digichat-v2.4.0` tag exists today** (`git tag -l 'digichat-v*'` stops at `digichat-v2.3.2`) even though `develop` already reads `2.4.0`. Cutting it is the release decision, not a deploy step, and it is why the rehearsal uses `ref` instead.
 
 **2. Import into the ACR (human, Azure write).** The Container Apps pull from `datatapchatregistry.azurecr.io`, **not** from GHCR. Nothing in this repository bridges those two registries: the old `datatap-web` lane that did the GHCR→ACR import was client-side and out of repo, and a `git grep` for `datatapchatregistry` / `azurecr.io` across `develop` returns 0 hits in any workflow. So the lane stops at GHCR, and a human runs the import:
 
@@ -233,7 +249,7 @@ git push origin digichat-v2.4.0
 # runs server-side and has no GitHub session to borrow. Use a classic PAT with
 # read:packages. If the package is public these can be omitted, but do not
 # assume that — org default visibility decides, and `ghcr.io/digithings-ai/digichat`
-# does not exist yet.
+# is private (verified 2026-10-09), so assume the credentials are required.
 az acr import -n datatapchatregistry --subscription "$SUB" \
   --source "ghcr.io/digithings-ai/digichat:v${VERSION}" \
   --username "$GHCR_USER" --password "$GHCR_PAT" \
@@ -335,9 +351,11 @@ Nothing newer. No 2.4.0 image exists in any registry.
 | **No probes on either ACA** | Open — DIG-1292. A production-affecting behavior change on a customer resource, with its own approval and its own rehearsal. Chosen as a prerequisite (`do_both`), not a follow-up: in `Single` mode with no probes a failed revision takes all traffic and there is nothing to demote it. |
 | **No owned Azure principal for the promotion** | Open — the other half of `do_both`. Security established that principal `44cfda92-…` is **dormant** (no credential at all) rather than a usable deploy identity, so the writes in §4 currently have no owned identity to run as. |
 | **No federated CI credential** | Moot. Scoped in PR #5179 for lane B; lane A was chosen, so DIG-1349 has no consumer. Revisit only if the ACA write is ever automated. |
-| **No GHCR→ACR import lane** | Open, and the honest limit of lane A. The build lane publishes to GHCR; the ACAs pull from ACR; the bridge is a human `az acr import` documented in §4 Step 1. Nothing in this repository can do that hop — the old importer was client-side and out of repo. Until it is automated, "build" and "available to promote" remain two human actions. |
+| **No GHCR→ACR import lane** | Open, and the honest limit of lane A. The build lane publishes to GHCR; the ACAs pull from ACR; the bridge is a human `az acr import` documented in §4 Step 1. Nothing in this repository can do that hop — the old importer was client-side and out of repo. Until it is automated, "build" and "available to promote" remain two human actions. The rehearsal path narrows this only in that it now produces an artifact to hand to that human: **§4 Step 1 promotes the image `ghcr.io/digithings-ai/digichat:sha-<commit>`, not a tag.** |
 | **`/healthz` 404s in both running builds** | Self-resolving: any deploy carrying `916c4b5d5` adds the route. Recorded so nobody reads the 404 as a regression. |
-| ~~**No build lane**~~ | **Closed by this PR** (DIG-1294). `.github/workflows/publish-digichat-image.yml` is back, tag-triggered, revision-labelled and self-verifying. |
+| ~~**No build lane**~~ | **Closed by PR #5214** (DIG-1294). `.github/workflows/publish-digichat-image.yml` is back, tag-triggered, revision-labelled and self-verifying. |
+| ~~**No rehearsal artifact before `digichat-v2.4.0` exists**~~ | **Closed.** The lane took only a release tag, and `digichat-v2.4.0` does not exist, so §4 Step 1 had nothing to promote. `workflow_dispatch` now also takes a `ref` and builds a rehearsal image named `sha-<12 chars of the commit>`. It never takes a `vX.Y.Z` name and never moves `:latest` — see the workflow header for why a build that is not the tag's commit must not take a release name. |
+| ~~**Nothing proves the image boots**~~ | **Closed.** Every build — release or rehearsal — is loaded into the runner, started, and watched until `/healthz` answers 200 with `ok=true` and `/api/health` reports the version it was built as. The push is a separate step gated on that probe. Prod is `Single` mode and a release tag is immutable, so an unbootable image published under a release name cannot be walked back by re-running the lane. |
 | ~~**Principal `44cfda92-…`**~~ | **Closed by DIG-1293** (2026-10-06, read-only). It is the service principal for app registration `datatap-digichat-deploy` (`be54468d-2f66-4aeb-a231-5db0b6e58789`), created 2026-08-09 by the shared account `datatap@datatapstream.onmicrosoft.com`. It holds `Contributor` on both ACAs and on the ACR, and it has **no credential at all** — 0 keys, 0 passwords, 0 federated credentials. Dormant, not deleted. Registered in [`credential-ownership.md`](credential-ownership.md) with the owner and the required roles for a future federated credential. |
 
 ---
@@ -349,7 +367,7 @@ The false claim — that `ghcr.io/digithings-ai/digichat` is published — was *
 Restoring the lane splits those claims in two, and the distinction matters:
 
 - **Claims that a lane was removed and never replaced** are now false — the lane is back. Corrected.
-- **Claims that the GHCR package exists** are still false. Restoring a workflow does not create a package: nothing publishes until a `digichat-v*` tag is pushed, and the ladder stops at `digichat-v2.3.2`. So `ghcr.io/digithings-ai/digichat` does not exist today, and will not until someone cuts the next release tag.
+- ~~**Claims that the GHCR package exists** are still false.~~ **Also corrected 2026-10-09: the package exists** — id `13179652`, `visibility: private`, `version_count: 28`, created 2026-07-05, last published 2026-09-21 with `v2.3.2` and `latest`. The 2026-10-06 check that said otherwise could not tell a *private* package from an absent one: two of its three probes were unauthenticated (`401` = "auth required", which a private package returns identically), and the third, `gh api /orgs/digithings-ai/packages?package_type=container`, returns `[]` for this package under every `visibility` filter even for an org admin. The discriminating route is the by-name one: `gh api /orgs/digithings-ai/packages/container/digichat`. What the earlier check got *right* is that nothing has published since 2026-09-21 and the tag ladder still stops at `digichat-v2.3.2`. Restoring a workflow does not create a package: nothing publishes until a `digichat-v*` tag is pushed, and the ladder stops at `digichat-v2.3.2`. So `ghcr.io/digithings-ai/digichat` does not exist today, and will not until someone cuts the next release tag.
 
 Any doc corrected in this PR that tells a reader to `docker pull ghcr.io/digithings-ai/digichat` must keep saying **that this works once the tag lands**, not that it works now.
 
