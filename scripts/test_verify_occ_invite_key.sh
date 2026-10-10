@@ -4,14 +4,21 @@
 # DIG-1381 closes on check 2 ("correct key, no origin" -> slug=occ). No rollout
 # has ever run, so that check has never been observed passing and nobody knows
 # the script can distinguish a real key from a fake one. This drives it against a
-# local fixture implementing the real hostTenantAuthorized rule, in three states:
+# local fixture implementing the real hostTenantAuthorized rule, in four states:
 #
-#   1. Act B1, correct key   -> all 6 PASS, exit 0   (the bar, reached)
+#   1. Act B1, correct key   -> all 7 PASS, exit 0   (the bar, reached)
 #   2. Act B1, wrong key     -> check 2 FAILs, exit 1  (the bar discriminates)
 #   3. Act B2 simulated      -> checks 3+4 flip to denial, exit 0
+#   4. Corpus leaked         -> check 7 FAILs, exit 1  (DIG-2779)
 #
 # Case 2 is the load-bearing one: without it, case 1 only shows the script can be
 # green. It shows green MEANS the key matched.
+#
+# Case 4 exists for the same reason, about a different check. Check 7 asserts the
+# retrieval corpus is not discoverable from the client projection. On a fixture
+# that never leaks a corpus, that check passes for free, which is what a check
+# that cannot fail looks like. FIXTURE_LEAK_CORPUS makes the fixture serialise
+# backend.digisearchIndex — the regression check 7 exists to catch.
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 cd "$HERE/.."
@@ -61,7 +68,7 @@ echo "### were off the real allowlist, case 1 could not pass."
 start_fixture FIXTURE_OCC_TOKEN="$KEY" || exit 2
 echo "-- fixture ready (Act B1: allowlist unchanged)"
 
-run_verify "1: Act B1, correct key -> all 6 pass" "$KEY" "PASS" 0
+run_verify "1: Act B1, correct key -> all 7 pass" "$KEY" "PASS" 0
 c1=$?
 if [ "$c1" -ne 0 ]; then echo "FAIL: expected exit 0 with the correct key, got $c1"; rc=1; fi
 stop_fixture; trap - EXIT
@@ -78,6 +85,18 @@ run_verify "3: Act B2 simulated, correct key" "$KEY" "PASS" 1
 c3=$?
 if [ "$c3" -ne 0 ]; then echo "FAIL: post-B2 run with the correct key should be all-PASS, got $c3"; rc=1; fi
 stop_fixture; trap - EXIT
+
+start_fixture FIXTURE_OCC_TOKEN="$KEY" FIXTURE_LEAK_CORPUS="occ_help,occ_tickets" || exit 2
+echo "-- fixture ready (regression: the projection serialises the corpus)"
+run_verify "4: corpus leaked into the client projection" "$KEY" "PASS" 0
+c4=$?
+stop_fixture; trap - EXIT
+if [ "$c4" -eq 0 ]; then
+  echo "FAIL: check 7 passed while the fixture leaked backend.digisearchIndex — it cannot fail"
+  rc=1
+else
+  echo "-- case 4 note: the run above must show a FAIL on 'retrieval corpus not exposed'"
+fi
 
 echo
 echo "==================================================================="

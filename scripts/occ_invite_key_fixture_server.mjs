@@ -23,6 +23,12 @@ import { createServer } from "node:http";
 const ALLOWLIST_SRC = "apps/digichat/src/lib/embed-first-party.ts";
 const OCC_TOKEN = process.env.FIXTURE_OCC_TOKEN ?? "";
 const PORT = Number(process.env.FIXTURE_PORT ?? 8787);
+// Simulates a REGRESSION in the client projection: serialise the retrieval
+// corpus on the OCC response, which toEmbedClientConfig does not do today
+// (embed-client-config.ts copies declared fields only). Off by default; the
+// only job is to give verify_occ_invite_key.sh check 7 a way to be observed
+// failing, so the check is not a vacuous green (DIG-2779).
+const LEAK_CORPUS = process.env.FIXTURE_LEAK_CORPUS ?? "";
 
 function firstPartyHosts() {
   const src = readFileSync(ALLOWLIST_SRC, "utf8");
@@ -80,7 +86,13 @@ const server = createServer((req, res) => {
   );
   const body = JSON.stringify(
     granted
-      ? { slug: "occ", gateMode: "ungated", title: "OCC help assistant" }
+      ? {
+          slug: "occ",
+          gateMode: "ungated",
+          title: "OCC help assistant",
+          // Only ever non-empty under FIXTURE_LEAK_CORPUS. See the const above.
+          ...(LEAK_CORPUS ? { backend: { digisearchIndex: LEAK_CORPUS } } : {}),
+        }
       : { slug: "embed", gateMode: "gated" },
   );
   res.writeHead(200, { "content-type": "application/json" });
