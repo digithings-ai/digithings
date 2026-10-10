@@ -73,9 +73,14 @@ def canonical_json(payload: Any) -> str:
 def require_local(url: str, *, what: str) -> str:
     """Assert *url* points at this machine; return it unchanged.
 
-    Raises :class:`ProductionTargetError` otherwise. Every seeder calls this
-    before its first write, so a stray ``SUPABASE_URL`` or ``--r2-endpoint``
-    pointing at production fails the run instead of writing to it.
+    Raises :class:`ProductionTargetError` otherwise. A stray ``SUPABASE_URL``
+    or ``DIGISEARCH_URL`` pointing at production then fails the run instead of
+    writing to it.
+
+    Every function in this package that takes a ``*_url`` parameter and uses it
+    calls this first. ``test_every_url_taking_seeder_guards_with_require_local``
+    walks the whole package and enforces that, so the rule cannot rot in a
+    module a file-scoped test never reads.
     """
     parsed = urlparse(url if "://" in url else f"http://{url}")
     host = (parsed.hostname or "").lower()

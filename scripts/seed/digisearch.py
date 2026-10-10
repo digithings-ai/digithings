@@ -18,7 +18,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from scripts.seed.deterministic import DEFAULT_SEED, digest, rng_for
+from scripts.seed.deterministic import DEFAULT_SEED, digest, require_local, rng_for
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SEEDS_DIR = REPO_ROOT / "digisearch" / "seeds"
@@ -72,7 +72,13 @@ def run_ingest(
 
     The key goes through the environment (``DIGISEARCH_SEED_API_KEY``),
     never the argv. Returns the child's exit code.
+
+    Both URLs are checked with :func:`require_local` first. The child
+    ingests into whichever host these name, so a stray ``DIGISEARCH_URL``
+    would otherwise push seed documents into a real deployment silently.
     """
+    require_local(digisearch_url, what="digisearch ingest")
+    require_local(digikey_url, what="digikey token exchange")
     env = dict(os.environ)
     env.update(
         {
