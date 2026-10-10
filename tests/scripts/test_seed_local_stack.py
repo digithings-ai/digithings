@@ -20,6 +20,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
@@ -32,9 +33,11 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from scripts.seed.deterministic import (  # noqa: E402
     DEFAULT_SEED,
+    LOCAL_GUARDS,
     ProductionTargetError,
     digest,
     require_local,
+    require_local_database,
     rng_for,
     stable_uuid,
     synthetic_ohlc,
@@ -116,8 +119,8 @@ def test_require_local_allows_loopback():
     assert require_local("http://localhost:8002", what="x")
 
 
-def test_no_seeder_calls_a_remote_put_without_local():
-    """`r2_market.put_local` is the only R2 writer and it hard-codes --local."""
+def test_the_r2_writer_hard_codes_local():
+    """`r2_market.put_local` hard-codes --local in its wrangler argv."""
     src = (REPO_ROOT / "scripts" / "seed" / "r2_market.py").read_text()
     # The wrangler argv is a list literal, so the subcommand is three separate
     # tokens rather than one string.
@@ -359,3 +362,168 @@ def test_seed_all_reports_a_verdict_and_exits_zero_in_dry_run(tmp_path):
 def test_every_seed_module_parses():
     for path in sorted((REPO_ROOT / "scripts" / "seed").glob("*.py")):
         ast.parse(path.read_text(), filename=str(path))
+
+
+def _unguarded_url_params(path):
+    """Return (function_name, params) for every `*_url` param used unguarded.
+
+    A parameter counts as guarded when it is passed straight to one of
+    `LOCAL_GUARDS` in the same function. Anything else that reads it is a
+    write path that never asked whether the target is this machine.
+    """
+    tree = ast.parse(path.read_text())
+    found = []
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        args = node.args
+        params = [
+            a.arg
+            for a in (*args.posonlyargs, *args.args, *args.kwonlyargs)
+            if a.arg.endswith("_url")
+        ]
+        if not params:
+            continue
+        guarded = set()
+        for call in ast.walk(node):
+            if not isinstance(call, ast.Call):
+                continue
+            fn = call.func
+            name = fn.attr if isinstance(fn, ast.Attribute) else getattr(fn, "id", None)
+            if name in LOCAL_GUARDS and call.args and isinstance(call.args[0], ast.Name):
+                guarded.add(call.args[0].id)
+        used = {n.id for n in ast.walk(node) if isinstance(n, ast.Name)}
+        found.append((node.name, [p for p in params if p in used and p not in guarded]))
+    return found
+
+
+def test_every_url_taking_seeder_guards_with_require_local():
+    """No function in the package may use a `*_url` without guarding it.
+
+    This walks the whole package on purpose. An earlier version of this rule
+    read one file, so a sibling module could forward a URL to a real
+    deployment while the suite stayed green.
+    """
+    seed_dir = REPO_ROOT / "scripts" / "seed"
+    modules = sorted(seed_dir.glob("*.py"))
+    assert len(modules) >= 8, f"control: expected the whole package, found {len(modules)}"
+
+    unguarded, seen = [], 0
+    for path in modules:
+        for func_name, offenders in _unguarded_url_params(path):
+            seen += 1
+            for param in offenders:
+                unguarded.append(f"{path.name}::{func_name}({param})")
+
+    # Control: the walk must actually have found something to police, or a
+    # rename of every parameter would make this pass for the wrong reason.
+    assert seen >= 2, f"control: only {seen} function(s) take a *_url"
+    assert unguarded == [], "unguarded URL parameters: " + ", ".join(unguarded)
+
+
+def test_digisearch_ingest_refuses_a_remote_search_host():
+    """The concrete path a package-wide rule exists for.
+
+    Only the search host is remote here, and the message must name it: with
+    both URLs remote, dropping either one of the two guards would still raise
+    and this test would stay green.
+    """
+    from scripts.seed import digisearch
+
+    with pytest.raises(ProductionTargetError, match="digisearch ingest"):
+        digisearch.run_ingest(
+            api_key="dgk_live_example",
+            digisearch_url="https://search.digithings.ai",
+            digikey_url="http://127.0.0.1:8005",
+            runner=lambda *a, **k: pytest.fail("must not reach the child process"),
+        )
+
+
+def test_digisearch_ingest_refuses_a_remote_digikey_host():
+    """The token exchange is a second write path, guarded separately."""
+    from scripts.seed import digisearch
+
+    with pytest.raises(ProductionTargetError, match="digikey token exchange"):
+        digisearch.run_ingest(
+            api_key="dgk_live_example",
+            digisearch_url="http://127.0.0.1:8002",
+            digikey_url="https://key.digithings.ai",
+            runner=lambda *a, **k: pytest.fail("must not reach the child process"),
+        )
+
+
+def test_digisearch_ingest_accepts_the_loopback_defaults():
+    from scripts.seed import digisearch
+
+    calls = []
+
+    def fake_run(cmd, env=None, cwd=None, check=None):
+        calls.append((cmd, env))
+        return subprocess.CompletedProcess(cmd, 0)
+
+    rc = digisearch.run_ingest(
+        api_key="dgk_live_example",
+        digisearch_url="http://127.0.0.1:8002",
+        digikey_url="http://127.0.0.1:8005",
+        runner=fake_run,
+    )
+    assert rc == 0
+    assert len(calls) == 1, "the child must run exactly once for loopback URLs"
+    assert calls[0][1]["DIGISEARCH_URL"] == "http://127.0.0.1:8002"
+
+
+def test_require_local_database_refuses_a_remote_host():
+    """A key store off this machine must fail the run, not accept the write."""
+    remote = "postgresql://dk:pw@db.example:5432/digikey"
+
+    # Control first: the guard must accept the local case, or the refusal
+    # below would prove nothing about the remote one.
+    assert require_local_database("postgresql://dk:pw@127.0.0.1:5432/digikey", what="k") == (
+        "postgresql://dk:pw@127.0.0.1:5432/digikey"
+    )
+    with pytest.raises(ProductionTargetError):
+        require_local_database(remote, what="digikey key rows")
+
+
+def test_require_local_database_accepts_the_documented_local_file_dsn():
+    """The local SQLite deployment must keep working.
+
+    `infra/digichat-release/compose.profile-a.yml` defaults
+    `DIGIKEY_DATABASE_URL` to `sqlite:////data/digikey.db`, which carries no
+    host. `require_local` cannot judge that shape, which is why this guard
+    exists instead of reusing the HTTP one.
+    """
+    dsn = "sqlite:////data/digikey.db"
+
+    assert require_local_database(dsn, what="k") == dsn
+    # Control: the HTTP guard really would refuse it, so the two guards are
+    # not interchangeable and the new one is not a duplicate.
+    with pytest.raises(ProductionTargetError):
+        require_local(dsn, what="k")
+
+
+def test_require_local_database_refuses_a_schemeless_value():
+    """A bare path has no scheme, so it is refused rather than guessed at."""
+    with pytest.raises(ProductionTargetError):
+        require_local_database("/data/digikey.db", what="digikey key rows")
+
+
+def test_ensure_keys_refuses_a_remote_database_before_writing(monkeypatch, tmp_path):
+    """The guard must fire BEFORE the DSN is exported to digikey.
+
+    Exporting first would leave `DIGIKEY_DATABASE_URL` pointing at production
+    in this process even though the mint raised, so the assertion is on the
+    environment and not only on the exception.
+    """
+    from scripts.seed import digikey_keys
+
+    monkeypatch.delenv("DIGIKEY_DATABASE_URL", raising=False)
+
+    with pytest.raises(ProductionTargetError):
+        digikey_keys.ensure_keys(
+            tenant_slug="seed",
+            database_url="postgresql://dk:pw@db.example:5432/digikey",
+            out_path=tmp_path / "keys.json",
+        )
+
+    assert "DIGIKEY_DATABASE_URL" not in os.environ

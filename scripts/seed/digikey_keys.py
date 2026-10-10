@@ -8,6 +8,10 @@ its ``label`` and reused when a non-revoked row already exists.
 
 Raw keys are secrets. They are written to a mode-0600 file and never
 printed; this module reports the ``key_prefix`` and the value's length only.
+
+``database_url`` is guarded by :func:`require_local_database` before it is
+exported, so a stray ``DIGIKEY_DATABASE_URL`` cannot point the mint at a
+production key store.
 """
 
 from __future__ import annotations
@@ -17,7 +21,7 @@ import stat
 from dataclasses import dataclass
 from pathlib import Path
 
-from scripts.seed.deterministic import DEFAULT_SEED, stable_uuid
+from scripts.seed.deterministic import DEFAULT_SEED, require_local_database, stable_uuid
 
 #: Scopes the local stack actually exercises. ``digisearch:ingest`` is the
 #: one `make seed-digisearch-local` requires; the rest mirror the default
@@ -58,6 +62,7 @@ def ensure_keys(
             )
             for label, scopes in SEED_KEYS
         ]
+    require_local_database(database_url, what="digikey key rows")
     os.environ["DIGIKEY_DATABASE_URL"] = database_url
     from digikey.db import session_factory
     from digikey.db_schema import ApiKeyRow
