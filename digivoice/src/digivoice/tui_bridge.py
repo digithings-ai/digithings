@@ -25,7 +25,7 @@ from digivoice.panels import SYSTEM_BLOCKS, doctor_summary
 from digivoice.paste import copy_to_clipboard
 from digivoice.paths import resolve_paths
 from digivoice.probe import CommandProbe, real_probe
-from digivoice.reload import run_reload, stop_home_control
+from digivoice.reload import restart_hammerspoon, run_reload, stop_home_control
 from digivoice.runner import CommandRunner, run_command
 from digivoice.settings import default_settings, load_settings, save_settings
 from digivoice.status import read_system_log, system_log_path
@@ -287,7 +287,13 @@ def dispatch(
         save_settings(paths, default_settings())
         return {"footer": footer, "note": "settings reset"}
     if op == "restart":
-        return {"footer": footer, "restart": True}
+        report = restart_hammerspoon(platform, home, env, runner=runner or run_command)
+        return {
+            "footer": footer,
+            "restart": True,
+            "hammerspoon": report.summary,
+            "note": report.summary,
+        }
     if op == "update":
         note, ok = _update_note(
             platform,

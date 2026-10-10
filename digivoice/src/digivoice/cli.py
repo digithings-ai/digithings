@@ -26,7 +26,7 @@ from digivoice.panels import SYSTEM_BLOCKS, restart_digivoice
 from digivoice.paste import copy_to_clipboard, paste
 from digivoice.paths import DEFAULT_MODEL, resolve_paths
 from digivoice.probe import CommandProbe, real_probe
-from digivoice.reload import stop_home_control
+from digivoice.reload import restart_hammerspoon, stop_home_control
 from digivoice.rewrite import rewrite_transcript
 from digivoice.runner import CommandRunner, cancellable_runner, run_command
 from digivoice.settings import (
@@ -889,9 +889,16 @@ def _reset(runtime: Runtime) -> CliResult:
 
 
 def _restart(runtime: Runtime) -> CliResult:
-    stop_home_control(runtime.platform, runtime.home, dict(runtime.env), runner=runtime.runner)
-    restart_digivoice()
-    return CliResult(code=0, stdout="", stderr="")
+    report = restart_hammerspoon(
+        runtime.platform, runtime.home, dict(runtime.env), runner=runtime.runner
+    )
+    text = "\n".join(report.lines) + "\n"
+    failed = report.summary.endswith("failed")
+    if sys.stdin.isatty() and not failed:
+        sys.stdout.write(text)
+        sys.stdout.flush()
+        restart_digivoice()
+    return CliResult(code=1 if failed else 0, stdout=text, stderr="")
 
 
 def _system(runtime: Runtime) -> CliResult:
