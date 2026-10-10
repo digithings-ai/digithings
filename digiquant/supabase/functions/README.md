@@ -93,14 +93,14 @@ Events to enable: `checkout.session.completed`, `customer.subscription.created`,
 
 ## Local Deno tests
 
-There is **no** CI Deno lane yet (follow-up: wire an `dashboard-functions` job). Run
-locally:
+CI runs these in the `deno-functions` job of `test-digiquant.yml`, pinned to the same
+Deno version, so a green local `deno task test` is what CI executes. Run locally:
 
 ```bash
 cd digiquant/supabase/functions
 
 # Install Deno if needed: https://deno.land (# or: curl -fsSL https://deno.land/install.sh | sh)
-deno test --allow-env --allow-read \
+deno test --allow-env --allow-read --allow-net=127.0.0.1,localhost \
   _shared/app-url.test.ts \
   _shared/access.test.ts \
   _shared/cors.test.ts \
@@ -108,6 +108,7 @@ deno test --allow-env --allow-read \
   _shared/billing-auth.test.ts \
   _shared/tiers.test.ts \
   _shared/vault.test.ts \
+  _shared/stripe.test.ts \
   stripe-webhook/stripe-webhook.test.ts \
   settings/settings.test.ts
 ```
@@ -120,7 +121,18 @@ deno task --cwd digiquant/supabase/functions test:settings
 ```
 
 Tests mock Stripe signature HMAC + an in-memory admin client / vault seams — no
-live network, no real secrets.
+live network, no real secrets. The only network they open is a loopback stub:
+`_shared/stripe.test.ts` binds `127.0.0.1` so the billing helpers can be driven
+against a stand-in Stripe with no live key and no spend, which is why the test
+task passes `--allow-net=127.0.0.1,localhost` and nothing wider.
+
+### Pointing billing at a stub or test mode
+
+`STRIPE_API_BASE` overrides the Stripe API host for every billing function; unset,
+they call `https://api.stripe.com/v1` as before. Set it to a local stub or a
+Stripe test-mode proxy to exercise checkout, customer portal and the webhook
+end to end without a live key. It carries the secret key in the `Authorization`
+header, so only ever point it at a host you control.
 
 ## HTTP error contract
 
