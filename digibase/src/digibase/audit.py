@@ -28,6 +28,10 @@ def _redact_value(value: Any, keys: tuple[str, ...]) -> Any:
         return redact_mapping(value, redact=keys)
     if isinstance(value, list):
         return [_redact_value(item, keys) for item in value]
+    # json.dumps writes a tuple as a JSON array, so a nested secret would
+    # otherwise land in the JSONL line.
+    if isinstance(value, tuple):
+        return tuple(_redact_value(item, keys) for item in value)
     return value
 
 
@@ -35,7 +39,11 @@ def redact_mapping(
     payload: dict[str, Any],
     redact: tuple[str, ...] | list[str] | None = None,
 ) -> dict[str, Any]:
-    """Return a copy of *payload* with sensitive keys replaced by ``[REDACTED]`` (recursive)."""
+    """Return a copy of *payload* with sensitive keys replaced by ``[REDACTED]``.
+
+    Recurses into nested dicts, lists, and tuples. ``json.dumps`` serializes a
+    tuple as an array, so a tuple that is left unwalked would persist secrets.
+    """
     keys = tuple(redact) if redact is not None else DEFAULT_REDACT_SUBSTRINGS
     out: dict[str, Any] = {}
     for key, value in payload.items():
