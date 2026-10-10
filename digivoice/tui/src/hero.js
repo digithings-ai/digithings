@@ -15,29 +15,32 @@ const GLYPHS = {
 }
 
 /**
- * The same letters drawn one size down (5×8, half the cells). Used when the
+ * The same letters, proportionally smaller (6 wide x 8 tall). Used when the
  * full-size wordmark cannot fit the frame on one line: the banner always stays
- * a single line, the face just gets smaller.
+ * a single line, the face just scales down without changing how it looks. It is
+ * a symmetric box reduction of the full-size glyphs above, so the stroke weight
+ * and the letter shapes track the large face.
  */
-const GLYPHS_COMPACT = {
-  D: ["#####", "##..#", "##..#", "##..#", "##..#", "##..#", "##..#", "#####"],
-  I: ["#####", "..#..", "..#..", "..#..", "..#..", "..#..", "..#..", "#####"],
-  G: [".###.", "#...#", "#....", "#..##", "#...#", "#...#", "#...#", ".###."],
-  T: ["#####", "..#..", "..#..", "..#..", "..#..", "..#..", "..#..", "..#.."],
-  H: ["#...#", "#...#", "#...#", "#...#", "#####", "#...#", "#...#", "#...#"],
-  N: ["#...#", "##..#", "##..#", "#.#.#", "#.#.#", "#..##", "#..##", "#...#"],
-  S: [".####", "#....", "#....", ".###.", "....#", "....#", "....#", "####."],
-  V: ["#...#", "#...#", "#...#", "#...#", "#...#", ".#.#.", ".#.#.", "..#.."],
-  O: [".###.", "#...#", "#...#", "#...#", "#...#", "#...#", "#...#", ".###."],
-  C: [".###.", "#...#", "#....", "#....", "#....", "#....", "#...#", ".###."],
-  E: ["#####", "#....", "#....", "####.", "#....", "#....", "#....", "#####"],
+const SHRINK_COLS = [[0], [1], [2], [3, 4], [5], [6]]
+const SHRINK_ROWS = [[0], [1], [2], [3, 4], [5, 6], [7], [8], [9]]
+
+function shrinkGlyph(rows) {
+  return SHRINK_ROWS.map((ys) =>
+    SHRINK_COLS.map((xs) =>
+      ys.some((y) => xs.some((x) => rows[y][x] === "#")) ? "#" : ".",
+    ).join(""),
+  )
 }
+
+const GLYPHS_COMPACT = Object.fromEntries(
+  Object.entries(GLYPHS).map(([letter, rows]) => [letter, shrinkGlyph(rows)]),
+)
 
 export const BUILD_MS = 1400
 export const HERO_GAP = 2
 export const GLYPH_COLS = 7
 export const GLYPH_ROWS = 10
-export const COMPACT_GLYPH_COLS = 5
+export const COMPACT_GLYPH_COLS = 6
 export const COMPACT_GLYPH_ROWS = 8
 /** Letters never touch: one blank column is the floor between glyphs. */
 export const MIN_GAP = 1

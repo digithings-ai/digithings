@@ -303,12 +303,11 @@ test("letters keep a gap on a narrow frame and never wrap to two lines", () => {
   assert.ok(full.gap >= MIN_GAP)
   assert.ok(full.lines[0].length <= 78)
   // A frame too small for the full face gets the smaller face, still one line,
-  // with a gap between every letter (nine glyphs, five columns each).
+  // with a gap between every letter (nine glyphs, six columns each).
   const small = wordmarkLines("DIGIVOICE", { cols: 63, tMs: BUILD_MS, truecolor: false, compact: true })
-  assert.equal(small.lines.length, COMPACT_GLYPH_ROWS / 2)
-  assert.equal(small.gap, 2)
+  assert.equal(small.lines.length, Math.ceil(COMPACT_GLYPH_ROWS / 2))
   assert.ok(small.gap >= MIN_GAP)
-  assert.ok(small.lines[0].length <= 61)
+  assert.ok(small.lines[0].length <= 62)
   assert.ok(small.lines[0].length >= 9 * COMPACT_GLYPH_COLS)
 })
 
