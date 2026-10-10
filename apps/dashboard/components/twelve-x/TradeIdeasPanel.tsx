@@ -110,9 +110,10 @@ export function IdeaDetail({ idea }: { idea: FxTradeIdeaRow }) {
   const showGrid = showLevels || levelsPending || showEvidence;
   /**
    * Publishability, not row count: the level-vs-fix chart's subject is
-   * published levels, and `buildLevelFixSeries` parses `trade_levels` with no
-   * gate of its own — so a bracket that was never published must never reach
-   * it, whatever it happens to carry in its shape.
+   * published levels, and a bracket that was never published must never reach
+   * it, whatever it happens to carry in its shape. This gate is the first of
+   * two — `buildLevelFixSeries` withholds non-publishable levels at the layer
+   * they are assembled, so widening this one cannot resurrect the ladder.
    */
   const levelsPublished = status === 'complete';
 
