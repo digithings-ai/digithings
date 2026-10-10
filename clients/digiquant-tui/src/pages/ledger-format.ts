@@ -1,5 +1,6 @@
-import { DASH, EMPTY_READ, type ReadResult } from "../read";
+import { EMPTY_READ, type ReadResult } from "../read";
 import { shapeLines, type PaneBlock, type PaneBody } from "./shape";
+import { cell } from "../format";
 
 /** Ledger is two panes: position events, then cash. Each empty list stays the empty sentence. */
 
@@ -9,13 +10,6 @@ function rec(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-function cell(value: unknown): string {
-  if (value == null || value === "") return DASH;
-  if (typeof value === "number") return Number.isFinite(value) ? JSON.stringify(value) : DASH;
-  if (typeof value === "boolean") return value ? "true" : "false";
-  if (typeof value === "string") return value;
-  return DASH;
-}
 
 function table(columns: string[], rows: string[][]): PaneBlock | null {
   if (rows.length === 0) return null;
@@ -54,12 +48,12 @@ function eventRows(value: unknown): string[][] {
     rows.push([
       date,
       ticker,
-      cell(row.type),
-      cell(row.fill_price),
-      cell(row.avg_entry),
-      cell(row.realized_pct),
-      cell(row.prev_weight_pct),
-      cell(row.weight_pct),
+      cell(row.type, "type"),
+      cell(row.fill_price, "fill_price"),
+      cell(row.avg_entry, "avg_entry"),
+      cell(row.realized_pct, "realized_pct"),
+      cell(row.prev_weight_pct, "prev_weight_pct"),
+      cell(row.weight_pct, "weight_pct"),
     ]);
   }
   return rows;
@@ -72,7 +66,7 @@ function cashRows(value: unknown): string[][] {
     const row = rec(item);
     const date = named(row?.date);
     if (!row || !date) continue;
-    rows.push([date, cell(row.kind), cell(row.amount), cell(row.balance)]);
+    rows.push([date, cell(row.kind, "kind"), cell(row.amount, "amount"), cell(row.balance, "balance")]);
   }
   return rows;
 }

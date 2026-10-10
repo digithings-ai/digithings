@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { act } from "react";
 import { testRender } from "@opentui/react/test-utils";
 import { PaneFrame, PANE_HINT } from "./pane";
-import { INK } from "../theme";
+import { DOWN, INK, MUTE, UP } from "../theme";
+import type { PaneBody } from "./shape";
 
 /** These are render-level assertions on purpose.
  *
@@ -88,5 +89,28 @@ describe("the pane footer paints its words", () => {
     const statusRow = rows.findIndex((row) => row.includes(STALE_FOOTER));
     expect(statusRow).toBeGreaterThan(0);
     expect(rows[statusRow - 1]).toMatch(/^│─+│$/);
+  });
+});
+describe("signed figures take the up and down colours", () => {
+  /** The hex the terminal stored for the first span whose text holds `needle`. */
+  async function inkOf(blocks: PaneBody, needle: string): Promise<string | null> {
+    const setup = await testRender(<PaneFrame title="T" status="S" focused={false} blocks={blocks} ink={INK} />, { width: 60, height: 8 });
+    await setup.renderOnce();
+    const spans = setup.captureSpans().lines.flatMap((line) => line.spans);
+    act(() => setup.renderer.destroy());
+    const span = spans.find((item) => item.text.includes(needle));
+    if (!span) return null;
+    const [r, g, b] = [span.fg.r, span.fg.g, span.fg.b].map((c) => Math.round(c * 255).toString(16).padStart(2, "0").toUpperCase());
+    return `#${r}${g}${b}`;
+  }
+
+  test("a table cell and a stat value colour by sign; zero and unsigned keep their ink", async () => {
+    const table: PaneBody = { blocks: [{ kind: "table", columns: [], rows: [["AAA", "+1.25%", "-2.50%", "0.00%"]] }] };
+    expect(await inkOf(table, "+1.25%")).toBe(UP.toUpperCase());
+    expect(await inkOf(table, "-2.50%")).toBe(DOWN.toUpperCase());
+    expect(await inkOf(table, "0.00%")).toBe(INK.toUpperCase());
+    const stat: PaneBody = { blocks: [{ kind: "stat", text: "day  -0.40%   invested  80.00%" }] };
+    expect(await inkOf(stat, "-0.40%")).toBe(DOWN.toUpperCase());
+    expect(await inkOf(stat, "80.00%")).toBe(MUTE.toUpperCase());
   });
 });

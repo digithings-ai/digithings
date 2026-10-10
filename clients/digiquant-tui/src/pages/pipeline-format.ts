@@ -1,5 +1,6 @@
 import { DASH, EMPTY_READ, type ReadResult } from "../read";
 import { shapeLines, type PaneBlock, type PaneBody } from "./shape";
+import { cell } from "../format";
 
 /** Pipeline panes. The graph is a node table. There is no canvas. */
 
@@ -27,13 +28,6 @@ function rec(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-function cell(value: unknown): string {
-  if (value == null || value === "") return DASH;
-  if (typeof value === "number") return Number.isFinite(value) ? JSON.stringify(value) : DASH;
-  if (typeof value === "boolean") return value ? "true" : "false";
-  if (typeof value === "string") return value;
-  return DASH;
-}
 
 function stat(pairs: [string, string][]): PaneBlock | null {
   const shown = pairs.filter(([, value]) => value !== DASH);
@@ -88,19 +82,19 @@ function persisted(value: unknown): string {
 function paintHealth(data: Record<string, unknown>): PaneBody {
   const nodes = rec(data.nodes);
   const head = stat([
-    ["run", cell(data.run_date)],
-    ["type", cell(data.run_type)],
-    ["status", cell(data.status)],
-    ["config", cell(data.config)],
-    ["posture", cell(data.posture)],
-    ["ok", cell(nodes?.ok)],
-    ["carried", cell(nodes?.carried)],
-    ["failed", cell(nodes?.failed)],
-    ["calls", cell(data.calls)],
+    ["run", cell(data.run_date, "run_date")],
+    ["type", cell(data.run_type, "run_type")],
+    ["status", cell(data.status, "status")],
+    ["config", cell(data.config, "config")],
+    ["posture", cell(data.posture, "posture")],
+    ["ok", cell(nodes?.ok, "ok")],
+    ["carried", cell(nodes?.carried, "carried")],
+    ["failed", cell(nodes?.failed, "failed")],
+    ["calls", cell(data.calls, "calls")],
     ["persisted", persisted(data.inputs_calls)],
-    ["tokens in", cell(data.tokens_in)],
-    ["tokens out", cell(data.tokens_out)],
-    ["cost", cell(data.cost_usd)],
+    ["tokens in", cell(data.tokens_in, "tokens_in")],
+    ["tokens out", cell(data.tokens_out, "tokens_out")],
+    ["cost", cell(data.cost_usd, "cost_usd")],
   ]);
   return head ? { blocks: [head] } : sentence(EMPTY_READ);
 }
@@ -123,7 +117,7 @@ function artifactRows(value: unknown): string[][] {
     const row = rec(item);
     const node = named(row?.node);
     if (!row || !node) continue;
-    rows.push([cell(row.stage), node, cell(row.document), cell(row.date)]);
+    rows.push([cell(row.stage, "stage"), node, cell(row.document, "document"), cell(row.date, "date")]);
   }
   return rows;
 }
@@ -149,7 +143,7 @@ function nodeRows(value: unknown): string[][] {
     const row = rec(item);
     const node = named(row?.label) ?? named(row?.id);
     if (!row || !node) continue;
-    rows.push([node, cell(row.stage), cell(row.state), targets(row.to)]);
+    rows.push([node, cell(row.stage, "stage"), cell(row.state, "state"), targets(row.to)]);
   }
   return rows;
 }
@@ -159,8 +153,8 @@ function paintGraph(data: Record<string, unknown>): PaneBody {
   if (!list) return sentence(NO_NODES);
   const blocks: PaneBlock[] = [];
   const head = stat([
-    ["run", cell(data.run_date)],
-    ["selected", cell(data.selected_node)],
+    ["run", cell(data.run_date, "run_date")],
+    ["selected", cell(data.selected_node, "selected_node")],
   ]);
   if (head) blocks.push(head);
   blocks.push(list);
@@ -174,7 +168,7 @@ function traceRows(value: unknown): string[][] {
     const row = rec(item);
     const node = named(row?.node);
     if (!row || !node) continue;
-    rows.push([node, cell(row.calls), cell(row.duration_s), cell(row.state)]);
+    rows.push([node, cell(row.calls, "calls"), cell(row.duration_s, "duration_s"), cell(row.state, "state")]);
   }
   return rows;
 }

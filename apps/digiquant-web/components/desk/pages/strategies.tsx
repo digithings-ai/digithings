@@ -14,6 +14,7 @@ import { strategySheetBody } from "../../../../../clients/digiquant-tui/src/page
 import { shapeLines, strategyBlocks, type PaneBody } from "../../../../../clients/digiquant-tui/src/pages/shape";
 import { readOfficial, type OfficialRead } from "../read-block";
 import { DeskPane, PANE_GRID, usePaneFocus } from "./pane";
+import { cell } from "../../../../../clients/digiquant-tui/src/format";
 
 const STRATEGY_PATHS = new Set(["/strategies", "/strategies/detail", "/strategies/deploy"]);
 const INDEX_PATH = "/strategies";
@@ -76,17 +77,6 @@ function str(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value : null;
 }
 
-function cell(value: unknown): string {
-  if (value == null || value === "") return DASH;
-  if (typeof value === "number") return Number.isFinite(value) ? JSON.stringify(value) : DASH;
-  if (typeof value === "boolean") return value ? "true" : "false";
-  if (typeof value === "string") return value;
-  if (Array.isArray(value)) {
-    if (value.length === 0) return "no rows";
-    return value.map((item) => cell(item)).join(", ");
-  }
-  return DASH;
-}
 
 function list(data: unknown, key: string): unknown[] | null {
   const row = rec(data);
@@ -130,14 +120,14 @@ function paintKpis(data: unknown): StrategyBlockBody | null {
     type: "kpis",
     notice: noticeLine(row),
     items: [
-      { label: "Catalog", value: cell(row.catalog) },
-      { label: "Deployable", value: cell(row.deployable) },
-      { label: "My deployments", value: cell(row.deployments) },
-      { label: "Paper accounts", value: cell(row.paper_accounts) },
-      { label: "Portfolios", value: cell(row.portfolios) },
-      { label: "Brokers", value: cell(row.brokers) },
-      { label: "Plan", value: cell(row.plan) },
-      { label: "Last run", value: cell(row.last_run) },
+      { label: "Catalog", value: cell(row.catalog, "catalog") },
+      { label: "Deployable", value: cell(row.deployable, "deployable") },
+      { label: "My deployments", value: cell(row.deployments, "deployments") },
+      { label: "Paper accounts", value: cell(row.paper_accounts, "paper_accounts") },
+      { label: "Portfolios", value: cell(row.portfolios, "portfolios") },
+      { label: "Brokers", value: cell(row.brokers, "brokers") },
+      { label: "Plan", value: cell(row.plan, "plan") },
+      { label: "Last run", value: cell(row.last_run, "last_run") },
     ],
   };
 }
@@ -152,13 +142,13 @@ function paintCatalog(data: unknown): StrategyBlockBody | null {
     if (!row || typeof row.id !== "string" || row.id === "") continue;
     rows.push([
       row.id,
-      cell(row.name),
-      cell(row.family),
-      cell(row.universe),
-      cell(row.cadence),
-      cell(row.targets),
-      cell(row.status),
-      cell(row.deploy),
+      cell(row.name, "name"),
+      cell(row.family, "family"),
+      cell(row.universe, "universe"),
+      cell(row.cadence, "cadence"),
+      cell(row.targets, "targets"),
+      cell(row.status, "status"),
+      cell(row.deploy, "deploy"),
     ]);
   }
   if (rows.length === 0) return { type: "empty", title: "No strategies.", why: null };
@@ -196,28 +186,28 @@ function paintDeployments(data: unknown): StrategyBlockBody | null {
     "deployments",
     "No deployments yet.",
     ["Deployment", "Strategy", "Target", "Status", "Last run"],
-    (row) => [cell(row.id), cell(row.strategy_id), cell(row.target), cell(row.status), cell(row.last_run)],
+    (row) => [cell(row.id, "id"), cell(row.strategy_id, "strategy_id"), cell(row.target, "target"), cell(row.status, "status"), cell(row.last_run, "last_run")],
   );
 }
 
 function paintTargets(data: unknown): StrategyBlockBody | null {
   return paintObjects(data, "targets", "No targets.", ["Target", "What it is", "Status"], (row) => {
     if (typeof row.target !== "string" || !row.target) return null;
-    return [row.target, cell(row.description), cell(row.status)];
+    return [row.target, cell(row.description, "description"), cell(row.status, "status")];
   });
 }
 
 function paintRuns(data: unknown): StrategyBlockBody | null {
   return paintObjects(data, "runs", "No runs.", ["Run", "Deployment", "Status"], (row) => {
     if (typeof row.run_date !== "string" || !row.run_date) return null;
-    return [row.run_date, cell(row.deployment_id), cell(row.status)];
+    return [row.run_date, cell(row.deployment_id, "deployment_id"), cell(row.status, "status")];
   });
 }
 
 function paintParameters(data: unknown): StrategyBlockBody | null {
   return paintObjects(data, "parameters", "No parameters.", ["Name", "Value", "State"], (row) => {
     if (typeof row.name !== "string" || !row.name) return null;
-    return [row.name, cell(row.value), cell(row.state)];
+    return [row.name, cell(row.value, "value"), cell(row.state, "state")];
   });
 }
 
@@ -229,13 +219,13 @@ function paintOverview(data: unknown): StrategyBlockBody | null {
   const lead = str(row.name);
   const lede = str(row.lede);
   const rows = [
-    { label: "ID", value: cell(row.id) },
-    { label: "Family", value: cell(row.family) },
-    { label: "Universe", value: cell(row.universe) },
-    { label: "Cadence", value: cell(row.cadence) },
-    { label: "Targets", value: cell(row.targets) },
-    { label: "Related thesis", value: cell(row.related_thesis) },
-    { label: "Execution", value: cell(row.execution) },
+    { label: "ID", value: cell(row.id, "id") },
+    { label: "Family", value: cell(row.family, "family") },
+    { label: "Universe", value: cell(row.universe, "universe") },
+    { label: "Cadence", value: cell(row.cadence, "cadence") },
+    { label: "Targets", value: cell(row.targets, "targets") },
+    { label: "Related thesis", value: cell(row.related_thesis, "related_thesis") },
+    { label: "Execution", value: cell(row.execution, "execution") },
   ];
   if (!lead && !lede && rows.every((item) => item.value === DASH)) {
     return { type: "empty", title: EMPTY_READ, why: null };
@@ -251,11 +241,11 @@ function paintTrack(data: unknown): StrategyBlockBody | null {
     for (const item of row.points) {
       const point = rec(item);
       if (!point || typeof point.date !== "string" || !point.date) continue;
-      points.push({ date: point.date, value: cell(point.value) });
+      points.push({ date: point.date, value: cell(point.value, "value") });
     }
   }
   const card = rec(row.card);
-  const rows = card ? CARD.map((item) => ({ label: item.label, value: cell(card[item.key]) })) : [];
+  const rows = card ? CARD.map((item) => ({ label: item.label, value: cell(card[item.key], item.key) })) : [];
   const why = str(row.reason);
   if (!row.available || points.length === 0) {
     return { type: "track", headline: "Not available.", why, rows, points: [] };
@@ -289,11 +279,11 @@ function paintDraft(data: unknown): StrategyBlockBody | null {
   if (!keys.some((key) => key in row)) return null;
   const notice = noticeLine(row);
   const rows = [
-    { label: "Target kind", value: cell(row.target_kind) },
-    { label: "Paper capital", value: cell(row.paper_capital) },
-    { label: "Broker", value: cell(row.broker) },
-    { label: "Portfolio", value: cell(row.portfolio) },
-    { label: "Schedule", value: cell(row.schedule) },
+    { label: "Target kind", value: cell(row.target_kind, "target_kind") },
+    { label: "Paper capital", value: cell(row.paper_capital, "paper_capital") },
+    { label: "Broker", value: cell(row.broker, "broker") },
+    { label: "Portfolio", value: cell(row.portfolio, "portfolio") },
+    { label: "Schedule", value: cell(row.schedule, "schedule") },
   ];
   if (!notice && rows.every((item) => item.value === DASH)) return { type: "empty", title: EMPTY_READ, why: null };
   return { type: "fields", notice, lead: null, lede: null, rows };
@@ -368,7 +358,7 @@ export function StrategiesPages({ path }: { path: string }) {
   return <StrategiesDesk path={path} reads={reads} layout={layout} />;
 }
 
-function paintIndex(id: string, read: OfficialRead | undefined): { status: ReadResult["status"] | "loading"; blocks: PaneBody; asOf: string | null } {
+function paintIndex(id: string, read: OfficialRead | undefined): { status: ReadResult["status"] | "loading"; blocks: PaneBody; asOf: string | null; dataAsOf?: string | null } {
   if (!read) return { status: "loading", blocks: shapeLines(["loading…"]), asOf: null };
   if (read.result.status === "stub" || read.result.lines.some((line) => STUB_MARKS.some((mark) => line.includes(mark)))) {
     return { status: "stub", blocks: shapeLines([STUB_READ]), asOf: null };
@@ -376,7 +366,7 @@ function paintIndex(id: string, read: OfficialRead | undefined): { status: ReadR
   if (id !== "st-deployments" && read.result.lines.length === 0 && read.result.status !== "ok") {
     return { status: read.result.status, blocks: shapeLines([EMPTY_READ]), asOf: null };
   }
-  return { status: read.result.status, blocks: strategiesBody(id, read.data, read.result), asOf: read.result.asOf };
+  return { status: read.result.status, blocks: strategiesBody(id, read.data, read.result), asOf: read.result.asOf, dataAsOf: read.result.dataAsOf ?? null };
 }
 
 /** Desk strategies index. Same blocks as the terminal. Detail and deploy stay on their own pages. */
@@ -399,6 +389,7 @@ function StrategiesIndex({ reads, layout }: { reads: Record<string, OfficialRead
               title={def.title}
               route={def.route}
               asOf={view.asOf}
+              dataAsOf={view.dataAsOf}
               blocks={view.blocks}
               tone={tone[view.status]}
               focused={panes.focus === placement.id}
@@ -412,14 +403,14 @@ function StrategiesIndex({ reads, layout }: { reads: Record<string, OfficialRead
   );
 }
 
-function paintDetail(id: string, read: OfficialRead): { status: ReadResult["status"]; blocks: PaneBody; asOf: string | null } {
+function paintDetail(id: string, read: OfficialRead): { status: ReadResult["status"]; blocks: PaneBody; asOf: string | null; dataAsOf?: string | null } {
   if (read.result.status === "stub" || read.result.lines.some((line) => STUB_MARKS.some((mark) => line.includes(mark)))) {
     return { status: "stub", blocks: shapeLines([STUB_READ]), asOf: null };
   }
   if (read.result.lines.length === 0 && read.result.status !== "ok") {
     return { status: read.result.status, blocks: shapeLines([EMPTY_READ]), asOf: null };
   }
-  return { status: read.result.status, blocks: strategiesBody(id, read.data, read.result), asOf: read.result.asOf };
+  return { status: read.result.status, blocks: strategiesBody(id, read.data, read.result), asOf: read.result.asOf, dataAsOf: read.result.dataAsOf ?? null };
 }
 
 function StrategiesDesk({
@@ -450,6 +441,7 @@ function StrategiesDesk({
             : (read?.result.lines.filter((line) => line.startsWith("source  ") || line.startsWith("marks  ")) ?? []);
         const blocks = formatted?.blocks ?? strategyBlocks(body, provenance);
         const asOf = formatted ? formatted.asOf : (read?.result.asOf ?? null);
+        const dataAsOf = formatted ? (formatted.dataAsOf ?? null) : (read?.result.dataAsOf ?? null);
         return (
           <div
             key={`${path}:${placement.id}`}
@@ -460,6 +452,7 @@ function StrategiesDesk({
               title={def.title}
               route={def.route}
               asOf={asOf}
+              dataAsOf={dataAsOf}
               blocks={blocks}
               tone={tone[status]}
               focused={panes.focus === placement.id}

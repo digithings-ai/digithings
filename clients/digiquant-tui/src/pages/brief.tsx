@@ -6,6 +6,7 @@ import { DANGER, INK, MUTE } from "../theme";
 import { briefBlocks } from "./brief-format";
 import { PaneFrame, useFocusedPane } from "./pane";
 import { shapeLines, type PaneBody } from "./shape";
+import { asOfStatus } from "../format";
 
 /** Brief desk. One block per official read. A down API or a stub stays a sentence. */
 const PATH = "/brief";
@@ -43,7 +44,7 @@ async function loadBrief(api: string, route: string, kind: BlockKind, signal?: A
   return { result, data };
 }
 
-function paint(id: string, read: Loaded | undefined): { status: ReadResult["status"] | "loading"; blocks: PaneBody; asOf: string | null } {
+function paint(id: string, read: Loaded | undefined): { status: ReadResult["status"] | "loading"; blocks: PaneBody; asOf: string | null; dataAsOf?: string | null } {
   if (!read) return { status: "loading", blocks: shapeLines(["loading…"]), asOf: null };
   if (read.result.status === "stub" || read.result.lines.some((line) => STUB_MARKS.some((mark) => line.includes(mark)))) {
     return { status: "stub", blocks: shapeLines([STUB_READ]), asOf: null };
@@ -51,7 +52,7 @@ function paint(id: string, read: Loaded | undefined): { status: ReadResult["stat
   if (read.result.lines.length === 0 && read.result.status !== "ok") {
     return { status: read.result.status, blocks: shapeLines([EMPTY_READ]), asOf: null };
   }
-  return { status: read.result.status, blocks: briefBlocks(id, read.data, read.result), asOf: read.result.asOf };
+  return { status: read.result.status, blocks: briefBlocks(id, read.data, read.result), asOf: read.result.asOf, dataAsOf: read.result.dataAsOf ?? null };
 }
 
 export function BriefPage() {
@@ -95,7 +96,7 @@ export function BriefPage() {
           >
             <PaneFrame
               title={def.title}
-              status={view.asOf ? `as of ${view.asOf}` : def.route}
+              status={asOfStatus(def.route, view.asOf, view.dataAsOf).label}
               focused={index === focus}
               blocks={view.blocks}
               ink={tone(view.status)}

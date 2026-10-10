@@ -12,6 +12,7 @@ import { portfolioBody } from "./portfolio-format";
 import { tearsheetBody } from "./tearsheet-format";
 import { thesesBody } from "./theses-format";
 import { shapeLines, type PaneBody } from "./shape";
+import { asOfStatus } from "../format";
 
 const API = (process.env.DQ_API_URL ?? "http://127.0.0.1:8788").replace(/\/+$/, "");
 
@@ -69,6 +70,7 @@ export function visibleRead(read: ReadResult | undefined): {
   status: ReadResult["status"] | "loading";
   lines: string[];
   asOf: string | null;
+  dataAsOf?: string | null;
 } {
   if (!read) return { status: "loading", lines: ["loading…"], asOf: null };
   if (read.status === "stub" || isStubEnvelope(read.lines)) {
@@ -78,6 +80,7 @@ export function visibleRead(read: ReadResult | undefined): {
     status: read.status,
     lines: read.lines.length > 0 ? read.lines : [EMPTY_READ],
     asOf: read.asOf,
+    dataAsOf: read.dataAsOf ?? null,
   };
 }
 
@@ -136,7 +139,7 @@ function PortfolioDesk({ path, api, reads }: { path: PortfolioPath; api: string;
           >
             <PaneFrame
               title={block.title}
-              status={view.asOf ? `as of ${view.asOf}` : block.route}
+              status={asOfStatus(block.route, view.asOf, view.dataAsOf).label}
               focused={index === focus}
               lines={view.lines}
               ink={tone(view.status)}
@@ -174,7 +177,7 @@ async function loadPortfolio(api: string, route: string, kind: BlockKind, signal
   return { result, data };
 }
 
-function paintPortfolio(id: string, read: Loaded | undefined): { status: ReadResult["status"] | "loading"; blocks: PaneBody; asOf: string | null } {
+function paintPortfolio(id: string, read: Loaded | undefined): { status: ReadResult["status"] | "loading"; blocks: PaneBody; asOf: string | null; dataAsOf?: string | null } {
   if (!read) return { status: "loading", blocks: shapeLines(["loading…"]), asOf: null };
   if (read.result.status === "stub" || read.result.lines.some((line) => STUB_MARKS.some((mark) => line.includes(mark)))) {
     return { status: "stub", blocks: shapeLines([STUB_READ]), asOf: null };
@@ -182,7 +185,7 @@ function paintPortfolio(id: string, read: Loaded | undefined): { status: ReadRes
   if (read.result.lines.length === 0 && read.result.status !== "ok") {
     return { status: read.result.status, blocks: shapeLines([EMPTY_READ]), asOf: null };
   }
-  return { status: read.result.status, blocks: portfolioBody(id, read.data, read.result), asOf: read.result.asOf };
+  return { status: read.result.status, blocks: portfolioBody(id, read.data, read.result), asOf: read.result.asOf, dataAsOf: read.result.dataAsOf ?? null };
 }
 
 /** `/portfolio` only. Later portfolio pages stay on the line read. */
@@ -228,7 +231,7 @@ function PortfolioHome({ api }: { api: string }) {
           >
             <PaneFrame
               title={def.title}
-              status={view.asOf ? `as of ${view.asOf}` : def.route}
+              status={asOfStatus(def.route, view.asOf, view.dataAsOf).label}
               focused={index === focus}
               blocks={view.blocks}
               ink={tone(view.status)}
@@ -292,7 +295,7 @@ function HoldingsHome({ api }: { api: string }) {
           >
             <PaneFrame
               title={def.title}
-              status={view.asOf ? `as of ${view.asOf}` : def.route}
+              status={asOfStatus(def.route, view.asOf, view.dataAsOf).label}
               focused={index === focus}
               blocks={view.blocks}
               ink={tone(view.status)}
@@ -304,7 +307,7 @@ function HoldingsHome({ api }: { api: string }) {
   );
 }
 
-function paintHoldings(id: string, read: Loaded | undefined): { status: ReadResult["status"] | "loading"; blocks: PaneBody; asOf: string | null } {
+function paintHoldings(id: string, read: Loaded | undefined): { status: ReadResult["status"] | "loading"; blocks: PaneBody; asOf: string | null; dataAsOf?: string | null } {
   if (!read) return { status: "loading", blocks: shapeLines(["loading…"]), asOf: null };
   if (read.result.status === "stub" || read.result.lines.some((line) => STUB_MARKS.some((mark) => line.includes(mark)))) {
     return { status: "stub", blocks: shapeLines([STUB_READ]), asOf: null };
@@ -312,7 +315,7 @@ function paintHoldings(id: string, read: Loaded | undefined): { status: ReadResu
   if (read.result.lines.length === 0 && read.result.status !== "ok") {
     return { status: read.result.status, blocks: shapeLines([EMPTY_READ]), asOf: null };
   }
-  return { status: read.result.status, blocks: holdingsBody(id, read.data, read.result), asOf: read.result.asOf };
+  return { status: read.result.status, blocks: holdingsBody(id, read.data, read.result), asOf: read.result.asOf, dataAsOf: read.result.dataAsOf ?? null };
 }
 
 export function HoldingsPage(props: DeskProps) {
@@ -363,7 +366,7 @@ function AttributionHome({ api }: { api: string }) {
           >
             <PaneFrame
               title={def.title}
-              status={view.asOf ? `as of ${view.asOf}` : def.route}
+              status={asOfStatus(def.route, view.asOf, view.dataAsOf).label}
               focused={index === focus}
               blocks={view.blocks}
               ink={tone(view.status)}
@@ -375,7 +378,7 @@ function AttributionHome({ api }: { api: string }) {
   );
 }
 
-function paintAttribution(id: string, read: Loaded | undefined): { status: ReadResult["status"] | "loading"; blocks: PaneBody; asOf: string | null } {
+function paintAttribution(id: string, read: Loaded | undefined): { status: ReadResult["status"] | "loading"; blocks: PaneBody; asOf: string | null; dataAsOf?: string | null } {
   if (!read) return { status: "loading", blocks: shapeLines(["loading…"]), asOf: null };
   if (read.result.status === "stub" || read.result.lines.some((line) => STUB_MARKS.some((mark) => line.includes(mark)))) {
     return { status: "stub", blocks: shapeLines([STUB_READ]), asOf: null };
@@ -383,7 +386,7 @@ function paintAttribution(id: string, read: Loaded | undefined): { status: ReadR
   if (read.result.lines.length === 0 && read.result.status !== "ok") {
     return { status: read.result.status, blocks: shapeLines([EMPTY_READ]), asOf: null };
   }
-  return { status: read.result.status, blocks: attributionBody(id, read.data, read.result), asOf: read.result.asOf };
+  return { status: read.result.status, blocks: attributionBody(id, read.data, read.result), asOf: read.result.asOf, dataAsOf: read.result.dataAsOf ?? null };
 }
 
 export function AttributionPage(props: DeskProps) {
@@ -434,7 +437,7 @@ function LedgerHome({ api }: { api: string }) {
           >
             <PaneFrame
               title={def.title}
-              status={view.asOf ? `as of ${view.asOf}` : def.route}
+              status={asOfStatus(def.route, view.asOf, view.dataAsOf).label}
               focused={index === focus}
               blocks={view.blocks}
               ink={tone(view.status)}
@@ -446,7 +449,7 @@ function LedgerHome({ api }: { api: string }) {
   );
 }
 
-function paintLedger(id: string, read: Loaded | undefined): { status: ReadResult["status"] | "loading"; blocks: PaneBody; asOf: string | null } {
+function paintLedger(id: string, read: Loaded | undefined): { status: ReadResult["status"] | "loading"; blocks: PaneBody; asOf: string | null; dataAsOf?: string | null } {
   if (!read) return { status: "loading", blocks: shapeLines(["loading…"]), asOf: null };
   if (read.result.status === "stub" || read.result.lines.some((line) => STUB_MARKS.some((mark) => line.includes(mark)))) {
     return { status: "stub", blocks: shapeLines([STUB_READ]), asOf: null };
@@ -454,7 +457,7 @@ function paintLedger(id: string, read: Loaded | undefined): { status: ReadResult
   if (read.result.lines.length === 0 && read.result.status !== "ok") {
     return { status: read.result.status, blocks: shapeLines([EMPTY_READ]), asOf: null };
   }
-  return { status: read.result.status, blocks: ledgerBody(id, read.data, read.result), asOf: read.result.asOf };
+  return { status: read.result.status, blocks: ledgerBody(id, read.data, read.result), asOf: read.result.asOf, dataAsOf: read.result.dataAsOf ?? null };
 }
 
 export function LedgerPage(props: DeskProps) {
@@ -505,7 +508,7 @@ function TearsheetHome({ api }: { api: string }) {
           >
             <PaneFrame
               title={def.title}
-              status={view.asOf ? `as of ${view.asOf}` : def.route}
+              status={asOfStatus(def.route, view.asOf, view.dataAsOf).label}
               focused={index === focus}
               blocks={view.blocks}
               ink={tone(view.status)}
@@ -517,7 +520,7 @@ function TearsheetHome({ api }: { api: string }) {
   );
 }
 
-function paintTearsheet(id: string, read: Loaded | undefined): { status: ReadResult["status"] | "loading"; blocks: PaneBody; asOf: string | null } {
+function paintTearsheet(id: string, read: Loaded | undefined): { status: ReadResult["status"] | "loading"; blocks: PaneBody; asOf: string | null; dataAsOf?: string | null } {
   if (!read) return { status: "loading", blocks: shapeLines(["loading…"]), asOf: null };
   if (read.result.status === "stub") {
     return { status: "stub", blocks: shapeLines([STUB_READ]), asOf: null };
@@ -525,7 +528,7 @@ function paintTearsheet(id: string, read: Loaded | undefined): { status: ReadRes
   if (read.result.lines.length === 0 && read.result.status !== "ok") {
     return { status: read.result.status, blocks: shapeLines([EMPTY_READ]), asOf: null };
   }
-  return { status: read.result.status, blocks: tearsheetBody(id, read.data, read.result), asOf: read.result.asOf };
+  return { status: read.result.status, blocks: tearsheetBody(id, read.data, read.result), asOf: read.result.asOf, dataAsOf: read.result.dataAsOf ?? null };
 }
 
 /** `/portfolio/theses` only. Later portfolio pages stay on the line read. */
@@ -572,7 +575,7 @@ function ThesesHome({ api }: { api: string }) {
           >
             <PaneFrame
               title={def.title}
-              status={view.asOf ? `as of ${view.asOf}` : def.route}
+              status={asOfStatus(def.route, view.asOf, view.dataAsOf).label}
               focused={index === focus}
               blocks={view.blocks}
               ink={tone(view.status)}
@@ -584,7 +587,7 @@ function ThesesHome({ api }: { api: string }) {
   );
 }
 
-function paintTheses(id: string, read: Loaded | undefined): { status: ReadResult["status"] | "loading"; blocks: PaneBody; asOf: string | null } {
+function paintTheses(id: string, read: Loaded | undefined): { status: ReadResult["status"] | "loading"; blocks: PaneBody; asOf: string | null; dataAsOf?: string | null } {
   if (!read) return { status: "loading", blocks: shapeLines(["loading…"]), asOf: null };
   if (read.result.status === "stub" || read.result.lines.some((line) => STUB_MARKS.some((mark) => line.includes(mark)))) {
     return { status: "stub", blocks: shapeLines([STUB_READ]), asOf: null };
@@ -592,7 +595,7 @@ function paintTheses(id: string, read: Loaded | undefined): { status: ReadResult
   if (read.result.lines.length === 0 && read.result.status !== "ok") {
     return { status: read.result.status, blocks: shapeLines([EMPTY_READ]), asOf: null };
   }
-  return { status: read.result.status, blocks: thesesBody(id, read.data, read.result), asOf: read.result.asOf };
+  return { status: read.result.status, blocks: thesesBody(id, read.data, read.result), asOf: read.result.asOf, dataAsOf: read.result.dataAsOf ?? null };
 }
 
 export function ThesesPage(props: DeskProps) {

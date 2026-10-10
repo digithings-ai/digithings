@@ -6,6 +6,7 @@ import { DANGER, INK, MUTE } from "../theme";
 import { pipelineBody } from "./pipeline-format";
 import { PaneFrame, useFocusedPane } from "./pane";
 import { shapeLines, type PaneBody } from "./shape";
+import { asOfStatus } from "../format";
 
 /** Pipeline desk. One block per official read. A down API or a stub stays a sentence. */
 const PATH = "/pipeline";
@@ -43,7 +44,7 @@ async function loadPipeline(api: string, route: string, kind: BlockKind, signal?
   return { result, data };
 }
 
-function paint(id: string, read: Loaded | undefined): { status: ReadResult["status"] | "loading"; blocks: PaneBody; asOf: string | null } {
+function paint(id: string, read: Loaded | undefined): { status: ReadResult["status"] | "loading"; blocks: PaneBody; asOf: string | null; dataAsOf?: string | null } {
   if (!read) return { status: "loading", blocks: shapeLines(["loading…"]), asOf: null };
   if (read.result.status === "stub" || read.result.lines.some((line) => STUB_MARKS.some((mark) => line.includes(mark)))) {
     return { status: "stub", blocks: shapeLines([STUB_READ]), asOf: null };
@@ -51,7 +52,7 @@ function paint(id: string, read: Loaded | undefined): { status: ReadResult["stat
   if (read.result.lines.length === 0 && read.result.status !== "ok") {
     return { status: read.result.status, blocks: shapeLines([EMPTY_READ]), asOf: null };
   }
-  return { status: read.result.status, blocks: pipelineBody(id, read.data, read.result), asOf: read.result.asOf };
+  return { status: read.result.status, blocks: pipelineBody(id, read.data, read.result), asOf: read.result.asOf, dataAsOf: read.result.dataAsOf ?? null };
 }
 
 /** Terminal pipeline. Run health, narrative, artifacts, nodes, the node document, and the call trace. */
@@ -96,7 +97,7 @@ export function PipelinePage({ api = DEFAULT_API }: { api?: string }) {
           >
             <PaneFrame
               title={def.title}
-              status={view.asOf ? `as of ${view.asOf}` : def.route}
+              status={asOfStatus(def.route, view.asOf, view.dataAsOf).label}
               focused={index === focus}
               blocks={view.blocks}
               ink={tone(view.status)}

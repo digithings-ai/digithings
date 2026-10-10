@@ -202,7 +202,7 @@ test("the call trace is a table of returned rows, or the empty sentence", () => 
       kind: "table",
       columns: ["node", "calls", "duration", "state"],
       rows: [
-        ["research", "2", "1.5", "ok"],
+        ["research", "2", "1.50", "ok"],
         ["publish", "—", "—", "—"],
       ],
     },

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@digithings/ui/ui";
+import { asOfStatus, toneOf } from "../../../../../clients/digiquant-tui/src/format";
 import { shapeLines, type PaneBody, type PaneBlock } from "../../../../../clients/digiquant-tui/src/pages/shape";
 
 export const PANE_HINT = "[tab] next";
@@ -29,12 +30,44 @@ export function usePaneFocus(ids: string[]): { focus: string; focusAt: (id: stri
   };
 }
 
+/** A signed figure is green or red, read off its sign. Zero and unsigned figures keep the pane ink. */
+function toneClass(text: string): string {
+  const tone = toneOf(text);
+  return tone === "up" ? "text-up" : tone === "down" ? "text-down" : "";
+}
+
+/** `label  value   label  value`. Labels stay muted; values take their tone. */
+function StatView({ text }: { text: string }) {
+  return (
+    <p className="m-0 text-ink-mute">
+      {text.split("   ").map((pair, index) => {
+        const cut = pair.indexOf("  ");
+        const label = cut < 0 ? pair : pair.slice(0, cut + 2);
+        const value = cut < 0 ? "" : pair.slice(cut + 2);
+        return (
+          <span key={index}>
+            {index > 0 ? "   " : ""}
+            {label}
+            {value ? <span className={toneClass(value)}>{value}</span> : null}
+          </span>
+        );
+      })}
+    </p>
+  );
+}
+
+const AGE_BADGE: Record<"fresh" | "warn" | "stale", string> = {
+  fresh: "border-hair text-ink-mute",
+  warn: "border-warn text-warn",
+  stale: "border-down text-down",
+};
+
 function BlockView({ block }: { block: PaneBlock }) {
   switch (block.kind) {
     case "sentence":
       return <p className="m-0 whitespace-pre-wrap">{block.text}</p>;
     case "stat":
-      return <p className="m-0 text-ink-mute">{block.text}</p>;
+      return <StatView text={block.text} />;
     case "chart":
       return <p className="m-0 whitespace-pre">{block.text}</p>;
     case "table":
@@ -55,7 +88,7 @@ function BlockView({ block }: { block: PaneBlock }) {
             {block.rows.map((row, index) => (
               <tr key={index} className="border-b border-hair last:border-b-0">
                 {row.map((cell, cellIndex) => (
-                  <td key={cellIndex} className="px-2 py-1 align-top">
+                  <td key={cellIndex} className={`px-2 py-1 align-top ${toneClass(cell)}`}>
                     {cell}
                   </td>
                 ))}
@@ -76,6 +109,7 @@ export function DeskPane({
   title,
   route,
   asOf,
+  dataAsOf,
   lines,
   blocks,
   tone,
@@ -86,6 +120,8 @@ export function DeskPane({
   title: string;
   route: string;
   asOf: string | null;
+  /** The date the payload holds. Shown beside `asOf` when they differ, and aged. */
+  dataAsOf?: string | null;
   lines?: string[];
   blocks?: PaneBody;
   tone: string;
@@ -94,7 +130,8 @@ export function DeskPane({
   onNext: () => void;
 }) {
   const body = blocks ?? shapeLines(lines ?? []);
-  const status = asOf ? `as of ${asOf}` : route;
+  const status = asOfStatus(route, asOf, dataAsOf);
+  const dates = status.age ? status.label.slice(0, status.label.indexOf(` · ${status.age}`)) : status.label;
   return (
     <section
       aria-label={title}
@@ -115,7 +152,14 @@ export function DeskPane({
       </header>
       <div className={`desk-pane-body flex min-h-0 flex-1 flex-col gap-1.5 overflow-auto px-2.5 py-1.5 ${PANE_COPY} ${tone}`}>{body.blocks.map((block, index) => <BlockView key={index} block={block} />)}</div>
       <footer className={`flex h-7 shrink-0 items-center justify-between gap-2 border-t border-hair px-2.5 text-ink-mute ${PANE_META}`}>
-        <span className="truncate tabular-nums">{status}</span>
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="truncate tabular-nums">{dates}</span>
+          {status.age && status.state ? (
+            <span data-age={status.state} className={`shrink-0 border px-1 leading-[1.2] ${AGE_BADGE[status.state]}`}>
+              {status.state === "fresh" ? status.age : `${status.age} · ${status.state}`}
+            </span>
+          ) : null}
+        </span>
         {focused ? (
           <Button type="button" variant="ghost" size="xs" className={`h-7 shrink-0 rounded-none px-0 ${PANE_META} text-ink-mute`} onClick={onNext}>
             {PANE_HINT}

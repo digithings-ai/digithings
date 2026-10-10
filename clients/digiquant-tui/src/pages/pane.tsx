@@ -1,6 +1,7 @@
 import { useKeyboard } from "@opentui/react";
 import { useState } from "react";
-import { ACCENT, BG, HAIR, MUTE } from "../theme";
+import { toneOf } from "../format";
+import { ACCENT, BG, DOWN, HAIR, MUTE, UP } from "../theme";
 import { shapeLines, type PaneBody } from "./shape";
 
 export const PANE_HINT = "[tab] next";
@@ -21,6 +22,47 @@ export function useFocusedPane(count: number, resetKey = ""): [number, (index: n
   return [shown, (index: number) => setState({ resetKey, focus: index })];
 }
 
+/** A signed figure is green or red; everything else keeps the pane ink. */
+function toneInk(text: string, ink: string): string {
+  const tone = toneOf(text);
+  return tone === "up" ? UP : tone === "down" ? DOWN : ink;
+}
+
+/** One row of cells, `sep` between them, each cell in its own tone. */
+function Toned({ cells, sep, ink }: { cells: string[]; sep: string; ink: string }) {
+  return (
+    <text fg={ink}>
+      {cells.map((cell, index) => (
+        <span key={index} fg={toneInk(cell, ink)}>
+          {index > 0 ? sep : ""}
+          {cell}
+        </span>
+      ))}
+    </text>
+  );
+}
+
+/** A stat line is `label  value   label  value`. Labels stay muted; values take their tone. */
+function StatLine({ text }: { text: string }) {
+  const pairs = text.split("   ");
+  return (
+    <text fg={MUTE}>
+      {pairs.map((pair, index) => {
+        const cut = pair.indexOf("  ");
+        const label = cut < 0 ? pair : pair.slice(0, cut + 2);
+        const value = cut < 0 ? "" : pair.slice(cut + 2);
+        return (
+          <span key={index} fg={MUTE}>
+            {index > 0 ? "   " : ""}
+            {label}
+            <span fg={toneInk(value, MUTE)}>{value}</span>
+          </span>
+        );
+      })}
+    </text>
+  );
+}
+
 function Blocks({ body, ink }: { body: PaneBody; ink: string }) {
   return (
     <box flexGrow={1} flexDirection="column" overflow="hidden">
@@ -33,11 +75,7 @@ function Blocks({ body, ink }: { body: PaneBody; ink: string }) {
               </text>
             );
           case "stat":
-            return (
-              <text key={index} fg={MUTE}>
-                {block.text}
-              </text>
-            );
+            return <StatLine key={index} text={block.text} />;
           case "chart":
             return (
               <text key={index} fg={ink}>
@@ -49,9 +87,7 @@ function Blocks({ body, ink }: { body: PaneBody; ink: string }) {
               <box key={index} flexDirection="column">
                 {block.columns.length ? <text fg={MUTE}>{block.columns.join("  ")}</text> : null}
                 {block.rows.map((row, rowIndex) => (
-                  <text key={rowIndex} fg={ink}>
-                    {row.join("  ")}
-                  </text>
+                  <Toned key={rowIndex} cells={row} sep="  " ink={ink} />
                 ))}
               </box>
             );

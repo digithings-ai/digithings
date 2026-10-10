@@ -1,5 +1,6 @@
 import { DASH, EMPTY_READ, type ReadResult } from "../read";
 import { shapeLines, type PaneBlock, type PaneBody } from "./shape";
+import { cell } from "../format";
 
 /** Portfolio panes. A chart is one row of the numbers the payload already has. */
 const PORTFOLIO_IDS = ["portfolio", "sleeves", "movers", "book", "nav", "drawdown"] as const;
@@ -19,13 +20,6 @@ function rec(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-function cell(value: unknown): string {
-  if (value == null || value === "") return DASH;
-  if (typeof value === "number") return Number.isFinite(value) ? JSON.stringify(value) : DASH;
-  if (typeof value === "boolean") return value ? "true" : "false";
-  if (typeof value === "string") return value;
-  return DASH;
-}
 
 function stat(pairs: [string, string][]): PaneBlock | null {
   const shown = pairs.filter(([, value]) => value !== DASH);
@@ -95,11 +89,11 @@ function paintPortfolio(data: Record<string, unknown>): PaneBody {
   const tip = rec(data.nav_tip);
   const invested = rec(data.invested);
   const head = stat([
-    ["NAV", cell(tip?.nav)],
-    ["date", cell(tip?.date)],
-    ["contract", cell(tip?.contract)],
-    ["invested", cell(invested?.envelope_pct)],
-    ["cash", cell(invested?.cash_pct)],
+    ["NAV", cell(tip?.nav, "nav")],
+    ["date", cell(tip?.date, "date")],
+    ["contract", cell(tip?.contract, "contract")],
+    ["invested", cell(invested?.envelope_pct, "envelope_pct")],
+    ["cash", cell(invested?.cash_pct, "cash_pct")],
   ]);
   return head ? { blocks: [head] } : sentence(EMPTY_READ);
 }
@@ -110,7 +104,7 @@ function paintSleeves(data: Record<string, unknown>): PaneBody {
   for (const item of data.sleeves) {
     const row = rec(item);
     if (!row || typeof row.sleeve !== "string" || row.sleeve.length === 0) continue;
-    rows.push([row.sleeve, cell(row.names), cell(row.weight_pct)]);
+    rows.push([row.sleeve, cell(row.names, "names"), cell(row.weight_pct, "weight_pct")]);
   }
   const list = table(["sleeve", "names", "weight"], rows);
   return list ? { blocks: [list] } : sentence(EMPTY_READ);
@@ -124,11 +118,11 @@ function paintMovers(data: Record<string, unknown>): PaneBody {
     if (!row || typeof row.ticker !== "string" || row.ticker.length === 0) continue;
     rows.push([
       row.ticker,
-      cell(row.sleeve),
-      cell(row.scaled_weight_pct),
-      cell(row.current_price),
-      cell(row.day_return_pct),
-      cell(row.unrealized_pct),
+      cell(row.sleeve, "sleeve"),
+      cell(row.scaled_weight_pct, "scaled_weight_pct"),
+      cell(row.current_price, "current_price"),
+      cell(row.day_return_pct, "day_return_pct"),
+      cell(row.unrealized_pct, "unrealized_pct"),
     ]);
   }
   const list = table(["ticker", "sleeve", "weight", "price", "day", "unrealized"], rows);
@@ -143,11 +137,11 @@ function paintBook(data: Record<string, unknown>): PaneBody {
     if (!row || typeof row.ticker !== "string" || row.ticker.length === 0) continue;
     rows.push([
       row.ticker,
-      cell(row.weight_pct),
-      cell(row.scaled_weight_pct),
-      cell(row.entry_price),
-      cell(row.current_price),
-      cell(row.unrealized_pct),
+      cell(row.weight_pct, "weight_pct"),
+      cell(row.scaled_weight_pct, "scaled_weight_pct"),
+      cell(row.entry_price, "entry_price"),
+      cell(row.current_price, "current_price"),
+      cell(row.unrealized_pct, "unrealized_pct"),
     ]);
   }
   const list = table(["ticker", "weight", "scaled", "entry", "price", "unrealized"], rows);
@@ -159,7 +153,7 @@ function pointRows(points: unknown[]): string[][] {
   for (const item of points) {
     const row = rec(item);
     if (!row) continue;
-    rows.push([cell(row.date), cell(row.nav), cell(row.day_return_pct), cell(row.contract), cell(row.index)]);
+    rows.push([cell(row.date, "date"), cell(row.nav, "nav"), cell(row.day_return_pct, "day_return_pct"), cell(row.contract, "contract"), cell(row.index, "index")]);
   }
   return rows;
 }
@@ -179,8 +173,8 @@ function paintNav(data: Record<string, unknown>): PaneBody {
 function paintDrawdown(data: Record<string, unknown>): PaneBody {
   const blocks: PaneBlock[] = [];
   const head = stat([
-    ["max", cell(data.max_pct)],
-    ["current", cell(data.current_pct)],
+    ["max", cell(data.max_pct, "max_pct")],
+    ["current", cell(data.current_pct, "current_pct")],
   ]);
   if (head) blocks.push(head);
   const series = Array.isArray(data.series) ? data.series : [];

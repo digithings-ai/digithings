@@ -2,6 +2,7 @@ import { BLOCKS, PAGES, layoutFor } from "../../../../clients/digiquant-tui/src/
 import type { ReadResult } from "../../../../clients/digiquant-tui/src/read";
 import { DeskFrame } from "./desk-frame";
 import { PANE_GRID } from "./pages/pane";
+import { asOfStatus } from "../../../../clients/digiquant-tui/src/format";
 
 const tone: Record<ReadResult["status"] | "loading", string> = {
   ok: "text-ink",
@@ -38,7 +39,7 @@ export function DeskReadout({ path, reads }: { path: string; reads: Record<strin
               {lines.slice(0, 14).join("\n")}
             </p>
             <p className="m-0 flex h-7 shrink-0 items-center truncate border-t border-hair px-2.5 font-mono text-[0.6875rem] tracking-[0.04em] text-ink-mute tabular-nums">
-              {read?.asOf ? `as of ${read.asOf}` : def.route}
+              {asOfStatus(def.route, read?.asOf, read?.dataAsOf).label}
             </p>
           </section>
         );

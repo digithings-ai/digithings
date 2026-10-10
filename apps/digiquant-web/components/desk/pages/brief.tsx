@@ -21,7 +21,7 @@ const tone: Record<ReadResult["status"] | "loading", string> = {
   error: "text-ink-soft",
 };
 
-function paint(id: string, read: OfficialRead | undefined): { status: ReadResult["status"] | "loading"; blocks: PaneBody; asOf: string | null } {
+function paint(id: string, read: OfficialRead | undefined): { status: ReadResult["status"] | "loading"; blocks: PaneBody; asOf: string | null; dataAsOf?: string | null } {
   if (!read) return { status: "loading", blocks: shapeLines(["loading…"]), asOf: null };
   if (read.result.status === "stub" || read.result.lines.some((line) => STUB_MARKS.some((mark) => line.includes(mark)))) {
     return { status: "stub", blocks: shapeLines([STUB_READ]), asOf: null };
@@ -29,7 +29,7 @@ function paint(id: string, read: OfficialRead | undefined): { status: ReadResult
   if (read.result.lines.length === 0 && read.result.status !== "ok") {
     return { status: read.result.status, blocks: shapeLines([EMPTY_READ]), asOf: null };
   }
-  return { status: read.result.status, blocks: briefBlocks(id, read.data, read.result), asOf: read.result.asOf };
+  return { status: read.result.status, blocks: briefBlocks(id, read.data, read.result), asOf: read.result.asOf, dataAsOf: read.result.dataAsOf ?? null };
 }
 
 export function BriefPage() {
@@ -71,6 +71,7 @@ export function BriefPage() {
               title={def.title}
               route={def.route}
               asOf={view.asOf}
+              dataAsOf={view.dataAsOf}
               blocks={view.blocks}
               tone={tone[view.status]}
               focused={panes.focus === placement.id}

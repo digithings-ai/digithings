@@ -24,6 +24,7 @@ import { StrategiesPages } from "./pages/strategies";
 import { deskForPath, railLine, stepRailCols, RAIL_COLS_DEFAULT } from "./rail";
 import { readBlock, type ReadResult } from "./read";
 import { ACCENT, BG, DANGER, DOWN, HAIR, HAIR_STRONG, INK, MUTE, SOFT, UP, WASH } from "./theme";
+import { asOfStatus } from "./format";
 
 const API = (process.env.DQ_API_URL ?? "http://127.0.0.1:8788").replace(/\/+$/, "");
 const STATUS = process.env.DQ_TUI_STATUS;
@@ -598,7 +599,7 @@ export function App() {
                     borderColor={border}
                     title={def.title}
                     titleColor={on ? ACCENT : MUTE}
-                    bottomTitle={read?.asOf ? `as of ${read.asOf}` : def.route}
+                    bottomTitle={asOfStatus(def.route, read?.asOf, read?.dataAsOf).label}
                     overflow="hidden"
                     zIndex={on ? 1 : 0}
                     paddingLeft={1}

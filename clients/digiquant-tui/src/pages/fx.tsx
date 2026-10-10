@@ -4,6 +4,7 @@ import { COLS, ROWS } from "../grid";
 import { DASH, EMPTY_READ, presentResponse, type ReadResult } from "../read";
 import { DANGER, INK, MUTE, WARN } from "../theme";
 import { PaneFrame, useFocusedPane } from "./pane";
+import { cell } from "../format";
 import { shapeLines } from "./shape";
 import { calendarDay, todayYmd, tradingSessionsSince } from "./trading-calendar";
 

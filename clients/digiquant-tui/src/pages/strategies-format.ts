@@ -1,5 +1,6 @@
 import { DASH, EMPTY_READ, type ReadResult } from "../read";
 import { shapeLines, type PaneBlock, type PaneBody } from "./shape";
+import { cell } from "../format";
 
 /**
  * Strategies desk panes.
@@ -96,13 +97,6 @@ function rec(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-function cell(value: unknown): string {
-  if (value == null || value === "") return DASH;
-  if (typeof value === "number") return Number.isFinite(value) ? JSON.stringify(value) : DASH;
-  if (typeof value === "boolean") return value ? "true" : "false";
-  if (typeof value === "string") return value;
-  return DASH;
-}
 
 function stat(pairs: [string, string][]): PaneBlock | null {
   const shown = pairs.filter(([, value]) => value !== DASH);
@@ -158,7 +152,7 @@ function paintSummary(data: Record<string, unknown>): PaneBody {
   const pairs: [string, string][] = [];
   for (const field of SUMMARY_FIELDS) {
     if (!(field.key in data)) continue;
-    const value = cell(data[field.key]);
+    const value = cell(data[field.key], field.key);
     if (value === DASH) continue;
     pairs.push([field.label, value]);
   }
@@ -179,13 +173,13 @@ function catalogRows(value: unknown): string[][] {
     if (!row || !id) continue;
     rows.push([
       id,
-      cell(row.name),
-      cell(row.family),
-      cell(row.universe),
-      cell(row.cadence),
+      cell(row.name, "name"),
+      cell(row.family, "family"),
+      cell(row.universe, "universe"),
+      cell(row.cadence, "cadence"),
       targets(row.targets),
-      cell(row.status),
-      cell(row.deploy),
+      cell(row.status, "status"),
+      cell(row.deploy, "deploy"),
     ]);
   }
   return rows;
@@ -203,7 +197,7 @@ function deploymentRows(value: unknown): string[][] {
     const row = rec(item);
     const id = named(row?.id);
     if (!row || !id) continue;
-    rows.push([id, cell(row.strategy_id), cell(row.target), cell(row.status), cell(row.last_run)]);
+    rows.push([id, cell(row.strategy_id, "strategy_id"), cell(row.target, "target"), cell(row.status, "status"), cell(row.last_run, "last_run")]);
   }
   return rows;
 }
@@ -267,7 +261,7 @@ function presentPairs(
 }
 
 function overviewValue(key: string, value: unknown): string {
-  return key === "targets" ? targets(value) : cell(value);
+  return key === "targets" ? targets(value) : cell(value, key);
 }
 
 function paintOverview(data: Record<string, unknown>): PaneBody | null {
@@ -304,14 +298,14 @@ function paintParameters(data: Record<string, unknown>): PaneBody | null {
   const rows = objectRows(data.parameters, (row) => {
     const name = named(row.name);
     if (!name) return null;
-    return [name, cell(row.value), cell(row.state)];
+    return [name, cell(row.value, "value"), cell(row.state, "state")];
   });
   const list = table(["name", "value", "state"], rows);
   return list ? { blocks: [list] } : sentence(storeSentence(NO_PARAMETERS, data));
 }
 
 function pointRows(points: unknown[]): string[][] {
-  return objectRows(points, (row) => [cell(row.date), cell(row.value)]);
+  return objectRows(points, (row) => [cell(row.date, "date"), cell(row.value, "value")]);
 }
 
 /** Numeric `value` fields, or a bare number. A null value is not replaced. */
@@ -334,7 +328,7 @@ function paintTrack(data: Record<string, unknown>): PaneBody | null {
   const blocks: PaneBlock[] = [];
   const card = rec(data.card);
   if (card) {
-    const head = stat(presentPairs(CARD_FIELDS, card, (key, value) => (key.length > 0 ? cell(value) : DASH)));
+    const head = stat(presentPairs(CARD_FIELDS, card, (key, value) => (key.length > 0 ? cell(value, key) : DASH)));
     if (head) blocks.push(head);
   }
   const points = Array.isArray(data.points) ? data.points : [];
@@ -354,7 +348,7 @@ function paintRuns(data: Record<string, unknown>): PaneBody | null {
   const rows = objectRows(data.runs, (row) => {
     const run = named(row.run_date);
     if (!run) return null;
-    return [run, cell(row.deployment_id), cell(row.status)];
+    return [run, cell(row.deployment_id, "deployment_id"), cell(row.status, "status")];
   });
   const list = table(["run", "deployment", "status"], rows);
   return list ? { blocks: [list] } : sentence(storeSentence(NO_RUNS, data));
@@ -382,7 +376,7 @@ function paintTargets(data: Record<string, unknown>): PaneBody | null {
   const rows = objectRows(data.targets, (row) => {
     const target = named(row.target);
     if (!target) return null;
-    return [target, cell(row.description), cell(row.status)];
+    return [target, cell(row.description, "description"), cell(row.status, "status")];
   });
   const list = table(["target", "what it is", "status"], rows);
   return list ? { blocks: [list] } : sentence(storeSentence(NO_TARGETS, data));
@@ -393,7 +387,7 @@ function paintSteps(data: Record<string, unknown>): PaneBody | null {
   const rows = objectRows(data.steps, (row) => {
     const label = named(row.label);
     if (!label) return null;
-    return [label, cell(row.state), cell(row.status), cell(row.detail)];
+    return [label, cell(row.state, "state"), cell(row.status, "status"), cell(row.detail, "detail")];
   });
   const list = table(["step", "state", "status", "detail"], rows);
   return list ? { blocks: [list] } : sentence(storeSentence(NO_STEPS, data));
@@ -406,7 +400,7 @@ function paintDraft(data: Record<string, unknown>): PaneBody | null {
   const blocks: PaneBlock[] = [];
   const note = noticeLine(data.notice);
   if (note) blocks.push({ kind: "sentence", text: note });
-  const pairs = presentPairs(DRAFT_FIELDS, data, (key, value) => (key.length > 0 ? cell(value) : DASH));
+  const pairs = presentPairs(DRAFT_FIELDS, data, (key, value) => (key.length > 0 ? cell(value, key) : DASH));
   if (pairs.length === 0) return blocks.length > 0 ? { blocks } : sentence(EMPTY_READ);
   if (pairs.length <= 4) {
     const head = stat(pairs);
