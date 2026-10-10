@@ -5,3 +5,6 @@
 dea336062146a8c3893645b28cde2febe581c828:apps/digiquant-app/.next/dev/prerender-manifest.json:generic-api-key:8
 dea336062146a8c3893645b28cde2febe581c828:apps/digiquant-app/.next/dev/prerender-manifest.json:generic-api-key:9
 e3dc6e7f8555229a537dc907cbb8110c252c7891:cloudflare/digithings-stack-cloudflare/src/index.ts:gloomberb-deployer-session-cookie:181
+# 28bcbc59: obvious patterned dummy keys in the DIG-2779 OCC rollout scope-guard test (scripts/test_occ_rollout_scope_guard.sh); file is not on develop, history-only.
+28bcbc590a586476ef5eb11ca37e411d7dfb0d66:scripts/test_occ_rollout_scope_guard.sh:generic-api-key:35
+28bcbc590a586476ef5eb11ca37e411d7dfb0d66:scripts/test_occ_rollout_scope_guard.sh:generic-api-key:36
