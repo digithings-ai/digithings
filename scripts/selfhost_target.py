@@ -85,7 +85,7 @@ class Endpoint:
 # Ports are the compose-published host ports on develop. Each carries the line it
 # was read from so a drift is a one-line diff a reviewer can check.
 BUILTIN: tuple[Endpoint, ...] = (
-    Endpoint("graph", "graph", "digigraph", "api", 8000, "docker-compose.yml:104"),
+    Endpoint("graph", "graph", "digigraph", "api", 8000, "docker-compose.yml:digigraph"),
     Endpoint(
         "api",
         "api",
@@ -95,20 +95,20 @@ BUILTIN: tuple[Endpoint, ...] = (
         "docker-compose.yml (no dashboard-api service)",
         requires="DT_API_URL",
     ),
-    Endpoint("key", "key", "digikey", "api", 8005, "docker-compose.yml:26"),
-    Endpoint("search", "search", "digisearch", "api", 8002, "docker-compose.yml:202"),
-    Endpoint("quant", "quant", "digiquant", "api", 8001, "docker-compose.yml:167"),
+    Endpoint("key", "key", "digikey", "api", 8005, "docker-compose.yml:digikey"),
+    Endpoint("search", "search", "digisearch", "api", 8002, "docker-compose.yml:digisearch"),
+    Endpoint("quant", "quant", "digiquant", "api", 8001, "docker-compose.yml:digiquant"),
     Endpoint(
         "chat",
         "chat",
         "digichat",
         "api",
         3005,
-        "docker-compose.yml:541 (host port is ${DIGICHAT_PUBLISH_PORT:-3005})",
+        "docker-compose.yml:digichat (host port is ${DIGICHAT_PUBLISH_PORT:-3005})",
     ),
-    Endpoint("mcp-search", "mcp", "digisearch-mcp", "mcp", 8765, "docker-compose.yml:401"),
-    Endpoint("mcp-vault", "mcp", "digivault-mcp", "mcp", 8769, "docker-compose.yml:428"),
-    Endpoint("mcp-tickets", "mcp", "zammad-mcp", "mcp", 8770, "docker-compose.yml:453"),
+    Endpoint("mcp-search", "mcp", "digisearch-mcp", "mcp", 8765, "docker-compose.yml:digisearch-mcp"),
+    Endpoint("mcp-vault", "mcp", "digivault-mcp", "mcp", 8769, "docker-compose.yml:digivault-mcp"),
+    Endpoint("mcp-tickets", "mcp", "zammad-mcp", "mcp", 8770, "docker-compose.yml:zammad-mcp"),
     Endpoint(
         "mcp-quant",
         "mcp",

@@ -51,22 +51,48 @@ def test_every_builtin_port_cites_a_file_line():
         assert ep.source, f"{ep.name} carries no source citation"
 
 
+def _compose_service_block(compose_text, service):
+    """Return the lines of one top-level service block, empty if absent."""
+    lines = compose_text.splitlines()
+    start = next(
+        (i + 1 for i, line in enumerate(lines) if re.match(rf"^  {re.escape(service)}:\s*$", line)),
+        None,
+    )
+    if start is None:
+        return []
+    out = []
+    for line in lines[start:]:
+        if re.match(r"^  [A-Za-z0-9_.-]+:\s*$", line):
+            break
+        out.append(line)
+    return out
+
+
 def test_fallback_ports_match_the_compose_file():
-    """Each cited compose line still publishes the port we baked in."""
-    compose = (REPO_ROOT / "docker-compose.yml").read_text().splitlines()
+    """Each built-in's port still appears in its own service's compose block.
+
+    The citation names the service, not a line number. A line number is an
+    incidental detail that moves whenever anyone edits the compose file, and a
+    guard that fires on an unrelated edit teaches reviewers to ignore it. This
+    guard still fails when a port value changes or a service is renamed.
+    """
+    text = (REPO_ROOT / "docker-compose.yml").read_text()
     checked = 0
     for ep in mod.BUILTIN:
         if ep.port is None or ":" not in ep.source:
             continue
-        match = re.match(r"docker-compose\.yml:(\d+)", ep.source)
-        assert match, f"control failed: {ep.name} source {ep.source!r} cites no line"
-        line_no = int(match.group(1))
-        line = compose[line_no - 1]
-        # An interpolated port ("${DIGICHAT_PUBLISH_PORT:-3005}") does not
-        # contain ":3005"; assert on the default value instead.
-        assert (f":{ep.port}" in line) or (f":-{ep.port}" in line), (
-            f"{ep.name}: compose.yml:{line_no} does not publish port {ep.port}\n{line}"
+        match = re.match(r"docker-compose\.yml:([\w.-]+)", ep.source)
+        assert match, f"control failed: {ep.name} source {ep.source!r} names no service"
+        service = match.group(1)
+        assert service == ep.service, (
+            f"{ep.name}: source cites {service!r} but the endpoint's service is {ep.service!r}"
         )
+        block = _compose_service_block(text, service)
+        assert block, f"control failed: service {service} is absent from docker-compose.yml"
+        # An interpolated port ("${DIGICHAT_PUBLISH_PORT:-3005}") does not contain
+        # ":3005", so accept the ":-" default form too.
+        published = any(f":{ep.port}" in line or f":-{ep.port}" in line for line in block)
+        assert published, f"{ep.name}: service {service} does not publish port {ep.port}"
         checked += 1
     # Exactly 8 of the 10 built-ins publish a port; "api" and "mcp-quant"
     # have none by design and are asserted as skips elsewhere.
