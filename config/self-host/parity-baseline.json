@@ -89,9 +89,27 @@
   "surface": {
     "composeEnv": {
       "apps/digitrace-langfuse/docker-compose.local.yml": [
+        "CLICKHOUSE_CLUSTER_ENABLED",
         "CLICKHOUSE_DB",
+        "CLICKHOUSE_MIGRATION_SSL",
+        "CLICKHOUSE_MIGRATION_URL",
         "CLICKHOUSE_PASSWORD",
-        "CLICKHOUSE_USER"
+        "CLICKHOUSE_URL",
+        "CLICKHOUSE_USER",
+        "DATABASE_URL",
+        "ENCRYPTION_KEY",
+        "LANGFUSE_INIT_USER_EMAIL",
+        "LANGFUSE_INIT_USER_PASSWORD",
+        "NEXTAUTH_SECRET",
+        "NEXTAUTH_URL",
+        "NODE_ENV",
+        "POSTGRES_DB",
+        "POSTGRES_PASSWORD",
+        "POSTGRES_USER",
+        "REDIS_HOST",
+        "REDIS_PORT",
+        "SALT",
+        "TELEMETRY_ENABLED"
       ],
       "docker-compose.yml": [
         "AUDIT_LOG_PATH",
