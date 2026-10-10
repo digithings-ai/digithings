@@ -527,3 +527,53 @@ def test_ensure_keys_refuses_a_remote_database_before_writing(monkeypatch, tmp_p
         )
 
     assert "DIGIKEY_DATABASE_URL" not in os.environ
+
+
+def _documents_insert_columns():
+    """Column list of every `documents` INSERT in the canonical seed SQL."""
+    sql = (REPO_ROOT / "digiquant" / "supabase" / "seed.sql").read_text()
+    return re.findall(r"INSERT INTO public\.documents \(([^)]*)\)", sql, re.I)
+
+
+#: NOT NULL, no-default columns on `documents` after the whole migration chain
+#: applies, measured with information_schema.columns on a clean database built
+#: from `digiquant/supabase/migrations/*.sql` (126/137 applied; the 11 gaps are
+#: Supabase-platform objects `auth.users`, schema `net` and the
+#: `supabase_realtime` publication, none of which this table depends on).
+DOCUMENTS_REQUIRED = ("date", "document_key", "title", "workspace_id")
+
+
+def test_the_documents_insert_supplies_every_required_column():
+    """`title` is a NOT NULL column, not only a key inside the payload.
+
+    It was omitted from all six inserts, so `supabase db reset` failed with
+    `null value in column "title"`. Nothing caught it: the file was never
+    applied anywhere, and the CI job that looks like it applies it reads only
+    `migrations/*.sql` (scripts/self_host_migrations_check.sh line 168 says so).
+    """
+    columns = _documents_insert_columns()
+
+    # Control: the extractor must actually see the real statements, or this
+    # passes for the wrong reason (a rename would empty the list).
+    assert len(columns) == 6, f"expected 6 documents inserts, found {len(columns)}"
+    for raw in columns:
+        supplied = {c.strip() for c in raw.split(",")}
+        missing = set(DOCUMENTS_REQUIRED) - supplied
+        assert not missing, f"documents insert omits required column(s): {sorted(missing)}"
+
+
+def test_the_python_brief_rows_supply_every_required_column():
+    """The Supabase-client path must satisfy the same constraint as the SQL.
+
+    `brief_documents` feeds the client path while `seed.sql` is the canonical
+    SQL form. A column-parity check alone would not have caught this: both
+    sides had five columns and agreed with each other while the database
+    rejected the row. So this asserts against the required set, not parity.
+    """
+    rows = brief_documents()
+
+    # Control first: an empty subject would satisfy every coverage assertion.
+    assert rows, "brief_documents returned no rows"
+    for row in rows:
+        missing = set(DOCUMENTS_REQUIRED) - set(row)
+        assert not missing, f"brief row omits required column(s): {sorted(missing)}"

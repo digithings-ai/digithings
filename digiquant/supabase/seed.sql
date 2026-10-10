@@ -54,38 +54,44 @@ VALUES ('8f774e89-3e65-5d6f-8828-ef0a5ef46a0a', '5505a4c5-c2c1-5c4e-8440-076fb7a
 ON CONFLICT (workspace_id, user_id) DO UPDATE SET role = EXCLUDED.role;
 
 -- ------------------------------------------------------------ brief fixtures
-INSERT INTO public.documents (workspace_id, date, document_key, doc_type, payload)
+INSERT INTO public.documents (workspace_id, date, document_key, doc_type, title, payload)
 VALUES ('0b4b7eca-d70e-59b9-ae05-4d95effd5536', '2026-10-09', 'seed/brief/rates/2026-10-09', 'Daily Digest',
+  'Seed brief — rates (2026-10-09)',
   '{"conviction": 0.73, "seed": 42, "summary": "Synthetic rates brief for the local reference stack. No client data, no market data, not advice.", "synthetic": true, "title": "Seed brief \u2014 rates (2026-10-09)"}'::jsonb)
 ON CONFLICT (workspace_id, date, document_key) DO UPDATE SET
   doc_type = EXCLUDED.doc_type,
   payload = EXCLUDED.payload;
-INSERT INTO public.documents (workspace_id, date, document_key, doc_type, payload)
+INSERT INTO public.documents (workspace_id, date, document_key, doc_type, title, payload)
 VALUES ('0b4b7eca-d70e-59b9-ae05-4d95effd5536', '2026-10-08', 'seed/brief/equities/2026-10-08', 'Daily Digest',
+  'Seed brief — equities (2026-10-08)',
   '{"conviction": 0.44, "seed": 42, "summary": "Synthetic equities brief for the local reference stack. No client data, no market data, not advice.", "synthetic": true, "title": "Seed brief \u2014 equities (2026-10-08)"}'::jsonb)
 ON CONFLICT (workspace_id, date, document_key) DO UPDATE SET
   doc_type = EXCLUDED.doc_type,
   payload = EXCLUDED.payload;
-INSERT INTO public.documents (workspace_id, date, document_key, doc_type, payload)
+INSERT INTO public.documents (workspace_id, date, document_key, doc_type, title, payload)
 VALUES ('0b4b7eca-d70e-59b9-ae05-4d95effd5536', '2026-10-07', 'seed/brief/credit/2026-10-07', 'Daily Digest',
+  'Seed brief — credit (2026-10-07)',
   '{"conviction": 0.62, "seed": 42, "summary": "Synthetic credit brief for the local reference stack. No client data, no market data, not advice.", "synthetic": true, "title": "Seed brief \u2014 credit (2026-10-07)"}'::jsonb)
 ON CONFLICT (workspace_id, date, document_key) DO UPDATE SET
   doc_type = EXCLUDED.doc_type,
   payload = EXCLUDED.payload;
-INSERT INTO public.documents (workspace_id, date, document_key, doc_type, payload)
+INSERT INTO public.documents (workspace_id, date, document_key, doc_type, title, payload)
 VALUES ('0b4b7eca-d70e-59b9-ae05-4d95effd5536', '2026-10-06', 'seed/brief/commodities/2026-10-06', 'Daily Digest',
+  'Seed brief — commodities (2026-10-06)',
   '{"conviction": 0.39, "seed": 42, "summary": "Synthetic commodities brief for the local reference stack. No client data, no market data, not advice.", "synthetic": true, "title": "Seed brief \u2014 commodities (2026-10-06)"}'::jsonb)
 ON CONFLICT (workspace_id, date, document_key) DO UPDATE SET
   doc_type = EXCLUDED.doc_type,
   payload = EXCLUDED.payload;
-INSERT INTO public.documents (workspace_id, date, document_key, doc_type, payload)
+INSERT INTO public.documents (workspace_id, date, document_key, doc_type, title, payload)
 VALUES ('0b4b7eca-d70e-59b9-ae05-4d95effd5536', '2026-10-05', 'seed/brief/fx/2026-10-05', 'Daily Digest',
+  'Seed brief — fx (2026-10-05)',
   '{"conviction": 0.55, "seed": 42, "summary": "Synthetic fx brief for the local reference stack. No client data, no market data, not advice.", "synthetic": true, "title": "Seed brief \u2014 fx (2026-10-05)"}'::jsonb)
 ON CONFLICT (workspace_id, date, document_key) DO UPDATE SET
   doc_type = EXCLUDED.doc_type,
   payload = EXCLUDED.payload;
-INSERT INTO public.documents (workspace_id, date, document_key, doc_type, payload)
+INSERT INTO public.documents (workspace_id, date, document_key, doc_type, title, payload)
 VALUES ('0b4b7eca-d70e-59b9-ae05-4d95effd5536', '2026-10-04', 'seed/brief/policy/2026-10-04', 'Daily Digest',
+  'Seed brief — policy (2026-10-04)',
   '{"conviction": 0.79, "seed": 42, "summary": "Synthetic policy brief for the local reference stack. No client data, no market data, not advice.", "synthetic": true, "title": "Seed brief \u2014 policy (2026-10-04)"}'::jsonb)
 ON CONFLICT (workspace_id, date, document_key) DO UPDATE SET
   doc_type = EXCLUDED.doc_type,

@@ -63,6 +63,7 @@ def brief_documents(
         rng = rng_for(seed, "brief", slug, day.isoformat())
         topic = ("rates", "equities", "credit", "commodities", "fx", "policy")[offset % 6]
         conviction = round(0.35 + rng.random() * 0.45, 2)
+        title = f"Seed brief — {topic} ({day.isoformat()})"
         rows.append(
             {
                 "workspace_id": ws,
@@ -72,8 +73,13 @@ def brief_documents(
                 # these 21 literals, and rejects anything else. "Daily Digest" is
                 # the narrative artifact a local brief actually is.
                 "doc_type": BRIEF_DOC_TYPE,
+                # `title` is a NOT NULL column on its own (migration 001), not
+                # only a key inside the payload. Omitting it here made the
+                # Supabase-client path fail where the SQL path had passed
+                # review. Both paths must write the same row.
+                "title": title,
                 "payload": {
-                    "title": f"Seed brief — {topic} ({day.isoformat()})",
+                    "title": title,
                     "summary": (
                         f"Synthetic {topic} brief for the local reference stack. "
                         "No client data, no market data, not advice."
