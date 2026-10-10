@@ -16,15 +16,28 @@ export type ChartEngine = "vela" | "echarts";
 /** Canvas cannot read CSS variables, so the chart reads the desk tokens once at mount. */
 export type ChartInk = { ink: string; mute: string; hair: string; up: string; down: string; surface: string; font: string };
 
-export const FALLBACK_INK: ChartInk = {
-  ink: "#eceef0",
-  mute: "#7d8389",
-  hair: "rgba(255, 255, 255, 0.09)",
-  up: "#3dd6c4",
-  down: "#e5533e",
-  surface: "#000000",
-  font: "monospace",
+type InkRole = Exclude<keyof ChartInk, "font">;
+
+/** Each desk token with its dark-theme fallback. The token name on each line is the canon-guard escape. */
+export const INK_TOKENS: Record<InkRole, readonly [`--${string}`, string]> = {
+  ink: ["--ink", "#eceef0"],
+  mute: ["--ink-mute", "#7d8389"],
+  hair: ["--hair", "rgba(255, 255, 255, 0.09)"],
+  up: ["--up", "#3dd6c4"],
+  down: ["--down", "#e5533e"],
+  surface: ["--surface", "#000000"],
 };
+
+/** Reads each token through `read`; an empty read keeps the fallback. */
+export function inkFrom(read: (token: string) => string, font: string): ChartInk {
+  const ink = { font: font || "monospace" } as ChartInk;
+  for (const [role, [token, fallback]] of Object.entries(INK_TOKENS) as [InkRole, readonly [string, string]][]) {
+    ink[role] = read(token).trim() || fallback;
+  }
+  return ink;
+}
+
+export const FALLBACK_INK: ChartInk = inkFrom(() => "", "");
 
 /** Slice fills step down from ink so neighbours stay apart without a palette. */
 const SLICE = [1, 0.72, 0.52, 0.38, 0.28, 0.2];
@@ -78,7 +91,7 @@ export function velaOptions(type: "line" | "area", points: PanelPoint[], ink: Ch
     theme: {
       background: ink.surface,
       textColor: ink.mute,
-      gridColor: "rgba(0, 0, 0, 0)",
+      gridColor: ink.hair,
       borderColor: ink.hair,
       upColor: ink.up,
       downColor: ink.down,

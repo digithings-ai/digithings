@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { ChartType, PanelPoint, PanelShape, PanelUnit } from "../../../../clients/digiquant-tui/src/pages/panel-shape";
-import { FALLBACK_INK, chartEngine, echartsOption, velaConfig, velaOptions, type ChartInk } from "./panel-chart-options";
+import { chartEngine, inkFrom, echartsOption, velaConfig, velaOptions, type ChartInk } from "./panel-chart-options";
 
 /** Caption when a chart fails to mount. The table toggle still has the numbers. */
 export const CHART_UNAVAILABLE = "Chart unavailable · the table has the numbers";
@@ -11,16 +11,7 @@ type Input = { shape: PanelShape; type: ChartType; points: PanelPoint[]; unit: P
 
 function readInk(host: HTMLElement): ChartInk {
   const style = getComputedStyle(host);
-  const token = (name: string, fallback: string) => style.getPropertyValue(name).trim() || fallback;
-  return {
-    ink: token("--ink", FALLBACK_INK.ink),
-    mute: token("--ink-mute", FALLBACK_INK.mute),
-    hair: token("--hair", FALLBACK_INK.hair),
-    up: token("--up", FALLBACK_INK.up),
-    down: token("--down", FALLBACK_INK.down),
-    surface: token("--surface", FALLBACK_INK.surface),
-    font: style.fontFamily || FALLBACK_INK.font,
-  };
+  return inkFrom((token) => style.getPropertyValue(token), style.fontFamily);
 }
 
 type Mounted = { resize: () => void; destroy: () => void };
