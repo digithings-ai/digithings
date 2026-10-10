@@ -268,8 +268,16 @@ services:
       dockerfile: digivault/Dockerfile
     image: digi-digivault:latest
     container_name: digi-digivault
+    # `core` and `quant` mirror scripts/localstack/contracts.py, which probes this
+    # service's 8004 /healthz in exactly those profiles; `all` is what
+    # `dt up --profile all` resolves to. `digivault` is kept so the old
+    # `--profile digivault` spelling still works. Adding a profile to a service
+    # that already had one does not change a bare `docker compose up`.
     profiles:
       - digivault
+      - core
+      - quant
+      - all
     ports:
       - "127.0.0.1:8004:8004"
     env_file:
@@ -449,8 +457,12 @@ services:
       dockerfile: digiquant/Dockerfile
     image: digi-digiquant-mcp:latest
     container_name: digi-digiquant-mcp
+    # `core` added because scripts/localstack/contracts.py runs the
+    # mcp-tools-list probe in `core`, `quant` and `all`.
     profiles:
       - quant
+      - core
+      - all
     ports:
       - "127.0.0.1:8767:8767"
     env_file:
@@ -542,8 +554,13 @@ services:
   digichat-db:
     image: postgres:16-alpine
     container_name: digi-digichat-db
+    # Paired with `digichat`; both follow scripts/localstack/contracts.py, which
+    # probes digichat's 3000 /api/health in the `core` and `chat` profiles.
     profiles:
       - digichat
+      - core
+      - chat
+      - all
     environment:
       POSTGRES_USER: digichat
       POSTGRES_PASSWORD: ${DIGICHAT_POSTGRES_PASSWORD:-digichat}
@@ -567,8 +584,13 @@ services:
       dockerfile: apps/digichat/Dockerfile
     image: digi-digichat:latest
     container_name: digi-digichat
+    # `core` and `chat` mirror scripts/localstack/contracts.py (3000 /api/health
+    # is probed in those profiles). `digichat` is kept for the old spelling.
     profiles:
       - digichat
+      - core
+      - chat
+      - all
     # Bind host: default loopback; set DIGICHAT_PUBLISH_HOST=0.0.0.0 in .env for LAN (see SECURITY.md).
     ports:
       - "${DIGICHAT_PUBLISH_HOST:-127.0.0.1}:${DIGICHAT_PUBLISH_PORT:-3005}:3000"
