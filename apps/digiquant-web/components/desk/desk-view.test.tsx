@@ -20,10 +20,9 @@ describe("terminal desk", () => {
       expect(deskPathFromSlug(page.path.split("/").filter(Boolean))).toBe(page.path);
     }
     for (const page of PAGES) {
-      if (page.path === "/fx" || page.path.startsWith("/fx/")) {
-        expect(params).not.toContain(page.path);
-        expect(deskPathFromSlug(page.path.split("/").filter(Boolean))).toBeNull();
-      }
+      // Invite pages get a static shell too; the access manifest gates the body.
+      expect(params).toContain(page.path);
+      expect(deskPathFromSlug(page.path.split("/").filter(Boolean))).toBe(page.path);
     }
     expect(deskPathFromSlug(undefined)).toBe("/brief");
     expect(deskPathFromSlug(["markets"])).toBeNull();

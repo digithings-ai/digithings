@@ -18,10 +18,10 @@ import { isInviteSurface } from "./public-surface";
 
 const DESK_KEY = "dq-desk";
 
-/** Drop invite-only rows. The public rail does not name them. */
+/** Drop invite rows the caller is not granted. The public rail does not name them. */
 function publicNav(groups: NavGroup[]): NavGroup[] {
   const keep = (node: NavNode): NavNode | null => {
-    if (isInviteSurface(node.path, node.label)) return null;
+    if (node.lock && isInviteSurface(node.path, node.label)) return null;
     const children = (node.children ?? []).flatMap((child) => {
       const next = keep(child);
       return next ? [next] : [];
