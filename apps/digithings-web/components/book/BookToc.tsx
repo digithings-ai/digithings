@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import type { ChapterRef } from "@/lib/book/toc";
+import type { ChapterWithSections } from "@/lib/book/toc";
 
 /**
  * The book's table of contents (DIG-2821).
@@ -16,7 +16,7 @@ export default function BookToc({
   activeSlug,
   withRefs = false,
 }: {
-  chapters: readonly ChapterRef[];
+  chapters: readonly ChapterWithSections[];
   activeSlug?: string;
   /** Print route only: reserve the column the page references land in. */
   withRefs?: boolean;
@@ -47,6 +47,25 @@ export default function BookToc({
               </>
             ) : null}
             <p className="m-0 text-ink-soft">{chapter.summary}</p>
+            {chapter.sections.length > 0 ? (
+              <ol className="mt-2 list-none p-0 pl-6 font-mono text-[0.82rem]">
+                {chapter.sections.map((s) => (
+                  <li key={s.slug} className="py-0.5">
+                    <Link href={s.href} className="text-ink-soft">
+                      {String(chapter.order).padStart(2, "0")}.{s.order} {s.title}
+                    </Link>
+                    {withRefs ? (
+                      <>
+                        {" · "}
+                        <span className="book-toc__ref" data-book-toc-ref={s.href}>
+                          {""}
+                        </span>
+                      </>
+                    ) : null}
+                  </li>
+                ))}
+              </ol>
+            ) : null}
           </li>
         );
       })}

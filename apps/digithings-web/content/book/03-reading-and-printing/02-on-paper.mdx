@@ -1,24 +1,9 @@
 ---
-title: Reading and printing
-order: 3
+title: "On paper"
+order: 2
 summary: >-
-  Pan and zoom on screen, paginate on paper, and build the file in CI so the
-  printed copy is a build artifact rather than somebody's browser.
+  Printing a chapter uses a stylesheet that the print engine honours rather than fights:
 ---
-
-The book is read two ways and both are supported deliberately.
-
-## On screen
-
-A chapter page carries the table of contents for that chapter as a rail, and the
-full book list as the previous/next pair at the foot of the page. Diagrams are
-ordinary images until you ask for them to be bigger.
-
-Dragging a diagram opens it: the image pans and zooms under the pointer, with
-the wheel and with a pinch. It is an interaction on top of an image, so the
-image is still there when the interaction is not — no script, no figure.
-
-## On paper
 
 Printing a chapter uses a stylesheet that the print engine honours rather than
 fights:
@@ -34,7 +19,7 @@ source. The engine fills it in, after pagination, by looking up the anchor each
 entry points at. A number written by hand would be wrong the moment a paragraph
 grew a line.
 
-### Why the print step is a build step
+## Why the print step is a build step
 
 The printed book is produced by a headless browser in CI, and the resulting file
 is uploaded as an artifact. It is not produced by a person pressing print.
@@ -43,9 +28,3 @@ That decision costs a browser in the pipeline and buys three things: the file is
 reproducible from a commit, the same input always yields the same output, and
 nobody's machine settings — paper size, margins, "fit to page", a stray header
 and footer — end up in the printed book.
-
-## What the two outputs share
-
-Everything that matters. The diagrams, the anchors, the running headers, the
-page geometry. A change to the page that improves reading improves the print,
-because there is only one page.

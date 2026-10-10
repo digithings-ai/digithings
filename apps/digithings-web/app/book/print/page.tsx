@@ -17,14 +17,20 @@ export default async function BookPrintPage() {
   const chapters = loadChapters(process.cwd());
   const refs = chapterRefs(chapters);
 
-  // Loaded up front, before any JSX: a chapter that will not compile must fail
-  // the build, not render an empty section in the middle of a printed page.
+  // Loaded up front, before any JSX: a page that will not compile must fail
+  // the build, not leave a hole in the printed book. Every chapter opener and
+  // every section, in reading order — the web splits them into pages, paper
+  // flows them continuously.
   const bodies = await Promise.all(
     chapters.map(async (chapter) => {
-      const mod = (await import(`../../../content/book/${chapter.slug}.mdx`)) as {
-        default: () => React.JSX.Element;
+      const load = async (file: string) =>
+        ((await import(`../../../content/book/${chapter.slug}/${file}.mdx`)) as { default: () => React.JSX.Element })
+          .default;
+      return {
+        chapter,
+        Opener: await load("index"),
+        sections: await Promise.all(chapter.sections.map(async (s) => ({ section: s, Body: await load(s.slug) }))),
       };
-      return { slug: chapter.slug, Body: mod.default };
     }),
   );
 
@@ -55,24 +61,25 @@ export default async function BookPrintPage() {
         <BookToc chapters={refs} withRefs />
       </section>
 
-      {bodies.map(({ slug, Body }) => {
-        const chapter = chapters.find((c) => c.slug === slug);
-        if (!chapter) return null;
-        return (
-          <section key={slug} className="book-chapter">
-            {/* The anchor the front matter\'s page reference is resolved
-                against. It is a marker, not a link target: the chapter\'s own
-                headings carry the reader-visible anchors. */}
-            <div data-book-anchor={`/book/${slug}/`} />
-            <p className="m-0 font-mono text-[0.8rem] text-accent">
-              {String(chapter.order).padStart(2, "0")}
-            </p>
-            <h1 className="mb-2 font-display text-[1.8rem] tracking-[-0.02em] text-ink">{chapter.title}</h1>
-            <p className="mb-6 max-w-[64ch] text-ink-soft">{chapter.summary}</p>
-            <Body />
-          </section>
-        );
-      })}
+      {bodies.map(({ chapter, Opener, sections }) => (
+        <section key={chapter.slug} className="book-chapter">
+          {/* Anchors the front matter's page references resolve against. */}
+          <div data-book-anchor={chapter.href} />
+          <p className="m-0 font-mono text-[0.8rem] text-accent">{String(chapter.order).padStart(2, "0")}</p>
+          <h1 className="mb-2 font-display text-[1.8rem] tracking-[-0.02em] text-ink">{chapter.title}</h1>
+          <p className="mb-6 max-w-[64ch] text-ink-soft">{chapter.summary}</p>
+          <Opener />
+          {sections.map(({ section, Body }) => (
+            <div key={section.slug} className="book-section">
+              <div data-book-anchor={section.href} />
+              <h2 className="mt-12 mb-4 font-display text-[1.6rem] leading-[1.15] tracking-[-0.01em] text-ink">
+                {String(chapter.order).padStart(2, "0")}.{section.order} {section.title}
+              </h2>
+              <Body />
+            </div>
+          ))}
+        </section>
+      ))}
     </div>
   );
 }
