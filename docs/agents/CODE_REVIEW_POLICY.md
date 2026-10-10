@@ -14,6 +14,81 @@ Prefer **in-session** review on a **fresh-context subagent** (author session mus
 
 Post findings on the record (PR comment). digithings requires `<!-- in-session-review -->` + `reviewed:agent` for the coverage gate.
 
+## Blocking verdicts
+
+Posting the findings is **not** the same as delivering the verdict. A verdict that
+blocks approval **must also be submitted as a GitHub review with state
+`CHANGES_REQUESTED`**, not only as a comment.
+
+The merge queue reads review state, not comment prose. `scripts/merge_queue.py`
+`_gate_review` checks exactly two things: `pr.reviewDecision ==
+"CHANGES_REQUESTED"`, and an `APPROVED` review from someone other than the
+author. It never reads comment text. **A comment that says "changes requested"
+does not block a merge; only a `CHANGES_REQUESTED` review does.**
+
+The comment is where the evidence lives. The review state is what the gate can
+see. **A blocking verdict needs both:**
+
+1. **Comment** — the findings, with severity, `file:line`, evidence and
+   fixability (the rule above).
+2. **Review** — submit with `event: REQUEST_CHANGES`, so the submitted state is
+   `CHANGES_REQUESTED`.
+
+What happened on 2026-10-07 (`digithings-ai/twelve-x#347`): the review said
+"changes requested — one finding blocks approval", was submitted as
+`COMMENTED`, and the queue merged the PR 6m37s later. Both halves were present;
+the state was invisible to the gate.
+
+The GitHub MCP review path (create pending review → add comments →
+`submit_pending`) does **not** pick the state for you. Stopping at
+`submit_pending` without `REQUEST_CHANGES` posts a `COMMENTED` review. Check the
+state you actually submitted:
+
+```bash
+gh api repos/<owner>/<repo>/pulls/<N>/reviews --jq '.[-1] | {state, submitted_at}'
+gh pr view <N> --json reviewDecision
+```
+
+## Attestation evidence
+
+A queue attestation (`review: attested by <role>`) is only useful with the review
+evidence attached. Every `qa` attestation must record:
+
+- **files / commits read**
+- **checks run** — the commands, not only their names
+- **verdict** — `approve` or `changes needed`
+
+The evidence goes in the queue's record comment on the PR, not in the merge
+commit message.
+
+**Enforcement, stated plainly: this part is manual.** The merge queue does not
+parse attestation prose and cannot tell an evidence-free attestation from an
+evidence-carrying one. What the DevOps leaf *can* make machine-enforced is that
+a posted blocking verdict blocks the queue, through the `CHANGES_REQUESTED`
+review state. Carrying evidence inside a human-readable attestation stays a
+reviewer and EM responsibility. Do not imply the queue verifies it.
+
+## The review marker (do not hand-write it)
+
+Tool-driven reviews post a marker:
+
+```html
+<!-- opencode-power-pack:code-review scope=<owner>/<repo>#<pr>@<head-sha> kind=<summary|finding-key> -->
+```
+
+The producer is third-party: [`waybarrios/opencode-power-pack`](https://github.com/waybarrios/opencode-power-pack),
+file `skills/code-review/SKILL.md`, distributed as the `opencode-power-pack`
+plugin / npm `@waybarrios/opencode-power-pack`. It matches the **exact** marker
+plus the authenticated author to decide whether to `PATCH` an existing summary
+or `POST` a new one.
+
+Do **not** hand-author this marker, and do not add fields to it. A hand-written
+marker with an extra field would not match, and the tool would `POST` a
+duplicate summary comment. Any new marker field has to be added upstream in that
+`SKILL.md`, not here. The skill also never submits a review, which is why the
+`CHANGES_REQUESTED` rule above is the only thing standing between a tool review
+and an invisible verdict.
+
 ## Metered third parties (quota)
 
 | Service | Policy |
