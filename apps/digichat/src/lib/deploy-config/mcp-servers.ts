@@ -168,6 +168,18 @@ export type McpServerForward = {
    * digigraph; the model never sees or supplies them.
    */
   setup?: Record<string, string>;
+  /**
+   * Operator tool allowlist for this server row (DIG-284). Remote tool names,
+   * exact match, no globs. Absent means deny-by-default upstream: zero tools
+   * are offered, which is the same as an empty list. Operator-only — the
+   * session overlay can never set this.
+   */
+  allowedTools?: string[];
+  /**
+   * Subset of `allowedTools` whose tools mutate remote state (DIG-284).
+   * Operator-only, same rules as `allowedTools`.
+   */
+  mutatingTools?: string[];
 };
 
 export type McpSessionOverlayItem = {
@@ -175,6 +187,12 @@ export type McpSessionOverlayItem = {
   url?: string;
   auth?: string;
   token?: string;
+  // Deliberately no `allowedTools` / `mutatingTools` (DIG-284), extending the
+  // `authHeader` invariant pinned by the #3841 test in mcp-servers.test.ts.
+  // These are operator-only: a visitor attaching a session connector gets zero
+  // tools, and a session overlay can never widen an operator row's allowlist.
+  // `url` is bounded the same way — it can only ever introduce a new row, never
+  // repoint an operator one.
 };
 
 export type McpUpstreamServer = {
@@ -190,6 +208,10 @@ export type McpUpstreamServer = {
    * digigraph; the model never sees or supplies them.
    */
   setup?: Record<string, string>;
+  /** Operator-only — session overlay can never set this (DIG-284). */
+  allowedTools?: string[];
+  /** Operator-only — session overlay can never set this (DIG-284). */
+  mutatingTools?: string[];
 };
 
 const MCP_AUTH = new Set(["none", "bearer", "oauth"]);
@@ -197,6 +219,60 @@ const MAX_SESSION_SERVERS = 8;
 const MAX_OVERLAY_JSON = 8_192;
 const MAX_UPSTREAM_JSON = 16_384;
 const MAX_TOKEN = 4_096;
+
+/**
+ * Bounds on the operator tool allowlists (`allowedTools`, `mutatingTools`).
+ * These live here, next to the header guard that has to honour them, and
+ * `schema.ts` imports them so the zod bound and the projection bound can never
+ * drift apart — if they could, "config parses but the whole upstream header is
+ * silently dropped" is exactly the invisibility DIG-284 exists to remove.
+ *
+ * 64 characters matches digigraph's `prefixed_tool_name` truncation width, so a
+ * name that fits here is one digigraph can prefix unambiguously; the longest name
+ * in the widest surface we ship is 36.
+ *
+ * 256 entries is set by our own corpus, not a guess. digiquant's `scope="read"`
+ * server advertises 113 tools (`READ_SCOPE_TOOLS` in
+ * `digiquant/src/digiquant/mcp_server.py`) and `config/examples/dashboard-modal.yaml`
+ * is that row, so the entry bound has to clear 113 with room to grow.
+ *
+ * `MAX_UPSTREAM_JSON` (16 KB) is the outer limit, and the entry bound is not the
+ * same limit — which matters to whoever fills the bound. The corpus row is well
+ * inside it: the real 113 digiquant names serialise to about 6 KB in both lists
+ * together. A maximal row is not: 256 names at the full 64 characters, in both
+ * lists, measure about 34 KB, and 30-character names still measure about 17 KB,
+ * so a row that is legal by both bounds here can still exceed the byte cap. When
+ * it does, `mcpUpstreamHeaderValue` drops the entire header, and the operator sees
+ * their MCP tools disappear with nothing logged — the `catch` in
+ * `app/api/chat/route.ts` is a comment, not a log line. `mcp.servers` itself is
+ * uncapped, so rows compound toward the same ceiling.
+ *
+ * Every overshoot fails closed, the same as an over-long `token` does today, and
+ * the bounds are deliberately independent: a config that trips either one is
+ * refused rather than trimmed, because a partial allowlist denies tools the
+ * operator asked for while still looking configured.
+ */
+export const MAX_MCP_TOOL_ENTRIES = 256;
+export const MAX_MCP_TOOL_NAME_LENGTH = 64;
+
+/**
+ * Copy an operator allowlist for the wire, or `undefined` when it must not be
+ * forwarded. An out-of-bounds list is dropped whole rather than truncated: a
+ * partial allowlist would quietly deny tools the operator asked for while still
+ * looking configured, and "drop everything" is the fail-closed answer. Dropped
+ * is not the same as empty-on-the-wire — callers omit the key, and once
+ * DIG-284 leaf 284.1 lands digigraph treats an absent allowlist as zero tools.
+ * Until then digigraph ignores these keys entirely (see ARCHITECTURE.md), so
+ * this is the wire contract, not an enforced gate.
+ */
+function boundedToolAllowlist(value: readonly string[] | undefined): string[] | undefined {
+  if (!value || value.length === 0) return undefined;
+  if (value.length > MAX_MCP_TOOL_ENTRIES) return undefined;
+  if (value.some((name) => typeof name !== "string" || name.length > MAX_MCP_TOOL_NAME_LENGTH)) {
+    return undefined;
+  }
+  return [...value];
+}
 
 /** Operator URL wins. Session client URLs only when allowUserServers, https-only. */
 export function resolveMcpOAuthResourceUrl(opts: {
@@ -230,6 +306,13 @@ export function operatorMcpServersForUpstream(
       if (s.authHeader?.trim()) row.authHeader = s.authHeader.trim();
     }
     if (s.setup && Object.keys(s.setup).length) row.setup = { ...s.setup };
+    // Operator tool allowlists. Re-checked here, not only in zod, exactly like
+    // `token` above: the projection is the last place the bound can be enforced
+    // before the bytes go on the wire. Over budget ⇒ omitted ⇒ zero tools.
+    const allowedTools = boundedToolAllowlist(s.allowedTools);
+    if (allowedTools) row.allowedTools = allowedTools;
+    const mutatingTools = boundedToolAllowlist(s.mutatingTools);
+    if (mutatingTools) row.mutatingTools = mutatingTools;
     out.push(row);
   }
   return out;
@@ -290,6 +373,15 @@ export function mergeMcpSessionOverlay(opts: {
     if (s.token) row.token = s.token;
     if (s.authHeader) row.authHeader = s.authHeader;
     if (s.setup) row.setup = { ...s.setup };
+    // Re-bound here too, not just in operatorMcpServersForUpstream: this is
+    // the path that trusts its input, so "enforced on every construction
+    // path" has to be true of the merge as well as the projection. Inputs are
+    // already bounded and the overlay cannot inject, so this is defence in
+    // depth rather than a live fix (review #5061 S1).
+    const allowed = boundedToolAllowlist(s.allowedTools);
+    if (allowed) row.allowedTools = allowed;
+    const mutating = boundedToolAllowlist(s.mutatingTools);
+    if (mutating) row.mutatingTools = mutating;
     return row;
   });
   const byId = new Map(out.map((s) => [s.id, s]));
@@ -321,7 +413,7 @@ export function mcpUpstreamHeaderValue(
   if (!servers.length) return undefined;
   const json = JSON.stringify(
     servers.map((s) => {
-      const row: Record<string, string | Record<string, string>> = {
+      const row: Record<string, string | string[] | Record<string, string>> = {
         id: s.id,
         url: s.url,
       };
@@ -329,6 +421,8 @@ export function mcpUpstreamHeaderValue(
       if (s.token) row.token = s.token;
       if (s.authHeader) row.authHeader = s.authHeader;
       if (s.setup && Object.keys(s.setup).length) row.setup = s.setup;
+      if (s.allowedTools?.length) row.allowedTools = s.allowedTools;
+      if (s.mutatingTools?.length) row.mutatingTools = s.mutatingTools;
       return row;
     }),
   );

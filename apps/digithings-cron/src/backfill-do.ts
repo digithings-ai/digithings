@@ -25,10 +25,18 @@ import type { Env } from "./env";
  *
  * - `in_flight` — claimed by a request that has not settled yet.
  * - `done` — GitHub answered 204/200, so a run was started for these dates.
- * - `dispatch_suppressed` — GitHub answered a benign 422 (workflow disabled,
- *   already queued, already running). Nothing ran, so this is NOT `done`, and it
- *   must stay dispatchable: recording it as `done` would answer every later
- *   retry with "already remediated" and the date would never be backfilled.
+ * - `dispatch_suppressed` — GitHub answered 422 with a body `isBenign422` in
+ *   dispatch.ts recognises: already queued, already running. Nothing ran, so
+ *   this is NOT `done`, and it must stay dispatchable: recording it as `done`
+ *   would answer every later retry with "already remediated" and the date would
+ *   never be backfilled.
+ *
+ *   A workflow disabled with `disabled_manually` is NOT this state. Its body,
+ *   `Cannot trigger a 'workflow_dispatch' on a disabled workflow`, matches
+ *   none of those substrings, so `postGithub` throws instead of returning and
+ *   the route releases the claim and answers 502 `dispatch_failed` — the date
+ *   is never recorded here at all, and stays dispatchable because no entry
+ *   survives the release.
  */
 export type RemediationState = "in_flight" | "done" | "dispatch_suppressed";
 

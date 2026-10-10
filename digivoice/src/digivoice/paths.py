@@ -23,8 +23,18 @@ def linux_data_dir(home: Path, xdg_data_home: str | None) -> Path:
     return base / APP_DIR_NAME
 
 
+def local_bin(home: Path) -> Path:
+    """Binaries `digivoice install` places on this machine. Not a cloud service."""
+    return home / ".local" / "bin"
+
+
 def piper_fallback(home: Path) -> Path:
-    return home / ".local" / "bin" / "piper"
+    return local_bin(home) / "piper"
+
+
+def vendor_dir(home: Path) -> Path:
+    """Extracted bun, whisper.cpp, and Piper trees, plus install.json. Not a cloud service."""
+    return home / ".local" / "share" / "digivoice" / "vendor"
 
 
 def resolve_paths(platform: str, home: Path, env: Mapping[str, str]) -> VoicePaths:

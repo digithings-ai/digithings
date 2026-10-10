@@ -340,9 +340,12 @@ export function evidenceDetail(statement: string): string | null {
 }
 
 export interface IdeaDetailModel {
+  /** Wire status, for diagnostics. Never render it — the union is internal. */
   status: FxTradeLevels['status'] | null;
   riskReward: number | null;
   riskRewardLabel: string | null;
+  /** A bracket arrived but is not publishable: show a pending state, no ladder. */
+  levelsPending: boolean;
   levelRows: IdeaDetailLevelRow[];
   evidenceRows: IdeaDetailEvidenceRow[];
 }
@@ -429,11 +432,26 @@ function buildLadderRows(
   return rows;
 }
 
+/**
+ * A bracket publishes complete or not at all. `partial`, `incomplete`, and any
+ * status `parseTradeLevels` did not recognise (it coerces those to
+ * `incomplete`) all mean the ladder is not publishable, so no rows and no
+ * risk/reward are derived from them — a half bracket on screen reads as
+ * actionable (DIG-260 L5).
+ *
+ * Shape stays a separate question: `hasTradeLevels` answers "is there data",
+ * this answers "may it be shown".
+ */
+function isPublishableBracket(tradeLevels: FxTradeLevels | null): tradeLevels is FxTradeLevels {
+  return tradeLevels !== null && tradeLevels.status === 'complete';
+}
+
 /** Pure view-model for IdeaDetail levels + evidence blocks. */
 export function buildIdeaDetailModel(idea: FxTradeIdeaRow): IdeaDetailModel {
   const tradeLevels = parseTradeLevels(idea.trade_levels);
+  const publishable = isPublishableBracket(tradeLevels);
   const levelRows =
-    hasTradeLevels(tradeLevels) && tradeLevels
+    publishable && hasTradeLevels(tradeLevels)
       ? buildLadderRows(tradeLevels, idea.pair, idea.direction)
       : [];
 
@@ -447,12 +465,15 @@ export function buildIdeaDetailModel(idea: FxTradeIdeaRow): IdeaDetailModel {
     instrument: row.instrument,
   }));
 
-  const riskReward = tradeLevels?.risk_reward ?? null;
+  // A non-published bracket carries no publishable R:R either — otherwise the
+  // panel would render a bare ratio beside an absent target.
+  const riskReward = publishable ? (tradeLevels?.risk_reward ?? null) : null;
 
   return {
     status: tradeLevels?.status ?? null,
     riskReward,
     riskRewardLabel: riskReward != null ? formatRiskReward(riskReward) : null,
+    levelsPending: tradeLevels !== null && !publishable,
     levelRows,
     evidenceRows,
   };

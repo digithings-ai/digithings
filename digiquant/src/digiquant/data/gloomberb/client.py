@@ -8,9 +8,9 @@ additionally require a Pro plan). The client owns endpoint constants, error
 mapping (§5.3), the 900s TTL cache, a circuit breaker, and the kill switch;
 ``digifetch`` stays the generic transport engine.
 
-The kill switch is ``GLOOMBERB_ENABLED`` (default ON): tools are default-ON per
-the author decision, and setting the flag to ``0``/``false``/``no``/``off``
-disables the whole family. The session cookie is read from
+The kill switch is ``GLOOMBERB_ENABLED`` (default OFF): tools are default-OFF in
+deployed environments, and an explicit opt-in (``1``/``true``/``yes``/``on``)
+re-enables the family. The session cookie is read from
 ``GLOOMBERB_SESSION_COOKIE`` - never logged, never part of tool input.
 
 No environment variables are read at import time; the flags are resolved in
@@ -1224,14 +1224,14 @@ def _env_flag(name: str, *, default: bool) -> bool:
 
 
 def gloomberb_enabled() -> bool:
-    """Resolve the family kill switch from env (``GLOOMBERB_ENABLED``, default ON).
+    """Resolve the family kill switch from env (``GLOOMBERB_ENABLED``, default OFF).
 
     The same predicate ``GloomberbClient`` resolves at construction. Exposed so
     the in-process agent surface can stop *advertising* a disabled family rather
     than registering schemas whose every call returns the typed disabled
     envelope (#4146 review F1).
     """
-    return _env_flag(GLOOMBERB_ENABLED_ENV, default=True)
+    return _env_flag(GLOOMBERB_ENABLED_ENV, default=False)
 
 
 def _parse_retry_after(value: str | None) -> float | None:
@@ -1333,6 +1333,20 @@ class _RawResponse(NamedTuple):
     currency: str | None
 
 
+class SessionCheck(NamedTuple):
+    """The verdict of one cookie validation probe against api.gloom.sh.
+
+    ``valid`` is True only when the probe was actually answered with the
+    cookie attached. Every other outcome — disabled kill switch, no cookie,
+    HTTP 401, upstream 5xx, transport failure, unparseable body — is False,
+    so the caller fails closed and hides the gated tools (#2752).
+    """
+
+    valid: bool
+    code: str
+    detail: str
+
+
 EnvT = TypeVar("EnvT", bound=DigifetchEnvelope[Any])
 InputT = TypeVar("InputT", bound=BaseModel)
 
@@ -1394,7 +1408,7 @@ class GloomberbClient:
                           created and owned by the client when omitted.
         base_url:         API root; defaults to ``https://api.gloom.sh``.
         enabled:          Kill switch; ``None`` reads ``GLOOMBERB_ENABLED``
-                          (default ON). ``False`` makes every call return a
+                          (default OFF). ``False`` makes every call return a
                           typed ``upstream_error`` envelope without any request.
         session_cookie:   Optional Gloom session cookie; ``None`` reads
                           ``GLOOMBERB_SESSION_COOKIE``. Accepts either a bare
@@ -1485,7 +1499,7 @@ class GloomberbClient:
 
     @property
     def enabled(self) -> bool:
-        """Kill-switch state (default ON)."""
+        """Kill-switch state (default OFF)."""
         return self._enabled
 
     def close(self) -> None:
@@ -1498,6 +1512,61 @@ class GloomberbClient:
 
     def __exit__(self, *exc: object) -> None:
         self.close()
+
+    # -- session cookie validation (§2752) --------------------------------
+
+    def check_session(self) -> SessionCheck:
+        """Validate ``GLOOMBERB_SESSION_COOKIE`` with ONE authenticated read.
+
+        The deployer owns the credential (Chris, 10 Oct 2026), so the cookie
+        is only a usable secret if the upstream account behind it is still
+        live. Gloomberb publishes no ``/me`` or ``/session`` route, so the
+        probe reuses the cheapest side-effect-free read, ``/market/quote``,
+        and forces it ``gated=True``: anonymous callers get HTTP 401, a live
+        session gets HTTP 200. Pinning one attempt keeps a probe from
+        spending the shared rate limit, for the same reason as
+        ``_SINGLE_ATTEMPT_POLICY``.
+
+        The cookie itself is never logged, never returned and never stored:
+        callers key any cache on :func:`session_cache_fingerprint`.
+        """
+        if not self._enabled:
+            return SessionCheck(False, "disabled", "GLOOMBERB_ENABLED is not set")
+        if self._session_cookie is None:
+            return SessionCheck(False, "no_secret", "GLOOMBERB_SESSION_COOKIE is not set")
+        # The label is load-bearing, not cosmetic: `_map_http_error` turns a
+        # 401/402/403 into "on an anonymous read" for any label other than the
+        # exact sentinel "Gloomberb". This probe carries a session, so a stale
+        # or expired cookie must read as `auth_required` naming
+        # GLOOMBERB_SESSION_COOKIE; the anonymous-read wording blamed the
+        # upstream and told the deployer their cookie was fine (#2752).
+        try:
+            raw = self._request_json(
+                "GET",
+                ENDPOINTS["quote"],
+                params={"symbol": "AAPL"},
+                gated=True,
+                retry_policy=_SINGLE_ATTEMPT_POLICY,
+                label="Gloomberb",
+            )
+        except Exception as exc:  # fail closed: never advertise on a transport fault
+            return SessionCheck(
+                False, "probe_failed", f"validation could not complete ({type(exc).__name__})"
+            )
+        if isinstance(raw, DigifetchError):
+            return SessionCheck(False, raw.code, raw.message)
+        # `_RawResponse.status` is a mapped state, not an HTTP code: the caller
+        # must branch on it, never on "200" (#2752). Only `success` counts as a
+        # validated session; `partial` proves the cookie got through but not
+        # that the probe answered cleanly, and every other state is a refusal,
+        # a 5xx or a transport fault.
+        if raw.status == "success":
+            return SessionCheck(True, "ok", "the session cookie is accepted by api.gloom.sh")
+        return SessionCheck(
+            False,
+            raw.reason_code or "auth_required",
+            f"api.gloom.sh answered the authenticated probe with {raw.status!r}",
+        )
 
     # -- public tools (§5.1) ----------------------------------------------
 

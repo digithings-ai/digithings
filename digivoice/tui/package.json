@@ -1,0 +1,17 @@
+{
+  "name": "digivoice-tui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "digivoice terminal UI on OpenTUI",
+  "scripts": {
+    "start": "bun src/main.js",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@opentui/core": "^0.5.10"
+  },
+  "optionalDependencies": {
+    "@opentui/core-linux-x64": "^0.5.10"
+  }
+}

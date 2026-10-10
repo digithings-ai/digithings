@@ -158,6 +158,14 @@
             "title": "Message",
             "type": "string"
           },
+          "missing": {
+            "description": "Names that could not be produced, the machine-readable form of the 'missing metrics' clause in message. Empty when status is ok.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing",
+            "type": "array"
+          },
           "num_trades": {
             "default": 0,
             "description": "Number of trades",
