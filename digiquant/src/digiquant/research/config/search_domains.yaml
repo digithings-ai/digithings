@@ -18,7 +18,7 @@ web_allowed_websites:
 
 # Per-segment overrides — each phase searches its highest-signal sources (<=5).
 # Prefer secondary aggregators over first-level origins where they parse the feed
-# (capitoltrades, quiverquant, whalewisdom). Unmapped segments use web_allowed_websites.
+# (whalewisdom). Unmapped segments use web_allowed_websites.
 per_segment:
   macro:
     - federalreserve.gov
@@ -49,8 +49,16 @@ per_segment:
     - marketwatch.com
     - barchart.com
   alt-politician-signals:
-    - capitoltrades.com
-    - quiverquant.com
+    # DIG-1133: congressional-trades aggregators (capitoltrades, quiverquant)
+    # removed from this segment's scope. Counsel (DIG-1056 §8.1) rates the
+    # segment's use of that material UNSURE-to-LIKELY under 5 U.S.C.
+    # 13107(c)(1)(B) — not a clearance — and it was publishing. The segment keeps
+    # its legitimate half: Fed / Treasury / regulatory / policy signal.
+    # The guard is `search_refusals.REFUSED_SEARCH_DOMAINS`, not this list.
+    - federalreserve.gov
+    - treasury.gov
+    - reuters.com
+    - apnews.com
     - sec.gov
   inst-institutional-flows:
     - whalewisdom.com
