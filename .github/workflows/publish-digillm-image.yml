@@ -67,12 +67,16 @@ jobs:
           elif [ "$REF_TYPE" = "tag" ]; then tag="$REF_NAME"; fi
           if [ -n "$tag" ]; then
             [[ "$tag" =~ ^digillm-v([0-9]+\.[0-9]+\.[0-9]+)$ ]] || { echo "::error::bad tag $tag"; exit 1; }
-            echo "version=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
-            echo "ref=$tag" >> "$GITHUB_OUTPUT"
-            echo "publish=true" >> "$GITHUB_OUTPUT"
+            {
+              echo "version=${BASH_REMATCH[1]}"
+              echo "ref=$tag"
+              echo "publish=true"
+            } >> "$GITHUB_OUTPUT"
           else
-            echo "publish=false" >> "$GITHUB_OUTPUT"
-            echo "ref=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+            {
+              echo "publish=false"
+              echo "ref=${{ github.sha }}"
+            } >> "$GITHUB_OUTPUT"
           fi
 
       - uses: actions/checkout@v4
@@ -97,7 +101,7 @@ jobs:
           docker run -d --name digillm-smoke -p 127.0.0.1:4000:4000 \
             -e LITELLM_MASTER_KEY=sk-smoke \
             -v "$PWD/config:/app/config:ro" digillm:ci
-          for i in $(seq 60); do
+          for _ in $(seq 60); do
             status=$(docker inspect -f '{{.State.Health.Status}}' digillm-smoke)
             [ "$status" = healthy ] && break
             [ "$(docker inspect -f '{{.State.Running}}' digillm-smoke)" = true ] || break
