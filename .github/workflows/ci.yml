@@ -707,6 +707,25 @@ jobs:
           print('required-checks needs matches all', len(jobs), 'other jobs in ci.yml')
           "
 
+      # Policy-gate drift guard (DIG-1982). The check above only sees ci.yml, so
+      # it cannot fail on a policy check living in another workflow file — and it
+      # would stay green no matter which one that was. This one reconciles the
+      # declared policy inventory (.github/policy-checks.yml) against the jobs the
+      # workflows actually define AND against develop's required status-check
+      # contexts (.github/required-contexts.txt), failing on both real bugs: a
+      # required context that can never report (every PR waits forever), and a
+      # policy check that reports and gates nothing (it goes red, merges continue).
+      #
+      # It reads contexts from the committed snapshot because reading branch
+      # protection needs `administration: read`, which cannot be granted to
+      # GITHUB_TOKEN at all. `--live` re-reads the API with the same
+      # enable_branch_protection.py call the human runbook uses; run it after
+      # changing branch protection. Detector only: it changes no setting.
+      - name: Verify policy checks match develop's branch protection
+        run: |
+          python3 -m pip install --quiet pyyaml
+          python3 scripts/check_required_policy_checks.py
+
       - name: Fail if any non-advisory dependency failed or was cancelled
         env:
           RESULTS: ${{ toJSON(needs) }}

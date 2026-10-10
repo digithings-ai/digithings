@@ -1,0 +1,26 @@
+# develop's required status-check contexts, as read from
+# GET /repos/digithings-ai/digithings/branches/develop/protection
+#
+# This is the guard's input. It is a committed snapshot, not a live read,
+# because `administration: read` — which the branch-protection endpoint needs —
+# cannot be granted to GITHUB_TOKEN at all, so no workflow can read it.
+#
+# KEEPING IT TRUE
+#
+# Every line here is a name GitHub will wait for forever if the producing
+# workflow ever stops reporting. So before changing branch protection by hand:
+#
+#   python3 scripts/enable_branch_protection.py status \
+#       --repo digithings-ai/digithings --branch develop
+#
+# and then re-run the guard, which is the same read the human runbook does:
+#
+#   python3 scripts/check_required_policy_checks.py --live \
+#       --repo digithings-ai/digithings --branch develop
+#
+# `scripts/set-branch-protection.sh` writes protection; edit this file in the
+# same change. `scripts/check_required_policy_checks.py` fails if the two drift.
+
+Required checks passed
+doc-links + agents-init
+mypy — digibase + digikey
