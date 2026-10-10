@@ -223,6 +223,8 @@ hs = {
     new = function(bin, cb, args)
       local t = { bin = bin, cb = cb, args = args, running = false, killed = false }
       function t:start() self.running = true; return self end
+      function t:environment() return { PATH = "/usr/bin:/bin" } end
+      function t:setEnvironment(env) self.env = env; return self end
       function t:isRunning() return self.running end
       function t:terminate() self.running = false; self.terminated = true end
       function t:kill9() self.running = false; self.killed = true end
@@ -420,6 +422,14 @@ function scenarios.launch_is_background_only()
   advance(5)
   eq(#notifications, 0, "no toast for dict, speak, or errors")
   eq(#menubars, 0, "no digivoice menubar mark during takes")
+end
+
+function scenarios.dict_and_speak_tasks_get_homebrew_on_path()
+  press_right_option()
+  local t = tasks[1]
+  check(t.env and t.env.PATH, "dict task has an explicit PATH")
+  check(t.env.PATH:find("/opt/homebrew/bin", 1, true), "PATH has /opt/homebrew/bin")
+  check(t.env.PATH:find("/usr/local/bin", 1, true), "PATH has /usr/local/bin")
 end
 
 function scenarios.dict_banner_recording_then_done()

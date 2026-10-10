@@ -29,6 +29,7 @@ from digisearch.web_providers.internal import InternalWebProvider
 from digisearch.web_search.models import WebSearchRequest, WebSearchResponse
 from fastapi.testclient import TestClient
 
+import digifetch
 from tests.digi_test_jwt import auth_headers
 
 pytestmark = pytest.mark.unit
@@ -167,8 +168,6 @@ def test_route_auto_with_every_key_set_still_runs_the_in_house_tool(monkeypatch)
     from digisearch.web_providers import base as providers_base
     from digisearch.web_search import service as svc
 
-    from digisearch import web_exa
-
     for env in EXTERNAL_PROVIDER_ENV.values():
         monkeypatch.setenv(env, "test-key")
 
@@ -176,7 +175,9 @@ def test_route_auto_with_every_key_set_still_runs_the_in_house_tool(monkeypatch)
         raise AssertionError("an external vendor HTTP call must never happen on auto")
 
     monkeypatch.setattr(providers_base.httpx, "request", _no_external_transport)
-    monkeypatch.setattr(web_exa.httpx, "post", _no_external_transport)
+    # EXA posts through the digifetch seam (DIG-912 §5.3), so the seam's fetch is
+    # what has to stay undialalled — httpx.post is no longer on that path.
+    monkeypatch.setattr(digifetch.HttpFetcher, "fetch", _no_external_transport)
     monkeypatch.setattr(
         svc,
         "run_web_search",

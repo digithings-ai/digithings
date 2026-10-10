@@ -417,7 +417,8 @@ def present_logs(
 
 def restart_digivoice() -> None:
     """Replace this process with a fresh digivoice. Does not return."""
-    os.execv(sys.executable, [sys.executable, *sys.argv])
+    # Bare relaunch: re-running `digivoice restart` would loop forever.
+    os.execv(sys.executable, [sys.executable, sys.argv[0]])
 
 
 def _run_update(

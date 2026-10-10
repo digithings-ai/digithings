@@ -139,7 +139,11 @@ def test_opens_hammerspoon_then_shows_banner(tmp_path: Path) -> None:
     )
     assert report.summary == "hammerspoon up · banner visible"
     assert any(
-        call.program == "open" and call.argv[1:] == ["-a", "Hammerspoon"] for call in runner.calls
+        call.program == "open"
+        and call.argv[1] == "--env"
+        and "/opt/homebrew/bin" in call.argv[2]
+        and call.argv[-2:] == ["-a", "Hammerspoon"]
+        for call in runner.calls
     )
     assert clock.t < 4
     assert all(call.timeout is not None for call in runner.calls)

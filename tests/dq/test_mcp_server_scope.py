@@ -30,7 +30,7 @@ def _tool_names(server) -> set[str]:
 READ_TOOLS_EXTRA = {"digiquant_list_coinmetrics_catalog"}
 
 #: The 89 digifetch x Gloomberb tools (#4069, #4110, 130-coverage through Task 8)
-#: are read-scope only, default-ON behind GLOOMBERB_ENABLED.
+#: are read-scope only, default-OFF behind GLOOMBERB_ENABLED.
 DIGIFETCH_TOOLS = {
     "digifetch_quote",
     "digifetch_quotes_batch",

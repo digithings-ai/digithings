@@ -1,0 +1,91 @@
+# Builds every Cloudflare Worker in the repo with `wrangler deploy --dry-run`.
+#
+# Why this exists: `tsc` cannot see a type-only import, so a Durable Object
+# class that is only `import type`d compiles, typechecks, tests green — and
+# `wrangler deploy` then refuses to build the Worker ("depends on the following
+# Durable Objects, which are not exported in your entrypoint file"). That is
+# what happened on PR #5106: 138 tests and a clean typecheck, and a deploy that
+# would have failed the moment the branch reached develop. The only real build
+# was inside deploy-digithings-cron.yml, i.e. after merge. This job moves that
+# failure to the PR, where an amend is cheap.
+#
+# No Cloudflare credentials and no Docker: `--dry-run` does not authenticate,
+# and `--containers-rollout=none` skips the container image build that otherwise
+# fails outright without a Docker CLI. Verified exit 0 for all six apps below.
+#
+# push is deliberately absent. The deploy workflows already build on develop
+# with the real credentials; duplicating that here would only race them.
+#
+# The matrix is the set of apps that pin `wrangler` in devDependencies AND ship
+# a wrangler.toml. tests/scripts/test_worker_build_matrix.py derives that set
+# and fails when a Worker is added to the repo without landing here.
+name: "CI: worker build check"
+
+on:
+  pull_request:
+    paths:
+      - 'apps/digithings-cron/**'
+      - 'apps/dashboard-api/**'
+      - 'apps/digiquant-runner/**'
+      - 'apps/digitrace-langfuse/**'
+      - 'apps/digichat-cloudflare/**'
+      - 'apps/digithings-stack-cloudflare/**'
+      - 'apps/**/wrangler.toml'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/build-cloudflare-workers.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: build-workers-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: wrangler deploy --dry-run
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      # One broken app should still report the other five, and the first run of
+      # a matrix fan-out is where an unlisted app would show up as a gap.
+      fail-fast: false
+      matrix:
+        # Directory names, not package names: digichat-cloudflare is the
+        # directory and digithings-digichat-cloudflare is the package, so the
+        # directory is the only stable key for `working-directory:` below.
+        app:
+          - digithings-cron
+          - dashboard-api
+          - digiquant-runner
+          - digitrace-langfuse
+          - digichat-cloudflare
+          - digithings-stack-cloudflare
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # Root install, not a per-app one: the workspaces hoist into the root
+      # node_modules, and the deploy workflow installs the same way.
+      - name: Install workspace dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Build the Worker
+        # npm exec resolves the wrangler pinned in that app's devDependencies
+        # (hoisted to the root node_modules) rather than whatever the registry
+        # serves, so this gate cannot drift under a green tree.
+        #
+        # --containers-rollout=none is load-bearing: without it wrangler demands
+        # a Docker CLI to build the image "even in dry-run mode", and the
+        # ubuntu-latest runner's Docker would build a real image per app per PR.
+        #
+        # --outdir keeps the bundle out of the working tree. It is disposable
+        # either way; writing it to $RUNNER_TEMP keeps a failed build's output
+        # readable without polluting the checkout.
+        run: npm exec -- wrangler deploy --dry-run --containers-rollout=none --outdir "$RUNNER_TEMP/wrangler-dry-run"
+        working-directory: apps/${{ matrix.app }}

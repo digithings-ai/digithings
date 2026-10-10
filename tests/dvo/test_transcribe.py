@@ -59,7 +59,8 @@ def test_a_fake_whisper_in_a_path_dir_is_found_with_no_override(tmp_path: Path) 
     binary.write_text("#!/bin/sh\necho hi\n", encoding="utf-8")
     binary.chmod(0o755)
     assert real_probe(str(tmp_path)).lookup("whisper-cli") == str(binary)
-    assert real_probe(None).lookup("whisper-cli") is None
+    # No PATH and no fallback dirs: nothing to find.
+    assert real_probe(None, fallback_dirs=()).lookup("whisper-cli") is None
 
 
 def test_clean_transcript_drops_segment_timestamps() -> None:

@@ -85,7 +85,7 @@ crons = [
   "30 5 * * *",        # twelve-x-market-context-daily
   "8 7 * * SAT",       # twelve-x-market-context-weekly
   "30 17 * * MON-FRI", # twelve-x-performance-eval
-  "3 6,18 * * *",      # twelve-x-primemarket-heartbeat
+  "3 6,18 * * *",
   "52 * * * MON-FRI",  # twelve-x-session-catchup
   "30 2 * * *",        # twelve-x-archive-maintenance
   "8 9 * * MON"        # twelve-x-digisearch-parity (GHA was 0 9 * * 1; :08 offset)
