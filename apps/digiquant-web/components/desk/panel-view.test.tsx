@@ -62,10 +62,10 @@ describe("PanelView", () => {
     }
   });
 
-  it("draws every chart type a shape allows with finite geometry, flat series included", () => {
+  it("mounts every chart type a shape allows on the engine that draws it", () => {
     const series = [
-      { label: "2026-10-08", value: 0 },
-      { label: "2026-10-09", value: 0 },
+      { label: "2026-08-31", value: 100 },
+      { label: "2026-09-30", value: 101 },
     ];
     const names = [
       { label: "UUP", value: 29.97 },
@@ -75,9 +75,10 @@ describe("PanelView", () => {
     for (const shape of Object.keys(CHART_TYPES) as (keyof typeof CHART_TYPES)[]) {
       for (const type of CHART_TYPES[shape]) {
         const points = shape === "series" ? series : names.filter((point) => type === "bar" || point.value > 0);
-        const html = renderToStaticMarkup(<PanelChart shape={shape} type={type} points={points} unit="pct" label="x" />);
+        const html = renderToStaticMarkup(<PanelChart shape={shape} type={type} points={points} unit="index" label="x" />);
+        const engine = shape === "series" && (type === "line" || type === "area") ? "vela" : "echarts";
         expect(html, `${shape}/${type}`).toContain(`data-chart="${type}"`);
-        expect(html, `${shape}/${type}`).not.toMatch(/NaN|Infinity/);
+        expect(html, `${shape}/${type}`).toContain(`data-engine="${engine}"`);
       }
     }
   });

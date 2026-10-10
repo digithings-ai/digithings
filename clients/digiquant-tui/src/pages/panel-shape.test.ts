@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { BLOCKS } from "../catalog";
-import { CHART_TYPES, PANEL_SHAPES, chartFor, chartPoints, panelData } from "./panel-shape";
+import { CHART_TYPES, PANEL_SHAPES, chartFor, chartPoints, monthlyReturns, panelData } from "./panel-shape";
 
 test("every mapped block is a catalog block, and its first chart fits its shape", () => {
   for (const [id, spec] of Object.entries(PANEL_SHAPES)) {
@@ -83,4 +83,33 @@ test("a saved chart pick wins only when the shape allows it", () => {
   expect(chartFor(panel, null)).toBe("area");
   expect(chartFor(panel, "line")).toBe("line");
   expect(chartFor(panel, "donut")).toBe("area");
+});
+
+test("an index series over two months or more offers a monthly-return heatmap", () => {
+  const panel = panelData("nav", {
+    points: [
+      { date: "2026-08-31", index: 100 },
+      { date: "2026-09-15", index: 103 },
+      { date: "2026-09-30", index: 102 },
+      { date: "2026-10-09", index: 99.96 },
+    ],
+  });
+  expect(panel?.charts).toEqual(["line", "area", "bar", "heatmap"]);
+  const months = monthlyReturns(panel?.points ?? []).map((m) => ({ ...m, pct: Number(m.pct.toFixed(4)) }));
+  expect(months).toEqual([
+    { year: 2026, month: 8, pct: 0 },
+    { year: 2026, month: 9, pct: 2 },
+    { year: 2026, month: 10, pct: -2 },
+  ]);
+});
+
+test("a percent series or a non-date label gets no heatmap", () => {
+  const drawdown = panelData("drawdown", {
+    series: [
+      { t: "2026-08-31", v: 0 },
+      { t: "2026-09-30", v: -1.2 },
+    ],
+  });
+  expect(drawdown?.charts).not.toContain("heatmap");
+  expect(monthlyReturns([{ label: "2026-09-30", value: 100 }, { label: "10Y", value: 101 }])).toEqual([]);
 });
