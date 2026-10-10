@@ -1,0 +1,9 @@
+{
+  "source": "config/contract/contract.yaml",
+  "vars": {
+    "DIGICHAT_EMBED_HOSTS": "digithings.ai,www.digithings.ai,occ.digithings.ai,digiquant.io,www.digiquant.io",
+    "DIGICHAT_ENABLED_SERVICES": "digigraph",
+    "DIGICHAT_REQUIRE_ROOT_AUTH": "0"
+  },
+  "worker": "digithings-digichat"
+}
