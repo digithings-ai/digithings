@@ -12,5 +12,7 @@ ENV PYTHONUNBUFFERED=1 \
 RUN pip install "mcp>=1.26,<2" "httpx>=0.28,<1"
 COPY scripts/zammad_mcp ./scripts/zammad_mcp
 EXPOSE 8770
+# Expiring ticket downloads, same container spool, same edge gate (DIG-2638).
+EXPOSE 8771
 ENV ZAMMAD_MCP_HOST=0.0.0.0
 CMD ["python", "-m", "scripts.zammad_mcp.server", "--port", "8770"]
