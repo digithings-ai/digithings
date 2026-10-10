@@ -110,10 +110,19 @@ def test_no_nulls_emitted(tmp_root: Path) -> None:
 
 def test_secrets_manifest_carries_names_only() -> None:
     manifest = yaml.safe_load((REPO / "config" / "contract" / "secrets.yaml").read_text())
-    allowed = {"name", "consumers", "required_in", "source", "note"}
+    # Shared with the landed S5 renderer input (DIG-2773): same base keys
+    # plus render instructions (generate/same_as/template). Values must
+    # never appear under any key.
+    allowed = {
+        "name", "consumers", "required_in", "source", "note", "notes",
+        "renderable", "generate", "generate_field", "generate_kind",
+        "template", "same_as",
+    }
+    forbidden_value_keys = {"value", "default", "password", "token", "secret_value"}
     for entry in manifest["secrets"]:
         assert set(entry) <= allowed, entry.get("name")
         assert entry["name"] and entry["consumers"]
+        assert not (set(entry) & forbidden_value_keys), entry.get("name")
 
 
 def test_shared_env_maps_to_an_artifact() -> None:

@@ -75,9 +75,17 @@ SECRET_LIST_WITHOUT = SECRET_LIST_WITH.replace("DIGICHAT_EMBED_TENANTS ", "OTHER
 # the first of these; a test that reaches one is a test failure, not a warning.
 MUTATING = ("deploy", "secret put", "versions", "publish", "secret delete")
 
+# Every wrangler call must be logged from this directory: that is the only place
+# a wrangler.toml for the digichat Worker exists.
+WORKER_DIR_SUFFIX = "apps/digichat-cloudflare"
+
 NPX_STUB = r"""#!/usr/bin/env bash
 # Records every invocation, then answers from the scenario env vars.
-printf '%s\n' "$*" >> "$WRANGLER_CALL_LOG"
+# The log line carries `token=` and `cwd=` because both are load-bearing and
+# neither is observable from the call text alone: whether CLOUDFLARE_API_TOKEN
+# survived the wrapper, and whether the call resolved a wrangler.toml at all.
+# Only presence is logged, never the value.
+printf '%s token=%s cwd=%s\n' "$*" "${CLOUDFLARE_API_TOKEN:+yes}" "$PWD" >> "$WRANGLER_CALL_LOG"
 args="$*"
 case "$args" in
   *whoami*)
@@ -108,7 +116,17 @@ exit 96
 """
 
 
-def run_scenario(name, auth, secrets, expect_fail, expect_absent=(), expect_present=()):
+def run_scenario(
+    name,
+    auth,
+    secrets,
+    expect_fail,
+    expect_absent=(),
+    expect_present=(),
+    extra_env=None,
+    expect_token=None,
+    expect_cwd=None,
+):
     with tempfile.TemporaryDirectory() as td:
         td = Path(td)
         stub = td / "npx"
@@ -132,6 +150,8 @@ def run_scenario(name, auth, secrets, expect_fail, expect_absent=(), expect_pres
         # stub is reached for the same reason it is reached in production.
         env.pop("CLOUDFLARE_API_TOKEN", None)
         env.pop("CLOUDFLARE_ACCOUNT_ID", None)
+        if extra_env:
+            env.update(extra_env)
 
         proc = subprocess.run(
             ["bash", str(ROLLOUT)],
@@ -159,6 +179,35 @@ def run_scenario(name, auth, secrets, expect_fail, expect_absent=(), expect_pres
         for m in MUTATING:
             if m in calls:
                 failures.append(f"reached a mutating wrangler call ({m!r}) before refusing")
+        # The wrapper must run wrangler inside the Worker directory. From the repo
+        # root there is no wrangler.toml, so `secret put` and `deploy` resolve no
+        # Worker: the put would not land on digithings-digichat while the script
+        # reported success. Asserted on every scenario, because it is not specific
+        # to token auth.
+        if expect_cwd:
+            # Match on the suffix, not the whole path: the logged cwd is absolute
+            # and the worktree path differs per clone.
+            off_dir = [
+                ln
+                for ln in calls.splitlines()
+                if not ln.rstrip().endswith(f"/{expect_cwd.lstrip('/')}")
+            ]
+            if calls and off_dir:
+                failures.append(
+                    f"wrangler was called outside {expect_cwd} on: {off_dir!r}"
+                )
+        # Whether the token reaches wrangler is the whole difference between the
+        # default (login wins) and OCC_ROLLOUT_AUTH=api-token (CI). Asserted rather
+        # than assumed in both directions, because getting it wrong either way is
+        # silent: a stripped token in CI is an auth error ten lines later, and a
+        # leaked-through token locally is the behaviour the strip exists to prevent.
+        if expect_token is not None and calls:
+            with_token = "token=yes" in calls
+            if with_token is not expect_token:
+                failures.append(
+                    f"expected CLOUDFLARE_API_TOKEN present={expect_token} for wrangler "
+                    f"calls, saw present={with_token}"
+                )
         if "STUB REFUSED" in out or "STUB received unexpected" in out:
             failures.append("stub intercepted a call the guard should have prevented")
 
@@ -243,6 +292,66 @@ def main():
                 "not authenticated",
                 "could not confirm a Cloudflare identity",
             ],
+            expect_cwd=WORKER_DIR_SUFFIX,
+            expect_token=False,
+        ),
+        # The CI opt-in. With OCC_ROLLOUT_AUTH=api-token the token must reach
+        # wrangler, because CI has no interactive `wrangler login` — this is the
+        # path .github/workflows/occ-invite-key-rollout.yml depends on, and it is
+        # the exact condition the CTO's issue assumed and the default refused.
+        run_scenario(
+            "api-token opt-in passes CLOUDFLARE_API_TOKEN through to wrangler",
+            auth="ok",
+            secrets="present",
+            expect_fail=True,
+            extra_env={
+                "OCC_ROLLOUT_AUTH": "api-token",
+                "CLOUDFLARE_API_TOKEN": "cf-stub-token-not-a-real-credential",
+                "CLOUDFLARE_ACCOUNT_ID": "abc123",
+            },
+            expect_present=[
+                "0/7 preflight: confirm the secret name already exists",
+                "1/7 read the new OCC invite key",
+                "the new OCC invite key was empty",
+            ],
+            expect_cwd=WORKER_DIR_SUFFIX,
+            expect_token=True,
+        ),
+        # The opt-in must not be a loophole: with no token in the environment it
+        # has to stop at preflight, before wrangler is called at all. Otherwise CI
+        # would hang on an interactive login instead of failing loudly.
+        run_scenario(
+            "api-token opt-in with an empty token refuses before calling wrangler",
+            auth="ok",
+            secrets="present",
+            expect_fail=True,
+            extra_env={"OCC_ROLLOUT_AUTH": "api-token", "CLOUDFLARE_ACCOUNT_ID": "abc123"},
+            expect_present=["FATAL", "OCC_ROLLOUT_AUTH=api-token but CLOUDFLARE_API_TOKEN is empty"],
+            expect_absent=["1/7 read the new OCC invite key"],
+        ),
+        # Same for the account id: a token without an account cannot be told which
+        # account a deploy would land on, and guessing is exactly the failure this
+        # script exists to prevent.
+        run_scenario(
+            "api-token opt-in without an account id refuses before calling wrangler",
+            auth="ok",
+            secrets="present",
+            expect_fail=True,
+            extra_env={
+                "OCC_ROLLOUT_AUTH": "api-token",
+                "CLOUDFLARE_API_TOKEN": "cf-stub-token-not-a-real-credential",
+            },
+            expect_present=["FATAL", "CLOUDFLARE_ACCOUNT_ID is empty"],
+            expect_absent=["1/7 read the new OCC invite key"],
+        ),
+        # An unrecognised mode is a typo, not a licence to fall back to `login`.
+        run_scenario(
+            "unknown OCC_ROLLOUT_AUTH is refused rather than defaulting to login",
+            auth="ok",
+            secrets="present",
+            expect_fail=True,
+            extra_env={"OCC_ROLLOUT_AUTH": "Api-Token"},
+            expect_present=["FATAL", "OCC_ROLLOUT_AUTH must be"],
         ),
     ]
 

@@ -115,15 +115,28 @@ apps/digithings-web/public/openwiki/
 # Secrets and credentials
 .env*
 projects/*/.env*
+# Wrangler dev vars. Rendered by `dt secrets render`; never committed.
+.dev.vars*
+!.dev.vars.example
 secrets.yaml
 # Exception: the config-contract secrets MANIFEST carries names only (no values)
-# and is the S5 renderer input — see config/contract/README.md.
+# and MUST be tracked: both variants read it (`dt secrets render` input),
+# and parity CI compares live config against it.
 !/config/contract/secrets.yaml
 digikey/examples/vault.yaml
 
 # Local stack (scripts/run_stack_local.sh)
 .local_stack_pids
 .litellm-local.log
+
+# Self-host local dev session (DIG-2771). All generated or local-only.
+# Cloudflare requires the wrangler persistence folder to be ignored:
+# https://developers.cloudflare.com/workers/wrangler/configuration/#persist-to
+.wrangler/
+apps/*/wrangler.selfhost.toml
+apps/*/.selfhost-dev/
+.dev.vars
+.dev.vars.*
 
 # Log files
 *.log
