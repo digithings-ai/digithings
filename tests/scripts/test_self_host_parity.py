@@ -479,3 +479,53 @@ def test_runner_help_documents_the_exclusions():
     assert proc.returncode == 0
     assert "cutover" in proc.stdout
     assert "parity_" in proc.stdout
+
+
+def _contract_run(tmp_path, monkeypatch, wrangler_toml: str) -> tuple[int, str]:
+    """Run --mode contract against one synthetic Worker and an empty compose side."""
+    worker = tmp_path / "apps" / "w"
+    worker.mkdir(parents=True)
+    (worker / "wrangler.toml").write_text(wrangler_toml)
+    contract = tmp_path / "config" / "contract"
+    contract.mkdir(parents=True)
+    (contract / "contract.yaml").write_text("bindings:\n- name: BOUND\n")
+    monkeypatch.setattr(parity, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(parity, "CONTRACT_DIR", contract)
+    monkeypatch.setattr(parity, "COMPOSE_FILES", [])
+    monkeypatch.setattr(parity, "ENV_EXAMPLE_FILES", [])
+    import contextlib
+    import io
+
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = parity.mode_contract()
+    return rc, buf.getvalue()
+
+
+def test_contract_skips_a_container_class_that_a_durable_object_binds(tmp_path, monkeypatch):
+    rc, out = _contract_run(
+        tmp_path,
+        monkeypatch,
+        '[[containers]]\nclass_name = "Box"\nimage = "x"\n'
+        '[[durable_objects.bindings]]\nname = "BOUND"\nclass_name = "Box"\n',
+    )
+    assert rc == 0, out
+
+
+def test_contract_fails_a_container_class_nothing_binds(tmp_path, monkeypatch):
+    rc, out = _contract_run(
+        tmp_path, monkeypatch, '[[containers]]\nclass_name = "Orphan"\nimage = "x"\n'
+    )
+    assert rc == 1
+    assert "container class Orphan has no durable_objects binding" in out
+
+
+def test_contract_still_fails_an_unmapped_durable_object_binding_name(tmp_path, monkeypatch):
+    rc, out = _contract_run(
+        tmp_path,
+        monkeypatch,
+        '[[containers]]\nclass_name = "Box"\nimage = "x"\n'
+        '[[durable_objects.bindings]]\nname = "NOT_IN_CONTRACT"\nclass_name = "Box"\n',
+    )
+    assert rc == 1
+    assert "NOT_IN_CONTRACT" in out
