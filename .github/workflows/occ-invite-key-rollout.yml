@@ -1,0 +1,285 @@
+# OCC invite key rollout — one click (DIG-1612, DIG-1381 Act B1).
+#
+# Chris clicks Run workflow. That is the whole ask.
+#
+# WHY A WORKFLOW AND NOT A TERMINAL COMMAND
+#   DIG-1474 stalled for ~18h with three approval cards and zero production
+#   change, because the runbook asked for `wrangler login` in an interactive
+#   terminal and named a scratch worktree path. A credentialed non-interactive
+#   path already existed — it is in CI, and the runbook did not use it. The
+#   agent machine is not authenticated to Cloudflare at all (no ~/.wrangler, no
+#   OAuth profile, CLOUDFLARE_API_TOKEN unset), so a terminal command can only
+#   ever be run by a human who is logged in. That is the friction being removed.
+#
+# WHAT THIS JOB CAN WRITE TO PRODUCTION
+#   1. digichat Worker secret DIGICHAT_EMBED_TENANTS  (the OCC `token` field only)
+#   2. a production deploy of the digithings-digichat Worker + its container image
+#   Nothing else. The registry edit is proven one-field by jq before the put.
+#
+# WHY IT IS A SEPARATE FILE AND NOT A STEP ON THE DEPLOY PATH
+#   This workflow gains the ability to write a production secret. That ability is
+#   isolated here so it is auditable on its own, rather than bolted onto a deploy
+#   path that runs on every push. A secret-write path that rides along with a
+#   routine deploy is a secret-write path nobody reads.
+#
+# SECRETS IT READS (all four are required; step 1 fails loudly and names any
+# that are missing, rather than failing later inside the script):
+#   CLOUDFLARE_API_TOKEN       - existing. Set 2026-09-14.
+#   CLOUDFLARE_ACCOUNT_ID      - existing. Set 2026-08-11.
+#   OCC_EMBED_TENANTS_CURRENT  - the CURRENT DIGICHAT_EMBED_TENANTS value from the
+#                                secrets manager. NOT YET PROVISIONED. It has to be:
+#                                Cloudflare secret values are write-only, so the
+#                                current registry cannot be read back from the
+#                                Worker, and this job cannot synthesise it.
+#                                !! It contains the live MCP_EDGE_KEY literal for
+#                                the zammad route. Storing it in GitHub Actions
+#                                duplicates a production credential into GitHub.
+#                                That is a Security decision (see PR DIG-1612), not
+#                                a Platform one, and it is why this file needs
+#                                sign-off before merge.
+#   OCC_INVITE_KEY             - the NEW OCC invite key Chris minted with
+#                                `openssl rand -hex 32`. NOT YET PROVISIONED.
+#                                Never mint one here: there is nowhere safe to put a
+#                                new credential in a CI log.
+#
+# HUMAN GATE
+#   `environment: production` — same gate deploy-digiquant-runner.yml uses for its
+#   first image deploy. The script still requires the literal ROLLOUT on stdin
+#   (piped below from the typed confirm input), so a mis-click that clears the
+#   environment approval still cannot write without the word.
+#
+# DRY RUN
+#   `dry_run: true` (the default) never calls wrangler. It runs the offline auth
+#   guard, which exercises the real script against a stubbed npx and asserts the
+#   same preflight guards plus the token pass-through and the Worker directory.
+#   That is the green non-production path this issue asks for.
+#
+# ROLLBACK
+#   Re-run with the previous tenant JSON and the previous key in
+#   OCC_EMBED_TENANTS_CURRENT / OCC_INVITE_KEY. The container id is bumped again
+#   (shared-vN -> shared-vN+1) so a warm instance is recycled, then the Worker is
+#   redeployed. That rollback is Act B2's body and must not be combined with Act
+#   B1. This workflow is the rollback path too, once Act B2 has landed.
+name: "Ops: OCC invite key rollout"
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "true = offline preflight only, writes nothing. Required for the first run."
+        type: boolean
+        default: true
+      confirm:
+        description: "Type ROLLOUT to perform the production write. Required unless dry_run is true."
+        type: string
+        default: ""
+
+# Per-run group, no cancel (#2541). A shared static group is wrong here: this job
+# is gated on `environment: production`, so one run can sit unapproved and hold the
+# group, and every later rollout queues behind that wait indefinitely. The
+# alternative — cancel-in-progress: true — is worse for this workflow: a cancelled
+# run can be cancelled between `secret put` and `deploy`, which is exactly the
+# half-applied state this script exists to prevent. Same trade, same shape, as
+# deploy-digiquant-runner.yml.
+#
+# The cost of a per-run group is that two approved rollouts are no longer mutually
+# excluded by the queue. The real mutexes are the `production` approval and the
+# script's own pre-put guards, which refuse a diff outside the two allowed fields.
+concurrency:
+  group: occ-invite-key-rollout-${{ github.run_id }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  rollout:
+    name: OCC invite key rollout (DIG-1612)
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 45
+    steps:
+      # No `path:` and no sparse-checkout: the container image builds from the
+      # monorepo root (wrangler.toml's image = "../../Dockerfile.digichat-cloudflare"),
+      # so a partial checkout cannot deploy.
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # wrangler bundles apps/digichat-cloudflare/src/index.ts, which imports
+      # @cloudflare/containers — a devDependency of that workspace. Without the
+      # install the bundle step fails on an unresolved import, after nothing has
+      # been written. Same install deploy-digiquant-runner.yml does.
+      - name: Install package dependencies
+        run: npm ci --no-audit --no-fund
+
+      # Fail loudly and specifically on a missing secret. The rollout script's own
+      # guards would otherwise report "CLOUDFLARE_API_TOKEN is empty" or "the new
+      # OCC invite key was empty" with no clue which GitHub secret to set, and for
+      # OCC_EMBED_TENANTS_CURRENT there is no fallback path at all: Cloudflare
+      # secret values are write-only, so the current registry cannot be read back
+      # from the Worker to synthesise it.
+      #
+      # Only lengths are printed. Never the value, never a prefix: this job holds
+      # the live MCP_EDGE_KEY literal in OCC_EMBED_TENANTS_CURRENT.
+      - name: Preflight — required secrets are present
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          OCC_EMBED_TENANTS_CURRENT: ${{ secrets.OCC_EMBED_TENANTS_CURRENT }}
+          OCC_INVITE_KEY: ${{ secrets.OCC_INVITE_KEY }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID \
+                      OCC_EMBED_TENANTS_CURRENT OCC_INVITE_KEY; do
+            if [ -z "${!name:-}" ]; then
+              echo "MISSING secret: $name"
+              missing=1
+            else
+              echo "present: $name (len=${#name} name, value hidden)"
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            cat >&2 <<'EOF'
+          One or more GitHub Actions secrets are not set for the `production`
+          environment, so this job cannot run. Nothing was written.
+
+          Fix (see docs/ops/OCC_INVITE_KEY.md § Rollout — Act B1):
+            OCC_EMBED_TENANTS_CURRENT  the CURRENT DIGICHAT_EMBED_TENANTS value from
+                                      the secrets manager. It contains the live
+                                      MCP_EDGE_KEY literal, so putting it in GitHub
+                                      Actions is a Security decision — DIG-1612's PR
+                                      carries that question for sign-off.
+            OCC_INVITE_KEY             the new key, from `openssl rand -hex 32`.
+          EOF
+            exit 1
+          fi
+
+      # Offline, writes nothing, no network. Runs the real rollout script against a
+      # stubbed npx on PATH and asserts:
+      #   - expired / not-authenticated whoami output is refused as an auth fault,
+      #     not reported as a missing secret (the regression this script guards)
+      #   - an unreadable secret list is not reported as an absent one
+      #   - OCC_ROLLOUT_AUTH=api-token passes CLOUDFLARE_API_TOKEN through to wrangler
+      #   - OCC_ROLLOUT_AUTH=api-token with no token, or no account id, stops at preflight
+      #   - an unrecognised OCC_ROLLOUT_AUTH stops rather than defaulting to `login`
+      #   - every wrangler call runs inside apps/digichat-cloudflare, the only
+      #     directory with a wrangler.toml for the digichat Worker
+      #   - the retrieval-corpus scope guard refuses any put that is not exactly
+      #     {occ.digithings.ai.token, occ.digithings.ai.backend.digisearchIndex},
+      #     and refuses a put that moves only one of the two (DIG-2779)
+      - name: Dry run — offline preflight and auth guard (no Cloudflare calls)
+        if: ${{ inputs.dry_run || inputs.confirm != 'ROLLOUT' }}
+        run: |
+          set -euo pipefail
+          python3 scripts/check_occ_rollout_auth_guard.py
+          bash scripts/test_occ_rollout_scope_guard.sh
+          {
+            echo "## OCC invite key rollout — dry run"
+            echo
+            echo "No Cloudflare API call was made and nothing was written."
+            echo "Offline auth guard: \`scripts/check_occ_rollout_auth_guard.py\` passed."
+            echo "Offline scope guard: \`scripts/test_occ_rollout_scope_guard.sh\` passed."
+            echo
+            echo "A real run rewrites exactly two fields on the OCC tenant entry:"
+            echo "\`occ.digithings.ai.token\` and \`occ.digithings.ai.backend.digisearchIndex\`."
+            echo "The second narrows the retrieval corpus to \`occ_help\`. Both are required,"
+            echo "so a token rotation on its own cannot report a compliant rollout."
+            echo
+            echo "To run for real: set \`dry_run\` to false and type \`ROLLOUT\` in"
+            echo "\`confirm\`, then clear the \`production\` environment approval."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # The production write. Both gates must be open: the typed word (checked again
+      # here so a stale dry_run=true cannot silently promote a run) and the
+      # environment approval this job is already sitting behind.
+      - name: Rollout — confirm the typed word
+        if: ${{ !inputs.dry_run && inputs.confirm == 'ROLLOUT' }}
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          set -euo pipefail
+          if [ "$CONFIRM" != "ROLLOUT" ]; then
+            echo "confirm is not ROLLOUT. Nothing was written." >&2
+            exit 1
+          fi
+          echo "confirm accepted."
+
+      # The one step that writes. stdout carries only the verify script's report;
+      # every progress line from the rollout script itself goes to stderr, so
+      # `tee rollout.out` cannot capture a secret even if one were printed.
+      #
+      # OCC_ROLLOUT_AUTH=api-token is the opt-in that lets the wrapper keep
+      # CLOUDFLARE_API_TOKEN instead of stripping it. Without it the wrapper
+      # deliberately drops the token so an interactive `wrangler login` wins — which
+      # is right on a laptop and fatal in CI, where no login is possible.
+      - name: Rollout — secret put, container-id recycle, deploy, verify
+        id: rollout
+        if: ${{ !inputs.dry_run && inputs.confirm == 'ROLLOUT' }}
+        env:
+          OCC_ROLLOUT_AUTH: api-token
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          OCC_EMBED_TENANTS_CURRENT: ${{ secrets.OCC_EMBED_TENANTS_CURRENT }}
+          OCC_INVITE_KEY: ${{ secrets.OCC_INVITE_KEY }}
+        run: |
+          set -o pipefail
+          printf 'ROLLOUT\n' | bash scripts/occ_invite_key_rollout.sh 2>&1 \
+            | tee rollout.out >/dev/null
+          rc=$?
+          # Only the PASS/FAIL report reaches the summary. Never the key, never the
+          # tenant JSON, never raw `wrangler secret` output: the summary is the one
+          # artefact Chris reads on his phone, and it is the place a leak would be
+          # least likely to be noticed.
+          {
+            echo "## OCC invite key rollout"
+            echo
+            echo '```'
+            grep -E '^(PASS|FAIL)  ' rollout.out || echo "(no PASS/FAIL lines: the run stopped before verification)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$rc"
+
+      # The rollout script makes the container-id bump inseparable from the deploy,
+      # but the commit it leaves is local to the runner and is gone when the job
+      # ends. That commit is the only record of the recycle, so it is exported here
+      # instead of being silently dropped. Nobody pushes it from CI: `contents:
+      # write` would let a secret-writing job edit branches, and the commit belongs
+      # on a task branch a human opens.
+      - name: Export the container-id bump as a patch artifact
+        if: ${{ always() && !inputs.dry_run && inputs.confirm == 'ROLLOUT' }}
+        env:
+          BASE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          patch="container-id-bump.patch"
+          paths="apps/digichat-cloudflare/src/paths.ts"
+          git diff -- "${paths}" > "$patch" || true
+          if [ -s "$patch" ]; then
+            echo "container-id bump recorded in $patch:"
+            # The patch is a one-line constant change to a build-time id, so it
+            # carries no secret. Show it so the operator can see which id shipped.
+            cat "$patch"
+          else
+            # The rollout script committed the change locally when it could. Recover
+            # it from the last commit instead of reporting an empty diff.
+            if git diff --quiet HEAD~1 -- "${paths}" 2>/dev/null; then
+              echo "no container-id change on disk or in HEAD~1; the rollout stopped before step 5/7." >&2
+            else
+              git diff HEAD~1 -- "${paths}" > "$patch"
+              echo "recovered the bump from the runner-local commit:"
+              cat "$patch"
+            fi
+          fi
+
+      - name: Upload the container-id bump patch
+        if: ${{ always() && !inputs.dry_run && inputs.confirm == 'ROLLOUT' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: occ-invite-key-container-id-bump
+          path: container-id-bump.patch
+          if-no-files-found: warn
+          retention-days: 90

@@ -68,7 +68,8 @@ Consequences:
 > **One command, if you prefer:** `bash scripts/occ_invite_key_rollout.sh` runs steps 2-5
 > below in order and prints the verification at the end. It prompts for the current registry
 > value and the new key with terminal echo off, refuses to put anything unless the edit changes
-> *exactly one field* (`occ.digithings.ai.token`), computes the next container id from the file
+> *exactly two fields* — `occ.digithings.ai.token` **and** `occ.digithings.ai.backend.digisearchIndex`
+> — **with both of them required to move**, computes the next container id from the file
 > instead of hard-coding one, makes the bump and the deploy inseparable, and prints the
 > fingerprint plus the rotation-log line. It does **not** mint the key and does **not** push the
 > container-id commit. Read it before running it: `scripts/occ_invite_key_rollout.sh`.
@@ -93,17 +94,49 @@ Steps 2-4 write to production. Steps 1 and 5 are safe to rehearse.
    and store it there. Never in a ticket, a comment, a document, a commit or a shell that writes
    history.
 2. **Build the new tenant JSON.** Take the **current** production `DIGICHAT_EMBED_TENANTS` value
-   from the secrets manager and change exactly one field: the `occ.digithings.ai` entry's
-   `token`. Do not touch the `mcp.servers` entry for the `zammad` route — its literal `token` is
+   from the secrets manager and change exactly two fields on the `occ.digithings.ai` entry:
+
+   | field | to | why |
+   |---|---|---|
+   | `token` | the new invite key | the rotation itself |
+   | `backend.digisearchIndex` | `occ_help` | the retrieval-corpus narrowing (below) |
+
+   Do not touch the `mcp.servers` entry for the `zammad` route — its literal `token` is
    the stack Worker's `MCP_EDGE_KEY` and it is a **different** credential; a one-sided change
    there breaks the OCC tool calls (R10).
 
    ```bash
-   # $JSON is the full registry with only the OCC token replaced. Verify the shape
-   # before it goes anywhere near the account:
+   # $JSON is the full registry with the OCC token replaced AND the corpus narrowed.
+   # Verify the shape before it goes anywhere near the account:
    printf '%s' "$JSON" | jq -e '.["occ.digithings.ai"].token == env.OCC_INVITE_KEY' >/dev/null
    printf '%s' "$JSON" | jq -e '.["occ.digithings.ai"].mcp.servers | length > 0' >/dev/null
+   printf '%s' "$JSON" | jq -e '.["occ.digithings.ai"].backend.digisearchIndex == "occ_help"' >/dev/null
+   # And the negative, because a plausible-looking index is the failure that matters:
+   ! printf '%s' "$JSON" | jq -e \
+       '.["occ.digithings.ai"].backend.digisearchIndex | test("(^|,)occ_tickets(,|$)")'
    ```
+
+### Why the corpus moves in the same put (DIG-2779)
+
+The live OCC tenant reads `digisearchIndex: "occ_help,occ_tickets"`. `occ_tickets` is the corpus
+built by `scripts/index_occ_tickets.py` from customer ticket text
+([ADR 0031](../adr/0031-occ-tickets-corpus-retrieval.md)). Counsel's condition for this
+rollout is that the embed reaches the **help corpus only**, so a token rotation that leaves
+`occ_tickets` reachable rotates the credential and leaves the retrieval grant exactly as wide as
+it was. The two fields therefore ship together, and `scripts/occ_invite_key_rollout.sh` step 2
+refuses a put that is not exactly those two fields, or that moves only one of them.
+
+The index is a **fixed literal in the script, not an operator-supplied value**. Do not parameterise
+it from the environment: an operator who could widen the corpus through the guard is the exact
+failure this gate exists to stop.
+
+**The live corpus cannot be read back over HTTP, by design.** The tenant registry is a write-only
+Worker secret, and `toEmbedClientConfig` copies declared fields only — it has no
+`backend.digisearchIndex` branch
+([embed-client-config.ts](../../apps/digichat/src/lib/embed-client-config.ts)). So the rollout
+script is the only place the narrowing can be proved, and it proves it before the put. What
+`scripts/verify_occ_invite_key.sh` check 7 asserts is the observable consequence: that the corpus
+is **not** discoverable from the client projection, i.e. the browser is not given a corpus oracle.
 
 3. **Put the secret** (from `apps/digichat-cloudflare`):
 
@@ -157,6 +190,13 @@ The script's checks:
 | 4 | no key, first-party origin | **`occ`** — expected, same reason | **`embed`** |
 | 5 | right key, first-party origin | `occ` | `occ` |
 | 6 | tenant-config body echoes no token material | pass | pass |
+| 7 | tenant-config body names no retrieval corpus | pass | pass |
+
+Check 7 is not a check on the key. It asserts that the response carries neither a
+`digisearchIndex` field nor the name `occ_tickets`, i.e. that the retrieval corpus is not
+discoverable from the client projection. It is the observable half of the narrowing; the
+pre-put half lives in `scripts/occ_invite_key_rollout.sh` step 2, because the registry is a
+write-only secret and no HTTP surface can report the live corpus.
 
 Check 2 is the only one that can tell a **correct** key from a **wrong** one before Act B2, because
 it is the only one that withholds the first-party origin — and without that origin the allowlist
