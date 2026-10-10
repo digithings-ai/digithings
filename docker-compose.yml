@@ -435,6 +435,39 @@ services:
     volumes:
       - digivault_data:/data/vault
 
+  # ─── digiquant MCP server (optional: run with docker compose --profile quant up) ───
+  # Backs the DigiQuantMcpContainer class in scripts/selfhost/container_shim.ts,
+  # which answers 503 for that class until a compose service publishes 8767.
+  # FastMCP over streamable-http; the entrypoint defaults to DIGIQUANT_MCP_PORT
+  # 8767, the port the shim routes to. The host must be 0.0.0.0 inside the
+  # container, or the shim cannot reach it (same reason as zammad-mcp below).
+  # No healthcheck: streamable-http has no plain GET probe. MCP reachability is
+  # checked by the tools/list probe in the self-host health gate (slice S7).
+  digiquant-mcp:
+    build:
+      context: .
+      dockerfile: digiquant/Dockerfile
+    image: digi-digiquant-mcp:latest
+    container_name: digi-digiquant-mcp
+    profiles:
+      - quant
+    ports:
+      - "127.0.0.1:8767:8767"
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DIGIQUANT_MCP_HOST=0.0.0.0
+      - DIGIQUANT_MCP_PORT=8767
+      - DIGIQUANT_DATA_DIR=/app/data
+      - DIGIKEY_JWKS_URL=${DIGIKEY_JWKS_URL:-http://digikey:8005/.well-known/jwks.json}
+    volumes:
+      - ./digiquant/data:/app/data:ro
+    depends_on:
+      digikey:
+        condition: service_healthy
+    command: ["python", "-m", "digiquant.mcp_server", "--host", "0.0.0.0", "--port", "8767"]
+
   # ─── zammad-mcp: read-only Zammad helpdesk MCP for the OCC embed (profile: zammad-mcp) ───
   # Operator MCP server for the occ tenant (config/examples/occ-embed.yaml,
   # `mcp.servers[].url: http://zammad-mcp:8770/mcp`): URLs stay on the BFF, the
