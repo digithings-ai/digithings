@@ -12,7 +12,7 @@ import {
   fg,
 } from "@opentui/core"
 
-import { HERO_GAP, pixelScale, slotRowsFor, splitWordmark, wordmarkLines } from "./hero.js"
+import { HERO_GAP, pixelScale, slotRowsFor, wordmarkLines } from "./hero.js"
 import { menuPaint, screenPaint } from "./menu_colors.js"
 
 export const FOOTER = "↑↓ move · enter select · esc back · click"
@@ -473,16 +473,15 @@ export function mountDigivoice(renderer, session, options = {}) {
     // The banner is measured against the capped frame, never the terminal, so it
     // stays a bounded size and centred instead of swelling to fill a wide window.
     const scale = pixelScale({ cols: frameWidth, rows: termH, letters: 9 })
-    const opts = { cols: frameWidth, rows: termH, tMs, truecolor, ink, scale }
-    const single = wordmarkLines("DIGIVOICE", opts)
+    const base = { cols: frameWidth, rows: termH, tMs, truecolor, ink, scale }
     const budget = Math.max(1, frameWidth - 2)
-    // When the frame cannot hold the whole word with a gap between the letters,
-    // break it into balanced lines so the glyphs never collide.
-    const words = single.lines[0].length <= budget ? ["DIGIVOICE"] : splitWordmark("DIGIVOICE", frameWidth, scale)
-    const groups = words.map((word) => wordmarkLines(word, opts).lines)
-    const width = Math.max(1, ...groups.map((lines) => lines[0]?.length ?? 0))
-    const blank = () => Array.from({ length: width }, () => ({ ch: " ", color: null }))
-    const face = groups.flatMap((lines, index) => (index ? [blank(), blank(), ...lines] : lines))
+    // The banner is always a single line. When the full-size wordmark cannot fit
+    // the frame with a gap between the letters, redraw it in the smaller face.
+    let drawn = wordmarkLines("DIGIVOICE", base)
+    if ((drawn.lines[0]?.length ?? 0) > budget) {
+      drawn = wordmarkLines("DIGIVOICE", { ...base, compact: true })
+    }
+    const face = drawn.lines
     const faceRows = face.length
     heroSlot = faceRows + 1
     heroBox.height = heroSlot

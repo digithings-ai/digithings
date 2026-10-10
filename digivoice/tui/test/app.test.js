@@ -6,13 +6,14 @@ import { createTestRenderer } from "@opentui/core/testing"
 import { FOOTER, heroOffset, mountDigivoice, onHangup, optionBinding, statusParts } from "../src/app.js"
 import {
   BUILD_MS,
+  COMPACT_GLYPH_COLS,
+  COMPACT_GLYPH_ROWS,
   LIT_SHADE,
   MIN_GAP,
   REST_SHADE,
   SHADES,
   letterGap,
   pixelScale,
-  splitWordmark,
   wordmarkLines,
 } from "../src/hero.js"
 
@@ -291,20 +292,24 @@ test("glyph cells become smaller square pixels when the window can hold them", (
   )
 })
 
-test("letters keep a gap on a narrow frame instead of touching", () => {
+test("letters keep a gap on a narrow frame and never wrap to two lines", () => {
   // Touching glyphs were the defect Chris rejected; the floor is one column.
   assert.equal(MIN_GAP, 1)
   assert.equal(letterGap(63, 9), MIN_GAP)
   assert.ok(letterGap(120, 9) > MIN_GAP)
-  // A frame too small for the whole word is split into balanced, spaced lines.
-  assert.deepEqual(splitWordmark("DIGIVOICE", 63), ["DIGI", "VOICE"])
-  for (const part of splitWordmark("DIGIVOICE", 63)) {
-    const drawn = wordmarkLines(part, { cols: 63, tMs: BUILD_MS, truecolor: false })
-    assert.ok(drawn.gap >= MIN_GAP)
-    assert.ok(drawn.lines[0].length <= 61)
-  }
-  // A frame that can hold the whole word stays on one line.
-  assert.deepEqual(splitWordmark("DIGIVOICE", 80), ["DIGIVOICE"])
+  // The full-size face fits a normal frame as one line.
+  const full = wordmarkLines("DIGIVOICE", { cols: 80, tMs: BUILD_MS, truecolor: false })
+  assert.equal(full.lines.length, 5)
+  assert.ok(full.gap >= MIN_GAP)
+  assert.ok(full.lines[0].length <= 78)
+  // A frame too small for the full face gets the smaller face, still one line,
+  // with a gap between every letter (nine glyphs, five columns each).
+  const small = wordmarkLines("DIGIVOICE", { cols: 63, tMs: BUILD_MS, truecolor: false, compact: true })
+  assert.equal(small.lines.length, COMPACT_GLYPH_ROWS / 2)
+  assert.equal(small.gap, 2)
+  assert.ok(small.gap >= MIN_GAP)
+  assert.ok(small.lines[0].length <= 61)
+  assert.ok(small.lines[0].length >= 9 * COMPACT_GLYPH_COLS)
 })
 
 test("the frame stays bounded and centred instead of filling the window", async () => {
@@ -329,7 +334,7 @@ test("the frame stays bounded and centred instead of filling the window", async 
   }
 })
 
-test("a narrow window stacks the wordmark so the letters stay spaced", async () => {
+test("a narrow window keeps the wordmark on a single line", async () => {
   const setup = await createTestRenderer({ width: 65, height: 60 })
   try {
     const app = mount(setup, session(), { cols: 65 })
@@ -338,9 +343,10 @@ test("a narrow window stacks the wordmark so the letters stay spaced", async () 
       .split("\n")
       .map((line, index) => (/[█▀▄]/.test(line) ? index : -1))
       .filter((index) => index >= 0)
-    assert.ok(rows.length >= 10, "two stacked bands of glyphs")
-    const gap = rows.some((row, index) => index > 0 && row - rows[index - 1] > 1)
-    assert.equal(gap, true, "the stacked lines are separated")
+    // One band of glyphs plus its single shadow row - never two stacked lines.
+    assert.ok(rows.length <= 6, "the wordmark is a single line")
+    const contiguous = rows.every((row, index) => index === 0 || row - rows[index - 1] === 1)
+    assert.equal(contiguous, true, "the glyph rows form one band with no stacking gap")
     app.destroy()
   } finally {
     setup.renderer.destroy()
