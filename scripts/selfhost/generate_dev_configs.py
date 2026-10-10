@@ -1,0 +1,440 @@
+#!/usr/bin/env python3
+"""Generate the self-host `wrangler dev` session for the digithings stack.
+
+DIG-2771, plan slice S3 of DIG-2758 ("sections 1, 3" of the self-host
+reference stack plan).
+
+Two things are generated, and neither edits application source:
+
+1. `<app>/wrangler.selfhost.toml` per worker, derived from that worker's real
+   `wrangler.toml`. The dev config drops `[[containers]]`,
+   `[[containers.authorized_keys]]` and `[[routes]]` (a local dev session must
+   never claim production hostnames), forces `workers_dev = true`, points `main`
+   at the generated entry, renames container-backed Durable Object classes to
+   `SelfHost<Class>`, prunes container names out of
+   `[[migrations]] new_sqlite_classes`, and appends a fixed `[dev] port`.
+
+2. `<app>/.selfhost-dev/entry.ts`, which re-exports the worker unchanged and
+   adds one `SelfHost<Class>` subclass per container class. The subclass has a
+   distinct name on purpose, so a Durable Object binding can point at the shim
+   without relying on ESM star-export precedence (which cannot be verified
+   here: `node_modules` is not installed in this worktree).
+
+Routing lives in `scripts/selfhost/container_shim.ts`. This generator only
+needs each container class's `defaultPort`, which it reads from the app source
+rather than restating, so the two cannot drift silently.
+
+Commands (`--mode`):
+- `single`    one `wrangler dev -c ... -c ...` session. This is the documented
+              multi-worker mode and it is what the plan asks for. Only the
+              PRIMARY worker gets an HTTP URL; the rest are reachable through
+              service bindings (Cloudflare docs, "Multi-worker development",
+              https://developers.cloudflare.com/workers/local-development/multi-workers/).
+- `per-worker` one `wrangler dev` command per worker, each on its own fixed
+              port. Cloudflare documents that service bindings also resolve
+              across separate dev commands (changelog 2025-09-23,
+              `wrangler-dev-multi-config-cross-command-support`), so this mode
+              is equivalent for binding resolution and better for reaching a
+              worker by URL.
+
+Usage:
+    python3 scripts/selfhost/generate_dev_configs.py generate
+    python3 scripts/selfhost/generate_dev_configs.py print-cmd --mode single
+    python3 scripts/selfhost/generate_dev_configs.py table
+"""
+
+from __future__ import annotations
+
+import argparse
+import re
+import sys
+from pathlib import Path
+from typing import Dict, List, Optional, Sequence, Tuple
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+PERSIST_DIR = ".wrangler/state"
+DEFAULT_MODE = "single"
+
+#: Blocks that must never appear in a dev config.
+DROPPED_BLOCKS = ("[[containers]]", "[[containers.authorized_keys]]", "[[routes]]")
+
+HEADER_RE = re.compile(r"^\s*\[\[?([A-Za-z0-9_.\"'-]+)\]?\]\s*$")
+CLASS_NAME_RE = re.compile(r'^\s*class_name\s*=\s*"([^"]+)"\s*$')
+MAIN_RE = re.compile(r"^\s*main\s*=\s*\"([^\"]+)\"\s*$")
+WORKERS_DEV_RE = re.compile(r"^\s*workers_dev\s*=\s*(true|false)\s*$")
+NAME_RE = re.compile(r"^\s*name\s*=\s*\"([^\"]+)\"\s*$")
+NEW_SQLITE_RE = re.compile(r"^\s*new_sqlite_classes\s*=\s*\[")
+
+
+class Worker:
+    """One wrangler worker that takes part in the local session."""
+
+    def __init__(
+        self,
+        worker: str,
+        app_dir: str,
+        config: str,
+        dev_port: int,
+        primary: bool = False,
+        scheduled: bool = False,
+    ) -> None:
+        self.worker = worker
+        self.app_dir = app_dir
+        self.config = config
+        self.dev_port = dev_port
+        self.primary = primary
+        self.scheduled = scheduled
+
+    @property
+    def app(self) -> Path:
+        return REPO_ROOT / self.app_dir
+
+    @property
+    def real_config(self) -> Path:
+        return self.app / self.config
+
+    @property
+    def dev_config(self) -> Path:
+        return self.app / "wrangler.selfhost.toml"
+
+    @property
+    def entry(self) -> Path:
+        return self.app / ".selfhost-dev" / "entry.ts"
+
+
+#: Fixed ports. 8787 is wrangler's default primary port. Nothing else in the
+#: repo uses 8787-8792: compose publishes 8000-8005, 4000, 8080, 8765, 8769,
+#: 8770, 3005, 5433, 11435, 20128, 9090, 3001, 4317/4318.
+WORKERS: Tuple[Worker, ...] = (
+    Worker(
+        "digithings-stack", "apps/digithings-stack-cloudflare", "wrangler.toml", 8787, primary=True
+    ),
+    Worker("digichat", "apps/digichat-cloudflare", "wrangler.toml", 8788),
+    Worker("dashboard-api", "apps/dashboard-api", "wrangler.toml", 8789),
+    Worker("digithings-cron", "apps/digithings-cron", "wrangler.toml", 8790, scheduled=True),
+    Worker("digiquant-runner", "apps/digiquant-runner", "wrangler.toml", 8791),
+    Worker("digitrace-langfuse", "apps/digitrace-langfuse", "wrangler.toml", 8792),
+)
+
+SHIM_PREFIX = "SelfHost"
+ENTRY_REL = ".selfhost-dev/entry.ts"
+
+GENERATED_BANNER = (
+    "# GENERATED by scripts/selfhost/generate_dev_configs.py (DIG-2771). Do not edit.\n"
+    "# Local self-host dev session. Derived from {source}: containers, authorized keys\n"
+    "# and production routes are removed, container Durable Object classes are shimmed to\n"
+    "# docker-compose services, and the dev port is fixed. Run:\n"
+    "#   python3 scripts/selfhost/generate_dev_configs.py generate\n"
+)
+
+
+def shim_class_name(container_class: str) -> str:
+    """Dev-only Durable Object name for a container class."""
+    return SHIM_PREFIX + container_class
+
+
+def _blocks(lines: Sequence[str]) -> List[Tuple[str, str, int, int]]:
+    """Return (header, body_text, start_index, end_index) for each TOML table."""
+    found: List[Tuple[str, str, int, int]] = []
+    starts: List[Tuple[int, str]] = []
+    for index, line in enumerate(lines):
+        match = HEADER_RE.match(line)
+        if match:
+            starts.append((index, line.strip()))
+    for position, (index, header) in enumerate(starts):
+        end = starts[position + 1][0] if position + 1 < len(starts) else len(lines)
+        found.append((header, "".join(lines[index + 1 : end]), index, end))
+    return found
+
+
+def container_class_names(toml_text: str) -> List[str]:
+    """Class names declared in `[[containers]]`, in file order.
+
+    Scoped to the `[[containers]]` block on purpose. A `[[durable_objects.bindings]]`
+    block also carries `class_name`, and some of those are real Durable Objects
+    with their own SQLite storage (cron's `BackfillLedger`). Shimming one of
+    those would replace a working DO with a storageless class and strip its
+    migration.
+    """
+    names: List[str] = []
+    for header, body, _start, _end in _blocks(toml_text.splitlines(keepends=True)):
+        if header != "[[containers]]":
+            continue
+        for line in body.splitlines():
+            match = CLASS_NAME_RE.match(line)
+            if match and match.group(1) not in names:
+                names.append(match.group(1))
+    return names
+
+
+def default_port_for(container_class: str, app_dir: str) -> Optional[int]:
+    """Read `defaultPort` for a container class out of the app source.
+
+    Returns None when the class cannot be found, so the generator can fail
+    loudly rather than emit a shim with a silently wrong default port.
+    """
+    src = REPO_ROOT / app_dir / "src"
+    class_re = re.compile(r"export class %s\b" % re.escape(container_class))
+    # The value may be a numeric literal or a named constant. A leading digit is
+    # allowed on purpose: `defaultPort = 3000` starts with a digit and would not
+    # match a letter-only capture class.
+    port_re = re.compile(r"defaultPort\s*=\s*([A-Za-z_$][\w$]*|\d+)")
+    const_re = re.compile(r"export const ([A-Za-z_$][\w$]*)\s*=\s*(\d+)")
+    for path in sorted(src.rglob("*.ts")):
+        text = path.read_text(encoding="utf-8")
+        class_at = class_re.search(text)
+        if class_at is None:
+            continue
+        body = text[class_at.end() : class_at.end() + 2000]
+        port_match = port_re.search(body)
+        if port_match is None:
+            continue
+        token = port_match.group(1)
+        if token.isdigit():
+            return int(token)
+        # The constant is usually declared in a sibling module (ports.ts), so
+        # the whole src tree is searched, not just this file.
+        for other in sorted(src.rglob("*.ts")):
+            for const_name, const_value in const_re.findall(other.read_text(encoding="utf-8")):
+                if const_name == token:
+                    return int(const_value)
+    return None
+
+
+def _prune_sqlite_list(body: str, container_classes: Sequence[str]) -> str:
+    """Remove container class names from new_sqlite_classes, keeping real DOs."""
+    lines = body.splitlines(keepends=True)
+    out: List[str] = []
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        if NEW_SQLITE_RE.match(line):
+            block = [line]
+            while "]" not in block[-1] and index + 1 < len(lines):
+                index += 1
+                block.append(lines[index])
+            joined = "".join(block)
+            kept = [
+                name for name in re.findall(r'"([^"]+)"', joined) if name not in container_classes
+            ]
+            if kept:
+                out.append("new_sqlite_classes = [%s]\n" % ", ".join('"%s"' % n for n in kept))
+            # An empty list is dropped: the shim classes have no storage.
+        else:
+            out.append(line)
+        index += 1
+    return "".join(out)
+
+
+def render_dev_toml(
+    worker: Worker,
+    source_text: str,
+    container_classes: Sequence[str],
+) -> str:
+    """Build the dev config for one worker from its real config text."""
+    lines = source_text.splitlines(keepends=True)
+    blocks = _blocks(lines)
+    kept: List[str] = []
+    skip_until = -1
+    in_table = False
+    injected_workers_dev = False
+    for index, line in enumerate(lines):
+        if index <= skip_until:
+            continue
+        stripped = line.strip()
+        if HEADER_RE.match(line):
+            if stripped in DROPPED_BLOCKS:
+                for _header, _body, start, end in blocks:
+                    if start == index:
+                        skip_until = end - 1
+                        break
+                continue
+            kept.append(line)
+            in_table = True
+            continue
+        if MAIN_RE.match(line):
+            kept.append('main = "%s"\n' % ENTRY_REL)
+            continue
+        if WORKERS_DEV_RE.match(line):
+            # Forced below, at the top level only. A `workers_dev` key inside any
+            # table would be a different key and is not what wrangler reads.
+            continue
+        if NAME_RE.match(line):
+            kept.append(line)
+            if not in_table and not injected_workers_dev:
+                kept.append("workers_dev = true\n")
+                injected_workers_dev = True
+            continue
+        if CLASS_NAME_RE.match(line):
+            value = CLASS_NAME_RE.match(line).group(1)  # type: ignore[union-attr]
+            if value in container_classes:
+                kept.append('class_name = "%s"\n' % shim_class_name(value))
+                continue
+        kept.append(line)
+
+    body = "".join(kept)
+    if "new_sqlite_classes" in body:
+        body = _prune_sqlite_list(body, container_classes)
+        # A migration tag that no longer names any class is dead weight; drop it.
+        pruned_lines = body.splitlines(keepends=True)
+        pruned: List[str] = []
+        skip_until = -1
+        for index, pruned_line in enumerate(pruned_lines):
+            if index <= skip_until:
+                continue
+            if pruned_line.strip() == "[[migrations]]":
+                end = index + 1
+                while end < len(pruned_lines) and not HEADER_RE.match(pruned_lines[end]):
+                    end += 1
+                block_body = "".join(pruned_lines[index + 1 : end])
+                if "new_sqlite_classes" not in block_body:
+                    skip_until = end - 1
+                    continue
+            pruned.append(pruned_line)
+        body = "".join(pruned)
+
+    banner = GENERATED_BANNER.format(source="%s/%s" % (worker.app_dir, worker.config))
+    dev_table = (
+        "\n# Fixed local port. In a single multi-config session only the PRIMARY\n# worker is exposed on a URL; auxiliary [dev] port values are undocumented.\n[dev]\nport = %d\n"
+        % worker.dev_port
+    )
+    return banner + body.rstrip("\n") + "\n" + dev_table
+
+
+def render_entry_ts(worker: Worker, class_ports: Dict[str, Optional[int]]) -> str:
+    """Build the dev entry point: the worker, unchanged, plus shim classes."""
+    lines = [
+        "// GENERATED by scripts/selfhost/generate_dev_configs.py (DIG-2771). Do not edit.",
+        "//",
+        "// The worker is re-exported unchanged. Container-backed Durable Object",
+        "// classes get a dev-only subclass with a DISTINCT name, so the binding can",
+        "// point at the shim without relying on star-export precedence.",
+        'import { SelfHostContainer } from "../../../scripts/selfhost/container_shim";',
+        "",
+        'export * from "../src/index";',
+        'export { default } from "../src/index";',
+        "",
+    ]
+    for container_class in sorted(class_ports):
+        port = class_ports[container_class]
+        port_literal = "0" if port is None else str(port)
+        note = (
+            ""
+            if port is not None
+            else "  // defaultPort not found in source; the shim answers 400."
+        )
+        lines.append(
+            "/** Shim for %s (container port %s). */%s" % (container_class, port_literal, note)
+        )
+        lines.append(
+            "export class %s extends SelfHostContainer {" % shim_class_name(container_class)
+        )
+        lines.append('\treadonly selfHostClass = "%s";' % container_class)
+        lines.append("\treadonly selfHostDefaultPort = %s;" % port_literal)
+        lines.append("}")
+        lines.append("")
+    return "\n".join(lines) + "\n"
+
+
+def worker_classes(worker: Worker) -> List[str]:
+    return container_class_names(worker.real_config.read_text(encoding="utf-8"))
+
+
+def class_ports_for(worker: Worker) -> Dict[str, Optional[int]]:
+    ports: Dict[str, Optional[int]] = {}
+    for container_class in worker_classes(worker):
+        ports[container_class] = default_port_for(container_class, worker.app_dir)
+    return ports
+
+
+def generate(write: bool = False) -> List[Path]:
+    """Render every dev config and entry. Returns the files written."""
+    written: List[Path] = []
+    for worker in WORKERS:
+        classes = worker_classes(worker)
+        ports = {name: default_port_for(name, worker.app_dir) for name in classes}
+        unknown = sorted(n for n, p in ports.items() if p is None)
+        if unknown:
+            print(
+                "warn: %s: no defaultPort found in source for %s; shim will answer 400"
+                % (worker.worker, ", ".join(unknown)),
+                file=sys.stderr,
+            )
+        dev_toml = render_dev_toml(worker, worker.real_config.read_text(encoding="utf-8"), classes)
+        entry_ts = render_entry_ts(worker, ports)
+        if write:
+            worker.dev_config.write_text(dev_toml, encoding="utf-8")
+            worker.entry.parent.mkdir(parents=True, exist_ok=True)
+            worker.entry.write_text(entry_ts, encoding="utf-8")
+        written.extend([worker.dev_config, worker.entry])
+    return written
+
+
+def session_command(mode: str = DEFAULT_MODE) -> List[str]:
+    """The exact `wrangler dev` argv for a mode."""
+    base = ["wrangler", "dev", "--local", "--persist-to", PERSIST_DIR]
+    if mode == "single":
+        argv = list(base)
+        for worker in WORKERS:
+            argv += ["-c", str(worker.dev_config.relative_to(REPO_ROOT))]
+        if any(w.scheduled for w in WORKERS):
+            argv.append("--test-scheduled")
+        return argv
+    return argv_per_worker(mode)  # type: ignore[return-value]
+
+
+def argv_per_worker(mode: str) -> List[List[str]]:
+    """One argv per worker for the per-worker mode."""
+    del mode  # only one alternative exists today
+    argvs: List[List[str]] = []
+    for worker in WORKERS:
+        argv = ["wrangler", "dev", "--local", "--persist-to", PERSIST_DIR]
+        argv += ["-c", str(worker.dev_config.relative_to(REPO_ROOT))]
+        if worker.scheduled:
+            argv.append("--test-scheduled")
+        argvs.append(argv)
+    return argvs
+
+
+def table_lines() -> List[str]:
+    """Human-readable port and class table for `dt status` style output."""
+    rows = [("worker", "app", "dev port", "role", "container classes (shim)")]
+    for worker in WORKERS:
+        classes = worker_classes(worker)
+        shimmed = ", ".join(shim_class_name(c) for c in classes) or "-"
+        role = "primary" if worker.primary else ("cron" if worker.scheduled else "auxiliary")
+        rows.append((worker.worker, worker.app_dir, str(worker.dev_port), role, shimmed))
+    widths = [max(len(r[i]) for r in rows) for i in range(len(rows[0]))]
+    return ["  ".join(cell.ljust(widths[i]) for i, cell in enumerate(row)).rstrip() for row in rows]
+
+
+def main(argv: Optional[Sequence[str]] = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("command", choices=["generate", "print-cmd", "table"])
+    parser.add_argument("--mode", default=DEFAULT_MODE, choices=["single", "per-worker"])
+    parser.add_argument("--write", action="store_true", help="write the generated files to disk")
+    args = parser.parse_args(argv)
+
+    if args.command == "table":
+        for line in table_lines():
+            print(line)
+        return 0
+    if args.command == "print-cmd":
+        if args.mode == "per-worker":
+            for argv in argv_per_worker(args.mode):
+                print(" ".join(argv))
+            return 0
+        print(" ".join(session_command(args.mode)))
+        return 0
+
+    written = generate(write=args.write)
+    for path in written:
+        print(path.relative_to(REPO_ROOT))
+    if not args.write:
+        print("\n(dry run; pass --write to write)", file=sys.stderr)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
