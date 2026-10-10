@@ -340,12 +340,6 @@
       "digiquant/src/digiquant/research/config/local.env.example": [
         "DATABASE_URL"
       ],
-      "digiquant/src/digiquant/research/config/mcp.secrets.env.example": [
-        "ALPHA_VANTAGE_API_KEY",
-        "COINGECKO_API_KEY",
-        "FRED_API_KEY",
-        "SEC_EDGAR_USER_AGENT"
-      ],
       "docs/templates/project/.env.example": [
         "DIGIKEY_JWKS_URL",
         "DIGIQUANT_URL",
@@ -354,6 +348,9 @@
         "LITELLM_PROXY_API_KEY",
         "OPENAI_API_BASE"
       ]
+    },
+    "houseGuarded": {
+      "digiquant/src/digiquant/research/config/mcp.secrets.env.example": "tests/scripts/test_retired_provider_keys.py (DIG-337) owns the retired provider-key placeholders in this file and keeps the vendor names out of the tree"
     },
     "wrangler": {
       "apps/dashboard-api/wrangler.toml": {

@@ -64,9 +64,30 @@ ENV_EXAMPLE_FILES = (
     "apps/digichat/reference/assistant-ui-templates/base/.env.example",
     "apps/digichat/reference/assistant-ui-templates/expo-react-native/.env.example",
     "digiquant/src/digiquant/research/config/local.env.example",
-    "digiquant/src/digiquant/research/config/mcp.secrets.env.example",
     "docs/templates/project/.env.example",
 )
+
+# Files whose contents a house guard already owns, and where this census must not
+# become a second place that reproduces the guarded material.
+#
+# `mcp.secrets.env.example` holds the placeholder rows for the provider keys Chris
+# retired on 2026-10-04. `tests/scripts/test_retired_provider_keys.py` (DIG-337)
+# owns that file: it allowlists the path, pins the rows as `replace-with-`
+# placeholders, and fails if either vendor name appears anywhere else in the
+# tree -- which includes this baseline file. Recording those names here would
+# have widened that guard's allowlist, which is a Security call and not this
+# slice's.
+#
+# So the census excludes the file and records the exclusion with its key count,
+# which is the honest direction to lose: drift on those 4 rows is invisible to
+# this check, and DIG-337's guard is the thing that watches them.
+HOUSE_GUARDED_FILES = {
+    "digiquant/src/digiquant/research/config/mcp.secrets.env.example": (
+        "tests/scripts/test_retired_provider_keys.py (DIG-337) owns the retired "
+        "provider-key placeholders in this file and keeps the vendor names out of "
+        "the tree"
+    ),
+}
 
 # A wrangler key that declares a binding, rather than a plain variable. A new key
 # in any of these namespaces is a new capability on the hosted side, so it is
@@ -220,11 +241,15 @@ def env_example_keys(path: Path) -> list[str]:
 def surface_signature() -> dict[str, Any]:
     compose: dict[str, list[str]] = {}
     for rel in COMPOSE_FILES:
+        if rel in HOUSE_GUARDED_FILES:
+            continue
         path = REPO_ROOT / rel
         if path.exists():
             compose[rel] = compose_env_keys(path)
     envs: dict[str, list[str]] = {}
     for rel in ENV_EXAMPLE_FILES:
+        if rel in HOUSE_GUARDED_FILES:
+            continue
         path = REPO_ROOT / rel
         if path.exists():
             envs[rel] = env_example_keys(path)
@@ -232,6 +257,10 @@ def surface_signature() -> dict[str, Any]:
         "wrangler": wrangler_surface(),
         "composeEnv": compose,
         "envExample": envs,
+        # The exclusions travel in the signature on purpose: dropping one, or
+        # adding another, is a change to what this check is allowed to be blind
+        # to, and that has to be a reviewed diff rather than a silent widening.
+        "houseGuarded": dict(sorted(HOUSE_GUARDED_FILES.items())),
     }
 
 
@@ -281,6 +310,19 @@ def diff_surface(recorded: dict[str, Any], current: dict[str, Any]) -> list[str]
                     problems.append(f"NEW env key {key} in {path}")
                 for key in sorted(set(old[path]) - set(new[path])):
                     problems.append(f"REMOVED env key {key} from {path}")
+    old_hg = recorded.get("houseGuarded", {})
+    new_hg = current.get("houseGuarded", {})
+    for path in sorted(set(new_hg) | set(old_hg)):
+        if path not in old_hg:
+            problems.append(
+                f"NEW house-guarded exclusion {path} (name the owning guard, or census it)"
+            )
+        elif path not in new_hg:
+            problems.append(
+                f"REMOVED house-guarded exclusion {path} (the owning guard may have changed)"
+            )
+        elif old_hg[path] != new_hg[path]:
+            problems.append(f"CHANGED house-guard reason for {path}")
     return problems
 
 
@@ -303,6 +345,7 @@ def mode_drift(update: bool) -> int:
         "wrangler names": sum(len(v) for v in current["wrangler"].values()),
         "compose env keys": sum(len(v) for v in current["composeEnv"].values()),
         "env.example keys": sum(len(v) for v in current["envExample"].values()),
+        "house-guarded": len(current.get("houseGuarded", {})),
     }
     print("SELF-HOST PARITY: DRIFT")
     for label, value in counts.items():

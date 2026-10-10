@@ -20,9 +20,22 @@
 #     say so in their own headers ("NOT AUTO-APPLIED").
 #
 # Modes:
-#   --plan        print the ordered migration list and every guard's verdict,
-#                 then exit. No database connection. Used by the test suite.
-#   (default)     create the target database, apply the chain, report.
+#   --plan               print the ordered migration list and every guard's
+#                        verdict, then exit. No database connection. Used by the
+#                        test suite.
+#   (default)            create the target database, apply the chain, report.
+#   --continue-on-error  apply every file, collect the failures, and report all
+#                        of them instead of stopping at the first.
+#
+# Exit codes -- MEASURE and JUDGE are different jobs:
+#   0  the chain applied completely (or, with --continue-on-error, the chain was
+#      measured and the gaps are reported as DATA)
+#   1  a guard refused, the server was unreachable, the database could not be
+#      created, or a file failed WITHOUT --continue-on-error
+#   2  bad usage
+# `self_host_parity.py --mode migrations` is what turns a measured gap list into
+# a PASS or a FAIL, by comparing it against config/self-host/parity-baseline.json.
+# This script deliberately has no opinion about which gaps are acceptable.
 #
 # Environment (standard libpq, so CI's `services:` block feeds it directly):
 #   PGHOST PGPORT PGUSER PGPASSWORD PGDATABASE
@@ -224,11 +237,31 @@ if [ -n "$json_out" ]; then
   note "json           $json_out"
 fi
 
-if [ -s "$log_dir/failures.txt" ]; then
-  note "RESULT: $(( $(wc -l <"$log_dir/failures.txt" | tr -d ' ') )) migration file(s) did not apply."
+# --- the verdict belongs to the judge, not to the measurement ---------------
+# CI caught this on PR #5351: this step used to `exit 1` on any recorded gap
+# while the judging step (`self_host_parity.py --mode migrations`) printed PASS,
+# so the job went red on a set of gaps the check itself calls known. A step that
+# measures and a step that judges must not disagree about the verdict.
+#
+# With --continue-on-error an incomplete chain is DATA: exit 0, and let the
+# judge decide. Without it the first failing file already `fail`ed in the loop
+# above, so the exit code there is already non-zero. Guard and infrastructure
+# failures always exit 1 -- they mean the measurement is missing, not merely
+# negative.
+failures=0
+[ -s "$log_dir/failures.txt" ] && failures="$(wc -l <"$log_dir/failures.txt" | tr -d ' ')"
+
+if [ "$failures" -gt 0 ]; then
+  note "RESULT: $failures migration file(s) did not apply."
   note "Compare them against config/self-host/parity-baseline.json:"
   note "a NEW failure fails this check; a baseline entry that STOPPED failing also fails it."
+  if [ -n "$continue_on_error" ]; then
+    echo "SELF-HOST MIGRATIONS CHECK: MEASURED ($applied/$count applied, $failures known-gap candidate(s))"
+    note "--continue-on-error: this is a measurement, not a verdict."
+    note "The verdict belongs to: python scripts/self_host_parity.py --mode migrations"
+    exit 0
+  fi
   exit 1
 fi
 
-echo "SELF-HOST MIGRATIONS CHECK: PASS"
+echo "SELF-HOST MIGRATIONS CHECK: PASS ($applied/$count applied)"

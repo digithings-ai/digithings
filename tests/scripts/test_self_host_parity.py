@@ -84,13 +84,54 @@ def test_compose_file_list_covers_every_compose_file_in_the_repo():
 
 
 def test_env_example_list_covers_every_env_example_in_the_repo():
+    """Every `.env.example` on disk is either censused or excluded on purpose.
+
+    An exclusion is not a gap: it has to be named, carry the guard that owns the
+    file, and exist. Anything else would be a file this check is silently blind
+    to, which is the failure this test exists to prevent.
+    """
     on_disk = sorted(
         str(p.relative_to(REPO_ROOT))
         for p in REPO_ROOT.rglob("*.env.example")
         if "node_modules" not in p.parts
     )
-    missing = sorted(set(on_disk) - set(parity.ENV_EXAMPLE_FILES))
-    assert not missing, f".env.example files not covered by the parity check: {missing}"
+    covered = set(parity.ENV_EXAMPLE_FILES) | set(parity.HOUSE_GUARDED_FILES)
+    missing = sorted(set(on_disk) - covered)
+    assert not missing, f".env.example files neither censused nor excluded: {missing}"
+    assert not (set(parity.ENV_EXAMPLE_FILES) & set(parity.HOUSE_GUARDED_FILES)), (
+        "a file is both censused and excluded"
+    )
+    for path, reason in parity.HOUSE_GUARDED_FILES.items():
+        assert (REPO_ROOT / path).exists(), f"excluded file does not exist: {path}"
+        assert reason.strip(), f"exclusion without a reason: {path}"
+
+
+def test_the_dig337_guarded_file_is_really_absent_from_the_committed_baseline():
+    """The point of the exclusion: no committed file of this slice may reproduce
+    the retired provider-key names that DIG-337's guard keeps out of the tree.
+
+    The pattern is read from that guard instead of being retyped here, for two
+    reasons. It is the guard's rule, not this slice's, and this file is itself a
+    tracked file the guard scans -- a retyped copy would make this slice the very
+    thing DIG-337 exists to prevent.
+    """
+    guarded_test = REPO_ROOT / "tests" / "scripts" / "test_retired_provider_keys.py"
+    spec = importlib.util.spec_from_file_location("_dig337_guard", guarded_test)
+    guard = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(guard)
+
+    surface = json.loads((REPO_ROOT / "config" / "self-host" / "parity-baseline.json").read_text())
+    for section in ("wrangler", "composeEnv", "envExample"):
+        for guarded in parity.HOUSE_GUARDED_FILES:
+            assert guarded not in surface["surface"].get(section, {}), (
+                f"{guarded} is still censused under {section}"
+            )
+    assert set(surface["surface"]["houseGuarded"]) == set(parity.HOUSE_GUARDED_FILES)
+
+    text = (REPO_ROOT / "config" / "self-host" / "parity-baseline.json").read_text()
+    assert not guard.PATTERN.search(text), "a retired provider-key name is back in the baseline"
+    for mine in (SCRIPT, RUNNER, Path(__file__)):
+        assert not guard.PATTERN.search(mine.read_text()), f"retired vendor name in {mine.name}"
 
 
 def test_the_self_host_compose_file_is_actually_covered():
@@ -326,6 +367,111 @@ def test_runner_plan_rejects_an_unparsable_migration_name(tmp_path, monkeypatch)
 def test_runner_is_valid_bash():
     proc = subprocess.run(["bash", "-n", str(RUNNER)], capture_output=True, text=True, check=False)
     assert proc.returncode == 0, proc.stderr
+
+
+# ------------------------------------------- the measure/judge exit contract
+_STUB_PSQL = r"""#!/usr/bin/env bash
+# A stub psql for the exit-contract tests. It answers the two probe queries the
+# runner asks (server version, public table count), drains nothing, and fails
+# ONLY for a migration file named 002_bad.sql -- so "the chain applied" and "one
+# file failed" are both reachable without a PostgreSQL server.
+prev=""; last=""
+for a in "$@"; do
+  if [ "$prev" = "-f" ]; then last="$a"; fi
+  if [ "$prev" = "-c" ]; then
+    case "$a" in
+      *server_version*) echo "17.11"; exit 0 ;;
+      *information_schema*) echo "42"; exit 0 ;;
+    esac
+  fi
+  prev="$a"
+done
+case " $* " in *' --version '*) echo "psql (PostgreSQL) 17.11"; exit 0 ;; esac
+case "$last" in
+  *002_bad.sql)
+    echo "psql:${last}:3: ERROR:  relation \"public.nope\" does not exist" >&2
+    exit 1 ;;
+esac
+exit 0
+"""
+
+_STUB_NOOP = "#!/usr/bin/env bash\nexit 0\n"
+
+
+def _stub_env(tmp_path, with_bad_file):
+    """A stubbed runner environment: no server, no real database, no real
+    migrations. Returns (env, json_path)."""
+    mig = tmp_path / "migrations"
+    mig.mkdir(exist_ok=True)
+    (mig / "001_ok.sql").write_text("select 1;\n")
+    if with_bad_file:
+        (mig / "002_bad.sql").write_text("select * from public.nope;\n")
+    stub = tmp_path / "psql"
+    stub.write_text(_STUB_PSQL)
+    stub.chmod(0o755)
+    for name in ("createdb", "dropdb"):
+        path = tmp_path / name
+        path.write_text(_STUB_NOOP)
+        path.chmod(0o755)
+    return {
+        "PARITY_PSQL": str(stub),
+        "PARITY_CREATEDB": str(tmp_path / "createdb"),
+        "PARITY_DROPDB": str(tmp_path / "dropdb"),
+        "PARITY_MIGRATIONS_DIR": str(mig),
+        "PGDATABASE": "parity_exit_contract",
+    }
+
+
+def test_runner_passes_when_every_migration_applies(tmp_path):
+    """The control for the two tests below. Without it, a stub that can only
+    fail would make both of them pass for the wrong reason."""
+    for args in ([], ["--continue-on-error"]):
+        proc = _run_runner(
+            [*args, "--json-out", str(tmp_path / "ok.json")], _stub_env(tmp_path, False)
+        )
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        assert "SELF-HOST MIGRATIONS CHECK: PASS (1/1 applied)" in proc.stdout, proc.stdout
+
+
+def test_continue_on_error_reports_a_gap_as_data_not_as_a_verdict(tmp_path):
+    """PR #5351, both jobs red: this step exited 1 on a gap that the judge
+    (`--mode migrations`) calls known, so a step that MEASURES and a step that
+    JUDGES disagreed and the job went red. With --continue-on-error the chain is
+    a measurement: exit 0, gaps reported, the judge decides."""
+    proc = _run_runner(
+        ["--continue-on-error", "--json-out", str(tmp_path / "m.json")], _stub_env(tmp_path, True)
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert (
+        "SELF-HOST MIGRATIONS CHECK: MEASURED (1/2 applied, 1 known-gap candidate(s))"
+        in proc.stdout
+    )
+    assert "does not exist" in proc.stdout, proc.stdout
+    assert (
+        json.loads((tmp_path / "m.json").read_text())["failures"][0]["migration"] == "002_bad.sql"
+    )
+
+
+def test_without_continue_on_error_a_failing_migration_still_fails(tmp_path):
+    proc = _run_runner([], _stub_env(tmp_path, True))
+    assert proc.returncode != 0, proc.stdout
+    assert "did not apply" in proc.stderr, proc.stderr
+
+
+def test_the_contract_step_cannot_die_before_it_captures_the_exit_code():
+    """GitHub runs every `run:` block under `bash -e {0}`. A bare `cmd; rc=$?`
+    is dead code there: `cmd` exiting 3 kills the step first, which is how the
+    contract check printed NOT RUN and still went red on PR #5351. Only a
+    command on the left of `||` is exempt from errexit."""
+    import yaml
+
+    wf = yaml.safe_load((REPO_ROOT / ".github" / "workflows" / "self-host-parity.yml").read_text())
+    steps = wf["jobs"]["drift"]["steps"]
+    contract = next(s for s in steps if s.get("name", "").startswith("contract lint"))
+    body = contract["run"]
+    assert "|| rc=$?" in body, body
+    bare = [ln for ln in body.splitlines() if ln.strip() == "rc=$?"]
+    assert bare == [], f"a bare `rc=$?` is unreachable under `bash -e`: {body}"
 
 
 def test_runner_help_documents_the_exclusions():
