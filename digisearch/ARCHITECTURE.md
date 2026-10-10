@@ -180,9 +180,19 @@ auth-exempt (CORS is enforced separately).
 
 #### `GET /health` and `GET /healthz`
 
-Public (no auth). Both endpoints are rate-limit-exempt. `/health` returns `{"status": "ok", "service": "digisearch"}` (legacy, kept for back-compat). `/healthz` returns `{"ok": true}` — the preferred liveness probe for load balancers and k8s (see AGENTS.md "Liveness vs status"). Used by Docker healthcheck and digigraph startup dependency.
+Public (no auth). Both endpoints are rate-limit-exempt. `/healthz` returns `{"ok": true}` — the preferred liveness probe for load balancers and k8s (see AGENTS.md "Liveness vs status"). Used by Docker healthcheck and digigraph startup dependency.
 
-**Gap:** Does not probe backend connectivity. A backend can be offline and both endpoints return 200. See [Redesign Recommendations](#12-redesign-recommendations).
+`/health` (legacy, kept for back-compat) returns `{"status": "ok", "service": "digisearch"}`, and returns `status: "degraded"` plus an `unseeded_indexes` array when the boot marked indexes as unseeded (#5045):
+
+```json
+{"status": "degraded", "service": "digisearch", "unseeded_indexes": ["occ_help", "occ_tickets"]}
+```
+
+Those collections are empty, so every query against them would answer "no results" and read as a confident miss. Reporting it here is what makes that failure diagnosable instead of silent — see [Unseeded corpora](#unseeded-corpora-5045).
+
+**HTTP stays 200 on both, deliberately.** Every consumer gates on the status code, not the body: `scripts/run_stack_local.sh` uses `curl -sf`, `tests/test_e2e.py::test_digisearch_health` asserts 200, and the Cloudflare Worker computes per-module health itself rather than proxying this body. `/healthz` remains the unconditional pure-liveness probe — AGENTS.md requires it, and `pipeline-digiquant.yml` calls it.
+
+**Gap:** Neither endpoint probes backend connectivity. A backend can be offline and both return 200. See [Redesign Recommendations](#12-redesign-recommendations).
 
 #### `GET /azure_status`
 
@@ -340,6 +350,8 @@ are wired as three parts (R12): the `TOOL_DIGISEARCH_WEBSETS_*` constants +
 Auth required (`digisearch:query` scope). Rate limited: 10 req/min per IP; token-bearing callers get 6× on their own token with a 6× per-IP ceiling (`DIGISEARCH_AUTH_RATE_LIMIT_MULTIPLIER` / `DIGISEARCH_IP_CEILING_MULTIPLIER`, #4106).
 
 Dispatches one named tool: `digisearch`, `digisearch_fetch_all`, `digisearch_research_delegate`, `web_search`, or the monitor/webset tools above. The hub calls this to execute search without importing digisearch Python code directly. Webset dispatch failures are `ok=false` with the stable code in `error` (`code: message`) — never a 4xx — so a missing webset or invalid criteria stays readable to the hub.
+
+An unseeded corpus (#5045) follows that same convention: **HTTP 200** with `{"ok": false, "error": "corpus_not_seeded: …"}`, naming the failing indexes. It is deliberately not a 4xx, and it is deliberately distinguishable from a genuine miss — a real zero-hit is `{"content": "No results found.", "results": [], "rag_sources": []}`. See [Unseeded corpora](#unseeded-corpora-5045).
 
 #### `POST /v1/research_turn`
 
@@ -1050,6 +1062,24 @@ Entry point: `digisearch` (Typer). All defined in `cli.py`.
 | `digisearch index build --config <path>` | Build/re-index (stub — prints guidance) |
 | `digisearch index inspect --index <name>` | Inspect stub index chunk counts |
 
+**Ingest exit codes (#5045).** `ingest` and `ingest-batch` share
+`_ingest_paths`, and **a total failure is a non-zero exit** — the contract that
+lets `seed_chroma.sh` detect it (`if ! seed_index …`):
+
+- `IngestError` → exit **1**.
+- Candidate files present but **no results recorded** → exit **1**. Keyed on
+  `not results`, *not* on `total == 0`, so a file that parsed successfully but
+  legitimately contains no embeddable text still exits **0**.
+- Missing source path, or a directory with no files → exit **1** (`_resolve_source`).
+- Directory expansion is `sorted(source.rglob("*"))`, so ingest order is
+  deterministic rather than filesystem-dependent.
+
+This matters because the pipeline runs with `skip_errors=True`: a per-file embed
+failure (a model that will not download, a provider that will not answer) was
+previously logged as a warning and skipped, leaving `total == 0` and **exit 0** —
+so the container seed wrote its success marker over an empty corpus and digisearch
+served nothing as healthy. See [Unseeded corpora](#unseeded-corpora-5045).
+
 **Note:** CLI and HTTP ingest both call `digisearch.pipeline.ingest.ingest_source`
 (batch via `ingest_paths`). That path writes through `route_add_chunks` —
 Chroma when `CHROMA_PATH` / `CHROMA_HOST` is set (Profile A seed), otherwise the
@@ -1117,7 +1147,8 @@ Result
 ├── chunk: Chunk
 ├── score: float               # relevance score; backend-specific scale
 ├── source_doc: Document?      # populated when full document is needed
-└── rank: int?                 # 1-based rank after sorting
+├── rank: int?                 # 1-based rank after sorting
+└── index_names: list[str]     # originating indexes; #5045 provenance (see below)
 ```
 
 ### `SearchResponse`
@@ -1127,8 +1158,25 @@ SearchResponse
 ├── results: list[Result]
 ├── facets: dict[str, list[{value, count}]]?  # Azure facet counts
 ├── total_count: int?          # full match count when include_total_count=True
-└── backend: str?              # "vectorize" | "azure_ai_search" | "chroma" | "stub"
+├── backend: str?              # "vectorize" | "azure_ai_search" | "chroma" | "stub" | "multi"
+└── index_names: list[str]     # every index queried; "multi" fan-out only
 ```
+
+**Fan-out provenance (#4995).** On a multi-index query each `Result` records the
+indexes it came from in `index_names`. Index name **is** the storage table name —
+`ChromaBackend` resolves it via `get_or_create_collection(name=…)` — so it is the
+correct provenance label.
+
+Scoring is unchanged: RRF accumulates `1.0 / (k + rank)` exactly as before and
+ordering is bit-identical; this is observability only. When one chunk folds across
+indexes (the `scored[chunk.id]` duplicate path in `_rrf_merge_results`) **all**
+contributing names are kept, in fan-out order, deduped — not just the first.
+
+The field never reaches the wire. `normalize_query_hit()` extracts only
+`chunk_id`, `doc_id`, `rank`, `score`, `content`, `content_length`,
+`content_truncated`, and `metadata`, so `QueryResponse.results` (a `list[dict]`)
+and digigraph's strict parsing are untouched. `index_names` is additive, not a
+rename of anything that existed.
 
 ### Standard JSON hit shape
 
@@ -1340,6 +1388,60 @@ digisearch/src/digisearch/
 └── dev/
     └── edgar_sample_export.py # EDGAR-CORPUS slice exporter (dev/test only)
 ```
+
+### Unseeded corpora (#5045)
+
+**The failure mode this exists to prevent.** In production the container boots,
+`seed_chroma.sh` populates the markdown corpora, and digisearch opens Chroma.
+Until #5045 an ingest that embedded *nothing* still exited **0**, so the seed
+wrote its success marker and digisearch served an empty Chroma as healthy:
+`/health` said `ok`, every query returned zero hits, and nothing logged an
+error. That is the worst shape a retrieval failure can take — indistinguishable
+from a genuine miss.
+
+**Two layers, both required.** The shell-level gate only works because the CLI
+propagates failure (see [CLI Commands](#cli-commands)); a seed marker written on
+a total-failure ingest is what made the original outage silent.
+
+**1. The boot records what it could not populate.** `start_digisearch.sh` exports
+`DIGISEARCH_UNSEEDED_INDEXES` — a comma-separated index list — before it `exec`s
+uvicorn. A seed failure records that index; a timeout (bounded, 600 s chroma /
+900 s tickets) records every index it could not confirm. The value is read **per
+call**, not cached at import, so it can be set around a request in tests.
+
+**2. Every query refuses to answer for a named index.** `guard_unseeded()` is the
+first thing `query_index()` does after splitting the comma fan-out, so it covers
+both HTTP paths (`POST /query` and `/v1/orchestrator_invoke` share that funnel).
+It raises `CorpusNotSeededError(indexes=[…])` on the **intersection** of the
+requested indexes and the unseeded set — so a fan-out to `occ_help,occ_tickets`
+where only the ticket backfill failed still answers from `occ_help`, and only
+names `occ_tickets`.
+
+`CorpusNotSeededError` subclasses `SearchBackendError` but is deliberately **not**
+in `_BACKEND_ERRORS`, so the backend dispatcher cannot catch it and fall through
+to the next backend — which would reintroduce exactly the silent-empty answer.
+
+**Surfacing differs per caller, deliberately:**
+
+| Path | Response | Why |
+|------|----------|-----|
+| `POST /query` | **HTTP 503**, `error.code = "http_503"`, `error.message` starting `corpus_not_seeded:` and naming the indexes | The corpus is a not-yet-ready dependency the next boot retries |
+| `POST /v1/orchestrator_invoke` | **HTTP 200**, `{"ok": false, "error": "corpus_not_seeded: …"}` | The hub already branches on `inv["ok"]` at all three call sites and returns it to the model as tool content |
+| `GET /health` | **HTTP 200**, `status: "degraded"` + `unseeded_indexes` | Consumers gate on the status code; only the body is informative |
+| `GET /healthz` | **HTTP 200**, `{"ok": true}` | Pure liveness — AGENTS.md requires it unconditional |
+
+`digigraph` passes the `ok=false` body through unchanged
+(`digisearch_hub.invoke_digisearch_tool`) and every one of its three call sites in
+`digisearch_tools.py` returns it verbatim, so the model receives a diagnosable
+error naming the indexes instead of "No results found."
+
+**Not-configured still counts as unpopulated.** A boot with no Zammad
+credentials records `occ_tickets` as unseeded and exits **0** (the container must
+still boot, and `digithings_docs` / `occ_help` must still serve). A boot that
+*expected* to backfill tickets and failed exits **1**. Both arm the guard —
+because the corpus was genuinely not populated either way, and a tenant fanning
+out to it deserves a diagnosable error. Accepted consequence: a credential-less
+container reports `/health` degraded, which is accurate.
 
 ### luxalgo market-trackers ingest (#4826)
 
@@ -2124,6 +2226,7 @@ Live verification record (2026-09-11, #3859 Task 10 — honest not-measured + wh
 | `DIGISEARCH_INDEX_CONFIG` | _(unset)_ | Path to index YAML (field_mapping, schema) |
 | `DIGISEARCH_CONFIG_PATH` | _(unset)_ | Path to YAML/TOML DigiSearchConfig |
 | `DIGISEARCH_ALLOW_STUB` | `0` | Enable in-memory stub (unit tests only) |
+| `DIGISEARCH_UNSEEDED_INDEXES` | _(unset)_ | Comma-separated index names the boot sequence could **not** populate, exported by `container/start_digisearch.sh` before it `exec`s uvicorn. `guard_unseeded()` refuses to answer for any of them rather than returning a confident empty result, and `/health` reports `status: "degraded"` while the list is non-empty. Read **per call, not cached at import**, so a test can set it around a single request; unset (or empty) leaves the guard inert, which is what local compose and bare processes rely on (#5045). See [Unseeded corpora](#unseeded-corpora-5045) |
 | `DIGISEARCH_RETRIEVAL_BACKEND` | `pgvector` | `pgvector` \| `lightrag` — document-level RetrievalBackend (#402) |
 | `DIGISEARCH_DATABASE_URL` | _(unset)_ | Postgres DSN for PgvectorBackend / LightRAG PG storage |
 | `DIGISEARCH_PGVECTOR_URL` | _(unset)_ | Optional alias; wins over `DIGISEARCH_DATABASE_URL` |
@@ -2143,6 +2246,8 @@ Live verification record (2026-09-11, #3859 Task 10 — honest not-measured + wh
 | `DIGISEARCH_CACHE_PATH` | `.digisearch_embed_cache.db` | SQLite embedding cache path |
 | `DIGISEARCH_EMBED` | `1` (on when unset) | Set `0` to skip pipeline-level embed on ingest |
 | `DIGISEARCH_EMBEDDING_PROVIDER` | _(unset)_ | `minilm` \| `openai` \| model id (`Xenova/paraphrase-multilingual-MiniLM-L12-v2`) — explicit provider or model (fails loud if unloadable) |
+| `DIGISEARCH_MULTILINGUAL_MODEL_DIR` | _(unset)_ | Directory holding a pre-downloaded multilingual ONNX model (`onnx/model_quantized.onnx` + `tokenizer.json`), used instead of fetching from the HuggingFace Hub on first embed. Resolved **per provider load**, local `stat()`s only — `huggingface_hub` is never imported when it is set; unset and unreachable ⇒ `RuntimeError`. The stack image bakes it and sets `HF_HUB_OFFLINE=1` after the bake, so a missing bake fails the image build rather than the first cold start on the request path (#5045) |
+| `HF_HUB_OFFLINE` | _(unset)_ | Set `1` to forbid HuggingFace Hub downloads. The stack image sets it **after** the bake layer, so the build can fetch the weights but the running container cannot egress to fetch them lazily (#5045) |
 | `DIGISEARCH_EMBED_CACHE` | `1` | Wrap BatchEmbedder in EmbeddingCache |
 | `DIGISEARCH_EMBED_BATCH_SIZE` | `100` | BatchEmbedder batch size |
 | `DIGISEARCH_EMBEDDING_MODEL` | _(unset)_ | Active embedding model id (OpenAI model or versioning) |

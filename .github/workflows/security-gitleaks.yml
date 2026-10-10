@@ -3,13 +3,23 @@
 # Scans PR diffs on every pull request and the full history on pushes to
 # develop/main. Fails the job on any finding. The repo's ".gitleaks.toml"
 # extends the default ruleset and allowlists known test fixtures.
+#
+# The pull_request trigger is deliberately unfiltered. It used to carry
+# paths-ignore ["**.md", "docs/**"], which made this workflow un-runnable as a
+# required status check: a workflow filtered out at the workflow level creates
+# NO check run at all, so a docs-only PR never reports `gitleaks-scan`. With
+# develop protection strict: true, promoting this check to required would then
+# block every docs-only PR forever. Measured on merged PRs' head shas: #5286
+# (scripts/merge_queue_policy.json) reported gitleaks-scan: success, while #5281
+# (SECURITY.md) and #5260 (docs/ops/SECRETS_INVENTORY.md) had no gitleaks-scan
+# context on the head sha at all. A job-level `if:` would also fix that (a
+# skipped job does report), but GitHub expressions cannot test "changed files
+# match this path glob", so the filter could not be reproduced faithfully at
+# job level. Always running costs one ~10 s PR-diff scan. See DIG-2223 / DIG-2642.
 name: "Security: gitleaks"
 
 on:
   pull_request:
-    paths-ignore:
-      - "**.md"
-      - "docs/**"
   push:
     branches: [main, develop]
 

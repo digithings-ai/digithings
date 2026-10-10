@@ -59,6 +59,25 @@ body:
     validations:
       required: true
   - type: textarea
+    id: vendor
+    attributes:
+      label: Third-party data access
+      description: |
+        Optional — fill in only if this task adds, changes or documents a call to
+        someone else's data, endpoint, authentication flow or vendor-specific
+        constant.
+
+        **No third-party data access merges without a `docs/vendor-terms/<vendor>/INDEX.md`
+        entry, written when the integration is proposed — not at review time.**
+
+        Give the vendor and the entry's path. If the entry does not exist yet, say
+        so; writing it is part of this task. An open-source `LICENSE` in the
+        vendor's repository does not cover their data. Reading their public terms
+        is not outreach — contacting them is Chris's decision.
+      placeholder: "Vendor: <name>\nEntry: docs/vendor-terms/<name>/INDEX.md (exists | to write)"
+    validations:
+      required: false
+  - type: textarea
     id: docs
     attributes:
       label: Documentation

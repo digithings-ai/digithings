@@ -256,7 +256,7 @@ The MCP server (`mcp_server.py`) listens on `127.0.0.1:8767` by default with `st
 | `digiquant_export` | Exports strategy config to a target artifact |
 | `digiquant_run_pipeline` | Runs the full LangGraph pipeline |
 | `digiquant_fetch_coinbase_ohlcv` | Fetches OHLCV from Coinbase (CCXT) into the price-history cache. Default `start` is Coinbase BTC listing `2015-07-20` (ETH/SOL return from the first available Coinbase daily bar). Do not prefix-clip to 900 days. `timeframe`/`end`/`through_yesterday` widen beyond the daily-only default (a vendor `ccxt-mcp` server already covers full CCXT generality; prefer it for anything beyond this). Intraday timeframes write under `price-history/{timeframe}/` so ISO timestamps never overwrite the daily `{ticker}.csv` cache (#3944). |
-| `digifetch_quote` | Latest quote for one listing via Gloomberb Cloud (`api.gloom.sh`, anonymous; **enrichment only** — free-tier data is delayed up to 15 minutes and is never a pipeline primary). Default-ON behind `GLOOMBERB_ENABLED`; payload carries "Sourced from Gloomberb" attribution + `term.gloom.sh/?ticker=` deep link (#4069) |
+| `digifetch_quote` | Latest quote for one listing via Gloomberb Cloud (`api.gloom.sh`, anonymous; **enrichment only** — free-tier data is delayed up to 15 minutes and is never a pipeline primary). Default-OFF behind `GLOOMBERB_ENABLED` (explicit opt-in re-enables); payload carries "Sourced from Gloomberb" attribution + `term.gloom.sh/?ticker=` deep link (#4069) |
 | `digifetch_quotes_batch` | Batch quotes for 1–20 listings (Gloomberb Cloud, anonymous). Per-item `status`/stale preserved: a stale listing is a null quote + reason code, not a failed batch |
 | `digifetch_price_history` | OHLCV bars for one listing. Resolution × range caps (spec §5.2): 5m→1wk, 15m→1mo, 1h→3mo, 1d→5y (default), 1wk→5y, 1mo→all-time; out-of-contract requests return typed `invalid_input` — rejected, never silently clamped. An explicit `start_date`/`end_date` window (ISO `YYYY-MM-DD`, mutually exclusive with `range`) bypasses the caps for long history — sent as `rangeKey=ALL` + `startDate`/`endDate` (live: 610 weekly bars back to 2015; #4100) |
 | `digifetch_ticker_financials` | Quote, profile, fundamentals, statements, and daily price history for one listing. `extended_statements=true` requests the SEC-sourced extended history; statement rows type the common fields and preserve the rest |
@@ -378,7 +378,7 @@ flag for the equity/sector (`EQUITY_TOOLS`) and macro (`MACRO_TOOLS`) phases, an
 #2908; its evidence path is the bundle + amendment flow) and the legacy Phase 7D
 path is unwired.
 
-Gating: the family is default-ON behind `GLOOMBERB_ENABLED`;
+Gating: the family is default-OFF behind `GLOOMBERB_ENABLED`; an explicit opt-in (``1``/``true``/``yes``/``on``) re-enables it;
 `available_digifetch_tools` applies that kill switch **and** the session-cookie
 gate to the advertised list, so a pipeline LLM is never handed a digifetch tool
 whose only answer is a typed disabled/`auth_required`/`pro_required` error. The
@@ -596,29 +596,22 @@ publication window, or a per-series vendor refusal — and `_fetch_macro` builds
 client per series, so a rate-limit blip silences an arbitrary subset. A partial leg is
 indistinguishable from that blip, and firing the gate on a healthy panel is how operators
 learn to ignore it. `main` emits exactly one outcome per macro spec, so the exempt ids and
-their outcomes always line up. Suspending the exemption only ever *adds* names to `failed`
-— it never turns a stale run fresh. A daily or `error` outcome is never exempt at any
-cadence. Staleness flag only — no money, rate or weight arithmetic. Contract tests:
+their outcomes always line up. Two known limits follow from the floor and the unanimity,
+both accepted rather than half-solved by a magic constant: a manifest with a single exempt
+series cannot trip the guard, and a partial leg stays exempt exactly as it did before this
+guard existed. Suspending the exemption only ever *adds* names to `failed` — it never turns
+a stale run fresh. A daily or `error` outcome is never exempt at any cadence. Staleness
+flag only — no money, rate or weight arithmetic. Contract tests:
 `tests/scripts/test_macro_death_is_not_silent.py`.
 
-**What the guard does not cover.** It closes the `history-only` shape only, and only over
-series the manifest actually declared. Four whole-leg freezes still exit 0:
-
-| Shape | Why the guard cannot see it | Status |
-|---|---|---|
-| Partial leg (2 or 3 of 4 slow series dead) | indistinguishable from a rate-limit blip; a subset is not evidence | accepted, by design |
-| Single **slow-cadence** series in the manifest | the `> 1` floor counts exempt ids, not manifest size — an 8-series panel with one monthly series has a frozen slow leg and cannot trip it | accepted, by design |
-| Panel serving stale rows in-window | outcome is `up-to-date`, not a soft fail, so it never enters the reduction | **open, pre-dates this guard** |
-| Unreadable manifest | `_resolve_macro_specs` swallows the exception and returns `[]`, so `exempt` is empty and the guard has no ids to reason about | **open, pre-dates this guard** |
-
-The last two are the same class of defect this guard closed — a macro panel frozen while
-the run reports fresh — reached by a sibling route. They need their own fixes: the
-frozen-but-serving panel by comparing each macro outcome's `as_of` against the run date
-rather than trusting `mode`, the unreadable manifest by making it a loud outcome instead of
-an empty spec list. A monthly series only reaches `up-to-date` once its 120-day
-`_CADENCE_WINDOW_DAYS["monthly"]` window is exhausted while rows still land inside it, so
-that shape carries a ~120-day fuse before a healthy panel trips it — which is why it has
-not surfaced.
+**Panel serving stale rows in-window** — A macro outcome can return `up-to-date` with
+`as_of=seal` when the live window contains the seal but nothing newer (line 1113).
+`_macro_leg_dead` only catches `history-only`; `up-to-date` is not a soft-fail mode.
+New guard `_macro_as_of_stale` compares each outcome's `as_of` against the run date
+using the series' cadence window (45/120/240 calendar days; default 45). Per-outcome:
+one frozen monthly series fires. Composes with `_macro_leg_dead` orthogonally — leg
+death = all slow series silent; staleness = any series' as_of outside its window.
+Limits: (1) undeclared cadence defaults to 45d; (2) calendar days, not trading days.
 
 #### Market-data R2 read path (#3780 Task 10)
 
@@ -855,12 +848,33 @@ Defined in `models.py`. Returned by `run_backtest()`, the pipeline's backtest no
 | `end_time` | `str` | ISO 8601 UTC, derived from last bar `ts_init` |
 | `total_pnl` | `float` | `final_balance - 1_000_000.0` (hardcoded starting capital) |
 | `total_return_pct` | `float` | `total_pnl / 1_000_000.0 * 100` |
-| `sharpe_ratio` | `float | None` | Annualised (252 days) from Nautilus portfolio analyzer |
-| `max_drawdown_pct` | `float | None` | Negative percent (e.g. `-15` is −15%), from `get_performance_stats_pnls()` or returns series fallback |
+| `sharpe_ratio` | `float | None` | Annualised from the account-report **balance path**, never from the analyzer (DIG-462) |
+| `max_drawdown_pct` | `float | None` | Negative percent (e.g. `-15` is −15%), from the same balance path |
 | `num_trades` | `int` | Row count of `generate_order_fills_report()` |
 | `per_symbol_pnl` | `dict[str, float]` | Populated for multi-symbol runs; empty for single-symbol |
+| `missing` | `list[str]` | Names that could not be produced — the machine-readable form of the "missing metrics" clause in `message`. Empty when `status` is `ok` |
 | `status` | `str` | `ok` | `partial` | `error` |
 | `message` | `str` | Optional detail |
+
+`sharpe_ratio`, `max_drawdown_pct` and `total_return_pct` all derive from one
+source: the balance column of `generate_account_report(Venue("SIM"))`, one row
+per fill. Returns are the percent change between consecutive balance rows,
+`years = (last_ts - first_ts) / 365.25 days`, and the annualisation factor is
+`sqrt(n_returns / years)` — **not** `sqrt(252)`. The fill path is irregular in
+time, so the observation count is the only correct scaler; `sqrt(252)` on a
+per-position series produced `sharpe_ratio = -76.34` against a true `-3.10%`
+return. `sharpe_ratio` stays `None` rather than a fabricated `0.0` when there
+are fewer than two returns, when dispersion is zero, or when no usable
+timestamps exist; such results are `partial`.
+
+Two of those `missing` names are worth knowing: `returns_series` (the chart
+return series could not be confirmed against `analyzer.portfolio_returns()`
+and was withheld rather than published unverified — see
+`_verified_returns_series`) and `returns_series (k/n symbols)` (same, counted
+for a multi-symbol run). **Never take a metric from a Nautilus stats dict
+without confirming the key exists**: `get_performance_stats_pnls()` has no
+`Max Drawdown %` key, and the missing key used to fall through to a wrong
+fallback silently.
 
 ### OptimizationConstraints
 
@@ -1410,7 +1424,7 @@ the payload itself (e.g. a quote's `data.stale`, spec §3.2) — maps to
 `"Free-tier data delayed up to 15 minutes"` with `stale=false`. Both signals
 stay distinct.
 
-**Pacing and safety.** The client is default-ON behind `GLOOMBERB_ENABLED`; only
+**Pacing and safety.** The client is default-OFF behind `GLOOMBERB_ENABLED`; an explicit opt-in (``1``/``true``/``yes``/``on``) re-enables it; only
 `1`/`true`/`yes`/`on` enable it, and any other value (a typo included) fails
 closed to disabled (see Environment Variables). A 900s TTL cache matches the R2
 market-data-cache convention; expired entries are evicted on access and the
@@ -2020,7 +2034,7 @@ The sandbox runs as UID `10001` (`sandbox`). It does not install digiquant itsel
 | `DIGIKEY_ISSUER` | `http://digikey:8005` | JWT issuer |
 | `DIGIKEY_AUDIENCE` | `digi-ecosystem` | JWT audience |
 | `DIGIKEY_PUBLIC_KEY_PEM` | `""` | Inline PEM for offline JWT verification |
-| `GLOOMBERB_ENABLED` | unset (ON) | Kill switch for the 89 `digifetch_*` Gloomberb tools. Only `1`/`true`/`yes`/`on` enable the family; any other value (including a typo) disables it, and every call then returns a typed `upstream_error` without a request |
+| `GLOOMBERB_ENABLED` | unset (OFF) | Kill switch for the 89 `digifetch_*` Gloomberb tools. Only `1`/`true`/`yes`/`on` enable the family; any other value (including a typo) disables it, and every call then returns a typed `upstream_error` without a request |
 | `LUXALGO_ENABLED` | unset (ON) | Kill switch for the 14 `luxalgo_*` hosted tools (#4779 P0 Library + #4844 edge/trackers). Only `1`/`true`/`yes`/`on` enable the family; any other explicit value disables it, and every call then returns a typed `upstream_error` without a request |
 | `LUXALGO_COMMERCIAL_LICENSE` | unset (OFF) | Commercial Library license flag for LuxAlgo indicator source code (#4845). Default OFF: unset, blank, or any non-truthy value keeps the 9th tool (`library_get_source_code`, CC BY-NC-SA) out of every surface — the dispatcher refuses it with a typed `invalid_input` envelope and no request. Only `1`/`true`/`yes`/`on` enable it, and even then only the dispatcher may carry the 9th tool (MCP, manifest, entitlements, read scope stay at 14). Procurement is owner-side; nothing is wired yet |
 | `GLOOMBERB_SESSION_COOKIE` | `""` | Optional Gloom session cookie for the 41 cookie-gated tools (37 `session` + 1 `preview` + 3 `pro`, declared once in `data/gloomberb/entitlements.py`): the original nine reads (holders, analyst research, corporate actions, research search, statements, ticker tweets, tweet search, short interest, saved searches) plus equity diagnostic (preview) and transcripts/screener/options-flow (pro), the 15 probe-backed Cloud reads, and the 13 inert workspace/broker tools. The `/public/proxies/*`, `/public/risks/*`, and `/public/events/*` filing reads are open and never send it. Bare token or `name=value`; never logged, never echoed into payloads, forwarded only to same-origin redirect hops — operator runbook: [docs/ops/gloomberb-session-cookie.md](../docs/ops/gloomberb-session-cookie.md) |

@@ -257,6 +257,15 @@
   transition: none;
 }
 
+/* Skip-through: while the page is moving, or the camera is settling onto the
+   narrated boxes, the scroll pose is the motion. A time-based follow here
+   lags a flick and reads as the section fighting the page. */
+.arch-tour[data-skipping] .arch-tour__camera,
+.arch-tour[data-skipping] .arch-tour__side,
+.arch-tour[data-skipping] .arch-tour__rail::before {
+  transition: none;
+}
+
 /* the frame already draws the box; the diagram inside must not draw a second. */
 .arch-tour__camera .arch-figure__body {
   border: 0;

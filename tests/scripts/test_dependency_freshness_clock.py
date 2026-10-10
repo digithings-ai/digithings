@@ -34,6 +34,24 @@ CRON = "23 6 1 * *"
 JOB_ID = "dependency-freshness"
 
 
+MONOREPO_SLUG = "digithings-ai/digithings"
+
+
+def _monorepo_const() -> str:
+    """Name of the jobs.ts constant that holds the monorepo slug.
+
+    Derived from the declaration instead of hardcoded. These pins are about the row
+    targeting the monorepo, not about what the constant is called, so renaming the
+    constant (DIG-2474) must not turn a repo-targeting pin into a build failure.
+    Repointing the row elsewhere still fails: the name comes from the declaration
+    that holds the slug, and the row must reference that exact name.
+    """
+    text = JOBS_SOURCE.read_text(encoding="utf-8")
+    m = re.search(rf'const\s+(?P<name>\w+)\s*(?::[^=]+)?=\s*"{re.escape(MONOREPO_SLUG)}"', text)
+    assert m, f"no jobs.ts constant declares {MONOREPO_SLUG}"
+    return m.group("name")
+
+
 def _workflow() -> dict:
     assert WORKFLOW.exists(), f"{WORKFLOW.relative_to(REPO_ROOT)} is the second line of defence"
     return yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
@@ -97,7 +115,7 @@ def test_the_clock_row_targets_this_workflow_on_develop() -> None:
     row = re.search(rf'wd\(\s*"{re.escape(JOB_ID)}"(?P<args>[^)]*)\)', text, flags=re.DOTALL)
     assert row, f"no wd() row for {JOB_ID}"
     args = row.group("args")
-    assert "DIGITHINGS" in args
+    assert _monorepo_const() in args
     assert "pipeline-dependency-freshness.yml" in args
     assert "enabled: false" not in args, "the clock must actually be enabled"
 
@@ -111,10 +129,17 @@ def test_the_cron_is_in_the_wrangler_trigger() -> None:
 
 
 def test_the_pinned_cron_set_is_updated() -> None:
-    """jobs.test.ts asserts uniqueEnabledCrons() by exact ordered equality, and
-    the enabled id list by exact set equality."""
+    """jobs.test.ts asserts the enabled id list by exact set equality.
+
+    It used to also assert the cron against ENABLED_CRONS, an ordered hardcoded
+    copy of the trigger list. DIG-732 deleted that copy: a copied list is a second
+    source of truth that drifts silently, and it was the only thing that noticed a
+    deleted backstop -- as a unit test nobody ran for five weeks. The cron half of
+    the guard moved with the list; test_the_cron_is_in_the_wrangler_trigger above
+    still asserts the clock against wrangler.toml, and
+    apps/digithings-cron/src/trigger-contract.test.ts now asserts the whole set.
+    """
     text = JOBS_TEST.read_text(encoding="utf-8")
-    assert f'"{CRON}"' in text, "ENABLED_CRONS must gain the new clock at its JOBS position"
     assert f'"{JOB_ID}"' in text, "PATH_A_ENABLED_IDS must gain the new job id"
 
 
