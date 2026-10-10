@@ -21,7 +21,7 @@ Install unit: `ghcr.io/digithings-ai/digichat:vX.Y.Z` (not npm, not `:latest`).
 | digichat | **GHCR** `ghcr.io/digithings-ai/digichat:v${DIGICHAT_VERSION}` |
 | digichat-db | Public `postgres:16-alpine` |
 | digikey-blocklist-redis | Public `redis:7-alpine` |
-| litellm | Public `docker.litellm.ai/berriai/litellm:main-stable` |
+| litellm | Public `ghcr.io/berriai/litellm:v1.83.14-stable.patch.3@sha256:f12d528d4a05add56cb09e54c5126088f2edc6bdf3a2f943bcd3a32b08769da2` |
 | digikey / digigraph / digivault | **GHCR** `ghcr.io/digithings-ai/<svc>:${DIGI_IMAGE_TAG}` |
 
 Pin stack and digichat tags separately (`DIGI_IMAGE_TAG` ≠ `DIGICHAT_VERSION`). Prefer
