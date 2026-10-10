@@ -162,8 +162,8 @@ nothing at all about this copy. It is a **second live copy**, not a scratch file
 
 | Name | Where the second copy is | Read by | Readback? | **Owner** | Recorded refresh path |
 |---|---|---|---|---|---|
-| `PRIMEMARKET_SESSION_TOKEN` | GitHub **Actions repo secret** on `digithings-ai/twelve-x`; **and** this `.env` | `nodes/scrape.py:661`; `scripts/primemarket_session_heartbeat.py:59`; CI probes it | no for the secret, yes for `.env` | **Security** (agent `b14d7a18`), with Chris as the only human who can execute it | `twelve-x/scripts/refresh_session_cookie.sh` — verifies live, then `gh secret set PRIMEMARKET_SESSION_TOKEN --repo "$REPO" --body "$VALUE"` (`scripts/refresh_session_cookie.sh:81`). Source of the value is Chris signing in at `https://desk.prime-terminal.com` and copying `localStorage['pmt_auth_token']`. **Rotate on expiry detection, never on a calendar** — measured: an authenticated call at 2026-09-15T00:08Z did **not** extend the window that 401'd at 06:04Z (`docs/PRIMEMARKET_DESK_API.md:157-165`) |
-| `PRIMEMARKET_SESSION_COOKIE` | **only** here. Not in CI since DIG-249 (`8368932`, 2026-10-05) | `nodes/scrape.py:559,662` — legacy path, verified then used as a fallback | yes (`.env`) | **Security** | **NONE — this is the finding.** `refresh_session_cookie.sh` writes only the token; the cookie-paste branch was deleted by DIG-249 (`8368932`). Last write: **2026-09-14T10:33Z**, recorded at `docs/PRIMEMARKET_DESK_API.md:161` — the only refresh history that exists for it — and the same doc's 2026-09-17 follow-up records that the desk had moved to the Bearer scheme and **the cookie was never the session the pmt endpoints consult** (`:171-172`). So this is a copy nothing refreshes, of a mechanism the desk stopped accepting. Delete it; do not rotate it |
+| `PRIMEMARKET_SESSION_TOKEN` | GitHub **Actions repo secret** on `digithings-ai/twelve-x`; **and** this `.env` | `nodes/scrape.py:605`; `scripts/primemarket_session_heartbeat.py:57`; `scripts/ingest_market_context.py:32`; CI probes it | no for the secret, yes for `.env` | **Security** (agent `b14d7a18`), with Chris as the only human who can execute it | `twelve-x/scripts/refresh_session_token.sh` — verifies live, then `gh secret set PRIMEMARKET_SESSION_TOKEN --repo "$REPO"` (`scripts/refresh_session_token.sh:217`). Source of the value is Chris signing in at `https://desk.prime-terminal.com` and copying `localStorage['pmt_auth_token']`. **Rotate on expiry detection, never on a calendar** — measured: an authenticated call at 2026-09-15T00:08Z did **not** extend the window that 401'd at 06:04Z (`docs/PRIMEMARKET_DESK_API.md:213-215`) |
+| `PRIMEMARKET_SESSION_COOKIE` | **only** here. Not in CI since DIG-249 (`8368932`, 2026-10-05) | **no reader** — verified `github/develop` on 2026-10-06: `git grep PRIMEMARKET_SESSION_COOKIE` finds **no** read in `nodes/scrape.py`, `config.py`, or any workflow; the twelve `github/develop` hits are documentation, three comments that only name it (`scripts/refresh_session_token.sh:12`, `market_context_ingest.yml:71`, `primemarket_session_heartbeat.yml:45`), and the tests that assert the env var is **ignored** (`tests/test_desk_digifetch_transport.py:131,166-184`, assertions at `:180-184`). The desk cookie is now *derived* from the token (`nodes/scrape.py:568`), so this name and `PRIMEMARKET_SESSION_TOKEN` are not interchangeable. *(Corrected 2026-10-06, DIG-1424: this cell previously read `nodes/scrape.py:559,662` — legacy path, verified then used as a fallback. Both cited lines are docstring text, and the read was removed by DIG-266.)* | yes (`.env`) | **Security** | **NONE — this is the finding.** `refresh_session_token.sh` writes only the token; the cookie-paste branch was deleted by DIG-249 (`8368932`) and the unreachable cookie route removed outright by DIG-266 (`ffbf354`). Last write: **2026-09-14T10:33Z**, recorded at `docs/PRIMEMARKET_DESK_API.md:211` — the only refresh history that exists for it. The same doc's 2026-09-17 follow-up attributed the resulting 401 window to a Bearer scheme change, and then **withdrew that attribution as unsupported** (`:220-227`: the `Authorization` header first appears in `nodes/scrape.py` *after* that window closed, and a 2026-10-05 measurement shows the desk authorising the cookie). **What caused the window is unmeasured.** So this is a copy nothing refreshes, of a mechanism whose last recorded failure is unexplained. Delete it; do not rotate it |
 
 Consequence to state plainly: **a `primemarket-session-expired` alert tells you
 about the Actions secret only.** The `.env` copy has no alert and no probe, and for
@@ -191,12 +191,19 @@ are populated is unverified — GitHub secrets are write-only, so I cannot read 
 back, only confirm the names exist. That is a gap, not a clean bill of health.
 
 This pair is still **live code**: `config.py:27-32` raises unless both are set, and
-`nodes/scrape.py:692` calls it as the last-resort login fallback after both supplied
-sessions fail. That ordering is deliberate and load-bearing — twelve-x
-`docs/PRIMEMARKET_DESK_API.md:139-152` explains that "try the supplied session, else
+`nodes/scrape.py:609` calls it as the login route taken when **no supplied
+`PRIMEMARKET_SESSION_TOKEN` is set** (`:605-607` returns early when one is). That
+ordering is deliberate and load-bearing — twelve-x
+`docs/PRIMEMARKET_DESK_API.md:193-198` explains that "try the supplied session, else
 fall back to credentials" is *not* implemented as a fallback chain, because a
 rejected session would then fire a real credential attempt against the live vendor
-account on every run. The chain is: session token, then cookie, then **this pair**.
+account on every run. The chain is: the supplied `PRIMEMARKET_SESSION_TOKEN`, and
+only when that name is unset, **this pair** — the `PRIMEMARKET_SESSION_COOKIE` link
+that used to sit between them was removed from the code by **DIG-266** (`ffbf354`,
+2026-10-05, "remove the unreachable cookie route and rename the refresh script"),
+on the same day **DIG-249** (`8368932`) had already taken it out of CI and the docs,
+and the desk cookie is now *derived* from the token rather than pasted separately
+(`nodes/scrape.py:568`).
 So these two values are the only thing standing between a stale session and a failed
 pipeline — and they are also the most damaging pair on this laptop, because they
 authenticate as a person, not as a job.
@@ -264,7 +271,12 @@ None of these are done here. This section records the owner and the refresh path
 the next person is not guessing, and every claim above carries a `file:line`, a
 commit, or a named command.
 
-## Review coverage for this section
+Every name in (g1) to (g3) is a credential **we hold a copy of**. There is one
+PrimeMarket credential where we hold no copy at all, and it is a standing
+prohibition rather than an owner to assign: [the vendor-published browser-bundle
+credential](#the-vendor-published-browser-bundle-credential-dig-1424) (DIG-1424).
+
+## Review coverage for the twelve-x laptop `.env` section
 
 Reviewed in-session on 2026-10-05 by a fresh-context reviewer, which found and
 forced the correction of five substantive errors in the first draft: a claim that
@@ -279,6 +291,104 @@ too and still passed by two workflows — and split "dead" from "uncanonical" fo
 the Supabase name. The takeaway for the next writer: **verify a line citation by
 reading the line on `github/develop`, not the working tree, and check the other
 repo before calling a shared name dead.**
+
+## The vendor-published browser-bundle credential (DIG-1424)
+
+Recorded here on 2026-10-06 from the vendor exposure reported to Security on
+DIG-1261 and split out as DIG-1424 (CTO's ruling). **No value was read, printed,
+copied, or transcribed** — not into this file, not into an issue, and not into any
+repository file. This record deliberately did **not** fetch the bundle to confirm
+the literal: a fetch would take the value through this process for no benefit, and
+a probe is a use. What was verified from our side is the absence claim in the table
+below. This section records a location and a prohibition. It carries no value, no
+prefix of one, and no length, and nothing here can be used to reconstruct one.
+
+| Name | Where the value lives | Copies we hold | Read by our code | Rotatable by us | Owner | Status |
+|---|---|---|---|---|---|---|
+| `NEXT_PUBLIC_API_TOKEN` (the value the vendor's bundle hardcodes as this variable's fallback literal) | the vendor's **public desk JS bundle**, served to every visitor's browser. The vendor app is a Next.js app, so the literal is inlined at build time and is present in the shipped `_next/static` chunks — the same property that makes every `NEXT_PUBLIC_*` value public, recorded under [Gaps and unknowns](#gaps-and-unknowns). The bundle presents that literal to a `userLogin` endpoint on the vendor's API host `frontendapi.primemarket-terminal.com` | **none.** Absent from the repo-secret and Worker-secret enumerations recorded above, and from every `.env`, from `digithings`, and from `twelve-x`. Verified by absence **of the name**: `git grep -i "NEXT_PUBLIC_API_TOKEN\|userLogin\|frontendapi"` in `twelve-x` on `github/develop` returns **nothing**. That proves the name is unused, not that the value is absent under some other name — no local command can prove the second half, and a credential we never wrote down could only have reached us by being read out of the bundle, which this record deliberately did not do | **nothing.** No digithings or twelve-x file reads this name. The scrape path is unchanged by this record and uses only the credentials in (g1) and (g2) | **no.** We hold no copy and the vendor is the only party who can change it. There is no `gh secret set`, no `wrangler secret put`, and no `refresh_*.sh` path that ends at this value, because we never store it | **Security** (agent `b14d7a18`), with Chris as the only human who can execute | **DELIBERATELY UNUSED. NEVER TO BE USED.** |
+
+### Why this is a standing prohibition
+
+It is an upstream **service** bearer token, not one of ours, and it reached
+every browser because the vendor shipped it in client-side code. Three facts put
+it out of bounds, and none of them is a preference:
+
+1. **It was leaked by the vendor, not provided to us.** The vendor's terms permit
+   programmatic access only for APIs *officially provided by them* (Section 12 —
+   see [`docs/plans/adr-0030/HOLD-Primarket.md`](../plans/adr-0030/HOLD-Primarket.md)).
+   Copying a token out of a bundle is the opposite of that exception, and using it
+   is the material breach that HOLD already records. Counsel owns the legal half on
+   DIG-1246 and has ruled that automated login is not permitted.
+2. **We cannot rotate it.** Rotation is the control this file exists to protect,
+   and here it does not exist. Any process depending on this value would break
+   silently, at a moment we choose by accident.
+3. **Using it makes the contractual position worse, not better.** A credential we
+   did not pay for and cannot revoke is a liability we would be importing.
+
+The CTO ruled the same on DIG-1261 (Security's half), which DIG-1424 splits out.
+Chris's incident on DIG-1226 — a credential value pasted into a Paperclip
+interaction reject-reason on 2026-10-05, where the record can no longer be edited
+or deleted — is the reason the rules below are written as prohibitions instead of
+as guidance.
+
+### The prohibitions
+
+- **Never use it** for any request, on any path, for any reason.
+- **Never wire it into `twelve-x`** — not into `.env`, not into
+  `config.py`, not into a workflow, and not as a fourth route behind the session keys
+  in (g1). The chain is the supplied session, then the desk login pair in (g2), and it
+  stops there: twelve-x `docs/PRIMEMARKET_DESK_API.md:193-198` records that "try the
+  supplied session, else fall back to credentials" is deliberately **not** implemented,
+  because a rejected session would then fire a real credential attempt against the live
+  vendor account on every run. A fourth route would break that on purpose.
+- **Never paste it** into a ticket, an issue comment, a chat message, a code
+  review, a commit message, a branch name, or any file in any repository. This
+  includes a **prefix** and includes a **length** — a prefix plus a length is
+  enough to confirm a candidate and to search a leak corpus. Report the
+  **location and the variable name** instead. The report-this / never-report-this
+  table is twelve-x `docs/PRIMEMARKET_DESK_API.md:158-162`, added there after the
+  DIG-1226 incident. In this repo,
+  [`docs/ops/credential-ownership.md`](credential-ownership.md) carries the ownership
+  side under **Enforcement → "No secret values in docs"**; its "Never paste a
+  credential value" section is **DIG-1226, not yet merged into `develop`**.
+- **Never write a script that fetches it or tests it.** A liveness probe is a use.
+  That is also why this section has no `file:line` probe command, unlike most rows
+  above.
+- **Never try to rotate it**, and never open a ticket that asks for it to be
+  rotated. Rotating is the reflex when a credential is unrotated and unauthenticated,
+  and here it is both impossible and wrong: we hold no copy, so there is nothing to
+  write back, and the only parties who could act are the vendor and Counsel. The
+  correct report for this finding is DIG-1424 itself, closed as a standing
+  prohibition.
+
+### This is a trap-guard, not a discovery
+
+The exposure is on the **vendor's** side and there is nothing for us to remediate
+on our side: we hold no copy, we cannot rotate it, and no code of ours reads it.
+That is precisely what makes it a trap. An agent that fetches the desk bundle will
+find a token-shaped literal in client-side JavaScript and can reasonably conclude
+"I have found an API token" and open new work — a probe, a rotation, a wiring
+change, or worse, a paste.
+
+**If you found a token in the desk bundle: this is DIG-1424, and there is no new
+work.** It is recorded, it is prohibited, and it needs no action from you. Do not
+test it, do not report its value, do not open an issue about it, and do not treat
+it as a discovery. Close the loop on DIG-1424 instead.
+
+### What this record is not
+
+This is not an access method. It adds no step-by-step recipe, no request example,
+and no reproducible command, and it deliberately stays inside the ADR-0030 hold
+([`docs/plans/adr-0030/HOLD-Primarket.md`](../plans/adr-0030/HOLD-Primarket.md)),
+which bars **PrimeMarket-specific examples in public files** until DIG-478
+(Card `295f3d75`, with Chris) is decided and Counsel confirms. The existing
+PrimeMarket rows above are themselves inside that hold: the session keys in (g1)
+and the login pair in (g2) are inventoried as **credentials we hold with a named
+owner and a recorded refresh path**, not as a way to obtain or use them.
+
+Related: DIG-1424 (this record), DIG-1261 (CTO ruling on the credential),
+DIG-1246 (Counsel, legal half), DIG-1226 (the never-paste rule and its
+precedent), DIG-478 and DIG-503 (the hold and its parent).
 
 ## Risk register
 
@@ -325,6 +435,8 @@ repo before calling a shared name dead.**
 **Still open, and not an agent action.** Confirm a `default` publishable/secret pair exists on `lfghjucjrsabiqwxerxv`, creating one only if it is absent; deploy both functions (`supabase functions deploy fx-hub-session fx-hub-grant-sync` — no workflow deploys them); verify FX Hub sign-in **and** invite redemption end to end; then deactivate the legacy pair as one reversible step. Runbook: `twelve-x:docs/ops/FX_HUB_API_KEY_MIGRATION.md`. Steps 1 and 3 must not be swapped — the code cannot read keys that do not exist yet. **Do not deactivate the flag on core `rwagjbkvxkdwqmouagad`**; that is platform-wide and out of scope here. Two things this checkout cannot answer, both of which gate the deactivation: whether `lfghjucjrsabiqwxerxv` has a `default` pair yet, and whether anything **outside** twelve-x (mobile/desktop builds, CI, webhooks) still reads the legacy keys on that project — Supabase's own guide makes both a manual pre-deactivation check.
 
 **A caller was found in this repo, and it gates the deactivation: a stale bundle.** `apps/dashboard/lib/twelve-x/supabase.ts` builds a GoTrue client from `NEXT_PUBLIC_TWELVEX_SUPABASE_ANON_KEY` (the same var as inventory row 93), and `lib/twelve-x/session.ts` `ensureTwelveXSession` calls `setSession()` → `getUser()` → `/auth/v1/user`, which carries that key on the `apikey` header. Because `NEXT_PUBLIC_*` is inlined at build time, DIG-258's publishable-key rotation only reaches users on the next production **build**, and the rotation log in `SECRETS_ROTATION.md` records the old `anon` JWT as still shipped in the live bundle at 2026-10-05. Deactivating the legacy flag therefore breaks the dashboard's FX Hub page for any browser still on a pre-rotation bundle — and it fails **silently**, because `ensureTwelveXSession` is best-effort and returns `false` rather than throwing. So the Pages rebuild and a live-bundle re-scan (asserting **absence** of the old key hash, not just presence of the new one) must land **before** the deactivation, not merely before the function deploy. Step 1 must also *confirm* a `default` pair rather than assume one: this project already carries a publishable key named `fx_hub_dashboard` (DIG-258), which shows the naming is under our control and a project can have every key custom-named — in which case both functions fail `API_KEYS_UNCONFIGURED`.
+
+**R16 — the vendor publishes an upstream bearer token in its own browser bundle, and we hold no copy of it.** Severity: high as a **trap for our own agents**, nil as a **storage** exposure. Evidence: [the vendor-published browser-bundle credential](#the-vendor-published-browser-bundle-credential-dig-1424) (DIG-1424); the vendor's desk app is a Next.js app, so the fallback literal for `NEXT_PUBLIC_API_TOKEN` is inlined into the shipped `_next/static` chunks and served to every visitor — the same inlining property already recorded for every `NEXT_PUBLIC_*` value under [Gaps and unknowns](#gaps-and-unknowns); absence of the name from our code verified by `git grep -i "NEXT_PUBLIC_API_TOKEN\|userLogin\|frontendapi"` in `twelve-x` on `github/develop`, which returns nothing; vendor terms Section 12 in [`docs/plans/adr-0030/HOLD-Primarket.md`](../plans/adr-0030/HOLD-Primarket.md). Why: this is the only entry in this file with **no stored copy, no reader, and no rotation path**, which makes it the one row a table cannot make safe on its own — the risk is that the next agent to read the desk bundle treats the literal as a credential it found, and acts. Everything else here is answered by owner + refresh path; this one is answered only by a prohibition, and a prohibition nobody reads is not a control. A token-shaped literal in public JavaScript is also the cheapest false positive for "I found a leaked API key", which is exactly the report shape that produced the permanent DIG-1226 record. Action: **no remediation is available or needed** — the exposure is vendor-side, we cannot rotate a credential we do not hold, and no code of ours reads it. DIG-1424 makes it a trap-guard: an agent who reports "I found an API token in the desk bundle" is answered with a link to DIG-1424, not with new work. Do not write a liveness probe for it — a probe is a use — and do not reopen it as "but if it works". Track any future vendor request to *officially provide* an API through DIG-478 (Card `295f3d75`) with Counsel, which is the only path by which the prohibition could ever change.
 
 ## Gaps and unknowns
 
