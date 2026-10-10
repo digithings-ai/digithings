@@ -116,6 +116,9 @@ apps/digithings-web/public/openwiki/
 .env*
 projects/*/.env*
 secrets.yaml
+# Exception: the config-contract secrets MANIFEST carries names only (no values)
+# and is the S5 renderer input — see config/contract/README.md.
+!/config/contract/secrets.yaml
 digikey/examples/vault.yaml
 
 # Local stack (scripts/run_stack_local.sh)
