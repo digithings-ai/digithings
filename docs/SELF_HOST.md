@@ -447,7 +447,7 @@ The inventory in `docs/LICENSING.md` is npm-client-only (verified against `packa
 | `redis:7-alpine`, `valkey/valkey:9-alpine` | Compose file | no |
 | `postgres:16-alpine` (the `digichat` profile database) | Compose file | no |
 | `ollama/ollama:latest` | Compose file | no |
-| `docker.litellm.ai/berriai/litellm:main-stable` | Compose file | no |
+| `ghcr.io/digithings-ai/digillm:0.1.0` (digillm, LiteLLM from PyPI) | Compose file | no |
 | `searxng/searxng:latest` | Compose file | no |
 | `diegosouzapw/omniroute:3.8.50` (optional profile) | Compose file | no — this one is the only image pinned by digest |
 | `prom/prometheus:latest`, `grafana/grafana:latest`, `otel/opentelemetry-collector-contrib:0.109.0` | Compose file | no |
