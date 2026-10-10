@@ -39,7 +39,7 @@ Each row is the tool sequence the model should run; field syntax is concrete.
 - **`owner_id` handling:** integer owner ids resolve to `firstname lastname` (fallback: login) via the cached `resolve_user`; non-integer lookups fail closed. In aggregate output, owner UUIDs resolve automatically and unresolvable values fall back to the raw string — one bad owner never fails the ranking.
 - **Category semantics:** `state_category` and `Category:` derive from `get_state_types()` (`{lower_name: state_type_id}`, cached, merged over a known-state table when the states endpoint is unreachable). Closed-type = Zammad closed/merged type names; pending = type ids 3/4; everything else is open. Instance custom states classify by type: `gelöst von Dev` is open-type, `warten auf Kunden` / `warten auf Dev` are pending-type. `ticket_report`'s closed count is the cheaper *name* heuristic instead (`closed`/`merged` names only).
 - **Automation accounts:** `jirasync@sitaas.de`, `-`, `auto` are excluded from `owner` rankings (pre-filter on raw values, post-filter on resolved names) and listed in the output footnote.
-- **Privacy (demo mode, #4944):** all articles returned, including internal notes (tagged `[internal]`); customer names/emails shown in full (including inside aggregate output), no masking; no article bodies in rankings. Every tool is GET-only and fails closed (`zammad error: ...`, missing token aborts before any HTTP).
+- **Privacy (no masking — card 34a86696):** all articles returned, including internal notes (tagged `[internal]`); customer names/emails shown in full (including inside aggregate output); no article bodies in rankings. Every tool is GET-only and fails closed (`zammad error: ...`, missing token aborts before any HTTP). Guarded by `tests/scripts/test_zammad_mcp_no_mask.py`.
 - **Caps:** window fetch and report scan cover at most 500 tickets each; keyword fallback uses at most `MAX_KEYWORD_TERMS=10` terms (German + English stopwords dropped).
 
 Every request is a GET. The token only ever leaves this process as the
@@ -192,8 +192,17 @@ interchangeable with multilingual ones).
 
 ## Privacy & exposure
 
-Demo mode (#4944): the OCC embed shows full customer names/emails and all
-articles, so the formatters are explicit:
+**No masking layer exists, and that is a decision, not an omission.** Chris
+rejected masking on 2026-10-06 (card `34a86696`): this is an internal support
+surface, and the OCC demo returns customer data and staff notes in full. Two
+implementations were proposed and both were closed unmerged — #5148
+(`task/1063-zammad-mask-by-default`, a `privacy.py` module behind
+`ZAMMAD_MCP_CUSTOMER_DISCLOSURE`) and #5155
+(`task/1063-zammad-mask-customer-pii`, inline helpers behind
+`ZAMMAD_DEMO_UNMASKED_PII`). `tests/scripts/test_zammad_mcp_no_mask.py` fails
+if either comes back, including via an environment flag.
+
+The formatters are therefore explicit:
 
 - internal articles (`internal: true`) are returned, tagged `[internal]`
 - customer names/emails are shown in full (`Customer:` lines, aggregate
