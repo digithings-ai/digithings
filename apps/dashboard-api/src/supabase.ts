@@ -29,6 +29,7 @@ import type { LiveBook, LiveDeps } from './kpis-live';
 import type { LedgerBook } from './ledger';
 import type { NavRowInput } from './ssot';
 import type { CommittedBookSnapshot, EnvelopeSource } from './envelope';
+import type { LedgerWeightEvent } from './ledger-weights';
 
 export const HOUSE_WORKSPACE_ID = '6b753576-ced9-5319-9bfa-c5d0aacd9319' as const;
 
@@ -314,6 +315,32 @@ export function createSupabaseSource(env: SupabaseEnv): SupabaseSource {
       const w = navWindow(book.navRows.map((r) => ({ date: r.date, nav: r.nav })));
       if (!w) return new Map();
       return loadMarketClosesMap(env, tickers, w.from, w.to);
+    },
+    /**
+     * Full `position_events` history up to the committed book date, oldest
+     * first. The `/brief` read is single-day (`date=eq.`); weight replay needs
+     * every event on or before the book date, so this uses `date=lte.` and
+     * ascending order. Read-only — no repair write is ever issued here.
+     */
+    loadLedgerEvents: async (
+      bookDate: string | null,
+      pin: string | null,
+    ): Promise<ReadonlyArray<LedgerWeightEvent>> => {
+      void pin;
+      if (!bookDate) return [];
+      const rows = (await supaGet(
+        env,
+        `position_events?select=date,ticker,event,weight_pct,prev_weight_pct` +
+          `&workspace_id=eq.${HOUSE_WORKSPACE_ID}&date=lte.${bookDate}` +
+          `&order=date.asc&limit=500`,
+      )) as LedgerEventRow[];
+      return rows.map((e) => ({
+        date: e.date,
+        ticker: e.ticker,
+        event: e.event,
+        weightPct: num(e.weight_pct),
+        prevWeightPct: num(e.prev_weight_pct),
+      }));
     },
   };
   const brief: BriefDeps = {
