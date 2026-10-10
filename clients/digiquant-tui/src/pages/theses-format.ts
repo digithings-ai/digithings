@@ -1,5 +1,6 @@
 import { DASH, EMPTY_READ, type ReadResult } from "../read";
 import { shapeLines, type PaneBlock, type PaneBody } from "./shape";
+import { cell } from "../format";
 
 /** Theses is two panes: counts plus the thesis table, then the signals table. */
 
@@ -13,13 +14,6 @@ function rec(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-function cell(value: unknown): string {
-  if (value == null || value === "") return DASH;
-  if (typeof value === "number") return Number.isFinite(value) ? JSON.stringify(value) : DASH;
-  if (typeof value === "boolean") return value ? "true" : "false";
-  if (typeof value === "string") return value;
-  return DASH;
-}
 
 function stat(pairs: [string, string][]): PaneBlock | null {
   const shown = pairs.filter(([, value]) => value !== DASH);
@@ -82,7 +76,7 @@ function thesisRows(value: unknown): string[][] {
     const row = rec(item);
     const id = named(row?.id);
     if (!row || !id) continue;
-    rows.push([id, cell(row.name), cell(row.state), vehicles(row.vehicles), cell(row.evidence), cell(row.kill_condition)]);
+    rows.push([id, cell(row.name, "name"), cell(row.state, "state"), vehicles(row.vehicles), cell(row.evidence, "evidence"), cell(row.kill_condition, "kill_condition")]);
   }
   return rows;
 }
@@ -94,7 +88,7 @@ function signalRows(value: unknown): string[][] {
     const row = rec(item);
     const id = named(row?.id);
     if (!row || !id) continue;
-    rows.push([id, cell(row.name), cell(row.state), cell(row.note)]);
+    rows.push([id, cell(row.name, "name"), cell(row.state, "state"), cell(row.note, "note")]);
   }
   return rows;
 }

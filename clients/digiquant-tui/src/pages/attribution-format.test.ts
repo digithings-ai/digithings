@@ -45,7 +45,7 @@ test("sleeves and names are tables, and a missing contribution stays blank", () 
       kind: "table",
       columns: ["sleeve", "bp"],
       rows: [
-        ["Core", "12.5"],
+        ["Core", "+12.5"],
         ["Hedge", "—"],
       ],
     },
@@ -53,7 +53,7 @@ test("sleeves and names are tables, and a missing contribution stays blank", () 
       kind: "table",
       columns: ["ticker", "sleeve", "bp"],
       rows: [
-        ["AAA", "Core", "12.5"],
+        ["AAA", "Core", "+12.5"],
         ["BBB", "—", "—"],
       ],
     },
@@ -80,16 +80,16 @@ test("one list paints alone, and a null sleeve contribution is not summed from n
       kind: "table",
       columns: ["ticker", "sleeve", "bp"],
       rows: [
-        ["AAA", "Core", "10"],
-        ["BBB", "Core", "5"],
+        ["AAA", "Core", "+10.0"],
+        ["BBB", "Core", "+5.0"],
       ],
     },
   ]);
   expect(attributionBody("attribution", { sleeves: [], names: [{ ticker: "AAA", sleeve: "Core", contribution_bp: 3 }] }, ok())).toEqual({
-    blocks: [{ kind: "table", columns: ["ticker", "sleeve", "bp"], rows: [["AAA", "Core", "3"]] }],
+    blocks: [{ kind: "table", columns: ["ticker", "sleeve", "bp"], rows: [["AAA", "Core", "+3.0"]] }],
   });
   expect(attributionBody("attribution", { sleeves: [{ sleeve: "Core", contribution_bp: -2 }], names: [] }, ok())).toEqual({
-    blocks: [{ kind: "table", columns: ["sleeve", "bp"], rows: [["Core", "-2"]] }],
+    blocks: [{ kind: "table", columns: ["sleeve", "bp"], rows: [["Core", "-2.0"]] }],
   });
 });
 

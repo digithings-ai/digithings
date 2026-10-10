@@ -1,5 +1,6 @@
 import { DASH, EMPTY_READ, type ReadResult } from "../read";
 import { shapeLines, type PaneBlock, type PaneBody } from "./shape";
+import { cell } from "../format";
 
 /** Tearsheet panes. A chart is the NAV numbers the series already returned. */
 const BARS = "▁▂▃▄▅▆▇█";
@@ -11,13 +12,6 @@ function rec(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-function cell(value: unknown): string {
-  if (value == null || value === "") return DASH;
-  if (typeof value === "number") return Number.isFinite(value) ? JSON.stringify(value) : DASH;
-  if (typeof value === "boolean") return value ? "true" : "false";
-  if (typeof value === "string") return value;
-  return DASH;
-}
 
 function stat(pairs: [string, string][]): PaneBlock | null {
   const shown = pairs.filter(([, value]) => value !== DASH);
@@ -106,16 +100,16 @@ function paintPerformance(data: Record<string, unknown>): PaneBody {
   const nav = rec(data.nav);
   const benchmark = rec(data.benchmark);
   const head = stat([
-    ["day", cell(metrics?.day_return_pct)],
-    ["since", cell(metrics?.since_inception_pct)],
-    ["excess", cell(metrics?.excess_return_pct)],
-    ["alpha", cell(metrics?.alpha_pct)],
-    ["IR", cell(metrics?.information_ratio)],
-    ["beta", cell(metrics?.beta)],
-    ["overlap", cell(metrics?.overlap_days)],
-    ["NAV", cell(nav?.base100_tip)],
-    ["date", cell(nav?.tip_date)],
-    ["benchmark", cell(benchmark?.ticker)],
+    ["day", cell(metrics?.day_return_pct, "day_return_pct")],
+    ["since", cell(metrics?.since_inception_pct, "since_inception_pct")],
+    ["excess", cell(metrics?.excess_return_pct, "excess_return_pct")],
+    ["alpha", cell(metrics?.alpha_pct, "alpha_pct")],
+    ["IR", cell(metrics?.information_ratio, "information_ratio")],
+    ["beta", cell(metrics?.beta, "beta")],
+    ["overlap", cell(metrics?.overlap_days, "overlap_days")],
+    ["NAV", cell(nav?.base100_tip, "base100_tip")],
+    ["date", cell(nav?.tip_date, "tip_date")],
+    ["benchmark", cell(benchmark?.ticker, "ticker")],
   ]);
   return head ? { blocks: [head] } : sentence(EMPTY_READ);
 }
@@ -125,7 +119,7 @@ function pointRows(points: unknown[]): string[][] {
   for (const item of points) {
     const row = rec(item);
     if (!row) continue;
-    rows.push([cell(row.date), cell(row.nav), cell(row.day_return_pct), cell(row.contract), cell(row.index)]);
+    rows.push([cell(row.date, "date"), cell(row.nav, "nav"), cell(row.day_return_pct, "day_return_pct"), cell(row.contract, "contract"), cell(row.index, "index")]);
   }
   return rows;
 }
@@ -150,7 +144,7 @@ function benchmarkRows(series: unknown): string[][] {
       const row = rec(item);
       const date = named(row?.date);
       if (!row || !date) continue;
-      rows.push([ticker, date, cell(row.close)]);
+      rows.push([ticker, date, cell(row.close, "close")]);
     }
   }
   return rows;

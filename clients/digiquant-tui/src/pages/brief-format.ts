@@ -1,5 +1,6 @@
 import { DASH, EMPTY_READ, type ReadResult } from "../read";
 import { shapeLines, type PaneBlock, type PaneBody } from "./shape";
+import { cell } from "../format";
 
 /** Brief panes. Stat, then table. A chart needs a series this page does not return. */
 const BRIEF_IDS = ["brief", "live", "decision", "signals", "risks", "movers", "pl-run-health"] as const;
@@ -16,13 +17,6 @@ function rec(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-function cell(value: unknown): string {
-  if (value == null || value === "") return DASH;
-  if (typeof value === "number") return Number.isFinite(value) ? JSON.stringify(value) : DASH;
-  if (typeof value === "boolean") return value ? "true" : "false";
-  if (typeof value === "string") return value;
-  return DASH;
-}
 
 function stat(pairs: [string, string][]): PaneBlock | null {
   const shown = pairs.filter(([, value]) => value !== DASH);
@@ -61,14 +55,14 @@ function paintBrief(data: Record<string, unknown>): PaneBody {
   const overlay = rec(data.overlay);
   const blocks: PaneBlock[] = [];
   const head = stat([
-    ["NAV", cell(tip?.nav)],
-    ["date", cell(tip?.date)],
-    ["contract", cell(tip?.contract)],
-    ["day", cell(data.day_return_pct)],
-    ["since", cell(data.since_inception_pct)],
-    ["invested", cell(data.invested_pct)],
-    ["overlay", cell(overlay?.badge)],
-    ["vs mark", cell(overlay?.live_vs_mark_pct)],
+    ["NAV", cell(tip?.nav, "nav")],
+    ["date", cell(tip?.date, "date")],
+    ["contract", cell(tip?.contract, "contract")],
+    ["day", cell(data.day_return_pct, "day_return_pct")],
+    ["since", cell(data.since_inception_pct, "since_inception_pct")],
+    ["invested", cell(data.invested_pct, "invested_pct")],
+    ["overlay", cell(overlay?.badge, "badge")],
+    ["vs mark", cell(overlay?.live_vs_mark_pct, "live_vs_mark_pct")],
   ]);
   if (head) blocks.push(head);
   const events = Array.isArray(data.session_events) ? data.session_events : [];
@@ -79,7 +73,7 @@ function paintBrief(data: Record<string, unknown>): PaneBody {
     const ticker = typeof row.ticker === "string" ? row.ticker : "";
     const event = typeof row.event === "string" ? row.event : "";
     if (!ticker && !event) continue;
-    rows.push([cell(row.date), ticker || DASH, event || DASH, cell(row.weight_pct)]);
+    rows.push([cell(row.date, "date"), ticker || DASH, event || DASH, cell(row.weight_pct, "weight_pct")]);
   }
   const list = table(["date", "ticker", "event", "weight"], rows);
   if (list) blocks.push(list);
@@ -89,12 +83,12 @@ function paintBrief(data: Record<string, unknown>): PaneBody {
 function paintLive(data: Record<string, unknown>): PaneBody {
   const blocks: PaneBlock[] = [];
   const head = stat([
-    ["quote", cell(data.quote_date)],
-    ["vs mark", cell(data.live_vs_mark_pct)],
-    ["day", cell(data.day_return_live_pct)],
-    ["since", cell(data.since_inception_live_pct)],
-    ["excess", cell(data.excess_live_pct)],
-    ["overlay", cell(data.overlay_eligible)],
+    ["quote", cell(data.quote_date, "quote_date")],
+    ["vs mark", cell(data.live_vs_mark_pct, "live_vs_mark_pct")],
+    ["day", cell(data.day_return_live_pct, "day_return_live_pct")],
+    ["since", cell(data.since_inception_live_pct, "since_inception_live_pct")],
+    ["excess", cell(data.excess_live_pct, "excess_live_pct")],
+    ["overlay", cell(data.overlay_eligible, "overlay_eligible")],
   ]);
   if (head) blocks.push(head);
   const universe = Array.isArray(data.universe) ? data.universe : [];
@@ -113,7 +107,7 @@ function paintDecision(data: Record<string, unknown>): PaneBody {
   const lead = typeof decision.lead === "string" ? decision.lead.trim() : "";
   const note = typeof decision.body === "string" ? decision.body.trim() : "";
   const blocks: PaneBlock[] = [];
-  const when = stat([["run", cell(decision.run_date)]]);
+  const when = stat([["run", cell(decision.run_date, "run_date")]]);
   if (when) blocks.push(when);
   const text = [lead, note].filter((part) => part.length > 0).join("\n");
   if (text) blocks.push({ kind: "sentence", text });
@@ -129,15 +123,15 @@ function paintSignals(data: Record<string, unknown>): PaneBody {
     const vehicles = Array.isArray(row.vehicles)
       ? row.vehicles.filter((name): name is string => typeof name === "string" && name.length > 0).join(", ")
       : "";
-    rows.push([row.name, cell(row.state), vehicles || DASH]);
+    rows.push([row.name, cell(row.state, "state"), vehicles || DASH]);
   }
   const blocks: PaneBlock[] = [];
   const counts = rec(data.counts);
   const head = counts
     ? stat([
-        ["active", cell(counts.active)],
-        ["watch", cell(counts.watch)],
-        ["exited", cell(counts.exited)],
+        ["active", cell(counts.active, "active")],
+        ["watch", cell(counts.watch, "watch")],
+        ["exited", cell(counts.exited, "exited")],
       ])
     : null;
   if (head) blocks.push(head);
@@ -163,11 +157,11 @@ function paintMovers(data: Record<string, unknown>): PaneBody {
     if (!row || typeof row.ticker !== "string" || row.ticker.length === 0) continue;
     rows.push([
       row.ticker,
-      cell(row.sleeve),
-      cell(row.scaled_weight_pct),
-      cell(row.current_price),
-      cell(row.day_return_pct),
-      cell(row.unrealized_pct),
+      cell(row.sleeve, "sleeve"),
+      cell(row.scaled_weight_pct, "scaled_weight_pct"),
+      cell(row.current_price, "current_price"),
+      cell(row.day_return_pct, "day_return_pct"),
+      cell(row.unrealized_pct, "unrealized_pct"),
     ]);
   }
   const list = table(["ticker", "sleeve", "weight", "price", "day", "unrealized"], rows);
@@ -177,13 +171,13 @@ function paintMovers(data: Record<string, unknown>): PaneBody {
 function paintHealth(data: Record<string, unknown>): PaneBody {
   const nodes = rec(data.nodes);
   const head = stat([
-    ["run", cell(data.run_date)],
-    ["type", cell(data.run_type)],
-    ["status", cell(data.status)],
-    ["config", cell(data.config)],
-    ["ok", cell(nodes?.ok)],
-    ["carried", cell(nodes?.carried)],
-    ["failed", cell(nodes?.failed)],
+    ["run", cell(data.run_date, "run_date")],
+    ["type", cell(data.run_type, "run_type")],
+    ["status", cell(data.status, "status")],
+    ["config", cell(data.config, "config")],
+    ["ok", cell(nodes?.ok, "ok")],
+    ["carried", cell(nodes?.carried, "carried")],
+    ["failed", cell(nodes?.failed, "failed")],
   ]);
   return head ? { blocks: [head] } : sentence(EMPTY_READ);
 }

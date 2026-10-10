@@ -1,6 +1,7 @@
 import type { BlockKind } from "./catalog";
+import { DASH, cell } from "./format";
 
-export const DASH = "—";
+export { DASH };
 export const STUB_READ = "The official API returned a stub envelope, not a house-book read.";
 export const EMPTY_READ = "This read returned no values.";
 export const NOT_PUBLISHED = "Not available yet.";
@@ -9,15 +10,11 @@ export type ReadResult = {
   status: "ok" | "empty" | "stub" | "error";
   lines: string[];
   asOf: string | null;
+  /** The date the payload actually holds (`provenance.tip_date`, `data.book_as_of`). `asOf` is the book asked for. */
+  dataAsOf?: string | null;
 };
 
-const scalar = (v: unknown): string => {
-  if (v == null || v === "") return DASH;
-  if (typeof v === "number") return Number.isFinite(v) ? JSON.stringify(v) : DASH;
-  if (typeof v === "boolean") return v ? "true" : "false";
-  if (typeof v === "string") return v;
-  return DASH;
-};
+const scalar = (v: unknown, key = ""): string => (typeof v === "object" && v !== null ? DASH : cell(v, key));
 
 const STUB_NAV_VALUES = [99.909, 204.04];
 const STUB_NAV_TEXT = new Set(["99.909", "204.04", "204.040"]);
@@ -68,7 +65,7 @@ function rowLine(row: unknown): string {
   if (!row || typeof row !== "object" || Array.isArray(row)) return scalar(row);
   return Object.entries(row as Record<string, unknown>)
     .slice(0, 6)
-    .map(([k, v]) => `${k} ${scalar(v)}`)
+    .map(([k, v]) => `${k} ${scalar(v, k)}`)
     .join("  ");
 }
 
@@ -82,14 +79,14 @@ export function fieldLines(data: unknown, limit = 16): string[] {
   const push = (line: string) => {
     if (lines.length < limit) lines.push(line);
   };
-  const walk = (value: unknown, prefix: string) => {
+  const walk = (value: unknown, prefix: string, key = "") => {
     if (lines.length >= limit) return;
     if (value == null || value === "") {
       push(`${prefix}${DASH}`);
       return;
     }
     if (typeof value !== "object") {
-      push(`${prefix}${scalar(value)}`);
+      push(`${prefix}${scalar(value, key)}`);
       return;
     }
     if (Array.isArray(value)) {
@@ -103,8 +100,8 @@ export function fieldLines(data: unknown, limit = 16): string[] {
       return;
     }
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      if (v && typeof v === "object") walk(v, `${prefix}${k}  `);
-      else push(`${prefix}${k}  ${scalar(v)}`);
+      if (v && typeof v === "object") walk(v, `${prefix}${k}  `, k);
+      else push(`${prefix}${k}  ${scalar(v, k)}`);
     }
   };
   walk(data, "");
@@ -138,14 +135,22 @@ function errorMessage(body: unknown): string {
   return typeof message === "string" ? message : "";
 }
 
-function provenance(body: unknown): { asOf: string | null; head: string[] } {
-  if (!body || typeof body !== "object") return { asOf: null, head: [] };
-  const env = body as { as_of?: unknown; provenance?: { source?: unknown; marks?: unknown } };
-  const asOf = typeof env.as_of === "string" ? env.as_of : null;
+const text = (v: unknown): string | null => (typeof v === "string" && v ? v : null);
+
+function provenance(body: unknown): { asOf: string | null; dataAsOf: string | null; head: string[] } {
+  if (!body || typeof body !== "object") return { asOf: null, dataAsOf: null, head: [] };
+  const env = body as {
+    as_of?: unknown;
+    data?: { book_as_of?: unknown; as_of?: unknown } | null;
+    provenance?: { source?: unknown; marks?: unknown; tip_date?: unknown };
+  };
+  const asOf = text(env.as_of);
+  const data = env.data && typeof env.data === "object" && !Array.isArray(env.data) ? env.data : null;
+  const dataAsOf = text(env.provenance?.tip_date) ?? text(data?.book_as_of) ?? text(data?.as_of);
   const head: string[] = [];
   if (typeof env.provenance?.source === "string" && env.provenance.source) head.push(`source  ${env.provenance.source}`);
   if (typeof env.provenance?.marks === "string" && env.provenance.marks) head.push(`marks  ${env.provenance.marks}`);
-  return { asOf, head };
+  return { asOf, dataAsOf, head };
 }
 
 /** The API's 400 for a route it does not serve yet: `bad_request`, "unknown route /path". */
@@ -179,13 +184,13 @@ export function presentResponse(
     return { status: "error", lines: [`${route} returned no data`], asOf: null };
   }
   const data = (body as { data: unknown }).data;
-  const { asOf, head } = provenance(body);
+  const { asOf, dataAsOf, head } = provenance(body);
   const bodyLines = kind === "graph" ? graphLines(data) : fieldLines(data);
   const empty =
     kind === "graph"
       ? bodyLines[bodyLines.length - 1] === "No nodes in this read."
       : isEmptyPayload(data);
-  return { status: empty ? "empty" : "ok", lines: [...head, ...bodyLines], asOf };
+  return { status: empty ? "empty" : "ok", lines: [...head, ...bodyLines], asOf, dataAsOf };
 }
 
 export async function readBlock(api: string, route: string, kind: BlockKind, signal?: AbortSignal): Promise<ReadResult> {

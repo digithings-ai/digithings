@@ -33,7 +33,7 @@ test("the scoreboard is a stat and session rows, with no invented event", () => 
   expect(body.blocks[0]).toEqual({ kind: "stat", text: "source  public_accounting_nav_history" });
   expect(body.blocks[1]).toEqual({
     kind: "stat",
-    text: "NAV  101.2   date  2026-01-02   contract  finalized_accounting   day  0.4   invested  80   overlay  finalized   vs mark  0",
+    text: "NAV  101.20   date  2026-01-02   contract  finalized_accounting   day  +0.40%   invested  80.00%   overlay  finalized   vs mark  0.00%",
   });
   expect(body.blocks.some((block) => block.kind === "table")).toBe(false);
   expect(JSON.stringify(body)).not.toContain("99.909");
@@ -53,7 +53,7 @@ test("a session row is a table and a missing book stays the empty sentence", () 
     {
       kind: "table",
       columns: ["date", "ticker", "event", "weight"],
-      rows: [["2026-01-02", "AAA", "OPEN", "2"]],
+      rows: [["2026-01-02", "AAA", "OPEN", "2.00%"]],
     },
   ]);
   expect(
@@ -94,7 +94,7 @@ test("live marks and movers use only the fields the read returned", () => {
     {
       kind: "table",
       columns: ["ticker", "sleeve", "weight", "price", "day", "unrealized"],
-      rows: [["AAA", "book", "10", "—", "—", "—"]],
+      rows: [["AAA", "book", "10.00%", "—", "—", "—"]],
     },
   ]);
 });

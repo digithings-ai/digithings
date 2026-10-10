@@ -558,7 +558,7 @@ test("draft fields are a stat or a table, and a draft is not an order", () => {
       columns: ["field", "value"],
       rows: [
         ["target kind", "paper"],
-        ["paper capital", "10000"],
+        ["paper capital", "10,000.00"],
         ["broker", "none"],
         ["portfolio", "house"],
         ["schedule", "daily"],

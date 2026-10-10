@@ -64,7 +64,7 @@ test("performance is a stat of the returned metrics, and nulls are left out", ()
     { kind: "stat", text: "source  public_accounting_nav_history   marks  stored" },
     {
       kind: "stat",
-      text: "day  1.2   since  3.04   excess  0.4   beta  0.8   overlap  20   NAV  103.04   date  2026-02-01   benchmark  SPY",
+      text: "day  +1.20%   since  +3.04%   excess  +0.40%   beta  0.80   overlap  20   NAV  103.04   date  2026-02-01   benchmark  SPY",
     },
   ]);
   const text = JSON.stringify(body);
@@ -110,7 +110,7 @@ test("NAV is a table, and a chart only when two or more nav numbers are present"
     {
       kind: "table",
       columns: ["date", "nav", "day", "contract", "index"],
-      rows: [["2026-01-02", "10", "—", "finalized_accounting", "100"]],
+      rows: [["2026-01-02", "10.00", "—", "finalized_accounting", "100.00"]],
     },
   ]);
   expect(JSON.stringify(one)).not.toContain(EMPTY_READ);
@@ -210,7 +210,7 @@ test("benchmarks are a table of aligned closes, and an empty series stays the em
       kind: "table",
       columns: ["ticker", "date", "close"],
       rows: [
-        ["SPY", "2026-01-01", "500"],
+        ["SPY", "2026-01-01", "500.00"],
         ["SPY", "2026-01-02", "—"],
       ],
     },

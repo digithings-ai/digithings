@@ -30,7 +30,7 @@ test("the envelope is a stat of the NAV tip, invested, and cash", () => {
     { kind: "stat", text: "source  public_accounting_nav_history" },
     {
       kind: "stat",
-      text: "NAV  101.2   date  2026-01-02   contract  finalized_accounting   invested  80   cash  20",
+      text: "NAV  101.20   date  2026-01-02   contract  finalized_accounting   invested  80.00%   cash  20.00%",
     },
   ]);
   expect(JSON.stringify(body)).not.toContain("135");
@@ -40,7 +40,7 @@ test("the envelope is a stat of the NAV tip, invested, and cash", () => {
       { nav_tip: { nav: 10 }, invested: { envelope_pct: 80, cash_pct: null } },
       ok(),
     ).blocks,
-  ).toEqual([{ kind: "stat", text: "NAV  10   invested  80" }]);
+  ).toEqual([{ kind: "stat", text: "NAV  10.00   invested  80.00%" }]);
   expect(
     portfolioBody("portfolio", { nav_tip: null, invested: { envelope_pct: null, cash_pct: null } }, ok()),
   ).toEqual({ blocks: [{ kind: "sentence", text: EMPTY_READ }] });
@@ -50,7 +50,7 @@ test("sleeves, movers, and the book are tables, or the empty sentence", () => {
   expect(
     portfolioBody("sleeves", { sleeves: [{ sleeve: "Core", names: 2, weight_pct: 40 }], rows: [{ ticker: "AAA" }] }, ok())
       .blocks,
-  ).toEqual([{ kind: "table", columns: ["sleeve", "names", "weight"], rows: [["Core", "2", "40"]] }]);
+  ).toEqual([{ kind: "table", columns: ["sleeve", "names", "weight"], rows: [["Core", "2", "40.00%"]] }]);
   expect(portfolioBody("sleeves", { sleeves: [], rows: [{ ticker: "AAA" }] }, ok())).toEqual({
     blocks: [{ kind: "sentence", text: EMPTY_READ }],
   });
@@ -64,7 +64,7 @@ test("sleeves, movers, and the book are tables, or the empty sentence", () => {
     {
       kind: "table",
       columns: ["ticker", "sleeve", "weight", "price", "day", "unrealized"],
-      rows: [["AAA", "Core", "10", "—", "1", "2"]],
+      rows: [["AAA", "Core", "10.00%", "—", "+1.00%", "+2.00%"]],
     },
   ]);
   expect(portfolioBody("movers", { rows: [] }, ok())).toEqual({ blocks: [{ kind: "sentence", text: EMPTY_READ }] });
@@ -78,7 +78,7 @@ test("sleeves, movers, and the book are tables, or the empty sentence", () => {
     {
       kind: "table",
       columns: ["ticker", "weight", "scaled", "entry", "price", "unrealized"],
-      rows: [["AAA", "12", "10", "5", "—", "20"]],
+      rows: [["AAA", "12.00%", "10.00%", "5.00", "—", "+20.00%"]],
     },
   ]);
   expect(JSON.stringify(portfolioBody("book", { rows: [] }, ok()))).not.toContain("sleeve");
@@ -96,7 +96,7 @@ test("NAV charts two or more points and keeps the point table", () => {
   expect(one.blocks[1]).toEqual({
     kind: "table",
     columns: ["date", "nav", "day", "contract", "index"],
-    rows: [["2026-01-02", "10", "—", "finalized_accounting", "100"]],
+    rows: [["2026-01-02", "10.00", "—", "finalized_accounting", "100.00"]],
   });
 
   const two = portfolioBody(
@@ -176,12 +176,12 @@ test("drawdown is a stat, and a chart only when the series has values", () => {
     ok(),
   );
   expect(body.blocks).toEqual([
-    { kind: "stat", text: "max  -12.5   current  -1" },
+    { kind: "stat", text: "max  -12.50%   current  -1.00%" },
     { kind: "chart", text: "▁█" },
   ]);
   expect(
     portfolioBody("drawdown", { max_pct: -3, current_pct: -3, series: [] }, ok()).blocks,
-  ).toEqual([{ kind: "stat", text: "max  -3   current  -3" }]);
+  ).toEqual([{ kind: "stat", text: "max  -3.00%   current  -3.00%" }]);
   expect(portfolioBody("drawdown", { max_pct: null, current_pct: null, series: [] }, ok())).toEqual({
     blocks: [{ kind: "sentence", text: EMPTY_READ }],
   });

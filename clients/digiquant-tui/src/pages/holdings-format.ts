@@ -1,5 +1,6 @@
-import { DASH, EMPTY_READ, type ReadResult } from "../read";
+import { EMPTY_READ, type ReadResult } from "../read";
 import { shapeLines, type PaneBlock, type PaneBody } from "./shape";
+import { cell } from "../format";
 
 /** Holdings is one table of the enriched book rows. No group headers and no total row. */
 
@@ -9,13 +10,6 @@ function rec(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-function cell(value: unknown): string {
-  if (value == null || value === "") return DASH;
-  if (typeof value === "number") return Number.isFinite(value) ? JSON.stringify(value) : DASH;
-  if (typeof value === "boolean") return value ? "true" : "false";
-  if (typeof value === "string") return value;
-  return DASH;
-}
 
 function table(columns: string[], rows: string[][]): PaneBlock | null {
   if (rows.length === 0) return null;
@@ -47,14 +41,14 @@ function paintHoldings(data: Record<string, unknown>): PaneBody {
     if (!row || typeof row.ticker !== "string" || row.ticker.length === 0) continue;
     rows.push([
       row.ticker,
-      cell(row.name),
-      cell(row.sleeve),
-      cell(row.scaled_weight_pct),
-      cell(row.shares),
-      cell(row.current_price),
-      cell(row.value),
-      cell(row.day_return_pct),
-      cell(row.thesis_id),
+      cell(row.name, "name"),
+      cell(row.sleeve, "sleeve"),
+      cell(row.scaled_weight_pct, "scaled_weight_pct"),
+      cell(row.shares, "shares"),
+      cell(row.current_price, "current_price"),
+      cell(row.value, "value"),
+      cell(row.day_return_pct, "day_return_pct"),
+      cell(row.thesis_id, "thesis_id"),
     ]);
   }
   const list = table(

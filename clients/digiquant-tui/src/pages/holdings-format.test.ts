@@ -49,7 +49,7 @@ test("holdings is the enriched book rows, with a missing price left blank", () =
       kind: "table",
       columns: ["ticker", "name", "sleeve", "weight", "shares", "price", "value", "day", "thesis"],
       rows: [
-        ["AAA", "Alpha", "Core", "10", "4", "—", "—", "1.5", "th-1"],
+        ["AAA", "Alpha", "Core", "10.00%", "4", "—", "—", "+1.50%", "th-1"],
         ["CASH", "—", "—", "—", "—", "—", "—", "—", "—"],
       ],
     },

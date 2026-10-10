@@ -1,5 +1,6 @@
-import { DASH, EMPTY_READ, type ReadResult } from "../read";
+import { EMPTY_READ, type ReadResult } from "../read";
 import { shapeLines, type PaneBlock, type PaneBody } from "./shape";
+import { cell } from "../format";
 
 /** Attribution is two tables: sleeves, then names. Contribution is the payload's basis points. */
 
@@ -9,13 +10,6 @@ function rec(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-function cell(value: unknown): string {
-  if (value == null || value === "") return DASH;
-  if (typeof value === "number") return Number.isFinite(value) ? JSON.stringify(value) : DASH;
-  if (typeof value === "boolean") return value ? "true" : "false";
-  if (typeof value === "string") return value;
-  return DASH;
-}
 
 function table(columns: string[], rows: string[][]): PaneBlock | null {
   if (rows.length === 0) return null;
@@ -45,7 +39,7 @@ function sleeveRows(value: unknown): string[][] {
   for (const item of value) {
     const row = rec(item);
     if (!row || typeof row.sleeve !== "string" || row.sleeve.length === 0) continue;
-    rows.push([row.sleeve, cell(row.contribution_bp)]);
+    rows.push([row.sleeve, cell(row.contribution_bp, "contribution_bp")]);
   }
   return rows;
 }
@@ -56,7 +50,7 @@ function nameRows(value: unknown): string[][] {
   for (const item of value) {
     const row = rec(item);
     if (!row || typeof row.ticker !== "string" || row.ticker.length === 0) continue;
-    rows.push([row.ticker, cell(row.sleeve), cell(row.contribution_bp)]);
+    rows.push([row.ticker, cell(row.sleeve, "sleeve"), cell(row.contribution_bp, "contribution_bp")]);
   }
   return rows;
 }

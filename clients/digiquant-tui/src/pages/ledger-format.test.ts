@@ -65,15 +65,14 @@ test("position events are a table, and a missing fill stays blank", () => {
       kind: "table",
       columns: ["date", "ticker", "type", "fill", "entry", "realized", "prev", "weight"],
       rows: [
-        ["2026-02-01", "AAA", "TRIM", "12.5", "10", "25", "8", "4"],
-        ["2026-01-15", "BBB", "OPEN", "—", "—", "—", "—", "3"],
+        ["2026-02-01", "AAA", "TRIM", "12.50", "10.00", "+25.00%", "8.00%", "4.00%"],
+        ["2026-01-15", "BBB", "OPEN", "—", "—", "—", "—", "3.00%"],
       ],
     },
   ]);
   const text = JSON.stringify(body);
   expect(text).not.toContain("cursor-token");
   expect(text).not.toContain("→");
-  expect(text).not.toContain("%");
 });
 
 test("cash is its own table, and a missing amount is not replaced", () => {
@@ -94,7 +93,7 @@ test("cash is its own table, and a missing amount is not replaced", () => {
       kind: "table",
       columns: ["date", "kind", "amount", "balance"],
       rows: [
-        ["2026-02-01", "period", "-20", "80"],
+        ["2026-02-01", "period", "-20", "80.00"],
         ["2026-01-01", "—", "—", "—"],
       ],
     },
