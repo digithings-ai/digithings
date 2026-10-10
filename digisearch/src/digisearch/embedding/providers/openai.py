@@ -25,6 +25,24 @@ _EGRESS_PURPOSE = "embedding"
 #: this provider, which is why this module never records a ``cache_hit`` decision.
 _EGRESS_CACHE_STATUS = "miss"
 
+#: Compared as plain strings: ``EgressDecision`` is a ``StrEnum``, so this is the
+#: same comparison as testing membership, without importing digillm here.
+_REFUSED = "refused"
+_MASKED = "masked"
+
+
+def _verdict(client: Any) -> tuple[Any, tuple[str, ...]]:
+    """The screening verdict the digillm screen recorded on this client, if any.
+
+    Returns UNSCREENED-equivalent when there is no client, no screen, or no call
+    screened yet -- so every caller gets the same three-way answer without this
+    module ever importing digillm's types at module scope.
+    """
+    screened = getattr(client, "last_screen", None)
+    if screened is None:
+        return None, ()
+    return screened.decision, tuple(screened.category_ids)
+
 
 class OpenAIEmbedder(EmbeddingProvider):
     """OpenAI text-embedding API.
@@ -95,8 +113,28 @@ class OpenAIEmbedder(EmbeddingProvider):
             kw: dict = {"api_key": self._api_key}
             if self._base_url:
                 kw["base_url"] = self._base_url
-            self._client = OpenAI(**kw)
+            self._client = self._screened(OpenAI(**kw))
         return self._client
+
+    @staticmethod
+    def _screened(inner: object) -> object:
+        """Wrap the constructed client in digillm's Art. 9 egress screen.
+
+        Lazy and non-raising, like every other digillm import in this module: the
+        deployed image installs neither digillm nor openai, so this must not turn
+        into a new import-time failure in a module that imports cleanly today. A
+        digillm that cannot be imported leaves the client exactly as it was --
+        unscreened, and recorded as such.
+        """
+        try:
+            from digillm.client import screened_client
+        except ImportError as unavailable:
+            logger.warning(
+                "egress screen not installed: digillm is not importable (%s)",
+                type(unavailable).__name__,
+            )
+            return inner
+        return screened_client(inner)
 
     def _resolved_destination(self) -> str:
         """The base URL this call will dial, with credentials removed.
@@ -132,6 +170,8 @@ class OpenAIEmbedder(EmbeddingProvider):
         attempt_id: uuid.UUID,
         payload: Any,
         outcome: str,
+        decision: Any = None,
+        category_ids: tuple[str, ...] = (),
     ) -> None:
         """Emit this provider attempt's egress record. Never raises."""
         try:
@@ -145,6 +185,8 @@ class OpenAIEmbedder(EmbeddingProvider):
                 type(unavailable).__name__,
             )
             return
+        if decision is None:
+            decision = EgressDecision.UNSCREENED
         record_egress(
             call_id=call_id,
             attempt_id=attempt_id,
@@ -154,7 +196,8 @@ class OpenAIEmbedder(EmbeddingProvider):
             purpose=_EGRESS_PURPOSE,
             cache_status=_EGRESS_CACHE_STATUS,
             outcome=outcome,
-            decision=EgressDecision.UNSCREENED,
+            decision=decision,
+            category_ids=category_ids,
             payload=payload,
         )
 
@@ -166,22 +209,39 @@ class OpenAIEmbedder(EmbeddingProvider):
         # What goes on the wire: the model plus the batch. digillm canonicalises it,
         # digests it and drops it. Nothing on this side stores or logs it.
         payload: Any = {"model": self.model, "input": list(texts)}
+        client: Any = None
         try:
             client = self._get_client()
             r = client.embeddings.create(model=self.model, input=texts)
         except Exception:
+            decision, categories = _verdict(client)
+            # A refusal never reached the wire, so it is not a failed wire
+            # attempt: recording it as one would put a call in the ledger that
+            # never reached the provider, the mirror of the error this module
+            # exists to avoid. The destination stays the real one -- "none" is
+            # reserved for a cache hit, and "where it would have gone" is exactly
+            # what a data-subject request needs to know.
             self._record_call(
                 call_id=call_id,
                 attempt_id=attempt_id,
                 payload=payload,
-                outcome="failed",
+                outcome="refused" if decision == _REFUSED else "failed",
+                decision=decision,
+                category_ids=categories,
             )
             raise
         vectors = [d.embedding for d in r.data]
+        decision, categories = _verdict(client)
+        # Digest what went on the wire -- the redaction, when one was substituted.
+        sent = payload
+        if decision == _MASKED:
+            sent = {"model": self.model, "input": client.last_screen.masked_payload}
         self._record_call(
             call_id=call_id,
             attempt_id=attempt_id,
-            payload=payload,
+            payload=sent,
             outcome="succeeded",
+            decision=decision,
+            category_ids=categories,
         )
         return vectors
