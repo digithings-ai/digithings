@@ -27,6 +27,17 @@ describe("MCP edge paths", () => {
     expect(source).toContain("digivault: 8769");
   });
 
+  // DIG-2638: oversized Zammad retrievals are served as an expiring download
+  // instead of being returned to the model. The download is a port in the same
+  // map, so it inherits the identical fail-closed key check rather than growing
+  // a second gate that could drift away from the tools' one.
+  it("maps the ticket download route so the same edge key gates it", () => {
+    expect(source).toContain('"zammad-export": 8771');
+    const mapAt = source.indexOf("const MCP_EDGE_SERVERS: Record<string, number> = {");
+    const entryAt = source.indexOf('"zammad-export": 8771');
+    expect(entryAt).toBeGreaterThan(mapAt);
+  });
+
   it("routes every mapped prefix fail-closed on a missing or wrong key", () => {
     expect(source).toContain("url.pathname.startsWith(`${MCP_EDGE_PREFIX}/`)");
     expect(source).toContain("workerEnv.MCP_EDGE_KEY?.trim()");
@@ -75,5 +86,27 @@ describe("in-container MCP program binds", () => {
   it("digivault-mcp binds 0.0.0.0:8769 under supervisord", () => {
     expect(supervisor).toContain("[program:digivault-mcp]");
     expect(supervisor).toContain("python -m digivault.mcp_server --port 8769 --host 0.0.0.0");
+  });
+
+  it("zammad-export serves the download spool on 127.0.0.1:8771 (DIG-2638)", () => {
+    expect(supervisor).toContain("[program:zammad-export]");
+    expect(supervisor).toContain("scripts.zammad_mcp.export_server --port 8771");
+    expect(supervisor).toContain("ZAMMAD_EXPORT_DIR");
+    // It is reachable only through the Worker's edge gate, so it does not need
+    // the 0.0.0.0 bind the three MCP servers need for the digraph dial.
+    expect(supervisor).not.toContain('ZAMMAD_EXPORT_HOST="0.0.0.0"');
+  });
+});
+
+describe("ticket export image surface", () => {
+  const dockerfile = readFileSync(
+    join(stackDir, "..", "..", "scripts", "zammad_mcp", "Dockerfile.mcp"),
+    "utf-8",
+  );
+
+  it("exposes the download port and still copies the whole module (DIG-2638)", () => {
+    expect(dockerfile).toContain("EXPOSE 8770");
+    expect(dockerfile).toContain("EXPOSE 8771");
+    expect(dockerfile).toContain("COPY scripts/zammad_mcp ./scripts/zammad_mcp");
   });
 });

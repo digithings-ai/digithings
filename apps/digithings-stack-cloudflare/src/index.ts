@@ -467,6 +467,10 @@ const MCP_EDGE_SERVERS: Record<string, number> = {
   zammad: 8770,
   digisearch: 8765,
   digivault: 8769,
+  // Expiring ticket downloads for oversized Zammad retrievals (DIG-2638). Same
+  // map => same fail-closed x-digi-mcp-key gate as the tools above, so a link
+  // works for exactly the callers that can already read tickets.
+  "zammad-export": 8771,
 };
 
 /** Edge key for one server: an MCP_EDGE_KEYS entry wins, else the shared key. */
