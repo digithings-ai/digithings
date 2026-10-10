@@ -61,8 +61,12 @@ def test_sox_argv_is_16k_mono_and_self_bounding() -> None:
     assert str(CHANNELS) in argv
     assert str(BITS) in argv
     assert "/tmp/a.wav" in argv
-    # `rec … trim 0 N` closes the file at N seconds instead of being killed.
-    assert argv[argv.index("rec") :] == ["rec", "trim", "0", "15"]
+    # Old argv was `… /tmp/a.wav rec trim 0 15`. `rec` is not a sox effect:
+    # SoX parses it as the output filename and the wav path as a second input,
+    # so the bounded take never lands on the path `record` checks. `trim 0 N`
+    # is the effect that closes the file, and it has to follow the wav.
+    assert "rec" not in argv
+    assert argv[argv.index("/tmp/a.wav") + 1 :] == ["trim", "0", "15"]
 
 
 def test_ffmpeg_argv_bounds_the_clip_and_targets_the_mac_mic() -> None:
