@@ -1,5 +1,16 @@
+import createMDX from "@next/mdx";
+
+import rehypeBookIds from "./lib/book/rehypeBookIds.mjs";
+import remarkFrontmatter from "remark-frontmatter";
+import remarkBookDiagrams from "./lib/book/remarkBookDiagrams.mjs";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // The book (DIG-2821) is MDX under content/book, compiled by @next/mdx and
+  // imported dynamically by app/book/[slug]/page.tsx. `.md`/`.mdx` are NOT in
+  // pageExtensions on purpose: adding them would turn every chapter file into a
+  // route of its own, and the chapter page already owns the URL.
+
   output: "export",
   images: { unoptimized: true },
   trailingSlash: true,
@@ -22,4 +33,27 @@ const nextConfig = {
   },
 };
 
-export default nextConfig;
+// `pageExtensions` left alone on purpose — see above.
+const withMDX = createMDX({
+  // Any .md/.mdx file, including the ones outside app/, so the dynamic import
+  // in the chapter page goes through the same loader.
+  extension: /\.mdx?$/,
+  options: {
+    // Heading ids, so the static HTML already carries the anchors the table of
+    // contents links to and the printed book resolves its page numbers from.
+    // The plugin's slug rules are pinned to lib/book/headings.ts by
+    // rehypeBookIds.test.ts.
+    rehypePlugins: [rehypeBookIds],
+    // Mermaid fences become `<img>` pointing at the static SVG, so the chapter
+    // never asks a browser to run mermaid and the printed page loads the same
+    // file the page does. See lib/book/remarkBookDiagrams.mjs.
+    // `remark-frontmatter` FIRST: a chapter's `---` header was reaching the
+    // page as a paragraph reading "title: … order: 2 summary: >- …". Parsing it
+    // as YAML makes it a `yaml` node, which renders nothing. The book reads the
+    // same fields itself (lib/book/frontmatter.ts), so this plugin only has to
+    // stop the header being printed.
+    remarkPlugins: [remarkFrontmatter, remarkBookDiagrams],
+  },
+});
+
+export default withMDX(nextConfig);
