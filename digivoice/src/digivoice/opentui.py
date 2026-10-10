@@ -65,6 +65,8 @@ def launch_opentui(
     prior = child.get("PYTHONPATH", "")
     child["PYTHONPATH"] = src if not prior else src + os.pathsep + prior
     child["DIGIVOICE_DATA_DIR"] = paths.data_dir
+    # `python -m` puts the cwd first on sys.path; launch must not depend on it.
+    child["PYTHONSAFEPATH"] = "1"
     child["DIGIVOICE_TUI_START"] = start
     child["DIGIVOICE_PYTHON"] = sys.executable
     child["DIGIVOICE_ARGV"] = json.dumps(list(sys.argv))

@@ -94,6 +94,23 @@ local function data_dir()
   return (os.getenv("HOME") or "") .. "/Library/Application Support/digivoice"
 end
 
+
+-- Hammerspoon inherits whatever PATH its launcher had (an agent shell, launchd),
+-- which may lack Homebrew. Every digivoice task gets a full PATH so sox, ffmpeg
+-- and whisper-cli resolve no matter how Hammerspoon was started.
+local function task_path()
+  local home = os.getenv("HOME") or ""
+  return "/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:" .. home .. "/.local/bin:"
+    .. home .. "/.bun/bin:" .. (os.getenv("PATH") or "/usr/bin:/bin:/usr/sbin:/sbin")
+end
+
+local function with_task_env(task)
+  local env = task:environment() or {}
+  env.PATH = task_path()
+  task:setEnvironment(env)
+  return task
+end
+
 local DIGIVOICE = digivoice_bin()
 local DATA_DIR = data_dir()
 local STOP_FILE = DATA_DIR .. "/dict.stop"
@@ -747,6 +764,7 @@ local function start_dict()
     print("digivoice: could not start digivoice dict (" .. DIGIVOICE .. ")")
     return
   end
+  with_task_env(s.task)
   s.task:start()
   s.local_state = "recording"
   ensure_esc_tap()
@@ -846,6 +864,7 @@ function M.speak_selection()
     print("digivoice: could not start digivoice speak (" .. DIGIVOICE .. ")")
     return
   end
+  with_task_env(s.task)
   s.task:start()
   ensure_esc_tap()
   start_frames(s)
