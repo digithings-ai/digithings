@@ -11,6 +11,7 @@ the typed-error paths), and the client's cache/breaker locks.
 from __future__ import annotations
 
 import json
+import os
 import re
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -38,7 +39,9 @@ from digiquant.data.gloomberb import (  # noqa: E402
     agent_tools,
     available_digifetch_tools,
     build_digifetch_tool_dispatcher,
+    session_gate,
 )
+from digiquant.data.gloomberb.session_gate import SessionGateStatus  # noqa: E402
 from digiquant.orchestrator_tools import build_orchestrator_tool_manifest  # noqa: E402
 from digiquant.tool_refusals import REFUSED_TOOLS  # noqa: E402
 
@@ -53,6 +56,33 @@ REFUSED_DIGIFETCH = {name for name in REFUSED_TOOLS if name.startswith("digifetc
 LIVE_ENTITLEMENTS = {n: v for n, v in TOOL_ENTITLEMENTS.items() if n not in REFUSED_DIGIFETCH}
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+@pytest.fixture(autouse=True)
+def _gate_stubbed_to_presence(monkeypatch: pytest.MonkeyPatch):
+    """Keep the tool-list filter offline after the secret gate landed (#2752).
+
+    `available_digifetch_tools` no longer asks "is a cookie set?" but "does the
+    secret gate accept the session?", and answering that costs one request to
+    api.gloom.sh. This module is about the FILTER — which names drop for which
+    entitlement — so the verdict is stubbed to follow the cookie's presence,
+    which is what the filter used to decide for itself. The real contract
+    (presence alone is not enough; the cookie must validate) is pinned in
+    `tests/dq/data/test_gloomberb_session_gate.py`.
+    """
+    session_gate.reset_session_gate_cache()
+    monkeypatch.setattr(
+        agent_tools,
+        "session_gate_status",
+        lambda *a, **k: SessionGateStatus(
+            bool((os.environ.get(GLOOMBERB_SESSION_COOKIE_ENV) or "").strip()),
+            "presence_stub",
+            "presence stands in for validation in the filter tests",
+        ),
+    )
+    yield
+    session_gate.reset_session_gate_cache()
+
 
 AAPL_QUOTE = {
     "symbol": "AAPL",
@@ -238,8 +268,11 @@ def test_available_digifetch_tools_defaults_to_every_schema(
     assert len(available_digifetch_tools()) == len(DIGIFETCH_TOOLS)
 
 
-def test_pro_tool_gate_is_cookie_presence(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Enable the family first (default is OFF in deployed environments).
+def test_pro_tool_needs_the_gate_to_be_open(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Enable the family first (default is OFF in deployed environments). The
+    # gate verdict is stubbed to the cookie's presence by the autouse fixture;
+    # `test_gloomberb_session_gate.py` pins that an unvalidated cookie is not
+    # enough on its own.
     monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, "1")
     assert available_digifetch_tools(("digifetch_transcripts",)) == []
     monkeypatch.setenv(GLOOMBERB_SESSION_COOKIE_ENV, "token")
