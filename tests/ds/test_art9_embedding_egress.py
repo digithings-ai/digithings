@@ -37,6 +37,12 @@ from digillm import egress_record as egress_record_mod
 # ("my nhs number is 485 777 3456" is ALLOWED -- intervening words defeat the
 # pattern. That recall gap belongs to the DIG-1071 leaf, whose file this leaf may
 # not edit; it is not this leaf's to compensate for by loosening an assertion.)
+# CI runs this lane as ``pytest tests/ds/ -m unit`` / ``pytest digillm/tests
+# -m unit``. Without a module-level marker pytest DESELECTS every test in
+# this file and prints a green line having run nothing, so the whole
+# suite would be invisible to CI while looking perfect locally.
+pytestmark = pytest.mark.unit
+
 REFUSING_TEXTS = ["nhs number 485 777 3456"]
 CLEAN_TEXTS = ["the weather in Rome is mild", "summarise this changelog"]
 
@@ -63,16 +69,23 @@ def _records_sink(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture
-def screen() -> Any:
-    """Install digibase's screener for the duration of one test."""
+def screen(monkeypatch: pytest.MonkeyPatch) -> Any:
+    """Install digibase's screener for the duration of one test.
+
+    Restored through monkeypatch rather than by setting it back to ``None``.
+    Those are different states: ``None`` means "a screen is deliberately not
+    installed", so every test that ran afterwards would see UNSCREENED where
+    production sees the auto-resolved screener -- a suite whose answer depends on
+    what ran first. monkeypatch puts the module's original sentinel back, so the
+    next test resolves the seam exactly as if this fixture had never run.
+    """
     from digibase.art9 import screen_request
 
-    client_mod.set_egress_screen(screen_request)
+    monkeypatch.setattr(client_mod, "_egress_screen", screen_request)
     # A fixture that silently installed nothing would make every assertion below
     # vacuous, so the seam is proved live before the test body runs.
     assert client_mod.get_egress_screen() is screen_request
     yield
-    client_mod.set_egress_screen(None)
 
 
 class _FakeOpenAI:

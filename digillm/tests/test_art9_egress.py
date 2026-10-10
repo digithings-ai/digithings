@@ -50,6 +50,12 @@ from digillm.overrides import reset_byok, set_byok
 # It is recorded here rather than hidden: the corpus below is retargeted to a
 # payload L1 actually refuses, so these tests exercise this leaf's wiring instead
 # of L1's recall.
+# CI runs this lane as ``pytest tests/ds/ -m unit`` / ``pytest digillm/tests
+# -m unit``. Without a module-level marker pytest DESELECTS every test in
+# this file and prints a green line having run nothing, so the whole
+# suite would be invisible to CI while looking perfect locally.
+pytestmark = pytest.mark.unit
+
 REFUSING_MESSAGES = [{"role": "user", "content": "nhs number 485 777 3456"}]
 CLEAN_MESSAGES = [{"role": "user", "content": "what is the weather in Rome"}]
 EMBEDDING_REFUSAL = "date of birth 1974-03-02"
@@ -93,6 +99,7 @@ def screen(monkeypatch: pytest.MonkeyPatch) -> None:
     An autouse test that asserts its own premise is what keeps a green run from
     meaning "the screen was never there".
     """
+    _screen_before = client_mod._egress_screen
     from digibase.art9 import screen_request
 
     client_mod.set_egress_screen(screen_request)
@@ -103,7 +110,11 @@ def screen(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     assert client_mod.get_egress_screen() is not None
     yield
-    client_mod.set_egress_screen(None)
+    # Restore the module's original sentinel, not ``None``: ``None`` is a
+    # different state ("a screen is deliberately not installed"), so it would
+    # make every later test in the session answer differently depending on
+    # what ran first.
+    client_mod._egress_screen = _screen_before
 
 
 @pytest.fixture(autouse=True)
