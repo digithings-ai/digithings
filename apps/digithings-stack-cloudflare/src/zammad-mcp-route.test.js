@@ -35,14 +35,20 @@ describe("MCP edge paths", () => {
   it("no longer maps a ticket-download port (DIG-2785)", () => {
     expect(source).not.toContain('"zammad-export"');
     expect(source).not.toContain("8771");
-    const mapAt = source.indexOf("const MCP_EDGE_SERVERS: Record<string, number> = {");
+    const mapHead = "const MCP_EDGE_SERVERS: Record<string, number> = {";
+    const mapAt = source.indexOf(mapHead);
+    expect(mapAt).toBeGreaterThan(-1);
+    // Slice from AFTER the head, not from it: the head carries its own colon,
+    // so counting colons across it reads one entry too many.
     const mapEnd = source.indexOf("};", mapAt);
     expect(mapEnd).toBeGreaterThan(mapAt);
-    const mapBody = source.slice(mapAt, mapEnd);
+    const mapBody = source.slice(mapAt + mapHead.length, mapEnd);
     for (const entry of ["zammad: 8770", "digisearch: 8765", "digivault: 8769"]) {
       expect(mapBody).toContain(entry);
     }
-    expect(mapBody.split(":").length - 1).toBe(3);
+    // Count the entries themselves, not every colon: a fourth server must fail
+    // this, and nothing else may be able to.
+    expect(mapBody.split("\n").filter((line) => /^\s*\w+\s*:\s*\d+/.test(line))).toHaveLength(3);
   });
 
   it("routes every mapped prefix fail-closed on a missing or wrong key", () => {
