@@ -15,10 +15,12 @@
  */
 
 import {
+  buildContinuityNavSeries,
   isLiveMarksOverlay,
   pickBenchmarkPoints,
-  sinceInceptionPctFromNav,
+  roundPct,
   type BenchmarkPoint,
+  type NavRowInput,
 } from './ssot';
 
 export interface LiveKpiPosition {
@@ -38,7 +40,7 @@ export interface LiveKpiPosition {
 
 export interface LiveBook {
   positions: LiveKpiPosition[];
-  navHistory: { date: string; nav: number }[];
+  navHistory: NavRowInput[];
   benchmarkHistory: BenchmarkPoint[];
   benchmarkTicker: string | null;
 }
@@ -153,17 +155,22 @@ export function buildLiveData(book: LiveBook): LiveData {
     liveNav != null && anchor != null && anchor > 0 ? (liveNav / anchor - 1) * 100 : null;
 
   const firstNavRow = sortedNav.length > 0 ? sortedNav[0] : null;
+  // Since-inception is the SAME base-100 continuity index `/brief` plots — never
+  // `nav / 100`. Accounting NAV levels carry flows and rebasing that never appear
+  // in `day_return_pct`, so a raw-level ratio reports non-performance level jumps
+  // as returns. The live move is applied to the INDEX tip, not the NAV tip.
+  const continuity = buildContinuityNavSeries(sortedNav);
+  const indexTip = continuity.length > 0 ? continuity[continuity.length - 1].nav : null;
+  const liveIndex = indexTip == null ? null : indexTip * (1 + liveVsMarkPct / 100);
   const sinceInceptionPct =
-    liveNav != null && firstNavRow != null
-      ? sinceInceptionPctFromNav(firstNavRow.nav, liveNav)
-      : null;
+    liveIndex != null && continuity.length >= 2 ? roundPct(liveIndex - 100) : null;
 
   let excess: number | null = null;
   const benchTicker = book.benchmarkTicker;
   if (
     liveNav != null &&
+    sinceInceptionPct != null &&
     firstNavRow != null &&
-    firstNavRow.nav > 0 &&
     book.benchmarkHistory?.length &&
     benchTicker
   ) {
@@ -175,7 +182,10 @@ export function buildLiveData(book: LiveBook): LiveData {
     if (endDate) {
       const aligned = pickBenchmarkPoints(book.benchmarkHistory, startDate, endDate);
       if (aligned) {
-        const portfolioReturnPct = (liveNav / firstNavRow.nav - 1) * 100;
+        // Portfolio leg is the index-based since-inception — the same number
+        // `/brief` reports, so the two endpoints can never disagree. The
+        // benchmark leg stays level-based: a price index carries no flows.
+        const portfolioReturnPct = sinceInceptionPct;
         const benchmarkReturnPct = (aligned.end.price / aligned.start.price - 1) * 100;
         excess = portfolioReturnPct - benchmarkReturnPct;
       }
