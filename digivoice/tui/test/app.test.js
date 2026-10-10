@@ -7,10 +7,12 @@ import { FOOTER, heroOffset, mountDigivoice, onHangup, optionBinding, statusPart
 import {
   BUILD_MS,
   LIT_SHADE,
+  MIN_GAP,
   REST_SHADE,
   SHADES,
   letterGap,
   pixelScale,
+  splitWordmark,
   wordmarkLines,
 } from "../src/hero.js"
 
@@ -287,6 +289,62 @@ test("glyph cells become smaller square pixels when the window can hold them", (
     ),
     true,
   )
+})
+
+test("letters keep a gap on a narrow frame instead of touching", () => {
+  // Touching glyphs were the defect Chris rejected; the floor is one column.
+  assert.equal(MIN_GAP, 1)
+  assert.equal(letterGap(63, 9), MIN_GAP)
+  assert.ok(letterGap(120, 9) > MIN_GAP)
+  // A frame too small for the whole word is split into balanced, spaced lines.
+  assert.deepEqual(splitWordmark("DIGIVOICE", 63), ["DIGI", "VOICE"])
+  for (const part of splitWordmark("DIGIVOICE", 63)) {
+    const drawn = wordmarkLines(part, { cols: 63, tMs: BUILD_MS, truecolor: false })
+    assert.ok(drawn.gap >= MIN_GAP)
+    assert.ok(drawn.lines[0].length <= 61)
+  }
+  // A frame that can hold the whole word stays on one line.
+  assert.deepEqual(splitWordmark("DIGIVOICE", 80), ["DIGIVOICE"])
+})
+
+test("the frame stays bounded and centred instead of filling the window", async () => {
+  for (const [width, height] of [
+    [100, 56],
+    [160, 40],
+  ]) {
+    const setup = await createTestRenderer({ width, height })
+    try {
+      const app = mount(setup, session(), { cols: width })
+      const frame = await setup.waitForFrame((value) => value.includes(HOME))
+      const line = frame.split("\n").find((row) => /[█▀▄]/.test(row))
+      const col = line.search(/\S/)
+      const end = line.replace(/\s+$/, "").length
+      assert.ok(col > 0, `hero is inset from the left edge at ${width}`)
+      assert.ok(end < width - 1, `hero does not reach the right edge at ${width}`)
+      assert.ok(end - col <= 72, `hero stays bounded at ${width}`)
+      app.destroy()
+    } finally {
+      setup.renderer.destroy()
+    }
+  }
+})
+
+test("a narrow window stacks the wordmark so the letters stay spaced", async () => {
+  const setup = await createTestRenderer({ width: 65, height: 60 })
+  try {
+    const app = mount(setup, session(), { cols: 65 })
+    const frame = await setup.waitForFrame((value) => value.includes(HOME))
+    const rows = frame
+      .split("\n")
+      .map((line, index) => (/[█▀▄]/.test(line) ? index : -1))
+      .filter((index) => index >= 0)
+    assert.ok(rows.length >= 10, "two stacked bands of glyphs")
+    const gap = rows.some((row, index) => index > 0 && row - rows[index - 1] > 1)
+    assert.equal(gap, true, "the stacked lines are separated")
+    app.destroy()
+  } finally {
+    setup.renderer.destroy()
+  }
 })
 
 test("home pins the hero and esc does not quit", async () => {

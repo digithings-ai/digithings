@@ -18,6 +18,8 @@ export const BUILD_MS = 1400
 export const HERO_GAP = 2
 export const GLYPH_COLS = 7
 export const GLYPH_ROWS = 10
+/** Letters never touch: one blank column is the floor between glyphs. */
+export const MIN_GAP = 1
 export const SHADES = [
   { step: 0.36, rgb: 95, cube: 59 },
   { step: 0.5, rgb: 135, cube: 102 },
@@ -37,10 +39,33 @@ export function wordWidth(letters, gap, scale = 1) {
 
 export function letterGap(cols, letters, scale = 1) {
   const budget = Math.max(1, cols - 2)
-  for (const gap of [2, 1, 0]) {
+  for (const gap of [2, 1]) {
     if (wordWidth(letters, gap, scale) <= budget) return gap
   }
-  return 0
+  return MIN_GAP
+}
+
+/**
+ * Split a wordmark into balanced lines that each fit `cols` with the minimum
+ * gap, so a narrow terminal keeps the letters spaced instead of colliding.
+ * Returns a single line when it already fits.
+ */
+export function splitWordmark(word, cols, scale = 1, gap = MIN_GAP) {
+  const text = word.toUpperCase()
+  const budget = Math.max(1, cols - 2)
+  if (wordWidth(text.length, gap, scale) <= budget) return [text]
+  for (const lines of [2, 3]) {
+    if (lines > text.length) break
+    const parts = []
+    let index = 0
+    for (let row = 0; row < lines && index < text.length; row += 1) {
+      const take = Math.floor((text.length - index) / (lines - row))
+      parts.push(text.slice(index, index + take))
+      index += take
+    }
+    if (parts.every((part) => wordWidth(part.length, gap, scale) <= budget)) return parts
+  }
+  return [text]
 }
 
 export function faceRowsFor(scale) {
@@ -55,7 +80,7 @@ export function pixelScale({ cols = 80, rows, letters = 9 } = {}) {
   const count = Math.max(1, letters)
   const budget = Math.max(1, cols - 2)
   for (const scale of [3, 2, 1]) {
-    if (wordWidth(count, 0, scale) > budget && scale > 1) continue
+    if (wordWidth(count, MIN_GAP, scale) > budget && scale > 1) continue
     if (rows != null && Number.isFinite(rows) && rows > 0) {
       const chrome = slotRowsFor(scale) + CHROME_BESIDE_SLOT
       if (rows < chrome && scale > 1) continue
