@@ -76,42 +76,8 @@ export const metadata: Metadata = {
 // into /docs — which makes React 19 warn ("Encountered a script tag while
 // rendering React component…") and, because client-created scripts never
 // execute, the ivory default only ever applied on a hard load anyway. Running
-// it here in the always-hydrated pre-paint <head> keeps the hard-load ivory
-// default (no flash) and removes the warning; the pathname guard scopes it to
-// /docs (trailingSlash export → /docs/ also matches). Kept local rather than in
-// the shared @digithings/ui themeInitScript because only this site has /docs.
-const docsIvoryInit =
-  "try{if(/^\\/docs(\\/|$)/.test(location.pathname)&&!localStorage.getItem('dt-theme')){document.documentElement.setAttribute('data-theme','light');var m=document.querySelector('meta[name=\"theme-color\"]');if(m)m.setAttribute('content','#FBFBF9')}}catch(e){}"; // canon-allow: mirrors tokens.css light --bg (pre-paint script)
-
-// Global pre-paint: apply the stored choice on every route. The SSR default is
-// dark; without this a visitor whose stored theme is light paints dark first
-// and flips to light only at hydration (~0.5s in) - the load flash. Mirrors
-// the toggle's storage key (dt-theme).
-const storedThemeInit =
-  "try{var t=localStorage.getItem('dt-theme');if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);if(t==='light'){var m=document.querySelector('meta[name=\"theme-color\"]');if(m)m.setAttribute('content','#FBFBF9')}}}catch(e){}"; // canon-allow: mirrors tokens.css light --bg (pre-paint script)
-
-export default function RootLayout({ children }: { children: ReactNode }) {
-  // suppressHydrationWarning: themeInitScript (and the /docs ivory default)
-  // legitimately flip data-theme + meta pre-hydration; scoped to this
-  // element's attributes only.
-  return (
-    <html lang="en" data-theme="dark" suppressHydrationWarning className={`${inter.variable} ${jetbrainsMono.variable} no-js`}>
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
-        {/* Stored theme choice (all routes) — pre-paint so no dark→light flip at hydration. */}
-        <script dangerouslySetInnerHTML={{ __html: storedThemeInit }} />
-        {/* /docs → ivory default (pre-paint), scoped by pathname; see docsIvoryInit above. */}
-        <script dangerouslySetInnerHTML={{ __html: docsIvoryInit }} />
-        {/* Law 06 (content-first): SSR ships html.no-js so stylesheet rules can
-            neutralize JS-gated hiding (hero entrance, [data-motion] reveals);
-            removed pre-paint when scripts run. */}
-        <script dangerouslySetInnerHTML={{ __html: "document.documentElement.classList.remove('no-js')" }} />
-        {/* Reload / back-forward mid-page: flag the root so the hero intro is skipped
-            (see lib/scrollResume.ts); the body-end script then lands the scroll. */}
-        <script dangerouslySetInnerHTML={{ __html: SCROLL_RESUME_FLAG }} />
-        {/* Single fallback; themeInitScript sets it to the active theme pre-paint.
-            Literal = tokens.css dark --bg (metas can't read CSS vars). */}
-        <meta name="theme-color" content="#0A0E0C" />{/* canon-allow: tokens.css dark --bg */}
+// it here in the always-hydrated pre-paint <head>
+<meta name="theme-color" content="#0A0E0C" />{/* canon-allow: tokens.css dark --bg */}
       </head>
       <body>
         {/* One pair for every route. Above page paint so a full-bleed
@@ -119,16 +85,16 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             DocumentFrame also mounts a pair — the style hides that copy.
             A style tag, not globals.css: Tailwind rewrites a `.line-y`
             selector because `line-y` is an `@utility`. */}
-        <LayoutLines className="site-rails z-20" />
-        <style>{":not(.site-rails) > .line-y{display:none}"}</style>
-        <LegacyByokPurge />
-        <MotionProvider>
+        
+        
+        
+        <>
           <ThemeProvider>
-            <HashScrollManager />
+            
             {children}
           </ThemeProvider>
-        </MotionProvider>
-        <script dangerouslySetInnerHTML={{ __html: SCROLL_RESUME_PLACE }} />
+        </>
+        
       </body>
     </html>
   );
