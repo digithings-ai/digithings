@@ -122,6 +122,15 @@ digikey/examples/vault.yaml
 .local_stack_pids
 .litellm-local.log
 
+# Self-host local dev session (DIG-2771). All generated or local-only.
+# Cloudflare requires the wrangler persistence folder to be ignored:
+# https://developers.cloudflare.com/workers/wrangler/configuration/#persist-to
+.wrangler/
+apps/*/wrangler.selfhost.toml
+apps/*/.selfhost-dev/
+.dev.vars
+.dev.vars.*
+
 # Log files
 *.log
 
