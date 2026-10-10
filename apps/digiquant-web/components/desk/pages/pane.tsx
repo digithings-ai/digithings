@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button } from "@digithings/ui/ui";
 import { shapeLines, type PaneBody, type PaneBlock } from "../../../../../clients/digiquant-tui/src/pages/shape";
+import { PanelView } from "../panel-view";
 
 export const PANE_HINT = "[tab] next";
 
@@ -82,6 +83,7 @@ export function DeskPane({
   focused,
   onFocus,
   onNext,
+  panel,
 }: {
   title: string;
   route: string;
@@ -92,8 +94,11 @@ export function DeskPane({
   focused: boolean;
   onFocus: () => void;
   onNext: () => void;
+  /** The read's data, for a block that can also draw as a chart. Pass it only on an ok read. */
+  panel?: { id: string; data: unknown };
 }) {
   const body = blocks ?? shapeLines(lines ?? []);
+  const painted = body.blocks.map((block, index) => <BlockView key={index} block={block} />);
   const status = asOf ? `as of ${asOf}` : route;
   return (
     <section
@@ -113,7 +118,15 @@ export function DeskPane({
           <span className="truncate">{title}</span>
         </Button>
       </header>
-      <div className={`desk-pane-body flex min-h-0 flex-1 flex-col gap-1.5 overflow-auto px-2.5 py-1.5 ${PANE_COPY} ${tone}`}>{body.blocks.map((block, index) => <BlockView key={index} block={block} />)}</div>
+      <div className={`desk-pane-body flex min-h-0 flex-1 flex-col gap-1.5 overflow-auto px-2.5 py-1.5 ${PANE_COPY} ${tone}`}>
+        {panel ? (
+          <PanelView id={panel.id} title={title} data={panel.data}>
+            {painted}
+          </PanelView>
+        ) : (
+          painted
+        )}
+      </div>
       <footer className={`flex h-7 shrink-0 items-center justify-between gap-2 border-t border-hair px-2.5 text-ink-mute ${PANE_META}`}>
         <span className="truncate tabular-nums">{status}</span>
         {focused ? (

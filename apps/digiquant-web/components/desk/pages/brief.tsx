@@ -76,6 +76,7 @@ export function BriefPage() {
               focused={panes.focus === placement.id}
               onFocus={() => panes.focusAt(placement.id)}
               onNext={panes.next}
+              panel={view.status === "ok" ? { id: placement.id, data: reads[placement.id]?.data } : undefined}
             />
           </div>
         );
