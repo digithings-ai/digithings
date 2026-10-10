@@ -237,3 +237,126 @@ def test_runbook_documents_rotation_and_the_terms_note() -> None:
     assert "Rotate or expire" in text
     assert "npx wrangler secret delete GLOOMBERB_SESSION_COOKIE" in text
     assert "DIG-1233" in text
+
+
+# --------------------------------------------------------------------------
+# The gitleaks rules are defence in depth, so their behaviour is pinned here in
+# plain Python: CI does not carry a gitleaks binary, and a rule that silently
+# stopped matching (or started matching a deployer config that carries no
+# secret) would otherwise be invisible until the next run that needs it.
+#
+# Both regexes are read out of the live ``.gitleaks.toml`` rather than copied
+# here, so a future edit to either rule has to keep the matrix below honest.
+# Measured with gitleaks 8.30.1 against the same eight arms; see the control
+# table in the rule comment above the ``[[rules]]`` block.
+# --------------------------------------------------------------------------
+
+_RULES_CONFIG = REPO_ROOT / ".gitleaks.toml"
+_QUOTED_RULE_ID = "gloomberb-deployer-session-cookie"
+_UNQUOTED_RULE_ID = "gloomberb-deployer-session-cookie-unquoted"
+
+#: A synthetic value: no real credential is written into the repository by this
+#: test, and the shape is what matters to the rules (>= 20 chars, no whitespace).
+_SYNTHETIC_COOKIE = "abc123def456ghi789jkl012mno345pqr"
+
+#: (arm name, line, must_match) for every arm, quoted and unquoted rules
+#: together. "must_match" is the combined verdict of BOTH rules.
+_COOKIE_RULE_MATRIX = (
+    # A committed cookie value, in every shape a deployer could plausibly write.
+    ("quoted-json", f'GLOOMBERB_SESSION_COOKIE: "{_SYNTHETIC_COOKIE}"', True),
+    ("quoted-env", f'GLOOMBERB_SESSION_COOKIE="{_SYNTHETIC_COOKIE}"', True),
+    ("unquoted-shell", f"export GLOOMBERB_SESSION_COOKIE={_SYNTHETIC_COOKIE}", True),
+    (
+        "value-beside-a-read",
+        f'GLOOMBERB_SESSION_COOKIE: "{_SYNTHETIC_COOKIE}", fallback: env.GLOOMBERB_SESSION_COOKIE',
+        True,
+    ),
+    # Carrying the env-var NAME is not carrying a secret. Each of these cost a
+    # develop-breaking suppression or would have caused one.
+    ("passthrough-default", 'GLOOMBERB_SESSION_COOKIE: env.GLOOMBERB_SESSION_COOKIE ?? ""', False),
+    ("identifier-read", "ctx.env.GLOOMBERB_SESSION_COOKIE", False),
+    ("near-miss-identifier", "envX.GLOOMBERB_SESSION_COOKIE_ABCDEFGHIJKL", False),
+    ("bare-read", "const v = process.env.GLOOMBERB_SESSION_COOKIE;", False),
+)
+
+
+def _gitleaks_rule_regexes() -> dict:
+    """Return {rule id: compiled regex} for the two Gloomberb rules.
+
+    The config is an extended one (``useDefault = true``) and TOML parsing is
+    not available on every interpreter this lane may run, so the two blocks are
+    sliced textually. Anchoring on ``id = "`` at the start of a line means a
+    rule id named in prose cannot masquerade as a rule.
+    """
+    text = _RULES_CONFIG.read_text(encoding="utf-8")
+    blocks = text.split("[[rules]]")
+    found: dict = {}
+    for block in blocks:
+        match = re.search(r'^id = "([^"]+)"', block, re.MULTILINE)
+        if match is None or match.group(1) not in {_QUOTED_RULE_ID, _UNQUOTED_RULE_ID}:
+            continue
+        _q = chr(39) * 3
+        rule = re.search(r"^regex = " + _q + r"(.*?)" + _q, block, re.MULTILINE | re.DOTALL)
+        assert rule is not None, f"{match.group(1)} has no regex"
+        found[match.group(1)] = re.compile(rule.group(1))
+    assert set(found) == {_QUOTED_RULE_ID, _UNQUOTED_RULE_ID}, (
+        f"both Gloomberb rules must exist; found {sorted(found)} in {_RULES_CONFIG.name}"
+    )
+    return found
+
+
+def test_gitleaks_cookie_rules_fire_on_every_cookie_shape() -> None:
+    """The matrix above, executed against the rules the repo actually ships."""
+    rules = _gitleaks_rule_regexes()
+    fired, missed = [], []
+    for name, line, must_match in _COOKIE_RULE_MATRIX:
+        hit = any(rule.search(line) for rule in rules.values())
+        (fired if hit else missed).append(name)
+        assert hit is must_match, (
+            f"arm {name!r}: expected {'a match' if must_match else 'no match'}, got "
+            f"{'a match' if hit else 'no match'} for {line!r}"
+        )
+    # Non-vacuity: the extractor and the rules must be able to fire at all, and
+    # each rule must earn its place on its own shape.
+    assert set(fired) == {
+        "quoted-json",
+        "quoted-env",
+        "unquoted-shell",
+        "value-beside-a-read",
+    }, fired
+    assert set(missed) == {
+        "passthrough-default",
+        "identifier-read",
+        "near-miss-identifier",
+        "bare-read",
+    }, missed
+    assert rules[_QUOTED_RULE_ID].search(f'GLOOMBERB_SESSION_COOKIE="{_SYNTHETIC_COOKIE}"'), (
+        "the quoted rule stopped matching a quoted cookie"
+    )
+    assert rules[_UNQUOTED_RULE_ID].search(
+        f"export GLOOMBERB_SESSION_COOKIE={_SYNTHETIC_COOKIE}"
+    ), "the unquoted rule stopped matching the shape `gloomberb login` writes"
+
+
+def test_the_unquoted_rule_declares_its_known_gap() -> None:
+    """The gap the rule comment declares must stay true, and stay narrow.
+
+    An UNQUOTED value carrying a dot (``NAME=ab.cd``) is not matched by the
+    unquoted arm, because excluding the dot is the only expressible way to stop
+    ``env.NAME`` from matching itself -- gitleaks runs on RE2, which has no
+    lookahead. The quoted arm still matches the same value quoted, and the
+    pytest config gate above is quoting-agnostic. If a future regex closes this
+    gap, update this test and the rule comment together.
+    """
+    rules = _gitleaks_rule_regexes()
+    dotted = "abc.def"
+    unquoted_line = f"GLOOMBERB_SESSION_COOKIE={dotted}{'x' * 20}"
+    assert not rules[_UNQUOTED_RULE_ID].search(unquoted_line), (
+        "the unquoted arm now matches a dotted value; the declared gap is stale"
+    )
+    quoted_line = f'GLOOMBERB_SESSION_COOKIE="{dotted}{"x" * 20}"'
+    assert rules[_QUOTED_RULE_ID].search(quoted_line), (
+        "the quoted arm must still match a dotted value quoted"
+    )
+    comment = _RULES_CONFIG.read_text(encoding="utf-8")
+    assert "DECLARED GAP" in comment, "the rule comment must state the gap it leaves"
