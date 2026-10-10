@@ -75,6 +75,7 @@ export type StockChatPrefsDeps = {
     onClose: () => void;
   }) => ReactNode;
   onOpenSessions?: () => void;
+  onOpenArtifacts?: () => void;
 };
 
 const defaultResolveWebSearch = (tenantAllows: boolean, userPref: boolean) =>
@@ -91,6 +92,7 @@ export function useStockChatPrefs({
   deps,
   sessionKey,
   hasSessions,
+  hasArtifacts = false,
   newThread,
   redo,
 }: {
@@ -98,6 +100,8 @@ export function useStockChatPrefs({
   deps: StockChatPrefsDeps;
   sessionKey: string;
   hasSessions: boolean;
+  /** Gating flag for /artifacts. Off until an artifact surface is wired. */
+  hasArtifacts?: boolean;
   newThread: () => void;
   redo: () => void;
 }) {
@@ -196,6 +200,7 @@ export function useStockChatPrefs({
       hasDigisearch: catalog.some((e) => e.id === "digisearch"),
       hasVault: catalog.some((e) => e.id === "digivault"),
       hasSessions,
+      hasArtifacts,
       allowUserMcp: config.allowUserServers === true,
       allowAddMcp: config.allowAddForm === true,
       catalogTools,
@@ -234,6 +239,7 @@ export function useStockChatPrefs({
         setComposerMenu("language");
       },
       openSessions: deps.onOpenSessions ?? defaultOpenSessions,
+      openArtifacts: deps.onOpenArtifacts ?? (() => {}),
       newThread: () => {
         setChatPrefs({
           ...createDefaultEmbedChatPrefs({ language: deps.defaultLanguageCode }),
@@ -264,6 +270,7 @@ export function useStockChatPrefs({
       catalogTools,
       sessionKey,
       hasSessions,
+      hasArtifacts,
       newThread,
       redo,
       config.allowUserServers,
