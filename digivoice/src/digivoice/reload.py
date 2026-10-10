@@ -30,6 +30,7 @@ from pydantic import BaseModel
 
 from digivoice.models import CliResult, VoicePaths
 from digivoice.paths import resolve_paths
+from digivoice.probe import augmented_path
 from digivoice.runner import CommandRunner, run_command
 from digivoice.settings import load_settings
 from digivoice.status import TERMINAL_STATES, read_status, status_path
@@ -348,7 +349,10 @@ def _ensure_home_control(
         if not open_bin:
             lines.append("hammerspoon .. not opened (open not on PATH)")
         else:
-            opened = active([open_bin, "-a", "Hammerspoon"], timeout=min(2.0, max(0.2, left())))
+            opened = active(
+                [open_bin, "--env", f"PATH={hammerspoon_env_path(env)}", "-a", "Hammerspoon"],
+                timeout=min(2.0, max(0.2, left())),
+            )
             if opened.code == 0:
                 lines.append("hammerspoon .. opened")
             else:
@@ -496,3 +500,87 @@ def _stop_home_control(
     first = detail.splitlines()[0] if detail else "unknown"
     lines.append(f"hammerspoon .. quit failed ({first})")
     return LaunchReport(summary="hammerspoon quit failed", lines=lines)
+
+
+def hammerspoon_env_path(env: Mapping[str, str]) -> str:
+    """PATH handed to a Hammerspoon we launch: the caller's plus Homebrew dirs.
+
+    `open -a` passes the launcher's environment to a freshly started app, so a
+    Hammerspoon started from a scrubbed agent shell inherits a PATH with no
+    sox/ffmpeg/whisper-cli. Always launch it with a full one.
+    """
+    home = env.get("HOME", "")
+    extra = ["/opt/homebrew/bin", "/opt/homebrew/sbin", "/usr/local/bin"]
+    if home:
+        extra += [f"{home}/.local/bin", f"{home}/.bun/bin"]
+    extra += ["/usr/bin", "/bin", "/usr/sbin", "/sbin"]
+    return augmented_path(env.get("PATH", ""), extra)
+
+
+def restart_hammerspoon(
+    platform: str,
+    home: Path,
+    env: Mapping[str, str],
+    runner: CommandRunner | None = None,
+    which_hs: Callable[[], str | None] | None = None,
+    which_osascript: Callable[[], str | None] | None = None,
+    which_open: Callable[[], str | None] | None = None,
+    budget: float = 12.0,
+    monotonic: Callable[[], float] | None = None,
+    sleep: Callable[[float], None] | None = None,
+) -> LaunchReport:
+    """Quit Hammerspoon, open it again with a full PATH, and wait until it answers.
+
+    Bounded by ``budget`` seconds; never raises. Non-macOS is a skip.
+    """
+    if platform != "darwin":
+        return LaunchReport(
+            summary="hammerspoon skipped", lines=["hammerspoon .. skipped (not macOS)"]
+        )
+    try:
+        full_path = hammerspoon_env_path({**env, "HOME": env.get("HOME", str(home))})
+        lookup_env = {**env, "PATH": full_path}
+        now = monotonic or time.monotonic
+        pause = sleep or time.sleep
+        deadline = now() + max(0.0, budget)
+        active = runner or run_command
+        stop = _stop_home_control(
+            platform, home, lookup_env, active, which_hs, which_osascript, min(3.0, budget)
+        )
+        lines = list(stop.lines)
+        hs_path = which_hs() if which_hs is not None else shutil.which("hs", path=full_path)
+        # Wait for the old instance to go away so the probe below sees the new one.
+        while hs_path and deadline - now() > 0.5:
+            alive, _ = _hs_ok(active, _PROBE_EXPR, 0.5)
+            if not alive:
+                break
+            pause(0.2)
+        open_bin = which_open() if which_open is not None else shutil.which("open", path=full_path)
+        if not open_bin:
+            lines.append("hammerspoon .. not opened (open not on PATH)")
+            return LaunchReport(summary="hammerspoon restart failed", lines=lines)
+        opened = active(
+            [open_bin, "--env", f"PATH={full_path}", "-a", "Hammerspoon"],
+            timeout=max(0.2, min(3.0, deadline - now())),
+        )
+        if opened.code != 0:
+            detail = (opened.stderr or opened.stdout or f"exit {opened.code}").strip()
+            lines.append(f"hammerspoon .. open failed ({detail.splitlines()[0] if detail else 'unknown'})")
+            return LaunchReport(summary="hammerspoon restart failed", lines=lines)
+        lines.append("hammerspoon .. opened (full PATH)")
+        if not hs_path:
+            lines.append("hammerspoon .. not verified (hs not on PATH)")
+            return LaunchReport(summary="hammerspoon restarted (unverified)", lines=lines)
+        while deadline - now() > 0:
+            up, _ = _hs_ok(active, _PROBE_EXPR, max(0.1, min(0.8, deadline - now())))
+            if up:
+                lines.append("hammerspoon .. back up")
+                return LaunchReport(summary="hammerspoon restarted", lines=lines)
+            pause(0.25)
+        lines.append(f"hammerspoon .. did not answer within {budget:g}s")
+        return LaunchReport(summary="hammerspoon restart failed", lines=lines)
+    except Exception as exc:
+        return LaunchReport(
+            summary=f"hammerspoon restart skipped ({exc})",
+            lines=[f"hammerspoon .. restart skipped ({exc})"],
+        )
