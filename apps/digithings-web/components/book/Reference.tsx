@@ -37,7 +37,10 @@ export default function Reference({ href, title, kind = "reference", children }:
     >
       <span className="block font-mono text-[0.7rem] uppercase tracking-[0.08em] text-ink-soft">go deeper · {kind}</span>
       <span className="mt-1 block font-mono text-[0.95rem] text-ink">{title} →</span>
-      {children ? <span className="mt-1 block text-[0.95rem] leading-[1.6] text-ink-soft">{children}</span> : null}
+      {/* A div, not a span: MDX wraps the children in <p>, and <p> inside
+          <span> is invalid nesting that the HTML parser rewrites before
+          React hydrates. */}
+      {children ? <div className="book-reference__body mt-1 text-[0.95rem] leading-[1.6] text-ink-soft">{children}</div> : null}
     </a>
   );
 }

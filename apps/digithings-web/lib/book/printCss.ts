@@ -34,6 +34,9 @@ export const PRINT_CSS = `
 .book-figure:fullscreen .book-figure__viewport { flex: 1; }
 .book-figure__viewport[data-active] { outline: 1px solid var(--ink-soft); }
 
+/* Reference cards: the MDX paragraph inside keeps the card's own rhythm. */
+.book-reference__body p { margin: 0; max-width: none; font-size: inherit; }
+
 /* Tables (GFM) in the house long-form grammar. */
 .book-chapter table { width: 100%; border-collapse: collapse; margin: 0 0 1.5rem; font-size: 0.92rem; }
 .book-chapter th, .book-chapter td { border-bottom: 1px solid var(--hair); padding: 0.45rem 0.6rem; text-align: left; vertical-align: top; color: var(--ink-soft); }
