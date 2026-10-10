@@ -301,6 +301,22 @@ Rules: computed by `computeLivePerformanceKpis` semantics (live quote vs
 Numbers here are `live marks` by definition and must never be labeled
 finalized accounting.
 
+Since-inception is defined once, identically to `GET /brief` (`/performance`,
+§6.4) and to the dashboard Brief desk: it is the **chained base-100 continuity
+index**, never a raw NAV ratio. The accounting rows are chained in date order
+into an index that starts at 100, each step taking the row's own
+`day_return_pct` when present (a step larger than 25% is treated as a level
+jump and clamped to 0) and otherwise the level ratio across non-seam,
+same-source consecutive rows (a legacy<->finalized flip is a seam and
+contributes 0). The live-vs-mark move is then applied to the **index tip**, and
+`since_inception_live_pct` is `index_tip_after_move - 100`. Raw
+`public_finalized_nav` levels carry flows and rebasing jumps that are not
+performance, so `nav / 100` is not a return and is not used anywhere on this
+route; `excess_live_pct` uses the same index figure for the portfolio leg (the
+benchmark leg stays level-based, since a price index has no flows). With fewer
+than two accounting rows the index has no return and every since-inception
+figure on this route is `null`.
+
 ### 6.6 `GET /nav-series`
 
 Shared NAV + close series. Replaces the `nav-seam.ts` ∥
