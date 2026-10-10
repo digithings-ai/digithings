@@ -30,7 +30,7 @@ import socket
 import time
 from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any  # score:allow untyped any — MCP JSON payloads / tool results
+from typing import Any, overload  # score:allow untyped any — MCP JSON payloads / tool results
 from urllib.parse import urlparse
 
 import anyio
@@ -554,19 +554,35 @@ def _tool_record(
     }
 
 
-def raw_tool_names_for_server(server_id: str, tools: Iterable[Any] | None) -> list[str]:
-    """Remote tool names for one server as advertised — pre-substitution, pre-truncation.
+@overload
+def raw_tool_names_for_server(server: dict[str, str]) -> list[str] | None: ...
 
-    ``prefixed_tool_name`` replaces every character outside ``[a-zA-Z0-9_-]`` and
-    cuts the result at 64, so ``atlassian.executeWrite`` and a 76-character
-    camelCase name both reach the gate wearing a name no operator wrote. An
-    allowlist is written in real names, so the real name has to travel with the
-    listed tool.
 
-    Only records carrying a raw name *and* addressed to *server_id* are reported:
-    a name is returned when it was observed, never reconstructed by reversing a
-    lossy substitution. Order-preserving, de-duplicated.
+@overload
+def raw_tool_names_for_server(server_id: str, tools: Iterable[Any] | None) -> list[str]: ...
+
+
+def raw_tool_names_for_server(
+    server_or_id: str | dict[str, str],
+    tools: Iterable[Any] | None = None,
+) -> list[str] | None:
+    """Advertised remote tool names for one server.
+
+    Two call shapes share this name because both answer "what did the server
+    actually advertise?":
+
+    - ``raw_tool_names_for_server(server)`` — DIG-507 cache lookup of names
+      captured at list time. ``None`` means no snapshot yet (not "zero tools").
+    - ``raw_tool_names_for_server(server_id, tools)`` — DIG-284 extract from
+      listed records' raw-name sidecars. ``prefixed_tool_name`` replaces every
+      character outside ``[a-zA-Z0-9_-]`` and cuts the result at 64, so an
+      allowlist written in real names needs the real name beside the record.
+      Only records carrying a raw name *and* addressed to *server_id* are
+      reported; order-preserving, de-duplicated.
     """
+    if isinstance(server_or_id, dict):
+        return _raw_names_cache.get(mcp_list_cache_key(server_or_id))
+    server_id = server_or_id
     prefix = f"{server_id}_"
     out: list[str] = []
     for td in tools or ():
@@ -876,16 +892,6 @@ def openai_tools_for_servers(servers: list[dict[str, str]]) -> list[dict[str, An
     return out
 
 
-def raw_tool_names_for_server(server: dict[str, str]) -> list[str] | None:
-    """Advertised tool names captured for ``server`` at list time.
-
-    ``None`` means no ``list_tools`` snapshot has been captured for this server
-    key. That is not the same as "the server advertises no tools": a caller must
-    not guess a remote name when the capture is absent.
-    """
-    return _raw_names_cache.get(mcp_list_cache_key(server))
-
-
 def resolve_remote_tool_name(server_id: str, offered: str, raw_names: list[str]) -> str | None:
     """Recover the advertised name behind ``offered``; ``None`` when not unique.
 
@@ -1011,6 +1017,8 @@ async def _list_tools_async(server: dict[str, str]) -> list[dict[str, Any]]:
         if t.name not in seen:
             seen.add(t.name)
             advertised.append(t.name)
+        # DIG-284: keep the raw name beside the offered one for the allowlist.
+        # DIG-507: also capture advertised names for call-time recovery.
         out.append(_tool_record(server_id, t.name, t.description, t.inputSchema))
     _raw_names_cache[mcp_list_cache_key(server)] = advertised
     return out
