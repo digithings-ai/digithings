@@ -11,8 +11,10 @@ import {
   interpretChatStream,
   interpretStatus,
   messageRows,
+  prefsHeaders,
   sessionRows,
 } from "./read";
+import { DEFAULT_PREFS } from "./palette";
 
 const closed = {
   error: { code: "upstream_empty", message: "digichat is not configured" },
@@ -170,4 +172,19 @@ test("MCP tenant-config projects ids and labels only", () => {
     { id: "datatap", label: "DataTap" },
     { id: "vault", label: "vault" },
   ]);
+});
+
+test("C7 prefs match the web schema and map to DigiChat BFF headers", () => {
+  expect(DEFAULT_PREFS.view).toBe("balanced");
+  expect(DEFAULT_PREFS.thinking).toBe("auto");
+  expect(prefsHeaders({ ...DEFAULT_PREFS, webSearch: true, language: "it", model: "x" })).toEqual({
+    "X-Digi-Enable-Web-Search": "1",
+    "X-Digi-Language": "it",
+    "X-Digi-Effort": "medium",
+    "X-Digi-Model": "x",
+    "X-Digi-Search-Engine": "auto",
+  });
+  expect(prefsHeaders({ ...DEFAULT_PREFS, digisearch: true })["X-Digi-Force-Tool"]).toBe(
+    "digisearch",
+  );
 });

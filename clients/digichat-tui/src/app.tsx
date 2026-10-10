@@ -230,7 +230,7 @@ export function App() {
       }
       const userMsg: UiChatMessage = { id: userId, role: "user", parts: userParts };
       const uiMessages = [...toUiMessages(prior), userMsg];
-      const sent = await postChat(API, id, uiMessages, controller.signal);
+      const sent = await postChat(API, id, uiMessages, controller.signal, uiRef.current.prefs);
       if (controller.signal.aborted) return;
       if (sent.kind !== "text") {
         applyClosed("error", sent.detail);

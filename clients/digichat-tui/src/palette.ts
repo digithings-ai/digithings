@@ -1,7 +1,8 @@
 /**
  * Slash palette for the digichat thread. Same commands as
- * packages/digichat-ui slash-commands.ts. Picks stay in this client:
- * the official chat route accepts `{ text }` only.
+ * packages/digichat-ui slash-commands.ts. Pref values match the web
+ * session-prefs / view-modes schema (C7); send applies them as DigiChat
+ * BFF headers on `/api/v1/chat`.
  */
 
 export type ChatPrefs = {
@@ -17,11 +18,12 @@ export type ChatPrefs = {
   model: string;
 };
 
+/** Matches apps/digichat DEFAULT_VIEW_MODE / DEFAULT_THINKING_MODE. */
 export const DEFAULT_PREFS: ChatPrefs = {
   webSearch: false,
   digisearch: false,
   digivault: false,
-  view: "compact",
+  view: "balanced",
   thinking: "auto",
   language: "en",
   effort: "medium",
@@ -29,6 +31,16 @@ export const DEFAULT_PREFS: ChatPrefs = {
   provider: "",
   model: "",
 };
+
+export const SEARCH_ENGINE_ALLOWLIST = new Set<ChatPrefs["searchEngine"]>([
+  "auto",
+  "internal",
+  "exa",
+  "tavily",
+  "parallel",
+  "firecrawl",
+  "tinyfish",
+]);
 
 export const PROVIDERS = ["openrouter", "openai", "anthropic", "gemini", "xai"] as const;
 

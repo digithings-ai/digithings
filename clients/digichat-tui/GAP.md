@@ -6,7 +6,7 @@ Compared with the digichat thread in `packages/ui` (`DigichatThread`, `DigichatT
 | --- | --- | --- | --- |
 | Boot sweep | Cube outline sweeps the composer until the shell is ready | Braille spinner plus `Loading conversation` for as long as the first read is in flight. No extra delay after the read returns | Closed. A 5×5 cube field cannot be drawn in one cell |
 | History skeleton | Shimmering user blocks and assistant lines while history loads | Shade bars in that same arrangement, under the loading line | Closed |
-| Working indicator | `loading` cubes, plus Connecting… / Warming up… from the stream | Spinner and `Assistant is working` while a send is in flight. Stop is `■` | Closed for the spinner. Connecting / Warming up need a stream this route does not return, so those words stay absent |
+| Working indicator | `loading` cubes, plus Connecting… / Warming up… from the stream | Spinner and `Assistant is working` while a send is in flight. Stop is `■` | Closed for the spinner. BFF SSE `text-delta` fills the reply (C2); Connecting / Warming up labels may still slip |
 | Welcome | Bottom-aligned headline, typed in, only on a settled empty thread | Same headline, block caret while it types, same placement | Closed |
 | Welcome body | Static lines from deploy config | Shown only when a body is provided. This mount has none | Closed |
 | Example prompts | Diamond mark plus the prompt, only from config or the runtime | Same mark when prompts exist. None are invented | Closed |
@@ -35,7 +35,7 @@ Compared with the digichat thread in `packages/ui` (`DigichatThread`, `DigichatT
 | Send / stop | Send cubes, brighter when text is present. Stop cubes while running | `↑` mute or brighter. `■` aborts the request | Closed |
 | Credit | Centered `powered by digichat — a digithings product.` with a link on digithings | The same sentence, centered, always | The link is not clickable in this cell. The words match |
 | Slash palette | Flat list above the composer: label and hint, highlight, empty state `No matching commands`. Opens on `/` | Same list, same empty line, same placement. Up/down, Enter, Escape | Closed |
-| Configure commands | Toggles, choices, and panes for search, view, thinking, language, effort, provider, models, MCP, tools, sessions, new, clear, compact, undo, redo, copy, export, help | Same commands. Toggles and choices update a local session. `/settings` opens that list | Local only. This route has no force-tool or prefs headers, so a query is sent as text and the status says so |
+| Configure commands | Toggles, choices, and panes for search, view, thinking, language, effort, provider, models, MCP, tools, sessions, new, clear, compact, undo, redo, copy, export, help | Same commands. Defaults match web (`view=balanced`). Send applies DigiChat BFF prefs headers (C7) | Closed for schema + headers. Force-tool from `/digisearch query` still sends text when a query follows |
 | Language rows | Featured `/english` … `/french` plus the choice list | Those five rows and the choice list | The long ISO picker is a separate web menu. The slash list is these five |
 | Models | Model list from the deployment | `/api/byok/models?provider=` for the selected provider | Closed for list. None are invented |
 | Provider | Provider catalog and a key field | openrouter, openai, anthropic, gemini, xai. Key stays out of the TUI | Secrets are not read or printed. Use `DIGICHAT_API_KEY` or web BYOK |
@@ -44,9 +44,9 @@ Compared with the digichat thread in `packages/ui` (`DigichatThread`, `DigichatT
 | Mentions | `@` list, or `No matching tools` | Same | Closed |
 | Help | The slash list is the help | `/` and `?` show that list | Closed |
 | Copy | Clipboard, check cube | Status `copied` and OSC 52 | A terminal may ignore OSC 52. The text is not printed |
-| Export | Downloads `digichat.md` as `## You` / `## digichat` | Same markdown in the thread column. Tool rows are omitted, as on the web | No browser download dialog |
+| Export | Downloads `digichat.md` as `## You` / `## digichat` | Same markdown in the thread column. Tool rows are omitted, as on the web | Closed for C11 (no browser download dialog) |
 | Compact | Summarizes the thread | `compact is not available on this route` | Closed. No summary is invented |
-| New chat | Header cube, `/new`, `/clear` | Header `+`, `n`, `/new`, `/clear` create a session through the route | Closed |
-| Desk read strip | Three diagnostic blocks under the desk page only | Not part of the digichat thread, so not drawn | Closed. The routes are still the ones the thread reads |
+| New chat | Header cube, `/new`, `/clear` | Header `+`, `n`, `/new`, `/clear` create via `/api/conversations` (C3) | Closed |
+| Desk read strip | Three diagnostic blocks under the desk page only | Not part of the digichat thread, so not drawn | Closed. Threads use DigiChat BFF conversations |
 
 Keyboard when the composer is idle: `j`/`k` sessions, `n` new, `i` or Enter compose, `/` palette, `a` attach, `c` copy, `r` redo or retry, `m` more, `e` edit, `o` open a tool or reasoning row, `s` settings, `?` help, `b` bottom, `q` quit. Tab arms attach, mic, and send.

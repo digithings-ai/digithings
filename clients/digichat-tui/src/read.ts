@@ -547,11 +547,47 @@ export function interpretChatStream(
   return { kind: "text", text: deltas.join("") };
 }
 
+/** Session prefs → DigiChat BFF headers (same names as web chat-panel / embed). */
+export function prefsHeaders(prefs: {
+  webSearch: boolean;
+  digisearch: boolean;
+  digivault: boolean;
+  language: string;
+  effort: string;
+  searchEngine: string;
+  model: string;
+}): Record<string, string> {
+  const headers: Record<string, string> = {};
+  if (prefs.webSearch) headers["X-Digi-Enable-Web-Search"] = "1";
+  if (prefs.digisearch) headers["X-Digi-Force-Tool"] = "digisearch";
+  else if (prefs.digivault) headers["X-Digi-Force-Tool"] = "digivault";
+  if (prefs.language && prefs.language !== "en") headers["X-Digi-Language"] = prefs.language;
+  if (prefs.effort) headers["X-Digi-Effort"] = prefs.effort;
+  if (prefs.model.trim()) headers["X-Digi-Model"] = prefs.model.trim();
+  const engine = prefs.searchEngine.trim().toLowerCase();
+  if (
+    engine &&
+    ["auto", "internal", "exa", "tavily", "parallel", "firecrawl", "tinyfish"].includes(engine)
+  ) {
+    headers["X-Digi-Search-Engine"] = engine;
+  }
+  return headers;
+}
+
 export async function postChat(
   api: string,
   sessionId: string,
   messages: UiChatMessage[],
   signal?: AbortSignal,
+  prefs?: {
+    webSearch: boolean;
+    digisearch: boolean;
+    digivault: boolean;
+    language: string;
+    effort: string;
+    searchEngine: string;
+    model: string;
+  },
 ): Promise<{ kind: "text"; text: string } | { kind: "error"; detail: string }> {
   try {
     const res = await fetch(`${api}${ROUTES.chat}`, {
@@ -562,6 +598,7 @@ export async function postChat(
         accept: "text/event-stream, application/json",
         "x-digichat-session": sessionId,
         ...authHeaders(),
+        ...(prefs ? prefsHeaders(prefs) : {}),
       },
       body: JSON.stringify({ messages }),
     });
