@@ -8,13 +8,26 @@ probe.
 
 The verdict branches pinned here, offline:
 
-* an enabling value in a **deployed** config fails (wrangler ``[vars]``, Dockerfile
-  ``ENV``, a workflow ``env:`` block, a compose ``environment:`` entry);
-* an enabling value in a **local** config passes -- that is the stated exemption
-  the issue asks for, and it is asserted in code rather than left to prose;
+* a **committed cookie value** fails everywhere, local configs included, because
+  the local exemption authorises running the tools with your own cookie, not
+  committing it (wrangler ``[vars]``, Dockerfile ``ENV``, a workflow ``env:``
+  block, a compose ``environment:`` entry, and a tracked ``.env``);
+* a **deployed** cookie line in a plaintext carrier fails even at the empty
+  value, because ``GLOOMBERB_SESSION_COOKIE = ""`` in ``[vars]`` is a slot in
+  git that invites one;
+* a **deployed** cookie line pointed at ``$VAR`` / ``vars.X`` fails, because
+  those resolve somewhere real but nowhere that is a secret store;
+* a deployed cookie line named as ``env.NAME`` / ``${{ secrets.NAME }}`` /
+  ``wrangler secret put`` passes -- the sanctioned per-deployer path;
+* an enabling ``GLOOMBERB_ENABLED`` value is **reported and never blocks**,
+  deployed or local. Since DIG-2752's per-tool gating decision the public tools
+  are meant to be on everywhere, so the flag is a report and the cookie is the
+  gate. It is still emitted, and its non-vacuity is asserted, so that a
+  report-only rule cannot rot into a deleted one;
 * a **disabled** value anywhere passes, so defence in depth can stay committed;
 * a commented-out line passes, including one that mentions an enabling value;
-* a line whose *inline* comment mentions an enabling value passes;
+* a line whose *inline* comment mentions a real value does **not** rescue it --
+  the comment is stripped, so the value is judged on its own;
 * ``tests/`` and ``docs/`` prose and fixtures are never scanned;
 * the enabling set is read from the client's ``_TRUTHY_ENV_VALUES``, so this
   guard and the runtime cannot drift apart;
@@ -29,6 +42,11 @@ asserted only the bare ``Dockerfile`` name, which this repo does not use, so all
 it passed while 12 of the 20 tracked Dockerfiles -- every root deploy image among
 them -- sat outside the guard. A synthetic ``apps/a/b/Dockerfile`` fixture cannot
 catch that class of gap; the names below come from ``git ls-files``.
+
+The flag tests assert the *negative* (``is_blocking`` is False) per shape, and
+each path-classification test is paired with a cookie assertion on the same
+surface. Without those pairings a report-only rule would make every "is this
+surface scanned?" test pass on a surface that scans nothing at all.
 """
 
 from __future__ import annotations
@@ -70,7 +88,7 @@ def _scan(guard: Any, path: str, text: str) -> list[Any]:
     return guard.scan_text(path, text, VALUES)
 
 
-# ── deployed: an enabling value fails ────────────────────────────────────────
+# ── the flag: reported, never gated (DIG-2752 per-tool gating) ────────────────
 
 
 @pytest.mark.parametrize(
@@ -88,14 +106,40 @@ def _scan(guard: Any, path: str, text: str) -> list[Any]:
         '  "GLOOMBERB_ENABLED": "yes"',
     ],
 )
-def test_enabling_value_in_deployed_config_is_a_finding(guard: Any, line: str) -> None:
+def test_an_enabling_flag_is_reported_and_never_blocks(guard: Any, line: str) -> None:
+    """Chris, 2026-10-10: gating is per tool, so the flag must not fail the build.
+
+    The assertion that matters is the negative one -- ``is_blocking`` is False for
+    every shape here -- because that is the clause the family-wide gate used to
+    own. It is pinned per-shape rather than once so a future edit cannot make one
+    carrier of the flag blocking and the rest not.
+    """
     findings = _scan(guard, "apps/x/wrangler.toml", f"[vars]\n{line}\n")
-    assert len(findings) == 1, f"{line!r} should be caught in a deployed config"
-    assert findings[0].deployed is True
+    assert len(findings) == 1, f"{line!r} should still be reported"
+    assert findings[0].kind == "flag-on"
+    assert not guard.is_blocking(findings[0]), f"{line!r} must not block on the flag"
+
+
+def test_the_flag_being_reported_is_not_the_surface_being_policed(guard: Any) -> None:
+    """A report-only rule must not become the only thing that surface can fail.
+
+    Pairs with the test above: same file, same path classification, and the
+    cookie half still stops it. Without this, deleting every cookie rule would
+    leave all of the flag tests green.
+    """
+    findings = _scan(
+        guard,
+        "apps/x/wrangler.toml",
+        f'[vars]\nGLOOMBERB_ENABLED = "1"\n{COOKIE} = "{REAL_COOKIE}"\n',
+    )
+    kinds = [f.kind for f in findings]
+    assert kinds == ["flag-on", "cookie_value"], kinds
+    assert [f for f in findings if guard.is_blocking(f)], "the cookie half must still gate"
 
 
 def test_every_deployed_surface_is_scanned(guard: Any) -> None:
     line = 'GLOOMBERB_ENABLED = "1"'
+    cookie = f'{COOKIE} = "{REAL_COOKIE}"\n'
     deployed_paths = [
         "apps/digithings-stack-cloudflare/wrangler.toml",
         "apps/digichat-cloudflare/wrangler.toml",
@@ -113,6 +157,12 @@ def test_every_deployed_surface_is_scanned(guard: Any) -> None:
         assert guard.is_deployed(path), f"{path} must count as a deployed surface"
         findings = _scan(guard, path, f"{line}\n")
         assert len(findings) == 1, f"{path} should be scanned for GLOOMBERB_ENABLED"
+        # A report-only flag line is satisfied by a surface that scans nothing
+        # but the name, so the cookie -- which does block -- proves the surface
+        # is really read.
+        assert guard.is_blocking(_scan(guard, path, cookie)[0]), (
+            f"{path} must still be able to fail on a committed cookie"
+        )
 
 
 def test_nested_wrangler_and_two_level_dockerfile(guard: Any) -> None:
@@ -286,18 +336,41 @@ def test_enabling_value_allowed_in_local_config(guard: Any, path: str) -> None:
     findings = _scan(guard, path, "GLOOMBERB_ENABLED=true\n")
     assert len(findings) == 1
     assert findings[0].deployed is False, "an exemption must be reported as non-blocking"
+    assert findings[0].kind == "flag-on"
+    assert not guard.is_blocking(findings[0]), "the flag is report-only everywhere now"
 
 
 def test_local_exemption_still_reported(guard: Any) -> None:
     """An exemption that reported nothing would be indistinguishable from a bug."""
     rendered = guard.render(
-        [guard.Finding(".env", 3, "GLOOMBERB_ENABLED=true", False)],
+        [guard.Finding(".env", 3, f'{COOKIE} = "<paste here>"', False, "plaintext_cookie_slot")],
         [],
         "parsed from client.py",
         VALUES,
     )
     assert "local-ok" in rendered
     assert "PASS" in rendered
+
+
+def test_a_reported_flag_is_labelled_apart_from_a_local_exemption(guard: Any) -> None:
+    """Three buckets, three labels: blocking, reported flag, local exemption.
+
+    ``flag-on`` used to render in the ``local-ok`` bucket, which would have made
+    a deployed flag report read as a local exemption in the CI log.
+    """
+    rendered = guard.render(
+        [
+            guard.Finding(".env", 3, "GLOOMBERB_ENABLED=true", False),
+            guard.Finding("apps/x/wrangler.toml", 9, 'GLOOMBERB_ENABLED = "1"', True),
+            guard.Finding(".env", 4, f'{COOKIE} = "<paste here>"', False, "plaintext_cookie_slot"),
+        ],
+        [],
+        "parsed from client.py",
+        VALUES,
+    )
+    assert rendered.count("\n  flag-on") == 2, rendered
+    assert rendered.count("\n  local-ok") == 1, rendered
+    assert "local exemption(s), 2 flag-on report(s)" in rendered
 
 
 # ── disabled values, comments, and unrelated files pass ──────────────────────
@@ -548,21 +621,42 @@ def test_coverage_families_widen_past_wrangler(guard: Any) -> None:
 
 def test_repo_passes(guard: Any) -> None:
     findings, gaps, values, _ = guard.scan(REPO_ROOT)
-    deployed = [f for f in findings if f.deployed]
+    blocking = [f for f in findings if guard.is_blocking(f)]
     assert gaps == []
-    assert deployed == [], f"deployed findings on develop: {deployed}"
+    assert blocking == [], f"blocking findings on develop: {blocking}"
     assert values == VALUES
 
 
 def test_main_exits_nonzero_on_a_deployed_finding(
     guard: Any, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """End-to-end on the real tree, with one enabling value injected."""
-    findings = [guard.Finding("apps/x/wrangler.toml", 9, 'GLOOMBERB_ENABLED = "1"', True)]
+    """End-to-end on the real tree, with one committed cookie injected."""
+    findings = [
+        guard.Finding(
+            "apps/x/wrangler.toml", 9, f'{COOKIE} = "{REAL_COOKIE}"', True, "cookie_value"
+        )
+    ]
     monkeypatch.setattr(guard, "scan", lambda *a, **k: (findings, [], VALUES, "test"))
     assert guard.main([]) == 1
     out = capsys.readouterr().out
-    assert "DEPLOYED" in out
+    assert "COOKIE" in out
+
+
+def test_main_exits_zero_with_only_the_flag_on(
+    guard: Any, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The exit code, end to end: a deployed enabling flag must not fail the build.
+
+    Goes through ``main`` rather than ``is_blocking`` because the exit code is
+    the thing CI reads, and a classifier could be right while the wiring around
+    it is not.
+    """
+    findings = [guard.Finding("apps/x/wrangler.toml", 9, 'GLOOMBERB_ENABLED = "1"', True)]
+    monkeypatch.setattr(guard, "scan", lambda *a, **k: (findings, [], VALUES, "test"))
+    assert guard.main([]) == 0
+    out = capsys.readouterr().out
+    assert "flag-on" in out, "it must still be reported"
+    assert "PASS" in out
 
 
 def test_main_exits_nonzero_on_a_coverage_gap(guard: Any, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -608,7 +702,11 @@ def test_main_exits_zero_when_clean(
 
 
 def test_warn_mode_reports_but_exits_zero(guard: Any, monkeypatch: pytest.MonkeyPatch) -> None:
-    findings = [guard.Finding("apps/x/wrangler.toml", 9, 'GLOOMBERB_ENABLED = "1"', True)]
+    findings = [
+        guard.Finding(
+            "apps/x/wrangler.toml", 9, f'{COOKIE} = "{REAL_COOKIE}"', True, "cookie_value"
+        )
+    ]
     monkeypatch.setattr(guard, "scan", lambda *a, **k: (findings, [], VALUES, "test"))
     assert guard.main(["--warn"]) == 0
 
@@ -792,11 +890,17 @@ def test_a_shell_passthrough_is_not_a_secret_reference(guard: Any, line: str) ->
     reading — "$NAME is an indirection, therefore it is fine" — is what lets a
     Dockerfile bake a cookie into a layer. The sanctioned forward is ``env.NAME``
     (a Worker binding) or ``${{ secrets.NAME }}``.
+
+    It lands on ``advertised_without_secret`` rather than ``cookie_value`` under
+    the current rules: nothing is being committed, the config is just pointing at
+    something that is not a secret store. Both block; the reason differs, and the
+    reason is what a reader acts on.
     """
     assert guard.is_secret_reference(line.split("=", 1)[1].strip()) is False, line
     findings = _scan(guard, "Dockerfile.digithings-stack-cloudflare", line + "\n")
     kinds = [f.kind for f in findings]
-    assert kinds == ["cookie_value"], f"{line!r} must fail; got {kinds}"
+    assert kinds == ["advertised_without_secret"], f"{line!r} must fail; got {kinds}"
+    assert guard.is_blocking(findings[0])
 
 
 @pytest.mark.parametrize(
@@ -850,50 +954,70 @@ def test_a_workflow_env_block_cannot_hold_a_cookie_either(guard: Any, path: str,
 @pytest.mark.parametrize(
     "line",
     [
-        'GLOOMBERB_ENABLED: "${{ vars.GLOOMBERB_ENABLED }}"',
-        "GLOOMBERB_ENABLED: $GLOOMBERB_ENABLED",
-        "GLOOMBERB_ENABLED = ${GLOOMBERB_ENABLED}",
-        "GLOOMBERB_ENABLED = $GLOOMBERB_ENABLED",
-        "GLOOMBERB_ENABLED = env.GLOOMBERB_ENABLED",
-        "GLOOMBERB_ENABLED = process.env.GLOOMBERB_ENABLED",
-        "GLOOMBERB_ENABLED = os.environ.get('GLOOMBERB_ENABLED')",
+        f'{COOKIE}: "${{{{ vars.{COOKIE} }}}}"',
+        f"{COOKIE}: ${{{COOKIE}}}",
+        f"{COOKIE} = ${{{COOKIE}}}",
+        f"{COOKIE} = ${COOKIE}",
+        f"{COOKIE} = vars.{COOKIE}",
     ],
 )
 def test_a_deployed_config_advertising_without_a_secret_fails(guard: Any, line: str) -> None:
-    """A repository variable is a settings field, not a secret store.
+    """A repository variable is a settings field; a shell var is baked in.
 
-    This is the "advertises the tools without a secret" case. A literal enabling
-    value is already caught by the original rule; what only this one sees is a
-    family switched on through an indirection, with nothing in the file that
-    supplies the cookie through a secret store.
+    This is Chris's "none advertised without a GLOOMBERB_SESSION_COOKIE secret"
+    case, and its subject is the **cookie** -- not the flag. Since the per-tool
+    gating decision the flag no longer fails anything, so this rule has to carry
+    the "advertised without a secret" half on its own.
     """
     findings = _scan(guard, "apps/digichat-cloudflare/wrangler.toml", line + "\n")
     kinds = [f.kind for f in findings]
     assert "advertised_without_secret" in kinds, f"{line!r} must fail; got {kinds}"
+    assert guard.is_blocking(findings[0])
 
 
-def test_advertising_with_a_secret_slot_in_the_file_passes(guard: Any) -> None:
-    """The fix the rule points at has to be reachable, or the rule is a dead end."""
-    text = (
-        'GLOOMBERB_ENABLED: "${{ vars.GLOOMBERB_ENABLED }}"\n'
-        f"# npx wrangler secret put {COOKIE}\n"
-    )
+@pytest.mark.parametrize(
+    "line",
+    [
+        f"{COOKIE} = env.{COOKIE}",
+        f"{COOKIE} = os.environ.get('{COOKIE}')",
+        f"{COOKIE} = Deno.env.get('{COOKIE}')",
+    ],
+)
+def test_the_worker_secret_binding_is_the_sanctioned_path(guard: Any, line: str) -> None:
+    """``env.X`` is what ``wrangler secret put`` produces, so it must pass.
+
+    The counterpart to the rule above and the reason the two lists are kept
+    apart: an indirection is not automatically a secret store.
+    """
+    findings = _scan(guard, "apps/digichat-cloudflare/wrangler.toml", line + "\n")
+    assert findings == [], f"{line!r} names a secret store; got {findings}"
+
+
+def test_a_flag_on_and_a_secret_binding_together_pass(guard: Any) -> None:
+    """The intended deployed shape: public tools on, cookie from the secret store."""
+    text = f'[vars]\nGLOOMBERB_ENABLED = "1"\n{COOKIE} = env.{COOKIE}\n'
     findings = _scan(guard, "apps/digichat-cloudflare/wrangler.toml", text)
-    assert findings == [], (
-        f"a file that names wrangler secret put {COOKIE} supplies it; got {findings}"
-    )
+    kinds = [f.kind for f in findings]
+    assert kinds == ["flag-on"], kinds
+    assert not any(guard.is_blocking(f) for f in findings)
 
 
-def test_an_indirect_flag_in_a_local_config_is_not_deployed(guard: Any) -> None:
-    """Local stays local: the exemption is about deployment, not about indirection."""
-    findings = _scan(guard, ".env.local", "GLOOMBERB_ENABLED=$GLOOMBERB_ENABLED\n")
-    assert findings == [], f"a local config is not a deployed surface; got {findings}"
+def test_an_indirect_cookie_in_a_local_config_is_not_blocking(guard: Any) -> None:
+    """Local stays local: the exemption is about deployment, not about indirection.
+
+    A local ``.env.local`` that passes the cookie through ``$NAME`` commits
+    nothing and ships nothing, so there is nothing to gate — and it is
+    classified as an indirection rather than as a committed credential, which is
+    what the same line in a deployed config now reports.
+    """
+    findings = _scan(guard, ".env.local", f"{COOKIE}=${{{COOKIE}}}\n")
+    assert findings == [], findings
 
 
-def test_a_literal_enabling_value_is_still_reported_as_enabled(guard: Any) -> None:
-    """The original rule keeps its own kind, so its reason string is unchanged."""
+def test_a_literal_enabling_value_is_still_reported_as_flag_on(guard: Any) -> None:
+    """The flag keeps its own kind, so its reason string is unchanged."""
     findings = _scan(guard, "apps/digichat-cloudflare/wrangler.toml", 'GLOOMBERB_ENABLED = "1"\n')
-    assert [f.kind for f in findings] == ["enabled"]
+    assert [f.kind for f in findings] == ["flag-on"]
 
 
 def test_cookie_names_are_the_two_the_client_reads(guard: Any) -> None:
@@ -930,27 +1054,27 @@ def test_findings_render_their_own_reason(guard: Any) -> None:
     """Each kind must say what to do; a bare path is a finding nobody can act on."""
     for kind, reason in guard.FINDING_REASONS.items():
         assert reason and reason.strip(), f"{kind} needs a reason string"
-    # The three cookie kinds are the ones DIG-2752 added; `enabled` is unchanged
-    # from the original guard and is pinned by exact text.
-    assert {
-        "enabled",
+    assert set(guard.FINDING_REASONS) == {
+        "flag-on",
         "cookie_value",
         "plaintext_cookie_slot",
         "advertised_without_secret",
-    } <= set(guard.FINDING_REASONS)
-    assert guard.FINDING_REASONS["enabled"] == (
-        "GLOOMBERB_ENABLED must never be enabled in a deployed config"
+    }
+    assert "reported, not gated" not in guard.FINDING_REASONS["flag-on"]
+    assert guard.FINDING_REASONS["flag-on"] == (
+        "GLOOMBERB_ENABLED is on, so the public Gloomberb tools are reachable; "
+        "that is intended under DIG-2752 per-tool gating and does not fail the build"
     )
     rendered = guard.render(
         [
-            guard.Finding(".env", 3, f"{COOKIE}=x", False, "cookie_value"),
+            guard.Finding(".env", 3, f"{COOKIE}={REAL_COOKIE}", False, "cookie_value"),
             guard.Finding(
                 "apps/x/wrangler.toml", 9, f'{COOKIE} = ""', True, "plaintext_cookie_slot"
             ),
             guard.Finding(
                 "apps/x/wrangler.toml",
                 10,
-                "GLOOMBERB_ENABLED: $GLOOMBERB_ENABLED",
+                f"{COOKIE} = ${COOKIE}",
                 True,
                 "advertised_without_secret",
             ),
@@ -1005,11 +1129,30 @@ def test_the_cookie_checks_are_not_vacuous_on_this_repo(guard: Any) -> None:
     try:
         assert [f.kind for f in seed(f'{COOKIE} = "{REAL_COOKIE}"\n')] == ["cookie_value"]
         assert [f.kind for f in seed(f'{COOKIE} = ""\n')] == ["plaintext_cookie_slot"]
-        assert [f.kind for f in seed("GLOOMBERB_ENABLED = $GLOOMBERB_ENABLED\n")] == [
-            "advertised_without_secret"
-        ]
-        assert [f.kind for f in seed('GLOOMBERB_ENABLED = "1"\n')] == ["enabled"]
+        assert [f.kind for f in seed(f"{COOKIE} = ${COOKIE}\n")] == ["advertised_without_secret"]
+        assert [f.kind for f in seed('GLOOMBERB_ENABLED = "1"\n')] == ["flag-on"]
         assert seed(f'{COOKIE} = "${{{{ secrets.{COOKIE} }}}}"\n') == []
+        assert seed(f"{COOKIE} = env.{COOKIE}\n") == []
     finally:
         target.write_bytes(original)
     assert target.read_bytes() == original, "the control must leave the file byte-identical"
+
+
+def test_the_flag_half_is_not_vacuous_either(guard: Any) -> None:
+    """``flag-on`` is report-only, so its non-vacuity control is the report itself.
+
+    A check that reports nothing and blocks nothing is indistinguishable from a
+    check that was deleted, which is the exact risk of making the flag
+    non-blocking. Asserting on ``scan_text`` over the real repo's own deployed
+    config, plus ``render``, proves the flag half still fires, is classified and
+    is printed -- it just no longer gates.
+    """
+    text = (REPO_ROOT / "apps/digichat-cloudflare/wrangler.toml").read_text(encoding="utf-8")
+    findings = guard.scan_text(
+        "apps/digichat-cloudflare/wrangler.toml", text + '\nGLOOMBERB_ENABLED = "1"\n', VALUES
+    )
+    kinds = [f.kind for f in findings]
+    assert kinds == ["flag-on"], kinds
+    assert not guard.is_blocking(findings[0])
+    rendered = guard.render(findings, [], "parsed from client.py", VALUES)
+    assert "flag-on" in rendered and "PASS" in rendered
