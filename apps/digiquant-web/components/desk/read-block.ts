@@ -38,7 +38,7 @@ export async function readDeskBlock(route: string, kind: BlockKind, signal?: Abo
   return result;
 }
 
-/** One official write. A non-2xx stays an error line. Stub envelopes are withheld. */
+/** One official write. A non-2xx stays an error line, an unpublished route included. Stub envelopes are withheld. */
 export async function postOfficial(route: string, payload: unknown, signal?: AbortSignal): Promise<OfficialRead> {
   let res: Response;
   try {
@@ -53,6 +53,6 @@ export async function postOfficial(route: string, payload: unknown, signal?: Abo
     return { result: { status: "error", lines: [`${route}: the official API could not be reached.`], asOf: null }, data: null };
   }
   const body = await readBody(res);
-  const result = presentResponse(route, res.status, body, "fields");
+  const result = presentResponse(route, res.status, body, "fields", { write: true });
   return { result, data: dataOf(body, result) };
 }

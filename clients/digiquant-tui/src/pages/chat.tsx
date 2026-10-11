@@ -68,7 +68,7 @@ async function postChat(api: string, route: string, payload: unknown): Promise<L
   } catch {
     body = null;
   }
-  const result = presentResponse(route, res.status, body, "fields");
+  const result = presentResponse(route, res.status, body, "fields", { write: true });
   return { result, data: dataOf(body, result) };
 }
 
