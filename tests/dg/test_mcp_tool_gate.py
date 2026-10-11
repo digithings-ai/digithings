@@ -545,26 +545,6 @@ def test_a_refusal_cannot_be_flipped_into_a_write_by_a_second_decision(transport
 
 
 @pytest.mark.unit
-def test_the_decision_consumer_takes_no_transport_from_the_caller():
-    """CTO ruling: the deciding request supplies a verdict and an id, nothing else.
-
-    A caller-supplied transport is the hole this closes. A row with a matching
-    ``id`` but an attacker-chosen ``url`` would send the RECORDED arguments to an
-    endpoint the operator never configured, which is D3 broken under another
-    name. So the parameter must not merely be ignored -- it must not exist.
-    """
-    import inspect
-
-    from digigraph.orchestration.registry import decide_mcp_call
-
-    params = inspect.signature(decide_mcp_call).parameters
-    assert "servers" not in params, (
-        "decide_mcp_call accepts a transport from the caller, so a deciding request "
-        "can redirect the recorded payload at an arbitrary endpoint"
-    )
-
-
-@pytest.mark.unit
 def test_approval_executes_against_the_transport_captured_at_refusal_time(transport, audit):
     """The recorded payload runs against the row that was recorded with it.
 
@@ -745,3 +725,82 @@ def test_the_decision_route_is_mounted_where_the_client_calls_it():
     assert ("/v1/mcp/decisions", ("POST",)) in paths, (
         f"the digigraph decision route is not mounted where digichat calls it: {sorted(p for p, _ in paths)}"
     )
+# --- DIG-284 leaf 284.6, CTO decision (2) -------------------------------------
+# digigraph owns the session-transport re-resolution. The consumer is handed
+# LIVE operator config and must re-check it against the recorded call at the
+# moment the write leaves, because between the refusal and the decision the
+# operator may have moved the endpoint or tightened the allowlist. A snapshot
+# taken at refusal time would miss both, so none is taken.
+
+OTHER_URL = "https://mcp-rotated.example.invalid/rpc"
+
+
+@pytest.mark.unit
+def test_a_stale_url_is_refused_so_a_recorded_call_cannot_follow_a_moved_endpoint(transport):
+    from digigraph.orchestration import registry
+
+    """The record was refused against one URL; decide-time config names another."""
+    server = _server()
+    state = {}
+    context = _context(server, session_id="sess-1", state=state)
+    refused = registry.execute(f"{server['id']}_{MUTATING}", {"issueKey": "JIRA-1234"}, context)
+    pending_id = refused["pending_id"]
+
+    rotated = _server(url=OTHER_URL)
+    decided = registry.decide_mcp_call(
+        pending_id, True, session_id="sess-1", servers=[rotated]
+    )
+
+    assert decided.get("error") == "mcp_server_not_available", decided
+    assert transport == [], "a recorded call was executed against a URL the operator no longer lists"
+    # At-most-once is preserved: a burn on a mismatch must not leave a live id.
+    again = registry.decide_mcp_call(
+        pending_id, True, session_id="sess-1", servers=[rotated]
+    )
+    assert again.get("error") == "unknown_pending_mcp_decision", again
+    assert transport == [], again
+
+
+@pytest.mark.unit
+def test_a_rotated_allowlist_is_refused_so_a_tightening_takes_effect_at_execute_time(transport):
+    from digigraph.orchestration import registry
+
+    """The record was refused while the tool was allowlisted; it no longer is."""
+    server = _server()
+    state = {}
+    context = _context(server, session_id="sess-1", state=state)
+    refused = registry.execute(f"{server['id']}_{MUTATING}", {"issueKey": "JIRA-1234"}, context)
+    pending_id = refused["pending_id"]
+
+    tightened = _server(allowedTools=[READ_ONLY], mutatingTools=[])
+    decided = registry.decide_mcp_call(
+        pending_id, True, session_id="sess-1", servers=[tightened]
+    )
+
+    assert "status" not in decided, f"a call the operator no longer allowlists was approved: {decided}"
+    assert transport == [], "the write left even though the operator had withdrawn the tool"
+
+
+@pytest.mark.unit
+def test_a_pending_id_from_another_session_is_refused(transport):
+    from digigraph.orchestration import registry
+
+    """The id is not a global capability: it is keyed by the session that made it."""
+    server = _server()
+    state = {}
+    context = _context(server, session_id="sess-1", state=state)
+    refused = registry.execute(f"{server['id']}_{MUTATING}", {"issueKey": "JIRA-1234"}, context)
+    pending_id = refused["pending_id"]
+
+    decided = registry.decide_mcp_call(
+        pending_id, True, session_id="sess-2", servers=[server]
+    )
+
+    assert decided.get("error") == "unknown_pending_mcp_decision", decided
+    assert transport == [], "a session executed a pending id it never created"
+
+    # The owning session is unaffected: scoping refused the thief, not the owner.
+    owned = registry.decide_mcp_call(pending_id, True, session_id="sess-1", servers=[server])
+    assert owned.get("status") == "approved", owned
+    assert len(transport) == 1, owned
+
