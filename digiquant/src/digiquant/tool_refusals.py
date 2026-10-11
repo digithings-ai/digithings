@@ -15,13 +15,40 @@ omission:
 * :mod:`digiquant.server` — ``v1_orchestrator_invoke`` answers a typed
   ``tool_refused`` refusal instead of dispatching.
 
-Why this exists for congressional trades (DIG-1057; Counsel's ruling on the
-inert feed is DIG-1029, and on the live surface DIG-1251): 5 U.S.C.
-13107(c)(1)(B) makes it unlawful to obtain or use a House/Senate
-financial-disclosure report for any purpose other than
-news-and-communications-media dissemination. We are not a news outlet, so the
-feed is refused regardless of who asks. ``digifetch_congress_trades`` sits in
-:data:`REFUSED_TOOLS` until Counsel clears it in writing.
+**Why this exists for congressional trades** (DIG-1057; Counsel's ruling on the
+inert feed is DIG-1029, and on the live surface DIG-1251). The reports at issue
+are the periodic transaction reports filed under 5 U.S.C. 13105(l), which are
+therefore "reports" for the purposes of 5 U.S.C. 13107(c). The clauses relied on
+are 5 U.S.C. 13107(a), 13107(b)(2)(C), 13107(c)(1)(B) and 13107(c)(2):
+
+* **13107(c)(1)(B)** makes it unlawful to use such a report *for a commercial
+  purpose* unless the user is a news and communications media entity
+  disseminating the report to the general public. The carve-out is scoped to the
+  commercial-purpose limb; it is not a general permission for any non-commercial
+  purpose.
+* **13107(c)(2)** is the separate limb that makes it unlawful knowingly and
+  wilfully to sell or otherwise transfer such a report for any purpose.
+
+We are not news and communications media and we operate commercially, so
+``digifetch_congress_trades`` sits in :data:`REFUSED_TOOLS` and is refused
+regardless of who asks, until Counsel clears it in writing. An earlier version of
+this note described (c)(1)(B) as a bar on all non-media purposes, which
+overstated the statute: the carve-out attaches to the commercial-purpose limb
+only, not to every purpose. Our outcome is unchanged; the statement of law is not
+(DIG-1479).
+
+**Scope of this refusal, and the LuxAlgo trackers exception (DIG-1472).** This
+refusal is keyed on *tool names*, so it refuses the ``digifetch_congress_trades``
+tool surface specifically — not the congressional-trades data class as a whole.
+The LuxAlgo ``market-trackers-data`` ``congress-trades`` dataset carries the same
+data class as the rows Counsel classified under 13105(l)/13107(c). Counsel
+confirmed the classification and advised refusal (DIG-1472, CONFIRMED). The
+business owner (Chris) decided on **2026-10-06** to keep that dataset in service
+anyway, accepting the 13107(c)(2) exposure. That is a business decision against
+Counsel's advice, not a legal clearance, and it is recorded here and in
+``digisearch.trackers_ingest`` so no later reader mistakes the allowlist for a
+Counsel opinion. The business owner is not Counsel, and the phrase "no legal
+risk" is not Counsel's position and does not appear in this repository.
 
 **The environment denylist is additive only.**
 :data:`ENV_DENYLIST_VAR` can *add* refused names. It can never remove one, and
