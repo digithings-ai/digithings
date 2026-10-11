@@ -17,9 +17,9 @@
 
 /* --- Directional colors (muted) ---------------------------------------- */
 .qn-up   { color: var(--accent-digiquant); }
-.qn-down { color: var(--accent-digiclaw); }
+.qn-down { color: var(--accent-digibot); }
 
-/* WCAG 1.4.3 fix (2026-08-12, #2280): --accent-digiquant/--accent-digiclaw's
+/* WCAG 1.4.3 fix (2026-08-12, #2280): --accent-digiquant/--accent-digibot's
    light-theme values (#0E8C7F, #b87840) are tuned to stay LIGHT ENOUGH to
    serve as a background under .accent-<module>'s pinned dark --on-accent
    text (tokens.css) — the opposite of what .qn-up/.qn-down need here, where

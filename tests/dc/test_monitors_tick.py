@@ -1,4 +1,4 @@
-"""Unit tests for the digiclaw → digisearch scheduled tick (#4065, Task 8d)."""
+"""Unit tests for the digibot → digisearch scheduled tick (#4065, Task 8d)."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import pytest
 def test_tick_posts_with_service_jwt(monkeypatch: pytest.MonkeyPatch) -> None:
     import digibase.service_auth as svc
 
-    from digiclaw import monitors_tick as mod
+    from digibot import monitors_tick as mod
 
     monkeypatch.setenv("DIGISEARCH_URL", "http://127.0.0.1:8002")
     calls: dict = {}
@@ -38,14 +38,14 @@ def test_tick_posts_with_service_jwt(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     out = mod.run_due_monitors()
     assert seen["auth"] == "Bearer svc-jwt"
-    assert calls.get("key_env") == "DIGICLAW_DIGIKEY_API_KEY"
+    assert calls.get("key_env") == "DIGIBOT_DIGIKEY_API_KEY"
     assert calls.get("scopes") == ("digisearch:query",)
     assert out == {"runs": 0, "failed": 0}
 
 
 @pytest.mark.unit
 def test_tick_counts_failed_runs(monkeypatch: pytest.MonkeyPatch) -> None:
-    from digiclaw import monitors_tick as mod
+    from digibot import monitors_tick as mod
 
     payload = {
         "runs": [
@@ -73,7 +73,7 @@ def test_tick_counts_failed_runs(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_tick_skips_jwt_minting_with_explicit_bearer(monkeypatch: pytest.MonkeyPatch) -> None:
     import digibase.service_auth as svc
 
-    from digiclaw import monitors_tick as mod
+    from digibot import monitors_tick as mod
 
     minted: list[str] = []
 
@@ -97,7 +97,7 @@ def test_tick_skips_jwt_minting_with_explicit_bearer(monkeypatch: pytest.MonkeyP
 
 @pytest.mark.unit
 def test_tick_normalizes_env_url(monkeypatch: pytest.MonkeyPatch) -> None:
-    from digiclaw import monitors_tick as mod
+    from digibot import monitors_tick as mod
 
     seen: list[str] = []
 
@@ -118,7 +118,7 @@ def test_tick_normalizes_env_url(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.mark.unit
 def test_post_raises_for_http_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    from digiclaw import monitors_tick as mod
+    from digibot import monitors_tick as mod
 
     real_client = httpx.Client
     transport = httpx.MockTransport(lambda request: httpx.Response(401, json={"error": {}}))
@@ -129,9 +129,9 @@ def test_post_raises_for_http_error(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.mark.unit
 def test_dispatch_agent_maps_web_watch_tick(monkeypatch: pytest.MonkeyPatch) -> None:
-    from digiclaw.schedule_schema import AgentDefinition, AgentSchedule, ScheduleMode
+    from digibot.schedule_schema import AgentDefinition, AgentSchedule, ScheduleMode
 
-    from digiclaw import cli, monitors_tick
+    from digibot import cli, monitors_tick
 
     calls: list[str] = []
     monkeypatch.setattr(monitors_tick, "run_due_monitors", lambda: calls.append("tick"))

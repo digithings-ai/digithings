@@ -862,7 +862,7 @@
     },
     "/health": {
       "get": {
-        "description": "Legacy health check for Docker and digiclaw (kept for back-compat).",
+        "description": "Legacy health check for Docker and digibot (kept for back-compat).",
         "operationId": "health_health_get",
         "responses": {
           "200": {
@@ -1321,7 +1321,7 @@
     },
     "/workflow": {
       "post": {
-        "description": "digiclaw custom skill: run_digigraph_workflow.\nPhase 0: user idea \u2192 backtest via digiquant \u2192 result in < 10s.",
+        "description": "digibot custom skill: run_digigraph_workflow.\nPhase 0: user idea \u2192 backtest via digiquant \u2192 result in < 10s.",
         "operationId": "run_digigraph_workflow",
         "requestBody": {
           "content": {

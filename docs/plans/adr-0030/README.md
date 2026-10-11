@@ -89,7 +89,7 @@ House chain today: `run_research_then_portfolio` in `digiquant/src/digiquant/por
 
 ### What stays shared
 
-Stage payload names, snapshot/ledger persistence style, separate Supabase projects, human gates on live venues, `digithings-cron` as the only scheduler, digikey for digithings service calls, the FX Hub session path in `apps/dashboard/lib/twelve-x/session.ts`, digisearch wake owned by `digiclaw` (not by a stage), secrets staying in the site consumer. `digifetch` still reads no environment variables. Wiring twelve-x scrapers onto `digifetch` is not part of any package here.
+Stage payload names, snapshot/ledger persistence style, separate Supabase projects, human gates on live venues, `digithings-cron` as the only scheduler, digikey for digithings service calls, the FX Hub session path in `apps/dashboard/lib/twelve-x/session.ts`, digisearch wake owned by `digibot` (not by a stage), secrets staying in the site consumer. `digifetch` still reads no environment variables. Wiring twelve-x scrapers onto `digifetch` is not part of any package here.
 
 ### What may not happen in these packages
 

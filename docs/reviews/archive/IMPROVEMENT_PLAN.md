@@ -170,7 +170,7 @@ Options:
 
 Both `digigraph/project_config.py` and `digisearch/core/config.py` implement identical `_subst_env()` functions.
 
-**Create:** `digigraph/src/digigraph/config_utils.py` (or a shared `digiclaw/` package if it exists).
+**Create:** `digigraph/src/digigraph/config_utils.py` (or a shared `digibot/` package if it exists).
 
 ```python
 import os, re

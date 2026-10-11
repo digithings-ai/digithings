@@ -19,7 +19,7 @@ tags:
 
 **12-month roadmap:**
 - Roll the digibase `install_metrics` helper out to every service so each exposes a `/metrics` endpoint with consistent labels
-- X-Request-ID correlation ID propagation across all services (digigraph, digisearch, digiquant, digikey, digiclaw) — enables tracing a request through the full stack
+- X-Request-ID correlation ID propagation across all services (digigraph, digisearch, digiquant, digikey, digibot) — enables tracing a request through the full stack
 - PII redaction middleware before any data reaches LangSmith
 - Structured logging throughout (digisearch currently has zero structured logging)
 - Grafana dashboard for operational visibility

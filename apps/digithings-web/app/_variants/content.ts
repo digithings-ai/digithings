@@ -76,7 +76,7 @@ export const BENTO: { id: string; span: Span }[] = [
   { id: "digikey", span: "unit" },
   { id: "digiquant", span: "wide" },
   { id: "digitrace", span: "unit" },
-  { id: "digiclaw", span: "unit" },
+  { id: "digibot", span: "unit" },
   { id: "digibase", span: "unit" },
   { id: "digivault", span: "unit" },
   { id: "digistore", span: "unit" },

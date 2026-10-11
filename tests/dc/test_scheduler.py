@@ -1,4 +1,4 @@
-"""Unit tests for digiclaw cron parsing and scheduler (#218 / CHR-63)."""
+"""Unit tests for digibot cron parsing and scheduler (#218 / CHR-63)."""
 
 from __future__ import annotations
 
@@ -6,8 +6,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
-from digiclaw.cron import CronParseError, next_cron_time, parse_cron
-from digiclaw.schedule_schema import (
+from digibot.cron import CronParseError, next_cron_time, parse_cron
+from digibot.schedule_schema import (
     AgentDefinition,
     AgentSchedule,
     ScheduleMode,
@@ -15,7 +15,7 @@ from digiclaw.schedule_schema import (
     load_agent_definition,
     load_agent_definitions,
 )
-from digiclaw.scheduler import (
+from digibot.scheduler import (
     JsonStateStore,
     LifecycleState,
     Scheduler,
@@ -206,7 +206,7 @@ def test_cli_schedule_status(tmp_path: Path, capsys: pytest.CaptureFixture[str])
         encoding="utf-8",
     )
     state = tmp_path / "state.json"
-    from digiclaw.cli import main
+    from digibot.cli import main
 
     assert main(["schedule", "status", "--agents-dir", str(agents_dir), "--state", str(state)]) == 0
     out = capsys.readouterr().out
@@ -224,7 +224,7 @@ def test_cli_schedule_status(tmp_path: Path, capsys: pytest.CaptureFixture[str])
 
 @pytest.mark.unit
 def test_load_packaged_example_agents() -> None:
-    root = Path(__file__).resolve().parents[2] / "digiclaw" / "agents"
+    root = Path(__file__).resolve().parents[2] / "digibot" / "agents"
     agents = load_agent_definitions(root)
     names = {a.name for a in agents}
     assert "example-cron" in names

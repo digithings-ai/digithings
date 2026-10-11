@@ -104,7 +104,7 @@ export const guides: Guide[] = [
         items: [
           "`digichat` — digichat + Postgres",
           "`digivault` — digivault",
-          "`heartbeat` — digiclaw loop",
+          "`heartbeat` — digibot loop",
           "`litellm-cache` — Redis for LiteLLM",
           "`observability` — Prometheus + Grafana",
         ],
@@ -113,7 +113,7 @@ export const guides: Guide[] = [
       {
         kind: "list",
         items: [
-          "`DIGI_IMAGE_TAG` — digikey, digigraph, digiquant, digisearch, digitrace, digivault, digiclaw (pin `sha-<12>` in production).",
+          "`DIGI_IMAGE_TAG` — digikey, digigraph, digiquant, digisearch, digitrace, digivault, digibot (pin `sha-<12>` in production).",
           "`DIGICHAT_IMAGE_TAG` — digichat only; prefer `vX.Y.Z` from release-please.",
         ],
       },

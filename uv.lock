@@ -19,7 +19,7 @@ resolution-markers = [
 [manifest]
 members = [
     "digibase",
-    "digiclaw",
+    "digibot",
     "digifetch",
     "digigraph",
     "digikey",
@@ -1230,9 +1230,9 @@ dev = [
 ]
 
 [[package]]
-name = "digiclaw"
+name = "digibot"
 version = "0.1.0"
-source = { editable = "digiclaw" }
+source = { editable = "digibot" }
 dependencies = [
     { name = "digibase" },
     { name = "httpx" },
@@ -1663,7 +1663,7 @@ all = [
     { name = "chonkie", extra = ["semantic"] },
     { name = "chromadb" },
     { name = "ddgs" },
-    { name = "digiclaw" },
+    { name = "digibot" },
     { name = "digifetch" },
     { name = "digikey" },
     { name = "digillm" },
@@ -1698,7 +1698,7 @@ dev = [
     { name = "beautifulsoup4" },
     { name = "chardet" },
     { name = "chonkie", extra = ["semantic"] },
-    { name = "digiclaw" },
+    { name = "digibot" },
     { name = "digikey" },
     { name = "fastapi" },
     { name = "langgraph" },
@@ -1743,7 +1743,7 @@ rerank = [
     { name = "sentence-transformers" },
 ]
 server = [
-    { name = "digiclaw" },
+    { name = "digibot" },
     { name = "digikey" },
     { name = "fastapi" },
     { name = "mcp" },
@@ -1778,7 +1778,7 @@ requires-dist = [
     { name = "ddgs", marker = "extra == 'web-search'", specifier = ">=9.0" },
     { name = "digibase", editable = "digibase" },
     { name = "digibase", extras = ["otel"], marker = "extra == 'otel'", editable = "digibase" },
-    { name = "digiclaw", marker = "extra == 'server'", editable = "digiclaw" },
+    { name = "digibot", marker = "extra == 'server'", editable = "digibot" },
     { name = "digifetch", marker = "extra == 'web-search'", editable = "digifetch" },
     { name = "digikey", marker = "extra == 'server'", editable = "digikey" },
     { name = "digillm", marker = "extra == 'embedding'", editable = "digillm" },

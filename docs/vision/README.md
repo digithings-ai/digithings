@@ -59,7 +59,7 @@ JWT-based authentication with scoped API keys (RS256, JWKS endpoint), SSO federa
 ### digitrace — observability
 LangSmith tracing, Prometheus metrics, correlation IDs (workflow, request, session). `/v1/status` public endpoint.
 
-### digiclaw — always-on agent orchestration
+### digibot — always-on agent orchestration
 Scheduled and continuous agent execution via OpenClaw. Heartbeat and audit capabilities. MCP skill interface.
 
 ### digibase — shared library
@@ -98,7 +98,7 @@ Human-facing operator surface (`apps/dashboard`) for research, portfolio deliber
 - digisearch ingestion and retrieval pipeline
 - digikey auth primitives
 - digitrace tracing helpers
-- digiclaw heartbeat and audit core
+- digibot heartbeat and audit core
 - digibase shared library
 - digillm LLM client library
 - digifetch web-scraping engine library
@@ -122,6 +122,6 @@ The open core is the infrastructure. The proprietary layer is the domain experti
 One document per module — positioning, current state, 12-month roadmap, and open vs. proprietary split:
 
 - [[digigraph|digigraph]] · [[digiquant|digiquant]] · [[digisearch|digisearch]] · [[digichat|digichat]]
-- [[digikey|digikey]] · [[digitrace|digitrace]] · [[digiclaw|digiclaw]] · [[digibase|digibase]] · [[digivault|digivault]]
+- [[digikey|digikey]] · [[digitrace|digitrace]] · [[digibot|digibot]] · [[digibase|digibase]] · [[digivault|digivault]]
 - [[digillm|digillm]] · [[digifetch|digifetch]] · [[digidev|digidev]] · [[dashboard|digiquant dashboard]]
 - [[digilink|digilink]] · [[digistore|digistore]] *(designed, not yet shipped)*

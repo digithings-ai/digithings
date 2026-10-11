@@ -1,7 +1,7 @@
 /**
  * Public OpenAPI explorer catalog — one entry per committed spec under
  * docs/openapi/*.json (synced into public/openapi/ at digithings-web prebuild).
- * digiclaw has no HTTP OpenAPI and is intentionally omitted.
+ * digibot has no HTTP OpenAPI and is intentionally omitted.
  */
 
 export interface OpenApiService {

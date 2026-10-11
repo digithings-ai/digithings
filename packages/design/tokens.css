@@ -12,7 +12,7 @@
   --accent-digichat:   #e2708a;
   --accent-digikey:    #d97a5a;
   --accent-digitrace:  #6fa3a3;
-  --accent-digiclaw:   #b87840;
+  --accent-digibot:   #b87840;
   --accent-digibase:   #9ea0a5;
   --accent-digistore:  #7b7fc7;
   --accent-digilink:   #4fa39b;
@@ -57,7 +57,7 @@
 .accent-digichat   { --accent: var(--accent-digichat);   --on-accent: #06110f; }
 .accent-digikey    { --accent: var(--accent-digikey);    --on-accent: #06110f; }
 .accent-digitrace  { --accent: var(--accent-digitrace);  --on-accent: #06110f; }
-.accent-digiclaw   { --accent: var(--accent-digiclaw);   --on-accent: #06110f; }
+.accent-digibot   { --accent: var(--accent-digibot);   --on-accent: #06110f; }
 .accent-digibase   { --accent: var(--accent-digibase);   --on-accent: #06110f; }
 .accent-digistore  { --accent: var(--accent-digistore);  --on-accent: #06110f; }
 .accent-digilink   { --accent: var(--accent-digilink);   --on-accent: #06110f; }
