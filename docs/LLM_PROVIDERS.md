@@ -58,7 +58,7 @@ Common confusion — these are **chat-only** and cannot be used as a LiteLLM bac
 
 - **URL:** https://console.groq.com
 - **⚠️ `llama-3.3-70b-versatile` hit its hard cutover in August 2026** and now 404s on the free/developer tier (Groq announced this 2026-06-17). **Do not route new traffic to it** — migrate to `openai/gpt-oss-120b` or `qwen/qwen3.6-27b`.
-- **Free tier:** Standing. 30 RPM, **1,000 RPD (binding constraint)**, TPM varies by model (gpt-oss-120b/qwen3.6-27b TPM not yet independently reconfirmed post-migration).
+- **Free tier:** Standing. 30 RPM, **1,000 RPD (binding constraint)**, ~8,000 TPM / 200K TPD on gpt-oss-120b/qwen (per-model; third-party figure read 2026-09-14 — confirm on the console Limits page).
 - **Best free models:** `openai/gpt-oss-120b`, `qwen/qwen3.6-27b`. Plus Whisper STT. `llama-4-scout-17b-16e-instruct` was also **deprecated from the free/developer tier 2026-06-17**.
 - **Paid:** gpt-oss-120b ~$0.15 / $0.60 (prompt caching $0.075/1M); Llama 4 Scout ~$0.11 / $0.34 (paid-only now); `llama-3.3-70b-versatile` ~$0.59 / $0.79 remains listed on the pricing page for enterprise committed-spend contracts only.
 - **LiteLLM:** `groq/openai/gpt-oss-120b`. Env: `GROQ_API_KEY`.
@@ -67,7 +67,7 @@ Common confusion — these are **chat-only** and cannot be used as a LiteLLM bac
 ### 3. Cerebras
 
 - **URL:** https://cloud.cerebras.ai
-- **Free tier (unconfirmed this cycle — sources conflict):** official docs cite 5 RPM / 30K TPM / 1M TPD on `gpt-oss-120b`, `zai-glm-4.7`, `gemma-4-31b`; third-party trackers still cite an older 30 RPM / 60–100K TPM / 8K-ctx-cap figure. `llama-3.3-70b`, `llama-4-scout`, `qwen-3-32b`, and `qwen3-235b` are **confirmed deprecated for free tier** — absent from official docs and 404ing on probe for two consecutive review cycles now (2026-07-19 and 2026-08-30).
+- **Free tier (no longer a no-card standing tier — Aug–Sep 2026 sources agree):** **5 RPM / 30K TPM / 1M TPD** on `gpt-oss-120b`, `zai-glm-4.7`, `gemma-4-31b`, via a ~$5 trial credit (30 days) that requires a payment method. The older 30 RPM / 60–100K TPM / no-card figure is stale. Not read from Cerebras's own page — re-verify. `llama-3.3-70b`, `llama-4-scout`, `qwen-3-32b`, and `qwen3-235b` are **confirmed deprecated for free tier** — absent from official docs and 404ing on probe for three consecutive review cycles now (2026-07-19, 2026-08-30, 2026-10-11).
 - **Best free models:** `gpt-oss-120b` (~3000 tok/s), `zai-glm-4.7`, `gemma-4-31b`. >2000 tok/s — fastest on market.
 - **LiteLLM:** `cerebras/gpt-oss-120b`. Env: `CEREBRAS_API_KEY`.
 - **Gotcha:** Context often clipped below native (8K) on free. Model roster and CC requirement are in flux — re-verify before depending on this provider.
