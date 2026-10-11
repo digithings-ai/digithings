@@ -57,3 +57,12 @@ jobs:
       - name: Verify generated files are in sync
         run: uv run --frozen --no-sync python scripts/agents_init.py --check
 
+      - name: Check production code for hardcoded model names
+        # #5029 phase 3. The model names this stack routes on belong in config/,
+        # not in code. #5046 moved them and verified it by hand once; this is
+        # what keeps it true. It reads the whole production tree, so it runs
+        # here rather than under a path filter — a filtered check does not post
+        # a status on the PRs that would have broken it, which is the same trap
+        # the pull_request comment above describes.
+        run: uv run --frozen --no-sync python scripts/check_model_name_literals.py
+

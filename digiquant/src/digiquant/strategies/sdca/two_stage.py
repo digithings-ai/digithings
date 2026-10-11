@@ -103,8 +103,14 @@ def persist_two_stage(
     windows: SdcaCycleWindows,
     dest_dir: Path,
     notes: str = "",
+    stem: str = "btc_composite",
 ) -> TwoStagePersistResult:
-    """Write aggressive + regularized provenance JSON. Does not overwrite btc_optimized."""
+    """Write aggressive + regularized provenance JSON. Does not overwrite btc_optimized.
+
+    ``stem`` is the filename prefix (default ``btc_composite``). Stage 0 uses
+    ``btc_solo_then_combine`` so an operator ``--out-dir`` pointed at the
+    package does not clobber the published IS keep/drop sidecars.
+    """
     dest_dir = Path(dest_dir)
     dest_dir.mkdir(parents=True, exist_ok=True)
     extra = (notes + " " + OVERFIT_NOTES).strip()
@@ -149,12 +155,10 @@ def persist_two_stage(
         ),
         oos_from_aggressive=True,
     )
-    (dest_dir / "btc_composite_aggressive.json").write_text(
-        aggressive.model_dump_json(indent=2) + "\n"
-    )
-    (dest_dir / "btc_composite_regularized.json").write_text(
-        regularized.model_dump_json(indent=2) + "\n"
-    )
+    if not stem or "/" in stem or "\\" in stem or ".." in stem:
+        raise ValueError("stem must be a filename prefix without path separators")
+    (dest_dir / f"{stem}_aggressive.json").write_text(aggressive.model_dump_json(indent=2) + "\n")
+    (dest_dir / f"{stem}_regularized.json").write_text(regularized.model_dump_json(indent=2) + "\n")
     return TwoStagePersistResult(aggressive=aggressive, regularized=regularized)
 
 

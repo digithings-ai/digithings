@@ -10,6 +10,15 @@ app = typer.Typer(help="digisearch – RAG, document search for Digi ecosystem")
 
 
 def _ingest_paths(paths: list[Path], index: str, chunker_name: str | None) -> int:
+    """Ingest *paths*, echoing one line per file. Returns total chunks created.
+
+    Exits non-zero when a candidate file was offered but **nothing** was
+    ingested. ``ingest_paths(skip_errors=True)`` logs and skips every parse or
+    embed failure, so a total failure — e.g. an embedding provider that cannot
+    be reached — returns ``(0, [])`` and would otherwise exit 0. A caller such
+    as the stack's Chroma seed then marks an *empty* index as seeded and serves
+    confident "no results" forever (#5045).
+    """
     from digisearch.pipeline.ingest import IngestError, ingest_paths
 
     try:
@@ -21,11 +30,36 @@ def _ingest_paths(paths: list[Path], index: str, chunker_name: str | None) -> in
         )
     except IngestError as exc:
         typer.echo(f"Ingest failed: {exc.message}", err=True)
-        return 0
+        raise typer.Exit(code=1) from exc
     for result in results:
         name = Path(result.source).name if result.source else result.doc_id
         typer.echo(f"Ingested {name}: {result.chunks_created} chunks")
+    if paths and not results:
+        typer.echo(
+            f"Nothing ingested into {index!r} from {len(paths)} candidate file(s): "
+            "every parse or embed failed.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
     return total
+
+
+def _resolve_source(source: Path) -> list[Path]:
+    """Expand *source* to the file list to ingest, exiting non-zero if unusable.
+
+    A missing or empty source is an error, not a zero-chunk success: the seed
+    scripts pass a seed directory per index, so a typo there would otherwise
+    leave that index permanently empty while reporting success.
+    """
+    if not source.exists():
+        typer.echo(f"Ingest source does not exist: {source}", err=True)
+        raise typer.Exit(code=1)
+    sources = sorted(source.rglob("*")) if source.is_dir() else [source]
+    paths = [p for p in sources if p.is_file()]
+    if not paths:
+        typer.echo(f"Ingest source has no files: {source}", err=True)
+        raise typer.Exit(code=1)
+    return paths
 
 
 @app.command()
@@ -40,8 +74,7 @@ def ingest(
     ),
 ) -> None:
     """Ingest documents into an index (stub in-process). Loads ``{stem}.yaml`` / ``.yml`` sidecars."""
-    sources = list(source.rglob("*")) if source.is_dir() else [source]
-    paths = [p for p in sources if p.is_file()]
+    paths = _resolve_source(source)
     total = _ingest_paths(paths, index, chunker)
     typer.echo(f"Total chunks: {total}")
 
@@ -77,8 +110,8 @@ def ingest_batch(
     ),
 ) -> None:
     """Batch-ingest every supported file under a directory (PDF + YAML sidecar pattern)."""
-    paths = sorted(directory.rglob("*"))
-    total = _ingest_paths([p for p in paths if p.is_file()], index, chunker)
+    paths = _resolve_source(directory)
+    total = _ingest_paths(paths, index, chunker)
     typer.echo(f"Total chunks: {total}")
 
 

@@ -17,7 +17,9 @@ import json
 
 import pytest
 
-from digisearch import mcp_server, web_exa
+import digifetch
+from digifetch import FetchResult
+from digisearch import mcp_server
 
 pytestmark = pytest.mark.unit
 
@@ -27,22 +29,27 @@ def _page_results(n: int) -> list[dict]:
 
 
 def _patch_exa_post(monkeypatch, results: list[dict], seen: dict) -> None:
-    """Fake EXA POST honoring ``numResults`` (returns at most that many results)."""
+    """Fake the digifetch seam EXA posts through, honoring ``numResults``.
 
-    class FakeResp:
-        status_code = 200
-        text = ""
+    EXA is not dialled directly any more (DIG-912 §5.3): ``web_exa._post`` goes
+    through ``digifetch.HttpFetcher``, so the double has to intercept the seam's
+    ``fetch`` and hand back the :class:`digifetch.FetchResult` the seam returns
+    on success (status + text body), not a raw ``httpx`` response.
+    """
 
-        def json(self):
-            return {"results": results[: seen["payload"]["numResults"]], "searchType": "auto"}
-
-    def fake_post(url, json=None, headers=None, timeout=None):
+    def fake_fetch(self, url, **kwargs):
+        payload = kwargs.get("json")
         seen["url"] = url
-        seen["payload"] = json
-        seen.setdefault("payloads", []).append(json)
-        return FakeResp()
+        seen["payload"] = payload
+        seen.setdefault("payloads", []).append(payload)
+        return FetchResult(
+            status_code=200,
+            url=url,
+            text=json.dumps({"results": results[: payload["numResults"]], "searchType": "auto"}),
+            content_type="application/json",
+        )
 
-    monkeypatch.setattr(web_exa.httpx, "post", fake_post)
+    monkeypatch.setattr(digifetch.HttpFetcher, "fetch", fake_fetch)
 
 
 @pytest.fixture

@@ -156,4 +156,36 @@ describe('registerLiveRoutes', () => {
     expect(body.provenance.source).toBe('market_api');
     expect(body.provenance.contract).toBeNull();
   });
+
+  it('never wears a market_api badge when no market data was read', async () => {
+    const handlers = new Map<string, (req: Request) => Promise<Response>>();
+    registerLiveRoutes((path, handler) => handlers.set(path, handler), {
+      loadLiveBook: async () => ({
+        positions: [
+          {
+            ticker: 'XLV',
+            weightPct: 20,
+            markPrice: null,
+            effectivePrice: null,
+            isLive: false,
+            metricsAsOf: null,
+            livePriceDate: null,
+          },
+        ],
+        navHistory: NAV6,
+        benchmarkHistory: [],
+        benchmarkTicker: 'SPY',
+      }),
+    });
+    const res = await handlers.get('/kpis/live')!(new Request('https://api.test/kpis/live'));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      data: { quote_date: string | null; overlay_eligible: boolean };
+      provenance: { source: string; marks: string };
+    };
+    expect(body.provenance.marks).toBe('unavailable');
+    expect(body.provenance.source).not.toBe('market_api');
+    expect(body.data.quote_date).toBeNull();
+    expect(body.data.overlay_eligible).toBe(false);
+  });
 });
