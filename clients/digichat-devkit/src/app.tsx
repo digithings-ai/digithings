@@ -303,6 +303,8 @@ export function App() {
   useKeyboard((key) => onKey.current(key));
 
   const sideWidth = Math.max(40, Math.min(54, Math.floor((width || 120) * 0.36)));
+  // right column = terminal minus the side panel and its right border, minus its own padding
+  const contentWidth = Math.max(8, (width || 120) - sideWidth - 2);
   // header 2 + section 2 + counter 2 + footer 2 (a hairline row each)
   const visible = Math.max(4, (height || 32) - 8 - WORDMARK_ROWS);
   const start = windowStart(rows.length, side, visible);
@@ -352,7 +354,7 @@ export function App() {
           </box>
         </box>
         <box flexGrow={1} flexDirection="column" backgroundColor={BG} paddingLeft={1} paddingRight={1}>
-          <ChromeRows view={view} detail={read.detail} turns={turns} reveal={reveal} blink={blink} accent={accent} />
+          <ChromeRows view={view} detail={read.detail} turns={turns} reveal={reveal} blink={blink} accent={accent} width={contentWidth} />
           {view.gate ? (
             <box height={1} backgroundColor={BG}>
               <text fg={MUTE}>{`· gate ${view.gate}`}</text>
@@ -360,12 +362,12 @@ export function App() {
           ) : null}
           {view.chips.length > 0 ? (
             <box height={1} backgroundColor={BG}>
-              <text fg={MUTE}>{`· ${view.chips.join("  ")}`}</text>
+              <text fg={MUTE}>{clip(`· ${view.chips.join("  ")}`, contentWidth)}</text>
             </box>
           ) : null}
           {view.issues.map((issue) => (
             <box key={issue} height={1} backgroundColor={BG}>
-              <text fg={MUTE}>{`· ${issue}`}</text>
+              <text fg={MUTE}>{clip(`· ${issue}`, contentWidth)}</text>
             </box>
           ))}
           <box flexGrow={1} border borderColor={HAIR} flexDirection="column" backgroundColor={BG} paddingLeft={1} paddingRight={1} overflow="hidden">
@@ -422,6 +424,7 @@ function ChromeRows({
   reveal,
   blink,
   accent,
+  width,
 }: {
   view: LiveView;
   detail: string;
@@ -429,6 +432,7 @@ function ChromeRows({
   reveal: number;
   blink: boolean;
   accent: string;
+  width: number;
 }) {
   const chrome = mainChrome(view, detail, turns);
   const title = chrome.find((row) => row.slot === "title")?.text ?? "—";
@@ -442,22 +446,22 @@ function ChromeRows({
     <box flexDirection="column" backgroundColor={BG}>
       <box height={1} flexDirection="row" backgroundColor={BG}>
         <text fg={MUTE}>title  </text>
-        <text fg={title === "—" ? MUTE : accent}>{title}</text>
+        <text fg={title === "—" ? MUTE : accent}>{clip(title, width - 7)}</text>
       </box>
       <box height={1} backgroundColor={BG}>
-        <text fg={headline === "—" ? MUTE : INK}>{headline}</text>
+        <text fg={headline === "—" ? MUTE : INK}>{clip(headline, width)}</text>
       </box>
       <box height={1} flexDirection="row" backgroundColor={BG}>
         <text fg={MUTE}>welcome  </text>
-        <text fg={view.welcomeTitle ? INK : MUTE}>{welcomeShown}</text>
+        <text fg={view.welcomeTitle ? INK : MUTE}>{clip(welcomeShown, width - 9)}</text>
         {view.welcomeTitle && reveal < view.welcomeTitle.length && blink ? <text fg={INK}>█</text> : null}
       </box>
       <box height={1} backgroundColor={BG}>
-        <text fg={view.welcomeBody && titleDone ? SOFT : MUTE}>{titleDone ? welcomeBody : "—"}</text>
+        <text fg={view.welcomeBody && titleDone ? SOFT : MUTE}>{clip(titleDone ? welcomeBody : "—", width)}</text>
       </box>
       {view.suggestions.map((item) => (
         <box key={item} height={1} backgroundColor={BG}>
-          <text fg={MUTE}>{`${GLYPH.system} ${item}`}</text>
+          <text fg={MUTE}>{clip(`${GLYPH.system} ${item}`, width)}</text>
         </box>
       ))}
     </box>
