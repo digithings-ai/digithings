@@ -112,7 +112,7 @@ curl -s -X POST http://localhost:8002/v1/monitors/<watch_id>/trigger \
 # Read run history (newest-first, cursor-paginated)
 curl -s http://localhost:8002/v1/monitors/<watch_id>/runs?limit=5
 
-# Tick all due + enabled watches (digiclaw wake-up clock)
+# Tick all due + enabled watches (digibot wake-up clock)
 curl -s -X POST http://localhost:8002/v1/monitors/tick
 ```
 

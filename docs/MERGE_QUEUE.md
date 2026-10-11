@@ -100,7 +100,7 @@ alternative is a queue that any agent holding a token could green-light its own 
 **Required check names are per repo, and a name that matches nothing is called out
 separately.** The two repos in this org report different names for the same idea:
 `twelve-x` runs one job called `test`, while `digithings` drives every suite through
-reusable workflows, so GitHub reports `digibase / test`, `digiclaw / test` and ten
+reusable workflows, so GitHub reports `digibase / test`, `digibot / test` and ten
 more, and names nothing `test` at all. A single global list can therefore only be
 right for one of them — and when it is wrong it is *silently* wrong, because an
 unmatched required name produces `required check 'test' has not reported`, which is

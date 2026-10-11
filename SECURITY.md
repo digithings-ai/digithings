@@ -147,7 +147,7 @@ Every pull request and every push to `develop`/`main` runs
 
 If you need to reach the stack from outside the host, use **Tailscale** or **Cloudflare Tunnel** rather than exposing ports publicly. `DIGICHAT_PUBLISH_HOST=0.0.0.0` is documented as an escape hatch for LAN exposure but should still sit behind a VPN or tunnel — never on the public internet.
 
-An edge gateway (currently digiclaw's scope) is the intended single Internet-facing surface: OIDC or mTLS, session binding, global rate limits, with digigraph and the verticals kept on loopback or private networks behind it.
+An edge gateway (currently digibot's scope) is the intended single Internet-facing surface: OIDC or mTLS, session binding, global rate limits, with digigraph and the verticals kept on loopback or private networks behind it.
 
 ## Rate limiting (auth paths)
 
@@ -230,7 +230,7 @@ Every Python component is scanned on every PR, every push to `main`/`develop`, a
 
 - **Blocks merge:** any finding with OSV severity **HIGH** or **CRITICAL** (CVSS ≥ 7.0).
 - **Warn-only:** findings at **MEDIUM** or **LOW** severity, and findings with unknown severity — surfaced via `::warning::` annotations on the PR, not gated.
-- **Scope:** `digibase`, `digigraph`, `digiquant`, `digisearch`, `digitrace`, `digikey`, `digiclaw`. Each component is installed with its `[dev]` extras and audited against the resolved transitive closure. `digiquant[nautilus]` is excluded (tracked in #42).
+- **Scope:** `digibase`, `digigraph`, `digiquant`, `digisearch`, `digitrace`, `digikey`, `digibot`. Each component is installed with its `[dev]` extras and audited against the resolved transitive closure. `digiquant[nautilus]` is excluded (tracked in #42).
 
 The JS workspaces are covered by the sibling [`npm audit` workflow](.github/workflows/security-npm-audit.yml) on the same cadence, auditing the whole `apps/*` + `packages/*` closure from the single root `package-lock.json`.
 

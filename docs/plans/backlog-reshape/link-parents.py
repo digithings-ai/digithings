@@ -24,7 +24,7 @@ LINKS = {
     297: [300, 314, 315, 316, 317, 318, 319, 320],
     # Website live demos
     174: [266, 261, 200, 204, 299, 301],
-    # digiclaw (reduced scope)
+    # digibot (reduced scope)
     173: [216, 217, 218, 220, 221],
     # digikey SSO federation
     175: [206, 207, 208, 209, 210, 211],

@@ -26,7 +26,7 @@ paths and aliases from here.
 | `apps/reference` | `apps/reference` | the design canon |
 | `apps/digichat` | `apps/digichat` | out of scope for the rebuild, moved for consistency; nested `cli/` + `reference/` ride along (not workspaces) |
 | `apps/digichat-cloudflare` / `apps/digithings-cron` / `apps/digithings-stack-cloudflare` | same names under `cloudflare/` | Workers — `apps/` vs a `workers/` tier is a decision |
-| *(unchanged)* | `digigraph/ digiquant/ digikey/ digisearch/ digismith/ digiclaw/ digibase/ digivault/ digiskills/ …` | Python services are not part of this move |
+| *(unchanged)* | `digigraph/ digiquant/ digikey/ digisearch/ digismith/ digibot/ digibase/ digivault/ digiskills/ …` | Python services are not part of this move |
 | *(unchanged)* | `scripts/`, `.github/`, `docs/`, `Makefile` | scripts stay at root; their *contents* change |
 
 `cloudflare/` does **not** fully dissolve: `scripts/build-manifest.mjs`, docs and

@@ -62,7 +62,7 @@ services:
     pull_policy: always
 
   heartbeat:
-    image: ghcr.io/digithings-ai/digiclaw:${DIGI_IMAGE_TAG:-latest}
+    image: ghcr.io/digithings-ai/digibot:${DIGI_IMAGE_TAG:-latest}
     build: !reset null
     pull_policy: always
 

@@ -213,7 +213,7 @@ Desired mixes stay valid as **targets**:
 - Human gates: live venues refused; `DIGIQUANT_EXECUTION_ROUTING` default off; `digiquant/brokers/` untouched without explicit human approval; twelve-x does not execute.
 - Clock ownership: `digithings-cron` dispatches both digithings and twelve-x jobs. Graphs do not grow private schedulers.
 - Service auth: digikey for digithings service calls. The twelve-x Supabase session path in `apps/dashboard/lib/twelve-x/session.ts` stays the FX Hub access path. This ADR does not fold it into digikey.
-- digisearch wake: `digiclaw` `web-watch-tick` posts to digisearch `/v1/monitors/tick` with a digikey scope `digisearch:query`. That is a platform monitor clock, not a finance stage. Stage modules must not start their own digisearch wake loops.
+- digisearch wake: `digibot` `web-watch-tick` posts to digisearch `/v1/monitors/tick` with a digikey scope `digisearch:query`. That is a platform monitor clock, not a finance stage. Stage modules must not start their own digisearch wake loops.
 - Secrets: site credentials and cookies stay in the consumer that logs in (Prime Market, Trading Economics). `digifetch` still reads no environment variables. [ADR-0029](0029-secrets-management.md) stays the secrets proposal; this ADR adds no secret names.
 - LLM routing target remains digillm where a module already uses it. This ADR does not migrate the digiquant house prompts onto digillm.
 

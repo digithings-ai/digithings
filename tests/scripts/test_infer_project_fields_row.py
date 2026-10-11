@@ -86,7 +86,7 @@ def test_retired_phase_labels_fall_back_to_default(mod: Any, label: str) -> None
         ("component:digiquant", "digiquant"),
         ("component:digikey", "digikey"),
         ("component:digismith", "digismith"),
-        ("component:digiclaw", "digiclaw"),
+        ("component:digibot", "digibot"),
         ("component:digibase", "digibase"),
         ("component:digivault", "digivault"),
     ],

@@ -21,10 +21,10 @@ from digisearch.web_search.citation import Citation
 class WatchSchedule(BaseModel):
     """When a watch runs.
 
-    ``cron`` uses the same 5-field grammar as ``digiclaw/cron.py`` (grammar
+    ``cron`` uses the same 5-field grammar as ``digibot/cron.py`` (grammar
     validation happens at the runner seam, not here). ``interval_seconds``
-    mirrors digiclaw's continuous sleep; the ``ge=60`` floor is deliberately
-    stricter than digiclaw's own ``ge=1``.
+    mirrors digibot's continuous sleep; the ``ge=60`` floor is deliberately
+    stricter than digibot's own ``ge=1``.
     """
 
     model_config = ConfigDict(extra="forbid")

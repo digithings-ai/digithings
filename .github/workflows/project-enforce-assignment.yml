@@ -86,7 +86,7 @@ jobs:
 
               Every issue in this repo must be tracked on one of the module project boards:
               - [digithings](https://github.com/orgs/digithings-ai/projects/1) — cross-cutting, epics, integration
-              - Module boards (digiquant, digigraph, digisearch, digichat, digikey, digismith, digiclaw, digibase)
+              - Module boards (digiquant, digigraph, digisearch, digichat, digikey, digismith, digibot, digibase)
 
               Apply a `component:` label and the routing workflow will assign it automatically.
               """)

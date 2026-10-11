@@ -236,7 +236,7 @@ def test_required_checks_are_resolved_per_repo() -> None:
     """Two repos in this org report different names, so one global list cannot serve both.
 
     `digithings` runs every test suite through reusable workflows, so GitHub reports
-    each as `<caller> / test` — `digibase / test`, `digiclaw / test`, and eleven more —
+    each as `<caller> / test` — `digibase / test`, `digibot / test`, and eleven more —
     and names nothing `test`. `twelve-x` runs one job and does report a bare `test`.
     A single hardcoded list is therefore wrong for one of them, and DIG-690 measured
     which: 28 PRs blocked, every one of them on `required check 'test' has not
@@ -391,8 +391,8 @@ def test_the_misconfiguration_announcement_names_what_it_meant_instead_of_a_wall
     assert "nearest:" not in err
     assert "gh pr checks" in err
 
-    near = mq._near_misses(("test",), ("digibase / test", "digiclaw / test", "path-filter"))
-    assert near[:2] == ["digibase / test", "digiclaw / test"]
+    near = mq._near_misses(("test",), ("digibase / test", "digibot / test", "path-filter"))
+    assert near[:2] == ["digibase / test", "digibot / test"]
     assert "path-filter" not in near, "no shared word; listing it would be noise"
     # Word-based, so an unrelated check that merely contains the letters is excluded.
     assert mq._near_misses(("mypy",), ("mypy — digibase + digikey", "npm-audit")) == [

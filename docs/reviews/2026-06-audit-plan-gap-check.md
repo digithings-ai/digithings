@@ -17,13 +17,13 @@
 | **P0 (12 AUDIT items)** | **12 / 12** mapped; **3** need human gate before merge (embed, exec sandbox, Redis/auth) |
 | **Deferred in plan §7** | **6** AUDIT rows (041–043, 058 full, 059 full, 100 conditional) — track as follow-up issues |
 
-**Verdict:** The implementation plan is **complete for the master inventory**. Gaps are **(a)** subagent findings never promoted to `AUDIT-*`, **(b)** thin DOC rows (ROADMAP, digiclaw ARCHITECTURE, `tests/ds` markers), and **(c)** ops/org work (REM-041–043) marked defer. **Recommend adding 6–8 REM items** (below) before wave-0 execution.
+**Verdict:** The implementation plan is **complete for the master inventory**. Gaps are **(a)** subagent findings never promoted to `AUDIT-*`, **(b)** thin DOC rows (ROADMAP, digibot ARCHITECTURE, `tests/ds` markers), and **(c)** ops/org work (REM-041–043) marked defer. **Recommend adding 6–8 REM items** (below) before wave-0 execution.
 
 **Critical gaps before execution**
 
 1. **Unmarked `tests/ds/` + edgar tests** — cited in audit §3 scripts; no `AUDIT-*` or `REM-*`.
 2. **DOC-02 `ROADMAP.md`** — only `SECURITY.md` in REM-016; roadmap still understates revocation.
-3. **DOC-04 / DOC-05 architecture files** — REM-112 targets `digiquant/AGENTS.md` only; `digiquant/ARCHITECTURE.md` and `digiclaw/ARCHITECTURE.md` ADDM/auth wording not explicit.
+3. **DOC-04 / DOC-05 architecture files** — REM-112 targets `digiquant/AGENTS.md` only; `digiquant/ARCHITECTURE.md` and `digibot/ARCHITECTURE.md` ADDM/auth wording not explicit.
 4. **digigraph MCP `workflow` tool** — bypasses `DigiAuthMiddleware` (audit §3 digigraph); bind fix (REM-002) does not document tool-level auth.
 5. **digichat in monorepo test gate** — `make test-unit` omission (audit §3 digichat); REM-122 fixes `AGENTS.md` only, not `Makefile`.
 6. **Org / quota cron** — REM-041–043 deferred; daily red noise from Atlas may persist through Phase 0.
@@ -39,7 +39,7 @@
 | AUDIT-001 | Y | REM-001 | P0 | digisearch |
 | AUDIT-002 | Y | REM-002 | P0 | digigraph |
 | AUDIT-003 | Y | REM-003 | P0 | digisearch |
-| AUDIT-004 | Y | REM-004 | P0 | digiclaw |
+| AUDIT-004 | Y | REM-004 | P0 | digibot |
 | AUDIT-005 | Y | REM-005 | P0 | digikey |
 | AUDIT-006 | Y | REM-006 | P0 | workflows |
 | AUDIT-007 | Y | REM-007 | P0 | workflows |
@@ -107,9 +107,9 @@
 | AUDIT-069 | Y | REM-069 | P2 | digibase |
 | AUDIT-070 | Y | REM-070 | P2 | digismith |
 | AUDIT-071 | Y | REM-071 | P2 | digismith |
-| AUDIT-072 | Y | REM-072 | P2 | digiclaw |
-| AUDIT-073 | Y | REM-073 | P2 | digiclaw |
-| AUDIT-074 | Y | REM-074 | P2 | digiclaw |
+| AUDIT-072 | Y | REM-072 | P2 | digibot |
+| AUDIT-073 | Y | REM-073 | P2 | digibot |
+| AUDIT-074 | Y | REM-074 | P2 | digibot |
 | AUDIT-075 | Y | REM-075 | P2 | digichat |
 | AUDIT-076 | Y | REM-076 | P2 | digichat |
 | AUDIT-077 | Y | REM-077 | P2 | digichat |
@@ -154,7 +154,7 @@
 | DOC-02 | SECURITY + **ROADMAP** revocation | **Partial** | REM-016 | `ROADMAP.md:27` not named |
 | DOC-03 | ADR-0007 status `proposed` | Y | REM-111 | — |
 | DOC-04 | digiquant AGENTS ADDM stub | **Partial** | REM-112, 028, 074 | `digiquant/ARCHITECTURE.md` not explicit |
-| DOC-05 | digiclaw AGENTS + **ARCHITECTURE** ADDM | **Partial** | REM-074, 112 | ARCHITECTURE + “auth-blocked” narrative thin |
+| DOC-05 | digibot AGENTS + **ARCHITECTURE** ADDM | **Partial** | REM-074, 112 | ARCHITECTURE + “auth-blocked” narrative thin |
 | DOC-06 | HEARTBEAT.md Docker path | Y | REM-072 | — |
 | DOC-07 | digigraph `require_scope` per route | Y | REM-113 | — |
 | DOC-08 | data_engineer registration gate | Y | REM-114, 049 | — |
@@ -214,7 +214,7 @@ Sourced from audit **§3 module tables** and **§5 CI matrix** (~297 raw → 105
 | G-05 | Medium | digichat | **`digichat-test.yml` not in `make test-unit`** | REM-122 doc-only; **no Makefile REM** |
 | G-06 | Medium | workflows | **Double CI** — path workflows + `ci.yml` both run on some PRs | **None** |
 | G-07 | Medium | digiquant | **`digiquant/ARCHITECTURE.md`** ADDM / drift docs stale (DOC-04 scope) | REM-112 → AGENTS only |
-| G-08 | Medium | digiclaw | **`digiclaw/ARCHITECTURE.md`** ADDM + auth-blocked narrative (DOC-05) | REM-074 → AGENTS only |
+| G-08 | Medium | digibot | **`digibot/ARCHITECTURE.md`** ADDM + auth-blocked narrative (DOC-05) | REM-074 → AGENTS only |
 | G-09 | Low | docs | **`ROADMAP.md:27`** revocation understated (DOC-02) | REM-016 → SECURITY only |
 | G-10 | Low | digigraph | **`vertical` hub** tools untested (named in §3) | REM-053 bundle |
 | G-11 | Low | landings | **Cloudflare Olympus deploy** without monorepo gate | REM-038 partial (CI only) |
@@ -234,7 +234,7 @@ Add to implementation plan as **`REM-138` … `REM-145`** (or fold into wave-0 b
 | **REM-140** | G-04 | Locate and mark **`edgar`** (or named) tests with `@pytest.mark.unit` | 2 | S |
 | **REM-141** | DOC-02 | Update **`ROADMAP.md`** revocation / Redis opt-in (with REM-016) | 4 | S |
 | **REM-142** | DOC-04 | Fix **`digiquant/ARCHITECTURE.md`** ADDM / drift sections | 4 | S |
-| **REM-143** | DOC-05 | Fix **`digiclaw/ARCHITECTURE.md`** ADDM + auth-blocked vs logic-blocked | 4 | S |
+| **REM-143** | DOC-05 | Fix **`digibot/ARCHITECTURE.md`** ADDM + auth-blocked vs logic-blocked | 4 | S |
 | **REM-144** | G-05 | Wire **`apps/digichat`** into `make test-unit` or documented aggregate target | 2 | S |
 | **REM-145** | G-06 | Document or dedupe **double workflow** triggers (`ci.yml` vs path filters) | 2 | S |
 

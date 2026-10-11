@@ -39,7 +39,7 @@ py-modules = []
 [tool.uv.workspace]
 members = [
   "digibase",
-  "digiclaw",
+  "digibot",
   "digifetch",
   "digigraph",
   "digikey",
@@ -54,7 +54,7 @@ members = [
 
 [tool.uv.sources]
 digibase = { workspace = true }
-digiclaw = { workspace = true }
+digibot = { workspace = true }
 digifetch = { workspace = true }
 digigraph = { workspace = true }
 digikey = { workspace = true }

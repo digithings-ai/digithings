@@ -20,9 +20,9 @@ owned by digikey.
 ## REST endpoints
 
 - `GET /health` → `{"status": "ok", "service": "digigraph"}` (legacy,
-  kept for Docker/digiclaw); `GET /healthz` → `{"ok": true}` (preferred
+  kept for Docker/digibot); `GET /healthz` → `{"ok": true}` (preferred
   liveness, auth- and rate-limit-exempt).
-- `POST /workflow` — run the LangGraph workflow (digiclaw skill contract);
+- `POST /workflow` — run the LangGraph workflow (digibot skill contract);
   dedicated rate-limit budget shared with chat completions.
 - `POST /v1/chat/completions` (mounted `v1` router) — OpenAI-compatible
   chat for Open WebUI / digichat, with SSE streaming via background thread

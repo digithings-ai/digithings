@@ -82,7 +82,7 @@ Data and state flow across the broader stack:
 
 - **digistore** holds the research library, strategy definitions, backtest results, and portfolio state.
 - **digisearch** indexes finalized research documents for semantic retrieval, so agents can pull relevant research context on demand.
-- **digiclaw** runs the research and portfolio graphs on their daily and weekly schedules autonomously — digiquant's scheduled execution layer.
+- **digibot** runs the research and portfolio graphs on their daily and weekly schedules autonomously — digiquant's scheduled execution layer.
 - **digichat** is the user-facing chat interface for querying research interactively.
 - **Dashboard** (`apps/dashboard`) is the operator surface — morning read, deliberations and risk debate, portfolio/NAV tracking — and the surface where the human approval gate will be exercised once that flow ships. See [[dashboard|dashboard.md]]. Sub-graphs live in `digiquant.dashboard` (ADR-0014, ADR-0015); product names are digiquant + research / portfolio / execution ([ADR-0026](../adr/0026-retire-olympus-atlas-hermes-kairos.md)).
 
@@ -134,7 +134,7 @@ The research methodology is defined and has been run as scheduled digigraph sub-
 ## 12-month roadmap
 
 **Months 1–3 — Research graph**
-Migrate research methodology from instruction files to deterministic, parallel digigraph sub-graph execution. Wire in digiclaw for scheduled daily, weekly, and monthly cycle triggers. Deliver the first autonomous daily digest.
+Migrate research methodology from instruction files to deterministic, parallel digigraph sub-graph execution. Wire in digibot for scheduled daily, weekly, and monthly cycle triggers. Deliver the first autonomous daily digest.
 
 **Months 3–6 — Portfolio deliberation pipeline**
 Build the full portfolio pipeline as digigraph sub-graphs: thesis construction, parallel analyst agents, portfolio manager synthesis, PyPortfolioOpt integration. Deliver portfolio output with weights and rationale driven by research.

@@ -33,7 +33,7 @@ Same as the root compose file:
 |---------|----------------|
 | `digichat` | digichat + Postgres |
 | `digivault` | digivault |
-| `heartbeat` | digiclaw loop |
+| `heartbeat` | digibot loop |
 | `litellm-cache` | Redis for LiteLLM |
 | `observability` | Prometheus + Grafana |
 
@@ -51,7 +51,7 @@ docker compose \
 
 | Variable | Default | Notes |
 |----------|---------|--------|
-| `DIGI_IMAGE_TAG` | `latest` | digikey, digigraph, digiquant, digisearch, digitrace, digivault, digiclaw |
+| `DIGI_IMAGE_TAG` | `latest` | digikey, digigraph, digiquant, digisearch, digitrace, digivault, digibot |
 | `DIGICHAT_IMAGE_TAG` | `latest` | digichat only (prefer `vX.Y.Z` from release-please) |
 
 Production: pin `DIGI_IMAGE_TAG=sha-<12-char-git-sha>` so every service matches one monorepo commit. See [RELEASES.md](../../../RELEASES.md).

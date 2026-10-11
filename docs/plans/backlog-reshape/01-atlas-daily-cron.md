@@ -13,7 +13,7 @@
 
 ## Goal
 
-Atlas refreshes its price data and recomputes daily outputs on a fixed schedule without requiring a standing scheduler service. Replaces the digiclaw cron dependency (#218) for the initial ship. When digiclaw lands later, this can be migrated — until then, GitHub Actions' `schedule:` trigger is sufficient and reliable.
+Atlas refreshes its price data and recomputes daily outputs on a fixed schedule without requiring a standing scheduler service. Replaces the digibot cron dependency (#218) for the initial ship. When digibot lands later, this can be migrated — until then, GitHub Actions' `schedule:` trigger is sufficient and reliable.
 
 ## Acceptance criteria
 
@@ -35,5 +35,5 @@ Atlas refreshes its price data and recomputes daily outputs on a fixed schedule 
 
 - Parent epic: **"Atlas daily-update backend"** (to be filed alongside).
 - Blocked-by: #149 (price pipeline migration into digiquant) — currently in-flight on `task/149-price-pipeline`.
-- Supersedes (for now): #218 (digiclaw cron scheduling) — deferred to P3 until digiclaw is load-bearing.
-- Why not digiclaw: digiclaw is an OpenClaw-wrapper agent orchestration layer designed for multiple autonomous agents needing drift/perf supervision. Atlas is a single daily job. A scheduler service is a solution looking for a problem until ≥3 recurring agent jobs exist.
+- Supersedes (for now): #218 (digibot cron scheduling) — deferred to P3 until digibot is load-bearing.
+- Why not digibot: digibot is an OpenClaw-wrapper agent orchestration layer designed for multiple autonomous agents needing drift/perf supervision. Atlas is a single daily job. A scheduler service is a solution looking for a problem until ≥3 recurring agent jobs exist.

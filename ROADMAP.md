@@ -25,7 +25,7 @@ Goal: make the ecosystem **production-credible** and **project-composable**.
 - **Observability:** Prometheus-friendly metrics, centralized dashboards; digisearch audit sink alignment.
 - **digigraph:** Auth-bound checkpoints, per-key RBAC, optional `X-Digi-Tenant` routing.
 - **digikey:** Production revocation via Redis `jti` blocklist (`DIGIKEY_BLOCKLIST_REDIS_URL`); multi-tenant RBAC remains Phase 2+.
-- **digiclaw:** MCP attachment to digigraph and richer gateway skills.
+- **digibot:** MCP attachment to digigraph and richer gateway skills.
 - **Rate limiting / cache:** Redis-backed distributed limits where today is in-process.
 
 ## Phase 3 — domain unification & ecosystem surface

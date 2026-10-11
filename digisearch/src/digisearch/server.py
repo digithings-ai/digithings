@@ -1930,7 +1930,7 @@ def api_get_monitor_run(
 
 @app.post("/v1/monitors/tick")
 def api_tick_monitors(request: Request) -> dict[str, Any]:
-    """Run every due + enabled watch once (digiclaw wake-up clock, §4.8)."""
+    """Run every due + enabled watch once (digibot wake-up clock, §4.8)."""
     store = get_monitor_store()
     runs = tick_due_watches(store=store)
     return {"runs": [run.model_dump(mode="json") for run in runs]}

@@ -11,7 +11,7 @@ okf_version: "0.2"
 - [dashboard](dashboard/)
 - [digibase](digibase/)
 - [digichat](digichat/)
-- [digiclaw](digiclaw/)
+- [digibot](digibot/)
 - [digigraph](digigraph/)
 - [digikey](digikey/)
 - [digiquant](digiquant/)

@@ -24,8 +24,8 @@ globs:
   - digibase/ARCHITECTURE.md
   - digibase/AGENTS.md
   - digibase/README.md
-  - digiclaw/ARCHITECTURE.md
-  - digiclaw/AGENTS.md
+  - digibot/ARCHITECTURE.md
+  - digibot/AGENTS.md
   - digigraph/ARCHITECTURE.md
   - digigraph/AGENTS.md
   - digikey/ARCHITECTURE.md

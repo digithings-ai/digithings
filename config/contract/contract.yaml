@@ -156,10 +156,10 @@ services:
   - zammad-mcp
 - name: heartbeat
   compose_file: docker-compose.yml
-  image: digi-digiclaw:latest
+  image: digi-digibot:latest
   build_context:
     context: .
-    dockerfile: digiclaw/Dockerfile
+    dockerfile: digibot/Dockerfile
   ports: []
   profiles:
   - heartbeat
@@ -645,17 +645,17 @@ env:
     env_example_files:
     - apps/digichat/.env.example
     compose_literal: []
-- name: DIGICLAW_AGENTS_DIR
-  description: Directory holding digiclaw agent definitions.
+- name: DIGIBOT_AGENTS_DIR
+  description: Directory holding digibot agent definitions.
   secret: false
   sources:
     wrangler_workers: []
     compose_files: []
     env_example_files: []
     compose_literal:
-    - DIGICLAW_AGENTS_DIR
-- name: DIGICLAW_DIGIKEY_API_KEY
-  description: Long-lived API key the digiclaw heartbeat agent uses.
+    - DIGIBOT_AGENTS_DIR
+- name: DIGIBOT_DIGIKEY_API_KEY
+  description: Long-lived API key the digibot heartbeat agent uses.
   secret: true
   sources:
     wrangler_workers: []
@@ -663,15 +663,15 @@ env:
     - docker-compose.yml
     env_example_files: []
     compose_literal: []
-- name: DIGICLAW_SCHEDULER_STATE
-  description: File holding the digiclaw scheduler cursor.
+- name: DIGIBOT_SCHEDULER_STATE
+  description: File holding the digibot scheduler cursor.
   secret: false
   sources:
     wrangler_workers: []
     compose_files: []
     env_example_files: []
     compose_literal:
-    - DIGICLAW_SCHEDULER_STATE
+    - DIGIBOT_SCHEDULER_STATE
 - name: DIGIGRAPH_HOST
   description: Host the digigraph dev server binds to.
   secret: false
@@ -1166,7 +1166,7 @@ env:
     - infra/digichat-release/compose.profile-a.yml
     - infra/digichat-release/compose.profile-a-bundle.yml
 - name: DIGI_WORKSPACE
-  description: Workspace root for digiclaw.
+  description: Workspace root for digibot.
   secret: false
   sources:
     wrangler_workers: []

@@ -16,7 +16,7 @@ Components and ports:
 - `digivault` (8004) — Obsidian-style markdown vault management
 - `digikey` (8005) — JWT + scoped API key auth plane
 - `digichat` (3005) — Next.js BFF + React chat UI
-- `digiclaw` — heartbeat, audit (JSONL), gateway
+- `digibot` — heartbeat, audit (JSONL), gateway
 - `digibase` — shared HTTP/audit **library** (Python package, not a service)
 - `digillm`, `digifetch`, `digiskills` — supporting libraries
 - `frontend/dashboard` — digiquant operator surface

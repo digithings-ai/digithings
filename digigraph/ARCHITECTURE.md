@@ -9,13 +9,13 @@
 
 ## 1. Overview
 
-digigraph is the central orchestration brain of the digithings stack. Every user request flows through it: from digiclaw (gateway), from digichat (Next.js BFF), from Open WebUI (OpenAI-compatible model), or directly from Claude Desktop (MCP). digigraph owns three distinct roles:
+digigraph is the central orchestration brain of the digithings stack. Every user request flows through it: from digibot (gateway), from digichat (Next.js BFF), from Open WebUI (OpenAI-compatible model), or directly from Claude Desktop (MCP). digigraph owns three distinct roles:
 
 1. **LangGraph state machine.** Maintains a compiled `StateGraph[WorkflowState]` that routes through research, strategy validation, backtest, and optional optimize nodes. Profile-driven conditional edges control which path executes.
 
 2. **Tool registry and dispatcher.** Provides an in-process registry of named orchestrator tools (search, agents, digistore introspection, planning primitives). Verticals (digisearch, digiquant) own their own OpenAI tool schemas, published via `POST /v1/orchestrator_tools`; digigraph fetches those schemas lazily and invokes them via `POST /v1/orchestrator_invoke`.
 
-3. **HTTP + MCP API surface.** Exposes a `POST /workflow` endpoint (digiclaw custom skill), a `POST /v1/chat/completions` endpoint (Open WebUI / digichat), thread state APIs (opt-in), and an MCP server for Claude Desktop and digiclaw agent integration.
+3. **HTTP + MCP API surface.** Exposes a `POST /workflow` endpoint (digibot custom skill), a `POST /v1/chat/completions` endpoint (Open WebUI / digichat), thread state APIs (opt-in), and an MCP server for Claude Desktop and digibot agent integration.
 
 digigraph is deliberately minimal as a hub: it does not implement the quant pipeline ordering (owned by digiquant) or tiered RAG (owned by digisearch). It coordinates them.
 
@@ -70,7 +70,7 @@ The following is built and functional as of this architecture review (March 2026
 |--------|------|------|------------|-------|
 | `GET` | `/health` | None | Unlimited | Legacy health check (back-compat; prefer `/healthz`) |
 | `GET` | `/healthz` | None | Unlimited | Liveness probe — returns `{"ok": true}`; see AGENTS.md "Liveness vs status" |
-| `POST` | `/workflow` | digikey JWT (optional) | 10 req/min/IP | digiclaw custom skill; body: `WorkflowRequest` |
+| `POST` | `/workflow` | digikey JWT (optional) | 10 req/min/IP | digibot custom skill; body: `WorkflowRequest` |
 | `GET` | `/v1/models` | digikey JWT (optional) | 30 req/min/IP | OpenAI model list; returns `digigraph-rag` |
 | `GET` | `/v1/model-info` | digikey JWT (optional) | 30 req/min/IP | Current model + mode |
 | `POST` | `/v1/chat/completions` | digikey JWT (optional) | 60 req/min/IP | OpenAI chat completions; body: `ChatCompletionRequest`; supports `stream: true` |
@@ -1174,7 +1174,7 @@ The following are explicitly documented as roadmap items:
 | **Per-user RBAC** | JWT subject not bound to checkpoint or tool access | Shared `thread_id` namespace; allowlists are per-request not per-user |
 | **Auth-bound checkpoints** | `thread_id` is caller-supplied; no ownership enforcement | Trust the client not to use other users' thread IDs |
 | **Request cancellation** | No mechanism to cancel in-flight streaming workflows | Background threads run to completion |
-| **digiclaw subgraph exposure** | digiclaw can attach only to the hub, not to vertical MCP servers directly | digiclaw calls `/workflow` only |
+| **digibot subgraph exposure** | digibot can attach only to the hub, not to vertical MCP servers directly | digibot calls `/workflow` only |
 
 ---
 

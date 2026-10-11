@@ -198,7 +198,7 @@ def test_nested_wrangler_and_two_level_dockerfile(guard: Any) -> None:
         # Under scripts/, which the local exemption covers by path.
         "scripts/zammad_mcp/Dockerfile.mcp",
         # Deeper than the two levels the old `*/*/Dockerfile` reached.
-        "infra/containers/Dockerfile.digiclaw",
+        "infra/containers/Dockerfile.digibot",
         "apps/digichat/Dockerfile.prod",
     ],
 )

@@ -38,7 +38,7 @@ jobs:
           - digisearch
           - digitrace
           - digikey
-          - digiclaw
+          - digibot
     steps:
       - uses: actions/checkout@v4
 

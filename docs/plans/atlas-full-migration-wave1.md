@@ -5,7 +5,7 @@
 **Scope:** Complete the Atlas → digigraph migration (research + portfolio + deliberation), add LiteLLM batch-API optimization, add GitHub Actions scheduling, migrate price pipeline to digiquant, and deploy to production.
 
 **Confirmed decisions:**
-- Scheduling: GitHub Actions first. digiclaw/OpenClaw deferred.
+- Scheduling: GitHub Actions first. digibot/OpenClaw deferred.
 - Persistence: **new first-class tables** for thesis + deliberation (migration 024).
 - Batching: LiteLLM Anthropic Batches pass-through. Provider-independent deferred.
 - Scope: research + thesis validation + vehicle mapping + deliberation + PM memo + rebalance + deep-dive recess.

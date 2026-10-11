@@ -6,7 +6,7 @@ Snapshot taken during project-management reorg session.
 
 **CI orchestration + tests (10):**
 - `ci.yml` — master orchestrator, calls the 8 module test workflows via `workflow_call`, plus `pip-audit`, `ruff-and-scripts`, `compose-validate`.
-- `digibase-test.yml`, `digichat-test.yml`, `digiclaw-test.yml`, `digigraph-test.yml`, `digikey-test.yml`, `digiquant-test.yml`, `digisearch-test.yml`, `digismith-test.yml` — per-module tests. Triggers: `workflow_call` + path-filtered `push/pull_request` (intentional dual-trigger; path filters keep it efficient).
+- `digibase-test.yml`, `digichat-test.yml`, `digibot-test.yml`, `digigraph-test.yml`, `digikey-test.yml`, `digiquant-test.yml`, `digisearch-test.yml`, `digismith-test.yml` — per-module tests. Triggers: `workflow_call` + path-filtered `push/pull_request` (intentional dual-trigger; path filters keep it efficient).
 - `type-check.yml` — mypy for digibase + digikey.
 
 **Security (2):**

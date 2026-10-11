@@ -50,7 +50,7 @@ Flagship vertical: **quantitative finance** — a "hedge-fund in a box" where on
 | **digichat** | Next.js BFF + chat UI (Auth.js, machine API keys) | `digichat/ARCHITECTURE.md` (nested repo) |
 | **digikey** | JWT + scoped API-key auth plane | [digikey/ARCHITECTURE.md](digikey/ARCHITECTURE.md) |
 | **digitrace** | LangSmith-aligned tracing helpers; health + `/v1/status` | [digitrace/ARCHITECTURE.md](digitrace/ARCHITECTURE.md) |
-| **digiclaw** | Heartbeat, audit, MCP skill → digigraph | [digiclaw/ARCHITECTURE.md](digiclaw/ARCHITECTURE.md) |
+| **digibot** | Heartbeat, audit, MCP skill → digigraph | [digibot/ARCHITECTURE.md](digibot/ARCHITECTURE.md) |
 | **digibase** | Shared HTTP/audit library + future data-plane service | [digibase/ARCHITECTURE.md](digibase/ARCHITECTURE.md) |
 | **digivault** | Obsidian-style markdown vault management (frontmatter, wikilinks, backlinks) | [digivault/ARCHITECTURE.md](digivault/ARCHITECTURE.md) |
 | **digillm** | Provider-agnostic LLM client/routing library | [digillm/ARCHITECTURE.md](digillm/ARCHITECTURE.md) |
@@ -134,7 +134,7 @@ digithings/
 ├── digichat/     # Next.js BFF + chat UI
 ├── digikey/      # API keys + JWT
 ├── digitrace/    # Tracing helpers + status API
-├── digiclaw/     # Heartbeat, audit, MCP skill
+├── digibot/     # Heartbeat, audit, MCP skill
 ├── digibase/     # Shared HTTP/audit library
 ├── config/       # LiteLLM, model modes
 ├── projects/     # Confidential pilots/engagements (gitignored)

@@ -288,7 +288,7 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     prose only; RecursiveChunker unchanged.
     Hashes only (count still 60) re-recorded for #4165 (orchestrator web_search recency_days
     mapping note in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
-    Hashes only (count still 60) for the hosted-MCP docs pass: the digisearch MCP tool-table rows (digisearch_query -> semantic, digisearch_research_turn -> research_turn) and     the digiclaw attachment prose in ARCHITECTURE.md — fixture prose only.
+    Hashes only (count still 60) for the hosted-MCP docs pass: the digisearch MCP tool-table rows (digisearch_query -> semantic, digisearch_research_turn -> research_turn) and     the digibot attachment prose in ARCHITECTURE.md — fixture prose only.
     Re-recorded at count 61 for #4246 (MCP tool-table naming corrections plus merged
     develop prose in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
     Re-recorded at count 115 for the promotion sync union (module/digisearch <- develop):
@@ -335,7 +335,7 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Hashes only (count still 127) re-recorded for #4756 (model-id provider
     value in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
     Hashes only (count still 127) re-recorded for #4973 (grokipedia MCP tool
-    rows + module-map / digiclaw-attach notes in ARCHITECTURE.md) — fixture
+    rows + module-map / digibot-attach notes in ARCHITECTURE.md) — fixture
     prose only; RecursiveChunker unchanged.
     Re-recorded at count 131 for #5045 (the Unseeded corpora section, the
     /health degraded contract, the ingest exit-code block, and the fan-out

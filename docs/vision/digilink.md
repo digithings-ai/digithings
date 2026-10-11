@@ -46,13 +46,13 @@ The protocol translation layer. A capability is added to the registry; digilink 
 
 A client running Claude Desktop calls digiquant backtest tools via MCP. Another client running automated scripts uses the generated CLI. An enterprise integration uses the REST API. A third-party webhook triggers a digisearch ingestion run. Same underlying capability, zero rebuilding, no vendor lock-in.
 
-digilink replaces the deferred "OpenClaw gateway" concept from the early digiclaw roadmap. digiclaw now focuses purely on agent orchestration and scheduled execution. digilink owns the connector layer.
+digilink replaces the deferred "OpenClaw gateway" concept from the early digibot roadmap. digibot now focuses purely on agent orchestration and scheduled execution. digilink owns the connector layer.
 
 ## Capabilities — Current
 
 **Not yet implemented as a standalone module.** This is the honest current state.
 
-Today, individual digithings services expose their own REST APIs independently. digigraph has an MCP server. digiclaw has an MCP skill interface. These exist and work. What does not yet exist is the unified capability registry and the automated adapter generation that digilink will provide — the layer that makes "add a capability once, expose it everywhere" true across the entire ecosystem rather than per-module.
+Today, individual digithings services expose their own REST APIs independently. digigraph has an MCP server. digibot has an MCP skill interface. These exist and work. What does not yet exist is the unified capability registry and the automated adapter generation that digilink will provide — the layer that makes "add a capability once, expose it everywhere" true across the entire ecosystem rather than per-module.
 
 The protocol translation problem is solved piecemeal today. digilink makes it systematic.
 

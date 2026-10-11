@@ -25,7 +25,7 @@ jobs:
       digikey: ${{ steps.filter.outputs.digikey }}
       digitrace: ${{ steps.filter.outputs.digitrace }}
       digivault: ${{ steps.filter.outputs.digivault }}
-      digiclaw: ${{ steps.filter.outputs.digiclaw }}
+      digibot: ${{ steps.filter.outputs.digibot }}
       digivoice: ${{ steps.filter.outputs.digivoice }}
       digiquant: ${{ steps.filter.outputs.digiquant }}
       digisearch: ${{ steps.filter.outputs.digisearch }}
@@ -71,10 +71,10 @@ jobs:
               - 'digivault/**'
               - 'tests/dv/**'
               - '.github/workflows/test-digivault.yml'
-            digiclaw:
-              - 'digiclaw/**'
+            digibot:
+              - 'digibot/**'
               - 'tests/dc/**'
-              - '.github/workflows/test-digiclaw.yml'
+              - '.github/workflows/test-digibot.yml'
             digivoice:
               - 'digivoice/**'
               - 'tests/dvo/**'
@@ -186,7 +186,7 @@ jobs:
               - '.github/workflows/pipeline-digiquant.yml'
             ruff_and_scripts:
               - 'digibase/**'
-              - 'digiclaw/**'
+              - 'digibot/**'
               - 'digigraph/**'
               - 'digiquant/**'
               - 'digisearch/**'
@@ -337,10 +337,10 @@ jobs:
     if: needs.changes.outputs.digivault == 'true'
     uses: ./.github/workflows/test-digivault.yml
 
-  digiclaw:
+  digibot:
     needs: changes
-    if: needs.changes.outputs.digiclaw == 'true'
-    uses: ./.github/workflows/test-digiclaw.yml
+    if: needs.changes.outputs.digibot == 'true'
+    uses: ./.github/workflows/test-digibot.yml
 
   digivoice:
     needs: changes
@@ -501,7 +501,7 @@ jobs:
       - name: Ruff (all src + tests)
         run: |
           uv run --frozen --no-sync ruff check \
-            digibase/src digiclaw/src digigraph/src digiquant/src \
+            digibase/src digibot/src digigraph/src digiquant/src \
             digisearch/src digitrace/src tests
 
       - name: Pytest (scripts + config + agents + integration hops + baseline)
@@ -711,7 +711,7 @@ jobs:
       - digikey
       - digitrace
       - digivault
-      - digiclaw
+      - digibot
       - digivoice
       - digiquant
       - digisearch

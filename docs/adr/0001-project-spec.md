@@ -5,7 +5,7 @@
 
 ## Context
 
-digithings has grown into eight components (`digigraph`, `digisearch`, `digiquant`, `digichat`, `digikey`, `digiclaw`, `digismith`, `digibase`). The first real client engagement — the **client pilot** (`projects/client-pilot/`) — demonstrated a reusable pattern for composing a subset of components into a running stack:
+digithings has grown into eight components (`digigraph`, `digisearch`, `digiquant`, `digichat`, `digikey`, `digibot`, `digismith`, `digibase`). The first real client engagement — the **client pilot** (`projects/client-pilot/`) — demonstrated a reusable pattern for composing a subset of components into a running stack:
 
 - `config.yaml` — project metadata, enabled agents, LLM mode, system prompts, run-storage path, indexes directory, MCP config, service URLs.
 - `indexes/*.yaml` — per-index schema/field mapping.

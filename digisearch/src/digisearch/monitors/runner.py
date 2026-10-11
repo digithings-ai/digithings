@@ -52,7 +52,7 @@ OFF end-to-end (§5).
 
 ``is_due`` owns all timezone conversion: ``now`` (assumed UTC when naive) and
 ``last_run_at`` are normalized to the watch's ``schedule.timezone``. Cron mode
-imports the grammar from :mod:`digiclaw.cron` (``parse_cron`` +
+imports the grammar from :mod:`digibot.cron` (``parse_cron`` +
 ``CronExpression.matches``) — never a copy — and suppresses a second run inside
 the same matching minute; interval mode fires when ``last_run_at + interval <=
 now``, with a missing ``last_run_at`` meaning due.
@@ -65,7 +65,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, cast
 from zoneinfo import ZoneInfo
 
-from digiclaw.cron import parse_cron
+from digibot.cron import parse_cron
 
 from digisearch.monitors.dedup import dedup_results
 from digisearch.monitors.models import (
@@ -282,7 +282,7 @@ def is_due(watch: Watch, now: datetime, last_run_at: datetime | None) -> bool:
     ``schedule.timezone`` here — callers pass UTC. Interval mode is due when
     ``last_run_at + interval_seconds <= now`` (a missing ``last_run_at`` means
     due). Cron mode is due when the local wall clock matches the imported
-    ``digiclaw.cron`` grammar, except when the previous run started inside the
+    ``digibot.cron`` grammar, except when the previous run started inside the
     same matching minute (one fire per cron minute).
     """
     schedule = watch.schedule
@@ -301,7 +301,7 @@ def is_due(watch: Watch, now: datetime, last_run_at: datetime | None) -> bool:
         previous = _ensure_aware(last_run_at).astimezone(zone)
         if previous.replace(second=0, microsecond=0) == current.replace(second=0, microsecond=0):
             return False
-    # digiclaw's matches() re-tags a naive datetime as UTC without shifting its
+    # digibot's matches() re-tags a naive datetime as UTC without shifting its
     # fields, so the local wall clock goes in naive: the astimezone() above did
     # the shifting, and the imported grammar then sees the watch's local fields.
     return parse_cron(schedule.cron).matches(current.replace(tzinfo=None))

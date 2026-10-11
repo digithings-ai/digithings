@@ -65,7 +65,7 @@ Every digithings FastAPI service exposes the same three Prometheus series via `d
 
 `service`, `version`, and `environment` are the cross-service identity labels that enable unified Grafana dashboards to slice by deployed version and environment. `version` is sourced from each service's `__version__` (falls back to `"0.1.0"`); `environment` is read from `DIGI_ENV` (defaults to `"dev"`). The `/metrics` endpoint is unauthenticated — the same trust boundary as `/health` — so Prometheus can scrape it on the internal network.
 
-The rollout covers five FastAPI services: digigraph, digiquant, digisearch, digikey, and digitrace. digiclaw is intentionally excluded — it is a CLI runner (`python -m digiclaw`), not an HTTP service.
+The rollout covers five FastAPI services: digigraph, digiquant, digisearch, digikey, and digitrace. digibot is intentionally excluded — it is a CLI runner (`python -m digibot`), not an HTTP service.
 
 ---
 
@@ -340,7 +340,7 @@ digigraph also has `DIGITRACE_URL=http://digitrace:8003` in its Docker Compose e
 
 ### Other services
 
-digisearch, digiquant, and digiclaw do not currently import `digitrace`. They use `digibase[otel]` directly (via `setup_otel_fastapi`) for infrastructure-level OTel tracing when `OTEL_EXPORTER_OTLP_ENDPOINT` is configured. They do not emit LangSmith spans.
+digisearch, digiquant, and digibot do not currently import `digitrace`. They use `digibase[otel]` directly (via `setup_otel_fastapi`) for infrastructure-level OTel tracing when `OTEL_EXPORTER_OTLP_ENDPOINT` is configured. They do not emit LangSmith spans.
 
 ### digichat
 

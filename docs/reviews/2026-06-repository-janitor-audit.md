@@ -30,7 +30,7 @@
 | `digismith/` | Tracing + `/v1/status` | Compose `:8003` | **Keep** | High |
 | `digikey/` | JWT/API keys | Compose `:8005`, all services | **Keep** | High |
 | `digibase/` | Shared HTTP/audit/OTel | Imported by all Python services | **Keep** | High |
-| `digiclaw/` | Heartbeat + audit MCP | `make up-heartbeat`, CI | **Keep** | High |
+| `digibot/` | Heartbeat + audit MCP | `make up-heartbeat`, CI | **Keep** | High |
 | `cloudflare/` | Web umbrella: design, landings, digichat, Olympus | npm workspaces, Cloudflare/build scripts | **Keep** | High |
 | `tests/` | Cross-component pytest suites | `make test`, CI | **Keep** | High |
 | `scripts/` | Agent kit, stack runners, build/deploy assembly | Makefile, hooks, GHA | **Keep** (trim stale — see JAN) | High |

@@ -207,8 +207,8 @@ canvases/
 # playwright-mcp scratch output (page snapshots, console logs)
 .playwright-mcp/
 
-# digiclaw scheduler durable state (local)
-.digiclaw/
+# digibot scheduler durable state (local)
+.digibot/
 .deno/
 
 # digivoice runtime data — model weights, recorded wavs, and the session

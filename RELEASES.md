@@ -109,7 +109,7 @@ hand, cut the matching `digichat-vX.Y.Z` tag in the same change.
 
 - **Branch cleanup:** Confirmed removal of stale merged branch `task/149-w1e-price-pipeline` (already deleted from origin; merged into `develop` via PR #286 / #288 for issue #149 — research price pipeline migration).
 
-- **Baseline cleanup (Phase 1–7):** AI-hallucinated docs removed; root docs rewritten; digiclaw repackaged (Phase 4); code dedup into `digibase`; test baseline for digiclaw; full details in [#31](https://github.com/digithings-ai/digithings/issues/31).
+- **Baseline cleanup (Phase 1–7):** AI-hallucinated docs removed; root docs rewritten; digibot repackaged (Phase 4); code dedup into `digibase`; test baseline for digibot; full details in [#31](https://github.com/digithings-ai/digithings/issues/31).
 - **Strategic docs:** [docs/VISION.md](docs/VISION.md) captures two-domain plan (digithings.ai + digiquant.io) and strategic decisions. First ADRs landed: [0001 Project Spec](docs/adr/0001-project-spec.md), [0002 Domain Unification](docs/adr/0002-domain-unification.md).
 - **Federated hub:** digisearch/digiquant expose `POST /v1/orchestrator_tools` + `POST /v1/orchestrator_invoke` (manifest + dispatch). digigraph caches vertical tool schemas and invokes them (same JWT chain). `DIGI_HUB_MODE=federated` additionally registers `digisearch_research_delegate` / `digiquant_pipeline_delegate`. digiquant: `POST /v1/workflow`, MCP `digiquant_run_pipeline`. digisearch: optional `digisearch[agent]`, `POST /v1/research_turn`, MCP `digisearch_research_turn`. digichat: `DIGICHAT_ENABLED_SERVICES`, optional `DIGISEARCH_INTERNAL_URL`, trace `service` field in UI.
 - **Infra / LiteLLM:** Compose uses `docker.litellm.ai/berriai/litellm:main-stable`, explicit `--config`, `/health/liveliness` healthcheck, digigraph `depends_on: litellm` healthy; optional `litellm-cache` profile (Redis). `LITELLM_PROXY_API_KEY` for digigraph Bearer vs upstream `OPENAI_API_KEY` in LiteLLM; proxy `litellm_settings` cache, retries, timeouts, and Ollama Cloud → local fallbacks in `config/litellm.yaml`.
@@ -118,4 +118,4 @@ hand, cut the matching `digichat-vX.Y.Z` tag in the same change.
 - **digiquant:** `POST /v1/jobs/backtest`, `GET /v1/jobs/{id}/status`; `digibase` errors and OTel.
 - **digisearch:** `workspace_id` on query; `digisearch-worker` CLI stub; `embeddings.config`; `digibase` integration.
 - **digitrace:** `digibase` errors and OTel; correlation middleware.
-- **digiclaw:** optional `AUDIT_SINK_URL` for NDJSON POST mirror.
+- **digibot:** optional `AUDIT_SINK_URL` for NDJSON POST mirror.

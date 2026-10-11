@@ -55,7 +55,7 @@ git rev-list --count origin/module/<component>..origin/develop   # 0 = current; 
 Local pushes to `main` require `ALLOW_MAIN_PUSH=1` as an environment variable
 (belt-and-suspenders on top of the PR gate).
 
-**Module branches managed by the tooling:** `module/digigraph`, `module/digiquant`, `module/digisearch`, `module/digichat`, `module/digikey`, `module/digismith` (remote branch predates the #4929 digitrace rename; see `scripts/module_branches.sh`), `module/digiclaw`, `module/digibase` — this is the `MODULES` array in `scripts/module_branches.sh`, so `make module-status`/`-sync`/`-switch`/`-pr` only know these eight.
+**Module branches managed by the tooling:** `module/digigraph`, `module/digiquant`, `module/digisearch`, `module/digichat`, `module/digikey`, `module/digismith` (remote branch predates the #4929 digitrace rename; see `scripts/module_branches.sh`), `module/digibot`, `module/digibase` — this is the `MODULES` array in `scripts/module_branches.sh`, so `make module-status`/`-sync`/`-switch`/`-pr` only know these eight.
 
 Other `module/*` branches exist on `origin` outside that set and are not managed by any
 command here. As of 2026-08 that was `module/website`, `module/dashboard`,
@@ -158,6 +158,8 @@ which this section used to point at, does not exist in the repo, and `origin`
 has no branch-naming ruleset to edit.
 
 ## Cutting a release
+
+> **Parked modules** (see [docs/PARKED_MODULES.md](docs/PARKED_MODULES.md)) stay on `develop` and are never cut into `main` or a `release/` branch.
 
 `develop` accumulates features; `main` is production. A release is **promoted to
 `main` first**, and only then gets its own branch — one per version, cut from

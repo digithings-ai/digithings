@@ -45,7 +45,7 @@
       "statement": "Each component quickstart routes start, verify, and gate flows per that component's AGENTS.md run/test commands, with stack-wide health checks across ports 8000-8003 and 8005.",
       "evidence": [
         {
-          "resource": "repo://digiclaw/AGENTS.md#L60-L80",
+          "resource": "repo://digibot/AGENTS.md#L60-L80",
           "version": "repo-lines-v1:sha256:41ca819a79fb6654f3aac4950b9422bb730addf683e60cb52a38389f0bfed7de:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYxOTM4Y2MyY2QyZGMwZjBiNzA5Yzc3NGJlNDU4NWMwNTc5YmY2MDE2ODFhNTQ2MjFiZmM1YzZkNGY2MzU5ZDUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc2MzJjZjlhMGRkNTIxZjA2ODU1NTM3MTI4MGE2YmNkYWZmMWI3N2FjMzNlY2Q0NjA0MDM0ZWY1ZWQ5MjllZDkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImM3Mjk4YTIyODkyMDFkYWFjMDNmNmFkYjExNDRlN2JkMWM5MTFkMzQxMWMwOWVkMmUwY2U5ZDFiZWQwZWVkN2MifQ"
         },
         {

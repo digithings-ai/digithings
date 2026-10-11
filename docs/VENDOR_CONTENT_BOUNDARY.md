@@ -57,7 +57,7 @@ whether or not it ever ships.
   guard). The library ships no vendor access and no vendor authorisation; you
   bring your own.
 - **Internal services** we own (digikey, digigraph, digiquant, digisearch,
-  digitrace, digivault, digiclaw, digibase).
+  digitrace, digivault, digibot, digibase).
 - **Test fixtures / mocks** that do not encode real vendor endpoints or
   credentials.
 
