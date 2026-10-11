@@ -108,6 +108,26 @@ describe("desk chrome", () => {
     expect(html).not.toContain("Requires the 12x group");
   });
 
+  it("keeps the desk name, blurb and path in a header that scrolls instead of dropping them", () => {
+    const html = renderToStaticMarkup(
+      <DeskAccess manifest={manifest}>
+        <DeskPicker />
+      </DeskAccess>,
+    );
+    expect(html).toContain("desk: Baseline");
+    expect(html).toContain('<span class="desk-sub">The house pipeline desk.</span>');
+
+    const frame = readFileSync(new URL("./desk-frame.tsx", import.meta.url), "utf8");
+    expect(frame).toMatch(/<div className="desk-head">\s*<DeskPicker \/>\s*<DeskCommand /);
+    const css = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
+    const head = css.slice(css.indexOf(".desk-head {"), css.indexOf("}", css.indexOf(".desk-head {")));
+    expect(head).toContain("overflow-x: auto");
+    expect(head).toContain("white-space: nowrap");
+    expect(css).toContain(".desk-head > * { flex-shrink: 0; }");
+    const narrow = css.slice(css.indexOf("@media (max-width: 759px)"), css.indexOf("@keyframes desk-page-settle"));
+    expect(narrow).not.toMatch(/max-width:\s*3\.5rem|text-overflow:\s*ellipsis/);
+  });
+
   it("keeps the draft classes and the d binding without a cursor utility", () => {
     const nav = readFileSync(new URL("./desk-nav.tsx", import.meta.url), "utf8");
     const picker = readFileSync(new URL("./desk-picker.tsx", import.meta.url), "utf8");
