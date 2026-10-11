@@ -356,6 +356,76 @@ def test_render_refuses_to_clobber_without_force(tmp_path):
     assert out.read_text() != "KEEP=me\n"
 
 
+# --- DIG-2959: --force overwrites the FILE, it does not re-roll a secret -----
+#
+# DIGICHAT_POSTGRES_PASSWORD is BOTH a rendered secret and the credential an
+# existing digichat-db volume was initialised with. Re-generating it on every
+# --force breaks auth against data that already exists, which is exactly what
+# happened on the v3 run: the container came up and could not authenticate.
+
+GENERATED = "DIGICHAT_POSTGRES_PASSWORD"
+
+
+def rendered(out):
+    return dict(row.split("=", 1) for row in out.read_text().splitlines() if "=" in row)
+
+
+def test_force_preserves_an_already_rendered_generated_value(tmp_path):
+    """The regression: --force must not silently change a generated password."""
+    out = tmp_path / ".dev.vars"
+    run("render", "--no-prompt", "--only", GENERATED, "--output", str(out), expect=0)
+    first = rendered(out)[GENERATED]
+    assert first, "nothing was rendered"
+
+    run(
+        "render", "--no-prompt", "--only", GENERATED, "--output", str(out), "--force", expect=0
+    )
+    assert rendered(out)[GENERATED] == first, (
+        "--force re-generated a password an existing database volume already uses"
+    )
+
+
+def test_rotate_is_the_only_way_to_change_a_preserved_value(tmp_path):
+    """Preservation must be escapable, or the value could never be rotated."""
+    out = tmp_path / ".dev.vars"
+    run("render", "--no-prompt", "--only", GENERATED, "--output", str(out), expect=0)
+    first = rendered(out)[GENERATED]
+
+    run(
+        "render",
+        "--no-prompt",
+        "--only",
+        GENERATED,
+        "--output",
+        str(out),
+        "--force",
+        "--rotate",
+        GENERATED,
+        expect=0,
+    )
+    assert rendered(out)[GENERATED] != first, "--rotate did not change the value"
+
+
+def test_rotate_rejects_a_name_the_manifest_does_not_carry(tmp_path):
+    """A typo in --rotate must fail loudly, not silently preserve everything."""
+    out = tmp_path / ".dev.vars"
+    out.write_text(f"{GENERATED}=kept\n")
+    proc = run(
+        "render",
+        "--no-prompt",
+        "--only",
+        GENERATED,
+        "--output",
+        str(out),
+        "--force",
+        "--rotate",
+        "NOT_A_SECRET",
+        expect=2,
+    )
+    assert "NOT_A_SECRET" in proc.stderr
+    assert out.read_text() == f"{GENERATED}=kept\n", "a rejected render still wrote"
+
+
 def test_non_renderable_hosted_secrets_are_skipped(tmp_path):
     """A GitHub/Cloudflare secret has no local value and must never be invented."""
     doc = yaml.safe_load(MANIFEST.read_text())
