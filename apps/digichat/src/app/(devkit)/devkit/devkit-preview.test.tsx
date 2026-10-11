@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { DevkitPreview } from "./devkit-preview";
 import type { DigichatDeployment } from "@/lib/deploy-config/schema";
 
@@ -79,5 +79,66 @@ describe("DevkitPreview header + invalid bar", () => {
     expect(screen.getByTestId("chrome-probe")).toHaveTextContent(
       "Probe Chat|Hi probe|Ask probe|Probe one",
     );
+  });
+});
+
+// DIG-2962: every look must render in all three presentation modes, and the
+// mode switch must flow through the real resolve pipeline (chrome.schema value
+// → clientConfig → header + frame chrome), not just repaint a class name.
+describe("DevkitPreview mode switch", () => {
+  function modeButtons() {
+    return screen
+      .getAllByRole("button")
+      .filter((b) => (b.getAttribute("data-mode") ?? "") !== "");
+  }
+
+  it("offers exactly the three modes the brief names", () => {
+    render(<DevkitPreview entryId="file:probe.yaml" deployment={DEPLOYMENT} issues={[]} />);
+    expect(modeButtons().map((b) => b.getAttribute("data-mode"))).toEqual([
+      "fullscreen",
+      "popup",
+      "embedded",
+    ]);
+  });
+
+  it("seeds the active mode from the deployment's own chrome.mode", () => {
+    render(
+      <DevkitPreview
+        entryId="file:probe.yaml"
+        deployment={{ ...DEPLOYMENT, chrome: { ...DEPLOYMENT.chrome, mode: "modal" } } as never}
+        issues={[]}
+      />,
+    );
+    expect(modeButtons().find((b) => b.getAttribute("data-mode") === "popup")?.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByTestId("devkit-preview-frame").getAttribute("data-mode")).toBe("popup");
+  });
+
+  it("reflects a switched mode in the live chrome the header renders", () => {
+    render(<DevkitPreview entryId="file:probe.yaml" deployment={DEPLOYMENT} issues={[]} />);
+    // DEPLOYMENT omits chrome.mode → schema default embed.
+    expect(screen.getByText(/probe · digichat · dark · embed/)).not.toBeNull();
+
+    fireEvent.click(modeButtons().find((b) => b.getAttribute("data-mode") === "popup")!);
+    expect(screen.getByText(/probe · digichat · dark · modal/)).not.toBeNull();
+    expect(screen.getByTestId("devkit-preview-frame").getAttribute("data-mode")).toBe("popup");
+  });
+
+  it("walks all three modes on one look and returns to where it started", () => {
+    render(<DevkitPreview entryId="file:probe.yaml" deployment={DEPLOYMENT} issues={[]} />);
+    for (const id of ["fullscreen", "popup", "embedded"]) {
+      fireEvent.click(modeButtons().find((b) => b.getAttribute("data-mode") === id)!);
+      expect(screen.getByTestId("devkit-preview-frame").getAttribute("data-mode")).toBe(id);
+      expect(modeButtons().find((b) => b.getAttribute("data-mode") === id)?.getAttribute("aria-pressed")).toBe("true");
+    }
+    expect(screen.getByText(/probe · digichat · dark · embed/)).not.toBeNull();
+  });
+
+  it("does NOT mutate the deployment it was handed", () => {
+    // The switch re-projects a clone: if it wrote back, switching a mode would
+    // silently dirty the draft text the operator never edited.
+    const deployment = { ...DEPLOYMENT, chrome: { ...DEPLOYMENT.chrome, mode: "embed" } } as never;
+    render(<DevkitPreview entryId="file:probe.yaml" deployment={deployment} issues={[]} />);
+    fireEvent.click(modeButtons().find((b) => b.getAttribute("data-mode") === "fullscreen")!);
+    expect((deployment as { chrome: { mode: string } }).chrome.mode).toBe("embed");
   });
 });
