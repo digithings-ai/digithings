@@ -87,12 +87,12 @@ describe("baseline tape", () => {
       change: "▲1.00%",
       up: true,
     };
-    const cells = mergeTapeQuotes([spy!, close!], [live]);
+    const cells = mergeTapeQuotes([spy!, close!], [live], ["SPY", "BTC-USD"]);
     expect(cells.map((cell) => cell.symbol)).toEqual(["SPY", "BTC-USD"]);
     expect(cells.find((cell) => cell.symbol === "SPY")?.changePct).toBeCloseTo(10);
     expect(cells.find((cell) => cell.symbol === "BTC-USD")?.price).toBe(120);
     expect(cells.find((cell) => cell.symbol === "QQQ")).toBeUndefined();
-    const wiped = mergeTapeQuotes([close!], [{ ...live, price: Number.NaN }]);
+    const wiped = mergeTapeQuotes([close!], [{ ...live, price: Number.NaN }], ["SPY", "BTC-USD"]);
     expect(wiped.find((cell) => cell.symbol === "BTC-USD")?.price).toBe(110);
   });
 });
@@ -206,5 +206,42 @@ describe("createCryptoFeed", () => {
     expect(FakeSocket.all).toHaveLength(4);
     feed.stop();
     expect(FakeSocket.all[3].closed).toBe(true);
+  });
+});
+
+describe("tape universe wiring", () => {
+  // COPX and GDX are in the R2 manifest but were never in the hand-kept list,
+  // and QQQ is in the hand-kept list but not in this universe. Asserting the
+  // split first is what keeps the case below discriminating: if the tape read
+  // TAPE_SYMBOLS instead of the universe it was handed, the rows would differ.
+  const universe = ["COPX", "BTC-USD", "GDX"];
+  const quoted = ["COPX", "GDX", "QQQ", "SPY", "BTC-USD"].map((symbol) =>
+    equityCell(symbol, [
+      { date: "2026-09-26", price: 100 },
+      { date: "2026-09-29", price: 110 },
+    ]),
+  );
+
+  it("uses symbols the hand-kept list never had, and drops the ones it did", () => {
+    expect(TAPE_SYMBOLS).not.toContain("COPX");
+    expect(TAPE_SYMBOLS).not.toContain("GDX");
+    expect(TAPE_SYMBOLS).toContain("QQQ");
+
+    const cells = mergeTapeQuotes(
+      quoted.filter((cell): cell is NonNullable<typeof cell> => cell !== null),
+      [],
+      universe,
+    );
+    expect(cells.map((cell) => cell.symbol)).toEqual(universe);
+    expect(cells.map((cell) => cell.symbol)).not.toContain("QQQ");
+  });
+
+  it("reports an unavailable universe symbol as absent, not blank", () => {
+    const cells = mergeTapeQuotes(
+      quoted.filter((cell): cell is NonNullable<typeof cell> => cell !== null),
+      [],
+      ["COPX", "NOTHING"],
+    );
+    expect(cells.map((cell) => cell.symbol)).toEqual(["COPX"]);
   });
 });

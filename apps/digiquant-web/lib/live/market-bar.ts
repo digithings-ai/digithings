@@ -18,7 +18,7 @@ import { useEffect, useState } from "react";
 import { officialGet, tapeFromBenchmarks } from "@/lib/official-api";
 import { fetchCloseSeries, seedWindowStart } from "./market-data";
 import { num } from "./quote-transforms";
-import { TAPE_SYMBOLS } from "./tape-universe";
+import { loadTapeUniverse, TAPE_SYMBOLS } from "./tape-universe";
 
 export const COINBASE_WS_URL = "wss://ws-feed.exchange.coinbase.com";
 export const CRYPTO_PRODUCTS = ["BTC-USD", "ETH-USD", "SOL-USD"] as const;
@@ -352,10 +352,20 @@ export function isQuotedCell(cell: MarketCell): boolean {
   return Number.isFinite(cell.price) && cell.price > 0;
 }
 
-/** Quoted baseline symbols only, in baseline order. A symbol with no finite price is omitted. */
-export function assembleTape(quotes: ReadonlyMap<string, MarketCell>): MarketCell[] {
+/**
+ * Quoted symbols only, in the order of `symbols` — the live universe (portfolio
+ * holdings ∪ price-table symbols, DIG-2858). A symbol with no finite price is
+ * omitted rather than rendered blank.
+ *
+ * The universe is a parameter, not this module's constant, so the tape's list
+ * is decided by whoever loaded it and can be asserted on directly.
+ */
+export function assembleTape(
+  quotes: ReadonlyMap<string, MarketCell>,
+  symbols: readonly string[],
+): MarketCell[] {
   const rows: MarketCell[] = [];
-  for (const symbol of TAPE_SYMBOLS) {
+  for (const symbol of symbols) {
     const hit = quotes.get(symbol);
     if (!hit || !isQuotedCell(hit)) continue;
     const changePct = hit.changePct !== null && Number.isFinite(hit.changePct) ? hit.changePct : null;
@@ -371,7 +381,11 @@ export function assembleTape(quotes: ReadonlyMap<string, MarketCell>): MarketCel
 }
 
 /** Archive closes first. A live crypto tick with a real price replaces that symbol. */
-export function mergeTapeQuotes(archive: readonly MarketCell[], live: readonly MarketCell[]): MarketCell[] {
+export function mergeTapeQuotes(
+  archive: readonly MarketCell[],
+  live: readonly MarketCell[],
+  symbols: readonly string[],
+): MarketCell[] {
   const quotes = new Map<string, MarketCell>();
   for (const cell of archive) {
     if (isQuotedCell(cell)) quotes.set(cell.symbol, cell);
@@ -379,7 +393,7 @@ export function mergeTapeQuotes(archive: readonly MarketCell[], live: readonly M
   for (const cell of live) {
     if (cell.kind === "crypto" && isQuotedCell(cell)) quotes.set(cell.symbol, cell);
   }
-  return assembleTape(quotes);
+  return assembleTape(quotes, symbols);
 }
 
 function cellFromPoints(symbol: string, points: { date: string; price: number }[]): MarketCell | null {
@@ -412,14 +426,18 @@ async function loadArchiveQuotes(symbols: readonly string[]): Promise<MarketCell
 }
 
 export function useMarketBar(): MarketBarState {
-  const [archive, setArchive] = useState<MarketCell[]>([]);
+  const [archive, setArchive] = useState<{ symbols: string[]; cells: MarketCell[] }>({
+    symbols: [],
+    cells: [],
+  });
   const [crypto, setCrypto] = useState<MarketBarState>(INITIAL);
 
   useEffect(() => {
     let cancelled = false;
-    void loadArchiveQuotes(TAPE_SYMBOLS)
-      .then((cells) => {
-        if (!cancelled) setArchive(cells);
+    void loadTapeUniverse()
+      .then((symbols) => loadArchiveQuotes(symbols).then((cells) => ({ symbols, cells })))
+      .then((next) => {
+        if (!cancelled) setArchive(next);
       })
       .catch(() => {
         /* symbols without a quote stay unavailable */
@@ -448,7 +466,7 @@ export function useMarketBar(): MarketBarState {
   }, []);
 
   return {
-    cells: mergeTapeQuotes(archive, crypto.cells),
+    cells: mergeTapeQuotes(archive.cells, crypto.cells, archive.symbols),
     status: crypto.status,
     asOf: crypto.asOf,
   };
