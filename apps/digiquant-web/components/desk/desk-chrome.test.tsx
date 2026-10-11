@@ -66,7 +66,7 @@ describe("desk chrome", () => {
     expect(settings?.children?.map((child) => child.path)).toEqual(["/settings/paper"]);
     expect(deskHomeHref(baseline)).toBe("/app/brief/");
     expect(deskHomeHref(fx)).toBeNull();
-    expect(deskHomeHref({ ...fx, access: "granted", pages: [{ path: "/fx", label: "FX Hub", access: "granted" }] })).toBeNull();
+    expect(deskHomeHref({ ...fx, access: "granted", pages: [{ path: "/fx", label: "FX Hub", access: "granted" }] })).toBe("/app/fx/");
   });
 
   it("does not invent desks when the manifest is missing", () => {
@@ -97,7 +97,8 @@ describe("desk chrome", () => {
     expect(linked("/app/portfolio/")).toBe(true);
     expect(linked("/app/tools/charts/")).toBe(true);
     expect(html).toContain(">/tools/terminal<");
-    expect(html).not.toContain(">/fx/settings<");
+    // Granted to this caller, so the rail names it. The locked FX desk stays hidden.
+    expect(html).toContain(">/fx/settings<");
     expect(html).not.toContain(">/fx<");
     expect(linked("/app/settings/")).toBe(true);
     expect(html).not.toContain("luxalgo");

@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Button } from "@digithings/ui/ui";
 import { useDeskAccess } from "./desk-access";
 import { deskHomeHref, lockTag } from "./desk-manifest";
-import { isPublicDeskChrome } from "./public-surface";
+import { isVisibleDesk } from "./public-surface";
 
 /** Top-bar desk selector. `d` opens it. A locked desk stays visible and does not navigate. */
 export function DeskPicker({ initialOpen = false }: { initialOpen?: boolean }) {
@@ -81,7 +81,7 @@ export function DeskPicker({ initialOpen = false }: { initialOpen?: boolean }) {
         <>
           <Button type="button" variant="ghost" className="desk-scrim" aria-label="Close desks" onClick={() => setOpen(false)} />
           <ul ref={list} className="desk-list" role="listbox" aria-label="Desks" onKeyDown={onKeyDown}>
-            {manifest.desks.filter((item) => isPublicDeskChrome(item)).map((item) => {
+            {manifest.desks.filter((item) => isVisibleDesk(item)).map((item) => {
               const locked = item.access === "locked";
               return (
                 <li key={item.id} role="option" aria-selected={item.id === desk.id}>
