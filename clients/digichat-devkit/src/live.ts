@@ -16,6 +16,21 @@ export type ChatTurn = { id: string; role: "user" | "assistant" | "system"; text
 export type LiveTool = { id: string; label: string; on: boolean };
 export type LiveMcp = { id: string; url: string; on: boolean };
 
+/**
+ * One preview field. `key` is the same key the settings row and the draft use, so a
+ * preview row and its setting are one field. `on` is the flag or toggle state and is null
+ * when the field has none. A `secret` field is redacted: its `value` is only what the pane
+ * already shows (an env var name, `set`, `not set` or `—`), never the credential.
+ */
+export type LiveField = {
+  key: string;
+  pane: string;
+  label: string;
+  value: string;
+  on: boolean | null;
+  secret: boolean;
+};
+
 export type LiveView = {
   headline: string;
   title: string | null;
@@ -36,6 +51,8 @@ export type LiveView = {
   mcp: LiveMcp[];
   issues: string[];
   configured: boolean;
+  /** Every preview field in pane order, so the preview never shows less than the settings. */
+  fields: LiveField[];
 };
 
 export type SettingRow =
@@ -212,6 +229,36 @@ export function liveFrom(read: KitRead, draft: Draft): LiveView {
   const issues = (panes.find((pane) => pane.id === "validation")?.lines ?? [])
     .filter((line) => line.kind === "mark" && line.text !== "none")
     .map((line) => (line.kind === "mark" ? line.text : ""));
+  // Every preview field, in the order the settings side lists them. The export pane is not a
+  // preview field, and the deployments and validation panes carry marks, which the view holds
+  // in `configured` and `issues`. Reading the panes is what keeps the two sides in step: a pane
+  // that gains a field reaches the preview without a line here.
+  const fields: LiveField[] = [];
+  for (const spec of SIDE) {
+    if (spec.id === "export") continue;
+    const pane = panes.find((item) => item.id === spec.id);
+    if (!pane) continue;
+    for (const line of pane.lines) {
+      if (line.kind !== "field") continue;
+      // DASH is the pane's "not set", so it is not an off: a field the deployment never
+      // declares keeps a null state and the preview never invents a decision. Only a flag or a
+      // toggle carries one.
+      const state =
+        line.toggle === undefined || line.value === DASH
+          ? null
+          : line.toggle === "mcp"
+            ? !line.value.endsWith(" · off")
+            : line.value === "on" || line.value === "default on";
+      fields.push({
+        key: fieldKey(spec.id, line.label),
+        pane: spec.id,
+        label: line.label,
+        value: line.value,
+        on: state,
+        secret: line.secret === true || isSecretLabel(line.label),
+      });
+    }
+  }
   return {
     headline,
     title: shown(fieldOf(panes, "appearance", "title")),
@@ -232,6 +279,7 @@ export function liveFrom(read: KitRead, draft: Draft): LiveView {
     mcp: mcpOf(panes),
     issues,
     configured,
+    fields,
   };
 }
 

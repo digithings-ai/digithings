@@ -11,11 +11,12 @@ import {
   rowsFor,
   stripRows,
   toggleFlag,
+  toggleMcp,
   toggleTool,
   typeInto,
 } from "./live";
 import { fieldKey, panesFor } from "./present";
-import { interpretResponse, loadKit, type KitRead } from "./read";
+import { DASH, interpretResponse, loadKit, type KitRead } from "./read";
 
 const acme = interpretResponse({
   entries: [
@@ -199,4 +200,64 @@ test("baseline replies are the streamed text or the error code", () => {
 test("an unreachable baseline is an error and not a reply", async () => {
   const result = await postBaseline("http://127.0.0.1:9", { messages: [] }, AbortSignal.timeout(800));
   expect(result).toEqual({ kind: "error", detail: "baseline unreachable" });
+});
+
+test("the live app shows every preview field the settings list, in the settings order", () => {
+  const draft = blankDraft();
+  const expected = panesFor(acme, draft)
+    .filter((pane) => pane.id !== "export")
+    .flatMap((pane) =>
+      pane.lines.filter((line) => line.kind === "field").map((line) => fieldKey(pane.id, line.label)),
+    );
+  // The pane list is non-empty, so the equality below is not an empty set compared to an
+  // empty set.
+  expect(expected.length).toBeGreaterThan(0);
+  const keys = liveFrom(acme, draft).fields.map((field) => field.key);
+  expect(keys).toEqual(expected);
+  // One row per field: a duplicated pane field would hide a later one.
+  expect(new Set(keys).size).toBe(keys.length);
+  // The export pane is not a preview field, so it never reaches the preview.
+  expect(keys.some((key) => key.startsWith("export:"))).toBe(false);
+});
+
+test("a draft change reaches the preview for every field kind, and a secret stays redacted", () => {
+  const launcher = fieldKey("appearance", "launcher label");
+  const dictation = fieldKey("features", "dictation");
+  const secretKey = fieldKey("gate", "quota consume URL (server-side)");
+  // Read first with nothing edited: a flag the deployment leaves unset and one it declares off
+  // are two states, and the view must tell them apart.
+  const base = new Map(liveFrom(acme, blankDraft()).fields.map((field) => [field.key, field]));
+  expect(base.get("features:dictation")?.on).toBeNull();
+  expect(base.get("models:picker")?.on).toBeNull();
+  expect(base.get("features:attachments")?.on).toBe(false);
+  expect(base.get("tools:allow user toggle")?.on).toBe(true);
+  const changed = toggleMcp(
+    toggleTool(
+      toggleFlag(typeInto(blankDraft(), launcher, DASH, false, "A"), dictation, DASH),
+      "vault",
+      true,
+    ),
+    "docs",
+    true,
+  );
+  const rows = new Map(liveFrom(acme, changed).fields.map((field) => [field.key, field]));
+  // A typed value shows up, on a field the deployment never set.
+  expect(rows.get(launcher)?.value).toBe("A");
+  // A flag the deployment left unset now reads on.
+  expect(rows.get(dictation)?.on).toBe(true);
+  // A tool and an mcp server each carry their toggle state.
+  expect(rows.get("tools:vault")?.on).toBe(false);
+  expect(rows.get("mcp:docs")?.on).toBe(false);
+  // An unset field keeps no state: the preview never invents an off the deployment did not set.
+  expect(rows.get("appearance:mode")?.value).toBe(DASH);
+  expect(rows.get("appearance:mode")?.on).toBeNull();
+  // A declared off is not an unset field.
+  expect(rows.get("features:attachments")?.on).toBe(false);
+  // The quota consume URL is a secret: the row says so, and carries only what the pane shows.
+  expect(rows.get(secretKey)?.secret).toBe(true);
+  expect(rows.get(secretKey)?.value).toBe("set");
+  const leaked = { ...changed, values: { ...changed.values, [secretKey]: "https://secret.example/quota" } };
+  const paintedLeak = painted(acme, leaked);
+  expect(paintedLeak).not.toContain("secret.example");
+  expect(paintedLeak).not.toContain("sk-live-secret");
 });
