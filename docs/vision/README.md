@@ -51,7 +51,7 @@ NautilusTrader-backed strategy engine with backtest and optimisation nodes wired
 Document ingestion, chunking, embedding, and hybrid vector/keyword search. Pluggable backends. Powers the client pilot's internal document search deployment.
 
 ### digichat — chat interface and BFF
-Next.js production chat UI (`apps/digichat`) — BYOK (bring-your-own-key) flow, model selector, Auth.js authentication, Drizzle ORM, adaptive UI scoped by access level. Not deployed publicly yet; the digithings.ai demo still runs a separate bespoke widget pending the gateway cutover ([ADR-0018](../adr/0018-digichat-path-routing.md), epic [#1248](https://github.com/digithings-ai/digithings/issues/1248)).
+Next.js production chat UI (`apps/digichat`) — BYOK (bring-your-own-key) flow, model selector, Auth.js authentication, Drizzle ORM, adaptive UI scoped by access level. Deployed publicly: the digichat Worker owns the `digithings.ai` zone routes for the app and its APIs (`/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`, `/api/plan-proof*`, `/api/health`, `/_dtchat*`) and proxies them to the digichat Cloudflare Container, while the Pages site serves the `/chat` shell that embeds it ([ADR-0018](../adr/0018-digichat-path-routing.md)). The earlier bespoke OpenRouter widget is retired — its Pages Function now answers `410 chat_migrated`. Epic [#1248](https://github.com/digithings-ai/digithings/issues/1248) is closed; route map and evidence in [digichat](digichat.md).
 
 ### digikey — auth control plane
 JWT-based authentication with scoped API keys (RS256, JWKS endpoint), SSO federation groundwork, org and project membership model.
