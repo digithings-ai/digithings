@@ -46,7 +46,9 @@ describe("buildComposeBundle", () => {
     expect(bundle.configYaml).toContain("token: ${DIGICHAT_EMBED_TOKEN}");
     expect(bundle.configYaml).toContain("token: ${ZAMMAD_API_TOKEN}");
     expect(bundle.configYaml).toContain("token: ${PLAIN_TOKEN}");
-    expect(bundle.configYaml).toContain("consumeUrl: ${DIGICHAT_CONSUME_URL}");
+    // DIG-2962: consumeUrl is schema-validated as an https URL, so a `${VAR}`
+    // string made the exported document fail the devkit's own validator.
+    expect(bundle.configYaml).toContain("consumeUrl: https://replace-me.invalid/consume");
     expect(bundle.configYaml).not.toContain("live-deploy-token");
     expect(bundle.configYaml).toContain("  backend:\n    type: digigraph");
     expect(bundle.envFragment).toContain("DIGICHAT_CONFIG_PATH=/app/config/demo.yaml");
