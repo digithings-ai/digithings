@@ -15,6 +15,7 @@ export function Band({
   takeaway,
   fill = false,
   plain = false,
+  pin = false,
   children,
 }: {
   id: BandId;
@@ -23,36 +24,56 @@ export function Band({
   fill?: boolean;
   /** Skip the reveal transform. Sticky children (the workflow deck) cannot pin inside it. */
   plain?: boolean;
+  /** Pin the section head (eyebrow + title + the hairline under it) under the
+   *  nav for the length of the band, so scrolling stops at that rule and the
+   *  band body stacks below it. The takeaway is deliberately NOT part of the
+   *  pinned unit: it is prose read once, and pinning it would cost the deck
+   *  the screen height the cards need. The band body must then stop at the
+   *  rule by adding `--band-pin-h` to its own top offset — see the pinned
+   *  band head block in app/globals.css. */
+  pin?: boolean;
   children?: ReactNode;
 }) {
   const index = BANDS.findIndex((b) => b.id === id);
   const label = BANDS[index]?.label ?? id;
   const screen = "lg:min-h-[calc(100svh-var(--nav-shell-h,62px))] lg:justify-center";
   const frameClass = `mx-auto flex w-full max-w-[var(--frame-w)] flex-col gap-[clamp(1.25rem,3vh,2.5rem)] px-[var(--page-pad)] py-[var(--page-step)] ${screen}`;
+  const eyebrow = (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+      <p className="section-eyebrow m-0">
+        <span aria-hidden="true" className="section-eyebrow__tick" />
+        {pad2(index + 1)} / {label}
+      </p>
+    </div>
+  );
+  const heading = (
+    <h2
+      id={`${id}-h`}
+      className="m-0 max-w-[28ch] font-display text-[clamp(1.5rem,3.2vw,2.25rem)] font-medium leading-[1.2] tracking-[-0.025em] text-balance text-ink"
+    >
+      {title}
+    </h2>
+  );
+  const takeawayClass = "m-0 max-w-[var(--measure-prose)] text-[0.9375rem] leading-[1.65] text-ink-soft";
   const frame = (
     <>
-        <header className="flex flex-col gap-[0.7rem]">
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <p className="section-eyebrow m-0">
-              <span aria-hidden="true" className="section-eyebrow__tick" />
-              {pad2(index + 1)} / {label}
-            </p>
-          </div>
-          <h2
-            id={`${id}-h`}
-            className="m-0 max-w-[28ch] font-display text-[clamp(1.5rem,3.2vw,2.25rem)] font-medium leading-[1.2] tracking-[-0.025em] text-balance text-ink"
-          >
-            {title}
-          </h2>
-          <p className="m-0 max-w-[var(--measure-prose)] text-[0.9375rem] leading-[1.65] text-ink-soft">{takeaway}</p>
+        <header className={`flex flex-col gap-[0.7rem]${pin ? " band-pin" : ""}`}>
+          {eyebrow}
+          {heading}
+          {pin ? null : <p className={takeawayClass}>{takeaway}</p>}
         </header>
+        {pin ? <p className={takeawayClass}>{takeaway}</p> : null}
         <div id={`${id}-body`} className={fill ? "flex min-h-0 flex-1 flex-col" : "min-w-0"}>
           {children}
         </div>
     </>
   );
   return (
-    <section id={id} aria-labelledby={`${id}-h`} className="relative z-10 border-b border-hair">
+    <section
+      id={id}
+      aria-labelledby={`${id}-h`}
+      className={`relative z-10 border-b border-hair${pin ? " band-pin-shell" : ""}`}
+    >
       {plain ? <div className={frameClass}>{frame}</div> : <Reveal className={frameClass}>{frame}</Reveal>}
     </section>
   );
