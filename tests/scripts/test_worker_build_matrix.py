@@ -203,6 +203,16 @@ def test_no_push_trigger() -> None:
 
     A push trigger here would duplicate the real deploy build with no credentials,
     and race the deploy workflows on the same commit.
+
+    Scoped honestly (DIG-2843): four of the six matrix apps have a deploy workflow
+    that builds on develop — digithings-cron, digiquant-runner, and the two lanes
+    the header means by "the deploy workflows". `digichat-cloudflare` and
+    `digithings-stack-cloudflare` do not: their deploy workflows were deleted by
+    f54af7052 (#4919, Human Gate) and they ship out-of-band, by hand. For those two
+    the race argument is now vacuous and the real argument is the credentials one —
+    a push here would build without them — so the assertion below still holds and
+    still needs the same reason. The absence is documented in
+    docs/DEPLOYMENT.md; this test pins the trigger, not the deploy story.
     """
     triggers = _workflow()[True]
     assert "push" not in triggers, "a push trigger races the deploy workflows and needs credentials"
