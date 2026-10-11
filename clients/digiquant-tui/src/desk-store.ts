@@ -182,12 +182,23 @@ export function uniqueRoutes<T extends { route: string }>(
   return routes;
 }
 
-/** Route to block kind, for a reader that needs the kind and not the block id. */
-export function kindsByRoute<T extends { route: string; kind: string }>(
-  blocks: Record<string, T> | readonly T[],
-): Map<string, string> {
-  const list = Array.isArray(blocks) ? blocks : Object.values(blocks as Record<string, T>);
-  const kinds = new Map<string, string>();
+/**
+ * Route to block kind, for a reader that needs the kind and not the block id.
+ *
+ * The kind is generic on purpose. Widen it to `string` here and every caller
+ * hands a plain string to `readBlock`, whose parameter is the block kind union
+ * — a type error that only the web build finds, because nothing typechecks
+ * `clients/`.
+ */
+export function kindsByRoute<K>(
+  blocks:
+    | Record<string, { route: string; kind: K }>
+    | readonly { route: string; kind: K }[],
+): Map<string, K> {
+  const list = Array.isArray(blocks)
+    ? blocks
+    : Object.values(blocks as Record<string, { route: string; kind: K }>);
+  const kinds = new Map<string, K>();
   for (const block of list) if (!kinds.has(block.route)) kinds.set(block.route, block.kind);
   return kinds;
 }
