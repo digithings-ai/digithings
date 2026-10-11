@@ -1,5 +1,6 @@
 import { buildAnimation } from "../animations/build";
 import { equalizerAnimation } from "../animations/equalizer";
+import { pagesAnimation } from "../animations/pages";
 import { riseAnimation } from "../animations/rise";
 import { routeAnimation } from "../animations/route";
 import { scrambleAnimation } from "../animations/scramble";
@@ -199,6 +200,13 @@ export const DIGIKEY: BannerDefinition = {
   id: "digikey",
   text: "DIGIKEY",
   label: "digikey",
+/** DIG-2878. A flipbook: pages riffle right to left, each carrying more of the
+ *  word, and the last, slowest turn lays it down in ink. LIVE turns a page now
+ *  and then. Accent: --accent-digibook. */
+export const DIGIBOOK: BannerDefinition = {
+  id: "digibook",
+  text: "DIGIBOOK",
+  label: "digibook",
   font: PIXEL_7X10,
   gap: 2,
   palette: {
@@ -267,6 +275,21 @@ export const DIGIGRAPH: BannerDefinition = {
   }),
   live: true,
   seed: 0xd16a,
+    accent: { hex: "#D4C5A0", cube: 187, cssVar: "--accent-digibook" },
+    glint: { hex: "#FFFFFF", cube: 231, cssVar: "--glint" },
+  },
+  animation: pagesAnimation({
+    pages: 5,
+    turnMs: [420, 340, 300, 360, 720],
+    overlap: 0.55,
+    curlMax: 7,
+    lean: 4,
+    everyMs: 5200,
+    liveTurnMs: 900,
+    riffleGapMs: 260,
+  }),
+  live: true,
+  seed: 0xb00c,
 };
 
 export const BANNERS = {
@@ -278,4 +301,5 @@ export const BANNERS = {
   digibase: DIGIBASE,
   digikey: DIGIKEY,
   digigraph: DIGIGRAPH,
+  digibook: DIGIBOOK,
 } as const;
