@@ -42,6 +42,7 @@ jobs:
           - dir: digivoice/tui
           - dir: clients/digichat-tui
           - dir: packages/surface-config
+          - dir: packages/hero-banner
     steps:
       - uses: actions/checkout@v4
 
@@ -65,7 +66,7 @@ jobs:
       # drop the condition — tests/scripts/test_bun_suites_ci_lane.py fails
       # until that happens.
       - name: Install from lockfile
-        if: matrix.dir != 'packages/surface-config'
+        if: matrix.dir != 'packages/surface-config' && matrix.dir != 'packages/hero-banner'
         working-directory: ${{ matrix.dir }}
         run: bun install --frozen-lockfile
 
