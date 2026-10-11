@@ -3,6 +3,7 @@ import { equalizerAnimation } from "../animations/equalizer";
 import { riseAnimation } from "../animations/rise";
 import { routeAnimation } from "../animations/route";
 import { scrambleAnimation } from "../animations/scramble";
+import { stackAnimation } from "../animations/stack";
 import { PIXEL_7X10 } from "../font";
 import type { BannerDefinition, Tone } from "../types";
 
@@ -140,10 +141,41 @@ export const DIGILLM: BannerDefinition = {
   seed: 0x11e1,
 };
 
+/** DIG-2869. A table filling up: records drop in row by row from the bottom,
+ *  land written (accent) and commit to ink a row at a time. Accent:
+ *  --accent-digibase. */
+export const DIGIBASE: BannerDefinition = {
+  id: "digibase",
+  text: "DIGIBASE",
+  label: "digibase",
+  font: PIXEL_7X10,
+  gap: 2,
+  palette: {
+    ink: INK,
+    ground: GROUND,
+    accent: { hex: "#9EA0A5", cube: 247, cssVar: "--accent-digibase" },
+    glint: { hex: "#FFFFFF", cube: 231, cssVar: "--glint" },
+  },
+  animation: stackAnimation({
+    rowMs: 120,
+    sweepMs: 260,
+    fallMs: 420,
+    blockMax: 4,
+    holdMs: 60,
+    commitMs: 260,
+    txEveryMs: 1100,
+    txWriteMs: 520,
+    scanMs: 900,
+  }),
+  live: true,
+  seed: 0xdb05,
+};
+
 export const BANNERS = {
   digithings: DIGITHINGS,
   digiquant: DIGIQUANT,
   digichat: DIGICHAT,
   digivoice: DIGIVOICE,
   digillm: DIGILLM,
+  digibase: DIGIBASE,
 } as const;
