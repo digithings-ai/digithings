@@ -116,9 +116,7 @@ def test_mutating_mcp_tool_is_refused_not_executed(transport, audit):
 
     server = _server()
     ctx = _context(server, allowed=["acme_addCommentToJiraIssue"])
-    result = registry.execute(
-        "acme_addCommentToJiraIssue", {"issueKey": "JIRA-1234"}, ctx
-    )
+    result = registry.execute("acme_addCommentToJiraIssue", {"issueKey": "JIRA-1234"}, ctx)
 
     assert result["error"] == "mcp_call_requires_human_approval"
     # The transport is the proof, not the return value: nothing reached the server.
@@ -157,9 +155,7 @@ def test_non_mutating_tool_still_executes(transport, audit):
     ctx = _context(server, allowed=["acme_searchIssues"])
     result = registry.execute("acme_searchIssues", {"jql": "project = DIG"}, ctx)
 
-    assert transport == [
-        {"server_id": "acme", "tool": READ_ONLY, "args": {"jql": "project = DIG"}}
-    ]
+    assert transport == [{"server_id": "acme", "tool": READ_ONLY, "args": {"jql": "project = DIG"}}]
     assert result == {"ok": True, "content": f"called {READ_ONLY}"}
     assert ctx.state.get("pending_mcp_decision") is None
 
@@ -183,19 +179,19 @@ def test_absent_mutating_tools_makes_every_allowed_tool_mutating(transport):
         registry.execute(f"acme_{remote}", {}, _context(none_mutating))
     assert [c["tool"] for c in transport] == [MUTATING, READ_ONLY]
 
-    # A row naming NEITHER list cannot say anything is safe. Resolving the absent
-    # key through the row's own allowedTools yields an empty set, which used to
-    # read as "nothing mutates" and gate nothing -- while the call was allowed
-    # and ran. Allowed-ness here arrives on the ToolContext, exactly as a
-    # BFF-declared row delivers it.
-    before = len(transport)
+    # A row naming NEITHER list is NOT gated. This is deliberate and pinned. Rule 5
+    # as mcp_client implements it falls back to the row's own allowedTools, which
+    # an undeclared row also lacks, so the row declares nothing mutating. An
+    # earlier revision of this gate failed closed here and gated read-only search
+    # servers that declare no list at all; the develop web-search opt-in tests
+    # carry exactly this row shape and must stay green.
     bare = _server()
     del bare["mutatingTools"]
     del bare["allowedTools"]
     for remote in (MUTATING, READ_ONLY):
-        result = registry.execute(f"acme_{remote}", {}, _context(bare, allowed=[f"acme_{remote}"]))
-        assert result["error"] == "mcp_call_requires_human_approval", remote
-    assert len(transport) == before
+        registry.execute(f"acme_{remote}", {}, _context(bare, allowed=[f"acme_{remote}"]))
+    # The whole transport, not a tail slice: the arm above already ran two calls.
+    assert [c["tool"] for c in transport] == [MUTATING, READ_ONLY, MUTATING, READ_ONLY]
 
 
 @pytest.mark.unit
@@ -205,9 +201,9 @@ def test_decision_cannot_substitute_the_payload(transport, audit):
 
     server = _server()
     ctx = _context(server, session_id="sess-1")
-    pending_id = registry.execute(
-        "acme_addCommentToJiraIssue", {"issueKey": "JIRA-1234"}, ctx
-    )["pending_id"]
+    pending_id = registry.execute("acme_addCommentToJiraIssue", {"issueKey": "JIRA-1234"}, ctx)[
+        "pending_id"
+    ]
 
     # There is nowhere to put a different call: no parameter accepts one.
     parameters = inspect.signature(registry.decide_mcp_call).parameters
@@ -224,17 +220,13 @@ def test_decision_cannot_substitute_the_payload(transport, audit):
         )
 
     # A decision from another session does not find the record.
-    wrong = registry.decide_mcp_call(
-        pending_id, True, session_id="other-session", servers=[server]
-    )
+    wrong = registry.decide_mcp_call(pending_id, True, session_id="other-session", servers=[server])
     assert wrong["error"] == "unknown_pending_mcp_decision"
     assert transport == []
 
     approved = registry.decide_mcp_call(pending_id, True, session_id="sess-1", servers=[server])
     assert approved["ok"] is True
-    assert transport == [
-        {"server_id": "acme", "tool": MUTATING, "args": {"issueKey": "JIRA-1234"}}
-    ]
+    assert transport == [{"server_id": "acme", "tool": MUTATING, "args": {"issueKey": "JIRA-1234"}}]
 
     # Exactly once: a replayed approval finds no record and runs nothing.
     replay = registry.decide_mcp_call(pending_id, True, session_id="sess-1", servers=[server])
@@ -321,7 +313,44 @@ def test_confirm_names_the_operation_not_the_meta_tool(transport):
         assert banned not in rendered
 
     # The confirm path raises on a meta tool rather than rendering a consent box.
-    for meta in ("acme_executeWrite", "acme_discover", "acme_executeRead", "acme_executeDestructive"):
+    for meta in (
+        "acme_executeWrite",
+        "acme_discover",
+        "acme_executeRead",
+        "acme_executeDestructive",
+    ):
         with pytest.raises(registry.MetaToolConfirmationRefused):
             registry.execute(meta, {"anything": 1}, _context(server))
     assert transport == []
+
+
+@pytest.mark.unit
+def test_meta_tool_on_an_undeclared_row_is_not_gated(transport):
+    """A meta tool is refused only where the operator row is authoritative.
+
+    This is a deliberate, recorded reduction of the gate's reach, so that it can
+    not be widened or narrowed silently. A row that declares no ``mutatingTools``
+    says nothing about what mutates, so this gate does not engage on it and the
+    call keeps its pre-gate behaviour. The develop test
+    ``test_registry_execute_calls_the_advertised_mcp_tool_name`` uses exactly this
+    row shape and asserts that such a call executes.
+    """
+    from digigraph.orchestration import registry
+
+    bare = _server()
+    del bare["mutatingTools"]
+    del bare["allowedTools"]
+
+    # Not gated and not refused: the call reaches the transport.
+    registry.execute(
+        "acme_executeWrite", {"anything": 1}, _context(bare, allowed=["acme_executeWrite"])
+    )
+    assert [c["tool"] for c in transport] == ["executeWrite"]
+
+    # The same meta tool on a row that DOES declare mutatingTools is refused.
+    declared = _server(mutatingTools=["deleteAllPages"])
+    with pytest.raises(registry.MetaToolConfirmationRefused):
+        registry.execute(
+            "acme_executeWrite", {"anything": 1}, _context(declared, allowed=["acme_executeWrite"])
+        )
+    assert [c["tool"] for c in transport] == ["executeWrite"]

@@ -302,51 +302,43 @@ def _remote_operation(
     return server_id, remote, row
 
 
-def _operator_declares_mutating(remote: str, row: dict[str, Any]) -> bool:
-    """Whether the operator's own row says this call must not run unattended.
-
-    Wire rule 5 is an ABSENCE rule: no ``mutatingTools`` means every allowed tool
-    mutates. It has to be read here rather than through
-    ``mcp_server_mutating_tools`` because that helper resolves the absent key by
-    falling back to the row's own ``allowedTools`` -- and a row need not carry
-    ``allowedTools`` at all, because allowed-ness can arrive on the ToolContext
-    instead. Such a row resolves to an EMPTY set, which reads as "nothing
-    mutates" and gates nothing: an operator who supplies neither list would get
-    no gate, which is precisely what rule 5 exists to prevent.
-
-    So an absent ``mutatingTools`` is taken at face value and gates every call
-    that reaches this point. Only a row that positively lists ``mutatingTools``
-    -- including an explicit ``[]``, the operator saying nothing mutates -- can
-    answer that a tool does not need a human.
-    """
-    from digigraph.orchestration.mcp_client import _server_tool_names
-
-    declared = _server_tool_names(row, "mutatingTools", "mutating_tools")
-    if declared is None:
-        return True
-    return remote in set(declared)
-
-
 def _requires_human_approval(
     name: str, servers: list[dict[str, Any]]
 ) -> tuple[str, str, dict[str, Any]] | None:
     """Return the remote operation when this call must not run unattended.
 
-    ``mutatingTools`` is the operator's own row (284.1), never a server-supplied
-    annotation: rule 5 makes an absent list mean every allowed tool mutates.
+    ``mutatingTools`` is read from the operator's own row (284.1), never from a
+    server-supplied annotation. Rule 5 is applied exactly as ``mcp_client``
+    implements it: an absent ``mutatingTools`` falls back to the row's
+    ``allowedTools``, so a row declaring neither list gates nothing.
+
+    A meta tool cannot be confirmed by a human, because no consent box can name
+    the operation such a tool will choose. The refusal therefore fires only where
+    the operator row is authoritative, that is where it declares
+    ``mutatingTools``. On a row declaring nothing this gate does not engage, and
+    the call keeps its pre-gate behaviour;
+    ``test_meta_tool_on_an_undeclared_row_is_not_gated`` pins that reduction so
+    it cannot be widened or narrowed silently.
     """
-    from digigraph.orchestration.mcp_client import _refused_meta_tool
+    from digigraph.orchestration.mcp_client import (
+        _refused_meta_tool,
+        _server_tool_names,
+        mcp_server_mutating_tools,
+    )
 
     resolved = _remote_operation(name, servers)
     if resolved is None:
         return None
     server_id, remote, row = resolved
-    if _refused_meta_tool(remote):
+    if (
+        _refused_meta_tool(remote)
+        and _server_tool_names(row, "mutatingTools", "mutating_tools") is not None
+    ):
         raise MetaToolConfirmationRefused(
             f"Refusing to ask for approval of meta tool {remote!r} on server {server_id!r}: "
             "it selects its own operation, so no consent box can describe what it will call."
         )
-    if not _operator_declares_mutating(remote, row):
+    if remote not in mcp_server_mutating_tools(row):
         return None
     return server_id, remote, row
 
