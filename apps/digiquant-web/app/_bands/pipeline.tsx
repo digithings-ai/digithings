@@ -139,11 +139,16 @@ export function PipelineBand() {
     <Band
       id="pipeline"
       plain
+      pin
       title="Agent orchestration"
       takeaway="Workflows, graphs, and orchestrations. Research and the investment portfolio run. Each card is a picture of that graph, not a live run. None of them places an order."
     >
+      {/* The head is pinned under the nav (globals.css .band-pin), so the deck
+          stops at the pinned rule instead of riding up under it: nav clearance
+          + the head's own height, which that stylesheet authors once. Below
+          901px the deck drops sticky and the var is 0. */}
       <DeckStack
-        className="[--deck-top:calc(var(--nav-shell-h,62px)+0.75rem)]"
+        className="[--deck-top:calc(var(--nav-shell-h,62px)+var(--band-pin-h,0px))]"
         ariaLabel="digiquant workflows"
         rail={WORKFLOWS.map((workflow) => workflow.name)}
         railAriaLabel="Workflows"

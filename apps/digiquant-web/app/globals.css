@@ -225,6 +225,61 @@ body {
   .section-eyebrow__tick { width: 1.6rem; }
 }
 
+/* ── pinned band head (DIG-2854) ───────────────────────────────────────────
+   A band may pin its section head under the nav for the length of the band.
+   The head carries the hairline on its own bottom edge, so that rule is where
+   scrolling stops and the band body starts stacking below it.
+
+   `--band-pin-h` is authored ONCE, on the shell, and read twice: as the
+   head's own block size here, and by the band body as `--deck-top`. The
+   number that sizes the head is the same number that stops the deck, so a
+   stacked card can never ride up under the head and be cut off by it.
+
+   Wide only, matching deck.css: below 901px the deck drops sticky entirely,
+   so a pinned head would cost the reader screen height for nothing. The var
+   is 0 there, which leaves `--deck-top` at the plain nav clearance. */
+.band-pin-shell {
+  --band-pin-h: 0px;
+}
+
+/* The canvas behind the head. Needed even un-pinned (narrow): the head is the
+   only element in the band that overlaps the body. */
+.band-pin {
+  background: var(--bg);
+}
+
+@media (min-width: 901px) {
+  .band-pin-shell {
+    /* eyebrow (0.75rem) + 0.7rem gap + one title line + 0.75rem pad + 1px
+       rule. The title is clamp()-capped at 2.25rem, so one line and this
+       number hold at every width the deck stacks at. */
+    --band-pin-h: 4.95rem;
+  }
+
+  .band-pin {
+    position: sticky;
+    top: var(--nav-shell-h, 62px);
+    /* Above the deck's own stacking (cards and the rail carry no z-index)
+       but below the nav, which sits outside the band's stacking context. */
+    z-index: 2;
+    box-sizing: border-box;
+    block-size: var(--band-pin-h);
+    padding-block-end: 0.75rem;
+  }
+
+  /* The rule runs to the same edges as the band's own border-b, so the pinned
+     line and the band boundary land on one rule. The head is sticky (hence
+     positioned), so this pseudo sizes against it. */
+  .band-pin::after {
+    content: "";
+    position: absolute;
+    inset-inline: calc(-1 * var(--page-pad, 0rem));
+    inset-block-end: -1px;
+    block-size: 1px;
+    background: var(--hair);
+  }
+}
+
 /* Hero entrance: logo + copy + buttons first; chart builds afterward (see QuantField). */
 @media (prefers-reduced-motion: no-preference) {
   .hero-rise {
