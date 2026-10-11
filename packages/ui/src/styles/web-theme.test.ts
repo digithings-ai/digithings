@@ -120,7 +120,7 @@ describe("mosaic focus-detail transition contract (DIG-2354)", () => {
     const at = css.indexOf(SELECTOR);
     expect(at).toBeGreaterThan(-1);
     const block = css.slice(at, css.indexOf("}", at));
-    const opacity = block.match(/opacity\s+[\d.]+m?s\s+var\(--ease\)([^;]*);/);
+    const opacity = block.match(/opacity\s+[\d.]+m?s\s+var\(--ease\)([^,;]*)[;,]/);
     expect(opacity).not.toBeNull();
     expect(opacity?.[1].trim()).toBe("");
   });
