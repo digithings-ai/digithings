@@ -9,7 +9,7 @@ description: Gathers 7-day positioning signals, public commentary, and disclosed
 
 - **Web grounding (pre-fetched)** — this segment has no maintained Supabase series. A
   `web_grounding` block (a cited web/news/X summary over curated domains incl. reuters.com,
-  apnews.com, sec.gov, cftc.gov, treasury.gov, capitoltrades.com, finance.yahoo.com) is
+  apnews.com, sec.gov, cftc.gov, treasury.gov, finance.yahoo.com) is
   provided in PHASE_INPUTS when available; ground on it and carry its source URLs for hedge-fund positioning, activist stakes, and prime-broker color. into the `sources` field; if no `web_grounding` is present, say so and lower conviction.
 
 ## Purpose

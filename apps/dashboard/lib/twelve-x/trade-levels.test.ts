@@ -243,7 +243,7 @@ const LEVELS_IDEA: FxTradeIdeaRow = {
     },
     targets: [{ value: '1.18', provenance: 'broker_quoted', source_ref: 'ING.pdf' }],
     risk_reward: 1.5,
-    status: 'partial',
+    status: 'complete',
   },
   evidence: [
     {
@@ -260,7 +260,7 @@ const LEVELS_IDEA: FxTradeIdeaRow = {
 describe('buildIdeaDetailModel', () => {
   it('orders short ladder Stop → Entry → Target with roles', () => {
     const model = buildIdeaDetailModel(LEVELS_IDEA);
-    expect(model.status).toBe('partial');
+    expect(model.status).toBe('complete');
     expect(model.riskReward).toBe(1.5);
     expect(model.riskRewardLabel).toBe('1.5');
     expect(model.levelRows.map((r) => r.role)).toEqual(['stop', 'entry', 'target']);

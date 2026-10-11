@@ -1,0 +1,18 @@
+---
+title: "Headings and anchors"
+order: 3
+summary: >-
+  Each heading gets one id: a slug of its own words.
+---
+
+Each heading gets one id: a slug of its own words. There is no author-chosen
+form, because MDX reads `{` as the start of an expression and a heading
+carrying `{#custom}` fails to compile — which was measured, not assumed.
+
+Repeated headings get a `-2` suffix in document order, so two sections called
+`Notes` produce two working entries rather than one link that jumps to the
+wrong place.
+
+The table of contents holds only levels two to four. A level-one heading is the
+chapter title, which the page already shows, and anything deeper is a clause
+that would turn the rail into a wall of links.
