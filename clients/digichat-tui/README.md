@@ -29,4 +29,9 @@ between sessions. `n` or the header `+` asks for a new chat. `/` opens the
 command palette. Tab arms attach, mic, and send. `q` quits when the composer
 is idle.
 
+Motion timing comes from `packages/design/motion.json`, the same tokens the web
+reads. `DIGI_REDUCED_MOTION=1` (or `NO_MOTION=1`) draws every animation at its
+final frame: the built wordmark with no glint, the full welcome text, a steady
+caret, and a static `·` spinner that keeps its status text.
+
 This app is bun-managed and lives outside the root npm workspaces.
