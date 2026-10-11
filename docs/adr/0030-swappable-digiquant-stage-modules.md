@@ -113,7 +113,7 @@ Reader contracts the hub already depends on (twelve-x writes, dashboard reads):
 - Trade ideas: `fx_trade_ideas_snapshot` (`FxTradeIdeaRow`: `run_date`, `rank`, `pair`, `direction`, `title`, `thesis`, `catalyst`, `levels`, `citations`, optional `trade_levels`, `evidence`, `idea_id`, optional `timeframe`). `fx_confluence_snapshot` is the ranked confluence board; its `components` jsonb carries a free-string `timeframe` (a hub test uses `1-3M`). `fx_idea_eval` scores successor-clock outcomes.
 - There is **no** `OrderIntent` (or other digiquant execution type) on these rows.
 
-`digifetch` extracted browser/HTTP mechanics from twelve-x scrapers and names `twelve-x/nodes/scrape.py` and `twelve-x/fx_calendar/scraper.py` as the requirements source. Site login, Prime Market selectors, the research-file AJAX call, Trading Economics calendar parsing, and PDF text stay in twelve-x. Wiring those scrapers onto digifetch is still deferred (`digifetch/ARCHITECTURE.md`). `digillm` notes twelve-x as a consumer (`nodes/llm.py` in the vision docs). This ADR does not claim those files were re-read.
+`digifetch` extracted browser/HTTP mechanics from twelve-x scrapers and names `twelve-x/nodes/scrape.py` and `twelve-x/fx_calendar/scraper.py` as the requirements source. Site login, vendor selectors, the vendor AJAX call, calendar parsing, and document text stay in twelve-x. Wiring those scrapers onto digifetch is still deferred (`digifetch/ARCHITECTURE.md`). `digillm` notes twelve-x as a consumer (`nodes/llm.py` in the vision docs). This ADR does not claim those files were re-read.
 
 ### Composition diagram (target)
 

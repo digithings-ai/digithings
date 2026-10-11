@@ -1,0 +1,54 @@
+# OCC invite key rollout guards (DIG-1612, DIG-1381 Act B1).
+#
+# DECISION (Chris, 2026-10-10): the OCC invite key is rotated on the Cloudflare
+# side only. GitHub never holds the current DIGICHAT_EMBED_TENANTS value (it
+# contains the live MCP_EDGE_KEY) or the new invite key. So this workflow has
+# no production write path and reads no rollout secrets. It runs the offline
+# guards that prove scripts/occ_invite_key_rollout.sh is safe to run.
+#
+# The production write is `scripts/occ_invite_key_rollout.sh` run from a
+# Cloudflare-authenticated terminal (OCC_ROLLOUT_AUTH=login), with the tenant
+# JSON read from the local secrets manager. See docs/ops/OCC_INVITE_KEY.md
+# section "Cloudflare-side rotation". It is a staged-deploy step, after the
+# release merge to main is approved.
+name: "Ops: OCC invite key rollout guards"
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "scripts/occ_invite_key_rollout.sh"
+      - "scripts/check_occ_rollout_auth_guard.py"
+      - "scripts/test_occ_rollout_scope_guard.sh"
+      - "scripts/verify_occ_invite_key.sh"
+      - "scripts/test_verify_occ_invite_key.sh"
+      - ".github/workflows/occ-invite-key-rollout.yml"
+
+concurrency:
+  group: occ-invite-key-rollout-guards-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  guards:
+    name: OCC invite key rollout guards (offline, no Cloudflare calls)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      # Offline, writes nothing, no network. Runs the real rollout script against
+      # a stubbed npx and asserts the auth, Worker-directory and scope guards
+      # (only occ.digithings.ai.token and backend.digisearchIndex may change).
+      - name: Offline auth and scope guards
+        run: |
+          set -euo pipefail
+          python3 scripts/check_occ_rollout_auth_guard.py
+          bash scripts/test_occ_rollout_scope_guard.sh
+          {
+            echo "## OCC invite key rollout guards"
+            echo
+            echo "No Cloudflare API call was made and nothing was written."
+            echo "The production rotation is Cloudflare-side only; see docs/ops/OCC_INVITE_KEY.md."
+          } >> "$GITHUB_STEP_SUMMARY"

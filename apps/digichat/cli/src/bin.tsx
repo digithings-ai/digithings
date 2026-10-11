@@ -22,6 +22,7 @@ import {
   assertCliEnabled,
   type DigichatCliAuth,
 } from "./chat-request.js";
+import { cliVersion } from "./version.js";
 
 function readFlag(argv: string[], name: string): string | undefined {
   const idx = argv.indexOf(name);
@@ -63,12 +64,17 @@ function resolveAuth(argv: string[]): DigichatCliAuth {
 
 function main(): void {
   const argv = process.argv.slice(2);
+  if (argv.includes("--version") || argv.includes("-V")) {
+    process.stdout.write(`digichat ${cliVersion()}\n`);
+    process.exit(0);
+  }
   if (argv.includes("--help") || argv.includes("-h")) {
     process.stdout.write(`digichat cli — Ink TTY client (assistant-ui react-ink)
 
 Usage:
   digichat --url http://127.0.0.1:3005 [--config path/to/digichat.yaml]
   digichat --demo
+  digichat --version
 
 Auth (one of, live mode):
   --embed-token / DIGICHAT_EMBED_TOKEN
