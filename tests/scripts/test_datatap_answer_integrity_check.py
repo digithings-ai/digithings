@@ -215,6 +215,13 @@ _BAD_ANSWERS = {
     "cus_short_body": "The tenant on file is CUS-4.",
     "cust_lowercase": "The tenant on file is cust-123.",
     "cus_underscore": "The tenant on file is CUS_4821.",
+    # DIG-2425. An md5 digest is 32 hex characters, which is *exactly* the
+    # dashless id shape `build_payload` emits, so by this detector's own
+    # definition it is a leak and must stay one. Recorded here so the digest
+    # case is pinned with the polarity it actually has, rather than left to a
+    # future reader who assumes "digest" means "harmless" and relaxes the
+    # dashless branch to digest widths.
+    "md5_digest_is_a_dashless_id": "The md5 of the logo is 5d41402abc4b2a76b9719d911017c592.",
 }
 
 
@@ -257,6 +264,168 @@ def test_http_200_answer_naming_a_customer_fails_with_exit_one(answer: str) -> N
         }
     )
     assert code == mod.FAIL == 1
+
+
+# --------------------------------------------------------------------------
+# Exit 0: a hex or prefixed shape that is *not* one of the two id shapes, and
+# is only clean because of a word boundary. There are exactly five such
+# boundaries in the identifier patterns and every one is pinned below (DIG-2425).
+# --------------------------------------------------------------------------
+
+# Each value is (the anchor it pins, the answer). The anchor name is carried
+# into the failure message so a red test says which boundary went missing
+# rather than just which sentence got invented about.
+#
+# Why each case is clean, and which removal reds it (each anchor was removed
+# from the pattern in turn to check this, and every one turned at least one id
+# below red):
+#
+#   uuid_dashed_leading    "x9b860dbf-..." — eight hex characters glued to a
+#                          word character. The engine can see the run, and only
+#                          the leading \b refuses to start inside it.
+#   uuid_dashed_trailing   "...-0123456789abcafe" — the twelfth hex is followed
+#                          by four more, so the run overruns and only the
+#                          trailing \b refuses to end inside it.
+#   uuid_dashless_leading  A digest or a git sha is one long hex run. Offset 0
+#   uuid_dashless_trailing is a legal 32-hex match only if the trailing \b is
+#                          allowed to sit mid-run, and every later offset is a
+#                          legal 32-hex match only if the leading \b is allowed
+#                          to sit mid-run. So the 33/40/64-hex cases need both,
+#                          which is why each is filed under both names.
+#   prefixed_leading       "Marcus-4" contains "cus-4" behind the letter r, and
+#                          the pattern is case-insensitive. Same for "focus-"
+#                          and "often_". Drop the \b and the answer reports
+#                          three leaked records on a refusal.
+#
+# The md5 digest is deliberately absent from this list and present in
+# _BAD_ANSWERS instead: 32 hex *is* the dashless id shape, so it is dirty. Only
+# the shapes wider than 32 hex are clean, and only because both of their
+# boundaries hold at once.
+_IDENTIFIER_PATTERNS = ("_UUID_RE", "_PREFIXED_ID_RE")
+
+
+def _identifier_pattern_sources() -> dict[str, str]:
+    """The regex literals behind the two identifier patterns, read from the AST.
+
+    Read from the tree rather than off `mod._UUID_RE.pattern` so the pin is on
+    the source that ships, and so a boundary quietly rewritten as a lookaround
+    (`(?<![0-9a-fA-F])`, which is not a `\b` and behaves differently near a
+    non-hex word character) fails to look like one of the five.
+    """
+    tree = ast.parse(SCRIPT.read_text(encoding="utf-8"))
+    sources: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign) or len(node.targets) != 1:
+            continue
+        target = node.targets[0]
+        if not isinstance(target, ast.Name) or target.id not in _IDENTIFIER_PATTERNS:
+            continue
+        assert isinstance(node.value, ast.Call), f"{target.id} must stay a re.compile call"
+        sources[target.id] = "".join(ast.literal_eval(arg) for arg in node.value.args)
+    assert set(sources) == set(_IDENTIFIER_PATTERNS), (
+        f"expected patterns {sorted(_IDENTIFIER_PATTERNS)}, found {sorted(sources)}"
+    )
+    return sources
+
+
+_CLEAN_IDENTIFIER_BOUNDARY_CASES = {
+    "sha256_digest": (
+        "uuid_dashless_leading",
+        "The sha256 of the logo is "
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.",
+    ),
+    "sha256_digest_trailing_anchor": (
+        "uuid_dashless_trailing",
+        "The sha256 of the logo is "
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.",
+    ),
+    "git_sha": (
+        "uuid_dashless_leading",
+        "Deployed from a1b2c3d4e5f60718293a4b5c6d7e8f9012345678 last night.",
+    ),
+    "git_sha_trailing_anchor": (
+        "uuid_dashless_trailing",
+        "Deployed from a1b2c3d4e5f60718293a4b5c6d7e8f9012345678 last night.",
+    ),
+    "hex_33": (
+        "uuid_dashless_leading",
+        "The truncated checksum is 5d41402abc4b2a76b9719d911017c592a.",
+    ),
+    "hex_33_trailing_anchor": (
+        "uuid_dashless_trailing",
+        "The truncated checksum is 5d41402abc4b2a76b9719d911017c592a.",
+    ),
+    "dashed_uuid_glued_to_a_word": (
+        "uuid_dashed_leading",
+        "Reference x9b860dbf-1234-4321-abcd-0123456789ab is stale.",
+    ),
+    "dashed_uuid_overrun_by_hex": (
+        "uuid_dashed_trailing",
+        "Reference 9b860dbf-1234-4321-abcd-0123456789abcafe is stale.",
+    ),
+    "cus_inside_marcus": ("prefixed_leading", "escalate to Marcus-4 today"),
+    "cus_inside_focus": (
+        "prefixed_leading",
+        "Please focus-4821 the report on that account.",
+    ),
+    "ten_inside_often": ("prefixed_leading", "We often_5 miss this in the nightly run."),
+}
+
+
+@pytest.mark.parametrize(
+    ("anchor", "answer"),
+    [case for _, case in sorted(_CLEAN_IDENTIFIER_BOUNDARY_CASES.items())],
+    ids=[name for name, _ in sorted(_CLEAN_IDENTIFIER_BOUNDARY_CASES.items())],
+)
+def test_a_hex_or_prefixed_shape_outside_the_boundary_is_clean(
+    anchor: str, answer: str
+) -> None:
+    """The five word boundaries, one by one, from the answer side.
+
+    Each answer below is one real-world string — a sha256, a git sha, a
+    truncated checksum, a doc reference, an escalation line — that this check
+    must call clean. None of them is an id. The only thing keeping them clean
+    is a `\b` at the edge of a pattern, and a `\b` that no test defends is a
+    `\b` that gets deleted the next time someone tidies a regex. So: remove any
+    one of the five and at least one id in this list goes red.
+    """
+    assert mod.scan_answer(answer) == [], (
+        f"{anchor!r} is load-bearing for this case; dropping that \\b turns a "
+        "clean answer into a false SEV1 on a client account"
+    )
+
+
+def test_the_identifier_patterns_have_no_anchor_without_a_case() -> None:
+    """The count is the pin: a sixth boundary needs a case of its own.
+
+    The behavioural test above can only catch a boundary that a case happens to
+    depend on. This one catches the other direction — someone who *adds* a
+    `\b`, or replaces one with a lookaround, and then relaxes the case that was
+    defending it. It reads the pattern literals out of the AST rather than off
+    the compiled object so the pin is on the source that ships.
+
+    Five is the number as of DIG-2425, and this test is where that number
+    changes. Adding a sixth anchor means adding a sixth case above, which means
+    saying what real string it is holding clean.
+    """
+    sources = _identifier_pattern_sources()
+    expected = {
+        "uuid_dashed_leading": r"\b[0-9a-fA-F]{8}-",
+        "uuid_dashed_trailing": r"{12}\b",
+        "uuid_dashless_leading": r"|\b[0-9a-fA-F]{32}",
+        "uuid_dashless_trailing": r"{32}\b",
+        "prefixed_leading": r"\b(?:CUST|CUS|ACC|TEN)",
+    }
+    missing = {
+        name: frag for name, frag in expected.items() if not any(frag in src for src in sources)
+    }
+    assert not missing, f"these anchors no longer appear in the patterns: {sorted(missing)}"
+    total = sum(src.count("\\b") for src in sources)
+    assert total == 5, (
+        f"expected 5 word boundaries across {sorted(sources)}, found {total}: one was "
+        "added or dropped, and every anchor needs a case in "
+        "_CLEAN_IDENTIFIER_BOUNDARY_CASES"
+    )
 
 
 @pytest.mark.parametrize("dirty", [0, 1], ids=["first_probe_dirty", "second_probe_dirty"])
