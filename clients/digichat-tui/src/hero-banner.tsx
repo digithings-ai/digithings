@@ -4,11 +4,13 @@ import { useEffect, useState } from "react";
 import { nextTickMs, resolveLive, resolveMotion } from "../../../packages/hero-banner/src/engine";
 import { bannerLines, colorModeFrom, type TermColor } from "../../../packages/hero-banner/src/tui";
 import type { BannerDefinition } from "../../../packages/hero-banner/src/types";
+import { reducedMotion } from "./motion";
 
 /**
  * OpenTUI renderer for @digithings/hero-banner. Any banner definition, drawn
  * in half-blocks. LOADING plays once per process: a remount keeps the clock.
- * NO_MOTION / HERO_BANNER_MOTION=reduce draw the settled mark with no timer;
+ * NO_MOTION / HERO_BANNER_MOTION=reduce / DIGI_REDUCED_MOTION draw the
+ * settled mark with no timer;
  * HERO_BANNER_LIVE=0 (or `live={false}`) settles after LOADING.
  * `holdMs` freezes the banner at one moment (snapshots, tests).
  */
@@ -38,7 +40,7 @@ export function HeroBanner({
   align?: "center" | "left";
   env?: Record<string, string | undefined>;
 }) {
-  const motion = resolveMotion({ env });
+  const motion = resolveMotion({ env, prefersReduced: reducedMotion(env) });
   const liveOn = resolveLive(def, { env, config: live });
   const mode = colorModeFrom(env);
   const [now, setNow] = useState(() => Date.now());
