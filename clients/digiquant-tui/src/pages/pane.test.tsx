@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { act } from "react";
 import { testRender } from "@opentui/react/test-utils";
-import { PaneFrame, PANE_HINT } from "./pane";
-import { DOWN, INK, MUTE, UP } from "../theme";
+import { CLOSE_HINT, OPEN_HINT, PaneFrame, PANE_HINT } from "./pane";
 import type { PaneBody } from "./shape";
+import { DOWN, INK, MUTE, UP } from "../theme";
 
 /** These are render-level assertions on purpose.
  *
@@ -112,5 +112,49 @@ describe("signed figures take the up and down colours", () => {
     const stat: PaneBody = { blocks: [{ kind: "stat", text: "day  -0.40%   invested  80.00%" }] };
     expect(await inkOf(stat, "-0.40%")).toBe(DOWN.toUpperCase());
     expect(await inkOf(stat, "80.00%")).toBe(MUTE.toUpperCase());
+  });
+});
+
+const WIDE: PaneBody = {
+  blocks: [
+    {
+      kind: "table",
+      columns: ["Pair", "Mid", "Bid", "Ask", "Spread", "LASTCOL"],
+      rows: Array.from({ length: 12 }, (_, i) => ["USDJPY", "149.123456789", "149.10", "149.14", "0.04", `ROW${i}END`]),
+    },
+  ],
+};
+
+async function paneFrame(width: number, height: number, open: boolean): Promise<string> {
+  const setup = await testRender(<PaneFrame title="WIDE" status="as of today" focused open={open} blocks={WIDE} ink={INK} />, { width, height });
+  // The first pass lays the body out and measures it; the second paints the face that fits.
+  await act(async () => {
+    await setup.renderOnce();
+  });
+  await act(async () => {
+    await setup.renderOnce();
+  });
+  const captured = setup.captureCharFrame();
+  act(() => setup.renderer.destroy());
+  return captured;
+}
+
+describe("a pane opens in place", () => {
+  test("closed, it shows the key columns, the rows that fit, and says what it left out", async () => {
+    const captured = await paneFrame(40, 10, false);
+    expect(captured).toContain(OPEN_HINT);
+    expect(captured).toContain("Pair");
+    expect(captured).not.toContain("LASTCOL");
+    expect(captured).toMatch(/\+\d+ cols/);
+    expect(captured).toContain("149.1235");
+    expect(captured).not.toContain("149.123456789");
+  });
+
+  test("open, it shows every column and the close hint", async () => {
+    const captured = await paneFrame(90, 20, true);
+    expect(captured).toContain(CLOSE_HINT);
+    expect(captured).toContain("LASTCOL");
+    expect(captured).toContain("ROW11END");
+    expect(captured).not.toMatch(/\+\d+ cols/);
   });
 });

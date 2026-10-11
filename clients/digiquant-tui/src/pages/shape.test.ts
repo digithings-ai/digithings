@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { EMPTY_READ, STUB_READ } from "../read";
-import { shapeLines, strategyBlocks } from "./shape";
+import { shapeLines, strategyBlocks, tidyBody, tidyNumbers } from "./shape";
 
 test("a stub, a 502, and an empty read stay the exact sentence", () => {
   expect(shapeLines([STUB_READ])).toEqual({ blocks: [{ kind: "sentence", text: STUB_READ }] });
@@ -61,4 +61,27 @@ test("strategy text stays a sentence and a catalog is a table", () => {
     rows: [["s1", "carry"]],
   });
   expect(table.blocks).toEqual([{ kind: "table", columns: ["ID", "Strategy"], rows: [["s1", "carry"]] }]);
+});
+
+test("long numbers are tidied; dates, times, versions and short numbers stay", () => {
+  expect(tidyNumbers("NAV 1.39268400000001")).toBe("NAV 1.3927");
+  expect(tidyNumbers("cash 1043280.123456")).toBe("cash 1043280.12");
+  expect(tidyNumbers("vol 0.000123456789")).toBe("vol 0.0001235");
+  expect(tidyNumbers("-2.500000000001%")).toBe("-2.5000%");
+  expect(tidyNumbers("2026-10-12 09:30:00.123456 104.80 v1.2.345678")).toBe("2026-10-12 09:30:00.123456 104.80 v1.2.345678");
+});
+
+test("table cells and prose are tidied, charts are not", () => {
+  const body = tidyBody({
+    blocks: [
+      { kind: "table", columns: ["Pair", "Mid"], rows: [["USDJPY", "149.123456789"]] },
+      { kind: "stat", text: "beta 0.9876543" },
+      { kind: "chart", text: "▁▂▃" },
+    ],
+  });
+  expect(body.blocks).toEqual([
+    { kind: "table", columns: ["Pair", "Mid"], rows: [["USDJPY", "149.1235"]] },
+    { kind: "stat", text: "beta 0.9877" },
+    { kind: "chart", text: "▁▂▃" },
+  ]);
 });

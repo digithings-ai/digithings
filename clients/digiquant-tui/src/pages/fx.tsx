@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
 import { BLOCKS, layoutFor, type BlockKind } from "../catalog";
-import { COLS, ROWS } from "../grid";
 import { DASH, EMPTY_READ, presentResponse, type ReadResult } from "../read";
 import { DANGER, INK, MUTE, WARN } from "../theme";
-import { PaneFrame, useFocusedPane } from "./pane";
+import { openLayout, PaneFrame, paneBox, useFocusedPane } from "./pane";
 import { cell } from "../format";
 import { shapeLines } from "./shape";
 import { calendarDay, todayYmd, tradingSessionsSince } from "./trading-calendar";
@@ -35,8 +34,6 @@ export const FX_PATHS = ["/fx", "/fx/ideas", "/fx/watch", "/fx/rates", "/fx/sett
 
 const NOT_PROVISIONED = /not provisioned|migration drafted/i;
 const NOT_CONFIGURED = /not configured/i;
-
-const share = (cells: number, total: number): `${number}%` => `${(cells / total) * 100}%` as `${number}%`;
 
 export function isFxBlock(id: string): id is FxBlockId {
   return (FX_BLOCK_IDS as readonly string[]).includes(id);
@@ -538,7 +535,7 @@ export function fxInk(status: FxTone): string {
   return DANGER;
 }
 
-function FxBlock({ id, api, focused }: { id: string; api: string; focused: boolean }) {
+function FxBlock({ id, api, focused, open }: { id: string; api: string; focused: boolean; open: boolean }) {
   const def = BLOCKS[id];
   const route = def?.route;
   const kind = def?.kind;
@@ -566,6 +563,7 @@ function FxBlock({ id, api, focused }: { id: string; api: string; focused: boole
       title={def.title}
       status={fxPaneStatus(loaded?.result ?? null, loaded?.data, def.route)}
       focused={focused}
+      open={open}
       blocks={shapeLines(lines)}
       ink={fxInk(status)}
     />
@@ -580,20 +578,17 @@ export function FxDesk({ path, api = API }: { path: string; api?: string }) {
 
 function FxLayout({ path, api }: { path: string; api: string }) {
   const layout = layoutFor(path);
-  const [focus, setFocus] = useFocusedPane(layout.length, path);
+  const [focus, setFocus, open] = useFocusedPane(layout.length, path);
+  const rects = openLayout(layout, focus, open);
   return (
     <box width="100%" height="100%" position="relative" overflow="hidden">
       {layout.map((placement, index) => (
         <box
           key={placement.id}
-          position="absolute"
-          left={share(placement.x - 1, COLS)}
-          top={share(placement.y - 1, ROWS)}
-          width={share(placement.w, COLS)}
-          height={share(placement.h, ROWS)}
+          {...paneBox(rects, placement.id)}
           onMouseDown={() => setFocus(index)}
         >
-          <FxBlock id={placement.id} api={api} focused={index === focus} />
+          <FxBlock id={placement.id} api={api} focused={index === focus} open={open && index === focus} />
         </box>
       ))}
     </box>

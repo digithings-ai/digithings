@@ -6,7 +6,7 @@ import { EMPTY_READ, STUB_READ, type ReadResult } from "../../../../../clients/d
 import { briefBlocks } from "../../../../../clients/digiquant-tui/src/pages/brief-format";
 import { shapeLines, type PaneBody } from "../../../../../clients/digiquant-tui/src/pages/shape";
 import { readOfficial, type OfficialRead } from "../read-block";
-import { DeskPane, PANE_GRID, usePaneFocus } from "./pane";
+import { DESK_TILE, DeskPane, PANE_MOSAIC, useDeskMosaic } from "./pane";
 
 /** Brief desk. One block per official read. A down API or a stub stays a sentence. */
 const PATH = "/brief";
@@ -35,7 +35,7 @@ function paint(id: string, read: OfficialRead | undefined): { status: ReadResult
 export function BriefPage() {
   const [reads, setReads] = useState<Record<string, OfficialRead>>({});
   const layout = layoutFor(PATH);
-  const panes = usePaneFocus(layout.map((placement) => placement.id));
+  const { mount, style, pane } = useDeskMosaic(layout);
 
   useEffect(() => {
     const placements = layoutFor(PATH);
@@ -56,7 +56,7 @@ export function BriefPage() {
   }, []);
 
   return (
-    <div className={PANE_GRID}>
+    <div ref={mount} className={PANE_MOSAIC}>
       {layout.map((placement) => {
         const def = BLOCKS[placement.id];
         if (!def) return null;
@@ -64,8 +64,8 @@ export function BriefPage() {
         return (
           <div
             key={placement.id}
-            className="min-h-0 min-w-0"
-            style={{ gridColumn: `${placement.x} / span ${placement.w}`, gridRow: `${placement.y} / span ${placement.h}` }}
+            className={DESK_TILE}
+            style={style(placement.id)}
           >
             <DeskPane
               title={def.title}
@@ -74,9 +74,7 @@ export function BriefPage() {
               dataAsOf={view.dataAsOf}
               blocks={view.blocks}
               tone={tone[view.status]}
-              focused={panes.focus === placement.id}
-              onFocus={() => panes.focusAt(placement.id)}
-              onNext={panes.next}
+              {...pane(placement.id)}
               panel={view.status === "ok" ? { id: placement.id, data: reads[placement.id]?.data } : undefined}
             />
           </div>

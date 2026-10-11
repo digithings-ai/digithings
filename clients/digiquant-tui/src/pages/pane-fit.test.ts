@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { compactBody, fitColumns, hiddenLabel } from "./pane-fit";
+import { describe, expect, it } from "bun:test";
+import { bodySize, compactBody, fitColumns, hiddenLabel } from "./pane-fit";
 
 describe("desk card face", () => {
   const columns = ["Direction", "Entry date", "Entry", "Exit date", "Exit", "Return"];
@@ -37,5 +37,20 @@ describe("desk card face", () => {
     const { body, hidden } = compactBody({ blocks }, { chars: 80, rows: 8 });
     expect(body.blocks).toEqual(blocks);
     expect(hiddenLabel(hidden)).toBeNull();
+  });
+
+  it("keeps the start of long prose and marks the cut", () => {
+    const text = "The book is long duration into the meeting. ".repeat(6).trim();
+    const { body } = compactBody({ blocks: [{ kind: "sentence", text }] }, { chars: 20, rows: 2 });
+    const face = body.blocks[0];
+    expect(face?.kind).toBe("sentence");
+    if (face?.kind !== "sentence") return;
+    expect(face.text.length).toBeLessThanOrEqual(40);
+    expect(face.text.endsWith("…")).toBe(true);
+  });
+
+  it("measures what an open card needs", () => {
+    expect(bodySize({ blocks: [{ kind: "table", columns, rows }] })).toEqual({ chars: 6 * 3 + 9 + 10 + 6 + 10 + 6 + 6, lines: 13 });
+    expect(bodySize({ blocks: [{ kind: "sentence", text: "x".repeat(150) }] })).toEqual({ chars: 72, lines: 3 });
   });
 });

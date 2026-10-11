@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
 import { BLOCKS, layoutFor, type BlockKind } from "../catalog";
-import { COLS, ROWS } from "../grid";
 import { EMPTY_READ, STUB_READ, presentResponse, type ReadResult } from "../read";
 import { DANGER, INK, MUTE } from "../theme";
 import { pipelineBody } from "./pipeline-format";
-import { PaneFrame, useFocusedPane } from "./pane";
+import { openLayout, PaneFrame, paneBox, useFocusedPane } from "./pane";
 import { shapeLines, type PaneBody } from "./shape";
 import { asOfStatus } from "../format";
 
@@ -13,8 +12,6 @@ const PATH = "/pipeline";
 const DEFAULT_API = (process.env.DQ_API_URL ?? "http://127.0.0.1:8788").replace(/\/+$/, "");
 
 const STUB_MARKS = ["99.909", "204.04", "legacy_estimate"];
-
-const share = (cells: number, total: number): `${number}%` => `${(cells / total) * 100}%` as `${number}%`;
 
 const tone = (status: ReadResult["status"] | "loading") => {
   if (status === "ok") return INK;
@@ -59,7 +56,8 @@ function paint(id: string, read: Loaded | undefined): { status: ReadResult["stat
 export function PipelinePage({ api = DEFAULT_API }: { api?: string }) {
   const [reads, setReads] = useState<Record<string, Loaded>>({});
   const layout = layoutFor(PATH);
-  const [focus, setFocus] = useFocusedPane(layout.length);
+  const [focus, setFocus, open] = useFocusedPane(layout.length);
+  const rects = openLayout(layout, focus, open);
 
   useEffect(() => {
     const placements = layoutFor(PATH);
@@ -88,17 +86,14 @@ export function PipelinePage({ api = DEFAULT_API }: { api?: string }) {
         return (
           <box
             key={placement.id}
-            position="absolute"
-            left={share(placement.x - 1, COLS)}
-            top={share(placement.y - 1, ROWS)}
-            width={share(placement.w, COLS)}
-            height={share(placement.h, ROWS)}
+            {...paneBox(rects, placement.id)}
             onMouseDown={() => setFocus(index)}
           >
             <PaneFrame
               title={def.title}
               status={asOfStatus(def.route, view.asOf, view.dataAsOf).label}
               focused={index === focus}
+              open={open && index === focus}
               blocks={view.blocks}
               ink={tone(view.status)}
             />
