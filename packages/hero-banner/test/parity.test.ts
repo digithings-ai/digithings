@@ -9,7 +9,8 @@ import { describe, expect, test } from "bun:test";
 import { heroWordmarkLines } from "../../ui/src/components/chat/digichat-wordmark";
 import type { BuildState } from "../src/animations/build";
 import type { RiseState } from "../src/animations/rise";
-import { DIGICHAT, DIGIQUANT, DIGITHINGS, DIGIVOICE_BASELINE as DIGIVOICE } from "../src/definitions";
+import { scrambleAnimation } from "../src/animations/scramble";
+import { DIGICHAT, DIGICHAT_SCRAMBLE, DIGIQUANT, DIGITHINGS, DIGIVOICE_BASELINE as DIGIVOICE } from "../src/definitions";
 import { preparedBanner } from "../src/engine";
 import { bannerLines, type TermCell, type TermColor } from "../src/tui";
 import { LEGACY_DIGIQUANT } from "./legacy/digiquant-cells";
@@ -103,15 +104,24 @@ function looks(cell: { ch: string; fg: TermColor | null; bg: TermColor | null })
 }
 
 describe("digichat SCRAMBLE matches digichat-wordmark.ts", () => {
+  // The legacy idle (LIVE `flash`). DIGICHAT itself streams in LIVE (DIG-2865);
+  // its LOADING is the same recipe, so it must match up to the end of LOADING.
+  const legacyIdle = { ...DIGICHAT, animation: scrambleAnimation(DIGICHAT_SCRAMBLE) };
+  const loadingMs = DIGICHAT.animation.loadingMs(preparedBanner(DIGICHAT).state);
   for (const truecolor of [true, false]) {
     test(`every 40ms frame for 20s, ${truecolor ? "truecolor" : "256"}`, () => {
       for (const cols of [120, 80, 70]) {
         for (let t = 0; t <= 20_000; t += 40) {
           const legacy = heroWordmarkLines("DIGICHAT", { cols, elapsed: t, full: true, truecolor });
-          const ours = bannerLines(DIGICHAT, { cols, t, mode: truecolor ? "truecolor" : "256", scale: 1 });
+          const mode = truecolor ? "truecolor" : "256";
+          const ours = bannerLines(legacyIdle, { cols, t, mode, scale: 1 });
           const a = legacy.lines.map((row) => row.map((c) => looks({ ch: c.ch, fg: legacyHex(c.color), bg: null })));
           const b = ours.lines.map((row: TermCell[]) => row.map(looks));
           expect(b).toEqual(a);
+          if (t < loadingMs) {
+            const streamed = bannerLines(DIGICHAT, { cols, t, mode, scale: 1 });
+            expect(streamed.lines.map((row: TermCell[]) => row.map(looks))).toEqual(a);
+          }
         }
       }
     });
