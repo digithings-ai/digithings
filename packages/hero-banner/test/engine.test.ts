@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { paintFrame } from "../src/canvas";
-import { BANNERS, DIGICHAT, DIGITHINGS, DIGIVOICE } from "../src/definitions";
+import { BANNERS, DIGICHAT, DIGITHINGS, DIGIVOICE_BASELINE as DIGIVOICE } from "../src/definitions";
 import {
   assertDefinition,
   claimLoading,
