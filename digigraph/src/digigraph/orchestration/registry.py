@@ -236,6 +236,12 @@ class PendingMcpCall:
     as the model wrote them. A decision carries only approve-or-deny: the
     consuming function below has no parameter for a tool name or for arguments,
     so a substituted payload cannot be spelled, let alone executed.
+
+    ``server_row`` is the operator row the call was recorded against, captured
+    at refusal time. It is process memory on the same footing as ``args``, and
+    for the same reason: a deciding request must not be able to redirect the
+    recorded arguments at an endpoint of its choosing. It never appears in
+    ``as_public_event`` or in an audit payload.
     """
 
     pending_id: str
@@ -244,6 +250,7 @@ class PendingMcpCall:
     remote_tool: str
     offered_name: str
     args: dict[str, Any]
+    server_row: dict[str, Any]
 
     @property
     def target_arguments(self) -> list[str]:
@@ -344,7 +351,12 @@ def _requires_human_approval(
 
 
 def _refuse_for_human_approval(
-    name: str, args: dict[str, Any], context: ToolContext, server_id: str, remote: str
+    name: str,
+    args: dict[str, Any],
+    context: ToolContext,
+    server_id: str,
+    remote: str,
+    server_row: dict[str, Any],
 ) -> dict[str, Any]:
     """Record the call once, audit it once, and refuse it without executing it."""
     from digigraph.audit import audit_log
@@ -356,6 +368,7 @@ def _refuse_for_human_approval(
         remote_tool=remote,
         offered_name=name,
         args=dict(args),
+        server_row=dict(server_row),
     )
     key = (record.session_id, record.pending_id)
     with _pending_mcp_lock:
@@ -412,7 +425,6 @@ def decide_mcp_call(
     approve: bool,
     *,
     session_id: str | None = None,
-    servers: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Consume a pending decision. The only path that can execute a recorded call.
 
@@ -422,14 +434,17 @@ def decide_mcp_call(
     replays as unknown rather than running twice -- at-most-once is the correct
     bias for a brake on unattended writes.
 
-    ``servers`` carries the transport only. The row that executes must be the one
-    the call was recorded against; a different row is refused rather than
-    substituted.
+    The transport is not a parameter and none may be added. It was captured
+    onto the record at refusal time, so the row that executes is the row the
+    call was recorded against. A deciding request that re-supplied one could
+    point the recorded arguments at an arbitrary endpoint, which is the gate
+    turned into a suggestion with a network hop in it. (CTO ruling on DIG-284,
+    2026-10-11: the transport is captured at refusal time; re-supplying it is
+    D3 broken by another name.)
 
     The record is consumed the moment the decision reaches this function, not the
-    moment it dispatches. An approval that arrives without a usable transport --
-    no ``servers``, or no row for the recorded server -- is therefore burned and
-    returns ``mcp_call_requires_servers`` / ``mcp_server_not_available``. That is
+    moment it dispatches. An approval whose captured row is unusable is
+    therefore burned and returns ``mcp_server_not_available``. That is
     deliberate and is the same at-most-once bias as the replay case above: a
     decision is spent once or never, and a caller that wants the call made again
     records a fresh pending call.
@@ -458,16 +473,14 @@ def decide_mcp_call(
             "server_id": record.server_id,
         }
 
-    if not servers:
-        return {"error": "mcp_call_requires_servers", "pending_id": record.pending_id}
-    if not any(
-        isinstance(s, dict) and s.get("id") == record.server_id and s.get("url") for s in servers
-    ):
+    row = record.server_row
+    if not row.get("id") or not row.get("url"):
         return {"error": "mcp_server_not_available", "pending_id": record.pending_id}
 
     from digigraph.orchestration.mcp_client import call_prefixed_tool
 
-    return call_prefixed_tool(record.offered_name, record.args, servers)
+    result = call_prefixed_tool(record.offered_name, record.args, [row])
+    return {"status": "approved", "pending_id": record.pending_id, "result": result}
 
 
 def execute(name: str, args: dict[str, Any], context: ToolContext) -> str | dict[str, Any]:
@@ -527,8 +540,8 @@ def execute(name: str, args: dict[str, Any], context: ToolContext) -> str | dict
         extra_servers = context.extra_mcp_servers or []
         gated = _requires_human_approval(name, extra_servers)
         if gated is not None:
-            server_id, remote, _row = gated
-            return _refuse_for_human_approval(name, args, context, server_id, remote)
+            server_id, remote, row = gated
+            return _refuse_for_human_approval(name, args, context, server_id, remote, row)
         if not has_tool(name):
             return call_prefixed_tool(name, args, extra_servers)
     _, _, handler, _ = _tools[name]

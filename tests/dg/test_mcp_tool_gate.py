@@ -214,29 +214,32 @@ def test_decision_cannot_substitute_the_payload(transport, audit):
             pending_id,
             True,
             session_id="sess-1",
-            servers=[server],
             tool="deleteAllPages",
             args={"pageId": "P-1"},
         )
 
     # A decision from another session does not find the record.
-    wrong = registry.decide_mcp_call(pending_id, True, session_id="other-session", servers=[server])
+    wrong = registry.decide_mcp_call(pending_id, True, session_id="other-session")
     assert wrong["error"] == "unknown_pending_mcp_decision"
     assert transport == []
 
-    approved = registry.decide_mcp_call(pending_id, True, session_id="sess-1", servers=[server])
-    assert approved["ok"] is True
+    # 284.6: the answer now carries the decision's own status, because the
+    # client route treats a reply without one as an upstream failure. What the
+    # tool said is nested under "result", not merged into it.
+    approved = registry.decide_mcp_call(pending_id, True, session_id="sess-1")
+    assert approved["status"] == "approved"
+    assert approved["result"]["ok"] is True
     assert transport == [{"server_id": "acme", "tool": MUTATING, "args": {"issueKey": "JIRA-1234"}}]
 
     # Exactly once: a replayed approval finds no record and runs nothing.
-    replay = registry.decide_mcp_call(pending_id, True, session_id="sess-1", servers=[server])
+    replay = registry.decide_mcp_call(pending_id, True, session_id="sess-1")
     assert replay["error"] == "unknown_pending_mcp_decision"
     assert len(transport) == 1
 
     denied = registry.execute(
         "acme_addCommentToJiraIssue", {"issueKey": "JIRA-9999"}, _context(server)
     )["pending_id"]
-    out = registry.decide_mcp_call(denied, False, session_id="sess-1", servers=[server])
+    out = registry.decide_mcp_call(denied, False, session_id="sess-1")
     assert out["status"] == "denied"
     assert len(transport) == 1
 
@@ -499,7 +502,7 @@ def test_denied_pending_call_is_audited_and_never_reaches_the_transport(transpor
         f"{server['id']}_{MUTATING}", {"issueKey": "JIRA-1234"}, _context(server)
     )["pending_id"]
 
-    denied = registry.decide_mcp_call(pending_id, False, session_id="sess-1", servers=[server])
+    denied = registry.decide_mcp_call(pending_id, False, session_id="sess-1")
 
     assert denied["status"] == "denied"
     assert transport == [], "a refused call must never reach the MCP transport"
@@ -526,11 +529,11 @@ def test_a_refusal_cannot_be_flipped_into_a_write_by_a_second_decision(transport
         f"{server['id']}_{MUTATING}", {"issueKey": "JIRA-1234"}, _context(server)
     )["pending_id"]
 
-    denied = registry.decide_mcp_call(pending_id, False, session_id="sess-1", servers=[server])
+    denied = registry.decide_mcp_call(pending_id, False, session_id="sess-1")
     assert denied["status"] == "denied"
 
     replayed_approval = registry.decide_mcp_call(
-        pending_id, True, session_id="sess-1", servers=[server]
+        pending_id, True, session_id="sess-1"
     )
 
     assert transport == [], (
