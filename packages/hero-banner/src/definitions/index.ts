@@ -2,6 +2,7 @@ import { buildAnimation } from "../animations/build";
 import { equalizerAnimation } from "../animations/equalizer";
 import { riseAnimation } from "../animations/rise";
 import { routeAnimation } from "../animations/route";
+import { scanAnimation } from "../animations/scan";
 import { scrambleAnimation } from "../animations/scramble";
 import { PIXEL_7X10 } from "../font";
 import type { BannerDefinition, Tone } from "../types";
@@ -140,10 +141,40 @@ export const DIGILLM: BannerDefinition = {
   seed: 0x11e1,
 };
 
+/** DIG-2873. A search: the word hides in an index of decoy pixels until a scan
+ *  beam finds it. LIVE runs queries over it and highlights the hits.
+ *  Accent: --accent-digisearch. */
+export const DIGISEARCH: BannerDefinition = {
+  id: "digisearch",
+  text: "DIGISEARCH",
+  label: "digisearch",
+  font: PIXEL_7X10,
+  gap: 2,
+  palette: {
+    ink: INK,
+    ground: GROUND,
+    accent: { hex: "#5AA3C4", cube: 74, cssVar: "--accent-digisearch" },
+    glint: { hex: "#FFFFFF", cube: 231, cssVar: "--glint" },
+  },
+  animation: scanAnimation({
+    sweepMs: 1700,
+    noise: 0.55,
+    trail: 8,
+    everyMs: 6000,
+    liveSweepMs: 900,
+    holdMs: 1400,
+    fadeMs: 350,
+    maxQuery: 4,
+  }),
+  live: true,
+  seed: 0x5ea2c,
+};
+
 export const BANNERS = {
   digithings: DIGITHINGS,
   digiquant: DIGIQUANT,
   digichat: DIGICHAT,
   digivoice: DIGIVOICE,
   digillm: DIGILLM,
+  digisearch: DIGISEARCH,
 } as const;
