@@ -16,6 +16,8 @@ import {
   backspace,
   blankDraft,
   chatBody,
+  cycleChoice,
+  enumOptions,
   liveFrom,
   mainChrome,
   postBaseline,
@@ -110,7 +112,7 @@ export function App() {
 
   const view = liveFrom(read, draft);
   const rows = rowsFor(read, draft);
-  const strip = stripRows(view);
+  const strip = stripRows(view, rows);
   const viewRef = useRef(view);
   const rowsRef = useRef(rows);
   const stripRef = useRef(strip);
@@ -255,7 +257,10 @@ export function App() {
       return;
     }
     const row = rowsRef.current[sideRef.current];
-    const textField = row?.kind === "field" && !row.toggle;
+    // An enum field is not a text field: it cycles its option list instead of taking
+    // free text, so `k`/`j` still move the caret and the type branch below skips it.
+    const choices = row?.kind === "field" && !row.toggle && !row.secret ? enumOptions(row.pane, row.label) : null;
+    const textField = row?.kind === "field" && !row.toggle && choices === null;
     if (name === "up" || (name === "k" && !textField)) {
       setSide((index) => Math.max(0, index - 1));
       setNote("");
@@ -292,6 +297,16 @@ export function App() {
       );
       return;
     }
+    if (row?.kind === "field" && choices && (name === "left" || name === "right")) {
+      setDraft((current) => cycleChoice(current, settingKey(row.pane, row.label), choices, row.value, name === "left" ? -1 : 1));
+      setNote("");
+      return;
+    }
+    if (row?.kind === "field" && choices && (name === "space" || name === "return" || name === "enter")) {
+      setDraft((current) => cycleChoice(current, settingKey(row.pane, row.label), choices, row.value));
+      setNote("");
+      return;
+    }
     if (row?.kind === "field" && (name === "space" || name === "return" || name === "enter")) {
       if (row.toggle === "flag") {
         setDraft((current) => toggleFlag(current, settingKey(row.pane, row.label), row.value));
@@ -315,7 +330,7 @@ export function App() {
       setNote("redacted");
       return;
     }
-    if (row?.kind === "field" && !row.toggle && !row.secret) {
+    if (row?.kind === "field" && !row.toggle && !row.secret && choices === null) {
       const setting = settingKey(row.pane, row.label);
       if (name === "backspace") {
         setDraft((current) => backspace(current, setting, row.value, false));
@@ -446,7 +461,7 @@ export function App() {
         </box>
       </box>
       <box height={2} paddingLeft={1} paddingRight={1} flexDirection="row" border={["top"]} borderColor={HAIR} backgroundColor={BG}>
-        <text fg={MUTE}>tab focus   ↑↓ move   space toggle   enter send   esc back   q quit</text>
+        <text fg={MUTE}>tab focus   ↑↓ move   space toggle   enter send   ←→ cycle   esc back   q quit</text>
         {note ? <text fg={SOFT}>{`   ${note}`}</text> : null}
       </box>
     </box>
@@ -570,11 +585,13 @@ function StripLine({ row, hot, caret }: { row: StripRow; hot: boolean; caret: bo
   const label =
     row.kind === "model"
       ? `model  ${row.value}`
-      : row.kind === "tool"
-        ? `tool  ${row.label}  ${row.on ? "on" : "off"}`
-        : row.kind === "mcp"
-          ? `mcp  ${row.label}  ${row.on ? "on" : "off"}`
-          : `${row.slot}  ${row.text}`;
+      : row.kind === "choice"
+        ? `${row.label}  ${row.value}`
+        : row.kind === "tool"
+          ? `tool  ${row.label}  ${row.on ? "on" : "off"}`
+          : row.kind === "mcp"
+            ? `mcp  ${row.label}  ${row.on ? "on" : "off"}`
+            : `${row.slot}  ${row.text}`;
   return (
     <box flexDirection="row" backgroundColor={BG}>
       <text fg={hot ? INK : MUTE}>{`${hot ? GLYPH.user : GLYPH.system} ${label}`}</text>
