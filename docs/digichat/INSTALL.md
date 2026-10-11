@@ -22,22 +22,39 @@ chat app.
 
 ## Install unit
 
-Primary install unit: a **pinned GHCR image** — not npm (`private: true`), not
-`:latest` in production.
+> **No published digichat image exists today.** The build lane is back —
+> `publish-digichat-image.yml` publishes `ghcr.io/digithings-ai/digichat:vX.Y.Z`
+> on a `digichat-vX.Y.Z` tag (the trigger is the `digichat-v*` glob, but a tag
+> that is not exactly `digichat-v<major>.<minor>.<patch>` is refused) — but the
+> package is still absent from GHCR
+> (verified 2026-10-06: anonymous pull `401`, org package list empty), because
+> the tag ladder stops at `digichat-v2.3.2` and nothing publishes until a tag
+> lands. Until then, build from the repo root and record the digest you deploy.
+> See [`docs/ops/digichat-datatap-aca.md`](../ops/digichat-datatap-aca.md).
+>
+> The **intended** primary install unit is a pinned published image — not npm
+> (`private: true`), not `:latest` in production.
 
 ```bash
-docker pull ghcr.io/digithings-ai/digichat:v2.3.2
+# today's only supported path
+docker build -f apps/digichat/Dockerfile \
+  --build-arg DIGICHAT_VERSION=2.4.0 \
+  --build-arg DIGICHAT_REVISION="$(git rev-parse HEAD)" \
+  -t digichat:2.4.0 .
 ```
 
 | Artifact | Value |
 |---|---|
 | Git tag | `digichat-vX.Y.Z` |
-| GHCR image | `ghcr.io/digithings-ai/digichat:vX.Y.Z` |
+| Published image | **none** — build locally (see above) |
 | Changelog | `apps/digichat/CHANGELOG.md` |
-| Current app version | `2.3.2` |
+| Current app version | `2.4.0` (`develop`) |
 
-**Existing clients (DataTap and others) stay on `v0.9.3`.** That GHCR tag remains
-published and is not deleted — only new installs / digithings’ own cut should move
+**Existing clients (DataTap and others) are pinned to a digichat image already
+imported into their own Azure registry** (`datatapchatregistry.azurecr.io`).
+Those registries are copies, so they keep working independently of GHCR; the
+claim that `ghcr.io/digithings-ai/digichat:v0.9.3` "remains published" can no
+longer be verified from this repo and should not be relied on.
 to `v2.3.2` until those clients choose to upgrade.
 
 Compose overlays and env templates live under
@@ -246,7 +263,7 @@ Optional seed list of known hosts: `apps/digichat/embed-hosts.txt` (not baked in
 ## Smoke
 
 ```bash
-docker pull ghcr.io/digithings-ai/digichat:v2.3.2
+docker run --rm -p 3005:3000 digichat:2.4.0   # local build, see § Install unit
 curl -sf http://127.0.0.1:3005/api/health | jq .
 # Embed (clients always pass token):
 # open http://127.0.0.1:3005/embed?host=client.example.com&token=…

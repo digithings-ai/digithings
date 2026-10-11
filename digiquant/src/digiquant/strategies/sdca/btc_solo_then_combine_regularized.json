@@ -1,0 +1,66 @@
+{
+  "variant": "regularized",
+  "evaluator": "curve_simulator",
+  "stage_a_weights": {
+    "valuation": 0.5,
+    "m2": 0.25,
+    "rs_eth": 0.0,
+    "dxy": 0.25,
+    "weekly_rsi": 0.0,
+    "weekly_macd": 0.0,
+    "sma_band": 0.0
+  },
+  "stage_b_params": {
+    "buy_max_rate": 3.5,
+    "buy_knee_risk": 30.0,
+    "sell_knee_risk": 75.0,
+    "sell_max_rate": 3.5,
+    "buy_curvature": 1.0,
+    "sell_curvature": 2.0,
+    "valuation_weight": 0.5,
+    "m2_weight": 0.25,
+    "rs_eth_weight": 0.0,
+    "dxy_weight": 0.25,
+    "weekly_rsi_weight": 0.0,
+    "weekly_macd_weight": 0.0,
+    "sma_band_weight": 0.0
+  },
+  "windows": [
+    {
+      "name": "2017_peak",
+      "kind": "peak",
+      "start": "2017-11-02",
+      "end": "2018-01-31"
+    },
+    {
+      "name": "2018_trough",
+      "kind": "trough",
+      "start": "2018-10-31",
+      "end": "2019-01-29"
+    },
+    {
+      "name": "2021_peak",
+      "kind": "peak",
+      "start": "2021-09-26",
+      "end": "2021-12-25"
+    },
+    {
+      "name": "2022_trough",
+      "kind": "trough",
+      "start": "2022-10-07",
+      "end": "2023-01-05"
+    },
+    {
+      "name": "2025_peak",
+      "kind": "peak",
+      "start": "2024-12-06",
+      "end": "2025-03-06"
+    }
+  ],
+  "mean_is_vs_flat_dca_pct": 292.694139217585,
+  "mean_oos_vs_flat_dca_pct": 38.42065963224898,
+  "beats_flat_dca_oos": true,
+  "rails_protocol": "refit per fold on the in-sample window only; never a full-history fit. Truncated quadratic log-time rails do not extrapolate (#3173).",
+  "notes": "Stage 1 survivors=['valuation', 'm2', 'dxy']; combined OOS vs-flat=38.4207 (published -7.7878); persist_settings_eligible=True; wrote_settings=false (sidecar-only; 2-trial Stage B is not a published-weight flip). beats_flat_dca_oos=True on this curve_simulator Stage B run. Do not --push-supabase. Two-stage fit will overfit: Stage A targets a handful of documented cycle windows and Stage B then tunes the curve on the same history. Keep the regularized variant (rounded weights, shrunk max rates) as the less aggressive copy. Not a published digiquant.io number. Do not --push-supabase. Regularized OOS vs-flat-DCA is copied from the aggressive run (rounded weights / shrunk rates were not re-scored).",
+  "oos_from_aggressive": true
+}

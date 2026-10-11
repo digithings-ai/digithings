@@ -133,6 +133,12 @@ MODE_ERROR = "error"
 
 _SOFT_FAIL_MODES = frozenset({MODE_HISTORY_ONLY, MODE_ERROR})
 
+#: Outcomes that claim the fetch *worked*. `_macro_leg_dead` reads the soft-fail
+#: modes, so the modes a vendor can be quiet on are not its business; the
+#: `as_of` age guard reads these instead, because a series the vendor has
+#: retired still comes back `full-repull` (DIG-1137).
+_MACRO_SUCCESS_MODES = frozenset({MODE_UP_TO_DATE, MODE_INCREMENTAL, MODE_FULL_REPULL})
+
 LIVE_WINDOW_DAYS = 45
 # The live fetch window must span at least one publication period of the series
 # (#4588). LIVE_WINDOW_DAYS assumes a series that publishes inside 45 days; for a
@@ -895,6 +901,61 @@ def _live_window_days(cadence: str | None) -> int:
         ) from None
 
 
+def _macro_as_of_stale(
+    outcomes: list[dict[str, Any]],
+    macro_specs: list[tuple[str, str, str | None]],
+    run: str,
+) -> list[dict[str, Any]]:
+    """Macro series sealed older than their own cadence window (DIG-1137).
+
+    ``_macro_leg_dead`` reads ``mode``: it catches the macro leg going
+    ``history-only`` outright. It cannot see the other way a macro panel dies --
+    the vendor stops publishing but keeps *answering*. A live fetch that returns
+    rows the store already has lands on the ``no new observations`` branch and
+    comes back ``up-to-date``, which is not a soft fail, so ``failed`` stays
+    empty and the run reports itself fresh with the panel frozen at its last
+    seal. ``staleness_gate`` cannot catch it either: it takes the newest
+    ``as_of`` across all datasets, and healthy price tickers pin that at the run
+    date no matter how dead the macro leg is.
+
+    So this reads the other field. Every macro outcome whose mode claims the
+    fetch worked is measured on ``as_of`` against the run date, in calendar
+    days, against the same ``_CADENCE_WINDOW_DAYS`` bound the live fetch used.
+    The window is the right threshold rather than the seal itself: a monthly
+    series legitimately holds a 34-day-old seal inside its 120-day window, and
+    flagging that would train operators to ignore the gate.
+
+    Orthogonal to ``_macro_leg_dead``, per outcome rather than per leg. That
+    guard needs unanimity because ``history-only`` has two indistinguishable
+    causes (an emptied window, or one vendor refusing one series) and a subset
+    is not evidence. Age has a single cause and is a measurement, so one frozen
+    series is a finding rather than a coincidence -- and it can only ever *add*
+    to ``failed``, never clear it.
+
+    Two limits, both accepted rather than hidden. ``history-only``/``error``
+    outcomes are left to ``_macro_leg_dead`` and the cadence exemption: a slow
+    series inside its window is quiet by design, and one past it has already
+    emptied its live window, so its age adds nothing to the leg test. And the
+    windows are calendar days, not open trading days like ``staleness_gate``'s
+    bound, so a monthly series is judged against months.
+    """
+    cadence_of = {f"{source}__{series}": cadence for source, series, cadence in macro_specs}
+    run_date = datetime.fromisoformat(run[:10]).date()
+    aged: list[dict[str, Any]] = []
+    for o in outcomes:
+        if o["ticker"] not in cadence_of or o["mode"] not in _MACRO_SUCCESS_MODES:
+            continue
+        as_of = str(o.get("as_of") or "")
+        if not as_of:
+            # A success-mode outcome with no seal carries no date to measure;
+            # the fetch branches that omit `as_of` all report a soft fail.
+            continue
+        age_days = (run_date - datetime.fromisoformat(as_of[:10]).date()).days
+        if age_days > _live_window_days(cadence_of[o["ticker"]]):
+            aged.append(o)
+    return aged
+
+
 def refresh_macro_series(
     source: str,
     series: str,
@@ -1507,6 +1568,11 @@ def main(argv: list[str] | None = None) -> int:
             and not _macro_leg_dead(outcomes, exempt)
         )
     ]
+    # Per-series `as_of` age guard (DIG-1137): a macro panel frozen behind a
+    # vendor that keeps answering lands on `up-to-date`, which `_macro_leg_dead`
+    # cannot see. Measured against each series' own cadence window. Additive
+    # only, like the exemption above -- it names series, it never clears them.
+    failed += _macro_as_of_stale(outcomes, macro_specs, run)
     stale = (not gate["ok"]) or bool(failed)
     manifest.update(build_manifest(new_as_of, datasets, stale=stale))
     digest = store.write_manifest(manifest)

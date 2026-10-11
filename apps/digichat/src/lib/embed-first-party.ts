@@ -4,7 +4,17 @@ import { normalizeEmbedHost, resolveEmbedTenantByHost } from "@/lib/embed-tenant
 export const FIRST_PARTY_EMBED_HOSTS: ReadonlySet<string> = new Set([
   "digithings.ai",
   "www.digithings.ai",
-  /** Virtual host for digithings.ai/chat/occ (no DNS; iframe ?host= only). */
+  /**
+   * Virtual host for digithings.ai/chat/occ (no DNS; iframe ?host= only).
+   *
+   * TODO(DIG-1210): remove. OCC is a client tenant with customer PII behind it,
+   * and tokenless first-party access is what made its corpus reachable by any
+   * visitor. It is being gated by an invite key instead — the Pages shell already
+   * forwards `?token=` on /chat/occ (see apps/digithings-web/lib/inviteToken.ts),
+   * and digichat already enforces `token` via X-Embed-Token. Deleting this entry
+   * is the whole switch, and is deliberately a separate deploy from the key
+   * rollout: land the token in DIGICHAT_EMBED_TENANTS first, or you lock OCC out.
+   */
   "occ.digithings.ai",
 ]);
 

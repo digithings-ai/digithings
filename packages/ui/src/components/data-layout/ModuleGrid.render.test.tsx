@@ -35,6 +35,11 @@ describe("ModuleGrid", () => {
   it("names each tile's facts on its focus control", () => {
     expect(html).toContain("178,900 lines · 41 endpoints");
   });
+
+  it("keeps focus detail mounted so a step can enter and leave", () => {
+    expect(html).toContain("dg-mosaic-enter");
+    expect(html.match(/dg-mosaic-detail/g)?.length).toBeGreaterThan(1);
+  });
 });
 
 describe("moduleFocusIndex", () => {

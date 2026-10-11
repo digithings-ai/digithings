@@ -3,7 +3,7 @@
 # Same multi-process image as Cloudflare Containers
 # (Dockerfile.digithings-stack-cloudflare + supervisord):
 #   digikey :8005, digigraph :8000 (published)
-#   digisearch :8002, digivault :8004, LiteLLM :4000, Redis :6379 (loopback)
+#   digisearch :8002, digivault :8004, LiteLLM (digillm, PyPI wheel) :4000, Redis :6379 (loopback)
 #
 # digichat stays a separate Node container (different runtime, secrets, scale).
 # digitrace HTTP and digiquant are intentionally omitted (library-only / not needed).

@@ -98,3 +98,14 @@ class TestComputeCompositeRisk:
         ]
         with pytest.raises(ValueError, match="total weight"):
             compute_composite_risk(indicators)
+
+    def test_zero_weight_null_member_does_not_null_the_blend(self) -> None:
+        """``0 × null`` must not wipe a solo extra. Omit unused members."""
+        indicators = [
+            IndicatorWeight(name="valuation", z=pl.Series([None, 1.0]), weight=0.0),
+            IndicatorWeight(name="m2", z=pl.Series([3.0, 3.0]), weight=1.0),
+        ]
+        result = compute_composite_risk(indicators)
+        assert result["composite_z"][0] == pytest.approx(3.0)
+        assert result["risk"][0] == pytest.approx(0.0)
+        assert result["composite_z"][1] == pytest.approx(3.0)
