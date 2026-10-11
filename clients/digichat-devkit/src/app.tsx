@@ -23,7 +23,7 @@ import {
   type SettingRow,
   type StripRow,
 } from "./live";
-import { fieldKey as settingKey } from "./present";
+import { exportFileName, fieldKey as settingKey, getExportYaml } from "./present";
 import { loadKit, type KitRead } from "./read";
 
 const BG = "#08090b";
@@ -262,6 +262,25 @@ export function App() {
       setTurns([]);
       setCompose("");
       setNote("");
+      return;
+    }
+    if (row?.kind === "field" && row.pane === "export" && (name === "space" || name === "return" || name === "enter")) {
+      // The row value is the promise of what gets written; compare, never re-derive.
+      const file = exportFileName(read, draftRef.current, row.label);
+      if (file === "" || row.value !== file) {
+        setNote(row.value);
+        return;
+      }
+      const body = getExportYaml(read, draftRef.current);
+      if (row.label === "embed snippet") {
+        const copied = Bun.spawnSync(["pbcopy"], { stdin: new TextEncoder().encode(body) });
+        setNote(copied.exitCode === 0 ? `copied ${file}` : "copy failed");
+        return;
+      }
+      Bun.write(file, body).then(
+        () => setNote(`wrote ${file}`),
+        () => setNote("write failed"),
+      );
       return;
     }
     if (row?.kind === "field" && (name === "space" || name === "return" || name === "enter")) {
