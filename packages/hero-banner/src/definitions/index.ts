@@ -47,7 +47,19 @@ export const DIGIQUANT: BannerDefinition = {
     down: { hex: "#E5533E", cube: 167, cssVar: "--down" },
     accent: { hex: "#3DD6C4", cube: 80, cssVar: "--accent" },
   },
-  animation: riseAnimation({ startMs: 250, columnMs: 16, glintChance: 0.045, strays: 60, glintDuty: 0.06, toneUntil: 0.72 }),
+  // buildDoneMs: startMs + 78 * columnMs + BUILD_RISE_MS (360) = 1858.
+  animation: riseAnimation({
+    startMs: 250,
+    columnMs: 16,
+    glintChance: 0.045,
+    strays: 60,
+    glintDuty: 0.06,
+    toneUntil: 0.72,
+    blinkChance: 0.35,
+    blinkDuty: 0.03,
+    blinkAlpha: 0.35,
+    buildDoneMs: 1858,
+  }),
   live: true,
   seed: 0x9a17,
 };
