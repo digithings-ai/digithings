@@ -16,6 +16,12 @@ describe("terminal desk", () => {
   it("publishes every terminal page and no web-only route", () => {
     const params = deskStaticParams().map((row) => `/${row.slug.join("/")}`);
     for (const page of publicCatalogPages()) {
+      // The brief IS the app: served at /app, /app/brief redirects there.
+      if (page.path === "/brief") {
+        expect(params).not.toContain("/brief");
+        expect(deskPathFromSlug(["brief"])).toBeNull();
+        continue;
+      }
       expect(params).toContain(page.path);
       expect(deskPathFromSlug(page.path.split("/").filter(Boolean))).toBe(page.path);
     }
