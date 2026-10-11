@@ -23,7 +23,7 @@
 import type { AllocationPositionInput, MarketCloseFill } from './allocations';
 import type { PortfolioNavTipInput } from './portfolio';
 import type { BriefBook, BriefDeps } from './brief';
-import type { BenchmarksBook, BenchmarksDeps } from './benchmarks';
+import { marketClosesHttpIssue, type BenchmarksBook, type BenchmarksDeps } from './benchmarks';
 import type { PerformanceBook, PerformanceDeps, PerformanceWindow } from './performance';
 import type { LiveBook, LiveDeps } from './kpis-live';
 import type { LedgerBook } from './ledger';
@@ -473,31 +473,56 @@ export function createSupabaseSource(env: SupabaseEnv): SupabaseSource {
       );
       if (inWindow.length === 0) return null;
       const dates = inWindow.map((r) => r.date).sort();
+      // The base URL is worker env, not a constant: an unset MARKET_DATA_URL
+      // is the one cause that turns every market read into an empty map, so it
+      // is named before any request is attempted.
+      const base = marketBase(env);
+      if (!base) {
+        return {
+          navDates: dates,
+          marketCloses: {},
+          marketUniverse: null,
+          marketIssue: 'market_url_unset',
+        };
+      }
       const universe = await loadMarketUniverse(env);
-      const tickers = universe ?? [];
+      if (!universe) {
+        return {
+          navDates: dates,
+          marketCloses: {},
+          marketUniverse: null,
+          marketIssue: 'market_universe_unavailable',
+        };
+      }
       const marketCloses: Record<string, { date: string; close: number }[]> = {};
-      if (tickers.length > 0) {
-        const base = marketBase(env);
+      let marketIssue: string | null = null;
+      for (let i = 0; i < universe.length; i += MAX_TICKERS_PER_REQUEST) {
+        const batch = universe.slice(i, i + MAX_TICKERS_PER_REQUEST);
+        const query =
+          `tickers=${batch.map((t) => encodeURIComponent(t)).join(',')}` +
+          `&from=${dates[0]}&to=${dates[dates.length - 1]}`;
+        let body: { rows?: MarketCloseRow[] };
         try {
-          for (let i = 0; i < tickers.length; i += MAX_TICKERS_PER_REQUEST) {
-            const batch = tickers.slice(i, i + MAX_TICKERS_PER_REQUEST);
-            const query =
-              `tickers=${batch.map((t) => encodeURIComponent(t)).join(',')}` +
-              `&from=${dates[0]}&to=${dates[dates.length - 1]}`;
-            const res = await fetch(`${base}/v1/market/closes?${query}`);
-            if (!res.ok) break;
-            const body = (await res.json()) as { rows?: MarketCloseRow[] };
-            for (const row of body.rows ?? []) {
-              const price = Number(row.close);
-              if (!Number.isFinite(price)) continue;
-              (marketCloses[row.ticker] ??= []).push({ date: row.date, close: price });
-            }
+          const res = await fetch(`${base}/v1/market/closes?${query}`);
+          if (!res.ok) {
+            // One failed batch is a cause, not a truncation: name the status.
+            marketIssue ??= marketClosesHttpIssue(res.status);
+            break;
           }
+          body = (await res.json()) as { rows?: MarketCloseRow[] };
         } catch {
-          // Honest-empty: builders fall back to keys, never to Supabase.
+          // Honest-empty stays, but the cause now travels with the bundle so
+          // the route badges it instead of inventing a date-alignment story.
+          marketIssue ??= 'market_closes_unreachable';
+          break;
+        }
+        for (const row of body.rows ?? []) {
+          const price = Number(row.close);
+          if (!Number.isFinite(price)) continue;
+          (marketCloses[row.ticker] ??= []).push({ date: row.date, close: price });
         }
       }
-      return { navDates: dates, marketCloses, marketUniverse: universe };
+      return { navDates: dates, marketCloses, marketUniverse: universe, marketIssue };
     },
   };
   return { envelope, brief, performance, live, benchmarks, ledger };
