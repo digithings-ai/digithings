@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, type ReactNode } from "react";
 import { BLOCKS, layoutFor, pageByPath } from "../../../../clients/digiquant-tui/src/catalog";
 import type { ReadResult } from "../../../../clients/digiquant-tui/src/read";
 import { DeskFrame } from "./desk-frame";
@@ -10,7 +10,8 @@ import { PipelinePage } from "./pages/pipeline";
 import { isInviteSurface } from "./public-surface";
 import { PortfolioPages, isPortfolioPath } from "./pages/portfolio";
 import { StrategiesPages } from "./pages/strategies";
-import { readDeskBlock } from "./read-block";
+import { deskCache, preloadDeskCache } from "./desk-cache";
+import { useDeskReads } from "../../../../clients/digiquant-tui/src/desk-store-react";
 
 const STRATEGY_PATHS = new Set(["/strategies", "/strategies/detail", "/strategies/deploy"]);
 
@@ -49,24 +50,26 @@ export function DeskBody({ path }: { path: string }): ReactNode {
 
 /** Catalog pages that have no dedicated component. Same blocks as the web desk. */
 export function DeskCatalogLive({ path }: { path: string }) {
-  const [reads, setReads] = useState<Record<string, ReadResult>>({});
-
-  useEffect(() => {
-    const placements = layoutFor(path);
-    const ac = new AbortController();
-    let cancel = false;
+  const placements = useMemo(() => layoutFor(path), [path]);
+  const routes = useMemo(
+    () => placements.map((placement) => BLOCKS[placement.id].route),
+    [placements],
+  );
+  const routeReads = useDeskReads(deskCache, routes);
+  const reads = useMemo(() => {
+    const byBlock: Record<string, ReadResult | undefined> = {};
     for (const placement of placements) {
-      const def = BLOCKS[placement.id];
-      void readDeskBlock(def.route, def.kind, ac.signal).then((result) => {
-        if (cancel) return;
-        setReads((prev) => ({ ...prev, [placement.id]: result }));
-      });
+      byBlock[placement.id] = routeReads[BLOCKS[placement.id].route];
     }
-    return () => {
-      cancel = true;
-      ac.abort();
-    };
-  }, [path]);
+    return byBlock;
+  }, [placements, routeReads]);
+
+  // One read for every desk dataset, started once. Every page this desk can
+  // reach is a dataset the cache already holds, so the reads above render from
+  // the cache and the panel never shows a loading line.
+  useEffect(() => {
+    preloadDeskCache();
+  }, []);
 
   return <DeskReadout path={path} reads={reads} />;
 }

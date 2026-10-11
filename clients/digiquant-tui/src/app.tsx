@@ -1,6 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import { useKeyboard, useRenderer } from "@opentui/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { WEB_SLOTS } from "../../../apps/digiquant-web/components/desk/web-slots";
 import { BLOCKS, layoutFor, layoutMatchesPage, pageByPath } from "./catalog";
 import {
@@ -22,7 +22,9 @@ import { PipelinePage } from "./pages/pipeline";
 import { PortfolioPages, isPortfolioPath } from "./pages/portfolio";
 import { StrategiesPages } from "./pages/strategies";
 import { deskForPath, railLine, stepRailCols, RAIL_COLS_DEFAULT } from "./rail";
-import { readBlock, type ReadResult } from "./read";
+import type { ReadResult } from "./read";
+import { deskCache, preloadDeskCache } from "./desk-cache";
+import { useDeskReads } from "./desk-store-react";
 import { ACCENT, BG, DANGER, DOWN, HAIR, HAIR_STRONG, INK, MUTE, SOFT, UP, WASH } from "./theme";
 
 const API = (process.env.DQ_API_URL ?? "http://127.0.0.1:8788").replace(/\/+$/, "");
@@ -195,7 +197,6 @@ export function App() {
   const [chatActive, setChatActive] = useState<string | undefined>();
   const [chatTyping, setChatTyping] = useState(false);
   const [note, setNote] = useState("");
-  const [reads, setReads] = useState<Record<string, ReadResult>>({});
 
   const pathRef = useRef(path);
   const deskRef = useRef(desk);
@@ -225,8 +226,23 @@ export function App() {
   const page = pageByPath(path);
   catalogRef.current = isCatalogPath(path);
   const aligned = page ? layoutMatchesPage(path, layout) : false;
-  const shown = aligned ? layout : layoutFor(path);
-  const shownReads = aligned ? reads : {};
+  const shown = useMemo(
+    () => (aligned ? layout : layoutFor(path)),
+    [aligned, layout, path],
+  );
+  const shownRoutes = useMemo(
+    () => shown.map((placement) => BLOCKS[placement.id].route),
+    [shown],
+  );
+  const routeReads = useDeskReads(deskCache, shownRoutes);
+  const shownReads = useMemo(() => {
+    const byBlock: Record<string, ReadResult | undefined> = {};
+    for (const placement of shown) {
+      const read = routeReads[BLOCKS[placement.id].route];
+      if (read !== undefined) byBlock[placement.id] = read;
+    }
+    return byBlock;
+  }, [shown, routeReads]);
   const shownFocus = aligned ? focus : -1;
   const rows = publicRailRows(desk);
   const hits = mode === "path" ? searchCommandPages(draft, desk).slice(0, COMMAND_LIMIT) : [];
@@ -245,7 +261,6 @@ export function App() {
     setDesk(owner);
     setLayout(placements);
     setFocus(-1);
-    setReads({});
     setNote("");
   };
 
@@ -296,37 +311,31 @@ export function App() {
     const placements = layoutFor(path);
     setLayout(placements);
     setFocus(-1);
-    setReads({});
-    const ac = new AbortController();
-    let cancel = false;
-    for (const placement of placements) {
-      const def = BLOCKS[placement.id];
-      void readBlock(API, def.route, def.kind, ac.signal).then((result) => {
-        if (cancel) return;
-        setReads((prev) => ({ ...prev, [placement.id]: result }));
-      });
-    }
-    return () => {
-      cancel = true;
-      ac.abort();
-    };
   }, [path]);
+
+  // One read for every desk dataset, started once. The results live in the
+  // shared store, so switching pages reads from the cache instead of
+  // refetching, and navigation no longer has to cancel anything.
+  useEffect(() => {
+    preloadDeskCache();
+  }, []);
 
   useEffect(() => {
     if (!STATUS) return;
     if (!page || !layoutMatchesPage(path, layout)) return;
-    if (layout.some((placement) => !reads[placement.id])) return;
-    const payload = {
-      path,
-      blocks: layout.map((placement) => ({
+    const blocks = layout.flatMap((placement) => {
+      const read = shownReads[placement.id];
+      if (read === undefined) return [];
+      return [{
         id: placement.id,
         route: BLOCKS[placement.id].route,
-        status: reads[placement.id].status,
-        line: reads[placement.id].lines[0] ?? "",
-      })),
-    };
-    void writeFile(STATUS, JSON.stringify(payload, null, 2));
-  }, [STATUS, layout, path, page, reads]);
+        status: read.status,
+        line: read.lines[0] ?? "",
+      }];
+    });
+    if (blocks.length !== layout.length) return;
+    void writeFile(STATUS, JSON.stringify({ path, blocks }, null, 2));
+  }, [STATUS, layout, path, page, shownReads]);
 
   useEffect(() => {
     if (path === "/tools/chat") return;
