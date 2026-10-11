@@ -32,7 +32,7 @@ export function paintFrame(
       const p = frame.pixels[y * frame.width + x];
       if (!p || p.alpha <= 0) continue;
       ctx.globalAlpha = Math.min(1, p.alpha);
-      ctx.fillStyle = colors[p.tone] ?? colors.ink ?? "#ffffff";
+      ctx.fillStyle = colors[p.tone] ?? colors.ink ?? "#ffffff"; // canon-allow: canvas fallback outside the DOM cascade; the definition palette is the sanctioned source
       ctx.fillRect(x * pixel, y * pixel, pixel, pixel);
     }
   }

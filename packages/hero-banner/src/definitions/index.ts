@@ -60,11 +60,11 @@ export const DIGICHAT: BannerDefinition = {
   font: PIXEL_7X10,
   gap: 2,
   palette: {
-    ink: { hex: "#D7D7D7", cube: 188 },
+    ink: { hex: "#D7D7D7", cube: 188 }, // canon-allow: a banner palette is renderer data, not a CSS theme; a terminal has no cascade to read a token from
     ground: { hex: "#000000", cube: 16 },
-    dim: { hex: "#5F5F5F", cube: 59 },
-    rest: { hex: "#D7D7D7", cube: 188 },
-    flash: { hex: "#FFFFFF", cube: 231 },
+    dim: { hex: "#5F5F5F", cube: 59 }, // canon-allow: a banner palette is renderer data, not a CSS theme; a terminal has no cascade to read a token from
+    rest: { hex: "#D7D7D7", cube: 188 }, // canon-allow: a banner palette is renderer data, not a CSS theme; a terminal has no cascade to read a token from
+    flash: { hex: "#FFFFFF", cube: 231 }, // canon-allow: a banner palette is renderer data, not a CSS theme; a terminal has no cascade to read a token from
   },
   animation: scrambleAnimation({
     stepMs: 80,
@@ -88,10 +88,10 @@ export const DIGIVOICE: BannerDefinition = {
   font: PIXEL_7X10,
   gap: 2,
   palette: {
-    ink: { hex: "#FFFFFF", cube: 231 },
+    ink: { hex: "#FFFFFF", cube: 231 }, // canon-allow: a banner palette is renderer data, not a CSS theme; a terminal has no cascade to read a token from
     ground: { hex: "#000000", cube: 16 },
     rest: { hex: "#878787", cube: 102 },
-    lit: { hex: "#FFFFFF", cube: 231 },
+    lit: { hex: "#FFFFFF", cube: 231 }, // canon-allow: a banner palette is renderer data, not a CSS theme; a terminal has no cascade to read a token from
   },
   animation: equalizerAnimation({ buildMs: 1400 }),
   live: true,

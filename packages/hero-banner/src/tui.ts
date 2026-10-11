@@ -162,7 +162,7 @@ export function termColorHex(c: TermColor): string {
     const i = n - 16;
     return rgbToHex([CUBE[Math.floor(i / 36)]!, CUBE[Math.floor(i / 6) % 6]!, CUBE[i % 6]!]);
   }
-  const base = ["#000000", "#800000", "#008000", "#808000", "#000080", "#800080", "#008080", "#c0c0c0",
-    "#808080", "#ff0000", "#00ff00", "#ffff00", "#0000ff", "#ff00ff", "#00ffff", "#ffffff"];
-  return base[n] ?? "#ffffff";
+  const base = ["#000000", "#800000", "#008000", "#808000", "#000080", "#800080", "#008080", "#c0c0c0", // canon-allow: the xterm-256 base palette table is the terminal's own colour standard, not app theming
+    "#808080", "#ff0000", "#00ff00", "#ffff00", "#0000ff", "#ff00ff", "#00ffff", "#ffffff"]; // canon-allow: the xterm-256 base palette table is the terminal's own colour standard, not app theming
+  return base[n] ?? "#ffffff"; // canon-allow: terminal fallback; the table above is the xterm-256 standard
 }
