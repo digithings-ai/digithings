@@ -130,6 +130,20 @@ def apply_mcp_extra_tools(
     The asymmetry is deliberate and stays: a user disable list is session input
     (``None`` = no user disables anything), while an operator allowlist is
     configuration (``None`` = deny everything).
+
+    The union is *not* symmetric, and may not be made so. ``names`` is session
+    input; ``live`` is operator configuration. ``names | live`` therefore let a
+    request add an MCP name the operator never permitted, and that name then
+    passed the call-time refusal in ``registry.execute`` because it was itself in
+    ``context.allowed_tool_names``. A session may **narrow** the tool surface; it
+    may never **widen** it. So a name from ``names`` survives only when it is a
+    locally registered tool, and every MCP name is contributed by ``live`` alone.
+
+    Intersecting with the local registry is exactly sufficient rather than
+    merely convenient: ``registry.execute`` dispatches only when ``has_tool(name)``
+    (i.e. the name is in that registry) or the name is an ``extra_mcp_servers``
+    entry (i.e. ``live``). A name that is neither can never execute, so dropping
+    it removes no reachable behaviour and closes the smuggle.
     """
     live = frozenset(n for n in extra_names if n not in disabled_extra)
     if not enable_web_search:
@@ -139,6 +153,12 @@ def apply_mcp_extra_tools(
         if names is not None:
             names = strip_web_search_tools(names)
     if names is not None:
+        from digigraph.orchestration.registry import list_tool_names
+
+        # A request narrows the tool surface; it never widens it. Anything a
+        # session contributes that is neither locally registered nor
+        # operator-permitted is dropped rather than unioned in.
+        names = frozenset(names) & (frozenset(list_tool_names()) | live)
         return names | live if live else names
     from digigraph.orchestration.registry import list_tool_names
 
