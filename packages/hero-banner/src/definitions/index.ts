@@ -2,6 +2,7 @@ import { buildAnimation } from "../animations/build";
 import { clawAnimation, withHeadroom } from "../animations/claw";
 import { equalizerAnimation } from "../animations/equalizer";
 import { pagesAnimation } from "../animations/pages";
+import { fetchAnimation } from "../animations/fetch";
 import { riseAnimation } from "../animations/rise";
 import { routeAnimation } from "../animations/route";
 import { scanAnimation } from "../animations/scan";
@@ -299,6 +300,14 @@ export const DIGITRACE: BannerDefinition = {
   id: "digitrace",
   text: "DIGITRACE",
   label: "digitrace",
+/** DIG-2871. A download, not a drawing: a request pixel runs out of the right
+ *  edge, then every lit cell comes back as a packet streamed in from the right
+ *  along its row and lands with a glint. LIVE fetches again now and then: a
+ *  request on one row, a small burst of packets back. Accent: --accent-digifetch. */
+export const DIGIFETCH: BannerDefinition = {
+  id: "digifetch",
+  text: "DIGIFETCH",
+  label: "digifetch",
   font: PIXEL_7X10,
   gap: 2,
   palette: {
@@ -405,6 +414,21 @@ export const DIGITRACE: BannerDefinition = {
   }),
   live: true,
   seed: 0x7ace,
+    accent: { hex: "#C9A45C", cube: 179, cssVar: "--accent-digifetch" },
+    glint: { hex: "#FFFFFF", cube: 231, cssVar: "--glint" },
+  },
+  animation: fetchAnimation({
+    requestColMs: 8,
+    packetColMs: 5,
+    launchColMs: 18,
+    jitterMs: 16,
+    flashMs: 140,
+    tail: [0.5, 0.2],
+    everyMs: 3800,
+    burst: [4, 7],
+  }),
+  live: true,
+  seed: 0xfe7c,
 };
 
 export const BANNERS = {
@@ -422,4 +446,5 @@ export const BANNERS = {
   digivault: DIGIVAULT,
   digisearch: DIGISEARCH,
   digitrace: DIGITRACE,
+  digifetch: DIGIFETCH,
 } as const;
