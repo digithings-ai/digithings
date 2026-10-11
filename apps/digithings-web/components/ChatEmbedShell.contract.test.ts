@@ -203,9 +203,13 @@ describe("ChatEmbedShell contracts", () => {
     expect(src).toContain("token ? stripInviteTokenFromUrl");
 
     // The token stays in the effect's local state for the session and nowhere
-    // else — no store, no cookie, no sessionStorage.
-    expect(src).not.toContain("sessionStorage");
+    // else — no store, no cookie, no sessionStorage. These match a USE
+    // (sessionStorage.setItem, document.cookie =), not the bare word: a
+    // guard on the bare name fires on this comment and on any prose that
+    // documents the rule, which is a test that cannot fail for its reason.
+    expect(src).not.toMatch(/sessionStorage\s*\.\s*(set|get|remove|clear)Item\s*\(/);
+    expect(src).not.toMatch(/localStorage\s*\.\s*(set|get|remove|clear)Item\s*\(/);
     expect(src).not.toContain("setItem(");
-    expect(src).not.toMatch(/document\.cookie/);
+    expect(src).not.toMatch(/document\s*\.\s*cookie\s*=[^=]/);
   });
 });
