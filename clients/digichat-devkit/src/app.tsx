@@ -1,6 +1,6 @@
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react";
 import { useEffect, useRef, useState } from "react";
-import { DigichatWordmark, WORDMARK_ROWS } from "../../digichat-tui/src/wordmark";
+import { DigichatWordmark, WORDMARK_ROWS } from "./wordmark";
 import { GLYPH } from "./glyphs";
 import {
   activateStrip,
@@ -31,9 +31,9 @@ const INK = "#eceef0";
 const SOFT = "#9aa0a6";
 const MUTE = "#7e858b";
 const HAIR = "#2a2e33";
+const FILL = "#101317";
 
 const API = (process.env.DIGICHAT_DEVKIT_URL ?? "http://127.0.0.1:3000").replace(/\/+$/, "");
-const GROUPS = ["Deployments", "Basics", "Appearance", "Advanced"] as const;
 const reading: KitRead = { status: "down", detail: "reading configs", files: [], envs: [] };
 
 type Focus = "compose" | "side" | "tools";
@@ -61,9 +61,9 @@ function windowStart(length: number, index: number, visible: number): number {
 function groupAt(rows: SettingRow[], index: number): string {
   for (let i = Math.min(Math.max(index, 0), rows.length - 1); i >= 0; i--) {
     const row = rows[i];
-    if (row.kind === "group") return row.text;
+    if (row.kind === "group") return row.text.toLowerCase();
   }
-  return "Deployments";
+  return "deployments";
 }
 
 function welcomeText(title: string | null): string {
@@ -220,7 +220,7 @@ export function App() {
         setCompose(list[next] ?? "");
         return;
       }
-      if (printable) setCompose((value) => value + ch);
+      if (printable) setCompose((value) => value + typed);
       return;
     }
     if (focusRef.current === "tools") {
@@ -303,40 +303,41 @@ export function App() {
   useKeyboard((key) => onKey.current(key));
 
   const sideWidth = Math.max(40, Math.min(54, Math.floor((width || 120) * 0.36)));
-  const visible = Math.max(8, (height || 32) - 6 - WORDMARK_ROWS);
+  // header 2 + section 2 + counter 2 + footer 2 (a hairline row each)
+  const visible = Math.max(4, (height || 32) - 8 - WORDMARK_ROWS);
   const start = windowStart(rows.length, side, visible);
   const shownRows = rows.slice(start, start + visible);
   const stripStart = windowStart(strip.length, tool, 4);
   const shownStrip = strip.slice(stripStart, stripStart + 4);
   const group = groupAt(rows, side);
-  const valueWidth = Math.max(8, sideWidth - 28);
+  // rail: right hairline 1 + padding 2 + mark 2 + label 22 + gap 1
+  const valueWidth = Math.max(4, sideWidth - 28 - 1);
   const headerReveal = read.detail.slice(0, shown);
   const accent = view.accent ?? INK;
 
   return (
     <box width="100%" height="100%" flexDirection="column" backgroundColor={BG}>
       <DigichatWordmark cols={width} />
-      <box height={1} paddingLeft={1} paddingRight={1} flexDirection="row" border={["bottom"]} borderColor={HAIR} backgroundColor={BG}>
+      <box height={2} paddingLeft={1} paddingRight={1} flexDirection="row" border={["bottom"]} borderColor={HAIR} backgroundColor={BG}>
         <text fg={INK}>devkit</text>
         <text fg={MUTE}>{`  ${API}  `}</text>
         <text fg={SOFT}>{headerReveal}</text>
         {shown < read.detail.length && blink ? <text fg={INK}>█</text> : null}
       </box>
       <box flexGrow={1} flexDirection="row" backgroundColor={BG}>
-        <box width={sideWidth} flexDirection="column" border={["right"]} borderColor={focus === "side" ? INK : HAIR} backgroundColor={BG}>
-          <box height={1} paddingLeft={1} paddingRight={1} flexDirection="row" border={["bottom"]} borderColor={HAIR} backgroundColor={BG}>
-            {GROUPS.map((item) => {
-              const on = item === group;
-              return (
-                <text key={item} fg={on ? INK : MUTE}>
-                  {on ? `${GLYPH.user} ${item} ` : `${GLYPH.system} ${item} `}
-                </text>
-              );
-            })}
+        <box width={sideWidth} flexDirection="column" border={["right"]} borderColor={HAIR} backgroundColor={BG}>
+          <box height={2} paddingLeft={1} paddingRight={1} flexDirection="row" border={["bottom"]} borderColor={HAIR} backgroundColor={BG}>
+            <text fg={focus === "side" ? INK : SOFT}>settings</text>
+            <text fg={MUTE}>{`  ${group}`}</text>
           </box>
           <box flexGrow={1} paddingLeft={1} paddingRight={1} flexDirection="column" backgroundColor={BG} overflow="hidden">
             {shownRows.map((row, index) => (
-              <box key={`${start + index}`} height={1} flexDirection="row" backgroundColor={BG}>
+              <box
+                key={`${start + index}`}
+                height={1}
+                flexDirection="row"
+                backgroundColor={focus === "side" && start + index === side ? FILL : BG}
+              >
                 <SettingLine
                   row={row}
                   hot={focus === "side" && start + index === side}
@@ -346,8 +347,8 @@ export function App() {
               </box>
             ))}
           </box>
-          <box height={1} paddingLeft={1} paddingRight={1} border={["top"]} borderColor={HAIR} backgroundColor={BG}>
-            <text fg={MUTE}>{`${start + 1}–${start + shownRows.length}/${rows.length}`}</text>
+          <box height={2} paddingLeft={1} paddingRight={1} border={["top"]} borderColor={HAIR} backgroundColor={BG}>
+            <text fg={MUTE}>{`${start + 1}–${start + shownRows.length} of ${rows.length}`}</text>
           </box>
         </box>
         <box flexGrow={1} flexDirection="column" backgroundColor={BG} paddingLeft={1} paddingRight={1}>
@@ -367,7 +368,7 @@ export function App() {
               <text fg={MUTE}>{`· ${issue}`}</text>
             </box>
           ))}
-          <box flexGrow={1} border={["left", "right", "top"]} borderColor={HAIR} flexDirection="column" backgroundColor={BG} paddingLeft={1} paddingRight={1} overflow="hidden">
+          <box flexGrow={1} border borderColor={HAIR} flexDirection="column" backgroundColor={BG} paddingLeft={1} paddingRight={1} overflow="hidden">
             {turns.map((turn) => (
               <TurnLine key={turn.id} turn={turn} accent={accent} alignRight={view.alignRight} />
             ))}
@@ -376,7 +377,12 @@ export function App() {
             ) : null}
           </box>
           {shownStrip.map((row, index) => (
-            <box key={`${stripStart + index}`} height={1} flexDirection="row" backgroundColor={BG}>
+            <box
+              key={`${stripStart + index}`}
+              height={1}
+              flexDirection="row"
+              backgroundColor={focus === "tools" && stripStart + index === tool ? FILL : BG}
+            >
               <StripLine
                 row={row}
                 hot={focus === "tools" && stripStart + index === tool}
@@ -384,7 +390,15 @@ export function App() {
               />
             </box>
           ))}
-          <box height={1} flexDirection="row" border={["top"]} borderColor={HAIR} backgroundColor={BG}>
+          <box
+            height={3}
+            paddingLeft={1}
+            paddingRight={1}
+            flexDirection="row"
+            border
+            borderColor={focus === "compose" ? INK : HAIR}
+            backgroundColor={BG}
+          >
             {view.attachments ? <text fg={MUTE}>+ </text> : null}
             <text fg={INK}>{`${GLYPH.user} `}</text>
             {compose ? <text fg={INK}>{compose}</text> : null}
@@ -393,8 +407,8 @@ export function App() {
           </box>
         </box>
       </box>
-      <box height={1} paddingLeft={1} paddingRight={1} flexDirection="row" border={["top"]} borderColor={HAIR} backgroundColor={BG}>
-        <text fg={MUTE}>tab focus   ↑↓ move   space toggle   enter send   q quit</text>
+      <box height={2} paddingLeft={1} paddingRight={1} flexDirection="row" border={["top"]} borderColor={HAIR} backgroundColor={BG}>
+        <text fg={MUTE}>tab focus   ↑↓ move   space toggle   enter send   esc back   q quit</text>
         {note ? <text fg={SOFT}>{`   ${note}`}</text> : null}
       </box>
     </box>
@@ -461,8 +475,8 @@ function SettingLine({
   caret: boolean;
   valueWidth: number;
 }) {
-  if (row.kind === "group") return <text fg={INK}>{`${GLYPH.assistant} ${row.text}`}</text>;
-  if (row.kind === "head") return <text fg={MUTE}>{`${GLYPH.system} ${row.text}`}</text>;
+  if (row.kind === "group") return <text fg={INK}>{`${GLYPH.assistant} ${row.text.toLowerCase()}`}</text>;
+  if (row.kind === "head") return <text fg={SOFT}>{`  ${row.text.toLowerCase()}`}</text>;
   if (row.kind === "mark") {
     return <text fg={row.on ? INK : MUTE}>{`${row.on ? GLYPH.assistant : GLYPH.system} ${row.text}`}</text>;
   }
