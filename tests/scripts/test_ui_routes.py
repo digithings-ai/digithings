@@ -1,6 +1,6 @@
 """Tests for scripts/ui_routes.py.
 
-The counts here are the load-bearing assertions. Section 7 says "the 53 routes",
+The counts here are the load-bearing assertions. Section 7 says "the 57 routes",
 and before this module existed that number was a claim in a document rather than
 something a test could check. If someone adds or removes a page, this file fails
 and the number is re-derived instead of remembered.
@@ -57,14 +57,14 @@ def test_the_three_deployed_apps_are_declared():
 # --- the counts section 7 names ------------------------------------------
 
 
-def test_route_count_is_53():
+def test_route_count_is_57():
     report = ui_routes.build(target="hosted", env={})
-    assert report["route_count"] == 53, report["apps"]
+    assert report["route_count"] == 57, report["apps"]
 
 
 @pytest.mark.parametrize(
     ("app", "expected"),
-    [("dashboard", 25), ("digithings-web", 21), ("digiquant-web", 7)],
+    [("dashboard", 25), ("digithings-web", 25), ("digiquant-web", 7)],
 )
 def test_per_app_counts(app, expected):
     report = ui_routes.build(target="hosted", env={})
@@ -81,7 +81,7 @@ def test_reference_app_is_enumerated_but_excluded_from_the_total():
     assert reference["url"] is None
     assert reference["requires"] is None
     counted = sum(len(v["routes"]) for v in report["apps"].values() if v["deployed"])
-    assert counted == 53
+    assert counted == 57
     # Firing control: the exclusion actually excludes something.
     assert len(reference["routes"]) > 0
 
@@ -175,7 +175,7 @@ def test_exit_code_is_zero_when_every_deployed_app_resolves():
 
 def test_text_output_lists_every_route():
     text = ui_routes.render_text(ui_routes.build(target="hosted", env={}))
-    assert text.count("    /") >= 53
+    assert text.count("    /") >= 57
     assert "target: hosted" in text
 
 
@@ -198,5 +198,5 @@ def test_route_count_agrees_with_the_resolver_contract():
     if contract_path is None:
         pytest.skip("config/contract/ has not landed")
     report = ui_routes.build(target="selfhost", env={})
-    assert report["route_count"] == 53
+    assert report["route_count"] == 57
     assert ui_routes.DEPLOYED_APPS == ("dashboard", "digithings-web", "digiquant-web")
