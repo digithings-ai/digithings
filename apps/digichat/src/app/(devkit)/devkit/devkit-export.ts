@@ -139,7 +139,17 @@ function substituteSecrets(text: string, secrets: ExportSecret[]): string {
       out.push(line);
       return;
     }
-    out.push(`${m[1]}${m[2]}${hit.key}${m[2]}${m[4]} \${${hit.variable}}`);
+    // consumeUrl is schema-validated as an https URL, so a `${VAR}` string
+    // would make the exported document fail its own validator — the export
+    // would not round-trip. Emit a valid, deliberately unresolvable https
+    // placeholder instead (.invalid is reserved by RFC 2606, so it can never
+    // point at a live quota endpoint). Tokens carry no URL constraint and keep
+    // the `${VAR}` convention.
+    const value =
+      hit.key === "consumeUrl"
+        ? `${m[1]}${m[2]}consumeUrl${m[2]}${m[4]} https://replace-me.invalid/consume`
+        : `${m[1]}${m[2]}${hit.key}${m[2]}${m[4]} \${${hit.variable}}`;
+    out.push(value);
     if (BLOCK_SCALAR_RE.test(m[5])) skipIndent = indentOf(line);
   });
   return out.join("\n");
