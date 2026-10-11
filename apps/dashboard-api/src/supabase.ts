@@ -29,6 +29,7 @@ import type { LiveBook, LiveDeps } from './kpis-live';
 import type { LedgerBook } from './ledger';
 import type { NavRowInput } from './ssot';
 import type { CommittedBookSnapshot, EnvelopeSource } from './envelope';
+import type { LedgerWeightEvent } from './ledger-weights';
 
 export const HOUSE_WORKSPACE_ID = '6b753576-ced9-5319-9bfa-c5d0aacd9319' as const;
 
@@ -315,6 +316,32 @@ export function createSupabaseSource(env: SupabaseEnv): SupabaseSource {
       if (!w) return new Map();
       return loadMarketClosesMap(env, tickers, w.from, w.to);
     },
+    /**
+     * Full `position_events` history up to the committed book date, oldest
+     * first. The `/brief` read is single-day (`date=eq.`); weight replay needs
+     * every event on or before the book date, so this uses `date=lte.` and
+     * ascending order. Read-only — no repair write is ever issued here.
+     */
+    loadLedgerEvents: async (
+      bookDate: string | null,
+      pin: string | null,
+    ): Promise<ReadonlyArray<LedgerWeightEvent>> => {
+      void pin;
+      if (!bookDate) return [];
+      const rows = (await supaGet(
+        env,
+        `position_events?select=date,ticker,event,weight_pct,prev_weight_pct` +
+          `&workspace_id=eq.${HOUSE_WORKSPACE_ID}&date=lte.${bookDate}` +
+          `&order=date.asc&limit=500`,
+      )) as LedgerEventRow[];
+      return rows.map((e) => ({
+        date: e.date,
+        ticker: e.ticker,
+        event: e.event,
+        weightPct: num(e.weight_pct),
+        prevWeightPct: num(e.prev_weight_pct),
+      }));
+    },
   };
   const brief: BriefDeps = {
     loadBriefBook: async (asOf: string | null): Promise<BriefBook | null> => {
@@ -403,18 +430,32 @@ export function createSupabaseSource(env: SupabaseEnv): SupabaseSource {
       if (!book) return null;
       const w = navWindow(book.navRows.map((r) => ({ date: r.date, nav: r.nav })));
       const history = w == null ? [] : await loadBenchmarkHistory(env, 'SPY', w.from, w.to);
+      const held = book.positions.filter((p) => p.ticker !== 'CASH');
+      // Live lane (contract §6.5): `effectivePrice` is the best price the server
+      // can see — a market close at least as fresh as the published mark, else
+      // the mark itself. `isLive` is what `derivePriceAsOfDate` and
+      // `computeLiveVsMarkPct` key on, so it must be earned, never assumed.
+      const needy = held.filter((p) => p.entryPrice != null).map((p) => p.ticker);
+      const closes =
+        w == null || needy.length === 0
+          ? new Map<string, MarketCloseFill>()
+          : await loadMarketClosesMap(env, needy, w.from, w.to);
       return {
-        positions: book.positions
-          .filter((p) => p.ticker !== 'CASH')
-          .map((p) => ({
+        positions: held.map((p) => {
+          const mark = p.currentPrice ?? null;
+          const markAsOf = p.metricsAsOf ?? null;
+          const close = closes.get(p.ticker);
+          const isLive = close != null && (markAsOf == null || close.asOf >= markAsOf);
+          return {
             ticker: p.ticker,
             weightPct: typeof p.weightActual === 'number' ? p.weightActual : 0,
-            markPrice: p.currentPrice ?? null,
-            effectivePrice: p.currentPrice ?? null,
-            isLive: false,
-            metricsAsOf: p.metricsAsOf ?? null,
-            livePriceDate: null,
-          })),
+            markPrice: mark,
+            effectivePrice: isLive && close ? close.price : mark,
+            isLive,
+            metricsAsOf: markAsOf,
+            livePriceDate: isLive && close ? close.asOf : null,
+          };
+        }),
         navHistory: book.navRows.map((r) => ({ date: r.date, nav: r.nav })),
         benchmarkHistory: history,
         benchmarkTicker: 'SPY',

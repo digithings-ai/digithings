@@ -30,6 +30,7 @@ import {
   insertArtifact,
   listArtifacts,
 } from "@/lib/artifacts-repo";
+import { registerSession, resetSessionLinks, isLiveSessionLink } from "@/lib/session-links";
 
 const routeCtx = { params: Promise.resolve({ id: "conv-1" }) };
 const db = {};
@@ -240,5 +241,32 @@ describe("/api/conversations/[id]/artifacts", () => {
       { ...routeCtx, token: "nope" }
     );
     expect(res.status).toBe(404);
+  });
+});
+
+describe("POST binds the minted token to its conversation", () => {
+  beforeEach(() => {
+    resetSessionLinks();
+  });
+
+  // The blob route answers 410 unless the exact token was bound to this exact
+  // live conversation. Before the bind existed on POST, nothing in production
+  // ever called bindLink, so every real link reported session_expired.
+  it("reports linked=true and the token then validates for the conversation", async () => {
+    // Registered the way apps/digichat/src/app/api/chat/route.ts now registers.
+    registerSession("conv-1", "user-1");
+    const res = await POST(req({ token: "tok-1", name: "a.txt", mediaType: "text/plain", bytes: [1, 2, 3] }), routeCtx);
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.linked).toBe(true);
+    expect(isLiveSessionLink("conv-1", "tok-1")).toBe(true);
+  });
+
+  it("reports linked=false rather than pretending when no live session exists", async () => {
+    const res = await POST(req({ token: "tok-1", name: "a.txt", mediaType: "text/plain", bytes: [1, 2, 3] }), routeCtx);
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.linked).toBe(false);
+    expect(isLiveSessionLink("conv-1", "tok-1")).toBe(false);
   });
 });
