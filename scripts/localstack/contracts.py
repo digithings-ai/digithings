@@ -19,6 +19,7 @@ accepted because two S1 PRs are open and this leaf must not invent a third:
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
@@ -138,9 +139,25 @@ BUILTIN_CHECKS: tuple[Check, ...] = (
     Check(
         name="digichat",
         kind="http",
-        url="http://127.0.0.1:3000/api/health",
+        url="http://127.0.0.1:${DIGICHAT_PUBLISH_PORT:-3005}/api/health",
         profiles=_CHAT,
-        source="Makefile target digichat-health (curl -sf 127.0.0.1:3000/api/health)",
+        # The HOST-published port, not the container port. compose publishes
+        # 127.0.0.1:${DIGICHAT_PUBLISH_PORT:-3005} -> 3000 (docker-compose.yml),
+        # so probing 3000 reports a healthy container as "Connection refused".
+        # The Makefile's digichat-health target curls 3000 because that target
+        # probes the *host* dev server (make digichat-dev), a different run mode.
+        #
+        # Only the PORT is templated. DIGICHAT_PUBLISH_HOST may be set to 0.0.0.0
+        # for a LAN bind, but a bind on 0.0.0.0 still answers on 127.0.0.1, and
+        # test_builtin_urls_are_labelled_local_loopback requires a default that
+        # is provably loopback. Templating the host would let this gate point off
+        # the developer's machine.
+        # The ${...:-default} syntax mirrors compose's own line and is expanded
+        # by _expand_env() at resolve time, so the default follows the variable.
+        source=(
+            "docker-compose.yml digichat ports: "
+            '"${DIGICHAT_PUBLISH_HOST:-127.0.0.1}:${DIGICHAT_PUBLISH_PORT:-3005}:3000"'
+        ),
     ),
     # ── checks with no source we are willing to fake ────────────────────────
     # The wrangler-dev port table is owned by S3 (PR #5353), the contract by S1.
@@ -325,6 +342,28 @@ def select(checks: tuple[Check, ...], profile: str) -> tuple[Check, ...]:
     return tuple(c for c in checks if c.in_profile(profile))
 
 
+#: ``${VAR}`` / ``${VAR:-default}`` in a default URL, matching the syntax the
+#: compose files already use for the same variables.
+_ENV_REF = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}")
+
+
+def _expand_env(url: str | None, config: dict[str, str]) -> str | None:
+    """Expand ``${VAR:-default}`` references in a built-in default URL.
+
+    Only applied to the *default* URL. A ``requires`` value is returned exactly
+    as configured (see :func:`resolve`), because a caller-configured local
+    binding route is keyed on the exact path it supplies.
+    """
+    if url is None or "${" not in url:
+        return url
+
+    def sub(match: re.Match[str]) -> str:
+        name, default = match.group(1), match.group(2)
+        return config.get(name) or (default or "")
+
+    return _ENV_REF.sub(sub, url)
+
+
 def resolve(check: Check, config: dict[str, str]) -> tuple[str | None, str | None]:
     """Resolve a check's URL from configuration.
 
@@ -339,4 +378,4 @@ def resolve(check: Check, config: dict[str, str]) -> tuple[str | None, str | Non
         # path it is given, so appending or stripping a trailing slash here
         # would silently address a route that does not exist.
         return value, None
-    return check.url, None
+    return _expand_env(check.url, config), None
