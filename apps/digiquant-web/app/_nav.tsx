@@ -4,6 +4,7 @@
  *  in-page anchors; the header links out to digithings.ai.
  */
 import { TerminalMark, type NavLink } from "@digithings/ui";
+import { QuantWordmark } from "./_chrome/QuantWordmark";
 
 export const DQ_CONTACT_EMAIL = "contact@digiquant.io";
 
@@ -12,7 +13,7 @@ export const DQ_CONTACT_EMAIL = "contact@digiquant.io";
 export const Brand = () => (
   <>
     <TerminalMark size={24} variant="compact" className="hidden max-[880px]:block" />
-    <span className="brand-word max-[880px]:hidden">digiquant</span>
+    <QuantWordmark replay className="block h-[18px] w-auto fill-current text-ink max-[880px]:hidden" />
   </>
 );
 

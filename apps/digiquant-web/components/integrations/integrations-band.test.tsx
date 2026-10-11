@@ -43,13 +43,18 @@ describe("IntegrationsBand", () => {
     expect(html).toContain("digifetch");
     expect(html).not.toContain("favicon-dg.svg");
     expect(html).not.toMatch(/12x|fx hub/i);
-    expect(html).toContain('aria-label="digiquant"');
-    expect(html).toContain('aria-label="digichat"');
-    expect(html).toContain('aria-label="digivoice"');
-    expect(html).toContain('fill="#878787"');
-    expect(html).toContain('fill="#ffffff"');
     expect(html).not.toContain("M-9 -5.5 -2 0 -9 5.5");
-    expect(html).toContain("M0 -6 -9 8");
+  });
+
+  it("drops the big module heroes and the emblem icons; a module tile shows its small banner or its name", () => {
+    expect(html).not.toContain('aria-label="digiquant"');
+    expect(html).not.toContain('aria-label="digivoice"');
+    expect(html).toMatch(/<canvas[^>]*aria-label="digichat"/);
+    expect(html).not.toContain("M0 -6 -9 8");
+    expect(html.match(/<canvas/g) ?? []).toHaveLength(1);
+    for (const name of ["digigraph", "digillm", "digikey", "digibase", "digifetch"]) {
+      expect(html).toContain(`>${name}</span>`);
+    }
   });
 
   it("scrolls the packages this tree actually calls, in two directions", () => {
@@ -130,7 +135,6 @@ describe("connected-package row marks", () => {
       "Kraken · account snapshots",
       "Tradier · account snapshots",
       "Yahoo Finance · quote history",
-      "FRED · macro series",
     ]) {
       expect(rowsHtml).toContain(label);
     }
