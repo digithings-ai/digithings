@@ -14,6 +14,13 @@ export type DigichatCliRequestOptions = {
   language?: string;
   model?: string;
   sessionId?: string;
+  /**
+   * Conversation this CLI session writes to. The BFF reads it as
+   * `x-external-conversation` (apps/digichat/src/app/api/chat/route.ts) and calls
+   * `registerSession` with it, which is what makes the session's artifact links
+   * resolve — the web client sends the same header for the same reason.
+   */
+  conversationId?: string;
 };
 
 /** Normalize DIGICHAT_URL / --url to an origin without trailing slash. */
@@ -45,6 +52,9 @@ export function buildDigichatChatHeaders(
   };
   if (opts.sessionId?.trim()) {
     headers["x-digichat-session"] = opts.sessionId.trim();
+  }
+  if (opts.conversationId?.trim()) {
+    headers["x-external-conversation"] = opts.conversationId.trim();
   }
   if (opts.language?.trim() && opts.language.trim() !== "en") {
     headers["x-digi-language"] = opts.language.trim();
