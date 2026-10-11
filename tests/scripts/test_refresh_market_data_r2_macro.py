@@ -184,11 +184,20 @@ def test_registry_declares_cadences_for_slow_series() -> None:
         assert "cadence: weekly" in _series_block(text, series), series
 
 
-def test_daily_series_carry_no_cadence() -> None:
-    """Daily is the default, so the daily block should stay unannotated."""
+def test_daily_series_declare_daily_explicitly() -> None:
+    """Daily is the default, but it is now declared rather than inferred.
+
+    DIG-2406 gave all 17 fetched daily FRED ids an explicit ``cadence: daily``.
+    Leaving them unannotated made them ride the fallback by accident, and the
+    fallback is the *narrowest* window, so the accident cost patience rather than
+    granting it. Declaring the default keeps the two cases distinguishable:
+    a deliberate ``daily`` and a genuinely undeclared series (a Yahoo FX symbol
+    or a ``--macro-series`` override), which is what
+    ``test_cli_specs_default_to_daily`` and the Yahoo block still pin.
+    """
     text = MACRO_YAML.read_text()
     for series in ("DGS10", "DFF", "SOFR", "VIXCLS", "DCOILWTICO"):
-        assert "cadence:" not in _series_block(text, series), series
+        assert "cadence: daily" in _series_block(text, series), series
 
 
 def test_resolver_carries_the_manifest_cadence() -> None:
@@ -196,7 +205,8 @@ def test_resolver_carries_the_manifest_cadence() -> None:
     by_series = {series: cadence for _source, series, cadence in specs}
     assert by_series["PCEPI"] == "monthly"
     assert by_series["ICSA"] == "weekly"
-    assert by_series["DGS10"] is None
+    # Declared daily, and declared *as* daily -- not absent. See DIG-2406.
+    assert by_series["DGS10"] == "daily"
 
 
 def test_cli_specs_default_to_daily() -> None:

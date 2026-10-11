@@ -19,14 +19,25 @@ dataset" rather than a clean failure.
 
 DIG-1137 adds the second half of the same hole. The guard above reads ``mode``,
 and there is a shape where the vendor keeps *answering* while the panel stops
-advancing: every live row is inside the window, so nothing looks like a failure
-and the run lands on ``up-to-date`` -- a success mode the soft-fail reduction
-never sees. ``staleness_gate`` cannot cover it either, because healthy price
-tickers pin ``max(as_of)`` at the run date. The panel is frozen at the same
-place, with ``stale=False`` and exit 0. So ``_macro_as_of_stale`` measures each
-macro series' ``as_of`` against its own cadence window and names anything past
-it. The section at the end of this file pins that guard, including the fuse: a
-monthly seal 34 days old is legitimately fresh and must stay quiet.
+advancing, so the run lands on ``up-to-date`` -- a success mode the
+soft-fail reduction never sees. ``staleness_gate`` cannot cover it either,
+because healthy price tickers pin ``max(as_of)`` at the run date. The panel
+is frozen at the same place, with ``stale=False`` and exit 0.
+
+The reachable shape is narrower than "the vendor keeps answering" (DIG-2406). The
+live fetch is clamped to ``obs_date <= run`` *before* the freshness check, so the
+one row date that keeps the fetch non-empty without advancing the seal is a row
+dated exactly ``run + 1``: it satisfies the raw-rows test, the clamp then drops
+it, and ``new_rows`` comes back empty in front of an old ``seal``. It is the
+seal -- stored history, not bounded by the window -- that ages out, not a live
+row. ``MODE_INCREMENTAL`` cannot reach the guard at all: its ``as_of`` is the max
+of history and live rows, and its live rows are both ``<= run`` and inside the
+cadence window by construction, so its age can never exceed that window.
+
+So ``_macro_as_of_stale`` measures each macro series' ``as_of`` against its own
+cadence window and names anything past it. The section at the end of this file
+pins that guard, including the fuse: a monthly seal 34 days old is legitimately
+fresh and must stay quiet.
 
 How this stays a real test rather than a stub. It does not reimplement the
 logic. It parses ``refresh_market_data_r2.py`` with :mod:`ast`, extracts the
