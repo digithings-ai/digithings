@@ -11,6 +11,7 @@ import { typeAnimation } from "../animations/type";
 import { clawAnimation, withHeadroom } from "../animations/claw";
 import { vaultAnimation } from "../animations/vault";
 import { scanAnimation } from "../animations/scan";
+import { spansAnimation } from "../animations/spans";
 import { PIXEL_7X10 } from "../font";
 import type { BannerDefinition, Tone } from "../types";
 
@@ -381,6 +382,36 @@ export const DIGISEARCH: BannerDefinition = {
   seed: 0x5ea2c,
 };
 
+/** DIG-2872. A trace waterfall, x is time: each pixel row is a lane of
+ *  sibling spans that open in a staircase and grow right, the word in ink on
+ *  their bars; the bars drain and leave the word. LIVE runs a small trace
+ *  (root plus children) now and then. Accent: --accent-digitrace. */
+export const DIGITRACE: BannerDefinition = {
+  id: "digitrace",
+  text: "DIGITRACE",
+  label: "digitrace",
+  font: PIXEL_7X10,
+  gap: 2,
+  palette: {
+    ink: INK,
+    ground: GROUND,
+    accent: { hex: "#6FA3A3", cube: 73, cssVar: "--accent-digitrace" },
+    glint: { hex: "#FFFFFF", cube: 231, cssVar: "--glint" },
+  },
+  animation: spansAnimation({
+    colMs: 14,
+    laneDelayMs: 70,
+    siblings: [2, 4],
+    speed: [0.7, 1.5],
+    fadeMs: 520,
+    barAlpha: [0.34, 0.24],
+    everyMs: 4200,
+    liveColMs: 16,
+  }),
+  live: true,
+  seed: 0x7ace,
+};
+
 export const BANNERS = {
   digithings: DIGITHINGS,
   digiquant: DIGIQUANT,
@@ -395,4 +426,5 @@ export const BANNERS = {
   digiclaw: DIGICLAW,
   digivault: DIGIVAULT,
   digisearch: DIGISEARCH,
+  digitrace: DIGITRACE,
 } as const;
