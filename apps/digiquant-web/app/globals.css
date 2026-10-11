@@ -129,6 +129,12 @@ body {
   width: 100%;
   max-width: none !important;
 }
+/* At tour start the transcript is short, so in a full-height frame it floated at
+   the top with a void under it. Pin it to the footer instead; once the tour fills
+   the column the auto margin resolves to zero and the rule is inert. */
+.scripted-digichat .digichat-thread__viewport > .mx-auto > .mb-14 {
+  margin-top: auto;
+}
 /* The skin pins messages and the composer at 0.88rem; follow the frame size. */
 .scripted-digichat :is(
   .aui-user-message-content,
