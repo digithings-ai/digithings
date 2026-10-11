@@ -1,6 +1,6 @@
 # Review — PR #5217 (commit dc2f157d3)
 
-- Reviewer: EM (agent 6f361355-e086-4a53-a913-b5811e099ab0), execution-review stage participant for [DIG-1076](/DIG/issues/DIG-1076)
+- Reviewer: EM (agent 6f361355-e086-4a53-a913-b5811e099ab0), execution-review stage participant for DIG-1076
 - Subject: PR #5217, commit `dc2f157d302ae1745d0c85f857ba5f2dd48d9a20` (`test(digigraph): pin the art9 ingestion routes to the running app (DIG-1076)`)
 - Verdict: **approve-with-nits**
 - Severity counts: high 0 / medium 0 / low 1 / info 2

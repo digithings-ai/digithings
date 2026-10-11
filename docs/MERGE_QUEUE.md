@@ -68,7 +68,7 @@ Two of these are deliberate choices worth stating plainly.
 is indistinguishable from a check that was never asked to run — which is exactly the hole
 being closed. This has a real cost: Bugbot reports `neutral` when it is out of quota, so a
 required Bugbot check would block merges indefinitely. Do not put a metered third-party
-service on the required list. See `CODE_REVIEW_BASELINE.md`.
+service on the required list. See `reviews/archive/CODE_REVIEW_BASELINE.md`.
 
 **A green commit status is not a passing build.** GitHub's commit status docs are explicit
 that "any person or integration with write permissions can set the state of any status
