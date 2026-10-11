@@ -104,7 +104,6 @@ surface's config:
 | --- | --- | --- |
 | dashboard (`apps/dashboard`) | `app/fonts.ts:17` | the only `Geist_Mono({…})` call (mono only; this surface has no sans loader) |
 | digiquant.io (`apps/digiquant-web`) | `app/fonts.ts:24` | the `Geist_Mono({… variable: "--font-mono-face" …})` call |
-| digiquant app (`apps/digiquant-app`) | `app/fonts.ts:27` | same; `app/globals.css` `--mono` reads `--font-mono-face` |
 | digithings.ai (`apps/digithings-web`) | `app/fonts.ts:25` | same |
 | DigiChat (`apps/digichat`), both `(digichat)` and `(baseline)` layouts | `src/app/fonts.ts:26` | same — one config serves the product and the catalog skins. Stacks live in `packages/ui/src/styles/digichat-app-theme.css` (baseline-isolation forbids that sheet importing any other `@digithings/` file). The retired name `--font-geist-mono` is aliased to `--font-mono-face` in `packages/ui/src/styles/chat-aui.css`, the only sheet that reads it, so digiquant-web and digithings.ai (which mount the chat skin without the digichat app theme) resolve the same shipped face |
 | tearsheet (client-facing HTML) | `digiquant/src/digiquant/fonts.py:21` | `MONO_FONT_FAMILY` — Python, not `next/font`: `MONO_FONT_STACK` and `GOOGLE_FONTS_HREF` follow it, and the page CSS, both Plotly layouts and `charts/trades.py` read the stack |

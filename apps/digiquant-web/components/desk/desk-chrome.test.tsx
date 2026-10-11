@@ -63,7 +63,7 @@ describe("desk chrome", () => {
     expect(paths).toContain("/fx/settings");
     expect(paths).not.toContain("/settings");
     expect(paths).not.toContain("/settings/paper");
-    expect(deskHomeHref(baseline)).toBe("/app/brief/");
+    expect(deskHomeHref(baseline)).toBe("/app/");
     expect(deskHomeHref(fx)).toBeNull();
     expect(deskHomeHref({ ...fx, access: "granted", pages: [{ path: "/fx", label: "FX Hub", access: "granted" }] })).toBeNull();
   });

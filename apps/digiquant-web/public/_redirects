@@ -15,6 +15,10 @@
 /subsystems/kairos       /subsystems/execution/   301
 /subsystems/kairos/      /subsystems/execution/   301
 
+# The brief IS the app: /app/brief is served at /app.
+/app/brief /app/ 308
+/app/brief/ /app/ 308
+
 # Retired operator UI. /dashboard is the brief at /app. Known desk paths keep
 # their slug. Retired pages go to /app. No splat: login, signup, the Auth
 # callback and settings (incl. the Alpaca OAuth callback) still ship from
@@ -47,8 +51,8 @@
 /dashboard/portfolio/ /app/portfolio/ 308
 /dashboard/pipeline /app/pipeline/ 308
 /dashboard/pipeline/ /app/pipeline/ 308
-/dashboard/brief /app/brief/ 308
-/dashboard/brief/ /app/brief/ 308
+/dashboard/brief /app/ 308
+/dashboard/brief/ /app/ 308
 /dashboard/portfolio/performance /app 308
 /dashboard/portfolio/performance/ /app 308
 /dashboard/research/vela-spike /app 308
@@ -114,8 +118,8 @@
 /olympus/portfolio/ /app/portfolio/ 308
 /olympus/pipeline /app/pipeline/ 308
 /olympus/pipeline/ /app/pipeline/ 308
-/olympus/brief /app/brief/ 308
-/olympus/brief/ /app/brief/ 308
+/olympus/brief /app/ 308
+/olympus/brief/ /app/ 308
 /olympus/portfolio/performance /app/ 308
 /olympus/portfolio/performance/ /app/ 308
 /olympus/research/vela-spike /app/ 308

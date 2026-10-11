@@ -5,16 +5,21 @@ import { isInviteSurface, publicCatalogPages } from "./public-surface";
 export function deskPathFromSlug(slug: string[] | undefined): string | null {
   if (!slug || slug.length === 0) return "/brief";
   const path = `/${slug.join("/")}`;
+  if (path === "/brief") return null; // served at /app; /app/brief redirects
   if (!pageByPath(path) || isInviteSurface(path)) return null;
   return path;
 }
 
 export function deskHref(path: string): string {
+  // The brief IS the app (owner decision 2026-10-11): it lives at /app.
+  if (path === "/brief") return "/app/";
   return `/app${path}/`;
 }
 
 export function deskStaticParams(): { slug: string[] }[] {
-  return publicCatalogPages().map((page) => ({ slug: page.path.split("/").filter(Boolean) }));
+  return publicCatalogPages()
+    .filter((page) => page.path !== "/brief")
+    .map((page) => ({ slug: page.path.split("/").filter(Boolean) }));
 }
 
 export function isDeskPath(path: string): boolean {

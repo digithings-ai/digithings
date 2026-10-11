@@ -20,7 +20,6 @@ const digichatTheme = at("packages/ui/src/styles/digichat-app-theme.css");
 const SURFACES = [
   { surface: "dashboard", config: "apps/dashboard/app/fonts.ts" },
   { surface: "digiquant.io", config: "apps/digiquant-web/app/fonts.ts" },
-  { surface: "digiquant app", config: "apps/digiquant-app/app/fonts.ts" },
 ] as const;
 
 /**

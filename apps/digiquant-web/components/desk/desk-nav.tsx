@@ -107,14 +107,16 @@ export function DeskRail({
     const folder = cur.dataset.folder === "1";
     const path = cur.dataset.path ?? "";
     let to: HTMLAnchorElement | undefined;
-    if (event.key === "ArrowDown") to = links[Math.min(index + 1, links.length - 1)];
-    else if (event.key === "ArrowUp") to = links[Math.max(index - 1, 0)];
-    else if (event.key === "Home") to = links[0];
-    else if (event.key === "End") to = links[links.length - 1];
-    else if (event.key === "ArrowRight" && folder) {
+    // j/k/h/l mirror the arrows, as in the digiquant TUI.
+    const key = ({ j: "ArrowDown", k: "ArrowUp", h: "ArrowLeft", l: "ArrowRight" } as Record<string, string>)[event.key] ?? event.key;
+    if (key === "ArrowDown") to = links[Math.min(index + 1, links.length - 1)];
+    else if (key === "ArrowUp") to = links[Math.max(index - 1, 0)];
+    else if (key === "Home") to = links[0];
+    else if (key === "End") to = links[links.length - 1];
+    else if (key === "ArrowRight" && folder) {
       if (!isOpen(path)) setOpen((state) => ({ ...state, [path]: true }));
       else to = links[index + 1];
-    } else if (event.key === "ArrowLeft") {
+    } else if (key === "ArrowLeft") {
       if (folder && isOpen(path)) setOpen((state) => ({ ...state, [path]: false }));
       else if (cur.dataset.parent) to = links.find((link) => link.dataset.path === cur.dataset.parent);
     } else return;

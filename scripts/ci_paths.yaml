@@ -121,10 +121,6 @@ dashboard:
 web:
   - apps/digithings-web/**
   - apps/digiquant-web/**
-  # Terminal app. Pages does not build it. This lane's root npm ci resolves the
-  # manifest, so a bad range here must fire the lane (deploy checks name the
-  # same manifest when those workflow files can be edited).
-  - apps/digiquant-app/**
   # digiquant-web's desk reads the TUI page catalog and response presenter from
   # source (components/desk/public-surface.ts, read-block.ts).
   - clients/digiquant-tui/src/**

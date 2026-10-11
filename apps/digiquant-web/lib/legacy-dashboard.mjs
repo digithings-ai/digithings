@@ -58,6 +58,8 @@ export const DASHBOARD_ACCOUNT_PATHS = [
 
 /** Live desk URL for one catalog or web-slot path. Matches deskHref. */
 export function legacyDeskHref(path) {
+  // The brief IS the app: it lives at /app, never /app/brief.
+  if (path === "/brief") return "/app/";
   return `/app${path}/`;
 }
 
@@ -101,6 +103,8 @@ export function legacyDashboardRedirects() {
     rules.push({ source: `/dashboard${path}`, destination: "/app", permanent: true });
     rules.push({ source: `/dashboard${path}/`, destination: "/app", permanent: true });
   }
+  rules.push({ source: "/app/brief", destination: "/app/", permanent: true });
+  rules.push({ source: "/app/brief/", destination: "/app/", permanent: true });
   rules.push({ source: "/dashboard", destination: "/app", permanent: true });
   rules.push({ source: "/dashboard/", destination: "/app", permanent: true });
   return rules;

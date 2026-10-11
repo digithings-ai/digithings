@@ -8,6 +8,8 @@ import { DeskAccess } from "./desk-access";
 import { DeskCommand } from "./desk-command";
 import { DeskRail } from "./desk-nav";
 import { DeskPicker } from "./desk-picker";
+import { DeskShortcuts } from "./desk-shortcuts";
+import { isTyping } from "./shortcuts";
 import { deskHref } from "./paths";
 import { RAIL_WIDTH_DEFAULT, RAIL_WIDTHS, stepRailWidth } from "./rail-width";
 
@@ -72,6 +74,36 @@ export function DeskFrame({ current, children }: { current: string; children: Re
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
 
+  const [help, setHelp] = useState(false);
+
+  // App-wide keys (map in ./shortcuts.ts). / ⌘K and d live in their own components.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey || isTyping(event.target)) return;
+      if (event.key === "?") {
+        event.preventDefault();
+        setHelp((value) => !value);
+      } else if (event.key === "Escape") {
+        setHelp(false);
+      } else if (event.key === "n") {
+        event.preventDefault();
+        if (narrow) setOpen(true);
+        window.requestAnimationFrame(() => {
+          const rail = document.getElementById("desk-rail");
+          const link =
+            rail?.querySelector<HTMLAnchorElement>('a.nav-link[aria-current="page"]') ??
+            rail?.querySelector<HTMLAnchorElement>("a.nav-link");
+          link?.focus();
+        });
+      } else if (event.key === "[" || event.key === "]") {
+        event.preventDefault();
+        writeRailWidth(stepRailWidth(width, event.key === "]" ? 1 : -1));
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [narrow, width]);
+
   const drawer = narrow && open;
   const style = { "--rail-w": `${width}px` } as CSSProperties;
 
@@ -112,6 +144,7 @@ export function DeskFrame({ current, children }: { current: string; children: Re
           <div className="desk-main flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{children}</div>
         </div>
       </div>
+      {help ? <DeskShortcuts onClose={() => setHelp(false)} /> : null}
     </DeskAccess>
   );
 }
