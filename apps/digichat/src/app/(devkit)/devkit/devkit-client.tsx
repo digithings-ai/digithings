@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { p } from "@/lib/base-path";
 import type { DigichatDeployment } from "@/lib/deploy-config/schema";
+import { groupEntriesByLook } from "./devkit-looks";
 import {
   Select,
   SelectContent,
@@ -137,11 +138,26 @@ export function DevkitDeploymentSelect({
         {files.length > 0 ? (
           <SelectGroup>
             <SelectLabel>{`Local files (${files.length})`}</SelectLabel>
-            {files.map((e) => (
-              <SelectItem key={e.id} value={e.id}>
-                {e.ok ? "●" : "○"} {e.label}
-                {e.ok ? "" : " (invalid)"}
-              </SelectItem>
+            {/* Grouped by look, not by file: the nine shipped configs collapse
+                to the looks a reviewer compares, and the twins the brief names
+                (three datatap copies, two local-app copies) land in one group
+                instead of reading as nine unrelated deployments. Every file is
+                still listed — nothing is deleted or hidden. */}
+            {groupEntriesByLook(
+              files.map((e) => ({ id: e.id, slug: e.label, chromeMode: undefined })),
+            ).map((group) => (
+              <SelectGroup key={group.id}>
+                <SelectLabel>{group.label}</SelectLabel>
+                {group.variantIds.map((id) => {
+                  const e = files.find((f) => f.id === id) as (typeof files)[number];
+                  return (
+                    <SelectItem key={e.id} value={e.id}>
+                      {e.ok ? "●" : "○"} {e.label}
+                      {e.ok ? "" : " (invalid)"}
+                    </SelectItem>
+                  );
+                })}
+              </SelectGroup>
             ))}
           </SelectGroup>
         ) : null}
