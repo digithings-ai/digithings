@@ -36,3 +36,24 @@ export function readInviteToken(search: string | undefined): string | undefined 
   const trimmed = raw.trim();
   return trimmed === "" ? undefined : trimmed;
 }
+
+/**
+ * Remove the invite key from the address bar once it has been read (DIG-1437).
+ *
+ * Until Act B2 removes occ.digithings.ai from FIRST_PARTY_EMBED_HOSTS nobody
+ * needs the key, so a leftover one buys nothing; the moment it is removed every
+ * staff member opens /chat/occ?token=..., and an unstripped key lands in browser
+ * history and stays visible to anyone reading over a shoulder.
+ *
+ * Returns the cleaned URL, or null when there is nothing to strip — a missing,
+ * empty or whitespace-only param is a no-op, which keeps readInviteToken the
+ * single reader and leaves an ordinary /chat visit without rewriting its own
+ * history. Every other query param and the hash are preserved.
+ */
+export function stripInviteTokenFromUrl(href: string): string | null {
+  const url = new URL(href);
+  const raw = url.searchParams.get(INVITE_TOKEN_PARAM);
+  if (raw === null || raw.trim() === "") return null;
+  url.searchParams.delete(INVITE_TOKEN_PARAM);
+  return url.toString();
+}
