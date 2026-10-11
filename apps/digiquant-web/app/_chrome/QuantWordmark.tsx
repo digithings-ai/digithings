@@ -7,9 +7,9 @@ import { HERO_PLAYED_KEY, nextHeroLive, type HeroGateView } from "@/lib/hero-pla
 /** Pixel lockup for the hero: DIGIQUANT drawn in square cells that grow up from
  *  the baseline, left to right, like bars of a bar chart building the word.
  *  The rise mixes digiquant up and down so the word reads as price moving
- *  both ways, then settles to ink. Afterwards a few cells keep glinting and a
- *  few strays keep blinking, each in its own up or down tone, so both colors
- *  stay alive. The hero (`replay`) builds on every load; other marks build
+ *  both ways, then settles to ink. Afterwards a fifth of the cells keep
+ *  flashing and most strays keep blinking, each in its own up or down tone, so
+ *  red and green both stay on the word. The hero (`replay`) builds on every load; other marks build
  *  once per tab and later loads keep only the glint. No CSS
  *  classes: animations are inline, keyframes live in globals.css, and
  *  [data-dq-anim] switches them off under reduced motion. */
@@ -40,6 +40,10 @@ function mulberry32(seed: number): () => number {
 
 type Cell = { x: number; y: number; style: CSSProperties };
 
+/** Share of letter cells that keep flashing up or down after the build. Enough
+ *  that red and green both stay on the word at any moment, not a rare glint. */
+const GLINT_SHARE = 0.2;
+
 const tone = (rand: () => number) => (rand() < 0.5 ? "var(--up)" : "var(--down)");
 
 function build(): { letters: Cell[]; strays: Cell[] } {
@@ -55,11 +59,11 @@ function build(): { letters: Cell[]; strays: Cell[] } {
         if (glyph[y][c] !== "#") continue;
         const px = x + c;
         used.add(`${px},${y}`);
-        const glint = rand() < 0.045;
+        const glint = rand() < GLINT_SHARE;
         const delay = columnDelayMs(px) + (9 - y) * 9 + Math.floor(rand() * 140);
         const rise = `dq-rise ${260 + Math.floor(rand() * 220)}ms cubic-bezier(0.2,0.7,0.2,1) ${delay}ms backwards`;
         const glintAnim = glint
-          ? `dq-glint ${7000 + Math.floor(rand() * 8000)}ms step-end ${3500 + Math.floor(rand() * 6000)}ms infinite`
+          ? `dq-glint ${1400 + Math.floor(rand() * 2600)}ms step-end ${BUILD_DONE_MS + Math.floor(rand() * 1600)}ms infinite`
           : "none";
         const cell: Cell = {
           x: px,
@@ -89,8 +93,8 @@ function build(): { letters: Cell[]; strays: Cell[] } {
     if (used.has(key)) continue;
     used.add(key);
     const flicker = `dq-stray ${60 + Math.floor(rand() * 140)}ms linear ${Math.floor(rand() * 1400)}ms backwards`;
-    const blink = rand() < 0.35;
-    const blinkAnim = `dq-blink ${4000 + Math.floor(rand() * 6000)}ms step-end ${BUILD_DONE_MS + 400 + Math.floor(rand() * 5000)}ms infinite`;
+    const blink = rand() < 0.6;
+    const blinkAnim = `dq-blink ${1800 + Math.floor(rand() * 3200)}ms step-end ${BUILD_DONE_MS + Math.floor(rand() * 2000)}ms infinite`;
     const cell: Cell = {
       x: px,
       y: py,
@@ -144,8 +148,8 @@ function gateView(gate: LiveGate | null): HeroGateView | null {
 
 /** `idle` holds every cell back (opacity 0, no animation) until it flips to `run`.
  *  The rise plays once per tab. Later mounts keep the glint only.
- *  `replay` (the top hero) builds on every load and still claims the tab, so
- *  the footer mark does not build a second time.
+ *  `replay` marks (the top hero, the top bar, the closing mark) build on every
+ *  load whether or not the tab has played.
  *  `armed` stays false until a scroll-triggered mark is allowed to claim. */
 export function QuantWordmark({
   className,
