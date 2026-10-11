@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { INVITE_TOKEN_PARAM, readInviteToken } from "./inviteToken";
+import { INVITE_TOKEN_PARAM, readInviteToken, stripInviteTokenFromUrl } from "./inviteToken";
 
 describe("readInviteToken", () => {
   it("uses the same key digichat already enforces", () => {
@@ -79,5 +79,43 @@ describe("readInviteToken", () => {
   it("is not confused by a token-looking value in the fragment", () => {
     // The fragment is never sent to a server and is not part of location.search.
     expect(readInviteToken("?utm=1#token=abc123")).toBeUndefined();
+  });
+});
+
+describe("stripInviteTokenFromUrl (DIG-1437)", () => {
+  it("removes only the token param and preserves every other param and the hash", () => {
+    const out = stripInviteTokenFromUrl(
+      "https://digithings.ai/chat/occ?theme=dark&token=s3cret&layout=wide#thread",
+    );
+    expect(out).not.toBeNull();
+    const url = new URL(out as string);
+    expect(url.searchParams.get("token")).toBeNull();
+    expect(url.searchParams.get("theme")).toBe("dark");
+    expect(url.searchParams.get("layout")).toBe("wide");
+    expect(url.hash).toBe("#thread");
+    expect(url.pathname).toBe("/chat/occ");
+    // The value itself must not survive anywhere in the rewritten URL.
+    expect(out).not.toContain("s3cret");
+  });
+
+  it("refuses when there is nothing to strip, so an ordinary visit never rewrites history", () => {
+    expect(stripInviteTokenFromUrl("https://digithings.ai/chat/occ")).toBeNull();
+    expect(stripInviteTokenFromUrl("https://digithings.ai/chat/occ?theme=dark")).toBeNull();
+    expect(stripInviteTokenFromUrl("https://digithings.ai/chat/occ?token=")).toBeNull();
+    expect(stripInviteTokenFromUrl("https://digithings.ai/chat/occ?token=%20%20")).toBeNull();
+  });
+
+  it("drops a duplicated token param entirely", () => {
+    const out = stripInviteTokenFromUrl("https://digithings.ai/chat/occ?token=one&token=two") as string;
+    expect(new URL(out).searchParams.getAll("token")).toEqual([]);
+  });
+
+  it("agrees with readInviteToken: it strips exactly when the reader returns a key", () => {
+    for (const search of ["?token=abc", "?token=abc&theme=dark", "?theme=dark", "?token=", ""]) {
+      const url = new URL("https://digithings.ai/chat/occ" + search);
+      const key = readInviteToken(url.search);
+      const stripped = stripInviteTokenFromUrl(url.toString());
+      expect(stripped !== null).toBe(key !== undefined);
+    }
   });
 });
