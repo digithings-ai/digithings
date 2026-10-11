@@ -10,6 +10,7 @@ import { pagesAnimation } from "../animations/pages";
 import { typeAnimation } from "../animations/type";
 import { clawAnimation, withHeadroom } from "../animations/claw";
 import { vaultAnimation } from "../animations/vault";
+import { scanAnimation } from "../animations/scan";
 import { PIXEL_7X10 } from "../font";
 import type { BannerDefinition, Tone } from "../types";
 
@@ -351,6 +352,35 @@ export const DIGIVAULT: BannerDefinition = {
   seed: 0xdb17,
 };
 
+/** DIG-2873. A search: the word hides in an index of decoy pixels until a scan
+ *  beam finds it. LIVE runs queries over it and highlights the hits.
+ *  Accent: --accent-digisearch. */
+export const DIGISEARCH: BannerDefinition = {
+  id: "digisearch",
+  text: "DIGISEARCH",
+  label: "digisearch",
+  font: PIXEL_7X10,
+  gap: 2,
+  palette: {
+    ink: INK,
+    ground: GROUND,
+    accent: { hex: "#5AA3C4", cube: 74, cssVar: "--accent-digisearch" },
+    glint: { hex: "#FFFFFF", cube: 231, cssVar: "--glint" },
+  },
+  animation: scanAnimation({
+    sweepMs: 1700,
+    noise: 0.55,
+    trail: 8,
+    everyMs: 6000,
+    liveSweepMs: 900,
+    holdMs: 1400,
+    fadeMs: 350,
+    maxQuery: 4,
+  }),
+  live: true,
+  seed: 0x5ea2c,
+};
+
 export const BANNERS = {
   digithings: DIGITHINGS,
   digiquant: DIGIQUANT,
@@ -364,4 +394,5 @@ export const BANNERS = {
   digidev: DIGIDEV,
   digiclaw: DIGICLAW,
   digivault: DIGIVAULT,
+  digisearch: DIGISEARCH,
 } as const;
