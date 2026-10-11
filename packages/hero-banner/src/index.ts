@@ -26,3 +26,4 @@ export { traverseAnimation, type TraverseOptions } from "./animations/traverse";
 export { tumblerAnimation, type TumblerOptions } from "./animations/tumbler";
 export { speakAnimation, speechLevel, type SpeakOptions } from "./animations/speak";
 export { pagesAnimation, type PagesOptions } from "./animations/pages";
+export { typeAnimation, type TypeOptions } from "./animations/type";
