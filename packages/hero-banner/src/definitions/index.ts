@@ -3,6 +3,7 @@ import { equalizerAnimation } from "../animations/equalizer";
 import { riseAnimation } from "../animations/rise";
 import { routeAnimation } from "../animations/route";
 import { scrambleAnimation } from "../animations/scramble";
+import { vaultAnimation } from "../animations/vault";
 import { PIXEL_7X10 } from "../font";
 import type { BannerDefinition, Tone } from "../types";
 
@@ -140,10 +141,32 @@ export const DIGILLM: BannerDefinition = {
   seed: 0x11e1,
 };
 
+/** DIG-2874. The vault door opens: a combination dial turns right, left, right,
+ *  the bolts slide back, the leaves part from the seam and the word inside
+ *  lights up. LIVE: a scan line runs down the word, or the bolts relock and
+ *  draw back. Accent: --accent-digivault. */
+export const DIGIVAULT: BannerDefinition = {
+  id: "digivault",
+  text: "DIGIVAULT",
+  label: "digivault",
+  font: PIXEL_7X10,
+  gap: 2,
+  palette: {
+    ink: INK,
+    ground: GROUND,
+    accent: { hex: "#9D8FC9", cube: 140, cssVar: "--accent-digivault" },
+    glint: { hex: "#FFFFFF", cube: 231, cssVar: "--glint" },
+  },
+  animation: vaultAnimation({ turnMs: 560, boltMs: 380, openMs: 720, settleMs: 520, everyMs: 7000, scanMs: 900 }),
+  live: true,
+  seed: 0xdb17,
+};
+
 export const BANNERS = {
   digithings: DIGITHINGS,
   digiquant: DIGIQUANT,
   digichat: DIGICHAT,
   digivoice: DIGIVOICE,
   digillm: DIGILLM,
+  digivault: DIGIVAULT,
 } as const;
