@@ -202,7 +202,12 @@ the full module map.
   not 90-day rolling z. Preset `btc_optimized` sells (`long_only: false`)
   with a concentrated remaining-book curve (high max daily % of remaining
   cash/coins at the extremes). Walk-forward OOS `beats_flat_dca_oos` is
-  still false — in-sample richness, not a proven OOS beat. Allocation
+  still false — do not claim an OOS win over flat DCA unless a new run
+  actually prints true. Extras are also searched as Stage 0 solos (OOS vs
+  `power_law_solo`); `indicator_weights` only change when an operator
+  passes `--persist-settings` *and* combined OOS is not worse. The Stage 0
+  CLI default is sidecar-only — a 2-trial `curve_simulator` Stage B is not
+  a published-weight flip. Allocation
   charts draw MTM allocated % plus fill dots; do not draw a percent-cash
   line (it is the inverse of allocated).
 - **Public copy.** User-facing name is **BTC-SDCA** (asset then type; never
@@ -257,11 +262,14 @@ on the extra-indicator allowlist.
 4. Allowlist extras: generic (`weekly_rsi`, `weekly_macd`, `sma_band`) vs
    plugins (BTC M2/rs_eth/dxy; on-chain #1086 later). No put/call scrape
    in this WP.
-5. Stage A backtest keep/drop (`optimize_stage_a_by_backtest` over
-   `stage_a_search_names(profile)`) → Stage B → `regularize`. Cycle
+5. Stage 0 solo books (`run_stage_0`, OOS vs `power_law_solo`) then
+   Stage 1 survivor weights (`optimize_stage_1_survivor_weights`, no 0 on
+   the grid) → Stage B → `regularize`. Legacy Stage A IS keep/drop
+   (`optimize_stage_a_by_backtest`) remains for diagnostics. Cycle
    overlap is diagnostic. Platform MCP: `digiquant_fit_sdca_weights` /
    `digiquant_run_optimize` (`strategy_name=sdca`, freeze `*_weight` keys).
-   Do not publish until the backtest looks comfortable.
+   Do not publish until the backtest looks comfortable. Do not claim
+   `beats_flat_dca_oos` unless a new run prints true.
 6. Only then add `settings.json`. `SdcaAssetProfile.eth_research_v1()` is
    research-only — not `eth_sdca` in settings, no `--push-supabase`, no
    live-trading. Do not change publish `signal_delay_days`.
@@ -478,7 +486,7 @@ and [`docs/adr/0021-digiquant-supabase-project-topology.md`](../docs/adr/0021-di
 It is the **only** place the `api.gloom.sh` URL/site logic lives — `digifetch`
 stays a generic transport engine (no URLs, no env reads).
 
-- **89 tools, read scope, default ON (#4069, #4110, #4813, #4837
+- **89 tools, read scope, default OFF (#4069, #4110, #4813, #4837
   130-coverage).** `digifetch_quote`, `digifetch_quotes_batch`,
   `digifetch_price_history`, `digifetch_ticker_financials`, `digifetch_options_chain`,
   `digifetch_sec_filings`, `digifetch_holders`, `digifetch_analyst_research`,
@@ -501,9 +509,9 @@ stays a generic transport engine (no URLs, no env reads).
   `orchestrator_tools.py`. Keep them read-scope — every digifetch tool is
   read-scope, including the 13 inert write-shaped workspace/broker tools
   (inert by verdict, not by scope: read-scope membership is not a read-only
-  guarantee); the family is default-ON behind
+  guarantee); the family is default-OFF behind
   `GLOOMBERB_ENABLED` — only `1`/`true`/`yes`/`on` enable it, and any other value
-  (a typo included) disables the family, returning a typed `upstream_error`
+  (a typo included) leaves the family off, returning a typed `upstream_error`
   without a request.
   - **Calculators + compositions (local math, no transport).**
     `digifetch_options_calculator`, `digifetch_bond_calculator`,

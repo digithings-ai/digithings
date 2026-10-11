@@ -43,6 +43,7 @@ class FakeCall:
     argv: list[str]
     stdin: str | None
     timeout: float | None
+    env: Mapping[str, str] | None = None
 
     @property
     def program(self) -> str:
@@ -74,8 +75,15 @@ class FakeRunner:
         *,
         stdin: str | None = None,
         timeout: float | None = None,
+        env: Mapping[str, str] | None = None,
     ) -> CommandResult:
-        call = FakeCall(argv=[str(part) for part in argv], stdin=stdin, timeout=timeout)
+        recorded = None if env is None else dict(env)
+        call = FakeCall(
+            argv=[str(part) for part in argv],
+            stdin=stdin,
+            timeout=timeout,
+            env=recorded,
+        )
         self.calls.append(call)
         response = self._responses.get(call.program, FakeReply())
         reply = response(call) if callable(response) else response

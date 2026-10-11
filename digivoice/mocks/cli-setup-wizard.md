@@ -1,6 +1,6 @@
-# DigiVoice `setup` wizard — CLI mock (CHR-860 / #4953)
+# digivoice `setup` wizard — CLI mock (CHR-860 / #4953)
 
-ASCII/TTY mock of the interactive config spine. Pixel language: DigiVoice banner /
+ASCII/TTY mock of the interactive config spine. Pixel language: digivoice banner /
 digithings.ai top bar (text only here). Agents use `digivoice setup --print` or
 `DIGIVOICE_SETUP_NONINTERACTIVE=1` (no TTY).
 
@@ -10,7 +10,7 @@ digithings.ai top bar (text only here). Agents use `digivoice setup --print` or
 $ digivoice setup
 
 ┌─ digivoice setup ──────────────────────────────────────┐
-│  DigiVoice · local speech config                       │
+│  digivoice · local speech config                       │
 │  settings: ~/Library/Application Support/digivoice/…   │
 │  ↑↓ move · Enter select · Esc back · q quit            │
 └────────────────────────────────────────────────────────┘
@@ -35,7 +35,7 @@ $ digivoice setup
 │  rewrite_model ........... (unset)                      │
 │  rewrite_runner .......... auto                         │
 │  rewrite_auto_route ...... false                        │
-│  rewrite_timeout_seconds . 30.0                         │
+│  rewrite_timeout_seconds . off                          │
 └────────────────────────────────────────────────────────┘
   ▶ Edit stt_model
     Edit tts_voice
@@ -52,7 +52,7 @@ Arrow + Enter edits one VoiceSettings field (same keys as `settings set`).
   paste_on_stop ...... true
   live_banner ........ true
   banner_position .... top-center   [↑↓ cycle literals]
-  banner_density ..... peek         [mini | peek | full]
+  banner_pinned ...... false
   banner_animations .. true
 ```
 
@@ -95,7 +95,7 @@ digivoice doctor
 [missing] ffmpeg  not on PATH
 [ok] capture      /opt/homebrew/bin/sox
 [ok] models       ggml-base.en at …/models/ggml-base.en.bin
-[ok] settings     valid settings.json (banner_density=peek)
+[ok] settings     valid settings.json (banner_pinned=false)
 [ok] hotkeys      sample binds documented (see hammerspoon/README)
 [ok] hammerspoon  adapter at ~/.hammerspoon/digivoice (or App Support)
 [info] history    …
@@ -107,11 +107,21 @@ digivoice doctor
 result: ok
 ```
 
-## Thin stubs
+## Update and uninstall
+
+`digivoice update` runs the same local install as `digivoice install`, refreshing a step that is missing or older than its pin, then copies the Hammerspoon lua into `~/.hammerspoon/digivoice` and reloads. `uninstall` is still a stub.
 
 ```
 $ digivoice update
-digivoice update: not wired yet — reinstall via uv / brew when available
+digivoice update
+bun  present  ~/.local/bin/bun
+opentui  present  digivoice/tui/node_modules/@opentui/core
+whisper-cli  present  ~/.local/bin/whisper-cli
+piper  present  ~/.local/bin/piper
+sox  present  /usr/bin/sox
+stt  present  ~/.local/share/digivoice/models/ggml-base.en.bin
+voice  present  ~/.local/share/digivoice/models/en_US-lessac-medium.onnx
+adapter  installed  ~/.hammerspoon/digivoice — hammerspoon .. reloaded
 
 $ digivoice uninstall
 digivoice uninstall: not wired yet — remove uv tool + data dir manually

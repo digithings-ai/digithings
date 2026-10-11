@@ -74,11 +74,16 @@ _SPECS = (
         output_model=PoliticianSignalsReport,
         phase_outputs_field=_PHASE_FIELD,
         # Containment (DIG-1252, for Counsel's DIG-1251 ruling): no live_search.
-        # Counsel has ruled this feed permanently refused under 5 U.S.C. 13107(c)(1)(B),
-        # and live_search=True is what put the nightly pipeline's `web_search` pre-pass
-        # on capitoltrades.com / quiverquant.com via search_domains.yaml. Dropping the
-        # flag stops the outbound harvest without deleting the segment, its skill, or
-        # its published history. Revisit only on Counsel's ruling.
+        # Counsel refused this feed under 5 U.S.C. 13107(c)(1)(B) — the periodic
+        # transaction reports filed under 5 U.S.C. 13105(l) are "reports" for 13107(c),
+        # and using one for a commercial purpose is unlawful unless the user is news and
+        # communications media disseminating to the general public. live_search=True is
+        # what put the nightly pipeline's `web_search` pre-pass on capitoltrades.com /
+        # quiverquant.com via search_domains.yaml. Dropping the flag stops the outbound
+        # harvest without deleting the segment, its skill, or its published history.
+        # Revisit only on Counsel's ruling. (An earlier note here described 13107(c)(1)(B)
+        # as barring all non-media purposes; the carve-out is scoped to the
+        # commercial-purpose limb. Restated accurately in DIG-1479.)
         live_search=False,
     ),
     SegmentNodeSpec(
