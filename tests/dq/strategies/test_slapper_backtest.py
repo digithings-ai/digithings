@@ -32,6 +32,7 @@ import pytest
 pytest.importorskip("nautilus_trader")
 
 from digiquant.backtest import run_backtest
+from digiquant.nautilus_runner import RETURNS_SERIES_MISSING
 
 DATA = Path(__file__).resolve().parents[3] / "digiquant" / "data" / "BTC-USD.csv"
 
@@ -48,7 +49,12 @@ class TestSlapperBacktest:
         )
         # The strategy must actually trade — zero trades means signals never
         # fired (indicator init bug) or orders never flipped (sizing bug).
-        assert result.status == "ok", f"backtest did not complete: status={result.status}"
+        # Partial is fine and expected here: the only thing withheld is the chart
+        # series, because the pinned analyzer cannot confirm returns().
+        assert result.success, f"backtest did not complete: status={result.status}"
+        assert set(result.missing) <= {RETURNS_SERIES_MISSING}, (
+            f"backtest lost a metric: {result.missing}"
+        )
         assert result.num_trades > 0, (
             f"btc_slapper produced no trades — on_bar path broken (status={result.status})"
         )
@@ -69,4 +75,7 @@ class TestSlapperBacktest:
                 strategy_params={"trade_size": 1},
             )
             assert result is not None
-            assert result.status == "ok"
+            assert result.success, f"{name} did not complete: status={result.status}"
+            assert set(result.missing) <= {RETURNS_SERIES_MISSING}, (
+                f"{name} lost a metric: {result.missing}"
+            )

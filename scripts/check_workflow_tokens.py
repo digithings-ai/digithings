@@ -12,15 +12,21 @@ What each credential gets, and why
   spend** with ``GET /user`` (a 401 means expired/revoked; a 200 proves it
   authenticates). This is the widest-blast-radius CI credential and the one the
   proposal actually names.
-* ``GH_DISPATCH_TOKEN`` — the cron Worker's fine-grained PAT. A fine-grained PAT
-  with only *Actions: write* does not necessarily authenticate ``GET /user``, so
-  probing that would false-alarm. It is instead probed with the read-only
+* ``GH_DISPATCH_TOKEN`` — the cron Worker's fine-grained PAT (``digithings-cron-dispatch``),
+  provisioned for *Actions: write* plus *Issues: read and write* on
+  ``digithings-ai/digithings`` and ``digithings-ai/twelve-x``. A fine-grained PAT
+  does not necessarily authenticate ``GET /user``, so probing that would false-alarm.
+  It is instead probed with the read-only
   ``GET /repos/{repo}/actions/runs?per_page=1``, which is gated on *Actions: read*
   and is therefore satisfied by the *Actions: write* grant the token is
   provisioned for: a 401/403 means the token is expired/revoked or has lost that
   grant. (The old probe, ``GET /repos/{repo}/actions/permissions``, is gated on
   *Administration: read* instead, so an Actions-only token would 403 and the
   canary would false-alarm daily.) Still no spend, still read-only.
+  Deliberately **not** an ``/issues`` probe: this canary reports credential
+  *liveness*, and widening it to prove the *Issues* grant would make it depend on
+  the digest alarm's target repo. Fine-grained PAT permissions are not readable
+  over the API at all — only a real write proves them.
 * ``CLAUDE_CODE_OAUTH_TOKEN`` / ``CURSOR_API_KEY`` — Claude Code Max / Cursor
   org secrets. **Neither has a documented, quota-free introspection endpoint.**
   Proving either is valid requires an actual agent invocation, which is exactly
@@ -138,8 +144,8 @@ _CURSOR_WHY = (
 def collect(repo: str | None = None) -> list[Credential]:
     repo = repo or os.environ.get("REPO") or "digithings-ai/digithings"
     # DIGITHINGS_PROJECT_TOKEN carries `repo`+`project`, so /user authenticates.
-    # GH_DISPATCH_TOKEN is fine-grained (Actions: write only) — probe an Actions
-    # read-gated endpoint it is actually provisioned for instead.
+    # GH_DISPATCH_TOKEN is fine-grained (Actions: write, Issues: read/write) — probe
+    # an Actions read-gated endpoint it is actually provisioned for instead.
     return [
         check_github_pat("DIGITHINGS_PROJECT_TOKEN", os.environ.get("DIGITHINGS_PROJECT_TOKEN")),
         check_github_pat(
