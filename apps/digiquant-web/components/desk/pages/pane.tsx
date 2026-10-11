@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { Button } from "@digithings/ui/ui";
+import { useEffect, useRef, useState, type RefObject } from "react";
+import { Button, Dialog, DialogContent, DialogDescription, DialogTitle } from "@digithings/ui/ui";
 import { shapeLines, type PaneBody, type PaneBlock } from "../../../../../clients/digiquant-tui/src/pages/shape";
+import { CHAR_PX, COMPACT_ROWS, compactBody, hiddenLabel } from "./pane-fit";
 
 export const PANE_HINT = "[tab] next";
 
@@ -71,7 +72,29 @@ function BlockView({ block }: { block: PaneBlock }) {
   }
 }
 
-/** Same chrome as the terminal pane: one-row header, body, footer. */
+/** Body padding (`px-2.5`), both sides, in px. */
+const BODY_PAD = 20;
+
+/** Characters the body fits across. Null until measured, and where ResizeObserver is missing. */
+function useBodyChars(): { ref: RefObject<HTMLDivElement | null>; chars: number | null } {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [chars, setChars] = useState<number | null>(null);
+  useEffect(() => {
+    const node = ref.current;
+    if (!node || typeof ResizeObserver === "undefined") return;
+    const measure = () => setChars(Math.max(1, Math.floor((node.clientWidth - BODY_PAD) / CHAR_PX)));
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+  return { ref, chars };
+}
+
+/** Same chrome as the terminal pane: one-row header, body, footer.
+ *  Like the site's module cards, the face is compact: the table columns that
+ *  fit, the first rows, the recent end of each chart. A click opens the full
+ *  view with everything. */
 export function DeskPane({
   title,
   route,
@@ -95,35 +118,59 @@ export function DeskPane({
 }) {
   const body = blocks ?? shapeLines(lines ?? []);
   const status = asOf ? `as of ${asOf}` : route;
+  const [open, setOpen] = useState(false);
+  const { ref: bodyRef, chars } = useBodyChars();
+  const face = chars === null ? { body, hidden: null } : compactBody(body, { chars, rows: COMPACT_ROWS });
+  const more = face.hidden ? hiddenLabel(face.hidden) : null;
+  const expand = () => {
+    onFocus();
+    setOpen(true);
+  };
   return (
-    <section
-      aria-label={title}
-      data-route={route}
-      data-focused={focused ? "1" : "0"}
-      className={`flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-surface ${focused ? "shadow-[inset_0_0_0_1px_var(--ink)]" : ""}`}
-    >
-      <header className="flex h-7 shrink-0 items-center border-b border-hair">
-        <Button
-          type="button"
-          variant="ghost"
-          size="xs"
-          className={`h-7 w-full justify-start rounded-none px-2.5 ${PANE_META} ${focused ? "text-ink" : "text-ink-mute"}`}
-          onClick={onFocus}
-        >
-          <span className="truncate">{title}</span>
-        </Button>
-      </header>
-      <div className={`desk-pane-body flex min-h-0 flex-1 flex-col gap-1.5 overflow-auto px-2.5 py-1.5 ${PANE_COPY} ${tone}`}>{body.blocks.map((block, index) => <BlockView key={index} block={block} />)}</div>
-      <footer className={`flex h-7 shrink-0 items-center justify-between gap-2 border-t border-hair px-2.5 text-ink-mute ${PANE_META}`}>
-        <span className="truncate tabular-nums">{status}</span>
-        {focused ? (
-          <Button type="button" variant="ghost" size="xs" className={`h-7 shrink-0 rounded-none px-0 ${PANE_META} text-ink-mute`} onClick={onNext}>
-            {PANE_HINT}
+    <>
+      <section
+        aria-label={title}
+        data-route={route}
+        data-focused={focused ? "1" : "0"}
+        className={`flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-surface ${focused ? "shadow-[inset_0_0_0_1px_var(--ink)]" : ""}`}
+      >
+        <header className="flex h-7 shrink-0 items-center border-b border-hair">
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            className={`h-7 w-full justify-start rounded-none px-2.5 ${PANE_META} ${focused ? "text-ink" : "text-ink-mute"}`}
+            aria-haspopup="dialog"
+            onClick={expand}
+          >
+            <span className="truncate">{title}</span>
           </Button>
-        ) : (
-          <span />
-        )}
-      </footer>
-    </section>
+        </header>
+        <div ref={bodyRef} className={`desk-pane-body flex min-h-0 flex-1 flex-col gap-1.5 overflow-auto px-2.5 py-1.5 ${PANE_COPY} ${tone}`} onClick={expand}>
+          {face.body.blocks.map((block, index) => <BlockView key={index} block={block} />)}
+        </div>
+        <footer className={`flex h-7 shrink-0 items-center justify-between gap-2 border-t border-hair px-2.5 text-ink-mute ${PANE_META}`}>
+          <span className="truncate tabular-nums">{more ? `${status} · ${more}` : status}</span>
+          {focused ? (
+            <Button type="button" variant="ghost" size="xs" className={`h-7 shrink-0 rounded-none px-0 ${PANE_META} text-ink-mute`} onClick={onNext}>
+              {PANE_HINT}
+            </Button>
+          ) : (
+            <span />
+          )}
+        </footer>
+      </section>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="flex max-h-[85vh] flex-col gap-0 p-0 sm:max-w-[min(72rem,calc(100%-2rem))]">
+          <header className="flex h-8 shrink-0 items-center border-b border-hair px-3 pr-10">
+            <DialogTitle className={`truncate ${PANE_META} text-ink`}>{title}</DialogTitle>
+          </header>
+          <div className={`flex min-h-0 flex-1 flex-col gap-1.5 overflow-auto px-3 py-2 ${PANE_COPY} ${tone}`}>
+            {body.blocks.map((block, index) => <BlockView key={index} block={block} />)}
+          </div>
+          <DialogDescription className={`flex h-8 shrink-0 items-center border-t border-hair px-3 text-ink-mute ${PANE_META}`}>{status}</DialogDescription>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
