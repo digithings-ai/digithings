@@ -13,7 +13,7 @@
   "dependencies": {
     "@digithings/design": "*",
     "@digithings/ui": "*",
-    "@luxalgo/vela": "^0.8.0",
+    "@luxalgo/vela": "0.8.2",
     "@supabase/supabase-js": "^2.101.1",
     "echarts": "^6.1.0",
     "geist": "^1.5.1",

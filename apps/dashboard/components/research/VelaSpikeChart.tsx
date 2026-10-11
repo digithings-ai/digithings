@@ -3,7 +3,7 @@
 import { DeskChart } from '@/components/desk/atoms/DeskChart';
 
 /** Vela project page — the attribution link target required by NOTICE.luxalgo-vela. */
-export const VELA_PROJECT_URL = 'https://luxalgo.com/vela';
+export const VELA_PROJECT_URL = 'https://velacharts.dev';
 
 /** Pinned headless chart version this spike was built against. */
 export const VELA_VERSION = '0.8.0';
