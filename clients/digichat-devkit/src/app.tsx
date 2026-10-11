@@ -1,6 +1,15 @@
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react";
 import { useEffect, useRef, useState } from "react";
-import { DigichatWordmark, WORDMARK_ROWS } from "./wordmark";
+import {
+  MARK_COLS,
+  MARK_ROWS,
+  REVEAL_MS,
+  glintCell,
+  markDirection,
+  markElapsed,
+  markLines,
+  revealedColumns,
+} from "./mark";
 import { GLYPH } from "./glyphs";
 import {
   activateStrip,
@@ -305,8 +314,10 @@ export function App() {
   const sideWidth = Math.max(40, Math.min(54, Math.floor((width || 120) * 0.36)));
   // right column = terminal minus the side panel and its right border, minus its own padding
   const contentWidth = Math.max(8, (width || 120) - sideWidth - 2);
-  // header 2 + section 2 + counter 2 + footer 2 (a hairline row each)
-  const visible = Math.max(4, (height || 32) - 8 - WORDMARK_ROWS);
+  // header chrome room = terminal minus mark lockup, "devkit", the api url, the carets and gaps
+  const headerRoom = Math.max(4, (width || 120) - (MARK_COLS + API.length + 14));
+  // header mark 2 + hairline 1 + section 2 + counter 2 + footer 2
+  const visible = Math.max(4, (height || 32) - (MARK_ROWS + 7));
   const start = windowStart(rows.length, side, visible);
   const shownRows = rows.slice(start, start + visible);
   const stripStart = windowStart(strip.length, tool, 4);
@@ -314,17 +325,23 @@ export function App() {
   const group = groupAt(rows, side);
   // rail: right hairline 1 + padding 2 + mark 2 + label 22 + gap 1
   const valueWidth = Math.max(4, sideWidth - 28 - 1);
-  const headerReveal = read.detail.slice(0, shown);
+  const headerReveal = clip(read.detail.slice(0, shown), headerRoom);
   const accent = view.accent ?? INK;
 
   return (
     <box width="100%" height="100%" flexDirection="column" backgroundColor={BG}>
-      <DigichatWordmark cols={width} />
-      <box height={2} paddingLeft={1} paddingRight={1} flexDirection="row" border={["bottom"]} borderColor={HAIR} backgroundColor={BG}>
-        <text fg={INK}>devkit</text>
-        <text fg={MUTE}>{`  ${API}  `}</text>
-        <text fg={SOFT}>{headerReveal}</text>
-        {shown < read.detail.length && blink ? <text fg={INK}>█</text> : null}
+      <box height={MARK_ROWS + 1} flexDirection="row" border={["bottom"]} borderColor={HAIR} backgroundColor={BG}>
+        <box paddingLeft={1} paddingRight={2} justifyContent="center">
+          <DigichatMark accent={accent} />
+        </box>
+        <box flexGrow={1} flexDirection="column" justifyContent="center">
+          <box flexDirection="row">
+            <text fg={INK}>devkit</text>
+            <text fg={MUTE}>{`  ${API}  `}</text>
+            <text fg={SOFT}>{headerReveal}</text>
+            {shown < read.detail.length && blink ? <text fg={INK}>█</text> : null}
+          </box>
+        </box>
       </box>
       <box flexGrow={1} flexDirection="row" backgroundColor={BG}>
         <box width={sideWidth} flexDirection="column" border={["right"]} borderColor={HAIR} backgroundColor={BG}>
@@ -413,6 +430,41 @@ export function App() {
         <text fg={MUTE}>tab focus   ↑↓ move   space toggle   enter send   esc back   q quit</text>
         {note ? <text fg={SOFT}>{`   ${note}`}</text> : null}
       </box>
+    </box>
+  );
+}
+
+function DigichatMark({ accent }: { accent: string }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 100);
+    return () => clearInterval(timer);
+  }, []);
+  const elapsed = markElapsed(now);
+  const revealing = elapsed < REVEAL_MS;
+  const lines = markLines(revealedColumns(elapsed));
+  const glint = glintCell(elapsed);
+  return (
+    <box width={MARK_COLS} height={MARK_ROWS} flexDirection="column">
+      {lines.map((line, row) => (
+        <text key={row}>
+          {[...line].map((ch, col) => {
+            const glinting = glint !== null && glint.row === row && glint.col === col;
+            const fg = glinting
+              ? accent
+              : revealing && ch !== " "
+                ? markDirection(row, col) === "up"
+                  ? INK
+                  : SOFT
+                : INK;
+            return (
+              <span key={col} fg={fg}>
+                {ch}
+              </span>
+            );
+          })}
+        </text>
+      ))}
     </box>
   );
 }
