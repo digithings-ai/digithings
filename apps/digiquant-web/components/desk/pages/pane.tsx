@@ -6,6 +6,7 @@ import { asOfStatus, toneOf } from "../../../../../clients/digiquant-tui/src/for
 import { shapeLines, type PaneBody, type PaneBlock } from "../../../../../clients/digiquant-tui/src/pages/shape";
 import { CHAR_PX, COMPACT_ROWS, compactBody, hiddenLabel } from "./pane-fit";
 import { PanelView } from "../panel-view";
+import { columnRoles } from "../table-columns";
 
 export const PANE_HINT = "[tab] next";
 
@@ -64,7 +65,45 @@ const AGE_BADGE: Record<"fresh" | "warn" | "stale", string> = {
   stale: "border-down text-down",
 };
 
-function BlockView({ block }: { block: PaneBlock }) {
+/** A wide table scrolls inside its own strip, never past the screen edge.
+ *  The first column stays pinned; numbers stay whole; prose wraps. */
+function PaneTable({ block, title }: { block: Extract<PaneBlock, { kind: "table" }>; title: string }) {
+  const roles = columnRoles(block.columns, block.rows);
+  return (
+    <div className="desk-table-scroll" role="region" aria-label={`${title} table`} tabIndex={0}>
+      <table className="desk-pane-table border-collapse text-left">
+        {block.columns.length ? (
+          <thead>
+            <tr>
+              {block.columns.map((column, index) => (
+                <th
+                  key={column}
+                  data-col={roles[index]}
+                  className="border-b border-hair px-2 py-1 text-left font-normal uppercase tracking-[0.06em] text-ink-mute"
+                >
+                  {column}
+                </th>
+              ))}
+            </tr>
+          </thead>
+        ) : null}
+        <tbody>
+          {block.rows.map((row, index) => (
+            <tr key={index} className="border-b border-hair last:border-b-0">
+              {row.map((cell, cellIndex) => (
+                <td key={cellIndex} data-col={roles[cellIndex]} className={`px-2 py-1 align-top ${toneClass(cell)}`}>
+                  {cell}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function BlockView({ block, title }: { block: PaneBlock; title: string }) {
   switch (block.kind) {
     case "sentence":
       return <p className="m-0 whitespace-pre-wrap">{block.text}</p>;
@@ -73,32 +112,7 @@ function BlockView({ block }: { block: PaneBlock }) {
     case "chart":
       return <p className="m-0 whitespace-pre">{block.text}</p>;
     case "table":
-      return (
-        <table className="desk-pane-table w-full border-collapse text-left">
-          {block.columns.length ? (
-            <thead>
-              <tr>
-                {block.columns.map((column) => (
-                  <th key={column} className="border-b border-hair px-2 py-1 text-left font-normal uppercase tracking-[0.06em] text-ink-mute">
-                    {column}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-          ) : null}
-          <tbody>
-            {block.rows.map((row, index) => (
-              <tr key={index} className="border-b border-hair last:border-b-0">
-                {row.map((cell, cellIndex) => (
-                  <td key={cellIndex} className={`px-2 py-1 align-top ${toneClass(cell)}`}>
-                    {cell}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      );
+      return <PaneTable block={block} title={title} />;
     default: {
       const exhaustive: never = block;
       return <p className="m-0">{String(exhaustive)}</p>;
@@ -157,7 +171,7 @@ export function DeskPane({
   panel?: { id: string; data: unknown };
 }) {
   const body = blocks ?? shapeLines(lines ?? []);
-  const painted = body.blocks.map((block, index) => <BlockView key={index} block={block} />);
+  const painted = body.blocks.map((block, index) => <BlockView key={index} block={block} title={title} />);
   const status = asOfStatus(route, asOf, dataAsOf);
   const dates = status.age ? status.label.slice(0, status.label.indexOf(` · ${status.age}`)) : status.label;
   const [open, setOpen] = useState(false);
@@ -189,7 +203,7 @@ export function DeskPane({
           </Button>
         </header>
         <div ref={bodyRef} className={`desk-pane-body flex min-h-0 flex-1 flex-col gap-1.5 overflow-auto px-2.5 py-1.5 ${PANE_COPY} ${tone}`} onClick={expand}>
-          {face.body.blocks.map((block, index) => <BlockView key={index} block={block} />)}
+          {face.body.blocks.map((block, index) => <BlockView key={index} block={block} title={title} />)}
         </div>
         <footer className={`flex h-7 shrink-0 items-center justify-between gap-2 border-t border-hair px-2.5 text-ink-mute ${PANE_META}`}>
           <span className="flex min-w-0 items-center gap-2">

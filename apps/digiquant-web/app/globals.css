@@ -652,16 +652,43 @@ body {
   .desk-pane-body .whitespace-pre {
     white-space: pre-wrap;
   }
-  .desk-pane-table {
-    table-layout: fixed;
-    width: 100%;
-    max-width: 100%;
-  }
-  .desk-pane-table th,
-  .desk-pane-table td {
-    overflow-wrap: anywhere;
-    word-break: break-word;
-  }
+}
+/* Desk tables at every width. A wide table scrolls inside its own strip, so
+   the right edge never clips. The key column stays pinned, numbers and dates
+   stay whole, and prose is the column that wraps. The edge shade shows only
+   while there is more to the right: the cover scrolls with the content, the
+   shade does not. */
+.desk-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  background:
+    linear-gradient(to left, var(--surface) 50%, transparent) right center / 1.5rem 100% no-repeat local,
+    linear-gradient(to left, color-mix(in srgb, var(--ink) 14%, transparent), transparent) right center / 0.75rem 100% no-repeat scroll;
+}
+.desk-table-scroll:focus-visible {
+  outline: 1px solid var(--ink);
+  outline-offset: -1px;
+}
+.desk-pane-table {
+  width: max-content;
+  min-width: 100%;
+  overflow-wrap: normal;
+}
+.desk-pane-table [data-col="key"] {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  max-width: 16ch;
+  background: var(--surface);
+}
+.desk-pane-table [data-col="num"] {
+  white-space: nowrap;
+  text-align: right;
+}
+.desk-pane-table [data-col="text"] {
+  min-width: 12ch;
+  max-width: 36ch;
 }
 /* Page body only. The shell stays painted. Never fades toward invisible. */
 @keyframes desk-page-settle {
