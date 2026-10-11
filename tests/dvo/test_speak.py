@@ -3,14 +3,24 @@
 from __future__ import annotations
 
 import json
+import os
+import signal
+import struct
+import threading
+import time
 from pathlib import Path
 
 import pytest
 from digivoice.cli import Runtime, run
-from digivoice.errors import SpeakError
+from digivoice.errors import CancelledError, SpeakError
+from digivoice.focus import FocusTarget
 from digivoice.history import append_entry, dict_entry
 from digivoice.paths import resolve_paths
+from digivoice.runner import run_command
+from digivoice.settings import VoiceSettings, save_settings
 from digivoice.speak import (
+    format_length_scale,
+    length_scale_for_speed,
     piper_argv,
     play_argv,
     read_selection,
@@ -18,6 +28,7 @@ from digivoice.speak import (
     select_piper,
     select_player,
     speak,
+    speak_stop_path,
 )
 
 from tests.dvo.fakes import FakeProbe, FakeReply, FakeRunner
@@ -88,6 +99,202 @@ def _speak_runtime(
 def test_piper_argv_pipes_model_and_wav() -> None:
     argv = piper_argv("/usr/bin/piper", Path("/v.onnx"), Path("/out.wav"))
     assert argv == ["/usr/bin/piper", "--model", "/v.onnx", "--output_file", "/out.wav"]
+    with_data = piper_argv(
+        "/usr/bin/piper",
+        Path("/v.onnx"),
+        Path("/out.wav"),
+        espeak_data=Path("/opt/espeak-ng-data"),
+    )
+    assert with_data[-2:] == ["--espeak_data", "/opt/espeak-ng-data"]
+
+
+def test_darwin_speak_loads_espeak_beside_the_real_piper(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("digivoice.speak.espeak_library_dirs", lambda: ())
+    monkeypatch.setattr("digivoice.speak.espeak_data_dirs", lambda: ())
+    real = tmp_path / "real"
+    real.mkdir()
+    piper = real / "piper"
+    piper.write_bytes(b"piper")
+    piper.chmod(0o755)
+    (real / "libespeak-ng.1.dylib").write_bytes(b"lib")
+    data = real / "espeak-ng-data"
+    data.mkdir()
+    (data / "phontab").write_bytes(b"tab")
+    link = tmp_path / ".local" / "bin" / "piper"
+    link.parent.mkdir(parents=True)
+    link.symlink_to(piper)
+    runtime = _speak_runtime(tmp_path, platform="darwin", commands={"piper": str(link)})
+    paths = resolve_paths("darwin", tmp_path, runtime.env)
+    result = speak(
+        paths,
+        runtime.probe,
+        runtime.runner,  # type: ignore[arg-type]
+        SPOKEN,
+        platform="darwin",
+        home=tmp_path,
+        env=runtime.env,
+    )
+    assert result.argv_piper[result.argv_piper.index("--espeak_data") + 1] == str(data)
+    call = runtime.runner.calls[0]  # type: ignore[union-attr]
+    assert call.env is not None
+    assert str(real) in call.env["DYLD_LIBRARY_PATH"].split(":")
+    assert runtime.runner.calls[1].env is None  # type: ignore[union-attr]
+
+
+def test_darwin_speak_uses_a_homebrew_espeak_library(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    libdir = tmp_path / "opt" / "lib"
+    libdir.mkdir(parents=True)
+    (libdir / "libespeak-ng.1.dylib").write_bytes(b"lib")
+    datadir = tmp_path / "opt" / "share" / "espeak-ng-data"
+    datadir.mkdir(parents=True)
+    (datadir / "phontab").write_bytes(b"tab")
+    monkeypatch.setattr("digivoice.speak.espeak_library_dirs", lambda: (libdir,))
+    monkeypatch.setattr("digivoice.speak.espeak_data_dirs", lambda: (datadir,))
+    runtime = _speak_runtime(tmp_path, platform="darwin")
+    paths = resolve_paths("darwin", tmp_path, runtime.env)
+    result = speak(
+        paths,
+        runtime.probe,
+        runtime.runner,  # type: ignore[arg-type]
+        SPOKEN,
+        platform="darwin",
+        home=tmp_path,
+        env=runtime.env,
+    )
+    assert result.argv_piper[-2:] == ["--espeak_data", str(datadir)]
+    call = runtime.runner.calls[0]  # type: ignore[union-attr]
+    assert call.env is not None
+    assert call.env["DYLD_LIBRARY_PATH"].split(":") == [str(libdir)]
+
+
+def test_linux_speak_does_not_set_dyld(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("digivoice.speak.espeak_library_dirs", lambda: ())
+    monkeypatch.setattr("digivoice.speak.espeak_data_dirs", lambda: ())
+    real = tmp_path / "real"
+    real.mkdir()
+    piper = real / "piper"
+    piper.write_bytes(b"piper")
+    piper.chmod(0o755)
+    (real / "libespeak-ng.1.dylib").write_bytes(b"lib")
+    data = real / "espeak-ng-data"
+    data.mkdir()
+    (data / "phontab").write_bytes(b"tab")
+    runtime = _speak_runtime(tmp_path, commands={"piper": str(piper)})
+    paths = resolve_paths("linux", tmp_path, runtime.env)
+    result = speak(
+        paths,
+        runtime.probe,
+        runtime.runner,  # type: ignore[arg-type]
+        SPOKEN,
+        platform="linux",
+        home=tmp_path,
+        env=runtime.env,
+    )
+    assert result.argv_piper[-2:] == ["--espeak_data", str(data)]
+    assert runtime.runner.calls[0].env is None  # type: ignore[union-attr]
+
+
+def _macho(cpu: str) -> bytes:
+    code = {"arm64": 0x0100000C, "x86_64": 0x01000007}[cpu]
+    return struct.pack("<II", 0xFEEDFACF, code)
+
+
+def test_darwin_speak_ignores_a_different_arch_espeak(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    libdir = tmp_path / "opt" / "lib"
+    libdir.mkdir(parents=True)
+    (libdir / "libespeak-ng.1.dylib").write_bytes(_macho("arm64"))
+    monkeypatch.setattr("digivoice.speak.espeak_library_dirs", lambda: (libdir,))
+    monkeypatch.setattr("digivoice.speak.espeak_data_dirs", lambda: ())
+    real = tmp_path / "vendor" / "piper"
+    real.mkdir(parents=True)
+    piper = real / "piper"
+    piper.write_bytes(_macho("x86_64"))
+    piper.chmod(0o755)
+    runtime = _speak_runtime(tmp_path, platform="darwin", commands={"piper": str(piper)})
+    paths = resolve_paths("darwin", tmp_path, runtime.env)
+    speak(
+        paths,
+        runtime.probe,
+        runtime.runner,  # type: ignore[arg-type]
+        SPOKEN,
+        platform="darwin",
+        home=tmp_path,
+        env=runtime.env,
+    )
+    assert runtime.runner.calls[0].env is None  # type: ignore[union-attr]
+
+
+def test_darwin_speak_prefers_the_same_arch_library_beside_piper(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    libdir = tmp_path / "opt" / "lib"
+    libdir.mkdir(parents=True)
+    (libdir / "libespeak-ng.1.dylib").write_bytes(_macho("arm64"))
+    monkeypatch.setattr("digivoice.speak.espeak_library_dirs", lambda: (libdir,))
+    monkeypatch.setattr("digivoice.speak.espeak_data_dirs", lambda: ())
+    real = tmp_path / "vendor" / "piper"
+    real.mkdir(parents=True)
+    piper = real / "piper"
+    piper.write_bytes(_macho("x86_64"))
+    piper.chmod(0o755)
+    (real / "libespeak-ng.1.dylib").write_bytes(_macho("x86_64"))
+    link = tmp_path / ".local" / "bin" / "piper"
+    link.parent.mkdir(parents=True)
+    link.symlink_to(piper)
+    runtime = _speak_runtime(tmp_path, platform="darwin", commands={"piper": str(link)})
+    paths = resolve_paths("darwin", tmp_path, runtime.env)
+    speak(
+        paths,
+        runtime.probe,
+        runtime.runner,  # type: ignore[arg-type]
+        SPOKEN,
+        platform="darwin",
+        home=tmp_path,
+        env=runtime.env,
+    )
+    call = runtime.runner.calls[0]  # type: ignore[union-attr]
+    assert call.env is not None
+    assert call.env["DYLD_LIBRARY_PATH"].split(":") == [str(real)]
+
+
+def test_darwin_speak_loads_the_espeak_beside_an_arm64_piper(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    libdir = tmp_path / "opt" / "lib"
+    libdir.mkdir(parents=True)
+    (libdir / "libespeak-ng.1.dylib").write_bytes(_macho("arm64") + b"homebrew")
+    monkeypatch.setattr("digivoice.speak.espeak_library_dirs", lambda: (libdir,))
+    monkeypatch.setattr("digivoice.speak.espeak_data_dirs", lambda: ())
+    real = tmp_path / "vendor" / "piper"
+    real.mkdir(parents=True)
+    piper = real / "piper"
+    piper.write_bytes(_macho("arm64"))
+    piper.chmod(0o755)
+    (real / "libespeak-ng.1.dylib").write_bytes(_macho("arm64") + b"beside")
+    link = tmp_path / ".local" / "bin" / "piper"
+    link.parent.mkdir(parents=True)
+    link.symlink_to(piper)
+    runtime = _speak_runtime(tmp_path, platform="darwin", commands={"piper": str(link)})
+    paths = resolve_paths("darwin", tmp_path, runtime.env)
+    speak(
+        paths,
+        runtime.probe,
+        runtime.runner,  # type: ignore[arg-type]
+        SPOKEN,
+        platform="darwin",
+        home=tmp_path,
+        env=runtime.env,
+    )
+    call = runtime.runner.calls[0]  # type: ignore[union-attr]
+    assert call.env is not None
+    assert call.env["DYLD_LIBRARY_PATH"].split(":")[0] == str(real)
+    assert str(libdir) not in call.env["DYLD_LIBRARY_PATH"].split(":")
 
 
 def test_play_argv_per_player() -> None:
@@ -108,6 +315,19 @@ def test_select_piper_prefers_path_then_fallback() -> None:
     )
 
 
+def test_resolve_voice_prefers_saved_voice_over_the_first_file(tmp_path: Path) -> None:
+    paths = resolve_paths("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)})
+    models = Path(paths.models_dir)
+    models.mkdir(parents=True)
+    first = models / "en_US-amy-medium.onnx"
+    chosen = models / "en_US-lessac-medium.onnx"
+    first.write_bytes(b"a")
+    chosen.write_bytes(b"b")
+    save_settings(paths, VoiceSettings(tts_voice="en_US-lessac-medium.onnx"))
+    probe = FakeProbe(files={str(first), str(chosen)}, directories={str(models)})
+    assert resolve_voice(paths, {}, probe) == chosen
+
+
 def test_resolve_voice_uses_env_then_models_dir(tmp_path: Path) -> None:
     models = tmp_path / "models"
     models.mkdir()
@@ -120,6 +340,30 @@ def test_resolve_voice_uses_env_then_models_dir(tmp_path: Path) -> None:
     other.write_bytes(b"y")
     probe2 = FakeProbe(files={str(other)})
     assert resolve_voice(paths, {"DIGIVOICE_PIPER_VOICE": str(other)}, probe2) == other
+
+
+def test_resolve_voice_saved_file_beats_a_missing_env_override(tmp_path: Path) -> None:
+    paths = resolve_paths("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)})
+    models = Path(paths.models_dir)
+    models.mkdir(parents=True)
+    amy = models / "en_US-amy-medium.onnx"
+    amy.write_bytes(b"a")
+    save_settings(paths, VoiceSettings(tts_voice="en_US-amy-medium.onnx"))
+    missing = tmp_path / "missing-lessac.onnx"
+    probe = FakeProbe(files={str(amy)}, directories={str(models)})
+    chosen = resolve_voice(paths, {"DIGIVOICE_PIPER_VOICE": str(missing)}, probe)
+    assert chosen == amy
+
+
+def test_resolve_voice_missing_env_falls_through_to_models_dir(tmp_path: Path) -> None:
+    paths = resolve_paths("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)})
+    models = Path(paths.models_dir)
+    models.mkdir(parents=True)
+    voice = models / "en_US-amy-medium.onnx"
+    voice.write_bytes(b"a")
+    missing = tmp_path / "missing-lessac.onnx"
+    probe = FakeProbe(directories={str(models)}, files={str(voice)})
+    assert resolve_voice(paths, {"DIGIVOICE_PIPER_VOICE": str(missing)}, probe) == voice
 
 
 def test_resolve_voice_missing_fails(tmp_path: Path) -> None:
@@ -309,6 +553,249 @@ def _ax_frontmost_dispatch(*, ax_stdout: str = "", ax_code: int = 0, frontmost: 
     return _respond
 
 
+def _clipboard_board(initial: str, *, on_copy: str | None):
+    """pbpaste/pbcopy share one clipboard. Command-C sets `on_copy` when given."""
+    board = {"text": initial}
+
+    def pbpaste(_call: object) -> FakeReply:
+        return FakeReply(stdout=board["text"])
+
+    def pbcopy(call: object) -> FakeReply:
+        board["text"] = getattr(call, "stdin", None) or ""
+        return FakeReply()
+
+    def osascript(call: object) -> FakeReply:
+        script = " ".join(getattr(call, "argv", []))
+        if "keystroke" in script and on_copy is not None:
+            board["text"] = on_copy
+            return FakeReply()
+        if "AXSelectedText" in script:
+            return FakeReply(stdout="missing value")
+        return FakeReply()
+
+    return board, pbpaste, pbcopy, osascript
+
+
+def test_read_selection_keeps_a_copy_that_matches_the_clipboard() -> None:
+    """A real selection is kept when Command-C writes text already on the clipboard."""
+    focus = FocusTarget(name="TextEdit", bundle_id="com.apple.TextEdit")
+    _board, pbpaste, pbcopy, osascript = _clipboard_board(
+        "selected sentence", on_copy="selected sentence"
+    )
+    runner = FakeRunner({"pbpaste": pbpaste, "pbcopy": pbcopy, "osascript": osascript})
+    probe = FakeProbe(
+        commands={
+            "pbpaste": "/usr/bin/pbpaste",
+            "pbcopy": "/usr/bin/pbcopy",
+            "osascript": "/usr/bin/osascript",
+        }
+    )
+    assert read_selection("darwin", probe, runner, focus) == "selected sentence"
+    typed = next(call for call in runner.calls if "keystroke" in " ".join(call.argv))
+    assert typed.argv[3:] == ["com.apple.TextEdit", "TextEdit"]
+    assert "-" not in typed.argv[3:]
+
+
+def test_read_selection_does_not_speak_clipboard_when_copy_writes_nothing() -> None:
+    focus = FocusTarget(name="TextEdit", bundle_id="com.apple.TextEdit")
+    board, pbpaste, pbcopy, osascript = _clipboard_board("leftover dictation", on_copy=None)
+    runner = FakeRunner({"pbpaste": pbpaste, "pbcopy": pbcopy, "osascript": osascript})
+    probe = FakeProbe(
+        commands={
+            "pbpaste": "/usr/bin/pbpaste",
+            "pbcopy": "/usr/bin/pbcopy",
+            "osascript": "/usr/bin/osascript",
+        }
+    )
+    with pytest.raises(SpeakError, match="nothing selected"):
+        read_selection("darwin", probe, runner, focus)
+    assert board["text"] == "leftover dictation"
+
+
+def test_read_selection_copy_targets_the_captured_app() -> None:
+    focus = FocusTarget(name="TextEdit", bundle_id="com.apple.TextEdit")
+    pastes = iter(["leftover dictation", "selected sentence"])
+
+    def pbpaste_reply(_call: object) -> FakeReply:
+        return FakeReply(stdout=next(pastes))
+
+    runner = FakeRunner(
+        {
+            "osascript": FakeReply(stdout="missing value"),
+            "pbpaste": pbpaste_reply,
+        }
+    )
+    assert read_selection("darwin", _darwin_probe(), runner, focus) == "selected sentence"
+    typed = next(call for call in runner.calls if "keystroke" in " ".join(call.argv))
+    assert typed.argv[3:] == ["com.apple.TextEdit", "TextEdit"]
+    assert "-" not in typed.argv[3:]
+    script = typed.argv[2]
+    assert "set frontmost of proc to true" in script
+    assert "key up option" in script
+    assert script.index("key up option") < script.index('keystroke "c"')
+    assert "tell proc" in script
+    assert 'keystroke "c"' in script
+    assert "frontmost is true" not in script
+
+
+def test_copy_speaks_the_selection_and_an_unchanged_marker_does_not(tmp_path: Path) -> None:
+    """Command-C after Option is released is the selection. The marker is not."""
+    focus_args = ["--focus-name", "Cursor", "--focus-bundle", "com.example.Cursor"]
+
+    def _speak(initial: str, on_copy: str | None) -> tuple[object, FakeRunner, dict[str, str]]:
+        board, pbpaste, pbcopy, osascript = _clipboard_board(initial, on_copy=on_copy)
+        runner = FakeRunner(
+            {
+                "piper": _writes_speak_wav(),
+                "afplay": FakeReply(),
+                "pbpaste": pbpaste,
+                "pbcopy": pbcopy,
+                "osascript": osascript,
+            }
+        )
+        runtime = _speak_runtime(
+            tmp_path,
+            platform="darwin",
+            runner=runner,
+            commands={"pbcopy": "/usr/bin/pbcopy", "osascript": "/usr/bin/osascript"},
+        )
+        result = run(["speak", "--selection", *focus_args], runtime)
+        return result, runner, board
+
+    spoken, runner, _board = _speak("leftover dictation", "cursor selection")
+    assert spoken.code == 0
+    assert spoken.stdout == "cursor selection\n"
+    typed = next(call for call in runner.calls if "keystroke" in " ".join(call.argv))
+    script = typed.argv[2]
+    assert "key up option" in script
+    assert script.index("key up option") < script.index('keystroke "c"')
+    assert "tell proc" in script
+    assert typed.argv[3:] == ["com.example.Cursor", "Cursor"]
+
+    silent, _runner, board = _speak("leftover dictation", None)
+    assert silent.code == 1
+    assert "nothing selected" in silent.stderr
+    assert silent.stdout == ""
+    assert board["text"] == "leftover dictation"
+    assert "app=Cursor" in silent.stderr
+    assert "bundle=com.example.Cursor" in silent.stderr
+
+
+def test_a_late_copy_is_spoken_and_a_stuck_marker_is_not(tmp_path: Path) -> None:
+    """The first read after Command-C can still be the marker. A later one counts."""
+    focus_args = ["--focus-name", "Cursor", "--focus-bundle", "com.example.Cursor"]
+
+    def _speak(late: str | None) -> tuple[object, FakeRunner, dict[str, object]]:
+        state: dict[str, object] = {
+            "text": "leftover dictation",
+            "after": 0,
+            "armed": False,
+        }
+
+        def pbpaste(_call: object) -> FakeReply:
+            if state["armed"]:
+                state["after"] = int(state["after"]) + 1
+                if late is not None and int(state["after"]) >= 2:
+                    return FakeReply(stdout=late)
+            return FakeReply(stdout=str(state["text"]))
+
+        def pbcopy(call: object) -> FakeReply:
+            state["text"] = getattr(call, "stdin", None) or ""
+            return FakeReply()
+
+        def osascript(call: object) -> FakeReply:
+            script = " ".join(getattr(call, "argv", []))
+            if "keystroke" in script:
+                state["armed"] = True
+                return FakeReply()
+            if "AXSelectedText" in script:
+                return FakeReply(stdout="missing value")
+            return FakeReply()
+
+        runner = FakeRunner(
+            {
+                "piper": _writes_speak_wav(),
+                "afplay": FakeReply(),
+                "pbpaste": pbpaste,
+                "pbcopy": pbcopy,
+                "osascript": osascript,
+            }
+        )
+        runtime = _speak_runtime(
+            tmp_path,
+            platform="darwin",
+            runner=runner,
+            commands={"pbcopy": "/usr/bin/pbcopy", "osascript": "/usr/bin/osascript"},
+        )
+        result = run(["speak", "--selection", *focus_args], runtime)
+        return result, runner, state
+
+    spoken, runner, state = _speak("highlighted sentence")
+    assert spoken.code == 0
+    assert spoken.stdout == "highlighted sentence\n"
+    assert int(state["after"]) >= 2
+    typed = next(call for call in runner.calls if "keystroke" in " ".join(call.argv))
+    script = typed.argv[2]
+    assert script.index("key up option") < script.index("delay 0.1")
+    assert script.index("delay 0.1") < script.index('keystroke "c"')
+    assert typed.argv[3:] == ["com.example.Cursor", "Cursor"]
+    restored = [call.stdin for call in runner.calls if call.program == "pbcopy"]
+    assert all(not (text or "").startswith("leftover") for text in restored)
+
+    silent, _runner, stuck = _speak(None)
+    assert silent.code == 1
+    assert silent.stdout == ""
+    assert "nothing selected" in silent.stderr
+    assert "app=Cursor" in silent.stderr
+    assert "bundle=com.example.Cursor" in silent.stderr
+    assert stuck["text"] == "leftover dictation"
+    assert int(stuck["after"]) == 5
+
+
+def test_ax_selected_text_is_used_without_a_clipboard_change() -> None:
+    focus = FocusTarget(name="TextEdit", bundle_id="com.apple.TextEdit")
+
+    def osascript(call: object) -> FakeReply:
+        script = " ".join(getattr(call, "argv", []))
+        if "AXSelectedText" in script:
+            return FakeReply(stdout="cursor selection")
+        return FakeReply()
+
+    runner = FakeRunner(
+        {
+            "osascript": osascript,
+            "pbpaste": FakeReply(stdout="leftover dictation"),
+            "pbcopy": FakeReply(),
+        }
+    )
+    probe = FakeProbe(
+        commands={
+            "pbpaste": "/usr/bin/pbpaste",
+            "pbcopy": "/usr/bin/pbcopy",
+            "osascript": "/usr/bin/osascript",
+        }
+    )
+    assert read_selection("darwin", probe, runner, focus) == "cursor selection"
+    assert "pbcopy" not in runner.programs
+    assert not any("keystroke" in " ".join(call.argv) for call in runner.calls)
+
+
+def test_read_selection_uses_the_captured_app() -> None:
+    focus = FocusTarget(name="Ghostty", bundle_id="com.mitchellh.ghostty")
+    runner = FakeRunner(
+        {
+            "osascript": FakeReply(stdout="missing value"),
+            "pbpaste": FakeReply(stdout="ghostty highlight"),
+        }
+    )
+    assert read_selection("darwin", _darwin_probe(), runner, focus) == "ghostty highlight"
+    ax = runner.calls[0]
+    assert "AXSelectedText" in " ".join(ax.argv)
+    assert ax.argv[3:] == ["com.mitchellh.ghostty", "Ghostty"]
+    assert "-" not in ax.argv[3:]
+    assert not any("frontmost is true" in " ".join(call.argv) for call in runner.calls[1:])
+
+
 def test_read_selection_darwin_ax_selected_text_wins_without_copy() -> None:
     runner = FakeRunner(
         {
@@ -438,3 +925,127 @@ def _sequenced_pbpaste(outputs: list[str]):
         return FakeReply(stdout=remaining.pop(0) if remaining else "")
 
     return _respond
+
+
+def test_piper_length_scale_matches_playback_speed() -> None:
+    assert length_scale_for_speed(1) == 1
+    assert length_scale_for_speed(2) == 0.5
+    assert length_scale_for_speed(0.5) == 2
+    normal = piper_argv("/usr/bin/piper", Path("/v.onnx"), Path("/out.wav"), length_scale=1)
+    assert "--length_scale" not in normal
+    fast = piper_argv("/usr/bin/piper", Path("/v.onnx"), Path("/out.wav"), length_scale=0.5)
+    assert fast[-2:] == ["--length_scale", format_length_scale(0.5)]
+    slow = piper_argv("/usr/bin/piper", Path("/v.onnx"), Path("/out.wav"), length_scale=2)
+    assert slow[-2:] == ["--length_scale", "2"]
+
+
+def test_speak_passes_length_scale_for_a_saved_speed(tmp_path: Path) -> None:
+    runtime = _speak_runtime(tmp_path, platform="linux")
+    paths = resolve_paths("linux", tmp_path, runtime.env)
+    save_settings(paths, VoiceSettings(tts_speed=2))
+    result = speak(
+        paths,
+        runtime.probe,
+        runtime.runner,  # type: ignore[arg-type]
+        SPOKEN,
+        platform="linux",
+        home=tmp_path,
+        env=runtime.env,
+    )
+    assert result.argv_piper[-2:] == ["--length_scale", "0.5"]
+    save_settings(paths, VoiceSettings(tts_speed=0.5))
+    slow = speak(
+        paths,
+        runtime.probe,
+        runtime.runner,  # type: ignore[arg-type]
+        SPOKEN,
+        platform="linux",
+        home=tmp_path,
+        env=runtime.env,
+    )
+    assert slow.argv_piper[-2:] == ["--length_scale", "2"]
+
+
+def test_cli_stop_file_skips_playback_and_history(tmp_path: Path) -> None:
+    stop = tmp_path / "speak.stop"
+
+    def piper_then_stop(call):
+        wav = next(Path(part) for part in call.argv if part.endswith(".wav"))
+        wav.parent.mkdir(parents=True, exist_ok=True)
+        wav.write_bytes(b"RIFF0000WAVEfmt ")
+        stop.write_text("stop\n", encoding="utf-8")
+        return FakeReply()
+
+    runner = FakeRunner({"piper": piper_then_stop, "aplay": FakeReply()})
+    runtime = _speak_runtime(tmp_path, runner=runner)
+    result = run(["speak", SPOKEN], runtime)
+    assert result.code == 3
+    assert "stopped" in result.stderr
+    assert "aplay" not in runner.programs
+    assert not (tmp_path / "history.jsonl").exists()
+    assert speak_stop_path(resolve_paths("linux", tmp_path, runtime.env)) == stop
+
+
+def test_stop_kills_the_player_process(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The stop file SIGKILLs the player. A status flag alone would leave it running."""
+    monkeypatch.setattr("digivoice.speak.find_espeak_library", lambda *args, **kwargs: None)
+    monkeypatch.setattr("digivoice.speak.find_espeak_data", lambda *args, **kwargs: None)
+    piper = tmp_path / "piper"
+    player = tmp_path / "afplay"
+    pid_path = tmp_path / "player.pid"
+    piper.write_text(
+        "#!/bin/sh\n"
+        "out=\n"
+        "while [ $# -gt 0 ]; do\n"
+        '  if [ "$1" = "--output_file" ]; then out="$2"; shift 2; else shift; fi\n'
+        "done\n"
+        'mkdir -p "$(dirname "$out")"\n'
+        'printf RIFF > "$out"\n'
+        "cat >/dev/null\n",
+        encoding="utf-8",
+    )
+    player.write_text(
+        f"#!/bin/sh\necho $$ > {pid_path}\nexec sleep 5\n",
+        encoding="utf-8",
+    )
+    piper.chmod(0o755)
+    player.chmod(0o755)
+    runtime = _speak_runtime(
+        tmp_path,
+        platform="darwin",
+        commands={"piper": str(piper), "afplay": str(player)},
+    )
+    paths = resolve_paths("darwin", tmp_path, runtime.env)
+    stop = speak_stop_path(paths)
+
+    def arm() -> None:
+        deadline = time.monotonic() + 4
+        while time.monotonic() < deadline:
+            if pid_path.is_file():
+                stop.write_text("stop\n", encoding="utf-8")
+                return
+            time.sleep(0.01)
+
+    threading.Thread(target=arm, daemon=True).start()
+    try:
+        with pytest.raises(CancelledError):
+            speak(
+                paths,
+                runtime.probe,
+                run_command,
+                SPOKEN,
+                platform="darwin",
+                home=tmp_path,
+                env=runtime.env,
+                cancelled=lambda: stop.is_file(),
+            )
+        assert pid_path.is_file()
+        pid = int(pid_path.read_text(encoding="utf-8"))
+        with pytest.raises(ProcessLookupError):
+            os.kill(pid, 0)
+    finally:
+        if pid_path.is_file():
+            try:
+                os.kill(int(pid_path.read_text(encoding="utf-8")), signal.SIGKILL)
+            except (ProcessLookupError, ValueError):
+                pass

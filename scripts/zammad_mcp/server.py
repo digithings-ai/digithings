@@ -252,10 +252,12 @@ def _owner_display_names(client: ZammadClient, rows: list[dict[str, Any]]) -> di
 def _display_customer(value: Any, cid: Any) -> str:
     """Full customer display for rankings: ``jane.doe@example.test (id 7)``.
 
-    Demo mode (#4944): real customer names and full emails are shown,
-    with the customer id appended when known so rankings still link to
-    the customer-history drill-down. Missing input falls back to
-    ``(id N)``; known text without a usable id renders as-is.
+    Real customer names and full emails are shown, with the customer id
+    appended when known so rankings still link to the customer-history
+    drill-down. Missing input falls back to ``(id N)``; known text without a
+    usable id renders as-is. No masking layer exists here (card 34a86696,
+    2026-10-06) and the id suffix must not be treated as licence to redact
+    the head — ``tests/scripts/test_zammad_mcp_no_mask.py`` pins the output.
     """
     text = str(value or "").strip() if value is not None else ""
     if not text:
@@ -271,7 +273,7 @@ def _customer_display_names(client: ZammadClient, rows: list[dict[str, Any]]) ->
     Mirrors ``_owner_display_names``: integer-like ids resolve via the cached
     ``resolve_user``; automation logins come back as-is for the caller to
     flag (dropped pre/post-rank, never rendered). Every other value maps to
-    the full display — demo mode (#4944) shows real customer names and full
+    the full display — real customer names and full
     emails with the id appended. Unresolvable ids fall back to the raw
     value with the id so one bad customer never fails the whole ranking.
     """
@@ -320,7 +322,7 @@ def aggregate_tickets(
     state named "open"). Window: created_at within since_days (one call,
     limit=500). Owner logins are UUIDs — names are resolved automatically;
     automation accounts are excluded and footnoted. Customer rankings show
-    full names/emails with ids (demo mode, #4944 — no masking).
+    full names/emails with ids (no masking layer — card 34a86696, 2026-10-06).
     Drill-down: feed a resulting ``customer_id:<N>`` into the
     customer-history tools (latest-ticket search + full-thread get_ticket
     flow) to read that customer's conversation.

@@ -29,6 +29,8 @@ COPY packages/ui ./packages/ui
 # packages/ui, so no gallery COPY is needed anymore (#3717 closed).
 COPY packages/digichat-ui ./packages/digichat-ui
 COPY apps/digichat ./apps/digichat
+# BYOK provider pins are imported from the repo-root config (#5020).
+COPY config/byok-providers.json ./config/byok-providers.json
 # Alpine musl bindings for lockfile platforms that resolve to glibc on some hosts
 RUN npm install \
       @rolldown/binding-linux-x64-musl@1.0.0-rc.16 \

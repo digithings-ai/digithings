@@ -145,6 +145,7 @@ from .models import (
     WatchlistRemoveInput,
     YieldCurveInput,
 )
+from .session_gate import session_gate_status
 
 logger = logging.getLogger(__name__)
 
@@ -167,7 +168,7 @@ __all__ = [
 # One lazily-built ``GloomberbClient`` per (kill switch, session cookie,
 # substack cookie) env triple. Keyed by the raw env values so an
 # operator/test env change gets a fresh client without a process restart; the default (unset) pair is the anonymous,
-# default-ON client. Only one client is kept alive: when the env pair changes,
+# family-disabled client. Only one client is kept alive: when the env pair changes,
 # the replaced client is closed so its transport is not leaked. The lock
 # serializes the read/close/replace dance — LangGraph runs parallel nodes, and
 # they all funnel through this one cached client.
@@ -358,7 +359,15 @@ _DEFAULT_TOOL_NAMES: tuple[str, ...] = tuple(t["function"]["name"] for t in DIGI
 
 
 def _session_cookie_present() -> bool:
-    return bool(os.environ.get(GLOOMBERB_SESSION_COOKIE_ENV, "").strip())
+    """True when a cookie is configured AND it validates against api.gloom.sh.
+
+    Presence-only advertising was the #2752 gap: a stale or mistyped cookie
+    advertised 41 tools that could only answer ``auth_required``. The verdict
+    is cached for one TTL window per cookie, so this stays free at list time
+    after the first probe. Kept as a named helper because the tests and the
+    MCP surface both read better against a verb.
+    """
+    return session_gate_status().authenticated
 
 
 def _substack_cookie_present() -> bool:
@@ -374,7 +383,7 @@ def available_digifetch_tools(subset: tuple[str, ...] | None = None) -> list[dic
     a tool that can only error:
 
     * the whole family is dropped when ``GLOOMBERB_ENABLED`` disables it
-      (default ON; a typo fails closed), because every call would return the
+      (default OFF; a typo fails closed), because every call would return the
       typed "disabled by kill switch" ``upstream_error``; and
     * ``session`` / ``preview`` / ``pro`` tools are dropped when
       ``GLOOMBERB_SESSION_COOKIE`` is unset, because they would return the

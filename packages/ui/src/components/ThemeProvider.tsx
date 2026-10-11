@@ -95,9 +95,9 @@ function applyThemeColor(t: Theme) {
   } catch {}
 }
 
-/** Inline in <head> before paint: <script dangerouslySetInnerHTML={{__html: themeInitScript}}/> */
-export const themeInitScript =
-  "try{var s=localStorage.getItem('dt-theme');var t=s||(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');document.documentElement.setAttribute('data-theme',t);var c=t==='light'?'#FBFBF9':'#0A0E0C';var m=document.querySelector('meta[name=\"theme-color\"]');if(!m){m=document.createElement('meta');m.setAttribute('name','theme-color');document.head.appendChild(m)}m.setAttribute('content',c)}catch(e){document.documentElement.setAttribute('data-theme','dark')}";
+// themeInitScript lives in ./themeInit.ts (a plain module) — see there.
+export { themeInitScript } from "./themeInit";
+
 
 const ThemeCtx = createContext<{ theme: Theme; toggle: () => void } | null>(null);
 
