@@ -9,7 +9,7 @@ import { describe, expect, test } from "bun:test";
 import { heroWordmarkLines } from "../../ui/src/components/chat/digichat-wordmark";
 import type { BuildState } from "../src/animations/build";
 import type { RiseState } from "../src/animations/rise";
-import { DIGICHAT, DIGIQUANT, DIGITHINGS, DIGIVOICE } from "../src/definitions";
+import { DIGICHAT, DIGIQUANT, DIGITHINGS_BASELINE, DIGIVOICE } from "../src/definitions";
 import { preparedBanner } from "../src/engine";
 import { bannerLines, type TermCell, type TermColor } from "../src/tui";
 import { LEGACY_DIGIQUANT } from "./legacy/digiquant-cells";
@@ -20,7 +20,7 @@ import { wordmarkLines as legacyVoiceLines } from "./legacy/digivoice-hero.js";
 const ms = (v: unknown) => Number(String(v).replace("ms", ""));
 
 describe("digithings BUILD matches PixelWordmark.tsx", () => {
-  const state = preparedBanner(DIGITHINGS).state as BuildState;
+  const state = preparedBanner(DIGITHINGS_BASELINE).state as BuildState;
 
   test("same letter cells, timings, opacity steps and glints", () => {
     expect(state.cells.length).toBe(LEGACY_DIGITHINGS.letters.length);

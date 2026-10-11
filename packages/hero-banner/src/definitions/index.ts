@@ -1,3 +1,4 @@
+import { assembleAnimation } from "../animations/assemble";
 import { buildAnimation } from "../animations/build";
 import { equalizerAnimation } from "../animations/equalizer";
 import { riseAnimation } from "../animations/rise";
@@ -15,8 +16,10 @@ import type { BannerDefinition, Tone } from "../types";
 const INK: Tone = { hex: "#ECEEF0", cube: 255, cssVar: "--ink" };
 const GROUND: Tone = { hex: "#0A0E0C", cube: 232, cssVar: "--bg" };
 
-/** apps/digithings-web/components/landing/PixelWordmark.tsx */
-export const DIGITHINGS: BannerDefinition = {
+/** The baseline: apps/digithings-web/components/landing/PixelWordmark.tsx,
+ *  ported cell for cell (test/parity.test.ts). DIGITHINGS replaces it on every
+ *  surface; it stays until the web PixelWordmark moves onto ./web. */
+export const DIGITHINGS_BASELINE: BannerDefinition = {
   id: "digithings",
   text: "DIGITHINGS",
   label: "digithings",
@@ -24,6 +27,34 @@ export const DIGITHINGS: BannerDefinition = {
   gap: 2,
   palette: { ink: INK, ground: GROUND, accent: { hex: "#FFFFFF", cube: 231, cssVar: "--glint" } },
   animation: buildAnimation({ steps: [0.36, 0.5, 0.66, 0.82, 1], glints: 13, strays: 70, glintDuty: 0.05 }),
+  live: true,
+  seed: 0xd161,
+};
+
+/** DIG-2921. digithings is the maker of things: every letter is a thing
+ *  assembled from parts. Accent: --accent-digithings. */
+export const DIGITHINGS: BannerDefinition = {
+  id: "digithings",
+  text: "DIGITHINGS",
+  label: "digithings",
+  font: PIXEL_7X10,
+  gap: 2,
+  palette: { ink: INK, ground: GROUND, accent: { hex: "#5B7CFA", cube: 69, cssVar: "--accent-digithings" } },
+  animation: assembleAnimation({
+    startMs: 80,
+    letterMs: 120,
+    spreadMs: 180,
+    flyMs: 520,
+    jitter: 0.25,
+    cloud: 12,
+    seatMs: 160,
+    socket: 0.14,
+    liftEveryMs: 1500,
+    liftParts: [3, 6],
+    liftOutMs: 280,
+    liftHoldMs: 240,
+    liftBackMs: 420,
+  }),
   live: true,
   seed: 0xd161,
 };

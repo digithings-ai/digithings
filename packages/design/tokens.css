@@ -45,6 +45,9 @@
   --accent-digibase:   #9ea0a5;
   --accent-digistore:  #7b7fc7;
   --accent-digilink:   #4fa39b;
+  --accent-digithings: #5b7cfa; /* DIG-2921: signal blue from the unassigned pool, the colour of a part
+                                   in flight in the DIGITHINGS hero banner. Brighter and more saturated
+                                   than digistore's #7b7fc7 and digisearch's #5aa3c4. */
   --accent-digillm:    #b8c95a; /* DIG-2870: chartreuse from the unassigned pool, the routed-stream
                                    colour of the DIGILLM hero banner. Distinct from digigraph's gold
                                    #e5b765 and the research greens. */

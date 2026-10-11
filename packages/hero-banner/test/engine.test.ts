@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { paintFrame } from "../src/canvas";
-import { BANNERS, DIGICHAT, DIGITHINGS, DIGIVOICE } from "../src/definitions";
+import { BANNERS, DIGICHAT, DIGITHINGS, DIGITHINGS_BASELINE, DIGIVOICE } from "../src/definitions";
 import {
   assertDefinition,
   claimLoading,
@@ -169,7 +169,7 @@ describe("canvas renderer", () => {
         calls.push([String(this.fillStyle), this.globalAlpha, args]);
       },
     };
-    const frame = sampleBanner(DIGITHINGS, { t: 0, motion: "reduced" }).frame;
+    const frame = sampleBanner(DIGITHINGS_BASELINE, { t: 0, motion: "reduced" }).frame;
     paintFrame(ctx, frame, { pixel: 4, colors: { ink: "#eceef0", accent: "#fff", ground: "#000" } });
     expect(calls.length).toBe(lit(frame));
     expect(calls[0]![2]![2]).toBe(4);
