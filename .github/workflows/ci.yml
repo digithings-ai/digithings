@@ -83,6 +83,7 @@ jobs:
               - 'digivoice/tui/**'
               - 'clients/digichat-tui/**'
               - 'packages/surface-config/**'
+              - 'packages/hero-banner/**'
               - '.github/workflows/test-bun-suites.yml'
             digiquant:
               - 'digiquant/**'

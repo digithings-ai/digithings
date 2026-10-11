@@ -7,9 +7,11 @@ preflight that finds nothing wrong must be proven able to find something.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
+import yaml
 
 from scripts.localstack import contracts, preflight
 
@@ -254,3 +256,100 @@ def test_wrangler_is_satisfied_by_npx_alone():
         preflight.ToolCheck("wrangler", ("npx", "wrangler"), "h"), path="/usr/bin:/bin"
     )
     assert report.ok
+
+
+# --- DIG-2959: a probe must address the HOST-published port -------------------
+#
+# compose republishes digichat as ${DIGICHAT_PUBLISH_PORT:-3005} -> 3000, so the
+# container port and the host port differ. The gate used to probe the container
+# port and reported a healthy, `Up (healthy)` container as "Connection refused".
+# ollama has the same shape (11435 -> 11434) but is `url=None` + `requires`, so it
+# skips instead of mis-probing: this guard covers the case that actually bites.
+
+
+def _host_bind_port(host_bind: str) -> str | None:
+    """The host port a service is published on, with ${VAR:-default} resolved."""
+    resolved = contracts._expand_env(str(host_bind), {})
+    match = re.search(r":(\d+)", resolved)
+    return match.group(1) if match else None
+
+
+def test_no_builtin_probe_uses_a_container_port_compose_republishes_elsewhere():
+    """The load-bearing guard: host_bind, not container_port, is what a probe can reach."""
+    doc = yaml.safe_load((REPO_ROOT / "config/contract/services.yaml").read_text())
+    rows = {row["name"]: row for row in doc["services"]}
+
+    violations = []
+    checked = []
+    for check in contracts.BUILTIN_CHECKS:
+        row = rows.get(check.name)
+        if row is None or check.url is None:
+            continue
+        host_bind, container_port = row.get("host_bind"), row.get("container_port")
+        if host_bind is None or container_port is None or "null" in str(host_bind):
+            continue
+        host_port = _host_bind_port(host_bind)
+        probe_port = re.search(r":(\d+)", contracts._expand_env(check.url, {}) or "")
+        if not host_port or not probe_port:
+            continue
+        checked.append(check.name)
+        if probe_port.group(1) != host_port:
+            violations.append(
+                f"{check.name} probes :{probe_port.group(1)} but compose publishes "
+                f"{host_bind} (container_port {container_port})"
+            )
+
+    # The guard is worthless if it inspects nothing: digichat is the row it exists for.
+    assert "digichat" in checked, f"digichat row not inspected; checked={checked}"
+    assert not violations, violations
+
+
+def test_digichat_probe_defaults_to_the_compose_published_port():
+    check = next(c for c in contracts.BUILTIN_CHECKS if c.name == "digichat")
+    url, reason = contracts.resolve(check, {})
+    assert reason is None
+    assert url == "http://127.0.0.1:3005/api/health"
+
+
+def test_digichat_probe_follows_the_publish_port_override():
+    """compose supports DIGICHAT_PUBLISH_PORT; the gate must follow it.
+
+    The *host* is deliberately not templated: a 0.0.0.0 bind still answers on
+    127.0.0.1, and the gate's default must stay provably loopback.
+    """
+    check = next(c for c in contracts.BUILTIN_CHECKS if c.name == "digichat")
+    url, reason = contracts.resolve(check, {"DIGICHAT_PUBLISH_PORT": "3999"})
+    assert reason is None
+    assert url == "http://127.0.0.1:3999/api/health"
+    # An empty override must not produce a bare ":" in the URL.
+    assert contracts.resolve(check, {"DIGICHAT_PUBLISH_PORT": ""})[0] == (
+        "http://127.0.0.1:3005/api/health"
+    )
+
+
+def test_env_expansion_falls_back_to_the_declared_default():
+    check = contracts.Check(
+        name="probe",
+        kind="http",
+        url="http://127.0.0.1:${DT_PROBE_PORT:-4321}/x",
+        profiles=("core",),
+        source="test",
+    )
+    assert contracts.resolve(check, {})[0] == "http://127.0.0.1:4321/x"
+    # An empty value is not a value: it must take the default, not produce ":".
+    assert contracts.resolve(check, {"DT_PROBE_PORT": ""})[0] == "http://127.0.0.1:4321/x"
+    assert contracts.resolve(check, {"DT_PROBE_PORT": "5555"})[0] == "http://127.0.0.1:5555/x"
+
+
+def test_a_configured_url_is_never_env_expanded():
+    """A `requires` value is keyed on the exact path the caller supplied."""
+    check = contracts.Check(
+        name="r2-put-get",
+        kind="http",
+        url="http://127.0.0.1:1/",
+        profiles=("core",),
+        source="test",
+        requires="DT_R2_URL",
+    )
+    url, _ = contracts.resolve(check, {"DT_R2_URL": "http://x/${FOO}"})
+    assert url == "http://x/${FOO}"
