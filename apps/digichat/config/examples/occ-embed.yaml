@@ -35,7 +35,7 @@ hosts:
       speech: false
     backend:
       type: digigraph
-      digisearchIndex: occ_help,occ_tickets
+      digisearchIndex: occ_help
       vaultPathPrefix: clients/online-compliance-center
     tools:
       allowUserToggle: true
@@ -72,8 +72,8 @@ hosts:
           label: Help search
           default: true
           setup:
-            # Docs + tickets fan-out by default (#4756); pass occ_help for docs only.
-            index_name: occ_help,occ_tickets
+            # Docs only. The ticket corpus snapshot was retired in DIG-1380, so there is no second leg to fan out to.
+            index_name: occ_help
         - id: digivault
           url: http://digivault-mcp:8769/mcp
           label: Knowledge vault

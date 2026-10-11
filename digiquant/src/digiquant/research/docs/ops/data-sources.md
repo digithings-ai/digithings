@@ -128,9 +128,9 @@ Reference list for all external data sources used in the daily digest pipeline. 
 ### Politician Tracking
 | Source | URL | Data |
 |--------|-----|------|
-| Quiver Quant | https://quiverquant.com/congress-trading | STOCK Act filings aggregated |
-| Capitol Trades | https://capitoltrades.com | Congress trades searchable |
 | EDGAR EFTS | https://efts.sec.gov/LATEST/search-index | Direct SEC search |
+> Commercial congressional-trade aggregators are not an approved source.
+> Counsel (DIG-1251) struck the ingestion proposal; do not re-add them here.
 
 ### Hedge Fund Intelligence
 | Source | URL | Data |

@@ -206,6 +206,34 @@ class TestPersistTwoStage:
             or "overfit" in pair.regularized.notes.lower()
         )
 
+    def test_custom_stem_does_not_clobber_btc_composite(self, tmp_path: Path) -> None:
+        dates = _dates()
+        prices = [100.0] * len(dates)
+        weights = SdcaCompositeWeights(valuation=1.0, m2=0.5)
+        extra_z = {"m2": [0.0] * len(dates)}
+        (tmp_path / "btc_composite_aggressive.json").write_text('{"keep": true}\n')
+        stage_b = run_stage_b_frozen(
+            dates,
+            prices,
+            [{**SDCA_SHAPE_DEFAULTS, **freeze_weight_params(weights)}],
+            rails_fitter=_fitter,
+            evaluator=_evaluator,
+            evaluator_label="synthetic_fixture",
+            extra_z=extra_z,
+        )
+        persist_two_stage(
+            stage_a_weights=weights,
+            stage_b=stage_b,
+            windows=SdcaCycleWindows.btc_v1(),
+            dest_dir=tmp_path,
+            notes="stem isolation",
+            stem="btc_solo_then_combine",
+        )
+        assert (tmp_path / "btc_solo_then_combine_aggressive.json").is_file()
+        assert (tmp_path / "btc_solo_then_combine_regularized.json").is_file()
+        assert (tmp_path / "btc_composite_aggressive.json").read_text() == '{"keep": true}\n'
+        assert not (tmp_path / "btc_composite_regularized.json").exists()
+
 
 class TestCheckedInTwoStageProvenance:
     def test_sidecars_roundtrip_and_record_honest_oos(self) -> None:

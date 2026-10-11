@@ -1,0 +1,75 @@
+name: "Test: bun suites"
+
+# DIG-2940: three packages declare `"test": "bun test"` and none of them ran in
+# CI — no workflow in .github/workflows mentioned the bun tool at all, so a
+# break in any of these suites was found by a user, not by CI:
+#   digivoice/tui, clients/digichat-tui, packages/surface-config
+#
+# One lane, not three workflow files. The command is the same in all three
+# (`bun run test`) and adding a fourth suite is one matrix line plus one
+# ci_paths.yaml glob. fail-fast is false so one red suite cannot hide the
+# others' results — the suites are independent and each verdict matters.
+#
+# `bun run test`, not bare `bun test`: the manifest's own script is the same
+# string a developer runs locally, so a suite skipped by editing package.json
+# shows up in the package.json diff.
+#
+# bun is pinned (1.4.2) for the reason AGENTS.md § "Context & compaction
+# policy" gives: an unpinned tool changing behaviour under a green build is
+# what produced #1701, #1705 and #1711. Same escape hatch as that rule: bump
+# it in its own PR.
+#
+# Deliberately no `tsc --noEmit`: these are bun-first packages whose configs
+# assume bun types without declaring them, so a type gate would be red on
+# arrival and block the lane itself. A lane that cannot land enforces nothing.
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ${{ matrix.dir }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      # One suite failing must not hide the others — they are independent
+      # suites, and fail-fast would cancel a passing suite's result.
+      fail-fast: false
+      matrix:
+        include:
+          - dir: digivoice/tui
+          - dir: clients/digichat-tui
+          - dir: packages/surface-config
+          - dir: packages/hero-banner
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.2"
+
+      # Per-directory install from the committed lockfile, matching the
+      # uv --frozen shape every other lane uses: --frozen-lockfile fails if
+      # the lockfile is stale rather than silently re-resolving.
+      #
+      # Per-directory, not once at the repo root: none of these three is
+      # installed by the root npm workspaces, and a root install would not
+      # provide bun's runner anyway.
+      #
+      # packages/surface-config is exempt: it declares zero dependencies by
+      # design (its header comment says so — Bun, Node and Next import it),
+      # so there is nothing to install. Running `bun install` there would
+      # walk up to the repo-root workspace and install the whole monorepo
+      # instead. If it ever gains a dependency, commit a bun.lock for it and
+      # drop the condition — tests/scripts/test_bun_suites_ci_lane.py fails
+      # until that happens.
+      - name: Install from lockfile
+        if: matrix.dir != 'packages/surface-config' && matrix.dir != 'packages/hero-banner'
+        working-directory: ${{ matrix.dir }}
+        run: bun install --frozen-lockfile
+
+      - name: Tests
+        working-directory: ${{ matrix.dir }}
+        run: bun run test

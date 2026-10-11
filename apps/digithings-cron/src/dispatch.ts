@@ -33,6 +33,19 @@ export function repositoryDispatchUrl(repo: string): string {
   return `${GH_API}/repos/${repo}/dispatches`;
 }
 
+/**
+ * The 422 bodies that mean "GitHub declined, but nothing is wrong" — a run for
+ * this ref is already in flight. Deliberately narrow: it is matched against a
+ * live response body, so a wider net would quietly reclassify a real refusal as
+ * a benign one and report a dispatch that never started as a success.
+ *
+ * A workflow disabled with `disabled_manually` is a 422 too, but its body is
+ * `Cannot trigger a 'workflow_dispatch' on a disabled workflow`, which matches
+ * none of these substrings. That is intended, not an oversight: such a dispatch
+ * is a failure (502 on POST /backfill) whose claim is released, so the date stays
+ * dispatchable. Widening this list to cover it needs the same evidence as any
+ * other change to a live-body heuristic — see DIG-1227.
+ */
 function isBenign422(body: string): boolean {
   const lower = body.toLowerCase();
   return (
@@ -254,38 +267,24 @@ export async function dispatch(
   return dispatchContainer(env, job, cron, scheduledTime, opts.args ?? {});
 }
 
-async function dispatchGithub(env: Env, job: Job, cron: string): Promise<DispatchResult> {
-  const dryRun = env.DRY_RUN === "1";
-  let url: string;
-  let body: Record<string, unknown>;
+/** Identifies one GitHub call in log lines and error messages. */
+type DispatchContext = {
+  cron: string;
+  repo: string;
+  job: string;
+};
 
-  if (job.kind === "workflow_dispatch" || job.kind === "container" || job.kind === "probe") {
-    if (!job.workflow || !job.ref) {
-      throw new Error(`job ${job.id}: workflow_dispatch requires workflow and ref`);
-    }
-    url = workflowDispatchUrl(job.repo, job.workflow);
-    body = { ref: job.ref, inputs: job.inputs ?? {} };
-  } else {
-    if (!job.event_type) {
-      throw new Error(`job ${job.id}: repository_dispatch requires event_type`);
-    }
-    url = repositoryDispatchUrl(job.repo);
-    body = { event_type: job.event_type, client_payload: {} };
-  }
-
-  if (dryRun) {
-    logLine({
-      cron,
-      repo: job.repo,
-      job: job.id,
-      github_status: null,
-      dry_run: true,
-      url,
-      body,
-    });
-    return { ok: true, status: 0, dry_run: true };
-  }
-
+/**
+ * POST one GitHub dispatch, with the shared retry / benign-422 / rate-limit
+ * handling. Every api.github.com write in this Worker goes through here, so the
+ * manual-kick surface and the cron surface cannot drift on error handling.
+ */
+async function postGithub(
+  env: Env,
+  url: string,
+  body: Record<string, unknown>,
+  at: DispatchContext,
+): Promise<DispatchResult> {
   const token = env.GH_DISPATCH_TOKEN;
   if (!token) {
     throw new Error("GH_DISPATCH_TOKEN is required when DRY_RUN is not 1");
@@ -308,9 +307,9 @@ async function dispatchGithub(env: Env, job: Job, cron: string): Promise<Dispatc
 
     if (status === 204 || status === 200) {
       logLine({
-        cron,
-        repo: job.repo,
-        job: job.id,
+        cron: at.cron,
+        repo: at.repo,
+        job: at.job,
         github_status: status,
         dry_run: false,
         attempt,
@@ -320,9 +319,9 @@ async function dispatchGithub(env: Env, job: Job, cron: string): Promise<Dispatc
 
     if (status === 422 && isBenign422(text)) {
       logLine({
-        cron,
-        repo: job.repo,
-        job: job.id,
+        cron: at.cron,
+        repo: at.repo,
+        job: at.job,
         github_status: status,
         dry_run: false,
         note: "benign_422",
@@ -333,9 +332,9 @@ async function dispatchGithub(env: Env, job: Job, cron: string): Promise<Dispatc
     if (isRateLimited(status, text) && attempt < MAX_ATTEMPTS) {
       const delayMs = retryDelayMs(res, attempt);
       logLine({
-        cron,
-        repo: job.repo,
-        job: job.id,
+        cron: at.cron,
+        repo: at.repo,
+        job: at.job,
         github_status: status,
         dry_run: false,
         retry_attempt: attempt + 1,
@@ -346,14 +345,91 @@ async function dispatchGithub(env: Env, job: Job, cron: string): Promise<Dispatc
     }
 
     logLine({
-      cron,
-      repo: job.repo,
-      job: job.id,
+      cron: at.cron,
+      repo: at.repo,
+      job: at.job,
       github_status: status,
       dry_run: false,
       error: text.slice(0, 500),
     });
-    throw new Error(`GitHub dispatch failed for ${job.id}: HTTP ${status}`);
+    throw new Error(`GitHub dispatch failed for ${at.job}: HTTP ${status}`);
   }
-  throw new Error(`GitHub dispatch failed for ${job.id}: retries exhausted`);
+  throw new Error(`GitHub dispatch failed for ${at.job}: retries exhausted`);
+}
+
+export type WorkflowDispatchTarget = {
+  /** Cron label for the log line; the manual surface has no cron of its own. */
+  cron: string;
+  /** Job-shaped identifier used in log lines and error messages. */
+  label: string;
+  repo: string;
+  workflow: string;
+  ref: string;
+  inputs?: Record<string, unknown>;
+};
+
+/**
+ * workflow_dispatch for a caller that is not a JOBS row — today that is only
+ * POST /backfill. Same POST, same retries, same benign-422 handling as the cron
+ * surface; it simply has no row behind it and therefore no clock.
+ */
+export async function dispatchWorkflow(
+  env: Env,
+  target: WorkflowDispatchTarget,
+): Promise<DispatchResult> {
+  const url = workflowDispatchUrl(target.repo, target.workflow);
+  const body: Record<string, unknown> = { ref: target.ref, inputs: target.inputs ?? {} };
+  const at: DispatchContext = { cron: target.cron, repo: target.repo, job: target.label };
+
+  if (env.DRY_RUN === "1") {
+    logLine({
+      cron: at.cron,
+      repo: at.repo,
+      job: at.job,
+      github_status: null,
+      dry_run: true,
+      url,
+      body,
+    });
+    return { ok: true, status: 0, dry_run: true };
+  }
+
+  return postGithub(env, url, body, at);
+}
+
+async function dispatchGithub(env: Env, job: Job, cron: string): Promise<DispatchResult> {
+  if (job.kind !== "repository_dispatch") {
+    if (!job.workflow || !job.ref) {
+      throw new Error(`job ${job.id}: workflow_dispatch requires workflow and ref`);
+    }
+    return dispatchWorkflow(env, {
+      cron,
+      label: job.id,
+      repo: job.repo,
+      workflow: job.workflow,
+      ref: job.ref,
+      inputs: job.inputs ?? {},
+    });
+  }
+
+  if (!job.event_type) {
+    throw new Error(`job ${job.id}: repository_dispatch requires event_type`);
+  }
+  const url = repositoryDispatchUrl(job.repo);
+  const body: Record<string, unknown> = { event_type: job.event_type, client_payload: {} };
+
+  if (env.DRY_RUN === "1") {
+    logLine({
+      cron,
+      repo: job.repo,
+      job: job.id,
+      github_status: null,
+      dry_run: true,
+      url,
+      body,
+    });
+    return { ok: true, status: 0, dry_run: true };
+  }
+
+  return postGithub(env, url, body, { cron, repo: job.repo, job: job.id });
 }

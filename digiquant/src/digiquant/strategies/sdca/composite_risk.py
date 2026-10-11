@@ -32,9 +32,10 @@ def compute_composite_risk(indicators: list[IndicatorWeight]) -> pl.DataFrame:
     ``composite_z`` is the weight-normalized average z-score, clamped to
     ``[-3, 3]``. ``risk`` rescales that to ``[0, 100]`` (z=+3 -> risk=0,
     z=-3 -> risk=100). A row is null in both columns if any enabled indicator
-    is null there.
+    is null there. Weight-0 members are omitted (they are not enabled), so
+    ``0 × null`` cannot wipe a solo extra.
     """
-    enabled = [ind for ind in indicators if ind.enabled]
+    enabled = [ind for ind in indicators if ind.enabled and ind.weight != 0.0]
     if not enabled:
         raise ValueError("compute_composite_risk requires at least one enabled indicator")
 

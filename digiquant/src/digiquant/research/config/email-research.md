@@ -53,8 +53,6 @@ Subscribe to the following newsletters/alerts at your dedicated email:
 | EIA Weekly Petroleum | https://eia.gov/petroleum/supply/weekly/ sign up for email | RESEARCH/Energy | Wednesday |
 | Farside BTC ETF Flows | https://farside.co.uk | RESEARCH/Crypto | Daily |
 | CFTC COT via email alert | https://cftc.gov/MarketReports/CommitmentsofTraders | RESEARCH/Options-AltData | Friday |
-| Capitol Trades Alerts | https://capitoltrades.com (set up alerts) | RESEARCH/HedgeFund | As filed |
-| Quiver Quant Weekly | https://quiverquant.com | RESEARCH/HedgeFund | Weekly |
 | FRED Email Alerts | https://fred.stlouisfed.org (set up series alerts for 10Y, 2Y, DXY) | RESEARCH/Macro | On release |
 | WSJ Markets (free tier) | https://wsj.com | RESEARCH/Macro | Daily |
 
@@ -64,7 +62,7 @@ Subscribe to the following newsletters/alerts at your dedicated email:
 |--------|----------|-------|--------------|
 | SpotGamma HIRO | https://spotgamma.com (~$399/yr) | RESEARCH/Options-AltData | Dealer gamma exposure, real-time GEX |
 | Glassnode Advanced | https://glassnode.com (~$799/yr) | RESEARCH/Crypto | Full on-chain analytics |
-| Unusual Whales ($29/mo) | https://unusualwhales.com | RESEARCH/Options-AltData | Options flow, dark pool, congress trades |
+| Unusual Whales ($29/mo) | https://unusualwhales.com | RESEARCH/Options-AltData | Options flow, dark pool, policy signals |
 | WhaleWisdom Pro | https://whalewisdom.com (~$40/mo) | RESEARCH/HedgeFund | 13F analytics, fund tracking |
 | Bridgewater Daily Observations | Institutional only | RESEARCH/HedgeFund | Direct macro view (if accessible) |
 | Energy Intel | https://energyintel.com | RESEARCH/Energy | Upstream oil market intelligence |
@@ -127,3 +125,7 @@ Subscribe to the following newsletters/alerts at your dedicated email:
 ### Google Alerts
 - Create Google Alerts for: "Iran Strait of Hormuz", "[your tracked hedge fund names]", "Federal Reserve pivot", "OPEC+ production"
 - Deliver to research email, label `RESEARCH/Geopolitical`
+
+<!-- Capitol Trades Alerts and Quiver Quant Weekly were removed here by Counsel
+     (DIG-1251): continuous commercial feeds of STOCK Act trade reports are a
+     prohibited acquisition path. Do not re-add. -->
