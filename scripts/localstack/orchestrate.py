@@ -164,7 +164,11 @@ def _tool(env: Mapping[str, str], key: str, default: Sequence[str]) -> tuple[str
 def plan_up(profile: str, env: Mapping[str, str]) -> tuple[Step, ...]:
     """Plan section 3, steps 2-7.  Steps 1 and 8 belong to the caller."""
     python = _tool(env, "python", ("python3",))
-    secrets = (*_tool(env, "secrets", ("scripts/dt-secrets",)), "render")
+    # --no-prompt: `dt up` is non-interactive. Without it dt-secrets falls back to
+    # a getpass prompt and blocks forever on a TTY that never answers (DIG-2959).
+    # Failing fast is the correct behaviour for a scripted stack bring-up; an
+    # operator who wants to be asked runs `dt-secrets render` directly.
+    secrets = (*_tool(env, "secrets", ("scripts/dt-secrets",)), "render", "--no-prompt")
     supabase = _tool(env, "supabase", ("supabase",))
     compose = _tool(env, "compose", ("docker", "compose"))
     wrangler = _tool(
