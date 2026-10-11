@@ -1,7 +1,9 @@
 import { buildAnimation } from "../animations/build";
 import { equalizerAnimation } from "../animations/equalizer";
 import { riseAnimation } from "../animations/rise";
+import { routeAnimation } from "../animations/route";
 import { scrambleAnimation } from "../animations/scramble";
+import { stackAnimation } from "../animations/stack";
 import { PIXEL_7X10 } from "../font";
 import type { BannerDefinition, Tone } from "../types";
 
@@ -47,7 +49,19 @@ export const DIGIQUANT: BannerDefinition = {
     down: { hex: "#E5533E", cube: 167, cssVar: "--down" },
     accent: { hex: "#3DD6C4", cube: 80, cssVar: "--accent" },
   },
-  animation: riseAnimation({ startMs: 250, columnMs: 16, glintChance: 0.045, strays: 60, glintDuty: 0.06, toneUntil: 0.72 }),
+  // buildDoneMs: startMs + 78 * columnMs + BUILD_RISE_MS (360) = 1858.
+  animation: riseAnimation({
+    startMs: 250,
+    columnMs: 16,
+    glintChance: 0.045,
+    strays: 60,
+    glintDuty: 0.06,
+    toneUntil: 0.72,
+    blinkChance: 0.35,
+    blinkDuty: 0.03,
+    blinkAlpha: 0.35,
+    buildDoneMs: 1858,
+  }),
   live: true,
   seed: 0x9a17,
 };
@@ -98,4 +112,70 @@ export const DIGIVOICE: BannerDefinition = {
   seed: 0,
 };
 
-export const BANNERS = { digithings: DIGITHINGS, digiquant: DIGIQUANT, digichat: DIGICHAT, digivoice: DIGIVOICE } as const;
+/** DIG-2870. A router: one request fans out to every lane (provider) and the
+ *  reply comes back. Accent: --accent-digillm. */
+export const DIGILLM: BannerDefinition = {
+  id: "digillm",
+  text: "DIGILLM",
+  label: "digillm",
+  font: PIXEL_7X10,
+  gap: 2,
+  palette: {
+    ink: INK,
+    ground: GROUND,
+    accent: { hex: "#B8C95A", cube: 149, cssVar: "--accent-digillm" },
+    reply: { hex: "#FFFFFF", cube: 231, cssVar: "--glint" },
+  },
+  animation: routeAnimation({
+    crossMs: 760,
+    forkMs: 70,
+    jitter: 0.18,
+    holdMs: 120,
+    returnMs: 520,
+    pending: 0.45,
+    trail: 7,
+    packetEveryMs: 900,
+    packetMs: 900,
+  }),
+  live: true,
+  seed: 0x11e1,
+};
+
+/** DIG-2869. A table filling up: records drop in row by row from the bottom,
+ *  land written (accent) and commit to ink a row at a time. Accent:
+ *  --accent-digibase. */
+export const DIGIBASE: BannerDefinition = {
+  id: "digibase",
+  text: "DIGIBASE",
+  label: "digibase",
+  font: PIXEL_7X10,
+  gap: 2,
+  palette: {
+    ink: INK,
+    ground: GROUND,
+    accent: { hex: "#9EA0A5", cube: 247, cssVar: "--accent-digibase" },
+    glint: { hex: "#FFFFFF", cube: 231, cssVar: "--glint" },
+  },
+  animation: stackAnimation({
+    rowMs: 120,
+    sweepMs: 260,
+    fallMs: 420,
+    blockMax: 4,
+    holdMs: 60,
+    commitMs: 260,
+    txEveryMs: 1100,
+    txWriteMs: 520,
+    scanMs: 900,
+  }),
+  live: true,
+  seed: 0xdb05,
+};
+
+export const BANNERS = {
+  digithings: DIGITHINGS,
+  digiquant: DIGIQUANT,
+  digichat: DIGICHAT,
+  digivoice: DIGIVOICE,
+  digillm: DIGILLM,
+  digibase: DIGIBASE,
+} as const;
