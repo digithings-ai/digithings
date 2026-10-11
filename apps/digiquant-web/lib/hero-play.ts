@@ -15,15 +15,18 @@ export const HERO_PLAYED_SCRIPT = [
 
 export type HeroGateView = { started: number; connected: boolean };
 
-/** Whether this mount should run the rise. `claim` records the play. */
+/** Whether this mount should run the rise. `claim` records the play.
+ *  `replay` is the top hero: it builds on every load, played tab or not. */
 export function nextHeroLive(input: {
   played: boolean;
+  replay?: boolean;
   armed: boolean;
   idle: boolean;
   now: number;
   gate: HeroGateView | null;
 }): { live: boolean; claim: boolean } {
   if (!input.armed || input.idle) return { live: false, claim: false };
+  if (input.replay) return { live: true, claim: !input.played };
   if (input.played) {
     const young =
       !!input.gate && input.now - input.gate.started < HERO_ADOPT_MS && !input.gate.connected;

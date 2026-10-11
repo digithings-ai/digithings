@@ -31,7 +31,7 @@ export function TopBand() {
     >
       <QuantField />
       <div className="pointer-events-none relative mx-auto flex h-full min-h-0 w-full max-w-[64rem] flex-col items-center justify-center px-[var(--page-pad)] pb-[2.5rem] pt-[calc(var(--nav-shell-h,62px)+1.25rem)] text-center before:pointer-events-none before:absolute before:inset-0 before:-z-10 before:bg-[radial-gradient(ellipse_at_center,rgb(0_0_0/0.82),rgb(0_0_0/0.28)_46%,transparent_74%)] sm:px-[2.5rem]">
-        <QuantWordmark className="block h-auto w-[264px] fill-current text-ink min-[380px]:w-[352px] sm:w-[528px] md:w-[616px]" />
+        <QuantWordmark replay className="block h-auto w-[264px] fill-current text-ink min-[380px]:w-[352px] sm:w-[528px] md:w-[616px]" />
         <h1
           id="top-h"
           className="hero-rise m-0 mt-[1.5rem] font-display text-[1.5rem] font-semibold leading-[1.25] tracking-[-0.02em] text-balance text-ink sm:text-[1.7rem]"

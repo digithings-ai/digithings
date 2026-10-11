@@ -15,9 +15,12 @@ import {
   type HeroBar,
   type HeroOverlay,
 } from "@/lib/hero-build";
-import { heroWatermark, HERO_HOLD_MS, loadHeroSeries, nextHero, type HeroSeries } from "@/lib/live/hero-series";
+import { heroMarket, heroWatermark, loadHeroSeries, nextHero, type HeroSeries } from "@/lib/live/hero-series";
 
 /** Hero backdrop: one finished LuxAlgo Vela chart, faded in.
+ *
+ *  Static: the first symbol with candles is drawn once per page load. No live
+ *  feed, no rotation; a refresh is the only thing that changes it.
  *
  *  Vela owns the axes for the whole life of the chart. There is no SVG axis
  *  stroke and no left-to-right reveal — those unmounted the frame and let
@@ -104,17 +107,6 @@ function applyLockedDomain(chart: Vela, bars: readonly HeroBar[], overlay: HeroO
   }
   write();
   control.renderer?.scheduler?.invalidate(4);
-}
-
-function velaBars(bars: readonly HeroBar[]) {
-  return bars.map((bar) => ({
-    time: bar.time,
-    open: bar.open,
-    high: bar.high,
-    low: bar.low,
-    close: bar.close,
-    ...(bar.volume === undefined ? {} : { volume: bar.volume }),
-  }));
 }
 
 export function QuantField() {
@@ -270,22 +262,7 @@ export function QuantField() {
         drawings: false as const,
         animations: motion,
       };
-      if (series.source === "coinbase") {
-        return {
-          ...colors,
-          symbol: `coinbase:${series.symbol}`,
-          timeframe: series.velaTimeframe,
-          bars: 300,
-          live: !reduced,
-        };
-      }
-      return {
-        ...colors,
-        symbol: series.symbol,
-        timeframe: series.velaTimeframe,
-        live: false as const,
-        data: velaBars(series.bars),
-      };
+      return { ...colors, ...heroMarket(series) };
     };
 
     const paint = async (series: HeroSeries) => {
@@ -293,31 +270,19 @@ export function QuantField() {
       barMs = series.velaTimeframe === "1" ? BAR_MS : DAY_MS;
       setWatermark(heroWatermark(series.symbol, series.timeframe));
       if (!chart) {
-        const [{ Vela: VelaChart }, { CoinbaseProvider }] = await Promise.all([
-          import("@luxalgo/vela"),
-          import("@luxalgo/vela/providers/coinbase"),
-        ]);
+        const { Vela: VelaChart } = await import("@luxalgo/vela");
         if (dead) return;
         chart = new VelaChart(host, chartOptions(series));
         chart.addNativeIndicator("volume", {
           inputs: { upColor: scale.volumeUp, downColor: scale.volumeDown },
         });
         host.style.touchAction = "pan-y";
-        chart.data.registerProvider("coinbase", new CoinbaseProvider());
         chart.on("load:end", (ev) => {
           if (dead) return;
           hasBars = (ev?.bars ?? 0) > 0 || book.length >= 2;
           if (hasBars) fadeIn();
         });
         await chart.ready().catch(() => undefined);
-      } else if (series.source === "coinbase") {
-        await chart.setMarket({ symbol: `coinbase:${series.symbol}`, timeframe: "1" });
-      } else {
-        await chart.setMarket({
-          symbol: series.symbol,
-          timeframe: "D",
-          data: velaBars(series.bars),
-        });
       }
       if (dead || !chart) return;
       hasBars = true;
@@ -347,10 +312,6 @@ export function QuantField() {
           return;
         }
         await paint(found.series);
-        if (dead || controller.signal.aborted) return;
-        later(HERO_HOLD_MS, () => {
-          void step(found.index + 1);
-        });
       } catch (err) {
         if (dead || (err instanceof DOMException && err.name === "AbortError")) return;
         unavailable();
