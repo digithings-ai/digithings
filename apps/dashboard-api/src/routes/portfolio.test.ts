@@ -123,12 +123,62 @@ describe("phase 1 portfolio routes", () => {
     expect(data.decision).toEqual({ lead: "long GLD", body: "Real yields roll over.", run_date: "2026-09-02" });
   });
 
-  it("brief risks has no source and does not read documents", async () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal("fetch", fetchMock);
+  it("brief risks derives risks from the core tables", async () => {
+    const urls: string[] = [];
+    mockFetch((url) => {
+      urls.push(url);
+      if (url.includes("/theses?")) {
+        return [
+          { thesis_id: "gold", date: "2026-09-02", name: "Gold", vehicle: "GLD", status: "ACTIVE" },
+          { thesis_id: "closed", date: "2026-09-02", name: "Done", vehicle: "TLT", status: "RETIRED" },
+        ];
+      }
+      if (url.includes("/positions?")) {
+        return [
+          { ticker: "GLD", date: "2026-09-02", weight_pct: 55, thesis_id: "gold" },
+          { ticker: "XLF", date: "2026-09-02", weight_pct: 5 },
+        ];
+      }
+      return [];
+    });
     const res = await body("/brief/risks");
+    const risks = (res.data as { risks: Array<{ code: string; ticker?: string; thesis_id?: string }> }).risks;
+    const codes = risks.map((r) => r.code).sort();
+    // GLD is held but over the concentration line; the gold thesis has no
+    // invalidation and no position under its own vehicle name; XLF has open
+    // weight with no thesis link. The RETIRED thesis is closed book.
+    expect(codes).toEqual([
+      "concentrated_position",
+      "position_without_thesis",
+      "thesis_without_invalidation",
+    ]);
+    expect(risks.find((r) => r.code === "concentrated_position")?.ticker).toBe("GLD");
+    expect(risks.find((r) => r.code === "thesis_without_invalidation")?.thesis_id).toBe("gold");
+    // No documents.doc_type carries a risk list: the read is now built from
+    // theses + positions, so those are the tables that must be consulted.
+    expect(urls.some((u) => u.includes("/theses?"))).toBe(true);
+    expect(urls.some((u) => u.includes("/positions?"))).toBe(true);
+    expect(urls.some((u) => u.includes("/documents?"))).toBe(false);
+  });
+
+  it("brief risks returns an empty list with a real source when nothing is flagged", async () => {
+    const urls: string[] = [];
+    mockFetch((url) => {
+      urls.push(url);
+      if (url.includes("/theses?")) {
+        return [{ thesis_id: "gold", date: "2026-09-02", name: "Gold", vehicle: "GLD", status: "ACTIVE", invalidation: "yields above 5%" }];
+      }
+      if (url.includes("/positions?")) {
+        return [{ ticker: "GLD", date: "2026-09-02", weight_pct: 12, thesis_id: "gold" }];
+      }
+      return [];
+    });
+    const res = await body("/brief/risks");
+    // An empty list that is NOT "unavailable": the tables were read and nothing
+    // tripped. This is the case the honest-empty stub could never express.
     expect(res.data).toEqual({ risks: [] });
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect((res.provenance as { source: string }).source).toBe("core:theses+positions");
+    expect(urls.some((u) => u.includes("/theses?"))).toBe(true);
   });
 
   it("dossier joins on thesis_id and scopes documents to the house", async () => {
