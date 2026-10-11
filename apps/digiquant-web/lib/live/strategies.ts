@@ -8,9 +8,12 @@
  * So one anon-readable table backs both the library index and every tearsheet;
  * updating a row updates the site with no redeploy.
  *
- * Reads go through the official API table route. That table is not on the
- * worker allowlist today, so a 404 withholds every statistic. There is no
- * Supabase fallback and no invented performance.
+ * Reads go through the official API table route, which serves
+ * `strategy_tearsheets` under the same anon-parity invariant this module
+ * already asserts for every other entry: migration 046 creates the anon
+ * SELECT policy, 051 deliberately keeps it, and 129 lists it among the
+ * browser-read surfaces. There is no Supabase fallback and no invented
+ * performance: a withheld or unpublished read still renders honest-empty.
  */
 import { type StrategyIndexEntry, type TearsheetData } from "@/components/tearsheet/types";
 import { officialGet, STRATEGY_ROUTE } from "@/lib/official-api";
@@ -46,7 +49,12 @@ function metricsOf(row: unknown): TearsheetData | null {
   if (typeof row !== "object" || row === null) return null;
   const rec = row as { metrics?: unknown };
   if (typeof rec.metrics !== "object" || rec.metrics === null) return null;
-  return rec.metrics as TearsheetData;
+  const metrics = rec.metrics as Record<string, unknown>;
+  // The column is `not null default '{}'`, so an unpublished row reads as an
+  // empty object. Without a strategy id it cannot name a card (`href` would be
+  // /strategies/undefined) or a tearsheet, so it is absent data, not a card.
+  if (typeof metrics.strategy !== "string" || metrics.strategy.length === 0) return null;
+  return metrics as unknown as TearsheetData;
 }
 
 /** Full tearsheet payload for one strategy, or `null` if the API did not publish it. */
