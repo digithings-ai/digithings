@@ -30,3 +30,4 @@ export { clawAnimation, withHeadroom, type ClawOptions } from "./animations/claw
 export { scanAnimation, type ScanOptions } from "./animations/scan";
 export { spansAnimation, liveTrace, type SpansOptions } from "./animations/spans";
 export { fetchAnimation, liveFetch, type FetchOptions } from "./animations/fetch";
+export { vaultAnimation, dialAt, type VaultOptions } from "./animations/vault";
