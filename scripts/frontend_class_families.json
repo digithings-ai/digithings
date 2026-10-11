@@ -41,7 +41,8 @@
     "nav",
     "pixel",
     "integrations",
-    "ground"
+    "ground",
+    "band"
   ],
   "dashboard": [
     "acct",
@@ -70,6 +71,7 @@
     "dtc",
     "light"
   ],
+  "_dq_band": "digiquant-web .band-* is the pipeline band head pin (DIG-2854, PR #5448): .band-pin-shell / .band-pin hold the section head and its hairline under the nav so the card deck stacks below the rule instead of riding up under it. The pin is this band's own two-column grid geometry, so it stays in the app sheet (same status as .desk-* / .scripted-*); if the owner later promotes the pinned band head into @digithings/ui, delete this entry with the app block.",
   "_dq_pixel": "digiquant-web .pixel-* and .integrations-* are the digithings wordmark rules the integrations band reuses (same composition as digithings-web .pixel-*). App-local landing CSS. The band's look stays where it is; this entry only names the families the census already sees.",
   "_dq_desk": "digiquant-web .scripted-* is the one-rule row-gap under the scripted digichat thread: the slot name aui_message-group cannot be an arbitrary Tailwind variant (the underscore becomes a space and the stylesheet fails to parse). .desk-* and .cell-* are the embedded terminal mosaic in terminal-desk.module.css. App-local landing composition, same status as digithings-web .pixel-* / .section-*. .cmd / .cmd-in / .cmd-list are the desk path field ported from the terminal draft. .rail / .nav-row / .nav-tri / .nav-path are the folder sidebar from the same draft. .desk-pick / .desk-list are the desk selector. .ground is the desk chat scope that clears the digichat skin fill so the thread sits on the desk (desk-chat.module.css). The look stays where it is; this entry only names the family the census already sees.",
   "_landing": "digithings-web .pixel-* (PixelField/PixelWordmark), .hero-* (the staged hero entrance) and .section-* (the numbered section eyebrow + gutter rail) are the home landing's own composition (#4895 / #4424), owner-picked; app-local like .whyx-*. If the landing's pixel mark or section eyebrow is promoted into @digithings/ui, delete the matching entry with the app block.",
