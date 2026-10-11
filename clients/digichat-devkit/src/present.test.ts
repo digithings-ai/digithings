@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { panesFor } from "./present";
+import { getExportYaml, panesFor, type ExportDraft } from "./present";
 import { interpretHttp, interpretResponse, loadKit, selectedEntry, type KitRead } from "./read";
 
 const refused = interpretHttp(404, null);
@@ -13,6 +13,51 @@ function values(read: KitRead, id: string): string[] {
 
 function blob(read: KitRead): string {
   return JSON.stringify(panesFor(read));
+}
+
+const noEdits: ExportDraft = { entryId: null, values: {}, toolOn: {}, mcpOn: {}, model: null };
+
+function exportPane(read: KitRead, draft: ExportDraft = noEdits) {
+  const pane = panesFor(read, draft).find((item) => item.id === "export");
+  if (!pane) throw new Error("missing pane export");
+  return pane;
+}
+
+/** One file-backed deployment that carries credentials, so redaction has something to hide. */
+function redactedFileRead(): KitRead {
+  return interpretResponse({
+    entries: [
+      {
+        id: "file:config/acme.yaml",
+        kind: "file",
+        label: "config/acme.yaml",
+        ok: true,
+        issues: ["accent contrast"],
+        redactedText: "slug: acme\n# redacted: the server never sends this line\n",
+        deployment: {
+          slug: "acme",
+          persistence: "memory",
+          auth: "anonymous",
+          backend: { type: "digigraph", apiKeyEnv: "sk-live-secret" },
+          chrome: { skin: "digichat", theme: "dark", placeholder: "Ask" },
+          features: { attachments: false, pageContext: "off" },
+          models: { default: "house", available: [] },
+          gate: { mode: "ungated", consumeUrl: "https://secret.example/quota" },
+          tools: { allowUserToggle: true, catalog: [{ id: "vault", label: "vault", default: true }] },
+          mcp: { servers: [] },
+        },
+      },
+      {
+        id: "env:other",
+        kind: "env",
+        label: "other",
+        ok: false,
+        issues: [],
+        redactedText: null,
+        deployment: null,
+      },
+    ],
+  });
 }
 
 test("a down service leaves every section empty and invents nothing", async () => {
@@ -65,7 +110,7 @@ test("a real file fills only the fields it carries", () => {
         label: "config/acme.yaml",
         ok: true,
         issues: ["accent contrast"],
-        redactedText: "slug: acme\n",
+        redactedText: "slug: acme\n# the server never sends this line\n",
         deployment: {
           slug: "acme",
           persistence: "memory",
@@ -108,11 +153,69 @@ test("a real file fills only the fields it carries", () => {
   const painted = blob(read);
   expect(painted).not.toContain("sk-live-secret");
   expect(painted).not.toContain("secret.example");
-  expect(painted).not.toContain("slug: acme");
+  // The export renders the draft from the structured deployment, so the slug IS now painted.
+  // What must stay out is the redacted FILE BODY the server declined to send.
+  expect(painted).toContain("slug: acme");
+  expect(painted).not.toContain("the server never sends this line");
 });
 
 test("a malformed payload is down rather than a guessed entry", () => {
   const read = interpretResponse({ entries: [{ id: "x" }] });
   expect(read.status).toBe("down");
   expect(read.files).toEqual([]);
+});
+
+test("every export action renders the draft as YAML, not an empty phrase", () => {
+  const read = redactedFileRead();
+  const yaml = getExportYaml(read, noEdits);
+  const pane = exportPane(read);
+  const labels = pane.lines.filter((line) => line.kind === "field").map((line) => line.label);
+  // The three actions the leaf names, all present as rows.
+  expect(labels).toEqual(["local compose", "embed snippet", "config YAML"]);
+  // And the pane itself carries the rendered body, not just an empty phrase.
+  expect(pane.lines.some((line) => line.kind !== "field" && line.text.includes("slug: acme"))).toBe(true);
+  expect(yaml).toContain("slug: acme");
+  expect(yaml).toContain("persistence: memory");
+  expect(yaml).toContain('"backend type": digigraph');
+  expect(yaml.length).toBeGreaterThan(80);
+  // No row may still read NOTHING while a draft is selected.
+  for (const line of pane.lines) {
+    if (line.kind === "field") expect(line.value).not.toBe("nothing to export");
+  }
+});
+
+test("the exported YAML redacts secrets the deployment carries", () => {
+  const read = redactedFileRead();
+  const yaml = getExportYaml(read, noEdits);
+  expect(yaml).not.toContain("sk-live-secret");
+  expect(yaml).not.toContain("secret.example");
+  expect(yaml).toContain("[redacted]");
+  // Same for the painted pane, so the TUI cannot leak what the file cannot.
+  expect(blob(read)).not.toContain("sk-live-secret");
+  expect(blob(read)).not.toContain("secret.example");
+});
+
+test("local edits in the draft reach the exported YAML", () => {
+  const read = redactedFileRead();
+  const edited: ExportDraft = {
+    ...noEdits,
+    values: { "identity:slug": "acme-eu", "features:attachments": "on" },
+    toolOn: { vault: false },
+    model: "house-large",
+  };
+  const yaml = getExportYaml(read, edited);
+  expect(yaml).toContain("acme-eu");
+  expect(yaml).toContain("house-large");
+  expect(yaml).toContain("vault");
+  expect(yaml).not.toContain("acme\n");
+});
+
+test("a down or empty read still exports nothing", () => {
+  expect(getExportYaml(interpretHttp(404, null), noEdits)).toBe("nothing to export");
+  expect(getExportYaml(empty, noEdits)).toBe("nothing to export");
+  expect(values(interpretHttp(404, null), "export")).toEqual([
+    "local compose=nothing to export",
+    "embed snippet=nothing to export",
+    "config YAML=nothing to export",
+  ]);
 });

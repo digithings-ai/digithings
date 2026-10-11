@@ -25,7 +25,7 @@ const acme = interpretResponse({
       label: "config/acme.yaml",
       ok: true,
       issues: ["accent contrast"],
-      redactedText: "slug: acme\n",
+      redactedText: "slug: acme\n# the server never sends this line\n",
       deployment: {
         slug: "acme",
         persistence: "memory",
@@ -135,7 +135,11 @@ test("editing a setting updates the live app and a secret never lands in the dra
   const text = painted(acme, leaked);
   expect(text).not.toContain("secret.example");
   expect(text).not.toContain("sk-live-secret");
-  expect(text).not.toContain("slug: acme");
+  // The export paints the draft from the structured deployment, so "slug: acme"
+  // is now on screen by design. What must stay out is the redacted file body
+  // the server declined to send.
+  expect(text).toContain("slug: acme");
+  expect(text).not.toContain("the server never sends this line");
 });
 
 test("a send carries the draft model, tools, and mcp and drops system notes", () => {
