@@ -380,6 +380,7 @@
         "DT_BASE_URL": "var",
         "DT_TARGET": "var",
         "DT_VARIANT": "var",
+        "MARKET_DATA_URL": "var",
         "SUPABASE_URL": "var"
       },
       "apps/digichat-cloudflare/wrangler.toml": {
