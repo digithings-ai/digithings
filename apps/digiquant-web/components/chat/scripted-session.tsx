@@ -150,7 +150,7 @@ export function ScriptedDigichatSession() {
         ref={frameRef}
         data-thread-skin="digichat"
         aria-label="digichat"
-        className={`${digichatFont.variable} ${digichatFont.className} grid h-[min(36rem,calc(100svh-16rem))] min-h-[24rem] grid-rows-[auto_minmax(0,1fr)] overflow-hidden border border-hair md:grid-cols-[14rem_minmax(0,1fr)] md:grid-rows-1`}
+        className={`${digichatFont.variable} ${digichatFont.className} scripted-digichat grid h-[calc(100svh-var(--nav-shell-h,62px)-2rem)] min-h-[28rem] grid-rows-[auto_minmax(0,1fr)] overflow-hidden border border-hair md:grid-cols-[14rem_minmax(0,1fr)] md:grid-rows-1`}
       >
         <div className="max-h-40 min-h-0 overflow-hidden md:flex md:max-h-none">
           <DigichatThreadList className="h-full w-full" />

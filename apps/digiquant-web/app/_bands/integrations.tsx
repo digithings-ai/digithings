@@ -9,8 +9,9 @@ import { MCP_TOOLS } from "../_mcp";
 
 const toolCount = (prefix: string) => MCP_TOOLS.filter((t) => t.name.startsWith(prefix)).length;
 
+/** Module banners sit under the digithings wordmark at half its width. */
 const BANNER =
-  "block h-auto w-[264px] max-w-full min-[380px]:w-[352px] sm:w-[528px] md:w-[616px]";
+  "block h-auto w-[176px] max-w-full sm:w-[264px] md:w-[308px]";
 
 const CARD =
   "flex h-auto min-h-full w-full min-w-0 shrink flex-col items-stretch gap-2.5 overflow-hidden bg-surface p-[1.15rem] text-start font-sans text-[length:inherit] font-normal whitespace-normal no-underline hover:bg-surface-2";
@@ -59,7 +60,6 @@ const PACKAGES_A = [
 
 const PACKAGES_B = [
   "Yahoo Finance · quote history",
-  "FRED · macro series",
   "Supabase · stored prices",
   "Binance · chart prices",
 ];
@@ -87,7 +87,7 @@ export function IntegrationsBand() {
           <p className="m-0 max-w-[36rem] text-center text-[1.05rem] leading-[1.55] text-ink-soft">
             The platform that drives the agentic side of digiquant.
           </p>
-          <ul className="m-0 flex w-full list-none flex-col items-center gap-10">
+          <ul className="m-0 flex w-full list-none flex-col items-center gap-5">
             <li>
               <QuantWordmark className={`${BANNER} fill-current text-ink`} />
             </li>

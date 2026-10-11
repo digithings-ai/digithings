@@ -55,7 +55,7 @@ describe("IntegrationsBand", () => {
     expect(html).toContain("Kraken · account snapshots");
     expect(html).toContain("Tradier · account snapshots");
     expect(html).toContain("Yahoo Finance · quote history");
-    expect(html).toContain("FRED · macro series");
+    expect(html).not.toContain("FRED");
     expect(html).toContain("Supabase · stored prices");
     expect(html).toContain("Binance · chart prices");
     expect(html).toContain("mq-track--left");
