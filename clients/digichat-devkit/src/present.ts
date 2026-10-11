@@ -322,6 +322,52 @@ function applyOverlay(paneId: string, lines: Line[], overlay?: Overlay): Line[] 
   });
 }
 
+/**
+ * The draft to export. Structurally `live.ts`'s `Draft`, mirrored here so this
+ * module stays free of the live -> present import it would otherwise cycle on.
+ */
+export type ExportDraft = Overlay & { model?: string | null };
+
+/** Section order of the exported document. Mirrors the pane order a reader sees. */
+const EXPORT_SECTIONS = ["identity", "features", "models", "appearance", "backend", "tools", "mcp", "gate"] as const;
+
+/** Values that YAML 1.1 reads as booleans or null, so they need quotes to stay strings. */
+const YAML_AMBIGUOUS = new Set(["on", "off", "yes", "no", "y", "n", "true", "false", "null", "none", "~"]);
+
+function yamlKey(label: string): string {
+  return /^[A-Za-z0-9_-]+$/.test(label) ? label : JSON.stringify(label);
+}
+
+function yamlScalar(value: string): string {
+  if (value.length === 0 || value !== value.trim() || YAML_AMBIGUOUS.has(value.toLowerCase())) {
+    return JSON.stringify(value);
+  }
+  return /[:#\n\r"'{}\[\],&*!|>%@`]/.test(value) ? JSON.stringify(value) : value;
+}
+
+/**
+ * The selected draft as YAML, for all three export actions. Built from the
+ * already-resolved and already-redacted pane lines: a secret field carries
+ * `[redacted]`, so no credential can reach this string. Returns `NOTHING` when
+ * there is no deployment to paint.
+ */
+export function getExportYaml(read: KitRead, draft: ExportDraft): string {
+  const dep = activeEntry(read, draft)?.deployment ?? null;
+  if (!dep) return NOTHING;
+  const sections = linesOf(dep);
+  const rows: string[] = [];
+  for (const section of EXPORT_SECTIONS) {
+    rows.push(`# ${section}`);
+    for (const line of applyOverlay(section, sections[section], draft)) {
+      if (line.kind !== "field") continue;
+      const value = line.secret || isSecretLabel(line.label) ? "[redacted]" : line.value;
+      rows.push(`${yamlKey(line.label)}: ${yamlScalar(value)}`);
+    }
+  }
+  if (draft.model != null) rows.push("# model", `model: ${yamlScalar(draft.model)}`);
+  return rows.join("\n");
+}
+
 /** Settings for one deployment. Values come from the configs read plus local edits. */
 export function panesFor(read: KitRead, overlay?: Overlay): PaneModel[] {
   const selected = activeEntry(read, overlay);
@@ -332,6 +378,21 @@ export function panesFor(read: KitRead, overlay?: Overlay): PaneModel[] {
     issues.length === 0
       ? [{ kind: "mark", text: NONE, on: false }]
       : issues.map((issue) => ({ kind: "mark" as const, text: issue, on: false }));
+
+  // The three export actions all write the same YAML; only the target differs.
+  const stem =
+    (selected?.label ?? "devkit").replace(/^.*\//, "").replace(/\.[^.]+$/, "") || "devkit";
+  const exportName = (suffix: string): string => (dep ? `${stem}.${suffix}` : NOTHING);
+  const yamlBody = getExportYaml(read, overlay ?? { entryId: null, values: {}, toolOn: {}, mcpOn: {} });
+  const exportLines: Line[] = [
+    field("local compose", exportName("compose.yaml")),
+    field("embed snippet", exportName("embed.html")),
+    field("config YAML", selected?.redacted === true ? "redacted on file" : exportName("config.yaml")),
+    // Field values render on one clipped line, so the body goes on its own lines.
+    ...(yamlBody === NOTHING
+      ? []
+      : yamlBody.split("\n").map((line): Line => ({ kind: "mark", text: line, on: false }))),
+  ];
 
   return [
     {
@@ -405,11 +466,7 @@ export function panesFor(read: KitRead, overlay?: Overlay): PaneModel[] {
       title: "Export",
       group: "Export",
       footer: "Export",
-      lines: [
-        field("local compose", NOTHING),
-        field("embed snippet", NOTHING),
-        field("config YAML", selected?.redacted ? "redacted on file" : NOTHING),
-      ],
+      lines: exportLines,
     },
     {
       id: "validation",
