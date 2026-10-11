@@ -24,8 +24,17 @@
 import { useEffect, useRef, useState } from "react";
 import { useMotionValueEvent, useScroll } from "motion/react";
 
-import { Emblem, StackRow } from "@digithings/ui";
+import { Emblem, StackRow, moduleById } from "@digithings/ui";
 import { BENTO, MODULE_ROWS, type ModuleRow } from "./content";
+
+/**
+ * In-site registry links win (`/chat`). Otherwise the first registry href.
+ * A cell with no registry link still has somewhere to go.
+ */
+export function stackModuleHref(id: string): string {
+  const links = moduleById(id)?.links ?? [];
+  return links.find((link) => link.href.startsWith("/"))?.href ?? links[0]?.href ?? "/docs";
+}
 
 /** One grid cell, at the span the bento layout gave it. */
 function Cell({
@@ -44,13 +53,16 @@ function Cell({
    *  so the kit's 4-column spans would not tile. `gridRow` is left to
    *  `grid-auto-rows`, which stretches every cell in a row to the tallest. */
   const colSpan = span === "hero" || span === "wide" ? 2 : 1;
+  const href = stackModuleHref(m.id);
   return (
-    <div
+    <a
+      href={href}
       data-module={m.id}
-      className={`bento-cell stack-cell flex min-h-[7rem] flex-col justify-between gap-[1rem] p-[1.05rem]${
+      className={`bento-cell stack-cell flex min-h-[7rem] flex-col justify-between gap-[1rem] p-[1.05rem] no-underline${
         active ? " is-active" : ""
       }`}
       style={{ gridColumn: `span ${colSpan}` }}
+      {...(href.startsWith("http") ? { rel: "noreferrer" } : {})}
     >
       <div className="flex items-start justify-between gap-[0.6rem]">
         <Emblem id={m.emblem} size={isHero ? 24 : 15} />
@@ -73,7 +85,7 @@ function Cell({
           </p>
         ) : null}
       </div>
-    </div>
+    </a>
   );
 }
 

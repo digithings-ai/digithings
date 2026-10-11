@@ -63,6 +63,21 @@ describe("ChatEmbedShell contracts", () => {
     expect(readParentDocumentTheme({ getAttribute: () => null })).toBe("dark");
   });
 
+  it("posts digichat:theme on a live toggle instead of rebuilding iframe src", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const path = fileURLToPath(new URL("./ChatEmbedShell.tsx", import.meta.url));
+    const src = readFileSync(path, "utf8");
+    const start = src.indexOf("const onThemeAttr");
+    const end = src.indexOf("const observer", start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const handler = src.slice(start, end);
+    expect(handler).not.toContain("setSrc");
+    expect(handler).toContain("postMessage");
+    expect(handler).toContain("buildEmbedThemeMessage");
+  });
+
   it("covers the cold Container with the shared tool-chain boot until digichat:ready", async () => {
     // Source contract: avoid a white flash on the dark digithings theme (#2093)
     // and keep the cold-start window animated. The shell mounts the shared
@@ -94,6 +109,51 @@ describe("ChatEmbedShell contracts", () => {
     const copy = readFileSync(copyPath, "utf8");
     expect(copy).toContain("Ask about digithings");
     expect(copy).toContain("Ask about Online Compliance Center");
+  });
+
+  it("forwards the OCC invite key from the parent URL to the embed", async () => {
+    // DIG-1210. The barrier is a bearer capability in the parent URL, handed
+    // straight to digichat under the one name it already enforces (`token=`).
+    // Source contract: the key must be read from window.location inside the
+    // mount effect, never during render — this app is output: "export", so the
+    // shipped HTML is one static artifact every visitor shares.
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const path = fileURLToPath(new URL("./ChatEmbedShell.tsx", import.meta.url));
+    const src = readFileSync(path, "utf8");
+
+    expect(src).toContain('from "@/lib/inviteToken"');
+    expect(src).toContain("readInviteToken(window.location.search)");
+    expect(src).toContain('url.searchParams.set("token", inviteToken)');
+
+    // Read behind the route's opt-in, never unconditionally: /chat must not
+    // pick up a stray ?token= and hand it to a tenant that never asked for one.
+    expect(src).toContain("acceptsInviteToken");
+    const readIndex = src.indexOf("readInviteToken(window.location.search)");
+    const guardIndex = src.indexOf("acceptsInviteToken\n        ?");
+    expect(guardIndex).toBeGreaterThan(-1);
+    expect(guardIndex).toBeLessThan(readIndex);
+
+    // Rebuilt only when something is actually missing. An invite link needs one
+    // extra src swap on hydration (the exported first paint had no key); every
+    // other visitor's src must be left alone.
+    expect(src).toContain("missingToken");
+    expect(src).toContain('!current.includes("token=")');
+  });
+
+  it("opts /chat/occ into the invite key and leaves /chat out", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const occ = readFileSync(
+      fileURLToPath(new URL("../app/chat/occ/page.tsx", import.meta.url)),
+      "utf8",
+    );
+    const chat = readFileSync(
+      fileURLToPath(new URL("../app/chat/page.tsx", import.meta.url)),
+      "utf8",
+    );
+    expect(occ).toContain("acceptsInviteToken");
+    expect(chat).not.toContain("acceptsInviteToken");
   });
 
   it("keeps the frame canvas pre-painted under the transparent warmup overlay", async () => {

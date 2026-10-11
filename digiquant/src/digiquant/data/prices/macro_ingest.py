@@ -34,8 +34,9 @@ from math import isfinite
 from pathlib import Path
 from typing import Any, TypedDict
 
-FRED_OBS_URL = "https://api.stlouisfed.org/fred/series/observations"
-
+# DIG-335: the keyed endpoint this constant pointed at is gone. Macro series are
+# ingested from anonymous gloomberb econ_series pages (see research/config/
+# macro_series.yaml); nothing here calls the FRED observations API any more.
 FRED_OVERLAP_DAYS = 14
 
 
@@ -586,7 +587,6 @@ def dedupe_observation_rows(rows: list[MacroObservation]) -> list[MacroObservati
 
 
 __all__ = [
-    "FRED_OBS_URL",
     "YAHOO_FX_DEFAULT",
     "CandleObservation",
     "FredRawObservation",

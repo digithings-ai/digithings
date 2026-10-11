@@ -34,7 +34,6 @@ ARCHITECTURE = REPO_ROOT / "digiquant" / "ARCHITECTURE.md"
 #: DigiStackContainer.envVars (review finding 6).
 MCP_SCOPED_VARS = (
     "DIGIQUANT_MARKET_DATA_BACKEND",
-    "FRED_API_KEY",
     "GLOOMBERB_SESSION_COOKIE",
     "R2_ACCOUNT_ID",
     "R2_BUCKET",
@@ -161,7 +160,6 @@ def test_mcp_container_backend_passthrough_matches_library_default() -> None:
 def test_wrangler_documents_mcp_secrets() -> None:
     text = WRANGLER.read_text()
     for name in (
-        "FRED_API_KEY",
         "GLOOMBERB_SESSION_COOKIE",
         "R2_ACCOUNT_ID",
         "R2_BUCKET",
@@ -169,6 +167,16 @@ def test_wrangler_documents_mcp_secrets() -> None:
         "R2_SECRET_ACCESS_KEY",
     ):
         assert name in text, name
+
+
+def test_wrangler_no_longer_offers_the_retired_fred_key() -> None:
+    """DIG-335: the checklist must not send an operator back to FRED for a key.
+
+    The comment block is an operator instruction list. Leaving
+    ``FRED_API_KEY`` in it is how the key got provisioned in the first place,
+    and it is the only place that names this Worker's secrets in prose.
+    """
+    assert "FRED_API_KEY" not in WRANGLER.read_text()
 
 
 def test_architecture_documents_mcp_hosting() -> None:

@@ -1,20 +1,25 @@
-"""Transcribe a wav with whisper-cli and the ggml-base.en weights.
+"""Transcribe a wav with whisper-cli and the configured local ggml weights.
 
 `whisper-cpp` is accepted as an alias because distributions disagree on the
 binary name. stdout carries the transcript; the banner and model loading chatter
-go to stderr, so only stdout is parsed.
+go to stderr, so only stdout is parsed. English `.en` models use `-l en`;
+multilingual catalog models use `-l auto`.
 """
 
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from pathlib import Path
 
+from digivoice.catalog import stt_language, stt_model_path
 from digivoice.errors import EmptyTranscriptError, TranscribeError
+from digivoice.installed_models import find_local_weight
 from digivoice.models import Transcript
-from digivoice.paths import DEFAULT_MODEL, DEFAULT_MODEL_FILE, VoicePaths
+from digivoice.paths import DEFAULT_MODEL, VoicePaths, local_bin
 from digivoice.probe import CommandProbe
 from digivoice.runner import CommandRunner, error_tail
+from digivoice.settings import load_settings
 
 WHISPER_BINARIES = ("whisper-cli", "whisper-cpp")
 LANGUAGE = "en"
@@ -31,7 +36,7 @@ _NON_SPEECH_MARKER = re.compile(
 )
 
 
-def whisper_argv(binary: str, model: Path, wav: Path) -> list[str]:
+def whisper_argv(binary: str, model: Path, wav: Path, *, language: str = LANGUAGE) -> list[str]:
     return [
         binary,
         "-m",
@@ -39,16 +44,21 @@ def whisper_argv(binary: str, model: Path, wav: Path) -> list[str]:
         "-f",
         str(wav),
         "-l",
-        LANGUAGE,
+        language,
         "-nt",
     ]
 
 
-def select_whisper(probe: CommandProbe) -> str | None:
+def select_whisper(probe: CommandProbe, home: Path | None = None) -> str | None:
     for name in WHISPER_BINARIES:
         found = probe.lookup(name)
         if found:
             return found
+    if home is None:
+        return None
+    fallback = local_bin(home) / "whisper-cli"
+    if probe.executable(str(fallback)):
+        return str(fallback)
     return None
 
 
@@ -59,8 +69,40 @@ def clean_transcript(raw: str) -> str:
     return " ".join(without_markers.split())
 
 
-def model_file(paths: VoicePaths) -> Path:
-    return Path(paths.models_dir) / DEFAULT_MODEL_FILE
+def model_file(
+    paths: VoicePaths,
+    model_id: str | None = None,
+    *,
+    home: Path | None = None,
+    env: Mapping[str, str] | None = None,
+) -> Path:
+    """Weights for this model.
+
+    An absolute id is that file, not ``models_dir`` plus the same name.
+    A catalog id opens ``models_dir`` first, then the same filename under
+    LM Studio, Ollama, or MLX Studio.
+    """
+    raw = (model_id or "").strip()
+    if raw:
+        direct = Path(raw).expanduser()
+        if direct.is_absolute():
+            if ".." in direct.parts:
+                direct = direct.resolve()
+            return direct
+    chosen = stt_model_path(paths.models_dir, model_id)
+    if chosen.is_file() or home is None:
+        return chosen
+    found = find_local_weight(home, env, chosen.name)
+    return found if found is not None else chosen
+
+
+def _model_choice(paths: VoicePaths, model_id: str | None) -> str:
+    """Explicit id, otherwise the saved ``stt_model``, otherwise the default."""
+    raw = (model_id or "").strip()
+    if raw:
+        return raw
+    saved = load_settings(paths).stt_model.strip()
+    return saved or DEFAULT_MODEL
 
 
 def transcribe(
@@ -68,18 +110,22 @@ def transcribe(
     probe: CommandProbe,
     runner: CommandRunner,
     wav_path: str,
+    model_id: str | None = None,
+    home: Path | None = None,
+    env: Mapping[str, str] | None = None,
 ) -> Transcript:
     """Run whisper-cli over `wav_path` and return the transcript text."""
-    binary = select_whisper(probe)
+    binary = select_whisper(probe, home)
     if binary is None:
         raise TranscribeError(
             "whisper-cli not on PATH (whisper.cpp binary name is whisper-cli, "
             "whisper-cpp also accepted)"
         )
-    model = model_file(paths)
+    chosen = _model_choice(paths, model_id)
+    model = model_file(paths, chosen, home=home, env=env)
     if not model.is_file():
-        raise TranscribeError(f"default model {DEFAULT_MODEL} missing: {model}")
-    argv = whisper_argv(binary, model, Path(wav_path))
+        raise TranscribeError(f"model {chosen} is not installed locally: {model}")
+    argv = whisper_argv(binary, model, Path(wav_path), language=stt_language(chosen))
     result = runner(argv, timeout=TRANSCRIBE_TIMEOUT)
     if result.code != 0:
         reason = error_tail(result.stderr) or f"exit {result.code}"
@@ -89,7 +135,7 @@ def transcribe(
         raise EmptyTranscriptError("whisper-cli returned no text; nothing was recognized")
     return Transcript(
         text=text,
-        model=DEFAULT_MODEL,
+        model=chosen,
         model_path=str(model),
         wav_path=wav_path,
         argv=list(argv),

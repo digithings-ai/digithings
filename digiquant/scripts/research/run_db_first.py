@@ -25,7 +25,23 @@ try:
 except ImportError:
     pass
 
-ROOT = Path(__file__).parent.parent
+from lib.roots import (  # noqa: E402
+    AGENT_CACHE_ROOT,
+    DELTA_REQUEST_SCHEMA,
+    DIGEST_SNAPSHOT_SCHEMA,
+    REPO_ROOT,
+    RESEARCH_CONFIG,
+    RESEARCH_SCHEMAS,
+    RUNBOOK,
+    research_script,
+)
+
+PREFLIGHT_PATHS = (
+    RUNBOOK,
+    DIGEST_SNAPSHOT_SCHEMA,
+    DELTA_REQUEST_SCHEMA,
+    RESEARCH_SCHEMAS,
+)
 
 
 def _sb():
@@ -42,7 +58,7 @@ def _run(cmd: list[str], dry_run: bool = False) -> int:
     print(f"$ {' '.join(cmd)}")
     if dry_run:
         return 0
-    r = subprocess.run(cmd, cwd=str(ROOT))
+    r = subprocess.run(cmd, cwd=str(REPO_ROOT))
     return int(r.returncode)
 
 
@@ -101,8 +117,8 @@ def _latest_snapshot_date_strictly_before(sb, before_date: str) -> Optional[str]
 
 
 def _execute_at_open_argv(d: str) -> list[str]:
-    argv = [sys.executable, "scripts/execute_at_open.py", "--date", d]
-    sched = ROOT / "config" / "schedule.json"
+    argv = [sys.executable, str(research_script("execute_at_open.py")), "--date", d]
+    sched = RESEARCH_CONFIG / "schedule.json"
     if not sched.exists():
         return argv
     try:
@@ -213,12 +229,7 @@ def main() -> int:
             materialize_baseline_date = prior if rows else _latest_snapshot_date_strictly_before(sb, d)
 
     # Preflight checks
-    for p in [
-        ROOT / "RUNBOOK.md",
-        ROOT / "templates" / "digest-snapshot-schema.json",
-        ROOT / "templates" / "delta-request-schema.json",
-        ROOT / "templates" / "schemas",
-    ]:
+    for p in PREFLIGHT_PATHS:
         if not p.exists():
             print(f"❌ missing required path: {p}", file=sys.stderr)
             return 2
@@ -228,21 +239,24 @@ def main() -> int:
     # After the agent publishes to Supabase, this CLI refreshes metrics and validates DB state.
     # 1) Validate artifacts on disk (if present)
     artifacts: list[Path] = []
-    day_dir = ROOT / "data" / "agent-cache" / "daily" / d
+    day_dir = AGENT_CACHE_ROOT / "daily" / d
     if day_dir.exists():
         artifacts.extend(day_dir.glob("*.json"))
         artifacts.extend((day_dir / "sectors").glob("*.json"))
         artifacts.extend((day_dir / "positions").glob("*.json"))
 
     for a in artifacts:
-        rc = _run([sys.executable, "scripts/validate_artifact.py", str(a)], dry_run=args.dry_run)
+        rc = _run(
+            [sys.executable, str(research_script("validate_artifact.py")), str(a)],
+            dry_run=args.dry_run,
+        )
         if rc != 0:
             return rc
 
     # 1.5) Track B: upsert positions from rebalance_decision.proposed_portfolio (before metrics refresh)
     if args.validate_mode in ("full", "pm") and not args.skip_sync_positions:
         rc = _run(
-            [sys.executable, "scripts/sync_positions_from_rebalance.py", "--date", d],
+            [sys.executable, str(research_script("sync_positions_from_rebalance.py")), "--date", d],
             dry_run=args.dry_run,
         )
         if rc != 0:
@@ -252,7 +266,7 @@ def main() -> int:
     rc = _run(
         [
             sys.executable,
-            "scripts/refresh_performance_metrics.py",
+            str(research_script("refresh_performance_metrics.py")),
             "--supabase",
             "--fill-calendar-through",
             d,
@@ -274,7 +288,7 @@ def main() -> int:
     rc = _run(
         [
             sys.executable,
-            "scripts/validate_db_first.py",
+            str(research_script("validate_db_first.py")),
             "--date",
             d,
             "--mode",

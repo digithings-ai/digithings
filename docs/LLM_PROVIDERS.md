@@ -10,7 +10,7 @@ Future work (see [VISION.md](VISION.md)): digichat will expose a model picker wh
 
 **Setup guides:** for step-by-step instructions on obtaining an API key and configuring each provider, see [providers/](providers/) — one file per provider.
 
-**Deep-reference docs:** for complete model listings, exact rate limits, context windows, and digithings-specific usage notes for every free-tier provider, see [free-providers/](free-providers/) — maintained weekly by the `provider-review` workflow. Start there when making provider selection decisions.
+**Deep-reference docs:** for complete model listings, exact rate limits, context windows, and digithings-specific usage notes for every free-tier provider, see [free-providers/](free-providers/) — maintained weekly by the `provider-review` job in the digithings-cron Cloudflare Worker. Start there when making provider selection decisions.
 
 ## How providers plug into LiteLLM
 
@@ -24,7 +24,7 @@ model_list:
       api_key: os.environ/GROQ_API_KEY
   - model_name: free-fast  # fallback on same alias
     litellm_params:
-      model: gemini/gemini-2.5-flash
+      model: gemini/gemini-3.5-flash-lite
       api_key: os.environ/GEMINI_API_KEY
 ```
 
@@ -51,7 +51,7 @@ Common confusion — these are **chat-only** and cannot be used as a LiteLLM bac
 - **Free tier:** Standing, no expiry. Gemini 2.5 Flash 15 RPM / 1,500 RPD / 1M TPM; Flash-Lite 30 RPM / 1,500 RPD / 1M TPM (double the RPM of Flash at the same RPD/TPM). Pro is **paid-only** (free 2 RPM tier removed 2026-04-01).
 - **Best free models:** `gemini-2.5-flash` (workhorse, vision, 1M ctx), `gemini-2.5-flash-lite` (highest RPM). Embeddings: `text-embedding-004`. Gemini 3 generation (`gemini-3-flash-preview`, `gemini-3.5-flash`, `gemini-3.1-pro-preview`) is paid-only for now — exact free-tier availability for the 3.x line is unconfirmed this cycle.
 - **Paid:** Flash ~$0.30 / $2.50 per 1M; Flash-Lite ~$0.10 / $0.40; Pro ~$1.25 / $10 (≤200K), $2.50 / $15 above. Gemini 3-flash-preview $0.50/$3.00, 3.5-flash $1.50/$9.00, 3.1-pro-preview $2/$12 (≤200K), $4/$18 above.
-- **LiteLLM:** `gemini/gemini-2.5-flash`. Env: `GEMINI_API_KEY`.
+- **LiteLLM:** `gemini/gemini-3.5-flash`. Env: `GEMINI_API_KEY`. (`gemini/gemini-2.5-flash` was a route until #5000; the pin moved to the 3.x line, which is what the BYOK groups route.)
 - **Gotcha:** **Free-tier prompts/responses are used to improve Google products.** Never send confidential data on free. Paid tier is zero-retention.
 
 ### 2. Groq
@@ -142,7 +142,7 @@ Common confusion — these are **chat-only** and cannot be used as a LiteLLM bac
 
 - **Cohere** — free trial key, 1,000 calls/month, 20 RPM. Command A strong at RAG ($2.50/$10); Command A+ (218B MoE, Apache 2.0) is open-weight self-host — **not** on the public per-token rate card despite earlier records, hosted-endpoint pricing is "contact sales." Embed v4.0 (multimodal) $0.12/1M text tokens. `cohere/command-a-03-2025`. Trial keys forbidden for commercial.
 - **AI21** — $10 signup credit. Jamba 1.5 Large/Mini (256K context). `ai21/jamba-1.5-large`.
-- **xAI (Grok)** — no permanently-free model; $25 signup credit + up to $150/mo via data-sharing opt-in. New flagship `grok-4.6` (2026-08-12, agent/coding-focused, supersedes `grok-4.5`) at $2/$6 (<200K), $4/$12 (≥200K). `xai/grok-4-3` is the default/cheapest current tier at $1.25/$2.50; `grok-3` fully retires 2026-08-15.
+- **xAI (Grok)** — no permanently-free model; $25 signup credit + up to $150/mo via data-sharing opt-in. New flagship `grok-4.6` (2026-08-12, agent/coding-focused, supersedes `grok-4.5`) at $2/$6 (<200K), $4/$12 (≥200K). `xai/grok-4.3` (dotted — `grok-4-3` with a dash is a hard 404, corrected in #5000) is the default/cheapest current tier at $1.25/$2.50; `grok-3` fully retires 2026-08-15.
 
 ---
 
@@ -228,13 +228,15 @@ Hardware rule of thumb: 7–14B runs on 16GB Mac / consumer GPU (Q4/Q5 quant). 7
 
 ## Maintenance
 
-This catalog is updated automatically. The `provider-review` workflow runs every Monday and:
+This catalog is updated automatically. The clock is the `provider-review` job in the digithings-cron Cloudflare Worker (`apps/digithings-cron`), **weekly Sun 00:09 UTC** (`9 0 * * SUN`). The Worker dispatches `.github/workflows/pipeline-provider-review.yml` on `develop`; that workflow is `workflow_dispatch`-only and carries no GitHub Actions `schedule:`. By repo policy no clock lives in `.github/workflows` (pinned by `tests/scripts/test_no_gha_schedules.py`). Each run then:
 
 1. Probes all providers with live API calls (`scripts/provider_review/probe.py`).
 2. Claude agent researches rate-limit pages and updates `docs/providers/snapshots/*.yaml`.
-3. Regenerates this file and `docs/free-providers/_index.md` from the updated snapshots.
+3. Regenerates this file and `docs/free-providers/_index.md` from the updated snapshots, and opens a PR labelled `automerge-docs` — it does not push to `develop` directly.
 4. Creates GitHub issues for significant changes (model removed, quota dropped ≥20%, free tier discontinued).
 5. Evaluates `# llm-decision:` tagged entries in `config/` against current provider state.
+
+The run is gated on the `CLAUDE_CODE_OAUTH_TOKEN` secret. Without it the workflow exits early and nothing is probed or regenerated, so the snapshot can go stale silently. If a cycle looks missing, check that the secret is present before assuming the clock stopped.
 
 **Manual review triggers:** issues labelled `provider-change` mean a solution decision should be reassessed. See `docs/free-providers/_index.md` for the current state of all free-tier limits.
 

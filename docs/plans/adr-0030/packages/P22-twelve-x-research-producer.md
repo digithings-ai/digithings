@@ -1,5 +1,13 @@
 # P2.2 — Confirm twelve-x research publish matches the stage-1 board
 
+> 🛑 **HELD — 2026-10-05 (DIG-503). Do not implement this package.** The
+> producer-scope table below names the research vendor's session-heartbeat
+> workflow and its private config constants. The vendor's Terms prohibit the
+> access method, and publishing that path from this public repository is the
+> exposure being closed. See [`../HOLD-Primarket.md`](../HOLD-Primarket.md). The
+> hold lifts only when DIG-478 is decided **and** Counsel confirms the exposure
+> is resolved.
+
 **Lane:** Needs a GitHub token that can read `digithings-ai/twelve-x`, then stronger review. OpenCode free is the wrong lane until step 0 passes.
 
 **Parent:** #4762.
@@ -32,15 +40,19 @@ If the response is HTTP 404 or 403: comment on this issue with the status code a
 |------|------------------------------|
 | `twelve_x/nodes/scrape.py` | `digifetch/ARCHITECTURE.md` |
 | `twelve_x/fx_calendar/scraper.py` | `digifetch/ARCHITECTURE.md` |
-| `config.py` (Prime Market and Trading Economics constants) | `digifetch/ARCHITECTURE.md` |
+| `config.py` (consumer site constants) | `digifetch/ARCHITECTURE.md` |
 | `.github/workflows/daily_run_asia.yml` | `apps/digithings-cron/src/jobs.ts` |
 | `.github/workflows/daily_run_london.yml` | same |
 | `.github/workflows/daily_run_new_york.yml` | same |
 | `.github/workflows/market_context_ingest.yml` | same |
-| `.github/workflows/primemarket_session_heartbeat.yml` | same |
 | `.github/workflows/session_catchup.yml` | same |
 | `.github/workflows/performance_eval.yml` | same |
 | `.github/workflows/archive_maintenance.yml` | same, not a stage |
+
+The research vendor's session-heartbeat workflow is deliberately absent from
+this table. It remains enabled in `apps/digithings-cron/src/jobs.ts` because
+stopping it is a client-deliverable decision reserved to Chris on DIG-478, not a
+documentation change — see [`../HOLD-Primarket.md`](../HOLD-Primarket.md).
 
 If a listed file is absent, record that in the PR and keep going only for files that exist. Do not recreate a missing scraper.
 
@@ -89,4 +101,4 @@ Consensus `fx_consensus_snapshot`: `run_date`, `currency`, `timeframe`, `weighte
 - `digiquant/brokers/**`, execution routing, live venues.
 - House GitHub Actions schedules and #4761 container moves.
 - Trade-idea ranking and level attachment (P3.2).
-- Supabase project merge, new secrets, Prime Market passwords.
+- Supabase project merge, new secrets, vendor site passwords.

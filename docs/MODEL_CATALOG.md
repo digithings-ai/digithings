@@ -99,9 +99,9 @@ exemption is no longer needed** — a stale exemption is a silent hole in the
 strict test. Advisory-only ids (below) are deliberately not exempt here, because
 the advisory test reports them instead.
 
-It currently carries **six** entries, all of them found on the strict test's
-first run. They share one root cause, which is worth stating plainly because it
-is the first real thing this catalog found:
+It is **empty** (`{"exemptions": []}`) today. It carried six entries for one
+month after this catalog landed, and the reason they ever existed is the first
+real thing the catalog found:
 
 > Every id in `byok-providers.json` `fallbackModels` must also be a `model_name`
 > in `config/litellm.yaml` (`test_every_advertised_byok_preset_is_a_litellm_model_group`).
@@ -109,21 +109,32 @@ is the first real thing this catalog found:
 > needs its own LiteLLM model group, and a wrong `litellm_params.model` is a 500 on
 > every BYOK chat that picks it.
 
-| Advertised id | models.dev | What it would take to fix it |
-|---------------|-----------|------------------------------|
-| `google/gemini-2.0-flash` (openrouter) | absent | `google/gemini-2.5-flash` + a LiteLLM group routing `openrouter/google/gemini-2.5-flash` |
-| `claude-sonnet-4-20250514` (anthropic) | absent — models.dev has **no Claude 4 generation at all** | route `anthropic/claude-sonnet-4-5` |
-| `claude-haiku-4-20250514` (anthropic) | absent, same | route `anthropic/claude-haiku-4-5` |
-| `claude-opus-4-20250514` (anthropic) | absent, same | route `anthropic/claude-opus-4-5` |
-| `gemini/gemini-2.0-flash` (gemini) | absent — Google's slice starts at `gemini-2.5-flash` | route `gemini/gemini-2.5-flash-lite` |
-| `grok-4-3` (xai) | absent — xAI publishes `grok-4.3`, dotted | correct the typo to `grok-4.3`, matching the `grok-4.5` group this repo already routes |
+That is why the strict test could not simply be loosened. Every entry was cleared
+in #5000, each successor verified against the provider's own API first — except
+the three anthropic ids, for which no key is held, and which were instead
+cross-checked against **two** independent public keyspaces (models.dev and
+LiteLLM's pricing table), which agree on every claude id.
 
-Every candidate in that table is present in models.dev today. None was applied
-here, because each one needs a provider key to confirm the upstream slug before
-it can become live routing — and a guessed `litellm_params.model` is worse than a
-stale pin, since the pin at least returns a real upstream error. That check
-belongs to whoever holds the keys, with `make test-unit` and a real BYOK ping as
-the evidence.
+| Retired pin | Why it was retired | Replaced with |
+|-------------|--------------------|---------------|
+| `google/gemini-2.0-flash` (openrouter) | absent from `openrouter.ai/api/v1/models` | `google/gemini-2.5-flash` |
+| `claude-sonnet-4-20250514` (anthropic) | absent from both keyspaces — only Bedrock/Vertex spellings survive | `claude-sonnet-4-6` |
+| `claude-haiku-4-20250514` (anthropic) | absent, same | `claude-haiku-4-5` |
+| `claude-opus-4-20250514` (anthropic) | absent, same | `claude-opus-4-5` |
+| `gemini/gemini-2.0-flash` (gemini) | Google's live list has no `gemini-2.0-*` at all | `gemini/gemini-3.5-flash-lite` |
+| `grok-4-3` (xai) | xAI publishes `grok-4.3`, dotted; a completion on `grok-4-3` is a hard 404 | `grok-4.3` |
+
+Two of those successors are worth calling out, because neither is the successor a
+catalog-only lookup suggests. `claude-sonnet-4-5` is in models.dev but LiteLLM
+marks it `deprecated 2026-11-30`, so shipping it would have recreated this exact
+bug in three months — hence `-4-6`. `gemini-2.5-flash-lite` is likewise in
+models.dev and is what the natural successor lookup returns, but Google 404s it
+for a fresh key ("no longer available to new users"), hence `gemini-3.5-flash-lite`.
+**Existence in the catalog is not servability for a new key** — that gap is
+exactly what the per-provider live verification in #5000 closed by hand.
+
+The file stays: it is the escape hatch for the next retired pin, and `--check`
+fails if an entry is no longer needed.
 
 ## What this is **not** authoritative for
 

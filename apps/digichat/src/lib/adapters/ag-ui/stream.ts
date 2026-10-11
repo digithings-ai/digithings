@@ -169,8 +169,11 @@ export async function createAgUiStreamResponse(opts: {
         });
         if (!res.ok || !res.body) {
           await res.body?.cancel().catch(() => {});
-          writeFailureStatus(writer, ctx, `AG-UI ${res.status}`, opts.activityDetail);
-          return;
+          const label = `AG-UI ${res.status}`;
+          writeFailureStatus(writer, ctx, label, opts.activityDetail);
+          // activityDetail "off" drops the status row. Throw so the UI stream
+          // still ends on an error part instead of a successful empty turn.
+          throw new Error(label);
         }
         for await (const evt of iterateSse(res.body, opts.signal)) {
           const json = parseSseJson(evt.data);

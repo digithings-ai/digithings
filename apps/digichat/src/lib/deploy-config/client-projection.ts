@@ -22,6 +22,7 @@ import {
   BASELINE_EMBED_WELCOME_BODY,
 } from "@/lib/baseline-embed";
 import { DEFAULT_LANGUAGE_CODE } from "@/lib/languages";
+import { DEPLOY_DEFAULT_MODELS } from "./deploy-models";
 
 /** Search-engine ids the BFF forwards to digigraph (digisearch vocabulary, #4724). */
 export const SEARCH_ENGINE_ALLOWLIST: ReadonlySet<string> = new Set([
@@ -147,16 +148,9 @@ export const DEFAULT_CLIENT_CONFIG: DigichatClientConfig = {
     branchPicker: true,
     pageContext: "visible",
   },
-  models: {
-    default: "deepseek/deepseek-v4-flash",
-    available: [
-      "deepseek/deepseek-v4-flash",
-      "deepseek/deepseek-v4-flash-0731",
-      "openai/gpt-oss-120b",
-      "z-ai/glm-5.3-flash",
-    ],
-    allowPicker: true,
-  },
+  // Table lives in config/digichat-deploy-models.json (#5029) — the same source
+  // the server-side dev default reads, so the two cannot diverge.
+  models: { ...DEPLOY_DEFAULT_MODELS, allowPicker: true },
   cli: { enabled: false },
   tools: { allowUserToggle: true, catalog: [] },
   // Least-privilege fallback: an unconfigured container must not expose BYOK,

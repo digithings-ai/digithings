@@ -29,14 +29,14 @@ EMPTY_REDIS_DEFAULT = "${REDIS_URL:-}"
 
 def _litellm_env_values(compose_path: Path) -> list[str]:
     doc = yaml.safe_load(compose_path.read_text(encoding="utf-8"))
-    env = doc["services"]["litellm"].get("environment")
+    env = doc["services"]["digillm"].get("environment")
     if env is None:
         return []
     if isinstance(env, dict):
         return [f"{k}={v}" for k, v in env.items()]
     if isinstance(env, list):
         return [str(item) for item in env]
-    raise TypeError(f"{compose_path}: unexpected litellm.environment type {type(env)}")
+    raise TypeError(f"{compose_path}: unexpected digillm.environment type {type(env)}")
 
 
 @pytest.mark.parametrize("compose_path", COMPOSE_FILES, ids=lambda p: p.name)

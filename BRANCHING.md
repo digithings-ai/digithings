@@ -100,8 +100,42 @@ module branch being force-pushed also stops it being quietly dropped.
 | `fix/<slug>` | Bug fix not bound to a single Issue. | `fix/auth-retry` |
 | `docs/<slug>` | Docs-only change (eligible for auto-merge via the `automerge-docs` label). | `docs/vision-update` |
 | `chore/<slug>` | Tooling, CI, config. | `chore/bump-pydantic` |
+| `DIG-<n>-<slug>` | A Paperclip **execution workspace**. Paperclip checks the workspace out on `DIG-<n>-<title-slug>`, so this is not a branch a human creates — the taxonomy has to admit what the harness already produces, or every commit made there is unpushable. See [Execution-workspace branches](#execution-workspace-branches-never-blanket-push) before pushing one. | `DIG-1122-pre-push-taxonomy-has-no-dig-slug-rule` |
 
 Slugs: lowercase, dashes, no underscores. Numbers permitted.
+
+### Execution-workspace branches: never blanket-push
+
+A `DIG-<n>-<slug>` branch is a **workspace**, not a unit of work. It accumulates
+whatever commits the agents working in it produce, which routinely includes
+commits belonging to other issues, merges of other people's PRs, and copies of
+changes that already landed on `develop` by another route.
+
+So `git push` on such a branch is not a save operation — it publishes the whole
+accumulation. Concretely, on the DIG-47 workspace (snapshot taken 2026-10-04,
+DIG-1122): one of its commits, `6d3789d9a` (a DIG-361 docs change), was a *stale
+duplicate* — the same change had reached `develop` by another route, squash-merged
+as `6c0de7e89` through PR #5094, so the two copies do not share a sha or a
+patch-id. The stale copy *deleted* the DIG-258 inventory row and the entire
+DIG-526 section that `develop` had gained since. Measured against `develop` at
+that point, the workspace branch deleted 166 lines and added 19 to
+`docs/ops/SECRETS_INVENTORY.md` — 185 changed lines carrying nothing but the loss
+of what `develop` already had.
+
+Two safe shapes:
+
+- **Re-home the commits** onto a branch whose whole history is yours — normally
+  `task/<N>-<slug>` or `feat/<slug>` — and push that. This is the normal path.
+- **Push an explicit per-commit refspec** when you only want to preserve a
+  specific commit on the workspace branch without moving its tip, e.g.
+  `git push origin <sha>:refs/heads/<taxonomy-legal-name>`.
+
+Avoid the third path: cherry-picking the same commits onto a legal branch
+*without* dropping the local ones is how a patch ends up on two refs with
+different SHAs. That happened on DIG-47.10 (`b6a3154d6`/`9b90f2a1c` locally,
+`99e3d8618`/`8cc861931` remotely, identical patch-ids). Two patch streams mean
+"which ref holds this fix?" has two answers and the contract review is in no
+ref at all.
 
 ## Adding a human contributor
 
@@ -201,6 +235,14 @@ Any contributor can delete their own short-lived branches after the PR lands:
 git push origin --delete <branch>
 git branch -d <branch>                          # local
 ```
+
+**Branches with no PR are not covered by this section.** A branch that nobody
+merged and nobody referenced is *stranded*, and it is disposed of under a separate
+policy: [`docs/ops/branch-hygiene-policy.md`](docs/ops/branch-hygiene-policy.md).
+That policy measures the branch by `git cherry` (unmerged patches, not commit
+count), assigns it a tier, and names the agent allowed to delete it. It also turns
+on the prevention side — `delete_branch_on_merge`, a branch-age guard, and a
+pre-push age warning. Read it before deleting anything that never had a PR.
 
 `main` and `develop` are protected server-side against deletion. Release
 branches are policy-protected — one per released version, and an old one is the
