@@ -6,6 +6,7 @@
     "jsx": "react-jsx",
     "jsxImportSource": "@opentui/react",
     "strict": true,
+    "resolveJsonModule": true,
     "noEmit": true,
     "skipLibCheck": true,
     "types": ["bun"]
