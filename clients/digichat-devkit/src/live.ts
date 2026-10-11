@@ -54,9 +54,90 @@ export type SettingRow =
 
 export type StripRow =
   | { kind: "model"; value: string; choices: string[] }
+  | { kind: "choice"; key: string; label: string; value: string; choices: string[] }
   | { kind: "tool"; id: string; label: string; on: boolean }
   | { kind: "mcp"; id: string; label: string; on: boolean }
   | { kind: "empty"; slot: "tools" | "mcp"; text: "none" };
+
+/**
+ * The option list every enum pane field cycles through, in schema order.
+ *
+ * Copied literally from `apps/digichat/src/lib/deploy-config/schema.ts` because this
+ * package depends on nothing but opentui/js-yaml/react — there is no schema import to
+ * make here, so the lists are a mirror and each one names its source. A field absent
+ * from this table keeps the free-text editor.
+ */
+const ENUM_OPTIONS: Record<string, string[]> = {
+  // ThreadSkinSchema = z.enum(THREAD_SKINS); packages/ui/src/components/chat/skins/thread-skins.ts:15
+  [fieldKey("appearance", "skin")]: [
+    "base",
+    "chatgpt",
+    "claude",
+    "grok",
+    "gemini",
+    "perplexity",
+    "react-ink",
+    "expo-react-native",
+    "base-assistant-ui",
+    "webpage-assistant",
+    "product-page-assistant",
+    "digichat",
+  ],
+  // ThemeSchema = z.enum(["dark", "light"])
+  [fieldKey("appearance", "theme")]: ["dark", "light"],
+  // ChromeModeSchema = z.enum(["app", "embed", "modal", "sidebar"])
+  [fieldKey("appearance", "mode")]: ["app", "embed", "modal", "sidebar"],
+  // UserAlignSchema = z.enum(["right", "left"])
+  [fieldKey("appearance", "user bubble alignment")]: ["right", "left"],
+  // PageContextModeSchema = z.enum(["off", "silent", "visible"])
+  [fieldKey("features", "page context")]: ["off", "silent", "visible"],
+  // BACKEND_FIELDS keys in present.ts — the nine backend types.
+  [fieldKey("backend", "backend type")]: [
+    "digigraph",
+    "foundry",
+    "openai-completions",
+    "openai-responses",
+    "anthropic",
+    "google-vertex",
+    "langgraph",
+    "ag-ui",
+    "a2a",
+  ],
+  // PersistenceSchema = z.enum(["none", "memory", "server"])
+  [fieldKey("backend", "persistence")]: ["none", "memory", "server"],
+  // AuthModeSchema = z.enum(["anonymous", "session"])
+  [fieldKey("backend", "auth")]: ["anonymous", "session"],
+  // GateModeSchema = z.enum(["turn_limited", "ungated", "trial_form"])
+  [fieldKey("gate", "mode")]: ["turn_limited", "ungated", "trial_form"],
+  // ActivityDetailSchema = z.enum(["off", "labels", "full"])
+  [fieldKey("gate", "activity detail")]: ["off", "labels", "full"],
+  // LlmAccessSchema = z.enum(["free_then_byok", "byok_only", "backend_only", "operator"])
+  [fieldKey("gate", "LLM access")]: ["free_then_byok", "byok_only", "backend_only", "operator"],
+  // GateSchema.requiredPlanTier = z.enum(["desk", "studio", "enterprise"])
+  [fieldKey("gate", "minimum plan tier")]: ["desk", "studio", "enterprise"],
+};
+
+/** The options an enum field cycles through, or null when the field is free text. */
+export function enumOptions(pane: string, label: string): string[] | null {
+  return ENUM_OPTIONS[fieldKey(pane, label)] ?? null;
+}
+
+/**
+ * Advance an enum field one step around its option ring and hold the choice in the
+ * draft. `step` may be negative to walk backwards. Same precedence as cycleModel:
+ * a value already held in the draft wins, then the displayed value, then the first
+ * option — so an unconfigured field lands on a real option instead of staying empty.
+ */
+export function cycleChoice(draft: Draft, key: string, options: string[], displayed: string, step = 1): Draft {
+  const list = options.filter((item) => item.length > 0);
+  if (list.length === 0) return draft;
+  const held = Object.prototype.hasOwnProperty.call(draft.values, key) ? draft.values[key] : null;
+  const shown = list.includes(displayed) ? displayed : null;
+  const current = held && list.includes(held) ? held : shown;
+  const at = current == null ? -1 : list.indexOf(current);
+  const next = list[(((at + step) % list.length) + list.length) % list.length];
+  return { ...draft, values: { ...draft.values, [key]: next } };
+}
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
 const CHIP_LABELS = ["attachments", "dictation", "speech", "sources", "model picker", "branch picker"];
@@ -272,8 +353,19 @@ function fieldRow(pane: string, line: FieldLine): SettingRow {
   };
 }
 
-export function stripRows(view: LiveView): StripRow[] {
+/**
+ * The strip's rows. `paneRows` adds one `choice` row per enum field so the strip shows
+ * the current skin/theme/mode/backend/gate value and can cycle it; without it the strip
+ * is exactly the model/tool/mcp rows it was.
+ */
+export function stripRows(view: LiveView, paneRows: SettingRow[] = []): StripRow[] {
   const rows: StripRow[] = [{ kind: "model", value: view.modelLine, choices: view.models }];
+  for (const row of paneRows) {
+    if (row.kind !== "field" || row.toggle || row.secret) continue;
+    const choices = enumOptions(row.pane, row.label);
+    if (!choices) continue;
+    rows.push({ kind: "choice", key: fieldKey(row.pane, row.label), label: row.label, value: row.value, choices });
+  }
   if (view.tools.length === 0) rows.push({ kind: "empty", slot: "tools", text: "none" });
   else {
     for (const tool of view.tools) rows.push({ kind: "tool", id: tool.id, label: tool.label, on: tool.on });
@@ -287,6 +379,7 @@ export function stripRows(view: LiveView): StripRow[] {
 
 export function activateStrip(draft: Draft, row: StripRow, view: LiveView): Draft {
   if (row.kind === "model") return cycleModel(draft, row.choices, view.activeModel);
+  if (row.kind === "choice") return cycleChoice(draft, row.key, row.choices, row.value);
   if (row.kind === "tool") return toggleTool(draft, row.id, row.on);
   if (row.kind === "mcp") return toggleMcp(draft, row.id, row.on);
   return draft;
