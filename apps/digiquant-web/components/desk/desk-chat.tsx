@@ -4,6 +4,7 @@ import { AssistantRuntimeProvider, useExternalStoreRuntime } from "@assistant-ui
 import { DigichatThread } from "@digithings/ui/chat/thread";
 import { DeskFrame } from "./desk-frame";
 import { ChatDesk, useChatDesk } from "./chat-desk";
+import { DIGICHAT_TEXT } from "../chat/digichat-font";
 import styles from "./desk-chat.module.css";
 
 const SENTENCE = "m-0 px-3 py-6 font-mono text-[0.75rem] leading-[1.45] text-ink-mute";
@@ -41,7 +42,7 @@ export function ChatPane() {
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
-      <div className={styles.ground}>
+      <div className={`${styles.ground} ${DIGICHAT_TEXT}`}>
         <DigichatThread welcome="What should we inspect?" placeholder="Ask digichat…" className="min-h-0 flex-1" />
       </div>
     </AssistantRuntimeProvider>
