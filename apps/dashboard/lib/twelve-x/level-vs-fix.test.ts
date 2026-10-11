@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
   buildLevelFixSeries,
   composeFixSeries,
@@ -250,11 +251,18 @@ describe('buildLevelFixSeries', () => {
     expect(s.targets).toEqual([]);
   });
 
-  // The two gates are deliberately not one shared function — `isPublishableBracket`
-  // is private to the frozen `trade-levels` module, so this file cannot import it.
-  // This test is what stops that duplication from drifting: for a bracket with every
-  // slot populated, the chart must withhold levels on exactly the fixtures the IdeaDetail
-  // model marks pending. If either predicate is widened, one side stops matching here.
+  // This file used to carry a byte-identical copy of the publishability
+  // predicate, and the guard for that was a cross-check of the two gates
+  // against each other. Now that both import one exported predicate the
+  // cross-check compares a function with itself, so it would pass no matter
+  // how the predicate changed. What is left to guard is the duplication
+  // itself: a future re-copy would reintroduce exactly the drift.
+  it('imports the publishability predicate instead of redeclaring it', () => {
+    const src = readFileSync(new URL('./level-vs-fix.ts', import.meta.url), 'utf8');
+    expect(src).toMatch(/import\s*\{[^}]*\bisPublishableBracket\b[^}]*\}\s*from '\.\/trade-levels'/);
+    expect(src).not.toMatch(/^\s*(export\s+)?function isPublishableBracket\b/m);
+  });
+
   it.each(['complete', 'partial', 'incomplete', 'draft'])(
     'agrees with the IdeaDetail model gate on a %s bracket',
     (status) => {
