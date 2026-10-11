@@ -28,6 +28,11 @@ export interface BenchmarksData {
   series: Record<string, BenchmarkClose[]>;
   aligned_start: string | null;
   overlap_days: number;
+  /**
+   * Machine-readable cause when the series cannot render, `null` when the
+   * overlap is healthy. Never a human string: consumers badge on the token.
+   */
+  reason: string | null;
 }
 
 export interface BenchmarksQuery {
@@ -117,12 +122,44 @@ export interface BenchmarksBook {
   marketCloses: Record<string, BenchmarkClose[]>;
   /** Universe from `GET /v1/market/tickers` (null when unavailable). */
   marketUniverse: string[] | null;
+  /**
+   * Why the loader came back without closes, or `null` when it got them.
+   * Set by the source layer; the route never guesses a cause it cannot see.
+   */
+  marketIssue?: string | null;
+}
+
+/**
+ * Reason token for a `/v1/market/closes` batch that answered non-OK. The
+ * status rides in the token so a caller can tell a 503 manifest outage from
+ * a 400 ticker cap without the route re-reading the response.
+ */
+export function marketClosesHttpIssue(status: number): string {
+  return `market_closes_http_${status}`;
+}
+
+/**
+ * Why a consumer is looking at empty series, or `null` when nothing is wrong.
+ *
+ * A loader-reported cause wins outright: the source layer saw the actual
+ * failure, so this route must not relabel it as a date-alignment gap.
+ */
+function benchmarkReason(
+  book: BenchmarksBook,
+  series: Record<string, BenchmarkClose[]>,
+  overlapDays: number,
+): string | null {
+  if (book.marketIssue) return book.marketIssue;
+  if (overlapDays > 0) return null;
+  const hasAnyClose = Object.values(series).some((points) => points.length > 0);
+  return hasAnyClose ? 'no_overlap' : 'no_closes_in_window';
 }
 
 /**
  * Build the §6.7 `data` object. Tickers with no market rows keep an empty
  * series under their key (fallback to keys, honest gap — never invented
  * closes). `overlap_days` counts NAV dates covered for every universe ticker.
+ * `reason` names the cause when the series is empty (see `benchmarkReason`).
  */
 export function buildBenchmarksData(
   book: BenchmarksBook,
@@ -148,6 +185,7 @@ export function buildBenchmarksData(
     series,
     aligned_start: covered.at(0) ?? null,
     overlap_days: covered.length,
+    reason: benchmarkReason(book, series, covered.length),
   };
 }
 
