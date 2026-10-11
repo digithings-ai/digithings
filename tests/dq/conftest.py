@@ -42,6 +42,7 @@ if importlib.util.find_spec("nautilus_trader") is None:
     collect_ignore = [
         "test_api.py",
         "test_audit.py",
+        "test_balance_path_metrics.py",
         "test_backtest.py",
         "test_calibrations_loader.py",
         "test_nautilus_runner.py",

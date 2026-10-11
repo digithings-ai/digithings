@@ -37,6 +37,13 @@ scripts
 # Zammad MCP server (scripts/zammad_mcp/Dockerfile.mcp) also builds from the
 # root context; re-include just that package.
 !scripts/zammad_mcp
+# scripts/index_occ_tickets.py is NOT copied into the stack image (DIG-1438
+# dropped [program:seed_occ_tickets], its only caller). The re-include stays
+# because DIG-1210 still has to change what this script writes.
+# (tests/scripts/test_stack_dockerignore_context.py pins this re-include, but it
+# is on `main` only — it does not exist on develop, so do not cite it as the
+# gate here.)
+!scripts/index_occ_tickets.py
 agents
 apps/digithings-web
 apps/digiquant-web

@@ -8,6 +8,7 @@ Usage:
     python scripts/provider_review/probe.py
     # writes /tmp/review/probe-results.json
 """
+
 from __future__ import annotations
 
 import json
@@ -18,55 +19,47 @@ from pathlib import Path
 
 from openai import OpenAI
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
 PROBE_PROMPT = "Reply with the single word: ok"
 PROBE_MAX_TOKENS = 10
 PROBE_TIMEOUT = 30
 
-# Base URLs and credentials for each probeable provider.
-# api_key_env: the GitHub org secret that holds the key.
-PROVIDERS: dict[str, dict] = {
-    "gemini": {
-        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
-        "api_key_env": "GEMINI_API_KEY",
-        "model": "gemini-2.5-flash",
-    },
-    "groq": {
-        "base_url": "https://api.groq.com/openai/v1",
-        "api_key_env": "GROQ_API_KEY",
-        "model": "llama-3.3-70b-versatile",
-    },
-    "cerebras": {
-        "base_url": "https://api.cerebras.ai/v1",
-        "api_key_env": "CEREBRAS_API_KEY",
-        "model": "llama-3.3-70b",
-    },
-    "mistral": {
-        "base_url": "https://api.mistral.ai/v1",
-        "api_key_env": "MISTRAL_API_KEY",
-        "model": "mistral-small-latest",
-    },
-    "nvidia_nim": {
-        "base_url": "https://integrate.api.nvidia.com/v1",
-        "api_key_env": "NVIDIA_API_KEY",
-        "model": "meta/llama-3.3-70b-instruct",
-    },
-    "ollama_cloud": {
-        "base_url": "https://ollama.com/v1",
-        "api_key_env": "OLLAMA_API_KEY",
-        "model": "rnj-1:cloud",
-    },
-    "openrouter": {
-        "base_url": "https://openrouter.ai/api/v1",
-        "api_key_env": "OPENROUTER_API_KEY",
-        "model": "meta-llama/llama-3.3-70b-instruct:free",
-    },
-    "deepseek": {
-        "base_url": "https://api.deepseek.com/v1",
-        "api_key_env": "DEEPSEEK_API_KEY",
-        "model": "deepseek-chat",
-    },
-    # github_models removed — platform fully retired 2026-07-30 (#1589).
-}
+# The probe table is config, not code (#5029): which providers the weekly review
+# probes, and which model each probe sends, are facts about the providers rather
+# than facts about how to probe them. Same env-var convention as
+# digigraph's llm_auth._resolve_byok_catalog_path — DIGI_CONFIG_PATH overrides the
+# directory; without it the __file__-relative path keeps resolving to the repo's
+# own config/ regardless of the process's working directory.
+PROBE_CONFIG_DIR = Path(os.environ.get("DIGI_CONFIG_PATH") or REPO_ROOT / "config")
+PROBE_CONFIG_PATH = PROBE_CONFIG_DIR / "provider-probes.json"
+
+
+def _load_providers() -> dict[str, dict]:
+    """Read config/provider-probes.json into the shape probe_provider() expects.
+
+    Fail-loud, like llm_auth's catalog loader: a silently empty provider set
+    would report "every provider failed" and read as an outage rather than as a
+    missing file, which is the worse failure of the two.
+    """
+    try:
+        raw = json.loads(PROBE_CONFIG_PATH.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise RuntimeError(f"probe table missing: {PROBE_CONFIG_PATH}") from exc
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"probe table is not valid JSON: {PROBE_CONFIG_PATH}") from exc
+    providers = raw.get("providers") if isinstance(raw, dict) else None
+    if not isinstance(providers, dict) or not providers:
+        raise RuntimeError(f"probe table has no non-empty 'providers' object: {PROBE_CONFIG_PATH}")
+    missing = sorted(
+        n for n, c in providers.items() if not {"base_url", "api_key_env", "model"} <= set(c)
+    )
+    if missing:
+        raise RuntimeError(f"probe table entries missing base_url/api_key_env/model: {missing}")
+    return providers
+
+
+PROVIDERS: dict[str, dict] = _load_providers()
 
 
 def probe_provider(name: str, config: dict) -> dict:
@@ -127,5 +120,9 @@ if __name__ == "__main__":
     for r in results:
         status = r["status"].upper()
         latency = f"{r['latency_ms']}ms" if r["latency_ms"] is not None else "—"
-        suffix = f" ({r['error'][:80]})" if r.get("error") else (f" — {r['reason']}" if r.get("reason") else "")
+        suffix = (
+            f" ({r['error'][:80]})"
+            if r.get("error")
+            else (f" — {r['reason']}" if r.get("reason") else "")
+        )
         print(f"  {status:7} {r['provider']:<15} {latency}{suffix}")

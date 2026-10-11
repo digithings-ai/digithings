@@ -53,7 +53,7 @@ def test_fetch_post_returns_typed_result_and_echoes_body() -> None:
         seen["cookie"] = request.headers.get("cookie")
         return httpx.Response(
             200,
-            text="https://s3.example.com/report.pdf?sig=abc",
+            text="https://cdn.example.com/doc.pdf?token=abc",
             headers={"content-type": "text/plain"},
         )
 
@@ -61,16 +61,16 @@ def test_fetch_post_returns_typed_result_and_echoes_body() -> None:
         result = f.fetch(
             "https://x.com/ajax",
             method="POST",
-            data={"GetReserchFile": "111"},
+            data={"file_id": "111"},
             cookies={"session": "abc123"},
         )
 
     assert isinstance(result, FetchResult)
     assert result.status_code == 200
-    assert result.text.startswith("https://s3.example.com/")
+    assert result.text.startswith("https://cdn.example.com/")
     assert result.content_type == "text/plain"
     assert seen["method"] == "POST"
-    assert b"GetReserchFile=111" in seen["content"]  # form-encoded body sent
+    assert b"file_id=111" in seen["content"]  # form-encoded body sent
     assert "session=abc123" in (seen["cookie"] or "")
 
 
@@ -123,7 +123,7 @@ def test_download_returns_bytes_and_size() -> None:
         return httpx.Response(200, content=body, headers={"content-type": "application/pdf"})
 
     with _fetcher(handler) as f:
-        result = f.download("https://s3.example.com/report.pdf")
+        result = f.download("https://cdn.example.com/doc.pdf")
 
     assert isinstance(result, DownloadResult)
     assert result.content == body
@@ -138,7 +138,7 @@ def test_download_enforces_max_bytes() -> None:
         return httpx.Response(200, content=big)
 
     with _fetcher(handler, max_bytes=1024) as f, pytest.raises(DownloadTooLargeError):
-        f.download("https://s3.example.com/huge.bin")
+        f.download("https://cdn.example.com/huge.bin")
 
 
 def test_download_raises_for_status() -> None:
@@ -146,7 +146,7 @@ def test_download_raises_for_status() -> None:
         return httpx.Response(500, content=b"boom")
 
     with _fetcher(handler) as f, pytest.raises(httpx.HTTPStatusError):
-        f.download("https://s3.example.com/err")
+        f.download("https://cdn.example.com/err")
 
 
 # ── composition with retry (the documented seam) ──────────────────────────────

@@ -11,6 +11,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from scripts.secret_staleness_check import can_wait, manifest_environments
+
 pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -70,7 +72,23 @@ class TestSyncDigiquantRunnerHouseSecrets:
         assert _triggers(doc) == {"workflow_dispatch": None}
         assert doc["permissions"] == {"contents": "read"}
         for name, job in doc["jobs"].items():
-            assert "environment" not in job, name
+            # Was `assert "environment" not in job`. #248 gave every job that reads a
+            # `secrets.*` name an `environment: cron`, because that is the only way
+            # GitHub exposes an environment-scope secret — and this workflow reads
+            # `DIGIQUANT_DIGIKEY_API_KEY` and the three `LANGFUSE_*` names. What has to
+            # hold instead is that the gate cannot make a run wait: with a required
+            # reviewer this job would hold its concurrency group while unapproved and
+            # stop the workflow outright (#2541).
+            assert job.get("environment") == "cron", (
+                f"{name} should declare `environment: cron` so the secrets it reads can "
+                "move out of repo scope; without it an environment-scope secret is "
+                "invisible to this job"
+            )
+        assert can_wait(manifest_environments()["cron"]) is False, (
+            "`cron` gained a required reviewer or a wait timer, so this workflow can "
+            "stall silently (#2541). Remove the rule and refresh "
+            "`.github/environments.json`"
+        )
 
     def test_puts_digikey_and_langfuse_on_single_script(self) -> None:
         text = WORKFLOW.read_text(encoding="utf-8")
@@ -81,7 +99,7 @@ class TestSyncDigiquantRunnerHouseSecrets:
         assert "workers/scripts/${script}/secrets" in mail
         for name in MUST_PUT:
             assert f"put {name}" in blob, name
-        assert '${LANGFUSE_BASE_URL%/}/api/public/otel' in blob
+        assert "${LANGFUSE_BASE_URL%/}/api/public/otel" in blob
         assert 'printf \'%s:%s\' "$LANGFUSE_PUBLIC_KEY" "$LANGFUSE_SECRET_KEY"' in blob
         assert "base64 -w0" in blob
         assert "Authorization=Basic" in blob
@@ -93,13 +111,13 @@ class TestSyncDigiquantRunnerHouseSecrets:
         blob = _blob(WORKFLOW)
         assert "putting $name" in blob
         assert "len=${#text}" in blob
-        assert "echo \"$text\"" not in blob
+        assert 'echo "$text"' not in blob
         assert "echo '$text'" not in blob
-        assert "echo \"$otlp_endpoint\"" not in blob
-        assert "echo \"$otel_headers\"" not in blob
+        assert 'echo "$otlp_endpoint"' not in blob
+        assert 'echo "$otel_headers"' not in blob
         assert "printenv" not in blob
         assert "FAIL empty $name" in blob
-        assert 'type:"secret_text"' in blob or "type:\"secret_text\"" in blob
+        assert 'type:"secret_text"' in blob or 'type:"secret_text"' in blob
 
     def test_env_ts_forwards_synced_names(self) -> None:
         text = ENV_TS.read_text(encoding="utf-8")
