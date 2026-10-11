@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@digithings/ui/ui";
 import { shapeLines, type PaneBody, type PaneBlock } from "../../../../../clients/digiquant-tui/src/pages/shape";
 import { PanelView } from "../panel-view";
+import { columnRoles } from "../table-columns";
 
 export const PANE_HINT = "[tab] next";
 
@@ -30,7 +31,45 @@ export function usePaneFocus(ids: string[]): { focus: string; focusAt: (id: stri
   };
 }
 
-function BlockView({ block }: { block: PaneBlock }) {
+/** A wide table scrolls inside its own strip, never past the screen edge.
+ *  The first column stays pinned; numbers stay whole; prose wraps. */
+function PaneTable({ block, title }: { block: Extract<PaneBlock, { kind: "table" }>; title: string }) {
+  const roles = columnRoles(block.columns, block.rows);
+  return (
+    <div className="desk-table-scroll" role="region" aria-label={`${title} table`} tabIndex={0}>
+      <table className="desk-pane-table border-collapse text-left">
+        {block.columns.length ? (
+          <thead>
+            <tr>
+              {block.columns.map((column, index) => (
+                <th
+                  key={column}
+                  data-col={roles[index]}
+                  className="border-b border-hair px-2 py-1 text-left font-normal uppercase tracking-[0.06em] text-ink-mute"
+                >
+                  {column}
+                </th>
+              ))}
+            </tr>
+          </thead>
+        ) : null}
+        <tbody>
+          {block.rows.map((row, index) => (
+            <tr key={index} className="border-b border-hair last:border-b-0">
+              {row.map((cell, cellIndex) => (
+                <td key={cellIndex} data-col={roles[cellIndex]} className="px-2 py-1 align-top">
+                  {cell}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function BlockView({ block, title }: { block: PaneBlock; title: string }) {
   switch (block.kind) {
     case "sentence":
       return <p className="m-0 whitespace-pre-wrap">{block.text}</p>;
@@ -39,32 +78,7 @@ function BlockView({ block }: { block: PaneBlock }) {
     case "chart":
       return <p className="m-0 whitespace-pre">{block.text}</p>;
     case "table":
-      return (
-        <table className="desk-pane-table w-full border-collapse text-left">
-          {block.columns.length ? (
-            <thead>
-              <tr>
-                {block.columns.map((column) => (
-                  <th key={column} className="border-b border-hair px-2 py-1 text-left font-normal uppercase tracking-[0.06em] text-ink-mute">
-                    {column}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-          ) : null}
-          <tbody>
-            {block.rows.map((row, index) => (
-              <tr key={index} className="border-b border-hair last:border-b-0">
-                {row.map((cell, cellIndex) => (
-                  <td key={cellIndex} className="px-2 py-1 align-top">
-                    {cell}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      );
+      return <PaneTable block={block} title={title} />;
     default: {
       const exhaustive: never = block;
       return <p className="m-0">{String(exhaustive)}</p>;
@@ -98,7 +112,7 @@ export function DeskPane({
   panel?: { id: string; data: unknown };
 }) {
   const body = blocks ?? shapeLines(lines ?? []);
-  const painted = body.blocks.map((block, index) => <BlockView key={index} block={block} />);
+  const painted = body.blocks.map((block, index) => <BlockView key={index} block={block} title={title} />);
   const status = asOf ? `as of ${asOf}` : route;
   return (
     <section
