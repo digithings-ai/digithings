@@ -1,0 +1,25 @@
+{
+  "name": "@digithings/hero-banner",
+  "version": "0.0.0",
+  "private": true,
+  "description": "One banner definition, rendered to a terminal (half-blocks, OpenTUI) and to the web (canvas). Spec: docs/architecture/hero-banner-spec.md.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./definitions": "./src/definitions/index.ts",
+    "./tui": "./src/tui.ts",
+    "./canvas": "./src/canvas.ts",
+    "./web": "./src/web.tsx"
+  },
+  "scripts": {
+    "test": "bun test"
+  },
+  "peerDependencies": {
+    "react": "^19.2.4"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  }
+}
