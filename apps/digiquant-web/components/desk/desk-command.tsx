@@ -16,6 +16,8 @@ export function DeskCommand({ pathname }: { pathname: string }) {
   const [sel, setSel] = useState(0);
   const editing = q !== null;
   const hits = editing ? searchDeskPages(q).slice(0, 8) : [];
+  // Wide enough for the whole path, so a tight header scrolls instead of cutting it.
+  const fit = `${Math.max((editing ? q : pathname).length, 12) + 1}ch`;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -49,6 +51,7 @@ export function DeskCommand({ pathname }: { pathname: string }) {
       <input
         ref={input}
         className="cmd-in"
+        style={{ minWidth: fit }}
         spellCheck={false}
         aria-label="Go to page"
         aria-expanded={editing && hits.length > 0}
