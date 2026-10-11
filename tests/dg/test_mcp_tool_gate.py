@@ -231,7 +231,7 @@ def test_decision_cannot_substitute_the_payload(transport, audit):
     # 284.6: the answer now carries the decision's own status, because the
     # client route treats a reply without one as an upstream failure. What the
     # tool said is nested under "result", not merged into it.
-    approved = registry.decide_mcp_call(pending_id, True, session_id="sess-1")
+    approved = registry.decide_mcp_call(pending_id, True, session_id="sess-1", servers=[server])
     assert approved["status"] == "approved"
     assert approved["result"]["ok"] is True
     assert transport == [{"server_id": "acme", "url": _SERVER_URL, "tool": MUTATING, "args": {"issueKey": "JIRA-1234"}}]
@@ -550,43 +550,6 @@ def test_a_refusal_cannot_be_flipped_into_a_write_by_a_second_decision(transport
 
 
 @pytest.mark.unit
-def test_approval_executes_against_the_transport_captured_at_refusal_time(transport, audit):
-    """The recorded payload runs against the row that was recorded with it.
-
-    The deciding request is a different HTTP request from the one that was
-    refused. Nothing in it can name the transport, so the only thing that can
-    still supply it is the refusal-time capture -- which is why this asserts the
-    URL that actually reached the transport, not merely that a call happened.
-    """
-    import digigraph.orchestration.mcp_client as mc
-    import digigraph.orchestration.registry as registry
-
-    server = _server(url="https://mcp.example.invalid/rpc")
-    seen: list[dict] = []
-    monkey_calls = mc._call_tool_blocking
-
-    def _capture(server_arg, tool, args):
-        seen.append({"id": server_arg.get("id"), "url": server_arg.get("url"), "tool": tool})
-        return monkey_calls(server_arg, tool, args)
-
-    mc._call_tool_blocking = _capture
-    try:
-        pending_id = registry.execute(
-            f"{server['id']}_{MUTATING}", {"issueKey": "JIRA-1234"}, _context(server)
-        )["pending_id"]
-        decided = registry.decide_mcp_call(pending_id, True, session_id="sess-1")
-    finally:
-        mc._call_tool_blocking = monkey_calls
-
-    assert "error" not in decided, (
-        f"the capture did not supply the transport, so the call never ran: {decided}"
-    )
-    assert len(seen) == 1, f"expected exactly one transport call, saw {seen}"
-    assert seen[0]["url"] == "https://mcp.example.invalid/rpc"
-    assert transport and transport[0]["args"] == {"issueKey": "JIRA-1234"}
-
-
-@pytest.mark.unit
 def test_approval_answers_approved_so_the_client_can_tell_success_from_failure():
     """The digichat route answers 502 unless ``status`` is approved or denied.
 
@@ -601,7 +564,7 @@ def test_approval_answers_approved_so_the_client_can_tell_success_from_failure()
         f"{server['id']}_{MUTATING}", {"issueKey": "JIRA-1234"}, _context(server)
     )["pending_id"]
 
-    decided = registry.decide_mcp_call(pending_id, True, session_id="sess-1")
+    decided = registry.decide_mcp_call(pending_id, True, session_id="sess-1", servers=[server])
 
     assert decided.get("status") == "approved", (
         f"an approval answered {decided.get('status')!r}, which the digichat route "
@@ -744,88 +707,6 @@ def test_the_decision_route_is_mounted_where_the_client_calls_it():
 # replaced here by tests that pin the real contract and name the residual it
 # leaves, so the gap is inherited by a reader instead of deleted.
 
-OTHER_URL = "https://mcp-rotated.example.invalid/rpc"
-
-
-@pytest.mark.unit
-def test_the_executing_row_is_the_captured_row_not_one_the_decision_supplies(transport):
-    """The positive arm of the ruling: with no transport parameter, only the
-    captured row can execute, so the recorded arguments cannot be redirected."""
-    from digigraph.orchestration import registry
-
-    server = _server()
-    context = _context(server, session_id="sess-1", state={})
-    refused = registry.execute(f"{server['id']}_{MUTATING}", {"issueKey": "JIRA-1234"}, context)
-    pending_id = refused["pending_id"]
-
-    decided = registry.decide_mcp_call(pending_id, True, session_id="sess-1")
-
-    assert decided.get("status") == "approved", decided
-    assert len(transport) == 1, decided
-    assert transport[0]["url"] == server["url"], (
-        "the recorded call was not executed against the endpoint it was recorded against"
-    )
-
-
-@pytest.mark.unit
-def test_the_captured_row_is_a_snapshot_so_a_later_withdrawal_does_not_reach_the_record(transport):
-    """The residual the accepted design leaves, pinned so it is never forgotten.
-
-    Because the row is a copy taken at refusal time, an operator who withdraws
-    the tool or moves the endpoint between the refusal and the decision does NOT
-    stop the recorded call. The human still has to approve it; what is lost is
-    that the approval is not re-validated against current operator config.
-    Re-validating would mean re-supplying the transport, which is exactly the
-    substitution the ruling forbids. A stale-url attempt is shown here to be
-    impossible rather than merely refused, because there is no longer any way
-    to express one.
-    """
-    from digigraph.orchestration import registry
-
-    server = _server()
-    context = _context(server, session_id="sess-1", state={})
-    refused = registry.execute(f"{server['id']}_{MUTATING}", {"issueKey": "JIRA-1234"}, context)
-    pending_id = refused["pending_id"]
-
-    decided = registry.decide_mcp_call(pending_id, True, session_id="sess-1")
-
-    assert decided.get("status") == "approved", decided
-    assert len(transport) == 1, decided
-    assert transport[0]["url"] == server["url"]
-    # The rotated endpoint is nowhere in the recorded traffic, and the constant
-    # is not vacuous: it differs from the row that actually executed.
-    assert OTHER_URL != server["url"]
-    assert OTHER_URL not in {c["url"] for c in transport}
-
-
-@pytest.mark.unit
-def test_the_record_holds_its_own_copy_of_the_row_so_a_later_mutation_cannot_move_it(transport):
-    """The recorded row must be a snapshot, not a live reference.
-
-    ``args`` has always been copied for exactly this reason. The captured row
-    needs the same treatment, or anything still holding the operator dict can
-    rewrite where the recorded arguments are sent after the human has already
-    read and approved them. This test exists because a mutant that dropped the
-    copy (``server_row=server_row``) passed the whole suite.
-    """
-    from digigraph.orchestration import registry
-
-    server = _server()
-    context = _context(server, session_id="sess-1", state={})
-    refused = registry.execute(f"{server['id']}_{MUTATING}", {"issueKey": "JIRA-1234"}, context)
-    pending_id = refused["pending_id"]
-
-    # Whoever still holds the request-scoped row rewrites it after the refusal.
-    server["url"] = OTHER_URL
-    server["allowedTools"] = []
-
-    decided = registry.decide_mcp_call(pending_id, True, session_id="sess-1")
-
-    assert decided.get("status") == "approved", decided
-    assert transport[0]["url"] == _SERVER_URL, (
-        "the recorded call followed a row that was mutated after the human approved it"
-    )
-
 
 @pytest.mark.unit
 def test_a_pending_id_from_another_session_is_refused(transport):
@@ -853,9 +734,112 @@ def test_a_decision_consumes_the_record_so_a_replay_runs_nothing(transport):
     refused = registry.execute(f"{server['id']}_{MUTATING}", {"issueKey": "JIRA-1234"}, context)
     pending_id = refused["pending_id"]
 
-    first = registry.decide_mcp_call(pending_id, True, session_id="sess-1")
-    second = registry.decide_mcp_call(pending_id, True, session_id="sess-1")
+    first = registry.decide_mcp_call(pending_id, True, session_id="sess-1", servers=[server])
+    second = registry.decide_mcp_call(pending_id, True, session_id="sess-1", servers=[server])
 
     assert first.get("status") == "approved", first
     assert second.get("error") == "unknown_pending_mcp_decision", second
     assert len(transport) == 1, (first, second)
+
+# --- DIG-284 leaf 284.6, CTO decision (2): the decision is checked against the
+# operator config live at execute time, not against a snapshot taken when the
+# call was refused. 98e32de0 supersedes cc795a07 on DIG-284.
+
+ROTATED_URL = "https://mcp-rotated.example.invalid/rpc"
+
+
+@pytest.mark.unit
+def test_a_stale_url_is_refused_because_the_recorded_server_is_gone(transport):
+    """A record whose server no longer resolves refuses, and stays refused.
+
+    "Stale" is not "the operator moved the endpoint" -- that is rotation, and
+    rotation has to take effect. Stale is the record naming a server the live
+    operator config cannot produce: the row is absent, or its id and url cannot
+    both be matched. The call must not run, and the at-most-once pop must have
+    already burned the record, so a retry cannot revive it.
+    """
+    import digigraph.orchestration.registry as registry
+
+    server = _server()
+    pending_id = registry.execute(
+        f"{server['id']}_{MUTATING}", {"issueKey": "JIRA-1234"}, _context(server)
+    )["pending_id"]
+
+    decided = registry.decide_mcp_call(pending_id, True, session_id="sess-1", servers=[])
+
+    assert decided["error"] == "mcp_server_not_available"
+    assert transport == [], "a call whose transport cannot be resolved must never reach it"
+    replayed = registry.decide_mcp_call(
+        pending_id, True, session_id="sess-1", servers=[server]
+    )
+    assert replayed["error"] == "unknown_pending_mcp_decision", (
+        "the record was not burned: a refused transport left the pending id live, "
+        "so the same decision could be replayed against a resolved transport"
+    )
+
+
+@pytest.mark.unit
+def test_a_rotated_allowlist_is_refused_so_a_tightening_takes_effect(transport):
+    """An allowlist that stopped listing the tool refuses the call at decide time.
+
+    The call was offered while the tool was allowed. The operator tightened the
+    allowlist afterwards. The decision must be judged against the allowlist live
+    at execute time, which is the whole reason the snapshot design was rejected.
+    """
+    import digigraph.orchestration.registry as registry
+
+    server = _server()
+    pending_id = registry.execute(
+        f"{server['id']}_{MUTATING}", {"issueKey": "JIRA-1234"}, _context(server)
+    )["pending_id"]
+
+    tightened = _server(allowedTools=[READ_ONLY], mutatingTools=[])
+    decided = registry.decide_mcp_call(
+        pending_id, True, session_id="sess-1", servers=[tightened]
+    )
+
+    assert decided["error"] == "mcp_tool_not_allowlisted"
+    assert "status" not in decided, "a tightened allowlist must not read as an approval"
+    assert transport == [], "a tool the operator removed must never reach the transport"
+
+
+@pytest.mark.unit
+def test_a_rotated_url_takes_effect_because_the_operator_moved_the_endpoint(transport):
+    """Same server id, new URL: the call runs against the NEW URL.
+
+    This is the test the refusal-time snapshot cannot pass. A snapshot frozen at
+    refusal would execute against the URL the operator has already retired; the
+    live re-resolution has to send the recorded arguments to the endpoint the
+    operator points at now.
+    """
+    import digigraph.orchestration.mcp_client as mc
+    import digigraph.orchestration.registry as registry
+
+    server = _server()
+    pending_id = registry.execute(
+        f"{server['id']}_{MUTATING}", {"issueKey": "JIRA-1234"}, _context(server)
+    )["pending_id"]
+
+    seen: list[dict] = []
+    original = mc._call_tool_blocking
+
+    def _capture(server_arg, tool, args):
+        seen.append({"id": server_arg.get("id"), "url": server_arg.get("url"), "tool": tool})
+        return original(server_arg, tool, args)
+
+    mc._call_tool_blocking = _capture
+    try:
+        moved = _server(url=ROTATED_URL)
+        decided = registry.decide_mcp_call(
+            pending_id, True, session_id="sess-1", servers=[moved]
+        )
+    finally:
+        mc._call_tool_blocking = original
+
+    assert decided.get("status") == "approved", decided
+    assert decided["result"]["ok"] is True
+    assert seen and seen[0]["url"] == ROTATED_URL, (
+        "the recorded arguments were sent to the retired endpoint instead of the "
+        f"one the operator moved them to: {seen}"
+    )
+    assert transport and transport[0]["args"] == {"issueKey": "JIRA-1234"}
