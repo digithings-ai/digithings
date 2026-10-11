@@ -49,4 +49,28 @@ describe("PipelineBand", () => {
     expect(html).not.toContain("motion-safe:");
     expect(html).not.toContain("StageRunway");
   });
+
+  /* DIG-2854: the head pins, so the deck must stop at the pinned rule. The
+     two assertions below are one invariant, and either alone is satisfiable by
+     the wrong thing — `band-pin` with the old --deck-top pins the head and
+     then hides the top of every card under it; --band-pin-h with no pin moves
+     the deck for nothing. */
+  it("pins the section head and stops the deck at the same rule", () => {
+    expect(html).toContain("band-pin-shell");
+    expect(html).toContain("band-pin");
+    // The deck reads the height the stylesheet authored once, not its own copy.
+    expect(html).toContain("--deck-top:calc(var(--nav-shell-h,62px)+var(--band-pin-h,0px))");
+    expect(html).not.toContain("--deck-top:calc(var(--nav-shell-h,62px)+0.75rem)");
+  });
+
+  it("pins the eyebrow and the title but not the takeaway", () => {
+    const headerAt = html.indexOf("band-pin\"");
+    expect(headerAt).toBeGreaterThanOrEqual(0);
+    const headerEnd = html.indexOf("</header>", headerAt);
+    expect(html.slice(headerAt, headerEnd)).toContain("Agent orchestration");
+    expect(html.slice(headerAt, headerEnd)).not.toContain("not a live run");
+    // It is still in the band, below the pinned head, where the reader meets
+    // it once before the deck starts stacking.
+    expect(html.indexOf("not a live run")).toBeGreaterThan(headerEnd);
+  });
 });
