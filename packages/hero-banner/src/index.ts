@@ -21,4 +21,5 @@ export { riseAnimation, riseEase, type RiseOptions } from "./animations/rise";
 export { scrambleAnimation, type ScrambleOptions } from "./animations/scramble";
 export { equalizerAnimation, levelFrac, type EqualizerOptions } from "./animations/equalizer";
 export { routeAnimation, type RouteOptions } from "./animations/route";
+export { traverseAnimation, type TraverseOptions } from "./animations/traverse";
 export { tumblerAnimation, type TumblerOptions } from "./animations/tumbler";
