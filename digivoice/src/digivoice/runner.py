@@ -11,7 +11,7 @@ import os
 import signal
 import subprocess
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Protocol
 
 from pydantic import BaseModel, Field
@@ -31,7 +31,17 @@ class CommandRunner(Protocol):
         *,
         stdin: str | None = None,
         timeout: float | None = None,
+        env: Mapping[str, str] | None = None,
     ) -> CommandResult: ...
+
+
+def _child_env(overlay: Mapping[str, str] | None) -> dict[str, str] | None:
+    """Parent environment plus `overlay`. None keeps the child's inherited env."""
+    if not overlay:
+        return None
+    merged = os.environ.copy()
+    merged.update(overlay)
+    return merged
 
 
 def run_command(
@@ -39,6 +49,7 @@ def run_command(
     *,
     stdin: str | None = None,
     timeout: float | None = None,
+    env: Mapping[str, str] | None = None,
 ) -> CommandResult:
     """Run `argv` with no shell. Missing binary and timeout become exit codes."""
     command = [str(part) for part in argv]
@@ -51,6 +62,7 @@ def run_command(
             text=True,
             timeout=timeout,
             check=False,
+            env=_child_env(env),
         )
     except FileNotFoundError:
         return CommandResult(argv=command, code=127, stderr=f"not found: {command[0]}")
@@ -89,6 +101,7 @@ def run_command_cancellable(
     stdin: str | None = None,
     timeout: float | None = None,
     cancelled: Callable[[], bool],
+    env: Mapping[str, str] | None = None,
 ) -> CommandResult:
     """Like `run_command`, but kills the child as soon as `cancelled()` turns true.
 
@@ -104,6 +117,7 @@ def run_command_cancellable(
             stderr=subprocess.PIPE,
             text=True,
             start_new_session=True,
+            env=_child_env(env),
         )
     except FileNotFoundError:
         return CommandResult(argv=command, code=127, stderr=f"not found: {command[0]}")
@@ -139,8 +153,15 @@ def cancellable_runner(base: CommandRunner, cancelled: Callable[[], bool]) -> Co
         *,
         stdin: str | None = None,
         timeout: float | None = None,
+        env: Mapping[str, str] | None = None,
     ) -> CommandResult:
-        return run_command_cancellable(argv, stdin=stdin, timeout=timeout, cancelled=cancelled)
+        return run_command_cancellable(
+            argv,
+            stdin=stdin,
+            timeout=timeout,
+            cancelled=cancelled,
+            env=env,
+        )
 
     return _run
 

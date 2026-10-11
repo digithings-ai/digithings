@@ -111,6 +111,51 @@ describe("ChatEmbedShell contracts", () => {
     expect(copy).toContain("Ask about Online Compliance Center");
   });
 
+  it("forwards the OCC invite key from the parent URL to the embed", async () => {
+    // DIG-1210. The barrier is a bearer capability in the parent URL, handed
+    // straight to digichat under the one name it already enforces (`token=`).
+    // Source contract: the key must be read from window.location inside the
+    // mount effect, never during render — this app is output: "export", so the
+    // shipped HTML is one static artifact every visitor shares.
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const path = fileURLToPath(new URL("./ChatEmbedShell.tsx", import.meta.url));
+    const src = readFileSync(path, "utf8");
+
+    expect(src).toContain('from "@/lib/inviteToken"');
+    expect(src).toContain("readInviteToken(window.location.search)");
+    expect(src).toContain('url.searchParams.set("token", inviteToken)');
+
+    // Read behind the route's opt-in, never unconditionally: /chat must not
+    // pick up a stray ?token= and hand it to a tenant that never asked for one.
+    expect(src).toContain("acceptsInviteToken");
+    const readIndex = src.indexOf("readInviteToken(window.location.search)");
+    const guardIndex = src.indexOf("acceptsInviteToken\n        ?");
+    expect(guardIndex).toBeGreaterThan(-1);
+    expect(guardIndex).toBeLessThan(readIndex);
+
+    // Rebuilt only when something is actually missing. An invite link needs one
+    // extra src swap on hydration (the exported first paint had no key); every
+    // other visitor's src must be left alone.
+    expect(src).toContain("missingToken");
+    expect(src).toContain('!current.includes("token=")');
+  });
+
+  it("opts /chat/occ into the invite key and leaves /chat out", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const occ = readFileSync(
+      fileURLToPath(new URL("../app/chat/occ/page.tsx", import.meta.url)),
+      "utf8",
+    );
+    const chat = readFileSync(
+      fileURLToPath(new URL("../app/chat/page.tsx", import.meta.url)),
+      "utf8",
+    );
+    expect(occ).toContain("acceptsInviteToken");
+    expect(chat).not.toContain("acceptsInviteToken");
+  });
+
   it("keeps the frame canvas pre-painted under the transparent warmup overlay", async () => {
     // The warmup overlay is transparent (no solid fill) -- the white-flash
     // guard stays on the frame slot: .dc-chat-frame in globals.css paints
@@ -129,5 +174,42 @@ describe("ChatEmbedShell contracts", () => {
     expect(css).toContain(".dc-chat-frame");
     expect(css).toContain("--chat-frame-canvas");
     expect(css).toContain("@digithings/ui/styles/digichat-boot-loader.css");
+  });
+
+  it("strips the invite key from the address bar right after reading it (DIG-1437)", async () => {
+    // The key must not survive in browser history or in the visible address
+    // bar. It is read client-side inside the mount effect, so that is the only
+    // place the rewrite can happen; doing it during render would put the key
+    // back into the exported HTML this app ships as one shared artifact.
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const path = fileURLToPath(new URL("./ChatEmbedShell.tsx", import.meta.url));
+    const src = readFileSync(path, "utf8");
+
+    expect(src).toContain("stripInviteTokenFromUrl");
+
+    // One call site, and it is the rewrite. A second would mean the key is
+    // being scrubbed twice, which is churn, not defence.
+    expect(src.split("window.history.replaceState").length - 1).toBe(1);
+
+    // Gated on the route opt-in and on a non-empty key, so an ordinary /chat
+    // visit never touches history.
+    const readIndex = src.indexOf("readInviteToken(window.location.search)");
+    const stripIndex = src.indexOf("stripInviteTokenFromUrl(window.location.href)");
+    const guardIndex = src.indexOf("acceptsInviteToken\n        ?");
+    expect(guardIndex).toBeGreaterThan(-1);
+    expect(stripIndex).toBeGreaterThan(readIndex);
+    expect(stripIndex).toBeGreaterThan(-1);
+    expect(src).toContain("token ? stripInviteTokenFromUrl");
+
+    // The token stays in the effect's local state for the session and nowhere
+    // else — no store, no cookie, no sessionStorage. These match a USE
+    // (sessionStorage.setItem, document.cookie =), not the bare word: a
+    // guard on the bare name fires on this comment and on any prose that
+    // documents the rule, which is a test that cannot fail for its reason.
+    expect(src).not.toMatch(/sessionStorage\s*\.\s*(set|get|remove|clear)Item\s*\(/);
+    expect(src).not.toMatch(/localStorage\s*\.\s*(set|get|remove|clear)Item\s*\(/);
+    expect(src).not.toContain("setItem(");
+    expect(src).not.toMatch(/document\s*\.\s*cookie\s*=[^=]/);
   });
 });

@@ -21,7 +21,6 @@ pytestmark = pytest.mark.unit
 
 TRANSCRIPT = "ship it."
 DARWIN_TOOLS = {"pbcopy": "/usr/bin/pbcopy", "osascript": "/usr/bin/osascript"}
-PASTE_PROGRAMS = {"pbcopy", "osascript"}
 
 # Open-ended recorder: writes the wav header, then records until SIGINT.
 LONG_SOX = """#!/bin/sh
@@ -100,7 +99,13 @@ def _recorded_wavs(tmp_path: Path) -> list[Path]:
 def _assert_nothing_left(tmp_path: Path, runner: FakeRunner) -> None:
     assert not (tmp_path / "history.jsonl").exists()
     assert _recorded_wavs(tmp_path) == []
-    assert not PASTE_PROGRAMS & set(runner.programs)
+    assert "pbcopy" not in runner.programs
+    for call in runner.calls:
+        if call.program != "osascript":
+            continue
+        script = " ".join(call.argv)
+        assert "keystroke" not in script
+        assert "bundle identifier of p" in script
     assert not (tmp_path / "dict.cancel").exists()
 
 

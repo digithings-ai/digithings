@@ -2,13 +2,70 @@
 
 from __future__ import annotations
 
+import logging
 import os
+import uuid
+from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 from digisearch.embedding.base import EmbeddingProvider
 
+logger = logging.getLogger(__name__)
+
+#: Recorded verbatim on every egress record this module emits. ``purpose`` is
+#: digillm's ``CallPurpose.EMBEDDING`` value; the test suite pins the literal
+#: against that enum so the two vocabularies cannot drift apart unnoticed.
+_EGRESS_PROVIDER = "openai"
+_EGRESS_PURPOSE = "embedding"
+
+#: This class sits *under* ``EmbeddingCache`` -- the factory wires
+#: EmbeddingCache -> BatchEmbedder -> provider -- so a call that reaches here was
+#: not served from cache. It is the same ``miss`` digillm records for an uncached
+#: chat completion. It can never be ``hit``: a cache hit returns without calling
+#: this provider, which is why this module never records a ``cache_hit`` decision.
+_EGRESS_CACHE_STATUS = "miss"
+
 
 class OpenAIEmbedder(EmbeddingProvider):
-    """OpenAI text-embedding API."""
+    """OpenAI text-embedding API.
+
+    This is the second outbound model surface in the stack that does not go
+    through ``digillm``: it drives ``openai.OpenAI`` directly, so a record emitted
+    only inside ``digillm.client`` never sees it and "every outbound model call"
+    would be false. Every call that reaches the wire therefore emits one
+    :func:`digillm.egress_record.record_egress`, reusing the stack's single record
+    and its single keyed digest. There is no second digest implementation here,
+    and ``record_egress`` deliberately offers no way to pass a pre-computed one.
+
+    Four properties this module is responsible for:
+
+    * The record carries destination, provider, model, decision, category ids and
+      the keyed digest. It never carries the texts: they are handed to digillm
+      only to derive the digest, which is dropped.
+    * An empty batch returns ``[]`` and records nothing. ``embed()`` returns before
+      a client is built, so nothing leaves the process and there is no attempt to
+      describe.
+    * A call that fails is recorded with ``outcome="failed"`` and the original
+      exception is re-raised. digillm's module documents that an attempt which
+      failed before the wire is still recorded, because a ledger missing the calls
+      it cannot prove went is worse than one listing calls it cannot prove did
+      not.
+    * ``decision`` is ``unscreened`` and ``category_ids`` is empty. Nothing screens
+      this path, and recording an Art. 9 category that no screener actually matched
+      would be a fabricated finding.
+
+    The ``digillm`` import is lazy and sits inside the recording call, not at
+    module scope. Module scope would make ``import
+    digisearch.embedding.providers.openai`` raise ``ModuleNotFoundError`` in the
+    deployed image -- which installs ``[server,ingestion,azure,chroma,web-search]``
+    and neither ``digillm`` nor ``openai`` -- introducing a new failure mode into a
+    module that imports cleanly today. It also cannot silently degrade into "no
+    record in production" on a path that reaches the wire, which is what the lazy
+    import bought: ``openai`` and ``digillm`` are declared in the *same*
+    ``[embedding]`` extra, so a client that built implies a digillm that imports.
+    If the guard below ever fires, the install has neither, and it says so at
+    warning level rather than dropping the evidence quietly.
+    """
 
     def __init__(
         self,
@@ -41,9 +98,90 @@ class OpenAIEmbedder(EmbeddingProvider):
             self._client = OpenAI(**kw)
         return self._client
 
+    def _resolved_destination(self) -> str:
+        """The base URL this call will dial, with credentials removed.
+
+        The openai client embeds any userinfo and query string in the URL it
+        requests, so recording ``self._base_url`` verbatim would write an API key
+        into the audit trail -- the one place a secret is guaranteed to be copied
+        somewhere new. Falls back to digillm's ``"unknown"`` when no usable base URL
+        is configured, never ``"none"``: ``"none"`` is reserved for a call that did
+        not leave the process, and "we do not know where it went" must never be
+        laundered into "nothing went".
+        """
+        from digillm.egress_record import UNKNOWN_DESTINATION
+
+        base = self._base_url
+        if not base:
+            return UNKNOWN_DESTINATION
+        try:
+            parts = urlsplit(base)
+            host = parts.hostname
+            port = parts.port
+        except ValueError:
+            return UNKNOWN_DESTINATION
+        if not parts.scheme or not host:
+            return UNKNOWN_DESTINATION
+        netloc = f"{host}:{port}" if port else host
+        return urlunsplit((parts.scheme, netloc, parts.path, "", ""))
+
+    def _record_call(
+        self,
+        *,
+        call_id: uuid.UUID,
+        attempt_id: uuid.UUID,
+        payload: Any,
+        outcome: str,
+    ) -> None:
+        """Emit this provider attempt's egress record. Never raises."""
+        try:
+            from digillm.egress_record import EgressDecision, record_egress
+        except ImportError as unavailable:
+            # Unreachable while a client exists -- see the class docstring. Only the
+            # exception *type* is logged; a message could carry the module path, and
+            # this is a warning that has to stay safe to read in a log aggregator.
+            logger.warning(
+                "egress record not emitted: digillm is not installed (%s)",
+                type(unavailable).__name__,
+            )
+            return
+        record_egress(
+            call_id=call_id,
+            attempt_id=attempt_id,
+            destination=self._resolved_destination(),
+            provider=_EGRESS_PROVIDER,
+            model=self.model,
+            purpose=_EGRESS_PURPOSE,
+            cache_status=_EGRESS_CACHE_STATUS,
+            outcome=outcome,
+            decision=EgressDecision.UNSCREENED,
+            payload=payload,
+        )
+
     def embed(self, texts: list[str]) -> list[list[float]]:
         if not texts:
             return []
-        client = self._get_client()
-        r = client.embeddings.create(model=self.model, input=texts)
-        return [d.embedding for d in r.data]
+        call_id = uuid.uuid4()
+        attempt_id = uuid.uuid4()
+        # What goes on the wire: the model plus the batch. digillm canonicalises it,
+        # digests it and drops it. Nothing on this side stores or logs it.
+        payload: Any = {"model": self.model, "input": list(texts)}
+        try:
+            client = self._get_client()
+            r = client.embeddings.create(model=self.model, input=texts)
+        except Exception:
+            self._record_call(
+                call_id=call_id,
+                attempt_id=attempt_id,
+                payload=payload,
+                outcome="failed",
+            )
+            raise
+        vectors = [d.embedding for d in r.data]
+        self._record_call(
+            call_id=call_id,
+            attempt_id=attempt_id,
+            payload=payload,
+            outcome="succeeded",
+        )
+        return vectors

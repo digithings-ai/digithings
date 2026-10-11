@@ -1,0 +1,25 @@
+{
+  "_readme": [
+    "DataTap Azure access register — the machine-readable copy of the Paperclip document",
+    "\"DataTap Azure access register (the allowlist)\" on DIG-1674 (document id",
+    "7089f97b-9f0f-4b57-be10-26e787ecf583), which Security owns. This file exists so the",
+    "rule can be enforced by scripts/az-guard/az instead of remembered.",
+    "",
+    "The guard reads exactly ONE key: authorized_subscriptions. Every other key is",
+    "ignored on purpose. An agent that adds \"allow_all\": true, \"denied\": [] or a",
+    "comment has changed nothing, because there is no key in this file that opens access.",
+    "",
+    "Each entry must be a full subscription UUID. A subscription NAME is not",
+    "authorisation and the guard refuses one: deciding that \"Datatap Trials\" is",
+    "non-production means reading DataTap's tenant, which is the act the rule forbids.",
+    "",
+    "EMPTY IS THE CURRENT STATE AND IT IS ENFORCED: an empty list refuses every az",
+    "command, including reads. Only DataTap, in writing, can add a row — DIG-1687. When a",
+    "row arrives, Security edits this file in the same PR as the document and records",
+    "who confirmed it."
+  ],
+  "authorized_subscriptions": [],
+  "last_changed": "2026-10-07",
+  "changed_by": "Security",
+  "source_document": "DIG-1674 / datatap-azure-access-register"
+}

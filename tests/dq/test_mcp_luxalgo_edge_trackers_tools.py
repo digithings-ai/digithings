@@ -407,7 +407,12 @@ def test_kill_switch_disables_with_no_request(
     envelope = client.edge_report({"preset": "gap-fill", "symbol": "BTCUSDT"})
     assert envelope.data.code == "upstream_error"
     assert "kill switch" in envelope.data.message
-    result = build_luxalgo_tool_dispatcher()("luxalgo_trackers_latest", {"dataset": "x"})
+    # A real allowlisted dataset, not a placeholder: ``dataset`` is pinned to
+    # LUXALGO_TRACKERS_ALLOWED_DATASETS since DIG-1479, so "x" would be refused
+    # by validation before the kill switch is ever consulted.
+    result = build_luxalgo_tool_dispatcher()(
+        "luxalgo_trackers_latest", {"dataset": "insider-transactions"}
+    )
     assert result["ok"] is False
     assert "kill switch" in result["content"]
 
