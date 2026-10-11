@@ -167,7 +167,12 @@ const THEMES = [
   { name: "dark", suffix: ".dark" },
 ];
 
-const browser = await chromium.launch();
+// --font-render-hinting=none: on Linux, Chromium hints glyphs and rounds
+// advance widths to whole pixels (Geist Mono at 14px measures 8px, not 8.4px),
+// so mermaid sized every box differently than on macOS and the committed SVGs
+// never matched CI's render. Unhinted metrics are fractional on every OS, so
+// the output is byte-identical on Linux and macOS. No-op off Linux.
+const browser = await chromium.launch({ args: ["--font-render-hinting=none"] });
 let written = 0;
 try {
   for (const theme of THEMES) {
