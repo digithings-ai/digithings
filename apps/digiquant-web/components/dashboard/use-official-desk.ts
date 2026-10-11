@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { LivePerformanceKpis } from "@digithings/ui";
 import { houseBookFromPayloads, officialGet, type OfficialHouseBook } from "@/lib/official-api";
+import { createDeskCache } from "@/lib/live/desk-cache";
 import type { LivePortfolioResult, LivePosition, NavPoint } from "@/lib/live/types";
 
 type DeskInput = Pick<
@@ -70,6 +71,23 @@ function toNav(book: OfficialHouseBook): NavPoint[] {
   }));
 }
 
+/**
+ * One read per dataset per window, shared by every mount of this hook.
+ *
+ * Module scope on purpose: the desk, the brief drawer and a route change each mount their own
+ * copy of this hook, and a store created inside the component would be thrown away with it —
+ * which is the fetch-on-every-mount behaviour this replaces.
+ */
+const DESK_READS: readonly (readonly [key: string, path: string, query?: Record<string, string>])[] = [
+  ["portfolio", "/portfolio"],
+  ["brief", "/brief", { overlay: "off" }],
+  ["nav-series", "/nav-series"],
+  ["allocations", "/allocations"],
+  ["performance", "/performance"],
+];
+
+const deskReads = createDeskCache<Awaited<ReturnType<typeof officialGet>>>();
+
 /** House book from the official catalog routes. Stub and withheld reads stay empty. */
 export function useOfficialDesk(): DeskInput {
   const [state, setState] = useState<DeskInput>(READING);
@@ -77,20 +95,20 @@ export function useOfficialDesk(): DeskInput {
   useEffect(() => {
     let alive = true;
     void (async () => {
-      const [portfolio, brief, nav, allocations, performance] = await Promise.all([
-        officialGet("/portfolio"),
-        officialGet("/brief", { overlay: "off" }),
-        officialGet("/nav-series"),
-        officialGet("/allocations"),
-        officialGet("/performance"),
-      ]);
+      const reads = await Promise.all(
+        DESK_READS.map(([key, path, query]) => deskReads.load(key, () => officialGet(path, query))),
+      );
       if (!alive) return;
-      const reads = [portfolio, brief, nav, allocations, performance];
+      // A withheld or failed read is a transport outcome, not a dataset. Forget those keys so
+      // the next mount tries again instead of replaying the failure until the window closes.
+      const failedKeys = DESK_READS.filter((_, i) => !reads[i].ok).map(([key]) => key);
+      for (const key of failedKeys) deskReads.invalidate(key);
       const failed = reads.find((read) => !read.ok);
       if (failed && !failed.ok) {
         setState({ ...READING, loading: false, error: failed.reason });
         return;
       }
+      const [portfolio, brief, nav, allocations, performance] = reads;
       if (!portfolio.ok || !brief.ok || !nav.ok || !allocations.ok || !performance.ok) return;
       const book = houseBookFromPayloads({
         portfolio: portfolio.body,
