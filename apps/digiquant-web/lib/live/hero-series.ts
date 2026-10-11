@@ -6,6 +6,9 @@
  * when a feed returns real candles: Coinbase one-minute OHLC when that
  * product exists, otherwise daily OHLC from `/v1/market/closes`. A close
  * with no open/high/low is skipped. Nothing here resamples or fills a bar.
+ *
+ * The hero is a snapshot: one series per page load, no stream and no rotation.
+ * It changes only when the page is reloaded.
  */
 import type { HeroBar } from "@/lib/hero-build";
 import { fetchMarketCandleRows } from "./market-data";
@@ -14,7 +17,6 @@ import { TAPE_SYMBOLS } from "./tape-universe";
 
 export const HERO_MINUTE = "1m";
 export const HERO_DAY = "1D";
-export const HERO_HOLD_MS = 20_000;
 const MIN_BARS = 2;
 const COINBASE_CANDLES = "https://api.exchange.coinbase.com/products";
 const MARKET_LOOKBACK_MS = 200 * 86_400_000;
@@ -31,6 +33,23 @@ export type HeroSeries = {
 
 export function heroWatermark(symbol: string, timeframe: string): string {
   return `${displaySymbol(symbol)} · ${timeframe}`;
+}
+
+/** Vela market for the hero: the fetched bars as static data, never a live feed. */
+export function heroMarket(series: HeroSeries) {
+  return {
+    symbol: series.symbol,
+    timeframe: series.velaTimeframe,
+    live: false as const,
+    data: series.bars.map((bar) => ({
+      time: bar.time,
+      open: bar.open,
+      high: bar.high,
+      low: bar.low,
+      close: bar.close,
+      ...(bar.volume === undefined ? {} : { volume: bar.volume }),
+    })),
+  };
 }
 
 /** ISO day far enough back to hold a short daily window, not the full archive. */

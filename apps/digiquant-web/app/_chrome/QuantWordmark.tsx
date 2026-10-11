@@ -1,15 +1,16 @@
 "use client";
 
 import { useEffect, useRef, type CSSProperties } from "react";
-import { BUILD_COLUMNS, BUILD_WORD, columnDelayMs } from "@/lib/hero-build";
+import { BUILD_COLUMNS, BUILD_DONE_MS, BUILD_WORD, columnDelayMs } from "@/lib/hero-build";
 import { HERO_PLAYED_KEY, nextHeroLive, type HeroGateView } from "@/lib/hero-play";
 
 /** Pixel lockup for the hero: DIGIQUANT drawn in square cells that grow up from
  *  the baseline, left to right, like bars of a bar chart building the word.
  *  The rise mixes digiquant up and down so the word reads as price moving
- *  both ways, then settles to ink. A few cells glint in the accent afterwards
- *  and strays flicker once. A later load in the tab keeps only that glint.
- *  No CSS
+ *  both ways, then settles to ink. Afterwards a few cells keep glinting and a
+ *  few strays keep blinking, each in its own up or down tone, so both colors
+ *  stay alive. The hero (`replay`) builds on every load; other marks build
+ *  once per tab and later loads keep only the glint. No CSS
  *  classes: animations are inline, keyframes live in globals.css, and
  *  [data-dq-anim] switches them off under reduced motion. */
 
@@ -39,10 +40,13 @@ function mulberry32(seed: number): () => number {
 
 type Cell = { x: number; y: number; style: CSSProperties };
 
+const tone = (rand: () => number) => (rand() < 0.5 ? "var(--up)" : "var(--down)");
+
 function build(): { letters: Cell[]; strays: Cell[] } {
   const rand = mulberry32(0x9a17);
   const used = new Set<string>();
   const letters: Cell[] = [];
+  const glints: Cell[] = [];
   let x = 0;
   for (const ch of WORD) {
     const glyph = GLYPHS[ch];
@@ -57,7 +61,7 @@ function build(): { letters: Cell[]; strays: Cell[] } {
         const glintAnim = glint
           ? `dq-glint ${7000 + Math.floor(rand() * 8000)}ms step-end ${3500 + Math.floor(rand() * 6000)}ms infinite`
           : "none";
-        letters.push({
+        const cell: Cell = {
           x: px,
           y,
           style: {
@@ -65,32 +69,42 @@ function build(): { letters: Cell[]; strays: Cell[] } {
             transformOrigin: "50% 100%",
             animation: glint ? `${rise}, ${glintAnim}` : rise,
             ["--dq-glint" as string]: glintAnim,
-            ["--dq-cell" as string]: rand() < 0.5 ? "var(--up)" : "var(--down)",
+            ["--dq-cell" as string]: tone(rand),
           } as CSSProperties,
-        });
+        };
+        letters.push(cell);
+        if (glint) glints.push(cell);
       }
     }
     x += 9;
   }
   mixDirections(letters);
+  mixDirections(glints);
   const strays: Cell[] = [];
+  const blinks: Cell[] = [];
   while (strays.length < 60) {
     const px = Math.floor(rand() * WIDTH);
     const py = Math.floor(rand() * 10);
     const key = `${px},${py}`;
     if (used.has(key)) continue;
     used.add(key);
-    strays.push({
+    const flicker = `dq-stray ${60 + Math.floor(rand() * 140)}ms linear ${Math.floor(rand() * 1400)}ms backwards`;
+    const blink = rand() < 0.35;
+    const blinkAnim = `dq-blink ${4000 + Math.floor(rand() * 6000)}ms step-end ${BUILD_DONE_MS + 400 + Math.floor(rand() * 5000)}ms infinite`;
+    const cell: Cell = {
       x: px,
       y: py,
       style: {
         opacity: 0,
-        animation: `dq-stray ${60 + Math.floor(rand() * 140)}ms linear ${Math.floor(rand() * 1400)}ms backwards`,
-        ["--dq-cell" as string]: rand() < 0.5 ? "var(--up)" : "var(--down)",
+        animation: blink ? `${flicker}, ${blinkAnim}` : flicker,
+        ["--dq-cell" as string]: tone(rand),
       },
-    });
+    };
+    strays.push(cell);
+    if (blink) blinks.push(cell);
   }
   mixDirections(strays);
+  mixDirections(blinks);
   return { letters, strays };
 }
 
@@ -98,7 +112,7 @@ function cellTone(cell: Cell): string {
   return String((cell.style as Record<string, string>)["--dq-cell"] ?? "");
 }
 
-/** The rise has to show both sides of the pair, not a run of one color. */
+/** Each set (rise, glint, blink) has to show both sides of the pair, not a run of one color. */
 function mixDirections(cells: Cell[]) {
   if (cells.length < 2) return;
   if (!cells.some((cell) => cellTone(cell) === "var(--up)")) {
@@ -130,15 +144,19 @@ function gateView(gate: LiveGate | null): HeroGateView | null {
 
 /** `idle` holds every cell back (opacity 0, no animation) until it flips to `run`.
  *  The rise plays once per tab. Later mounts keep the glint only.
+ *  `replay` (the top hero) builds on every load and still claims the tab, so
+ *  the footer mark does not build a second time.
  *  `armed` stays false until a scroll-triggered mark is allowed to claim. */
 export function QuantWordmark({
   className,
   phase = "run",
   armed = true,
+  replay = false,
 }: {
   className?: string;
   phase?: "run" | "idle";
   armed?: boolean;
+  replay?: boolean;
 }) {
   const idle = phase === "idle";
   const ref = useRef<SVGSVGElement>(null);
@@ -148,6 +166,7 @@ export function QuantWordmark({
     const gate = readGate();
     const decision = nextHeroLive({
       played: root.getAttribute("data-dq-hero") === "played",
+      replay,
       armed,
       idle,
       now: performance.now(),
@@ -169,7 +188,7 @@ export function QuantWordmark({
       /* private mode: this document still plays once */
     }
     root.setAttribute("data-dq-hero", "played");
-  }, [armed, idle]);
+  }, [armed, idle, replay]);
 
   return (
     <svg
@@ -180,6 +199,9 @@ export function QuantWordmark({
       aria-label="digiquant"
       shapeRendering="crispEdges"
       className={className}
+      // The hero owns the attribute from the first paint, so the played-tab
+      // CSS never cuts its rise. Other marks get it from the effect.
+      data-dq-live={replay && !idle ? "" : undefined}
     >
       {CELLS.letters.map((cell) => (
         <rect

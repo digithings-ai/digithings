@@ -4,6 +4,7 @@ import { TAPE_SYMBOLS } from "./tape-universe";
 import {
   barsFromCoinbase,
   barsFromMarketRows,
+  heroMarket,
   heroWatermark,
   marketLookback,
   nextHero,
@@ -80,5 +81,31 @@ describe("hero series", () => {
 
   it("asks the archive for a short daily window", () => {
     expect(marketLookback(new Date("2026-10-03T00:00:00.000Z"))).toBe("2026-03-17");
+  });
+
+  it("hands Vela a static snapshot, never a live feed", () => {
+    const series: HeroSeries = {
+      symbol: "BTC-USD",
+      timeframe: "1m",
+      velaTimeframe: "1",
+      source: "coinbase",
+      bars: [
+        { time: 60_000, open: 1, high: 2, low: 1, close: 2, volume: 3 },
+        { time: 120_000, open: 2, high: 2, low: 1, close: 1 },
+      ],
+    };
+    const market = heroMarket(series);
+    expect(market.live).toBe(false);
+    expect(market.symbol).toBe("BTC-USD");
+    expect(market.data).toEqual(series.bars);
+  });
+
+  it("draws the hero once per load: no stream, no rotation", () => {
+    const field = readFileSync(new URL("../../app/_chrome/QuantField.tsx", import.meta.url), "utf8");
+    expect(field).toContain("heroMarket(series)");
+    expect(field).not.toMatch(/live:\s*!reduced/);
+    expect(field).not.toContain("setMarket");
+    expect(field).not.toContain("HERO_HOLD_MS");
+    expect(field).not.toContain("registerProvider");
   });
 });
