@@ -1,6 +1,6 @@
 import { CtaLink, Emblem, Marquee } from "@digithings/ui";
 import { DigivoiceHero } from "@/components/integrations/digivoice-hero";
-import { IntegrationMark, integrationHref, type IntegrationId } from "@/components/integrations/marks";
+import { IntegrationMark, integrationHref, RowMark, type IntegrationId, type RowProviderId } from "@/components/integrations/marks";
 import { DigichatWordmark } from "../../../../packages/ui/src/components/chat/DigichatWordmark";
 import { PixelWordmark } from "../../../digithings-web/components/landing/PixelWordmark";
 import { QuantWordmark } from "../_chrome/QuantWordmark";
@@ -49,20 +49,41 @@ const MODULES: { name: string; line: string; emblem?: string }[] = [
   { name: "digifetch", line: "Market-data tools the research stages call through Gloomberg." },
 ];
 
-const PACKAGES_A = [
-  "Coinbase · public price feed",
-  "Alpaca · broker adapter",
-  "Interactive Brokers · broker adapter",
-  "Kraken · account snapshots",
-  "Tradier · account snapshots",
+/** The connected-package rows. Each entry carries its provider's official mark;
+ *  the label is the copy the band shipped with, unchanged. */
+type RowEntry = { id: RowProviderId; label: string };
+
+const PACKAGES_A: RowEntry[] = [
+  { id: "coinbase", label: "Coinbase · public price feed" },
+  { id: "alpaca", label: "Alpaca · broker adapter" },
+  { id: "ibkr", label: "Interactive Brokers · broker adapter" },
+  { id: "kraken", label: "Kraken · account snapshots" },
+  { id: "tradier", label: "Tradier · account snapshots" },
 ];
 
-const PACKAGES_B = [
-  "Yahoo Finance · quote history",
-  "FRED · macro series",
-  "Supabase · stored prices",
-  "Binance · chart prices",
+const PACKAGES_B: RowEntry[] = [
+  { id: "yahoo", label: "Yahoo Finance · quote history" },
+  { id: "fred", label: "FRED · macro series" },
+  { id: "supabase", label: "Supabase · stored prices" },
+  { id: "binance", label: "Binance · chart prices" },
 ];
+
+/** One row lozenge. Marquee's `items` prop resolves its icon from a slug it looks
+ *  up itself, so it cannot mix registry marks with providers that have none; the
+ *  rows pass their own chips as `children` instead and keep Marquee's Chip dress
+ *  verbatim. If those class names ever change in marquee/Marquee.tsx, change them
+ *  here in the same commit or the two rows drift out of step with every other
+ *  Marquee consumer. The group gap (2.2rem) and the wrap geometry stay in
+ *  marquee.css — .mq-group lays these spans out as flex items either way. */
+function RowItem({ entry }: { entry: RowEntry }) {
+  return (
+    <span className="inline-flex items-center gap-[0.55rem] font-mono text-[0.82rem] whitespace-nowrap text-ink-soft">
+      <RowMark id={entry.id} />
+      {entry.label}
+    </span>
+  );
+}
+
 
 /** Integrations. digithings is the platform under the agents and the chat.
  *  Gloomberg, LuxAlgo Vela, and NautilusTrader are the three drivers.
@@ -130,8 +151,16 @@ export function IntegrationsBand() {
         </ul>
 
         <div className="flex min-w-0 flex-col gap-3" aria-label="Connected packages">
-          <Marquee items={PACKAGES_A} direction="left" speed={42} />
-          <Marquee items={PACKAGES_B} direction="right" speed={50} />
+          <Marquee direction="left" speed={42}>
+            {PACKAGES_A.map((entry) => (
+              <RowItem key={entry.id} entry={entry} />
+            ))}
+          </Marquee>
+          <Marquee direction="right" speed={50}>
+            {PACKAGES_B.map((entry) => (
+              <RowItem key={entry.id} entry={entry} />
+            ))}
+          </Marquee>
         </div>
       </div>
     </Band>

@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { IntegrationsBand } from "@/app/_bands/integrations";
+import { rowMark, type RowProviderId } from "@/components/integrations/marks";
 
 describe("IntegrationsBand", () => {
   const html = renderToStaticMarkup(<IntegrationsBand />);
+  /** Everything from the rows down. The driver cards above them carry their own
+   *  marks, so a count taken over the whole band would not be about the rows. */
+  const rowsHtml = html.slice(html.indexOf('aria-label="Connected packages"'));
 
   it("names the drivers and links them out", () => {
     expect(html).toContain("Gloomberg");
@@ -78,5 +82,57 @@ describe("IntegrationsBand", () => {
     expect(className).toContain("whitespace-normal");
     expect(className).toContain("min-w-0");
     expect(className).not.toContain("whitespace-nowrap");
+  });
+});
+
+/**
+ * DIG-2861 — a logo per provider in the two sliding rows.
+ *
+ * The acceptance asks for no text-only entries left. That is NOT met: Simple Icons
+ * (the CC0 source of official monochrome brand paths this repo already uses) carries
+ * no path for Alpaca, Interactive Brokers, Kraken, Tradier, Yahoo Finance or FRED.
+ * These tests pin the two things that must be true either way — a provider with an
+ * official mark shows it, and a provider without one is left plain rather than given
+ * a lookalike — so the gap stays visible and cannot be closed with a fake.
+ */
+describe("connected-package row marks", () => {
+  const html = renderToStaticMarkup(<IntegrationsBand />);
+  const rowsHtml = html.slice(html.indexOf('aria-label="Connected packages"'));
+
+  /** Simple Icons 15.22.0 — verified by importing the pinned package, not by
+   *  reading a registry file. */
+  const WITH_OFFICIAL_MARK: RowProviderId[] = ["coinbase", "supabase", "binance"];
+  const WITHOUT_OFFICIAL_MARK: RowProviderId[] = ["alpaca", "ibkr", "kraken", "tradier", "yahoo", "fred"];
+
+  it("knows which providers have an official monochrome path", () => {
+    for (const id of WITH_OFFICIAL_MARK) expect(rowMark(id)).not.toBeNull();
+    for (const id of WITHOUT_OFFICIAL_MARK) expect(rowMark(id)).toBeNull();
+  });
+
+  it("draws every official mark in the rows, in the row's own colour", () => {
+    // Marquee renders its content twice (two .mq-group spans) so the -50% loop is
+    // seamless, so each mark is expected twice.
+    const marks = rowsHtml.match(/<svg[^>]*viewBox="0 0 24 24"/g) ?? [];
+    expect(marks).toHaveLength(WITH_OFFICIAL_MARK.length * 2);
+    // monochrome by construction: the path paints with currentColor, never a brand hex
+    expect(rowsHtml).not.toMatch(/<path[^>]*fill="#/);
+  });
+
+  it("leaves a provider with no official mark plain, with no lookalike", () => {
+    // A scraped favicon, a recoloured app icon or a hand-drawn monogram would be
+    // something other than the vendor's own mark.
+    expect(rowsHtml).not.toContain("<img");
+    expect(rowsHtml).not.toMatch(/inline-grid[^"]*place-items-center/);
+    // every label still reads, marked or not
+    for (const label of [
+      "Alpaca · broker adapter",
+      "Interactive Brokers · broker adapter",
+      "Kraken · account snapshots",
+      "Tradier · account snapshots",
+      "Yahoo Finance · quote history",
+      "FRED · macro series",
+    ]) {
+      expect(rowsHtml).toContain(label);
+    }
   });
 });
