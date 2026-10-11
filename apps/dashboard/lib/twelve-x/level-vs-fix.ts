@@ -8,8 +8,8 @@
  * pair, callers fall back to the anchors-only series built from the eval row's
  * `entry_fix`/`exit_fix` — the chart still renders levels + markers.
  */
-import { parseTradeLevels } from './trade-levels';
-import type { FxIdeaEvalRow, FxTradeIdeaRow, FxTradeLevels } from './types';
+import { isPublishableBracket, parseTradeLevels } from './trade-levels';
+import type { FxIdeaEvalRow, FxTradeIdeaRow } from './types';
 
 export interface FxFixPoint {
   /** Observation date (YYYY-MM-DD). */
@@ -216,16 +216,11 @@ export interface LevelFixSeries {
  * `incomplete`, and any status `parseTradeLevels` did not recognise (it
  * coerces those to `incomplete`) all mean the ladder is not publishable.
  *
- * This mirrors `isPublishableBracket` in `./trade-levels` rather than
- * importing it: that predicate is module-private and that file is a frozen
- * contract. The two must be kept in step — `level-vs-fix.test.ts` asserts
- * this gate and `trade-levels.pending-levels.test.ts` asserts the model gate,
- * and neither alone pins the pair. That is why the test file cross-checks the
- * two gates against each other.
+ * The predicate is imported from `./trade-levels` rather than restated: this
+ * file used to carry a byte-identical copy, and `level-vs-fix.test.ts` needed a
+ * cross-check test purely to stop the two from drifting. One exported
+ * predicate makes that class of bug unrepresentable.
  */
-function isPublishableBracket(tradeLevels: FxTradeLevels | null): tradeLevels is FxTradeLevels {
-  return tradeLevels !== null && tradeLevels.status === 'complete';
-}
 
 /**
  * PURE — flat published levels + moving fix for one idea. `fixes` is the
