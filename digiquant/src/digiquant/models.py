@@ -25,6 +25,13 @@ class BacktestResult(BaseModel):
         default_factory=dict,
         description="Per-symbol PnL breakdown for multi-symbol backtests",
     )
+    missing: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Names that could not be produced, the machine-readable form of the "
+            "'missing metrics' clause in message. Empty when status is ok."
+        ),
+    )
     status: str = Field("ok", description="ok | partial | error")
     message: str = Field("", description="Optional message or error")
 
