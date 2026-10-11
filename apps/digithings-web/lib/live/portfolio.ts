@@ -128,14 +128,20 @@ async function getApi(path: string): Promise<unknown> {
   }
 }
 
-/** `GET /nav-series` → points, oldest first. */
+/**
+ * `GET /nav-series` → points, oldest first. Uses the API's chained `index`
+ * (its since-inception definition, DIG-2801) when present, so a bad raw `nav`
+ * row (e.g. a 15.13 print on a ~102 book) cannot spike the chart; raw `nav` is
+ * the fallback.
+ */
 export function apiNavPoints(data: unknown): NavPoint[] {
   const points = (data as { points?: unknown })?.points;
   if (!Array.isArray(points)) return [];
   const out: NavPoint[] = [];
   for (const row of points) {
-    const r = row as { date?: unknown; nav?: unknown };
-    const nav = Number(r?.nav);
+    const r = row as { date?: unknown; nav?: unknown; index?: unknown };
+    const index = r?.index == null ? NaN : Number(r.index);
+    const nav = Number.isFinite(index) ? index : Number(r?.nav);
     if (typeof r?.date === "string" && Number.isFinite(nav)) out.push({ date: r.date, nav });
   }
   return out.sort((a, b) => a.date.localeCompare(b.date));
