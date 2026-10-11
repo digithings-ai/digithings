@@ -33,11 +33,14 @@ const twelveXAnonKey =
  * typed fetchers in `./fetch.ts` cast their selected rows to the contract types
  * in `./types.ts`.
  *
- * Starts on the anon key alone (today's behavior — harmless pre-cutover,
- * since anon still reads everything until supabase/migrations/cutover/
- * fx_hub_rls_cutover.sql in the twelve-x repo is promoted). Post-cutover,
- * `./session.ts` `ensureTwelveXSession()` calls `auth.setSession()` with a
- * session minted server-side by twelve-x's own `fx-hub-session` Edge
+ * Starts on the anon key alone, and since the cutover that key alone reads
+ * nothing: the RLS cutover was promoted on 2026-09-14 in the twelve-x repo
+ * (`supabase/migrations/028_fx_hub_rls_cutover.sql`, with
+ * `029_fx_hub_rls_access_fix.sql` swapping its inline `fx_hub_grants`
+ * subquery for a SECURITY DEFINER `fx_hub_has_access()` helper), so the
+ * `anon` role holds no read grant on the `fx_*` tables. Reads therefore
+ * depend on `./session.ts`: `ensureTwelveXSession()` calls `auth.setSession()`
+ * with a session minted server-side by twelve-x's own `fx-hub-session` Edge
  * Function — see that file for why (Supabase's Third-Party Auth only
  * supports named identity providers, not "trust another Supabase project",
  * so this project needs its own real session rather than a forwarded JWT).

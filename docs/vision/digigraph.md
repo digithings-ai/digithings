@@ -55,7 +55,7 @@ Shipped and in production:
 - JWT authentication via digikey
 - Per-IP rate limiting
 - Checkpoint persistence via `DIGI_CHECKPOINTER` (memory / SQLite / Postgres today; migrates to digistore once that module ships)
-- LLM routing — model selection, caching, cost controls (LiteLLM today; the in-tree `digigraph.llm` module is superseded by the shared [[digillm|digillm]] library, to which digigraph migrates)
+- LLM routing — model selection, caching, cost controls, through the shared [[digillm|digillm]] library, a hard dependency (`digillm>=0.1.0`). `digigraph.llm_client`, `llm_auth` and `llm_errors` are thin in-tree wrappers that delegate to digillm; they are the seam, not a second implementation. LiteLLM runs as the digillm *service* (OpenAI-compatible proxy), not as an in-process library
 - digitrace tracing — every workflow tagged with `workflow_id`, `request_id`, `session_id`
 - MCP server — digigraph capabilities available as MCP tools for Claude Desktop and similar clients
 - Parallel tool execution

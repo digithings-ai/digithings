@@ -39,7 +39,7 @@ Each row is the tool sequence the model should run; field syntax is concrete.
 - **`owner_id` handling:** integer owner ids resolve to `firstname lastname` (fallback: login) via the cached `resolve_user`; non-integer lookups fail closed. In aggregate output, owner UUIDs resolve automatically and unresolvable values fall back to the raw string — one bad owner never fails the ranking.
 - **Category semantics:** `state_category` and `Category:` derive from `get_state_types()` (`{lower_name: state_type_id}`, cached, merged over a known-state table when the states endpoint is unreachable). Closed-type = Zammad closed/merged type names; pending = type ids 3/4; everything else is open. Instance custom states classify by type: `gelöst von Dev` is open-type, `warten auf Kunden` / `warten auf Dev` are pending-type. `ticket_report`'s closed count is the cheaper *name* heuristic instead (`closed`/`merged` names only).
 - **Automation accounts:** `jirasync@sitaas.de`, `-`, `auto` are excluded from `owner` rankings (pre-filter on raw values, post-filter on resolved names) and listed in the output footnote.
-- **Privacy (demo mode, #4944):** all articles returned, including internal notes (tagged `[internal]`); customer names/emails shown in full (including inside aggregate output), no masking; no article bodies in rankings. Every tool is GET-only and fails closed (`zammad error: ...`, missing token aborts before any HTTP).
+- **Privacy (no masking — card 34a86696):** all articles returned, including internal notes (tagged `[internal]`); customer names/emails shown in full (including inside aggregate output); no article bodies in rankings. Every tool is GET-only and fails closed (`zammad error: ...`, missing token aborts before any HTTP). Guarded by `tests/scripts/test_zammad_mcp_no_mask.py`.
 - **Caps:** window fetch and report scan cover at most 500 tickets each; keyword fallback uses at most `MAX_KEYWORD_TERMS=10` terms (German + English stopwords dropped).
 
 Every request is a GET. The token only ever leaves this process as the
@@ -120,7 +120,16 @@ environment, and the Worker secret is deliberately not forwarded there); the
 server still authenticates to Zammad with its own environment (no Zammad token
 in the tenant entry).
 
-## Ticket search index (`occ_tickets`)
+## Ticket search index (`occ_tickets`) — retired
+
+> **Not on the boot path, and not part of the served corpus.** DIG-1380 retired
+> the ticket index: the committed `occ_tickets.jsonl` snapshot is deleted and
+> DIG-1438 removed the `[program:seed_occ_tickets]` boot step that re-imported
+> live tickets from the Zammad API, so nothing in the stack image populates
+> `occ_tickets` any more. The writer below is kept only because DIG-1210 still
+> owns its masking semantics. **Do not point a tenant at this index** — the OCC
+> tenant serves `occ_help` and reaches tickets through the read-only Zammad
+> tools.
 
 Separate from the `occ_help` docs corpus, `scripts/index_occ_tickets.py`
 backfills every visible ticket (GET-only) plus its articles — one Chunk per
@@ -145,14 +154,22 @@ collection to verify the model stamp. Never query `occ_tickets` with the
 Demo snapshot: data as of 2026-10-01. There is no sync job — re-run the
 script for a fresh snapshot.
 
-## Serving tickets in OCC chat (multi-index fan-out)
+## Serving tickets in OCC chat
 
-`query_index` accepts a comma-separated index list
-(`"occ_help,occ_tickets"`), fans out to each index, and merges with RRF —
-so the OCC tenant serves docs plus tickets with no routing-code changes:
-set the tenant's `digisearchIndex` to the comma pair (tenant map,
-`occ-embed.yaml`) after both indexes are (re)built with the multilingual
-model. All embeddings — ingest and query — must set
+**Do not fan the OCC tenant out to a ticket index.** `query_index` still accepts a
+comma-separated index list and merges the hits with RRF, but the tenant's
+`digisearchIndex` is `occ_help` alone (tenant map, `occ-embed.yaml`).
+
+The ticket corpus was retired in DIG-1380: it was a committed
+`occ_tickets.jsonl` snapshot plus a `[program:seed_occ_tickets]` boot step, and
+neither is in the image any more (DIG-1438). Pointing the tenant back at a ticket
+index therefore searches an empty collection, or — if the writer is ever wired
+back in — one full of unmasked ticket bodies and sender metadata. For ticket
+questions use the read-only Zammad tools through the key-gated MCP route above;
+the OCC system prompt says so and tells the model to say when they do not ground
+the answer.
+
+All embeddings — ingest and query — must set
 `DIGISEARCH_EMBEDDING_PROVIDER` to the model id
 (`Xenova/paraphrase-multilingual-MiniLM-L12-v2`); same 384 dims across models
 means a mismatch retrieves silently wrong results (MiniLM vectors are not
@@ -167,18 +184,25 @@ interchangeable with multilingual ones).
    Replace the `occ_help` collection in place for the demo (delete +
    re-ingest under the same name); Chroma refuses cross-model writes via
    its model stamp, so a stale collection fails loud, not silent.
-2. Refresh tickets: `python -m scripts.index_occ_tickets` (pins +
-   verifies the model stamp; see usage above).
-3. Evaluate: run the gold queries in `tests/scripts/data/` against the
+2. Evaluate: run the gold queries in `tests/scripts/data/` against the
    live indexes; proceed past the agreed recall bar only.
-4. Rebuild + redeploy the stack image (rebuild marker v11 carries the new
-   extra) and flip the tenant map to `"occ_help,occ_tickets"`; rollback is
-   a redeploy of the previous image + tenant map.
+3. Rebuild + redeploy the stack image (rebuild marker v11 carries the new
+   extra) with the tenant map at `occ_help`; rollback is a redeploy of the
+   previous image + tenant map.
 
 ## Privacy & exposure
 
-Demo mode (#4944): the OCC embed shows full customer names/emails and all
-articles, so the formatters are explicit:
+**No masking layer exists, and that is a decision, not an omission.** Chris
+rejected masking on 2026-10-06 (card `34a86696`): this is an internal support
+surface, and the OCC demo returns customer data and staff notes in full. Two
+implementations were proposed and both were closed unmerged — #5148
+(`task/1063-zammad-mask-by-default`, a `privacy.py` module behind
+`ZAMMAD_MCP_CUSTOMER_DISCLOSURE`) and #5155
+(`task/1063-zammad-mask-customer-pii`, inline helpers behind
+`ZAMMAD_DEMO_UNMASKED_PII`). `tests/scripts/test_zammad_mcp_no_mask.py` fails
+if either comes back, including via an environment flag.
+
+The formatters are therefore explicit:
 
 - internal articles (`internal: true`) are returned, tagged `[internal]`
 - customer names/emails are shown in full (`Customer:` lines, aggregate

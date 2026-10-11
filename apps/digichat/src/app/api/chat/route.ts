@@ -43,6 +43,10 @@ import {
   isOverEmbedTrialLimit,
   unlockEmbedTrial,
 } from "@/lib/embed-turn-quota";
+import {
+  EMBED_MONITOR_TOKEN_HEADER,
+  isAllowlistedMonitorToken,
+} from "@/lib/embed-monitor-token";
 import { consumeChatAccess } from "@/lib/embed-gate-provider";
 import { resolveChatTenantContext } from "@/lib/chat-route-context";
 import {
@@ -60,6 +64,7 @@ import {
 } from "@/lib/chat-run-lock";
 import { isMutatingTurnMode, parseDigiTurnMode } from "@/lib/turn-mode";
 import { uiMessagesForUpstream } from "@/lib/ui-stream-parts";
+import { registerSession } from "@/lib/session-links";
 
 // #4753: the boot-retry budget in adapters/digithings/stream.ts runs up to
 // ~250s (stack portReady 180s + instanceGet 60s + margin). The route must
@@ -261,7 +266,8 @@ export async function POST(req: Request) {
   // turns, defers the locked presentation to the embedding page (which shows the
   // trial form) rather than the BYOK/contact card. Enforced per client IP in
   // memory — best-effort anti-abuse per the design spec. Fail open on any internal
-  // error so an infra hiccup never blocks a legitimate visitor.
+  // error in the per-IP quota check so an infra hiccup never blocks a legitimate
+  // visitor; the monitor-allowlist check below is the exception and fails closed.
   // When the tenant configures gate.consumeUrl and the client presents a chat
   // token, server-side quota supersedes the unlock header and the IP quota.
   let quotaSatisfied = false;
@@ -281,6 +287,34 @@ export async function POST(req: Request) {
         );
       }
       quotaSatisfied = true;
+    }
+
+    if (!quotaSatisfied) {
+      try {
+        // An allowlisted internal monitor (DIG-613) holds a server-side secret
+        // and is exempt from the per-IP free-turn budget, so an hourly check can
+        // run every hour without spending the window's 3 turns in the first hour
+        // and then reporting 402 for the next 24. The secret is not
+        // X-Embed-Token — that one is a publishable key served in the embedding
+        // page (DIG-619), so a bypass keyed on it would be public. Fails open:
+        // no allowlist configured means this is false and the quota below runs
+        // exactly as before. Scope is this gate only — every other check in this
+        // route, and tenant resolution itself, is unchanged.
+        if (isAllowlistedMonitorToken(req.headers.get(EMBED_MONITOR_TOKEN_HEADER))) {
+          quotaSatisfied = true;
+        }
+      } catch (e) {
+        // Fails CLOSED for the bypass: the assignment above never ran, so
+        // quotaSatisfied stays false and the per-IP quota below applies to this
+        // caller exactly as it did before the monitor check existed. Do not set
+        // quotaSatisfied here to "reconcile" this log with the wording it replaced
+        // ("failing open") — that would turn a safe fallback into a real quota
+        // bypass (DIG-1165).
+        console.warn(
+          "[trial-gate] monitor allowlist error, falling back to the per-IP cap:",
+          e,
+        );
+      }
     }
 
     if (!quotaSatisfied) {
@@ -316,6 +350,16 @@ export async function POST(req: Request) {
   }
 
   const externalConversation = req.headers.get("x-external-conversation")?.trim() || null;
+
+  // The artifact blob route keys link lifetime on the conversation id, because
+  // that is what the path carries. Register the conversation here so a token
+  // bound by the artifacts POST can validate. Re-registering the same id is
+  // idempotent, so a render or poll does not kill a link the user is holding;
+  // a reload mints a new conversation id, the old one is never re-registered,
+  // and its links stop resolving with no TTL anywhere.
+  if (externalConversation) {
+    registerSession(externalConversation, ownerUserSub);
+  }
   const runLockKey = externalConversation
     ? `chat-run:${tenantSlug}:${sessionId}:${externalConversation}`
     : `chat-run:${tenantSlug}:${sessionId}`;

@@ -1,0 +1,26 @@
+# dashboard-api local overlay — DIG-2901 (supabase exit 13).
+#
+# Local-only config for `wrangler dev`. NEVER used for deploy: no routes, no
+# custom domains, no secrets, and deliberately NO Supabase vars, so the worker
+# serves the stub doubles (see src/stubs.ts) and can never read prod Supabase.
+#
+# D1 is schema-only until ticket 0 (DIG-2888 snapshot) lands; the seed step in
+# scripts/run_stack_local.sh no-ops until then. Real DDL arrives via
+# DIG-2890/DIG-2891; the placeholder migration here only proves the apply path.
+#
+# Started by: ./scripts/run_stack_local.sh  (wrangler dev --persist-to)
+# Never: wrangler deploy --config wrangler.local.toml
+
+name = "dashboard-api-local"
+main = "src/index.ts"
+compatibility_date = "2026-09-04"
+workers_dev = false
+
+[[d1_databases]]
+binding = "DASHBOARD_D1"
+# Placeholder id: wrangler dev --local never contacts the API, so any
+# well-formed UUID works. Prod bindings are untouched (see wrangler.toml,
+# which carries NO d1_databases section by design).
+database_id = "00000000-0000-4000-8000-000000000000"
+database_name = "dashboard-local"
+migrations_dir = "d1-local/migrations"

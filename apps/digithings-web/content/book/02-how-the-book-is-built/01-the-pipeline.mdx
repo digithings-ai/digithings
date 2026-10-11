@@ -1,0 +1,21 @@
+---
+title: "The pipeline"
+order: 1
+summary: >-
+  graph LR Achapter.mdx --> Bparse header B --> Cextract headings B --> Dfind mermaid fences D --> Erender SVG at build E --> Fpublic/book/diagrams/ C --> Gpage + table of contents F --> G G --> Hprinted page
+---
+
+```mermaid
+graph LR
+  A[chapter.mdx] --> B[parse header]
+  B --> C[extract headings]
+  B --> D[find mermaid fences]
+  D --> E[render SVG at build]
+  E --> F[public/book/diagrams/]
+  C --> G[page + table of contents]
+  F --> G
+  G --> H[printed page]
+```
+
+There are four steps and one of them is the only place a diagram is ever
+rendered.
