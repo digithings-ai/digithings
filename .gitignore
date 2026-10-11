@@ -115,12 +115,28 @@ apps/digithings-web/public/openwiki/
 # Secrets and credentials
 .env*
 projects/*/.env*
+# Wrangler dev vars. Rendered by `dt secrets render`; never committed.
+.dev.vars*
+!.dev.vars.example
 secrets.yaml
+# Exception: the config-contract secrets MANIFEST carries names only (no values)
+# and MUST be tracked: both variants read it (`dt secrets render` input),
+# and parity CI compares live config against it.
+!/config/contract/secrets.yaml
 digikey/examples/vault.yaml
 
 # Local stack (scripts/run_stack_local.sh)
 .local_stack_pids
 .litellm-local.log
+
+# Self-host local dev session (DIG-2771). All generated or local-only.
+# Cloudflare requires the wrangler persistence folder to be ignored:
+# https://developers.cloudflare.com/workers/wrangler/configuration/#persist-to
+.wrangler/
+apps/*/wrangler.selfhost.toml
+apps/*/.selfhost-dev/
+.dev.vars
+.dev.vars.*
 
 # Log files
 *.log
@@ -202,3 +218,22 @@ canvases/
 **/ggml-*.bin
 **/history.jsonl
 **/recordings/*.wav
+
+# Customer data artifacts (DIG-1498 R5, DIG-2607).
+#
+# `scripts/index_occ_tickets.py` writes full non-anonymized Zammad ticket
+# bodies into the digisearch `occ_tickets` index — customer names, customer
+# emails and internal-only staff notes, unmasked by design in demo mode. The
+# retired `seed_occ_tickets` supervisor program wrote the same shape and was
+# removed for it (see apps/digithings-stack-cloudflare/container/supervisor/
+# supervisord.conf). Anything it produces is customer data, never source.
+#
+# Anchored on the file name so the real source scripts stay committable:
+# `scripts/index_occ_tickets.py` does not begin with `occ_tickets`, and
+# tests/scripts/test_gitignore_build_artifacts.py pins that.
+occ_tickets/
+occ_tickets*.json
+occ_tickets*.jsonl
+occ_tickets*.ndjson
+seed_occ_tickets*
+*_occ_tickets_snapshot*.json

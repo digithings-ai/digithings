@@ -632,3 +632,60 @@ load-bearing by neutralising each in turn — `if False:` on the redirect check
 fails `test_a_redirect_off_github_is_refused`, `ttl = ttl` fails
 `test_a_caller_cannot_widen_the_token_lifetime`.
 
+
+---
+
+## Decision record — 2026-10-07: the App is out, a fine-grained PAT is in
+
+This file reviews PR #5250, which shipped the **GitHub App** design. That design
+did not survive review. Two decisions on the issue changed it, and the branch
+`DIG-2102-…` removes the App artifacts and rewrites the runbook around the PAT.
+
+| When | Decision | Source |
+|---|---|---|
+| 2026-10-07 23:03 UTC | **App rejected** — *"GitHub app is to much, can we run the policy checks with GitHub Actions instead"* | interaction `8f7aa02b`, `local-board` |
+| 2026-10-07 23:18 UTC | **PAT card accepted** — no reason recorded, so acceptance is approval of the *approach*, not evidence a token was created | interaction `9b14e5e5`, `local-board` |
+
+**What was removed,** because it existed only to serve the App:
+
+| File | Lines | Why |
+|---|---|---|
+| `.github/policy-check-reader-app.json` | 30 | The App manifest. Nothing else reads it. |
+| `scripts/mint_policy_check_token.py` | 266 | Mints a short-lived installation token from a private key. A PAT needs no minting — the guard's whole job is one `GET`. |
+| `tests/scripts/test_mint_policy_check_token.py` | 182 | Tests for the above. |
+
+**What replaced it:** the credential is now a fine-grained personal access token
+`digithings-policy-check-reader`, one repository (`digithings-ai/digithings`),
+one permission (`Administration: read`), 90-day expiry, published as the repo
+secret `POLICY_CHECK_READER_TOKEN` at `cron` scope. `docs/ops/policy-check-credential.md`
+is rewritten; `docs/ops/credential-ownership.md` §(a) carries the new row. The
+three design constraints, the placement section and the anonymity measurement
+are unchanged, because none of them depended on the credential's type.
+
+**Honest account of what the change costs,** recorded here rather than left for
+someone else to notice later:
+
+- **Identity.** The token belongs to the `chrizefan` account, which on this
+  one-member org *is* the org owner. The App was a non-human identity; this is
+  not. This is the second PAT in that shape, so R14 applies again — the
+  difference being that R14's objection was to a credential's *power*, and this
+  token has less power than the App private key would have had.
+- **Leak response.** Uninstalling an App was one call and touched no human
+  account. Revoking a PAT is a personal-account action, so it waits on Chris.
+  The compensating control is the ceiling, not the speed: one repository, one
+  read-only permission, and an expiry that stops it within 90 days.
+- **Enforcement inverts in the credential's favour.** An App private key has no
+  expiry, so its 90 days was discipline. A fine-grained PAT expires on its own,
+  so the house cadence is a date in the inventory row.
+
+**Red lines held.** No agent creates, mints, extends or revokes this credential:
+it is issued from a personal account, and personal and owner accounts are out of
+bounds for agents. An agent may publish a value Chris hands over, prove the grant
+with one authenticated `GET`, and record it. Nothing in the runbook can be
+reordered to hand that boundary away.
+
+**State at this writing:** the credential does not exist. `gh secret list` has no
+`POLICY_CHECK_*` at repo, org or `cron` scope, and `gh api
+/orgs/digithings-ai/apps/policy-check-reader` returns 404. Neither document
+carries an inventory row claiming otherwise, and `policy-check-credential.md`
+step 5 makes adding that row conditional on the smoke call passing.

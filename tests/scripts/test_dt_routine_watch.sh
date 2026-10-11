@@ -262,5 +262,138 @@ printf '{"api":"http://127.0.0.1:3100/api","companyId":"nothing-here","watchAllS
 [ $? -ne 0 ] && ok "watchAllScheduleTriggers matching nothing exits non-zero" \
   || no "watchAllScheduleTriggers matching nothing exits non-zero"
 
+# 15-17. The self-gap report is a latch, not a tombstone: a first silence pages once, the next healthy
+#     tick releases the latch, and a later silence pages AGAIN (DIG-1397).
+rm -f "$WORK/s1517.json"
+fixture "$WORK/f15" "$DUE" null null "$TWO_MANUAL"
+python3 -c "
+import datetime, json
+old=(datetime.datetime.now(datetime.timezone.utc)-datetime.timedelta(hours=5)).strftime('%Y-%m-%dT%H:%M:%S.000Z')
+json.dump({'lastCheckAt':old,'boundaries':{}}, open('$WORK/s1517.json','w'))
+"
+run 15 "$WORK/f15" "$WORK/s1517.json"
+FIRST="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('selfGapReportedAt') or '')" "$WORK/s1517.json")"
+if [ "$PAGES" = 1 ] && printf '%s' "$OUT" | grep -q "kind=self-gap" && [ -n "$FIRST" ]; then
+  ok "a silence past the threshold pages once and latches"
+else
+  no "a silence past the threshold pages once and latches"
+fi
+
+# 16. the next healthy tick: the clock is turning, so nothing is filed and the latch is released.
+fixture "$WORK/f16" "$PAST" null null "$TWO_MANUAL"
+run 16 "$WORK/f16" "$WORK/s1517.json"
+if [ "$PAGES" = 0 ] && [ "$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('selfGapReportedAt') or '')" "$WORK/s1517.json")" = "" ]; then
+  ok "a healthy tick releases the latch and files nothing"
+else
+  no "a healthy tick releases the latch and files nothing"
+fi
+
+# 17. and a second silence pages again with a reportedAt of its own. iso() has second resolution, so the
+#     ticks are held a second apart or the two stamps could be equal by luck.
+sleep 1
+python3 -c "
+import datetime, json
+st=json.load(open('$WORK/s1517.json'))
+st['lastCheckAt']=(datetime.datetime.now(datetime.timezone.utc)-datetime.timedelta(hours=5)).strftime('%Y-%m-%dT%H:%M:%S.000Z')
+json.dump(st, open('$WORK/s1517.json','w'))
+"
+run 17 "$WORK/f15" "$WORK/s1517.json"
+SECOND="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('selfGapReportedAt') or '')" "$WORK/s1517.json")"
+if [ "$PAGES" = 1 ] && printf '%s' "$OUT" | grep -q "kind=self-gap" && [ -n "$SECOND" ] && [ "$SECOND" != "$FIRST" ]; then
+  ok "a second silence pages again with a reportedAt of its own"
+else
+  no "a second silence pages again with a reportedAt of its own"
+fi
+
+# 18-19. Lane S: a healthy firing must be judgeable at all (DIG-1397 leaf 2). The scheduler rewrites
+#     nextRunAt the moment it fires, so on the next tick the only CLOSED boundary left is the last
+#     firing itself. Reading nothing but the live pointer is what made ok unreachable.
+eval "$(python3 - "$TID" <<'PY'
+import datetime, json, sys
+
+tid = sys.argv[1]
+now = datetime.datetime.now(datetime.timezone.utc)
+
+
+def iso(t):
+    return t.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+
+fire = now - datetime.timedelta(hours=2)
+ok_run = json.dumps(
+    [{"id": "r1", "triggeredAt": iso(fire), "source": "schedule", "triggerId": tid, "status": "succeeded"}],
+    separators=(",", ":"),
+)
+print("FIRE='%s'" % iso(fire))
+print("FUTURE='%s'" % iso(now + datetime.timedelta(hours=26)))
+print("STALE='%s'" % iso(now - datetime.timedelta(hours=30)))
+print("OK_RUN='%s'" % ok_run)
+
+# Still inside the grace window: the firing exists but the run may not be readable yet, so this
+# boundary is not yet claimable. Without this pair, dropping the grace test on the last-fired
+# candidate would be invisible -- check 1 has no lastFiredAt at all.
+early = now - datetime.timedelta(minutes=5)
+early_run = json.dumps(
+    [{"id": "r1", "triggeredAt": iso(early), "source": "schedule", "triggerId": tid, "status": "succeeded"}],
+    separators=(",", ":"),
+)
+print("EARLY='%s'" % iso(early))
+print("EARLY_RUN='%s'" % early_run)
+PY
+)"
+for v in FIRE FUTURE STALE OK_RUN EARLY EARLY_RUN; do
+  eval "got=\$$v"
+  if [ -z "$got" ]; then printf 'harness bug: %s came back empty\n' "$v"; exit 99; fi
+done
+
+# 18. The production shape: fired 2h ago, next window tomorrow, so nextRunAt is still in the future.
+#     The boundary to judge is the last firing, and it must come out ok exactly once, with no page.
+#     Before the fix this tick printed "not yet due" and never reached a verdict.
+rm -f "$WORK/s18.json"
+fixture "$WORK/f18" "$FUTURE" "$FIRE" "succeeded" "$OK_RUN"
+run 18 "$WORK/f18" "$WORK/s18.json"
+OK_OUT="$OUT"
+OK_LINES="$(printf '%s' "$OK_OUT" | grep -c ' -> ok {')"
+LAST_VERDICT="$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['boundaries']['$RID'].get('lastVerdict') or '')" "$WORK/s18.json" 2>/dev/null)"
+if [ "$PAGES" = 0 ] && [ "$OK_LINES" = 1 ] && printf '%s' "$OK_OUT" | grep -q '(last-fired)' && [ "$LAST_VERDICT" = ok ]; then
+  ok "a healthy firing is judged ok once off the last-fired boundary, and pages nothing"
+else
+  no "a healthy firing is judged ok once off the last-fired boundary, and pages nothing"
+fi
+
+# 18b. ...and the very next tick must say nothing about that boundary again: judged, so recorded.
+run 18b "$WORK/f18" "$WORK/s18.json"
+if [ "$(printf '%s' "$OUT" | grep -c ' -> ')" = 0 ]; then
+  ok "the same last-fired boundary is judged once, not re-reported every tick"
+else
+  no "the same last-fired boundary is judged once, not re-reported every tick"
+fi
+
+# 19. The other half, and the reason this lane is safe: a window that closed with nothing in the run
+#     history must still page. nextRunAt claims a firing 2h ago while the last real firing was 30h
+#     ago, so the most recent closed boundary is the next-due one and only that one is falsifiable.
+#     A picker that preferred lastFiredAt here would read coalesce and page nothing.
+rm -f "$WORK/s19.json"
+fixture "$WORK/f19" "$DUE" "$STALE" "Skipped" "$MANUAL_RUN"
+run 19 "$WORK/f19" "$WORK/s19.json"
+if [ "$PAGES" = 1 ] && printf '%s' "$OUT" | grep -q 'kind=missed' && printf '%s' "$OUT" | grep -q '(next-due)'; then
+  ok "a closed window with no firing still pages missed off the next-due boundary"
+else
+  no "a closed window with no firing still pages missed off the next-due boundary"
+fi
+
+# 20. The grace window has to apply to the last firing too. Five minutes after firing is inside the
+#     20-minute grace: the run may not be readable yet, so the boundary is not claimable and the
+#     original not-yet-due line is the honest answer. Judge it early and the next tick would read
+#     coalesce (or worse) for a firing that had simply not landed in the run history yet.
+rm -f "$WORK/s20.json"
+fixture "$WORK/f20" "$FUTURE" "$EARLY" "succeeded" "$EARLY_RUN"
+run 20 "$WORK/f20" "$WORK/s20.json"
+if [ "$PAGES" = 0 ] && [ "$(printf '%s' "$OUT" | grep -c ' -> ')" = 0 ] && printf '%s' "$OUT" | grep -q 'not yet due'; then
+  ok "a firing still inside the grace window is not judged yet"
+else
+  no "a firing still inside the grace window is not judged yet"
+fi
+
 if [ "$fails" -eq 0 ]; then printf '\nall checks passed\n'; else printf '\n%s check(s) failed\n' "$fails"; fi
 exit $([ "$fails" -eq 0 ] && echo 0 || echo 1)

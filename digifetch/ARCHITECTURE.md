@@ -157,7 +157,7 @@ variables; a consumer (`digisearch`) sources the allowlist from
 
 `cookies_from_playwright(context.cookies())` flattens Playwright's list of cookie
 dicts to the `{name: value}` dict an HTTP client sends — the exact hand-off
-twelve-x's `scrape_research` performs inline before its AJAX call.
+a consumer performs inline before its follow-up HTTP call.
 
 Per-call `cookies=` are host-agnostic, so redirect handling forwards them only
 while the hop stays on the **original origin**; a hop to another origin drops
