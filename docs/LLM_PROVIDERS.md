@@ -10,7 +10,7 @@ Future work (see [VISION.md](VISION.md)): digichat will expose a model picker wh
 
 **Setup guides:** for step-by-step instructions on obtaining an API key and configuring each provider, see [providers/](providers/) — one file per provider.
 
-**Deep-reference docs:** for complete model listings, exact rate limits, context windows, and digithings-specific usage notes for every free-tier provider, see [free-providers/](free-providers/) — maintained weekly by the `provider-review` workflow. Start there when making provider selection decisions.
+**Deep-reference docs:** for complete model listings, exact rate limits, context windows, and digithings-specific usage notes for every free-tier provider, see [free-providers/](free-providers/) — maintained weekly by the `provider-review` job in the digithings-cron Cloudflare Worker. Start there when making provider selection decisions.
 
 ## How providers plug into LiteLLM
 
@@ -228,13 +228,15 @@ Hardware rule of thumb: 7–14B runs on 16GB Mac / consumer GPU (Q4/Q5 quant). 7
 
 ## Maintenance
 
-This catalog is updated automatically. The `provider-review` workflow runs every Monday and:
+This catalog is updated automatically. The clock is the `provider-review` job in the digithings-cron Cloudflare Worker (`apps/digithings-cron`), **weekly Sun 00:09 UTC** (`9 0 * * SUN`). The Worker dispatches `.github/workflows/pipeline-provider-review.yml` on `develop`; that workflow is `workflow_dispatch`-only and carries no GitHub Actions `schedule:`. By repo policy no clock lives in `.github/workflows` (pinned by `tests/scripts/test_no_gha_schedules.py`). Each run then:
 
 1. Probes all providers with live API calls (`scripts/provider_review/probe.py`).
 2. Claude agent researches rate-limit pages and updates `docs/providers/snapshots/*.yaml`.
-3. Regenerates this file and `docs/free-providers/_index.md` from the updated snapshots.
+3. Regenerates this file and `docs/free-providers/_index.md` from the updated snapshots, and opens a PR labelled `automerge-docs` — it does not push to `develop` directly.
 4. Creates GitHub issues for significant changes (model removed, quota dropped ≥20%, free tier discontinued).
 5. Evaluates `# llm-decision:` tagged entries in `config/` against current provider state.
+
+The run is gated on the `CLAUDE_CODE_OAUTH_TOKEN` secret. Without it the workflow exits early and nothing is probed or regenerated, so the snapshot can go stale silently. If a cycle looks missing, check that the secret is present before assuming the clock stopped.
 
 **Manual review triggers:** issues labelled `provider-change` mean a solution decision should be reassessed. See `docs/free-providers/_index.md` for the current state of all free-tier limits.
 
