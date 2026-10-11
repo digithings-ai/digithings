@@ -349,10 +349,27 @@
   --hair: rgba(12, 12, 10, 0.12);
 }
 
+/* assistant-ui puts `data-active` / `aria-current` on the item Root, not on the
+   Trigger that carries `__item`, so match the parent too. The open chat gets a
+   ▸ marker and an accent wash that reads on a transparent sidebar. */
+.digichat-thread-list__item::before {
+  content: "▸";
+  display: inline-block;
+  width: 1.1em;
+  color: transparent;
+}
 .digichat-thread-list__item[data-active],
-.digichat-thread-list__item[aria-current="true"] {
-  background: var(--term-fill);
+.digichat-thread-list__item[aria-current="true"],
+.digichat-thread-list [data-active] > .digichat-thread-list__item,
+.digichat-thread-list [aria-current="true"] > .digichat-thread-list__item {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
   color: var(--term-ink);
+}
+.digichat-thread-list__item[data-active]::before,
+.digichat-thread-list__item[aria-current="true"]::before,
+.digichat-thread-list [data-active] > .digichat-thread-list__item::before,
+.digichat-thread-list [aria-current="true"] > .digichat-thread-list__item::before {
+  color: var(--accent);
 }
 
 .digichat-gate,

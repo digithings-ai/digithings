@@ -106,6 +106,39 @@ body {
   row-gap: 0.75rem;
 }
 
+/* The band chat sits on the page ground: sidebar, message area and footer are
+   one surface with no panel fills of their own. The thread column runs the
+   frame's full width. Text size comes from the frame (DIGICHAT_TEXT). */
+.scripted-digichat :is(
+  .digichat-thread,
+  .digichat-thread__viewport,
+  .digichat-thread__footer,
+  .aui-thread-viewport-footer,
+  .digichat-thread-list,
+  [data-slot="aui_composer-shell"]
+) {
+  --background: transparent;
+  --card: transparent;
+  --composer-bg: transparent;
+  --term-bg: transparent;
+  --thread-max-width: 100%;
+  background: transparent !important;
+  background-color: transparent !important;
+}
+.scripted-digichat .digichat-thread__viewport > .mx-auto {
+  width: 100%;
+  max-width: none !important;
+}
+/* The skin pins messages and the composer at 0.88rem; follow the frame size. */
+.scripted-digichat :is(
+  .aui-user-message-content,
+  .aui-assistant-message-content,
+  .aui-assistant-message-content .aui-md,
+  .aui-composer-input
+) {
+  font-size: inherit !important;
+}
+
 /* Crosshair, hero only: the pointer becomes a crosshair over the hero (QuantField
    draws the matching lines). Links and buttons keep the kit's pointer.
    Full-viewport chart under the fixed nav: TopBand uses -mt + h-[100svh] so the
