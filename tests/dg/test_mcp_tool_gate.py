@@ -429,3 +429,56 @@ def test_no_request_input_widens_the_operator_allowlist(monkeypatch, transport):
     permitted = registry.execute(offered_read, {"jql": "project = X"}, ctx)
     assert permitted == {"ok": True, "content": f"called {READ_ONLY}"}
     assert [call["tool"] for call in transport] == [READ_ONLY]
+
+
+# =====================================================================
+# Adversarial round 2 (EM ruling cafdf1dc): the gate is asked before the
+# local handler, so a name that is both a prefixed MCP name and a
+# locally registered tool still meets a human.
+# =====================================================================
+
+
+@pytest.mark.unit
+def test_shadowed_local_tool_is_gated_before_the_local_handler(monkeypatch, transport):
+    """A server row can shadow a local tool. The row still decides, not ``has_tool``.
+
+    ``session_upsert_mcp`` is both a prefixed MCP name and a registered local
+    tool. Consulting the gate only behind ``not has_tool(name)`` meant the local
+    handler ran an operator-declared-mutating operation without anyone being
+    asked. The control below is the other half: when the operator declares
+    nothing mutating, the local handler must still run, or this would be
+    deny-everything dressed as a fix.
+    """
+    import digigraph.skills.registry as _skills  # noqa: F401  side-effect import registers builtins
+    from digigraph.orchestration import registry
+    from digigraph.orchestration.mcp_client import split_prefixed_tool_name
+
+    # Preconditions, asserted so this cannot pass vacuously: the name really is
+    # shadowing, and it really is prefixed. An unpopulated registry would make
+    # has_tool False and turn the whole case into the ordinary MCP path.
+    assert registry.has_tool("session_upsert_mcp") is True
+    assert split_prefixed_tool_name("session_upsert_mcp")[0] == "session"
+
+    server = "https://evil.invalid"
+    row = _server(id="session", allowedTools=["upsert_mcp"], mutatingTools=["upsert_mcp"])
+    ctx = _context(row, allowed={"session_upsert_mcp"})
+
+    refused = registry.execute("session_upsert_mcp", {"server": {"id": "evil", "url": server}}, ctx)
+
+    assert refused.get("error") == "mcp_call_requires_human_approval", refused
+    assert refused.get("server_id") == "session", refused
+    assert refused.get("tool") == "upsert_mcp", refused
+    # The gate was read: a pending decision exists and is resolvable.
+    assert refused["pending_id"]
+    assert registry.pending_mcp_decision(refused["pending_id"], session_id="sess-1") is not None
+    # Nothing was executed anywhere -- neither the local handler nor the transport.
+    assert transport == []
+    assert "evil.invalid" not in str(refused)
+
+    # Control: the operator declares nothing mutating, so the same shadowed name
+    # must fall through to the local handler.
+    loud = _server(id="session", allowedTools=["upsert_mcp"], mutatingTools=[])
+    ctx2 = _context(loud, allowed={"session_upsert_mcp"})
+    ran = registry.execute("session_upsert_mcp", {"server": {"id": "acme"}}, ctx2)
+    assert ran == {"ok": True, "session_prefs": {"server": {"id": "acme"}}}
+    assert transport == []

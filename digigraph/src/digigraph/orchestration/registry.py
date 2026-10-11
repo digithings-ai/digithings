@@ -519,13 +519,18 @@ def execute(name: str, args: dict[str, Any], context: ToolContext) -> str | dict
                 "Adjust agents.allowed_tools, DIGI_ALLOWED_TOOLS, or the request allowed_tools field."
             ),
         }
-    if is_extra and not has_tool(name):
+    if is_extra:
+        # Gate before dispatch, not inside the not-has_tool branch. A name can be
+        # both a prefixed MCP name and a locally registered tool (21 of the 23
+        # registered names parse as prefixed). Asking the local handler first let
+        # an operator-declared-mutating operation run with the gate never read.
         extra_servers = context.extra_mcp_servers or []
         gated = _requires_human_approval(name, extra_servers)
         if gated is not None:
             server_id, remote, _row = gated
             return _refuse_for_human_approval(name, args, context, server_id, remote)
-        return call_prefixed_tool(name, args, extra_servers)
+        if not has_tool(name):
+            return call_prefixed_tool(name, args, extra_servers)
     _, _, handler, _ = _tools[name]
     return handler(args, context)
 
