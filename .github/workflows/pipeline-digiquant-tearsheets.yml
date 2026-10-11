@@ -16,7 +16,8 @@ name: "Pipeline: digiquant tearsheets"
 # digiquant/scripts/sync_strategy_calibrations.py (one-time, service role).
 #
 # 1. Fetch latest Coinbase daily OHLCV
-# 2. Stage M2SL / DTWEXBGS CSVs so btc_sdca keeps its published composite weights
+# 2. Stage the M2SL CSV so btc_sdca keeps its published m2 weight (DTWEXBGS left
+#    the gloomberb panel in #4794 PR3, so dxy zeros loudly instead of staging)
 # 3. Backtest with calibrations from Supabase (private IP — never in repo/CI secrets)
 # 4. Upsert the tearsheet payload + current signal to Supabase (service role)
 
@@ -40,7 +41,6 @@ jobs:
       CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY }}
       SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY }}
-      FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -70,7 +70,7 @@ jobs:
       - name: Fetch Coinbase daily OHLCV
         run: uv run --frozen --with ccxt python digiquant/scripts/fetch_coinbase.py --through-yesterday
 
-      - name: Stage SDCA macro siblings (M2, DXY)
+      - name: Stage SDCA macro sibling (M2)
         # Workflow YAML comes from the default branch (develop); this job checks
         # out `main`. Skip until the script exists on main so a develop-only
         # step cannot fail the nightly (#3456 review).

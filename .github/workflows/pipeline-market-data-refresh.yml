@@ -1,6 +1,11 @@
 # Daily R2 market-data refresh (#3780, Task 6).
 #
-# yfinance/FRED/Yahoo-FX latest -> merge into new immutable R2 generations
+# The schedule below is still main's live clock. Develop dropped it in #4761 on
+# the assumption that digithings-cron -> digiquant-runner took over, but
+# apps/digiquant-runner does not exist on main — so the removal is NOT ported
+# here. Carry it over only in the same PR that lands the runner on main.
+#
+# yfinance/Gloomberb/Yahoo-FX latest -> merge into new immutable R2 generations
 # via scripts/refresh_market_data_r2.py. Fail-soft: on a fetch failure the
 # previous objects keep serving, the manifest is written with stale=true,
 # and the non-zero exit fails the run so the failure alerts.
@@ -28,7 +33,6 @@ jobs:
       R2_BUCKET: ${{ secrets.R2_BUCKET }}
       R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
       R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-      FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
       CORE_POSTGRES_URI: ${{ secrets.CORE_POSTGRES_URI }}
       # FX mirror (#4150): refresh_market_data_r2.py mirrors sealed Yahoo-FX
       # generations back into core macro_series_observations — twelve-x reads

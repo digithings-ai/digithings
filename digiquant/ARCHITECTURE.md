@@ -1190,12 +1190,12 @@ for downstream gates (RS rotation #1084, active books, composition #1078).
 | `write_regime_series` / `load_regime_series` / `regime_index_by_date` | Consumer surface (parquet + date map) — no Nautilus dependency |
 | `backtest_regime_gate` | CI-only long-vs-cash harness documenting gated vs always-invested returns — **not** a published `BacktestResult` |
 
-**Default blend** (equal weights): `M2SL` YoY (+), `DTWEXBGS` level (−, strong dollar = contraction), `UNRATE` level (−), `MANEMP` YoY (+) as the manufacturing-activity / PMI proxy — FRED does not carry live ISM PMI. Score map: `regime_score = 50 + composite_z × 50/3` (100 = max expansion). Discrete: `expansion` if score ≥ 60, `contraction` if ≤ 40, else `neutral`. `risk_on` is true only in expansion (gate open); neutral/contraction raise cash in the CI gate harness.
+**Default blend** (equal weights): `M2SL` YoY (+), `UNRATE` level (−). The `DTWEXBGS` (dollar) and `MANEMP` (manufacturing-activity / PMI proxy) votes were removed 2026-09-29: neither is served by the anonymous gloomberb panel, so `MacroSeriesSpec`s for them still work but only for callers supplying their own frames. Score map: `regime_score = 50 + composite_z × 50/3` (100 = max expansion). Discrete: `expansion` if score ≥ 60, `contraction` if ≤ 40, else `neutral`. `risk_on` is true only in expansion (gate open); neutral/contraction raise cash in the CI gate harness.
 
 **Data path.** Series land via the existing macro pipeline
 (`digiquant prices fetch-macro` → `macro_series_observations`). Manifest
-`research/config/macro_series.yaml` lists `M2SL`, `DTWEXBGS`, `UNRATE`, and
-`MANEMP` — no hardcoded secrets. Callers pass already-fetched
+`research/config/macro_series.yaml` lists `M2SL` and `UNRATE` from the panel —
+no hardcoded secrets. Callers pass already-fetched
 `{name: DataFrame[date, value]}` into `compute`; the model never fetches.
 
 **Consumers.** Other strategies read the regime parquet / `regime_index_by_date`

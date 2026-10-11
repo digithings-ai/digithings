@@ -111,7 +111,9 @@ class FakeStore:
         except KeyError:
             raise LookupError(f"unknown macro {source}/{series}") from None
 
-    def fetch_macro(self, source: str, series: str, start: str, end: str) -> list[dict]:
+    def fetch_macro(
+        self, source: str, series: str, start: str, end: str, *, cadence=None
+    ) -> list[dict]:
         if (source, series) in self.macro_empty:
             raise FetchError(f"{source}__{series}", "empty live window")
         return [
@@ -451,15 +453,15 @@ def test_daily_price_error_still_fails_run(monkeypatch: pytest.MonkeyPatch, tmp_
 def test_slow_macro_error_still_fails_run(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Only history-only is exempt; a slow-series error is still loud."""
     store = _slow_macro_store()
-    store.macro_empty.discard(("fred", "PCEPI"))
-    store.macro_lives[("fred", "PCEPI")] = []
 
-    def _boom(source: str, series: str, end: str) -> list[dict]:
-        raise RuntimeError("fred down")
+    def _boom(*args: Any, **kwargs: Any) -> list[dict]:
+        raise RuntimeError("gloomberb down")
 
-    store.fetch_macro_full = _boom  # type: ignore[method-assign]
-    # Force the restatement path off and the error path on: empty history bootstrap
-    # with a raising full fetch lands MODE_ERROR.
+    # #4794: a fred bootstrap seals the Gloomberb tail directly — the store's
+    # full re-pull seam is not on this path. A raising page must still fail loud.
+    monkeypatch.setattr("digiquant.data.prices.gloomberb_macro.fetch_gloomberb_series", _boom)
+    # Force the error path on: empty history bootstrap with a raising page
+    # fetch lands MODE_ERROR.
     del store.macros[("fred", "PCEPI")]
     rc, artifact = _run_main(
         monkeypatch, tmp_path, store, [("fred", "PCEPI", "monthly")], "2026-09-23"
