@@ -1,0 +1,152 @@
+# Build, smoke-test and publish the digillm image (DIG-1780).
+#
+# digillm is digithings' LiteLLM proxy: LiteLLM from the pinned PyPI wheel plus
+# the repo's digillm package (Dockerfile.digillm), replacing the vendor
+# berriai image in every compose file.
+#
+# * pull_request / push to develop touching the image inputs: build + smoke test
+#   only. Nothing is pushed.
+# * tag `digillm-vX.Y.Z` or workflow_dispatch with that tag: build, smoke test,
+#   then push ghcr.io/digithings-ai/digillm:X.Y.Z. The tag's version must match
+#   the `digillm:X.Y.Z` pin in docker-compose.yml, and an existing tag is never
+#   overwritten (cut a new patch instead).
+#
+# This lane holds no deploy credential: GHCR publish only, no environment, no
+# cloud login. It never runs on a schedule.
+name: "Publish: digillm image"
+
+on:
+  pull_request:
+    paths:
+      - "Dockerfile.digillm"
+      - "digillm/**"
+      - ".github/workflows/publish-digillm-image.yml"
+  push:
+    branches: [develop]
+    paths:
+      - "Dockerfile.digillm"
+      - "digillm/**"
+      - ".github/workflows/publish-digillm-image.yml"
+    tags:
+      - "digillm-v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to build and publish (e.g. digillm-v0.1.0)."
+        required: true
+        type: string
+
+concurrency:
+  group: publish-digillm-image-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build + smoke (digillm)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ghcr.io/digithings-ai/digillm
+    steps:
+      - name: Resolve release tag
+        id: rel
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          tag=""
+          if [ -n "${INPUT_TAG:-}" ]; then tag="$INPUT_TAG"
+          elif [ "$REF_TYPE" = "tag" ]; then tag="$REF_NAME"; fi
+          if [ -n "$tag" ]; then
+            [[ "$tag" =~ ^digillm-v([0-9]+\.[0-9]+\.[0-9]+)$ ]] || { echo "::error::bad tag $tag"; exit 1; }
+            {
+              echo "version=${BASH_REMATCH[1]}"
+              echo "ref=$tag"
+              echo "publish=true"
+            } >> "$GITHUB_OUTPUT"
+          else
+            {
+              echo "publish=false"
+              echo "ref=${{ github.sha }}"
+            } >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.rel.outputs.ref }}
+
+      - name: Version must match the compose pin
+        if: steps.rel.outputs.publish == 'true'
+        env:
+          VERSION: ${{ steps.rel.outputs.version }}
+        run: |
+          set -euo pipefail
+          grep -q "image: ghcr.io/digithings-ai/digillm:${VERSION}" docker-compose.yml \
+            || { echo "::error::docker-compose.yml does not pin digillm:${VERSION}"; exit 1; }
+
+      - name: Build
+        run: docker build -f Dockerfile.digillm -t digillm:ci .
+
+      - name: Smoke test
+        run: |
+          set -euo pipefail
+          docker run -d --name digillm-smoke -p 127.0.0.1:4000:4000 \
+            -e LITELLM_MASTER_KEY=sk-smoke \
+            -v "$PWD/config:/app/config:ro" digillm:ci
+          for _ in $(seq 60); do
+            status=$(docker inspect -f '{{.State.Health.Status}}' digillm-smoke)
+            [ "$status" = healthy ] && break
+            [ "$(docker inspect -f '{{.State.Running}}' digillm-smoke)" = true ] || break
+            sleep 2
+          done
+          docker logs digillm-smoke | tail -n 50
+          [ "$(docker inspect -f '{{.State.Health.Status}}' digillm-smoke)" = healthy ]
+          curl -fsS http://127.0.0.1:4000/health/liveliness
+          curl -fsS -H "Authorization: Bearer sk-smoke" http://127.0.0.1:4000/v1/models \
+            | python3 -c "import json,sys; d=json.load(sys.stdin)['data']; assert d, 'no models'; print(len(d), 'models')"
+          uid=$(docker exec digillm-smoke id -u)
+          [ "$uid" != 0 ] || { echo "::error::digillm runs as root"; exit 1; }
+          docker exec digillm-smoke python -c "import digillm, importlib.metadata as m; print('litellm', m.version('litellm'))"
+
+      - name: Log in to GHCR
+        if: steps.rel.outputs.publish == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Refuse to overwrite an existing tag
+        if: steps.rel.outputs.publish == 'true'
+        env:
+          VERSION: ${{ steps.rel.outputs.version }}
+        run: |
+          set -euo pipefail
+          if out=$(docker manifest inspect "$IMAGE:$VERSION" 2>&1); then
+            echo "::error::$IMAGE:$VERSION already exists; cut a new patch version"; exit 1
+          fi
+          echo "$out" | grep -qiE "manifest unknown|not found" \
+            || { echo "::error::could not check $IMAGE:$VERSION: $out"; exit 1; }
+
+      - name: Push
+        if: steps.rel.outputs.publish == 'true'
+        env:
+          VERSION: ${{ steps.rel.outputs.version }}
+          REV: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          docker build -f Dockerfile.digillm \
+            --label "org.opencontainers.image.revision=$REV" \
+            --label "org.opencontainers.image.source=https://github.com/digithings-ai/digithings" \
+            --label "org.opencontainers.image.version=$VERSION" \
+            -t "$IMAGE:$VERSION" .
+          docker push "$IMAGE:$VERSION"
+          echo "pushed $(docker inspect -f '{{index .RepoDigests 0}}' "$IMAGE:$VERSION")" >> "$GITHUB_STEP_SUMMARY"

@@ -90,6 +90,8 @@ export type EmbedChatPrefsApi = {
   hasDigisearch: boolean;
   hasVault: boolean;
   hasSessions: boolean;
+  /** A session artifact surface exists here. Gates the /artifacts row. */
+  hasArtifacts: boolean;
   allowUserMcp: boolean;
   allowAddMcp: boolean;
   catalogTools: CatalogToolRow[];
@@ -107,6 +109,7 @@ export type EmbedChatPrefsApi = {
   openThinking: () => void;
   openLanguage: () => void;
   openSessions: () => void;
+  openArtifacts: () => void;
   newThread: () => void;
   compactThread: () => void | Promise<void>;
   undo: () => void;

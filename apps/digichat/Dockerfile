@@ -27,6 +27,8 @@ COPY packages/ui ./packages/ui
 # packages/ui, so no gallery COPY is needed anymore (#3717 closed).
 COPY packages/digichat-ui ./packages/digichat-ui
 COPY apps/digichat ./apps/digichat
+# BYOK provider pins are imported from the repo-root config (#5020).
+COPY config/byok-providers.json ./config/byok-providers.json
 # Same bake as Dockerfile.digichat-cloudflare: health version matches package.json.
 ARG DIGICHAT_VERSION
 RUN VERSION="${DIGICHAT_VERSION:-$(node -p "require('./apps/digichat/package.json').version")}" \
@@ -54,6 +56,17 @@ COPY --from=builder --chown=nextjs:nodejs /app/apps/digichat/config /app/config
 COPY --from=builder /tmp/digichat-version /etc/digichat-version
 ARG DIGICHAT_VERSION
 ENV DIGICHAT_VERSION=$DIGICHAT_VERSION
+# OCI image annotations: make the image self-describing so an immutable digest
+# can be proven back to the commit that built it, without trusting a mutable tag.
+# The publish lane passes DIGICHAT_REVISION=<full sha> and DIGICHAT_SOURCE_URL;
+# a local `docker build` that omits them still builds (labels come out empty),
+# which is why the binding check treats a missing revision as a failure for
+# released images rather than for any image. See docs/ops/digichat-datatap-aca.md.
+ARG DIGICHAT_REVISION=""
+ARG DIGICHAT_SOURCE_URL="https://github.com/digithings-ai/digithings"
+LABEL org.opencontainers.image.revision=$DIGICHAT_REVISION \
+      org.opencontainers.image.version=$DIGICHAT_VERSION \
+      org.opencontainers.image.source=$DIGICHAT_SOURCE_URL
 USER nextjs
 EXPOSE 3000
 ENV PORT=3000

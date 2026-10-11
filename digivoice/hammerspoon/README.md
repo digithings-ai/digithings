@@ -4,42 +4,38 @@ Sample macOS hotkey adapter for digivoice. **Not** part of the Python package
 import path and **not** a hard dependency — copy or symlink into your Hammerspoon
 config.
 
-## Locked binds
+## Default binds
+
+These are the binds until a row in `settings.json` `hotkey_bindings` is saved. A saved remap replaces that row. The previous key is not also kept. The adapter re-reads the file when it changes, so the next key uses the new bind. System Reload (`hs.reload()`) reads it again at startup. A value that does not parse keeps the previous bind, prints a warning, and leaves the event tap running.
 
 | Bind | Action |
 | --- | --- |
-| **Right Option** only (keycode 61) | Toggle dictation: first press starts `digivoice dict --toggle`; second press stops recording (stop-file), then digivoice transcribes and pastes. **Not** hold-to-talk. |
+| **Right Option** only (keycode 61) | Toggle dictation: first press starts `digivoice dict --toggle`; second press stops recording (stop-file), then digivoice transcribes and pastes. **Not** hold-to-talk. If a readout is playing, this key stops that player first and starts dictation only after the speak task has exited. |
 | **Esc** (plain, no modifiers) | Cancel the active dictation: creates the cancel-file; digivoice stops the recorder / whisper / rewrite, deletes the wav, and pastes nothing and logs nothing. Only live while a take is recording, transcribing, or rewriting; Esc is swallowed only when it cancels, otherwise it reaches the focused app. Not used for speech. |
-| **Double-tap Left Option** (keycode 58, ~350ms) | Speak selection: `digivoice speak --selection`. Soft-fails if nothing is selected (the banner says so). **No** clipboard or `kind:dict` history fallback. |
+| **Double-tap Left Option** (keycode 58, ~350ms) | Speak selection: `digivoice speak --selection`, unless a readout is already playing. A tap while it is playing writes `speak.stop`; the player process group is killed and another readout does not start. Soft-fails if nothing is selected (the banner shows processing or error, not the selection). **No** clipboard or `kind:dict` history fallback. |
 
-Do not invent other default binds in this sample.
+Do not invent other default binds in this sample. The terminal UI can store another key, including modifiers (`ctrl+shift+space`).
 
 ## Status banner
 
-Status is a custom overlay banner, not Hammerspoon notifications. The one allowed toast is at Hammerspoon launch: it lists the configured commands and the resolved `digivoice` path.
+Status is a custom overlay banner, not Hammerspoon notifications. Ship model is background-only: no Dock icon (`hs.dockicon.hide`), no digivoice menubar mark, no launch toast. Hammerspoon's own menu-icon preference is separate (turn it off in HS prefs if you want zero menubar chrome).
 
-The banner is **display only** (a click cycles density mini → peek → full; it never steals focus and never starts or stops anything). Esc is the only control.
+The banner is one status icon. It has no status word, copy, close, pin button, or transcript. Recording is a level meter drawn in that same grid. A click focuses the digivoice terminal when that UI is already open, and opens it otherwise; it does not stack a terminal and it does not stop a take. Esc is the only take control. Whether the idle icon stays up is `banner_pinned` in the terminal UI (default off). Pending, idle, and nothing-to-show hide the icon. It shows for recording, dictating, processing, a current error, or a current warning. A `pending: true` flag hides it. Drag moves the icon; release near one of the 9 anchors snaps and persists the position (`banner_pos.json`). Chrome follows the system appearance (remock dark ground, ivory light ground). Launch does not draw the banner unless it is pinned. `digivoice banner show` reveals a recording icon (not the flag text); Esc on a preview only hides it.
 
-| Phase | Animation (digichat 5x5 square grid) | Text shown |
-| --- | --- | --- |
-| recording | red equalizer wave | none (grid only) |
-| transcribing | teal diagonal sweep | none yet (no live streaming STT) |
-| rewriting | teal circular sweep | the raw transcript glimpse |
-| pasting | teal downward sweep | the text being pasted |
-| speaking | teal equalizer | the selected text |
-| loading | teal grid twinkle | none |
-| done / cancelled / nothing heard / error | check / stop square / `!` / `x` glyph | final text, "take discarded", "no speech detected", or the error line |
+| Phase | Motion on the same 5x5 grid |
+| --- | --- |
+| recording | red level meter: five bars rise and fall on their own timing, with a slow flow across the columns |
+| transcribing | dictating mark; a bright band sweeps across it |
+| loading / rewriting / pasting / speaking | processing ring; a bright segment chases around it |
+| error | red cross ripples outward from the center |
+| warning | amber mark; brightness runs down the stem, then the dot flashes |
+| done / cancelled | settles to idle when pinned, otherwise hides |
+| pinned, idle | gray square breathes slowly |
+| `banner_animations` off | the same picture, held on one frame |
 
-No titles, no hints, no settings UI on the banner — state reads from the grid alone.
-Density comes from settings: **mini** is grid only, **peek** (default) is a short
-glimpse that auto-dismisses a few seconds after idle/done, **full** shows the whole
-transcript and stays until collapsed or removed. The banner reads `status.json`
-that the CLI writes, so it shows exactly what digivoice is doing.
+No titles, no hints, no transcript, no copy, no close, no pin, and no settings UI on the banner. The banner reads `status.json` that the CLI writes and draws only the icon.
 
-Long text is clipped to a 3-line glimpse in peek; click the banner to cycle density
-(mini → peek → full → mini).
-
-The menubar mark (`assets/digivoice-mark.png` + `REC`) stays during a dictation as a mic-in-use indicator, even when the banner is disabled. Errors are also printed to the Hammerspoon console.
+There is no digivoice menubar mark — the banner grid alone shows take state. Closing the Terminal leaves Hammerspoon running; **Quit** in the digivoice TUI stops the adapter and quits Hammerspoon.
 
 ### Banner settings
 
@@ -48,13 +44,21 @@ Stored in digivoice's `settings.json`, changed with the CLI, and **re-read at th
 ```bash
 digivoice settings set live_banner false          # disable the overlay entirely (default true)
 digivoice settings set banner_position top-right  # top-center (default) | top-left | top-right
-                                                  # | bottom-center | bottom-left | bottom-right | center
-digivoice settings set banner_density full        # mini (grid only) | peek (default) | full (stays)
+                                                  # | middle-left | middle-right | bottom-center
+                                                  # | bottom-left | bottom-right | center
 digivoice settings set banner_animations false    # still grid frame (default true)
+digivoice settings set banner_pinned true         # keep the icon up (default false)
 digivoice settings --json                         # show everything
 ```
 
-An unknown `banner_position` falls back to `top-center`; an unknown `banner_density` falls back to `peek`.
+Show the banner without dictating (preview; hidden again with `hide`):
+
+```bash
+digivoice banner show --text "sound check"
+digivoice banner hide   # or: toggle
+```
+
+An unknown `banner_position` falls back to `top-center`. A leftover `banner_density` in an old file is ignored.
 
 ## How stop works
 
@@ -97,7 +101,7 @@ Default stop-file: `~/Library/Application Support/digivoice/dict.stop`
    require("digivoice")
    ```
 
-5. Reload Hammerspoon config (menu → Reload Config).
+5. Reload Hammerspoon config (Hammerspoon → Reload Config), or just run bare `digivoice`. That launch opens Hammerspoon if it is not running, adds `require("digivoice")` to `~/.hammerspoon/init.lua` when the adapter is installed but not required, hides the Dock icon, and shows the banner. No digivoice menubar step. Cap a few seconds; never blocks the shell. Closing that Terminal leaves HS up; TUI **Quit** tears it down.
 
 Optional: `export DIGIVOICE_BIN=/absolute/path/to/digivoice` if PATH lookup fails
 inside Hammerspoon's environment.
@@ -118,7 +122,7 @@ After a digivoice change lands on `develop`:
 
 2. Reload the Lua adapter: Hammerspoon menubar icon → **Reload Config** (or run `hs.reload()` in the Hammerspoon console). The adapter is symlinked from the checkout (`~/.hammerspoon/digivoice` → `digithings/digivoice/hammerspoon`), so reloading picks up the new `init.lua` and `banner_core.lua`. Settings changes need no reload.
 
-3. Check which CLI Hammerspoon will run. The launch toast prints `cli: <path>` and the Hammerspoon console logs `digivoice: armed; cli = <path>`. Lookup order: `$DIGIVOICE_BIN`, `command -v digivoice`, `<checkout>/.venv/bin/digivoice` (derived from the symlink), `~/.local/bin/digivoice`, `~/.venv/bin/digivoice`, then a login-shell `command -v digivoice`. If it is wrong or missing, point it at the right binary and reload:
+3. Check which CLI Hammerspoon will run. Lookup order: `$DIGIVOICE_BIN`, `command -v digivoice`, `<checkout>/.venv/bin/digivoice` (derived from the symlink), `~/.local/bin/digivoice`, `~/.venv/bin/digivoice`, then a login-shell `command -v digivoice`. Confirm with `hs -c 'return require("digivoice")'` after reload, or watch `dict`/`speak` argv. If it is wrong or missing, point it at the right binary and reload:
 
    ```bash
    launchctl setenv DIGIVOICE_BIN "$HOME/path/to/digithings/.venv/bin/digivoice"   # then quit/reopen Hammerspoon
@@ -161,7 +165,7 @@ macOS will not prompt until the tool first needs the grant. Expect two prompts:
 2. Grant Mic to Hammerspoon (+ terminal).
 3. Grant Accessibility to Hammerspoon (+ terminal).
 4. Reload Hammerspoon; press **Right Option** once, speak, press again → paste. Press **Esc** mid-take → discarded.
-5. Select a coding CLI reply, **double-tap Left Option** → Piper playback (the banner says so if nothing is selected).
+5. Select a coding CLI reply, **double-tap Left Option** → Piper playback (nothing selected stays on the grid).
 
 ## Piper voice on Chris's Mac
 
@@ -201,7 +205,9 @@ digivoice speak --selection
 1. Select the reply text in the terminal/TUI, then
 2. Double-tap **Left Option** (within ~350ms).
 
-If nothing is selected, digivoice exits 1 with a one-line hint and the banner
-shows it — it will **not** read the clipboard or last dictation from history.
-**Right Option** dict toggle is unchanged. Ctrl+Shift+Option is **not** bound.
+The same double-tap while that readout is playing stops the player and does not
+start another readout. **Right Option** during playback stops the player, then
+starts dictation. If nothing is selected, digivoice exits 1 with a one-line hint
+and the banner shows it — it will **not** read the clipboard or last dictation
+from history. Ctrl+Shift+Option is **not** bound.
 

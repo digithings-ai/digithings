@@ -145,6 +145,7 @@ from .models import (
     WatchlistRemoveInput,
     YieldCurveInput,
 )
+from .session_gate import session_gate_status
 
 logger = logging.getLogger(__name__)
 
@@ -167,7 +168,7 @@ __all__ = [
 # One lazily-built ``GloomberbClient`` per (kill switch, session cookie,
 # substack cookie) env triple. Keyed by the raw env values so an
 # operator/test env change gets a fresh client without a process restart; the default (unset) pair is the anonymous,
-# default-ON client. Only one client is kept alive: when the env pair changes,
+# family-disabled client. Only one client is kept alive: when the env pair changes,
 # the replaced client is closed so its transport is not leaked. The lock
 # serializes the read/close/replace dance — LangGraph runs parallel nodes, and
 # they all funnel through this one cached client.
@@ -287,9 +288,17 @@ MACRO_TOOLS: tuple[str, ...] = (
     # stay MCP-only, see below).
     "digifetch_treasury_auctions",
 )
-# ``digifetch_congress_trades`` stays MCP-only for now (#4146 review F9): its
-# upstream OCR dependency answers HTTP 500, so a pipeline tool could only return
-# a typed upstream_error. Re-add to MACRO_TOOLS when upstream recovers.
+# ``digifetch_congress_trades`` is in no subset and must stay that way
+# (DIG-1057): Counsel refused it under 5 U.S.C. 13107(c)(1)(B), so it is denied
+# at registration on every surface (see ``digiquant.tool_refusals``). That
+# refusal means using a 5 U.S.C. 13105(l) periodic transaction report for a
+# commercial purpose is unlawful unless the user is news and communications
+# media disseminating to the general public — it is not a bar on all
+# non-media purposes, which is what an earlier note here implied (DIG-1479).
+# An earlier note also said its upstream OCR dependency answered HTTP 500 and to
+# re-add it once upstream recovered — that was wrong; the upstream is live
+# (probed 2026-10-05, HTTP 200). Do not re-add it to MACRO_TOOLS or any other
+# subset without Counsel's written clearance.
 
 PM_TOOLS: tuple[str, ...] = (
     "digifetch_quote",
@@ -350,7 +359,15 @@ _DEFAULT_TOOL_NAMES: tuple[str, ...] = tuple(t["function"]["name"] for t in DIGI
 
 
 def _session_cookie_present() -> bool:
-    return bool(os.environ.get(GLOOMBERB_SESSION_COOKIE_ENV, "").strip())
+    """True when a cookie is configured AND it validates against api.gloom.sh.
+
+    Presence-only advertising was the #2752 gap: a stale or mistyped cookie
+    advertised 41 tools that could only answer ``auth_required``. The verdict
+    is cached for one TTL window per cookie, so this stays free at list time
+    after the first probe. Kept as a named helper because the tests and the
+    MCP surface both read better against a verb.
+    """
+    return session_gate_status().authenticated
 
 
 def _substack_cookie_present() -> bool:
@@ -366,7 +383,7 @@ def available_digifetch_tools(subset: tuple[str, ...] | None = None) -> list[dic
     a tool that can only error:
 
     * the whole family is dropped when ``GLOOMBERB_ENABLED`` disables it
-      (default ON; a typo fails closed), because every call would return the
+      (default OFF; a typo fails closed), because every call would return the
       typed "disabled by kill switch" ``upstream_error``; and
     * ``session`` / ``preview`` / ``pro`` tools are dropped when
       ``GLOOMBERB_SESSION_COOKIE`` is unset, because they would return the

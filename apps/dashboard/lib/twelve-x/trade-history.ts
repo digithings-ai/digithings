@@ -5,7 +5,12 @@
  * measured grade basis.
  */
 import type { FxIdeaEvalRow, FxLevelProvenance, FxTradeIdeaRow } from './types';
-import { formatLevelValue, hasTradeLevels, parseTradeLevels } from './trade-levels';
+import {
+  formatLevelValue,
+  hasTradeLevels,
+  isPublishableBracket,
+  parseTradeLevels,
+} from './trade-levels';
 
 export type TradeLifecycle = 'live' | 'closed' | 'no_data' | 'unscored';
 
@@ -219,7 +224,11 @@ export function assembleTradeHistory(
   return ideas
     .map((idea) => {
       const ev = evalByKey.get(evalKey(idea.run_date, idea.rank));
-      const tl = parseTradeLevels(idea.trade_levels);
+      // DIG-260 L5: a bracket publishes complete or not at all. This is the
+      // same gate the IdeaDetail model and the chart series already use, so a
+      // row that has `levelsPending` here cannot show them there.
+      const parsed = parseTradeLevels(idea.trade_levels);
+      const tl = isPublishableBracket(parsed) ? parsed : null;
       const fmt = (value: string, provenance?: FxLevelProvenance) =>
         formatLevelValue(value, idea.pair, provenance);
       const entryBand =
