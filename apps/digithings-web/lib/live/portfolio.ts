@@ -106,8 +106,60 @@ export function publishedNavPoints(rows: readonly unknown[]): NavPoint[] {
   return points;
 }
 
-/** Finalized NAV points, oldest first. */
+/**
+ * The dashboard's canonical read API (dashboard-api), when this build is pointed
+ * at one: the same backend digiquant.io's Brief desk reads (`NEXT_PUBLIC_DASHBOARD_API_URL`,
+ * e.g. `http://127.0.0.1:8887` for the local stack). Empty when unset.
+ */
+export function dashboardApiBase(): string {
+  return (process.env.NEXT_PUBLIC_DASHBOARD_API_URL ?? "").trim().replace(/\/+$/, "");
+}
+
+async function getApi(path: string): Promise<unknown> {
+  const base = dashboardApiBase();
+  if (!base) return null;
+  try {
+    const res = await fetch(`${base}${path}`, { headers: { Accept: "application/json" } });
+    if (!res.ok) return null;
+    const body = (await res.json()) as { data?: unknown };
+    return body?.data ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** `GET /nav-series` → points, oldest first. */
+export function apiNavPoints(data: unknown): NavPoint[] {
+  const points = (data as { points?: unknown })?.points;
+  if (!Array.isArray(points)) return [];
+  const out: NavPoint[] = [];
+  for (const row of points) {
+    const r = row as { date?: unknown; nav?: unknown };
+    const nav = Number(r?.nav);
+    if (typeof r?.date === "string" && Number.isFinite(nav)) out.push({ date: r.date, nav });
+  }
+  return out.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/** `GET /benchmarks` → the benchmark ticker's closes from `fromDate`, oldest first. */
+export function apiBenchmarkPoints(data: unknown, fromDate: string): PricePoint[] {
+  const series = (data as { series?: Record<string, unknown> })?.series;
+  const rows = series?.[BENCHMARK_TICKER];
+  if (!Array.isArray(rows)) return [];
+  const out: PricePoint[] = [];
+  for (const row of rows) {
+    const r = row as { date?: unknown; close?: unknown };
+    const price = Number(r?.close);
+    if (typeof r?.date === "string" && r.date >= fromDate && Number.isFinite(price)) {
+      out.push({ date: r.date, price });
+    }
+  }
+  return out.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/** Finalized NAV points, oldest first. dashboard-api first, Supabase as before. */
 export async function fetchNav(): Promise<NavPoint[]> {
+  if (dashboardApiBase()) return apiNavPoints(await getApi("/nav-series"));
   if (!supabase) return [];
   const { data, error } = await supabase
     .from(ACCOUNTING_NAV_VIEW)
@@ -125,6 +177,12 @@ export async function fetchNav(): Promise<NavPoint[]> {
  * fallback for prices).
  */
 export async function fetchBenchmark(fromDate: string): Promise<PricePoint[]> {
+  if (dashboardApiBase()) {
+    return apiBenchmarkPoints(
+      await getApi(`/benchmarks?tickers=${encodeURIComponent(BENCHMARK_TICKER)}`),
+      fromDate,
+    );
+  }
   const base = (process.env.NEXT_PUBLIC_MARKET_DATA_URL ?? "").trim().replace(/\/+$/, "");
   if (!base) return [];
   const url = `${base}/v1/market/closes?tickers=${encodeURIComponent(BENCHMARK_TICKER)}&from=${encodeURIComponent(fromDate)}`;
