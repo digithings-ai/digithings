@@ -10,6 +10,7 @@ import { traverseAnimation } from "../animations/traverse";
 import { tumblerAnimation } from "../animations/tumbler";
 import { speakAnimation, type SpeakOptions } from "../animations/speak";
 import { typeAnimation } from "../animations/type";
+import { vaultAnimation } from "../animations/vault";
 import { PIXEL_7X10 } from "../font";
 import type { BannerDefinition, Tone } from "../types";
 
@@ -273,6 +274,14 @@ export const DIGIGRAPH: BannerDefinition = {
   id: "digigraph",
   text: "DIGIGRAPH",
   label: "digigraph",
+/** DIG-2874. The vault door opens: a combination dial turns right, left, right,
+ *  the bolts slide back, the leaves part from the seam and the word inside
+ *  lights up. LIVE: a scan line runs down the word, or the bolts relock and
+ *  draw back. Accent: --accent-digivault. */
+export const DIGIVAULT: BannerDefinition = {
+  id: "digivault",
+  text: "DIGIVAULT",
+  label: "digivault",
   font: PIXEL_7X10,
   gap: 2,
   palette: {
@@ -343,6 +352,12 @@ export const DIGIGRAPH: BannerDefinition = {
   }),
   live: true,
   seed: 0xc1a3,
+    accent: { hex: "#9D8FC9", cube: 140, cssVar: "--accent-digivault" },
+    glint: { hex: "#FFFFFF", cube: 231, cssVar: "--glint" },
+  },
+  animation: vaultAnimation({ turnMs: 560, boltMs: 380, openMs: 720, settleMs: 520, everyMs: 7000, scanMs: 900 }),
+  live: true,
+  seed: 0xdb17,
 };
 
 export const BANNERS = {
@@ -357,4 +372,5 @@ export const BANNERS = {
   digibook: DIGIBOOK,
   digidev: DIGIDEV,
   digiclaw: DIGICLAW,
+  digivault: DIGIVAULT,
 } as const;

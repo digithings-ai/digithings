@@ -28,3 +28,4 @@ export { speakAnimation, speechLevel, type SpeakOptions } from "./animations/spe
 export { pagesAnimation, type PagesOptions } from "./animations/pages";
 export { typeAnimation, type TypeOptions } from "./animations/type";
 export { clawAnimation, withHeadroom, type ClawOptions } from "./animations/claw";
+export { vaultAnimation, dialAt, type VaultOptions } from "./animations/vault";
