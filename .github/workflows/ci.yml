@@ -44,6 +44,9 @@ jobs:
       # generate_ci_path_filters.py rewrites only the embedded block, not this
       # outputs map.
       clients_tui: ${{ steps.filter.outputs.clients_tui }}
+      # Added by hand (DIG-2940): generate_ci_path_filters.py only rewrites the
+      # block between the CI_PATH_FILTERS markers, not this outputs map.
+      bun_suites: ${{ steps.filter.outputs.bun_suites }}
       ruff_and_scripts: ${{ steps.filter.outputs.ruff_and_scripts }}
       workflows: ${{ steps.filter.outputs.workflows }}
       compose: ${{ steps.filter.outputs.compose }}
@@ -80,6 +83,11 @@ jobs:
               - 'digivoice/**'
               - 'tests/dvo/**'
               - '.github/workflows/test-digivoice.yml'
+            bun_suites:
+              - 'digivoice/tui/**'
+              - 'clients/digichat-tui/**'
+              - 'packages/surface-config/**'
+              - '.github/workflows/test-bun-suites.yml'
             digiquant:
               - 'digiquant/**'
               - 'tests/dq/**'
@@ -413,6 +421,13 @@ jobs:
     needs: changes
     if: needs.changes.outputs.clients_tui == 'true'
     uses: ./.github/workflows/test-clients-tui.yml
+  # Bun suites (DIG-2940). Before this, digivoice/tui, clients/digichat-tui and
+  # packages/surface-config each declared `"test": "bun test"` and none of it
+  # ran anywhere in CI — no workflow mentioned the bun tool at all.
+  bun-suites:
+    needs: changes
+    if: needs.changes.outputs.bun_suites == 'true'
+    uses: ./.github/workflows/test-bun-suites.yml
 
   # ── Dependency CVE audit (pip-audit / OSV) ──────────────────────────────────
   pip-audit:
@@ -725,6 +740,7 @@ jobs:
       - nautilus-smoke
       - research-graph
       - clients-tui
+      - bun-suites
       - pip-audit
       - npm-audit
       - ruff-and-scripts
