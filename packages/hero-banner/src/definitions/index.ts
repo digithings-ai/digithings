@@ -4,6 +4,7 @@ import { riseAnimation } from "../animations/rise";
 import { routeAnimation } from "../animations/route";
 import { scrambleAnimation } from "../animations/scramble";
 import { stackAnimation } from "../animations/stack";
+import { traverseAnimation } from "../animations/traverse";
 import { tumblerAnimation } from "../animations/tumbler";
 import { PIXEL_7X10 } from "../font";
 import type { BannerDefinition, Tone } from "../types";
@@ -194,6 +195,37 @@ export const DIGIKEY: BannerDefinition = {
   seed: 0x6e7,
 };
 
+/** DIG-2867. A workflow graph: a run floods along each letter's strokes,
+ *  branching at forks, flashes every task it reaches and hops the gap into the
+ *  next letter. Accent: --accent-digigraph. */
+export const DIGIGRAPH: BannerDefinition = {
+  id: "digigraph",
+  text: "DIGIGRAPH",
+  label: "digigraph",
+  font: PIXEL_7X10,
+  gap: 2,
+  palette: {
+    ink: INK,
+    ground: GROUND,
+    accent: { hex: "#E5B765", cube: 179, cssVar: "--accent-digigraph" },
+    glint: { hex: "#FFFFFF", cube: 231, cssVar: "--glint" },
+  },
+  animation: traverseAnimation({
+    startMs: 200,
+    stepMs: 16,
+    hopMs: 70,
+    frontMs: 90,
+    trailMs: 140,
+    taskMs: 160,
+    holdMs: 240,
+    blueprint: 0.16,
+    runEveryMs: 1800,
+    sprint: 0.5,
+  }),
+  live: true,
+  seed: 0xd16a,
+};
+
 export const BANNERS = {
   digithings: DIGITHINGS,
   digiquant: DIGIQUANT,
@@ -202,4 +234,5 @@ export const BANNERS = {
   digillm: DIGILLM,
   digibase: DIGIBASE,
   digikey: DIGIKEY,
+  digigraph: DIGIGRAPH,
 } as const;
