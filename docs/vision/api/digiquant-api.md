@@ -75,7 +75,7 @@ Response:
 - `total_pnl` (number): Total P&L.
 - `sharpe_ratio` (number | null): Sharpe ratio.
 - `num_trades` (integer): Number of trades executed.
-- `status` (string): "completed" | "failed".
+- `status` (string): "ok" | "partial" | "error".
 
 ```bash
 curl -X POST $DIGIQUANT_URL/run_backtest \
