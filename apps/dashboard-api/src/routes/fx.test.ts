@@ -116,8 +116,19 @@ describe("phase 3 fx and rates", () => {
     // Vehicles join on thesis_id, never on the uuid — and only at the tip date.
     expect(body.data.theses[0].vehicles).toEqual(["EUR/USD"]);
     expect(body.data.theses[1].vehicles).toEqual(["USD/JPY"]);
-    expect(body.data.counts).toEqual({ active: 1, watch: 0, exited: 0 });
-    // Core uses CHALLENGED/MONITORING, which are not watch/exited and pass through.
+    expect(body.data.counts).toEqual({
+      active: 1,
+      // CHALLENGED is a live thesis under active management, so it rolls into
+      // `watch`. The old mapper only accepted a literal `watch`, which
+      // chk_theses_status does not allow, so this bucket was always zero.
+      watch: 1,
+      exited: 0,
+      by_status: {
+        active: 1, monitoring: 0, challenged: 1, closed: 0,
+        invalidated: 0, paused: 0, new: 0, unknown: 0,
+      },
+    });
+    // The row still reports the token the book carries.
     expect(body.data.theses[1].state).toBe("challenged");
   });
 
@@ -140,10 +151,13 @@ describe("phase 3 fx and rates", () => {
       ? [{ thesis_id: "t1", name: "A", status: "MONITORING", date: "2026-09-28" }]
       : []));
     const res = await app.fetch(new Request("https://x/rates/theses"), CORE);
-    const body = (await res.json()) as { data: { theses: { name: string; state: string }[]; counts: { watch: number } } };
+    const body = (await res.json()) as { data: { theses: { name: string; state: string }[]; counts: { watch: number; by_status: { monitoring: number } } } };
     expect(res.status).toBe(200);
     expect(body.data.theses).toHaveLength(1);
     expect(body.data.theses[0].name).toBe("A");
-    expect(body.data.counts.watch).toBe(0);
+    // MONITORING is a token the constraint allows, so it reaches `watch`.
+    expect(body.data.theses[0].state).toBe("monitoring");
+    expect(body.data.counts.watch).toBe(1);
+    expect(body.data.counts.by_status.monitoring).toBe(1);
   });
 });

@@ -134,6 +134,100 @@ describe("phase 1 portfolio routes", () => {
     expect(payload.data.counts.active).toBe(0);
   });
 
+  // DIG-486: the exact wire shape for a fixed three-thesis book. The old mapper
+  // read `evidence`, `kill_condition` and `note` — none of which are columns on
+  // core `theses` — so all three were permanently null, and its `watch`/`exited`
+  // buckets matched no token `chk_theses_status` allows, so both were
+  // permanently zero. This fixture pins every cell and every count.
+  it("theses returns the exact shape for a dated three-thesis book", async () => {
+    mockFetch((url) => {
+      if (url.includes("thesis_vehicles")) return [
+        { date: "2026-09-28", thesis_id: "gold-bid", ticker: "GLD" },
+        { date: "2026-09-28", thesis_id: "gold-bid", ticker: "IAU" },
+        // SLV is on an older date and must not ride along with today's book.
+        { date: "2026-09-27", thesis_id: "gold-bid", ticker: "SLV" },
+        { date: "2026-09-28", thesis_id: "vehicle-tesla-margin", ticker: "TSLA" },
+      ];
+      if (url.includes("/theses?")) return [
+        {
+          id: "uuid-gold", thesis_id: "gold-bid", name: "Gold bid", status: "ACTIVE", thesis_kind: "market",
+          validation_criteria: [{ condition: "real yields below 2%" }, { condition: "DXY under 100" }],
+          invalidation_criteria: [{ condition: "real yields above 3%" }],
+          invalidation: null, notes: "Trimmed on 2026-09-24.", date: "2026-09-28",
+        },
+        {
+          // No jsonb criteria: the kill condition must still read off the
+          // free-text `invalidation` column from migration 001.
+          id: "uuid-fe", thesis_id: "front-end-easing", name: "Front-end easing", status: "MONITORING", thesis_kind: "market",
+          validation_criteria: null, invalidation_criteria: null,
+          invalidation: "Fed re-tightens before March", notes: null, date: "2026-09-28",
+        },
+        {
+          id: "uuid-tsla", thesis_id: "vehicle-tesla-margin", name: "Tesla margin", status: "INVALIDATED", thesis_kind: "vehicle",
+          validation_criteria: [], invalidation_criteria: [], invalidation: null,
+          notes: "Killed: the pricing action reversed.", date: "2026-09-28",
+        },
+      ];
+      return [];
+    });
+    const res = await body("/theses");
+    expect(res.status).toBe(200);
+    expect(res.data).toEqual({
+      theses: [
+        {
+          id: "uuid-gold", name: "Gold bid", state: "active", vehicles: ["GLD", "IAU"],
+          evidence: "real yields below 2%; DXY under 100",
+          kill_condition: "real yields above 3%",
+          note: "Trimmed on 2026-09-24.",
+        },
+        {
+          id: "uuid-fe", name: "Front-end easing", state: "monitoring", vehicles: [],
+          evidence: null, kill_condition: "Fed re-tightens before March", note: null,
+        },
+        {
+          id: "uuid-tsla", name: "Tesla margin", state: "invalidated", vehicles: ["TSLA"],
+          evidence: null, kill_condition: null, note: "Killed: the pricing action reversed.",
+        },
+      ],
+      counts: {
+        // MONITORING is a live thesis under management, so it is `watch`;
+        // INVALIDATED is off the book, so it is `exited`.
+        active: 1, watch: 1, exited: 1,
+        by_status: {
+          active: 1, monitoring: 1, challenged: 0, closed: 0,
+          invalidated: 1, paused: 0, new: 0, unknown: 0,
+        },
+      },
+    });
+    expect(res.as_of).toBe("2026-09-28");
+  });
+
+  // `watch` and `exited` are rollups over tokens the constraint allows, so a
+  // row whose status the constraint would reject must land in `unknown` and
+  // inflate neither — `WATCH` in the table is not the `watch` bucket. The row
+  // still shows its own status: the pane reports the book, it does not relabel.
+  //
+  // `chk_theses_status` rejects `WATCH`, so this row cannot be written by the
+  // table. It is here on purpose: the mapper is exported and both routes hand it
+  // whatever a read returns, and a bucket that only trusts the constraint is a
+  // bucket that lies the first time the constraint is bypassed. In practice the
+  // `unknown` bucket is reachable through a NULL `status`, which is allowed.
+  it("theses buckets a status the constraint would reject as unknown", async () => {
+    mockFetch((url) => (url.includes("/theses?")
+      ? [
+        { id: "uuid-a", thesis_id: "a", name: "A", status: null, date: "2026-09-28" },
+        { id: "uuid-b", thesis_id: "b", name: "B", status: "WATCH", date: "2026-09-28" },
+      ]
+      : []));
+    const res = await body("/theses");
+    const payload = res as { data: { theses: { state: string }[]; counts: { active: number; watch: number; exited: number; by_status: { unknown: number } } } };
+    expect(payload.data.theses.map((t) => t.state)).toEqual(["—", "watch"]);
+    expect(payload.data.counts.active).toBe(0);
+    expect(payload.data.counts.watch).toBe(0);
+    expect(payload.data.counts.exited).toBe(0);
+    expect(payload.data.counts.by_status.unknown).toBe(2);
+  });
+
   it("drawdown is computed from NAV and stays null without a second point", async () => {
     mockFetch(() => [{ date: "2026-01-01", nav: 100 }, { date: "2026-01-03", nav: 80 }]);
     const res = await body("/performance/drawdown", { ...ENV, DASHBOARD_DEV_CALLER: "brief" });

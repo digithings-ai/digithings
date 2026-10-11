@@ -467,6 +467,11 @@ figure is `null` (the app shows "—"). An unconfigured reader is 502
 Portfolio: `GET /allocations/enriched`, `/attribution`, `/theses`,
 `/theses/signals` (brief), `/ledger/cash`, `/performance/drawdown`,
 `/brief/decision`, `/brief/risks`, `/dossier/{ticker}`.
+`/theses` and `/theses/signals` return the same `Theses` shape as
+`/rates/theses`, from the same core tables on the same newest-business-date
+rule; `/rates/theses` is documented in
+`apps/digiquant-app/contracts/markets.md`. Neither carries a desk filter —
+core `theses` has no `desk` column.
 
 Pipeline: `GET /pipeline/runs/latest/health` (optional `date=YYYY-MM-DD`),
 `/graph`, `/narrative`, `/trace`, `/artifacts`,

@@ -605,7 +605,17 @@ export function RtCurveBlock() {
   );
 }
 
-const thesisTone: Record<string, BadgeTone> = { active: 'ok', watch: 'wip', exited: 'plain' };
+// Tones for the real `chk_theses_status` tokens the API returns. `watch` and
+// `exited` are `counts` rollups, not row states, so they are not keys here.
+const thesisTone: Record<string, BadgeTone> = {
+  active: 'ok',
+  monitoring: 'wip',
+  challenged: 'wip',
+  new: 'wip',
+  paused: 'plain',
+  closed: 'plain',
+  invalidated: 'plain',
+};
 
 /** GET /rates/theses — rates desk theses. */
 export function RtThesesBlock() {

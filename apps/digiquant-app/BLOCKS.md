@@ -80,7 +80,7 @@ Robustness contract for every primitive: null → `—`; long text wraps or clam
 | chat-composer | `POST /chat/sessions/:id/messages` | new (write) |
 
 ### FX / rates desk
-`GET /fx/summary`, `/fx/pairs`, `/fx/pairs/:pair/path`, `/fx/ideas`, `/fx/ideas/:pair`, `/fx/levels`, `/fx/flags/:pair`, `/fx/paper-exposure`, `/fx/sessions`, `GET/PUT /fx/directives`, `/rates/summary`, `/rates/watchlist` — all **new**; `rates-theses` = `/v1/tables/theses?desk=rates` (**table**).
+`GET /fx/summary`, `/fx/pairs`, `/fx/pairs/:pair/path`, `/fx/ideas`, `/fx/ideas/:pair`, `/fx/levels`, `/fx/flags/:pair`, `/fx/paper-exposure`, `/fx/sessions`, `GET/PUT /fx/directives`, `/rates/summary`, `/rates/watchlist` — all **new**; `rates-theses` = `/rates/theses` (JSON, core `theses` + `thesis_vehicles`, **no desk filter** — see `contracts/markets.md`).
 
 ### Settings / shell
 `GET /settings/prefs` (+PUT), `/settings/desk`, `/settings/fx-feed`, `/settings/brokers` (+`POST …/connect`), `/settings/integrations`, `/settings/keys` (+POST mint / DELETE revoke), `GET /desks`, `/desks/:id/spine`, `/features` (soon-bar flags), `GET /pipeline/runs/latest` (status chip). Theme toggle = client only. All **new**.
