@@ -2,13 +2,13 @@ import { RGBA } from "@opentui/core";
 import { useEffect, useState } from "react";
 
 import {
+  SETTLED_MS,
   heroWordmarkLines,
   truecolorEnabled,
   wordmarkLines,
   type CellColor,
 } from "../../../packages/ui/src/components/chat/digichat-wordmark";
-
-const TICK_MS = 40;
+import { FRAME, reducedMotion } from "./motion";
 
 /** Process start. A remount in the same process keeps this clock. */
 let originMs: number | null = null;
@@ -18,7 +18,9 @@ function paint(color: CellColor): RGBA {
   return RGBA.fromIndex(color.cube);
 }
 
+/** Test freeze, or the settled frame under reduced motion. */
 function frozenMs(): number | null {
+  if (reducedMotion()) return SETTLED_MS;
   const raw = process.env.DIGICHAT_WORDMARK_MS;
   if (raw == null || raw === "") return null;
   const value = Number(raw);
@@ -37,7 +39,7 @@ export function DigichatWordmark({ cols }: { cols: number }) {
     if (hold != null) return;
     if (originMs === null) originMs = Date.now();
     const origin = originMs;
-    const timer = setInterval(() => setElapsed(Date.now() - origin), TICK_MS);
+    const timer = setInterval(() => setElapsed(Date.now() - origin), FRAME.tick);
     setElapsed(Date.now() - origin);
     return () => clearInterval(timer);
   }, [hold]);
