@@ -339,3 +339,65 @@ describe('fail-closed routing (slice 0008)', () => {
     expect(res.status).toBe(200);
   });
 });
+
+
+describe('loadBenchmarksBook names why the market closes are empty', () => {
+  it('names market_url_unset when MARKET_DATA_URL is absent from the worker env', async () => {
+    mockLiveFetch([{ date: '2026-10-10', ticker: 'XLV', close: 110 }]);
+    const book = await createSupabaseSource(ENV).benchmarks.loadBenchmarksBook(null, null);
+    expect(book?.marketIssue).toBe('market_url_unset');
+    expect(book?.marketCloses).toEqual({});
+  });
+  it('names market_universe_unavailable when /v1/market/tickers answers non-OK', async () => {
+    (globalThis as Record<string, unknown>).fetch = vi.fn(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes('/v1/market/tickers')) return new Response('nope', { status: 502 });
+      if (url.includes('/public_accounting_nav_history')) return Response.json(NAV_ROWS);
+      if (url.includes('/daily_snapshots')) return Response.json([{ date: '2026-09-24' }]);
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    const book = await createSupabaseSource({
+      ...ENV,
+      MARKET_DATA_URL: 'https://m.test',
+    }).benchmarks.loadBenchmarksBook(null, null);
+    expect(book?.marketIssue).toBe('market_universe_unavailable');
+  });
+  it('carries the http status when a closes batch fails', async () => {
+    (globalThis as Record<string, unknown>).fetch = vi.fn(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes('/v1/market/closes')) return new Response('nope', { status: 503 });
+      if (url.includes('/v1/market/tickers')) return Response.json({ tickers: ['XLV'] });
+      if (url.includes('/public_accounting_nav_history')) return Response.json(NAV_ROWS);
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    const book = await createSupabaseSource({
+      ...ENV,
+      MARKET_DATA_URL: 'https://m.test',
+    }).benchmarks.loadBenchmarksBook(null, null);
+    expect(book?.marketIssue).toBe('market_closes_http_503');
+  });
+  it('names market_closes_unreachable when a closes batch throws', async () => {
+    (globalThis as Record<string, unknown>).fetch = vi.fn(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes('/v1/market/tickers')) return Response.json({ tickers: ['XLV'] });
+      if (url.includes('/public_accounting_nav_history')) return Response.json(NAV_ROWS);
+      if (url.includes('/v1/market/closes')) throw new TypeError('fetch failed');
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    const book = await createSupabaseSource({
+      ...ENV,
+      MARKET_DATA_URL: 'https://m.test',
+    }).benchmarks.loadBenchmarksBook(null, null);
+    expect(book?.marketIssue).toBe('market_closes_unreachable');
+    expect(book?.marketCloses).toEqual({});
+  });
+  it('is null when the market API answered with rows', async () => {
+    mockLiveFetch([{ date: '2026-09-24', ticker: 'XLV', close: 110 }]);
+    const book = await createSupabaseSource({
+      ...ENV,
+      MARKET_DATA_URL: 'https://m.test',
+    }).benchmarks.loadBenchmarksBook(null, null);
+    expect(book?.marketIssue).toBeNull();
+    expect(book?.marketCloses.XLV).toHaveLength(1);
+  });
+});
