@@ -33,12 +33,13 @@ SUITES = (
     "digivoice/tui",
     "clients/digichat-tui",
     "packages/surface-config",
+    "packages/hero-banner",
 )
 
 # Suites with zero dependencies skip the install step (see the workflow): there
 # is nothing to install, and `bun install` there would walk up to the repo-root
 # workspace and install the whole monorepo instead.
-NO_INSTALL_SUITES = ("packages/surface-config",)
+NO_INSTALL_SUITES = ("packages/surface-config", "packages/hero-banner")
 
 
 def test_bun_suites_are_not_vanished() -> None:
