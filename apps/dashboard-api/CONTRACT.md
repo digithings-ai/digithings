@@ -385,9 +385,18 @@ Response `data`:
   "universe": ["SPY", "QQQ"],
   "series": { "SPY": [{ "date": "2026-09-24", "close": 512.3 }] },
   "aligned_start": "2025-09-24",
-  "overlap_days": 21
+  "overlap_days": 21,
+  "reason": null
 }
 ```
+
+`reason` is `null` when the overlap is healthy, and otherwise the cause of
+the empty series as a stable token a consumer may badge on: the source layer's
+own failure (`market_url_unset`, `market_universe_unavailable`,
+`market_closes_http_<status>`, `market_closes_unreachable`) wins verbatim, else
+`no_overlap` when some closes exist but the intersection never covers a NAV
+date, else `no_closes_in_window`. A loader cause is never relabelled as an
+alignment gap.
 
 Rules: an empty market-API answer falls back to the benchmark keys (#4053,
 R2-API-only, no Supabase fallback). Each series aligns to the NAV dates;
