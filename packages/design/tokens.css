@@ -45,6 +45,12 @@
   --accent-digibase:   #9ea0a5;
   --accent-digistore:  #7b7fc7;
   --accent-digilink:   #4fa39b;
+  --accent-digivoice:  #cf6bd6; /* DIG-2922: orchid from the unassigned pool, the peak-cap colour of the
+                                   DIGIVOICE hero banner. Clear of digichat's pink #e2708a and
+                                   digivault's lavender #9d8fc9. */
+  --accent-digillm:    #b8c95a; /* DIG-2870: chartreuse from the unassigned pool, the routed-stream
+                                   colour of the DIGILLM hero banner. Distinct from digigraph's gold
+                                   #e5b765 and the research greens. */
   --accent-digivault:  #9d8fc9; /* ruled 2026-07-04: the lavender returns from the unassigned pool —
                                    the Obsidian-kinship hue for the Obsidian-style vault. 6.67:1 on
                                    the dark canvas (AA+); distinct from digistore's deeper #7b7fc7. */

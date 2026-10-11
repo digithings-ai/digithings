@@ -9,7 +9,7 @@ import { describe, expect, test } from "bun:test";
 import { heroWordmarkLines } from "../../ui/src/components/chat/digichat-wordmark";
 import type { BuildState } from "../src/animations/build";
 import type { RiseState } from "../src/animations/rise";
-import { DIGICHAT, DIGIQUANT, DIGITHINGS, DIGIVOICE } from "../src/definitions";
+import { DIGICHAT, DIGIQUANT, DIGITHINGS, DIGIVOICE_BASELINE as DIGIVOICE } from "../src/definitions";
 import { preparedBanner } from "../src/engine";
 import { bannerLines, type TermCell, type TermColor } from "../src/tui";
 import { LEGACY_DIGIQUANT } from "./legacy/digiquant-cells";

@@ -24,3 +24,4 @@ export { routeAnimation, type RouteOptions } from "./animations/route";
 export { stackAnimation, type StackOptions } from "./animations/stack";
 export { traverseAnimation, type TraverseOptions } from "./animations/traverse";
 export { tumblerAnimation, type TumblerOptions } from "./animations/tumbler";
+export { speakAnimation, speechLevel, type SpeakOptions } from "./animations/speak";
