@@ -26,6 +26,24 @@ import {
 
 const here = dirname(fileURLToPath(import.meta.url));
 
+const STACK_WRANGLER = join(here, "..", "wrangler.toml");
+const STANDALONE_WRANGLER = join(here, "..", "..", "dashboard-api", "wrangler.toml");
+
+/** Every `NAME = ` line inside a wrangler file's `[vars]` table. */
+function wranglerVars(tomlPath) {
+  const lines = readFileSync(tomlPath, "utf-8").split("\n");
+  const start = lines.findIndex((l) => l.trim() === "[vars]");
+  if (start === -1) return [];
+  const out = [];
+  for (const line of lines.slice(start + 1)) {
+    const table = /^\s*\[/.exec(line);
+    if (table) break;
+    const kv = /^([A-Za-z_][A-Za-z0-9_]*)\s*=/.exec(line);
+    if (kv) out.push(kv[1]);
+  }
+  return out;
+}
+
 const STUB_ENV = {};
 const MCP_ENV = { MCP_EDGE_KEY: "test-edge-key" };
 
@@ -201,5 +219,29 @@ describe("adapter source pins", () => {
     expect(source).not.toContain("Access-Control-Allow-Origin");
     expect(source).not.toContain("resolveAllowlist");
     expect(source).not.toContain("corsHeaders");
+  });
+});
+
+describe("folded worker env covers the standalone dashboard-api vars (DIG-2815)", () => {
+  it("declares every [vars] key the standalone dashboard-api worker declares", () => {
+    const standalone = wranglerVars(STANDALONE_WRANGLER);
+    const stack = new Set(wranglerVars(STACK_WRANGLER));
+    // Sanity: the extractor must see the table at all, on both sides. An empty
+    // list would make the containment check below vacuously true.
+    expect(standalone.length).toBeGreaterThan(0);
+    expect(stack.size).toBeGreaterThan(0);
+    expect(standalone).toContain("MARKET_DATA_URL");
+    const missing = standalone.filter((k) => !stack.has(k));
+    expect(missing).toEqual([]);
+  });
+
+  it("keeps MARKET_DATA_URL on the stack worker (the #4689 fold missed it)", () => {
+    // The fold forwards worker env verbatim, so a key the standalone worker
+    // declares and the stack does not resolves to '' inside the Worker: the
+    // market base goes relative, the universe read throws, and /benchmarks
+    // answers 200 with every series empty.
+    expect(wranglerVars(STACK_WRANGLER)).toContain("MARKET_DATA_URL");
+    const toml = readFileSync(STACK_WRANGLER, "utf-8");
+    expect(toml).toContain('MARKET_DATA_URL = "https://graph.digithings.ai"');
   });
 });
