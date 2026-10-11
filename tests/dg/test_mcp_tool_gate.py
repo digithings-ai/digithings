@@ -539,3 +539,206 @@ def test_a_refusal_cannot_be_flipped_into_a_write_by_a_second_decision(transport
     )
     assert replayed_approval["error"] == "unknown_pending_mcp_decision"
     assert len([n for n, _ in audit if n == "mcp_call_denied_by_human"]) == 1
+
+
+@pytest.mark.unit
+def test_the_decision_consumer_takes_no_transport_from_the_caller():
+    """CTO ruling: the deciding request supplies a verdict and an id, nothing else.
+
+    A caller-supplied transport is the hole this closes. A row with a matching
+    ``id`` but an attacker-chosen ``url`` would send the RECORDED arguments to an
+    endpoint the operator never configured, which is D3 broken under another
+    name. So the parameter must not merely be ignored -- it must not exist.
+    """
+    import inspect
+
+    from digigraph.orchestration.registry import decide_mcp_call
+
+    params = inspect.signature(decide_mcp_call).parameters
+    assert "servers" not in params, (
+        "decide_mcp_call accepts a transport from the caller, so a deciding request "
+        "can redirect the recorded payload at an arbitrary endpoint"
+    )
+
+
+@pytest.mark.unit
+def test_approval_executes_against_the_transport_captured_at_refusal_time(transport, audit):
+    """The recorded payload runs against the row that was recorded with it.
+
+    The deciding request is a different HTTP request from the one that was
+    refused. Nothing in it can name the transport, so the only thing that can
+    still supply it is the refusal-time capture -- which is why this asserts the
+    URL that actually reached the transport, not merely that a call happened.
+    """
+    import digigraph.orchestration.mcp_client as mc
+    import digigraph.orchestration.registry as registry
+
+    server = _server(url="https://mcp.example.invalid/rpc")
+    seen: list[dict] = []
+    monkey_calls = mc._call_tool_blocking
+
+    def _capture(server_arg, tool, args):
+        seen.append({"id": server_arg.get("id"), "url": server_arg.get("url"), "tool": tool})
+        return monkey_calls(server_arg, tool, args)
+
+    mc._call_tool_blocking = _capture
+    try:
+        pending_id = registry.execute(
+            f"{server['id']}_{MUTATING}", {"issueKey": "JIRA-1234"}, _context(server)
+        )["pending_id"]
+        decided = registry.decide_mcp_call(pending_id, True, session_id="sess-1")
+    finally:
+        mc._call_tool_blocking = monkey_calls
+
+    assert "error" not in decided, (
+        f"the capture did not supply the transport, so the call never ran: {decided}"
+    )
+    assert len(seen) == 1, f"expected exactly one transport call, saw {seen}"
+    assert seen[0]["url"] == "https://mcp.example.invalid/rpc"
+    assert transport and transport[0]["args"] == {"issueKey": "JIRA-1234"}
+
+
+@pytest.mark.unit
+def test_approval_answers_approved_so_the_client_can_tell_success_from_failure():
+    """The digichat route answers 502 unless ``status`` is approved or denied.
+
+    An approval that returns the raw tool payload makes a successful write look
+    like an upstream failure to the operator who approved it. The status is the
+    contract; the tool result travels beside it.
+    """
+    import digigraph.orchestration.registry as registry
+
+    server = _server()
+    pending_id = registry.execute(
+        f"{server['id']}_{MUTATING}", {"issueKey": "JIRA-1234"}, _context(server)
+    )["pending_id"]
+
+    decided = registry.decide_mcp_call(pending_id, True, session_id="sess-1")
+
+    assert decided.get("status") == "approved", (
+        f"an approval answered {decided.get('status')!r}, which the digichat route "
+        "reads as an upstream failure"
+    )
+    assert decided["pending_id"] == pending_id
+
+
+@pytest.mark.unit
+def test_the_captured_transport_never_reaches_the_public_event_or_the_audit(audit):
+    """The capture stays in the record beside ``args``, never on the way out.
+
+    ``as_public_event`` is what reaches the model and the checkpoint, and the
+    audit payload is what reaches the log. A captured token or URL in either is
+    a disclosure the 284.4 design deliberately excluded.
+    """
+    from digigraph.orchestration.registry import pending_mcp_decision
+
+    server = _server()
+    state: dict = {}
+    registry = __import__("digigraph.orchestration.registry", fromlist=["execute"])
+    pending_id = registry.execute(
+        f"{server['id']}_{MUTATING}", {"issueKey": "JIRA-1234"}, _context(server, state=state)
+    )["pending_id"]
+
+    event = state["pending_mcp_decision"]
+    for field in ("url", "token", "auth", "server", "transport"):
+        assert field not in event, f"{field} leaked into the public pending event"
+
+    record = pending_mcp_decision(pending_id, session_id="sess-1")
+    assert record is not None
+    public = record.as_public_event()
+    for field in ("url", "token", "auth", "server", "transport"):
+        assert field not in public, f"{field} leaked into the public pending event"
+        assert field not in record.target_arguments
+
+    assert audit, "the pending decision must be recorded"
+    for _name, payload in audit:
+        for field in ("url", "token", "auth", "server", "transport"):
+            assert field not in payload, f"{field} leaked into an audit payload"
+
+
+OPERATOR_ONLY_KEYS = (
+    "url",
+    "auth",
+    "token",
+    "authHeader",
+    "auth_header",
+    "allowedTools",
+    "mutatingTools",
+    "servers",
+    "mcp_servers",
+    "session_id",
+)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("key", OPERATOR_ONLY_KEYS)
+def test_the_decision_route_refuses_every_operator_only_key(key):
+    """The body carries a verdict and an id, and nothing that configures a server.
+
+    Each of these keys is refused BY NAME so the refusal says which one, rather
+    than reporting a generic bad request the operator cannot act on.
+    """
+    from digigraph.http_api.mcp_decisions import decision_from_request
+
+    body = {"pending_id": "a" * 32, "approve": True, key: "https://attacker.invalid/rpc"}
+    _fields, error = decision_from_request(body, session_id="sess-1")
+
+    assert error.get("error") == "decision_body_rejected", (
+        f"the route accepted an operator-only key {key!r}: {error}"
+    )
+    assert error.get("key") == key, f"the refusal does not name {key!r}: {error}"
+
+
+@pytest.mark.unit
+def test_the_decision_route_refuses_a_request_with_no_session_header():
+    """The session is the capability's scope; without it there is nothing to check."""
+    from digigraph.http_api.mcp_decisions import decision_from_request
+
+    _fields, error = decision_from_request(
+        {"pending_id": "a" * 32, "approve": True}, session_id=None
+    )
+
+    assert error.get("error") == "mcp_decision_requires_session", error
+
+
+@pytest.mark.unit
+def test_the_decision_route_refuses_a_verdict_that_is_not_a_boolean():
+    """ "true" as a string is not a decision; guessing at it would be an approval."""
+    from digigraph.http_api.mcp_decisions import decision_from_request
+
+    _fields, error = decision_from_request(
+        {"pending_id": "a" * 32, "approve": "true"}, session_id="sess-1"
+    )
+
+    assert error.get("error") == "decision_body_rejected", error
+
+
+@pytest.mark.unit
+def test_the_decision_route_accepts_exactly_the_two_keys_the_client_sends():
+    """The positive arm, so the refusals above are not passing for the wrong reason."""
+    from digigraph.http_api.mcp_decisions import decision_from_request
+
+    fields, error = decision_from_request(
+        {"pending_id": "a" * 32, "approve": False}, session_id="sess-1"
+    )
+
+    assert error == {}, f"a well-formed decision was refused: {error}"
+    assert fields == {"pending_id": "a" * 32, "approve": False}
+
+
+@pytest.mark.unit
+def test_the_decision_route_is_mounted_where_the_client_calls_it():
+    """``apps/digichat/.../approve/route.ts`` posts to ``/v1/mcp/decisions``.
+
+    A route under any other path leaves the operator clicking approve and getting
+    a 502 forever, so the path is pinned rather than left to review.
+    """
+    from digigraph.http_api.mcp_decisions import router
+
+    paths = {
+        (getattr(r, "path", None), tuple(sorted(getattr(r, "methods", ()) or ())))
+        for r in router.routes
+    }
+    assert ("/v1/mcp/decisions", ("POST",)) in paths, (
+        f"the digigraph decision route is not mounted where digichat calls it: {sorted(p for p, _ in paths)}"
+    )
