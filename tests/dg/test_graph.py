@@ -337,7 +337,7 @@ def test_mcp_human_decision_is_not_consumed_through_the_interrupt_resume_path() 
     doc = (repo_root / "digigraph" / "ARCHITECTURE.md").read_text()
 
     # Half A -- the resume route is not a decision consumer.
-    resume_route = server_src.split("@app.post(\"/threads/{thread_id}/resume\")", 1)
+    resume_route = server_src.split('@app.post("/threads/{thread_id}/resume")', 1)
     assert len(resume_route) == 2, "the /threads/{id}/resume route moved; re-read it"
     assert "decide_mcp_call" not in resume_route[1], (
         "the /threads/{id}/resume route now calls the MCP decision consumer -- "

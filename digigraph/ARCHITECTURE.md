@@ -666,6 +666,8 @@ Nodes emit streaming events via LangGraph's native `get_stream_writer()` (`langg
 
 The JWT subject (`sub`) is not bound to checkpoint state. Any authenticated caller with a valid JWT can read or resume any `thread_id` via the thread API. This is a known gap — see Section 11 (Redesign Recommendations).
 
+The human decision for a mutating MCP call does not travel on that resume route. `POST /threads/{thread_id}/resume` hands its body to `graph.invoke(Command(resume=...), ...)`; on a graph compiled with `interrupt_after=[...]` that value is silently dropped, which `tests/dg/test_graph.py::test_static_interrupt_after_pauses_but_resume_value_is_silently_dropped` pins. The decision is consumed instead by `orchestration.registry.decide_mcp_call`, which looks the pending id up under `(session_id, pending_id)` in process memory. Scope that pending id per session and not per thread: the gap above means a `thread_id` is not a capability here, so a pending id must not be one either. `tests/dg/test_graph.py::test_mcp_human_decision_is_not_consumed_through_the_interrupt_resume_path` pins both halves of this paragraph against the code.
+
 ### 6.2 Tool Allowlists
 
 Three sources merged in `tool_policy.py`:

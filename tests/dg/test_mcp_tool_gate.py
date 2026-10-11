@@ -482,3 +482,60 @@ def test_shadowed_local_tool_is_gated_before_the_local_handler(monkeypatch, tran
     ran = registry.execute("session_upsert_mcp", {"server": {"id": "acme"}}, ctx2)
     assert ran == {"ok": True, "session_prefs": {"server": {"id": "acme"}}}
     assert transport == []
+
+
+@pytest.mark.unit
+def test_denied_pending_call_is_audited_and_never_reaches_the_transport(transport, audit):
+    """A refusal is a decision, so it leaves the same trail an approval does.
+
+    The deny half of test_decision_cannot_substitute_the_payload asserts the
+    transport did not grow. It does not assert that anything was RECORDED, so a
+    refusal that returned cleanly and wrote no audit row would pass today.
+    """
+    import digigraph.orchestration.registry as registry
+
+    server = _server()
+    pending_id = registry.execute(
+        f"{server['id']}_{MUTATING}", {"issueKey": "JIRA-1234"}, _context(server)
+    )["pending_id"]
+
+    denied = registry.decide_mcp_call(pending_id, False, session_id="sess-1", servers=[server])
+
+    assert denied["status"] == "denied"
+    assert transport == [], "a refused call must never reach the MCP transport"
+    denials = [(name, payload) for name, payload in audit if name == "mcp_call_denied_by_human"]
+    assert len(denials) == 1, f"expected exactly one denial audit row, got {audit}"
+    assert denials[0][1] == {"tool": MUTATING, "server_id": "acme", "pending_id": pending_id}
+
+
+@pytest.mark.unit
+def test_a_refusal_cannot_be_flipped_into_a_write_by_a_second_decision(transport, audit):
+    """The second decision on a pending id is refused, whichever way it points.
+
+    The replay arm that already exists approves twice, which the at-most-once pop
+    refuses. The dangerous direction is the one it does not cover: a caller that
+    is refused and then submits the SAME pending id again as an approval. If the
+    record were still live, that second call would perform the write the human
+    just said no to -- so this asserts the write never reaches the transport, not
+    merely that the second call returns an error.
+    """
+    import digigraph.orchestration.registry as registry
+
+    server = _server()
+    pending_id = registry.execute(
+        f"{server['id']}_{MUTATING}", {"issueKey": "JIRA-1234"}, _context(server)
+    )["pending_id"]
+
+    denied = registry.decide_mcp_call(pending_id, False, session_id="sess-1", servers=[server])
+    assert denied["status"] == "denied"
+
+    replayed_approval = registry.decide_mcp_call(
+        pending_id, True, session_id="sess-1", servers=[server]
+    )
+
+    assert transport == [], (
+        "a refusal was flipped into a write: the pending id was still live after a "
+        "denial, so the same id was approved a second time and the call executed"
+    )
+    assert replayed_approval["error"] == "unknown_pending_mcp_decision"
+    assert len([n for n, _ in audit if n == "mcp_call_denied_by_human"]) == 1
