@@ -2,6 +2,9 @@ import path from "node:path";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
+  // packages/hero-banner has no tsconfig of its own, so its .tsx would fall back
+  // to the classic JSX runtime. Next compiles it with the automatic one.
+  esbuild: { jsx: "automatic" },
   test: {
     environment: "node",
     setupFiles: ["./vitest.setup.ts"],

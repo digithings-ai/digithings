@@ -56,11 +56,11 @@
 /* After the build: letters glint and strays blink in their own up/down tone. */
 @keyframes dq-glint {
   0% { fill: var(--dq-cell, var(--up)); }
-  6%, 100% { fill: currentColor; }
+  45%, 100% { fill: currentColor; }
 }
 @keyframes dq-blink {
   0% { opacity: 0.35; fill: var(--dq-cell, var(--up)); }
-  3%, 100% { opacity: 0; }
+  30%, 100% { opacity: 0; }
 }
 /* A later load in the same tab keeps the glint and drops the rise. The live
    mark (data-dq-live) is the one already playing, and the top hero always
