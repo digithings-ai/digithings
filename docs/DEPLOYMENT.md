@@ -71,7 +71,7 @@ digichat needs `AUTH_SECRET`, `AUTH_URL`, and `DIGIKEY_BFF_TOKEN` in `.env`. Aut
 
 ## LiteLLM
 
-LiteLLM is the only LLM router. Compose uses `docker.litellm.ai/berriai/litellm:main-stable` with explicit `--config` and a `/health/liveliness` healthcheck.
+LiteLLM is the only LLM router. Compose runs the `digillm` service (`ghcr.io/digithings-ai/digillm:0.1.0`, built from `Dockerfile.digillm`: `litellm[proxy]==1.83.14` from PyPI, never the vendor image — DIG-1780; network alias `litellm`, port 4000) with explicit `--config` and a `/health/liveliness` healthcheck.
 
 **Auth modes:**
 

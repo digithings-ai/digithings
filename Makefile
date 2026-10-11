@@ -1,7 +1,7 @@
 # Digi Ecosystem – common targets (Phase 0+)
 # Use: make build, make test, make test-e2e, make up, make down
 
-.PHONY: build up down test test-unit test-e2e test-baseline doc-check adr-check vault-check package up-heartbeat up-digichat down-digichat digichat-release-up digichat-release-down digichat-profile-a-up digichat-profile-a-down digichat-profile-a-bundle-up digichat-profile-a-bundle-down digichat-dev digichat-health digichat-config-check stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init model-catalog model-catalog-check clean-imports find-stale commit pr task new-task status batch-candidates parse-error hooks-install up-observability down-observability research-validate supabase-migrations-check datatap-answer-check
+.PHONY: build up down test test-unit test-e2e test-baseline doc-check adr-check vault-check package up-heartbeat up-digichat down-digichat digichat-release-up digichat-release-down digichat-profile-a-up digichat-profile-a-down digichat-profile-a-bundle-up digichat-profile-a-bundle-down digichat-dev digichat-health digichat-config-check stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init model-catalog model-catalog-check config-contract config-contract-check clean-imports find-stale commit pr task new-task status batch-candidates parse-error hooks-install up-observability down-observability research-validate supabase-migrations-check datatap-answer-check
 
 build:
 	docker compose build
@@ -240,6 +240,15 @@ model-catalog:
 model-catalog-check:
 	python3 scripts/refresh_model_catalog.py --check
 
+# Render the config contract (config/contract/*.yaml) into .env.example,
+# wrangler [vars] blocks, and config/generated/compose-contract.env (DIG-2758 S1).
+config-contract:
+	python3 scripts/render_config_contract.py
+
+# CI drift guard. Network-free — re-renders in memory and diffs. S9 consumes this.
+config-contract-check:
+	python3 scripts/render_config_contract.py --check
+
 # Validate research env + Supabase baseline row + graph compilation before a real run.
 # Fail-fast house: no provider pings — provider errors surface from the real run.
 # Usage: make research-validate              (full check)
@@ -371,3 +380,45 @@ secrets-audit:
 .PHONY: secrets-staleness
 secrets-staleness:
 	python3 scripts/secret_staleness_check.py --open-issue
+
+# --- local self-host stack (DIG-2775, S7) ------------------------------------
+# One command: `make local-stack` (alias `dt up`) brings up the local
+# self-host stack and refuses to report success unless the health gate passes.
+#
+# This block is additive and self-contained. The targets delegate to
+# `scripts/dt`; the preflight, secrets render, supabase, compose, wrangler
+# dev, proxy and seed artefacts it calls are owned by slices S1-S6 and are
+# SKIPPED (never failed) while they are still open PRs.
+#
+# Local check only, like the other stack targets above. CI parity is S9
+# (DIG-2777); the gate reuses this same code path via `local-stack-health`.
+.PHONY: local-stack local-stack-down local-stack-status local-stack-seed
+.PHONY: local-stack-reset local-stack-health local-stack-preflight local-stack-urls
+local-stack:
+	./scripts/dt up --profile $(or $(PROFILE),core)
+
+local-stack-down:
+	./scripts/dt down --profile $(or $(PROFILE),core)
+
+local-stack-status:
+	./scripts/dt status --profile $(or $(PROFILE),core)
+
+local-stack-seed:
+	./scripts/dt seed --profile $(or $(PROFILE),core)
+
+# Destructive: drops and rebuilds the local database. Requires SEED=... to set
+# the deterministic seed; RESET_YES=1 confirms, because `dt reset` otherwise
+# exits 2 without it.
+local-stack-reset:
+	./scripts/dt reset --profile $(or $(PROFILE),core) $(if $(SEED),--seed $(SEED),) $(if $(RESET_YES),--yes,)
+
+# The gate alone. Exits nonzero on any failure; `--require-all` additionally
+# fails on a skipped check, so CI can demand that nothing went unverified.
+local-stack-health:
+	./scripts/dt status --profile $(or $(PROFILE),core) $(if $(REQUIRE_ALL),--require-all,)
+
+local-stack-preflight:
+	./scripts/dt preflight
+
+local-stack-urls:
+	./scripts/dt urls --profile $(or $(PROFILE),core)

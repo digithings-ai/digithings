@@ -3,6 +3,9 @@
 Wrappers are exercised through FastMCP's tool manager with a
 MockTransport-backed GloomberbClient patched over the env-seam builder. No
 network, no session cookie required (gated tools are exercised both ways).
+Since #2752 the secret gate is forced open by an autouse fixture here, because
+this module tests what each tool does once it is advertised; whether it is
+advertised at all is pinned in tests/dq/data/test_gloomberb_session_gate.py.
 """
 
 from __future__ import annotations
@@ -19,13 +22,16 @@ pytest.importorskip("mcp.server.fastmcp")
 
 pytestmark = pytest.mark.unit
 
-from digiquant.data.gloomberb import (  # noqa: E402
+from digiquant.data.gloomberb import (  # noqa: E402  # noqa: E402
     GLOOMBERB_ATTRIBUTION,
     GLOOMBERB_DELAY_NOTICE,
     PREVIEW_ACCESS_WARNING,
     EarningsEvent,
     GloomberbClient,
+    agent_tools,
+    session_gate,
 )
+from digiquant.data.gloomberb.session_gate import SessionGateStatus  # noqa: E402
 from digiquant.mcp_server import create_mcp_server  # noqa: E402
 from digiquant.orchestrator_tools import build_orchestrator_tool_manifest  # noqa: E402
 from digiquant.tool_refusals import REFUSED_TOOLS  # noqa: E402
@@ -189,8 +195,31 @@ AAPL_QUOTE = {
 
 @pytest.fixture(autouse=True)
 def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No inherited Gloomberb env, and an authenticated secret gate (#2752).
+
+    Since #2752 a session/preview/pro tool is advertised only when the
+    configured cookie is *validated* against api.gloom.sh, not merely present.
+    This module exercises tool behaviour (envelopes, entitlement notes, wire
+    access), so it asks for a server that is authenticated and then drives every
+    tool with a mocked transport -- no request leaves the process either way.
+
+    The advertisement contract itself is pinned in
+    `tests/dq/data/test_gloomberb_session_gate.py`; the absent/invalid cases are
+    not asserted here because this module deliberately opens the gate.
+    """
     monkeypatch.delenv("GLOOMBERB_ENABLED", raising=False)
     monkeypatch.delenv("GLOOMBERB_SESSION_COOKIE", raising=False)
+    session_gate.reset_session_gate_cache()
+    monkeypatch.setattr(
+        session_gate,
+        "session_gate_status",
+        lambda *a, **k: SessionGateStatus(True, "ok", "authenticated for this test"),
+    )
+    monkeypatch.setattr(
+        agent_tools, "session_gate_status", session_gate.session_gate_status, raising=False
+    )
+    yield
+    session_gate.reset_session_gate_cache()
 
 
 def _mcp(name: str):

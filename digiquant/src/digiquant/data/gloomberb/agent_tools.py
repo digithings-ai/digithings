@@ -145,6 +145,7 @@ from .models import (
     WatchlistRemoveInput,
     YieldCurveInput,
 )
+from .session_gate import session_gate_status
 
 logger = logging.getLogger(__name__)
 
@@ -358,7 +359,15 @@ _DEFAULT_TOOL_NAMES: tuple[str, ...] = tuple(t["function"]["name"] for t in DIGI
 
 
 def _session_cookie_present() -> bool:
-    return bool(os.environ.get(GLOOMBERB_SESSION_COOKIE_ENV, "").strip())
+    """True when a cookie is configured AND it validates against api.gloom.sh.
+
+    Presence-only advertising was the #2752 gap: a stale or mistyped cookie
+    advertised 41 tools that could only answer ``auth_required``. The verdict
+    is cached for one TTL window per cookie, so this stays free at list time
+    after the first probe. Kept as a named helper because the tests and the
+    MCP surface both read better against a verb.
+    """
+    return session_gate_status().authenticated
 
 
 def _substack_cookie_present() -> bool:
