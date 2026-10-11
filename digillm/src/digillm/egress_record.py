@@ -22,6 +22,16 @@ That is the honest current value, and it is the evidence a later filter will be
 judged against: the day ``unscreened`` stops appearing, someone has to justify
 it.
 
+A decision is written only together with the evidence for it, in both
+directions: a record may claim ``masked`` or ``refused`` only if it names the
+categories that triggered it, and only those two may carry categories at all.
+That is what makes an empty ``category_ids`` readable. A ledger can then tell
+"screened, found nothing" (``pass``, empty) from "never screened"
+(``unscreened``, empty) -- two different answers to a data-subject request --
+and can count the ``unscreened`` rows instead of trusting them. A record that
+breaks the pairing cannot be built, and is dropped like any other unbuildable
+record: a warning, and the call proceeds.
+
 Three limits of the record, stated here so no reader over-reads it:
 
 * Granularity is one digillm provider attempt, not one HTTP packet. The OpenAI
@@ -103,6 +113,14 @@ class EgressDecision(StrEnum):
     than screened-and-clean. ``PASS``, ``MASKED`` and ``REFUSED`` exist so a
     later filter has somewhere to write its verdict without changing this
     record's shape. ``CACHE_HIT`` is the no-egress path.
+
+    A decision may only be written with the evidence for it:
+    :data:`MASKED` and :data:`REFUSED` are the only values that may carry
+    ``category_ids``, and they must carry at least one. ``PASS`` is the value
+    for "a screen ran and hit nothing", so it pairs with an empty
+    ``category_ids`` -- which is exactly what separates it from
+    :data:`UNSCREENED`. :meth:`EgressRecord._validate_shape` enforces the
+    pairing; it does not screen anything.
     """
 
     UNSCREENED = "unscreened"
@@ -190,6 +208,29 @@ class EgressRecord(BaseModel):
                 )
         elif self.destination == NO_EGRESS_DESTINATION:
             raise ValueError("only a cache hit may use the 'none' destination")
+
+        # A decision is a claim about a screen, so it is only writable together
+        # with that screen's evidence. `masked` and `refused` assert categories
+        # were hit and must name them; every other value asserts nothing was
+        # hit, so carrying any would contradict the claim.
+        #
+        # This is what makes an empty `category_ids` readable. Before the rule a
+        # hit set could sit on an `unscreened` row, so emptiness proved nothing
+        # and no ledger could tell "screened, found nothing" from "never
+        # screened". After it, a non-empty hit set is itself proof that a screen
+        # ran and hit -- which is what lets a later filter's `pass` rows be
+        # counted instead of assumed.
+        claimed_hit = self.decision in (EgressDecision.MASKED, EgressDecision.REFUSED)
+        if claimed_hit and not self.category_ids:
+            raise ValueError(
+                "a masked or refused record must name the Art. 9 categories that "
+                "triggered it, or the decision asserts a screen with no evidence"
+            )
+        if self.category_ids and not claimed_hit:
+            raise ValueError(
+                f"only a masked or refused record may carry Art. 9 category ids; a "
+                f"{self.decision.value!r} record with categories contradicts itself"
+            )
 
         return self
 

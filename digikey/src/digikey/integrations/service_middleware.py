@@ -212,4 +212,9 @@ def digisearch_path_scopes(method: str, path: str) -> list[str] | None:
         return ["digisearch:query"]
     if path == "/azure_status":
         return ["digisearch:query"]
+    # DIG-1177: the screening path gets its own scope. It must not ride the
+    # digisearch:query fallthrough below, and it is not auth-exempt: the caller
+    # has to hold digisearch:screen explicitly.
+    if path == "/internal/art9/screen":
+        return ["digisearch:screen"]
     return ["digisearch:query"]

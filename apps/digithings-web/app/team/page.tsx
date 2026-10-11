@@ -4,15 +4,16 @@ import {
   ContactMailto,
   CtaLink,
   DocumentFrame,
-  GlyphList,
-  GlyphRow,
   PageTitle,
   Prose,
+  Reveal,
   Section,
 } from "@digithings/ui";
+import { Card, CardContent } from "@digithings/ui/ui";
 import { DT_CONTACT_EMAIL } from "@/app/_nav";
 import { DtFooter } from "@/components/DtFooter";
 import { DtNav } from "@/components/DtNav";
+import { SecondaryCard, SecondaryGrid } from "@/components/SecondaryCard";
 
 export const metadata: Metadata = {
   title: "team — who builds digithings",
@@ -84,38 +85,42 @@ export default function TeamPage() {
 
           <Section id="maintainer" title="The maintainer">
             {MEMBERS.map((m) => (
-              <div key={m.name}>
-                <div className="flex flex-wrap items-center gap-[1.2rem]">
-                  <Image
-                    src={m.avatar}
-                    alt={`${m.name}, ${m.role.toLowerCase()} of digithings`}
-                    width={m.avatarSize}
-                    height={m.avatarSize}
-                    className="h-[96px] w-[96px] border border-hair"
-                  />
-                  <div className="grid gap-[0.25rem]">
-                    <span className="text-[length:var(--type-section)] font-medium text-ink">
-                      {m.name}
-                    </span>
-                    <span className="font-mono text-[length:var(--type-meta)] tracking-[var(--tracking-meta)] uppercase text-ink-mute">
-                      {m.role}
-                    </span>
-                    <a
-                      className="font-mono text-[length:var(--type-meta)] text-accent underline-offset-[3px] hover:text-ink hover:underline"
-                      href={m.github}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      @{m.githubHandle}
-                    </a>
-                  </div>
-                </div>
-                <div className="mt-[1.2rem]">
-                  <Prose>
-                    <p>{m.blurb}</p>
-                  </Prose>
-                </div>
-              </div>
+              <Reveal key={m.name}>
+                <Card className="border border-hair bg-surface ring-0">
+                  <CardContent>
+                    <div className="flex flex-wrap items-center gap-[1.2rem]">
+                      <Image
+                        src={m.avatar}
+                        alt={`${m.name}, ${m.role.toLowerCase()} of digithings`}
+                        width={m.avatarSize}
+                        height={m.avatarSize}
+                        className="h-[96px] w-[96px] border border-hair"
+                      />
+                      <div className="grid gap-[0.25rem]">
+                        <span className="text-[length:var(--type-section)] font-medium text-ink">
+                          {m.name}
+                        </span>
+                        <span className="font-mono text-[length:var(--type-meta)] tracking-[var(--tracking-meta)] uppercase text-ink-mute">
+                          {m.role}
+                        </span>
+                        <a
+                          className="font-mono text-[length:var(--type-meta)] text-accent underline-offset-[3px] hover:text-ink hover:underline"
+                          href={m.github}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          @{m.githubHandle}
+                        </a>
+                      </div>
+                    </div>
+                    <div className="mt-[1.2rem]">
+                      <Prose>
+                        <p>{m.blurb}</p>
+                      </Prose>
+                    </div>
+                  </CardContent>
+                </Card>
+              </Reveal>
             ))}
           </Section>
 
@@ -124,13 +129,13 @@ export default function TeamPage() {
             title="Working together"
             lede="The stack is MIT-licensed and developed in public, so there are two ways in."
           >
-            <GlyphList>
-              {TOGETHER.map((r) => (
-                <GlyphRow key={r.label} label={r.label}>
+            <SecondaryGrid>
+              {TOGETHER.map((r, i) => (
+                <SecondaryCard key={r.label} label={r.label} index={i}>
                   {r.body}
-                </GlyphRow>
+                </SecondaryCard>
               ))}
-            </GlyphList>
+            </SecondaryGrid>
             <div className="mt-[1.6rem] flex flex-wrap items-center gap-[0.8rem]">
               <CtaLink href="https://github.com/digithings-ai/digithings" external>
                 Contribute on GitHub

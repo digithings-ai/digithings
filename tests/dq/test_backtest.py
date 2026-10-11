@@ -10,6 +10,7 @@ import pytest
 from digiquant.backtest import run_backtest
 from digiquant.data.loader import generate_synthetic_ohlcv
 from digiquant.models import BacktestResult
+from digiquant.nautilus_runner import RETURNS_SERIES_MISSING
 
 from tests.dq.conftest import SKIP_NATIVE_CRASH
 
@@ -110,7 +111,22 @@ class TestRunBacktest:
 @SKIP_NATIVE_CRASH
 @pytest.mark.unit
 class TestRunBacktestReal:
-    """Run real Nautilus backtest when nautilus_trader and test data are available."""
+    """Run real Nautilus backtest when nautilus_trader and test data are available.
+
+    A real run is ``partial``, not ``ok``: the pinned nautilus_trader cannot confirm
+    ``analyzer.returns()`` against ``portfolio_returns()``, so the chart series is
+    withheld rather than drawn from a per-position fallback. What these tests are
+    about — the run happening, and producing a Nautilus result — still holds, so the
+    assertions are that the backtest succeeded and that the withheld series is the
+    only thing missing.
+    """
+
+    @staticmethod
+    def _assert_only_series_withheld(result: BacktestResult) -> None:
+        assert result.success, f"backtest did not complete: status={result.status}"
+        assert set(result.missing) <= {RETURNS_SERIES_MISSING}, (
+            f"backtest lost a metric: {result.missing}"
+        )
 
     def test_returns_backtest_result_with_nautilus_run_id(self) -> None:
         pytest.importorskip("nautilus_trader")
@@ -125,7 +141,7 @@ class TestRunBacktestReal:
                 data_dir=tmp,
             )
         assert isinstance(result, BacktestResult)
-        assert result.status == "ok"
+        self._assert_only_series_withheld(result)
         assert result.run_id.startswith("nautilus-")
 
     def test_returns_in_reasonable_time(self) -> None:
@@ -155,7 +171,7 @@ class TestRunBacktestReal:
                 data_dir=tmp,
             )
         assert isinstance(result, BacktestResult)
-        assert result.status == "ok"
+        self._assert_only_series_withheld(result)
         assert result.run_id.startswith("nautilus-")
         assert "AAPL" in result.symbols
         assert "OHLCV" in result.message or "user" in result.message.lower()

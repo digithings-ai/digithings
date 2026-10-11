@@ -8,6 +8,10 @@ from unittest.mock import patch
 import pytest
 from digiquant.data.loader import generate_synthetic_ohlcv
 from digiquant.models import BacktestResult
+from digiquant.nautilus_runner import (
+    RETURNS_SERIES_MISSING,
+    RETURNS_SERIES_MISSING_SYMBOLS,
+)
 from digiquant.server import app
 from fastapi.testclient import TestClient
 
@@ -25,6 +29,21 @@ def _api_error_message(data: dict) -> str:
     if isinstance(err, dict) and err.get("message"):
         return str(err["message"])
     return str(data.get("detail", ""))
+
+
+def _assert_only_chart_series_withheld(missing: list[str]) -> None:
+    """Every name on ``missing`` is the withheld chart series, and there is one.
+
+    A single-symbol run names it bare, a multi-symbol run counts it
+    (``returns_series (3/3 symbols)``); no other metric may appear. See
+    ``nautilus_runner._verified_returns_series`` for why the series is withheld under
+    the pinned nautilus_trader at all.
+    """
+    assert len(missing) == 1, f"lost something besides the chart series: {missing}"
+    name = missing[0]
+    assert name == RETURNS_SERIES_MISSING or name.startswith(RETURNS_SERIES_MISSING_SYMBOLS), (
+        f"lost a metric: {missing}"
+    )
 
 
 @pytest.fixture
@@ -101,7 +120,11 @@ class TestRunBacktest:
         data = r.json()
         for field in SAMPLE_BACKTEST_RESULT_FIELDS:
             assert field in data, f"Missing field: {field}"
-        assert data["status"] == "ok"
+        # A real run is partial under the pinned nautilus_trader: its analyzer's
+        # returns() alias cannot be confirmed against portfolio_returns(), so the
+        # chart series is withheld. Every other metric is present.
+        assert data["status"] == "partial"
+        _assert_only_chart_series_withheld(data["missing"])
         assert data["symbols"] == SAMPLE_BACKTEST_PAYLOAD["symbols"]
         # Multi-symbol runs use "multi-" prefix; single-symbol uses "nautilus-".
         assert data["run_id"].startswith(("nautilus-", "multi-"))
@@ -286,7 +309,9 @@ class TestRunPipeline:
         assert r.status_code == 200
         data = r.json()
         assert "backtest" in data and "optimize" in data and "export" in data
-        assert data["backtest"]["status"] == "ok"
+        # partial, for the withheld chart series only — see _verified_returns_series.
+        assert data["backtest"]["status"] == "partial"
+        _assert_only_chart_series_withheld(data["backtest"]["missing"])
         assert data["optimize"]["status"] == "ok"
         assert data["export"]["status"] == "ok"
 
