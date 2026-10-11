@@ -35,3 +35,8 @@
   background-color: transparent !important;
   box-shadow: none !important;
 }
+
+/* The skin sizes the composer input at text-base; follow the ground's chat size. */
+.ground :global(.aui-composer-input) {
+  font-size: inherit !important;
+}

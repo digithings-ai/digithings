@@ -9,3 +9,10 @@ import { mono } from "@/app/fonts";
  * in `app/fonts.ts`.
  */
 export const digichatFont = mono;
+
+/**
+ * Chat text size on digiquant-web: the band and the desk both set it on the
+ * chat root, and the thread inherits it. Matches the page body scale (mono reads
+ * wider than the sans prose, so it sits a step below the 0.9375rem takeaway).
+ */
+export const DIGICHAT_TEXT = "text-[0.8125rem] leading-[1.55]";
