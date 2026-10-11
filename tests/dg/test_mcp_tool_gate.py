@@ -183,6 +183,20 @@ def test_absent_mutating_tools_makes_every_allowed_tool_mutating(transport):
         registry.execute(f"acme_{remote}", {}, _context(none_mutating))
     assert [c["tool"] for c in transport] == [MUTATING, READ_ONLY]
 
+    # A row naming NEITHER list cannot say anything is safe. Resolving the absent
+    # key through the row's own allowedTools yields an empty set, which used to
+    # read as "nothing mutates" and gate nothing -- while the call was allowed
+    # and ran. Allowed-ness here arrives on the ToolContext, exactly as a
+    # BFF-declared row delivers it.
+    before = len(transport)
+    bare = _server()
+    del bare["mutatingTools"]
+    del bare["allowedTools"]
+    for remote in (MUTATING, READ_ONLY):
+        result = registry.execute(f"acme_{remote}", {}, _context(bare, allowed=[f"acme_{remote}"]))
+        assert result["error"] == "mcp_call_requires_human_approval", remote
+    assert len(transport) == before
+
 
 @pytest.mark.unit
 def test_decision_cannot_substitute_the_payload(transport, audit):
