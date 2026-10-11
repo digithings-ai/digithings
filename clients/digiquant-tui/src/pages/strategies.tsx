@@ -6,10 +6,9 @@
  */
 import { useEffect, useState } from "react";
 import { BLOCKS, layoutFor, type BlockKind } from "../catalog";
-import { COLS, ROWS } from "../grid";
 import { DASH, EMPTY_READ, STUB_READ, presentResponse, type ReadResult } from "../read";
 import { DANGER, INK, MUTE } from "../theme";
-import { PaneFrame, useFocusedPane } from "./pane";
+import { openLayout, PaneFrame, paneBox, useFocusedPane } from "./pane";
 import { strategiesBody } from "./strategies-format";
 import { shapeLines, strategyBlocks, type PaneBody } from "./shape";
 import { strategySheetBody } from "./strategy-sheet";
@@ -60,8 +59,6 @@ export type StrategyBlockBody =
   | { type: "sheet"; rows: { label: string; value: string }[]; chart: string | null; trades: string[][] };
 
 type Loaded = { result: ReadResult; data: unknown };
-
-const share = (cells: number, total: number): `${number}%` => `${(cells / total) * 100}%` as `${number}%`;
 
 function isBlockId(id: string): id is BlockId {
   return (BLOCK_IDS as readonly string[]).includes(id);
@@ -412,7 +409,8 @@ function paintIndex(id: string, read: Loaded | undefined): { status: ReadResult[
 
 /** Terminal strategies index. Summary, catalog, and deployments. Detail and deploy stay on their own pages. */
 function StrategiesIndex({ reads, layout }: { reads: Record<string, Loaded>; layout: ReturnType<typeof layoutFor> }) {
-  const [focus, setFocus] = useFocusedPane(layout.length, INDEX_PATH);
+  const [focus, setFocus, open] = useFocusedPane(layout.length, INDEX_PATH);
+  const rects = openLayout(layout, focus, open);
   return (
     <box width="100%" height="100%" position="relative" overflow="hidden">
       {layout.map((placement, index) => {
@@ -423,17 +421,14 @@ function StrategiesIndex({ reads, layout }: { reads: Record<string, Loaded>; lay
         return (
           <box
             key={`${INDEX_PATH}:${placement.id}`}
-            position="absolute"
-            left={share(placement.x - 1, COLS)}
-            top={share(placement.y - 1, ROWS)}
-            width={share(placement.w, COLS)}
-            height={share(placement.h, ROWS)}
+            {...paneBox(rects, placement.id)}
             onMouseDown={() => setFocus(index)}
           >
             <PaneFrame
               title={def.title}
               status={view.asOf ? `as of ${view.asOf}` : def.route}
               focused={index === focus}
+              open={open && index === focus}
               blocks={view.blocks}
               ink={tone(view.status)}
             />
@@ -463,7 +458,8 @@ function StrategiesDesk({
   reads: Record<string, Loaded>;
   layout: ReturnType<typeof layoutFor>;
 }) {
-  const [focus, setFocus] = useFocusedPane(layout.length, path);
+  const [focus, setFocus, open] = useFocusedPane(layout.length, path);
+  const rects = openLayout(layout, focus, open);
   return (
     <box width="100%" height="100%" position="relative" overflow="hidden">
       {layout.map((placement, index) => {
@@ -485,17 +481,14 @@ function StrategiesDesk({
         return (
           <box
             key={`${path}:${placement.id}`}
-            position="absolute"
-            left={share(placement.x - 1, COLS)}
-            top={share(placement.y - 1, ROWS)}
-            width={share(placement.w, COLS)}
-            height={share(placement.h, ROWS)}
+            {...paneBox(rects, placement.id)}
             onMouseDown={() => setFocus(index)}
           >
             <PaneFrame
               title={def.title}
               status={asOf ? `as of ${asOf}` : def.route}
               focused={index === focus}
+              open={open && index === focus}
               blocks={blocks}
               ink={tone(status)}
             />

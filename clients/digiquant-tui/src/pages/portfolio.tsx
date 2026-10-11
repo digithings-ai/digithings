@@ -1,10 +1,9 @@
 /** @jsxImportSource @opentui/react */
 import { useEffect, useState } from "react";
 import { BLOCKS, layoutFor, type BlockKind } from "../catalog";
-import { COLS, ROWS } from "../grid";
 import { EMPTY_READ, STUB_READ, isStubEnvelope, presentResponse, readBlock, type ReadResult } from "../read";
 import { DANGER, INK, MUTE } from "../theme";
-import { PaneFrame, useFocusedPane } from "./pane";
+import { openLayout, PaneFrame, paneBox, useFocusedPane } from "./pane";
 import { attributionBody } from "./attribution-format";
 import { holdingsBody } from "./holdings-format";
 import { ledgerBody } from "./ledger-format";
@@ -81,8 +80,6 @@ export function visibleRead(read: ReadResult | undefined): {
   };
 }
 
-const share = (cells: number, total: number): `${number}%` => `${(cells / total) * 100}%` as `${number}%`;
-
 const tone = (status: ReadResult["status"] | "loading") => {
   if (status === "ok") return INK;
   if (status === "empty" || status === "loading") return MUTE;
@@ -97,7 +94,8 @@ function PortfolioDesk({ path, api, reads }: { path: PortfolioPath; api: string;
     reads: {},
   });
   const blocks = portfolioBlocks(path);
-  const [focus, setFocus] = useFocusedPane(blocks.length, path);
+  const [focus, setFocus, open] = useFocusedPane(blocks.length, path);
+  const rects = openLayout(blocks, focus, open);
   const controlled = reads !== undefined;
   const shown = controlled ? reads : fetched.path === path ? fetched.reads : {};
 
@@ -127,17 +125,14 @@ function PortfolioDesk({ path, api, reads }: { path: PortfolioPath; api: string;
         return (
           <box
             key={block.id}
-            position="absolute"
-            left={share(block.x - 1, COLS)}
-            top={share(block.y - 1, ROWS)}
-            width={share(block.w, COLS)}
-            height={share(block.h, ROWS)}
+            {...paneBox(rects, block.id)}
             onMouseDown={() => setFocus(index)}
           >
             <PaneFrame
               title={block.title}
               status={view.asOf ? `as of ${view.asOf}` : block.route}
               focused={index === focus}
+              open={open && index === focus}
               lines={view.lines}
               ink={tone(view.status)}
             />
@@ -190,7 +185,8 @@ function PortfolioHome({ api }: { api: string }) {
   const path = "/portfolio";
   const [reads, setReads] = useState<Record<string, Loaded>>({});
   const layout = layoutFor(path);
-  const [focus, setFocus] = useFocusedPane(layout.length, path);
+  const [focus, setFocus, open] = useFocusedPane(layout.length, path);
+  const rects = openLayout(layout, focus, open);
 
   useEffect(() => {
     const placements = layoutFor(path);
@@ -219,17 +215,14 @@ function PortfolioHome({ api }: { api: string }) {
         return (
           <box
             key={placement.id}
-            position="absolute"
-            left={share(placement.x - 1, COLS)}
-            top={share(placement.y - 1, ROWS)}
-            width={share(placement.w, COLS)}
-            height={share(placement.h, ROWS)}
+            {...paneBox(rects, placement.id)}
             onMouseDown={() => setFocus(index)}
           >
             <PaneFrame
               title={def.title}
               status={view.asOf ? `as of ${view.asOf}` : def.route}
               focused={index === focus}
+              open={open && index === focus}
               blocks={view.blocks}
               ink={tone(view.status)}
             />
@@ -253,7 +246,8 @@ function HoldingsHome({ api }: { api: string }) {
   const path = "/portfolio/holdings";
   const [reads, setReads] = useState<Record<string, Loaded>>({});
   const layout = layoutFor(path);
-  const [focus, setFocus] = useFocusedPane(layout.length, path);
+  const [focus, setFocus, open] = useFocusedPane(layout.length, path);
+  const rects = openLayout(layout, focus, open);
 
   useEffect(() => {
     const placements = layoutFor(path);
@@ -283,17 +277,14 @@ function HoldingsHome({ api }: { api: string }) {
         return (
           <box
             key={placement.id}
-            position="absolute"
-            left={share(placement.x - 1, COLS)}
-            top={share(placement.y - 1, ROWS)}
-            width={share(placement.w, COLS)}
-            height={share(placement.h, ROWS)}
+            {...paneBox(rects, placement.id)}
             onMouseDown={() => setFocus(index)}
           >
             <PaneFrame
               title={def.title}
               status={view.asOf ? `as of ${view.asOf}` : def.route}
               focused={index === focus}
+              open={open && index === focus}
               blocks={view.blocks}
               ink={tone(view.status)}
             />
@@ -324,7 +315,8 @@ function AttributionHome({ api }: { api: string }) {
   const path = "/portfolio/attribution";
   const [reads, setReads] = useState<Record<string, Loaded>>({});
   const layout = layoutFor(path);
-  const [focus, setFocus] = useFocusedPane(layout.length, path);
+  const [focus, setFocus, open] = useFocusedPane(layout.length, path);
+  const rects = openLayout(layout, focus, open);
 
   useEffect(() => {
     const placements = layoutFor(path);
@@ -354,17 +346,14 @@ function AttributionHome({ api }: { api: string }) {
         return (
           <box
             key={placement.id}
-            position="absolute"
-            left={share(placement.x - 1, COLS)}
-            top={share(placement.y - 1, ROWS)}
-            width={share(placement.w, COLS)}
-            height={share(placement.h, ROWS)}
+            {...paneBox(rects, placement.id)}
             onMouseDown={() => setFocus(index)}
           >
             <PaneFrame
               title={def.title}
               status={view.asOf ? `as of ${view.asOf}` : def.route}
               focused={index === focus}
+              open={open && index === focus}
               blocks={view.blocks}
               ink={tone(view.status)}
             />
@@ -395,7 +384,8 @@ function LedgerHome({ api }: { api: string }) {
   const path = "/portfolio/ledger";
   const [reads, setReads] = useState<Record<string, Loaded>>({});
   const layout = layoutFor(path);
-  const [focus, setFocus] = useFocusedPane(layout.length, path);
+  const [focus, setFocus, open] = useFocusedPane(layout.length, path);
+  const rects = openLayout(layout, focus, open);
 
   useEffect(() => {
     const placements = layoutFor(path);
@@ -425,17 +415,14 @@ function LedgerHome({ api }: { api: string }) {
         return (
           <box
             key={placement.id}
-            position="absolute"
-            left={share(placement.x - 1, COLS)}
-            top={share(placement.y - 1, ROWS)}
-            width={share(placement.w, COLS)}
-            height={share(placement.h, ROWS)}
+            {...paneBox(rects, placement.id)}
             onMouseDown={() => setFocus(index)}
           >
             <PaneFrame
               title={def.title}
               status={view.asOf ? `as of ${view.asOf}` : def.route}
               focused={index === focus}
+              open={open && index === focus}
               blocks={view.blocks}
               ink={tone(view.status)}
             />
@@ -466,7 +453,8 @@ function TearsheetHome({ api }: { api: string }) {
   const path = "/portfolio/tearsheet";
   const [reads, setReads] = useState<Record<string, Loaded>>({});
   const layout = layoutFor(path);
-  const [focus, setFocus] = useFocusedPane(layout.length, path);
+  const [focus, setFocus, open] = useFocusedPane(layout.length, path);
+  const rects = openLayout(layout, focus, open);
 
   useEffect(() => {
     const placements = layoutFor(path);
@@ -496,17 +484,14 @@ function TearsheetHome({ api }: { api: string }) {
         return (
           <box
             key={placement.id}
-            position="absolute"
-            left={share(placement.x - 1, COLS)}
-            top={share(placement.y - 1, ROWS)}
-            width={share(placement.w, COLS)}
-            height={share(placement.h, ROWS)}
+            {...paneBox(rects, placement.id)}
             onMouseDown={() => setFocus(index)}
           >
             <PaneFrame
               title={def.title}
               status={view.asOf ? `as of ${view.asOf}` : def.route}
               focused={index === focus}
+              open={open && index === focus}
               blocks={view.blocks}
               ink={tone(view.status)}
             />
@@ -533,7 +518,8 @@ function ThesesHome({ api }: { api: string }) {
   const path = "/portfolio/theses";
   const [reads, setReads] = useState<Record<string, Loaded>>({});
   const layout = layoutFor(path);
-  const [focus, setFocus] = useFocusedPane(layout.length, path);
+  const [focus, setFocus, open] = useFocusedPane(layout.length, path);
+  const rects = openLayout(layout, focus, open);
 
   useEffect(() => {
     const placements = layoutFor(path);
@@ -563,17 +549,14 @@ function ThesesHome({ api }: { api: string }) {
         return (
           <box
             key={placement.id}
-            position="absolute"
-            left={share(placement.x - 1, COLS)}
-            top={share(placement.y - 1, ROWS)}
-            width={share(placement.w, COLS)}
-            height={share(placement.h, ROWS)}
+            {...paneBox(rects, placement.id)}
             onMouseDown={() => setFocus(index)}
           >
             <PaneFrame
               title={def.title}
               status={view.asOf ? `as of ${view.asOf}` : def.route}
               focused={index === focus}
+              open={open && index === focus}
               blocks={view.blocks}
               ink={tone(view.status)}
             />

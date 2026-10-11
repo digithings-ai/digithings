@@ -11,7 +11,7 @@ import { tearsheetBody } from "../../../../../clients/digiquant-tui/src/pages/te
 import { thesesBody } from "../../../../../clients/digiquant-tui/src/pages/theses-format";
 import { shapeLines, type PaneBody } from "../../../../../clients/digiquant-tui/src/pages/shape";
 import { readDeskBlock, readOfficial, type OfficialRead } from "../read-block";
-import { DeskPane, PANE_GRID, usePaneFocus } from "./pane";
+import { DESK_TILE, DeskPane, PANE_MOSAIC, useDeskMosaic } from "./pane";
 
 /** Portfolio family. Tearsheet and performance share one layout. No dossier. */
 export const PORTFOLIO_PATHS = [
@@ -95,7 +95,7 @@ function PortfolioDesk({ path, reads }: { path: PortfolioPath; reads?: Reads }) 
     reads: {},
   });
   const blocks = portfolioBlocks(path);
-  const panes = usePaneFocus(blocks.map((block) => block.id));
+  const { mount, style, pane } = useDeskMosaic(blocks);
   const controlled = reads !== undefined;
   const shown = controlled ? reads : fetched.path === path ? fetched.reads : {};
 
@@ -119,14 +119,14 @@ function PortfolioDesk({ path, reads }: { path: PortfolioPath; reads?: Reads }) 
   }, [controlled, path]);
 
   return (
-    <div className={PANE_GRID}>
+    <div ref={mount} className={PANE_MOSAIC}>
       {blocks.map((block) => {
         const view = visibleRead(shown[block.id]);
         return (
           <div
             key={block.id}
-            className="min-h-0 min-w-0"
-            style={{ gridColumn: `${block.x} / span ${block.w}`, gridRow: `${block.y} / span ${block.h}` }}
+            className={DESK_TILE}
+            style={style(block.id)}
           >
             <DeskPane
               title={block.title}
@@ -134,9 +134,7 @@ function PortfolioDesk({ path, reads }: { path: PortfolioPath; reads?: Reads }) 
               asOf={view.asOf}
               lines={view.lines}
               tone={tone[view.status]}
-              focused={panes.focus === block.id}
-              onFocus={() => panes.focusAt(block.id)}
-              onNext={panes.next}
+              {...pane(block.id)}
             />
           </div>
         );
@@ -165,7 +163,7 @@ function PortfolioHome() {
   const path = "/portfolio";
   const [reads, setReads] = useState<Record<string, OfficialRead>>({});
   const layout = layoutFor(path);
-  const panes = usePaneFocus(layout.map((placement) => placement.id));
+  const { mount, style, pane } = useDeskMosaic(layout);
 
   useEffect(() => {
     const placements = layoutFor(path);
@@ -186,7 +184,7 @@ function PortfolioHome() {
   }, []);
 
   return (
-    <div className={PANE_GRID}>
+    <div ref={mount} className={PANE_MOSAIC}>
       {layout.map((placement) => {
         const def = BLOCKS[placement.id];
         if (!def) return null;
@@ -194,8 +192,8 @@ function PortfolioHome() {
         return (
           <div
             key={placement.id}
-            className="min-h-0 min-w-0"
-            style={{ gridColumn: `${placement.x} / span ${placement.w}`, gridRow: `${placement.y} / span ${placement.h}` }}
+            className={DESK_TILE}
+            style={style(placement.id)}
           >
             <DeskPane
               title={def.title}
@@ -203,9 +201,7 @@ function PortfolioHome() {
               asOf={view.asOf}
               blocks={view.blocks}
               tone={tone[view.status]}
-              focused={panes.focus === placement.id}
-              onFocus={() => panes.focusAt(placement.id)}
-              onNext={panes.next}
+              {...pane(placement.id)}
             />
           </div>
         );
@@ -227,7 +223,7 @@ function HoldingsHome() {
   const path = "/portfolio/holdings";
   const [reads, setReads] = useState<Record<string, OfficialRead>>({});
   const layout = layoutFor(path);
-  const panes = usePaneFocus(layout.map((placement) => placement.id));
+  const { mount, style, pane } = useDeskMosaic(layout);
 
   useEffect(() => {
     const placements = layoutFor(path);
@@ -248,7 +244,7 @@ function HoldingsHome() {
   }, []);
 
   return (
-    <div className={PANE_GRID}>
+    <div ref={mount} className={PANE_MOSAIC}>
       {layout.map((placement) => {
         const def = BLOCKS[placement.id];
         if (!def) return null;
@@ -256,8 +252,8 @@ function HoldingsHome() {
         return (
           <div
             key={placement.id}
-            className="min-h-0 min-w-0"
-            style={{ gridColumn: `${placement.x} / span ${placement.w}`, gridRow: `${placement.y} / span ${placement.h}` }}
+            className={DESK_TILE}
+            style={style(placement.id)}
           >
             <DeskPane
               title={def.title}
@@ -265,9 +261,7 @@ function HoldingsHome() {
               asOf={view.asOf}
               blocks={view.blocks}
               tone={tone[view.status]}
-              focused={panes.focus === placement.id}
-              onFocus={() => panes.focusAt(placement.id)}
-              onNext={panes.next}
+              {...pane(placement.id)}
             />
           </div>
         );
@@ -296,7 +290,7 @@ function AttributionHome() {
   const path = "/portfolio/attribution";
   const [reads, setReads] = useState<Record<string, OfficialRead>>({});
   const layout = layoutFor(path);
-  const panes = usePaneFocus(layout.map((placement) => placement.id));
+  const { mount, style, pane } = useDeskMosaic(layout);
 
   useEffect(() => {
     const placements = layoutFor(path);
@@ -317,7 +311,7 @@ function AttributionHome() {
   }, []);
 
   return (
-    <div className={PANE_GRID}>
+    <div ref={mount} className={PANE_MOSAIC}>
       {layout.map((placement) => {
         const def = BLOCKS[placement.id];
         if (!def) return null;
@@ -325,8 +319,8 @@ function AttributionHome() {
         return (
           <div
             key={placement.id}
-            className="min-h-0 min-w-0"
-            style={{ gridColumn: `${placement.x} / span ${placement.w}`, gridRow: `${placement.y} / span ${placement.h}` }}
+            className={DESK_TILE}
+            style={style(placement.id)}
           >
             <DeskPane
               title={def.title}
@@ -334,9 +328,7 @@ function AttributionHome() {
               asOf={view.asOf}
               blocks={view.blocks}
               tone={tone[view.status]}
-              focused={panes.focus === placement.id}
-              onFocus={() => panes.focusAt(placement.id)}
-              onNext={panes.next}
+              {...pane(placement.id)}
             />
           </div>
         );
@@ -365,7 +357,7 @@ function LedgerHome() {
   const path = "/portfolio/ledger";
   const [reads, setReads] = useState<Record<string, OfficialRead>>({});
   const layout = layoutFor(path);
-  const panes = usePaneFocus(layout.map((placement) => placement.id));
+  const { mount, style, pane } = useDeskMosaic(layout);
 
   useEffect(() => {
     const placements = layoutFor(path);
@@ -386,7 +378,7 @@ function LedgerHome() {
   }, []);
 
   return (
-    <div className={PANE_GRID}>
+    <div ref={mount} className={PANE_MOSAIC}>
       {layout.map((placement) => {
         const def = BLOCKS[placement.id];
         if (!def) return null;
@@ -394,8 +386,8 @@ function LedgerHome() {
         return (
           <div
             key={placement.id}
-            className="min-h-0 min-w-0"
-            style={{ gridColumn: `${placement.x} / span ${placement.w}`, gridRow: `${placement.y} / span ${placement.h}` }}
+            className={DESK_TILE}
+            style={style(placement.id)}
           >
             <DeskPane
               title={def.title}
@@ -403,9 +395,7 @@ function LedgerHome() {
               asOf={view.asOf}
               blocks={view.blocks}
               tone={tone[view.status]}
-              focused={panes.focus === placement.id}
-              onFocus={() => panes.focusAt(placement.id)}
-              onNext={panes.next}
+              {...pane(placement.id)}
             />
           </div>
         );
@@ -434,7 +424,7 @@ function TearsheetHome() {
   const path = "/portfolio/tearsheet";
   const [reads, setReads] = useState<Record<string, OfficialRead>>({});
   const layout = layoutFor(path);
-  const panes = usePaneFocus(layout.map((placement) => placement.id));
+  const { mount, style, pane } = useDeskMosaic(layout);
 
   useEffect(() => {
     const placements = layoutFor(path);
@@ -455,7 +445,7 @@ function TearsheetHome() {
   }, []);
 
   return (
-    <div className={PANE_GRID}>
+    <div ref={mount} className={PANE_MOSAIC}>
       {layout.map((placement) => {
         const def = BLOCKS[placement.id];
         if (!def) return null;
@@ -463,8 +453,8 @@ function TearsheetHome() {
         return (
           <div
             key={placement.id}
-            className="min-h-0 min-w-0"
-            style={{ gridColumn: `${placement.x} / span ${placement.w}`, gridRow: `${placement.y} / span ${placement.h}` }}
+            className={DESK_TILE}
+            style={style(placement.id)}
           >
             <DeskPane
               title={def.title}
@@ -472,9 +462,7 @@ function TearsheetHome() {
               asOf={view.asOf}
               blocks={view.blocks}
               tone={tone[view.status]}
-              focused={panes.focus === placement.id}
-              onFocus={() => panes.focusAt(placement.id)}
-              onNext={panes.next}
+              {...pane(placement.id)}
             />
           </div>
         );
@@ -499,7 +487,7 @@ function ThesesHome() {
   const path = "/portfolio/theses";
   const [reads, setReads] = useState<Record<string, OfficialRead>>({});
   const layout = layoutFor(path);
-  const panes = usePaneFocus(layout.map((placement) => placement.id));
+  const { mount, style, pane } = useDeskMosaic(layout);
 
   useEffect(() => {
     const placements = layoutFor(path);
@@ -520,7 +508,7 @@ function ThesesHome() {
   }, []);
 
   return (
-    <div className={PANE_GRID}>
+    <div ref={mount} className={PANE_MOSAIC}>
       {layout.map((placement) => {
         const def = BLOCKS[placement.id];
         if (!def) return null;
@@ -528,8 +516,8 @@ function ThesesHome() {
         return (
           <div
             key={placement.id}
-            className="min-h-0 min-w-0"
-            style={{ gridColumn: `${placement.x} / span ${placement.w}`, gridRow: `${placement.y} / span ${placement.h}` }}
+            className={DESK_TILE}
+            style={style(placement.id)}
           >
             <DeskPane
               title={def.title}
@@ -537,9 +525,7 @@ function ThesesHome() {
               asOf={view.asOf}
               blocks={view.blocks}
               tone={tone[view.status]}
-              focused={panes.focus === placement.id}
-              onFocus={() => panes.focusAt(placement.id)}
-              onNext={panes.next}
+              {...pane(placement.id)}
             />
           </div>
         );

@@ -6,7 +6,7 @@ import { EMPTY_READ, STUB_READ, type ReadResult } from "../../../../../clients/d
 import { pipelineBody } from "../../../../../clients/digiquant-tui/src/pages/pipeline-format";
 import { shapeLines, type PaneBody } from "../../../../../clients/digiquant-tui/src/pages/shape";
 import { readOfficial, type OfficialRead } from "../read-block";
-import { DeskPane, PANE_GRID, usePaneFocus } from "./pane";
+import { DESK_TILE, DeskPane, PANE_MOSAIC, useDeskMosaic } from "./pane";
 
 /** Pipeline desk. Same blocks as the terminal. A down API or a stub stays a sentence. */
 const PATH = "/pipeline";
@@ -36,7 +36,7 @@ function paint(id: string, read: OfficialRead | undefined): { status: ReadResult
 export function PipelinePage() {
   const [reads, setReads] = useState<Record<string, OfficialRead>>({});
   const layout = layoutFor(PATH);
-  const panes = usePaneFocus(layout.map((placement) => placement.id));
+  const { mount, style, pane } = useDeskMosaic(layout);
 
   useEffect(() => {
     const placements = layoutFor(PATH);
@@ -57,7 +57,7 @@ export function PipelinePage() {
   }, []);
 
   return (
-    <div className={PANE_GRID}>
+    <div ref={mount} className={PANE_MOSAIC}>
       {layout.map((placement) => {
         const def = BLOCKS[placement.id];
         if (!def) return null;
@@ -65,8 +65,8 @@ export function PipelinePage() {
         return (
           <div
             key={placement.id}
-            className="min-h-0 min-w-0"
-            style={{ gridColumn: `${placement.x} / span ${placement.w}`, gridRow: `${placement.y} / span ${placement.h}` }}
+            className={DESK_TILE}
+            style={style(placement.id)}
           >
             <DeskPane
               title={def.title}
@@ -74,9 +74,7 @@ export function PipelinePage() {
               asOf={view.asOf}
               blocks={view.blocks}
               tone={tone[view.status]}
-              focused={panes.focus === placement.id}
-              onFocus={() => panes.focusAt(placement.id)}
-              onNext={panes.next}
+              {...pane(placement.id)}
             />
           </div>
         );

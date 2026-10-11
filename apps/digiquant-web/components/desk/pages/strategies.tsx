@@ -13,7 +13,7 @@ import { strategiesBody } from "../../../../../clients/digiquant-tui/src/pages/s
 import { strategySheetBody } from "../../../../../clients/digiquant-tui/src/pages/strategy-sheet";
 import { shapeLines, strategyBlocks, type PaneBody } from "../../../../../clients/digiquant-tui/src/pages/shape";
 import { readOfficial, type OfficialRead } from "../read-block";
-import { DeskPane, PANE_GRID, usePaneFocus } from "./pane";
+import { DESK_TILE, DeskPane, PANE_MOSAIC, useDeskMosaic } from "./pane";
 
 const STRATEGY_PATHS = new Set(["/strategies", "/strategies/detail", "/strategies/deploy"]);
 const INDEX_PATH = "/strategies";
@@ -381,9 +381,9 @@ function paintIndex(id: string, read: OfficialRead | undefined): { status: ReadR
 
 /** Desk strategies index. Same blocks as the terminal. Detail and deploy stay on their own pages. */
 function StrategiesIndex({ reads, layout }: { reads: Record<string, OfficialRead>; layout: ReturnType<typeof layoutFor> }) {
-  const panes = usePaneFocus(layout.map((placement) => placement.id));
+  const { mount, style, pane } = useDeskMosaic(layout);
   return (
-    <div className={PANE_GRID}>
+    <div ref={mount} className={PANE_MOSAIC}>
       {layout.map((placement) => {
         const def = BLOCKS[placement.id];
         if (!def) return null;
@@ -392,8 +392,8 @@ function StrategiesIndex({ reads, layout }: { reads: Record<string, OfficialRead
         return (
           <div
             key={`${INDEX_PATH}:${placement.id}`}
-            className="min-h-0 min-w-0"
-            style={{ gridColumn: `${placement.x} / span ${placement.w}`, gridRow: `${placement.y} / span ${placement.h}` }}
+            className={DESK_TILE}
+            style={style(placement.id)}
           >
             <DeskPane
               title={def.title}
@@ -401,9 +401,7 @@ function StrategiesIndex({ reads, layout }: { reads: Record<string, OfficialRead
               asOf={view.asOf}
               blocks={view.blocks}
               tone={tone[view.status]}
-              focused={panes.focus === placement.id}
-              onFocus={() => panes.focusAt(placement.id)}
-              onNext={panes.next}
+              {...pane(placement.id)}
             />
           </div>
         );
@@ -431,9 +429,9 @@ function StrategiesDesk({
   reads: Record<string, OfficialRead>;
   layout: ReturnType<typeof layoutFor>;
 }) {
-  const panes = usePaneFocus(layout.map((placement) => placement.id));
+  const { mount, style, pane } = useDeskMosaic(layout);
   return (
-    <div className={PANE_GRID}>
+    <div ref={mount} className={PANE_MOSAIC}>
       {layout.map((placement) => {
         const def = BLOCKS[placement.id];
         if (!def) return null;
@@ -453,8 +451,8 @@ function StrategiesDesk({
         return (
           <div
             key={`${path}:${placement.id}`}
-            className="min-h-0 min-w-0"
-            style={{ gridColumn: `${placement.x} / span ${placement.w}`, gridRow: `${placement.y} / span ${placement.h}` }}
+            className={DESK_TILE}
+            style={style(placement.id)}
           >
             <DeskPane
               title={def.title}
@@ -462,9 +460,7 @@ function StrategiesDesk({
               asOf={asOf}
               blocks={blocks}
               tone={tone[status]}
-              focused={panes.focus === placement.id}
-              onFocus={() => panes.focusAt(placement.id)}
-              onNext={panes.next}
+              {...pane(placement.id)}
             />
           </div>
         );

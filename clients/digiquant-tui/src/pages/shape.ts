@@ -238,3 +238,31 @@ export function strategyBlocks(body: StrategyView, provenance: string[] = []): P
   }
   return { blocks: blocks.length ? blocks : [{ kind: "sentence", text: EMPTY_READ }] };
 }
+
+/** A number with float noise or a long tail, inside text. Not part of a date, a time or a version. */
+const LONG_NUMBER = /(?<![\d.:])-?\d+\.\d{5,}(?![\d.])/g;
+
+/** `1.39268400000001` reads `1.3927`: two decimals from 1000, four from 1, four significant digits below 1. Other text is untouched. */
+export function tidyNumbers(text: string): string {
+  return text.replace(LONG_NUMBER, (raw) => {
+    const value = Number(raw);
+    if (!Number.isFinite(value)) return raw;
+    const size = Math.abs(value);
+    if (size >= 1000) return value.toFixed(2);
+    if (size >= 1) return value.toFixed(4);
+    return String(Number(value.toPrecision(4)));
+  });
+}
+
+/** The same body with every long number tidied. Both desks paint through this. */
+export function tidyBody(body: PaneBody): PaneBody {
+  return {
+    blocks: body.blocks.map((block): PaneBlock => {
+      if (block.kind === "table") {
+        return { kind: "table", columns: block.columns, rows: block.rows.map((row) => row.map(tidyNumbers)) };
+      }
+      if (block.kind === "chart") return block;
+      return { kind: block.kind, text: tidyNumbers(block.text) };
+    }),
+  };
+}

@@ -545,6 +545,19 @@ body {
   margin-left: 10px;
   color: var(--ink-mute);
 }
+/* Desk tiles are placed by inline rects from the shared expand solve. Opening
+   one eases it and its neighbours to their new rects on the mosaic's timing
+   (kit ModuleGrid: 0.5s on the brand curve). Reduced motion places them at once. */
+.desk-tile {
+  transition:
+    left 0.5s var(--ease),
+    top 0.5s var(--ease),
+    width 0.5s var(--ease),
+    height 0.5s var(--ease);
+}
+@media (prefers-reduced-motion: reduce) {
+  .desk-tile { transition: none; }
+}
 @media (max-width: 759px) {
   .desk-pages { display: inline-flex; }
   .desk-shell > header {
@@ -597,6 +610,16 @@ body {
     min-width: 0;
     height: auto;
     flex: none;
+  }
+  /* The stack ignores the solved rects: every tile takes the full width in flow,
+     and an open tile grows down in place. */
+  .desk-mosaic { gap: 1px; }
+  .desk-mosaic > .desk-tile {
+    position: relative !important;
+    inset: auto !important;
+    width: 100% !important;
+    height: auto !important;
+    transition: none;
   }
   .desk-mosaic section {
     height: auto;
