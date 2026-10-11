@@ -68,3 +68,28 @@ test("LIVE keeps moving after LOADING; HERO_BANNER_LIVE=0 settles", async () => 
   const offB = await frameAt(def, size, 3300, { HERO_BANNER_LIVE: "0" });
   expect(offA).toBe(offB);
 });
+
+/**
+ * DIG-2695: `DIGI_REDUCED_MOTION` is the flag motion.ts documents as drawing
+ * EVERY animation at its settled frame. The banner is one of those animations
+ * and used to ignore it, so an operator who set the flag still got a moving
+ * wordmark. Same spelling as NO_MOTION, same outcome.
+ */
+test("DIGI_REDUCED_MOTION settles the banner exactly like NO_MOTION", async () => {
+  const size = { width: 120, height: 30 };
+  const def = BANNERS.digichat;
+  const loadingMs = def.animation.loadingMs(preparedBanner(def).state);
+  const mid = Math.round(loadingMs * 0.35);
+
+  const settled = await frameAt(def, size, 0, { NO_MOTION: "1" });
+
+  // Non-vacuity: with no flag the banner really does move, so "settled" is a
+  // distinct frame and the equality below cannot be met by two moving frames.
+  expect(await frameAt(def, size, mid)).not.toBe(settled);
+
+  // The flag under test, at the same instant, must land on the settled frame.
+  expect(await frameAt(def, size, mid, { DIGI_REDUCED_MOTION: "1" })).toBe(settled);
+
+  // And it must stay there, not merely land there.
+  expect(await frameAt(def, size, Math.round(loadingMs * 0.8), { DIGI_REDUCED_MOTION: "1" })).toBe(settled);
+});
