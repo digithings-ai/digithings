@@ -1,6 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { DeskPage } from "./desk-page";
+import { DeskAccess } from "./desk-access";
+import type { Manifest } from "./desk-manifest";
+import { DeskPage, DeskRouteBody } from "./desk-page";
 
 describe("mounted desk pages", () => {
   it("renders the page components for the live desk paths", () => {
@@ -83,5 +85,26 @@ describe("mounted desk pages", () => {
     expect(fx).toContain("This page is not on the public desk.");
     expect(fx).not.toMatch(/fx hub|12x/i);
     expect(fx).not.toContain("/fx/summary");
+  });
+
+  it("draws an invite page only when the manifest grants it", () => {
+    const desk = (access: "granted" | "locked"): Manifest => ({
+      caller: { tier: "enterprise", groups: [] },
+      desks: [{ id: "fx", label: "FX Hub", blurb: "", access, pages: [{ path: "/fx", label: "FX Hub", access }] }],
+    });
+    const granted = renderToStaticMarkup(
+      <DeskAccess manifest={desk("granted")}>
+        <DeskRouteBody path="/fx" />
+      </DeskAccess>,
+    );
+    expect(granted).not.toContain("This page is not on the public desk.");
+    expect(granted).toContain("FX hub · summary");
+    const locked = renderToStaticMarkup(
+      <DeskAccess manifest={desk("locked")}>
+        <DeskRouteBody path="/fx" />
+      </DeskAccess>,
+    );
+    expect(locked).toContain("This page is not on the public desk.");
+    expect(locked).not.toContain("/fx/summary");
   });
 });
