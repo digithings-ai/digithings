@@ -44,6 +44,21 @@ def test_stdin_is_routed_and_never_inherited(tmp_path: Path) -> None:
     assert run_command(read).stdout == ""
 
 
+def test_env_overlay_is_visible_and_keeps_the_parent(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DIGIVOICE_PARENT_MARK", "kept")
+    script = (
+        "import os; "
+        "print(os.environ['DIGIVOICE_PARENT_MARK']); "
+        "print(os.environ['DYLD_LIBRARY_PATH'])"
+    )
+    result = run_command(
+        [sys.executable, "-c", script],
+        env={"DYLD_LIBRARY_PATH": "/opt/homebrew/lib"},
+    )
+    assert result.code == 0
+    assert result.stdout.splitlines() == ["kept", "/opt/homebrew/lib"]
+
+
 def test_error_tail_keeps_the_last_lines_and_fits_the_limit() -> None:
     assert error_tail("one\ntwo\nthree\n") == "one | two | three"
     assert error_tail("") == ""

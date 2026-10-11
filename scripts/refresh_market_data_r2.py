@@ -38,8 +38,27 @@ the manifest entry shape stays identical. (The brief names the price fetcher
 ``download_ohlcv_batch``; the real adapter is ``fetch_batch`` in
 ``digiquant.data.prices.fetchers`` — used here.)
 
-Exit codes: 0 fresh, 1 stale (gate refused or any ticker history-only/error),
-SystemExit message on missing credentials/URIs (fail closed, like backfill).
+Exit codes: 0 fresh, 1 stale (gate refused, or any ticker hard-failed, or any
+slow-cadence macro series ``history-only``), SystemExit message on missing
+credentials/URIs (fail closed, like backfill).
+
+Staleness is evaluated per series *and* per leg. A monthly/quarterly macro
+series that published nothing is exempt (#4621). That exemption is per-series
+and keyed on cadence alone, so it cannot see a leg: when the whole macro panel
+comes back ``history-only`` at once, every outcome is individually exempt,
+``failed`` is empty and the run exits 0 claiming fresh while the panel stays
+frozen at the last good seal. The exemption is therefore suspended only when
+*every* exempt macro series is ``history-only`` at once
+(:func:`_macro_leg_dead`), and the run then exits 1.
+
+Scope of that guard, precisely: it closes the ``history-only`` shape only, and
+only over series the manifest actually declared. Two neighbouring whole-leg
+freezes are *not* covered and still exit 0 — a panel that keeps serving rows
+inside its live window (``up-to-date``, so not a soft fail at all), and an
+unreadable manifest (``_resolve_macro_specs`` returns ``[]``, leaving the guard
+no exempt id to reason about). Partial legs and single-series manifests are
+also out of reach, by design. All four are recorded in
+``digiquant/ARCHITECTURE.md``; the first two predate this guard.
 
 No vendor API key is needed on this path: the macro panel is sealed from
 anonymous Gloomberb ``econ_series`` pages (#4794). ``source=="fred"`` fetches
@@ -113,6 +132,12 @@ MODE_HISTORY_ONLY = "history-only"
 MODE_ERROR = "error"
 
 _SOFT_FAIL_MODES = frozenset({MODE_HISTORY_ONLY, MODE_ERROR})
+
+#: Outcomes that claim the fetch *worked*. `_macro_leg_dead` reads the soft-fail
+#: modes, so the modes a vendor can be quiet on are not its business; the
+#: `as_of` age guard reads these instead, because a series the vendor has
+#: retired still comes back `full-repull` (DIG-1137).
+_MACRO_SUCCESS_MODES = frozenset({MODE_UP_TO_DATE, MODE_INCREMENTAL, MODE_FULL_REPULL})
 
 LIVE_WINDOW_DAYS = 45
 # The live fetch window must span at least one publication period of the series
@@ -829,6 +854,40 @@ def _slow_macro_exempt_ids(macro_specs: list[tuple[str, str, str | None]]) -> se
     }
 
 
+def _macro_leg_dead(outcomes: list[dict[str, Any]], exempt: set[str]) -> bool:
+    """True when every exempt macro series is ``history-only`` at once (DIG-694).
+
+    The #4621 exemption is per-series and keyed on cadence alone, so it cannot
+    see a leg: when the whole macro panel comes back ``history-only`` at once,
+    each outcome is individually exempt, ``failed`` comes back empty and the
+    run exits 0 claiming fresh while the panel is frozen at the last good
+    seal. ``staleness_gate`` cannot cover it either -- it is a date-gap check
+    over the max ``as_of`` across datasets, and a whole-leg freeze leaves the
+    best ``as_of`` untouched.
+
+    ``history-only`` on a slow series has two causes that are not equally
+    strong evidence. An empty live window means the 120/240-day publication
+    window ran dry; a fetch failure means the vendor refused *that one* call,
+    and ``_fetch_macro`` builds a fresh client per series, so a rate-limit
+    blip silences an arbitrary subset of the panel. A subset is therefore not
+    evidence of anything -- a majority rule would fail the cron on a healthy
+    panel, which is how operators learn to ignore it. Only unanimity over the
+    exempt set is safe: every slow series silent at once is the feed, whatever
+    the cause. ``main`` emits exactly one outcome per macro spec, so the exempt
+    ids and their outcomes always line up.
+
+    The ``> 1`` floor is #4621 itself: with a single exempt series there is no
+    leg to judge, and its quiet window is the release calendar. It buys two
+    known limits, both recorded in ``digiquant/ARCHITECTURE.md`` -- a
+    single-series manifest can never trip this guard, and a partial leg stays
+    exempt exactly as it did before.
+    """
+    silent = {
+        o["ticker"] for o in outcomes if o["mode"] == MODE_HISTORY_ONLY and o["ticker"] in exempt
+    }
+    return len(silent) > 1 and silent == exempt
+
+
 def _live_window_days(cadence: str | None) -> int:
     """Live fetch window for a series' declared cadence (default: daily, 45d)."""
     if not cadence:
@@ -840,6 +899,61 @@ def _live_window_days(cadence: str | None) -> int:
         raise ValueError(
             f"unknown cadence {cadence!r}; expected one of {sorted(_CADENCE_WINDOW_DAYS)}"
         ) from None
+
+
+def _macro_as_of_stale(
+    outcomes: list[dict[str, Any]],
+    macro_specs: list[tuple[str, str, str | None]],
+    run: str,
+) -> list[dict[str, Any]]:
+    """Macro series sealed older than their own cadence window (DIG-1137).
+
+    ``_macro_leg_dead`` reads ``mode``: it catches the macro leg going
+    ``history-only`` outright. It cannot see the other way a macro panel dies --
+    the vendor stops publishing but keeps *answering*. A live fetch that returns
+    rows the store already has lands on the ``no new observations`` branch and
+    comes back ``up-to-date``, which is not a soft fail, so ``failed`` stays
+    empty and the run reports itself fresh with the panel frozen at its last
+    seal. ``staleness_gate`` cannot catch it either: it takes the newest
+    ``as_of`` across all datasets, and healthy price tickers pin that at the run
+    date no matter how dead the macro leg is.
+
+    So this reads the other field. Every macro outcome whose mode claims the
+    fetch worked is measured on ``as_of`` against the run date, in calendar
+    days, against the same ``_CADENCE_WINDOW_DAYS`` bound the live fetch used.
+    The window is the right threshold rather than the seal itself: a monthly
+    series legitimately holds a 34-day-old seal inside its 120-day window, and
+    flagging that would train operators to ignore the gate.
+
+    Orthogonal to ``_macro_leg_dead``, per outcome rather than per leg. That
+    guard needs unanimity because ``history-only`` has two indistinguishable
+    causes (an emptied window, or one vendor refusing one series) and a subset
+    is not evidence. Age has a single cause and is a measurement, so one frozen
+    series is a finding rather than a coincidence -- and it can only ever *add*
+    to ``failed``, never clear it.
+
+    Two limits, both accepted rather than hidden. ``history-only``/``error``
+    outcomes are left to ``_macro_leg_dead`` and the cadence exemption: a slow
+    series inside its window is quiet by design, and one past it has already
+    emptied its live window, so its age adds nothing to the leg test. And the
+    windows are calendar days, not open trading days like ``staleness_gate``'s
+    bound, so a monthly series is judged against months.
+    """
+    cadence_of = {f"{source}__{series}": cadence for source, series, cadence in macro_specs}
+    run_date = datetime.fromisoformat(run[:10]).date()
+    aged: list[dict[str, Any]] = []
+    for o in outcomes:
+        if o["ticker"] not in cadence_of or o["mode"] not in _MACRO_SUCCESS_MODES:
+            continue
+        as_of = str(o.get("as_of") or "")
+        if not as_of:
+            # A success-mode outcome with no seal carries no date to measure;
+            # the fetch branches that omit `as_of` all report a soft fail.
+            continue
+        age_days = (run_date - datetime.fromisoformat(as_of[:10]).date()).days
+        if age_days > _live_window_days(cadence_of[o["ticker"]]):
+            aged.append(o)
+    return aged
 
 
 def refresh_macro_series(
@@ -1438,14 +1552,27 @@ def main(argv: list[str] | None = None) -> int:
     gate = staleness_gate(new_as_of, run)
     # Cadence-aware stale gate (#4621): a slow series sitting out its release
     # cycle is expected quiet, not an outage. Real feed death — daily price
-    # errors/history-only, or any macro error — still fails loud.
+    # errors/history-only, or any macro error — still fails loud. The exemption
+    # is suspended only when every exempt macro series is history-only at once
+    # (#694 follow-up): a partial leg is indistinguishable from per-series
+    # vendor refusals and must stay quiet. Suspending it only ever adds names
+    # to `failed`; it never turns a stale run fresh.
     exempt = _slow_macro_exempt_ids(macro_specs)
     failed = [
         o
         for o in outcomes
         if o["mode"] in _SOFT_FAIL_MODES
-        and not (o["ticker"] in exempt and o["mode"] == MODE_HISTORY_ONLY)
+        and not (
+            o["ticker"] in exempt
+            and o["mode"] == MODE_HISTORY_ONLY
+            and not _macro_leg_dead(outcomes, exempt)
+        )
     ]
+    # Per-series `as_of` age guard (DIG-1137): a macro panel frozen behind a
+    # vendor that keeps answering lands on `up-to-date`, which `_macro_leg_dead`
+    # cannot see. Measured against each series' own cadence window. Additive
+    # only, like the exemption above -- it names series, it never clears them.
+    failed += _macro_as_of_stale(outcomes, macro_specs, run)
     stale = (not gate["ok"]) or bool(failed)
     manifest.update(build_manifest(new_as_of, datasets, stale=stale))
     digest = store.write_manifest(manifest)
