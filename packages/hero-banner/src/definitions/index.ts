@@ -7,6 +7,7 @@ import { stackAnimation } from "../animations/stack";
 import { tumblerAnimation } from "../animations/tumbler";
 import { traverseAnimation } from "../animations/traverse";
 import { pagesAnimation } from "../animations/pages";
+import { typeAnimation } from "../animations/type";
 import { PIXEL_7X10 } from "../font";
 import type { BannerDefinition, Tone } from "../types";
 
@@ -263,6 +264,36 @@ export const DIGIBOOK: BannerDefinition = {
   seed: 0xb00c,
 };
 
+/** DIG-2876. Typed at a prompt, then built: a block cursor types the word (one
+ *  typo, backspaced), parks and blinks, and a build sweep turns the source to
+ *  ink. LIVE edits one glyph now and then, or reruns the build. Accent:
+ *  --accent-digidev. */
+export const DIGIDEV: BannerDefinition = {
+  id: "digidev",
+  text: "DIGIDEV",
+  label: "digidev",
+  font: PIXEL_7X10,
+  gap: 2,
+  palette: {
+    ink: INK,
+    ground: GROUND,
+    accent: { hex: "#6B9DFF", cube: 75, cssVar: "--accent-digidev" },
+    glint: { hex: "#FFFFFF", cube: 231, cssVar: "--glint" },
+  },
+  animation: typeAnimation({
+    idleMs: 700,
+    keyMs: 130,
+    jitter: 0.5,
+    typoMs: 380,
+    holdMs: 900,
+    buildMs: 620,
+    blinkMs: 530,
+    everyMs: 6000,
+  }),
+  live: true,
+  seed: 0xde7,
+};
+
 export const BANNERS = {
   digithings: DIGITHINGS,
   digiquant: DIGIQUANT,
@@ -273,4 +304,5 @@ export const BANNERS = {
   digikey: DIGIKEY,
   digigraph: DIGIGRAPH,
   digibook: DIGIBOOK,
+  digidev: DIGIDEV,
 } as const;
