@@ -1,6 +1,7 @@
 import { buildAnimation } from "../animations/build";
 import { equalizerAnimation } from "../animations/equalizer";
 import { riseAnimation } from "../animations/rise";
+import { routeAnimation } from "../animations/route";
 import { scrambleAnimation } from "../animations/scramble";
 import { PIXEL_7X10 } from "../font";
 import type { BannerDefinition, Tone } from "../types";
@@ -98,4 +99,39 @@ export const DIGIVOICE: BannerDefinition = {
   seed: 0,
 };
 
-export const BANNERS = { digithings: DIGITHINGS, digiquant: DIGIQUANT, digichat: DIGICHAT, digivoice: DIGIVOICE } as const;
+/** DIG-2870. A router: one request fans out to every lane (provider) and the
+ *  reply comes back. Accent: --accent-digillm. */
+export const DIGILLM: BannerDefinition = {
+  id: "digillm",
+  text: "DIGILLM",
+  label: "digillm",
+  font: PIXEL_7X10,
+  gap: 2,
+  palette: {
+    ink: INK,
+    ground: GROUND,
+    accent: { hex: "#B8C95A", cube: 149, cssVar: "--accent-digillm" },
+    reply: { hex: "#FFFFFF", cube: 231, cssVar: "--glint" },
+  },
+  animation: routeAnimation({
+    crossMs: 760,
+    forkMs: 70,
+    jitter: 0.18,
+    holdMs: 120,
+    returnMs: 520,
+    pending: 0.45,
+    trail: 7,
+    packetEveryMs: 900,
+    packetMs: 900,
+  }),
+  live: true,
+  seed: 0x11e1,
+};
+
+export const BANNERS = {
+  digithings: DIGITHINGS,
+  digiquant: DIGIQUANT,
+  digichat: DIGICHAT,
+  digivoice: DIGIVOICE,
+  digillm: DIGILLM,
+} as const;
