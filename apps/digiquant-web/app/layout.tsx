@@ -66,7 +66,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             neutralize JS-gated hiding (hero entrance, [data-motion] reveals,
             the strategy deck); removed pre-paint when scripts run. */}
         <script dangerouslySetInnerHTML={{ __html: "document.documentElement.classList.remove('no-js')" }} />
-        {/* Later loads in this tab skip the pixel-mark rise. The first load still plays it. */}
+        {/* Later loads in this tab skip the secondary pixel-mark rise. The top hero builds on every load. */}
         <script dangerouslySetInnerHTML={{ __html: HERO_PLAYED_SCRIPT }} />
         
         <meta name="theme-color" content="#000000" />{/* canon-allow: page canvas is solid black, see globals.css */}
