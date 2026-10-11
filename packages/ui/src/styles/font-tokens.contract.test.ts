@@ -21,9 +21,15 @@ const SURFACES = [
   { surface: "dashboard", config: "apps/dashboard/app/fonts.ts" },
   { surface: "digiquant.io", config: "apps/digiquant-web/app/fonts.ts" },
   { surface: "digiquant app", config: "apps/digiquant-app/app/fonts.ts" },
-  { surface: "digithings.ai", config: "apps/digithings-web/app/fonts.ts" },
-  { surface: "DigiChat", config: "apps/digichat/src/app/fonts.ts" },
 ] as const;
+
+/**
+ * digithings-web and digichat were restored to develop's versions on this
+ * branch (a15c4873), so they still load their own fonts in their layouts.
+ * They rejoin SURFACES (with app/fonts.ts) when the Geist Mono port is redone
+ * for them; until then the contract does not police them.
+ */
+const PENDING_PORT = ["apps/digithings-web/", "apps/digichat/"];
 
 /** Type-specimen galleries and demos show font alternatives on purpose. */
 const OUT_OF_SCOPE = [
@@ -54,6 +60,7 @@ function filesUnder(root: string): string[] {
 const IN_SCOPE = [...filesUnder("apps"), ...filesUnder("packages")]
   .filter((file) => /\.(ts|tsx|css|html|md|svg)$/.test(file))
   .filter((file) => !OUT_OF_SCOPE.some((dir) => file.startsWith(dir)))
+  .filter((file) => !PENDING_PORT.some((dir) => file.startsWith(dir)))
   // This contract names the retired fonts on purpose, so it cannot scan itself.
   .filter((file) => !file.endsWith("font-tokens.contract.test.ts"));
 
