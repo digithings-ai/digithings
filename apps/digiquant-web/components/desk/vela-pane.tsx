@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { VelaWorkspace } from "@luxalgo/vela/workspace";
 import { VELA_UNAVAILABLE, velaWorkspaceOptions } from "./vela-options";
 
-/** LuxAlgo Vela workspace. One chart. Binance and Coinbase. A failed mount keeps this chrome. */
+/** LuxAlgo Vela workspace. One chart, house bars only. A failed mount keeps this chrome. */
 export function VelaPane() {
   const ref = useRef<HTMLDivElement>(null);
   const [failed, setFailed] = useState(false);
@@ -20,13 +20,9 @@ export function VelaPane() {
     };
 
     const mount = async () => {
-      const [{ VelaWorkspace: Workspace }, { BinanceProvider }, { CoinbaseProvider }] = await Promise.all([
-        import("@luxalgo/vela/workspace"),
-        import("@luxalgo/vela/providers/binance"),
-        import("@luxalgo/vela/providers/coinbase"),
-      ]);
+      const { VelaWorkspace: Workspace } = await import("@luxalgo/vela/workspace");
       if (dead) return;
-      workspace = new Workspace(host, velaWorkspaceOptions(BinanceProvider, CoinbaseProvider));
+      workspace = new Workspace(host, velaWorkspaceOptions());
     };
 
     void mount().catch(fail);

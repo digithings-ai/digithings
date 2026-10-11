@@ -18,7 +18,7 @@ export const DIGIQUANT_CANVAS = '#0A0E0C'; // canon-allow: canvas before --bg re
 export const DESK_CHART_FONT = 'ui-monospace, SFMono-Regular, Menlo, monospace';
 
 /** Vela project page — the attribution link required by NOTICE.luxalgo-vela. */
-export const VELA_PROJECT_URL = 'https://luxalgo.com/vela';
+export const VELA_PROJECT_URL = 'https://velacharts.dev';
 
 export interface DeskChartSurface {
   background: string;
