@@ -43,6 +43,10 @@ bun_suites:
   - digivoice/tui/**
   - clients/digichat-tui/**
   - packages/surface-config/**
+  - packages/hero-banner/**
+  # DIG-2864 (2026-10-11): the hero-banner engine's 39 parity tests are the
+  # no-visual-regression proof for every banner ticket, so an unwatched
+  # suite would be the DIG-2940 hole again under a new name.
   - .github/workflows/test-bun-suites.yml
 
 digiquant:
