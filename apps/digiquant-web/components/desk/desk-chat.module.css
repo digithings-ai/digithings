@@ -35,3 +35,11 @@
   background-color: transparent !important;
   box-shadow: none !important;
 }
+
+/* The skin pins messages and the composer at 0.88rem; follow the ground's chat size. */
+.ground :global(.aui-user-message-content),
+.ground :global(.aui-assistant-message-content),
+.ground :global(.aui-assistant-message-content .aui-md),
+.ground :global(.aui-composer-input) {
+  font-size: inherit !important;
+}

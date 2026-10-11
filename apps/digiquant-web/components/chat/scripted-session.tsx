@@ -18,7 +18,7 @@ import {
   type PlayCursor,
   type TourState,
 } from "@/app/_strategy-script";
-import { digichatFont } from "@/components/chat/digichat-font";
+import { DIGICHAT_TEXT, digichatFont } from "@/components/chat/digichat-font";
 import { OpenToolFallback } from "@/components/chat/open-tool-fallback";
 
 /** Hides the real composer. The visitor picks an example; they do not type into one. */
@@ -150,7 +150,7 @@ export function ScriptedDigichatSession() {
         ref={frameRef}
         data-thread-skin="digichat"
         aria-label="digichat"
-        className={`${digichatFont.variable} ${digichatFont.className} grid h-[min(36rem,calc(100svh-16rem))] min-h-[24rem] grid-rows-[auto_minmax(0,1fr)] overflow-hidden border border-hair md:grid-cols-[14rem_minmax(0,1fr)] md:grid-rows-1`}
+        className={`${digichatFont.variable} ${digichatFont.className} ${DIGICHAT_TEXT} scripted-digichat grid h-[min(40rem,calc(100svh-10rem))] min-h-[24rem] grid-rows-[auto_minmax(0,1fr)] overflow-hidden border border-hair md:grid-cols-[15rem_minmax(0,1fr)] md:grid-rows-1 lg:h-auto lg:min-h-[28rem] lg:flex-[1_1_0px]`}
       >
         <div className="max-h-40 min-h-0 overflow-hidden md:flex md:max-h-none">
           <DigichatThreadList className="h-full w-full" />

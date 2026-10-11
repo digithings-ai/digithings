@@ -26,6 +26,40 @@ describe("desk chat threads", () => {
     expect(html).not.toContain("DIGICHAT");
   });
 
+  it("marks only the open thread with the ▸ arrow and the highlight", () => {
+    const html = renderToStaticMarkup(
+      <ChatThreadRows
+        threads={[
+          { status: "regular", id: "s1", title: "rates" },
+          { status: "regular", id: "s2", title: "carry" },
+        ]}
+        activeId="s2"
+        onSelect={() => {}}
+      />,
+    );
+    const rows = html.split('<div class="nav-row"').slice(1);
+    expect(rows).toHaveLength(2);
+    const [first, second] = rows;
+    expect(first).toContain("rates");
+    expect(first).not.toContain("▸");
+    expect(first).not.toContain('aria-current="true"');
+    expect(first).not.toMatch(/nav-link[^"]* on\b/);
+    expect(second).toContain("carry");
+    expect(second).toContain('data-active="true"');
+    expect(second).toContain("▸");
+    expect(second).toContain('aria-current="true"');
+    expect(second).toMatch(/nav-link[^"]* on\b/);
+    expect(second).not.toContain("bg-transparent");
+  });
+
+  it("shows no marker when no thread is open", () => {
+    const html = renderToStaticMarkup(
+      <ChatThreadRows threads={[{ status: "regular", id: "s1", title: "rates" }]} onSelect={() => {}} />,
+    );
+    expect(html).not.toContain("▸");
+    expect(html).not.toContain('aria-current="true"');
+  });
+
   it("renders nothing when the API returned no threads", () => {
     const html = renderToStaticMarkup(<ChatThreadRows threads={[]} onSelect={() => {}} />);
     expect(html).toBe("");
