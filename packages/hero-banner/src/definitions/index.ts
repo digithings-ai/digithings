@@ -4,6 +4,7 @@ import { riseAnimation } from "../animations/rise";
 import { routeAnimation } from "../animations/route";
 import { scrambleAnimation } from "../animations/scramble";
 import { stackAnimation } from "../animations/stack";
+import { tumblerAnimation } from "../animations/tumbler";
 import { PIXEL_7X10 } from "../font";
 import type { BannerDefinition, Tone } from "../types";
 
@@ -171,6 +172,35 @@ export const DIGIBASE: BannerDefinition = {
   seed: 0xdb05,
 };
 
+/** DIG-2868. A pin-tumbler lock: a key slides in along the shear line, every
+ *  pin drops into line as the tip passes, then the key turns. Accent: --accent-digikey. */
+export const DIGIKEY: BannerDefinition = {
+  id: "digikey",
+  text: "DIGIKEY",
+  label: "digikey",
+  font: PIXEL_7X10,
+  gap: 2,
+  palette: {
+    ink: INK,
+    ground: GROUND,
+    accent: { hex: "#D97A5A", cube: 173, cssVar: "--accent-digikey" },
+    glint: { hex: "#FFFFFF", cube: 231, cssVar: "--glint" },
+  },
+  animation: tumblerAnimation({
+    keyMs: 1300,
+    settleMs: 200,
+    clickMs: 90,
+    holdMs: 160,
+    turnMs: 420,
+    maxOffset: 3,
+    locked: 0.32,
+    eventEveryMs: 2200,
+    pickMs: 360,
+  }),
+  live: true,
+  seed: 0x6e7,
+};
+
 export const BANNERS = {
   digithings: DIGITHINGS,
   digiquant: DIGIQUANT,
@@ -178,4 +208,5 @@ export const BANNERS = {
   digivoice: DIGIVOICE,
   digillm: DIGILLM,
   digibase: DIGIBASE,
+  digikey: DIGIKEY,
 } as const;
