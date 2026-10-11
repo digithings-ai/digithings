@@ -85,6 +85,22 @@ describe('buildTableQuery', () => {
     expect(q).not.toContain('retrieval_pin');
   });
 
+  // DIG-2857: digiquant.io tear sheets read strategy_tearsheets through this
+  // route. While it was off the allowlist every read 404'd `not_found`, so
+  // `fetchTearsheet` returned null and every card rendered honest-empty.
+  it('serves strategy_tearsheets unpinned (anon RLS parity, no workspace_id column)', () => {
+    const q = buildTableQuery(
+      'strategy_tearsheets',
+      qs({ select: 'strategy_id,metrics', 'eq.strategy_id': 'btc_slapper', limit: '1' }),
+    );
+    expect(q).toContain('strategy_tearsheets?');
+    expect(q).toContain('select=strategy_id%2Cmetrics');
+    expect(q).toContain('strategy_id=eq.btc_slapper');
+    expect(q).toContain('limit=1');
+    // The table has no workspace_id column; a pin here would 400 upstream.
+    expect(q).not.toContain('workspace_id');
+  });
+
   it('rejects tables outside the allowlist', () => {
     try {
       buildTableQuery('portfolio_ledger_commits', qs({ select: '*' }));
