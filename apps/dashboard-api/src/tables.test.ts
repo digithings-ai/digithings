@@ -13,11 +13,12 @@ import {
   TablesQueryError,
 } from './tables';
 
-const ENV: Env = {
+const ENV: Env = { DASHBOARD_TRUST_IDENTITY_HEADERS: "1",
   SUPABASE_URL: 'https://test.supabase.co',
   SUPABASE_SERVICE_ROLE_KEY: 'test-service-key',
 };
 
+const BRIEF = { headers: { 'x-digi-tier': 'brief' } };
 const FETCHED: string[] = [];
 
 function mockFetch(rows: unknown): void {
@@ -110,7 +111,7 @@ describe('GET /v1/tables/:table', () => {
   it('serves rows and forwards the PostgREST query upstream', async () => {
     mockFetch([{ date: '2026-09-24' }]);
     const res = await app.fetch(
-      new Request('https://api.test/v1/tables/daily_snapshots?select=date&order=date.desc&limit=1'),
+      new Request('https://api.test/v1/tables/daily_snapshots?select=date&order=date.desc&limit=1', BRIEF),
       ENV,
     );
     expect(res.status).toBe(200);
@@ -123,7 +124,7 @@ describe('GET /v1/tables/:table', () => {
   it('returns 404 for a non-allowlisted table', async () => {
     mockFetch([]);
     const res = await app.fetch(
-      new Request('https://api.test/v1/tables/portfolio_ledger_commits?select=*'),
+      new Request('https://api.test/v1/tables/portfolio_ledger_commits?select=*', BRIEF),
       ENV,
     );
     expect(res.status).toBe(404);
@@ -133,8 +134,8 @@ describe('GET /v1/tables/:table', () => {
   it('returns 502 without worker env (fail-closed, no stub lane)', async () => {
     mockFetch([]);
     const res = await app.fetch(
-      new Request('https://api.test/v1/tables/positions?select=*'),
-      {},
+      new Request('https://api.test/v1/tables/positions?select=*', BRIEF),
+      { DASHBOARD_TRUST_IDENTITY_HEADERS: '1' },
     );
     expect(res.status).toBe(502);
     expect(FETCHED).toHaveLength(0);

@@ -65,6 +65,76 @@ export async function fetchBenchmarkHistory(
 }
 
 /**
+ * Closes for many tickers, batched at the worker cap. A failed batch leaves
+ * those symbols out of the map — it does not invent a close or a percent.
+ * Empty when unconfigured. Points are ascending by date.
+ */
+export async function fetchCloseSeries(
+  tickers: readonly string[],
+  fromDate: string,
+): Promise<Map<string, { date: string; price: number }[]>> {
+  const out = new Map<string, { date: string; price: number }[]>();
+  const base = marketDataBaseUrl();
+  if (!base || tickers.length === 0) return out;
+  for (let i = 0; i < tickers.length; i += MAX_TICKERS_PER_REQUEST) {
+    const batch = tickers.slice(i, i + MAX_TICKERS_PER_REQUEST);
+    const joined = batch.map((ticker) => encodeURIComponent(ticker)).join(",");
+    const query = `tickers=${joined}&from=${encodeURIComponent(fromDate)}`;
+    try {
+      const res = await fetch(`${base}/v1/market/closes?${query}`);
+      if (!res.ok) {
+        console.error("fetchCloseSeries:", res.status);
+        continue;
+      }
+      const body = (await res.json()) as { rows?: MarketCloseRow[] };
+      for (const row of body.rows ?? []) {
+        const symbol = typeof row.ticker === "string" ? row.ticker.trim().toUpperCase() : "";
+        const date = typeof row.date === "string" ? row.date : null;
+        const price = Number(row.close);
+        if (!symbol || !date || !Number.isFinite(price) || price <= 0) continue;
+        const points = out.get(symbol) ?? [];
+        points.push({ date, price });
+        out.set(symbol, points);
+      }
+    } catch (err) {
+      console.error("fetchCloseSeries:", err);
+    }
+  }
+  for (const points of out.values()) points.sort((a, b) => a.date.localeCompare(b.date));
+  return out;
+}
+
+/**
+ * Raw `/v1/market/closes` rows for one ticker. The hero chart turns a row into
+ * a candle only when open, high, low, and close are all present. A close-only
+ * row is not a candle. Empty when unconfigured or the request fails.
+ */
+export async function fetchMarketCandleRows(
+  ticker: string,
+  fromDate: string,
+  signal?: AbortSignal,
+): Promise<Record<string, unknown>[]> {
+  const base = marketDataBaseUrl();
+  const symbol = ticker.trim();
+  if (!base || !symbol) return [];
+  try {
+    const query = `tickers=${encodeURIComponent(symbol)}&from=${encodeURIComponent(fromDate)}`;
+    const res = await fetch(`${base}/v1/market/closes?${query}`, { signal });
+    if (!res.ok) {
+      console.error("fetchMarketCandleRows:", res.status);
+      return [];
+    }
+    const body = (await res.json()) as { rows?: unknown };
+    if (!Array.isArray(body.rows)) return [];
+    return body.rows.filter((row): row is Record<string, unknown> => !!row && typeof row === "object");
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") throw err;
+    console.error("fetchMarketCandleRows:", err);
+    return [];
+  }
+}
+
+/**
  * `from` for the Lane 1 seed request: `now` minus {@link SEED_LOOKBACK_DAYS}
  * (UTC). Stays in the past by construction, so the Worker's as_of-bounded `to`
  * always leaves a non-empty range for the latest closes to land in.
