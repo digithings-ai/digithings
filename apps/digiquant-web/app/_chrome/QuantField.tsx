@@ -273,10 +273,11 @@ export function QuantField() {
       if (series.source === "coinbase") {
         return {
           ...colors,
-          symbol: `coinbase:${series.symbol}`,
+          symbol: houseSymbol(series.symbol),
           timeframe: series.velaTimeframe,
           bars: 300,
-          live: !reduced,
+          // No tick source: the house provider serves history and does not stream.
+          live: false as const,
         };
       }
       return {
@@ -293,17 +294,14 @@ export function QuantField() {
       barMs = series.velaTimeframe === "1" ? BAR_MS : DAY_MS;
       setWatermark(heroWatermark(series.symbol, series.timeframe));
       if (!chart) {
-        const [{ Vela: VelaChart }, { CoinbaseProvider }] = await Promise.all([
-          import("@luxalgo/vela"),
-          import("@luxalgo/vela/providers/coinbase"),
-        ]);
+        const { Vela: VelaChart } = await import("@luxalgo/vela");
         if (dead) return;
         chart = new VelaChart(host, chartOptions(series));
         chart.addNativeIndicator("volume", {
           inputs: { upColor: scale.volumeUp, downColor: scale.volumeDown },
         });
         host.style.touchAction = "pan-y";
-        chart.data.registerProvider("coinbase", new CoinbaseProvider());
+        chart.data.registerProvider(HOUSE_PROVIDER_NAME, new HouseBarsProvider());
         chart.on("load:end", (ev) => {
           if (dead) return;
           hasBars = (ev?.bars ?? 0) > 0 || book.length >= 2;
@@ -311,7 +309,7 @@ export function QuantField() {
         });
         await chart.ready().catch(() => undefined);
       } else if (series.source === "coinbase") {
-        await chart.setMarket({ symbol: `coinbase:${series.symbol}`, timeframe: "1" });
+        await chart.setMarket({ symbol: houseSymbol(series.symbol), timeframe: "1" });
       } else {
         await chart.setMarket({
           symbol: series.symbol,
