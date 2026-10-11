@@ -93,8 +93,11 @@ export function DeskFrame({ current, children }: { current: string; children: Re
           >
             pages
           </Button>
-          <DeskPicker />
-          <DeskCommand pathname={deskHref(current)} />
+          {/* Desk name, blurb and path never drop out. A tight header slides sideways. */}
+          <div className="desk-head">
+            <DeskPicker />
+            <DeskCommand pathname={deskHref(current)} />
+          </div>
         </header>
         <div className="desk-body relative flex min-h-0 min-w-0 flex-1">
           {drawer ? (

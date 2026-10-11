@@ -77,6 +77,7 @@ export function DeskPicker({ initialOpen = false }: { initialOpen?: boolean }) {
       >
         desk: {desk.label} ▾
       </Button>
+      {desk.blurb ? <span className="desk-sub">{desk.blurb}</span> : null}
       {open ? (
         <>
           <Button type="button" variant="ghost" className="desk-scrim" aria-label="Close desks" onClick={() => setOpen(false)} />
