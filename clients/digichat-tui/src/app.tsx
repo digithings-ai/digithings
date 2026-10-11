@@ -15,27 +15,34 @@ import {
   type Tone,
 } from "./chrome";
 import { INITIAL_UI, reduceKey, type KeyEffect, type UiState } from "./keys";
-import { choiceOptions, mentionRows, paletteRows, paneRows } from "./palette";
+import { choiceOptions, mentionRows, paletteRows, paneRows, type PaneCatalog } from "./palette";
 import {
   DASH,
   PLACEHOLDER,
   ROUTES,
   CREDIT,
   WELCOME,
-  assembleScreen,
-  messageRoute,
+  assembleFromBff,
+  basename,
+  chatBaseUrl,
+  conversationRoute,
+  fetchByokModels,
+  fetchMcpServers,
+  filePartsFromPaths,
+  postChat,
   postRoute,
+  putRoute,
   readRoute,
-  replyText,
   sessionId,
-  sessionRoute,
+  toUiMessages,
   type ChatMessage,
   type ChatScreen,
+  type UiChatMessage,
 } from "./read";
 import { ATTACH, BG, DANGER, FILL, HAIR, INK, MUTE, NEW_CHAT, SCROLL, SEND, SOFT, STOP, VOICE } from "./theme";
 import { DigichatWordmark, WORDMARK_ROWS } from "./wordmark";
 
-const API = (process.env.DQ_API_URL ?? "http://127.0.0.1:8788").replace(/\/+$/, "");
+const API = chatBaseUrl();
 
 const TONE: Record<Tone, string> = { ink: INK, soft: SOFT, mute: MUTE, danger: DANGER };
 
@@ -106,24 +113,32 @@ export function App() {
   const [tick, setTick] = useState(0);
   const [caretOn, setCaretOn] = useState(true);
   const [reveal, setReveal] = useState(0);
+  const [catalog, setCatalog] = useState<PaneCatalog>({});
   const gen = useRef(0);
   const screenRef = useRef(screen);
   const uiRef = useRef(ui);
   const busyRef = useRef(busy);
+  const catalogRef = useRef(catalog);
   const abortRef = useRef<AbortController | null>(null);
   screenRef.current = screen;
   uiRef.current = ui;
   busyRef.current = busy;
+  catalogRef.current = catalog;
 
   const load = async (id?: string) => {
     const ticket = ++gen.current;
-    const [sessions, current, messages] = await Promise.all([
-      readRoute(API, ROUTES.sessions),
-      readRoute(API, id ? sessionRoute(id) : ROUTES.current),
-      readRoute(API, id ? messageRoute(id) : ROUTES.messages),
-    ]);
+    const list = await readRoute(API, ROUTES.conversations);
     if (ticket !== gen.current) return null;
-    const next = assembleScreen(sessions, current, messages);
+    const preferred =
+      id ??
+      (list.kind === "data"
+        ? (list.data as { conversations?: Array<{ id?: string }> })?.conversations?.[0]?.id
+        : null) ??
+      null;
+    const preferredId = typeof preferred === "string" && preferred.length > 0 ? preferred : null;
+    const current = preferredId ? await readRoute(API, conversationRoute(preferredId)) : null;
+    if (ticket !== gen.current) return null;
+    const next = assembleFromBff(list, current, preferredId);
     setScreen(next);
     return next;
   };
@@ -173,9 +188,9 @@ export function App() {
     });
   };
 
-  const submitText = async (text: string) => {
+  const submitText = async (text: string, attachmentPaths: string[] = []) => {
     const body = text.trim();
-    if (!body || busyRef.current) return;
+    if ((!body && attachmentPaths.length === 0) || busyRef.current) return;
     const controller = new AbortController();
     abortRef.current = controller;
     busyRef.current = true;
@@ -183,7 +198,7 @@ export function App() {
     try {
       let id = screenRef.current?.currentId ?? null;
       if (!id) {
-        const created = await postRoute(API, "/chat/sessions", {}, controller.signal);
+        const created = await postRoute(API, ROUTES.conversations, {}, controller.signal);
         if (controller.signal.aborted) return;
         if (created.kind !== "data") {
           applyClosed(created.kind, created.note);
@@ -195,21 +210,51 @@ export function App() {
           return;
         }
       }
-      const sent = await postRoute(API, messageRoute(id), { text: body }, controller.signal);
+      const prior = screenRef.current?.messages ?? [];
+      const userId = `u-${Date.now()}`;
+      const { parts: fileParts, skipped } = await filePartsFromPaths(attachmentPaths);
       if (controller.signal.aborted) return;
-      if (sent.kind !== "data") {
-        applyClosed(sent.kind, sent.note);
+      if (skipped.length > 0) {
+        setUi((prev) => ({
+          ...prev,
+          note: `skipped attach: ${skipped.join(", ")}`,
+        }));
+      }
+      const userParts = [
+        ...(body ? [{ type: "text" as const, text: body }] : []),
+        ...fileParts,
+      ];
+      if (userParts.length === 0) {
+        applyClosed("empty", "nothing to send");
         return;
       }
-      const next = await load(id);
-      const reply = replyText(sent.data);
-      if (!next || !reply || next.messages.some((message) => message.text === reply)) return;
-      if (next.status === "empty" && next.note) return;
+      const userMsg: UiChatMessage = { id: userId, role: "user", parts: userParts };
+      const uiMessages = [...toUiMessages(prior), userMsg];
+      const sent = await postChat(API, id, uiMessages, controller.signal, uiRef.current.prefs);
+      if (controller.signal.aborted) return;
+      if (sent.kind !== "text") {
+        applyClosed("error", sent.detail);
+        return;
+      }
+      const assistantId = `a-${Date.now()}`;
+      const displayText =
+        body || (fileParts.length > 0 ? fileParts.map((p) => p.filename).join(", ") : DASH);
+      const nextMessages: ChatMessage[] = [
+        ...prior,
+        { id: userId, role: "user", text: displayText, tool: null, reasoning: "", at: "" },
+        { id: assistantId, role: "assistant", text: sent.text, tool: null, reasoning: "", at: "" },
+      ];
+      void putRoute(API, conversationRoute(id), {
+        messages: toUiMessages(nextMessages),
+      }, controller.signal);
       setScreen({
-        ...next,
         status: "ok",
+        sessions: screenRef.current?.sessions ?? [{ id, title: DASH }],
+        currentId: id,
+        messages: nextMessages,
+        note: "",
         welcome: false,
-        messages: [...next.messages, { id: `reply-${id}`, role: "assistant", text: reply, tool: null, reasoning: "", at: "" }],
+        canSend: true,
       });
     } finally {
       if (abortRef.current === controller) abortRef.current = null;
@@ -218,12 +263,43 @@ export function App() {
     }
   };
 
+  const loadCatalog = async (pane: "models" | "mcp" | "tools") => {
+    if (pane === "tools") {
+      setCatalog((prev) => ({ ...prev, tools: toolNames(screenRef.current?.messages ?? []) }));
+      return;
+    }
+    if (pane === "models") {
+      const provider = uiRef.current.prefs.provider || "openrouter";
+      const result = await fetchByokModels(API, provider);
+      if (result.kind === "ok") {
+        setCatalog((prev) => ({
+          ...prev,
+          models: result.models,
+          modelsNote: result.models.length === 0 ? "No models returned." : "",
+        }));
+      } else {
+        setCatalog((prev) => ({ ...prev, models: [], modelsNote: result.detail }));
+      }
+      return;
+    }
+    const result = await fetchMcpServers(API);
+    if (result.kind === "ok") {
+      setCatalog((prev) => ({
+        ...prev,
+        mcp: result.servers,
+        mcpNote: result.servers.length === 0 ? "No MCP servers." : "",
+      }));
+    } else {
+      setCatalog((prev) => ({ ...prev, mcp: [], mcpNote: result.detail }));
+    }
+  };
+
   const createSession = async () => {
     if (busyRef.current) return;
     busyRef.current = true;
     setBusy(true);
     try {
-      const created = await postRoute(API, "/chat/sessions", {});
+      const created = await postRoute(API, ROUTES.conversations, {});
       if (created.kind !== "data") {
         const kind = created.kind === "error" ? "error" : "empty";
         setScreen((prev) => (prev ? { ...prev, note: created.note } : blank(created.note, kind)));
@@ -268,12 +344,18 @@ export function App() {
       return;
     }
     if (effect.type === "submit") {
-      void submitText(effect.text);
+      void submitText(effect.text, effect.attachments);
       return;
     }
     if (effect.type === "copy") {
       const text = lastText(screenRef.current?.messages ?? [], "assistant");
       if (text) writeClipboard(text);
+      return;
+    }
+    if (effect.type === "load-catalog") {
+      if (effect.pane === "models" || effect.pane === "mcp" || effect.pane === "tools") {
+        void loadCatalog(effect.pane);
+      }
       return;
     }
     if (effect.type === "redo") {
@@ -295,6 +377,7 @@ export function App() {
       lastUserText: lastText(messages, "user"),
       lastFoldable: lastFoldable(messages),
       toolNames: toolNames(messages),
+      catalog: catalogRef.current,
     });
     uiRef.current = result.state;
     setUi(result.state);
@@ -352,7 +435,7 @@ export function App() {
     pane === "export"
       ? exportMarkdown(messages).split("\n").map((text) => ({ text: text || " ", tone: "soft" as const }))
       : pane
-        ? paneRows(pane, ui.prefs).map((row, index) => ({
+        ? paneRows(pane, ui.prefs, catalog).map((row, index) => ({
             text: `${index === ui.paneIndex ? ">" : " "} ${row.label}${row.description ? `  ${row.description}` : ""}`,
             tone: index === ui.paneIndex ? "ink" : "soft",
           }))
@@ -428,9 +511,9 @@ export function App() {
             )}
           </box>
         ) : null}
-        {ui.attachments.map((name) => (
-          <box key={name} height={1} backgroundColor={BG}>
-            <text fg={SOFT}>{attachmentLine(name)}</text>
+        {ui.attachments.map((path) => (
+          <box key={path} height={1} backgroundColor={BG}>
+            <text fg={SOFT}>{attachmentLine(basename(path))}</text>
           </box>
         ))}
         <box border borderColor={HAIR} backgroundColor={BG} flexDirection="column" paddingLeft={1} paddingRight={1}>

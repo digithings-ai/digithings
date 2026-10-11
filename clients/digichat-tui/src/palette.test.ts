@@ -32,6 +32,10 @@ test("an empty tool command toggles and a query is sent as text", () => {
   const sent = submitDraft("/digisearch the book", DEFAULT_PREFS);
   expect(sent).toMatchObject({ type: "send", text: "the book" });
   expect(submitDraft("/nope", DEFAULT_PREFS)).toMatchObject({ type: "block", note: "unknown command" });
+  expect(submitDraft("/charts", DEFAULT_PREFS)).toMatchObject({
+    type: "note",
+    note: expect.stringContaining("open in web"),
+  });
 });
 
 test("enter on / opens a command, and a plain line submits", () => {
@@ -43,7 +47,7 @@ test("enter on / opens a command, and a plain line submits", () => {
   const typed = reduceKey(INITIAL_UI, { sequence: "h" }, ctx);
   const more = reduceKey(typed.state, { sequence: "i" }, ctx);
   const sent = reduceKey(more.state, { name: "return" }, ctx);
-  expect(sent.effect).toEqual({ type: "submit", text: "hi", note: "" });
+  expect(sent.effect).toEqual({ type: "submit", text: "hi", note: "", attachments: [] });
 });
 
 test("voice stays on the tray and a failed read can retry", () => {

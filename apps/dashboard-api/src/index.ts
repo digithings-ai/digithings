@@ -71,37 +71,8 @@ export interface Env {
   TWELVEX_SUPABASE_SERVICE_KEY?: string;
 }
 
-export { buildProvenance, errorResponse, type ErrorCode, type Provenance } from "./errors";
-
-export interface CommonParams {
-  asOf: string | null;
-  retrievalPin: string | null;
-}
-
-const AS_OF_RE = /^\d{4}-\d{2}-\d{2}$/;
-
-/**
- * Contract section 1 common query params. Throws a Response (the error
- * envelope) on malformed input so handlers can `catch (e) return e`.
- */
-export function parseCommonParams(url: URL): CommonParams {
-  const retrievalPin = url.searchParams.get("retrieval_pin");
-  if (retrievalPin !== null && retrievalPin.length > 128) {
-    throw errorResponse("bad_request", "retrieval_pin exceeds 128 characters", null, {
-      max_length: 128,
-    });
-  }
-  const asOf = url.searchParams.get("asOf");
-  if (asOf !== null) {
-    const d = new Date(`${asOf}T00:00:00Z`);
-    if (!AS_OF_RE.test(asOf) || Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== asOf) {
-      throw errorResponse("bad_request", "asOf must be a calendar date YYYY-MM-DD", retrievalPin, {
-        asOf,
-      });
-    }
-  }
-  return { asOf, retrievalPin };
-}
+// Section 1/2 primitives live in ./errors and ./responses: this module is the
+// worker entrypoint and may export only `default` (see the header of ./responses).
 
 function normalizePath(pathname: string): string {
   if (pathname.length > 1 && pathname.endsWith("/")) return pathname.slice(0, -1);
@@ -135,7 +106,7 @@ function failClosed(handler: RouteHandler): RouteHandler {
 }
 
 /** Provenance marker for the no-credential stub branch (see buildRouteTable). */
-export const STUB_PROVENANCE_SOURCE = "stub-doubles-no-supabase-env";
+const STUB_PROVENANCE_SOURCE = "stub-doubles-no-supabase-env";
 
 /**
  * Rewrite a stub-served success envelope so its provenance names the stub

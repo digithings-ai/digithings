@@ -38,6 +38,7 @@ function api(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
     hasDigisearch: true,
     hasVault: true,
     hasSessions: false,
+    hasArtifacts: false,
     allowUserMcp: false,
     allowAddMcp: false,
     catalogTools: [
@@ -58,6 +59,7 @@ function api(over: Partial<EmbedChatPrefsApi> = {}): EmbedChatPrefsApi {
     openThinking: vi.fn(),
     openLanguage: vi.fn(),
     openSessions: vi.fn(),
+    openArtifacts: vi.fn(),
     newThread: vi.fn(),
     compactThread: vi.fn(),
     undo: vi.fn(),
@@ -343,5 +345,39 @@ describe("executeSlashDef", () => {
       a,
     );
     expect(a.setExtraTool).toHaveBeenCalledWith("datatap", false);
+  });
+});
+
+describe("/artifacts", () => {
+  const ids = (over: Partial<EmbedChatPrefsApi> = {}) =>
+    buildProductSlashCommands(api(over)).map((c) => c.id);
+
+  it("lists /artifacts when the session has an artifact surface", () => {
+    const listed = ids({ hasArtifacts: true });
+    // Guards the "passes only because the list is empty" trap: one visible row.
+    expect(listed.length).toBeGreaterThan(0);
+    expect(listed).toContain("artifacts");
+  });
+
+  it("hides /artifacts when there is no artifact surface", () => {
+    // Same api as the test above with one field flipped, so a listing that is
+    // empty for an unrelated reason cannot pass the previous test.
+    expect(ids({ hasArtifacts: false })).not.toContain("artifacts");
+  });
+
+  it("opens the artifact list on selection", () => {
+    const a = api({ hasArtifacts: true });
+    executeSlashDef(
+      {
+        id: "artifacts",
+        names: ["/artifacts"],
+        needsArg: false,
+        hint: "",
+        kind: "action",
+      },
+      "",
+      a,
+    );
+    expect(a.openArtifacts).toHaveBeenCalledTimes(1);
   });
 });

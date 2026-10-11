@@ -21,6 +21,7 @@ import {
 } from "@/lib/artifact-blobs";
 import { requireDigiChatAuth } from "@/lib/request-auth";
 import { tenantIdBySlug } from "@/lib/conversations-repo";
+import { bindLink } from "@/lib/session-links";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -134,7 +135,12 @@ export async function POST(req: Request, ctx: RouteContext) {
     await blobStore(process.env as { DIGICHAT_ARTIFACTS?: R2Like }).delete(storageKey).catch(() => {});
     return Response.json({ error: "not_found" }, { status: 404 });
   }
-  return Response.json({ id, storageKey }, { status: 201 });
+  // Bind the token the caller just chose to this conversation, so the blob
+  // route accepts it. `linked` is false when no live session exists for the
+  // conversation, which is the honest answer: the row is stored, but the link
+  // will report session_expired rather than pretend to resolve.
+  const linked = bindLink(conversationId, token);
+  return Response.json({ id, storageKey, linked }, { status: 201 });
 }
 
 export async function DELETE(req: Request, ctx: RouteContext) {

@@ -1,4 +1,4 @@
-/** Contract §1/§2 shared shapes: error envelope + provenance. Re-exported from ./index. */
+/** Contract §1/§2 shared shapes: error envelope + provenance. Re-exported from ./responses. */
 
 export type ErrorCode =
   | "bad_request"
