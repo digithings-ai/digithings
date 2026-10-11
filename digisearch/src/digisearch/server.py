@@ -13,11 +13,13 @@ import re
 import secrets
 import time as _time
 from collections import deque as _deque
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from threading import Lock as _Lock
+from types import MappingProxyType
 from typing import Any, Literal
 
+from digibase.art9_middleware import install_art9_admission
 from digibase.cors import install_cors
 from digibase.errors import json_error_response, register_fastapi_error_handlers
 from digibase.http import install_request_id_logging, install_request_id_middleware
@@ -28,6 +30,12 @@ from digikey.integrations.service_middleware import DigiAuthMiddleware, digisear
 from digisearch import __version__
 from digisearch.agent.pipeline_models import ResearchTurnOutput
 from digisearch.backend_require import require_real_search_backend
+from digisearch.client import (
+    SURFACE_KIND_HTTP,
+    Art9SurfaceRefusal,
+    declare_art9_surface,
+    require_art9_clear,
+)
 from digisearch.core.models import Query
 from digisearch.indexes.backends.backend_errors import CorpusNotSeededError
 from digisearch.indexes.backends.vectorize import MAX_TOP_K as _VECTORIZE_MAX_TOP_K
@@ -162,6 +170,11 @@ app = FastAPI(
 )
 install_metrics(app, service="digisearch", version=__version__)
 install_cors(app, service="digisearch")
+# Art. 9 admission floor, added BEFORE DigiAuthMiddleware on purpose: Starlette runs the
+# most recently added middleware outermost, so digikey auth rejects an unscoped caller
+# before the admission screen reads its body. Registered last it would read and screen
+# request bodies for callers the auth layer was going to turn away anyway (DIG-1083).
+install_art9_admission(app, app_name="digisearch", service="digisearch")
 app.add_middleware(DigiAuthMiddleware, service="digisearch", path_scopes=_digisearch_path_scopes)
 
 
@@ -1979,6 +1992,29 @@ async def api_exa_webhook(request: Request) -> dict[str, Any] | JSONResponse:
         return _monitor_error(
             request, 422, "exa_payload_invalid", "EXA webhook payload must be a JSON object."
         )
+    # Art. 9 (spec DIG-912 §5.4, acceptance test 7). Two floors miss this route on
+    # purpose-and-consequence: `_digisearch_path_scopes` returns None for it, so the
+    # digikey layer treats it as public, and it sits outside every declared ingest
+    # prefix, so `check_route("digisearch", ...)` allows it and leaf 3's admission
+    # middleware passes it through unscreened. The digisearch surface registry is the
+    # only remaining place a screen can stand, which is what "an explicit mechanism,
+    # not by path" means. A route that is public but undeclared is REFUSED here rather
+    # than waved through - otherwise losing the registration would silently unscreen
+    # the webhook (finding F11).
+    surface = _auth_exempt_surface(request)
+    if surface is None:
+        return _monitor_error(
+            request,
+            403,
+            "art9:surface_unregistered",
+            "EXA webhook is an auth-exempt route with no Art. 9 surface declared for it.",
+        )
+    try:
+        require_art9_clear(surface, payload)
+    except Art9SurfaceRefusal as refusal:
+        return _monitor_error(
+            request, 403, refusal.result.reason, f"Art. 9 screening refused: {refusal}"
+        )
     try:
         exa_monitor_id = exa_monitor_id_from_payload(payload)
     except ExaAdapterError as exc:
@@ -2422,3 +2458,42 @@ def api_export_webset(
 
 register_fastapi_error_handlers(app, service="digisearch")
 setup_otel_fastapi(app, service_name="digisearch", service_version=__version__)
+
+
+# --- Art. 9 surfaces for the routes digikey leaves public ---------------------
+# Runs last, after every route above has been registered. Keys are the router's own
+# path templates read off `app.routes` - a hand-written route string is exactly how a
+# registry drifts from the app and stops covering anything (finding F3) - and exemption
+# is decided by probing the app's own `_digisearch_path_scopes`, never by a second,
+# possibly-disagreeing copy of the policy.
+def _register_auth_exempt_surfaces() -> Mapping[str, str]:
+    """Declare an Art. 9 surface for every served route digikey leaves public.
+
+    Returns path template -> surface id.
+    """
+    surfaces: dict[str, str] = {}
+    for route in app.routes:
+        path = getattr(route, "path", None)
+        methods = getattr(route, "methods", None)
+        if not isinstance(path, str) or not methods:
+            continue
+        if any(_digisearch_path_scopes(method, path) is None for method in sorted(methods)):
+            surface = f"{SURFACE_KIND_HTTP}:{path}"
+            declare_art9_surface(surface, SURFACE_KIND_HTTP)
+            surfaces[path] = surface
+    return MappingProxyType(surfaces)
+
+
+AUTH_EXEMPT_SURFACES: Mapping[str, str] = _register_auth_exempt_surfaces()
+
+
+def _auth_exempt_surface(request: Request) -> str | None:
+    """Surface id screening ``request``, or ``None`` when its route is not public.
+
+    Looks the route up by the template the router matched, falling back to the request
+    path (the two coincide for the literal routes that can be auth-exempt).
+    """
+    template = getattr(request.scope.get("route"), "path", None)
+    if not isinstance(template, str):
+        template = request.url.path
+    return AUTH_EXEMPT_SURFACES.get(template)
