@@ -1417,11 +1417,13 @@ env:
   sources:
     wrangler_workers:
     - dashboard-api
+    - digithings-stack-cloudflare
     compose_files: []
     env_example_files: []
     compose_literal: []
   wrangler_values:
     dashboard-api: https://graph.digithings.ai
+    digithings-stack-cloudflare: https://graph.digithings.ai
 - name: NEXT_PUBLIC_DIGICHAT_TRACE_UI
   description: Browser-visible twin of DIGICHAT_TRACE_UI.
   secret: false
