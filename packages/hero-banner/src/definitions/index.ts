@@ -4,6 +4,7 @@ import { equalizerAnimation } from "../animations/equalizer";
 import { pagesAnimation } from "../animations/pages";
 import { riseAnimation } from "../animations/rise";
 import { routeAnimation } from "../animations/route";
+import { scanAnimation } from "../animations/scan";
 import { scrambleAnimation } from "../animations/scramble";
 import { stackAnimation } from "../animations/stack";
 import { traverseAnimation } from "../animations/traverse";
@@ -282,6 +283,13 @@ export const DIGIVAULT: BannerDefinition = {
   id: "digivault",
   text: "DIGIVAULT",
   label: "digivault",
+/** DIG-2873. A search: the word hides in an index of decoy pixels until a scan
+ *  beam finds it. LIVE runs queries over it and highlights the hits.
+ *  Accent: --accent-digisearch. */
+export const DIGISEARCH: BannerDefinition = {
+  id: "digisearch",
+  text: "DIGISEARCH",
+  label: "digisearch",
   font: PIXEL_7X10,
   gap: 2,
   palette: {
@@ -358,6 +366,21 @@ export const DIGIVAULT: BannerDefinition = {
   animation: vaultAnimation({ turnMs: 560, boltMs: 380, openMs: 720, settleMs: 520, everyMs: 7000, scanMs: 900 }),
   live: true,
   seed: 0xdb17,
+    accent: { hex: "#5AA3C4", cube: 74, cssVar: "--accent-digisearch" },
+    glint: { hex: "#FFFFFF", cube: 231, cssVar: "--glint" },
+  },
+  animation: scanAnimation({
+    sweepMs: 1700,
+    noise: 0.55,
+    trail: 8,
+    everyMs: 6000,
+    liveSweepMs: 900,
+    holdMs: 1400,
+    fadeMs: 350,
+    maxQuery: 4,
+  }),
+  live: true,
+  seed: 0x5ea2c,
 };
 
 export const BANNERS = {
@@ -373,4 +396,5 @@ export const BANNERS = {
   digidev: DIGIDEV,
   digiclaw: DIGICLAW,
   digivault: DIGIVAULT,
+  digisearch: DIGISEARCH,
 } as const;
