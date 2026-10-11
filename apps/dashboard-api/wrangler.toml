@@ -12,8 +12,9 @@ main = "src/index.ts"
 compatibility_date = "2026-09-04"
 workers_dev = true
 
+# ~10 events/week; logs off to cut noise (cost epic). Re-enable when debugging.
 [observability]
-enabled = true
+enabled = false
 
 [vars]
 SUPABASE_URL = "https://rwagjbkvxkdwqmouagad.supabase.co"

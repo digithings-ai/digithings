@@ -87,9 +87,12 @@ class_name = "DigiStackContainer"
 # context (#4046).
 image = "../../Dockerfile.digithings-stack-cloudflare"
 image_build_context = "../.."
-max_instances = 5
+# Cost minimum (Cloudflare cost epic): one replica; traffic is ~2k req/day.
+max_instances = 1
 # Multi-process Profile A needs real RAM/disk (lite = 256MiB is far too small).
-instance_type = "standard-2"
+# standard-1 = 4 GiB (was standard-2, 6 GiB). Memory is billed per GiB-s.
+# Verify container RSS stays under ~3 GiB after deploy; revert to standard-2 if OOM.
+instance_type = "standard-1"
 
 # Dedicated digiquant-mcp market-data container (#3780, Task 8). Separate image
 # with the [research]+[mcp] extras serving FastMCP streamable-http on :8767 —
@@ -115,8 +118,9 @@ class_name = "DigiQuantMcpContainer"
 image = "../../digiquant/Dockerfile.mcp"
 image_build_context = "../.."
 max_instances = 1
-# p50 <50ms / p99 <200ms per 500-bar indicator window was budgeted on standard-2.
-instance_type = "standard-2"
+# FastMCP read path over R2; standard-1 (4 GiB) for cost. p50/p99 budget was set
+# on standard-2 — re-check latency after deploy.
+instance_type = "standard-1"
 
 # Folded digichat (#4689). Same image as the standalone digichat worker
 # (Next standalone on :3000, one shared instance for digithings + OCC + future
@@ -132,15 +136,13 @@ class_name = "DigiChatContainer"
 # file: ../.. is the repo root.
 image = "../../Dockerfile.digichat-cloudflare"
 image_build_context = "../.."
-max_instances = 5
-# Next standalone needs real RAM/disk (lite = 256MiB is far too small);
-# explicit instance_type required — matches the two entries above.
-instance_type = "standard-2"
+max_instances = 2
+# Next standalone: basic = 1 GiB (lite = 256MiB is far too small). Typical Next
+# standalone RSS is 200-500 MiB; revert to standard-1 if OOM.
+instance_type = "basic"
 
-# Ops SSH (wrangler containers ssh) — ed25519 debug key (private key not in repo).
-[[containers.authorized_keys]]
-name = "stack-debug"
-public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOWKJSXCImobvGW1hFjW5VV4mSM5ZnFoC/sTsW/cdFD9 digithings-stack-debug"
+# Ops SSH debug key removed (cost/hygiene epic). Re-add [[containers.authorized_keys]]
+# temporarily only for a live debugging session.
 
 [[durable_objects.bindings]]
 name = "STACK"
