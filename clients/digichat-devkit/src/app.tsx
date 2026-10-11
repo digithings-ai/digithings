@@ -1,15 +1,6 @@
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react";
 import { useEffect, useRef, useState } from "react";
-import {
-  MARK_COLS,
-  MARK_ROWS,
-  REVEAL_MS,
-  glintCell,
-  markDirection,
-  markElapsed,
-  markLines,
-  revealedColumns,
-} from "./mark";
+import { DigichatWordmark, WORDMARK_ROWS } from "./wordmark";
 import { GLYPH } from "./glyphs";
 import {
   activateStrip,
@@ -314,10 +305,15 @@ export function App() {
   const sideWidth = Math.max(40, Math.min(54, Math.floor((width || 120) * 0.36)));
   // right column = terminal minus the side panel and its right border, minus its own padding
   const contentWidth = Math.max(8, (width || 120) - sideWidth - 2);
-  // header chrome room = terminal minus mark lockup, "devkit", the api url, the carets and gaps
-  const headerRoom = Math.max(4, (width || 120) - (MARK_COLS + API.length + 14));
-  // header mark 2 + hairline 1 + section 2 + counter 2 + footer 2
-  const visible = Math.max(4, (height || 32) - (MARK_ROWS + 7));
+  // the hero mark keeps the top-left corner; it never grows past 72 columns and
+  // never drops below the pixel font's floor, so the chrome always has room beside it
+  const heroCols = Math.min(72, Math.max(58, (width || 120) - 30));
+  // header chrome room = terminal minus the mark lockup and its padding
+  const headerRoom = Math.max(4, (width || 120) - (heroCols + 4));
+  // the api url drops its tail before it can wrap onto a second row
+  const apiShown = clip(API, Math.max(4, headerRoom - 7));
+  // header mark 5 + hairline 1 + section 2 + counter 2 + footer 2
+  const visible = Math.max(4, (height || 32) - (WORDMARK_ROWS + 7));
   const start = windowStart(rows.length, side, visible);
   const shownRows = rows.slice(start, start + visible);
   const stripStart = windowStart(strip.length, tool, 4);
@@ -330,17 +326,19 @@ export function App() {
 
   return (
     <box width="100%" height="100%" flexDirection="column" backgroundColor={BG}>
-      <box height={MARK_ROWS + 1} flexDirection="row" border={["bottom"]} borderColor={HAIR} backgroundColor={BG}>
-        <box paddingLeft={1} paddingRight={2} justifyContent="center">
-          <DigichatMark accent={accent} />
+      <box height={WORDMARK_ROWS + 1} flexDirection="row" border={["bottom"]} borderColor={HAIR} backgroundColor={BG}>
+        <box paddingLeft={1} paddingRight={3} flexDirection="column" justifyContent="flex-start">
+          <DigichatWordmark cols={heroCols} rows={WORDMARK_ROWS} />
         </box>
-        <box flexGrow={1} flexDirection="column" justifyContent="center">
-          <box flexDirection="row">
-            <text fg={INK}>devkit</text>
-            <text fg={MUTE}>{`  ${API}  `}</text>
-            <text fg={SOFT}>{headerReveal}</text>
-            {shown < read.detail.length && blink ? <text fg={INK}>█</text> : null}
-          </box>
+        <box flexGrow={1} flexDirection="column" justifyContent="flex-start" paddingRight={1} backgroundColor={BG} overflow="hidden">
+          <text>
+            <span fg={INK}>devkit</span>
+            <span fg={MUTE}>{`  ${apiShown}`}</span>
+          </text>
+          <text>
+            <span fg={SOFT}>{headerReveal}</span>
+            {shown < read.detail.length && blink ? <span fg={INK}>█</span> : null}
+          </text>
         </box>
       </box>
       <box flexGrow={1} flexDirection="row" backgroundColor={BG}>
@@ -430,41 +428,6 @@ export function App() {
         <text fg={MUTE}>tab focus   ↑↓ move   space toggle   enter send   esc back   q quit</text>
         {note ? <text fg={SOFT}>{`   ${note}`}</text> : null}
       </box>
-    </box>
-  );
-}
-
-function DigichatMark({ accent }: { accent: string }) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 100);
-    return () => clearInterval(timer);
-  }, []);
-  const elapsed = markElapsed(now);
-  const revealing = elapsed < REVEAL_MS;
-  const lines = markLines(revealedColumns(elapsed));
-  const glint = glintCell(elapsed);
-  return (
-    <box width={MARK_COLS} height={MARK_ROWS} flexDirection="column">
-      {lines.map((line, row) => (
-        <text key={row}>
-          {[...line].map((ch, col) => {
-            const glinting = glint !== null && glint.row === row && glint.col === col;
-            const fg = glinting
-              ? accent
-              : revealing && ch !== " "
-                ? markDirection(row, col) === "up"
-                  ? INK
-                  : SOFT
-                : INK;
-            return (
-              <span key={col} fg={fg}>
-                {ch}
-              </span>
-            );
-          })}
-        </text>
-      ))}
     </box>
   );
 }
