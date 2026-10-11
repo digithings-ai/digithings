@@ -354,3 +354,78 @@ def test_meta_tool_on_an_undeclared_row_is_not_gated(transport):
             "acme_executeWrite", {"anything": 1}, _context(declared, allowed=["acme_executeWrite"])
         )
     assert [c["tool"] for c in transport] == ["executeWrite"]
+
+
+# =====================================================================
+# EM ruling on Security's union finding (284.4 sign-off rework, condition 1
+# and 2): a request-scoped allowlist may narrow the tool surface but must
+# never widen it past the operator's per-row allowlist.
+# =====================================================================
+
+
+def _install_catalog(monkeypatch, server_id: str, raw_names: tuple[str, ...]) -> None:
+    """Serve a fake catalog in place of the network call.
+
+    Patches ``_list_tools_blocking``, the one call behind
+    ``list_tools_cached``, so the cache, 284.3's per-row brake and this leaf's
+    policy intersection all run for real. Replacing the module cache stops one
+    test's catalog from answering the next.
+    """
+    from digigraph.orchestration import mcp_client
+
+    records = [
+        mcp_client._tool_record(
+            server_id, raw, f"{raw} description", {"type": "object", "properties": {}}
+        )
+        for raw in raw_names
+    ]
+    monkeypatch.setattr(mcp_client, "_cache", {})
+    monkeypatch.setattr(
+        mcp_client,
+        "_list_tools_blocking",
+        lambda server: records if server.get("id") == server_id else [],
+    )
+
+
+@pytest.mark.unit
+def test_no_request_input_widens_the_operator_allowlist(monkeypatch, transport):
+    """The smuggle Security proved is closed at the execution boundary.
+
+    The operator permits one tool. The session allowlist names the other one.
+    The union used to carry the session's MCP name through, which is the same
+    set ``registry.execute`` checks -- so the call-time refusal passed a name
+    the operator never permitted.
+    """
+    from digigraph.orchestration import mcp_client, registry
+    from digigraph.tool_policy import apply_mcp_extra_tools
+
+    _install_catalog(monkeypatch, "acme", (MUTATING, READ_ONLY))
+    # The operator row permits the read tool only, so the write tool is not in
+    # the operator's set at all. mutatingTools names the mutating side so the
+    # permitted read tool runs unattended: this test is about the allowlist
+    # union, not about the confirmation gate.
+    row = _server(allowedTools=[READ_ONLY], mutatingTools=[MUTATING])
+    offered_mutating = mcp_client.prefixed_tool_name("acme", MUTATING)
+    offered_read = mcp_client.prefixed_tool_name("acme", READ_ONLY)
+
+    session_named = frozenset({offered_mutating})
+    allowed = apply_mcp_extra_tools(
+        session_named,
+        frozenset(mcp_client.extra_tool_names_for_servers([row])),
+        frozenset(),
+        enable_web_search=True,
+    )
+
+    # The session cannot widen: its MCP name is gone, the operator's stays.
+    assert offered_mutating not in allowed
+    assert offered_read in allowed
+
+    # Execution boundary: the smuggled name is refused by the call-time brake
+    # and never reaches the transport. The permitted name still runs, so the
+    # assertion above is not an empty set.
+    ctx = _context(row, allowed=allowed)
+    refused = registry.execute(offered_mutating, {"issueKey": "JIRA-1"}, ctx)
+    assert refused["error"] == "tool_not_allowed"
+    permitted = registry.execute(offered_read, {"jql": "project = X"}, ctx)
+    assert permitted == {"ok": True, "content": f"called {READ_ONLY}"}
+    assert [call["tool"] for call in transport] == [READ_ONLY]
