@@ -435,6 +435,7 @@
         "DigiQuantMcpContainer": "container",
         "DigiStackContainer": "container",
         "MARKET_DATA": "r2_bucket",
+        "MARKET_DATA_URL": "var",
         "MCP_STACK": "durable_object_namespace",
         "OPENAI_API_BASE": "var",
         "STACK": "durable_object_namespace",
