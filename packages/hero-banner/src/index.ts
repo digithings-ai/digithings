@@ -27,3 +27,4 @@ export { traverseAnimation, type TraverseOptions } from "./animations/traverse";
 export { pagesAnimation, type PagesOptions } from "./animations/pages";
 export { typeAnimation, type TypeOptions } from "./animations/type";
 export { clawAnimation, withHeadroom, type ClawOptions } from "./animations/claw";
+export { scanAnimation, type ScanOptions } from "./animations/scan";

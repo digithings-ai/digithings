@@ -2,6 +2,7 @@ import { buildAnimation } from "../animations/build";
 import { equalizerAnimation } from "../animations/equalizer";
 import { riseAnimation } from "../animations/rise";
 import { routeAnimation } from "../animations/route";
+import { scanAnimation } from "../animations/scan";
 import { scrambleAnimation } from "../animations/scramble";
 import { stackAnimation } from "../animations/stack";
 import { tumblerAnimation } from "../animations/tumbler";
@@ -153,6 +154,13 @@ export const DIGIBASE: BannerDefinition = {
   id: "digibase",
   text: "DIGIBASE",
   label: "digibase",
+/** DIG-2873. A search: the word hides in an index of decoy pixels until a scan
+ *  beam finds it. LIVE runs queries over it and highlights the hits.
+ *  Accent: --accent-digisearch. */
+export const DIGISEARCH: BannerDefinition = {
+  id: "digisearch",
+  text: "DIGISEARCH",
+  label: "digisearch",
   font: PIXEL_7X10,
   gap: 2,
   palette: {
@@ -327,6 +335,21 @@ export const DIGICLAW: BannerDefinition = {
   }),
   live: true,
   seed: 0xc1a3,
+    accent: { hex: "#5AA3C4", cube: 74, cssVar: "--accent-digisearch" },
+    glint: { hex: "#FFFFFF", cube: 231, cssVar: "--glint" },
+  },
+  animation: scanAnimation({
+    sweepMs: 1700,
+    noise: 0.55,
+    trail: 8,
+    everyMs: 6000,
+    liveSweepMs: 900,
+    holdMs: 1400,
+    fadeMs: 350,
+    maxQuery: 4,
+  }),
+  live: true,
+  seed: 0x5ea2c,
 };
 
 export const BANNERS = {
@@ -341,4 +364,5 @@ export const BANNERS = {
   digibook: DIGIBOOK,
   digidev: DIGIDEV,
   digiclaw: DIGICLAW,
+  digisearch: DIGISEARCH,
 } as const;
