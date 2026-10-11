@@ -105,6 +105,32 @@ export async function fetchCloseSeries(
 }
 
 /**
+ * Every symbol the R2 archive actually holds closes for, from the Worker's own
+ * manifest (`GET /v1/market/tickers`). This is the price-table universe — the
+ * tape's symbol list is built from it at runtime rather than hand-kept, so a
+ * symbol added to the archive reaches the ticker without a frontend edit.
+ *
+ * Empty when unconfigured or on failure. Never a Supabase fallback (#4053).
+ */
+export async function fetchMarketTickers(): Promise<string[]> {
+  const base = marketDataBaseUrl();
+  if (!base) return [];
+  try {
+    const res = await fetch(`${base}/v1/market/tickers`);
+    if (!res.ok) {
+      console.error("fetchMarketTickers:", res.status);
+      return [];
+    }
+    const body = (await res.json()) as { tickers?: unknown };
+    if (!Array.isArray(body.tickers)) return [];
+    return body.tickers.filter((ticker): ticker is string => typeof ticker === "string");
+  } catch (err) {
+    console.error("fetchMarketTickers:", err);
+    return [];
+  }
+}
+
+/**
  * Raw `/v1/market/closes` rows for one ticker. The hero chart turns a row into
  * a candle only when open, high, low, and close are all present. A close-only
  * row is not a candle. Empty when unconfigured or the request fails.
