@@ -29,16 +29,28 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts" / "datatap_answer_integrity_check.py"
 
 # The script's imports are a closed set, and this is the list. Stdlib only — no
-# requests, no httpx, no new dependency. Nothing here can read a credential (no
-# os, no dotenv, no getenv) or write anything (no open, no tempfile, no sqlite3,
-# no shutil, no subprocess), and urllib.request is the only network door, reached
-# through http_request. See
+# requests, no httpx, no new dependency. Nothing here can write anything (no
+# open, no tempfile, no sqlite3, no shutil, no subprocess), and urllib.request is
+# the only network door, reached through http_request. See
 # test_the_script_imports_only_stdlib_and_nothing_that_can_write_or_read_a_secret.
+#
+# ``os`` is here because of the monitor token, and only because of it. Without
+# the allowlist bypass the check spent two of its three hourly turns inside one
+# 24h window and then reported HTTP 402 from a trial gate that is ours —
+# apps/digichat/src/app/api/chat/route.ts, keyed on embedConfig.gateMode ===
+# "trial_form" and counted per client IP in apps/digichat/src/lib/
+# embed-turn-quota.ts. DigiChat already exempts an internal monitor on the
+# x-embed-monitor-token header (apps/digichat/src/lib/embed-monitor-token.ts,
+# DIG-613); the check did not present it, so it was charged for the quota it
+# needs to run. The CTO approved reading that one secret from the environment on
+# 2026-10-05 (DIG-965). Reading one env var is not a write, and the module
+# remains the only thing that can reach the value: nothing else is imported.
 _ALLOWED_IMPORTS = {
     "__future__",
     "argparse",
     "dataclasses",
     "json",
+    "os",
     "re",
     "sys",
     "typing",
@@ -70,6 +82,23 @@ _REAL_HTTP_REQUEST = mod.http_request
 def _restore_the_http_request_seam() -> None:
     yield
     mod.http_request = _REAL_HTTP_REQUEST
+
+
+# The name the script is expected to read. It is spelled out here rather than
+# taken from the module so this file's other tests keep running against the
+# unimplemented script; one test below pins that the script agrees.
+MONITOR_TOKEN_ENV_VAR = "DATATAP_ANSWER_CHECK_MONITOR_TOKEN"
+MONITOR_TOKEN = "k" * 48
+
+
+# The check reads one secret from the environment. A developer machine, a CI
+# runner or an operator shell may well have it set, so it is removed before
+# every test: the header-set tests assert exact dicts and would otherwise read
+# whatever the surrounding shell happens to hold. Tests that need a token set it
+# themselves with monkeypatch.
+@pytest.fixture(autouse=True)
+def _no_monitor_token_from_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv(MONITOR_TOKEN_ENV_VAR, raising=False)
 
 
 EMBED_BASE = "https://digichat.jollygrass-53364db9.eastus2.azurecontainerapps.io"
@@ -191,6 +220,119 @@ def test_discovery_reads_the_public_page_and_sends_no_credentials() -> None:
     assert discovery["url"] == "https://datatap.stream/chat"
     assert discovery["headers"] == {}, "discovery reads a public page; it sends nothing"
     assert all("authorization" not in {k.lower() for k in c["headers"]} for c in fake.calls)
+
+
+# --------------------------------------------------------------------------
+# The monitor identity. Ours, sanctioned, and the only way past our own gate.
+#
+# apps/digichat/src/app/api/chat/route.ts answers HTTP 402 {"error":
+# "trial_gate"} when embedConfig.gateMode is "trial_form" and the caller is over
+# EMBED_FREE_TURN_LIMIT (3) turns per client IP inside a 24h window
+# (apps/digichat/src/lib/embed-turn-quota.ts). Both probes come from one IP, so
+# the first run spent two of three turns and every later run in that window was
+# refused. The gate is our code, on our host; nothing on the client side was
+# closed. DigiChat already exempts an internal monitor presented as
+# x-embed-monitor-token (apps/digichat/src/lib/embed-monitor-token.ts, DIG-613).
+# --------------------------------------------------------------------------
+
+
+def test_the_script_names_the_monitor_token_env_var() -> None:
+    """The one secret the CTO approved is named as a module constant.
+
+    The scheduler that runs this check hourly has to be told where to put the
+    value, and the operator writing digichat's `DIGICHAT_MONITOR_TOKENS` has to
+    be told which variable to copy it into. Spelling the name once, in the
+    script, is what keeps those two from drifting apart.
+    """
+    assert mod.MONITOR_TOKEN_ENV_VAR == MONITOR_TOKEN_ENV_VAR
+
+
+def test_the_chat_request_carries_the_monitor_token_from_the_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The sanctioned bypass is presented on every probe."""
+    monkeypatch.setenv(MONITOR_TOKEN_ENV_VAR, MONITOR_TOKEN)
+    code, fake = _run_main(_both_probes_clean())
+    assert code == mod.OK
+    chats = [c for c in fake.calls if c["url"].endswith("/api/chat")]
+    assert len(chats) == 2
+    for chat in chats:
+        assert chat["headers"].get("x-embed-monitor-token") == MONITOR_TOKEN, (
+            "both probes run inside one quota window, so both need the identity"
+        )
+
+
+def test_no_monitor_token_is_sent_when_the_environment_does_not_hold_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unset secret is omitted, not sent empty.
+
+    An empty header value is not the same as no header on the server side, and
+    the run must stay honest: with no identity the probes are charged like any
+    other caller, which is the behaviour this whole leaf exists to make visible.
+    """
+    monkeypatch.delenv(MONITOR_TOKEN_ENV_VAR, raising=False)
+    _, fake = _run_main(_both_probes_clean())
+    chat = next(c for c in fake.calls if c["url"].endswith("/api/chat"))
+    assert "x-embed-monitor-token" not in chat["headers"]
+
+
+def test_the_check_never_presents_the_unsigned_trial_unlock_waiver(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """x-embed-trial-unlock is not a bypass and must never appear on the wire.
+
+    DIG-634 tracks an unsigned X-Embed-Trial-Unlock header with a cap of 100, so
+    it would also survive a short burst of probes — which is exactly why the
+    acceptance evidence has to name the header that is sent, not only the exit
+    code. This is a negative pin so a later "make the check pass" change cannot
+    quietly swap in the waiver that a signed monitor token replaces.
+    """
+    monkeypatch.setenv(MONITOR_TOKEN_ENV_VAR, MONITOR_TOKEN)
+    _, fake = _run_main(_both_probes_clean())
+    for call in fake.calls:
+        for header in call["headers"]:
+            assert "trial-unlock" not in header.lower(), (
+                f"unsigned unlock waiver presented as {header!r}"
+            )
+
+
+def test_the_monitor_token_is_never_sent_to_the_discovery_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Discovery reads DataTap's public page. It has no business with our secret."""
+    monkeypatch.setenv(MONITOR_TOKEN_ENV_VAR, MONITOR_TOKEN)
+    _, fake = _run_main(_both_probes_clean())
+    discovery = fake.calls[0]
+    assert discovery["url"] == "https://datatap.stream/chat"
+    assert discovery["headers"] == {}
+
+
+def test_a_402_names_our_own_gate_and_the_two_places_to_fix_it() -> None:
+    """The reason string must stop blaming the client and start naming the cause.
+
+    An operator reading this run is told whose gate is closed and which two
+    settings have to agree. It must stay an exit-2 reason, and it must not tell
+    anyone to retry: the counter resets on its own after 24 hours and retrying
+    only adds load to our own host.
+    """
+    reason = mod._status_reason(
+        "named_entity",
+        mod.HttpResponse(
+            status=402, content_type="application/json", body='{"error":"trial_gate"}'
+        ),
+    )
+    lowered = reason.lower()
+    assert "their trial gate" not in lowered
+    assert "cannot see the answer path" in lowered
+    assert "our" in lowered and "gate" in lowered, f"must name our own gate: {reason!r}"
+    assert MONITOR_TOKEN_ENV_VAR in reason, f"must name the check-side secret to set: {reason!r}"
+    assert "DIGICHAT_MONITOR_TOKENS" in reason, (
+        f"must name the digichat-side allowlist to set: {reason!r}"
+    )
+    assert "retry" not in lowered and "again" not in lowered, (
+        f"a 402 from our own quota is not retried, so do not tell anyone to: {reason!r}"
+    )
 
 
 # --------------------------------------------------------------------------
@@ -585,6 +727,24 @@ def test_the_script_imports_only_stdlib_and_nothing_that_can_write_or_read_a_sec
         "the import set is the read-only / no-secret proof; anything new must be "
         f"argued for here, added: {sorted(imported - _ALLOWED_IMPORTS)}, "
         f"removed: {sorted(_ALLOWED_IMPORTS - imported)}"
+    )
+
+
+def test_the_module_docstring_stops_claiming_the_check_reads_no_secret() -> None:
+    """The docstring is the read-only proof a reviewer reads first.
+
+    It asserted "This script reads no secret and writes no local state" and
+    pointed at this import allowlist as the reason. Since the CTO's decision the
+    first half is false: the check reads one env var. A docstring that
+    overstates the safety property is worse than no docstring, because the next
+    reviewer trusts it.
+    """
+    docstring = ast.get_docstring(ast.parse(SCRIPT.read_text(encoding="utf-8"))) or ""
+    assert "reads no secret" not in docstring, (
+        "the module docstring still denies the one secret the CTO approved"
+    )
+    assert MONITOR_TOKEN_ENV_VAR in docstring, (
+        "the module docstring must name the env var the check now reads"
     )
 
 
