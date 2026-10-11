@@ -381,12 +381,66 @@ async function decision(req: Request, ctx: RouteCtx<Env>): Promise<Response> {
   );
 }
 
-async function risks(req: Request, _ctx: RouteCtx<Env>): Promise<Response> {
+/** Weight at or above which a single line is flagged as concentrated. */
+const CONCENTRATION_PCT = 20;
+/** A thesis status that counts as still live (anything else is closed book). */
+const LIVE_THESIS_STATUS = new Set(["ACTIVE", "OPEN", "LIVE", "HOLD"]);
+
+async function risks(req: Request, ctx: RouteCtx<Env>): Promise<Response> {
   const pinR = pinOf(req);
   if ("error" in pinR) return pinR.error;
-  // No documents.doc_type carries a risk list (chk_documents_doc_type), so there is
-  // nothing honest to serve yet: an empty list marked unavailable, never a guess.
-  return ok({ risks: [] }, "unavailable", pinR.pin, null, "unavailable");
+  const [thesesOut, positions] = await Promise.all([
+    read(ctx.env, "theses", "select=*&order=date.desc&limit=500"),
+    read(ctx.env, "positions", `select=*&workspace_id=eq.${HOUSE_WORKSPACE_ID}&order=date.desc&limit=500`),
+  ]);
+  if ("error" in thesesOut) return thesesOut.error;
+  if ("error" in positions) return positions.error;
+  const live = latestSnapshot(thesesOut.rows).filter((r) => LIVE_THESIS_STATUS.has(str(r.status) ?? ""));
+  const held = latestSnapshot(positions.rows);
+  const heldTickers = new Set(held.map((r) => str(r.ticker)).filter((t): t is string => t !== null));
+  const risks: Array<Record<string, unknown>> = [];
+  for (const t of live) {
+    const id = str(t.thesis_id);
+    if (id === null) continue;
+    if (!str(t.invalidation)) {
+      risks.push({
+        code: "thesis_without_invalidation",
+        severity: "review",
+        thesis_id: id,
+        detail: "live thesis records no invalidation trigger",
+      });
+    }
+    if (!heldTickers.has((str(t.vehicle) ?? "").toUpperCase())) {
+      risks.push({
+        code: "thesis_without_position",
+        severity: "review",
+        thesis_id: id,
+        detail: "live thesis has no holding in the latest position snapshot",
+      });
+    }
+  }
+  for (const p of held) {
+    const ticker = str(p.ticker);
+    const weight = num(p.weight_pct);
+    if (ticker === null) continue;
+    if (weight !== null && weight >= CONCENTRATION_PCT) {
+      risks.push({
+        code: "concentrated_position",
+        severity: "watch",
+        ticker,
+        detail: `single line at ${weight}% of the book`,
+      });
+    }
+    if (weight !== null && weight > 0 && !str(p.thesis_id)) {
+      risks.push({
+        code: "position_without_thesis",
+        severity: "review",
+        ticker,
+        detail: "open weight with no thesis link",
+      });
+    }
+  }
+  return ok({ risks }, "core:theses+positions", pinR.pin, maxDate(thesesOut.rows, "date"));
 }
 
 async function dossier(req: Request, ctx: RouteCtx<Env>): Promise<Response> {

@@ -21,6 +21,10 @@ const DEFAULT_ORIGINS = [
   "http://127.0.0.1:3100",
   "http://localhost:3101",
   "http://127.0.0.1:3101",
+  // The digiquant desk preview (:4202) reads the API cross-origin once it is
+  // served as a static export, which cannot use the dev-only /official-api proxy.
+  "http://localhost:4202",
+  "http://127.0.0.1:4202",
 ].join(",");
 
 export function resolveAllowlist(env: { DASHBOARD_API_ALLOWED_ORIGINS?: string }): string[] {

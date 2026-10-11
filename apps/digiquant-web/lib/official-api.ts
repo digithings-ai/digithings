@@ -24,13 +24,21 @@ export const TAPE_ROUTE = "/benchmarks";
 
 const STUB_NAV = [99.909, 204.04];
 
+/** Where a statically served local desk reads from; mirrors next.config.mjs. */
+const LOCAL_STATIC_API_ORIGIN = "http://127.0.0.1:8788";
+
 export function officialApiBase(hostname?: string): string {
   const env = (process.env.NEXT_PUBLIC_DASHBOARD_API_URL ?? process.env.NEXT_PUBLIC_DQ_API_URL ?? "")
     .trim()
     .replace(/\/+$/, "");
   if (env.length > 0) return env;
   const host = hostname ?? (typeof window !== "undefined" ? window.location.hostname : "");
-  if (host === "127.0.0.1" || host === "localhost") return DEV_API_PROXY;
+  if (host === "127.0.0.1" || host === "localhost") {
+    // `next dev` serves the same-origin /official-api rewrite, but `output:
+    // "export"` ignores rewrites: a statically served desk answers 404 on that
+    // path and every read fails. Fall back to the API origin directly there.
+    return process.env.NODE_ENV === "production" ? LOCAL_STATIC_API_ORIGIN : DEV_API_PROXY;
+  }
   return PRODUCTION_API_BASE;
 }
 

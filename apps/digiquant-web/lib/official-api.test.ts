@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   classifyOfficialRead,
+  officialApiBase,
   houseBookFromPayloads,
   isStubPayload,
   runFromDocuments,
@@ -133,5 +134,34 @@ describe("official API reads", () => {
     expect(snap?.stages.find((s) => s.name === "Inputs")?.status).toBe("recorded");
     expect(snap?.stages.find((s) => s.name === "Decision")?.status).toBe("not-recorded");
     expect(snap?.stages.find((s) => s.name === "Inputs")?.titles).toEqual(["Attention plan"]);
+  });
+});
+
+describe("officialApiBase", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("uses the dev proxy under `next dev`, where the rewrite exists", () => {
+    vi.stubEnv("NEXT_PUBLIC_DASHBOARD_API_URL", "");
+    vi.stubEnv("NODE_ENV", "development");
+    expect(officialApiBase("127.0.0.1")).toBe("/official-api");
+    expect(officialApiBase("localhost")).toBe("/official-api");
+  });
+
+  it("goes straight to the API origin for a static export, which ignores rewrites", () => {
+    vi.stubEnv("NEXT_PUBLIC_DASHBOARD_API_URL", "");
+    vi.stubEnv("NODE_ENV", "production");
+    expect(officialApiBase("127.0.0.1")).toBe("http://127.0.0.1:8788");
+  });
+
+  it("prefers the configured origin over every local default", () => {
+    vi.stubEnv("NEXT_PUBLIC_DASHBOARD_API_URL", "http://127.0.0.1:8887/");
+    expect(officialApiBase("127.0.0.1")).toBe("http://127.0.0.1:8887");
+  });
+
+  it("keeps production on the hosted API", () => {
+    vi.stubEnv("NEXT_PUBLIC_DASHBOARD_API_URL", "");
+    expect(officialApiBase("digiquant.io")).toBe("https://graph.digithings.ai/dashboard-api");
   });
 });
