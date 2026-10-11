@@ -2,7 +2,7 @@
  *  A block that is not in the map stays a table. Web and TUI read the same map. */
 
 export type PanelShape = "series" | "composition" | "ranking";
-export type ChartType = "line" | "area" | "bar" | "donut" | "treemap";
+export type ChartType = "line" | "area" | "bar" | "donut" | "treemap" | "heatmap";
 export type PanelMode = "table" | "chart";
 export type PanelUnit = "index" | "pct" | "bp";
 
@@ -23,7 +23,7 @@ export type PanelSpec = {
 
 /** Chart types each shape allows, in picker order. */
 export const CHART_TYPES: Record<PanelShape, readonly ChartType[]> = {
-  series: ["line", "area", "bar"],
+  series: ["line", "area", "bar", "heatmap"],
   composition: ["donut", "bar", "treemap"],
   ranking: ["bar"],
 };
@@ -34,6 +34,7 @@ export const CHART_LABEL: Record<ChartType, string> = {
   bar: "Bar",
   donut: "Donut",
   treemap: "Treemap",
+  heatmap: "Heatmap",
 };
 
 const spec = (
@@ -64,7 +65,8 @@ export type PanelPoint = { label: string; value: number };
 export type PanelData = {
   spec: PanelSpec;
   points: PanelPoint[];
-  /** Chart types that can draw these points. Donut and treemap need no negative value. */
+  /** Chart types that can draw these points. Donut and treemap need no negative value.
+   *  Heatmap needs an index series with at least two months. */
   charts: ChartType[];
 };
 
@@ -97,7 +99,10 @@ export function panelData(id: string, data: unknown): PanelData | null {
   if (points.length < 2) return null;
 
   const signed = points.some((point) => point.value < 0);
-  const charts = CHART_TYPES[spec.shape].filter((type) => !(signed && (type === "donut" || type === "treemap")));
+  const monthly = spec.unit === "index" && monthlyReturns(points).length >= 2;
+  const charts = CHART_TYPES[spec.shape].filter(
+    (type) => !(signed && (type === "donut" || type === "treemap")) && (type !== "heatmap" || monthly),
+  );
   return { spec, points, charts };
 }
 
@@ -120,4 +125,40 @@ export function chartFor(panel: PanelData, picked: ChartType | null | undefined)
   if (picked && panel.charts.includes(picked)) return picked;
   if (panel.charts.includes(panel.spec.chart)) return panel.spec.chart;
   return panel.charts[0] ?? "bar";
+}
+
+/** A `YYYY-MM-DD` label, read as a UTC day. */
+export function dayOf(label: string): number | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(label);
+  if (!match) return null;
+  const time = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return Number.isFinite(time) ? time : null;
+}
+
+export type MonthReturn = { year: number; month: number; pct: number };
+
+/** Month-on-month change of an index series, in percent: each month's last level against
+ *  the month before's last level. The first month runs from the first point. A label that
+ *  is not a date ends the read: no months. */
+export function monthlyReturns(points: PanelPoint[]): MonthReturn[] {
+  const closes: { year: number; month: number; value: number }[] = [];
+  let base: number | null = null;
+  for (const point of points) {
+    const time = dayOf(point.label);
+    if (time === null) return [];
+    const day = new Date(time);
+    const year = day.getUTCFullYear();
+    const month = day.getUTCMonth() + 1;
+    base ??= point.value;
+    const last = closes.at(-1);
+    if (last && last.year === year && last.month === month) last.value = point.value;
+    else closes.push({ year, month, value: point.value });
+  }
+  const out: MonthReturn[] = [];
+  let prev = base;
+  for (const close of closes) {
+    if (prev !== null && prev !== 0) out.push({ year: close.year, month: close.month, pct: (close.value / prev - 1) * 100 });
+    prev = close.value;
+  }
+  return out;
 }
