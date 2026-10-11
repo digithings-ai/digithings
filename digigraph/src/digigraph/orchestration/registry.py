@@ -424,7 +424,15 @@ def decide_mcp_call(
 
     ``servers`` carries the transport only. The row that executes must be the one
     the call was recorded against; a different row is refused rather than
-    substituted. Nothing is consumed unless the call is actually dispatched.
+    substituted.
+
+    The record is consumed the moment the decision reaches this function, not the
+    moment it dispatches. An approval that arrives without a usable transport --
+    no ``servers``, or no row for the recorded server -- is therefore burned and
+    returns ``mcp_call_requires_servers`` / ``mcp_server_not_available``. That is
+    deliberate and is the same at-most-once bias as the replay case above: a
+    decision is spent once or never, and a caller that wants the call made again
+    records a fresh pending call.
     """
     with _pending_mcp_lock:
         record = _pending_mcp_calls.pop((session_id, pending_id), None)
