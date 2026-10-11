@@ -29,6 +29,12 @@ import {
   tryResolveLanguageInput,
 } from "@/lib/languages";
 import type { DigichatDeployment } from "@/lib/deploy-config/schema";
+import {
+  DEVKIT_MODES,
+  devkitModeForChrome,
+  withChromeMode,
+  type DevkitModeId,
+} from "./devkit-looks";
 
 /** Stable no-ops: the preview has no persisted session to reset or redo. */
 const noop = () => {};
@@ -103,6 +109,28 @@ export function DevkitPreview({
   );
   const skin = clientConfig.chrome.skin;
   const [theme, setTheme] = useState<"dark" | "light">(clientConfig.chrome.theme);
+  // Presentation mode is a PREVIEW control, not a draft edit: it is seeded from
+  // the deployment's own chrome.mode and re-projects the client config, so
+  // switching a mode never dirties YAML the operator did not type.
+  const [mode, setMode] = useState<DevkitModeId>(
+    devkitModeForChrome(clientConfig.chrome.mode),
+  );
+
+  const modeChromeMode = (
+    DEVKIT_MODES.find((m) => m.id === mode) ?? DEVKIT_MODES[2]
+  ).chromeMode;
+  const projected = useMemo(
+    () => withChromeMode(deployment, modeChromeMode),
+    [deployment, modeChromeMode],
+  );
+  const modeClientConfig = useMemo(
+    () =>
+      resolveRouteClientConfig({
+        mode: "product",
+        deployment: projected as DigichatDeployment,
+      }),
+    [projected],
+  );
 
   return (
     <DevkitPreviewInner
@@ -110,10 +138,12 @@ export function DevkitPreview({
       slug={deployment.slug}
       skin={skin}
       theme={theme}
+      mode={mode}
       dirty={dirty}
       issues={issues}
       onToggleTheme={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
-      clientConfig={clientConfig}
+      onSelectMode={setMode}
+      clientConfig={modeClientConfig}
       sessionKey={`devkit-${entryId}`}
     />
   );
@@ -123,18 +153,22 @@ function DevkitPreviewInner({
   slug,
   skin,
   theme,
+  mode,
   dirty,
   issues,
   onToggleTheme,
+  onSelectMode,
   clientConfig,
   sessionKey,
 }: {
   slug: string;
   skin: ThreadSkin;
   theme: "dark" | "light";
+  mode: DevkitModeId;
   dirty: boolean;
   issues: string[];
   onToggleTheme: () => void;
+  onSelectMode: (mode: DevkitModeId) => void;
   clientConfig: ReturnType<typeof resolveRouteClientConfig>;
   sessionKey: string;
 }) {
@@ -200,15 +234,39 @@ function DevkitPreviewInner({
             />
           ) : null}
           <span className="font-mono">
-            {slug} · {skin} · {theme}
+            {slug} · {skin} · {theme} · {clientConfig.chrome.mode}
             {clientConfig.models.default
               ? ` · ${clientConfig.models.default}`
               : " · no default model"}
           </span>
+          <div
+            role="group"
+            aria-label="Preview mode"
+            data-testid="devkit-preview-modes"
+            className="ml-auto flex items-center gap-0.5 rounded-md border px-0.5 py-0.5"
+          >
+            {DEVKIT_MODES.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                data-mode={m.id}
+                aria-pressed={m.id === mode}
+                onClick={() => onSelectMode(m.id)}
+                className={cn(
+                  "rounded px-2 py-0.5 font-mono text-[11px]",
+                  m.id === mode
+                    ? "bg-accent text-accent-foreground"
+                    : "text-muted-foreground hover:bg-accent/50",
+                )}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
           <button
             type="button"
             onClick={onToggleTheme}
-            className="ml-auto rounded-md px-2 py-1 hover:bg-accent"
+            className="rounded-md px-2 py-1 hover:bg-accent"
           >
             {theme === "dark" ? "light" : "dark"}
           </button>
@@ -222,7 +280,26 @@ function DevkitPreviewInner({
             {issues.join(" ")}
           </div>
         ) : null}
-        <div className="relative flex min-h-0 flex-1 flex-col bg-background text-foreground">
+        {/* The three preview modes are chrome, not a redraw: the same Thread
+            Skin renders in the parent-site frame each mode implies, so the
+            matrix compares the same look across real hosting conditions. */}
+        <div
+          data-testid="devkit-preview-frame"
+          data-mode={mode}
+          className={cn(
+            "relative flex min-h-0 flex-1 bg-muted text-foreground",
+            mode === "fullscreen" && "p-0",
+            mode === "popup" && "items-center justify-center p-6",
+            mode === "embedded" && "items-stretch justify-center p-3",
+          )}
+        >
+          <div
+            className={cn(
+              "flex min-h-0 w-full flex-col bg-background text-foreground",
+              mode === "popup" && "max-h-full max-w-lg rounded-lg border shadow-2xl",
+              mode === "embedded" && "h-full max-w-2xl rounded-md border",
+            )}
+          >
           <StockChatPrefsHost value={prefsApi} panes={panes}>
             <SkinRuntimeProvider value={SKIN_RUNTIME}>
               <SkinChromeProvider value={skinChrome}>
@@ -230,6 +307,7 @@ function DevkitPreviewInner({
               </SkinChromeProvider>
             </SkinRuntimeProvider>
           </StockChatPrefsHost>
+          </div>
         </div>
       </div>
     </AssistantRuntimeProvider>
