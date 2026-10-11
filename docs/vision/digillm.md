@@ -26,7 +26,7 @@ LLM access code is where subtle production bugs live: inconsistent retry/backoff
 
 ## How it fits in the ecosystem
 
-digillm sits beneath every component that calls a model. Consumers: **twelve-x** adopts it today; **digigraph** and **digisearch** migrate to it next (their current in-tree LLM modules are superseded by this package). It depends only on `openai` and `pydantic`, with optional extras for path-based mode resolution (`[modes]`) and LangSmith tracing (`[trace]`). It imports cleanly with no side effects and no FastAPI in the dependency tree.
+digillm sits beneath every component that calls a model. Consumers: **twelve-x** and **digigraph** are on it today; **digisearch** reaches it on its optional web-research path. digigraph declares it a hard dependency (`digillm>=0.1.0`) and its in-tree `llm_client`, `llm_auth` and `llm_errors` modules are thin wrappers that delegate here: the in-tree LLM implementation was extracted from digigraph, so the wrappers are the seam, not a pending migration. It depends only on `openai` and `pydantic`, with optional extras for path-based mode resolution (`[modes]`) and LangSmith tracing (`[trace]`). It imports cleanly with no side effects and no FastAPI in the dependency tree.
 
 ## Capabilities — Current
 
@@ -42,7 +42,7 @@ Shipped and in active use:
 
 ## Capabilities — 12-month roadmap
 
-- digigraph and digisearch fully migrated off their in-tree LLM modules onto digillm
+- ~~digigraph and digisearch fully migrated off their in-tree LLM modules onto digillm~~ *(shipped for digigraph; digisearch reaches it on its optional web path)*
 - Streaming (SSE) response support exposed through the shared client
 - Richer cost/usage accounting surfaced to digitrace
 - Pluggable cache backends (today an in-process cache; Redis-backed shared cache is future digibase work)
