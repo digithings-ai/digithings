@@ -23,3 +23,4 @@ export { equalizerAnimation, levelFrac, type EqualizerOptions } from "./animatio
 export { routeAnimation, type RouteOptions } from "./animations/route";
 export { stackAnimation, type StackOptions } from "./animations/stack";
 export { tumblerAnimation, type TumblerOptions } from "./animations/tumbler";
+export { traverseAnimation, type TraverseOptions } from "./animations/traverse";
