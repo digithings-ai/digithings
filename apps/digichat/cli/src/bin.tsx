@@ -11,8 +11,12 @@
  *   DIGICHAT_CONFIG       Path to digichat.yaml — when set, requires cli.enabled: true
  *   DIGICHAT_MODEL        Optional X-Digi-Model
  *   DIGICHAT_LANGUAGE     Optional X-Digi-Language
+ *
+ * Flags:
+ *   --artifacts           Open the session's /artifacts file list on start
  */
 
+import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { load as loadYaml } from "js-yaml";
@@ -74,11 +78,17 @@ function main(): void {
 Usage:
   digichat --url http://127.0.0.1:3005 [--config path/to/digichat.yaml]
   digichat --demo
+  digichat --artifacts
   digichat --version
 
 Auth (one of, live mode):
   --embed-token / DIGICHAT_EMBED_TOKEN
   --api-key     / DIGICHAT_API_KEY
+
+--artifacts opens /artifacts — the same command the web chat has — over this
+session's file list. It needs a digichat machine key (--api-key /
+DIGICHAT_API_KEY=digi_live_…), the same credential the web routes require; an
+embed token has no session store, exactly as the web embed client has none.
 
 --demo runs the official with-react-ink scripted agent (no BFF).
 When --config / DIGICHAT_CONFIG is set, cli.enabled must be true.
@@ -86,7 +96,15 @@ When --config / DIGICHAT_CONFIG is set, cli.enabled must be true.
     process.exit(0);
   }
 
+  const wantsArtifacts = argv.includes("--artifacts");
+
   if (argv.includes("--demo")) {
+    if (wantsArtifacts) {
+      process.stderr.write(
+        "digichat: --artifacts needs a live session with a machine key (DIGICHAT_API_KEY=digi_live_…); --demo has no BFF and no session store\n",
+      );
+      process.exit(2);
+    }
     render(<DigichatCliApp mode="demo" />);
     return;
   }
@@ -104,6 +122,7 @@ When --config / DIGICHAT_CONFIG is set, cli.enabled must be true.
     <DigichatCliApp
       mode="live"
       modelName={model || "digigraph"}
+      startInArtifacts={wantsArtifacts}
       request={{
         baseUrl,
         auth: resolveAuth(argv),
@@ -111,6 +130,12 @@ When --config / DIGICHAT_CONFIG is set, cli.enabled must be true.
           readFlag(argv, "--language") || process.env.DIGICHAT_LANGUAGE?.trim(),
         model,
         sessionId: `cli-${Date.now().toString(36)}`,
+        // The artifacts table has a foreign key onto conversations, so the
+        // session needs a conversation of its own. The web chat mints one
+        // client-side the same way (crypto.randomUUID at thread creation) and
+        // POSTs it before it lists files; a fresh id per launch matches that,
+        // since the store retires a session's links when it is not re-registered.
+        conversationId: randomUUID(),
       }}
     />,
   );
