@@ -1,4 +1,5 @@
 import { buildAnimation } from "../animations/build";
+import { clawAnimation, withHeadroom } from "../animations/claw";
 import { equalizerAnimation } from "../animations/equalizer";
 import { riseAnimation } from "../animations/rise";
 import { routeAnimation } from "../animations/route";
@@ -140,10 +141,45 @@ export const DIGILLM: BannerDefinition = {
   seed: 0x11e1,
 };
 
+/** DIG-2875. An arcade claw machine picks the word out of a pile: the claw
+ *  travels a faint rail, drops, grips each sunk glyph and lifts it into place
+ *  (one seeded grab slips and is retried). LIVE plucks one glyph now and then
+ *  and sets it back, or lets it slip. The font carries four blank rows of
+ *  headroom for the gantry. Accent: --accent-digiclaw. */
+export const DIGICLAW: BannerDefinition = {
+  id: "digiclaw",
+  text: "DIGICLAW",
+  label: "digiclaw",
+  font: withHeadroom(PIXEL_7X10),
+  gap: 2,
+  palette: {
+    ink: INK,
+    ground: GROUND,
+    accent: { hex: "#B87840", cube: 137, cssVar: "--accent-digiclaw" },
+    glint: { hex: "#FFFFFF", cube: 231, cssVar: "--glint" },
+  },
+  animation: clawAnimation({
+    enterMs: 260,
+    travelMs: 110,
+    dropMs: 140,
+    gripMs: 60,
+    liftMs: 200,
+    releaseMs: 50,
+    flashMs: 140,
+    paceStart: 1.05,
+    paceMin: 0.5,
+    exitMs: 280,
+    everyMs: 7000,
+  }),
+  live: true,
+  seed: 0xc1a3,
+};
+
 export const BANNERS = {
   digithings: DIGITHINGS,
   digiquant: DIGIQUANT,
   digichat: DIGICHAT,
   digivoice: DIGIVOICE,
   digillm: DIGILLM,
+  digiclaw: DIGICLAW,
 } as const;
