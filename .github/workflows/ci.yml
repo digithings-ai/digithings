@@ -40,6 +40,10 @@ jobs:
       e2e_contract: ${{ steps.filter.outputs.e2e_contract }}
       nautilus_smoke: ${{ steps.filter.outputs.nautilus_smoke }}
       research_graph: ${{ steps.filter.outputs.research_graph }}
+      # Added by hand for #2072 — as with digillm/digifetch above,
+      # generate_ci_path_filters.py rewrites only the embedded block, not this
+      # outputs map.
+      clients_tui: ${{ steps.filter.outputs.clients_tui }}
       # Added by hand (DIG-2940): generate_ci_path_filters.py only rewrites the
       # block between the CI_PATH_FILTERS markers, not this outputs map.
       bun_suites: ${{ steps.filter.outputs.bun_suites }}
@@ -125,6 +129,7 @@ jobs:
             web:
               - 'apps/digithings-web/**'
               - 'apps/digiquant-web/**'
+              - 'clients/digiquant-tui/src/**'
               - 'digiquant/src/digiquant/portfolio/graph.py'
               - 'apps/digithings-cron/**'
               - 'apps/digiquant-runner/**'
@@ -143,6 +148,9 @@ jobs:
               - 'package.json'
               - 'package-lock.json'
               - '.github/workflows/test-web.yml'
+            clients_tui:
+              - 'clients/**'
+              - '.github/workflows/test-clients-tui.yml'
             e2e_contract:
               - 'tests/test_e2e.py'
               - 'tests/test_e2e_contract.py'
@@ -316,6 +324,26 @@ jobs:
       - name: Vendor-content gate
         run: python3 scripts/check_vendor_content.py
 
+  # Example-credentials guard (DIG-3148, from the #5030 retro-review).
+  # Unconditional, same shape as vendor-content-gate above: no `needs:`, no
+  # path filter, so the job name is always reported and required on develop.
+  # scripts/check_example_credentials.py scans tracked .example/.template
+  # files for committed credential-shaped values; it is stdlib-only, so no
+  # install step. Shallow checkout is fine: the script reads `git ls-files`
+  # on the working tree, never history.
+  example-credentials-guard:
+    name: Example-credentials guard
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Example-credentials guard
+        run: python3 scripts/check_example_credentials.py
+
   # ── Per-component test suites (gated by paths) ───────────────────────────────
   digibase:
     needs: changes
@@ -406,6 +434,13 @@ jobs:
     if: needs.changes.outputs.research_graph == 'true'
     uses: ./.github/workflows/test-research-graph.yml
 
+  # Bun TUI clients (#2072). Before this, clients/digiquant-tui,
+  # clients/digichat-tui and clients/digichat-devkit each declared
+  # `"test": "bun test"` and none of it ran anywhere in CI.
+  clients-tui:
+    needs: changes
+    if: needs.changes.outputs.clients_tui == 'true'
+    uses: ./.github/workflows/test-clients-tui.yml
   # Bun suites (DIG-2940). Before this, digivoice/tui, clients/digichat-tui and
   # packages/surface-config each declared `"test": "bun test"` and none of it
   # ran anywhere in CI — no workflow mentioned the bun tool at all.
@@ -726,6 +761,7 @@ jobs:
       - frontend-canon
       - gloomberb-ci-guard
       - vendor-content-gate
+      - example-credentials-guard
       - digibase
       - digikey
       - digitrace
@@ -743,6 +779,7 @@ jobs:
       - e2e-contract
       - nautilus-smoke
       - research-graph
+      - clients-tui
       - bun-suites
       - pip-audit
       - npm-audit

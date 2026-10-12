@@ -54,7 +54,7 @@ import { LiveMetricsBadge } from "./live-metrics";
 import { PivotStatsPivotToggle, PivotStatsTable } from "./pivot-stats-table";
 import { SignalDelayChip } from "./signal-delay";
 import type { StatsPivot } from "./pivot-stats";
-import { RemainingBookNotes, StrategyNotes } from "./strategy-notes";
+import { StrategyNotes } from "./strategy-notes";
 import { strategyDisplayName, symbolBase } from "./strategy-names";
 import { StrategyTypeChip } from "./strategy-type-chip";
 import { showsIndicatorsTab } from "./strategy-kinds";
@@ -74,6 +74,7 @@ import {
 } from "./trades";
 import { type TearsheetData, type TearsheetTrade } from "./types";
 import { fetchTearsheet } from "@/lib/live/strategies";
+import { StrategyTearsheet, buildStrategyTearsheet } from "@digithings/ui";
 import { hasTradeKpis, isDcaTearsheet, allocatedPctCurve, fillMarkersForChart, indicatorPanels, curveKnees, lastAllocatedPct, ALLOCATED_KPI_LABEL, VS_LUMP_KPI_LABEL, TOTAL_RETURN_KPI_LABEL, isValuationOnlyIndex } from "./dca";
 import { BacktestOnlyChip } from "./honesty";
 
@@ -125,40 +126,9 @@ type TearsheetMode = "charts" | "tables";
 type ChartTab = "price" | "rails" | "risk" | "indicators" | "accumulation" | "equity" | "drawdown" | "pnl" | "matrix";
 type TableTab = "stats" | "trades";
 
-/** Honest chrome when Cloudflare Pages has the route but the live store has no payload yet. */
-function TearsheetUnavailable({ slug, message }: { slug: string; message: string }) {
-  const dca = slug.includes("sdca");
-  const title = strategyDisplayName(slug);
+function sheetFallback(slug: string): { title: string; symbol: string } {
   const asset = symbolBase(slug.split("_")[0]?.toUpperCase() || slug);
-  const symbol = `${asset}-USD`;
-  return (
-    <div className="ts-print-root">
-      <header className="ts-header">
-        <div className="ts-header-main">
-          <Link href="/strategies" className="ts-back">← Strategies</Link>
-          <h1 className="ts-h1 ts-h1-with-logo">
-            <AssetLogoFor strategy={slug} symbol={symbol} size={36} className="ts-header-logo" />
-            <span>{title}</span>
-          </h1>
-          {dca ? (
-            <div className="ts-meta">
-              <Badge variant="outline" className="border-accent-weak bg-accent-weak">
-                {symbol}
-              </Badge>
-              <StrategyTypeChip strategy={slug} />
-              <SignalDelayChip days={3} detail="full" />
-              <BacktestOnlyChip />
-            </div>
-          ) : null}
-        </div>
-      </header>
-      <p className="ts-status ts-status-error" role="status">
-        {message} Charts and KPIs appear after the operator publishes this backtest
-        to the live store — they are not omitted to hide a result.
-      </p>
-      {dca ? <RemainingBookNotes strategy={slug} asset={asset} /> : null}
-    </div>
-  );
+  return { title: strategyDisplayName(slug), symbol: `${asset}-USD` };
 }
 
 const CHART_H = 440;
@@ -167,9 +137,9 @@ function PrintHeading({ children }: { children: string }) {
   return <h2 className="ts-print-heading">{children}</h2>;
 }
 
-export function TearsheetView({ slug }: { slug: string }) {
-  const [data, setData] = useState<TearsheetData | null>(null);
-  const [err, setErr] = useState<string | null>(null);
+export function TearsheetView({ slug, embedded = false }: { slug: string; embedded?: boolean }) {
+  const [loaded, setLoaded] = useState<{ slug: string; data: TearsheetData } | null>(null);
+  const data = loaded?.slug === slug ? loaded.data : null;
   const [scaleOverride, setScaleOverride] = useState<ChartScale | null>(null);
   const [period, setPeriod] = useState<ReturnsPeriod>("monthly");
   const [matrixMetric, setMatrixMetric] = useState<MatrixMetric>("return");
@@ -187,12 +157,11 @@ export function TearsheetView({ slug }: { slug: string }) {
     let alive = true;
     fetchTearsheet(slug)
       .then((d) => {
-        if (!alive) return;
-        if (d) setData(d);
-        else setErr("Could not load tearsheet data — the live store returned nothing.");
+        if (!alive || !d) return;
+        setLoaded({ slug, data: d });
       })
-      .catch((e: unknown) => {
-        if (alive) setErr(`Could not load tearsheet data: ${e instanceof Error ? e.message : String(e)}`);
+      .catch(() => {
+        /* unpublished figures stay empty */
       });
     return () => { alive = false; };
   }, [slug]);
@@ -438,8 +407,7 @@ export function TearsheetView({ slug }: { slug: string }) {
     }
   }, [chartKnees.buy_knee_risk, chartKnees.sell_knee_risk, chartTab, data?.indicator_weights, hasLump, scale]);
 
-  if (err) return <TearsheetUnavailable slug={slug} message={err} />;
-  if (!data) return <p className="ts-status">Loading tearsheet…</p>;
+  if (!data) return <StrategyTearsheet model={buildStrategyTearsheet(null, sheetFallback(slug))} />;
 
   const title = strategyDisplayName(slug, data?.label);
   const asset = symbolBase(data.symbol);
@@ -513,7 +481,7 @@ export function TearsheetView({ slug }: { slug: string }) {
 
       <header className="ts-header">
         <div className="ts-header-main">
-          <Link href="/strategies" className="ts-back">← Strategies</Link>
+          {embedded ? null : <Link href="/strategies" className="ts-back">← Strategies</Link>}
           <h1 className="ts-h1 ts-h1-with-logo">
             <AssetLogoFor strategy={slug} symbol={data.symbol} size={36} className="ts-header-logo" />
             <span>{title}</span>
@@ -525,7 +493,7 @@ export function TearsheetView({ slug }: { slug: string }) {
             </Badge>
             <StrategyTypeChip strategy={slug} kind={data.kind} />
             <SignalDelayChip days={data.signal_delay_days} detail="full" />
-            {dcaBook ? <BacktestOnlyChip /> : null}
+            {dcaBook && !embedded ? <BacktestOnlyChip /> : null}
             <span className="ts-meta-text">{data.period_start} → {data.period_end} · {fmtNum(data.bars)} bars</span>
           </div>
         </div>

@@ -16,6 +16,30 @@ risk ids R1–R15). No value is ever printed here; every literal below is masked
   verification script and the **Act B2 rollback**: [OCC_INVITE_KEY.md](OCC_INVITE_KEY.md). Read it
   before acting on §1 for the `occ` entry.
 
+## When a rotation fails: report the branch, never the value
+
+A rotation that fails is the moment the value is most likely to get pasted into an issue,
+a comment, or a chat — because someone is stuck and trying to help. **Do not.** The rule
+is in [`credential-ownership.md`](credential-ownership.md#never-paste-a-credential-value):
+a credential value is never pasted into a ticket, an issue, a comment, an interaction
+reason, or any chat surface, including by the credential owner, including to help an agent
+diagnose.
+
+What is safe to report, and sufficient:
+
+- **which check failed** — shape, live vendor verify, or the secret write;
+- **the status the vendor returned** — e.g. `401`;
+- **the script's exit code**;
+- **which procedure number above you were on**.
+
+An interaction reason is worse than a comment: Paperclip exposes delete and edit routes
+for comments and **no route at all** for an interaction record, so a value pasted there is
+permanent. This happened on DIG-1226 (2026-10-05) and is the reason the rule names that
+channel.
+
+If a script fails without telling you which branch it took, fix the script. Do not ask
+anyone for the value.
+
 ## The container boot-env trap
 
 **A running Container is not replaced when a new Worker version deploys.** It keeps the environment it
