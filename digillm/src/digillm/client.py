@@ -1883,6 +1883,23 @@ def _execute_tool_in_fan_out(
 
 
 @_traceable("run_tools")
+
+def _emit_tool_result(
+    on_tool_step: Callable[[str, Any], None], name: str, result: str | dict[str, Any]
+) -> None:
+    """Emit one tool_result step, keyed by the *tool* name.
+
+    The tool name must win over any "name" key in the result: get_skill returns
+    {"name": <skill id>, ...}, and spreading the result last relabelled the
+    completion as a phantom tool named after the skill while the real row
+    never completed (OCC demo, DIG-3089).
+    """
+    body = result if isinstance(result, dict) else {"content": result}
+    payload = {**body, "name": name}
+    if isinstance(body.get("name"), str) and body["name"] != name:
+        payload["result_name"] = body["name"]
+    on_tool_step("tool_result", payload)
+
 def run_tools(
     model: str,
     messages: list[ChatCompletionMessage],
@@ -2172,6 +2189,8 @@ def run_tools(
                     result = {"content": str(e)}
                 else:
                     _note_tool_success()
+                if on_tool_step is not None:
+                    _emit_tool_result(on_tool_step, name, result)
                 ordered.append(((tc_id, name, args), result))
 
         for idx, ((tc_id, name, args), result) in enumerate(ordered):
@@ -2180,14 +2199,12 @@ def run_tools(
                     _note_tool_error(name, tool_errors[idx])
                 else:
                     _note_tool_success()
-            if on_tool_step is not None:
-                if run_parallel:
-                    on_tool_step("tool_call", {"name": name, "arguments": args})
-                payload = {
-                    "name": name,
-                    **(result if isinstance(result, dict) else {"content": result}),
-                }
-                on_tool_step("tool_result", payload)
+            # Sequential calls already emitted their result the moment each
+            # tool returned (below), so a slow round no longer leaves earlier
+            # rows "running" until the last tool of the round finishes.
+            if on_tool_step is not None and run_parallel:
+                on_tool_step("tool_call", {"name": name, "arguments": args})
+                _emit_tool_result(on_tool_step, name, result)
             msg_content = (
                 result.get("content", str(result)) if isinstance(result, dict) else str(result)
             )
