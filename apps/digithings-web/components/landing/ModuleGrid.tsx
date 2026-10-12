@@ -18,7 +18,10 @@ function markFor(id: string) {
  * "ask digichat" hands the question to `/chat`.
  *
  * The dist/ contract is the mosaic's `aria-label="digithings modules, sized by
- * lines of code"`, checked by `scripts/build-digithings.sh`.
+ * lines of code"`, checked by `scripts/build-digithings.sh`. It is the only
+ * one: the folded `/modules/*` and `/architecture` routes this pane used to
+ * back are gone, and `ModuleManifest` went with them in the rebrand (#5264
+ * named it as staying; develop has since deleted it).
  *
  * Band eyebrows (`SectionHead`) above the mosaic were dropped in #4898;
  * the `#architecture` id on the section remains the jump target.
