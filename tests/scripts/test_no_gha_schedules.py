@@ -49,8 +49,12 @@ def test_develop_workflows_have_no_gha_schedule() -> None:
 def test_jobs_map_does_not_claim_a_digisearch_parity_clock() -> None:
     """digisearch_parity is not a workflow in this repo. Do not invent a cron."""
     text = JOBS_SOURCE.read_text(encoding="utf-8")
-    ids = re.findall(r'(?:wd|rd|cj|pj)\(\s*"([^"]+)"', text)
-    workflows = re.findall(r'(?:wd|rd|cj|pj)\([^)]*?"([^"]+\.yml)"', text, flags=re.DOTALL)
+    # Both scrapes below name every builder in JOBS. A builder missing from this
+    # alternation is invisible here, so the assertions below would pass against a
+    # job they cannot see — a silent hole, not a green lane. wj = watch jobs
+    # (DIG-3065). Add your builder in the same edit that adds it to jobs.ts.
+    ids = re.findall(r'(?:wd|rd|cj|pj|wj)\(\s*"([^"]+)"', text)
+    workflows = re.findall(r'(?:wd|rd|cj|pj|wj)\([^)]*?"([^"]+\.yml)"', text, flags=re.DOTALL)
     assert "digisearch_parity" not in ids
     assert "digisearch-parity" not in ids
     assert "digisearch_parity.yml" not in workflows
