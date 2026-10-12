@@ -13,6 +13,7 @@ import {
   hasSupabaseEnv,
   loadMarketClosesMap,
   loadNavRowsCached,
+  __resetNavRowsCacheForTests,
   supaGet,
   type SupabaseEnv,
 } from './supabase';
@@ -370,6 +371,7 @@ describe('loadNavRowsCached', () => {
 
   beforeEach(() => {
     vi.useFakeTimers();
+    __resetNavRowsCacheForTests();
     FETCHED.length = 0;
   });
 
@@ -378,9 +380,10 @@ describe('loadNavRowsCached', () => {
   });
 
   function navFetch(): void {
-    (globalThis as Record<string, unknown>).fetch = vi.fn(async () =>
-      Response.json([NAV_ROW]),
-    );
+    (globalThis as Record<string, unknown>).fetch = vi.fn(async (url: string) => {
+      FETCHED.push(url);
+      return Response.json([NAV_ROW]);
+    });
   }
 
   function navRequests(): number {

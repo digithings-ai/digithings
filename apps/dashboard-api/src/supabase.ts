@@ -171,6 +171,12 @@ export const NAV_ROWS_TTL_MS = 10 * 60 * 1000;
 let navRowsCache: { rows: NavRowInput[]; at: number } | null = null;
 let navRowsInFlight: Promise<NavRowInput[]> | null = null;
 
+/** Test seam: the nav cache is module state, so suites reset it per test. */
+export function __resetNavRowsCacheForTests(): void {
+  navRowsCache = null;
+  navRowsInFlight = null;
+}
+
 /**
  * `loadNavRows` behind a short TTL with single-flight coalescing.
  *
