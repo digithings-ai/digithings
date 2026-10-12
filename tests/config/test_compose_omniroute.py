@@ -30,8 +30,17 @@ def test_omniroute_profile_is_opt_in_and_guards_password_at_start() -> None:
     services = data["services"]
     omni = services["omniroute"]
     guard = services["omniroute-auth-guard"]
-    assert omni.get("profiles") == ["omniroute"]
-    assert guard.get("profiles") == ["omniroute"]
+    # #3413: OmniRoute must never start in the default (no-profile) run.
+    # ANY `profiles:` key excludes a service from that set, so the S4
+    # convention of listing `core`/`all` next to the service's own profile
+    # keeps it opt-in. These assert the property AND the convention, so
+    # dropping the profiles key, the own-profile entry, or core/all all fail.
+    assert omni.get("profiles"), "omniroute must carry a profiles key to stay opt-in"
+    assert guard.get("profiles"), "the guard must share the omniroute profile"
+    assert "omniroute" in omni["profiles"]
+    assert "omniroute" in guard["profiles"]
+    assert omni["profiles"] == ["omniroute", "core", "all"]
+    assert guard["profiles"] == ["omniroute", "core", "all"]
     assert omni.get("ports") == ["127.0.0.1:20128:20128"]
     depends = omni.get("depends_on") or {}
     assert "omniroute-auth-guard" in depends

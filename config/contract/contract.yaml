@@ -1201,6 +1201,16 @@ env:
     env_example_files:
     - .env.example
     compose_literal: []
+- name: DT_PROXY_PORT
+  description: Host port for the digithings.localhost reverse proxy
+    (S4, DIG-2772 / #5355). Compose-only input; no worker reads it.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal: []
 - name: DT_TARGET
   description: Variant selector for UIs (selfhost|hosted, S1 identity,
     DIG-2759). Rendered by scripts/render_config_contract.py into wrangler
