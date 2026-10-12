@@ -98,8 +98,6 @@ ALL_KINDS = (
     "var",
 )
 
-SECRET_PLACEHOLDERS = ("placeholder", "set by deployment")
-
 
 @dataclass(frozen=True)
 class Surface:
