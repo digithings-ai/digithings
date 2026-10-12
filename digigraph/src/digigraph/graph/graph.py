@@ -108,6 +108,49 @@ def _bounded_conn_string(conn_string: str) -> str:
         return conn_string
 
 
+def _apply_sqlite_retention(saver: object) -> object | None:
+    """Prune and VACUUM a freshly opened file checkpointer (DIG-2896).
+
+    Runs while the process is starting, so it must never be able to take the process
+    down: every failure is logged and swallowed, and the file is left as it is. Losing
+    a retention pass costs disk; refusing to start costs the run.
+
+    Only the file backend is handled. Postgres retention stays where it is -- in the
+    database, on a schedule the service does not own (see ARCHITECTURE.md 5.5.2).
+    """
+    from digigraph.graph import checkpoint_retention
+
+    import logging as _logging
+
+    _log = _logging.getLogger(__name__)
+    try:
+        retain_days = checkpoint_retention.retain_days_from_env()
+    except checkpoint_retention.RetentionConfigError as exc:
+        _log.warning(
+            "%s is unusable (%s); using the %d-day default rather than skipping "
+            "retention, which would leave the checkpoint file unpruned",
+            checkpoint_retention.RETAIN_DAYS_ENV,
+            exc,
+            checkpoint_retention.DEFAULT_RETAIN_DAYS,
+        )
+        retain_days = checkpoint_retention.DEFAULT_RETAIN_DAYS
+    try:
+        conn = getattr(saver, "conn", None)
+        if conn is None:
+            _log.error(
+                "sqlite checkpointer exposes no connection; retention did not run and "
+                "the checkpoint file will grow unbounded"
+            )
+            return None
+        result = checkpoint_retention.apply_retention(conn, retain_days=retain_days)
+    except Exception:  # noqa: BLE001 - startup must survive a failed retention pass
+        _log.exception("sqlite checkpoint retention failed; the checkpoint file is untouched")
+        return None
+    if result.pruned_any:
+        _log.info("sqlite checkpoint retention: %s", checkpoint_retention.describe(result))
+    return result
+
+
 # Sync checkpointers (SqliteSaver/PostgresSaver, not the Async* variants) are correct
 # here because every call site in workflow.py is a plain `def` (FastAPI runs these off
 # the event loop in its own threadpool already). If any route here ever becomes
@@ -160,6 +203,9 @@ def get_checkpointer():
                 cm = SqliteSaver.from_conn_string(uri)
                 _cm_holders.append(cm)
                 _checkpointer_instance = cm.__enter__()
+                # The file backend has no cron and nothing in langgraph expires a
+                # thread, so retention runs where the saver is opened (#2896).
+                _apply_sqlite_retention(_checkpointer_instance)
             except ImportError:
                 import logging as _logging
 
