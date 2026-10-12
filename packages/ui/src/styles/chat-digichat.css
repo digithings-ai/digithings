@@ -510,7 +510,9 @@
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-input,
 .digichat-launcher .aui-composer-input {
   cursor: text;
-  overflow: hidden;
+  /* Vertical scroll once the box hits its 5-row max-height. */
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-send {
