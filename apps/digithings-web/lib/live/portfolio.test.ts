@@ -119,3 +119,24 @@ describe("live portfolio reads", () => {
     await expect(fetchBenchmark("2024-01-01")).resolves.toEqual([]);
   });
 });
+
+describe("dashboard-api reads", () => {
+  it("maps /nav-series points oldest first", async () => {
+    const { apiNavPoints } = await import("./portfolio");
+    expect(
+      apiNavPoints({ points: [{ date: "2026-07-18", nav: 101 }, { date: "2026-07-17", nav: 100 }, { date: 1, nav: 2 }] }),
+    ).toEqual([{ date: "2026-07-17", nav: 100 }, { date: "2026-07-18", nav: 101 }]);
+  });
+  it("prefers the chained index over a bad raw nav", async () => {
+    const { apiNavPoints } = await import("./portfolio");
+    expect(apiNavPoints({ points: [{ date: "2026-08-26", nav: 15.13, index: 101.77 }] })).toEqual([
+      { date: "2026-08-26", nav: 101.77 },
+    ]);
+  });
+  it("maps /benchmarks SPY closes from the start date", async () => {
+    const { apiBenchmarkPoints } = await import("./portfolio");
+    expect(
+      apiBenchmarkPoints({ series: { SPY: [{ date: "2026-07-16", close: 1 }, { date: "2026-07-17", close: 2 }] } }, "2026-07-17"),
+    ).toEqual([{ date: "2026-07-17", price: 2 }]);
+  });
+});

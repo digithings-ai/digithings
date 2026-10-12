@@ -181,8 +181,29 @@ def plan_up(profile: str, env: Mapping[str, str]) -> tuple[Step, ...]:
     )
     supabase = _tool(env, "supabase", ("supabase",))
     compose = _tool(env, "compose", ("docker", "compose"))
+    # One multi-config session, because a service binding only resolves between
+    # workers started in the same session. -c is repeatable; with none, wrangler
+    # looks for a config in the repo root, finds none, and exits "Missing
+    # entry-point". The argv and the requires gate are the SAME tuple so they
+    # cannot drift apart again.
+    wrangler_session = (
+        "apps/dashboard-api/wrangler.toml",
+        "apps/digithings-cron/wrangler.toml",
+        "apps/digiquant-runner/wrangler.toml",
+    )
+    wrangler_cfg_args = tuple(tok for cfg in wrangler_session for tok in ("-c", cfg))
     wrangler = _tool(
-        env, "wrangler", ("npx", "wrangler", "dev", "--local", "--persist-to", ".wrangler/state")
+        env,
+        "wrangler",
+        (
+            "npx",
+            "wrangler",
+            "dev",
+            "--local",
+            "--persist-to",
+            ".wrangler/state",
+            *wrangler_cfg_args,
+        ),
     )
     proxy = _tool(env, "proxy", ("caddy", "run", "--config", "infra/local-proxy/Caddyfile"))
     seed = (*python, "scripts/seed/seed_all.py")
@@ -209,7 +230,7 @@ def plan_up(profile: str, env: Mapping[str, str]) -> tuple[Step, ...]:
                 "one multi-config session so service bindings resolve; "
                 "fixed ports so the health gate can address them"
             ),
-            requires=("apps/dashboard-api/wrangler.toml",),
+            requires=wrangler_session,
             owner="S3 (DIG-2771, PR #5353)",
         ),
         Step(

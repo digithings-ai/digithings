@@ -138,6 +138,20 @@
    composer, so typing cannot shove the welcome around. */
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-thread-viewport-footer {
   margin-top: auto;
+  gap: 0.55rem;
+  padding-bottom: 0.45rem;
+}
+
+/* The stock thread column uses px-4 / gap-y-6 / mb-14. Pull that air in so
+   turns, the welcome, and the composer share one inset. */
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_thread-viewport"] > div {
+  padding-inline: 0.9rem;
+  padding-top: 0.75rem;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_message-group"] {
+  gap: 0.85rem;
+  margin-bottom: 1rem;
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_thread-viewport"] {
@@ -324,7 +338,8 @@
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_composer-shell"] {
   border-color: var(--hair);
-  background: var(--bg);
+  --composer-bg: transparent;
+  background: transparent;
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_composer-shell"]:focus-within {
@@ -1350,7 +1365,7 @@
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_composer-shell"][data-dragging="true"] {
   border-style: dashed;
   border-color: var(--hair);
-  background: var(--bg);
+  background: transparent;
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-user-message-attachments {
@@ -1527,8 +1542,7 @@
 .digichat-launcher__panel,
 .digichat-launcher__body,
 .digichat-launcher .aui-root,
-.digichat-launcher .aui-thread-viewport-footer,
-.digichat-launcher [data-slot="aui_composer-shell"] {
+.digichat-launcher .aui-thread-viewport-footer {
   --background: var(--bg);
   --foreground: var(--ink);
   --popover: var(--bg);
@@ -1547,6 +1561,8 @@
 
 .digichat-launcher [data-slot="aui_composer-shell"] {
   gap: 0.25rem;
+  --composer-bg: transparent;
+  background: transparent;
 }
 
 /* Portaled attach / more / tooltip / dialog must stack above the launcher

@@ -236,3 +236,83 @@ def test_the_report_json_carries_counts_for_ci():
     assert payload["counts"]["total"] == 1
     assert payload["counts"]["skipped"] == 1
     assert payload["dry_run"] is True
+
+
+# --- wrangler-dev must name its configs (DIG-2959 item 3) --------------------
+#
+# The step runs from the repo root, which has no wrangler config, so `wrangler
+# dev` with no -c exits "Missing entry-point". Its own note says the session
+# exists "so service bindings resolve", and a binding only resolves between
+# workers started in the same session.
+
+
+def _wrangler_step():
+    return next(s for s in orchestrate.plan_up("core", {}) if s.name == "wrangler-dev")
+
+
+def _configs_passed(argv):
+    """The paths handed to wrangler via -c/--config, in argv order."""
+    out = []
+    for i, tok in enumerate(argv):
+        if tok in ("-c", "--config") and i + 1 < len(argv):
+            out.append(argv[i + 1])
+    return out
+
+
+def test_wrangler_dev_passes_a_config_for_every_config_it_requires():
+    """The argv and the requires gate are the same tuple.
+
+    They drifted once: the step declared apps/dashboard-api/wrangler.toml in
+    requires while the command named no config at all. Asserting the link, not
+    the list, is what stops them drifting again.
+    """
+    step = _wrangler_step()
+    assert step.requires, "wrangler-dev must declare which configs it needs"
+    assert _configs_passed(step.argv) == list(step.requires), (
+        f"argv {list(step.argv)} passes {_configs_passed(step.argv)} "
+        f"but requires {list(step.requires)}"
+    )
+
+
+def test_wrangler_dev_never_runs_without_a_config():
+    """The original defect, stated as the failure it produced.
+
+    There is no wrangler config at the repo root (the step's cwd), so a session
+    with no -c can only end in "Missing entry-point".
+    """
+    step = _wrangler_step()
+    assert _configs_passed(step.argv), "wrangler dev with no -c cannot resolve a config"
+    root = Path(__file__).resolve().parents[2]
+    assert not list(root.glob("wrangler.*")), (
+        "this test's premise is that the repo root has no wrangler config"
+    )
+
+
+def test_every_service_binding_target_is_in_the_same_wrangler_session():
+    """The reason the session is multi-config rather than one worker.
+
+    digithings-cron binds RUNNER -> digiquant-runner. If the target is not
+    started in the same session the binding does not resolve, and nothing else
+    in the plan would say so.
+    """
+    import tomllib
+
+    step = _wrangler_step()
+    session = _configs_passed(step.argv)
+    root = Path(__file__).resolve().parents[2]
+    names = {}
+    for cfg in session:
+        with (root / cfg).open("rb") as fh:
+            names[tomllib.load(fh)["name"]] = cfg
+
+    bound = 0
+    for cfg in session:
+        with (root / cfg).open("rb") as fh:
+            for svc in tomllib.load(fh).get("services", []):
+                target = svc["service"]
+                assert target in names, (
+                    f"{cfg} binds {svc['binding']} -> {target}, "
+                    f"but {target} is not started in the same wrangler session"
+                )
+                bound += 1
+    assert bound, "no [[services]] binding in the session; the premise is stale"
