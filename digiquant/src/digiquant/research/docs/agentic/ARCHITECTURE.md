@@ -153,7 +153,7 @@ Supabase: segment payloads → `documents` per RUNBOOK (stable `document_key` va
 - **1A Sentiment & News**: AAII/CNN Fear & Greed, retail sentiment, social media signal, top news catalysts
 - **1B CTA Positioning**: Systematic trend-follower positioning (via COT, CTI), futures open interest, CTA flow model estimates
 - **1C Options & Derivatives**: GEX (gamma exposure), VIX structure, put/call ratios, dealer positioning, block prints
-- **1D Politician Signals**: Congressional trades (STOCK Act filings), recent buys/sells by tracked officials
+- **1D Politician Signals**: Official policy signals — Treasury, Fed, SEC/CFTC/FDIC/OCC, and tariff actions. No trade-level content (DIG-1251).
 
 ---
 

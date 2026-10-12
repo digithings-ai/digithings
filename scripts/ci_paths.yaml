@@ -33,6 +33,22 @@ digivoice:
   - tests/dvo/**
   - .github/workflows/test-digivoice.yml
 
+# Bun suites (DIG-2940). Three packages declare `"test": "bun test"` and none
+# of them ran in CI — no workflow mentioned the bun tool at all, so a break in
+# any of these suites was found by a user, not by CI. One lane
+# (test-bun-suites.yml) covers all three, so this is a single key with three
+# directory globs rather than three keys. A change to the lane itself must fire
+# the lane.
+bun_suites:
+  - digivoice/tui/**
+  - clients/digichat-tui/**
+  - packages/surface-config/**
+  - packages/hero-banner/**
+  # DIG-2864 (2026-10-11): the hero-banner engine's 39 parity tests are the
+  # no-visual-regression proof for every banner ticket, so an unwatched
+  # suite would be the DIG-2940 hole again under a new name.
+  - .github/workflows/test-bun-suites.yml
+
 digiquant:
   - digiquant/**
   - tests/dq/**
@@ -205,6 +221,7 @@ nautilus_smoke:
   - tests/dq/conftest.py
   - tests/dq/test_api.py
   - tests/dq/test_audit.py
+  - tests/dq/test_balance_path_metrics.py
   - tests/dq/test_backtest.py
   - tests/dq/test_calibrations_loader.py
   - tests/dq/test_nautilus_runner.py

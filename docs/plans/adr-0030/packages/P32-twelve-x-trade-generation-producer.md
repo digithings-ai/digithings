@@ -66,4 +66,4 @@ Digiquant side already classifies free strings as display-only (`split_timeframe
 - Pair allow/deny, risk-style directives, watchlist steering.
 - Moving this package under `digiquant/`.
 - twelve-x Supabase merge into `core`.
-- Secrets, Prime Market credentials, `config.py` values.
+- Secrets, vendor site credentials, `config.py` values.

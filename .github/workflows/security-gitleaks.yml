@@ -3,13 +3,23 @@
 # Scans PR diffs on every pull request and the full history on pushes to
 # develop/main. Fails the job on any finding. The repo's ".gitleaks.toml"
 # extends the default ruleset and allowlists known test fixtures.
+#
+# The pull_request trigger is deliberately unfiltered. It used to carry
+# paths-ignore ["**.md", "docs/**"], which made this workflow un-runnable as a
+# required status check: a workflow filtered out at the workflow level creates
+# NO check run at all, so a docs-only PR never reports `gitleaks-scan`. With
+# develop protection strict: true, promoting this check to required would then
+# block every docs-only PR forever. Measured on merged PRs' head shas: #5286
+# (scripts/merge_queue_policy.json) reported gitleaks-scan: success, while #5281
+# (SECURITY.md) and #5260 (docs/ops/SECRETS_INVENTORY.md) had no gitleaks-scan
+# context on the head sha at all. A job-level `if:` would also fix that (a
+# skipped job does report), but GitHub expressions cannot test "changed files
+# match this path glob", so the filter could not be reproduced faithfully at
+# job level. Always running costs one ~10 s PR-diff scan. See DIG-2223 / DIG-2642.
 name: "Security: gitleaks"
 
 on:
   pull_request:
-    paths-ignore:
-      - "**.md"
-      - "docs/**"
   push:
     branches: [main, develop]
 
@@ -86,11 +96,25 @@ jobs:
         if: github.event_name == 'pull_request'
         run: |
           # Fast path: scan only commits in the PR range. Uses git log -p.
+          #
+          # --report-* makes the scan self-diagnosing (DIG-872). Without it the
+          # only trace of a finding is a bare "WRN leaks found: N" in a log that
+          # is gone after retention, so every red costs a manual reproduction:
+          # fetch the pinned scanner, pin --log-opts against the right history,
+          # and discard whatever the bare run invents by walking local refs.
+          # A red that will not say what it found invites a re-run reflex, and
+          # on a gate that has been red for days the cheapest available action
+          # is to suppress the next finding rather than reproduce it.
+          #
+          # The report is written under RUNNER_TEMP, never inside the repo, so
+          # it cannot be committed and cannot re-enter the next scan's history.
           gitleaks detect \
             --source . \
             --config .gitleaks.toml \
             --redact \
             --no-banner \
+            --report-format json \
+            --report-path "${RUNNER_TEMP}/gitleaks-report.json" \
             --log-opts="--no-merges origin/${GITHUB_BASE_REF}..HEAD"
 
       - name: Scan (full history)
@@ -102,4 +126,39 @@ jobs:
             --source . \
             --config .gitleaks.toml \
             --redact \
-            --no-banner
+            --no-banner \
+            --report-format json \
+            --report-path "${RUNNER_TEMP}/gitleaks-report.json"
+
+      # `if: always()` on both steps below is load-bearing. The artifact is
+      # needed exactly when the scan fails, and a step gated on success() would
+      # publish nothing on the one run a human is trying to read.
+      - name: Name the findings
+        if: always()
+        run: |
+          set -uo pipefail
+          report="${RUNNER_TEMP}/gitleaks-report.json"
+          if [ ! -f "$report" ]; then
+            echo "::warning::gitleaks wrote no report, so the scan did not complete. Read the step above."
+            exit 0
+          fi
+          # Reads the ALREADY-redacted report and prints only locating metadata.
+          # --redact rewrites both the Secret field and the Match field (the
+          # latter embeds the offending source line), which is what makes it safe
+          # to publish this file; verified against a seeded fixture, not assumed.
+          python3 -c 'import json,sys
+          f=json.load(open(sys.argv[1]))
+          print("=== gitleaks findings: %d ===" % len(f))
+          if not f: print("  (none)")
+          for x in f:
+              print("  %-24s %s:%s  commit %s" % (x.get("RuleID"), x.get("File"), x.get("StartLine"), (x.get("Commit") or "")[:9]))
+          ' "$report"
+
+      - name: Upload the findings report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-report
+          path: ${{ runner.temp }}/gitleaks-report.json
+          if-no-files-found: warn
+          retention-days: 30
