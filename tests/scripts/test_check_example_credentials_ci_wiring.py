@@ -19,9 +19,9 @@ monkeypatched, so the real tree is never mutated and never scanned.
 """
 
 from __future__ import annotations
+
 # Folded from PR #5253 (DIG-31): CI-wiring half. Kept as a separate module
 # because the batch branch already carries a newer guard engine.
-
 import importlib.util
 import subprocess
 import types

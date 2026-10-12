@@ -18,12 +18,12 @@ Failing fixtures live in ``tmp_path`` only. Putting them in a tracked
 """
 
 from __future__ import annotations
+
 # Folded from PR #5032 (DIG-31, draft): the three closed bypasses
 # (CoinGecko CG- keys, 16-char AlphaVantage keys, product-name values)
 # plus the CI-wiring end-to-end tests. Call arguments are adapted to the
 # batch engine signature looks_cred_val(v, var); the assertions are
 # otherwise verbatim from the draft.
-
 import importlib.util
 import subprocess
 from pathlib import Path
