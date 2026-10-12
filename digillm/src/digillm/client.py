@@ -1885,20 +1885,23 @@ def _execute_tool_in_fan_out(
 # DeepSeek V3.2+/V4 sometimes emits its native "DSML" tool-call markup as plain
 # content instead of structured tool_calls (OCC demo: raw "<｜DSML｜tool_calls>"
 # in the chat and the turn ending). The bar is U+FF5C; ASCII "|" is accepted too.
-_DSML_BAR = "[｜|]"
+_DSML_BAR = r"\s*[｜|]+\s*"
+_DSML_TAG = rf"<{_DSML_BAR}DSML{_DSML_BAR}"
+_DSML_END = rf"</{_DSML_BAR}DSML{_DSML_BAR}"
+_DSML_WRAP = r"\s*(?:tool_calls|function_calls|calls)\s*"
 _DSML_BLOCK_RE = re.compile(
-    rf"<{_DSML_BAR}DSML{_DSML_BAR}(?:tool_calls|function_calls)>(.*?)(?:</{_DSML_BAR}DSML{_DSML_BAR}(?:tool_calls|function_calls)>|\Z)",
+    rf"{_DSML_TAG}{_DSML_WRAP}>(.*?)(?:{_DSML_END}{_DSML_WRAP}>|\Z)",
     re.S,
 )
 _DSML_INVOKE_RE = re.compile(
-    rf"<{_DSML_BAR}DSML{_DSML_BAR}invoke\s+name=\"([^\"]+)\"\s*>(.*?)(?:</{_DSML_BAR}DSML{_DSML_BAR}invoke>|(?=<{_DSML_BAR}DSML{_DSML_BAR}invoke)|\Z)",
+    rf"{_DSML_TAG}\s*invoke\s+name=\"([^\"]+)\"\s*>(.*?)(?:{_DSML_END}\s*invoke\s*>|(?={_DSML_TAG}\s*invoke)|\Z)",
     re.S,
 )
 _DSML_PARAM_RE = re.compile(
-    rf"<{_DSML_BAR}DSML{_DSML_BAR}parameter\s+name=\"([^\"]+)\"(?:\s+string=\"(true|false)\")?\s*>(.*?)</{_DSML_BAR}DSML{_DSML_BAR}parameter>",
+    rf"{_DSML_TAG}\s*parameter\s+name=\"([^\"]+)\"(?:\s+string=\"(true|false)\")?\s*>(.*?){_DSML_END}\s*parameter\s*>",
     re.S,
 )
-_DSML_MARK_RE = re.compile(rf"<{_DSML_BAR}DSML{_DSML_BAR}")
+_DSML_MARK_RE = re.compile(_DSML_TAG)
 
 
 def _parse_dsml_tool_calls(content: str | None) -> tuple[str, list[dict[str, Any]]]:
@@ -2133,7 +2136,6 @@ def run_tools(
         outer = on_tool_step
         held: list[str] = []
         state = {"suppress": False}
-        markers = ("<\uff5cDSML\uff5c", "<|DSML|")
 
         def _filter(kind: str, payload: Any) -> None:
             if outer is None:
@@ -2145,16 +2147,16 @@ def run_tools(
                 return
             held.append(payload)
             text = "".join(held)
-            for m in markers:
-                idx = text.find(m)
-                if idx >= 0:
-                    state["suppress"] = True
-                    held.clear()
-                    if text[:idx]:
-                        outer("content", text[:idx])
-                    return
+            hit = _DSML_MARK_RE.search(text)
+            if hit:
+                state["suppress"] = True
+                held.clear()
+                if text[: hit.start()]:
+                    outer("content", text[: hit.start()])
+                return
             cut = text.rfind("<")
-            if cut >= 0 and any(m.startswith(text[cut:]) for m in markers):
+            if cut >= 0 and ">" not in text[cut:] and len(text) - cut < 24:
+                # Could be the start of a DSML tag split across deltas: hold it.
                 if text[:cut]:
                     outer("content", text[:cut])
                 held[:] = [text[cut:]]
