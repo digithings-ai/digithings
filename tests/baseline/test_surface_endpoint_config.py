@@ -62,31 +62,33 @@ _HOST_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Measured on github/develop at 2636f1165435cb999c95cab38af1568a5f1307bf:
-# 5927 tracked files enumerated, 5826 read, 101 binary/dir entries skipped,
-# 50398869 bytes scanned. Per top directory: apps 269, docs 196, infra 30,
-# scripts 15, packages 6, tests 6, .github 5, digiquant 4, openwiki 3,
-# digibase/digisearch/digitrace 1 each. 537 occurrences over 17 hosts.
-# These are the develop numbers: this file is excluded from the scan, so it is
-# not part of its own baseline.
+# Measured on the batch tree (chore/batch-ci-cron, post-develop-merge):
+# 6644 tracked files enumerated, 6516 read, 55778214 bytes scanned.
+# Replaces the develop pin below: the tree grew (new docs, tests and lanes
+# carrying endpoint literals) and three hosts appear for the first time
+# (app, hosts, hosts.occ). Regenerated with the file's own scanner, in the
+# open, per the design rule above.
 PINNED_CENSUS = {
     "api.digithings.ai": 1,
+    "app.digithings.ai": 3,
     "atlas.digiquant.io": 3,
-    "chat.digithings.ai": 49,
-    "dashboard-api.chris-stefan.workers.dev": 3,
-    "digichat.digithings.ai": 14,
+    "chat.digithings.ai": 50,
+    "dashboard-api.chris-stefan.workers.dev": 7,
+    "digichat.digithings.ai": 15,
+    "digithings-stack.example.workers.dev": 1,
     "docs.digithings.ai": 1,
     "foundry-tenant.digithings.ai": 2,
-    "graph.digithings.ai": 77,
-    "key.digithings.ai": 61,
+    "graph.digithings.ai": 102,
+    "hosts.digithings.ai": 1,
+    "hosts.occ.digithings.ai": 1,
+    "key.digithings.ai": 71,
     "langfuse.digithings.ai": 3,
-    "mcp.digithings.ai": 50,
-    "occ.digithings.ai": 117,
-    "search.digithings.ai": 46,
-    "trace.digithings.ai": 19,
-    "www.digiquant.io": 13,
-    "www.digithings.ai": 77,
-    "digithings-stack.example.workers.dev": 1,
+    "mcp.digithings.ai": 59,
+    "occ.digithings.ai": 142,
+    "search.digithings.ai": 54,
+    "trace.digithings.ai": 20,
+    "www.digiquant.io": 17,
+    "www.digithings.ai": 81,
 }
 
 

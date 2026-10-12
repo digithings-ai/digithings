@@ -344,6 +344,12 @@ def test_contract_arm_accepts_a_binding_declared_only_by_class_name(tmp_path, mo
             "envExample": {},
         },
     )
+    # mode_contract() reads durable_objects bindings off disk for container
+    # kinds; the stubbed surface above is the whole fixture, so stub that read
+    # too rather than letting the test touch the real tree.
+    monkeypatch.setattr(
+        parity, "durable_object_classes", lambda p: {"DigiStackContainer"}
+    )
     assert parity.mode_contract() == 0
 
 
@@ -367,6 +373,9 @@ def test_contract_arm_still_fails_when_the_declared_class_name_differs(
             "composeEnv": {},
             "envExample": {},
         },
+    )
+    monkeypatch.setattr(
+        parity, "durable_object_classes", lambda p: set()
     )
     assert parity.mode_contract() == 1
     assert "DigiStackContainer" in capsys.readouterr().out

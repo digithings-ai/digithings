@@ -104,16 +104,11 @@ checks:
     job: scan
     enforcement: advisory
     reason: >-
-      Secret scanning, and the highest-value check in this file. It cannot be
-      made required as it stands: `security-gitleaks.yml` carries a
-      workflow-level `paths-ignore` of `**.md` and `docs/**`, so a docs-only PR
-      never starts the workflow, its check never reports, and requiring the name
-      would hang those PRs on "Waiting for status to be reported" forever. This
-      is exactly failure mode 1 and exactly what docs/BRANCH_PROTECTION.md's
-      pre-apply note warns about. To require it, first move the skip to a
-      job-level `if:` (a skipped job reports Success; a skipped workflow does
-      not) or drop the PR trigger filter. The guard refuses the required
-      transition while that filter is still there.
+      Secret scanning, and the highest-value check in this file. The old
+      workflow-level `paths-ignore` of `**.md` and `docs/**` is gone (removed
+      so the check reports on every PR), so requiring it would no longer stall
+      docs-only PRs — but it is still required nowhere, so it stays advisory
+      until DIG-1952 child B sequences the branch-protection write.
 
   - context: All agent-task issues in TSV with real phase and valid model
     workflow: ci-pr-hygiene.yml
