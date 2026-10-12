@@ -3,6 +3,8 @@
  * the `?` overlay and docs/surfaces/digiquant-app-shortcuts.md.
  * Ported from the retired apps/digiquant-app (lib/shortcuts.ts); keys match the
  * digiquant TUI (clients/digiquant-tui/src/app.tsx) where the TUI has one.
+ *  No `Tab` row: the desk advertises only keys it binds (owner ruling
+ *  2026-10-12). Blocks are reached with `n`, the rail with the arrow keys.
  */
 export type Shortcut = { keys: string; does: string; tui?: string };
 
@@ -15,7 +17,6 @@ export const SHORTCUTS: Shortcut[] = [
   { keys: "rail → ← / l h", does: "Open / close a folder, step into it or back to its parent", tui: "→ ← / l h" },
   { keys: "Home / End", does: "First / last page in the rail" },
   { keys: "[  ]", does: "Narrower / wider page rail", tui: "[ ]" },
-  { keys: "Tab", does: "Move between blocks and controls", tui: "Tab" },
   { keys: "Esc", does: "Close menu, list, drawer or this help", tui: "Esc" },
   { keys: "?", does: "Show / hide shortcuts" },
 ];

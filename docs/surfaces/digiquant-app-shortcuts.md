@@ -18,9 +18,10 @@ anywhere in the app to see this list. Keys match the digiquant TUI
 | rail `→ ←` / `l h` | Open / close a folder, step in or back to the parent | `→ ←` / `l h` |
 | `Home` / `End` | First / last page in the rail | — |
 | `[` `]` | Narrower / wider page rail | `[` `]` |
-| `Tab` | Move between blocks and controls | `Tab` |
 | `Esc` | Close menu, list, drawer or this help | `Esc` |
 | `?` | Show / hide shortcuts | — |
 
-Not carried over: the old app's `e` layout-edit mode and drag-to-resize
-sidebar, because the desk has no editable layout. `q` (quit) is TUI-only.
+Not carried over (owner ruling 2026-10-12): the old app's `e` layout-edit
+mode, its drag-to-resize sidebar, and `[`/`]` pin-and-unpin — the desk has
+no editable layout, and `[` `]` now narrows and widens the page rail. There
+is no `Tab` row: the desk advertises only keys it binds. `q` (quit) is TUI-only.
