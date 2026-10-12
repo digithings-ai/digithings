@@ -211,6 +211,17 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   # Runs on refs/heads/ only, because the guard is about branching: a tag or a
   # note pushed from an unmerged commit is not a second attempt at the work.
   if [ "$is_deletion" -eq 0 ] && [[ "$remote_ref" == refs/heads/* ]]; then
+    # The guard refuses a *rebuild*, a second attempt at work already in flight.
+    # It cannot tell a rebuild from an update on its own, so the kind of push has
+    # to be stated here: git reports a ref the remote does not have as an
+    # all-zero sha, which is the signal the diff base above already reads.
+    # Without it the arm refuses every follow-up commit to an unmerged branch,
+    # because such a branch keeps overlapping its siblings at every later commit.
+    if [ -n "$remote_sha" ] && ! is_zero_sha "$remote_sha"; then
+      push_kind="--is-update"
+    else
+      push_kind="--is-create"
+    fi
     # An installed hook is a *copy* under .git/hooks, shared by every worktree,
     # so $0 cannot find the checker. Resolve it from the repository the push is
     # running in — the checker is committed, so a real checkout always has it.
@@ -222,7 +233,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     elif ! command -v "${BRANCH_RESTART_CHECK_PYTHON:-python3}" >/dev/null 2>&1; then
       echo "pre-push: duplicate-work guard skipped — '${BRANCH_RESTART_CHECK_PYTHON:-python3}' not found." >&2
     elif ! restart_out="$("${BRANCH_RESTART_CHECK_PYTHON:-python3}" "$checker" "$local_sha" \
-                            --branch-name "${branch_name:-$local_ref}" 2>&1)"; then
+                            --branch-name "${branch_name:-$local_ref}" "$push_kind" 2>&1)"; then
       # Non-zero is a refusal; the checker has already written the reason and the
       # sibling list, and it carries the escapes that permit the push.
       printf '%s\n' "$restart_out" >&2

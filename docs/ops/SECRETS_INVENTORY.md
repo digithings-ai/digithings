@@ -45,6 +45,7 @@ Six repo secrets that no `.github` YAML read were deleted on 2026-09-17/18: `COP
 | `DIGIKEY_ADMIN_TOKEN` | `apps/digithings-stack-cloudflare/src/index.ts:68`; `digikey/src/digikey/server.py:60` | `apps/digithings-stack-cloudflare/wrangler.toml:138`; `docker-compose.yml:37` | no — write-only | key-issue / revoke admin ops (503 when unset) | stack Worker; compose | static bearer, `compare_digest` |
 | `DIGIKEY_BFF_TOKEN` | `apps/digichat-cloudflare/src/index.ts:51`; `apps/digithings-stack-cloudflare/src/index.ts:66`; `digikey/src/digikey/settings.py:20` | both `wrangler.toml:54` / `:136` | no — write-only | digichat BFF session exchange; chat auth | 2 Workers + compose + profiles | **must match across both Workers** |
 | `DIGICHAT_PLAN_PROOF_SECRET` | `apps/digichat-cloudflare/src/index.ts:52` | `apps/digichat-cloudflare/wrangler.toml:55` | no — write-only | Desk+ plan proofs (`X-Embed-Plan-Proof`) | digichat Worker only | must match digiquant verifier |
+| `DIGICHAT_MONITOR_TOKENS` | `apps/digichat-cloudflare/src/index.ts:53`; `apps/digithings-stack-cloudflare/src/index.ts:297` | `apps/digichat-cloudflare/wrangler.toml:62` (comment); `apps/digichat/.env.example:126` | no — write-only | DataTap answer-integrity monitor spends `EMBED_FREE_TURN_LIMIT` per client IP, then every later run reads 402 `trial_gate` (DIG-613) | digichat Worker only | **not `put` on any Worker yet**; optional, comma-separated, entries `< 32` chars ignored. Unset => allowlist empty and the gate applies to everyone. Must match `DATATAP_ANSWER_CHECK_MONITOR_TOKEN` on the check side |
 | `DIGICHAT_EMBED_TENANTS` | `apps/digichat-cloudflare/src/index.ts:48` | `apps/digichat-cloudflare/wrangler.toml:51` | no — write-only | all tenant routing + per-tenant `token` | digichat Worker; release profiles | carries literal `MCP_EDGE_KEY` copy; profile value `plaintext-literal` |
 | `MCP_EDGE_KEY` · `MCP_EDGE_KEYS` | `apps/digithings-stack-cloudflare/src/index.ts:343` | `apps/digithings-stack-cloudflare/wrangler.toml:35` (comment) | no — write-only | `/_stack/mcp/*` returns 401 | literal inside `DIGICHAT_EMBED_TENANTS` | rotate both places |
 | `CRON_KICK_SECRET` | `apps/digithings-cron/src/index.ts:134` (also guards `:174,197`) | `apps/digithings-cron/wrangler.toml:28` (comment) | no — write-only | `POST /kick` returns 404 | cron Worker only | optional, fail-closed |
@@ -80,6 +81,7 @@ Six repo secrets that no `.github` YAML read were deleted on 2026-09-17/18: `COP
 | `DIGISEARCH_SMTP_USER` · `DIGISEARCH_SMTP_PASS` | `digisearch/src/digisearch/monitors/delivery.py:320` | `.env.example:109` | yes (`.env`) | monitor email delivery fails | local `.env` | |
 | `FRED_API_KEY` · `COINGECKO_API_KEY` · `ALPHA_VANTAGE_API_KEY` · `SEC_EDGAR_USER_AGENT` | `digiquant/.../research ingest` | `digiquant/src/digiquant/research/config/mcp.secrets.env.example:5-12`; history-only `digiquant/src/digiquant/olympus/atlas/config/mcp.secrets.env.example` (absent at HEAD, byte-identical literals, verified 2026-10-04) | n/a | research ingest fails | committed example, gitleaks-allowlisted | `plaintext-literal`; owner-confirmed dead 2026-06-18 |
 | `OMNIROUTE_API_KEY` · `OMNIROUTE_AUTH_PASSWORD` | `docker-compose.yml:358,384-385` | `.env.example:14-15` | yes (`.env`) | omniroute profile breaks | local `.env` | vendor default forbidden |
+| `DIGILLM_EGRESS_DIGEST_KEY` | `digillm/src/digillm/egress_record.py:78` (`DIGEST_KEY_ENV`), read per record at `:235` | `.env.example:244` (commented, no value) | yes (`.env`) / no — write-only (secret store) | no outage: records keep emitting with `digest_algorithm: "absent"` and `payload_digest: null` | none — one value per environment, never shared across them | HMAC pepper over the canonical outbound **messages** for the GDPR egress ledger. Floor 32 chars, no unkeyed fallback by design. **Unset in every environment as of 2026-10-06** — on a production request path this is the one secret in this inventory whose absence is silent, because the ledger still fills and nothing alerts (contrast `LANGSMITH_API_KEY`, `AZURE_SEARCH_API_KEY`, `COHERE_API_KEY`, `EXA_API_KEY`: all optional, all dormant-or-degraded when missing). **Must not be co-located with the ledger it protects** — see [the digillm egress pepper](#the-digillm-egress-pepper--not-a-normal-api-key-dig-1184) |
 
 ### (c) infrastructure tokens (Cloudflare / Supabase / DB)
 
@@ -107,7 +109,7 @@ Six repo secrets that no `.github` YAML read were deleted on 2026-09-17/18: `COP
 |---|---|---|---|---|---|---|
 | `DIGIQUANT_VAULT_MASTER_KEY` · `DIGIQUANT_VAULT_KEY_ID` | `digiquant/src/digiquant/vault/envelope.py:79,80` | `.env` (no default) | yes (`.env`) | every sealed broker credential unreadable | local secret store | AES-256-GCM, base64 32 bytes; `v1` label |
 | `ALPACA_OAUTH_CLIENT_ID` · `ALPACA_OAUTH_CLIENT_SECRET` | `digiquant/.../staging_secrets.py:28-29` | `.env`; `apps/dashboard/.env.local.example` | yes (`.env`) | broker OAuth connect fails | Supabase EF + `.env` | broker path — human gate |
-| `GLOOMBERB_SESSION_COOKIE` | `digiquant/src/digiquant/data/gloomberb/client.py:1450`; `digiquant/src/digiquant/data/gloomberb/agent_tools.py:194-197` | `.env`; stack Worker (`wrangler.toml:186`); forwarded `index.ts:222` | yes (`.env`) | session-gated digifetch tools off | `.env` + stack Worker | construction-time read, not import-time (`client.py:16-17`); in-process cache keys on the current env so a changed cookie builds a new client; hosted MCP still needs a container recycle (R5) |
+| `GLOOMBERB_SESSION_COOKIE` | `digiquant/src/digiquant/data/gloomberb/client.py:1450`; `digiquant/src/digiquant/data/gloomberb/agent_tools.py:194-197` | `.env`; stack Worker (`wrangler.toml:186`) — **deployment unverified, see R17**; forwarded `index.ts:222` | yes (`.env`) | session-gated digifetch tools off | `.env` + stack Worker | construction-time read, not import-time (`client.py:16-17`); in-process cache keys on the current env so a changed cookie builds a new client; hosted MCP still needs a container recycle (R5) |
 | `DIGIKEY_BLOCKLIST_REDIS_URL` · `DIGIKEY_REQUIRE_BLOCKLIST` | `digikey/src/digikey/blocklist.py:36,41` | `.env`; container env | yes | revoked JTIs stay valid / fail-closed 503 | code default is fail-closed; `DIGIKEY_REQUIRE_BLOCKLIST=0` is the local opt-out (`blocklist.py` `require_blocklist_enabled`). Compose default `1` (`docker-compose.yml:35`); `.env.example:226` | see [ADR-0007](../adr/0007-digikey-revocation.md) |
 | per-watch delivery secret (HMAC) | `digisearch/src/digisearch/server.py:1941`; `monitors/delivery.py:102` | monitor store (not a fixed env) | n/a | webhook signature verify fails | per-watch row | rotates per watch |
 | `DIGIQUANT_EXECUTION_ROUTING` | `digiquant/.../envcompat.py:14` | `.env` | yes (`.env`) | live-routing kill switch | local `.env` | alias `OLYMPUS_KAIROS_ROUTING`; broker path |
@@ -161,7 +163,7 @@ nothing at all about this copy. It is a **second live copy**, not a scratch file
 
 | Name | Where the second copy is | Read by | Readback? | **Owner** | Recorded refresh path |
 |---|---|---|---|---|---|
-| `PRIMEMARKET_SESSION_TOKEN` | GitHub **Actions repo secret** on `digithings-ai/twelve-x`; **and** this `.env` | `nodes/scrape.py:661`; `scripts/primemarket_session_heartbeat.py:59`; CI probes it | no for the secret, yes for `.env` | **Security** (agent `b14d7a18`), with Chris as the only human who can execute it | `twelve-x/scripts/refresh_session_cookie.sh` — verifies live, then `gh secret set PRIMEMARKET_SESSION_TOKEN --repo "$REPO" --body "$VALUE"` (`scripts/refresh_session_cookie.sh:81`). Source of the value is Chris signing in at `https://desk.prime-terminal.com` and copying `localStorage['pmt_auth_token']`. **Rotate on expiry detection, never on a calendar** — measured: an authenticated call at 2026-09-15T00:08Z did **not** extend the window that 401'd at 06:04Z (`docs/PRIMEMARKET_DESK_API.md:157-165`) |
+| `PRIMEMARKET_SESSION_TOKEN` | GitHub **Actions repo secret** on `digithings-ai/twelve-x`; **and** this `.env` | `nodes/scrape.py:661`; `scripts/primemarket_session_heartbeat.py:59`; CI probes it | no for the secret, yes for `.env` | **Security** (agent `b14d7a18`), with Chris as the only human who can execute it | `twelve-x/scripts/refresh_session_cookie.sh` — verifies live, then `gh secret set PRIMEMARKET_SESSION_TOKEN --repo "$REPO" --body "$VALUE"` (`scripts/refresh_session_cookie.sh:81`). Source of the value is a human operator's own sign-in at `https://desk.prime-terminal.com`. **The acquisition procedure is not published in this repo** — it is held in the private `twelve-x` repo, for the reason given in [Vendor terms and what this file may publish](#vendor-terms-and-what-this-file-may-publish-dig-1194). **Rotate on expiry detection, never on a calendar** — measured: an authenticated call at 2026-09-15T00:08Z did **not** extend the window that 401'd at 06:04Z (`docs/PRIMEMARKET_DESK_API.md:157-165`) |
 | `PRIMEMARKET_SESSION_COOKIE` | **only** here. Not in CI since DIG-249 (`8368932`, 2026-10-05) | `nodes/scrape.py:559,662` — legacy path, verified then used as a fallback | yes (`.env`) | **Security** | **NONE — this is the finding.** `refresh_session_cookie.sh` writes only the token; the cookie-paste branch was deleted by DIG-249 (`8368932`). Last write: **2026-09-14T10:33Z**, recorded at `docs/PRIMEMARKET_DESK_API.md:161` — the only refresh history that exists for it — and the same doc's 2026-09-17 follow-up records that the desk had moved to the Bearer scheme and **the cookie was never the session the pmt endpoints consult** (`:171-172`). So this is a copy nothing refreshes, of a mechanism the desk stopped accepting. Delete it; do not rotate it |
 
 Consequence to state plainly: **a `primemarket-session-expired` alert tells you
@@ -263,7 +265,283 @@ None of these are done here. This section records the owner and the refresh path
 the next person is not guessing, and every claim above carries a `file:line`, a
 commit, or a named command.
 
+## The digillm egress pepper — not a normal API key (DIG-1184)
+
+Not a `(g)` item: that series covers the twelve-x laptop `.env`, and this key is a
+digithings deployment secret with no laptop copy. It gets its own section because it is
+the one secret here whose failure mode is a ledger that silently stops proving anything.
+
+`DIGILLM_EGRESS_DIGEST_KEY` (added by DIG-1139 / PR #5152, documented for
+operators by DIG-1184) is the only secret in this inventory whose **absence is
+silent on a production request path**. Nothing breaks: a missing key is not a 401
+or a failed health check here, because with no pepper set digillm still writes
+every egress record — it just writes `digest_algorithm: "absent"` and
+`payload_digest: null`, because `egress_record.compute_payload_digest` refuses to
+substitute an unkeyed hash for a missing secret. (`LANGSMITH_API_KEY`,
+`AZURE_SEARCH_API_KEY`, `COHERE_API_KEY` and `EXA_API_KEY` are also silent when
+absent, but each is optional: tracing export stops, a backend is disabled, search
+is dormant. This one sits on every LLM call.)
+
+So the failure mode is not an outage, it is a **ledger that looks complete and
+cannot evidence what was sent**. Measured on `task/1139-digillm-egress-record` at
+`1c3346585`: `pytest digillm/tests/test_digillm.py` produced 83 records and the
+full `pytest digillm/tests` produced 156, every one of them `absent`. That is the
+correct code behaviour and the point of DIG-1139; it is also a privacy mechanism
+that is off in every shipped configuration today.
+
+Three rules that differ from every other row here:
+
+1. **Do not co-locate the pepper with the ledger.** By default both land in the
+   same checkout — the key in `.env`, the records in
+   `digiquant/results/egress/records.jsonl`, reachable by the same process under
+   the same operator. That is fine for local development and wrong anywhere a
+   second person can read. **This is not yet enforceable in this stack, and an
+   operator must not record it as done on the strength of a file mode.** No service
+   in `docker-compose.yml` declares a `user:`, and none of the Dockerfiles behind
+   the five digillm-importing compose services (`digiclaw`, `digigraph`,
+   `digiquant`, `digisearch`, `digitrace`) has a `USER` directive, so those
+   services run as uid 0 and root ignores file mode
+   bits: a ledger chmod-ed `0222` on a volume is separated from other operators but
+   not from the process that also holds the pepper in its environment. A GitHub
+   *org secret* is workflow-scoped and does not reach compose either, and Bitwarden
+   Secrets Manager is still an open migration here (DIG-95), so today neither is an
+   available delivery path. Real separation needs a sink the app cannot read back —
+   and `DIGILLM_EGRESS_LOG_PATH` only reaches a regular file (the sink opens the
+   path for append; the module has no syslog/OTLP branch, so a FIFO would block
+   the request path and a socket cannot be written at all). Genuine separation is
+   unavailable until `egress_record` grows a collector transport, or the deployment
+   consumes records through the in-process observer with `DIGILLM_EGRESS_LOG_PATH=off`.
+   Same mount, same backup, or same read grant defeats the mechanism: an HMAC next
+   to its own ledger is a dictionary for any candidate list the reader holds.
+2. **Set both variables on every service that imports digillm.** `digiclaw`,
+   `digigraph`, `digiquant`, `digisearch`, `digiskills` and `digitrace` all declare
+   the dependency (`digiskills` ships no compose service of its own, so its vars
+   ride with whichever service hosts it). A per-service compose `environment:` entry is per-service, so a
+   pepper on one service leaves the rest emitting `absent` into the same ledger —
+   which looks like the exact silent failure this section is about. And leave
+   `DIGILLM_EGRESS_LOG_PATH` set in containers (`off` for the observer route): no image copies `digiquant/` or
+   `.git`, so the default resolves inside the container's writable layer and the
+   GDPR ledger is destroyed on the next recreate while every health check stays
+   green.
+3. **One key per environment, never shared.** A reused pepper makes every
+   deployment's digests comparable, so one leaked ledger becomes a dictionary for
+   all of them. Rotation changes future digests, so a rotated environment can no
+   longer recompute historical records against new ones — keep the old key and
+   old ledger in separately-guarded custody if counsel must verify past entries.
+   `docs/ops/SECRETS_ROTATION.md` has no cadence row for this key yet; add one
+   there before this goes to production, and rotate it whenever the ledger store
+   changes custody.
+
+**Verification, before anyone relies on the ledger for a compliance question:**
+
+```bash
+# 1. the pepper is present AND long enough to produce a digest, without ever
+#    printing it. `-n` is not enough: a truncated paste or a placeholder is
+#    non-empty and still yields digest_algorithm "absent" on every record. Test the
+#    length, not the shape — after stripping, as the code does
+#    (`pepper.strip()` before measuring, so padding does not count). Never list
+#    a secret store here — `bws secret list`
+#    prints values, and this file's rule is that verification means behaviour,
+#    never readback (docs/ops/SECRETS_ROTATION.md:12).
+#    Run this on EVERY service listed above, not one.
+docker compose exec <digillm-service> sh -c \
+  'k=$(printf "%s" "$DIGILLM_EGRESS_DIGEST_KEY" | sed "s/^[[:space:]]*//;s/[[:space:]]*$//"); [ ${#k} -ge 32 ] && echo len-ok || echo TOO-SHORT-OR-MISSING'
+
+# 2. the separation actually holds. This check is necessary, not proof: it shows
+#    the process cannot read that file, not that records are being written.
+#    NO-SINK and LEAK are both failures (an unset or stale path must not read
+#    as "ok").
+docker compose exec <digillm-service> sh -c '[ -e "$DIGILLM_EGRESS_LOG_PATH" ] || { echo NO-SINK; exit 1; }; [ -r "$DIGILLM_EGRESS_LOG_PATH" ] && echo LEAK || echo ok'
+
+# 3. the ledger is not 100% "absent" — a count, no payload content. Two filters,
+#    both necessary: unit-test records (digillm/tests/test_digillm.py does not
+#    redirect DIGILLM_EGRESS_LOG_PATH, so a checkout-local ledger holds records
+#    with destinations like "<MagicMock …>") and cache-hit records, which carry no
+#    payload and are "absent" whether or not a pepper exists.
+jq -r 'select(.destination | startswith("http")) | .digest_algorithm' \
+  digiquant/results/egress/records.jsonl | sort | uniq -c
+```
+
+An `absent`-only distribution over real, non-cache-hit destinations is a finding:
+that environment never had a pepper, so its digests cannot be recomputed. A ledger
+that is *part* `absent` is not a total failure — it means the pepper was installed
+partway through the ledger's life, and only the earlier records are unverifiable.
+Wire the secret, then read the ledger.
+
+## Vendor terms and what this file may publish (DIG-1194)
+
+Raised by the CTO from DIG-503. Counsel's finding on DIG-461/DIG-503 was that this
+file, public under our own name, described how to obtain and replay a session
+against a vendor whose Terms of Use prohibit automated and unauthorized access.
+Security owns the call on what an audit document in a public repo may contain,
+because the file's value is its provenance — it records what was found and when —
+and because it carries live rotation decisions that a docs edit would quietly
+overwrite. Three questions were put to Security. Answered 2026-10-05.
+
+**Q1 — Are the vendor-specific rows generalised, and at what level?**
+**No. The vendor name stays, and so do the `file:line` citations.** They are our own
+configuration identifiers: no secret inside a name, and no actionable step it enables,
+so deleting them would remove exactly zero attack surface. The audit needs them
+regardless — named owner, both storage locations, read-by path, refresh script and
+rotate-on-expiry state. Strip the names and every row becomes an unactionable rumour.
+`https://desk.prime-terminal.com` stays too: a public login page, and load-bearing —
+this credential authenticates **as a person**, which is why its refresh path is a human
+sign-in. What is generalisable here is the **method**, not the **name** — and the
+method is what is being removed.
+
+**Q2 — Is the session-acquisition procedure at the `PRIMEMARKET_SESSION_TOKEN`
+row a recipe that belongs out of a public repo?**
+**Yes, and it has been removed.** A session-acquisition procedure — a human sign-in at
+the vendor's desk, then reading the resulting credential out of a named browser storage
+slot — was the *session-acquisition* half of the prohibited pattern, and it was the most
+operational sentence in the file. The row now reads "a human operator's own sign-in",
+and **the acquisition procedure is not published in this repo**: the canonical copy is
+held in the private `twelve-x` repo, for the reason given in [Vendor terms and what
+this file may publish](#vendor-terms-and-what-this-file-may-publish-dig-1194) — the
+vendor's terms prohibit automated access. It is not restated here either. A removal is
+not an amendment: deleting a step from the operative document does not license
+republishing the step in the document that records the removal. Nothing was lost that
+the audit needs: the row still records the name, both storage locations, the reader,
+the owner, the refresh script, and the rotate-on-expiry rule.
+
+**Q3 — Does the `PRIMEMARKET_SESSION_COOKIE` finding survive in a public file?**
+**Yes, unchanged.** "Delete it; do not rotate it" and "an expiry alert tells you
+about the Actions secret only" are **negative** findings — they exist to stop
+someone doing the wrong thing. Removing a negative finding from a public audit
+removes the warning while leaving the secret in place, which is strictly worse
+than publishing it. The supporting citations (`docs/PRIMEMARKET_DESK_API.md:161`,
+`:171-172`) stay too: a `file:line` pointer into a private repo is not an
+operational recipe, and the citation is the only reason the claim is checkable.
+
+**Changed in this file on 2026-10-05:** the one sentence in Q2, nothing else. The
+vendor name, both storage locations, the three-place spread of the desk login pair,
+"a human's desk credentials", the delete-don't-rotate conclusion, the alert gap,
+and every `file:line` above are all as they were, because Security's judgement is
+that an audit which softens its own findings is worse than one that publishes them.
+
+**Corrected 2026-10-06 (DIG-1413, on Security's ruling at DIG-1418), in Q1 and Q2
+only.** Two of this section's own claims were wrong, and the corrections are to its
+reasoning, not to any finding. The Q2 narrative quoted the removed sentence back
+verbatim; it now describes the mechanism and points at the canonical copy instead.
+And Q1 rested on a claim that a later check disproved — that the `PRIMEMARKET_*` names
+are "already public and unavoidable" in `.env.example`, the twelve-x workflow files and
+the Python config. They are not: on the public `develop` every hit for those names is
+inside this file, and the `.env.example` that does carry them lives in the **private**
+`twelve-x` repo. That premise is withdrawn. The names stay anyway, on the reason that
+does hold — they are our own configuration identifiers, and an audit row without its
+name, owner, storage locations and rotation state is an unactionable rumour. **No row
+was edited, no owner changed, no rotation state changed, and no risk-register entry
+changed by this correction.** The general rule recorded for DIG-1415: *our own
+configuration identifiers and a public login page stay; names that locate a credential
+on someone else's system go.*
+
+**Vendor terms are now recorded separately, with artefacts.** A secret inventory
+cannot answer "are we allowed to use this at all" — that is a different question
+from "where does the value live and who owns it", and answering it here is how the
+2026-08-01 note went wrong. Terms, retrieval date, sha256 and classification live
+under `docs/vendor-terms/<vendor>/`, per `docs/VENDOR_CONTENT_BOUNDARY.md`.
+[`gloomber/INDEX.md`](../vendor-terms/gloomber/INDEX.md) is the first entry. Security
+classified it **Unclear** on 2026-10-05; Counsel's memo the same day concluded
+**Prohibited (confirmed)**. The record is additive — the memo sits beside Security's
+position, not over it.
+
+### Gloomberb: the accepted use, the custody blocker, and what is still unverified
+
+Written 2026-10-06 by Security, after Chris answered the four-question card on
+DIG-1194. Nothing here was previously in this file, and
+nothing above it changed.
+
+**The accepted use, in full.** Counsel classified the Gloomberb session-cookie method
+**PROHIBITED, CONFIRMED** on 2026-10-05. Chris was shown that finding and, on
+2026-10-06, chose to keep the 42 cookie-gated `digifetch_*` tools running, on the
+stated basis that *"our tools don't have clients yet, I'm just experimenting with the
+cookie method. I won't publish yet."* That is a deliberate acceptance of a prohibited
+use by the person who owns that decision, made with the finding in front of him. It
+is recorded here so that the next reader sees an accepted risk with a name on it, not
+a silent practice. **It is an acceptance of use, not of publication, and not of any
+client-facing surface.** It lapses — and this row, and R17, re-open — if any of these
+become true:
+
+| Tripwire | Why it lapses the acceptance |
+|---|---|
+| anything about this access method is published | Chris's own condition; it is also §12 exposure |
+| a hosted or client-facing surface can reach the gated tools | §12 permits apps "for yourself **or for users who have their own access**"; the acceptance covers only our own internal experiment |
+| the account's plan changes, or a team plan is bought | a team plan or written agreement (§21) is the one thing that makes method D permitted, so the analysis changes |
+| the account is closed, or the credential is destroyed | nothing left to accept |
+| Counsel's position changes | the finding is the basis of the acceptance |
+
+**Custody: authorised, and blocked.** Chris authorised moving the cookie into
+Bitwarden. It is **not** there. The `keymaster` machine account token is in the
+macOS Keychain and authenticates, but `bws project list` returns nothing while
+`bws project create` is refused with *"maximum number of projects (3) for this
+plan"* — the organisation is at its quota and the machine account has no grant on any
+of the three existing projects. Granting that is an owner action in Bitwarden, and
+the Bitwarden account itself is outside Security's red lines. Tracked on
+DIG-95; Security runs one command once it is granted.
+**Until then this credential exists in exactly one place — one line of a gitignored
+`.env` — and no inventory, no expiry and no owner sits behind it.** That is the whole
+remaining custody risk, and it is not mitigated by anything else in this file.
+
+**No money is at stake.** Chris confirmed there is **no payment method** on the
+Gloomberb account. That closes the §8/§15/§9 hazard Counsel flagged — no trial can
+have converted, and deletion cancels immediately with no refund owed. Closing the
+account is therefore money-safe whenever he chooses it; it is not money-safe-blocked,
+it is simply not authorised, because "keep it running" keeps the account.
+
+**One claim in this file is now unverified.** The inventory row for this name lists
+the stack Worker (`wrangler.toml:186`) as a second copy. Security could not confirm
+or refute it on 2026-10-06: `wrangler secret list` requires a `CLOUDFLARE_API_TOKEN`
+Security does not hold, and the connected Cloudflare tooling exposes no
+secret-binding listing. Treat the deployed copy as **unknown, not absent**. If it is
+set, then "keeping the tools running" is production traffic against a prohibited
+endpoint, not a local experiment — which is why R17 asks DevOps for one command.
+
 ## Review coverage for this section
+
+The digillm egress pepper section was reviewed in-session on 2026-10-06 twice by
+fresh-context reviewers — once on an operational lens, once adversarially on privacy and
+security. The second pass found the load-bearing defect in the whole change: **the
+prescribed separation is unenforceable as written.** The docs told an operator to put
+the ledger where digillm could "append to but not read back", but no service in
+`docker-compose.yml` declares a `user:` and none of the Dockerfiles behind the five
+digillm-importing compose services has a `USER` directive, so those services run as
+uid 0 and root ignores file mode bits — a `0222` ledger on
+a volume separates it from other operators and not from the process holding the pepper. An
+operator following the first draft would have marked that rule done while holding no
+separation at all. All four docs now state the constraint and the honest consequence:
+`DIGILLM_EGRESS_LOG_PATH` only reaches a regular file, so genuine separation is
+unavailable until `egress_record` grows a collector transport (or the deployment
+uses the observer with the path `off`) — and they ship the necessary (not
+sufficient) in-service check that reports `NO-SINK`/`LEAK`/`ok` without hanging
+on a FIFO.
+
+The same pass also forced: `absent` no longer being described as proof a pepper was
+missing (the `completion()` cache-hit record is `absent` with or without one, and a partly
+`absent` ledger means a partway key install, not a total failure); the presence check
+testing the 32-character floor rather than non-emptiness, so a truncated paste can no
+longer pass; the pepper generation command shown only in its piped form, since the bare
+form puts the value in terminal scrollback; the default ledger path documented with its
+`$CWD` fallback and the consequence that inside a container image — where nothing copies
+`digiquant/` or `.git` — the default lands in the writable layer and is destroyed on
+recreate; both variables set on every service that imports digillm rather than one; the
+"were sent" claim softened to "offered to the provider"; and two line citations corrected
+(`SECRETS_ROTATION.md:11` → `:12`; the BYOK key is at `client.py:696-703`, not `:1371`).
+
+The first pass forced eight corrections that had gone into the initial draft: a
+verification step that would have **printed the secret** (`bws secret list --search …` —
+`--search` does not exist on `bws` 2.1.0, and plain `secret list` emits every `"value"`);
+a delivery claim that a GitHub org secret reaches `docker compose`, which it cannot; four
+claims that the digest covers "the outbound payload" when it covers `messages` only; a
+record-count figure that did not reproduce (397 → 83 for the cited command, 156 for the
+full suite); an undisclosed fact that the test suite appends to the real default ledger; a
+table row that broke this file's own column conventions; an unsupported "the only secret
+whose absence is silent"; and an unresolvable "rotate on the usual cadence" with no
+cadence row to point at. It also corrected the digillm docs it accompanied —
+`digillm/ARCHITECTURE.md`, `digillm/AGENTS.md` and `.env.example` — on the `off`/`none`
+disabling values, the `compute_payload_digest(key=)` test seam, the module-map wording
+"per provider attempt" (the code records attempts that fail *before* the wire too), and a
+"duplicated locally" claim about the Art. 9 ids that named a canonical copy which does not
+exist — digibase has no GDPR module, so there is nothing to drift from.
 
 Reviewed in-session on 2026-10-05 by a fresh-context reviewer, which found and
 forced the correction of five substantive errors in the first draft: a claim that
@@ -315,6 +593,27 @@ repo before calling a shared name dead.**
 **R14 — one personal PAT is the only GitHub credential for every org-wide clock *and* for the alarm that reports on them.** Severity: high (accepted 2026-10-05, DIG-363). Evidence: `GH_DISPATCH_TOKEN` is a fine-grained **personal** access token on a human account (settings id 19179726, `digithings-ai/digithings` + `digithings-ai/twelve-x`, expires 2027-09-15); the `digithings-cron` Worker holds it as its only GitHub credential. It authorizes all **38** distinct cron expressions' `workflow_dispatch` POST (`apps/digithings-cron/wrangler.toml:37-76` `[triggers]`, posted at `apps/digithings-cron/src/dispatch.ts:289,295-298`), and the DIG-71 short-day alarm, which posts to `POST /repos/$ALERT_ISSUE_REPO/issues/$ALERT_ISSUE_NUMBER/comments` with the same token and no other. Why: the credential that reports "the clocks stopped" is the credential that stops the clocks, so **one event on one human account is a correlated outage of the workload and its own alarm in a single move** — 2FA re-enrolment, a lockout, a password change under account-wide PAT revocation, offboarding, or account deletion. Two aggravating properties: fine-grained PAT permissions are **not readable over any GitHub API**, so grant drift on this credential is invisible to tooling; and revocation is an **account-level** action, so rotation cannot be done by an agent or on a schedule — only reactively, by a human. Action: **accepted risk, not mitigated** — Chris chose B (keep the PAT) and the shared token on 2026-10-05, declining a GitHub App because that would add a second long-lived secret with power to mint dispatch and issue tokens. Re-open if any of: the PAT reaches its 2027-09-15 expiry (rotate reactively, [runbook](SECRETS_ROTATION.md#4-gh_dispatch_token)); the alarm lands on a second credential; or the token moves to Bitwarden (DIG-95), which changes custody but **not** this coupling. Adding a second credential for the alarm would reverse the deliberate `GH_ISSUE_TOKEN`-must-not-exist rule (`apps/digiquant-runner/wrangler.toml:14,20`) and would have to be argued on its own merits.
 
 **R15 — the twelve-x legacy `anon` / `service_role` JWTs cannot be revoked without breaking FX Hub session minting.** Severity: low now, **closing 2026** (Supabase deprecates both). Evidence: project `lfghjucjrsabiqwxerxv` (twelve-x, a **separate** Supabase project from the core `rwagjbkvxkdwqmouagad`); the Management API `POST /v1/projects/{ref}/api-keys` accepts only `type: publishable | secret`, so a legacy JWT key has **no in-place rotation**; `PUT /v1/projects/{ref}/api-keys/legacy` takes no body and returns a single `{"enabled": bool}`, i.e. **one flag over both `anon` and `service_role`**; in the **separate `digithings-ai/twelve-x` repo** (not this one) `supabase/functions/fx-hub-session/index.ts:72` reads the auto-injected `SUPABASE_ANON_KEY` and the same function uses the auto-injected `SUPABASE_SERVICE_ROLE_KEY`. Why: after the 2026-10-05 client-key rotation (DIG-258) the old legacy `anon` JWT **remains valid** — it is still accepted by the project and still inlines into any bundle built before that date, so "rotated" does not yet mean "old key rejected". Action: move `fx-hub-session` off the auto-injected `SUPABASE_ANON_KEY` to its supported replacement, `SUPABASE_PUBLISHABLE_KEYS` (the `anon` role's new key), and off `SUPABASE_SERVICE_ROLE_KEY` to `SUPABASE_SECRET_KEYS` — Supabase now lists the old names under *Legacy* keys — then disable legacy project-wide as one reversible step — never per-key, because the flag is not per-key. Not urgent: the anon role has **no read grant** on any of the 20 FX tables since the 2026-09-14 RLS cutover, so the residual exposure is a live-but-blind key, not a data path.
+
+**R15 status — the code half landed 2026-10-05 (DIG-704); the flag is still enabled.** The *Action* above is superseded by this, in two ways.
+
+1. **The scope was wider than one function.** `supabase/functions/fx-hub-grant-sync/index.ts:69-71` also read the auto-injected `SUPABASE_SERVICE_ROLE_KEY`, for its `fx_hub_grants` upsert. It is the invite-redemption mirror core calls when an invite is redeemed, so migrating `fx-hub-session` alone would have broken **invite redemption while sign-in still passed** — invisible from the path anyone would test. Both functions are now off the legacy pair (`digithings-ai/twelve-x` PR #268, **merged into `develop` as `f71eb69` on 2026-10-05**, and `f71eb69` is already an ancestor of `main`, so no promotion is outstanding), on `SUPABASE_SECRET_KEYS[default]` and `SUPABASE_PUBLISHABLE_KEYS[default]` with **no legacy fallback** — a fallback would keep the dependency alive and make the eventual deactivation fail silently instead of loudly, so a missing or unparseable dictionary now returns `500 API_KEYS_UNCONFIGURED` naming the missing **variable** and no key material.
+2. **Two traps that make a literal reading of the *Action* wrong.** (a) The replacement variables are auto-injected **JSON dictionaries keyed by key name**, not plain strings — `JSON.parse(env)['default']`; reading the variable directly yields JSON text, not a key. (b) New-format keys are **not JWTs** and the platform answers `Invalid JWT` when one arrives on `Authorization`, but `supabase-js` only suppresses its Bearer fallback on the **Edge-Functions** fetch path — its PostgREST and Auth paths, which these calls use, still mirror the key into `Authorization`. Hence the `global.fetch` wrapper stripping `Bearer sb_publishable_`/`Bearer sb_secret_`, and hence the import floor `@supabase/supabase-js@^2.111.0` (the `isNewApiKey` check does not exist before 2.111.0; the previous unfloored `@2` specifier could resolve below it and fail every call).
+
+**Still open, and not an agent action.** Confirm a `default` publishable/secret pair exists on `lfghjucjrsabiqwxerxv`, creating one only if it is absent; deploy both functions (`supabase functions deploy fx-hub-session fx-hub-grant-sync` — no workflow deploys them); verify FX Hub sign-in **and** invite redemption end to end; then deactivate the legacy pair as one reversible step. Runbook: `twelve-x:docs/ops/FX_HUB_API_KEY_MIGRATION.md`. Steps 1 and 3 must not be swapped — the code cannot read keys that do not exist yet. **Do not deactivate the flag on core `rwagjbkvxkdwqmouagad`**; that is platform-wide and out of scope here. Two things this checkout cannot answer, both of which gate the deactivation: whether `lfghjucjrsabiqwxerxv` has a `default` pair yet, and whether anything **outside** twelve-x (mobile/desktop builds, CI, webhooks) still reads the legacy keys on that project — Supabase's own guide makes both a manual pre-deactivation check.
+
+**A caller was found in this repo, and it gates the deactivation: a stale bundle.** `apps/dashboard/lib/twelve-x/supabase.ts` builds a GoTrue client from `NEXT_PUBLIC_TWELVEX_SUPABASE_ANON_KEY` (the same var as inventory row 93), and `lib/twelve-x/session.ts` `ensureTwelveXSession` calls `setSession()` → `getUser()` → `/auth/v1/user`, which carries that key on the `apikey` header. Because `NEXT_PUBLIC_*` is inlined at build time, DIG-258's publishable-key rotation only reaches users on the next production **build**, and the rotation log in `SECRETS_ROTATION.md` records the old `anon` JWT as still shipped in the live bundle at 2026-10-05. Deactivating the legacy flag therefore breaks the dashboard's FX Hub page for any browser still on a pre-rotation bundle — and it fails **silently**, because `ensureTwelveXSession` is best-effort and returns `false` rather than throwing. So the Pages rebuild and a live-bundle re-scan (asserting **absence** of the old key hash, not just presence of the new one) must land **before** the deactivation, not merely before the function deploy. Step 1 must also *confirm* a `default` pair rather than assume one: this project already carries a publishable key named `fx_hub_dashboard` (DIG-258), which shows the naming is under our control and a project can have every key custom-named — in which case both functions fail `API_KEYS_UNCONFIGURED`.
+**R16 — two vendors' access methods are published in public docs, and one of them has never had its terms read.** Severity: high. Evidence: the session-acquisition sentence removed from this file on 2026-10-05; the surviving PrimeMarket rows at the `PRIMEMARKET_SESSION_TOKEN`/`PRIMEMARKET_SESSION_COOKIE` table and the desk-login pair; [`gloomber/INDEX.md`](../vendor-terms/gloomber/INDEX.md) (artefact sha256 `6f781a39…`, terms effective 2026-09-26, classified **Unclear** 2026-10-05, Counsel sign-off **not yet given**); `docs/ops/gloomberb-session-cookie.md`; `digiquant/src/digiquant/data/gloomberb/client.py:405-406`. Why: the 2026-08-01 record that "PrimeMarket is fine with us using their data" was written on the belief that the terms "could not be retrieved", when they were served live the whole time — and Gloomber's terms, 3,072 words at a URL that returns 200, had never been read by anyone here. One failure mode, two vendors: **no retrievable, dated artefact to check a claim against.** Action: `docs/vendor-terms/<vendor>/` per `docs/VENDOR_CONTENT_BOUNDARY.md`; Counsel sign-off in writing before any new vendor access merges to a public repo; Gloomber's §14 team-plan licence question and §11 interface carve-out are with Counsel as of 2026-10-05.
+
+**R16 status — closed 2026-10-05/06.** Both halves are done. Gloomber's terms were
+retrieved, archived and read (artefact sha256 `6f781a39…`, effective 2026-09-26);
+Counsel's memo concluded **Prohibited, confirmed**, and Counsel gave written
+boundary sign-off for PR #5157. Security's own position had been **Unclear**, and the
+memo is filed beside it rather than over it — Security's reading that we do not
+*bypass* authentication survived, but the §14 licence gap, which Security had flagged
+as the sharpest point, is what Counsel put at the centre. The PrimeMarket half is
+DIG-461/DIG-478 and stays open there; nothing in this row is a clearance for it.
+
+**R17 — an accepted prohibited use, a credential with no custody, and a deployment state nobody can verify.** Severity: high. Evidence: the accepted-use record and custody blocker in [Vendor terms and what this file may publish](#gloomberb-the-accepted-use-the-custody-blocker-and-what-is-still-unverified); Counsel's memo (2026-10-05); Chris's acceptance and custody authorisation (2026-10-06, DIG-1194); `bws project list` → empty against `project create` → *"maximum number of projects (3) for this plan"*; `git grep GLOOMBERB -- .github/workflows/` → empty, so no scheduled ingest holds the cookie; `wrangler secret list` unrunnable for Security. Why: three separate weaknesses stack. (1) A Counsel-confirmed prohibited access method is in deliberate, documented use by decision — which is a legitimate state, but only while it stays internal, so its safety depends on tripwires nobody is watching. (2) The credential has no inventory entry with an owner or expiry and lives in one untracked `.env` line, because the Bitwarden write path is quota-blocked. (3) The inventory asserts a deployed Worker copy that cannot be confirmed, so the real blast radius of "keep it running" is unknown. Action: DevOps runs `wrangler secret list` on `digithings-stack` and reports whether `GLOOMBERB_SESSION_COOKIE` is set; owner grants the `keymaster` machine account a project so Security can complete the move on DIG-95; Security adds an expiry-bearing inventory row for this name as soon as it has a home; DIG-1233 keeps the deployed default off, which is now the only thing standing between an experiment and production traffic.
 
 ## Gaps and unknowns
 

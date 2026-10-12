@@ -27,6 +27,8 @@ COPY packages/ui ./packages/ui
 # packages/ui, so no gallery COPY is needed anymore (#3717 closed).
 COPY packages/digichat-ui ./packages/digichat-ui
 COPY apps/digichat ./apps/digichat
+# BYOK provider pins are imported from the repo-root config (#5020).
+COPY config/byok-providers.json ./config/byok-providers.json
 # Same bake as Dockerfile.digichat-cloudflare: health version matches package.json.
 ARG DIGICHAT_VERSION
 RUN VERSION="${DIGICHAT_VERSION:-$(node -p "require('./apps/digichat/package.json').version")}" \
