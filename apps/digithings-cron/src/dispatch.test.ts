@@ -338,9 +338,9 @@ describe("dispatch", () => {
     const result = await dispatch(env, job as Job, job?.cron ?? "", 1);
     expect(result).toEqual({ ok: true, status: 200, dry_run: false });
     expect(urls).toEqual([
-      "https://graph.digithings.ai/healthz",
-      "https://key.digithings.ai/healthz",
-      "https://search.digithings.ai/healthz",
+      "https://graph.digithings.ai/_stack/status",
+      "https://key.digithings.ai/_stack/status",
+      "https://search.digithings.ai/_stack/status",
     ]);
     expect(urls.some((url) => url.includes("api.github.com"))).toBe(false);
     expect(runnerFetch).not.toHaveBeenCalled();
