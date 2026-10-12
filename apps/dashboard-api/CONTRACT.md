@@ -362,6 +362,10 @@ Response `data`:
 
 ```json
 {
+  "plot": {
+    "series": "index",
+    "accounting_nav": { "contract": "legacy_estimate", "plottable": false, "reason": "all_legacy_estimate" }
+  },
   "tip": { "date": "2026-09-24", "contract": "legacy_estimate" },
   "points": [{ "index": 0, "date": "2026-09-24", "nav": 99.909, "day_return_pct": null, "contract": "legacy_estimate" }]
 }
@@ -371,6 +375,16 @@ Rules: same continuity-index semantics as §6.4 (per-row day returns,
 ≤ 4-day forward-fill, seam basis changes carry flat). Per-point contract
 labels preserved so consumers can badge tip flips (e.g.
 `finalized_accounting` → `legacy_estimate`).
+
+`plot` names the series a chart may draw, and separates the continuity
+`index` from the labeled accounting NAV (DIG-2802). `plot.series` is
+always `index`. `plot.accounting_nav.plottable` is `true` only when
+**every** point is `finalized_accounting`; an empty series is never
+`plottable`. Until the accounting NAV is whole — and while a date it does
+not carry is absent rather than filled from another scale — every NAV
+chart plots `points[].index` and never `points[].nav`.
+`plot.accounting_nav.contract` is `finalized_accounting`, `legacy_estimate`,
+`mixed` (both present) or `unavailable` (no points).
 
 ### 6.7 `GET /benchmarks`
 

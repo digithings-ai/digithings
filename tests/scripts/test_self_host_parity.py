@@ -323,6 +323,9 @@ def test_contract_arm_passes_when_every_name_is_declared(tmp_path, monkeypatch):
 
 
 # --------------------------------------------------------------- runner guards
+MIGRATIONS_DIR = REPO_ROOT / "digiquant" / "supabase" / "migrations"
+
+
 def _run_runner(args, env_extra=None):
     import os
 
@@ -338,11 +341,36 @@ def _run_runner(args, env_extra=None):
     )
 
 
+def _expected_chain(migrations_dir=MIGRATIONS_DIR):
+    """The chain the runner is expected to plan, derived from the tree.
+
+    This mirrors the runner's own ``ls -1 "$migrations_dir"/*.sql``: top level
+    only, LC_ALL=C order. ``cutover/`` is a subdirectory, so it is absent from
+    this list -- that is the staged-not-applied exclusion, not a second list.
+
+    The count is derived rather than written down because it is a census, not a
+    ratchet: a hardcoded number turns every future migration into a red lane for
+    a reason that has nothing to do with what is being tested. The chain's own
+    endpoints are asserted too, so the plan must name the real first and last
+    file and cannot satisfy this by counting a different set.
+    """
+    return sorted(p.name for p in migrations_dir.glob("*.sql"))
+
+
+def _plan_chain_line(stdout):
+    """The `chain  N migrations, first .. last` line, or None."""
+    for line in stdout.splitlines():
+        if line.strip().startswith("chain"):
+            return line
+    return None
+
+
 @pytest.mark.parametrize("database", ["postgres", "dig1781", "paperclip", "production"])
 def test_runner_refuses_any_database_that_is_not_clearly_disposable(database):
     """This host runs three other people's PostgreSQL servers, including
     Paperclip's own board database. The runner must never be one `PGDATABASE`
-    typo away from applying 137 migrations into someone else's data."""
+    typo away from applying the whole migration chain into someone else's
+    data."""
     proc = _run_runner([], {"PGDATABASE": database})
     assert proc.returncode == 1, proc.stderr
     assert "refusing to touch database" in proc.stderr
@@ -353,7 +381,24 @@ def test_runner_plan_excludes_the_staged_cutover_directory():
     proc = _run_runner(["--plan"])
     assert proc.returncode == 0, proc.stderr
     assert "cutover/       excluded" in proc.stdout
-    assert "137 migrations" in proc.stdout, proc.stdout
+    chain = _expected_chain()
+    # The census is the subject here, so an empty or truncated tree would make
+    # the comparison below vacuous. Pin that the chain is a real one.
+    assert len(chain) > 100, chain
+    assert f"{len(chain)} migrations, {chain[0]} .. {chain[-1]}" in proc.stdout, proc.stdout
+
+
+def test_runner_plan_count_follows_the_migrations_directory(tmp_path):
+    """The control for the derived count above: same assertion, a different
+    directory, a different number. Without this the census could be satisfying
+    the assertion by coincidence rather than by tracking the tree."""
+    names = ["001_first.sql", "002_second.sql", "003_third.sql"]
+    for name in names:
+        (tmp_path / name).write_text("select 1;\n")
+    proc = _run_runner(["--plan"], {"PARITY_MIGRATIONS_DIR": str(tmp_path)})
+    assert proc.returncode == 0, proc.stderr
+    assert _plan_chain_line(proc.stdout) is not None, proc.stdout
+    assert "3 migrations, 001_first.sql .. 003_third.sql" in proc.stdout, proc.stdout
 
 
 def test_runner_plan_rejects_an_unparsable_migration_name(tmp_path, monkeypatch):
