@@ -2,6 +2,8 @@
 
 from digibase.art9 import (
     ART9_CATEGORIES,
+    CONTROL_PLANE_PREFIXES,
+    CONTROL_PLANE_ROUTES,
     INGEST_PREFIXES,
     INGEST_ROUTES,
     ROUTE_KIND_INGEST,
@@ -15,6 +17,7 @@ from digibase.art9 import (
     category_order,
     check_route,
     field_names,
+    is_control_plane,
     is_registered,
     is_under_prefix,
     iter_ingest_routes,
@@ -40,6 +43,8 @@ from digibase.metrics import install_metrics
 
 __all__ = [
     "ART9_CATEGORIES",
+    "CONTROL_PLANE_PREFIXES",
+    "CONTROL_PLANE_ROUTES",
     "DEFAULT_TIMEOUT",
     "INGEST_PREFIXES",
     "INGEST_ROUTES",
@@ -62,6 +67,7 @@ __all__ = [
     "install_metrics",
     "install_request_id_logging",
     "install_request_id_middleware",
+    "is_control_plane",
     "is_registered",
     "is_under_prefix",
     "iter_ingest_routes",
