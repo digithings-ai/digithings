@@ -10,7 +10,7 @@ vendor must fall in one of a small set of paths, and each of those paths must ke
 *why* it is allowed. That second half matters most -- without it the allowlist silently
 becomes a dumping ground and the next agent re-adds a server block "just for docs".
 
-The allowed paths are (five original, plus batch-folded fixture files each carrying its reason below):
+The seven allowed paths are (five original, plus two fixture files each carrying its reason below):
 
 1. ``.gitleaks.toml``                     -- allowlist rules for history-only paths.
 2. ``research/config/mcp.secrets.env.example`` -- the placeholder rows themselves. The
@@ -20,7 +20,9 @@ The allowed paths are (five original, plus batch-folded fixture files each carry
 4. ``docs/ops/SECRETS_INVENTORY.md``       -- human lock; DIG-124 owns it.
 5. ``embed-mcp-catalog.ts``                -- the keyless public CoinGecko endpoint in
    digichat. It is a chat feature, not a key, and is an EM decision (DIG-337).
-6. ``test_check_example_credentials_product_names.py`` -- batch-folded fixtures
+6. ``tests/scripts/test_check_example_credentials.py`` -- DIG-3148 fixtures naming
+   the retired row, proving the example-credentials guard scans it.
+7. ``test_check_example_credentials_product_names.py`` -- batch-folded fixtures
    pinning retired-vendor-shaped bypasses of the committed-credential guard.
    Synthetic values only (tmp_path, never tracked); no code reads either name.
 
@@ -55,6 +57,10 @@ ALLOWED: dict[str, str] = {
     "docs/ops/SECRETS_INVENTORY.md": "human lock; DIG-124 owns this file",
     "apps/digichat/src/components/stock/embed-mcp-catalog.ts": (
         "keyless public endpoint; digichat chat feature, EM-gated"
+    ),
+    "tests/scripts/test_check_example_credentials.py": (
+        "DIG-3148: pins the example-credentials guard wiring; fixtures name the "
+        "retired row to prove the guard scans it"
     ),
     "tests/scripts/test_check_example_credentials_product_names.py": (
         "batch-folded regression fixtures pinning retired-vendor-shaped "
@@ -95,7 +101,7 @@ def _hits() -> list[tuple[str, int, str]]:
 
 
 def test_no_vendor_mentions_outside_the_allowlist():
-    """Every remaining mention lives in one of the five allowed paths."""
+    """Every remaining mention lives in one of the six allowed paths."""
     offenders = [
         f"{p}:{n}: {line.strip()}"
         for p, n, line in _hits()
