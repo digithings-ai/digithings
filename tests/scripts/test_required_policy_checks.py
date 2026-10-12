@@ -157,29 +157,33 @@ def test_gitleaks_is_flagged_as_the_highest_value_ungated_check() -> None:
     inventory, _tracked = guard.load_inventory(INVENTORY)
     gitleaks = next(c for c in inventory if c.context == "gitleaks-scan")
     assert gitleaks.enforcement == "advisory"
-    assert "paths-ignore" in gitleaks.reason
+    assert "highest-value" in gitleaks.reason
     assert gitleaks.workflow == "security-gitleaks.yml"
 
 
 # ── failure mode 1: a required context no PR-triggered workflow produces ─────
 
 
-def test_requiring_gitleaks_while_it_is_path_filtered_fails() -> None:
-    """The stall, end to end.
+def test_requiring_gitleaks_without_a_path_filter_does_not_stall() -> None:
+    """No stall once the workflow-level filter is gone.
 
-    `security-gitleaks.yml` carries a workflow-level `paths-ignore` of `**.md`
-    and `docs/**`. Make `gitleaks-scan` required anyway — exactly what
-    DIG-1952 child B would do — and docs-only PRs never start the workflow, so
-    the check never reports and GitHub blocks them on "Waiting for status to be
-    reported" forever. This is why the entry cannot simply be flipped to
-    `required`.
+    `security-gitleaks.yml` used to carry a workflow-level `paths-ignore` of
+    `**.md` and `docs/**`, under which requiring `gitleaks-scan` hung
+    docs-only PRs forever (failure mode 1). That filter was removed so the
+    check reports on every PR: requiring the name now produces no stall
+    finding. The stall logic itself stays pinned by
+    `test_stall_rule_covers_a_workflow_level_paths_filter`, which feeds a
+    synthetic filtered workflow rather than depending on this file's shape.
     """
     contexts = [*LIVE_CONTEXTS, "gitleaks-scan"]
 
     findings = _run(*guard.load_inventory(INVENTORY), contexts)
 
-    assert "policy.stall" in _codes(findings)
-    assert "gitleaks-scan" in _subjects(findings, "policy.stall")
+    assert "policy.stall" not in _codes(findings)
+    facts = guard.read_workflow_facts(
+        guard.WORKFLOWS_DIR / "security-gitleaks.yml", "develop"
+    )
+    assert facts.path_filter is None
 
 
 def test_a_required_context_from_a_non_pr_workflow_fails() -> None:
