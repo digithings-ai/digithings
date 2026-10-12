@@ -4,9 +4,9 @@
 > baseline/delta/monthly, chain-terminal materialize). **Do not use for current topology.**
 >
 > **Canonical references:**
-> - [`digiquant/ARCHITECTURE.md`](../../digiquant/ARCHITECTURE.md) § research + portfolio
-> - [`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../superpowers/specs/2026-06-20-olympus-daily-thesis-design.md) §13–§14
-> - [`digiquant/src/digiquant/portfolio/docs/ARCHITECTURE.md`](../../digiquant/src/digiquant/portfolio/docs/ARCHITECTURE.md)
+> - [`digiquant/ARCHITECTURE.md`](../../../digiquant/ARCHITECTURE.md) § research + portfolio
+> - [`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../../superpowers/specs/2026-06-20-olympus-daily-thesis-design.md) §13–§14
+> - [`digiquant/src/digiquant/portfolio/docs/ARCHITECTURE.md`](../../../digiquant/src/digiquant/portfolio/docs/ARCHITECTURE.md)
 >
 > **Current entry point:** `python -m digiquant.portfolio.chain --cadence daily`
 > (`.github/workflows/pipeline-digiquant.yml`). portfolio terminal = **H9 `commit_run`**.

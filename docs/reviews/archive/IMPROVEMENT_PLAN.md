@@ -1,6 +1,6 @@
 # digithings — Improvement Plan v2.0
 
-**Based on:** `docs/CODE_REVIEW_BASELINE.md` v2.0 (2026-03-18)
+**Based on:** `docs/reviews/archive/CODE_REVIEW_BASELINE.md` v2.0 (2026-03-18)
 **Starting scores:** digigraph 6.2 · digiquant 7.0 · digisearch 5.7
 **Goal:** Reach composite ≥ 8.5 across all three components
 
