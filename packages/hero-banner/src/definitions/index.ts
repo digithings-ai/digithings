@@ -1,19 +1,20 @@
 import { buildAnimation } from "../animations/build";
+import { clawAnimation, withHeadroom } from "../animations/claw";
 import { equalizerAnimation } from "../animations/equalizer";
 import { fetchAnimation } from "../animations/fetch";
+import { pagesAnimation } from "../animations/pages";
 import { riseAnimation } from "../animations/rise";
 import { routeAnimation } from "../animations/route";
 import { scanAnimation } from "../animations/scan";
 import { scrambleAnimation } from "../animations/scramble";
-import { stackAnimation } from "../animations/stack";
-import { tumblerAnimation } from "../animations/tumbler";
-import { traverseAnimation } from "../animations/traverse";
-import { pagesAnimation } from "../animations/pages";
-import { typeAnimation } from "../animations/type";
-import { clawAnimation, withHeadroom } from "../animations/claw";
 import { spansAnimation } from "../animations/spans";
+import { stackAnimation } from "../animations/stack";
+import { traverseAnimation } from "../animations/traverse";
+import { tumblerAnimation } from "../animations/tumbler";
+import { typeAnimation } from "../animations/type";
 import { PIXEL_7X10 } from "../font";
 import type { BannerDefinition, Tone } from "../types";
+
 
 /**
  * The four ported banners. Each one is the single source for its TUI and web
@@ -156,29 +157,6 @@ export const DIGIBASE: BannerDefinition = {
   id: "digibase",
   text: "DIGIBASE",
   label: "digibase",
-/** DIG-2873. A search: the word hides in an index of decoy pixels until a scan
- *  beam finds it. LIVE runs queries over it and highlights the hits.
- *  Accent: --accent-digisearch. */
-export const DIGISEARCH: BannerDefinition = {
-  id: "digisearch",
-  text: "DIGISEARCH",
-  label: "digisearch",
-/** DIG-2872. A trace waterfall, x is time: each pixel row is a lane of
- *  sibling spans that open in a staircase and grow right, the word in ink on
- *  their bars; the bars drain and leave the word. LIVE runs a small trace
- *  (root plus children) now and then. Accent: --accent-digitrace. */
-export const DIGITRACE: BannerDefinition = {
-  id: "digitrace",
-  text: "DIGITRACE",
-  label: "digitrace",
-/** DIG-2871. A download, not a drawing: a request pixel runs out of the right
- *  edge, then every lit cell comes back as a packet streamed in from the right
- *  along its row and lands with a glint. LIVE fetches again now and then: a
- *  request on one row, a small burst of packets back. Accent: --accent-digifetch. */
-export const DIGIFETCH: BannerDefinition = {
-  id: "digifetch",
-  text: "DIGIFETCH",
-  label: "digifetch",
   font: PIXEL_7X10,
   gap: 2,
   palette: {
@@ -353,6 +331,20 @@ export const DIGICLAW: BannerDefinition = {
   }),
   live: true,
   seed: 0xc1a3,
+};
+
+/** DIG-2873. A search: the word hides in an index of decoy pixels until a scan
+ *  beam finds it. LIVE runs queries over it and highlights the hits.
+ *  Accent: --accent-digisearch. */
+export const DIGISEARCH: BannerDefinition = {
+  id: "digisearch",
+  text: "DIGISEARCH",
+  label: "digisearch",
+  font: PIXEL_7X10,
+  gap: 2,
+  palette: {
+    ink: INK,
+    ground: GROUND,
     accent: { hex: "#5AA3C4", cube: 74, cssVar: "--accent-digisearch" },
     glint: { hex: "#FFFFFF", cube: 231, cssVar: "--glint" },
   },
@@ -368,6 +360,21 @@ export const DIGICLAW: BannerDefinition = {
   }),
   live: true,
   seed: 0x5ea2c,
+};
+
+/** DIG-2872. A trace waterfall, x is time: each pixel row is a lane of
+ *  sibling spans that open in a staircase and grow right, the word in ink on
+ *  their bars; the bars drain and leave the word. LIVE runs a small trace
+ *  (root plus children) now and then. Accent: --accent-digitrace. */
+export const DIGITRACE: BannerDefinition = {
+  id: "digitrace",
+  text: "DIGITRACE",
+  label: "digitrace",
+  font: PIXEL_7X10,
+  gap: 2,
+  palette: {
+    ink: INK,
+    ground: GROUND,
     accent: { hex: "#6FA3A3", cube: 73, cssVar: "--accent-digitrace" },
     glint: { hex: "#FFFFFF", cube: 231, cssVar: "--glint" },
   },
@@ -383,6 +390,21 @@ export const DIGICLAW: BannerDefinition = {
   }),
   live: true,
   seed: 0x7ace,
+};
+
+/** DIG-2871. A download, not a drawing: a request pixel runs out of the right
+ *  edge, then every lit cell comes back as a packet streamed in from the right
+ *  along its row and lands with a glint. LIVE fetches again now and then: a
+ *  request on one row, a small burst of packets back. Accent: --accent-digifetch. */
+export const DIGIFETCH: BannerDefinition = {
+  id: "digifetch",
+  text: "DIGIFETCH",
+  label: "digifetch",
+  font: PIXEL_7X10,
+  gap: 2,
+  palette: {
+    ink: INK,
+    ground: GROUND,
     accent: { hex: "#C9A45C", cube: 179, cssVar: "--accent-digifetch" },
     glint: { hex: "#FFFFFF", cube: 231, cssVar: "--glint" },
   },
