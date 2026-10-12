@@ -10,7 +10,7 @@ vendor must fall in one of a small set of paths, and each of those paths must ke
 *why* it is allowed. That second half matters most -- without it the allowlist silently
 becomes a dumping ground and the next agent re-adds a server block "just for docs".
 
-The five allowed paths are:
+The six allowed paths are:
 
 1. ``.gitleaks.toml``                     -- allowlist rules for history-only paths.
 2. ``research/config/mcp.secrets.env.example`` -- the placeholder rows themselves. The
@@ -20,6 +20,8 @@ The five allowed paths are:
 4. ``docs/ops/SECRETS_INVENTORY.md``       -- human lock; DIG-124 owns it.
 5. ``embed-mcp-catalog.ts``                -- the keyless public CoinGecko endpoint in
    digichat. It is a chat feature, not a key, and is an EM decision (DIG-337).
+6. ``tests/scripts/test_check_example_credentials.py`` -- DIG-3148 fixtures naming
+   the retired row, proving the example-credentials guard scans it.
 
 The guard file itself is skipped: it has to spell the patterns out to search for them.
 """
@@ -52,6 +54,10 @@ ALLOWED: dict[str, str] = {
     "docs/ops/SECRETS_INVENTORY.md": "human lock; DIG-124 owns this file",
     "apps/digichat/src/components/stock/embed-mcp-catalog.ts": (
         "keyless public endpoint; digichat chat feature, EM-gated"
+    ),
+    "tests/scripts/test_check_example_credentials.py": (
+        "DIG-3148: pins the example-credentials guard wiring; fixtures name the "
+        "retired row to prove the guard scans it"
     ),
 }
 
@@ -87,7 +93,7 @@ def _hits() -> list[tuple[str, int, str]]:
 
 
 def test_no_vendor_mentions_outside_the_allowlist():
-    """Every remaining mention lives in one of the five allowed paths."""
+    """Every remaining mention lives in one of the six allowed paths."""
     offenders = [
         f"{p}:{n}: {line.strip()}"
         for p, n, line in _hits()
