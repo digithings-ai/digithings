@@ -1915,3 +1915,11 @@ bindings:
   name: LANGFUSE_EVENTS
   bucket_name: digitrace-langfuse-events
   source: apps/digitrace-langfuse/wrangler.toml
+# DIG-2895 data API. The D1 database is a LOCAL placeholder id (no deploy, no
+# routes, no remote database); the binding exists so the parity contract can see
+# the name. A remote database_id is a cutover step and needs Chris's approval.
+- worker: digidata-api
+  type: d1_database
+  name: TWELVEX_DB
+  database_name: twelvex
+  source: apps/digidata-api/wrangler.toml

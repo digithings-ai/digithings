@@ -49,6 +49,25 @@ describe("query building", () => {
   });
   it("caps batch size", () => {
     expect(() => validateUpsert(T, spec, [], null)).toThrow(BadRequest);
+    const c0 = spec.columns[0];
+    expect(() => validateUpsert(T, spec, Array.from({ length: 501 }, () => ({ [c0]: 1 })), null)).toThrow(BadRequest);
+    expect(() => validateUpsert(T, spec, Array.from({ length: 500 }, () => ({ [c0]: 1 })), null)).not.toThrow();
+  });
+  // #5404: an empty row would build `INSERT INTO "t" () VALUES ()` (a syntax
+  // error, so a 502 rather than a 400), and rows with different key sets mean
+  // different things per DATA_BACKEND. Both are refused instead.
+  it("refuses a row with no columns", () => {
+    expect(() => validateUpsert(T, spec, {}, null)).toThrow(BadRequest);
+    expect(() => validateUpsert(T, spec, [{}], null)).toThrow(BadRequest);
+    expect(() => validateUpsert(T, spec, [{ [spec.columns[0]]: 1 }, {}], null)).toThrow(BadRequest);
+  });
+  it("refuses rows with different key sets", () => {
+    const [a, b] = spec.columns;
+    expect(() => validateUpsert(T, spec, [{ [a]: 1 }, { [b]: 2 }], null)).toThrow(BadRequest);
+    // The guard is on the SET of keys, not their order, and a uniform batch of
+    // any size still passes -- so it is not refusing every multi-row call.
+    expect(() => validateUpsert(T, spec, [{ [b]: 1, [a]: 2 }], null)).not.toThrow();
+    expect(() => validateUpsert(T, spec, [{ [a]: 1, [b]: 2 }, { [b]: 3, [a]: 4 }], null)).not.toThrow();
   });
 });
 

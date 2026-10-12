@@ -44,9 +44,21 @@ export function parseSelect(table: string, spec: TableSpec, params: URLSearchPar
 export function validateUpsert(table: string, spec: TableSpec, body: unknown, onConflict: string | null): UpsertQuery {
   const rows = Array.isArray(body) ? body : [body];
   if (rows.length === 0 || rows.length > 500) throw new BadRequest("1..500 rows per call");
+  let signature: string | null = null;
   for (const r of rows) {
     if (!r || typeof r !== "object" || Array.isArray(r)) throw new BadRequest("rows must be objects");
-    for (const k of Object.keys(r)) col(spec, k);
+    const rk = Object.keys(r);
+    if (rk.length === 0) throw new BadRequest("a row with no columns would insert nothing");
+    for (const k of rk) col(spec, k);
+    // One column list for the whole call. PostgREST derives it from the body and
+    // writes NULL over anything a row omits; D1 would touch only the keys that
+    // row names. A batch with mixed key sets therefore means two different things
+    // depending on DATA_BACKEND, so it is refused rather than silently divergent
+    // (#5404). An empty row is refused for the same reason: it would build
+    // `INSERT INTO "t" () VALUES ()`, which is a SQL syntax error, not a 400.
+    const sig = rk.slice().sort().join(",");
+    if (signature === null) signature = sig;
+    else if (sig !== signature) throw new BadRequest("every row must carry the same columns");
   }
   const conflict = onConflict ? onConflict.split(",").map((c) => col(spec, c)) : spec.pk;
   if (conflict.length === 0) throw new BadRequest("table has no primary key; pass on_conflict");
