@@ -769,7 +769,7 @@ describe("run lost to a container or DO restart (DIG-3061)", () => {
   });
 
   it("does not count a transport error towards the lost confirmations", async () => {
-    const { session, starts, setMode } = lostHarness();
+    const { session, setMode } = lostHarness();
     const accepted = await session.accept(
       job({ idempotency_key: "market-data-refresh-morning:transport-then-lost" }),
     );
@@ -789,7 +789,7 @@ describe("run lost to a container or DO restart (DIG-3061)", () => {
   });
 
   it("resets the lost streak when the container answers again", async () => {
-    const { session, starts, setMode } = lostHarness();
+    const { session, setMode } = lostHarness();
     const accepted = await session.accept(
       job({ idempotency_key: "market-data-refresh-morning:streak-reset" }),
     );
