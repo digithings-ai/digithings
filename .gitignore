@@ -237,3 +237,14 @@ occ_tickets*.jsonl
 occ_tickets*.ndjson
 seed_occ_tickets*
 *_occ_tickets_snapshot*.json
+
+# Agent review/report/scratch files belong in docs/reviews/pr/ (see AGENTS.md), never the repo root
+/review-*.md
+/report-*.md
+/handoff-*.md
+/findings-*.md
+/plan-*.md
+/scratch*
+/.scratch/
+/*-prompt.md
+/*-opencode.log
