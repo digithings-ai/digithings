@@ -32,6 +32,7 @@ from digillm import egress_record as egress_mod
 from digillm.egress_record import (
     DIGEST_KEY_ENV,
     EGRESS_LOG_PATH_ENV,
+    EgressCategoryId,
     EgressDecision,
     EgressRecord,
     compute_payload_digest,
@@ -534,3 +535,153 @@ def test_record_is_frozen_and_forbids_payload_shaped_fields() -> None:
 
 def test_observer_is_exported_and_never_breaks_the_call() -> None:
     assert digillm.set_egress_observer is egress_mod.set_egress_observer
+
+
+# --- 11. a decision is writable only with the evidence for it -----------------
+
+_HIT: tuple[EgressCategoryId, ...] = (EgressCategoryId.HEALTH,)
+_WIRED = "https://llm.internal.example/v1"
+
+
+def _record_with(
+    decision: EgressDecision,
+    category_ids: tuple[EgressCategoryId, ...] = (),
+    destination: str = _WIRED,
+) -> EgressRecord:
+    """The smallest record that isolates the decision/evidence pairing.
+
+    Built directly rather than through a call so a rejection here is the
+    validator refusing, not some caller's guard standing in front of it.
+    """
+    return EgressRecord(
+        ts=dt.datetime(2026, 10, 10, 9, 0, tzinfo=dt.UTC),
+        call_id=uuid.UUID(int=11),
+        attempt_id=uuid.UUID(int=12),
+        destination=destination,
+        provider="openai",
+        model="gpt-4o-mini",
+        purpose="chat_completion",
+        decision=decision,
+        category_ids=category_ids,
+        cache_status="miss",
+        outcome="succeeded",
+    )
+
+
+def _builds(decision: EgressDecision, category_ids: tuple[EgressCategoryId, ...]) -> bool:
+    """Whether the record survives validation for this pairing."""
+    destination = "none" if decision is EgressDecision.CACHE_HIT else _WIRED
+    try:
+        _record_with(decision, category_ids, destination)
+    except ValidationError:
+        return False
+    return True
+
+
+@pytest.mark.parametrize(
+    ("decision", "category_ids"),
+    [
+        (EgressDecision.UNSCREENED, ()),
+        # `pass` is "a screen ran and hit nothing". It pairs with an empty hit
+        # set, and that pairing is the only thing telling it apart from
+        # `unscreened`, so it has to keep building.
+        (EgressDecision.PASS, ()),
+        (EgressDecision.MASKED, _HIT),
+        (EgressDecision.REFUSED, _HIT),
+        (EgressDecision.MASKED, tuple(EgressCategoryId)),
+    ],
+)
+def test_every_coherent_decision_and_evidence_pairing_still_builds(
+    decision: EgressDecision, category_ids: tuple[EgressCategoryId, ...]
+) -> None:
+    record = _record_with(decision, category_ids)
+    assert record.decision is decision
+    assert record.category_ids == category_ids
+
+
+@pytest.mark.parametrize("decision", [EgressDecision.MASKED, EgressDecision.REFUSED])
+def test_a_hit_verdict_must_name_the_categories_that_produced_it(
+    decision: EgressDecision,
+) -> None:
+    with pytest.raises(ValidationError, match="must name the Art. 9 categories"):
+        _record_with(decision, ())
+
+
+@pytest.mark.parametrize(
+    "decision", [EgressDecision.UNSCREENED, EgressDecision.PASS, EgressDecision.CACHE_HIT]
+)
+def test_only_a_hit_verdict_may_carry_categories(decision: EgressDecision) -> None:
+    # A cache hit is given its own destination so the pairing rule is the only
+    # thing that can reject it; otherwise the destination rule would refuse it
+    # first and this test would pass for the wrong reason.
+    destination = "none" if decision is EgressDecision.CACHE_HIT else _WIRED
+    with pytest.raises(ValidationError, match="only a masked or refused record may carry"):
+        _record_with(decision, _HIT, destination)
+
+
+def test_a_non_empty_hit_set_can_only_sit_on_a_screen_verdict() -> None:
+    """Emptiness is what a ledger reader uses, so it has to mean one thing.
+
+    `unscreened` and `pass` both carry an empty `category_ids`, and the decision
+    field is the only thing separating them. That separation only survives if a
+    hit set can never ride along on a row that denies a screen ran: then any row
+    with categories is proof a screen ran and hit, and an empty set reads as "no
+    categories" rather than "no evidence". Before the rule an `unscreened` row
+    could carry categories, so emptiness proved nothing and the two facts were
+    indistinguishable in the ledger.
+    """
+    # Positive subject: a hit set is expressible, so the set below is not empty
+    # for want of a way to write one.
+    assert _record_with(EgressDecision.REFUSED, _HIT).category_ids == _HIT
+
+    assert {d for d in EgressDecision if _builds(d, _HIT)} == {
+        EgressDecision.MASKED,
+        EgressDecision.REFUSED,
+    }
+    # And no decision became unwritable: every value in the closed enum still has
+    # at least one pairing that builds, so the rule closed a gap rather than
+    # making a verdict unreachable.
+    assert {d for d in EgressDecision if _builds(d, ()) or _builds(d, _HIT)} == set(EgressDecision)
+
+
+def test_an_incoherent_record_is_dropped_at_the_producer_and_the_call_survives() -> None:
+    """The rule has to bite on the path records are actually written from."""
+    collector = _Collector()
+    set_egress_observer(collector)
+
+    common = {
+        "call_id": uuid.UUID(int=21),
+        "attempt_id": uuid.UUID(int=22),
+        "destination": _WIRED,
+        "provider": "openai",
+        "model": "gpt-4o-mini",
+        "purpose": "chat_completion",
+        "cache_status": "miss",
+        "outcome": "succeeded",
+    }
+
+    # Control first: the same producer, the same fields, a coherent pairing.
+    kept = egress_mod.record_egress(**common, decision=EgressDecision.REFUSED, category_ids=_HIT)
+    assert kept is not None
+    assert len(collector.records) == 1
+
+    dropped = egress_mod.record_egress(
+        **common, decision=EgressDecision.UNSCREENED, category_ids=_HIT
+    )
+    assert dropped is None, "a record asserting no screen while naming what it hit is not a record"
+    assert len(collector.records) == 1, "the incoherent record must not reach the ledger"
+
+
+def test_the_cache_hit_and_destination_rules_are_not_weakened() -> None:
+    """The pairing rule is added to these two, not on top of a relaxation."""
+    with pytest.raises(ValidationError, match="destination must be 'none'"):
+        _record_with(EgressDecision.CACHE_HIT, (), _WIRED)
+
+    for decision in EgressDecision:
+        if decision is EgressDecision.CACHE_HIT:
+            continue
+        categories = _HIT if decision in (EgressDecision.MASKED, EgressDecision.REFUSED) else ()
+        with pytest.raises(
+            ValidationError, match="only a cache hit may use the 'none' destination"
+        ):
+            _record_with(decision, categories, "none")

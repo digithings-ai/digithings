@@ -97,7 +97,9 @@ Note that `containerApps/write` is not an image-only permission: it permits chan
 
 ### Lane-B CI credential — scoped, not created
 
-**Status: parked.** DIG-1242's lane question (`lane`: A build-lane-only / **B** gated workflow that also writes Azure / C docs-only) is still open, so nothing here has been created and no ARM write was made. The spec is written down now so that choosing B is a single decision with no further design work:
+**Status: not needed.** DIG-1242's lane question was answered on 2026-10-06: **Option A** (build lane only), so the pipeline never writes Azure and needs no federated credential. Nothing here has been created and no ARM write was made. DIG-1349, which would have built this, is moot unless the lane is revisited.
+
+The spec is kept because choosing B later should be a single decision with no further design work:
 
 | Item | Required shape |
 |------|----------------|
@@ -176,6 +178,7 @@ With retention disabled, all 33 tags stay pullable forever, including the two de
 | Credential | Owner | Canonical Store | Refresh Path | Detector |
 |------------|-------|-----------------|--------------|----------|
 | ACA inline `auth-secret` / `embed-tenants` — 4 bindings (DataTap ACA, prod + dev) | Chris Stefan (confirmed by board answer, 2026-10-06) | the Container App itself, confirmed by board answer (no Key Vault exists in the subscription) | read back with `az containerapp secret list --show-values`, then `az containerapp secret set -n digichat -g <rg> --secrets <name>=<new-value>` on one app at a time | `scripts/digichat_aca_secret_detector.py` — fingerprints in [`digichat-aca-secret-fingerprints.json`](digichat-aca-secret-fingerprints.json), expiry 2027-01-04 (see [above](#container-app-inline-secrets--and-yes-they-are-readable)) |
+| `POLICY_CHECK_READER_TOKEN` — the policy-check gate reader: fine-grained PAT `digithings-policy-check-reader`, `digithings-ai/digithings` only, `Administration: read` only, 90-day expiry. **Scoped, not created.** A GitHub App was recommended first and declined on 2026-10-07 — see [`policy-check-credential.md`](policy-check-credential.md). | Security team (Chris Stefan as the create-and-revoke backstop — a PAT is issued from his personal account, and on a one-member org that account is the org owner, so it is a red line for agents) | Planned: GitHub Actions `cron` environment secret, one home, **no Bitwarden copy**. GitHub Actions is the only consumer and write-only access to a secret is all it needs, so a second copy would be a second way to lose the credential. | Chris creates the token (`digithings`, one repository, `Administration: read`, 90 days), then `gh secret set POLICY_CHECK_READER_TOKEN --env cron --repo digithings-ai/digithings` from **stdin**, then `gh secret list --env cron` to prove it landed at that scope, then smoke it with `GH_TOKEN=… gh api repos/digithings-ai/digithings/branches/develop/protection/required_status_checks`, then revoke the previous token **last**. On a suspected leak, **revoke first** — it is per-token, so `GH_DISPATCH_TOKEN` is untouched, and revocation is a personal-account action, so it waits on Chris. | **Scoped, not live.** The credential does not exist: `gh secret list` has no `POLICY_CHECK_*` at any scope. The drift guard that would consume it is DIG-2098 decision D; until that lands there is no failing-loud check, so by the Enforcement rule below this row is a specification, not a production-ready credential. Full runbook: [`policy-check-credential.md`](policy-check-credential.md) |
 
 ---
 

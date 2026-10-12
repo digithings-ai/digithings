@@ -211,6 +211,31 @@ function errorBody(code: string, message: string, retrievalPin: string | null): 
   return { error: { code, message, details: {}, retrieval_pin: retrievalPin } };
 }
 
+/**
+ * Provenance must describe the numbers actually returned — CONTRACT §1: "badges
+ * always describe the source of the displayed numbers". A book with no market
+ * contribution must never wear a `market_api` badge.
+ */
+export function liveProvenance(book: LiveBook, tipDate: string | null): {
+  source: string;
+  tip_date: string | null;
+  contract: null;
+  seam: false;
+  marks: 'stored' | 'market_api' | 'unavailable';
+} {
+  const hasLive = book.positions.some((p) => p.isLive);
+  const hasMark = book.positions.some((p) => p.markPrice != null && p.markPrice > 0);
+  return {
+    source: hasLive || book.benchmarkHistory.length > 0
+      ? 'market_api'
+      : 'positions+public_accounting_nav_history',
+    tip_date: tipDate,
+    contract: null,
+    seam: false,
+    marks: hasLive ? 'market_api' : hasMark ? 'stored' : 'unavailable',
+  };
+}
+
 /** Register GET /kpis/live on a minimal structural registrar. */
 export function registerLiveRoutes(
   onGet: (path: string, handler: (req: Request) => Promise<Response>) => void,
@@ -234,13 +259,7 @@ export function registerLiveRoutes(
       data,
       as_of: data.quote_date,
       retrieval_pin: parsed.retrievalPin,
-      provenance: {
-        source: 'market_api',
-        tip_date: data.quote_date,
-        contract: null,
-        seam: false,
-        marks: 'market_api',
-      },
+      provenance: liveProvenance(book, data.quote_date),
     });
   });
 }
