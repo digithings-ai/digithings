@@ -1,13 +1,34 @@
 # Digi Ecosystem – common targets (Phase 0+)
 # Use: make build, make test, make test-e2e, make up, make down
 
-.PHONY: build up down test test-unit test-e2e test-baseline doc-check adr-check vault-check package up-heartbeat up-digichat down-digichat digichat-release-up digichat-release-down digichat-profile-a-up digichat-profile-a-down digichat-profile-a-bundle-up digichat-profile-a-bundle-down digichat-dev digichat-health digichat-config-check stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init model-catalog model-catalog-check clean-imports find-stale commit pr task new-task status batch-candidates parse-error hooks-install up-observability down-observability research-validate supabase-migrations-check
+.PHONY: build up down test test-unit test-e2e test-baseline doc-check adr-check vault-check package up-core up-chat up-trace up-edge up-all proxy-validate up-heartbeat up-digichat down-digichat digichat-release-up digichat-release-down digichat-profile-a-up digichat-profile-a-down digichat-profile-a-bundle-up digichat-profile-a-bundle-down digichat-dev digichat-health digichat-config-check stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init model-catalog model-catalog-check config-contract config-contract-check clean-imports find-stale commit pr task new-task status batch-candidates parse-error hooks-install up-observability down-observability research-validate supabase-migrations-check datatap-answer-check
 
 build:
 	docker compose build
 
 up:
 	docker compose up -d
+
+# Service groups (S4 / DIG-2772). Table + rationale in docker-compose.yml and docs/LOCAL_STACK.md.
+# The always-on backends (digikey, digigraph, digisearch, digiquant, digitrace, ollama, ...)
+# are NOT gated by these -- ADR-0001 keeps `make up` the zero-config path.
+# NOTE: there is deliberately no `quant` profile. digiquant + ollama are the whole of it and
+# they are always-on; giving them a profile would make `make up` silently skip them.
+.PHONY: up-core up-chat up-trace up-edge up-all proxy-validate
+up-core:
+	docker compose --profile core up -d
+up-chat:
+	docker compose --profile chat up -d
+up-trace:
+	docker compose --profile trace up -d
+up-edge:
+	docker compose --profile edge up -d
+up-all:
+	docker compose --profile core --profile chat --profile trace --profile edge up -d
+# Parse-check the Caddyfile with the image that will run it. Needs the Docker daemon.
+proxy-validate:
+	docker run --rm -v $(CURDIR)/infra/local-proxy/Caddyfile:/etc/caddy/Caddyfile:ro \
+		caddy:2.8-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 
 # Pull prebuilt GHCR images (no local Dockerfile build). See infra/self-host/ and docs/DEPLOYMENT.md.
 .PHONY: up-ghcr up-ghcr-digichat pull-ghcr
@@ -56,6 +77,20 @@ adr-check:
 # loads, not the repo-root namespace dir.
 vault-check:
 	PYTHONPATH=digivault/src python3 -P scripts/check_vault.py
+
+# Read-only probe of the DataTap production answer path. Exits 2 if it cannot see.
+#
+# GNU make returns 2 for *any* failing recipe and cannot return 1, so this target
+# cannot carry the script's exit 1 on its own. The recipe therefore echoes the
+# real status on a `datatap-answer-check: exit N` line and still fails, so make
+# never reports success for a check that found something. Anything that schedules
+# this must run `python3 scripts/datatap_answer_integrity_check.py` directly and
+# branch on its exit code, not on make's.
+datatap-answer-check:
+	@python3 scripts/datatap_answer_integrity_check.py; \
+	code=$$?; \
+	echo "datatap-answer-check: exit $$code"; \
+	exit $$code
 
 # Coverage for Phase 1 code (digigraph + digiquant + digitrace). Requires: pip install -e "digigraph[dev]" -e "digiquant[dev]" -e "digitrace"
 test-cov:
@@ -226,6 +261,15 @@ model-catalog:
 model-catalog-check:
 	python3 scripts/refresh_model_catalog.py --check
 
+# Render the config contract (config/contract/*.yaml) into .env.example,
+# wrangler [vars] blocks, and config/generated/compose-contract.env (DIG-2758 S1).
+config-contract:
+	python3 scripts/render_config_contract.py
+
+# CI drift guard. Network-free — re-renders in memory and diffs. S9 consumes this.
+config-contract-check:
+	python3 scripts/render_config_contract.py --check
+
 # Validate research env + Supabase baseline row + graph compilation before a real run.
 # Fail-fast house: no provider pings — provider errors surface from the real run.
 # Usage: make research-validate              (full check)
@@ -344,10 +388,58 @@ secrets-scan:
 secrets-audit:
 	python3 scripts/secrets_audit.py --strict
 
-# Age every GitHub secret name (repo, org and the `cron` environment) and list the
-# ones past the rotation window. Names and last-written dates only — GitHub never
-# returns a value here, so this needs no credential beyond `gh`. Runs monthly in
-# `secret-staleness-check.yml`, which also files the tracking issue.
+# Age every GitHub secret name (repo, org and the `cron` environment), list the ones
+# past the rotation window, and open or update one tracking issue.
+#
+# Run this by hand, from a shell whose `gh auth` token carries `repo` (and
+# `admin:org`, for the org level). It is deliberately NOT automated: the Actions
+# secrets endpoints need a token with the `repo` scope, which a workflow's
+# GITHUB_TOKEN never has, so from CI this script would read nothing. The monthly
+# `secret-staleness-check.yml` run therefore does the environment-gate drift half
+# only, via `--gates-only` (Paperclip DIG-477, option D). Reads names and
+# last-written dates only — GitHub never returns a value here.
 .PHONY: secrets-staleness
 secrets-staleness:
-	python3 scripts/secret_staleness_check.py
+	python3 scripts/secret_staleness_check.py --open-issue
+
+# --- local self-host stack (DIG-2775, S7) ------------------------------------
+# One command: `make local-stack` (alias `dt up`) brings up the local
+# self-host stack and refuses to report success unless the health gate passes.
+#
+# This block is additive and self-contained. The targets delegate to
+# `scripts/dt`; the preflight, secrets render, supabase, compose, wrangler
+# dev, proxy and seed artefacts it calls are owned by slices S1-S6 and are
+# SKIPPED (never failed) while they are still open PRs.
+#
+# Local check only, like the other stack targets above. CI parity is S9
+# (DIG-2777); the gate reuses this same code path via `local-stack-health`.
+.PHONY: local-stack local-stack-down local-stack-status local-stack-seed
+.PHONY: local-stack-reset local-stack-health local-stack-preflight local-stack-urls
+local-stack:
+	./scripts/dt up --profile $(or $(PROFILE),core)
+
+local-stack-down:
+	./scripts/dt down --profile $(or $(PROFILE),core)
+
+local-stack-status:
+	./scripts/dt status --profile $(or $(PROFILE),core)
+
+local-stack-seed:
+	./scripts/dt seed --profile $(or $(PROFILE),core)
+
+# Destructive: drops and rebuilds the local database. Requires SEED=... to set
+# the deterministic seed; RESET_YES=1 confirms, because `dt reset` otherwise
+# exits 2 without it.
+local-stack-reset:
+	./scripts/dt reset --profile $(or $(PROFILE),core) $(if $(SEED),--seed $(SEED),) $(if $(RESET_YES),--yes,)
+
+# The gate alone. Exits nonzero on any failure; `--require-all` additionally
+# fails on a skipped check, so CI can demand that nothing went unverified.
+local-stack-health:
+	./scripts/dt status --profile $(or $(PROFILE),core) $(if $(REQUIRE_ALL),--require-all,)
+
+local-stack-preflight:
+	./scripts/dt preflight
+
+local-stack-urls:
+	./scripts/dt urls --profile $(or $(PROFILE),core)

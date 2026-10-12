@@ -32,6 +32,7 @@ import {
   getTodayEvents,
   getUpcomingEvents,
   getBriefs,
+  resolveCanonicalRunDate,
 } from '@/lib/twelve-x/fetch';
 import { selectLatestCompleteConsensus } from '@/lib/twelve-x/consensus-derive';
 import { isTwelveXConfigured } from '@/lib/twelve-x/supabase';
@@ -155,6 +156,8 @@ interface TwelveXData {
   todayBriefs: FxBriefRow[];
   todayEvents: FxEconomicCalendarRow[];
   researchBriefs: FxBriefRow[];
+  /** Latest run_date in `fx_research_history` — the base-table clock. See resolveCanonicalRunDate. */
+  researchRunDate: string | null;
   divergenceByCurrency: Record<string, FxConsensusDivergence>;
   ideaEval: FxIdeaEvalRow[];
   /** Raw (un-netted) eval rows for the track-record tab's honest carried count. */
@@ -344,13 +347,29 @@ export default function TwelveXClient() {
         // The raw rows are a superset: net the carried boards locally so the
         // page fetches fx_idea_eval once instead of twice.
         const ideaEval = netCarriedIdeas(ideaEvalRaw);
-        const opinionsDate = intelligence[0]?.run_date ?? digest?.run_date ?? null;
-        const intelRunDate = intelligence[0]?.run_date ?? undefined;
+        // Resolve the canonical run ONCE, before any per-day fetch, so every
+        // below query keys off the same date. `getBriefs` orders by run_date
+        // desc, so row 0 carries the latest run_date in `fx_research_history` —
+        // the base table, and the only one of the four guaranteed a row for a
+        // session that actually ran.
+        //
+        // NB the consensus candidate MUST come from `selectLatestCompleteConsensus`
+        // and not from `consensusSeries[0]`: `getConsensusTimeSeries` orders
+        // run_date ASCENDING, so its row 0 is the OLDEST run in the series.
+        const latestConsensus = selectLatestCompleteConsensus(consensusSeries);
+        const researchRunDate = researchBriefs[0]?.run_date ?? null;
+        const canonical = resolveCanonicalRunDate({
+          research: researchRunDate,
+          digest: digest?.run_date,
+          consensus: latestConsensus[0]?.run_date ?? null,
+          confluence: intelligence[0]?.run_date,
+        });
         const [eventOpinions, intelligenceWhy] = await Promise.all([
-          opinionsDate ? getEventOpinions(opinionsDate) : Promise.resolve([]),
-          getIntelligenceWhy(intelRunDate),
+          canonical ? getEventOpinions(canonical) : Promise.resolve([]),
+          // Stays confluence-keyed: "why" explains the confluence setups, and a
+          // flat session legitimately has none for the canonical date.
+          getIntelligenceWhy(intelligence[0]?.run_date ?? undefined),
         ]);
-        const canonical = intelligence[0]?.run_date ?? digest?.run_date ?? null;
         const [tradeIdeas, tradeIdeaHistory, todayBriefs, todayEvents, divergenceByCurrency] = canonical
           ? await Promise.all([
               getTradeIdeas(canonical),
@@ -361,7 +380,6 @@ export default function TwelveXClient() {
             ])
           : [[], [], [], await getTodayEvents(), {}];
         if (cancelled) return;
-        const latestConsensus = selectLatestCompleteConsensus(consensusSeries);
         setData({
           digest,
           consensusSeries,
@@ -376,6 +394,7 @@ export default function TwelveXClient() {
           todayBriefs,
           todayEvents,
           researchBriefs,
+          researchRunDate,
           divergenceByCurrency,
           ideaEval,
           ideaEvalRaw,
@@ -415,11 +434,18 @@ export default function TwelveXClient() {
     [data?.consensusSeries]
   );
 
-  // The single canonical "as-of" run the workspace reports, preferring the
-  // digest's run, then intelligence, then the latest consensus run.
+  // The single canonical "as-of" run the workspace reports. Shares ONE resolver
+  // with the briefs rail above, so the DatePager and the Today rail can never
+  // disagree about which day is today (they did: Oct 6 vs Oct 7, 2026).
   const canonicalRunDate = useMemo(
-    () => data?.digest?.run_date ?? intelligenceDate ?? latestConsensusDate,
-    [data?.digest?.run_date, intelligenceDate, latestConsensusDate]
+    () =>
+      resolveCanonicalRunDate({
+        research: data?.researchRunDate,
+        digest: data?.digest?.run_date,
+        consensus: latestConsensusDate,
+        confluence: intelligenceDate,
+      }),
+    [data?.researchRunDate, data?.digest?.run_date, latestConsensusDate, intelligenceDate]
   );
 
   const watchlist = useWatchlist();

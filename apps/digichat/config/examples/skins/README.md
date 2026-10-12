@@ -19,9 +19,9 @@ DIGICHAT_CONFIG_PATH=/app/config/examples/skins/claude.yaml
 DIGICHAT_CONFIG_PATH=/app/config/digichat.yaml
 ```
 
-Thread templates (`base`, clones, `base-assistant-ui`, `react-ink`) default to
+Thread templates (`base`, clones, `base-assistant-ui`) default to
 `chrome.mode: embed` so `/` redirects to `/embed` and the iframe is the product.
-Layout templates (`webpage-assistant`, `product-page-assistant`, `expo-react-native`)
-use `chrome.mode: app` so they own `/`.
+`react-ink` ships `chrome.mode: app`, joining the layout templates
+(`webpage-assistant`, `product-page-assistant`, `expo-react-native`) that own `/`.
 
 Chat still goes through `POST /api/chat` (BFF). Secrets stay in env, not these files.

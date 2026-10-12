@@ -98,10 +98,9 @@ class BrowserConfig:
 
     Attributes:
         headless:         Launch headless (always True in CI/scrape contexts).
-        user_agent:       Optional UA string set on the browser context. TE's
-                          scraper sets a desktop-Chrome UA to avoid bot blocks;
-                          primemarket leaves it default. ``None`` = Playwright
-                          default.
+        user_agent:       Optional UA string set on the browser context. One
+                          consumer sets a desktop-Chrome UA; the other leaves
+                          it default. ``None`` = Playwright default.
         default_timeout_ms: Per-page default timeout (ms) applied via
                           ``page.set_default_timeout``. TE uses 45_000.
         browser:          Which Playwright browser to launch (``chromium`` /

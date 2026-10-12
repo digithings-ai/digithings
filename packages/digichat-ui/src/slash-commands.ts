@@ -30,7 +30,8 @@ export type SlashId =
   | "undo"
   | "redo"
   | "mcp"
-  | "tools";
+  | "tools"
+  | "artifacts";
 
 export type SlashDef = {
   id: SlashId | string;
@@ -239,6 +240,14 @@ export const SLASH_COMMANDS: readonly SlashDef[] = [
     category: "setup",
   },
   {
+    id: "artifacts",
+    names: ["/artifacts"],
+    needsArg: false,
+    hint: "Files this session produced",
+    kind: "action",
+    category: "session",
+  },
+  {
     id: "sessions",
     names: ["/sessions", "/resume", "/continue"],
     needsArg: false,
@@ -324,6 +333,8 @@ export type SlashVisibility = {
   mcp?: boolean;
   /** Connected-tools palette. Hide when the install has no catalog/MCP. */
   tools?: boolean;
+  /** Artifact list for this session. Hide where there is no artifact surface. */
+  artifacts?: boolean;
 };
 
 export type ParsedSlash =
@@ -362,6 +373,7 @@ function isVisible(cmd: SlashDef, visibility?: SlashVisibility): boolean {
   if (cmd.id === "models" || cmd.id === "effort") return visibility?.models !== false;
   if (cmd.id === "mcp") return visibility?.mcp !== false;
   if (cmd.id === "tools") return visibility?.tools !== false;
+  if (cmd.id === "artifacts") return visibility?.artifacts === true;
   return true;
 }
 

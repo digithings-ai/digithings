@@ -1,5 +1,7 @@
 # Trademarks
 
+The digithings name and logo are **not yet registered**. No application has been filed as at the date of this file. Until registration is granted, no exclusive right in these marks is claimed or implied by this repository.
+
 The MIT license covers copyright only. It grants no trademark rights, and this
 file does not change that.
 

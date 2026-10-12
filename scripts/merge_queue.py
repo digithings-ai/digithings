@@ -37,9 +37,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
-from dataclasses import dataclass, field
+from collections.abc import Mapping
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -96,6 +98,7 @@ class Policy:
     delete_branch: bool
     required_checks: tuple[str, ...]
     ignored_checks: frozenset[str] = frozenset()
+    required_checks_by_repo: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
 
     def authority(self, role: str) -> Authority | None:
         return next((a for a in self.merge_authorities if a.role == role), None)
@@ -103,6 +106,35 @@ class Policy:
     def is_blocked_base(self, base: str) -> bool:
         """A base is blocked by name or by prefix, so `release/v1.2.3` is covered."""
         return any(base == b or base.startswith(f"{b}/") for b in self.blocked_bases)
+
+    def required_for(self, repo: str) -> tuple[str, ...]:
+        """The check names this repo's gate is written against.
+
+        One org owns repos whose CI reports different names for the same idea.
+        `digithings` drives every suite through reusable workflows, so GitHub reports
+        each as `<caller> / test` and names nothing `test`; `twelve-x` runs a single
+        job and does report a bare `test`. A single global list can therefore only
+        ever be right for one of them — and when it is wrong it is *silently* wrong,
+        because an unmatched required name reads exactly like a red CI run. See
+        DIG-690, where `required check 'test' has not reported` blocked all 28 open
+        PRs on digithings and nobody could tell that from CI being broken.
+
+        The per-repo entry is the required list; `required_checks` is the fallback for
+        a repo with no entry, so an unlisted repo still gets a gate. Falling back to
+        *nothing* would be the one failure that matters here — a queue that stops
+        checking is worse than one that refuses.
+        """
+        return tuple(self.required_checks_by_repo.get(repo, ())) or self.required_checks
+
+    def for_repo(self, repo: str) -> Policy:
+        """A copy whose `required_checks` are this repo's.
+
+        Resolving once here rather than passing `repo` down to every gate is what
+        keeps the resolved list and the *reported* list from diverging: `_gate_checks`
+        and `_audit_body` both read `policy.required_checks`, so the check the merge
+        depended on and the check the audit comment names cannot come from two places.
+        """
+        return replace(self, required_checks=self.required_for(repo))
 
 
 @dataclass
@@ -149,6 +181,13 @@ def load_policy(path: Path = POLICY_PATH) -> Policy:
         delete_branch=bool(defaults.get("delete_branch", True)),
         required_checks=tuple(defaults.get("required_checks", ())),
         ignored_checks=frozenset(defaults.get("ignored_checks", ())),
+        # Reject a non-string entry rather than coercing it: a typo'd check name is
+        # the exact failure DIG-690 was, and `str(42)` would turn that into a gate
+        # that silently matches nothing.
+        required_checks_by_repo={
+            str(repo): tuple(str(name) for name in names)
+            for repo, names in (raw.get("required_checks_by_repo") or {}).items()
+        },
     )
 
 
@@ -207,6 +246,61 @@ def _is_check_run(entry: dict[str, Any]) -> bool:
     Actions run, so it cannot be written by hand.
     """
     return entry.get("__typename") == "CheckRun"
+
+
+def _near_misses(unmatched: tuple[str, ...], reported: tuple[str, ...]) -> list[str]:
+    """Reported checks that share a word with a gate that matched nothing.
+
+    The point of this announcement is to be actionable without opening a second tool.
+    Dumping all 58 check names a digithings PR reports is not action — the reader
+    cannot compare that against a name they were told is wrong. Sharing a word is a
+    good enough proxy for "this is what you meant": `test` finds `digibase / test`,
+    `mypy` finds `mypy — digibase + digikey`. Word, not substring, so `test` does not
+    match `path-filter`'s neighbours and `foo_test` does not match `test`.
+    """
+    near: list[str] = []
+    for wanted in unmatched:
+        wanted_words = set(re.split(r"[^0-9A-Za-z]+", wanted.lower())) - {""}
+        if not wanted_words:
+            continue
+        for name in reported:
+            if name in near:
+                continue
+            name_words = set(re.split(r"[^0-9A-Za-z]+", name.lower())) - {""}
+            if wanted_words & name_words:
+                near.append(name)
+    return near[:4]
+
+
+def unmatched_required_checks(
+    prs: list[dict[str, Any]], required: tuple[str, ...]
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """Required names that *no* PR in the queue reports, and everything that was reported.
+
+    A required check that is missing from one PR is the case this script exists for:
+    a path-filtered workflow, a skip, a waiver — the change lands untested. A required
+    check that is missing from *every* PR is a different thing entirely: the gate is
+    naming something this repo's CI does not produce. DIG-690 was 28 open PRs, all
+    blocked on `required check 'test' has not reported`, in a repo where nothing has
+    ever reported `test` — and the message is byte-identical to the untested-PR case,
+    so the only sensible operator move was to go read CI logs that were fine.
+
+    So compare against the union of what the queue did report. Requiring every PR to
+    agree would misfire on correct behaviour (one Python-only PR legitimately has no
+    `digichat / test`), which would train operators to ignore this. The second element
+    is the reported union, so the caller can name what it should have said.
+
+    This reports; it never unblocks. A gate that cannot match must still block.
+    """
+    reported: set[str] = set()
+    for pr in prs:
+        for entry in pr.get("statusCheckRollup") or []:
+            reported.add(_check_name(entry))
+    if not reported:
+        # Nothing ran anywhere. That is CI being absent, not a naming mistake, and
+        # conflating the two would send the reader to the policy file.
+        return (), ()
+    return tuple(r for r in required if r not in reported), tuple(sorted(reported))
 
 
 def _gate_checks(pr: dict[str, Any], policy: Policy) -> list[str]:
@@ -458,6 +552,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"merge_queue: {exc}", file=sys.stderr)
         return EXIT_OPERATIONAL
 
+    # Resolve the gate to this repo's real check names before any evaluation. Every
+    # consumer below — the check gate and the audit comment — reads the resolved
+    # policy, so what the merge relied on and what the trail claims cannot diverge.
+    policy = policy.for_repo(args.repo)
+
     if args.limit < 1 or args.max_merges < 1:
         print("merge_queue: --limit and --max-merges must be >= 1", file=sys.stderr)
         return EXIT_OPERATIONAL
@@ -491,8 +590,29 @@ def main(argv: list[str] | None = None) -> int:
     try:
 
         def read_queue() -> list[Verdict]:
+            prs = fetch_queue(args.repo, args.base, args.limit)
+            # No once-per-invocation guard is needed, and that is worth stating rather
+            # than assuming: a required name reported by *no* PR means every PR fails
+            # the check gate, so nothing is eligible and `run` breaks out of its loop
+            # after this single read. An eligible PR always reports every required
+            # name, so the warning cannot coexist with a merge and cannot repeat.
+            unmatched, reported = unmatched_required_checks(prs, policy.required_checks)
+            if unmatched:
+                near = _near_misses(unmatched, reported)
+                print(
+                    f"merge_queue: this gate cannot be satisfied in {args.repo} — no open PR "
+                    "reports "
+                    + ", ".join(f"'{name}'" for name in unmatched)
+                    + ". That is a misconfigured required check, not a red build: "
+                    f"{len(reported)} distinct checks did report"
+                    + (", nearest: " + ", ".join(f"'{n}'" for n in near) if near else "")
+                    + f". Fix the name in {POLICY_PATH.name} "
+                    f"(required_checks_by_repo['{args.repo}'], or defaults.required_checks); "
+                    f"`gh pr checks <n> --repo {args.repo}` lists what a PR actually ran.",
+                    file=sys.stderr,
+                )
             return evaluate_all(
-                fetch_queue(args.repo, args.base, args.limit),
+                prs,
                 policy,
                 base=args.base,
                 acting_role=args.acting_role,
