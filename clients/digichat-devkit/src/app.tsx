@@ -1,15 +1,6 @@
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react";
 import { useEffect, useRef, useState } from "react";
-import {
-  MARK_COLS,
-  MARK_ROWS,
-  REVEAL_MS,
-  glintCell,
-  markDirection,
-  markElapsed,
-  markLines,
-  revealedColumns,
-} from "./mark";
+import { MARK_COLS, MARK_ROWS, DigichatMark } from "./wordmark";
 import { GLYPH } from "./glyphs";
 import {
   activateStrip,
@@ -366,7 +357,7 @@ export function App() {
     <box width="100%" height="100%" flexDirection="column" backgroundColor={BG}>
       <box height={MARK_ROWS + 1} flexDirection="row" border={["bottom"]} borderColor={HAIR} backgroundColor={BG}>
         <box paddingLeft={1} paddingRight={2} justifyContent="center">
-          <DigichatMark accent={accent} />
+          <DigichatMark />
         </box>
         <box flexGrow={1} flexDirection="column" justifyContent="center">
           <box flexDirection="row">
@@ -464,41 +455,6 @@ export function App() {
         <text fg={MUTE}>tab focus   ↑↓ move   space toggle   enter send   ←→ cycle   esc back   q quit</text>
         {note ? <text fg={SOFT}>{`   ${note}`}</text> : null}
       </box>
-    </box>
-  );
-}
-
-function DigichatMark({ accent }: { accent: string }) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 100);
-    return () => clearInterval(timer);
-  }, []);
-  const elapsed = markElapsed(now);
-  const revealing = elapsed < REVEAL_MS;
-  const lines = markLines(revealedColumns(elapsed));
-  const glint = glintCell(elapsed);
-  return (
-    <box width={MARK_COLS} height={MARK_ROWS} flexDirection="column">
-      {lines.map((line, row) => (
-        <text key={row}>
-          {[...line].map((ch, col) => {
-            const glinting = glint !== null && glint.row === row && glint.col === col;
-            const fg = glinting
-              ? accent
-              : revealing && ch !== " "
-                ? markDirection(row, col) === "up"
-                  ? INK
-                  : SOFT
-                : INK;
-            return (
-              <span key={col} fg={fg}>
-                {ch}
-              </span>
-            );
-          })}
-        </text>
-      ))}
     </box>
   );
 }
