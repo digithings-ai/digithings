@@ -9,10 +9,12 @@ digest of what was sent.
 The record deliberately never carries the payload. A copy of the outbound
 messages in a log file is not an audit trail, it is a second copy of the data
 with weaker access control than the database it came from. What the record
-does carry is ``HMAC-SHA256`` over the canonical outbound payload under a
+does carry is ``HMAC-SHA256`` over the canonical outbound messages under a
 pepper that never leaves the deployment, so two records can be compared for
-"same bytes on the wire" while a reader holding a candidate list cannot rank
-it. If the pepper is missing the record says ``digest_algorithm: "absent"``
+"same messages on the wire" while a reader holding a candidate list cannot
+rank it. The digest covers the ``messages`` array only, never the whole
+request kwargs: two calls with identical messages but different ``tools``,
+``temperature`` or ``model`` share a digest. If the pepper is missing the record says ``digest_algorithm: "absent"``
 rather than quietly falling back to an unkeyed hash, which would be a lookup
 table for every value that has ever been sent.
 
@@ -21,6 +23,16 @@ call that reaches the wire and ``cache_hit`` on the path where nothing left.
 That is the honest current value, and it is the evidence a later filter will be
 judged against: the day ``unscreened`` stops appearing, someone has to justify
 it.
+
+A decision is written only together with the evidence for it, in both
+directions: a record may claim ``masked`` or ``refused`` only if it names the
+categories that triggered it, and only those two may carry categories at all.
+That is what makes an empty ``category_ids`` readable. A ledger can then tell
+"screened, found nothing" (``pass``, empty) from "never screened"
+(``unscreened``, empty) -- two different answers to a data-subject request --
+and can count the ``unscreened`` rows instead of trusting them. A record that
+breaks the pairing cannot be built, and is dropped like any other unbuildable
+record: a warning, and the call proceeds.
 
 Three limits of the record, stated here so no reader over-reads it:
 
@@ -103,6 +115,14 @@ class EgressDecision(StrEnum):
     than screened-and-clean. ``PASS``, ``MASKED`` and ``REFUSED`` exist so a
     later filter has somewhere to write its verdict without changing this
     record's shape. ``CACHE_HIT`` is the no-egress path.
+
+    A decision may only be written with the evidence for it:
+    :data:`MASKED` and :data:`REFUSED` are the only values that may carry
+    ``category_ids``, and they must carry at least one. ``PASS`` is the value
+    for "a screen ran and hit nothing", so it pairs with an empty
+    ``category_ids`` -- which is exactly what separates it from
+    :data:`UNSCREENED`. :meth:`EgressRecord._validate_shape` enforces the
+    pairing; it does not screen anything.
     """
 
     UNSCREENED = "unscreened"
@@ -191,6 +211,29 @@ class EgressRecord(BaseModel):
         elif self.destination == NO_EGRESS_DESTINATION:
             raise ValueError("only a cache hit may use the 'none' destination")
 
+        # A decision is a claim about a screen, so it is only writable together
+        # with that screen's evidence. `masked` and `refused` assert categories
+        # were hit and must name them; every other value asserts nothing was
+        # hit, so carrying any would contradict the claim.
+        #
+        # This is what makes an empty `category_ids` readable. Before the rule a
+        # hit set could sit on an `unscreened` row, so emptiness proved nothing
+        # and no ledger could tell "screened, found nothing" from "never
+        # screened". After it, a non-empty hit set is itself proof that a screen
+        # ran and hit -- which is what lets a later filter's `pass` rows be
+        # counted instead of assumed.
+        claimed_hit = self.decision in (EgressDecision.MASKED, EgressDecision.REFUSED)
+        if claimed_hit and not self.category_ids:
+            raise ValueError(
+                "a masked or refused record must name the Art. 9 categories that "
+                "triggered it, or the decision asserts a screen with no evidence"
+            )
+        if self.category_ids and not claimed_hit:
+            raise ValueError(
+                f"only a masked or refused record may carry Art. 9 category ids; a "
+                f"{self.decision.value!r} record with categories contradicts itself"
+            )
+
         return self
 
 
@@ -216,7 +259,15 @@ def set_egress_observer(observer: EgressObserver | None) -> None:
 
 
 def canonical_payload_bytes(payload: Any) -> bytes:
-    """Serialize a payload deterministically, so digests compare across runs."""
+    """Serialize a payload deterministically, so digests compare across runs.
+
+    Deterministic for JSON-native payloads (outbound messages are dicts of
+    strings). ``default=str`` keeps an exotic value from losing the whole
+    record -- ``record_egress`` drops the record when serialization raises,
+    which is worse than a weak digest -- but its ``str()`` coercion can embed
+    a memory address, so digests over non-JSON-native values may not reproduce
+    across processes. Do not remove it without replacing that guarantee.
+    """
     return json.dumps(
         payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str
     ).encode("utf-8")
@@ -329,7 +380,7 @@ def record_egress(
 ) -> EgressRecord | None:
     """Build and emit one egress record.
 
-    ``payload`` is the outbound payload as it went on the wire -- already
+    ``payload`` is the outbound messages as they went on the wire -- already
     truncated where digillm truncates -- and is used only to derive the digest.
     It is never stored, logged, or attached to an exception. Pass
     ``payload=None`` for the no-egress path.

@@ -8,11 +8,17 @@ from pathlib import Path
 import pytest
 from digivoice.cli import Runtime, run
 from digivoice.paths import resolve_paths
-from digivoice.settings import settings_path
+from digivoice.settings import (
+    default_settings,
+    load_settings,
+    settings_path,
+)
 from digivoice.setup import (
     SETUP_MENU,
+    postprocess_menu_options,
     recommend_models,
     render_setup_overview,
+    run_interactive_setup,
     setup_public_dict,
 )
 
@@ -35,7 +41,8 @@ def test_setup_print_shows_settings_and_menu(tmp_path: Path) -> None:
     assert result.code == 0
     assert "digivoice setup" in result.stdout
     assert "stt_model" in result.stdout
-    assert "banner_density" in result.stdout
+    assert "banner_density" not in result.stdout
+    assert "banner_position" in result.stdout
     for item in SETUP_MENU:
         assert item.split(" (")[0] in result.stdout
     assert "Right Option" in result.stdout
@@ -71,7 +78,10 @@ def test_recommend_models_stub_points_at_epic() -> None:
     recs = recommend_models()
     assert recs["tiers"]
     assert any(t["model"] == "ggml-base.en" for t in recs["tiers"])
+    assert any(t["model"] == "ggml-base" for t in recs["tiers"])
     assert "#4939" in recs["pointer"]
+    assert "rewrite" in recs
+    assert len(recs["rewrite"]) >= 2
 
 
 def test_render_overview_lists_all_sections(tmp_path: Path) -> None:
@@ -80,7 +90,7 @@ def test_render_overview_lists_all_sections(tmp_path: Path) -> None:
 
     text = render_setup_overview(load_settings(paths), paths)
     assert "Models" in text and "Features" in text and "Hotkeys" in text
-    assert "Hardware" in text
+    assert "best for" in text
 
 
 def test_setup_public_dict_extends_settings_dump(tmp_path: Path) -> None:
@@ -88,7 +98,8 @@ def test_setup_public_dict_extends_settings_dump(tmp_path: Path) -> None:
     from digivoice.settings import load_settings
 
     payload = setup_public_dict(load_settings(paths), paths)
-    assert payload["banner_density"] == "peek"
+    assert "banner_density" not in payload
+    assert payload["banner_pinned"] is False
     assert payload["setup_menu"] == list(SETUP_MENU)
 
 
@@ -106,7 +117,7 @@ def test_interactive_review_save_round_trip(
     code = run_interactive_setup(paths, stdin=fake_in, stdout=fake_out)
     assert code == 0
     assert (tmp_path / "settings.json").is_file()
-    assert load_settings(paths).banner_density == "peek"
+    assert load_settings(paths).banner_density == "retract"
     assert "digivoice setup" in fake_out.getvalue()
 
 
@@ -117,18 +128,33 @@ def test_interactive_features_edit_persists(tmp_path: Path) -> None:
     from digivoice.setup import run_interactive_setup
 
     paths = resolve_paths("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)})
-    # Features → banner_density → full → Back → Review & save → Save → Quit
-    fake_in = io.StringIO("2\n4\n3\n6\n5\n1\n7\n")
+    # Features → banner_position → top-left → Back → Review & save → Save → Quit
+    # theme_mode and theme_palette sit before Back, so Back is item 9.
+    fake_in = io.StringIO("3\n5\n2\n9\n5\n1\n7\n")
     code = run_interactive_setup(paths, stdin=fake_in, stdout=io.StringIO())
     assert code == 0
-    assert load_settings(paths).banner_density == "full"
+    assert load_settings(paths).banner_position == "top-left"
+    assert "banner_density" not in (tmp_path / "settings.json").read_text(encoding="utf-8")
 
 
-def test_update_and_uninstall_are_documented_stubs(tmp_path: Path) -> None:
+def test_update_refreshes_and_uninstall_stays_a_stub(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from digivoice.models import InstallReport, InstallStep
+
+    seen: dict[str, object] = {}
+
+    def fake_run_install(**kwargs: object) -> InstallReport:
+        seen.update(kwargs)
+        return InstallReport(steps=[InstallStep(id="adapter", status="present", detail="adapter")])
+
+    monkeypatch.setattr("digivoice.cli.run_install", fake_run_install)
     runtime = _runtime(tmp_path)
     update = run(["update"], runtime)
     assert update.code == 0
-    assert "not wired yet" in update.stdout
+    assert seen["refresh"] is True
+    assert update.stdout.startswith("digivoice update\n")
+    assert "not wired yet" not in update.stdout
     uninstall = run(["uninstall"], runtime)
     assert uninstall.code == 0
     assert "not wired yet" in uninstall.stdout
@@ -190,3 +216,109 @@ def test_doctor_hammerspoon_ok_when_adapter_present(tmp_path: Path) -> None:
     found = next(c for c in report.checks if c.id == "hammerspoon")
     assert found.status == "ok"
     assert str(adapter) in found.detail
+
+
+def test_setup_print_includes_detection_and_postprocess(tmp_path: Path) -> None:
+    result = run(["setup", "--print"], _runtime(tmp_path))
+    assert result.code == 0
+    assert "word_detection" in result.stdout
+    assert "spelling_detection" in result.stdout
+    assert "Post-process" in result.stdout
+    for key in (
+        "rewrite_enabled",
+        "rewrite_preset",
+        "rewrite_model",
+        "rewrite_runner",
+        "rewrite_auto_route",
+        "rewrite_timeout_seconds",
+    ):
+        assert key in result.stdout
+    assert "off" in result.stdout
+    assert "as spoken" in result.stdout
+    assert "ggml-tiny" in result.stdout
+    assert "qwen2.5-0.5b" in result.stdout or "rewrite" in result.stdout.casefold()
+
+
+def test_setup_menu_contains_postprocess() -> None:
+    assert "Post-process (rewrite + auto-route)" in list(SETUP_MENU)
+    assert "Features (paste, banner, detection)" in list(SETUP_MENU)
+
+
+def test_postprocess_menu_copy_is_literal() -> None:
+    options = postprocess_menu_options(default_settings().model_dump(mode="json"))
+    joined = "\n".join(options)
+    assert "Clean up after dictation" in joined
+    assert "as spoken" in joined
+    assert "Give up after" in joined
+    assert "off" in joined
+    assert "Timeout seconds" not in joined
+    assert "openrouter" not in joined.casefold()
+    assert "Local model" in joined
+    assert "suggested" in joined.casefold() or "download" in joined.casefold()
+    assert "15" in joined or "off by default" in joined.casefold()
+
+
+def test_interactive_stt_select_downloads_and_wires(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import io
+
+    from digivoice.catalog import STT_CATALOG
+
+    paths = resolve_paths("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)})
+    seen: list[str] = []
+
+    def fake_install(target_paths, entry, fetch=None, progress=None):
+        dest = Path(target_paths.models_dir) / entry.filename
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(b"weights")
+        seen.append(entry.id)
+        return str(dest)
+
+    monkeypatch.setattr("digivoice.setup.install_catalog_model", fake_install)
+    # Models → stt_model → first catalog row (tiny.en) → Back → Review & save → Save → Quit
+    fake_in = io.StringIO("1\n1\n1\n3\n5\n1\n7\n")
+    code = run_interactive_setup(paths, stdin=fake_in, stdout=io.StringIO())
+    assert code == 0
+    assert seen == [STT_CATALOG[0].id]
+    assert load_settings(paths).stt_model == STT_CATALOG[0].id
+    assert (Path(paths.models_dir) / STT_CATALOG[0].filename).is_file()
+
+
+def test_interactive_rewrite_select_downloads_and_wires(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import io
+
+    from digivoice.catalog import REWRITE_CATALOG
+
+    paths = resolve_paths("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)})
+    seen: list[str] = []
+
+    def fake_install(target_paths, entry, fetch=None, progress=None):
+        dest = Path(target_paths.models_dir) / entry.filename
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(b"gguf")
+        seen.append(entry.filename)
+        return str(dest)
+
+    monkeypatch.setattr("digivoice.setup.install_catalog_model", fake_install)
+    # Post-process → Local model → first rewrite catalog row → Back → Review → Save → Quit
+    fake_in = io.StringIO("2\n3\n1\n8\n5\n1\n7\n")
+    code = run_interactive_setup(paths, stdin=fake_in, stdout=io.StringIO())
+    assert code == 0
+    assert seen == [REWRITE_CATALOG[0].filename]
+    loaded = load_settings(paths)
+    assert loaded.rewrite_model == REWRITE_CATALOG[0].filename
+    assert loaded.rewrite_runner == "llama.cpp"
+
+
+def test_interactive_timeout_cycles_presets(tmp_path: Path) -> None:
+    import io
+
+    paths = resolve_paths("linux", tmp_path, {"DIGIVOICE_DATA_DIR": str(tmp_path)})
+    # Post-process → Give up after (cycles off→15) → Back → Review & save → Save → Quit
+    fake_in = io.StringIO("2\n6\n8\n5\n1\n7\n")
+    code = run_interactive_setup(paths, stdin=fake_in, stdout=io.StringIO())
+    assert code == 0
+    assert load_settings(paths).rewrite_timeout_seconds == 15.0
