@@ -442,7 +442,7 @@ function buildLadderRows(
  * Shape stays a separate question: `hasTradeLevels` answers "is there data",
  * this answers "may it be shown".
  */
-function isPublishableBracket(tradeLevels: FxTradeLevels | null): tradeLevels is FxTradeLevels {
+export function isPublishableBracket(tradeLevels: FxTradeLevels | null): tradeLevels is FxTradeLevels {
   return tradeLevels !== null && tradeLevels.status === 'complete';
 }
 

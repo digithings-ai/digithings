@@ -1406,6 +1406,24 @@ env:
     - docker-compose.yml
     env_example_files: []
     compose_literal: []
+- name: MARKET_DATA_URL
+  description: Base URL of the R2 market-data API serving GET /v1/market/closes and
+    GET /v1/market/tickers. dashboard-api reads it only; the dashboard client reads the
+    same host as NEXT_PUBLIC_MARKET_DATA_URL. Unset means closes resolve to an empty
+    map, so allocations marks read unavailable, benchmarks series read empty and
+    /kpis/live has no quote date (dashboard-api CONTRACT 6.7, R2-API-only, no Supabase
+    fallback).
+  secret: false
+  sources:
+    wrangler_workers:
+    - dashboard-api
+    - digithings-stack-cloudflare
+    compose_files: []
+    env_example_files: []
+    compose_literal: []
+  wrangler_values:
+    dashboard-api: https://graph.digithings.ai
+    digithings-stack-cloudflare: https://graph.digithings.ai
 - name: NEXT_PUBLIC_DIGICHAT_TRACE_UI
   description: Browser-visible twin of DIGICHAT_TRACE_UI.
   secret: false

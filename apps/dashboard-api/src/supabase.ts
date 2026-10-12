@@ -23,7 +23,7 @@
 import type { AllocationPositionInput, MarketCloseFill } from './allocations';
 import type { PortfolioNavTipInput } from './portfolio';
 import type { BriefBook, BriefDeps } from './brief';
-import type { BenchmarksBook, BenchmarksDeps } from './benchmarks';
+import { marketClosesHttpIssue, type BenchmarksBook, type BenchmarksDeps } from './benchmarks';
 import type { PerformanceBook, PerformanceDeps, PerformanceWindow } from './performance';
 import type { LiveBook, LiveDeps } from './kpis-live';
 import type { LedgerBook } from './ledger';
@@ -430,28 +430,43 @@ export function createSupabaseSource(env: SupabaseEnv): SupabaseSource {
       if (!book) return null;
       const w = navWindow(book.navRows.map((r) => ({ date: r.date, nav: r.nav })));
       const history = w == null ? [] : await loadBenchmarkHistory(env, 'SPY', w.from, w.to);
+      const held = book.positions.filter((p) => p.ticker !== 'CASH');
+      // Live lane (contract §6.5): `effectivePrice` is the best price the server
+      // can see — a market close at least as fresh as the published mark, else
+      // the mark itself. `isLive` is what `derivePriceAsOfDate` and
+      // `computeLiveVsMarkPct` key on, so it must be earned, never assumed.
+      const needy = held.filter((p) => p.entryPrice != null).map((p) => p.ticker);
+      const closes =
+        w == null || needy.length === 0
+          ? new Map<string, MarketCloseFill>()
+          : await loadMarketClosesMap(env, needy, w.from, w.to);
       return {
-        positions: book.positions
-          .filter((p) => p.ticker !== 'CASH')
-          .map((p) => ({
+        positions: held.map((p) => {
+          const mark = p.currentPrice ?? null;
+          const markAsOf = p.metricsAsOf ?? null;
+          const close = closes.get(p.ticker);
+          const isLive = close != null && (markAsOf == null || close.asOf >= markAsOf);
+          return {
             ticker: p.ticker,
             weightPct: typeof p.weightActual === 'number' ? p.weightActual : 0,
-            markPrice: p.currentPrice ?? null,
-            effectivePrice: p.currentPrice ?? null,
-            isLive: false,
-            metricsAsOf: p.metricsAsOf ?? null,
-            livePriceDate: null,
-          })),
+            markPrice: mark,
+            effectivePrice: isLive && close ? close.price : mark,
+            isLive,
+            metricsAsOf: markAsOf,
+            livePriceDate: isLive && close ? close.asOf : null,
+          };
+        }),
         navHistory: book.navRows.map((r) => ({
-        date: r.date,
-        nav: r.nav,
-        invested_pct: r.investedPct ?? null,
-        cash_pct: r.cashPct ?? null,
-        day_return_pct: r.dayReturnPct ?? null,
-        source: r.source ?? null,
-        contract: (r.contract ?? null) as string | null,
-        series_seam: r.seriesSeam ?? false,
-      })),
+          date: r.date,
+          nav: r.nav,
+          invested_pct: r.investedPct ?? null,
+          cash_pct: r.cashPct ?? null,
+          day_return_pct: r.dayReturnPct ?? null,
+          source: r.source ?? null,
+          contract: (r.contract ?? null) as string | null,
+          series_seam: r.seriesSeam ?? false,
+        })),
+
         benchmarkHistory: history,
         benchmarkTicker: 'SPY',
       };
@@ -468,31 +483,56 @@ export function createSupabaseSource(env: SupabaseEnv): SupabaseSource {
       );
       if (inWindow.length === 0) return null;
       const dates = inWindow.map((r) => r.date).sort();
+      // The base URL is worker env, not a constant: an unset MARKET_DATA_URL
+      // is the one cause that turns every market read into an empty map, so it
+      // is named before any request is attempted.
+      const base = marketBase(env);
+      if (!base) {
+        return {
+          navDates: dates,
+          marketCloses: {},
+          marketUniverse: null,
+          marketIssue: 'market_url_unset',
+        };
+      }
       const universe = await loadMarketUniverse(env);
-      const tickers = universe ?? [];
+      if (!universe) {
+        return {
+          navDates: dates,
+          marketCloses: {},
+          marketUniverse: null,
+          marketIssue: 'market_universe_unavailable',
+        };
+      }
       const marketCloses: Record<string, { date: string; close: number }[]> = {};
-      if (tickers.length > 0) {
-        const base = marketBase(env);
+      let marketIssue: string | null = null;
+      for (let i = 0; i < universe.length; i += MAX_TICKERS_PER_REQUEST) {
+        const batch = universe.slice(i, i + MAX_TICKERS_PER_REQUEST);
+        const query =
+          `tickers=${batch.map((t) => encodeURIComponent(t)).join(',')}` +
+          `&from=${dates[0]}&to=${dates[dates.length - 1]}`;
+        let body: { rows?: MarketCloseRow[] };
         try {
-          for (let i = 0; i < tickers.length; i += MAX_TICKERS_PER_REQUEST) {
-            const batch = tickers.slice(i, i + MAX_TICKERS_PER_REQUEST);
-            const query =
-              `tickers=${batch.map((t) => encodeURIComponent(t)).join(',')}` +
-              `&from=${dates[0]}&to=${dates[dates.length - 1]}`;
-            const res = await fetch(`${base}/v1/market/closes?${query}`);
-            if (!res.ok) break;
-            const body = (await res.json()) as { rows?: MarketCloseRow[] };
-            for (const row of body.rows ?? []) {
-              const price = Number(row.close);
-              if (!Number.isFinite(price)) continue;
-              (marketCloses[row.ticker] ??= []).push({ date: row.date, close: price });
-            }
+          const res = await fetch(`${base}/v1/market/closes?${query}`);
+          if (!res.ok) {
+            // One failed batch is a cause, not a truncation: name the status.
+            marketIssue ??= marketClosesHttpIssue(res.status);
+            break;
           }
+          body = (await res.json()) as { rows?: MarketCloseRow[] };
         } catch {
-          // Honest-empty: builders fall back to keys, never to Supabase.
+          // Honest-empty stays, but the cause now travels with the bundle so
+          // the route badges it instead of inventing a date-alignment story.
+          marketIssue ??= 'market_closes_unreachable';
+          break;
+        }
+        for (const row of body.rows ?? []) {
+          const price = Number(row.close);
+          if (!Number.isFinite(price)) continue;
+          (marketCloses[row.ticker] ??= []).push({ date: row.date, close: price });
         }
       }
-      return { navDates: dates, marketCloses, marketUniverse: universe };
+      return { navDates: dates, marketCloses, marketUniverse: universe, marketIssue };
     },
   };
   return { envelope, brief, performance, live, benchmarks, ledger };

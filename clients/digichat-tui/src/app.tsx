@@ -40,6 +40,7 @@ import {
   type UiChatMessage,
 } from "./read";
 import { ATTACH, BG, DANGER, FILL, HAIR, INK, MUTE, NEW_CHAT, SCROLL, SEND, SOFT, STOP, VOICE } from "./theme";
+import { FRAME, reducedMotion, STILL_SPINNER } from "./motion";
 import { DigichatWordmark, WORDMARK_ROWS } from "./wordmark";
 
 const API = chatBaseUrl();
@@ -147,21 +148,25 @@ export function App() {
     void load();
   }, []);
 
-  useEffect(() => {
-    const timer = setInterval(() => setTick((value) => value + 1), 80);
-    return () => clearInterval(timer);
-  }, []);
+  const still = reducedMotion();
 
   useEffect(() => {
+    if (still) return;
+    const timer = setInterval(() => setTick((value) => value + 1), FRAME.spinner);
+    return () => clearInterval(timer);
+  }, [still]);
+
+  useEffect(() => {
+    if (still) return;
     let timer = 0;
     const start = setTimeout(() => {
-      timer = setInterval(() => setCaretOn((on) => !on), 530);
-    }, 530);
+      timer = setInterval(() => setCaretOn((on) => !on), FRAME.caret);
+    }, FRAME.caret);
     return () => {
       clearTimeout(start);
       clearInterval(timer);
     };
-  }, []);
+  }, [still]);
 
   const welcome = screen?.welcome === true && !ui.pane;
   useEffect(() => {
@@ -169,16 +174,20 @@ export function App() {
       setReveal(0);
       return;
     }
+    if (still) {
+      setReveal(WELCOME.length);
+      return;
+    }
     setReveal(0);
     const timer = setInterval(() => {
       setReveal((n) => (n >= WELCOME.length ? n : n + 1));
-    }, 16);
-    const stop = setTimeout(() => clearInterval(timer), WELCOME.length * 16 + 40);
+    }, FRAME.type);
+    const stop = setTimeout(() => clearInterval(timer), WELCOME.length * FRAME.type + 40);
     return () => {
       clearInterval(timer);
       clearTimeout(stop);
     };
-  }, [welcome]);
+  }, [welcome, still]);
 
   const applyClosed = (kind: "empty" | "error", note: string) => {
     if (!note) return;
@@ -387,7 +396,7 @@ export function App() {
 
   const rail = Math.min(28, Math.max(18, Math.floor(width * 0.28)));
   const threadWidth = Math.max(24, width - rail - 4);
-  const spinner = spinnerFrame(tick);
+  const spinner = still ? STILL_SPINNER : spinnerFrame(tick);
   const messages = screen?.messages ?? [];
   const slash = paletteRows(ui.draft, ui.prefs);
   const mentions = mentionRows(ui.draft, toolNames(messages));

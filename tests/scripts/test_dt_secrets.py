@@ -53,6 +53,12 @@ def entries(manifest) -> list[dict]:
     return manifest["secrets"]
 
 
+@pytest.fixture(scope="module")
+def tool():
+    """The tool as a module, so its internals can be exercised directly."""
+    return load_tool()
+
+
 def run(*argv: str, expect: int | None = None):
     proc = subprocess.run(
         [PY, str(TOOL), *argv], capture_output=True, text=True, cwd=REPO, check=False
@@ -142,6 +148,74 @@ def test_every_generated_secret_declares_how_it_is_made(manifest, entries):
             assert "generate" not in e, f"{e['name']} both aliases and generates"
         if "generate_field" in e:
             assert "generate" in e, e["name"]
+
+
+def test_supabase_keychain_generation_pins_its_cwd(manifest, entries):
+    """`supabase status` resolves its project from the child process cwd.
+
+    Its own --workdir flag does not redirect container-name resolution
+    (measured on CLI v2.117.0), so the directory has to be declared and applied.
+    """
+    e = next(x for x in entries if x["name"] == "CORE_SUPABASE_SERVICE_KEY")
+    assert "supabase" in e["generate"], e
+    assert e.get("generate_cwd"), "generated-local supabase entry declares no generate_cwd"
+
+
+def test_generate_cwd_prefers_the_env_override(tool, monkeypatch, tmp_path):
+    """The committed contract stays portable; the host points it at its own dir."""
+    outside = tmp_path / "core-local" / "supabase"
+    outside.mkdir(parents=True)
+    monkeypatch.setenv("DT_GENERATE_CWD_CORE_SUPABASE_SERVICE_KEY", str(outside))
+    assert tool.generate_cwd("CORE_SUPABASE_SERVICE_KEY", {}) == str(outside)
+
+
+def test_generate_cwd_resolves_a_relative_path_against_the_cwd(tool, monkeypatch, tmp_path):
+    monkeypatch.delenv("DT_GENERATE_CWD_CORE_SUPABASE_SERVICE_KEY", raising=False)
+    monkeypatch.chdir(tmp_path)
+    got = tool.generate_cwd("CORE_SUPABASE_SERVICE_KEY", {"generate_cwd": "sub/dir"})
+    assert got == str(tmp_path / "sub" / "dir")
+
+
+def test_generate_cwd_is_none_when_the_entry_declares_none(tool, monkeypatch):
+    monkeypatch.delenv("DT_GENERATE_CWD_ANY", raising=False)
+    assert tool.generate_cwd("ANY", {}) is None
+
+
+def test_run_generate_runs_the_command_in_the_given_cwd(tool, tmp_path, monkeypatch):
+    """The cwd must reach the child process; this is the whole point (DIG-2959)."""
+    seen: dict[str, str] = {}
+
+    def fake_run(argv, **kwargs):
+        seen["cwd"] = kwargs.get("cwd")
+        # supabase emits KEY="value"; KV_RE only matches the quoted form.
+        return subprocess.CompletedProcess(
+            argv, 0, stdout='SERVICE_ROLE_KEY="abc"\n', stderr=""
+        )
+
+    monkeypatch.setattr(tool.subprocess, "run", fake_run)
+    assert tool.run_generate(["supabase", "status"], "SERVICE_ROLE_KEY", str(tmp_path)) == "abc"
+    assert seen["cwd"] == str(tmp_path)
+
+
+def test_run_generate_names_a_missing_workdir_instead_of_blaming_the_tool(tool, monkeypatch):
+    """A missing cwd makes subprocess raise FileNotFoundError, same as a missing
+    binary. Reporting 'is not installed' would send the reader after the wrong
+    cause, so the workdir is checked first."""
+    monkeypatch.setenv("PATH", "")  # guarantee the program is not resolvable either
+    with pytest.raises(tool.RenderError, match="workdir does not exist"):
+        tool.run_generate(["definitely-not-a-tool"], "X", "/nonexistent-dir")
+
+
+def test_run_generate_surfaces_the_stderr_hint_when_a_cli_exits_zero(tool, tmp_path, monkeypatch):
+    """supabase exits 0 even when it cannot inspect its containers, so the empty
+    field must carry the tool's own complaint."""
+
+    def fake_run(argv, **kwargs):
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="No such container: x\n")
+
+    monkeypatch.setattr(tool.subprocess, "run", fake_run)
+    with pytest.raises(tool.RenderError, match="No such container"):
+        tool.run_generate(["supabase", "status"], "SERVICE_ROLE_KEY", str(tmp_path))
 
 
 def test_no_secret_reaches_a_non_renderable_source(entries):
@@ -280,6 +354,76 @@ def test_render_refuses_to_clobber_without_force(tmp_path):
     assert out.read_text() == "KEEP=me\n"
     run("render", "--no-prompt", "--only", "AUTH_SECRET", "--output", str(out), "--force", expect=0)
     assert out.read_text() != "KEEP=me\n"
+
+
+# --- DIG-2959: --force overwrites the FILE, it does not re-roll a secret -----
+#
+# DIGICHAT_POSTGRES_PASSWORD is BOTH a rendered secret and the credential an
+# existing digichat-db volume was initialised with. Re-generating it on every
+# --force breaks auth against data that already exists, which is exactly what
+# happened on the v3 run: the container came up and could not authenticate.
+
+GENERATED = "DIGICHAT_POSTGRES_PASSWORD"
+
+
+def rendered(out):
+    return dict(row.split("=", 1) for row in out.read_text().splitlines() if "=" in row)
+
+
+def test_force_preserves_an_already_rendered_generated_value(tmp_path):
+    """The regression: --force must not silently change a generated password."""
+    out = tmp_path / ".dev.vars"
+    run("render", "--no-prompt", "--only", GENERATED, "--output", str(out), expect=0)
+    first = rendered(out)[GENERATED]
+    assert first, "nothing was rendered"
+
+    run(
+        "render", "--no-prompt", "--only", GENERATED, "--output", str(out), "--force", expect=0
+    )
+    assert rendered(out)[GENERATED] == first, (
+        "--force re-generated a password an existing database volume already uses"
+    )
+
+
+def test_rotate_is_the_only_way_to_change_a_preserved_value(tmp_path):
+    """Preservation must be escapable, or the value could never be rotated."""
+    out = tmp_path / ".dev.vars"
+    run("render", "--no-prompt", "--only", GENERATED, "--output", str(out), expect=0)
+    first = rendered(out)[GENERATED]
+
+    run(
+        "render",
+        "--no-prompt",
+        "--only",
+        GENERATED,
+        "--output",
+        str(out),
+        "--force",
+        "--rotate",
+        GENERATED,
+        expect=0,
+    )
+    assert rendered(out)[GENERATED] != first, "--rotate did not change the value"
+
+
+def test_rotate_rejects_a_name_the_manifest_does_not_carry(tmp_path):
+    """A typo in --rotate must fail loudly, not silently preserve everything."""
+    out = tmp_path / ".dev.vars"
+    out.write_text(f"{GENERATED}=kept\n")
+    proc = run(
+        "render",
+        "--no-prompt",
+        "--only",
+        GENERATED,
+        "--output",
+        str(out),
+        "--force",
+        "--rotate",
+        "NOT_A_SECRET",
+        expect=2,
+    )
+    assert "NOT_A_SECRET" in proc.stderr
+    assert out.read_text() == f"{GENERATED}=kept\n", "a rejected render still wrote"
 
 
 def test_non_renderable_hosted_secrets_are_skipped(tmp_path):
