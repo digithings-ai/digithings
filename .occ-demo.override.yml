@@ -1,0 +1,18 @@
+services:
+  digichat:
+    image: digi-digichat:occ-release
+    environment:
+      - DIGICHAT_CONFIG_PATH=/app/config/examples/occ-embed.yaml
+      - DIGICHAT_HOST_OCC_TOKEN=${DIGICHAT_HOST_OCC_TOKEN}
+      - ZAMMAD_API_TOKEN=${ZAMMAD_API_TOKEN}
+    volumes:
+      - /Users/chrisstefan/Code/digithings-wt-release-occ-chat/apps/digichat/config:/app/config:ro
+  digigraph:
+    environment:
+      - DIGI_TENANT_CORPUS_MAP=${DIGI_TENANT_CORPUS_MAP}
+  digisearch-mcp:
+    environment:
+      - DIGISEARCH_MCP_HOST=0.0.0.0
+  digivault-mcp:
+    environment:
+      - DIGIVAULT_MCP_HOST=0.0.0.0
