@@ -281,6 +281,29 @@ def test_module_docstring_no_longer_documents_the_parsed_filing_schema() -> None
         assert leaked not in doc, f"module docstring still documents {leaked!r}"
 
 
+@pytest.mark.unit
+def test_fetch_boundary_refuses_url_fragment_on_any_host() -> None:
+    """The fetch boundary itself refuses a refused URL, whatever the host.
+
+    Repointing the feed constant at another aggregator relocates the violation
+    rather than resolving it, so the fragment denylist must still refuse — and
+    must refuse before the transport is touched. Added by the implementer:
+    DIG-1329 requires this guard and no other test in the suite reaches it.
+    """
+    repointed = "https://aggregator.invalid/mirror/congress/trades/latest.json"
+    assert "/congress/trades/" in congress.CODE_REFUSED_URL_FRAGMENTS
+    fetcher = _FakeFetcher([_TICKER_ROW])
+    with pytest.raises(RefusedDatasetError) as excinfo:
+        congress._fetch_feed_json(repointed, fetcher, congress.TRACKERS_ALLOWED_HOSTS)
+    assert repointed in str(excinfo.value), "refusal must name the offending url"
+    assert fetcher.calls == [], "refusal must happen before any URL is fetched"
+    # A non-refused feed url on the allowlisted host is untouched.
+    ok_url = "https://raw.githubusercontent.com/LuxAlgo/market-trackers-data/main/insider/x.json"
+    ok_fetcher = _FakeFetcher([_TICKER_ROW])
+    congress._fetch_feed_json(ok_url, ok_fetcher, congress.TRACKERS_ALLOWED_HOSTS)
+    assert ok_fetcher.calls == [ok_url]
+
+
 # --- Unchanged behaviour: the pure row→payload mapper -----------------------
 
 
