@@ -206,6 +206,11 @@
   line-height: 1.375rem;
   field-sizing: content;
   box-sizing: border-box;
+  /* 3-5 rows then scroll (padding-block 0.2rem each side). */
+  max-height: calc(5 * 1.375rem + 0.4rem);
+  overflow-y: auto;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
 }
 
 .digichat-thread .aui-composer-input:placeholder-shown {
@@ -233,8 +238,12 @@
   min-height: 1lh;
   padding-block: 0;
   line-height: 1.375rem;
+  /* Grow to 5 rows, then scroll; long input wraps instead of running right. */
+  max-height: calc(5 * 1.375rem);
   overflow-x: hidden;
-  overflow-y: hidden;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
 }
 
 .digichat-launcher [data-slot="aui_composer-shell"][data-layout="compact"] .aui-composer-input:placeholder-shown {
