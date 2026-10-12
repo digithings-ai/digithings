@@ -29,7 +29,7 @@ import logging
 import os
 import urllib.error
 import urllib.request
-from typing import Any
+from typing import Any  # score:allow untyped any — JSON request/response payloads
 
 from scripts.zammad_mcp.exports import (
     EXPORT_ROW_LIMIT,

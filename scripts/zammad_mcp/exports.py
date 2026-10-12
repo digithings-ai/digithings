@@ -51,7 +51,7 @@ import io
 import json
 from collections import Counter
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any  # score:allow untyped any — Zammad JSON ticket rows
 
 from scripts.zammad_mcp.formatting import _counts_line, _field, _parse_timestamp
 
