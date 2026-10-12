@@ -317,6 +317,8 @@ async function dispatchWatch(
  * skipped 202 responses are successful. Probe jobs fetch public URLs in this
  * Worker. DRY_RUN=1 logs and does not call. A job id in GITHUB_OVERRIDE_JOBS
  * uses workflow_dispatch and logs github_override.
+ * opts.args reaches every dispatch path: on a GitHub row it overrides the
+ * row's static inputs per key, on a container row it is sent as args.
  */
 export async function dispatch(
   env: Env,
@@ -337,7 +339,7 @@ export async function dispatch(
         }),
       );
     }
-    return dispatchGithub(env, job, cron);
+    return dispatchGithub(env, job, cron, opts.args ?? {});
   }
   if (job.kind === "probe") {
     return dispatchProbe(env, job, cron);
@@ -478,7 +480,16 @@ export async function dispatchWorkflow(
   return postGithub(env, url, body, at);
 }
 
-async function dispatchGithub(env: Env, job: Job, cron: string): Promise<DispatchResult> {
+async function dispatchGithub(
+  env: Env,
+  job: Job,
+  cron: string,
+  args: Record<string, string> = {},
+): Promise<DispatchResult> {
+  // A /kick arg is what the caller asked for right now, so it wins over the
+  // row's static value. Keys the caller did not mention keep the row's value,
+  // so a partial override cannot silently blank the rest of the inputs.
+  const inputs: Record<string, string> = { ...(job.inputs ?? {}), ...args };
   if (job.kind !== "repository_dispatch") {
     if (!job.workflow || !job.ref) {
       throw new Error(`job ${job.id}: workflow_dispatch requires workflow and ref`);
@@ -489,7 +500,7 @@ async function dispatchGithub(env: Env, job: Job, cron: string): Promise<Dispatc
       repo: job.repo,
       workflow: job.workflow,
       ref: job.ref,
-      inputs: job.inputs ?? {},
+      inputs,
     });
   }
 
@@ -497,7 +508,7 @@ async function dispatchGithub(env: Env, job: Job, cron: string): Promise<Dispatc
     throw new Error(`job ${job.id}: repository_dispatch requires event_type`);
   }
   const url = repositoryDispatchUrl(job.repo);
-  const body: Record<string, unknown> = { event_type: job.event_type, client_payload: {} };
+  const body: Record<string, unknown> = { event_type: job.event_type, client_payload: inputs };
 
   if (env.DRY_RUN === "1") {
     logLine({
