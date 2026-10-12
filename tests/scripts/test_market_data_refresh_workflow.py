@@ -474,8 +474,14 @@ class FakeCoreClient:
         self._table = name
         return self
 
-    def upsert(self, rows: list[dict], on_conflict: str | None = None) -> "FakeCoreClient":
-        self.calls.append({"table": self._table, "rows": list(rows), "on_conflict": on_conflict})
+    def upsert(
+        self, rows: list[dict], on_conflict: str | None = None, **kwargs: Any
+    ) -> "FakeCoreClient":
+        # `**kwargs` mirrors the real supabase-py `upsert` surface, so writers that pass
+        # `returning=` (DIG-1835 lane S) are not rejected by this fake.
+        self.calls.append(
+            {"table": self._table, "rows": list(rows), "on_conflict": on_conflict, **kwargs}
+        )
         return self
 
     def execute(self) -> Any:
@@ -526,6 +532,7 @@ def test_core_mirror_writes_only_mirrored_sources() -> None:
     call = client.calls[0]
     assert call["table"] == "macro_series_observations"
     assert call["on_conflict"] == "source,series_id,obs_date"
+    assert call["returning"] == "minimal"
     assert {r["series_id"] for r in call["rows"]} == {"FX/EUR"}
     assert all(r["source"] == "yahoo" and r["unit"] == "fx" for r in call["rows"])
     assert all(

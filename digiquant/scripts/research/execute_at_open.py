@@ -33,6 +33,7 @@ def _ensure_importable() -> None:
 # Bootstrap before importing digiquant packages — this file is also a standalone script.
 _ensure_importable()
 from digiquant.dashboard.tenancy import house_workspace_id  # noqa: E402
+from digiquant.portfolio.ledger_replay import fetch_ledger_state  # noqa: E402
 from digiquant.portfolio.models.portfolio_ledger import OrderRejectionReason  # noqa: E402
 from digiquant.portfolio.models.position_event import PositionEventKind  # noqa: E402
 from digiquant.research.data.queries import (  # noqa: E402
@@ -357,20 +358,59 @@ def _event_tickers_for_date(sb, execution_date: str) -> Set[str]:
     return out
 
 
-def _prior_position_weight(sb, prior_date: Optional[str], ticker: str) -> Optional[float]:
-    if not prior_date:
-        return None
+def _comparison_book_weights(sb, book_date: Optional[str]) -> Dict[str, Optional[float]]:
+    """DIG-2816: the prior book anchored to the ``position_events`` ledger.
+
+    ``_book_weights`` returns what the last writer *persisted* into
+    ``positions``. That table is a drift-carrying ACTUAL written by several
+    independent writers with no check against the ledger, so a stale row silently
+    becomes the comparison basis for every ``prev_weight_pct`` this file writes —
+    the 28-Sep events replaying the 25-Sep rebalance. ``position_events`` is the
+    ledger of INTENDED targets, so it wins wherever the two disagree.
+
+    Fail-closed by construction: when the ledger is missing, unreadable, empty or
+    carries no usable target, this returns the stored ``positions`` book unchanged,
+    i.e. byte-for-byte pre-DIG-2816 behaviour. It never invents a weight and never
+    zeroes one. It also never ADDS a ledger-only ticker — a name the ledger mentions
+    but the book does not hold was not held, and inventing the holding would put a
+    fabricated ``prev_weight_pct`` into the ledger itself. Such rows are reported by
+    the writers' reconciliation as ``ledger_only`` instead.
+
+    Values stay ``Optional[float]``: a ``positions`` row whose ``weight_pct`` is NULL
+    must remain ``None``, because ``_event_kind_from_order_delta`` treats ``None`` as
+    "no prior book" (the lot side then decides OPEN vs ADD) and ``0.0`` as a real
+    prior weight. Collapsing the two here would reclassify events.
+    """
+    if not book_date:
+        return {}
     res = (
-        _eq_house(sb.table("positions").select("weight_pct"))
-        .eq("date", prior_date)
-        .eq("ticker", ticker)
-        .limit(1)
-        .execute()
+        _eq_house(sb.table("positions").select("ticker,weight_pct")).eq("date", book_date).execute()
     )
-    rows = getattr(res, "data", None) or []
-    if not rows:
-        return None
-    return _parse_pct(rows[0].get("weight_pct"))
+    out: Dict[str, Optional[float]] = {}
+    for row in getattr(res, "data", None) or []:
+        if not isinstance(row, dict):
+            continue
+        tk = row.get("ticker")
+        if not tk or str(tk).upper() == "CASH":
+            continue
+        out[str(tk).upper()] = _parse_pct(row.get("weight_pct"))
+
+    state = fetch_ledger_state(sb, _house_id(), book_date)
+    if not state.covered:
+        return out
+    anchored: List[str] = []
+    for tk, target in state.targets.items():
+        if tk not in out:
+            continue
+        out[tk] = target.weight_pct
+        anchored.append(tk)
+    print(
+        f"🔎 prior-book ledger anchor: basis={book_date} anchored={len(anchored)}"
+        f"/{len(state.targets)} ledger_targets applied={state.applied}"
+        f" ignored={state.ignored} future={state.future}"
+        f" unusable_weight={state.unusable_weight} exited={len(state.exited)}"
+    )
+    return out
 
 
 # Compatibility projection labels (#2422 / Task 2.5). Historical prose rows stay
@@ -420,6 +460,10 @@ def _hold_events_for_positions_not_in_rebalance(
     )
     rows = getattr(res, "data", None) or []
     prior_d = _prior_book_date(sb, execution_date) if prior_date is None else prior_date
+    # DIG-2816: the comparison book is ledger-anchored, so a HOLD row's pp move is
+    # book-to-book against the intended targets, not against whatever the last
+    # ``positions`` writer happened to persist.
+    comparison_w = _comparison_book_weights(sb, prior_d)
     out: List[Dict[str, Any]] = []
     for row in rows:
         if not isinstance(row, dict):
@@ -434,7 +478,7 @@ def _hold_events_for_positions_not_in_rebalance(
         w = _parse_pct(row.get("weight_pct"))
         if w is None or w <= 0:
             continue
-        prev_w = _prior_position_weight(sb, prior_d, ticker)
+        prev_w = comparison_w.get(str(ticker).upper())
         price = _fetch_open(sb, ticker, execution_date)
         reason = row.get("rationale")
         if isinstance(reason, str) and reason.strip():
@@ -810,7 +854,7 @@ def build_events_from_paper_fills(
         )
         pageable = _pageable_rejection(result, run_d)
 
-    prior_weights = _book_weights(sb, prior_book_d)
+    prior_weights = _comparison_book_weights(sb, prior_book_d)
 
     events: List[Dict[str, Any]] = []
     for fill in result.fills:
@@ -888,13 +932,17 @@ def build_events_from_digest_snapshot(sb, execution_d: str) -> Optional[List[Dic
         except (TypeError, ValueError):
             continue
     prior_d = _prior_book_date(sb, execution_d)
-    prior_w = _book_weights(sb, prior_d)
+    prior_w = _comparison_book_weights(sb, prior_d)
     all_tickers = set(prior_w) | set(targets)
     out: List[Dict[str, Any]] = []
     eps = 0.0001
     basis = f"prior committed book {prior_d}" if prior_d else "no prior committed book"
     for t in sorted(all_tickers):
-        prev = prior_w.get(t, 0.0)
+        # DIG-2816: ``_comparison_book_weights`` preserves a NULL ``weight_pct`` as
+        # None (the fill path needs to tell "no prior book" from a real 0.0), so the
+        # prose diff below coerces it exactly as ``_book_weights`` used to.
+        prev = prior_w.get(t)
+        prev = 0.0 if prev is None else prev
         rec = targets.get(t, 0.0)
         chg = rec - prev
         if prev <= eps and rec > eps:
@@ -956,13 +1004,17 @@ def build_events_from_positions_book(sb, execution_d: str) -> Optional[List[Dict
     if not targets:
         return None
     prior_d = _prior_book_date(sb, execution_d)
-    prior_w = _book_weights(sb, prior_d)
+    prior_w = _comparison_book_weights(sb, prior_d)
     all_tickers = set(prior_w) | set(targets)
     out: List[Dict[str, Any]] = []
     eps = 0.0001
     basis = f"prior committed book {prior_d}" if prior_d else "no prior committed book"
     for t in sorted(all_tickers):
-        prev = prior_w.get(t, 0.0)
+        # DIG-2816: ``_comparison_book_weights`` preserves a NULL ``weight_pct`` as
+        # None (the fill path needs to tell "no prior book" from a real 0.0), so the
+        # prose diff below coerces it exactly as ``_book_weights`` used to.
+        prev = prior_w.get(t)
+        prev = 0.0 if prev is None else prev
         rec = targets.get(t, 0.0)
         chg = rec - prev
         if prev <= eps and rec > eps:

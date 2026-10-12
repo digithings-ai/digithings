@@ -15,6 +15,7 @@ import {
   isNavSeriesSeam,
   navContinuityStepPct,
   navRowContractLabel,
+  navSeriesPlotReadiness,
   MAX_DAY_RETURN_GAP_DAYS,
   type NavInputRow,
 } from './nav-series';
@@ -193,5 +194,51 @@ describe('calendarDaysBetween', () => {
     expect(calendarDaysBetween('2026-09-23', '2026-09-24')).toBe(1);
     expect(calendarDaysBetween('2026-09-24', '2026-09-23')).toBe(-1);
     expect(calendarDaysBetween('nope', '2026-09-24')).toBeNull();
+  });
+});
+
+describe('navSeriesPlotReadiness (CONTRACT 6.6 plot)', () => {
+  it('plots the index and calls the accounting NAV whole when every point is finalized', () => {
+    const points = buildNavSeries([
+      row({ date: '2026-09-23', nav: 121.8, contract: 'finalized_accounting' }),
+      row({ date: '2026-09-24', nav: 122.5, contract: 'finalized_accounting' }),
+    ]);
+    expect(navSeriesPlotReadiness(points)).toEqual({
+      series: 'index',
+      accountingNav: { contract: 'finalized_accounting', plottable: true, reason: 'all_finalized' },
+    });
+  });
+
+  it('refuses the accounting NAV while any point is a legacy estimate', () => {
+    const points = buildNavSeries([
+      row({ date: '2026-09-30', nav: 121.8, contract: 'finalized_accounting' }),
+      row({ date: '2026-10-03', nav: 100.19, contract: 'legacy_estimate', source: 'legacy_nav_history' }),
+    ]);
+    const readiness = navSeriesPlotReadiness(points);
+    expect(readiness.series).toBe('index');
+    expect(readiness.accountingNav.plottable).toBe(false);
+    expect(readiness.accountingNav.contract).toBe('mixed');
+    expect(readiness.accountingNav.reason).toContain('legacy_estimate');
+  });
+
+  it('does not treat an empty series as a whole accounting scale', () => {
+    const readiness = navSeriesPlotReadiness([]);
+    expect(readiness.series).toBe('index');
+    expect(readiness.accountingNav.plottable).toBe(false);
+    expect(readiness.accountingNav.contract).toBe('unavailable');
+  });
+
+  it('accepts a single finalized point as whole', () => {
+    const readiness = navSeriesPlotReadiness([
+      row({ date: '2026-08-27', nav: 122.5, contract: 'finalized_accounting' }),
+    ]);
+    expect(readiness.accountingNav.plottable).toBe(true);
+  });
+
+  it('never reads a NAV value into the reason', () => {
+    const readiness = navSeriesPlotReadiness([
+      row({ date: '2026-10-03', nav: 100.19, contract: 'legacy_estimate' }),
+    ]);
+    expect(readiness.accountingNav.reason).not.toContain('100.19');
   });
 });
