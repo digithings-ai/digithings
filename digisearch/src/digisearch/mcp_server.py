@@ -617,7 +617,7 @@ def run_mcp(
     bind = host or os.environ.get("DIGISEARCH_MCP_HOST", "127.0.0.1")
     mcp.settings.host = bind
     # FastMCP fixes its DNS-rebinding allowlist to loopback at construction; a
-    # container bind (0.0.0.0) must also accept the compose service name or every
+    # container bind to all interfaces must also accept the compose service name or every
     # in-network call is refused 421. Extra hosts via DIGISEARCH_MCP_ALLOWED_HOSTS.
     if bind not in ("127.0.0.1", "localhost", "::1"):
         from mcp.server.transport_security import TransportSecuritySettings

@@ -314,17 +314,21 @@ describe("DigichatConfigSchema", () => {
     const occHost = occ.hosts?.["occ.digithings.ai"];
     expect(occHost?.chrome.skin).toBe("digichat");
     expect(occHost?.backend.type).toBe("digigraph");
-    if (occHost?.backend.type === "digigraph") {
-      expect(occHost.backend.digisearchIndex).toBe("occ_help");
-      expect(occHost.backend.vaultPathPrefix).toBe("clients/online-compliance-center");
-    }
-    expect(occHost?.tools?.catalog.map((t) => t.id)).toEqual([
-      "digisearch",
-      "digivault",
+    // backend.digisearchIndex was retired; Help search reaches the model only as
+    // the digisearch MCP server, whose setup names the occ_help index.
+    expect(occHost?.tools?.catalog).toEqual([]);
+    const occServers = occHost?.mcp?.servers ?? [];
+    expect(occServers.find((s) => s.id === "digisearch")?.setup?.index_name).toBe("occ_help");
+    expect(occServers.find((s) => s.id === "digisearch")?.allowedTools).toEqual([
+      "semantic",
       "web_search",
     ]);
-    expect(occHost?.tools?.catalog.find((t) => t.id === "web_search")?.default).toBe(true);
-    expect(occHost?.gate?.webSearch).toBe(true);
+    expect(occServers.find((s) => s.id === "digivault")?.allowedTools).toEqual([
+      "search_notes",
+      "search_tag",
+      "backlinks",
+    ]);
+    expect(occHost?.gate?.webSearch).toBe(false);
     expect(occHost?.mcp?.allowUserServers).toBe(false);
     expect(occHost?.mcp?.servers.map((s) => s.id)).toEqual([
       "zammad",
