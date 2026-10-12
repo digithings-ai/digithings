@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any  # score:allow untyped any — plotly Figure typing
 
 import polars as pl
+
 from digiquant.fonts import MONO_FONT_STACK
 from digiquant.stats import normalize_series
 

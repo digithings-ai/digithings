@@ -349,6 +349,9 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     invariant (max chunk 1997 <= 2000) and RecursiveChunker are unchanged.
     Re-recorded at count 132 for the batch/digiquant fold (DIG-3137): the
     ARCHITECTURE.md trackers section now carries HEAD's DIG-1307 refusal
+    Re-recorded for the develop merge (DIG-3137 follow-up): chunk 9 covers
+    the /query route docs after #5183/#5045 prose moves — fixture prose only;
+    RecursiveChunker unchanged.
     framing plus DIG-1464's CC0-1.0 precision and per-family limits — fixture
     prose only; RecursiveChunker unchanged.
     """
@@ -370,8 +373,8 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "2d89279e6be2ef3c",
         "7b18269636061f8e",
         "5eaa545f6fd87479",
-        "ac22aad7e50a19a8",
-        "d85a3755cd5e8708",
+        "c1b340d871d4f198",
+        "35bae5b21ed48559",
         "6bb725ee96409565",
         "2496b0331a6908ca",
         "d79c9e4802601817",
