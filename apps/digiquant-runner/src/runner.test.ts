@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import worker from "./index";
 import { dataPlaneEnv, type Env, type HouseLedger } from "./env";
 import {
@@ -597,6 +597,75 @@ describe("watchdog and poll resilience", () => {
     expect(shadow?.args.artifact_prefix).toBe(`pipeline-runs/house-run/${accepted.run_id}/`);
     expect(shadow?.args.source_branch).toBe("main");
     expect((await session.health()).running).toEqual([shadow?.run_id]);
+  });
+
+  // A successful house run with no marker is invisible to the next kick: the
+  // skip-gate reads success.json and finds nothing, so the run repeats. Assert
+  // the trace, not just the absent marker -- an absent marker alone is also
+  // true before the fix, so it cannot tell the two trees apart.
+  it("traces a succeeded house run that wrote no marker because the binding is absent", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      const { session, starts, statuses, bodies } = harness();
+      const accepted = await session.accept(
+        job({
+          command: "house-run",
+          concurrency: "digiquant-pipeline",
+          idempotency_key: "house-run-no-archive",
+          args: { refresh_scope: "none", run_date: "2026-09-30" },
+        }),
+      );
+      const remote = statuses.get(starts[0]);
+      if (!remote) throw new Error("missing status");
+      remote.status = "succeeded";
+      remote.exit_code = 0;
+      remote.finished_at = "2026-09-30T17:00:00.000Z";
+      await session.alarm();
+
+      const traced = errors.mock.calls.map((call) => String(call[0]));
+      expect(traced).toContain(
+        `house_ledger_not_written run=${accepted.run_id} reason=archive_unbound`,
+      );
+      // Tracing must not cost the shadow booking.
+      const shadow = bodies.find((body) => body.command === "allocation-shadow");
+      expect(shadow?.args.source_branch).toBe("main");
+      expect((await session.health()).running).toEqual([shadow?.run_id]);
+    } finally {
+      errors.mockRestore();
+    }
+  });
+
+  it("traces a succeeded house run that wrote no marker because run_date was absent", async () => {
+    const archive = memoryArchive();
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      const { session, starts, statuses, bodies } = harness({ archive });
+      const accepted = await session.accept(
+        job({
+          command: "house-run",
+          concurrency: "digiquant-pipeline",
+          idempotency_key: "house-run-no-date",
+          args: { refresh_scope: "none" },
+        }),
+      );
+      const remote = statuses.get(starts[0]);
+      if (!remote) throw new Error("missing status");
+      remote.status = "succeeded";
+      remote.exit_code = 0;
+      remote.finished_at = "2026-09-30T17:00:00.000Z";
+      await session.alarm();
+
+      const traced = errors.mock.calls.map((call) => String(call[0]));
+      expect(traced).toContain(
+        `house_ledger_not_written run=${accepted.run_id} reason=missing_run_date`,
+      );
+      // No marker under any key, and the shadow still books.
+      expect([...archive.data.keys()].filter((k) => k.includes("success.json"))).toEqual([]);
+      const shadow = bodies.find((body) => body.command === "allocation-shadow");
+      expect(shadow?.args.source_branch).toBe("main");
+    } finally {
+      errors.mockRestore();
+    }
   });
 
   it("starts a queued price tick only after the house-run lock clears", async () => {

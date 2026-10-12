@@ -467,6 +467,14 @@ export class RunnerSession {
         const message = err instanceof Error ? err.message : String(err);
         console.error(`house_ledger_write_failed ${message}`);
       }
+    } else {
+      // The skip-gate reads this object, so a house run that succeeded without
+      // writing it is invisible to the next kick. A failed put above already
+      // logs, so without this branch a missing binding or a missing run_date is
+      // the only way to complete with no marker and no trace.
+      console.error(
+        `house_ledger_not_written run=${run.run_id} reason=${runDate ? "archive_unbound" : "missing_run_date"}`,
+      );
     }
     const idempotencyKey = `allocation-shadow:${run.run_id}`;
     if (ledger.idem[idempotencyKey]) return;
