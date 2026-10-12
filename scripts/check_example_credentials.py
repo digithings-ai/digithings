@@ -132,7 +132,7 @@ CRED_VALUE_PATTERNS = [
     # is end-anchored and the separator is not part of the alphabet being
     # matched.
     r'^SG\.[A-Za-z0-9_-]{20,}',
-    # CoinGecko-style keys (CG- + 16 alphanumerics): the hyphen puts the
+    # CG-prefixed keys (CG- + 16 alphanumerics): the hyphen puts the
     # body outside every other body class, so the prefix carries the signal
     # and the class only bounds the length.
     r'^CG-[A-Za-z0-9]{16,}',

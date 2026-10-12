@@ -6,7 +6,7 @@ The hole this fills: `scripts/secrets_audit.py` audits *secret names*, and
 `.example`/`.template` files. Neither one looks at a data payload. On 2026-10-02
 (#4987) `apps/digithings-stack-cloudflare/container/seed/occ_tickets.jsonl`
 landed on `main` carrying 791 rows that quote a customer email address, 86
-distinct customer display names and 372 `[internal]` staff-only notes, in a
+distinct customer display names and 372 internal staff-only notes, in a
 **public** repository. No check failed, because nothing was checking.
 
 A payload that seeds a vector store is copied wholesale into a running Chroma
@@ -17,7 +17,7 @@ defect is not one bad line, it is that a mask was missing from a generator.
 So the invariant is mechanical and cheap: **a tracked payload may not contain
 an email address that is not a reserved example domain.** Detection, not
 judgement — this script does not know what a person is called and will not try.
-A display name or an `[internal]` tag has no reliable shape, so it is out of
+A display name or an internal tag has no reliable shape, so it is out of
 scope here; that residual is tracked as the free-text-name item on DIG-1230, and
 masking it is a product decision, not a lint rule.
 

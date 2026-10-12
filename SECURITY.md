@@ -151,7 +151,7 @@ the two are not the same problem: a seed payload (`apps/*/container/seed/*.jsonl
 is copied wholesale into a running vector store, so one committed address
 reaches every person the tenant talks to. On 2026-10-02 (#4987) a 1.5 MB
 payload carrying 791 rows that quote a customer email address and 372
-`[internal]` staff-only notes landed on `main` in this **public** repository,
+internal staff-only notes landed on `main` in this **public** repository,
 and every check was green.
 
 - **The gate.** `scripts/check_pii_seed_payloads.py` fails a commit that adds
@@ -175,7 +175,7 @@ and every check was green.
 - **It prints counts, never addresses.** A guard whose output can be pasted
   into a CI log is a second disclosure channel, and this repo is public. The
   finding is `path:line: count`.
-- **What it does not catch.** Display names and `[internal]` tags have no
+- **What it does not catch.** Display names and internal tags have no
   reliable shape; a name in free text is only removable by a product decision
   (German and Spanish prose need real name detection), not by a lint rule. The
   masking default that keeps them out of the corpus lives in
