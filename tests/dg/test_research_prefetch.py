@@ -91,4 +91,4 @@ def test_document_rag_hands_tools_to_the_model_and_does_not_prefetch(
     assert "digivault_search_notes" in names
     # The prefetch used to paste results into the user turn; nothing may do that now.
     assert "already fetched" not in captured["user"]
-    assert captured["max_tool_rounds"] == 4
+    assert captured["max_tool_rounds"] == 6
