@@ -324,6 +324,26 @@ jobs:
       - name: Vendor-content gate
         run: python3 scripts/check_vendor_content.py
 
+  # Example-credentials guard (DIG-3148, from the #5030 retro-review).
+  # Unconditional, same shape as vendor-content-gate above: no `needs:`, no
+  # path filter, so the job name is always reported and required on develop.
+  # scripts/check_example_credentials.py scans tracked .example/.template
+  # files for committed credential-shaped values; it is stdlib-only, so no
+  # install step. Shallow checkout is fine: the script reads `git ls-files`
+  # on the working tree, never history.
+  example-credentials-guard:
+    name: Example-credentials guard
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Example-credentials guard
+        run: python3 scripts/check_example_credentials.py
+
   # ── Per-component test suites (gated by paths) ───────────────────────────────
   digibase:
     needs: changes
@@ -722,6 +742,7 @@ jobs:
       - frontend-canon
       - gloomberb-ci-guard
       - vendor-content-gate
+      - example-credentials-guard
       - digibase
       - digikey
       - digitrace
