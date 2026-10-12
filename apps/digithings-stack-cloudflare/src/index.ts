@@ -80,7 +80,7 @@ export class DigiStackContainer extends Container {
    */
   requiredPorts = [DIGIGRAPH_PORT];
   /** Cold starts are seamless (#4323); each wake bills the whole tail, so keep it minimal. */
-  sleepAfter = "3m";
+  sleepAfter = "1m";
 
   /**
    * Runtime env for supervisord processes. Secrets from `wrangler secret put`;
@@ -202,10 +202,10 @@ export class DigiQuantMcpContainer extends Container {
   requiredPorts = [DIGIQUANT_MCP_PORT];
   /**
    * Cold-start policy: a cold start pays only the FastMCP import, never a data
-   * load (R2 is the cache), so the container may sleep freely; a 3-minute idle
+   * load (R2 is the cache), so the container may sleep freely; a 1-minute idle
    * tail keeps the billed wake window minimal.
    */
-  sleepAfter = "3m";
+  sleepAfter = "1m";
 
   /**
    * Runtime env for the MCP process. Secrets from `wrangler secret put`.
@@ -256,7 +256,7 @@ export class DigiChatContainer extends Container {
   defaultPort = DIGICHAT_PORT;
   requiredPorts = [DIGICHAT_PORT];
   /** Short idle tail: each wake bills for the whole sleepAfter window. */
-  sleepAfter = "3m";
+  sleepAfter = "1m";
 
   /**
    * Runtime env for the digichat Next process. Mirrors the standalone
