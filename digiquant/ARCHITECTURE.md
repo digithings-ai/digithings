@@ -879,6 +879,26 @@ and the donut must never fall back to `round(rate * n)` as an observed count).
 Tests: `tests/dq/test_honesty.py` (upstream golden vectors),
 `tests/dq/test_tearsheet_honesty.py` (per-surface N + CI assertions).
 
+**Model versioning for `BacktestResult` (DIG-845 / L3).** The clause that stood
+here — "`BacktestResult` is untouched, so no model versioning was needed" —
+was true of the tearsheet 1.4 work and stopped being true once the honesty
+envelope reached the result model, so it is reworded here rather than dropped.
+Per `AGENTS.md` § Pre-Flight ("Confirm `BacktestResult` Pydantic model is
+unchanged or versioned if modified"), the decision is recorded: **additive,
+back-compatible, no version bump.** L3 adds exactly two fields to
+`models.BacktestResult`, both defaulting to an empty state —
+`honest_rate: HonestRateBlock | None` (default `None`) and
+`honest_rate_by_symbol: dict[str, HonestRateBlock]` (default `{}`) — so every
+payload that validated before still validates, and a consumer that has never
+heard of the envelope reads exactly what it read before. `num_trades` also
+gained a sharper description on the same leaf (a **fill** count, and explicitly
+*not* a win-rate denominator — `honest_rate.n` is the denominator), which is a
+description change and not a type or semantic change. No published surface
+depends on the old wording, so no migration, no `SCHEMA_VERSION` bump and no
+consumer notification are required. Consumers that want the envelope read
+`honest_rate`; they must never synthesize one from `num_trades` or from
+`round(rate * n)`.
+
 Existing published fixtures stay at older schema versions (no `ohlc_bars`, blank `entry_label`, no `signal_delay_days`) until regenerated, so consumers must tolerate all versions.
 
 **Public signal delay (#1462).** The public tearsheets lag reality by **3 calendar days** ("backtested strategies running live — signals delayed 3 days") to protect strategy IP: on a single-asset long/flat strategy a current equity curve trivially leaks the live position. The mechanism is an **end-date shift, not redaction** — `generate_tearsheets.py --signal-delay-days N` truncates the OHLCV frame (`apply_signal_delay`, cutoff = newest cached bar minus N calendar days) *before* the backtest, so the entire tearsheet is generated as if run N days ago. Every artifact (equity curve, drawdown, trade log, open-position state, headline metrics, `period_end`) is self-consistent by construction; there is no per-field redaction logic to get wrong. The lag is declared honestly: the static JSON, the `index.json` entry, and the `strategy_tearsheets` metrics all carry `signal_delay_days`, and a payload note states the as-of date. `generated_at` stays the true generation timestamp (the delay is marketed openly, not hidden). Default is `0` (exact no-op) for internal/undelayed runs; the scheduled pipeline (`pipeline-digiquant-tearsheets.yml`) passes `--signal-delay-days 3`. Side effect: the `_PUBLISHED_BASELINE` drift warning compares exact trade counts, so a trade opened within the delay window can transiently warn — informational only. Tests: `tests/dq/test_tearsheet_signal_delay.py`.
@@ -950,6 +970,8 @@ Defined in `models.py`. Returned by `run_backtest()`, the pipeline's backtest no
 | `num_trades` | `int` | Row count of `generate_order_fills_report()` |
 | `per_symbol_pnl` | `dict[str, float]` | Populated for multi-symbol runs; empty for single-symbol |
 | `missing` | `list[str]` | Names that could not be produced — the machine-readable form of the "missing metrics" clause in `message`. Empty when `status` is `ok` |
+| `honest_rate` | `HonestRateBlock \| None` | Win rate with its denominator and interval. `None` when no realized-PnL series was extracted — never a fabricated zero and never `num_trades` |
+| `honest_rate_by_symbol` | `dict[str, HonestRateBlock]` | Per-symbol `honest_rate` blocks for multi-symbol backtests. Declared on the model by DIG-845 (L3); populated by DIG-847 (#5298), so it is `{}` until that leaf lands |
 | `status` | `str` | `ok` | `partial` | `error` |
 | `message` | `str` | Optional detail |
 
