@@ -496,3 +496,18 @@ describe("resolveMcpOAuthResourceUrl", () => {
     ).toBe("");
   });
 });
+
+describe("mutatingTools: [] survives to the wire", () => {
+  it("keeps an explicit empty list so read-only tools skip the approval brake", async () => {
+    const { mcpUpstreamHeaderValue } = await import("./mcp-servers");
+    const json = mcpUpstreamHeaderValue([
+      { id: "zammad", url: "http://zammad-mcp:8770/mcp", allowedTools: ["get_ticket"], mutatingTools: [] },
+    ] as never);
+    expect(JSON.parse(json!)[0].mutatingTools).toEqual([]);
+  });
+  it("still omits mutatingTools when the row allows nothing", async () => {
+    const { mcpUpstreamHeaderValue } = await import("./mcp-servers");
+    const json = mcpUpstreamHeaderValue([{ id: "z", url: "http://z:1/mcp", mutatingTools: [] }] as never);
+    expect(JSON.parse(json!)[0].mutatingTools).toBeUndefined();
+  });
+});
