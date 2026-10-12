@@ -32,6 +32,21 @@ async function frameAt(
   return current.captureCharFrame();
 }
 
+/** The frame as a viewer sees it: characters plus colours. A door that only
+ *  changes colour (DIGIVAULT's dial clicks) still moves. */
+async function lookAt(
+  def: BannerDefinition,
+  size: { width: number; height: number },
+  holdMs: number,
+): Promise<string> {
+  const chars = await frameAt(def, size, holdMs);
+  const colours = current!
+    .captureSpans()
+    .lines.map((line) => line.spans.map((span) => `${span.width}:${JSON.stringify(span.fg)}/${JSON.stringify(span.bg)}`).join(" "))
+    .join("\n");
+  return `${chars}\n${colours}`;
+}
+
 const mark = (frame: string) => frame.split("\n").filter((line) => /[█▀▄]/.test(line));
 
 for (const def of Object.values(BANNERS)) {
@@ -46,10 +61,10 @@ for (const def of Object.values(BANNERS)) {
 
         // LOADING moves: early intro frames differ from each other and from the settled
         // mark (digichat locks its letters well before its LOADING window closes).
-        const early = await frameAt(def, size, Math.round(loadingMs * 0.15));
-        const mid = await frameAt(def, size, Math.round(loadingMs * 0.35));
+        const early = await lookAt(def, size, Math.round(loadingMs * 0.15));
+        const mid = await lookAt(def, size, Math.round(loadingMs * 0.35));
         expect(early).not.toBe(mid);
-        expect(mid).not.toBe(settled);
+        expect(await frameAt(def, size, Math.round(loadingMs * 0.35))).not.toBe(settled);
 
         // Reduced motion never moves.
         expect(await frameAt(def, size, Math.round(loadingMs * 0.35), { NO_MOTION: "1" })).toBe(settled);
