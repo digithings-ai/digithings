@@ -87,7 +87,7 @@ describe("runSiteProbe", () => {
 });
 
 describe("runStackProbe", () => {
-  it("GETs the three public healthz urls and does not call GitHub", async () => {
+  it("GETs the three worker-only status urls and does not call GitHub", async () => {
     const globalFetch = vi.fn();
     vi.stubGlobal("fetch", globalFetch);
     const seen: string[] = [];
@@ -97,9 +97,9 @@ describe("runStackProbe", () => {
     });
     await expect(runStackProbe(fetchImpl)).resolves.toEqual({ ok: true });
     expect(seen).toEqual([
-      "https://graph.digithings.ai/healthz",
-      "https://key.digithings.ai/healthz",
-      "https://search.digithings.ai/healthz",
+      "https://graph.digithings.ai/_stack/status",
+      "https://key.digithings.ai/_stack/status",
+      "https://search.digithings.ai/_stack/status",
     ]);
     expect(globalFetch).not.toHaveBeenCalled();
     expect(seen.some((url) => url.includes("api.github.com"))).toBe(false);
@@ -110,11 +110,11 @@ describe("runStackProbe", () => {
     await expect(runStackProbe(warned)).resolves.toEqual({ ok: true });
 
     const bad: ProbeFetch = vi.fn(async (url: string) => {
-      if (url === "https://key.digithings.ai/healthz") {
+      if (url === "https://key.digithings.ai/_stack/status") {
         return response(200, JSON.stringify({ ok: false }), "application/json");
       }
       return response(200, JSON.stringify({ ok: true }), "application/json");
     });
-    await expect(runStackProbe(bad)).rejects.toThrow("https://key.digithings.ai/healthz");
+    await expect(runStackProbe(bad)).rejects.toThrow("https://key.digithings.ai/_stack/status");
   });
 });
