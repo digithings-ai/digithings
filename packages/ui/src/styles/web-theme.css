@@ -357,6 +357,9 @@ body {
    name still shows (never an abbreviation), just set smaller next to the
    version, so the head fits ~135px with padding. */
 .dg-cell[data-tier="mini"] .dg-mosaic-name { font-size: 1.1rem; }
+/* A hero-banner mark in place of the text name (10 cells tall); tiles narrow it by tier. */
+.dg-mosaic-mark { display: block; flex: 0 1 auto; width: min(100%, 11rem); }
+.dg-cell[data-tier="mini"] .dg-mosaic-mark { width: min(100%, 8.5rem); }
 
 /* The whole tile is the focus target, but the focused tile also owns real
    controls (copy the compose command, ask digichat). A <button> cannot contain
