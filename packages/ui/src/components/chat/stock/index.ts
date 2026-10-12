@@ -61,6 +61,18 @@ export {
   type StockChatPrefsConfig,
   type StockChatPrefsDeps,
 } from "./stock-chat-prefs-host";
+// DIG-2882: the session artifact panel and the artifact `a:` override.
+export {
+  ArtifactsPanel,
+  ArtifactLink,
+  artifactListPath,
+  artifactBlobPath,
+  isArtifactBlobHref,
+  formatArtifactSize,
+  formatArtifactDate,
+  type ArtifactRow,
+  type ArtifactIo,
+} from "./artifacts-panel";
 export { SkinCredit, SKIN_CREDIT_TEXT } from "./skin-credit";
 export { Thread } from "./thread.aui";
 export {

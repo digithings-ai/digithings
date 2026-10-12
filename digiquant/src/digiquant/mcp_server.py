@@ -123,7 +123,7 @@ def _r2_is_stale(manifest_as_of: str, resolved_as_of: str) -> bool:
 # ``digiquant.data.gloomberb.agent_tools``) and are imported at the top of this
 # module under ``_build_gloomberb_client`` / ``_gloomberb_envelope_json``. The
 # builder remains the patchable seam tests use to inject a MockTransport-backed
-# client. ``GLOOMBERB_ENABLED`` defaults ON (author decision, spec §11/§12.6);
+# client. ``GLOOMBERB_ENABLED`` defaults OFF (Counsel memo DIG-1233);
 # the session cookie is never logged or echoed into tool payloads.
 
 
@@ -642,6 +642,18 @@ def create_mcp_server(
     from digiquant.data.gloomberb.entitlements import (
         TOOL_ENTITLEMENTS as _GLOOMBERB_ENTITLEMENTS,
     )
+    from digiquant.data.gloomberb.session_gate import (
+        session_gate_status as _gloomberb_session_gate_status,
+    )
+
+    # #2752: a `session` / `preview` / `pro` tool is advertised only when the
+    # deployer's own cookie is configured AND validates against api.gloom.sh.
+    # Resolved ONCE per server build — the gate caches the probe for one TTL
+    # window, and this keeps a 41-tool build from re-asking. `free` and
+    # `venue_session` tools are untouched, and the LuxAlgo family is `free`
+    # only, so the entitlement value alone selects the Gloomberb gated set.
+    _gloomberb_session_tools_advertised = _gloomberb_session_gate_status().authenticated
+    _GLOOMBERB_SESSION_ENTITLEMENTS = frozenset({"session", "preview", "pro"})
     from digiquant.data.gloomberb.entitlements import (
         with_entitlement_note as _gloomberb_note,
     )
@@ -671,6 +683,11 @@ def create_mcp_server(
             if entitlement is not None:
                 fn.entitlement = entitlement
                 fn.__doc__ = note_fn(name, fn.__doc__ or "")
+            if (
+                entitlement in _GLOOMBERB_SESSION_ENTITLEMENTS
+                and not _gloomberb_session_tools_advertised
+            ):
+                return fn
             if enabled is None or name in enabled:
                 return mcp.tool(name=name)(fn)
             return fn
@@ -1024,7 +1041,8 @@ def create_mcp_server(
 
     # ── digifetch x Gloomberb market-data reads (#4069, #4110) ──────────────
     # 33 enrichment tools over api.gloom.sh (plus a Yahoo-backed earnings
-    # calendar). Default-ON behind GLOOMBERB_ENABLED; anonymous unless
+    # calendar). Default-OFF behind GLOOMBERB_ENABLED (explicit opt-in
+    # re-enables); anonymous unless
     # GLOOMBERB_SESSION_COOKIE is set for holders / analyst / corporate-actions
     # / research-search / transcripts / statements / tweets / short-interest /
     # equity-diagnostic (transcripts and screener additionally need a Pro
@@ -1041,7 +1059,7 @@ def create_mcp_server(
 
         `exchange` is optional. Enrichment only: free-tier data is delayed up
         to 15 minutes and is never a pipeline primary. Disabled by the
-        GLOOMBERB_ENABLED kill switch (default ON). Carries "Sourced from
+        GLOOMBERB_ENABLED kill switch (default OFF; explicit opt-in re-enables). Carries "Sourced from
         Gloomberb" attribution and a term.gloom.sh deep link.
         """
         try:

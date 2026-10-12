@@ -44,8 +44,18 @@ export const MCP_CONTAINER_ID = "mcp-v1";
  * (container-name token only; no migration, schema, or binding change).
  * Verify: `curl -sf https://graph.digithings.ai/_stack/meta | python3 -c
  * 'import sys,json;print(json.load(sys.stdin)["containerId"])'`.
+ *
+ * v17 → v18 (2026-10-08, digikey hotfix #5283 / #5010): a v17 instance keeps
+ * serving the digikey build whose `_one_required` let a requested `ns:*`
+ * scope be satisfied by any narrow `ns:x` grant (scope escalation on both
+ * token exchanges). Under steady traffic a v17 instance never reaches
+ * `sleepAfter`, so the Worker redeploy alone does not take the old scopes.py
+ * out of service — this bump does. Rollback: restore the previous suffix and
+ * redeploy (container-name token only; no migration, schema, or binding
+ * change; digikey state lives in DIGIKEY_DATABASE_URL, not on container disk).
+ * Verify: same `_stack/meta` check as above → "shared-v18".
  */
-export const SHARED_STACK_CONTAINER_ID = "shared-v17";
+export const SHARED_STACK_CONTAINER_ID = "shared-v18";
 
 /**
  * Map public hostname → container port.
