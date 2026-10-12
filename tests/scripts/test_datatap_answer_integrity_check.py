@@ -585,6 +585,68 @@ def test_either_probe_failing_alone_is_exit_one(dirty: int) -> None:
     assert len(fake.calls) == 3, "one discovery plus both probes; a skipped probe is not a pass"
 
 
+def test_a_confirmed_leak_is_not_buried_by_a_later_probe_blind_spot(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Probe 1 leaks over HTTP 200; probe 2 then answers 402. The leak still wins.
+
+    The finding is a fact about an answer that really was served, so it is
+    recorded when it is seen and survives the next probe failing. Burying it
+    under our own blind spot would report a confirmed leak as a clean answer
+    path — the one outcome this check exists to prevent — and exit 2 is reserved
+    for the runs where we have seen nothing at all.
+
+    Named rather than folded into another test because this is the whole
+    two-probe sequence the module docstring argues for, and because it is the
+    case the mutation inverted: testing ``could_not_run`` before ``dirty`` turned
+    this run into a 2 and all 41 tests stayed green.
+    """
+
+    class DirtyThenBlindFake(FakeHttp):
+        """Discovery, then a leaking 200, then a 402 on the other probe."""
+
+        def __init__(self, responses: dict[str, object]):
+            super().__init__(responses)
+            self.chats = 0
+
+        def __call__(self, method, url, *, headers=None, body=None, timeout=None):
+            if not url.endswith("/api/chat"):
+                return super().__call__(method, url, headers=headers, body=body, timeout=timeout)
+            index = self.chats
+            self.chats += 1
+            self.calls.append(
+                {"method": method, "url": url, "headers": headers or {}, "body": body}
+            )
+            if index == 0:
+                return _ok("text/event-stream", _answer(_BAD_ANSWERS["cust_prefix"]))
+            return _error(402, json.dumps({"error": "trial_gate"}))
+
+    fake = DirtyThenBlindFake({"/chat$": _ok("text/html; charset=utf-8", DISCOVERY_HTML)})
+    mod.http_request = fake
+    code = mod.main([])
+
+    out = capsys.readouterr().out
+    assert code == mod.FAIL == 1, (
+        "a leak confirmed by a real HTTP 200 must not be downgraded to our own "
+        f"blind spot; exit was {code}"
+    )
+    assert fake.chats == 2, (
+        "fixture defect: the 402 must land on the *second* probe, after the leak"
+    )
+    assert "customer id (prefixed): CUST-99812" in out, (
+        "the finding must be itemised as 'probe: finding', not merely echoed by the "
+        f"answer dump; got:\n{out}"
+    )
+    assert "The other probe could not run" in out, (
+        "the blind spot must still be reported next to the failure, so an operator "
+        f"reading the run knows it was only partly blind; got:\n{out}"
+    )
+    assert "Reported as a failure anyway" in out, (
+        "the line that explains why a real finding outranks our own blind spot is "
+        f"the reason this ordering is defensible to whoever reads the log; got:\n{out}"
+    )
+
+
 # --------------------------------------------------------------------------
 # Exit 2: our check could not see. Never exit 1, never phrased as fabrication.
 # --------------------------------------------------------------------------
@@ -723,6 +785,78 @@ def test_a_valid_stream_served_as_text_plain_is_could_not_run(
         f"as a finding; got:\n{out}"
     )
     assert "event stream" in out, f"the reason must name what came back instead:\n{out}"
+
+
+@pytest.mark.parametrize(
+    "reason",
+    ["error", "content-filter", "abort"],
+)
+def test_a_finish_reason_other_than_a_stop_is_could_not_run(reason: str) -> None:
+    """A stream that ends on an abnormal finish reason is not an answer we can scan.
+
+    DataTap's platform reports mid-answer failures as a normal HTTP 200 whose
+    terminal frame carries the reason (``error``, ``content-filter``, ``abort``).
+    Parsing the text-deltas off such a stream and calling the answer clean would
+    treat a truncated answer as a clean one, so the parser raises instead. It is
+    still not a fabrication, so the exit code is 2.
+
+    Pinned because dropping the reason check left all 41 tests green: the rest of
+    the suite only ever emits a finish frame with no ``finishReason`` at all.
+
+    All three abnormal reasons are pinned, not just ``error``, because each one is
+    the same class of event — the turn stopped without the model finishing — and
+    because ``content-filter`` is the one a future implementer is most tempted to
+    whitelist to quiet a noisy rejection. Whitelisting any of them leaves the rest
+    of this file green, so the guarantee would be only as strong as this
+    parameterisation.
+    """
+    body = _sse(
+        {"type": "start"},
+        {"type": "text-delta", "delta": "I don't have access to customer records."},
+        {"type": "finish", "finishReason": reason},
+    )
+    code, _ = _run_main(
+        {
+            "/api/chat$": _ok("text/event-stream", body),
+            "/chat$": _ok("text/html; charset=utf-8", DISCOVERY_HTML),
+        }
+    )
+    assert code == mod.COULD_NOT_RUN == 2, (
+        f"finishReason {reason!r} means the answer was truncated; scanning the "
+        f"deltas as if it were complete would call a partial answer clean (exit {code})"
+    )
+
+
+@pytest.mark.parametrize(
+    "finish",
+    [
+        {"type": "finish"},
+        {"type": "finish", "finishReason": "stop"},
+        {"type": "finish", "finishReason": "length"},
+        {"type": "finish", "finishReason": "tool-calls"},
+    ],
+    ids=["absent", "stop", "length", "tool-calls"],
+)
+def test_the_ordinary_finish_reasons_are_still_a_clean_exit_zero(finish: dict) -> None:
+    """The reason check must stay narrow, not become 'any finish frame raises'.
+
+    Demanding a verified terminal frame would turn every ordinary run into
+    exit 2, which on an hourly check reads as a permanently broken probe. A
+    normal stop, a truncation, a tool-call turn, and a frame that carries no
+    reason at all are all answers we did receive in full enough to scan.
+    """
+    body = _sse(
+        {"type": "start"},
+        {"type": "text-delta", "delta": "I don't have access to customer records, sorry."},
+        finish,
+    )
+    code, _ = _run_main(
+        {
+            "/api/chat$": _ok("text/event-stream", body),
+            "/chat$": _ok("text/html; charset=utf-8", DISCOVERY_HTML),
+        }
+    )
+    assert code == mod.OK == 0
 
 
 def test_discovery_failure_is_could_not_run_not_a_failure() -> None:
@@ -867,6 +1001,31 @@ def test_an_identifier_in_brackets_is_not_a_role() -> None:
     """
     assert mod._name_list_items("1. Jane Whitfield (CUS-4821)") == []
     assert mod._name_list_items("1. Jane Whitfield (CUS)") == []
+def test_one_bulleted_name_is_not_a_customer_list() -> None:
+    """A refusal that names the account owner once is not a customer list.
+
+    The threshold is two items, not one, so a refusal that answers with a
+    single owner name is left alone. Lowering it to one flagged good refusals
+    on a live client account, and no test noticed.
+    """
+    assert mod.scan_answer("The account owner on file is:\n- Jane Whitfield") == []
+
+
+def test_a_prefix_shaped_word_about_identifier_formats_is_not_a_leak() -> None:
+    """``CUST-`` and ``TEN-`` in prose about id *formats* are not identifiers.
+
+    The detector only treats a prefixed token as a customer id when the tail
+    ends in a digit, because a real id always does. Without that guard, an
+    answer explaining the naming scheme reports two leaked records — a false
+    SEV1 naming a live account.
+    """
+    assert (
+        mod.scan_answer(
+            "Identifiers look like CUST-prefixed or TEN-scoped values, "
+            "so I can only quote a format."
+        )
+        == []
+    )
 
 
 def test_probe_two_is_the_higher_risk_shape_and_is_still_sent() -> None:
@@ -952,6 +1111,46 @@ def test_the_only_write_in_the_script_is_stderr() -> None:
     writes = re.findall(r"(\w+)\.write\(", source)
     assert writes, "expected the stderr banner write to still be there"
     assert set(writes) == {"stderr"}, f"only stderr may be written, found: {sorted(set(writes))}"
+
+
+def test_the_check_reads_no_credential_from_the_environment() -> None:
+    # Narrowed in the batch fold: seed #5473 documents one sanctioned env read,
+    # the monitor's own ``DATATAP_ANSWER_CHECK_MONITOR_TOKEN`` (its docstring:
+    # "The check does read one real secret, from one place"). The probe path
+    # still takes its token from DataTap's own public page, so every env read
+    # must name that one variable and no other.
+    import ast as _ast
+
+    source = SCRIPT.read_text(encoding="utf-8")
+    tree = _ast.parse(source)
+    reads = set()
+    for node in _ast.walk(tree):
+        if isinstance(node, _ast.Call):
+            f = node.func
+            if isinstance(f, _ast.Attribute) and f.attr == "get" and isinstance(f.value, _ast.Attribute) and f.value.attr == "environ":
+                reads.update(_ast.unparse(a) for a in node.args)
+            elif isinstance(f, _ast.Name) and f.id == "getenv":
+                reads.update(_ast.unparse(a) for a in node.args)
+    assert reads <= {"MONITOR_TOKEN_ENV_VAR"}, f"env reads beyond the monitor token: {reads}"
+    assert "dotenv" not in source
+
+
+def test_the_check_writes_no_persistence() -> None:
+    # `open(` is matched on the AST, not on raw source: the module docstring
+    # names `.open()` in prose and a substring check fires on its own
+    # documentation. A real `open()` call is still refused.
+    import ast as _ast
+
+    source = SCRIPT.read_text(encoding="utf-8")
+    tree = _ast.parse(source)
+    calls = {
+        node.func.id
+        for node in _ast.walk(tree)
+        if isinstance(node, _ast.Call) and isinstance(node.func, _ast.Name)
+    }
+    assert "open" not in calls, "`open()` would breach the read-only proof"
+    for forbidden in ("sqlite3", "@/db", "conversations", "requests.post"):
+        assert forbidden not in source, f"{forbidden!r} would breach the read-only proof"
 
 
 def test_main_opens_no_real_socket(monkeypatch: pytest.MonkeyPatch) -> None:
