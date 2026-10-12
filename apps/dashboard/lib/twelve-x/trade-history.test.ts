@@ -171,6 +171,37 @@ describe('assembleTradeHistory', () => {
     expect(row.hasLevels).toBe(false);
   });
 
+  it('withholds every ladder field when the bracket is not complete', () => {
+    // Broker target-only: targets exist but entry + stop are missing. A history
+    // row must publish nothing — a target with no entry or stop is a half ladder.
+    const partial = idea({
+      run_date: '2026-07-28',
+      rank: 1,
+      trade_levels: {
+        targets: [{ value: '1.1800', provenance: 'broker_quoted', source_ref: 'desk.md' }],
+        status: 'partial',
+      },
+    });
+    const rows = assembleTradeHistory([partial], []);
+    const row = rows[0];
+    expect(row.entryBand).toBeNull();
+    expect(row.stop).toBeNull();
+    expect(row.target).toBeNull();
+    // Merged semantics (L5 as landed): a withheld bracket reports no levels.
+    // The shape-only hasLevels distinction stays open on #5238 for its owner.
+    expect(row.hasLevels).toBe(false);
+    // The internal status enum never reaches the published row.
+    expect(JSON.stringify(row)).not.toContain('partial');
+  });
+
+  it('publishes the ladder only for a complete bracket', () => {
+    const complete = idea({ run_date: '2026-07-29', rank: 1 });
+    const rows = assembleTradeHistory([complete], []);
+    expect(rows[0].entryBand).toBe('148.2–148.6');
+    expect(rows[0].stop).toBe('147.4');
+    expect(rows[0].target).toBe('150.5');
+  });
+
   it('marks missing_rates as no_data, unscored and level-less ideas honestly', () => {
     const rows: TradeHistoryRow[] = assembleTradeHistory(
       [
