@@ -26,6 +26,7 @@ from digibase.art9 import (
     screen_text,
     value_patterns,
 )
+from digibase.art9_middleware import Art9AdmissionMiddleware, install_art9_admission
 from digibase.cors import install_cors, resolve_cors_origins
 from digibase.http import (
     current_request_id,
@@ -45,6 +46,7 @@ __all__ = [
     "ROUTE_KIND_INGEST",
     "ROUTE_KIND_READ",
     "ROUTE_UNREGISTERED",
+    "Art9AdmissionMiddleware",
     "Art9ConfigurationError",
     "RouteDecision",
     "ScreenResult",
@@ -55,6 +57,7 @@ __all__ = [
     "check_route",
     "current_request_id",
     "field_names",
+    "install_art9_admission",
     "install_cors",
     "install_metrics",
     "install_request_id_logging",
