@@ -12,29 +12,11 @@ compatibility_flags = ["nodejs_compat"]
 [observability]
 enabled = true
 
-# Zone routes — same hostname as Pages: Worker owns digichat paths; Pages owns /chat shells.
-[[routes]]
-pattern = "digithings.ai/embed*"
-zone_name = "digithings.ai"
-[[routes]]
-pattern = "digithings.ai/api/chat*"
-zone_name = "digithings.ai"
-[[routes]]
-pattern = "digithings.ai/api/embed*"
-zone_name = "digithings.ai"
-[[routes]]
-pattern = "digithings.ai/api/byok*"
-zone_name = "digithings.ai"
-[[routes]]
-pattern = "digithings.ai/api/plan-proof*"
-zone_name = "digithings.ai"
-[[routes]]
-pattern = "digithings.ai/api/health"
-zone_name = "digithings.ai"
-[[routes]]
-pattern = "digithings.ai/_dtchat*"
-zone_name = "digithings.ai"
-
+# Zone routes moved to digithings-stack (cost epic: one DigiChat container, not two).
+# This worker stays deployable for rollback only: re-add the routes here AND remove
+# them from apps/digithings-stack-cloudflare/wrangler.toml to roll back.
+# Deleting the live digithings-digichat worker + its container app is a separate,
+# owner-approved step after the stack cutover is verified.
 [[containers]]
 class_name = "DigiChatContainer"
 # Build context is monorepo root (two levels up from this package).
