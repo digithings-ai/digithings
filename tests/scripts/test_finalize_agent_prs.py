@@ -26,6 +26,7 @@ range by ci-review-coverage.yml before anything reaches main.
 from __future__ import annotations
 
 import importlib.util
+import subprocess
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -171,3 +172,152 @@ def test_list_agent_prs_still_filters_by_branch_prefix(monkeypatch: pytest.Monke
     monkeypatch.setattr(fap, "_gh_json", lambda *a: [agent_branch, other_branch])
     prs = fap._list_agent_prs("digithings-ai/digithings")
     assert {pr["number"] for pr in prs} == {1}
+
+
+# --- DIG-3066: the GraphQL deadline and the split query --------------------
+#
+# The single wide query (--limit 100 with body/reviews/statusCheckRollup) was
+# ~1.6 MB and failed on 4/4 measured attempts with HTTP 502/504 at ~11.5 s,
+# against a ~11 s upstream deadline. These pin the two halves of the fix: the
+# expensive fields move out of the candidate query, and gh calls get a bounded
+# retry that still fails loudly.
+
+
+def _fake_proc(returncode: int, stdout: str = "", stderr: str = "") -> Any:
+    return subprocess.CompletedProcess(
+        args=["gh"], returncode=returncode, stdout=stdout, stderr=stderr
+    )
+
+
+def test_the_candidate_query_does_not_ask_for_the_expensive_fields() -> None:
+    """If these creep back into the list query, the 504 comes back with them.
+
+    Asserted against the constants the query actually uses, and cross-checked on
+    the source so a rename cannot quietly leave the wide query in place.
+    """
+    for heavy in ("body", "reviews", "statusCheckRollup", "labels", "mergeable"):
+        assert heavy not in fap.CANDIDATE_FIELDS.split(","), (
+            f"{heavy} in the candidate query re-inflates the payload"
+        )
+        assert heavy in fap.HYDRATE_FIELDS.split(","), f"{heavy} must still be fetched per PR"
+    # isCrossRepository is the CWE-862 fork guard and is cheap — it must stay in
+    # the candidate query or the filter has nothing to fail closed on.
+    assert "isCrossRepository" in fap.CANDIDATE_FIELDS.split(",")
+
+
+def test_the_candidate_limit_sees_more_than_the_old_page_of_100() -> None:
+    """The old page silently truncated the scan: 23 of 42 agent PRs were skipped."""
+    assert fap.PR_LIST_LIMIT > 100
+
+
+def test_a_transient_gateway_failure_is_retried_then_succeeds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[Any] = []
+
+    def fake_run(args: Any, **kw: Any) -> Any:
+        calls.append(args)
+        if len(calls) == 1:
+            return _fake_proc(
+                1, stderr="HTTP 504: 504 Gateway Timeout (https://api.github.com/graphql)"
+            )
+        return _fake_proc(0, stdout='{"ok": true}')
+
+    slept: list[float] = []
+    monkeypatch.setattr(fap.subprocess, "run", fake_run)
+    monkeypatch.setattr(fap.time, "sleep", lambda s: slept.append(s))
+
+    assert fap._gh_json("pr", "list") == {"ok": True}
+    assert len(calls) == 2, "the retry must actually re-invoke gh"
+    assert slept == [fap._GH_BACKOFF_SECONDS[0]], "a real backoff must be taken between attempts"
+
+
+def test_the_retry_gives_up_and_raises_rather_than_swallowing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A hard failure must still fail the step — the retry must not hide it."""
+    calls: list[Any] = []
+
+    def fake_run(args: Any, **kw: Any) -> Any:
+        calls.append(args)
+        return _fake_proc(1, stderr="HTTP 504: 504 Gateway Timeout")
+
+    monkeypatch.setattr(fap.subprocess, "run", fake_run)
+    monkeypatch.setattr(fap.time, "sleep", lambda s: None)
+
+    with pytest.raises(subprocess.CalledProcessError):
+        fap._gh_json("pr", "list")
+    assert len(calls) == fap.MAX_GH_ATTEMPTS, "all bounded attempts must be spent before raising"
+
+
+def test_a_deterministic_failure_is_not_retried(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Retrying a 4xx only burns the job's 45-minute budget."""
+    calls: list[Any] = []
+
+    def fake_run(args: Any, **kw: Any) -> Any:
+        calls.append(args)
+        return _fake_proc(1, stderr="HTTP 401: Bad credentials (https://api.github.com/graphql)")
+
+    monkeypatch.setattr(fap.subprocess, "run", fake_run)
+    monkeypatch.setattr(fap.time, "sleep", lambda s: None)
+
+    with pytest.raises(subprocess.CalledProcessError):
+        fap._gh_json("pr", "list")
+    assert len(calls) == 1, "a 401 is deterministic and must not be retried"
+
+
+def test_a_pr_whose_state_cannot_be_read_never_reaches_ready_merge(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Fail CLOSED: an unread statusCheckRollup reads as (False, False) = "green".
+
+    Without this the split query would be a fail-open regression: a transient
+    per-PR read failure would push a red-CI PR to ready_merge.
+    """
+    candidate = {
+        "number": 77,
+        "headRefName": "cursor/some-work",
+        "baseRefName": "develop",
+        "isCrossRepository": False,
+        "isDraft": False,
+        "createdAt": (datetime.now(UTC) - timedelta(hours=fap.MIN_AGE_HOURS + 1)).isoformat(),
+    }
+    monkeypatch.setattr(fap, "_list_agent_prs", lambda repo: [candidate])
+    monkeypatch.setattr(fap, "_hydrate_pr", lambda repo, number: None)
+    monkeypatch.setattr(fap, "_issue_labels", lambda repo, num: [])
+
+    actions = fap.evaluate_all("digithings-ai/digithings", fetch_base=False)
+    assert len(actions) == 1
+    assert actions[0].state != "ready_merge", "unreadable state must never be merge-ready"
+    assert actions[0].state == "needs_human"
+
+
+def test_evaluate_all_merges_the_hydrated_fields_onto_the_candidate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The split must not lose fields — a hydrated PR still classifies as before."""
+    candidate = {
+        "number": 78,
+        "headRefName": "cursor/some-work",
+        "baseRefName": "develop",
+        "isCrossRepository": False,
+        "isDraft": False,
+        "createdAt": (datetime.now(UTC) - timedelta(hours=fap.MIN_AGE_HOURS + 1)).isoformat(),
+    }
+    heavy = {
+        "title": "feat: a thing",
+        "body": "Fixes #99",
+        "labels": [],
+        "mergeable": "MERGEABLE",
+        "reviewRequests": [],
+        "reviews": [],
+        "statusCheckRollup": [{"name": "CI", "state": "SUCCESS", "conclusion": "SUCCESS"}],
+    }
+    monkeypatch.setattr(fap, "_list_agent_prs", lambda repo: [candidate])
+    monkeypatch.setattr(fap, "_hydrate_pr", lambda repo, number: heavy)
+    monkeypatch.setattr(fap, "_issue_labels", lambda repo, num: [])
+
+    actions = fap.evaluate_all("digithings-ai/digithings", fetch_base=False)
+    assert [a.state for a in actions] == ["ready_merge"], (
+        "a hydrated green+linked+old PR must still reach ready_merge"
+    )
