@@ -352,13 +352,11 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command:
       - >-
-        if [ -n "$$CHEAPERINFERENCE_API_KEY" ]; then
-        python3 /app/scripts/merge_litellm_cheaperinference.py > /tmp/litellm.yaml && CFG=/tmp/litellm.yaml;
-        else CFG=/app/config/litellm.yaml; fi;
+        if [ -n "$$CHEAPERINFERENCE_API_KEY" ] && python3 /app/scripts/merge_litellm_cheaperinference.py > /tmp/litellm.yaml; then CFG=/tmp/litellm.yaml; else CFG=/app/config/litellm.yaml; fi;
         exec litellm --config "$$CFG" --host 0.0.0.0 --port 4000
     volumes:
       - ./config:/app/config:ro
-      - ./scripts/merge_litellm_cheaperinference.py:/app/scripts/merge_litellm_cheaperinference.py:ro
+      - ./scripts:/app/scripts:ro
     # LiteLLM can start without Ollama; Ollama models fail until ollama is healthy.
     # The slim image has no curl/wget — probe with the bundled Python.
     healthcheck:
