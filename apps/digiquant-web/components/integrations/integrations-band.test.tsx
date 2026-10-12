@@ -46,15 +46,20 @@ describe("IntegrationsBand", () => {
     expect(html).not.toContain("M-9 -5.5 -2 0 -9 5.5");
   });
 
-  it("drops the big module heroes and the emblem icons; a module tile shows its small banner or its name", () => {
+  it("drops the big digiquant hero and the emblem icons; every module tile shows its own small banner", () => {
     expect(html).not.toContain('aria-label="digiquant"');
-    expect(html).not.toContain('aria-label="digivoice"');
-    expect(html).toMatch(/<canvas[^>]*aria-label="digichat"/);
     expect(html).not.toContain("M0 -6 -9 8");
-    expect(html.match(/<canvas/g) ?? []).toHaveLength(1);
-    for (const name of ["digigraph", "digillm", "digikey", "digibase", "digifetch"]) {
-      expect(html).toContain(`>${name}</span>`);
+    const modules = [
+      "digigraph", "digichat", "digillm", "digikey", "digibase", "digifetch",
+      "digisearch", "digitrace", "digivault", "digiclaw", "digivoice", "digidev", "digibook",
+    ];
+    for (const name of modules) {
+      expect(html).toMatch(new RegExp(`<canvas[^>]*aria-label="${name}"`));
+      expect(html).not.toContain(`>${name}</span>`);
     }
+    expect(html.match(/<canvas/g) ?? []).toHaveLength(modules.length);
+    expect(html).toContain('aria-label="digiquant calls"');
+    expect(html).toContain('aria-label="the rest of digithings"');
   });
 
   it("scrolls the packages this tree actually calls, in two directions", () => {
