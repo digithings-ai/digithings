@@ -408,9 +408,11 @@
   --section-y: clamp(4.5rem, 9vw, 8rem);
   --section-y-tight: clamp(2.5rem, 5vw, 4rem);
   --ease-glide: cubic-bezier(0.22, 1, 0.36, 1);
+  /* --ease and --duration-* mirror motion.json (motion-tokens.contract.test.ts). */
   --duration-reveal: 0.6s;
   --duration-hover: 0.18s;
   --duration-copied: 1.5s;
+  --duration-build: 1.4s;
 
   /* Marketing type ladder (the document scale). The instrument-panel display
      clamp stays reserved for a landing hero; every other surface uses this

@@ -165,7 +165,16 @@ describe('loadBriefSnapshot', () => {
       provenance: null,
     });
     digiquant.getAllocations.mockResolvedValue({
-      data: { book_as_of: '2026-09-24', rows: [], contract: 'legacy_estimate' },
+      data: {
+        book_as_of: '2026-09-24',
+        // The stub producer emits the fixture NAV figure BESIDE the
+        // `legacy_estimate` contract (dashboard-api/src/stubs.ts navRows), and
+        // isStubPayload keys on the figure, never on the contract alone - a live
+        // NAV series carries `legacy_estimate` on real points. Withholding here
+        // must therefore mean "a fixture figure was present".
+        nav_tip: { date: '2026-09-24', nav: 99.909, contract: 'legacy_estimate' },
+        rows: [],
+      },
       asOf: null,
       retrievalPin: null,
       provenance: null,
