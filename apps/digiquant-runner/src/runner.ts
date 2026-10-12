@@ -46,20 +46,26 @@ export class DigiQuantRunnerContainer extends Container<Env> {
   sleepAfter = "2m";
   enableInternet = true;
 
-  constructor(ctx: DurableObjectState, env: Env) {
-    super(ctx, env);
-    // Deferred until the instance is idle so the re-arm never races a request,
-    // and swallowed on failure: a missed re-arm must not take the instance down.
-    this.ctx
-      .blockConcurrencyWhile(() =>
-        rearmHeartbeatAfterReset({
-          getAlarm: () => this.ctx.storage.getAlarm(),
-          hasActiveWork: () => this.session().hasActiveWork(),
-          scheduleHeartbeat: () => this.schedule(HEARTBEAT_MS / 1000, "heartbeat").then(() => undefined),
-        }),
-      )
-      .catch(() => undefined);
-  }
+  /**
+   * DIG-3061: a Durable Object reset (a code update, or eviction) drops the
+   * heartbeat alarm, and nothing re-armed it, so an in-flight house run kept its
+   * lock forever and no success.json was ever written.
+   *
+   * A field initializer runs straight after super(), which is the earliest point
+   * the instance can defer work. blockConcurrencyWhile holds it until the DO is
+   * idle, so the re-arm never races a request, and the catch keeps a missed
+   * re-arm from surfacing as an unhandled rejection.
+   */
+  rearmHeartbeatGuard: Promise<boolean | undefined> = this.ctx
+    .blockConcurrencyWhile(() =>
+      rearmHeartbeatAfterReset({
+        getAlarm: () => this.ctx.storage.getAlarm(),
+        hasActiveWork: () => this.session().hasActiveWork(),
+        scheduleHeartbeat: () =>
+          this.schedule(HEARTBEAT_MS / 1000, "heartbeat").then(() => undefined),
+      }),
+    )
+    .catch(() => undefined);
 
   override async fetch(request: Request): Promise<Response> {
     this.envVars = dataPlaneEnv(this.env);
