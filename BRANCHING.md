@@ -236,6 +236,14 @@ git push origin --delete <branch>
 git branch -d <branch>                          # local
 ```
 
+**Branches with no PR are not covered by this section.** A branch that nobody
+merged and nobody referenced is *stranded*, and it is disposed of under a separate
+policy: [`docs/ops/branch-hygiene-policy.md`](docs/ops/branch-hygiene-policy.md).
+That policy measures the branch by `git cherry` (unmerged patches, not commit
+count), assigns it a tier, and names the agent allowed to delete it. It also turns
+on the prevention side — `delete_branch_on_merge`, a branch-age guard, and a
+pre-push age warning. Read it before deleting anything that never had a PR.
+
 `main` and `develop` are protected server-side against deletion. Release
 branches are policy-protected — one per released version, and an old one is the
 only way to patch a client still pinned to it — but that is not yet enforced

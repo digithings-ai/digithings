@@ -5,6 +5,9 @@
 **Authority:** Counsel memo DIG-461 revision 2
 **Related:** DIG-478 (parent, Counsel, blocked on Chris), DIG-503 (this freeze), DIG-461 (Counsel memo), DIG-443 (Security)
 
+> `DIG-###` are internal issue-tracker IDs. They are not resolvable in this
+> public repository; each is cited so the reasoning is traceable internally.
+
 ---
 
 ## What is held
@@ -12,7 +15,7 @@
 | Item | Location | State | Reason |
 |------|----------|-------|--------|
 | Package **P22** — `twelve-x` research producer confirm | `docs/plans/adr-0030/packages/P22-twelve-x-research-producer.md` | **HELD** — not to be implemented | Would publish the PrimeMarket scrape path into the public repo |
-| The `twelve_x/nodes/scrape.py` mapping | `docs/plans/adr-0030/README.md` § "Paths below" | **HELD** — removed | Mapped private-recipe paths onto public docs |
+| The `twelve_x/nodes/scrape.py` mapping | `docs/plans/adr-0030/README.md` § "Paths below" | **HELD** — mapping row still present; vendor names removed from it | Mapped private-recipe paths onto public docs |
 | The worked access recipe itself | `digifetch/ARCHITECTURE.md` (was lines 180–182, 198, 206, 249) | **REMOVED** 2026-10-05 (DIG-503) | Described the step-by-step access method in a public repo |
 
 ## Why

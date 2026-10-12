@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import pytest
-from digivoice.paste import KEYSTROKE_SCRIPT, copy_to_clipboard, paste
+from digivoice.focus import FocusTarget
+from digivoice.paste import ACTIVATE_AND_PASTE_SCRIPT, KEYSTROKE_SCRIPT, copy_to_clipboard, paste
 
 from tests.dvo.fakes import FakeProbe, FakeReply, FakeRunner
 
@@ -40,6 +41,27 @@ def test_paste_copies_then_keystrokes() -> None:
     assert copied.argv == ["/usr/bin/pbcopy"]
     assert typed.argv == ["/usr/bin/osascript", "-e", KEYSTROKE_SCRIPT]
     assert "v" in KEYSTROKE_SCRIPT and "command down" in KEYSTROKE_SCRIPT
+
+
+def test_paste_activates_the_app_that_had_focus() -> None:
+    runner = FakeRunner({"pbcopy": FakeReply(), "osascript": FakeReply()})
+    focus = FocusTarget(name="TextEdit", bundle_id="com.apple.TextEdit")
+    result = paste("darwin", FakeProbe(commands=dict(DARWIN_TOOLS)), runner, TEXT, focus)
+    assert result.pasted is True
+    assert result.detail == "pasted into TextEdit"
+    copied, typed = runner.calls
+    assert copied.stdin == TEXT
+    assert TEXT not in " ".join(typed.argv)
+    assert typed.argv == [
+        "/usr/bin/osascript",
+        "-e",
+        ACTIVATE_AND_PASTE_SCRIPT,
+        "com.apple.TextEdit",
+        "TextEdit",
+    ]
+    assert "-" not in typed.argv
+    assert "keystroke" in ACTIVATE_AND_PASTE_SCRIPT
+    assert "frontmost" in ACTIVATE_AND_PASTE_SCRIPT
 
 
 def test_denied_accessibility_is_reported_but_not_raised() -> None:

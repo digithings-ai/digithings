@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -498,3 +500,184 @@ def test_mcp_web_search_allowed_with_opt_in() -> None:
         out = execute("digisearch_web_search", {"query": "x"}, ctx)
     call.assert_called_once()
     assert out == {"ok": True}
+
+
+# --- DIG-507: the remote MCP server must be asked for the name it advertised ---
+
+
+def _capture_names(monkeypatch: pytest.MonkeyPatch, server: dict[str, str], names: list[str]) -> None:
+    from digigraph.orchestration import mcp_client
+
+    monkeypatch.setitem(mcp_client._raw_names_cache, mcp_client.mcp_list_cache_key(server), names)
+
+
+def _forget_names(monkeypatch: pytest.MonkeyPatch, server: dict[str, str]) -> None:
+    from digigraph.orchestration import mcp_client
+
+    key = mcp_client.mcp_list_cache_key(server)
+    monkeypatch.delitem(mcp_client._raw_names_cache, key, raising=False)
+
+
+@pytest.mark.unit
+def test_list_tools_async_captures_the_advertised_tool_names(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The capture is the mechanism; pin it at the only place names still exist."""
+    from digigraph.orchestration import mcp_client
+
+    class _Tool:
+        def __init__(self, name: str) -> None:
+            self.name = name
+            self.description = None
+            self.inputSchema = {"type": "object", "properties": {}}
+
+    class _Listing:
+        tools = [_Tool("atlassian.executeWrite"), _Tool("plain"), _Tool("atlassian.executeWrite")]
+
+    class _Session:
+        async def __aenter__(self) -> "_Session":
+            return self
+
+        async def __aexit__(self, *exc: object) -> bool:
+            return False
+
+        async def initialize(self) -> None:
+            return None
+
+        async def list_tools(self) -> _Listing:
+            return _Listing()
+
+    @contextlib.asynccontextmanager
+    async def _wire(url: str, **kwargs: object):
+        yield (object(), object(), object())
+
+    monkeypatch.setattr("mcp.client.streamable_http.streamablehttp_client", _wire)
+    monkeypatch.setattr("mcp.ClientSession", lambda read, write: _Session())
+
+    server = {"id": "atlassian", "url": "https://mcp.example/mcp"}
+    _forget_names(monkeypatch, server)
+
+    offered = asyncio.run(mcp_client._list_tools_async(server))
+
+    # The model is still offered the sanitised names -- unchanged by DIG-507.
+    assert [t["function"]["name"] for t in offered] == [
+        "atlassian_atlassian_executeWrite",
+        "atlassian_plain",
+        "atlassian_atlassian_executeWrite",
+    ]
+    # Captured advertised names, de-duplicated and order-preserved.
+    assert mcp_client.raw_tool_names_for_server(server) == ["atlassian.executeWrite", "plain"]
+
+
+@pytest.mark.unit
+def test_registry_execute_calls_the_advertised_mcp_tool_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Acceptance 1: end to end through registry.execute(), a dotted name survives."""
+    server = {"id": "atlassian", "url": "https://mcp.example/mcp"}
+    _capture_names(
+        monkeypatch,
+        server,
+        [
+            "atlassian.discover",
+            "atlassian.executeRead",
+            "atlassian.executeWrite",
+            "atlassian.executeDestructive",
+        ],
+    )
+    offered = prefixed_tool_name("atlassian", "atlassian.executeWrite")
+    assert offered == "atlassian_atlassian_executeWrite"
+
+    ctx = ToolContext(
+        session_id="s",
+        run_data_dir=None,
+        index_name="default",
+        index_config={},
+        state={},
+        extra_mcp_servers=[server],
+        allowed_tool_names=frozenset({offered}),
+    )
+    with patch(
+        "digigraph.orchestration.mcp_client._call_tool_blocking",
+        return_value={"ok": True},
+    ) as call:
+        out = execute(offered, {"text": "hi"}, ctx)
+
+    assert out == {"ok": True}
+    call.assert_called_once_with(server, "atlassian.executeWrite", {"text": "hi"})
+
+
+@pytest.mark.unit
+def test_registry_execute_calls_a_long_advertised_tool_name_in_full(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Acceptance 2: a name past the 64-safe-char cap is called correctly, not truncated."""
+    raw = "a" * 64 + ".tail"
+    server = {"id": "longtools", "url": "https://mcp.example/mcp"}
+    _capture_names(monkeypatch, server, [raw])
+    offered = prefixed_tool_name("longtools", raw)
+    assert offered == "longtools_" + "a" * 64
+
+    ctx = ToolContext(
+        session_id="s",
+        run_data_dir=None,
+        index_name="default",
+        index_config={},
+        state={},
+        extra_mcp_servers=[server],
+        allowed_tool_names=frozenset({offered}),
+    )
+    with patch(
+        "digigraph.orchestration.mcp_client._call_tool_blocking",
+        return_value={"ok": True},
+    ) as call:
+        out = execute(offered, {"text": "hi"}, ctx)
+
+    assert out == {"ok": True}
+    call.assert_called_once_with(server, raw, {"text": "hi"})
+
+
+@pytest.mark.unit
+def test_call_prefixed_tool_refuses_a_name_the_server_never_advertised(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    server = {"id": "atlassian", "url": "https://mcp.example/mcp"}
+    _capture_names(monkeypatch, server, ["atlassian.executeRead"])
+    with patch("digigraph.orchestration.mcp_client._call_tool_blocking") as call:
+        out = call_prefixed_tool("atlassian_invented", {}, [server])
+    call.assert_not_called()
+    assert out["error"] == "mcp_tool_name_unresolved"
+    assert out["tool"] == "atlassian_invented"
+    assert out["server"] == "atlassian"
+
+
+@pytest.mark.unit
+def test_call_prefixed_tool_refuses_when_two_advertised_names_collapse(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Both truncate to the same offered name; guessing either calls the wrong tool."""
+    first, second = "b" * 64 + "X", "b" * 64 + "Y"
+    server = {"id": "collapser", "url": "https://mcp.example/mcp"}
+    _capture_names(monkeypatch, server, [first, second])
+    offered = prefixed_tool_name("collapser", first)
+    assert prefixed_tool_name("collapser", second) == offered
+    with patch("digigraph.orchestration.mcp_client._call_tool_blocking") as call:
+        out = call_prefixed_tool(offered, {}, [server])
+    call.assert_not_called()
+    assert out["error"] == "mcp_tool_name_unresolved"
+
+
+@pytest.mark.unit
+def test_call_prefixed_tool_falls_back_to_the_offered_name_without_a_capture(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No list_tools snapshot means the offered name is the best name there is."""
+    server = {"id": "nocapture", "url": "https://mcp.example/mcp"}
+    _forget_names(monkeypatch, server)
+    with patch(
+        "digigraph.orchestration.mcp_client._call_tool_blocking",
+        return_value={"ok": True},
+    ) as call:
+        out = call_prefixed_tool("nocapture_echo", {"q": "hi"}, [server])
+    assert out == {"ok": True}
+    call.assert_called_once_with(server, "echo", {"q": "hi"})

@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import json as _json
+
 import pytest
 from digisearch.core.models import Chunk
 from digisearch.search import add_chunks
 from digisearch.server import app
 from fastapi.testclient import TestClient
 
+import digifetch
+from digifetch import FetchResult
 from tests.digi_test_jwt import auth_headers
 
 
@@ -146,25 +150,25 @@ def test_orchestrator_invoke_web_search_forwards_offset(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Page 2 is deterministic over the invoke surface (#4241)."""
-    import digisearch.web_exa as web_exa_mod
 
     monkeypatch.setenv("EXA_API_KEY", "test-key")
     seen: dict = {}
     results = [{"title": f"t{i}", "url": f"https://example.com/{i}"} for i in range(1, 17)]
 
-    class FakeResp:
-        status_code = 200
-        text = ""
+    def fake_fetch(self, url, **kwargs):
+        payload = kwargs.get("json")
+        seen["payload"] = payload
+        seen.setdefault("payloads", []).append(payload)
+        return FetchResult(
+            status_code=200,
+            url=url,
+            text=_json.dumps({"results": results[: payload["numResults"]], "searchType": "auto"}),
+            content_type="application/json",
+        )
 
-        def json(self):
-            return {"results": results[: seen["payload"]["numResults"]], "searchType": "auto"}
-
-    def fake_post(url, json=None, headers=None, timeout=None):
-        seen["payload"] = json
-        seen.setdefault("payloads", []).append(json)
-        return FakeResp()
-
-    monkeypatch.setattr(web_exa_mod.httpx, "post", fake_post)
+    # EXA posts through the shared digifetch seam (DIG-912 §5.3), not httpx
+    # directly, so the double has to intercept digifetch.HttpFetcher.fetch.
+    monkeypatch.setattr(digifetch.HttpFetcher, "fetch", fake_fetch)
     r = client.post(
         "/v1/orchestrator_invoke",
         json={
@@ -210,16 +214,15 @@ def test_orchestrator_invoke_web_search_default_offset_is_unpaged(
 def test_orchestrator_invoke_web_search_offset_past_cap_is_ok_false(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import digisearch.web_exa as web_exa_mod
 
     monkeypatch.setenv("EXA_API_KEY", "test-key")
     seen: list = []
 
-    def fake_post(url, json=None, headers=None, timeout=None):
-        seen.append(json)
+    def fake_fetch(self, url, **kwargs):
+        seen.append(kwargs.get("json"))
         raise AssertionError("out-of-range must be refused before any EXA POST")
 
-    monkeypatch.setattr(web_exa_mod.httpx, "post", fake_post)
+    monkeypatch.setattr(digifetch.HttpFetcher, "fetch", fake_fetch)
     r = client.post(
         "/v1/orchestrator_invoke",
         json={
@@ -239,11 +242,10 @@ def test_orchestrator_invoke_web_search_offset_past_cap_is_ok_false(
 def test_orchestrator_invoke_web_search_negative_offset_is_ok_false(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import digisearch.web_exa as web_exa_mod
 
     monkeypatch.setenv("EXA_API_KEY", "test-key")
     seen: list = []
-    monkeypatch.setattr(web_exa_mod.httpx, "post", lambda *a, **k: seen.append(a))
+    monkeypatch.setattr(digifetch.HttpFetcher, "fetch", lambda *a, **k: seen.append(k.get("json")))
     r = client.post(
         "/v1/orchestrator_invoke",
         json={
@@ -262,11 +264,10 @@ def test_orchestrator_invoke_web_search_negative_offset_is_ok_false(
 def test_orchestrator_invoke_web_search_bad_offset_type_is_ok_false(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import digisearch.web_exa as web_exa_mod
 
     monkeypatch.setenv("EXA_API_KEY", "test-key")
     seen: list = []
-    monkeypatch.setattr(web_exa_mod.httpx, "post", lambda *a, **k: seen.append(a))
+    monkeypatch.setattr(digifetch.HttpFetcher, "fetch", lambda *a, **k: seen.append(k.get("json")))
     for bad in (True, "garbage", 2.5, [8]):
         r = client.post(
             "/v1/orchestrator_invoke",

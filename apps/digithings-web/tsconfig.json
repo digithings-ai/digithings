@@ -13,6 +13,12 @@
     "esModuleInterop": true,
     "module": "esnext",
     "moduleResolution": "bundler",
+    // The book's chapter reader is imported by scripts/book/render-diagrams.mjs,
+    // which runs in plain Node with type stripping. Node ESM will not resolve an
+    // extensionless specifier, so the book's own intra-module imports carry the
+    // .ts extension; this option is what lets TypeScript accept them (and
+    // `noEmit` above is what lets it be on at all).
+    "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "react-jsx",
