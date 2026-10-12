@@ -32,16 +32,18 @@ pytestmark = pytest.mark.unit
 #: SAME raw map string used in production — verbatim from
 #: ``infra/digichat-release/compose.profile-a-bundle.override.yml:6`` and
 #: ``apps/digithings-stack-cloudflare/wrangler.toml`` ``DIGI_TENANT_CORPUS_MAP``.
+#: The occ fan-out is ``occ_help`` alone: the committed ticket snapshot was
+#: retired in DIG-1380, so there is no second leg to search.
 _RAW_MAP = (
     '{"digithings":{"digisearchIndex":"digithings_docs",'
     '"vaultPathPrefix":"clients/digithings"},'
-    '"occ":{"digisearchIndex":"occ_help,occ_tickets",'
+    '"occ":{"digisearchIndex":"occ_help",'
     '"vaultPathPrefix":"clients/online-compliance-center"}}'
 )
 
 _EXPECTED = {
     "digithings": ("digithings_docs", "clients/digithings"),
-    "occ": ("occ_help,occ_tickets", "clients/online-compliance-center"),
+    "occ": ("occ_help", "clients/online-compliance-center"),
 }
 
 

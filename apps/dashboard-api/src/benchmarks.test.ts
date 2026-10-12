@@ -9,6 +9,7 @@ import {
   alignBenchmarkSeries,
   benchmarkOverlapMeetsFloor,
   buildBenchmarksData,
+  marketClosesHttpIssue,
   parseBenchmarksQuery,
   registerBenchmarksRoutes,
   resolveBenchmarkUniverse,
@@ -155,5 +156,92 @@ describe('registerBenchmarksRoutes', () => {
     expect(body.data.universe).toEqual(['SPY']);
     expect(body.data.overlap_days).toBe(6);
     expect(body.as_of).toBe('2026-08-28');
+  });
+});
+
+
+describe('benchmark reason (why the series is empty)', () => {
+  it('is null when overlap covers the NAV window', () => {
+    const data = buildBenchmarksData(
+      { navDates: NAV_DATES, marketCloses: { SPY }, marketUniverse: ['SPY'] },
+      ['SPY'],
+      null,
+      null,
+    );
+    expect(data.reason).toBeNull();
+  });
+  it('names no_closes_in_window when the market API returned no rows at all', () => {
+    const data = buildBenchmarksData(
+      { navDates: ['2026-08-28'], marketCloses: {}, marketUniverse: null },
+      null,
+      null,
+      null,
+    );
+    expect(data.overlap_days).toBe(0);
+    expect(data.reason).toBe('no_closes_in_window');
+  });
+  it('names no_overlap when only part of the universe has closes', () => {
+    // Overlap is an intersection: one covered ticker cannot clear it while a
+    // sibling key in the same universe stays empty.
+    const data = buildBenchmarksData(
+      {
+        navDates: NAV_DATES,
+        marketCloses: { SPY },
+        marketUniverse: ['SPY', 'QQQ'],
+      },
+      ['SPY', 'QQQ'],
+      null,
+      null,
+    );
+    expect(data.series.SPY).toHaveLength(6);
+    expect(data.series.QQQ).toEqual([]);
+    expect(data.overlap_days).toBe(0);
+    expect(data.reason).toBe('no_overlap');
+  });
+  it('reports the loader cause verbatim and never guesses overlap', () => {
+    const data = buildBenchmarksData(
+      {
+        navDates: NAV_DATES,
+        marketCloses: {},
+        marketUniverse: null,
+        marketIssue: 'market_url_unset',
+      },
+      ['SPY'],
+      null,
+      null,
+    );
+    expect(data.overlap_days).toBe(0);
+    expect(data.reason).toBe('market_url_unset');
+  });
+  it('carries the http status of a failed closes batch', () => {
+    const data = buildBenchmarksData(
+      {
+        navDates: NAV_DATES,
+        marketCloses: {},
+        marketUniverse: ['SPY'],
+        marketIssue: marketClosesHttpIssue(503),
+      },
+      ['SPY'],
+      null,
+      null,
+    );
+    expect(data.reason).toBe('market_closes_http_503');
+  });
+  it('route surfaces the reason on the response body', async () => {
+    const handlers = new Map<string, (req: Request) => Promise<Response>>();
+    registerBenchmarksRoutes((path, handler) => handlers.set(path, handler), {
+      loadBenchmarksBook: async () => ({
+        navDates: NAV_DATES,
+        marketCloses: {},
+        marketUniverse: null,
+        marketIssue: 'market_url_unset',
+      }),
+    });
+    const res = await handlers.get('/benchmarks')!(
+      new Request('https://api.test/benchmarks?tickers=SPY'),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { data: { reason: string | null } };
+    expect(body.data.reason).toBe('market_url_unset');
   });
 });

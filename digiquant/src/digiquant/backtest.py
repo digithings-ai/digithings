@@ -59,6 +59,11 @@ _CACHE_ENABLED = os.environ.get("DIGIQUANT_BACKTEST_CACHE", "true").strip().lowe
     "no",
 )
 
+# Part of the cache key. v2 = sharpe_ratio and max_drawdown_pct are derived from the
+# account-report balance path (DIG-462); v1 reported a per-trade series annualised by
+# sqrt(252), which no consumer of a cached result should ever see again.
+_METRICS_VERSION = 2
+
 
 def _backtest_cache_max() -> int:
     raw = (os.environ.get("DIGIQUANT_BACKTEST_CACHE_MAX") or "128").strip()
@@ -80,6 +85,10 @@ def _cache_key(
     data_dir: str | Path | None,
 ) -> str:
     payload = {
+        # Bumped whenever a reported metric changes meaning, so results cached by an
+        # older runner (e.g. the pre-fix Sharpe annualised off the per-trade analyzer
+        # series) cannot be served against a key that no longer describes them.
+        "metrics_version": _METRICS_VERSION,
         "strategy_name": strategy_name,
         "symbols": sorted(symbols),
         "params": dict(sorted((params or {}).items())),

@@ -1,4 +1,11 @@
-"""luxalgo market-trackers-data congress-trades CC0 dump → digisearch index.
+"""luxalgo market-trackers-data congress-trades feed → digisearch index.
+
+Upstream is LuxAlgo's public ``market-trackers-data`` repository, which publishes
+the underlying US public-records disclosures as a derived feed. **No licence is
+asserted here.** The earlier docstring called this a CC0 dump; that claim is
+unverified and is open with Security under DIG-1464, and LuxAlgo's own terms say
+the market data includes data licensed from third parties and may not be
+redistributed. Do not assert a licence in this file until DIG-1464 closes.
 
 Primary-source US public-records layer **beside Gloomberg** (never replacing
 the terminal digest). Thin wrap mirroring :mod:`digisearch.research_ingest`:
@@ -50,7 +57,8 @@ from digisearch.search._stub import _stub_index
 logger = logging.getLogger(__name__)
 
 
-#: Stable feed: current congress-trades snapshot (CC0-1.0 data).
+#: Stable feed: current congress-trades snapshot from LuxAlgo's public
+#: ``market-trackers-data`` repository. Licence unverified — see DIG-1464.
 CONGRESS_TRADES_URL: str = (
     "https://raw.githubusercontent.com/LuxAlgo/market-trackers-data"
     "/main/congress/trades/latest.json"
@@ -439,6 +447,21 @@ def ingest_congress_trades(
     manifest-declared count. Rows without a natural key are counted as
     skipped (logged, never silent); already-indexed rows are skipped
     idempotently.
+
+    **This ingest is retained by business decision against Counsel's advice
+    (DIG-1472, DIG-1479).** Counsel classified these rows as periodic
+    transaction reports under 5 U.S.C. 13105(l) and therefore "reports" for
+    5 U.S.C. 13107(c), and advised refusing the dataset. On 2026-10-06 the
+    business owner (Chris) decided to keep it in service, accepting the
+    13107(c)(2) exposure. That is a business decision, **not** a legal
+    clearance, and no one should read this module as a Counsel opinion. The
+    matching refusal note for the ``digifetch_congress_trades`` tool surface is
+    in :mod:`digiquant.tool_refusals`; the dataset allowlist that keeps
+    ``congress-trades`` reachable through the LuxAlgo thin wrap is
+    ``LUXALGO_TRACKERS_ALLOWED_DATASETS`` in :mod:`digiquant.data.luxalgo.models`.
+    Do not add a refuse-by-default guard to this path without Counsel's
+    instruction: one branch (PR #5178, from DIG-1329) implements exactly that
+    and now contradicts the business decision.
     """
     manifest = check_manifest_not_stale(fetcher, allowed_hosts=allowed_hosts)
     rows = fetch_congress_trades_latest(fetcher, allowed_hosts=allowed_hosts)
