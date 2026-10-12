@@ -78,6 +78,8 @@ SLUG = "digithings-ai/digithings"
 WINDOW_DAYS = 30
 YEAR_DAYS = 371  # 53 weeks, matches RepoHeatmap's default
 BRANCH = "main"
+ISSUE_FIELDS = "number,title,url,createdAt,updatedAt,closedAt"
+ISSUE_LIMIT = 3000  # one list holds every open issue and every closed one
 
 
 def _shown(path: Path) -> str:
@@ -102,6 +104,42 @@ def _gh(*args: str) -> object:
 
 def _since() -> str:
     return (datetime.now(UTC) - timedelta(days=WINDOW_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _issues(state: str, limit: int = ISSUE_LIMIT) -> list[dict]:
+    """Every issue in *state*, read from the issue list rather than the Search API.
+
+    Not ``search/issues``. Since ~2026-09-20 that endpoint has answered an
+    ``is:issue`` query with this repo's *pull requests* for the Actions token: run
+    35567282830 (2026-09-21) printed "3 PRs open, 3 issues open" against "1278 PRs
+    merged, 1301 issues closed" — each pair identical, i.e. the qualifier had
+    resolved to ``is:pr`` — and every row then failed the ``/issues/`` url_marker
+    filter, leaving ``openIssues`` empty for ``--check`` to reject. That is the
+    wrong-kind class of #4091, arriving as the whole result set instead of one row.
+    ``gh issue list`` reads GraphQL's ``issues`` connection, which is typed
+    ``Issue`` and cannot return a pull request at all, so the wrong-kind row has no
+    way in. It measures the same population ``is:issue`` names — 214 open issues
+    against 104 open PRs here.
+
+    Not ``repo.open_issues_count`` either: GitHub models PRs as issues, so that
+    field counts both, and a pair whose halves are scoped differently is a false
+    figure. ``_require_list_rows`` still refuses a list that arrives empty.
+    """
+    rows = _gh(
+        "issue",
+        "list",
+        "--repo",
+        SLUG,
+        "--state",
+        state,
+        "--limit",
+        str(limit),
+        "--json",
+        ISSUE_FIELDS,
+    )
+    if not isinstance(rows, list):
+        return []
+    return [row for row in rows if isinstance(row, dict)]
 
 
 def _module_paths() -> dict[str, str]:
@@ -487,7 +525,7 @@ def _search_span(
 
 
 def _require_list_rows(
-    merged: object, open_issues: object, merged_rows: list[dict], open_rows: list[dict]
+    merged: object, merged_rows: list[dict], open_total: int, open_rows: list[dict]
 ) -> None:
     """Refuse to build a snapshot whose row lists the page cannot render.
 
@@ -503,16 +541,12 @@ def _require_list_rows(
             "refusing to write a snapshot its own --check would reject "
             "(transient Search wrong-kind page? re-run)"
         )
-    if (
-        not open_rows
-        and isinstance(open_issues, dict)
-        and int(open_issues.get("total_count", 0)) > 0
-    ):
+    if not open_rows and open_total > 0:
         raise SystemExit(
-            "repo activity: open-issue search reports "
-            f"{open_issues['total_count']} issues but no /issues/ rows survived "
-            "filtering — refusing to write a snapshot its own --check would reject "
-            "(transient Search wrong-kind page? re-run)"
+            "repo activity: the issue list reports "
+            f"{open_total} open issues but no rows survived filtering — "
+            "refusing to write a snapshot its own --check would reject "
+            "(transient GitHub failure? re-run)"
         )
 
 
@@ -531,15 +565,22 @@ def collect() -> dict:
         # unchanged.
         f"search/issues?q=repo:{SLUG}+is:pr+is:merged+merged:>={since[:10]}&per_page=25&sort=updated",
     )
-    closed = _gh(
-        "api",
-        f"search/issues?q=repo:{SLUG}+is:issue+is:closed+closed:>={since[:10]}&per_page=1",
-    )
     now = datetime.now(UTC)
     year_since = (now - timedelta(days=365)).strftime("%Y-%m-%dT%H:%M:%SZ")
     year_commits = _year_commits(now)
     year_merged = _search_dates(f"repo:{SLUG}+is:pr+is:merged+merged:>={year_since[:10]}")
-    year_closed = _search_dates(f"repo:{SLUG}+is:issue+is:closed+closed:>={year_since[:10]}")
+    # Issues come from the issue list, never from `search/issues` — see `_issues`
+    # for the wrong-kind failure that made the issue qualifier unusable there. One
+    # list answers both the 30-day window and the year-long heatmap.
+    closed_issues = _issues("closed")
+    closed_in_window = [
+        row for row in closed_issues if str(row.get("closedAt") or "")[:10] >= since[:10]
+    ]
+    year_closed = [
+        str(row["closedAt"])
+        for row in closed_issues
+        if row.get("closedAt") and str(row["closedAt"])[:10] >= year_since[:10]
+    ]
     if not year_merged or not year_closed:
         # A transient GitHub failure here used to ship a heatmap with most months
         # missing: the search helpers returned nothing, `_to_daily` filled zeros, and
@@ -548,22 +589,12 @@ def collect() -> dict:
             "repo activity: the year-long merged/closed searches returned no rows — "
             "refusing to write a heatmap with missing months (transient GitHub failure?)"
         )
-    # Deliberately UNBOUNDED, unlike the three above — the whole open backlog, not
-    # what opened this month. Consumers must label it as current state; see the
-    # module docstring.
-    #
-    # And NOT repo.open_issues_count: GitHub models PRs as issues, so that field is
-    # open issues PLUS open PRs. Measured 2026-08-06 it read 203 against a true
-    # 197 issues + 6 open PRs. This renders beside `issuesClosed`, which comes from
-    # `is:issue`, and a pair whose halves are scoped differently is a false figure on
-    # a page that promises "every figure is countable in the repo".
-    open_issues = _gh(
-        "api",
-        # Over-fetched like `merged` above: wrong-kind rows from the Search API
-        # (#4091) are filtered by url_marker, and at per_page=6 that filter once
-        # emptied the list (run 38211281127). Truncated to 6 below; shape unchanged.
-        f"search/issues?q=repo:{SLUG}+is:issue+is:open&per_page=25&sort=updated",
-    )
+    # Deliberately UNBOUNDED, unlike the windowed three above — the whole open
+    # backlog, not what opened this month. Consumers must label it as current
+    # state; see the module docstring. Read from the issue list (`_issues`), so it
+    # is scoped exactly like `issuesClosed`, and unlike the old `is:issue` search it
+    # cannot come back as a page of pull requests for this token.
+    open_issues = _issues("open")
     open_prs = _gh(
         "api",
         f"search/issues?q=repo:{SLUG}+is:pr+is:open&per_page=1",
@@ -582,8 +613,12 @@ def collect() -> dict:
         modules[mid] = {"path": path, "lastCommit": last, "files": files, "lines": lines}
 
     merged_rows = _search_items(merged, 6, "/pull/")
-    open_rows = _search_items(open_issues, 6, "/issues/")
-    _require_list_rows(merged, open_issues, merged_rows, open_rows)
+    # Most recently updated first, the order the old `sort=updated` search asked for
+    # (the issue list defaults to creation order). Truncated to 6, shape unchanged.
+    open_rows = sorted(
+        open_issues, key=lambda row: str(row.get("updatedAt") or ""), reverse=True
+    )[:6]
+    _require_list_rows(merged, merged_rows, len(open_issues), open_rows)
 
     return {
         "generatedAt": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -591,11 +626,9 @@ def collect() -> dict:
         "commits": len(commits),
         "features": _features(commits),
         "pullsMerged": int(merged.get("total_count", 0)) if isinstance(merged, dict) else 0,
-        "issuesClosed": int(closed.get("total_count", 0)) if isinstance(closed, dict) else 0,
+        "issuesClosed": len(closed_in_window),
         "pullsOpen": int(open_prs.get("total_count", 0)) if isinstance(open_prs, dict) else 0,
-        "issuesOpen": int(open_issues.get("total_count", 0))
-        if isinstance(open_issues, dict)
-        else 0,
+        "issuesOpen": len(open_issues),
         "mergedPulls": [
             {
                 "number": row["number"],
