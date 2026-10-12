@@ -456,7 +456,16 @@ export function createSupabaseSource(env: SupabaseEnv): SupabaseSource {
             livePriceDate: isLive && close ? close.asOf : null,
           };
         }),
-        navHistory: book.navRows.map((r) => ({ date: r.date, nav: r.nav })),
+        navHistory: book.navRows.map((r) => ({
+        date: r.date,
+        nav: r.nav,
+        invested_pct: r.investedPct ?? null,
+        cash_pct: r.cashPct ?? null,
+        day_return_pct: r.dayReturnPct ?? null,
+        source: r.source ?? null,
+        contract: (r.contract ?? null) as string | null,
+        series_seam: r.seriesSeam ?? false,
+      })),
         benchmarkHistory: history,
         benchmarkTicker: 'SPY',
       };
