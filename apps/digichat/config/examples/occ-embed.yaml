@@ -44,9 +44,6 @@ hosts:
           default: true
         - id: digivault
           default: true
-        - id: web_search
-          default: true
-          label: Web search
     # Operator MCP servers stay on the BFF — URLs are never projected to the
     # browser. Zammad rides its `Token token=<x>` scheme as a raw authHeader
     # value (#3841); digigraph treats the dotless `zammad-mcp` name as
@@ -97,4 +94,4 @@ hosts:
       llmAccess: operator
       showByok: false
       showLanguageSelector: true
-      webSearch: true
+      webSearch: false
