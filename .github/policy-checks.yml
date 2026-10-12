@@ -163,3 +163,30 @@ checks:
     job: actionlint
     enforcement: advisory
     reason: Path-gated lane, folded into `Required checks passed`.
+
+  - context: GLOOMBERB deployed-config guard
+    workflow: ci.yml
+    job: gloomberb-ci-guard
+    enforcement: advisory
+    reason: >-
+      Unconditional lane, folded into `Required checks passed` (in its
+      `needs:`). Deliberately ungated directly: it reports on every PR and
+      goes red, and merges continue. Required nowhere.
+
+  - context: Vendor-content gate
+    workflow: ci.yml
+    job: vendor-content-gate
+    enforcement: advisory
+    reason: >-
+      Unconditional lane, folded into `Required checks passed` (in its
+      `needs:`). Deliberately ungated directly: it reports on every PR and
+      goes red, and merges continue. Required nowhere.
+
+  - context: Example-credentials guard
+    workflow: ci.yml
+    job: example-credentials-guard
+    enforcement: advisory
+    reason: >-
+      Unconditional lane, folded into `Required checks passed` (in its
+      `needs:`). Deliberately ungated directly: it reports on every PR and
+      goes red, and merges continue. Required nowhere.
