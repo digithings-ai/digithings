@@ -57,7 +57,7 @@ The four recipes in this package are:
 | Kind | Used by | LOADING | LIVE |
 |---|---|---|---|
 | `build` | digithings | Cells step in through opacity steps, plus strays | Glints |
-| `rise` | digiquant | Column sweep with eased rise and up/down tones, plus strays | Glints |
+| `rise` | digiquant | Column sweep with eased rise and up/down tones, plus strays | Glints and blinking strays, each in its own up or down tone (both colours always; never the accent) |
 | `scramble` | digichat | Letters spin, lock and flash | A flash every `idleGapMs` |
 | `equalizer` | digivoice | Amplitude envelope over `buildMs` | Equalizer columns |
 
@@ -110,7 +110,7 @@ existing one fits.
 | Module | Legacy source | Proof |
 |---|---|---|
 | digithings | `apps/digithings-web/components/landing/PixelWordmark.tsx` (seed `0xd161`) | `test/parity.test.ts`: every cell, timing, opacity step, glint and stray equals a copy of the legacy generator |
-| digiquant | `QuantWordmark.tsx` on #4986 (seed `0x9a17`) | Same check against the legacy `build()`: cells, rise, tone, glint, strays |
+| digiquant | `QuantWordmark.tsx` on #4986 + #5416 (seed `0x9a17`) | Same check against the legacy `build()`: cells, rise, tone, glint, strays, blinks; plus sampled LOADING and LIVE frames hold both up and down |
 | digichat | `packages/ui/src/components/chat/digichat-wordmark.ts` | Every 40 ms frame for 0–20 s at 120, 80 and 70 cols, in both colour modes, equals `heroWordmarkLines` |
 | digivoice | `digivoice/tui/src/hero.js` (#4965) | Every 60 ms frame for 1.4–8 s, in both colour modes, equals `wordmarkLines`. The still frame equals hero.js at `tMs = 1400` |
 

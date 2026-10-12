@@ -179,3 +179,37 @@ describe("canvas renderer", () => {
     expect(new Set(calls.map((c) => c[1]))).toEqual(new Set([0.36, 0.5, 0.66, 0.82, 1]));
   });
 });
+
+describe("digiquant shows red and green days (DIG-2866)", () => {
+  const tones = (t: number, extra: Partial<Parameters<typeof sampleBanner>[1]> = {}) => {
+    const out = new Set<string>();
+    for (const p of sampleBanner(BANNERS.digiquant, { t, ...extra }).frame.pixels) if (p) out.add(p.tone);
+    return out;
+  };
+  const span = (from: number, to: number, extra = {}) => {
+    const out = new Set<string>();
+    for (let t = from; t < to; t += 40) for (const tone of tones(t, extra)) out.add(tone);
+    return out;
+  };
+
+  test("LOADING builds in both up and down, never the accent", () => {
+    const seen = span(0, 1900);
+    expect(seen.has("up") && seen.has("down")).toBe(true);
+    expect(seen.has("accent")).toBe(false);
+  });
+
+  test("LIVE keeps flashing both up and down, never the accent", () => {
+    const seen = span(4000, 20000);
+    expect(seen.has("up") && seen.has("down")).toBe(true);
+    expect(seen.has("accent")).toBe(false);
+  });
+
+  test("a reload that skips LOADING still flashes both up and down", () => {
+    const seen = span(4000, 20000, { skipLoading: true });
+    expect(seen.has("up") && seen.has("down")).toBe(true);
+  });
+
+  test("reduced motion is the settled ink mark", () => {
+    expect([...tones(5000, { motion: "reduced" })]).toEqual(["ink"]);
+  });
+});

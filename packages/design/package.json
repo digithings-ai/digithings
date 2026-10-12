@@ -21,10 +21,12 @@
     "./html-escape.js": "./html-escape.js",
     "./site/site.css": "./site/site.css",
     "./site/*": "./site/*",
-    "./releases.json": "./releases.json"
+    "./releases.json": "./releases.json",
+    "./motion.json": "./motion.json"
   },
   "files": [
     "tokens.css",
+    "motion.json",
     "components.css",
     "starfield.js",
     "scroll-trigger.js",

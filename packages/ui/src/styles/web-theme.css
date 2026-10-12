@@ -508,7 +508,7 @@ button.dg-docker.is-copied { color: var(--accent); }
   pointer-events: auto;
   visibility: visible;
   transition:
-    opacity 0.34s var(--ease) 0.18s,
+    opacity 0.34s var(--ease),
     transform 0.42s var(--ease) 0.14s,
     visibility 0s linear 0s;
 }

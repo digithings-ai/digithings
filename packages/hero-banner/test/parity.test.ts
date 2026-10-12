@@ -64,14 +64,22 @@ describe("digiquant RISE matches QuantWordmark.tsx (#4986)", () => {
     });
   });
 
-  test("same strays", () => {
-    expect(state.strays.map((c) => [c.x, c.y, c.dur, c.delay, c.tone])).toEqual(
+  test("same strays and blinks", () => {
+    expect(state.strays.map((c) => [c.x, c.y, c.dur, c.delay, c.tone, c.blink && [c.blink.period, c.blink.offset]])).toEqual(
       LEGACY_DIGIQUANT.strays.map((c) => {
         const s = c.style as Record<string, string>;
         const m = /dq-stray (\d+)ms linear (\d+)ms/.exec(String(s.animation))!;
-        return [c.x, c.y, Number(m[1]), Number(m[2]), tone(s)];
+        const b = /dq-blink (\d+)ms step-end (\d+)ms/.exec(String(s.animation));
+        return [c.x, c.y, Number(m[1]), Number(m[2]), tone(s), b && [Number(b[1]), Number(b[2])]];
       }),
     );
+  });
+
+  test("glints and blinks each show both up and down", () => {
+    const glints = new Set(state.cells.filter((c) => c.glint).map((c) => c.tone));
+    const blinks = new Set(state.strays.filter((c) => c.blink).map((c) => c.tone));
+    expect([...glints].sort()).toEqual(["down", "up"]);
+    expect([...blinks].sort()).toEqual(["down", "up"]);
   });
 });
 
