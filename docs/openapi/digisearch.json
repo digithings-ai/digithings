@@ -1254,8 +1254,15 @@
             "title": "Summary"
           },
           "total": {
-            "title": "Total",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total"
           }
         },
         "required": [
