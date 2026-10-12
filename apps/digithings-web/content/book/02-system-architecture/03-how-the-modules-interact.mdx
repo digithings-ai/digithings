@@ -1,0 +1,89 @@
+---
+title: How the modules interact
+order: 3
+summary: >-
+  The interface talks only to the hub, identity is checked on every hop, and
+  model access is a library rather than a service.
+---
+
+The diagram below is the whole system at the level of who calls whom. Solid
+arrows are network calls between running services; dotted arrows are a library
+being used inside a service, which crosses no network at all.
+
+```mermaid
+flowchart TB
+  subgraph clients["people and operators"]
+    BR["browser"]
+    OPS["operator"]
+  end
+
+  subgraph edge["surfaces and identity"]
+    WEB["digithings.ai"]
+    CHAT["digichat"]
+    KEY["digikey · identity"]
+  end
+
+  subgraph hub["the hub"]
+    GRAPH["digigraph · orchestrator"]
+  end
+
+  subgraph verticals["vertical services"]
+    SEARCH["digisearch · retrieval"]
+    QUANT["digiquant · market research"]
+    VAULT["digivault · knowledge vault"]
+    TRACE["digitrace · tracing"]
+  end
+
+  subgraph llm["model layer"]
+    LIB["digillm · library"]
+    PROXY["LiteLLM · routing"]
+    PROV["model providers · local models"]
+  end
+
+  subgraph data["data"]
+    DB["Postgres"]
+    R2["market archive · read-only"]
+  end
+
+  BR --> WEB
+  WEB -->|"embedded chat"| CHAT
+  BR --> CHAT
+  OPS -->|"issues keys"| KEY
+  CHAT -->|"exchanges session for identity"| KEY
+  CHAT -->|"chat request"| GRAPH
+  GRAPH -->|"verifies identity"| KEY
+  GRAPH -->|"tool calls"| SEARCH
+  GRAPH -->|"tool calls"| QUANT
+  GRAPH -->|"tool calls"| VAULT
+  GRAPH -->|"traces"| TRACE
+  SEARCH --> KEY
+  QUANT --> KEY
+  VAULT --> KEY
+  GRAPH -.-> LIB
+  QUANT -.-> LIB
+  LIB --> PROXY
+  PROXY --> PROV
+  SEARCH --> DB
+  QUANT --> DB
+  VAULT --> DB
+  QUANT -.->|"reads"| R2
+```
+
+Read it for three things. First, **digichat never calls a vertical**. Every
+capability the interface offers is reached through the hub, which means there is
+one place that decides which tools a user may use, one place that records what
+happened, and one interface to keep stable.
+
+Second, **digikey sits on every service-to-service edge**, not only at the front
+door. The verticals verify the caller's identity themselves instead of trusting
+that a request from inside the network must be legitimate. The network path is
+not the security boundary; identity is.
+
+Third, **the model layer is a library**. digillm is drawn with dotted arrows
+because it never listens for traffic. Services import it, and it talks to a
+routing layer that can reach any provider. That keeps model choice out of the
+service code entirely.
+
+<Reference kind="API" href="/docs/api/" title="API reference">
+  The interfaces of every service in this diagram, generated from the code.
+</Reference>
