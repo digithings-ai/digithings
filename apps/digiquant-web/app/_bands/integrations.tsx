@@ -35,9 +35,11 @@ const DRIVERS: { id: IntegrationId; name: string; role: string; line: string; fa
   },
 ];
 
-/** Modules digiquant actually calls. A module with its own hero banner shows it
- *  small; the rest show their name as plain text. */
-const MODULES: { name: string; line: string }[] = [
+type Module = { name: string; line: string };
+
+/** Modules digiquant actually calls. Every module shows its own hero banner,
+ *  small; a name without one falls back to plain text. */
+const MODULES: Module[] = [
   { name: "digigraph", line: "Orchestrates the research and portfolio runs." },
   { name: "digichat", line: "The chat where a strategy idea starts." },
   { name: "digillm", line: "Routes and caches the model calls research and the dashboard make." },
@@ -45,6 +47,37 @@ const MODULES: { name: string; line: string }[] = [
   { name: "digibase", line: "Shared errors, request handling, and metrics on the API." },
   { name: "digifetch", line: "Market-data tools the research stages call through Gloomberg." },
 ];
+
+/** The rest of the platform. digiquant does not call these; they sit beside it. */
+const PLATFORM: Module[] = [
+  { name: "digisearch", line: "RAG ingest, query, and research." },
+  { name: "digitrace", line: "Observability, health, and status for every service." },
+  { name: "digivault", line: "A Markdown vault with wikilinks and lint." },
+  { name: "digiclaw", line: "Heartbeat runner and an append-only audit log." },
+  { name: "digivoice", line: "Local dictation and speech, on the machine." },
+  { name: "digidev", line: "An agentic coding workflow kit for any codebase." },
+  { name: "digibook", line: "The book: architecture, design decisions, and the reasons." },
+];
+
+function ModuleGrid({ label, modules }: { label: string; modules: Module[] }) {
+  return (
+    <div className="flex w-full min-w-0 flex-col gap-4">
+      <h3 className="m-0 font-mono text-[0.75rem] font-normal tracking-[0.08em] text-ink-soft uppercase">{label}</h3>
+      <ul aria-label={label} className="m-0 grid w-full list-none gap-x-8 gap-y-5 p-0 sm:grid-cols-2 lg:grid-cols-3">
+        {modules.map((mod) => (
+          <li key={mod.name} className="min-w-0">
+            {mod.name in BANNERS ? (
+              <ModuleBanner name={mod.name} className="block h-full !w-auto" />
+            ) : (
+              <span className="block font-mono text-[0.95rem] text-ink">{mod.name}</span>
+            )}
+            <span className="mt-1.5 block text-[0.875rem] leading-[1.5] text-ink-soft">{mod.line}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 /** The connected-package rows. Each entry carries its provider's official mark;
  *  the label is the copy the band shipped with, unchanged. */
@@ -104,20 +137,8 @@ export function IntegrationsBand() {
           <p className="m-0 max-w-[36rem] text-center text-[1.05rem] leading-[1.55] text-ink-soft">
             The platform that drives the agentic side of digiquant.
           </p>
-          <ul className="m-0 grid w-full list-none gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
-            {MODULES.map((mod) => (
-              <li key={mod.name} className="min-w-0">
-                {mod.name in BANNERS ? (
-                  <span className="block h-5 w-fit">
-                    <ModuleBanner name={mod.name} className="block h-full !w-auto" />
-                  </span>
-                ) : (
-                  <span className="block font-mono text-[0.95rem] text-ink">{mod.name}</span>
-                )}
-                <span className="mt-1 block text-[0.875rem] leading-[1.5] text-ink-soft">{mod.line}</span>
-              </li>
-            ))}
-          </ul>
+          <ModuleGrid label="digiquant calls" modules={MODULES} />
+          <ModuleGrid label="the rest of digithings" modules={PLATFORM} />
         </div>
 
         <ul aria-label="Architectural drivers" className="m-0 grid min-w-0 list-none gap-px overflow-x-clip border border-hair bg-hair p-px md:grid-cols-3">
