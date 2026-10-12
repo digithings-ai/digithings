@@ -376,7 +376,8 @@ env:
   secret: false
   sources:
     wrangler_workers: []
-    compose_files: []
+    compose_files:
+    - docker-compose.yml
     env_example_files: []
     compose_literal:
     - CHEAPERINFERENCE_API_BASE
