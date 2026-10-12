@@ -97,6 +97,58 @@ unreliable as a *required* check (it reports `neutral` on a usage-limit skip, wh
 have blocked all ten promotions on 2026-08-05 had it been required). #1612 was closed as
 not planned; see its closing comment for the full comparison.
 
+## The policy-gate drift guard
+
+`ci.yml`'s own "Verify needs list covers every job in this file" step only sees
+`ci.yml`, so it cannot fail on a policy check that lives in another workflow file — it
+would stay green no matter which one that was. `scripts/check_required_policy_checks.py`
+is the corrected inventory ([DIG-1982](https://github.com/digithings-ai/digithings/issues/1982)).
+It reconciles:
+
+| set | against | catches |
+|---|---|---|
+| `.github/policy-checks.yml` | the jobs the workflows actually define | a renamed or dropped check; a policy surface nobody declared |
+| `.github/policy-checks.yml` | develop's required contexts | a check the gate does not hold, and a gate the inventory does not own |
+| develop's required contexts | whether each can report on every develop PR | **the stall** — a required check that never arrives hangs every merge |
+
+`ci.yml`'s in-file `needs` staleness check is **kept**, not replaced. The three
+reconciliations do not overlap; dropping the old one would leave a real hole.
+
+**Check the gate, at any time:**
+
+```bash
+python3 scripts/check_required_policy_checks.py                    # committed snapshot (what CI runs)
+python3 scripts/check_required_policy_checks.py --live \
+    --repo digithings-ai/digithings --branch develop               # the live gate
+```
+
+CI reads `.github/required-contexts.txt`, not the API: reading branch protection needs
+`administration: read`, which **cannot be granted to `GITHUB_TOKEN`** at all, so no
+workflow can read it. The snapshot is only trustworthy if it is updated in the same
+change as the protection itself — run `--live` after any manual branch-protection edit
+and commit the difference, or the guard is checking a fiction.
+
+### Declaring a new policy check
+
+Add it to `.github/policy-checks.yml` with one of three `enforcement` values:
+
+- `required` — must be in develop's contexts *and* must report on every develop PR.
+  The guard fails both if it is absent and if it could be skipped.
+- `advisory` — runs and reports but deliberately does not gate. **Requires a `reason`.**
+- `other-branch` — gates another branch (`main`), not develop.
+
+A job counts as a policy surface when it has an explicit `name:`. A job without one
+reports under its job id and is folded into an aggregator instead. Naming a job makes it
+a policy surface; leaving it unnamed keeps it internal.
+
+**`gitleaks-scan` is the worked example of why `required` is not free.** Its entry is
+`advisory`, and promoting it to `required` is refused while `security-gitleaks.yml` keeps
+its workflow-level `paths-ignore`: a docs-only PR never starts the workflow, the check
+never reports, and requiring the name hangs those PRs on "Waiting for status to be
+reported" forever. Move the skip to a job-level `if:` (a skipped *job* reports Success; a
+skipped *workflow* does not) or drop the filter first. That is the pre-apply note above,
+enforced in CI instead of only in prose.
+
 ## How to apply protection
 
 Re-apply `develop`'s checks (idempotent — safe to re-run any time the contexts in the
@@ -106,6 +158,14 @@ filtering.
 
 ```bash
 bash scripts/set-branch-protection.sh
+```
+
+Then update `.github/required-contexts.txt` to match what was applied, and prove the
+snapshot against the live gate:
+
+```bash
+python3 scripts/check_required_policy_checks.py --live \
+    --repo digithings-ai/digithings --branch develop
 ```
 
 `--branch main` is refused on purpose — see [On `main`](#on-main) for how `main`'s
@@ -134,6 +194,14 @@ gh api repos/digithings-ai/digithings/branches/main/protection    | python3 -m j
 Look at `required_status_checks.contexts`: on `develop` it should list the checks in
 [On `develop`](#on-develop) with `strict: true`; on `main` it should list only
 `Every commit reaching main was reviewed` per [On `main`](#on-main).
+
+`scripts/enable_branch_protection.py status` reports the same state in a form meant for
+reading, and is what [the policy-gate guard](#the-policy-gate-drift-guard) uses:
+
+```bash
+python3 scripts/enable_branch_protection.py status \
+    --repo digithings-ai/digithings --branch develop
+```
 
 ## Emergency bypass procedure
 
