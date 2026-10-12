@@ -46,6 +46,34 @@ def test_secrets_render_never_prompts_under_dt_up(profile):
     assert step.argv[-1] == "--no-prompt", "flag must follow the render subcommand"
 
 
+# Every profile the Makefile passes to `dt compose --profile`, measured from its
+# own invocations rather than guessed.
+_STACK_PROFILES = ("chat", "core", "digichat", "edge", "heartbeat", "observability", "trace")
+
+
+@pytest.mark.parametrize("profile", list(_STACK_PROFILES))
+def test_dt_up_preserves_already_rendered_generated_secrets(profile):
+    """A second `dt up` must not re-roll generated-local secrets.
+
+    `dt-secrets render` preserves an existing generated value ONLY when --force is
+    passed: without it `preserve` is empty, so `if preserve and name in preserve`
+    never fires and every generated-local entry runs its `generate` argv again. The
+    fresh value then invalidates whatever the previous one initialised (a database
+    volume, for one), so `dt up` must pass --force.
+    """
+    step = next(s for s in orchestrate.plan_up(profile, {}) if s.name == "secrets-render")
+    assert "--force" in step.argv, (
+        f"{profile}: dt up must pass --force to preserve generated secrets"
+    )
+
+
+@pytest.mark.parametrize("profile", list(_STACK_PROFILES))
+def test_dt_up_force_does_not_displace_the_non_interactive_flag(profile):
+    """--force keeps its position: the non-interactive flag must stay last."""
+    step = next(s for s in orchestrate.plan_up(profile, {}) if s.name == "secrets-render")
+    assert step.argv.index("--force") < step.argv.index("--no-prompt")
+
+
 @pytest.mark.parametrize("profile", list(("core", "quant", "chat", "trace", "all")))
 def test_every_profile_produces_a_compose_profile(profile):
     step = next(s for s in orchestrate.plan_up(profile, {}) if s.name == "compose-up")

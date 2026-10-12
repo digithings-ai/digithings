@@ -1,0 +1,17 @@
+{
+  "name": "digiquant-tui",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "bun src/index.tsx",
+    "probe": "bun src/probe.ts",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@opentui/react": "0.5.14",
+    "react": "19.2.4",
+    "react-devtools-core": "^7.0.1",
+    "ws": "^8.18.0"
+  }
+}

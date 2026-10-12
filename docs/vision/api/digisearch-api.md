@@ -2,7 +2,7 @@
 title: "digisearch — API reference"
 type: reference
 status: generated
-created: 2026-09-22
+created: 2026-10-02
 tags:
   - api
   - core
@@ -11,14 +11,14 @@ relevance:
 ---
 # digisearch — API reference
 
-> Production RAG without a stack rewrite when you switch vector DB.
+> RAG without a stack rewrite when you switch vector DB.
 
 **Role:** Vector retrieval · multi-backend · **Tier:** core
 
 ## Overview
 One client over Cloudflare Vectorize, Azure AI Search, or Chroma, with backend-neutral entities so you swap engines without touching business code.
 
-Dense, sparse, and hybrid retrieval are first-class; BeautifulSoup and pdfplumber handle ingest, Polars throughout.
+Dense, sparse and hybrid retrieval all ship; BeautifulSoup and pdfplumber handle ingest, Polars throughout.
 
 ## Authentication
 All query/ingest routes require a digikey JWT carrying the matching scope.
@@ -59,7 +59,7 @@ Request:
 - `text` (string) — required: Query text.
 - `index_name` (string): Target index (default "default").
 - `top_k` (integer): Results to return, 1–100 (default 10).
-- `mode` (string): "keyword" | "vector" | "hybrid" (default hybrid).
+- `mode` (string): "keyword" | "vector" | "hybrid" (default hybrid). Chroma, Vectorize, and the stub coerce keyword and hybrid to vector-only search.
 - `filters` ({field,op,value}[]): Structured metadata filters.
 
 Response:
@@ -74,6 +74,8 @@ curl -X POST $DIGISEARCH_URL/query \
 ```
 
 ```python
+import os, httpx
+
 r = httpx.post(
     f"{os.environ['DIGISEARCH_URL']}/query",
     headers={"Authorization": f"Bearer {os.environ['DIGI_JWT']}"},
