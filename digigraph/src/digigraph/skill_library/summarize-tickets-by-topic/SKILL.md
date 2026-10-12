@@ -19,16 +19,23 @@ open tickets", "what are these tickets about", "group these by theme".
 3. **One line per ticket, with its id.** The id is not decoration — it is how
    the reader checks your work.
 4. **Order by size**, largest topic first. Say how many tickets are in each.
+5. **Keep topics specific.** A topic groups tickets about the same problem or
+   request, not the same product area. Do not merge unrelated tickets into one
+   broad topic; put tickets that fit nowhere under a final `Other` topic.
+6. **Count, then check the counts.** A topic's count is the number of ticket
+   lines under it, nothing else. Every retrieved ticket appears on exactly one
+   line. Before answering, add the topic counts: the sum must equal the number
+   of tickets in the heading. If it does not, fix the lines, not the numbers.
 
 ## Output shape
 
 ```
 ## <one line naming the scope and how many tickets>
 
-### <Topic>
+### <Topic> (<count>)
 - <TICKET-ID> — <what that one ticket is about, in one clause>
 
-### <Topic>
+### <Topic> (<count>)
 - <TICKET-ID> — <what that one ticket is about, in one clause>
 
 <one sentence: what the largest group has in common, and what is left over>
