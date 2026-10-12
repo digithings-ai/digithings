@@ -1,4 +1,31 @@
 #!/usr/bin/env python3
+"""Execute the session open: the one writer of ``position_events``.
+
+Ledger semantics enforced here (DIG-2809). These are writer rules, not display rules.
+
+1. The event label comes from the PRIOR COMMITTED BOOK, never from a source document.
+   ``OPEN`` means "not held at a positive weight before this execution"; a name the
+   prior book already carried gets the label its delta against that weight implies
+   (``ADD`` / ``TRIM`` / ``HOLD``). A replayed ``rebalance-decision`` document still
+   carries the ``action`` and ``current_pct`` of the day it was written, so reading
+   the label from it re-opened positions that had been held for days (UUP, 28 Sep).
+   The ledger path (:func:`_event_kind_from_order_delta`) already obeyed this via the
+   lot book; the prose path now obeys it via the committed ``positions`` book.
+
+2. ``prev_weight_pct`` has three distinguishable states and must not conflate them:
+   an ATTESTED prior weight (including an attested ``0.0``), "the committed book has
+   no row for this ticker before this date", and "the source document never said".
+   Only the third falls back to the document. ``None`` therefore means "not held",
+   never "the book said zero".
+
+3. ``position_events`` is a (date, ticker) DAILY projection: the unique key makes the
+   last write win and there is no intraday ordering column, so two same-day actions
+   for one ticker collapse into one row. See 001_initial_schema.sql.
+
+4. ``event`` is constrained to OPEN / ADD / TRIM / EXIT / HOLD. REBALANCE is not a
+   writable value and is never emitted.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -168,6 +195,10 @@ def _book_weights(sb, book_date: Optional[str]) -> Dict[str, float]:
 # Desk Activity shows weight deltas at 1 decimal pp. A fill that does not move that
 # display is a lot true-up, not a position change (house 2026-09-01 FXI/VGK/XLF).
 _DESK_PP_DECIMALS = 1
+
+# A committed book weight at or below this is "not held". One threshold for every
+# builder, so the prose path cannot drift away from the ledger path (DIG-2809).
+_BOOK_WEIGHT_EPS = 0.0001
 
 
 def _desk_weight_unchanged(weight_pct: Optional[float], prev_weight_pct: Optional[float]) -> bool:
@@ -357,7 +388,6 @@ def _event_tickers_for_date(sb, execution_date: str) -> Set[str]:
             out.add(str(r["ticker"]))
     return out
 
-
 def _comparison_book_weights(sb, book_date: Optional[str]) -> Dict[str, Optional[float]]:
     """DIG-2816: the prior book anchored to the ``position_events`` ledger.
 
@@ -383,6 +413,124 @@ def _comparison_book_weights(sb, book_date: Optional[str]) -> Dict[str, Optional
     """
     if not book_date:
         return {}
+    res = (
+        _eq_house(sb.table("positions").select("ticker,weight_pct")).eq("date", book_date).execute()
+    )
+    out: Dict[str, Optional[float]] = {}
+    for row in getattr(res, "data", None) or []:
+        if not isinstance(row, dict):
+            continue
+        tk = row.get("ticker")
+        if not tk or str(tk).upper() == "CASH":
+            continue
+        out[str(tk).upper()] = _parse_pct(row.get("weight_pct"))
+
+    state = fetch_ledger_state(sb, _house_id(), book_date)
+    if not state.covered:
+        return out
+    anchored: List[str] = []
+    for tk, target in state.targets.items():
+        if tk not in out:
+            continue
+        out[tk] = target.weight_pct
+        anchored.append(tk)
+    print(
+        f"🔎 prior-book ledger anchor: basis={book_date} anchored={len(anchored)}"
+        f"/{len(state.targets)} ledger_targets applied={state.applied}"
+        f" ignored={state.ignored} future={state.future}"
+        f" unusable_weight={state.unusable_weight} exited={len(state.exited)}"
+    )
+    return out
+
+
+# Compatibility projection labels (#2422 / Task 2.5). Historical prose rows stay
+# ``legacy`` permanently; ledger paper-fill projections stamp ``authoritative``.
+
+
+def _reconcile_against_committed_book(
+    *,
+    ticker: str,
+    event: str,
+    weight_pct: Optional[float],
+    doc_prev_weight_pct: Optional[float],
+    prose_prior_d: Optional[str],
+    prose_prior_w: Dict[str, float],
+) -> Tuple[str, Optional[float], Optional[str]]:
+    """Reconcile one prose rebalance row against the committed book.
+
+    Returns ``(event, prev_weight_pct, note)``. ``note`` is a printable warning
+    when a label was corrected, else ``None``. The book governs two things only:
+    the OPEN-vs-held distinction and the prior weight (module rules 1 and 2).
+    Every other label the document states is left alone: the prose path is
+    permanently legacy (#2422) and DIG-2809 asks for OPEN vs ADD, not a rewrite.
+
+    Three distinguishable states of ``prev_weight_pct`` (module rule 2):
+
+    * an attested book weight, including an attested ``0.0`` (the ticker HAS a
+      committed row and the book says its weight is zero);
+    * ``None`` with a prior book present and no row for the ticker (not held);
+    * the document's ``current_pct``, only when NO committed book exists at all
+      before this date, because then it is the only prior evidence that exists.
+    """
+    tk_u = str(ticker).upper()
+    held_in_book = tk_u in prose_prior_w
+    book_prev = float(prose_prior_w[tk_u]) if held_in_book else None
+
+    prev: Optional[float]
+    if held_in_book:
+        prev = book_prev
+    elif prose_prior_d is None:
+        prev = doc_prev_weight_pct
+    else:
+        prev = None
+
+    note: Optional[str] = None
+    if held_in_book and book_prev is not None and book_prev > _BOOK_WEIGHT_EPS and event == "OPEN":
+        delta = None if weight_pct is None else float(weight_pct) - book_prev
+        if delta is None:
+            event = "ADD"
+        elif delta > _BOOK_WEIGHT_EPS:
+            event = "ADD"
+        elif delta < -_BOOK_WEIGHT_EPS:
+            event = "TRIM"
+        else:
+            event = "HOLD"
+        note = (
+            f"\u26a0\ufe0f  {ticker}: document said OPEN but the committed book "
+            f"{prose_prior_d} already held {book_prev:.4g}%; relabelled {event}."
+        )
+    elif (
+        event == "ADD"
+        and prose_prior_d is not None
+        and not held_in_book
+        and (weight_pct is None or float(weight_pct) > _BOOK_WEIGHT_EPS)
+    ):
+        event = "OPEN"
+        note = (
+            f"\u26a0\ufe0f  {ticker}: document said ADD but the committed book "
+            f"{prose_prior_d} has no row; relabelled OPEN."
+        )
+    return event, prev, note
+
+
+def _prior_position_weight(sb, prior_date: Optional[str], ticker: str) -> Optional[float]:
+    if not prior_date:
+        return None
+    res = (
+        _eq_house(sb.table("positions").select("weight_pct"))
+        .eq("date", prior_date)
+        .eq("ticker", ticker)
+        .limit(1)
+        .execute()
+    )
+    rows = getattr(res, "data", None) or []
+    if not rows:
+        return None
+    return _parse_pct(rows[0].get("weight_pct"))
+
+
+# Compatibility projection labels (#2422 / Task 2.5). Historical prose rows stay
+# ``legacy`` permanently; ledger paper-fill projections stamp ``authoritative``.
     res = (
         _eq_house(sb.table("positions").select("ticker,weight_pct")).eq("date", book_date).execute()
     )
@@ -935,7 +1083,7 @@ def build_events_from_digest_snapshot(sb, execution_d: str) -> Optional[List[Dic
     prior_w = _comparison_book_weights(sb, prior_d)
     all_tickers = set(prior_w) | set(targets)
     out: List[Dict[str, Any]] = []
-    eps = 0.0001
+    eps = _BOOK_WEIGHT_EPS
     basis = f"prior committed book {prior_d}" if prior_d else "no prior committed book"
     for t in sorted(all_tickers):
         # DIG-2816: ``_comparison_book_weights`` preserves a NULL ``weight_pct`` as
@@ -962,7 +1110,7 @@ def build_events_from_digest_snapshot(sb, execution_d: str) -> Optional[List[Dic
                 "ticker": t,
                 "event": ev,
                 "weight_pct": rec,
-                "prev_weight_pct": prev if prev > eps else None,
+                "prev_weight_pct": prev if t in prior_w else None,
                 "price": price,
                 "reason": (
                     f"Derived from digest snapshot proposed_positions vs {basis} "
@@ -1007,7 +1155,7 @@ def build_events_from_positions_book(sb, execution_d: str) -> Optional[List[Dict
     prior_w = _comparison_book_weights(sb, prior_d)
     all_tickers = set(prior_w) | set(targets)
     out: List[Dict[str, Any]] = []
-    eps = 0.0001
+    eps = _BOOK_WEIGHT_EPS
     basis = f"prior committed book {prior_d}" if prior_d else "no prior committed book"
     for t in sorted(all_tickers):
         # DIG-2816: ``_comparison_book_weights`` preserves a NULL ``weight_pct`` as
@@ -1034,7 +1182,7 @@ def build_events_from_positions_book(sb, execution_d: str) -> Optional[List[Dict
                 "ticker": t,
                 "event": ev,
                 "weight_pct": rec,
-                "prev_weight_pct": prev if prev > eps else None,
+                "prev_weight_pct": prev if t in prior_w else None,
                 "price": price,
                 "reason": (
                     f"Derived from positions book vs {basis} "
@@ -1296,6 +1444,13 @@ def main() -> int:
         print(f"✅ recorded {len(extra)} HOLD event(s) from positions snapshot only for {d}")
         return 0
 
+    # Prose path: the prior COMMITTED book is the authority on what was held before this
+    # execution. A replayed rebalance-decision document still carries the `action` and
+    # `current_pct` of the day it was written, so reading the label or the prior weight
+    # out of it re-states a position that was already held (DIG-2809).
+    prose_prior_d = _prior_book_date(sb, d)
+    prose_prior_w = _book_weights(sb, prose_prior_d)
+
     # Build events for every rebalance row (including HOLD) so quiet days still have ledger rows.
     events: List[Dict[str, Any]] = []
     for row in table:
@@ -1310,7 +1465,7 @@ def main() -> int:
         is_hold = action_u in ("HOLD", "")
 
         weight_pct = _parse_pct(row.get("recommended_pct"))
-        prev_weight_pct = _parse_pct(row.get("current_pct"))
+        doc_prev_weight_pct = _parse_pct(row.get("current_pct"))
         weight_change_pct = _parse_pct(row.get("change_pct"))
 
         price = _fetch_open(sb, ticker, d)
@@ -1332,20 +1487,30 @@ def main() -> int:
             elif weight_change_pct is not None and weight_change_pct > 0:
                 event = "ADD"
             elif (
-                prev_weight_pct is not None
+                doc_prev_weight_pct is not None
                 and weight_pct is not None
-                and weight_pct < prev_weight_pct
+                and weight_pct < doc_prev_weight_pct
             ):
                 event = "TRIM"
             elif (
-                prev_weight_pct is not None
+                doc_prev_weight_pct is not None
                 and weight_pct is not None
-                and weight_pct > prev_weight_pct
+                and weight_pct > doc_prev_weight_pct
             ):
                 event = "ADD"
             else:
                 event = "TRIM"
 
+        event, prev_weight_pct, note = _reconcile_against_committed_book(
+            ticker=ticker,
+            event=event,
+            weight_pct=weight_pct,
+            doc_prev_weight_pct=doc_prev_weight_pct,
+            prose_prior_d=prose_prior_d,
+            prose_prior_w=prose_prior_w,
+        )
+        if note:
+            print(note)
         rec: Dict[str, Any] = {
             "date": d,
             "ticker": ticker,
