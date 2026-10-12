@@ -31,8 +31,9 @@ export function ScrollBanner({
     const el = ref.current;
     if (armed || !el) return;
     if (typeof IntersectionObserver !== "function") {
-      setArmed(true);
-      return;
+      // No observer to wait on: arm on the next frame, not in the effect body.
+      const raf = requestAnimationFrame(() => setArmed(true));
+      return () => cancelAnimationFrame(raf);
     }
     const io = new IntersectionObserver(
       (entries) => {
