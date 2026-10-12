@@ -486,13 +486,50 @@ def _search_span(
         _search_span(query, m, kind, mid + timedelta(days=1), last, out)
 
 
+def _require_list_rows(
+    merged: object, open_issues: object, merged_rows: list[dict], open_rows: list[dict]
+) -> None:
+    """Refuse to build a snapshot whose row lists the page cannot render.
+
+    `total_count` says rows exist while the url_marker filter dropped every one
+    (a transient Search wrong-kind page did exactly this on run 38211281127:
+    130 open issues, zero openIssues rows). Writing that file only moves the
+    failure to `--check`; fail here instead, naming the re-run as the fix.
+    """
+    if not merged_rows and isinstance(merged, dict) and int(merged.get("total_count", 0)) > 0:
+        raise SystemExit(
+            "repo activity: merged search reports "
+            f"{merged['total_count']} PRs but no /pull/ rows survived filtering — "
+            "refusing to write a snapshot its own --check would reject "
+            "(transient Search wrong-kind page? re-run)"
+        )
+    if (
+        not open_rows
+        and isinstance(open_issues, dict)
+        and int(open_issues.get("total_count", 0)) > 0
+    ):
+        raise SystemExit(
+            "repo activity: open-issue search reports "
+            f"{open_issues['total_count']} issues but no /issues/ rows survived "
+            "filtering — refusing to write a snapshot its own --check would reject "
+            "(transient Search wrong-kind page? re-run)"
+        )
+
+
 def collect() -> dict:
     since = _since()
     commits = _commits_since(since)
 
     merged = _gh(
         "api",
-        f"search/issues?q=repo:{SLUG}+is:pr+is:merged+merged:>={since[:10]}&per_page=6&sort=updated",
+        # Over-fetched on purpose: the Search API has handed back a PR where an
+        # issue was expected and vice versa (#4091), and the url_marker filter in
+        # _search_items drops the wrong-kind rows. At per_page=6 a bad page could
+        # empty the whole list — run 38211281127 wrote zero openIssues rows
+        # against 130 open issues and failed its own --check. The list
+        # constructor below still truncates to 6, so the snapshot shape is
+        # unchanged.
+        f"search/issues?q=repo:{SLUG}+is:pr+is:merged+merged:>={since[:10]}&per_page=25&sort=updated",
     )
     closed = _gh(
         "api",
@@ -522,7 +559,10 @@ def collect() -> dict:
     # a page that promises "every figure is countable in the repo".
     open_issues = _gh(
         "api",
-        f"search/issues?q=repo:{SLUG}+is:issue+is:open&per_page=6&sort=updated",
+        # Over-fetched like `merged` above: wrong-kind rows from the Search API
+        # (#4091) are filtered by url_marker, and at per_page=6 that filter once
+        # emptied the list (run 38211281127). Truncated to 6 below; shape unchanged.
+        f"search/issues?q=repo:{SLUG}+is:issue+is:open&per_page=25&sort=updated",
     )
     open_prs = _gh(
         "api",
@@ -540,6 +580,10 @@ def collect() -> dict:
             last = (hist[0].get("commit") or {}).get("committer", {}).get("date")
         files, lines = _code_shape(path)
         modules[mid] = {"path": path, "lastCommit": last, "files": files, "lines": lines}
+
+    merged_rows = _search_items(merged, 6, "/pull/")
+    open_rows = _search_items(open_issues, 6, "/issues/")
+    _require_list_rows(merged, open_issues, merged_rows, open_rows)
 
     return {
         "generatedAt": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -559,7 +603,7 @@ def collect() -> dict:
                 "url": row["url"],
                 "mergedAt": row["closedAt"],
             }
-            for row in _search_items(merged, 6, "/pull/")
+            for row in merged_rows
         ],
         "openIssues": [
             {
@@ -568,7 +612,7 @@ def collect() -> dict:
                 "url": row["url"],
                 "updatedAt": row["updatedAt"],
             }
-            for row in _search_items(open_issues, 6, "/issues/")
+            for row in open_rows
         ],
         "branch": BRANCH,
         "dailyContributions": _to_daily(year_commits, year_merged, year_closed, now),

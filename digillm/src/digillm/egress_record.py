@@ -9,10 +9,12 @@ digest of what was sent.
 The record deliberately never carries the payload. A copy of the outbound
 messages in a log file is not an audit trail, it is a second copy of the data
 with weaker access control than the database it came from. What the record
-does carry is ``HMAC-SHA256`` over the canonical outbound payload under a
+does carry is ``HMAC-SHA256`` over the canonical outbound messages under a
 pepper that never leaves the deployment, so two records can be compared for
-"same bytes on the wire" while a reader holding a candidate list cannot rank
-it. If the pepper is missing the record says ``digest_algorithm: "absent"``
+"same messages on the wire" while a reader holding a candidate list cannot
+rank it. The digest covers the ``messages`` array only, never the whole
+request kwargs: two calls with identical messages but different ``tools``,
+``temperature`` or ``model`` share a digest. If the pepper is missing the record says ``digest_algorithm: "absent"``
 rather than quietly falling back to an unkeyed hash, which would be a lookup
 table for every value that has ever been sent.
 
@@ -257,7 +259,15 @@ def set_egress_observer(observer: EgressObserver | None) -> None:
 
 
 def canonical_payload_bytes(payload: Any) -> bytes:
-    """Serialize a payload deterministically, so digests compare across runs."""
+    """Serialize a payload deterministically, so digests compare across runs.
+
+    Deterministic for JSON-native payloads (outbound messages are dicts of
+    strings). ``default=str`` keeps an exotic value from losing the whole
+    record -- ``record_egress`` drops the record when serialization raises,
+    which is worse than a weak digest -- but its ``str()`` coercion can embed
+    a memory address, so digests over non-JSON-native values may not reproduce
+    across processes. Do not remove it without replacing that guarantee.
+    """
     return json.dumps(
         payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str
     ).encode("utf-8")
@@ -370,7 +380,7 @@ def record_egress(
 ) -> EgressRecord | None:
     """Build and emit one egress record.
 
-    ``payload`` is the outbound payload as it went on the wire -- already
+    ``payload`` is the outbound messages as they went on the wire -- already
     truncated where digillm truncates -- and is used only to derive the digest.
     It is never stored, logged, or attached to an exception. Pass
     ``payload=None`` for the no-egress path.

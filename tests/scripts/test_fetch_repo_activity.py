@@ -161,11 +161,37 @@ def test_open_prs_are_unwindowed_current_state() -> None:
 
 @pytest.mark.unit
 def test_recent_lists_come_from_search_items_not_commit_subjects() -> None:
+    # The row queries are deliberately OVER-fetched (per_page=25): the Search API
+    # has handed back wrong-kind rows (#4091) which the url_marker filter drops,
+    # and at per_page=6 that once emptied openIssues entirely (run 38211281127).
+    # _search_items still truncates to 6 rows, so the snapshot shape is unchanged.
     source = SCRIPT.read_text(encoding="utf-8")
     merged = next(line for line in source.splitlines() if "is:pr+is:merged" in line)
-    assert "per_page=6" in merged and "sort=updated" in merged
+    assert "per_page=25" in merged and "sort=updated" in merged
     issues = next(line for line in source.splitlines() if "is:issue+is:open&" in line)
-    assert "sort=updated" in issues
+    assert "per_page=25" in issues and "sort=updated" in issues
+    assert "_search_items(merged, 6" in source and "_search_items(open_issues, 6" in source
+
+
+@pytest.mark.unit
+def test_require_list_rows_refuses_filtered_to_empty() -> None:
+    """Run 38211281127: totals said 932 merged / 130 open, the url_marker filter
+    dropped every openIssues row, and collect() wrote a file its own --check
+    rejects. Totals with no surviving rows must fail at build time instead."""
+    row = {
+        "number": 1,
+        "title": "x",
+        "url": "https://github.com/digithings-ai/digithings/pull/1",
+        "mergedAt": None,
+    }
+    fra._require_list_rows({"total_count": 932}, {"total_count": 130}, [row], [row])
+    with pytest.raises(SystemExit):
+        fra._require_list_rows({"total_count": 932}, {"total_count": 130}, [row], [])
+    with pytest.raises(SystemExit):
+        fra._require_list_rows({"total_count": 932}, {"total_count": 130}, [], [row])
+    # Genuinely quiet repos (zero totals) still pass — the guard fires only when
+    # rows were expected but filtering ate them.
+    fra._require_list_rows({"total_count": 0}, {"total_count": 0}, [], [])
 
 
 @pytest.mark.unit
