@@ -352,7 +352,7 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command:
       - >-
-        if [ -n "$${CHEAPERINFERENCE_API_KEY:-}" ]; then
+        if [ -n "$$CHEAPERINFERENCE_API_KEY" ]; then
         python3 /app/scripts/merge_litellm_cheaperinference.py > /tmp/litellm.yaml && CFG=/tmp/litellm.yaml;
         else CFG=/app/config/litellm.yaml; fi;
         exec litellm --config "$$CFG" --host 0.0.0.0 --port 4000
