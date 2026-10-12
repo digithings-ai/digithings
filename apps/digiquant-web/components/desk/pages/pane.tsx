@@ -303,7 +303,7 @@ export function DeskPane({
           toggle();
         }}
       >
-        {open && panel ? (
+        {panel ? (
           <div onClick={(event) => event.stopPropagation()}>
             <PanelView id={panel.id} title={title} data={panel.data}>
               {face.body.blocks.map((block, index) => <BlockView key={index} block={block} title={title} />)}

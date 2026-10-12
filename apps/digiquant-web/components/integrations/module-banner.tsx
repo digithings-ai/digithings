@@ -24,9 +24,10 @@ export function ModuleBanner({ name, className }: { name: string; className?: st
   useEffect(() => {
     const node = ref.current;
     if (!node || armed) return;
+    // Without IntersectionObserver there is nothing to wait for: arm on the next frame.
     if (typeof IntersectionObserver === "undefined") {
-      setArmed(true);
-      return;
+      const frame = requestAnimationFrame(() => setArmed(true));
+      return () => cancelAnimationFrame(frame);
     }
     const observer = new IntersectionObserver(
       (entries) => {

@@ -37,8 +37,9 @@ test("the baseline rail is the web sidebar, in order", () => {
     "/tools/terminal",
     "/tools/charts",
     "/tools/chat",
+    "/settings",
+    "/settings/paper",
   ]);
-  expect(railPaths("baseline")).not.toContain("/settings");
   expect(railPaths("baseline")).not.toContain("/performance");
   expect(railPaths("baseline")).not.toContain("/fx");
   const strategies = rows.find((row) => row.path === "/strategies");

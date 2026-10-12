@@ -16,7 +16,7 @@ export type ReadResult = {
 
 const scalar = (v: unknown, key = ""): string => (typeof v === "object" && v !== null ? DASH : cell(v, key));
 
-import { isStubPayload as isStubEnvelope } from "../../../../packages/ui/src/lib/stub-payload";
+import { isStubPayload as isStubEnvelope } from "../../../packages/ui/src/lib/stub-payload";
 
 export { isStubEnvelope };
 

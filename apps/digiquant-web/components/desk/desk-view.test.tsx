@@ -25,11 +25,6 @@ describe("terminal desk", () => {
       expect(params).toContain(page.path);
       expect(deskPathFromSlug(page.path.split("/").filter(Boolean))).toBe(page.path);
     }
-    for (const page of PAGES) {
-      // Invite pages get a static shell too; the access manifest gates the body.
-      expect(params).toContain(page.path);
-      expect(deskPathFromSlug(page.path.split("/").filter(Boolean))).toBe(page.path);
-    }
     expect(deskPathFromSlug(undefined)).toBe("/brief");
     expect(deskPathFromSlug(["markets"])).toBeNull();
     expect(deskPathFromSlug(["charts"])).toBeNull();

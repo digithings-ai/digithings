@@ -46,10 +46,12 @@ for (const def of Object.values(BANNERS)) {
 
         // LOADING moves: early intro frames differ from each other and from the settled
         // mark (digichat locks its letters well before its LOADING window closes).
-        const early = await frameAt(def, size, Math.round(loadingMs * 0.15));
-        const mid = await frameAt(def, size, Math.round(loadingMs * 0.35));
-        expect(early).not.toBe(mid);
-        expect(mid).not.toBe(settled);
+        // Sampled at several points: an animation can hold one glyph frame across a
+        // phase (digivault's dial reads the same at 15% and 35% at half-block size).
+        const frames: string[] = [];
+        for (const at of [0.15, 0.35, 0.55, 0.75]) frames.push(await frameAt(def, size, Math.round(loadingMs * at)));
+        expect(new Set(frames).size).toBeGreaterThan(1);
+        expect(frames.some((frame) => frame !== settled)).toBe(true);
 
         // Reduced motion never moves.
         expect(await frameAt(def, size, Math.round(loadingMs * 0.35), { NO_MOTION: "1" })).toBe(settled);

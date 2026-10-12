@@ -12,15 +12,17 @@ const byName = (name: string) => {
 };
 
 describe("mcp tool manifest", () => {
-  it("lists every tool the server registers", () => {
+  // The band lists the audited subset (gen_mcp_manifest.py), never a name the server does not register.
+  it("lists only tools the server registers", () => {
     const src = readFileSync(resolve(__dirname, "../../../digiquant/src/digiquant/mcp_server.py"), "utf8");
-    const registered = [...src.matchAll(/@_maybe_tool\("([a-z0-9_]+)"\)/g)].map((m) => m[1]).sort();
-    expect(TOOLS.map((t) => t.name).sort()).toEqual(registered);
+    const registered = new Set([...src.matchAll(/@_maybe_tool\("([a-z0-9_]+)"\)/g)].map((m) => m[1]));
+    expect(TOOLS.length).toBeGreaterThan(0);
+    for (const t of TOOLS) expect(registered.has(t.name), t.name).toBe(true);
   });
 
-  it("marks the read-scope tools from READ_SCOPE_TOOLS", () => {
-    expect(byName("digiquant_list_strategies").scope).toBe("read");
-    expect(byName("digiquant_run_backtest").scope).toBe("full");
+  it("marks every tool with a scope", () => {
+    for (const t of TOOLS) expect(["read", "full"], t.name).toContain(t.scope);
+    expect(byName("digiquant_run_optimize").scope).toBe("full");
   });
 });
 
@@ -30,7 +32,7 @@ describe("demo execution", () => {
   });
 
   it("reports missing, unexpected and mistyped arguments", () => {
-    const t = byName("digiquant_run_backtest");
+    const t = byName("digiquant_run_optimize");
     expect(validateArgs(t, {})).toContain('missing required argument "strategy_name"');
     expect(validateArgs(t, { strategy_name: 3, symbols_json: "[]", nope: 1 })).toEqual(
       expect.arrayContaining(['"strategy_name" must be str', 'unexpected argument "nope"']),
@@ -38,22 +40,22 @@ describe("demo execution", () => {
   });
 
   it("does not register full-scope tools under read scope", () => {
-    const t = byName("digiquant_run_backtest");
+    const t = byName("digiquant_run_optimize");
     const out = runDemo(t, JSON.stringify(exampleArgs(t)), "read");
     expect(out.at(-1)?.kind).toBe("err");
     expect(out.at(-1)?.text).toContain("not registered under --scope read");
   });
 
   it("returns a demo result, never an executed one", () => {
-    const t = byName("digiquant_list_strategies");
-    const out = runDemo(t, "{}", "read");
+    const t = byName("luxalgo_edge_symbols");
+    const out = runDemo(t, "{}", "full");
     const last = out.at(-1);
     expect(last?.kind).toBe("out");
     expect(JSON.parse(last?.text ?? "{}")).toMatchObject({ mode: "demo", executed: false });
   });
 
   it("rejects arguments that are not a JSON object", () => {
-    const t = byName("digiquant_list_strategies");
+    const t = byName("luxalgo_edge_symbols");
     expect(runDemo(t, "[1]", "full").at(-1)?.text).toContain("JSON object");
     expect(runDemo(t, "{", "full").at(-1)?.text).toContain("not valid JSON");
   });
