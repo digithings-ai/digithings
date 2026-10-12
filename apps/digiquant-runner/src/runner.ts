@@ -6,9 +6,38 @@
  */
 import { Container } from "@cloudflare/containers";
 import { dataPlaneEnv, type Env } from "./env";
-import { RunnerSession, type ContainerPort, type RunnerKv } from "./runner-session";
+import {
+  HEARTBEAT_MS,
+  RunLostError,
+  RunnerSession,
+  type ContainerPort,
+  type RunnerKv,
+} from "./runner-session";
 
 export const RUNNER_CONTAINER_ID = "runner-v1";
+
+/**
+ * Re-arm the heartbeat after a Durable Object reset (DIG-3061).
+ *
+ * A reset (a code update, or eviction) drops the heartbeat alarm, and nothing
+ * re-armed it, so an in-flight house run kept its lock forever and no
+ * success.json was ever written.
+ *
+ * An already-armed alarm means this is the ordinary instantiation - a request,
+ * or the alarm's own wake - not a reset. Container.schedule INSERTs a fresh row
+ * on every call, so scheduling again would double the poll rate for the life of
+ * the instance. Returns true when a heartbeat was scheduled.
+ */
+export async function rearmHeartbeatAfterReset(deps: {
+  getAlarm: () => Promise<number | null>;
+  hasActiveWork: () => Promise<boolean>;
+  scheduleHeartbeat: () => Promise<void>;
+}): Promise<boolean> {
+  if ((await deps.getAlarm()) !== null) return false;
+  if (!(await deps.hasActiveWork())) return false;
+  await deps.scheduleHeartbeat();
+  return true;
+}
 
 export class DigiQuantRunnerContainer extends Container<Env> {
   defaultPort = 8080;
@@ -16,6 +45,21 @@ export class DigiQuantRunnerContainer extends Container<Env> {
   /** Idle tail. Raised to 30m while a lock is held. */
   sleepAfter = "1m";
   enableInternet = true;
+
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env);
+    // Deferred until the instance is idle so the re-arm never races a request,
+    // and swallowed on failure: a missed re-arm must not take the instance down.
+    this.ctx
+      .blockConcurrencyWhile(() =>
+        rearmHeartbeatAfterReset({
+          getAlarm: () => this.ctx.storage.getAlarm(),
+          hasActiveWork: () => this.session().hasActiveWork(),
+          scheduleHeartbeat: () => this.schedule(HEARTBEAT_MS / 1000, "heartbeat").then(() => undefined),
+        }),
+      )
+      .catch(() => undefined);
+  }
 
   override async fetch(request: Request): Promise<Response> {
     this.envVars = dataPlaneEnv(this.env);
@@ -92,7 +136,12 @@ function portFromContainer(container: DigiQuantRunnerContainer): ContainerPort {
       const res = await container.containerFetch(
         `http://container/status?run_id=${encodeURIComponent(runId)}`,
       );
-      if (res.status === 404) return null;
+      // A 404 is the container reporting it has no record of this run, which is
+      // distinct from being unable to reach it: the registry lives in the
+      // container's memory, so a container or DO restart really does lose the
+      // run. Throwing the typed error lets pollLock separate "the run is gone"
+      // from "the container is unreachable" (DIG-3061).
+      if (res.status === 404) throw new RunLostError(runId);
       if (!res.ok) throw new Error(`container /status HTTP ${res.status}`);
       return res.json();
     },

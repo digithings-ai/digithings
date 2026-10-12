@@ -11,6 +11,8 @@ import {
   type ContainerStatus,
   type RunJobRequest,
 } from "./runner-session";
+import { LOST_CONFIRMATIONS, RUN_LOST_ERROR, RunLostError } from "./runner-session";
+import { rearmHeartbeatAfterReset } from "./runner";
 
 const T0 = Date.parse("2026-09-29T13:00:00.000Z");
 
@@ -646,5 +648,159 @@ describe("watchdog and poll resilience", () => {
     );
     expect(house.status).toBe("accepted");
     expect(starts).toEqual([prices.run_id]);
+  });
+});
+
+describe("run lost to a container or DO restart (DIG-3061)", () => {
+  /**
+   * readStatus with three modes. Only "lost" is evidence the run is gone; a
+   * transport error must never count towards LOST_CONFIRMATIONS.
+   */
+  function lostHarness(archive?: HouseLedger) {
+    const inner = {} as { statuses?: Map<string, ContainerStatus> };
+    let mode: "ok" | "transport" | "lost" = "ok";
+    const harnessResult = harness({
+      readStatus: async (runId) => {
+        if (mode === "transport") throw new Error("container unreachable");
+        if (mode === "lost") throw new RunLostError(runId);
+        return inner.statuses?.get(runId) ?? null;
+      },
+      archive,
+    });
+    inner.statuses = harnessResult.statuses;
+    return { ...harnessResult, setMode: (next: typeof mode) => { mode = next; } };
+  }
+
+  it("keeps the lock after a single lost poll and fails it on the second", async () => {
+    const archive = memoryArchive();
+    const { session, starts, alarms, setMode } = lostHarness(archive);
+    const accepted = await session.accept(
+      job({ command: "house-run", concurrency: "house-run", idempotency_key: "house-run:1" }),
+    );
+    const runId = accepted.run_id;
+    expect(starts).toEqual([runId]);
+
+    // First 404: the container may just be cold-booting.
+    setMode("lost");
+    alarms.length = 0;
+    await session.alarm();
+    expect((await session.health()).running).toEqual([runId]);
+    expect(alarms).toEqual([HEARTBEAT_MS]);
+
+    // Second consecutive 404, one heartbeat later: the run is gone for good.
+    await session.alarm();
+    expect((await session.health()).running).toEqual([]);
+    const res = await session.fetch(new Request(`https://digiquant-runner/v1/jobs/${runId}`));
+    const body = (await res.json()) as { status: string; exit_code: number | null; error: string | null };
+    expect(body.status).toBe("failed");
+    expect(body.error).toBe(RUN_LOST_ERROR);
+    expect(body.exit_code).toBeNull();
+    // A lost run never books anything: no success marker is written.
+    expect([...archive.data.keys()].filter((k) => k.includes("success.json"))).toEqual([]);
+  });
+
+  it("does not count a transport error towards the lost confirmations", async () => {
+    const { session, starts, setMode } = lostHarness();
+    const accepted = await session.accept(
+      job({ idempotency_key: "market-data-refresh-morning:transport-then-lost" }),
+    );
+    const runId = accepted.run_id;
+
+    // Unreachable is not lost, and it does not count either way: after a
+    // transport error and one 404 the streak is still 1, so the run survives.
+    setMode("transport");
+    await session.alarm();
+    setMode("lost");
+    await session.alarm();
+    expect((await session.health()).running).toEqual([runId]);
+
+    // A second 404 does finish it - the streak reached LOST_CONFIRMATIONS.
+    await session.alarm();
+    expect((await session.health()).running).toEqual([]);
+  });
+
+  it("resets the lost streak when the container answers again", async () => {
+    const { session, starts, setMode } = lostHarness();
+    const accepted = await session.accept(
+      job({ idempotency_key: "market-data-refresh-morning:streak-reset" }),
+    );
+    const runId = accepted.run_id;
+
+    setMode("lost");
+    await session.alarm();
+    setMode("ok");
+    await session.alarm();
+    setMode("lost");
+    await session.alarm();
+    // Second 404 overall, first in a row: the run survives.
+    expect((await session.health()).running).toEqual([runId]);
+    await session.alarm();
+    expect((await session.health()).running).toEqual([]);
+  });
+
+  it("needs LOST_CONFIRMATIONS polls, not one, before failing", async () => {
+    expect(LOST_CONFIRMATIONS).toBe(2);
+  });
+});
+
+describe("heartbeat re-armed after a Durable Object reset (DIG-3061)", () => {
+  function edges(opts: { alarm: number | null; locks: number; queued?: number }) {
+    const scheduled: number[] = [];
+    return {
+      scheduled,
+      deps: {
+        getAlarm: async () => opts.alarm,
+        hasActiveWork: async () => opts.locks > 0 || (opts.queued ?? 0) > 0,
+        scheduleHeartbeat: async () => {
+          scheduled.push(HEARTBEAT_MS / 1000);
+        },
+      },
+    };
+  }
+
+  it("arms one heartbeat when a reset dropped the alarm and work is held", async () => {
+    const { deps, scheduled } = edges({ alarm: null, locks: 1 });
+    expect(await rearmHeartbeatAfterReset(deps)).toBe(true);
+    expect(scheduled).toEqual([HEARTBEAT_MS / 1000]);
+  });
+
+  it("also arms when the work is queued rather than locked", async () => {
+    const { deps, scheduled } = edges({ alarm: null, locks: 0, queued: 2 });
+    expect(await rearmHeartbeatAfterReset(deps)).toBe(true);
+    expect(scheduled).toEqual([HEARTBEAT_MS / 1000]);
+  });
+
+  it("does not duplicate the schedule while an alarm is already armed", async () => {
+    // An armed alarm means an ordinary instantiation (a request, or the alarm's
+    // own wake). Container.schedule INSERTs a row per call, so a second one here
+    // would double the poll rate for the life of the instance.
+    const { deps, scheduled } = edges({ alarm: 1_700_000_000_000, locks: 1 });
+    expect(await rearmHeartbeatAfterReset(deps)).toBe(false);
+    expect(scheduled).toEqual([]);
+  });
+
+  it("does not arm anything when the runner holds no work", async () => {
+    const { deps, scheduled } = edges({ alarm: null, locks: 0 });
+    expect(await rearmHeartbeatAfterReset(deps)).toBe(false);
+    expect(scheduled).toEqual([]);
+  });
+
+  it("checks the alarm before the work, so an armed alarm wins", async () => {
+    const seen: string[] = [];
+    const armed = await rearmHeartbeatAfterReset({
+      getAlarm: async () => {
+        seen.push("getAlarm");
+        return 1;
+      },
+      hasActiveWork: async () => {
+        seen.push("hasActiveWork");
+        return true;
+      },
+      scheduleHeartbeat: async () => {
+        seen.push("scheduleHeartbeat");
+      },
+    });
+    expect(armed).toBe(false);
+    expect(seen).toEqual(["getAlarm"]);
   });
 });
