@@ -199,8 +199,10 @@ pruned by this path (twelve-x `tests/test_backfill_snapshots.py`).
 
 ### Deployment caution
 
-Any push touching `apps/digithings-cron/**` deploys this Worker to production (see
-`## Deploy`). A PR against `develop` is therefore a production change. Nothing here is
+Any push to `main` touching `apps/digithings-cron/**` deploys this Worker to production,
+after the `production` environment gate is approved (see `## Deploy`). A PR against
+`develop` is not a production change: it reaches production only when `develop` is
+promoted into `main`. Nothing here is
 enabled by default: `BACKFILL_ENABLED = "0"` in `wrangler.toml`, and turning it on is a
 separate, explicit act.
 
@@ -266,11 +268,16 @@ npm run dev
 
 ## Deploy
 
-Deploy from `develop` and `main`. CI workflow:
-.github/workflows/deploy-digithings-cron.yml (push paths
-apps/digithings-cron/** + workflow_dispatch; Node 22; wrangler deploy).
+Deploy from `main` only, behind the `production` environment gate (DIG-3129). CI
+workflow: .github/workflows/deploy-digithings-cron.yml (push to `main`, paths
+apps/digithings-cron/**; plus workflow_dispatch; Node 22; wrangler deploy).
 Needs CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID and syncs GH_DISPATCH_TOKEN
 through the wrangler-action secret input without printing the value.
+
+A push to `develop` does not deploy. It is validated by the CI `web` lane
+(.github/workflows/test-web.yml, which runs this workspace's Vitest + typecheck)
+and by build-cloudflare-workers.yml, and reaches production only when `develop`
+is promoted into `main`.
 
 ## Migration
 

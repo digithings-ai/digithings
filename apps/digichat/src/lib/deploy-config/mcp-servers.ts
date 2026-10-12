@@ -274,6 +274,17 @@ function boundedToolAllowlist(value: readonly string[] | undefined): string[] | 
   return [...value];
 }
 
+/**
+ * `mutatingTools` keeps an explicit `[]`: digigraph reads it as "nothing on this
+ * row mutates", while an absent list means every allowed tool mutates and must
+ * wait for human approval. Dropping the empty list turned every read-only tool
+ * into an approval prompt.
+ */
+function boundedMutatingList(value: readonly string[] | undefined): string[] | undefined {
+  if (Array.isArray(value) && value.length === 0) return [];
+  return boundedToolAllowlist(value);
+}
+
 /** Operator URL wins. Session client URLs only when allowUserServers, https-only. */
 export function resolveMcpOAuthResourceUrl(opts: {
   operator: readonly McpServerForward[];
@@ -311,7 +322,7 @@ export function operatorMcpServersForUpstream(
     // before the bytes go on the wire. Over budget ⇒ omitted ⇒ zero tools.
     const allowedTools = boundedToolAllowlist(s.allowedTools);
     if (allowedTools) row.allowedTools = allowedTools;
-    const mutatingTools = boundedToolAllowlist(s.mutatingTools);
+    const mutatingTools = boundedMutatingList(s.mutatingTools);
     if (mutatingTools) row.mutatingTools = mutatingTools;
     out.push(row);
   }
@@ -380,7 +391,7 @@ export function mergeMcpSessionOverlay(opts: {
     // depth rather than a live fix (review #5061 S1).
     const allowed = boundedToolAllowlist(s.allowedTools);
     if (allowed) row.allowedTools = allowed;
-    const mutating = boundedToolAllowlist(s.mutatingTools);
+    const mutating = boundedMutatingList(s.mutatingTools);
     if (mutating) row.mutatingTools = mutating;
     return row;
   });
@@ -422,7 +433,7 @@ export function mcpUpstreamHeaderValue(
       if (s.authHeader) row.authHeader = s.authHeader;
       if (s.setup && Object.keys(s.setup).length) row.setup = s.setup;
       if (s.allowedTools?.length) row.allowedTools = s.allowedTools;
-      if (s.mutatingTools?.length) row.mutatingTools = s.mutatingTools;
+      if (s.mutatingTools && s.allowedTools?.length) row.mutatingTools = s.mutatingTools;
       return row;
     }),
   );

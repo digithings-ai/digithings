@@ -67,6 +67,17 @@ hosts:
           default: true
           tokenEnv: ZAMMAD_API_TOKEN
           authHeader: Authorization
+          # Read-only ticket tools. The MCP brake (DIG-284) refuses every tool
+          # of a server row without an explicit allowedTools list.
+          allowedTools:
+            - search_tickets
+            - list_tickets
+            - get_ticket
+            - ticket_report
+            - aggregate_tickets
+          # All five are read-only; an explicit empty list stops the brake
+          # from falling back to allowedTools and asking approval for each read.
+          mutatingTools: []
         - id: digisearch
           url: http://digisearch-mcp:8765/mcp
           label: Help search
