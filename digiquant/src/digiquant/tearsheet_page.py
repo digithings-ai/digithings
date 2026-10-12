@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from digiquant.fonts import GOOGLE_FONTS_HREF, MONO_FONT_STACK
 from digiquant.models import BacktestResult
 from digiquant.stats.honesty import DISCLAIMER, format_honest_rate, wilson
 
@@ -114,7 +115,7 @@ def _build_page(
   <title>Backtest Report — {strategy_display}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link href="{GOOGLE_FONTS_HREF}" rel="stylesheet">
   <style>
     /* ── Reset & Root ────────────────────────────────────── */
     *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
@@ -134,7 +135,7 @@ def _build_page(
       --negative: #f87171;
       --warn: #fbbf24;
       --purple: #a78bfa;
-      --font-mono: 'IBM Plex Mono', 'Courier New', monospace;
+      --font-mono: {MONO_FONT_STACK};
       --font-sans: 'IBM Plex Sans', system-ui, sans-serif;
     }}
     [data-theme="light"] {{
@@ -435,14 +436,14 @@ def _build_page(
   const DARK_LAYOUT = {{
     paper_bgcolor: 'rgba(0,0,0,0)',
     plot_bgcolor: 'rgba(255,255,255,0.03)',
-    font: {{ color: '#94a3b8', family: "'IBM Plex Mono','Courier New',monospace", size: 11 }},
+    font: {{ color: '#94a3b8', family: "{MONO_FONT_STACK}", size: 11 }},
     xaxis: {{ gridcolor: 'rgba(255,255,255,0.05)', linecolor: 'rgba(255,255,255,0.1)', tickfont: {{ color: '#64748b', size: 10 }} }},
     yaxis: {{ gridcolor: 'rgba(255,255,255,0.05)', linecolor: 'rgba(255,255,255,0.1)', tickfont: {{ color: '#64748b', size: 10 }} }},
   }};
   const LIGHT_LAYOUT = {{
     paper_bgcolor: 'rgba(0,0,0,0)',
     plot_bgcolor: 'rgba(0,0,0,0.02)',
-    font: {{ color: '#475569', family: "'IBM Plex Mono','Courier New',monospace", size: 11 }},
+    font: {{ color: '#475569', family: "{MONO_FONT_STACK}", size: 11 }},
     xaxis: {{ gridcolor: 'rgba(0,0,0,0.05)', linecolor: 'rgba(0,0,0,0.1)', tickfont: {{ color: '#94a3b8', size: 10 }} }},
     yaxis: {{ gridcolor: 'rgba(0,0,0,0.05)', linecolor: 'rgba(0,0,0,0.1)', tickfont: {{ color: '#94a3b8', size: 10 }} }},
   }};
