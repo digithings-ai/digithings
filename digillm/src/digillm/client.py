@@ -1882,7 +1882,57 @@ def _execute_tool_in_fan_out(
     return execute_tool(name, args)
 
 
-@_traceable("run_tools")
+# DeepSeek V3.2+/V4 sometimes emits its native "DSML" tool-call markup as plain
+# content instead of structured tool_calls (OCC demo: raw "<｜DSML｜tool_calls>"
+# in the chat and the turn ending). The bar is U+FF5C; ASCII "|" is accepted too.
+_DSML_BAR = "[｜|]"
+_DSML_BLOCK_RE = re.compile(
+    rf"<{_DSML_BAR}DSML{_DSML_BAR}(?:tool_calls|function_calls)>(.*?)(?:</{_DSML_BAR}DSML{_DSML_BAR}(?:tool_calls|function_calls)>|\Z)",
+    re.S,
+)
+_DSML_INVOKE_RE = re.compile(
+    rf"<{_DSML_BAR}DSML{_DSML_BAR}invoke\s+name=\"([^\"]+)\"\s*>(.*?)(?:</{_DSML_BAR}DSML{_DSML_BAR}invoke>|(?=<{_DSML_BAR}DSML{_DSML_BAR}invoke)|\Z)",
+    re.S,
+)
+_DSML_PARAM_RE = re.compile(
+    rf"<{_DSML_BAR}DSML{_DSML_BAR}parameter\s+name=\"([^\"]+)\"(?:\s+string=\"(true|false)\")?\s*>(.*?)</{_DSML_BAR}DSML{_DSML_BAR}parameter>",
+    re.S,
+)
+_DSML_MARK_RE = re.compile(rf"<{_DSML_BAR}DSML{_DSML_BAR}")
+
+
+def _parse_dsml_tool_calls(content: str | None) -> tuple[str, list[dict[str, Any]]]:
+    """Lift DSML tool-call markup out of ``content`` into OpenAI-shaped tool_calls.
+
+    Returns (content with the markup removed, tool_calls). Leaves content untouched
+    and returns [] when there is no parseable markup.
+    """
+    if not content or not _DSML_MARK_RE.search(content):
+        return content or "", []
+    calls: list[dict[str, Any]] = []
+    for block in _DSML_BLOCK_RE.finditer(content):
+        for inv in _DSML_INVOKE_RE.finditer(block.group(1)):
+            args: dict[str, Any] = {}
+            for pname, is_str, raw in _DSML_PARAM_RE.findall(inv.group(2)):
+                value: Any = raw.strip() if is_str != "false" else raw.strip()
+                if is_str == "false":
+                    try:
+                        value = json.loads(raw.strip())
+                    except ValueError:
+                        value = raw.strip()
+                args[pname] = value
+            calls.append(
+                {
+                    "id": f"dsml_{len(calls)}",
+                    "type": "function",
+                    "function": {"name": inv.group(1).strip(), "arguments": json.dumps(args)},
+                }
+            )
+    if not calls:
+        return content, []
+    stripped = _DSML_BLOCK_RE.sub("", content).strip()
+    return stripped, calls
+
 
 def _emit_tool_result(
     on_tool_step: Callable[[str, Any], None], name: str, result: str | dict[str, Any]
@@ -1900,6 +1950,8 @@ def _emit_tool_result(
         payload["result_name"] = body["name"]
     on_tool_step("tool_result", payload)
 
+
+@_traceable("run_tools")
 def run_tools(
     model: str,
     messages: list[ChatCompletionMessage],
@@ -2077,6 +2129,16 @@ def run_tools(
 
     for round_idx in range(max_tool_rounds):
         content, tool_calls = _produce_turn(current, tools)
+        streamed_content = content
+        if not tool_calls and tools:
+            content, dsml_calls = _parse_dsml_tool_calls(content)
+            if dsml_calls:
+                logger.warning(
+                    "run_tools: lifted %d DSML tool call(s) out of round %d content",
+                    len(dsml_calls),
+                    round_idx,
+                )
+                tool_calls = dsml_calls
         if not tool_calls:
             if tool_choice == "required":
                 # tool_choice="required" is a floor a deployment opted into (see
@@ -2094,7 +2156,7 @@ def run_tools(
                 )
             return content or ""
 
-        if on_tool_step is not None and content:
+        if on_tool_step is not None and streamed_content:
             # This round's content already streamed live via on_tool_step("content", ...)
             # inside _produce_turn, before tool_calls was known — that is unavoidable for
             # a live per-token stream (buffering the whole round to decide "is this
@@ -2112,7 +2174,9 @@ def run_tools(
             # Empty-narration tool rounds deliberately skip this callback: there is no
             # streamed content to demote, and emitting a vacuous boundary would reorder
             # consumer callbacks ahead of tool_call (see digigraph rag_stream tests).
-            on_tool_step("round_boundary", {"round_idx": round_idx, "narration": content})
+            # streamed_content, not content: DSML markup lifted into tool_calls
+            # above already streamed live and must be demoted with the narration.
+            on_tool_step("round_boundary", {"round_idx": round_idx, "narration": streamed_content})
 
         asst_entries: list[ToolCallDict] = []
         for tc in tool_calls:
