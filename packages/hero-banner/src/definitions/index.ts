@@ -200,38 +200,7 @@ export const DIGIBASE: BannerDefinition = {
   id: "digibase",
   text: "DIGIBASE",
   label: "digibase",
-/** DIG-2868. A pin-tumbler lock: a key slides in along the shear line, every
- *  pin drops into line as the tip passes, then the key turns. Accent: --accent-digikey. */
-export const DIGIKEY: BannerDefinition = {
-  id: "digikey",
-  text: "DIGIKEY",
-  label: "digikey",
-/** DIG-2878. A flipbook: pages riffle right to left, each carrying more of the
- *  word, and the last, slowest turn lays it down in ink. LIVE turns a page now
- *  and then. Accent: --accent-digibook. */
-export const DIGIBOOK: BannerDefinition = {
-  id: "digibook",
-  text: "DIGIBOOK",
-  label: "digibook",
-/** DIG-2876. Typed at a prompt, then built: a block cursor types the word (one
- *  typo, backspaced), parks and blinks, and a build sweep turns the source to
- *  ink. LIVE edits one glyph now and then, or reruns the build. Accent:
- *  --accent-digidev. */
-export const DIGIDEV: BannerDefinition = {
-  id: "digidev",
-  text: "DIGIDEV",
-  label: "digidev",
   font: PIXEL_7X10,
-/** DIG-2875. An arcade claw machine picks the word out of a pile: the claw
- *  travels a faint rail, drops, grips each sunk glyph and lifts it into place
- *  (one seeded grab slips and is retried). LIVE plucks one glyph now and then
- *  and sets it back, or lets it slip. The font carries four blank rows of
- *  headroom for the gantry. Accent: --accent-digiclaw. */
-export const DIGICLAW: BannerDefinition = {
-  id: "digiclaw",
-  text: "DIGICLAW",
-  label: "digiclaw",
-  font: withHeadroom(PIXEL_7X10),
   gap: 2,
   palette: {
     ink: INK,
@@ -252,6 +221,19 @@ export const DIGICLAW: BannerDefinition = {
   }),
   live: true,
   seed: 0xdb05,
+};
+
+/** DIG-2868. A pin-tumbler lock: a key slides in along the shear line, every
+ *  pin drops into line as the tip passes, then the key turns. Accent: --accent-digikey. */
+export const DIGIKEY: BannerDefinition = {
+  id: "digikey",
+  text: "DIGIKEY",
+  label: "digikey",
+  font: PIXEL_7X10,
+  gap: 2,
+  palette: {
+    ink: INK,
+    ground: GROUND,
     accent: { hex: "#D97A5A", cube: 173, cssVar: "--accent-digikey" },
     glint: { hex: "#FFFFFF", cube: 231, cssVar: "--glint" },
   },
@@ -277,37 +259,6 @@ export const DIGIGRAPH: BannerDefinition = {
   id: "digigraph",
   text: "DIGIGRAPH",
   label: "digigraph",
-/** DIG-2874. The vault door opens: a combination dial turns right, left, right,
- *  the bolts slide back, the leaves part from the seam and the word inside
- *  lights up. LIVE: a scan line runs down the word, or the bolts relock and
- *  draw back. Accent: --accent-digivault. */
-export const DIGIVAULT: BannerDefinition = {
-  id: "digivault",
-  text: "DIGIVAULT",
-  label: "digivault",
-/** DIG-2873. A search: the word hides in an index of decoy pixels until a scan
- *  beam finds it. LIVE runs queries over it and highlights the hits.
- *  Accent: --accent-digisearch. */
-export const DIGISEARCH: BannerDefinition = {
-  id: "digisearch",
-  text: "DIGISEARCH",
-  label: "digisearch",
-/** DIG-2872. A trace waterfall, x is time: each pixel row is a lane of
- *  sibling spans that open in a staircase and grow right, the word in ink on
- *  their bars; the bars drain and leave the word. LIVE runs a small trace
- *  (root plus children) now and then. Accent: --accent-digitrace. */
-export const DIGITRACE: BannerDefinition = {
-  id: "digitrace",
-  text: "DIGITRACE",
-  label: "digitrace",
-/** DIG-2871. A download, not a drawing: a request pixel runs out of the right
- *  edge, then every lit cell comes back as a packet streamed in from the right
- *  along its row and lands with a glint. LIVE fetches again now and then: a
- *  request on one row, a small burst of packets back. Accent: --accent-digifetch. */
-export const DIGIFETCH: BannerDefinition = {
-  id: "digifetch",
-  text: "DIGIFETCH",
-  label: "digifetch",
   font: PIXEL_7X10,
   gap: 2,
   palette: {
@@ -330,6 +281,20 @@ export const DIGIFETCH: BannerDefinition = {
   }),
   live: true,
   seed: 0xd16a,
+};
+
+/** DIG-2878. A flipbook: pages riffle right to left, each carrying more of the
+ *  word, and the last, slowest turn lays it down in ink. LIVE turns a page now
+ *  and then. Accent: --accent-digibook. */
+export const DIGIBOOK: BannerDefinition = {
+  id: "digibook",
+  text: "DIGIBOOK",
+  label: "digibook",
+  font: PIXEL_7X10,
+  gap: 2,
+  palette: {
+    ink: INK,
+    ground: GROUND,
     accent: { hex: "#D4C5A0", cube: 187, cssVar: "--accent-digibook" },
     glint: { hex: "#FFFFFF", cube: 231, cssVar: "--glint" },
   },
@@ -345,6 +310,21 @@ export const DIGIFETCH: BannerDefinition = {
   }),
   live: true,
   seed: 0xb00c,
+};
+
+/** DIG-2876. Typed at a prompt, then built: a block cursor types the word (one
+ *  typo, backspaced), parks and blinks, and a build sweep turns the source to
+ *  ink. LIVE edits one glyph now and then, or reruns the build. Accent:
+ *  --accent-digidev. */
+export const DIGIDEV: BannerDefinition = {
+  id: "digidev",
+  text: "DIGIDEV",
+  label: "digidev",
+  font: PIXEL_7X10,
+  gap: 2,
+  palette: {
+    ink: INK,
+    ground: GROUND,
     accent: { hex: "#6B9DFF", cube: 75, cssVar: "--accent-digidev" },
     glint: { hex: "#FFFFFF", cube: 231, cssVar: "--glint" },
   },
@@ -360,6 +340,22 @@ export const DIGIFETCH: BannerDefinition = {
   }),
   live: true,
   seed: 0xde7,
+};
+
+/** DIG-2875. An arcade claw machine picks the word out of a pile: the claw
+ *  travels a faint rail, drops, grips each sunk glyph and lifts it into place
+ *  (one seeded grab slips and is retried). LIVE plucks one glyph now and then
+ *  and sets it back, or lets it slip. The font carries four blank rows of
+ *  headroom for the gantry. Accent: --accent-digiclaw. */
+export const DIGICLAW: BannerDefinition = {
+  id: "digiclaw",
+  text: "DIGICLAW",
+  label: "digiclaw",
+  font: withHeadroom(PIXEL_7X10),
+  gap: 2,
+  palette: {
+    ink: INK,
+    ground: GROUND,
     accent: { hex: "#B87840", cube: 137, cssVar: "--accent-digiclaw" },
     glint: { hex: "#FFFFFF", cube: 231, cssVar: "--glint" },
   },
@@ -378,12 +374,41 @@ export const DIGIFETCH: BannerDefinition = {
   }),
   live: true,
   seed: 0xc1a3,
+};
+
+/** DIG-2874. The vault door opens: a combination dial turns right, left, right,
+ *  the bolts slide back, the leaves part from the seam and the word inside
+ *  lights up. LIVE: a scan line runs down the word, or the bolts relock and
+ *  draw back. Accent: --accent-digivault. */
+export const DIGIVAULT: BannerDefinition = {
+  id: "digivault",
+  text: "DIGIVAULT",
+  label: "digivault",
+  font: PIXEL_7X10,
+  gap: 2,
+  palette: {
+    ink: INK,
+    ground: GROUND,
     accent: { hex: "#9D8FC9", cube: 140, cssVar: "--accent-digivault" },
     glint: { hex: "#FFFFFF", cube: 231, cssVar: "--glint" },
   },
   animation: vaultAnimation({ turnMs: 560, boltMs: 380, openMs: 720, settleMs: 520, everyMs: 7000, scanMs: 900 }),
   live: true,
   seed: 0xdb17,
+};
+
+/** DIG-2873. A search: the word hides in an index of decoy pixels until a scan
+ *  beam finds it. LIVE runs queries over it and highlights the hits.
+ *  Accent: --accent-digisearch. */
+export const DIGISEARCH: BannerDefinition = {
+  id: "digisearch",
+  text: "DIGISEARCH",
+  label: "digisearch",
+  font: PIXEL_7X10,
+  gap: 2,
+  palette: {
+    ink: INK,
+    ground: GROUND,
     accent: { hex: "#5AA3C4", cube: 74, cssVar: "--accent-digisearch" },
     glint: { hex: "#FFFFFF", cube: 231, cssVar: "--glint" },
   },
@@ -399,6 +424,21 @@ export const DIGIFETCH: BannerDefinition = {
   }),
   live: true,
   seed: 0x5ea2c,
+};
+
+/** DIG-2872. A trace waterfall, x is time: each pixel row is a lane of
+ *  sibling spans that open in a staircase and grow right, the word in ink on
+ *  their bars; the bars drain and leave the word. LIVE runs a small trace
+ *  (root plus children) now and then. Accent: --accent-digitrace. */
+export const DIGITRACE: BannerDefinition = {
+  id: "digitrace",
+  text: "DIGITRACE",
+  label: "digitrace",
+  font: PIXEL_7X10,
+  gap: 2,
+  palette: {
+    ink: INK,
+    ground: GROUND,
     accent: { hex: "#6FA3A3", cube: 73, cssVar: "--accent-digitrace" },
     glint: { hex: "#FFFFFF", cube: 231, cssVar: "--glint" },
   },
@@ -414,6 +454,21 @@ export const DIGIFETCH: BannerDefinition = {
   }),
   live: true,
   seed: 0x7ace,
+};
+
+/** DIG-2871. A download, not a drawing: a request pixel runs out of the right
+ *  edge, then every lit cell comes back as a packet streamed in from the right
+ *  along its row and lands with a glint. LIVE fetches again now and then: a
+ *  request on one row, a small burst of packets back. Accent: --accent-digifetch. */
+export const DIGIFETCH: BannerDefinition = {
+  id: "digifetch",
+  text: "DIGIFETCH",
+  label: "digifetch",
+  font: PIXEL_7X10,
+  gap: 2,
+  palette: {
+    ink: INK,
+    ground: GROUND,
     accent: { hex: "#C9A45C", cube: 179, cssVar: "--accent-digifetch" },
     glint: { hex: "#FFFFFF", cube: 231, cssVar: "--glint" },
   },
