@@ -78,6 +78,34 @@ custom_domain = true
 # zone_name = "digithings.ai"
 # custom_domain = true
 
+# DigiChat cutover (cost epic): zone routes moved here from digithings-digichat so the
+# folded DigiChatContainer serves them and the duplicate container goes idle.
+# DEPLOY ORDER: deploy digithings-digichat (routes removed) first, then this worker.
+# Precondition: the digichat secrets listed in apps/digichat-cloudflare/wrangler.toml
+# exist on this worker (wrangler secret list) before deploy.
+[[routes]]
+pattern = "digithings.ai/embed*"
+zone_name = "digithings.ai"
+[[routes]]
+pattern = "digithings.ai/api/chat*"
+zone_name = "digithings.ai"
+[[routes]]
+pattern = "digithings.ai/api/embed*"
+zone_name = "digithings.ai"
+[[routes]]
+pattern = "digithings.ai/api/byok*"
+zone_name = "digithings.ai"
+[[routes]]
+pattern = "digithings.ai/api/plan-proof*"
+zone_name = "digithings.ai"
+[[routes]]
+pattern = "digithings.ai/api/health"
+zone_name = "digithings.ai"
+[[routes]]
+pattern = "digithings.ai/_dtchat*"
+zone_name = "digithings.ai"
+
+
 [[containers]]
 class_name = "DigiStackContainer"
 # `image` and `image_build_context` resolve relative to THIS config file's
