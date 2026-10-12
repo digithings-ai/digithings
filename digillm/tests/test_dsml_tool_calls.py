@@ -34,3 +34,49 @@ def test_function_calls_wrapper_and_unterminated():
 
 def test_plain_content_untouched():
     assert _parse_dsml_tool_calls("hello") == ("hello", [])
+
+
+def test_wrapup_dsml_filtered_and_retried():
+    from unittest.mock import MagicMock, patch
+
+    import digillm
+    import digillm.client as client_mod
+
+    def chunk(content=None, tool_calls=None):
+        delta = MagicMock()
+        delta.content = content
+        delta.tool_calls = tool_calls
+        delta.reasoning_content = None
+        delta.reasoning = None
+        ch = MagicMock()
+        ch.choices = [MagicMock(delta=delta, finish_reason=None)]
+        ch.usage = None
+        return ch
+
+    tc = MagicMock(index=0, id="c1", type="function")
+    tc.function = MagicMock(arguments='{"q": "x"}')
+    tc.function.name = "lookup"
+    round1 = [chunk(tool_calls=[tc])]
+    leak = [
+        chunk(content="Paging on.\n<\uff5cDSML"),
+        chunk(
+            content='\uff5ctool_calls><\uff5cDSML\uff5cinvoke name="lookup"></\uff5cDSML\uff5cinvoke></\uff5cDSML\uff5ctool_calls>'
+        ),
+    ]
+    fake = MagicMock()
+    fake.chat.completions.create.side_effect = [round1, leak]
+    seen = []
+    tools = [{"type": "function", "function": {"name": "lookup", "parameters": {}}}]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake):
+        out = digillm.run_tools(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "go"}],
+            tools,
+            execute_tool=lambda n, a: "r",
+            on_tool_step=lambda k, p: seen.append((k, p)),
+            stream_deltas=True,
+            max_tool_rounds=1,
+        )
+    assert out == "Paging on."
+    streamed = "".join(p for k, p in seen if k == "content")
+    assert "DSML" not in streamed and streamed == "Paging on.\n"

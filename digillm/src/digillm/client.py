@@ -2241,6 +2241,53 @@ def run_tools(
             )
         )
 
+    def _wrapup_turn(turn_messages: list[ChatCompletionMessage]) -> str:
+        """Tool-free wrap-up turn with DSML markup filtered from stream and result."""
+        nonlocal on_tool_step
+        outer = on_tool_step
+        held: list[str] = []
+        state = {"suppress": False}
+        markers = ("<\uff5cDSML\uff5c", "<|DSML|")
+
+        def _filter(kind: str, payload: Any) -> None:
+            if outer is None:
+                return
+            if kind != "content" or not isinstance(payload, str):
+                outer(kind, payload)
+                return
+            if state["suppress"]:
+                return
+            held.append(payload)
+            text = "".join(held)
+            for m in markers:
+                idx = text.find(m)
+                if idx >= 0:
+                    state["suppress"] = True
+                    held.clear()
+                    if text[:idx]:
+                        outer("content", text[:idx])
+                    return
+            cut = text.rfind("<")
+            if cut >= 0 and any(m.startswith(text[cut:]) for m in markers):
+                if text[:cut]:
+                    outer("content", text[:cut])
+                held[:] = [text[cut:]]
+                return
+            held.clear()
+            outer("content", text)
+
+        on_tool_step = _filter if outer is not None else None
+        try:
+            raw, _ = _produce_turn(turn_messages, None, response_format=final_response_format)
+        finally:
+            on_tool_step = outer
+        if held and not state["suppress"] and outer is not None:
+            outer("content", "".join(held))
+        cleaned, _ = _parse_dsml_tool_calls(raw)
+        if _DSML_MARK_RE.search(cleaned):
+            cleaned = cleaned[: _DSML_MARK_RE.search(cleaned).start()].rstrip()
+        return cleaned
+
     for round_idx in range(max_tool_rounds):
         content, tool_calls = _produce_turn(current, tools)
         streamed_content = content
@@ -2437,6 +2484,23 @@ def run_tools(
         # Enforcing the caller's output schema here stops the cheap model from
         # answering in prose or returning an empty body, which is what forced the
         # tool-free retry that could not re-ground.
-        final, _ = _produce_turn(current, None, response_format=final_response_format)
+        # With tool history in context, DeepSeek V4.x often answers this tool-free
+        # wrap-up with DSML tool-call markup instead of prose (OCC demo). The live
+        # stream is filtered so the markup never reaches the client, the returned
+        # text is stripped, and an all-markup answer gets one explicit retry.
+        final = _wrapup_turn(current)
+        if not final.strip():
+            logger.warning("run_tools: wrap-up returned only DSML tool calls; retrying for prose")
+            current.append(
+                {
+                    "role": "user",
+                    "content": (
+                        "No more tools are available. Do not call or write any tool calls. "
+                        "Write the final answer now in plain prose/markdown from the tool "
+                        "results above, and say what could not be retrieved."
+                    ),
+                }
+            )
+            final = _wrapup_turn(current)
         return final or ""
     return content or ""
