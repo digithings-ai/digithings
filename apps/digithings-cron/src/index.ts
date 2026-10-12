@@ -522,23 +522,26 @@ export default {
         return Response.json({ error: "cron_required" }, { status: 400 });
       }
       // One derivation, at the kick boundary. Flooring to the wall-clock minute
-      // gives a repeat kick inside the same minute the same start key, so the
-      // dedupe engages. A kick is a distinct namespace from the cron path and
-      // does not resolve to the cron's firing slot: see DIG-47 spec section 9,
-      // decision D3.
+      // gives a repeat kick inside the same minute the same scheduledTime. A
+      // kick is a distinct namespace from the cron path and does not resolve
+      // to the cron's firing slot: see DIG-47 spec section 9, decision D3.
       const scheduledTime = requestedTime ?? Math.floor(Date.now() / 60_000) * 60_000;
-      // The start key names one kick. An explicit key wins; otherwise the key
-      // is the cron plus the floored minute, so a repeat kick inside the same
-      // minute resolves to the same key and the dedupe below engages.
-      const key = startKey ?? `${cron}:${scheduledTime}`;
-      if (seenStartKeys.has(key)) {
-        return Response.json(
-          { ok: true, cron, started: [], skipped: [], runs: [], duplicate: true },
-          { status: 200 },
-        );
+      // The start key names one kick. Only an explicit key dedupes: a
+      // repeat kick carrying the same key is a double-submit and answers 200
+      // without reaching the runner again (A.4). Kicks without a key always
+      // dispatch — deriving a key from the cron and minute here would
+      // wrongly collapse distinct kicks that happen to share a minute.
+      if (startKey !== undefined) {
+        const key = `${cron}\n${startKey}`;
+        if (seenStartKeys.has(key)) {
+          return Response.json(
+            { ok: true, cron, started: [], skipped: [], runs: [], duplicate: true },
+            { status: 200 },
+          );
+        }
+        if (seenStartKeys.size >= 5000) seenStartKeys.clear();
+        seenStartKeys.add(key);
       }
-      if (seenStartKeys.size >= 5000) seenStartKeys.clear();
-      seenStartKeys.add(key);
       let result;
       try {
         result = await runJobsForCron(cron, scheduledTime, env, ctx, {
