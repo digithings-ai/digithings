@@ -80,3 +80,14 @@ def test_wrapup_dsml_filtered_and_retried():
     assert out == "Paging on."
     streamed = "".join(p for k, p in seen if k == "content")
     assert "DSML" not in streamed and streamed == "Paging on.\n"
+
+
+def test_mangled_double_bar_variant():
+    raw = (
+        '<｜｜DSML｜｜ calls> <｜｜DSML｜｜ invoke name="get_skill"> '
+        '<｜｜DSML｜｜ parameter name="name" string="true">present-results</｜｜DSML｜｜ parameter> '
+        "</｜｜DSML｜｜ invoke>"
+    )
+    content, calls = _parse_dsml_tool_calls(raw)
+    assert content == ""
+    assert calls[0]["function"]["name"] == "get_skill"
