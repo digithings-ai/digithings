@@ -29,6 +29,7 @@ on:
       - 'apps/digiquant-runner/**'
       - 'apps/digitrace-langfuse/**'
       - 'apps/digichat-cloudflare/**'
+      - 'apps/digidata-api/**'
       - 'apps/digithings-stack-cloudflare/**'
       - 'apps/**/wrangler.toml'
       - 'package.json'
@@ -59,6 +60,7 @@ jobs:
         app:
           - digithings-cron
           - dashboard-api
+          - digidata-api
           - digiquant-runner
           - digitrace-langfuse
           - digichat-cloudflare
