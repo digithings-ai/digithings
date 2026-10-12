@@ -225,3 +225,14 @@ jobs:
 
       - name: Test dashboard-api
         run: npm run test --workspace dashboard-api
+
+      # digidata-api (DIG-2895) is the Worker data API with the D1/Supabase
+      # backend switch. Same reasoning as dashboard-api above, and it was the
+      # same gap: the package declares `test`/`typecheck` and no lane invoked
+      # either, so its suite only ever ran on the author's machine. The root
+      # `npm ci` above installs the workspace from the lockfile.
+      - name: Typecheck digidata-api
+        run: npm run typecheck --workspace digidata-api
+
+      - name: Test digidata-api
+        run: npm run test --workspace digidata-api
