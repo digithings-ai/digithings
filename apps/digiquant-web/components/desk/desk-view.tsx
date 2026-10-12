@@ -41,6 +41,7 @@ export function DeskReadout({
           <section
             key={placement.id}
             aria-label={def.title}
+            tabIndex={0}
             style={{ gridColumn: `${placement.x} / span ${placement.w}`, gridRow: `${placement.y} / span ${placement.h}` }}
             className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-surface"
           >

@@ -4,6 +4,7 @@ import { PAGES } from "../../../../clients/digiquant-tui/src/catalog";
 import { publicCatalogPages } from "./public-surface";
 import { STUB_READ, presentResponse } from "../../../../clients/digiquant-tui/src/read";
 import { DeskView } from "./desk-view";
+import { SHORTCUTS } from "./shortcuts";
 import { deskPathFromSlug, deskStaticParams, isDeskPath } from "./paths";
 
 /** `next/link` drops a trailing slash unless the Next config is loaded. */
@@ -58,5 +59,15 @@ describe("terminal desk", () => {
     expect(html).not.toContain("legacy_estimate");
     expect(html).not.toContain("/markets/");
     expect(html).toContain("loading…");
+  });
+
+  it("makes Tab real: blocks are focusable and the map advertises Tab", () => {
+    const stub = presentResponse("/brief", 200, { data: { nav: 99.909 } }, "fields");
+    const html = renderToStaticMarkup(
+      <DeskView path="/brief" reads={{ brief: stub }} />,
+    );
+    expect(html).toContain('tabindex="0"');
+    const tab = SHORTCUTS.find((row) => row.keys === "Tab");
+    expect(tab?.does).toBe("Move between blocks and controls");
   });
 });
