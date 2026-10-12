@@ -14,7 +14,7 @@ export class DigiQuantRunnerContainer extends Container<Env> {
   defaultPort = 8080;
   requiredPorts = [8080];
   /** Idle tail. Raised to 30m while a lock is held. */
-  sleepAfter = "2m";
+  sleepAfter = "1m";
   enableInternet = true;
 
   override async fetch(request: Request): Promise<Response> {
@@ -57,7 +57,7 @@ export class DigiQuantRunnerContainer extends Container<Env> {
   }
 
   private async applyActivityWindow(session: RunnerSession): Promise<void> {
-    this.sleepAfter = (await session.hasActiveWork()) ? "30m" : "2m";
+    this.sleepAfter = (await session.hasActiveWork()) ? "30m" : "1m";
     this.renewActivityTimeout();
   }
 }
