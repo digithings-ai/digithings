@@ -26,6 +26,20 @@ PLACEHOLDER_PATTERNS = [
 #: empty, placeholder or a comment - which is the case for every entry below, and
 #: measured rather than assumed by
 #: `test_check_example_credentials_access_key_names.py`.
+# Words that read as a placeholder for any variable name.
+GENERIC_PLACEHOLDER_VALUES = (
+    'local', 'dev', 'development', 'test', 'localhost', 'none',
+)
+# Digi product names (see AGENTS.md "Naming"). These used to sit in the
+# blanket placeholder allowlist, which is how PASSWORD=digichat sailed
+# past the guard: for a credential-shaped variable a product name is a
+# weak real credential, not a placeholder, so it is never exempt.
+PRODUCT_NAME_VALUES = (
+    'digichat', 'digigraph', 'digiquant', 'digisearch', 'digikey',
+    'digivault', 'digiclaw', 'digibase', 'digitrace', 'digillm',
+    'digifetch', 'digiskills', 'digiweb', 'digivoice', 'digidev',
+    'digismith', 'digithings',
+)
 CRED_VAR_PATTERNS = [
     r'API_KEY', r'SECRET', r'TOKEN', r'PASSWORD', r'PRIVATE_KEY',
     r'CLIENT_SECRET',
@@ -118,6 +132,10 @@ CRED_VALUE_PATTERNS = [
     # is end-anchored and the separator is not part of the alphabet being
     # matched.
     r'^SG\.[A-Za-z0-9_-]{20,}',
+    # CoinGecko-style keys (CG- + 16 alphanumerics): the hyphen puts the
+    # body outside every other body class, so the prefix carries the signal
+    # and the class only bounds the length.
+    r'^CG-[A-Za-z0-9]{16,}',
 ]
 #: Bits per character at or above which a value counts as a credential. Set
 #: below the weakest probe (3.565) on purpose: the floor also has to cover the
@@ -263,7 +281,7 @@ def is_placeholder(v):
         if re.search(p, v, re.I):
             return True
     low = v.lower()
-    if low in ('digichat', 'local', 'dev', 'development', 'test', 'localhost', 'none'):
+    if low in ('local', 'dev', 'development', 'test', 'localhost', 'none'):
         return True
     return False
 
@@ -294,6 +312,13 @@ def looks_cred_val(v, var=''):
     carries no corroboration and leaves the floor at `CRED_MIN_VALUE_LEN`, so
     every existing single-argument caller is unaffected."""
     v = v.strip().strip('"').strip("'")
+    # A product name under a credential-shaped variable is a weak real
+    # credential (PASSWORD=digichat), however short: report it before the
+    # placeholder check below can exempt it. Gated on looks_cred_var, so a
+    # bare product name elsewhere is unaffected, and single-argument callers
+    # (var='') never take this arm.
+    if v.lower() in PRODUCT_NAME_VALUES and looks_cred_var(var):
+        return True
     floor = CRED_MIN_VALUE_LEN_STRONG if looks_strong_cred_var(var) else CRED_MIN_VALUE_LEN
     if len(v) < floor:
         return False
