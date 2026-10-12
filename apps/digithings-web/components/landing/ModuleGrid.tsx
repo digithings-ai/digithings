@@ -4,6 +4,13 @@ import { ModuleGrid as KitModuleGrid, modules, type ModuleGridItem } from "@digi
 import { writeHandoff } from "@/lib/chatHandoff";
 import { moduleLines } from "@/lib/repoActivity";
 import { moduleCountLabel, moduleVersion } from "@/lib/moduleCounts";
+import { bannerFor, ScrollBanner } from "./ScrollBanner";
+
+/** A tile's name mark: the module's hero banner, or none (text name) yet. */
+function markFor(id: string) {
+  const def = bannerFor(id);
+  return def ? <ScrollBanner def={def} /> : undefined;
+}
 
 /**
  * The landing's module mosaic and its `#architecture` anchor: the kit
@@ -15,12 +22,16 @@ import { moduleCountLabel, moduleVersion } from "@/lib/moduleCounts";
  *
  * Band eyebrows (`SectionHead`) above the mosaic were dropped in #4898;
  * the `#architecture` id on the section remains the jump target.
+ *
+ * Each tile names its module with that module's hero banner, built on
+ * scroll-in; a module the banner family has not reached yet keeps its text name.
  */
 const ITEMS: ModuleGridItem[] = modules.map((module) => ({
   module,
   lines: moduleLines(module.id),
   version: moduleVersion(module.id),
   counts: moduleCountLabel(module.id) || undefined,
+  mark: markFor(module.id),
 }));
 
 function ask(id: string) {
