@@ -29,16 +29,28 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts" / "datatap_answer_integrity_check.py"
 
 # The script's imports are a closed set, and this is the list. Stdlib only — no
-# requests, no httpx, no new dependency. Nothing here can read a credential (no
-# os, no dotenv, no getenv) or write anything (no open, no tempfile, no sqlite3,
-# no shutil, no subprocess), and urllib.request is the only network door, reached
-# through http_request. See
+# requests, no httpx, no new dependency. Nothing here can write anything (no
+# open, no tempfile, no sqlite3, no shutil, no subprocess), and urllib.request is
+# the only network door, reached through http_request. See
 # test_the_script_imports_only_stdlib_and_nothing_that_can_write_or_read_a_secret.
+#
+# ``os`` is here because of the monitor token, and only because of it. Without
+# the allowlist bypass the check spent two of its three hourly turns inside one
+# 24h window and then reported HTTP 402 from a trial gate that is ours —
+# apps/digichat/src/app/api/chat/route.ts, keyed on embedConfig.gateMode ===
+# "trial_form" and counted per client IP in apps/digichat/src/lib/
+# embed-turn-quota.ts. DigiChat already exempts an internal monitor on the
+# x-embed-monitor-token header (apps/digichat/src/lib/embed-monitor-token.ts,
+# DIG-613); the check did not present it, so it was charged for the quota it
+# needs to run. The CTO approved reading that one secret from the environment on
+# 2026-10-05 (DIG-965). Reading one env var is not a write, and the module
+# remains the only thing that can reach the value: nothing else is imported.
 _ALLOWED_IMPORTS = {
     "__future__",
     "argparse",
     "dataclasses",
     "json",
+    "os",
     "re",
     "sys",
     "typing",
@@ -70,6 +82,23 @@ _REAL_HTTP_REQUEST = mod.http_request
 def _restore_the_http_request_seam() -> None:
     yield
     mod.http_request = _REAL_HTTP_REQUEST
+
+
+# The name the script is expected to read. It is spelled out here rather than
+# taken from the module so this file's other tests keep running against the
+# unimplemented script; one test below pins that the script agrees.
+MONITOR_TOKEN_ENV_VAR = "DATATAP_ANSWER_CHECK_MONITOR_TOKEN"
+MONITOR_TOKEN = "k" * 48
+
+
+# The check reads one secret from the environment. A developer machine, a CI
+# runner or an operator shell may well have it set, so it is removed before
+# every test: the header-set tests assert exact dicts and would otherwise read
+# whatever the surrounding shell happens to hold. Tests that need a token set it
+# themselves with monkeypatch.
+@pytest.fixture(autouse=True)
+def _no_monitor_token_from_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv(MONITOR_TOKEN_ENV_VAR, raising=False)
 
 
 EMBED_BASE = "https://digichat.jollygrass-53364db9.eastus2.azurecontainerapps.io"
@@ -194,6 +223,119 @@ def test_discovery_reads_the_public_page_and_sends_no_credentials() -> None:
 
 
 # --------------------------------------------------------------------------
+# The monitor identity. Ours, sanctioned, and the only way past our own gate.
+#
+# apps/digichat/src/app/api/chat/route.ts answers HTTP 402 {"error":
+# "trial_gate"} when embedConfig.gateMode is "trial_form" and the caller is over
+# EMBED_FREE_TURN_LIMIT (3) turns per client IP inside a 24h window
+# (apps/digichat/src/lib/embed-turn-quota.ts). Both probes come from one IP, so
+# the first run spent two of three turns and every later run in that window was
+# refused. The gate is our code, on our host; nothing on the client side was
+# closed. DigiChat already exempts an internal monitor presented as
+# x-embed-monitor-token (apps/digichat/src/lib/embed-monitor-token.ts, DIG-613).
+# --------------------------------------------------------------------------
+
+
+def test_the_script_names_the_monitor_token_env_var() -> None:
+    """The one secret the CTO approved is named as a module constant.
+
+    The scheduler that runs this check hourly has to be told where to put the
+    value, and the operator writing digichat's `DIGICHAT_MONITOR_TOKENS` has to
+    be told which variable to copy it into. Spelling the name once, in the
+    script, is what keeps those two from drifting apart.
+    """
+    assert mod.MONITOR_TOKEN_ENV_VAR == MONITOR_TOKEN_ENV_VAR
+
+
+def test_the_chat_request_carries_the_monitor_token_from_the_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The sanctioned bypass is presented on every probe."""
+    monkeypatch.setenv(MONITOR_TOKEN_ENV_VAR, MONITOR_TOKEN)
+    code, fake = _run_main(_both_probes_clean())
+    assert code == mod.OK
+    chats = [c for c in fake.calls if c["url"].endswith("/api/chat")]
+    assert len(chats) == 2
+    for chat in chats:
+        assert chat["headers"].get("x-embed-monitor-token") == MONITOR_TOKEN, (
+            "both probes run inside one quota window, so both need the identity"
+        )
+
+
+def test_no_monitor_token_is_sent_when_the_environment_does_not_hold_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unset secret is omitted, not sent empty.
+
+    An empty header value is not the same as no header on the server side, and
+    the run must stay honest: with no identity the probes are charged like any
+    other caller, which is the behaviour this whole leaf exists to make visible.
+    """
+    monkeypatch.delenv(MONITOR_TOKEN_ENV_VAR, raising=False)
+    _, fake = _run_main(_both_probes_clean())
+    chat = next(c for c in fake.calls if c["url"].endswith("/api/chat"))
+    assert "x-embed-monitor-token" not in chat["headers"]
+
+
+def test_the_check_never_presents_the_unsigned_trial_unlock_waiver(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """x-embed-trial-unlock is not a bypass and must never appear on the wire.
+
+    DIG-634 tracks an unsigned X-Embed-Trial-Unlock header with a cap of 100, so
+    it would also survive a short burst of probes — which is exactly why the
+    acceptance evidence has to name the header that is sent, not only the exit
+    code. This is a negative pin so a later "make the check pass" change cannot
+    quietly swap in the waiver that a signed monitor token replaces.
+    """
+    monkeypatch.setenv(MONITOR_TOKEN_ENV_VAR, MONITOR_TOKEN)
+    _, fake = _run_main(_both_probes_clean())
+    for call in fake.calls:
+        for header in call["headers"]:
+            assert "trial-unlock" not in header.lower(), (
+                f"unsigned unlock waiver presented as {header!r}"
+            )
+
+
+def test_the_monitor_token_is_never_sent_to_the_discovery_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Discovery reads DataTap's public page. It has no business with our secret."""
+    monkeypatch.setenv(MONITOR_TOKEN_ENV_VAR, MONITOR_TOKEN)
+    _, fake = _run_main(_both_probes_clean())
+    discovery = fake.calls[0]
+    assert discovery["url"] == "https://datatap.stream/chat"
+    assert discovery["headers"] == {}
+
+
+def test_a_402_names_our_own_gate_and_the_two_places_to_fix_it() -> None:
+    """The reason string must stop blaming the client and start naming the cause.
+
+    An operator reading this run is told whose gate is closed and which two
+    settings have to agree. It must stay an exit-2 reason, and it must not tell
+    anyone to retry: the counter resets on its own after 24 hours and retrying
+    only adds load to our own host.
+    """
+    reason = mod._status_reason(
+        "named_entity",
+        mod.HttpResponse(
+            status=402, content_type="application/json", body='{"error":"trial_gate"}'
+        ),
+    )
+    lowered = reason.lower()
+    assert "their trial gate" not in lowered
+    assert "cannot see the answer path" in lowered
+    assert "our" in lowered and "gate" in lowered, f"must name our own gate: {reason!r}"
+    assert MONITOR_TOKEN_ENV_VAR in reason, f"must name the check-side secret to set: {reason!r}"
+    assert "DIGICHAT_MONITOR_TOKENS" in reason, (
+        f"must name the digichat-side allowlist to set: {reason!r}"
+    )
+    assert "retry" not in lowered and "again" not in lowered, (
+        f"a 402 from our own quota is not retried, so do not tell anyone to: {reason!r}"
+    )
+
+
+# --------------------------------------------------------------------------
 # Exit 1: a real HTTP 200 answer that names a customer. Nothing else.
 # --------------------------------------------------------------------------
 
@@ -206,7 +348,40 @@ _BAD_ANSWERS = {
     "name_list": "1. Jane Whitfield 2. Marcus Oyelaran 3. Dana Reyes 4. Priya Raman",
     "name_list_dashes": "- Jane Whitfield\n- Marcus Oyelaran\n- Dana Reyes\n- Priya Raman",
     "name_list_role": "- Dana Whitfield (owner)\n- Marcus Oyelaran",
+    # The four shapes M4/M5 on PR #5086 found and deliberately did not fix.
+    # Each of these is a leaked identifier that the check currently calls
+    # clean, so the run exits 0 and reports PASS. Dashless hex is not
+    # hypothetical: `build_payload` stamps every message with
+    # `uuid.uuid4().hex`, so a 32-hex id is this product's own id shape.
+    "uuid_dashless": "Your customer id is a3f9c1e47b2d48f6a0c5e91d3b7f2486.",
+    "cus_short_body": "The tenant on file is CUS-4.",
+    "cust_lowercase": "The tenant on file is cust-123.",
+    "cus_underscore": "The tenant on file is CUS_4821.",
 }
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        # The digit requirement in `_PREFIXED_ID_RE` is load-bearing and must
+        # survive any loosening of the shapes above: without it the character
+        # class swallows the next English word. These are the sentences that
+        # would break if the fix drops the digit anchor instead of moving it.
+        "Our ids are CUST-prefixed and TEN-scoped across tenants.",
+        "The CUS-scoped report excludes ACC-tier accounts.",
+        "Ask for the TEN-level breakdown instead.",
+    ],
+    ids=["cust_prefixed_word", "cus_scoped_and_acc_tier", "ten_level_prose"],
+)
+def test_a_prefix_followed_by_an_english_word_is_not_an_identifier(answer: str) -> None:
+    """The loosening is only allowed where a digit anchors the body.
+
+    A lowercase or underscored body is safe to accept *because* it starts with
+    a digit: no English word does. So the fix may widen case and separator, but
+    it may not drop the digit requirement. If it does, these three sentences
+    start failing and the check invents findings on its own refusal wording.
+    """
+    assert mod.scan_answer(answer) == [], "prose describing a naming convention is not a leak"
 
 
 # The ids come from the keys and the values from the same sort, so an id always
@@ -588,6 +763,24 @@ def test_the_script_imports_only_stdlib_and_nothing_that_can_write_or_read_a_sec
     )
 
 
+def test_the_module_docstring_stops_claiming_the_check_reads_no_secret() -> None:
+    """The docstring is the read-only proof a reviewer reads first.
+
+    It asserted "This script reads no secret and writes no local state" and
+    pointed at this import allowlist as the reason. Since the CTO's decision the
+    first half is false: the check reads one env var. A docstring that
+    overstates the safety property is worse than no docstring, because the next
+    reviewer trusts it.
+    """
+    docstring = ast.get_docstring(ast.parse(SCRIPT.read_text(encoding="utf-8"))) or ""
+    assert "reads no secret" not in docstring, (
+        "the module docstring still denies the one secret the CTO approved"
+    )
+    assert MONITOR_TOKEN_ENV_VAR in docstring, (
+        "the module docstring must name the env var the check now reads"
+    )
+
+
 def test_the_only_write_in_the_script_is_stderr() -> None:
     """Named separately so "the write proof" points at something measurable.
 
@@ -884,6 +1077,102 @@ def test_the_role_strip_does_not_move_the_company_suffix_guard() -> None:
     assert mod.scan_answer("- Dana Whitfield (owner)\n- Marcus Oyelaran (owner)") != []
 
 
+def test_a_three_word_company_name_is_not_two_customers() -> None:
+    """The suffix guard has to read the name's last word, not its whole tail.
+
+    ``name.partition(" ")`` handed the guard everything after the FIRST space, and
+    ``_COMPANY_SUFFIXES`` holds no entry with a space in it, so that tail could
+    only ever be a suffix when the name had exactly two tokens. "- Whitfield Ltd"
+    was a company and "- Dana Whitfield Ltd" was not, and every three-word trading
+    name went the same way: a list of companies is one of the two answer shapes
+    this check must never raise exit 1 on.
+
+    Each shape is pinned on its own because they reach the guard by different
+    routes — role strip, truncation, inline enumeration, emphasis marks — and a
+    guard that survives only one of them is not fixed.
+    """
+    for answer in (
+        "- Dana Whitfield Ltd\n- Marcus Oyelaran Ltd",
+        "- Dana Whitfield Ltd (owner)\n- Marcus Oyelaran Ltd (owner)",
+        # #5086's prose tail: the role strip has to run first for the item to be a
+        # name at all, and the suffix guard then has to see "Ltd".
+        "- Dana Whitfield Ltd\n- Marcus Oyelaran Ltd\n\nLet me know if you need anything else.",
+        "- Dana Whitfield Ltd (owner)\n- Marcus Oyelaran Ltd (owner)\n\nLet me know!",
+        # Four tokens, using the middle initial the name regex allows.
+        "- Dana W. Whitfield Ltd\n- Marcus O. Oyelaran Ltd",
+        "1. Dana Whitfield Ltd 2. Marcus Oyelaran Ltd",
+        "- **Dana Whitfield Ltd**\n- **Marcus Oyelaran Ltd**",
+        # Suffixes other than Ltd, and a two-part surname before them.
+        "- Whitfield Trading Co\n- Oyelaran Trading Co",
+        "- Dana Whitfield Limited\n- Marcus Oyelaran Limited",
+    ):
+        assert mod.scan_answer(answer) == [], f"{answer!r} is a list of companies"
+
+
+def test_every_company_suffix_is_recognised_at_the_end_of_a_longer_name() -> None:
+    """The class, over the suffix list itself.
+
+    Hard-coding "Ltd" fixes one instance, leaves the other sixteen suffixes on the
+    old behaviour, and covers nothing that is added to the list later. So the list
+    is walked instead: for each entry, a three-word trading name ending in it must
+    be clean, and the two-word form the guard already handled must stay clean too.
+    """
+    assert len(mod._COMPANY_SUFFIXES) >= 15, sorted(mod._COMPANY_SUFFIXES)
+    for suffix in sorted(mod._COMPANY_SUFFIXES):
+        # capitalize() so "gmbh" and "pty" reach the name regex as Title Case,
+        # which is the shape a company suffix actually arrives in.
+        word = suffix.capitalize()
+        three_word = f"- Dana Whitfield {word}\n- Marcus Oyelaran {word}"
+        assert mod.scan_answer(three_word) == [], f"{word!r} did not suppress {three_word!r}"
+        two_word = f"- Whitfield {word}\n- Oyelaran {word}"
+        assert mod.scan_answer(two_word) == [], f"{word!r} regressed on {two_word!r}"
+
+
+def test_a_doubled_space_before_the_suffix_is_still_a_company() -> None:
+    """Whitespace around the guard's input is whitespace, not a name part.
+
+    The old tail kept the second space and ``strip(".,;:()")`` strips punctuation
+    rather than whitespace, so "Whitfield  Ltd" was tested as " Ltd" and missed —
+    the two-word shape the docstring claims to cover, missed by one extra space. An
+    answer that pads or indents a list item is ordinary, so this is a live shape
+    rather than a curiosity.
+    """
+    for answer in (
+        "- Whitfield  Ltd\n- Oyelaran  Ltd",
+        "- Whitfield  Ltd (owner)\n- Oyelaran  Ltd (owner)",
+        "- Whitfield\tLtd\n- Oyelaran\tLtd",
+    ):
+        assert mod.scan_answer(answer) == [], f"{answer!r} is a list of companies"
+
+
+def test_a_company_word_that_is_not_the_last_word_still_fires() -> None:
+    """Last position is the whole rule. This is the damage direction.
+
+    Two ways to widen this guard are both wrong, and this test fails under either:
+
+    - testing ANY token against the suffix set, which would suppress "- Group
+      Whitfield" and every other name that merely contains a company word;
+    - "repairing" the lookahead that used to follow the guard into a live one (see
+      the comment above ``items.append``), which would skip the next marker's glyphs
+      and swallow item one whenever item two began with a company word — dropping
+      "- Group Whitfield" and leaving a single item, which is under the two-item bar.
+
+    So a company word in leading or middle position must suppress nothing, with and
+    without a role, and with and without the prose tail.
+    """
+    for answer in (
+        "- Group Whitfield\n- Holdings Oyelaran",
+        "- Group Whitfield (owner)\n- Holdings Oyelaran (owner)",
+        "- Whitfield Group Oyelaran\n- Oyelaran Group Pine",
+        "- Dana W. Group Oyelaran\n- Marcus O. Group Oyelaran",
+        "- Whitfield Ltd Oak\n- Oyelaran Ltd Pine",
+        # …and with the prose tail, which is the shape that took item one down to
+        # a single item when the guard was widened.
+        "- Group Whitfield\n- Holdings Oyelaran\n\nLet me know if you need anything else.",
+    ):
+        assert mod.scan_answer(answer) != [], f"{answer!r} is a name list and must be sent"
+
+
 # Menu phrases whose FIRST word is already on the blocklist, and whose second word
 # is not the whole phrase. These are the shapes the whole-item-only guard let
 # through: "- Account Settings / - Profile Settings" fired at exit 1 because neither
@@ -1083,3 +1372,56 @@ def m_discovery_html(config: str) -> str:
     """Rebuild the page with a different config object in place of the live one."""
     original = '{\\"embedUrl\\":\\"' + EMBED_BASE + '/embed\\",\\"token\\":\\"' + "t" * 48 + '\\"}'
     return DISCOVERY_HTML.replace(original, "{" + config.replace('"', '\\"') + "}")
+
+
+# --------------------------------------------------------------------------
+# Leaf A3: the token must come from the object that holds embedUrl, at any
+# nesting depth, and from no other object.
+#
+# #5086 replaced a forward regex with a rfind/find brace pair, which fixed the
+# case of a token *preceding* embedUrl inside its own object but left two holes:
+# a nested object between embedUrl and token hides the token entirely (the
+# check goes permanently blind, exit 2 every hour), and a sibling object that
+# *precedes* embedUrl wins the rfind and hands back the wrong token. The wrong
+# token is the worse of the two: it 401s, and a 401 from a client platform
+# reads like their fault rather than like our bug.
+# --------------------------------------------------------------------------
+
+
+def test_discovery_reads_the_token_past_a_nested_object() -> None:
+    """A nested object between embedUrl and token must not hide the token.
+
+    Real RSC payloads nest. A window bounded by the *first* closing brace after
+    embedUrl truncates at the nested object's own brace, so the token falls
+    outside it and discovery raises. Fails closed, which is the safe direction,
+    but it is still a check that can never pass again, and nothing distinguishes
+    that from a client outage in the reader's eyes.
+    """
+    target = mod.discover_embed_target(
+        m_discovery_html(
+            '{"embedUrl":"' + EMBED_BASE + '/embed",'
+            '"features":{"deep":{"x":1}},'
+            '"token":"' + "t" * 48 + '"}'
+        )
+    )
+    assert target.token == "t" * 48
+
+
+def test_discovery_never_takes_a_token_from_a_neighbouring_object() -> None:
+    """The token must be the embedUrl object's own, not a sibling's.
+
+    This is the invariant, and it is what #5086 set out to restore. Bounding
+    the window backwards with rfind picks the sibling's opening brace when a
+    previous object closes before embedUrl, so the first "token" in the window
+    belongs to that sibling. Pairing it with the real one in the page makes the
+    failure unambiguous: the wrong token must not win.
+    """
+    real, decoy = "r" * 48, "d" * 48
+    target = mod.discover_embed_target(
+        m_discovery_html(
+            '{"other":{"token":"' + decoy + '"},'
+            '"embedUrl":"' + EMBED_BASE + '/embed",'
+            '"token":"' + real + '"}'
+        )
+    )
+    assert target.token == real, "discovery returned a token from a different object"
