@@ -18,6 +18,7 @@ from collections.abc import Iterable, Mapping
 from typing import TYPE_CHECKING, Any
 
 import httpx
+from digibase.art9 import screen_text
 from pydantic import BaseModel, ConfigDict, Field
 
 from digisearch.embedding.base import EmbeddingProvider
@@ -169,6 +170,27 @@ def ingest_url(
             raise UrlFetchError(
                 f"no extractable content from {url!r}",
                 code="url_empty_extract",
+                http_status=422,
+            )
+        # Leaf 7 (DIG-1080): screen the extracted text before it reaches the
+        # disk. Leaf 6 screens inside `index_chunks` and so covers everything
+        # downstream of here, but the staged `page.md` below is written first,
+        # and a write that must be undone is a write the caller cannot undo.
+        #
+        # Fail closed on anything that is not an explicit `allow`. Leaf 1 only
+        # ever returns `allow` or `refuse` today, so this is equivalent to a
+        # refusal test; it is written as `!= "allow"` so that a future decision
+        # value cannot fall through and stage unscreened text.
+        #
+        # `screen.reason` is a fixed-vocabulary code and carries no matched
+        # value, so naming it here is safe in a message that reaches logs.
+        screen = screen_text(markdown)
+        if screen.decision != "allow":
+            raise UrlFetchError(
+                f"refused {url!r}: the fetched page holds Art. 9 "
+                f"special-category data ({', '.join(screen.categories)}), "
+                f"{screen.reason}",
+                code="url_art9_refused",
                 http_status=422,
             )
         page = os.path.join(tmpdir, "page.md")

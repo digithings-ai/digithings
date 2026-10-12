@@ -32,6 +32,24 @@ JOB_ID = "datatap-answer-check"
 MAKE_TARGET = "make datatap-answer-check"
 
 
+MONOREPO_SLUG = "digithings-ai/digithings"
+
+
+def _monorepo_const() -> str:
+    """Name of the jobs.ts constant that holds the monorepo slug.
+
+    Derived from the declaration instead of hardcoded. These pins are about the row
+    targeting the monorepo, not about what the constant is called, so renaming the
+    constant (DIG-2474) must not turn a repo-targeting pin into a build failure.
+    Repointing the row elsewhere still fails: the name comes from the declaration
+    that holds the slug, and the row must reference that exact name.
+    """
+    text = JOBS_SOURCE.read_text(encoding="utf-8")
+    m = re.search(rf'const\s+(?P<name>\w+)\s*(?::[^=]+)?=\s*"{re.escape(MONOREPO_SLUG)}"', text)
+    assert m, f"no jobs.ts constant declares {MONOREPO_SLUG}"
+    return m.group("name")
+
+
 def _workflow() -> dict:
     assert WORKFLOW.exists(), f"{WORKFLOW.relative_to(REPO_ROOT)} is the second line of defence"
     return yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
@@ -97,7 +115,7 @@ def test_the_clock_row_targets_this_workflow_on_develop() -> None:
     row = re.search(rf'wd\(\s*"{re.escape(JOB_ID)}"(?P<args>[^)]*)\)', text, flags=re.DOTALL)
     assert row, f"no wd() row for {JOB_ID}"
     args = row.group("args")
-    assert "DIGITHINGS" in args
+    assert _monorepo_const() in args
     assert "datatap-answer-check.yml" in args
     assert "enabled: false" not in args, "the clock must actually be enabled"
 

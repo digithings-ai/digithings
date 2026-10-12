@@ -38,6 +38,16 @@ IGNORED = (
     # opencode session state, at the root and nested.
     ".opencode/session.db",
     "apps/digichat/.opencode/storage/message.json",
+    # Customer artifacts from `scripts/index_occ_tickets.py`, whose chunks carry
+    # full non-anonymized ticket metadata. DIG-1498 R5 / DIG-2607. The rules are
+    # anchored on the file NAME so `scripts/index_occ_tickets.py` stays
+    # committable — see TRACKED below.
+    "occ_tickets/tickets.json",
+    "occ_tickets.json",
+    "nested/dir/occ_tickets.jsonl",
+    "occ_tickets.ndjson",
+    "seed_occ_tickets.json",
+    "data/zammad_occ_tickets_snapshot_2026.json",
 )
 
 # Tracked source that must stay committable. Guards against a rule so broad it
@@ -48,6 +58,10 @@ TRACKED = (
     "apps/digichat/next.config.ts",
     "opencode.json",
     "packages/ui/src/index.ts",
+    # The DIG-2607 customer-artifact rules are anchored on the file name, so the
+    # backfill script that produces those artifacts must stay committable. This
+    # is the pin: a future `occ_tickets*` rule that stops anchoring fails here.
+    "scripts/index_occ_tickets.py",
 )
 
 

@@ -33,6 +33,19 @@ export function repositoryDispatchUrl(repo: string): string {
   return `${GH_API}/repos/${repo}/dispatches`;
 }
 
+/**
+ * The 422 bodies that mean "GitHub declined, but nothing is wrong" — a run for
+ * this ref is already in flight. Deliberately narrow: it is matched against a
+ * live response body, so a wider net would quietly reclassify a real refusal as
+ * a benign one and report a dispatch that never started as a success.
+ *
+ * A workflow disabled with `disabled_manually` is a 422 too, but its body is
+ * `Cannot trigger a 'workflow_dispatch' on a disabled workflow`, which matches
+ * none of these substrings. That is intended, not an oversight: such a dispatch
+ * is a failure (502 on POST /backfill) whose claim is released, so the date stays
+ * dispatchable. Widening this list to cover it needs the same evidence as any
+ * other change to a live-body heuristic — see DIG-1227.
+ */
 function isBenign422(body: string): boolean {
   const lower = body.toLowerCase();
   return (

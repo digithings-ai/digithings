@@ -14,6 +14,8 @@ import pytest
 
 pytest.importorskip("mcp.server.fastmcp")
 
+from digiquant.data.gloomberb import session_gate
+from digiquant.data.gloomberb.session_gate import SessionGateStatus
 from digiquant.mcp_server import READ_SCOPE_TOOLS, create_mcp_server
 
 from digiquant import mcp_server
@@ -27,10 +29,37 @@ def _tool_names(server) -> set[str]:
     return {t.name for t in tools}
 
 
+@pytest.fixture(autouse=True)
+def authenticated_gloomberb_session():
+    """Every test in this module is about SCOPE, not about the Gloomberb
+    advertisement gate (#2752), so the whole file runs with the gate held open
+    against a stubbed verdict and no probe on the network.
+
+    ``create_mcp_server`` imports ``session_gate_status`` inside its own body,
+    on every call, so patching the module attribute here is what the server
+    sees. Without this fixture the scope tables below would be read at 85 tools
+    instead of 126 and three tests would fail for the wrong reason. The gate
+    itself is pinned in ``test_gloomberb_session_gate.py`` and, at registration
+    level, by ``test_session_tools_disappear_without_an_authenticated_cookie``
+    at the end of this file."""
+    session_gate.reset_session_gate_cache()
+    monkey = pytest.MonkeyPatch()
+    monkey.setattr(
+        session_gate,
+        "session_gate_status",
+        lambda *args, **kwargs: SessionGateStatus(True, "ok", "authenticated for the scope tests"),
+    )
+    try:
+        yield
+    finally:
+        monkey.undo()
+        session_gate.reset_session_gate_cache()
+
+
 READ_TOOLS_EXTRA = {"digiquant_list_coinmetrics_catalog"}
 
 #: The 89 digifetch x Gloomberb tools (#4069, #4110, 130-coverage through Task 8)
-#: are read-scope only, default-ON behind GLOOMBERB_ENABLED.
+#: are read-scope only, default-OFF behind GLOOMBERB_ENABLED.
 DIGIFETCH_TOOLS = {
     "digifetch_quote",
     "digifetch_quotes_batch",
@@ -264,3 +293,45 @@ def test_congress_trades_is_refused_on_every_scope():
     assert "digifetch_congress_trades" not in READ_SCOPE_TOOLS
     assert "digifetch_congress_trades" not in _tool_names(create_mcp_server())
     assert "digifetch_congress_trades" not in _tool_names(create_mcp_server(scope="read"))
+
+
+@pytest.mark.unit
+def test_session_tools_disappear_without_an_authenticated_cookie():
+    """The gate is the only reason the surface can shrink below the tables.
+
+    With the cookie gone and the real gate running, exactly the
+    session/preview/pro tools leave both scopes: nothing else may, or a typo in
+    the entitlement set would silently drop the free family too. Counts come
+    from ``TOOL_ENTITLEMENTS`` rather than from a literal, so this follows the
+    vocabulary instead of restating it.
+    """
+    from digiquant.data.gloomberb.entitlements import TOOL_ENTITLEMENTS
+
+    session_gate.reset_session_gate_cache()
+    monkey = pytest.MonkeyPatch()
+    monkey.delenv("GLOOMBERB_SESSION_COOKIE", raising=False)
+    monkey.setattr(
+        session_gate,
+        "session_gate_status",
+        lambda *args, **kwargs: SessionGateStatus(
+            False, "no_secret", "GLOOMBERB_SESSION_COOKIE is not set"
+        ),
+    )
+    try:
+        full = _tool_names(create_mcp_server())
+        read = _tool_names(create_mcp_server(scope="read"))
+    finally:
+        monkey.undo()
+        session_gate.reset_session_gate_cache()
+
+    gated = {
+        name for name, tier in TOOL_ENTITLEMENTS.items() if tier in {"session", "preview", "pro"}
+    }
+    free = {name for name, tier in TOOL_ENTITLEMENTS.items() if tier == "free"}
+
+    assert gated, "the gate would have nothing to hide"
+    assert not (full & gated), sorted(full & gated)[:5]
+    assert not (read & gated), sorted(read & gated)[:5]
+    # The free family is untouched by the gate, on either scope.
+    assert free & full
+    assert len(full) == 126 - len(gated)
