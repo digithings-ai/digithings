@@ -162,6 +162,12 @@ the tree, requires Workers Paid, declares seven `digithings.ai` route patterns i
 digichat Node for digithings still runs on operator Compose + Cloudflare Tunnel; that is a
 different surface from the `digichat-cloudflare` Worker.
 
+The Worker fronts the `DigiChatContainer` Container (`apps/digichat-cloudflare/wrangler.toml`,
+`Dockerfile.digichat-cloudflare`); deploying it by hand is `npx wrangler deploy` from
+`apps/digichat-cloudflare/` with the build context at the monorepo root, per
+[`apps/digichat-cloudflare/README.md`](../apps/digichat-cloudflare/README.md). No workflow
+deploys it — the section below measures exactly that.
+
 ### digithings.ai — static landing page
 
 - **Source:** `apps/digithings-web/` (Next.js static export; and shared `packages/design/`, `packages/ui/`, `packages/digichat-ui/` assets). Those four are the app's transitive workspace closure, and `tests/scripts/test_deploy_build_inputs.py` asserts the deploy build check watches all of them.
