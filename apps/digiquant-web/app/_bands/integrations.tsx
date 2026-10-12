@@ -5,6 +5,7 @@ import { BANNERS } from "../../../../packages/hero-banner/src/definitions";
 import { PixelWordmark } from "../../../digithings-web/components/landing/PixelWordmark";
 import { Band } from "../_chrome/Band";
 import { MCP_TOOLS } from "../_mcp";
+import PROVIDERS from "./integrations.providers.json";
 
 const toolCount = (prefix: string) => MCP_TOOLS.filter((t) => t.name.startsWith(prefix)).length;
 
@@ -83,19 +84,24 @@ function ModuleGrid({ label, modules }: { label: string; modules: Module[] }) {
  *  the label is the copy the band shipped with, unchanged. */
 type RowEntry = { id: RowProviderId; label: string };
 
-const PACKAGES_A: RowEntry[] = [
-  { id: "coinbase", label: "Coinbase · public price feed" },
-  { id: "alpaca", label: "Alpaca · broker adapter" },
-  { id: "ibkr", label: "Interactive Brokers · broker adapter" },
-  { id: "kraken", label: "Kraken · account snapshots" },
-  { id: "tradier", label: "Tradier · account snapshots" },
-];
+/** The rows themselves are generated, not written here: a provider appears only
+ *  when a manifest in this repo declares one of its packages AND a non-test
+ *  source file imports it. That is what keeps a dead provider out of the band —
+ *  FRED, for instance, is still declared by the sealed `m2` parquet fixture but
+ *  nothing imports it, so it no longer scrolls past.
+ *
+ *  Rebuild with `python3 scripts/build_providers_band.py`; CI refuses the band
+ *  when the committed JSON has drifted from the tree. Editing this list by hand
+ *  is exactly the staleness the generator exists to end. */
+const PACKAGES: RowEntry[] = (PROVIDERS.providers as { id: RowProviderId; label: string }[]).map(
+  ({ id, label }) => ({ id, label }),
+);
 
-const PACKAGES_B: RowEntry[] = [
-  { id: "yahoo", label: "Yahoo Finance · quote history" },
-  { id: "supabase", label: "Supabase · stored prices" },
-  { id: "binance", label: "Binance · chart prices" },
-];
+/** Two rows, split by position so the list length is what decides it rather than
+ *  a second hardcoded array to keep in step: even entries scroll left, odd scroll
+ *  right. A single-entry provider set still fills both rows. */
+const PACKAGES_A = PACKAGES.filter((_, i) => i % 2 === 0);
+const PACKAGES_B = PACKAGES.filter((_, i) => i % 2 === 1);
 
 /** One row lozenge. Marquee's `items` prop resolves its icon from a slug it looks
  *  up itself, so it cannot mix registry marks with providers that have none; the

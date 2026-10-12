@@ -1,0 +1,49 @@
+{
+  "generatedBy": "scripts/build_providers_band.py",
+  "rule": "a provider ships only when a manifest declares one of its packages and a non-test source file imports it",
+  "providers": [
+    {
+      "id": "alpaca",
+      "label": "Alpaca · broker adapter",
+      "declaredIn": [
+        "digiquant/pyproject.toml: optional-dependencies.brokers-alpaca"
+      ],
+      "logo": {
+        "missing": true,
+        "reason": "no official monochrome mark registered in ROW_MARKS"
+      }
+    },
+    {
+      "id": "supabase",
+      "label": "Supabase · stored prices",
+      "declaredIn": [
+        "apps/dashboard/package.json: dependencies",
+        "apps/digiquant-web/package.json: dependencies",
+        "apps/digithings-web/package.json: dependencies",
+        "digibase/pyproject.toml: optional-dependencies.supabase",
+        "digiquant/pyproject.toml: optional-dependencies.prices",
+        "digiquant/pyproject.toml: optional-dependencies.research",
+        "digivault/pyproject.toml: optional-dependencies.supabase"
+      ],
+      "logo": {
+        "slug": "supabase",
+        "source": "simple-icons@15.18.0",
+        "registry": "apps/digiquant-web/components/integrations/marks.tsx"
+      }
+    },
+    {
+      "id": "yahoo",
+      "label": "Yahoo Finance · quote history",
+      "declaredIn": [
+        "digiquant/pyproject.toml: optional-dependencies.data",
+        "digiquant/pyproject.toml: optional-dependencies.m2",
+        "digiquant/pyproject.toml: optional-dependencies.mcp",
+        "digiquant/pyproject.toml: optional-dependencies.prices"
+      ],
+      "logo": {
+        "missing": true,
+        "reason": "no official monochrome mark registered in ROW_MARKS"
+      }
+    }
+  ]
+}

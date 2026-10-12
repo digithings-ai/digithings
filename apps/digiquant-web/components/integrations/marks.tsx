@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { siBinance, siCoinbase, siSupabase } from "simple-icons";
+import { siCoinbase, siSupabase } from "simple-icons";
 
 /** Marks for the integrations band. DigiThings, LuxAlgo and NautilusTrader use
  *  the vendors' own assets: the digithings favicon, the LuxAlgo app icon, and the
@@ -79,17 +79,13 @@ export function IntegrationMark({ id, size = 20 }: { id: IntegrationId; size?: n
   );
 }
 
-/** The providers named in the two connected-package rows. */
-export type RowProviderId =
-  | "coinbase"
-  | "alpaca"
-  | "ibkr"
-  | "kraken"
-  | "tradier"
-  | "yahoo"
-  | "fred"
-  | "supabase"
-  | "binance";
+/** The providers the two connected-package rows can name. Narrower than it
+ *  looks: the rows themselves are generated from this tree's real dependencies
+ *  by scripts/build_providers_band.py, so a provider only belongs here while
+ *  some manifest declares one of its packages and a non-test source file
+ *  imports it. tests/scripts/test_providers_band_is_current.py fails CI when the
+ *  generated JSON names an id this union does not cover. */
+export type RowProviderId = "alpaca" | "supabase" | "yahoo";
 
 interface SimpleIcon {
   hex: string;
@@ -98,24 +94,24 @@ interface SimpleIcon {
 
 /**
  * Marks for the connected-package rows, taken from Simple Icons — the CC0 source
- * of official brand paths this repo already uses, kept tree-shakeable in
- * packages/ui/src/components/logos.ts. Each path renders with fill="currentColor",
- * so a mark is monochrome by construction and takes the row's ink colour on any
- * surface.
+ * of official brand paths this repo already uses. Each path renders with
+ * fill="currentColor", so a mark is monochrome by construction and takes the
+ * row's ink colour on any surface.
  *
  * A provider with NO entry here is a real gap, not a rendering failure to paper
- * over. Simple Icons 15.18.0 carries no official path for Alpaca, Interactive
- * Brokers, Kraken, Tradier, Yahoo Finance or FRED; public/marks/ holds only the
- * LuxAlgo and NautilusTrader assets; and the vendor sites serve favicons
- * (16–32px ICOs) or full-colour app icons rather than an official monochrome SVG.
- * Those rows keep the plain lozenge on purpose. A recoloured favicon or a
- * hand-drawn monogram is not the vendor's mark, and a scraped one carries no
- * provenance — so the missing six are named rather than faked.
+ * over. Simple Icons 15.18.0 carries no official path for Alpaca or Yahoo
+ * Finance; public/marks/ holds only the LuxAlgo and NautilusTrader assets; and
+ * the vendor sites serve favicons (16–32px ICOs) or full-colour app icons rather
+ * than an official monochrome SVG. Those rows keep the plain lozenge on purpose.
+ * A recoloured favicon or a hand-drawn monogram is not the vendor's mark, and a
+ * scraped one carries no provenance — so the gap is named rather than faked.
+ *
+ * scripts/build_providers_band.py reads this object to record a `logo` for each
+ * generated row, so adding an entry here and regenerating is what closes a gap;
+ * the generator cannot invent one this file does not register.
  */
 const ROW_MARKS: Partial<Record<RowProviderId, SimpleIcon>> = {
-  coinbase: siCoinbase,
   supabase: siSupabase,
-  binance: siBinance,
 };
 
 /** The official monochrome path for a row provider, or null when none exists. */
