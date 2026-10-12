@@ -337,14 +337,20 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Hashes only (count still 127) re-recorded for #4973 (grokipedia MCP tool
     rows + module-map / digiclaw-attach notes in ARCHITECTURE.md) — fixture
     prose only; RecursiveChunker unchanged.
-    Re-recorded at count 131 for #5045 (the Unseeded corpora section, the
-    /health degraded contract, the ingest exit-code block, and the fan-out
-    provenance note in ARCHITECTURE.md) — fixture prose only; RecursiveChunker
-    unchanged.
-    Re-recorded at count 132 for the #5088 review fix (the POST /query row of
-    the unseeded-corpus per-caller table now documents the real `http_503`
-    error envelope in ARCHITECTURE.md) — fixture prose only; RecursiveChunker
-    unchanged.
+    Hashes only (count still 127) re-recorded for DIG-1464 (LuxAlgo trackers
+    data-licence classification: the module-map row and the CC0 public-records
+    layer note now read CC0-1.0, the licence Security classified against the
+    upstream LICENSE file) — fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 128 for the DIG-1464 review follow-up (the
+    ARCHITECTURE.md trackers section now carries the per-family
+    congress-trades/short-volume limits, and the module-map row says
+    so). The added prose pushed one chunk over the split boundary, so
+    this is a count change as well as a hash re-record; the size
+    invariant (max chunk 1997 <= 2000) and RecursiveChunker are unchanged.
+    Re-recorded at count 132 for the batch/digiquant fold (DIG-3137): the
+    ARCHITECTURE.md trackers section now carries HEAD's DIG-1307 refusal
+    framing plus DIG-1464's CC0-1.0 precision and per-family limits — fixture
+    prose only; RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
@@ -422,17 +428,17 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "4741cf750a9a20e6",
         "80578aa2dbbb641d",
         "1f9fe54a7f6c6f25",
-        "9fdf82f0c003a7a4",
-        "9ebbe22f37b1ac89",
-        "75aa00c56fa87d4c",
-        "acc08c97a5620aaf",
-        "2da9a534085afc86",
+        "ca5bf28f89d9e616",
+        "f7ef2f68779a303e",
+        "ed9fd383de98c694",
+        "cd4e7192b6baa3d3",
+        "a03c67e88e3c2999",
+        "8bb70d874a5aceb3",
         "354bda51b13bec14",
         "81a3302403f3eb85",
-        "ce69650ecfb49d00",
-        "3021ca751898fc7b",
-        "ef1849e4569e10b8",
-        "8e7e26ccae99b4a2",
+        "0a50c275d11604aa",
+        "ef6a144c2e1e109e",
+        "f27dfd53b2cda272",
         "d90f1ea6b18577c2",
         "6603c2da6eeb5309",
         "e351b4963a561cd6",

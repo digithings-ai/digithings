@@ -1265,9 +1265,10 @@ digisearch/src/digisearch/
 │   ├── ingest.py              # Canonical filesystem ingest (HTTP + CLI + tests)
 │   └── url_ingest.py          # Sole URL-fetch site: ingest_url (HTML→markdown)
 │                              # + fetch_json_feed (JSON feeds, e.g. trackers)
-├── trackers_ingest.py         # luxalgo market-trackers-data CC0 ingest (#4826):
-│                              # per-dataset adapter pattern, refused at its
-│                              # entry points since DIG-1307 (no fetch, no write)
+├── trackers_ingest.py         # luxalgo market-trackers-data CC0-1.0 ingest (#4826):
+│                              # per-dataset adapter pattern, per-family limits
+│                              # classified DIG-1464; refused at its entry points
+│                              # since DIG-1307 (no fetch, no write)
 ├── trackers_wave2_ingest.py   # wave-2 ticker datasets (#4849): insider →
 │                              # 13F → short-volume → lobbying → gov-contracts
 │                              # (same pattern via a TRACKER_DATASETS table)
@@ -1445,13 +1446,16 @@ container reports `/health` degraded, which is accurate.
 
 ### luxalgo market-trackers ingest (#4826)
 
-CC0 public-records layer **beside Gloomberg** (never replacing the terminal
+CC0-1.0 public-records layer **beside Gloomberg** (never replacing the terminal
 digest). `trackers_ingest.py` is where the per-dataset adapter pattern was
 proven — on the one dataset now **refused** (DIG-1307, closing counsel item
 (i) of DIG-1291). Its entry points raise `RefusedDatasetError` before any
 fetch and before any index write, so nothing parsed from it reaches the
 `trackers` index. The mechanics below are still live — the live wave-2
 adapters implement every one of them:
+The grant does not clear two families — congress-trades
+(5 U.S.C. 13107(c)(1)(B)) and short-volume (unresolved upstream FINRA
+terms); see `digiquant/src/digiquant/data/luxalgo/attribution.py`.
 
 - Fetch goes only through `pipeline.url_ingest.fetch_json_feed` — the single
   URL-fetch site (digifetch `HttpFetcher` + `validate_fetch_url`;
