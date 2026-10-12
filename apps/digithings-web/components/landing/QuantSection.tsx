@@ -28,7 +28,8 @@ import {
 } from "@/lib/live/useLiveBand";
 import { GROUPED_LABEL } from "./label";
 import { windowAlpha, windowBeta } from "@/lib/bookMath";
-import { QuantWordmark } from "./QuantWordmark";
+import { DIGIQUANT } from "@digithings/hero-banner/definitions";
+import { ScrollBanner } from "./ScrollBanner";
 import { PIPELINE_ENGINES } from "@/lib/digiquantPipeline";
 
 /**
@@ -611,8 +612,8 @@ export function QuantSection({ className }: { className?: string }) {
               `minmax(0,1fr)` + `min-w-0` pin the track to the container. */}
           <div className="grid grid-cols-[minmax(0,1fr)] gap-[2rem] min-[980px]:grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)] min-[980px]:gap-[2.4rem]">
             {/* Left: the digiquant pixel wordmark and its domain as one link to
-                digiquant.io, with the claim below. The wordmark is the same mark
-                digiquant.io draws, in ink; the visible domain stays under it
+                digiquant.io, with the claim below. The wordmark is the DIGIQUANT hero
+                banner: it builds when it scrolls into view, then stays live; the visible domain stays under it
                 because the owner asked for the text to be visible. */}
             <div className="flex min-w-0 flex-col justify-center gap-[1rem]">
               {/* `h2`, not `h3`: this band has no other heading, so an `h3` left
@@ -626,7 +627,7 @@ export function QuantSection({ className }: { className?: string }) {
                   rel="noopener noreferrer"
                   className="group flex w-full max-w-[22rem] flex-col gap-[0.7rem] text-ink no-underline"
                 >
-                  <QuantWordmark className="block h-auto w-full" />
+                  <ScrollBanner def={DIGIQUANT} className="w-full" />
                   <span className="font-mono text-[0.78rem] tracking-[0.04em] text-ink-mute underline decoration-hair decoration-1 underline-offset-[0.2em] transition-colors group-hover:text-ink group-focus-visible:text-ink">
                     digiquant.io
                   </span>

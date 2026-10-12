@@ -1,19 +1,19 @@
 import { buildAnimation } from "../animations/build";
-import { clawAnimation, withHeadroom } from "../animations/claw";
 import { equalizerAnimation } from "../animations/equalizer";
-import { pagesAnimation } from "../animations/pages";
-import { fetchAnimation } from "../animations/fetch";
 import { riseAnimation } from "../animations/rise";
 import { routeAnimation } from "../animations/route";
-import { scanAnimation } from "../animations/scan";
 import { scrambleAnimation } from "../animations/scramble";
 import { stackAnimation } from "../animations/stack";
-import { traverseAnimation } from "../animations/traverse";
 import { tumblerAnimation } from "../animations/tumbler";
-import { speakAnimation, type SpeakOptions } from "../animations/speak";
+import { traverseAnimation } from "../animations/traverse";
+import { pagesAnimation } from "../animations/pages";
 import { typeAnimation } from "../animations/type";
+import { clawAnimation, withHeadroom } from "../animations/claw";
 import { vaultAnimation } from "../animations/vault";
+import { scanAnimation } from "../animations/scan";
 import { spansAnimation } from "../animations/spans";
+import { fetchAnimation } from "../animations/fetch";
+import { speakAnimation, type SpeakOptions } from "../animations/speak";
 import { PIXEL_7X10 } from "../font";
 import type { BannerDefinition, Tone } from "../types";
 
@@ -123,46 +123,6 @@ export const DIGIVOICE_BASELINE: BannerDefinition = {
   live: true,
   seed: 0,
 };
-
-const SPEAK = {
-  startMs: 220,
-  sweepMs: 820,
-  riseMs: 200,
-  capMs: 240,
-  rest: 0.3,
-  releaseMs: 520,
-  caps: "peak",
-  holdMs: 300,
-  fallMs: 700,
-  speech: true,
-  syllableMs: [130, 260],
-  phrase: [3, 7],
-  pauseMs: [420, 1100],
-  floor: 0.08,
-} satisfies SpeakOptions;
-
-/** DIG-2922. digivoice is a voice: the EQUALIZER becomes a voice meter. Each
- *  letter column is a level bar, speech comes in syllables and phrases, and
- *  accent peak caps hang over the bars. Accent: --accent-digivoice. */
-export const DIGIVOICE: BannerDefinition = {
-  id: "digivoice",
-  text: "DIGIVOICE",
-  label: "digivoice",
-  font: PIXEL_7X10,
-  gap: 2,
-  palette: { ink: INK, ground: GROUND, accent: { hex: "#CF6BD6", cube: 170, cssVar: "--accent-digivoice" } },
-  animation: speakAnimation(SPEAK),
-  live: true,
-  seed: 0x5e1c,
-};
-
-/** The variations explored before DIGIVOICE (SPEECH) was locked, kept for the
- *  review previews: LEVEL lights the top of a non-stop bar, PEAK adds the
- *  falling caps without speech. */
-export const DIGIVOICE_VARIANTS = {
-  "digivoice-level": { ...DIGIVOICE, animation: speakAnimation({ ...SPEAK, caps: "tip", speech: false }) },
-  "digivoice-peak": { ...DIGIVOICE, animation: speakAnimation({ ...SPEAK, speech: false }) },
-} satisfies Record<string, BannerDefinition>;
 
 /** DIG-2870. A router: one request fans out to every lane (provider) and the
  *  reply comes back. Accent: --accent-digillm. */
@@ -485,6 +445,46 @@ export const DIGIFETCH: BannerDefinition = {
   live: true,
   seed: 0xfe7c,
 };
+
+const SPEAK = {
+  startMs: 220,
+  sweepMs: 820,
+  riseMs: 200,
+  capMs: 240,
+  rest: 0.3,
+  releaseMs: 520,
+  caps: "peak",
+  holdMs: 300,
+  fallMs: 700,
+  speech: true,
+  syllableMs: [130, 260],
+  phrase: [3, 7],
+  pauseMs: [420, 1100],
+  floor: 0.08,
+} satisfies SpeakOptions;
+
+/** DIG-2922. digivoice is a voice: the EQUALIZER becomes a voice meter. Each
+ *  letter column is a level bar, speech comes in syllables and phrases, and
+ *  accent peak caps hang over the bars. Accent: --accent-digivoice. */
+export const DIGIVOICE: BannerDefinition = {
+  id: "digivoice",
+  text: "DIGIVOICE",
+  label: "digivoice",
+  font: PIXEL_7X10,
+  gap: 2,
+  palette: { ink: INK, ground: GROUND, accent: { hex: "#CF6BD6", cube: 170, cssVar: "--accent-digivoice" } },
+  animation: speakAnimation(SPEAK),
+  live: true,
+  seed: 0x5e1c,
+};
+
+/** The variations explored before DIGIVOICE (SPEECH) was locked, kept for the
+ *  review previews: LEVEL lights the top of a non-stop bar, PEAK adds the
+ *  falling caps without speech. */
+export const DIGIVOICE_VARIANTS = {
+  "digivoice-level": { ...DIGIVOICE, animation: speakAnimation({ ...SPEAK, caps: "tip", speech: false }) },
+  "digivoice-peak": { ...DIGIVOICE, animation: speakAnimation({ ...SPEAK, speech: false }) },
+} satisfies Record<string, BannerDefinition>;
 
 export const BANNERS = {
   digithings: DIGITHINGS,
