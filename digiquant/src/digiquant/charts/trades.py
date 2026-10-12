@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 from typing import Any  # score:allow untyped any — plotly Figure typing
 
 from digiquant.charts.common import (
@@ -13,27 +12,38 @@ from digiquant.charts.common import (
     _extract_frame,
 )
 from digiquant.fonts import MONO_FONT_STACK
+from digiquant.stats import normalize_series
 from digiquant.stats.honesty import honest_rate
 
 
 def count_winning_trades(realized_pnls_series: Any) -> int | None:
     """Count winning (PnL > 0) trades; None when the series is missing/empty.
-
-    Goes through :func:`_extract_frame` (duck-typed ``.values`` / ``.to_list``
-    / ``.tolist`` / iterable — no imports) and counts ``> 0`` over the value
-    column. Never ``.to_pandas()``: that bridge needs pyarrow, which is not
-    installed, so it raised ``ModuleNotFoundError`` and — called unguarded
-    from ``tearsheet.py`` — crashed whole-tearsheet generation.
+    Delegates to :func:`digiquant.stats.normalize_series` — the same honest denominator
+    the model path uses, so chart and model counts cannot drift apart. Never
+    ``.to_pandas()``: that bridge needs pyarrow, which is not installed, so it raised
+    ``ModuleNotFoundError`` and — called unguarded from ``tearsheet.py`` — crashed
+    whole-tearsheet generation.
     """
-    if realized_pnls_series is None:
+    normalized = normalize_series(realized_pnls_series)
+    if normalized is None:
         return None
-    df = _extract_frame(realized_pnls_series)
-    if df is None or len(df) == 0:
+    return sum(1 for value in normalized[1] if value > 0)
+
+
+def _finite_values(realized_pnls_series: Any) -> list[float] | None:
+    """The finite values of a PnL/returns input, or None when there are none.
+
+    Delegates to :func:`digiquant.stats.normalize_series` like
+    :func:`count_winning_trades`, so a chart cannot disagree with the model about
+    which rows count. The three builders that used to read the input themselves
+    did it through ``.values.tolist()``, which on the pyo3 analyzer's ``dict``
+    resolves to a bound method and raises ``AttributeError`` — they returned
+    ``ChartUnavailable`` on every real build while looking like covered callers.
+    """
+    normalized = normalize_series(realized_pnls_series)
+    if normalized is None:
         return None
-    try:
-        return int((df["value"] > 0).sum())
-    except Exception:
-        return None
+    return normalized[1]
 
 
 def _build_realized_pnl_chart(realized_pnls_series: Any) -> Any:
@@ -87,26 +97,8 @@ def _build_trade_pnl_distribution_chart(realized_pnls_series: Any) -> Any:
     try:
         import plotly.graph_objects as go
 
-        raw = (
-            realized_pnls_series.to_pandas()
-            if hasattr(realized_pnls_series, "to_pandas")
-            else realized_pnls_series
-        )
-        if hasattr(raw, "values"):
-            raw_vals = raw.values.tolist()
-        elif hasattr(raw, "tolist"):
-            raw_vals = raw.tolist()
-        else:
-            raw_vals = list(raw)
-        vals = []
-        for x in raw_vals:
-            try:
-                fv = float(x)
-                if not math.isnan(fv):
-                    vals.append(fv)
-            except (TypeError, ValueError):
-                pass
-        if not vals:
+        vals = _finite_values(realized_pnls_series)
+        if vals is None:
             return None
         wins = [v for v in vals if v > 0]
         losses = [v for v in vals if v <= 0]
@@ -163,26 +155,8 @@ def _build_per_trade_pnl_bars(realized_pnls_series: Any) -> Any:
     try:
         import plotly.graph_objects as go
 
-        raw = (
-            realized_pnls_series.to_pandas()
-            if hasattr(realized_pnls_series, "to_pandas")
-            else realized_pnls_series
-        )
-        if hasattr(raw, "values"):
-            raw_vals = raw.values.tolist()
-        elif hasattr(raw, "tolist"):
-            raw_vals = raw.tolist()
-        else:
-            raw_vals = list(raw)
-        vals = []
-        for x in raw_vals:
-            try:
-                fv = float(x)
-                if not math.isnan(fv) and not math.isinf(fv):
-                    vals.append(fv)
-            except (TypeError, ValueError):
-                pass
-        if not vals:
+        vals = _finite_values(realized_pnls_series)
+        if vals is None:
             return None
         trade_nums = list(range(1, len(vals) + 1))
         colors = ["#34d399" if v > 0 else "#f87171" for v in vals]
@@ -312,26 +286,8 @@ def _build_cumulative_trade_pnl(realized_pnls_series: Any) -> Any:
     try:
         import plotly.graph_objects as go
 
-        raw = (
-            realized_pnls_series.to_pandas()
-            if hasattr(realized_pnls_series, "to_pandas")
-            else realized_pnls_series
-        )
-        if hasattr(raw, "values"):
-            raw_vals = raw.values.tolist()
-        elif hasattr(raw, "tolist"):
-            raw_vals = raw.tolist()
-        else:
-            raw_vals = list(raw)
-        vals = []
-        for x in raw_vals:
-            try:
-                fv = float(x)
-                if not math.isnan(fv) and not math.isinf(fv):
-                    vals.append(fv)
-            except (TypeError, ValueError):
-                pass
-        if not vals:
+        vals = _finite_values(realized_pnls_series)
+        if vals is None:
             return None
         cum = []
         running = 0.0
