@@ -89,9 +89,27 @@
   "surface": {
     "composeEnv": {
       "apps/digitrace-langfuse/docker-compose.local.yml": [
+        "CLICKHOUSE_CLUSTER_ENABLED",
         "CLICKHOUSE_DB",
+        "CLICKHOUSE_MIGRATION_SSL",
+        "CLICKHOUSE_MIGRATION_URL",
         "CLICKHOUSE_PASSWORD",
-        "CLICKHOUSE_USER"
+        "CLICKHOUSE_URL",
+        "CLICKHOUSE_USER",
+        "DATABASE_URL",
+        "ENCRYPTION_KEY",
+        "LANGFUSE_INIT_USER_EMAIL",
+        "LANGFUSE_INIT_USER_PASSWORD",
+        "NEXTAUTH_SECRET",
+        "NEXTAUTH_URL",
+        "NODE_ENV",
+        "POSTGRES_DB",
+        "POSTGRES_PASSWORD",
+        "POSTGRES_USER",
+        "REDIS_HOST",
+        "REDIS_PORT",
+        "SALT",
+        "TELEMETRY_ENABLED"
       ],
       "docker-compose.yml": [
         "AUDIT_LOG_PATH",
@@ -124,6 +142,8 @@
         "DIGIKEY_URL",
         "DIGIQUANT_DATA_DIR",
         "DIGIQUANT_INTERNAL_URL",
+        "DIGIQUANT_MCP_HOST",
+        "DIGIQUANT_MCP_PORT",
         "DIGIQUANT_URL",
         "DIGISEARCH_INDEX",
         "DIGISEARCH_INTERNAL_URL",
@@ -296,6 +316,9 @@
         "DIGISEARCH_URL",
         "DIGI_ALLOWED_ORIGINS",
         "DIGI_LLM_MODE",
+        "DT_BASE_URL",
+        "DT_TARGET",
+        "DT_VARIANT",
         "GRAFANA_ADMIN_PASSWORD",
         "NOTIFY_FROM",
         "OLLAMA_API_KEY",
@@ -354,6 +377,10 @@
     },
     "wrangler": {
       "apps/dashboard-api/wrangler.toml": {
+        "DT_BASE_URL": "var",
+        "DT_TARGET": "var",
+        "DT_VARIANT": "var",
+        "MARKET_DATA_URL": "var",
         "SUPABASE_URL": "var"
       },
       "apps/digichat-cloudflare/wrangler.toml": {
@@ -361,6 +388,9 @@
         "DIGICHAT_EMBED_HOSTS": "var",
         "DIGICHAT_ENABLED_SERVICES": "var",
         "DIGICHAT_REQUIRE_ROOT_AUTH": "var",
+        "DT_BASE_URL": "var",
+        "DT_TARGET": "var",
+        "DT_VARIANT": "var",
         "DigiChatContainer": "container"
       },
       "apps/digiquant-runner/wrangler.toml": {
@@ -372,6 +402,9 @@
         "BACKFILL_ENABLED": "var",
         "BACKFILL_LEDGER": "durable_object_namespace",
         "DRY_RUN": "var",
+        "DT_BASE_URL": "var",
+        "DT_TARGET": "var",
+        "DT_VARIANT": "var",
         "GITHUB_OVERRIDE_JOBS": "var",
         "RUNNER": "service"
       },
@@ -395,10 +428,14 @@
         "DIGIVAULT_URL": "var",
         "DIGI_LLM_MODE": "var",
         "DIGI_TENANT_CORPUS_MAP": "var",
+        "DT_BASE_URL": "var",
+        "DT_TARGET": "var",
+        "DT_VARIANT": "var",
         "DigiChatContainer": "container",
         "DigiQuantMcpContainer": "container",
         "DigiStackContainer": "container",
         "MARKET_DATA": "r2_bucket",
+        "MARKET_DATA_URL": "var",
         "MCP_STACK": "durable_object_namespace",
         "OPENAI_API_BASE": "var",
         "STACK": "durable_object_namespace",
@@ -407,6 +444,9 @@
       "apps/digithings-web/wrangler.toml": {},
       "apps/digitrace-langfuse/wrangler.toml": {
         "CLICKHOUSE_CLUSTER_ENABLED": "var",
+        "DT_BASE_URL": "var",
+        "DT_TARGET": "var",
+        "DT_VARIANT": "var",
         "LANGFUSE_EVENTS": "r2_bucket",
         "LANGFUSE_S3_EVENT_UPLOAD_BUCKET": "var",
         "LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE": "var",

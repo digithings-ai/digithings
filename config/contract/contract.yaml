@@ -93,10 +93,12 @@ services:
   - 127.0.0.1:8004:8004
   profiles:
   - digivault
-- name: litellm
+- name: digillm
   compose_file: docker-compose.yml
-  image: docker.litellm.ai/berriai/litellm:main-stable
-  build_context: null
+  image: ghcr.io/digithings-ai/digillm:0.1.0
+  build_context:
+    context: .
+    dockerfile: Dockerfile.digillm
   ports:
   - 127.0.0.1:4000:4000
   profiles: []
@@ -243,9 +245,10 @@ ports:
   container_port: 8005
   host_port: 8005
   note: public route key.digithings.ai
-- name: litellm
+- name: digillm
   container_port: 4000
   host_port: 4000
+  note: network alias litellm (OPENAI_API_BASE=http://litellm:4000/v1)
 - name: ollama
   container_port: 11434
   host_port: 11435
@@ -413,6 +416,16 @@ env:
     - CLICKHOUSE_DB
   compose_literal_files:
     - apps/digitrace-langfuse/docker-compose.local.yml
+- name: CLICKHOUSE_MIGRATION_SSL
+  description: Whether Langfuse uses TLS for the ClickHouse migration connection.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - apps/digitrace-langfuse/docker-compose.local.yml
+    env_example_files: []
+    compose_literal:
+    - CLICKHOUSE_MIGRATION_SSL
 - name: CLOUDFLARE_ACCOUNT_ID
   description: Canonical Cloudflare account id for both Vectorize and D1.
   secret: false
@@ -876,6 +889,26 @@ env:
     compose_literal: []
   wrangler_values:
     digithings-stack: r2
+- name: DIGIQUANT_MCP_HOST
+  description: Bind address for the DigiQuant MCP server.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal:
+    - DIGIQUANT_MCP_HOST
+- name: DIGIQUANT_MCP_PORT
+  description: Port for the DigiQuant MCP server.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal:
+    - DIGIQUANT_MCP_PORT
 - name: DIGIQUANT_PORT
   description: Port the digiquant dev server binds to.
   secret: false
@@ -1152,6 +1185,55 @@ env:
     compose_literal: []
   wrangler_values:
     digithings-cron: '0'
+- name: DT_BASE_URL
+  description: Variant base URL (S1 identity, DIG-2759). Rendered by
+    scripts/render_config_contract.py into wrangler [vars] (hosted value)
+    and the root .env.example.
+  secret: false
+  sources:
+    wrangler_workers:
+    - dashboard-api
+    - digithings-cron
+    - digithings-digichat
+    - digithings-stack
+    - digitrace-langfuse
+    compose_files: []
+    env_example_files:
+    - .env.example
+    compose_literal: []
+- name: DT_TARGET
+  description: Variant selector for UIs (selfhost|hosted, S1 identity,
+    DIG-2759). Rendered by scripts/render_config_contract.py into wrangler
+    [vars] (hosted value) and the root .env.example.
+  secret: false
+  sources:
+    wrangler_workers:
+    - dashboard-api
+    - digithings-cron
+    - digithings-digichat
+    - digithings-stack
+    - digitrace-langfuse
+    compose_files: []
+    env_example_files:
+    - .env.example
+    compose_literal: []
+- name: DT_VARIANT
+  description: Variant identity (selfhost|hosted, S1 identity, DIG-2759).
+    Code branches on it (S3 container shim). Rendered by
+    scripts/render_config_contract.py into wrangler [vars] (hosted value)
+    and the root .env.example.
+  secret: false
+  sources:
+    wrangler_workers:
+    - dashboard-api
+    - digithings-cron
+    - digithings-digichat
+    - digithings-stack
+    - digitrace-langfuse
+    compose_files: []
+    env_example_files:
+    - .env.example
+    compose_literal: []
 - name: EXPORT_OUTPUT_DIR
   description: Directory exports are written to.
   secret: false
@@ -1242,6 +1324,26 @@ env:
     - INITIAL_PASSWORD
   compose_literal_files:
     - docker-compose.yml
+- name: LANGFUSE_INIT_USER_EMAIL
+  description: Email of the first Langfuse user created at boot.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - apps/digitrace-langfuse/docker-compose.local.yml
+    env_example_files: []
+    compose_literal:
+    - LANGFUSE_INIT_USER_EMAIL
+- name: LANGFUSE_INIT_USER_PASSWORD
+  description: Password of the first Langfuse user created at boot.
+  secret: true
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - apps/digitrace-langfuse/docker-compose.local.yml
+    env_example_files: []
+    compose_literal:
+    - LANGFUSE_INIT_USER_PASSWORD
 - name: LANGFUSE_S3_EVENT_UPLOAD_BUCKET
   description: R2 bucket receiving Langfuse events.
   secret: false
@@ -1304,6 +1406,24 @@ env:
     - docker-compose.yml
     env_example_files: []
     compose_literal: []
+- name: MARKET_DATA_URL
+  description: Base URL of the R2 market-data API serving GET /v1/market/closes and
+    GET /v1/market/tickers. dashboard-api reads it only; the dashboard client reads the
+    same host as NEXT_PUBLIC_MARKET_DATA_URL. Unset means closes resolve to an empty
+    map, so allocations marks read unavailable, benchmarks series read empty and
+    /kpis/live has no quote date (dashboard-api CONTRACT 6.7, R2-API-only, no Supabase
+    fallback).
+  secret: false
+  sources:
+    wrangler_workers:
+    - dashboard-api
+    - digithings-stack-cloudflare
+    compose_files: []
+    env_example_files: []
+    compose_literal: []
+  wrangler_values:
+    dashboard-api: https://graph.digithings.ai
+    digithings-stack-cloudflare: https://graph.digithings.ai
 - name: NEXT_PUBLIC_DIGICHAT_TRACE_UI
   description: Browser-visible twin of DIGICHAT_TRACE_UI.
   secret: false
@@ -1457,6 +1577,26 @@ env:
     env_example_files: []
     compose_literal:
     - PYTHONUNBUFFERED
+- name: REDIS_HOST
+  description: Redis host for the Langfuse stack.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - apps/digitrace-langfuse/docker-compose.local.yml
+    env_example_files: []
+    compose_literal:
+    - REDIS_HOST
+- name: REDIS_PORT
+  description: Redis port for the Langfuse stack.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - apps/digitrace-langfuse/docker-compose.local.yml
+    env_example_files: []
+    compose_literal:
+    - REDIS_PORT
 - name: SUPABASE_URL
   description: Shared Supabase project URL.
   secret: false
@@ -1470,6 +1610,16 @@ env:
   wrangler_values:
     dashboard-api: https://rwagjbkvxkdwqmouagad.supabase.co
     digithings-stack: https://rwagjbkvxkdwqmouagad.supabase.co
+- name: TELEMETRY_ENABLED
+  description: Whether Langfuse sends anonymous telemetry.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - apps/digitrace-langfuse/docker-compose.local.yml
+    env_example_files: []
+    compose_literal:
+    - TELEMETRY_ENABLED
 - name: XAI_API_KEY
   description: xAI credential.
   secret: true

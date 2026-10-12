@@ -38,6 +38,15 @@ def test_compose_up_carries_the_requested_profile():
 
 
 @pytest.mark.parametrize("profile", list(("core", "quant", "chat", "trace", "all")))
+def test_secrets_render_never_prompts_under_dt_up(profile):
+    """`dt up` is non-interactive. Without --no-prompt, dt-secrets falls back to a
+    getpass prompt and blocks forever (DIG-2959), so every profile must carry it."""
+    step = next(s for s in orchestrate.plan_up(profile, {}) if s.name == "secrets-render")
+    assert "--no-prompt" in step.argv
+    assert step.argv[-1] == "--no-prompt", "flag must follow the render subcommand"
+
+
+@pytest.mark.parametrize("profile", list(("core", "quant", "chat", "trace", "all")))
 def test_every_profile_produces_a_compose_profile(profile):
     step = next(s for s in orchestrate.plan_up(profile, {}) if s.name == "compose-up")
     assert profile in step.argv
