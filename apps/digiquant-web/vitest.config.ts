@@ -2,8 +2,12 @@ import path from "node:path";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
+  // packages/hero-banner has no tsconfig of its own, so its .tsx would fall back
+  // to the classic JSX runtime. Next compiles it with the automatic one.
+  esbuild: { jsx: "automatic" },
   test: {
     environment: "node",
+    setupFiles: ["./vitest.setup.ts"],
     include: ["components/**/*.test.ts", "components/**/*.test.tsx", "lib/**/*.test.ts"],
   },
   resolve: {
@@ -12,6 +16,18 @@ export default defineConfig({
       // Subpath first: Vite alias matching is prefix-based, so the bare
       // "@digithings/ui" entry below would otherwise swallow
       // "@digithings/ui/ui" and resolve it as `src/index.ts/ui`.
+      "@digithings/ui/chat/thread-list": path.resolve(
+        __dirname,
+        "../../packages/ui/src/components/chat/DigichatThreadList.tsx",
+      ),
+      "@digithings/ui/chat/thread": path.resolve(
+        __dirname,
+        "../../packages/ui/src/components/chat/DigichatThread.tsx",
+      ),
+      "@digithings/ui/chart-scale": path.resolve(
+        __dirname,
+        "../../packages/ui/src/components/finance-charts/chart-scale.ts",
+      ),
       "@digithings/ui/ui": path.resolve(__dirname, "../../packages/ui/src/ui/index.ts"),
       "@digithings/ui": path.resolve(__dirname, "../../packages/ui/src/index.ts"),
     },

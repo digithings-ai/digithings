@@ -16,7 +16,7 @@
  * `public_accounting_nav_history`, closes via `GET /v1/market/closes`,
  * R2-API-only). Small envelope/param helpers below mirror CONTRACT.md
  * §1/§2 so this file is self-contained; the merge step swaps them for
- * `errorResponse` / `buildProvenance` / `parseCommonParams` from `./index`.
+ * `errorResponse` / `buildProvenance` / `parseCommonParams` from `./responses`.
  *
  * Pure builders live in `./portfolio`, `./allocations`, `./nav-series`,
  * `./invested`, `./book`, `./committed-book` (vitest parity targets).

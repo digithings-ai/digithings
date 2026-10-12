@@ -2,7 +2,7 @@
 title: "digigraph — API reference"
 type: reference
 status: generated
-created: 2026-09-22
+created: 2026-10-02
 tags:
   - api
   - core
@@ -21,9 +21,9 @@ A LangGraph state machine routes each request to the right sub-graph — quant r
 Speaks the OpenAI API so existing clients work unchanged; LiteLLM handles routing, caching, and checkpointed state across hops.
 
 ## Authentication
-Endpoints accept a digikey-issued RS256 JWT in `Authorization: Bearer`. When no JWKS is configured the service runs in passthrough mode (dev/test only). `/healthz` and `/v1/status` are auth-exempt.
+Protected routes require a digikey-issued RS256 JWT in `Authorization: Bearer`. If neither `DIGIKEY_JWKS_URL` nor `DIGIKEY_PUBLIC_KEY_PEM` is set, those routes return 503 `auth_not_configured`. There is no anonymous passthrough. Compose sets `DIGIKEY_JWKS_URL`. Auth-exempt paths are `/health`, `/healthz`, `/metrics`, `/docs`, `/redoc`, and `/openapi.json`. `GET /v1/status` requires `digigraph:workflow`.
 
-- `digigraph:workflow` — POST /workflow + debug routes (default fallback)
+- `digigraph:workflow` — POST /workflow, GET /v1/status, debug routes, and the default fallback
 - `digigraph:chat` — /v1/chat/completions, /v1/models, /v1/model-info
 - `digigraph:mcp` — /threads/*, /files/* (when enabled)
 
@@ -44,7 +44,7 @@ MCP: `FastMCP streamable-http (workflow, chat, thread_state, list_orchestrator_t
 - `DIGIKEY_JWKS_URL`: JWT public-key (JWKS) endpoint.
 - `OPENAI_API_BASE`: LiteLLM proxy base URL.
 - `DIGI_LLM_MODE` (default `test`): Model tier: test / medium / best.
-- `DIGI_CHECKPOINTER` (default `memory`): LangGraph state backend: memory / sqlite / postgres / none.
+- `DIGI_CHECKPOINTER`: LangGraph state backend: memory / sqlite / postgres / none. Unset uses sqlite when a digiproject.yaml is active, otherwise memory.
 - `DIGI_ENABLE_THREAD_API` (default `0`): Gate /threads/* and /files/*.
 - `DIGI_ENABLE_DEBUG_ENDPOINTS` (default `0`): Gate /test_llm and /v1/debug/*.
 
@@ -67,9 +67,9 @@ curl $DIGIGRAPH_URL/healthz
 ```
 
 ### GET /v1/status
-Public, secret-free project status.
+Secret-free project status. Requires digigraph:workflow. digitrace's /v1/status is the public one.
 
-auth: none · rate: 30/min/IP
+auth: digigraph:workflow · rate: 30/min/IP
 
 Response example:
 ```json
@@ -84,13 +84,13 @@ Response example:
 ```
 
 ```bash
-curl $DIGIGRAPH_URL/v1/status
+curl $DIGIGRAPH_URL/v1/status -H "Authorization: Bearer $JWT"
 ```
 
 ### POST /workflow
 Run the full research + backtest graph (digiclaw custom skill).
 
-auth: digigraph:workflow (optional) · rate: 10/min/IP
+auth: digigraph:workflow · rate: 10/min/IP
 
 Request:
 - `prompt` (string) — required: The user request to route through the supervisor.
@@ -137,10 +137,10 @@ const { message } = await r.json();
 ### POST /v1/chat/completions
 OpenAI-compatible chat. Set stream:true for SSE (events: tool_call, content, done).
 
-auth: digigraph:chat (optional) · rate: 10/min/IP
+auth: digigraph:chat · rate: 60/min/IP
 
 Request:
-- `model` (string): Model id; default "digigraph-rag".
+- `model` (string): Advertised id; default "digigraph-rag". It does not select the upstream model — project config does.
 - `messages` ({role,content}[]) — required: Chat messages.
 - `stream` (boolean): Stream tokens as SSE.
 
@@ -163,7 +163,7 @@ resp = client.chat.completions.create(
 ### GET /v1/models
 OpenAI-style model list.
 
-auth: digigraph:chat (optional) · rate: 30/min/IP
+auth: digigraph:chat · rate: 30/min/IP
 
 ```bash
 curl $DIGIGRAPH_URL/v1/models -H "Authorization: Bearer $JWT"
