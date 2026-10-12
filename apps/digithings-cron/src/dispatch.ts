@@ -431,6 +431,7 @@ async function postGithub(
   url: string,
   body: Record<string, unknown>,
   at: DispatchContext,
+  target: string,
 ): Promise<DispatchResult> {
   const token = env.GH_DISPATCH_TOKEN;
   if (!token) {
@@ -480,7 +481,7 @@ async function postGithub(
         error: text.slice(0, 500),
       });
       throw new Error(
-        `${UNDECLARED_INPUT}: job ${at.job}: ${url} does not declare the input key(s)${named}. GitHub refused the dispatch, so no run started.`,
+        `${UNDECLARED_INPUT}: job ${at.job}: ${target} does not declare the input key(s)${named}. GitHub refused the dispatch, so no run started.`,
       );
     }
 
@@ -561,7 +562,7 @@ export async function dispatchWorkflow(
     return { ok: true, status: 0, dry_run: true };
   }
 
-  return postGithub(env, url, body, at);
+  return postGithub(env, url, body, at, `${target.workflow} on ref ${target.ref}`);
 }
 
 async function dispatchGithub(
@@ -607,5 +608,11 @@ async function dispatchGithub(
     return { ok: true, status: 0, dry_run: true };
   }
 
-  return postGithub(env, url, body, { cron, repo: job.repo, job: job.id });
+  return postGithub(
+    env,
+    url,
+    body,
+    { cron, repo: job.repo, job: job.id },
+    `repository_dispatch ${job.event_type} on ${job.repo}`,
+  );
 }

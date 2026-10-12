@@ -166,6 +166,15 @@ async function runJobsForCron(
   return { started, skipped, runs: [] };
 }
 
+/**
+ * Start keys already dispatched by this isolate. A repeat kick carrying the
+ * same key is a duplicate and must not reach the runner a second time (A.4).
+ * Best-effort and per-isolate by construction: it catches double-submits, not
+ * cross-isolate races. Bounded so a long-lived isolate cannot grow it without
+ * limit; eviction only risks a re-dispatch, never a dropped one.
+ */
+const seenStartKeys = new Set<string>();
+
 function normalizePath(pathname: string): string {
   if (pathname.length > 1 && pathname.endsWith("/")) {
     return pathname.slice(0, -1);
@@ -475,12 +484,14 @@ export default {
       let force = false;
       let args: Record<string, string> = {};
       let requestedTime: number | undefined;
+      let startKey: string | undefined;
       try {
         const body = (await request.json()) as {
           cron?: unknown;
           force?: unknown;
           args?: unknown;
           scheduledTime?: unknown;
+          startKey?: unknown;
         };
         cron = typeof body.cron === "string" ? body.cron : "";
         force = body.force === true;
@@ -498,6 +509,12 @@ export default {
           }
           requestedTime = body.scheduledTime;
         }
+        if (body.startKey !== undefined) {
+          if (typeof body.startKey !== "string" || body.startKey.length === 0) {
+            return Response.json({ error: "invalid_args" }, { status: 400 });
+          }
+          startKey = body.startKey;
+        }
       } catch {
         return Response.json({ error: "invalid_json" }, { status: 400 });
       }
@@ -510,6 +527,18 @@ export default {
       // does not resolve to the cron's firing slot: see DIG-47 spec section 9,
       // decision D3.
       const scheduledTime = requestedTime ?? Math.floor(Date.now() / 60_000) * 60_000;
+      // The start key names one kick. An explicit key wins; otherwise the key
+      // is the cron plus the floored minute, so a repeat kick inside the same
+      // minute resolves to the same key and the dedupe below engages.
+      const key = startKey ?? `${cron}:${scheduledTime}`;
+      if (seenStartKeys.has(key)) {
+        return Response.json(
+          { ok: true, cron, started: [], skipped: [], runs: [], duplicate: true },
+          { status: 200 },
+        );
+      }
+      if (seenStartKeys.size >= 5000) seenStartKeys.clear();
+      seenStartKeys.add(key);
       let result;
       try {
         result = await runJobsForCron(cron, scheduledTime, env, ctx, {

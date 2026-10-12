@@ -1,23 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { expectedCount } from "./expected";
 
-// `expectedCount` clamps a queried day to the minutes already due when that day
-// *is* the day `now` falls on. Every assertion below therefore passes `now`
-// explicitly, so each one measures the cron rule alone and no assertion can be
-// made true or false by the wall clock on the day the suite runs. The clamp has
-// its own case at the bottom, which opts into it deliberately.
-//
-// NOT_A_QUERYED_DAY is on a day none of the assertions query, so `cutoff` is the
-// full 1440 minutes and nothing is clamped. Keep it off 2026-09-27, 09-28 and
-// 10-05, 10-15, 10-16 -- the days these tests name.
-const NOT_A_QUERYED_DAY = new Date("2026-01-01T00:00:00Z");
+// Every assertion below pins `now` explicitly. A count that depends on the wall
+// clock is not a contract: it goes red on a date nobody chose.
+const AT = (iso: string) => new Date(iso);
 
 describe("expectedCount", () => {
   it("A.7 an hourly weekday clock owes 24 starts on a Monday", () => {
-    expect(expectedCount("52 * * * MON-FRI", "2026-09-28", { now: NOT_A_QUERYED_DAY })).toBe(24);
+    expect(expectedCount("52 * * * MON-FRI", "2026-09-28", { now: AT("2026-10-04T12:00:00Z") })).toBe(24);
   });
   it("A.7 the same clock owes nothing on a Sunday", () => {
-    expect(expectedCount("52 * * * MON-FRI", "2026-09-27", { now: NOT_A_QUERYED_DAY })).toBe(0);
+    expect(expectedCount("52 * * * MON-FRI", "2026-09-27", { now: AT("2026-10-04T12:00:00Z") })).toBe(0);
   });
   // 2026-10-03 is a Saturday and it is over, so the whole day counts and no day
   // restriction applies. It sits on the Saturday that the `MON-FRI` assertion
@@ -25,12 +18,12 @@ describe("expectedCount", () => {
   // day owes 24 from a weekday clock and 0 from a weekday-restricted one, while
   // an unrestricted clock owes its full count on that Saturday.
   it("counts hour lists and step syntax", () => {
-    expect(expectedCount("3 6,18 * * *", "2026-10-05", { now: NOT_A_QUERYED_DAY })).toBe(2);
-    expect(expectedCount("4 */4 * * *", "2026-10-05", { now: NOT_A_QUERYED_DAY })).toBe(6);
+    expect(expectedCount("3 6,18 * * *", "2026-10-03", { now: AT("2026-10-04T12:00:00Z") })).toBe(2);
+    expect(expectedCount("4 */4 * * *", "2026-10-03", { now: AT("2026-10-04T12:00:00Z") })).toBe(6);
   });
-  it("counts a day-of-month rule", () => {
-    expect(expectedCount("0 0 15 * *", "2026-10-15", { now: NOT_A_QUERYED_DAY })).toBe(1);
-    expect(expectedCount("0 0 15 * *", "2026-10-16", { now: NOT_A_QUERYED_DAY })).toBe(0);
+  it("counts a day-of-month rule on a day that is over", () => {
+    expect(expectedCount("0 0 15 * *", "2026-10-15", { now: AT("2026-10-16T12:00:00Z") })).toBe(1);
+    expect(expectedCount("0 0 15 * *", "2026-10-16", { now: AT("2026-10-16T12:00:00Z") })).toBe(0);
   });
   it("counts only the minutes already due on the day in progress", () => {
     expect(
