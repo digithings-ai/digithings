@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import math
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 Z_95 = 1.959963984540054
 WARN_FLOOR = 30
@@ -73,6 +73,53 @@ class HonestRate(BaseModel):
     ci_hi: float | None = None
     low_sample: bool = False
     refused: bool = False
+
+
+class HonestRateBlock(HonestRate):
+    """``HonestRate`` plus what a surface needs to label it honestly.
+
+    ``k`` counts closed round trips with realized PnL > 0; a breakeven close
+    (``pnl == 0``) is a loss — counted in ``n`` but not in ``k``.
+
+    Construction re-derives the guard flags *and* the Wilson interval from
+    ``k``/``n``, so a block cannot be built unguarded, cannot be built with a
+    caller-pinned estimate beside an interval from different counts, and a
+    refused sample keeps neither number nor interval. Like every model in this
+    module the fields stay writable afterwards; the guarantee is at
+    construction.
+    """
+
+    schema: str = "1.0"
+    basis: str = "closed round trips (Nautilus realized PnL, one per closed position)"
+    n_unit: str = "closed round trips"
+    warn_floor: int = WARN_FLOOR
+    refuse_floor: int = REFUSE_FLOOR
+    stability: StabilitySplit | None = None
+    disclaimer: str = DISCLAIMER
+
+    @model_validator(mode="after")
+    def _guard(self) -> HonestRateBlock:
+        """Re-derive the guards and the interval; a caller cannot pin a rate.
+
+        An empty sample is refused whatever the floors say. ``wilson()`` has no
+        interval for ``n == 0``, and a block carrying no number must not report
+        itself unguarded — otherwise a caller who relaxes ``refuse_floor`` gets
+        ``refused=False`` beside three ``None`` fields. A negative count is
+        rejected here because ``wilson()`` returns early for ``n <= 0`` and
+        never reaches its own check; with ``n > 0`` it would raise by itself.
+        """
+        if self.k < 0 or self.n < 0:
+            raise ValueError(f"negative counts: k={self.k} n={self.n}")
+        if self.k > self.n:
+            raise ValueError(f"impossible counts: k={self.k} n={self.n}")
+        self.low_sample = self.n < self.warn_floor
+        w = wilson(self.k, self.n)
+        self.refused = w is None or self.n < self.refuse_floor
+        if self.refused:
+            self.estimate = self.ci_lo = self.ci_hi = None
+        else:
+            self.estimate, self.ci_lo, self.ci_hi = w.estimate, w.lo, w.hi
+        return self
 
 
 def wilson(k: int, n: int, z: float = Z_95) -> Wilson | None:
