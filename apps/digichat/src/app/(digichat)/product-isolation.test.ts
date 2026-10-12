@@ -53,8 +53,8 @@ describe("product CSS isolation", () => {
     const bridge = read(
       "../../../../../packages/ui/src/styles/digichat-app-theme.css",
     );
-    expect(bridge).toMatch(/--font-sans:\s*var\(--font-inter\)/);
-    expect(bridge).toMatch(/--font-mono:\s*var\(--font-ibm-plex-mono\)/);
+    expect(bridge).toMatch(/--font-sans:\s*var\(--font-sans-face,\s*"Inter"\)/);
+    expect(bridge).toMatch(/--font-mono:\s*var\(--font-mono-face,\s*"Geist Mono"\)/);
     expect(bridge).toMatch(/--background:\s*oklch\(1 0 0\)/);
   });
 
