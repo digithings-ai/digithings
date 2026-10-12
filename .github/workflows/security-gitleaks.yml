@@ -175,7 +175,7 @@ jobs:
 # address inside one reaches whoever the tenant talks to. gitleaks looks for
 # credentials; nothing looked for personal data. On 2026-10-02 (#4987) a
 # 1.5 MB payload carrying 791 rows with customer email addresses and 372
-# `[internal]` staff notes landed on main in this public repository, and CI was
+# internal staff notes landed on main in this public repository, and CI was
 # green.
 #
 # Scoped to the PR diff, so introducing the gate cannot fail on the payload that
