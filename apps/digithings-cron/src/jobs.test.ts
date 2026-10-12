@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { JOBS, jobsForCron, uniqueEnabledCrons } from "./jobs";
+import { houseRunDeadlineSeconds, JOBS, jobsForCron, uniqueEnabledCrons } from "./jobs";
 
 const RESUMED_PIPELINE_IDS = [
   "prices-at-open-13",
@@ -45,6 +45,7 @@ const PATH_A_ENABLED_IDS = [
   "dependency-freshness",
   "smoke-site",
   "datatap-answer-check",
+  "digiquant-house-run-watch",
 ] as const;
 
 const TWELVE_X_ENABLED_IDS = [
@@ -311,5 +312,37 @@ describe("jobsForCron", () => {
     // Prior GHA was `0 9 * * 1`. Offset :08 avoids house-run-09 at 09:17.
     expect(jobsForCron("0 9 * * MON")).toEqual([]);
     expect(jobsForCron("17 9 * * MON").map((row) => row.id)).toEqual(["house-run-09"]);
+  });
+
+  it("watches the digiquant runner hourly for a house run that never landed", () => {
+    const job = JOBS.find((row) => row.id === "digiquant-house-run-watch");
+    expect(job).toMatchObject({
+      id: "digiquant-house-run-watch",
+      cron: "23 * * * *",
+      repo: "digithings-ai/digithings",
+      kind: "watch",
+      watch: "digiquant-runner",
+      ref: "develop",
+      enabled: true,
+    });
+    expect(jobsForCron("23 * * * *").map((row) => row.id)).toEqual([
+      "digiquant-house-run-watch",
+    ]);
+    // Read-only: a watch row carries no command, so index.ts's house-run arg
+    // branch (gated on job.command === "house-run") cannot hand it run_date and
+    // it can never be mistaken for something the runner should start.
+    expect(job?.command).toBeUndefined();
+    expect(job?.timeoutSeconds).toBeUndefined();
+  });
+
+  it("resolves the watcher deadline from the house-run row, not a second copy", () => {
+    // Single source of truth (DIG-3065): change house-run-09's timeout and the
+    // watcher's deadline moves with it. A copied literal could drift silently.
+    const houseRun = JOBS.find((row) => row.id === "house-run-09");
+    expect(houseRun?.timeoutSeconds).toBe(14400);
+    expect(houseRunDeadlineSeconds()).toBe(houseRun?.timeoutSeconds);
+    expect(houseRunDeadlineSeconds()).toBe(14400);
+    // The watcher must not resolve a deadline when the row it reads is absent.
+    expect(houseRunDeadlineSeconds(JOBS.filter((row) => row.id !== "house-run-09"))).toBeUndefined();
   });
 });
