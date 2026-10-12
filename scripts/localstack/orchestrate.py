@@ -168,7 +168,17 @@ def plan_up(profile: str, env: Mapping[str, str]) -> tuple[Step, ...]:
     # a getpass prompt and blocks forever on a TTY that never answers (DIG-2959).
     # Failing fast is the correct behaviour for a scripted stack bring-up; an
     # operator who wants to be asked runs `dt-secrets render` directly.
-    secrets = (*_tool(env, "secrets", ("scripts/dt-secrets",)), "render", "--no-prompt")
+    # --force BEFORE --no-prompt: the argv shape is pinned by
+    # test_localstack_orchestrate.py (argv[-1] must be --no-prompt), and --force
+    # means "preserve already-rendered generated-local values" rather than
+    # "overwrite the file". Without it a second `dt up` re-rolls every generated
+    # secret, which invalidates whatever the previous value initialised.
+    secrets = (
+        *_tool(env, "secrets", ("scripts/dt-secrets",)),
+        "render",
+        "--force",
+        "--no-prompt",
+    )
     supabase = _tool(env, "supabase", ("supabase",))
     compose = _tool(env, "compose", ("docker", "compose"))
     wrangler = _tool(
