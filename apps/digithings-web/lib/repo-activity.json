@@ -1,1672 +1,2785 @@
 {
-  "generatedAt": "2026-09-15T15:32:35Z",
+  "generatedAt": "2026-10-12T19:45:12Z",
   "windowDays": 30,
-  "commits": 2388,
+  "commits": 1542,
   "features": [
     {
-      "scope": "stack",
-      "summary": "expose hosted digisearch route (search.digithings.ai) for CI web grounding",
-      "pr": 4067,
-      "date": "2026-09-15T10:47:03Z"
+      "scope": "occ",
+      "summary": "carve multilingual ticket search out to main",
+      "pr": 4987,
+      "date": "2026-10-02T14:55:30Z"
+    },
+    {
+      "scope": "digigraph",
+      "summary": "raise /v1/chat/completions rate limit to 60/min",
+      "pr": 4778,
+      "date": "2026-09-29T16:32:30Z"
+    },
+    {
+      "scope": "digichat",
+      "summary": "searchEngine pref with tenant default and header forward",
+      "pr": 4737,
+      "date": "2026-09-28T23:40:48Z"
+    },
+    {
+      "scope": "digigraph",
+      "summary": "enforce hosted license scopes at edge",
+      "pr": 4736,
+      "date": "2026-09-28T23:34:37Z"
+    },
+    {
+      "scope": "digikey",
+      "summary": "license heartbeat receiver + edge scope checks (slice 3)",
+      "pr": 4720,
+      "date": "2026-09-28T22:22:48Z"
     },
     {
       "scope": "digiquant",
-      "summary": "market reads R2-only; remove Supabase bodies",
-      "pr": 4082,
-      "date": "2026-09-14T22:52:37Z"
-    },
-    {
-      "scope": "digiquant-web",
-      "summary": "live prices seeded from the R2 market API",
-      "pr": 4079,
-      "date": "2026-09-14T22:00:40Z"
-    },
-    {
-      "scope": "dashboard",
-      "summary": "market reads R2-API-only; universe from /v1/market/tickers",
-      "pr": 4078,
-      "date": "2026-09-14T21:26:11Z"
-    },
-    {
-      "scope": "digiquant",
-      "summary": "same-day opens from a live fetch; retire intraday Supabase writer",
-      "pr": 4062,
-      "date": "2026-09-14T21:20:09Z"
-    },
-    {
-      "scope": "digiquant-web",
-      "summary": "benchmark history from the R2 market API",
-      "pr": 4049,
-      "date": "2026-09-14T17:21:48Z"
+      "summary": "provider option for web grounding",
+      "pr": 4728,
+      "date": "2026-09-28T22:15:32Z"
     }
   ],
-  "pullsMerged": 1126,
-  "issuesClosed": 532,
-  "pullsOpen": 2,
-  "issuesOpen": 163,
+  "pullsMerged": 950,
+  "issuesClosed": 334,
+  "pullsOpen": 100,
+  "issuesOpen": 214,
   "mergedPulls": [
     {
-      "number": 4094,
-      "title": "fix(website): keep repo-activity openIssues to real issues (#4091)",
-      "url": "https://github.com/digithings-ai/digithings/pull/4094",
-      "mergedAt": "2026-09-15T15:23:07Z"
+      "number": 5504,
+      "title": "fix(web): read repo-activity issue figures from the issue list, not Search",
+      "url": "https://github.com/digithings-ai/digithings/pull/5504",
+      "mergedAt": "2026-10-12T19:42:01Z"
     },
     {
-      "number": 4090,
-      "title": "chore(promote): module/digiquant -> develop (#4069)",
-      "url": "https://github.com/digithings-ai/digithings/pull/4090",
-      "mergedAt": "2026-09-15T15:10:04Z"
+      "number": 5490,
+      "title": "feat(root): notice digiquant house runs that never landed (DIG-3065)",
+      "url": "https://github.com/digithings-ai/digithings/pull/5490",
+      "mergedAt": "2026-10-12T19:30:28Z"
     },
     {
-      "number": 4092,
-      "title": "chore(sync): module/digiquant <- develop",
-      "url": "https://github.com/digithings-ai/digithings/pull/4092",
-      "mergedAt": "2026-09-15T14:56:21Z"
+      "number": 5485,
+      "title": "fix(root): wrangler dev names the configs it requires (dt up entry-point)",
+      "url": "https://github.com/digithings-ai/digithings/pull/5485",
+      "mergedAt": "2026-10-12T19:20:05Z"
     },
     {
-      "number": 4088,
-      "title": "chore(release): promote develop to main \u2014 web-grounding retry + R2-only market reads",
-      "url": "https://github.com/digithings-ai/digithings/pull/4088",
-      "mergedAt": "2026-09-15T14:54:29Z"
+      "number": 5488,
+      "title": "fix(digiquant): re-arm the runner heartbeat and fail lost house runs",
+      "url": "https://github.com/digithings-ai/digithings/pull/5488",
+      "mergedAt": "2026-10-12T19:18:28Z"
     },
     {
-      "number": 4085,
-      "title": "feat(digiquant): digifetch x Gloomberb market-data tools (#4069)",
-      "url": "https://github.com/digithings-ai/digithings/pull/4085",
-      "mergedAt": "2026-09-15T14:50:56Z"
+      "number": 5413,
+      "title": "chore(root): smoke-stack probes worker-only /_stack/status (no container wake)",
+      "url": "https://github.com/digithings-ai/digithings/pull/5413",
+      "mergedAt": "2026-10-12T19:06:17Z"
     },
     {
-      "number": 4087,
-      "title": "fix(digiquant): retry web grounding unscoped when a scoped search is empty (#4086)",
-      "url": "https://github.com/digithings-ai/digithings/pull/4087",
-      "mergedAt": "2026-09-15T14:39:55Z"
+      "number": 5412,
+      "title": "chore(digiquant): runner idle sleepAfter 2m -> 1m",
+      "url": "https://github.com/digithings-ai/digithings/pull/5412",
+      "mergedAt": "2026-10-12T18:54:02Z"
     }
   ],
   "openIssues": [
     {
-      "number": 4101,
-      "title": "ops(digiquant): post-deploy verification of digifetch_* tools + upstream drift checks",
-      "url": "https://github.com/digithings-ai/digithings/issues/4101",
-      "updatedAt": "2026-09-15T15:42:30Z"
+      "number": 643,
+      "title": "[housekeeping-auto] label coverage drift",
+      "url": "https://github.com/digithings-ai/digithings/issues/643",
+      "updatedAt": "2026-10-12T08:08:58Z"
     },
     {
-      "number": 4100,
-      "title": "feat(digiquant): widen 1wk history range via startDate (upstream serves >5Y)",
-      "url": "https://github.com/digithings-ai/digithings/issues/4100",
-      "updatedAt": "2026-09-15T15:42:29Z"
+      "number": 642,
+      "title": "[housekeeping-auto] scheduled-workflow failures (weekly)",
+      "url": "https://github.com/digithings-ai/digithings/issues/642",
+      "updatedAt": "2026-10-12T08:08:57Z"
     },
     {
-      "number": 4099,
-      "title": "docs(digiquant): runbook for GLOOMBERB_SESSION_COOKIE (free account + per-deployment env)",
-      "url": "https://github.com/digithings-ai/digithings/issues/4099",
-      "updatedAt": "2026-09-15T15:42:28Z"
+      "number": 5407,
+      "title": "[provider-review] groq: Free TPM down 12K to ~8K; llama-3.3-70b still 404",
+      "url": "https://github.com/digithings-ai/digithings/issues/5407",
+      "updatedAt": "2026-10-11T09:32:45Z"
     },
     {
-      "number": 4098,
-      "title": "feat(digiquant): surface Gloomberb deep links + attribution in digiquant pages and digichat",
-      "url": "https://github.com/digithings-ai/digithings/issues/4098",
-      "updatedAt": "2026-09-15T15:42:27Z"
+      "number": 4396,
+      "title": "chore(deps): upgrade to next@16.3.5 (+ fix ~79 TS build errors) to clear residual npm-audit HIGH/CRITICAL",
+      "url": "https://github.com/digithings-ai/digithings/issues/4396",
+      "updatedAt": "2026-10-09T20:41:26Z"
     },
     {
-      "number": 4097,
-      "title": "feat(digiquant): wire /v1/orchestrator_invoke dispatch for the digifetch_* tool family",
-      "url": "https://github.com/digithings-ai/digithings/issues/4097",
-      "updatedAt": "2026-09-15T15:42:26Z"
+      "number": 5150,
+      "title": "Free text in OCC tickets is not scrubbed: titles, bodies, Note: and jira_assignee still reach the model",
+      "url": "https://github.com/digithings-ai/digithings/issues/5150",
+      "updatedAt": "2026-10-08T12:44:24Z"
     },
     {
-      "number": 4096,
-      "title": "ops(digiquant): verify Gloomberb MCP image builds + in-container egress (last #4069 spike)",
-      "url": "https://github.com/digithings-ai/digithings/issues/4096",
-      "updatedAt": "2026-09-15T15:42:25Z"
+      "number": 5149,
+      "title": "occ_tickets digisearch index carries OCC customer names, emails and [internal] notes unmasked",
+      "url": "https://github.com/digithings-ai/digithings/issues/5149",
+      "updatedAt": "2026-10-08T12:44:24Z"
     }
   ],
   "branch": "main",
   "dailyContributions": [
     {
-      "date": "2025-09-10",
-      "count": 0
-    },
-    {
-      "date": "2025-09-11",
-      "count": 0
-    },
-    {
-      "date": "2025-09-12",
-      "count": 0
-    },
-    {
-      "date": "2025-09-13",
-      "count": 0
-    },
-    {
-      "date": "2025-09-14",
-      "count": 0
-    },
-    {
-      "date": "2025-09-15",
-      "count": 0
-    },
-    {
-      "date": "2025-09-16",
-      "count": 0
-    },
-    {
-      "date": "2025-09-17",
-      "count": 0
-    },
-    {
-      "date": "2025-09-18",
-      "count": 0
-    },
-    {
-      "date": "2025-09-19",
-      "count": 0
-    },
-    {
-      "date": "2025-09-20",
-      "count": 0
-    },
-    {
-      "date": "2025-09-21",
-      "count": 0
-    },
-    {
-      "date": "2025-09-22",
-      "count": 0
-    },
-    {
-      "date": "2025-09-23",
-      "count": 0
-    },
-    {
-      "date": "2025-09-24",
-      "count": 0
-    },
-    {
-      "date": "2025-09-25",
-      "count": 0
-    },
-    {
-      "date": "2025-09-26",
-      "count": 0
-    },
-    {
-      "date": "2025-09-27",
-      "count": 0
-    },
-    {
-      "date": "2025-09-28",
-      "count": 0
-    },
-    {
-      "date": "2025-09-29",
-      "count": 0
-    },
-    {
-      "date": "2025-09-30",
-      "count": 0
-    },
-    {
-      "date": "2025-10-01",
-      "count": 0
-    },
-    {
-      "date": "2025-10-02",
-      "count": 0
-    },
-    {
-      "date": "2025-10-03",
-      "count": 0
-    },
-    {
-      "date": "2025-10-04",
-      "count": 0
-    },
-    {
-      "date": "2025-10-05",
-      "count": 0
-    },
-    {
-      "date": "2025-10-06",
-      "count": 0
-    },
-    {
       "date": "2025-10-07",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-10-08",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-10-09",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-10-10",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-10-11",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-10-12",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-10-13",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-10-14",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-10-15",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-10-16",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-10-17",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-10-18",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-10-19",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-10-20",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-10-21",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-10-22",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-10-23",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-10-24",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-10-25",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-10-26",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-10-27",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-10-28",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-10-29",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-10-30",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-10-31",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-11-01",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-11-02",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-11-03",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-11-04",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-11-05",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-11-06",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-11-07",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-11-08",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-11-09",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-11-10",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-11-11",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-11-12",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-11-13",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-11-14",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-11-15",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-11-16",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-11-17",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-11-18",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-11-19",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-11-20",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-11-21",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-11-22",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-11-23",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-11-24",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-11-25",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-11-26",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-11-27",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-11-28",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-11-29",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-11-30",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-12-01",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-12-02",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-12-03",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-12-04",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-12-05",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-12-06",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-12-07",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-12-08",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-12-09",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-12-10",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-12-11",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-12-12",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-12-13",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-12-14",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-12-15",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-12-16",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-12-17",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-12-18",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-12-19",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-12-20",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-12-21",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-12-22",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-12-23",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-12-24",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-12-25",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-12-26",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-12-27",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-12-28",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-12-29",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-12-30",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2025-12-31",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-01-01",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-01-02",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-01-03",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-01-04",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-01-05",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-01-06",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-01-07",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-01-08",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-01-09",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-01-10",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-01-11",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-01-12",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-01-13",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-01-14",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-01-15",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-01-16",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-01-17",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-01-18",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-01-19",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-01-20",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-01-21",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-01-22",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-01-23",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-01-24",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-01-25",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-01-26",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-01-27",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-01-28",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-01-29",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-01-30",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-01-31",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-02-01",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-02-02",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-02-03",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-02-04",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-02-05",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-02-06",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-02-07",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-02-08",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-02-09",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-02-10",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-02-11",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-02-12",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-02-13",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-02-14",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-02-15",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-02-16",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-02-17",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-02-18",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-02-19",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-02-20",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-02-21",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-02-22",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-02-23",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-02-24",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-02-25",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-02-26",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-02-27",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-02-28",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-03-01",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-03-02",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-03-03",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-03-04",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-03-05",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-03-06",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-03-07",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-03-08",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-03-09",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-03-10",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-03-11",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-03-12",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-03-13",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-03-14",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-03-15",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-03-16",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-03-17",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-03-18",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-03-19",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-03-20",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-03-21",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-03-22",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-03-23",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-03-24",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-03-25",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-03-26",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-03-27",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-03-28",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-03-29",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-03-30",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-03-31",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-04-01",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-04-02",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-04-03",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-04-04",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-04-05",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-04-06",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-04-07",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-04-08",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-04-09",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-04-10",
-      "count": 1
+      "count": 1,
+      "commits": 0,
+      "pulls": 1,
+      "issues": 0
     },
     {
       "date": "2026-04-11",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-04-12",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-04-13",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-04-14",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-04-15",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-04-16",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-04-17",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-04-18",
-      "count": 21
+      "count": 21,
+      "commits": 9,
+      "pulls": 6,
+      "issues": 6
     },
     {
       "date": "2026-04-19",
-      "count": 222
+      "count": 222,
+      "commits": 81,
+      "pulls": 78,
+      "issues": 63
     },
     {
       "date": "2026-04-20",
-      "count": 91
+      "count": 91,
+      "commits": 48,
+      "pulls": 22,
+      "issues": 21
     },
     {
       "date": "2026-04-21",
-      "count": 61
+      "count": 61,
+      "commits": 40,
+      "pulls": 12,
+      "issues": 9
     },
     {
       "date": "2026-04-22",
-      "count": 20
+      "count": 20,
+      "commits": 12,
+      "pulls": 6,
+      "issues": 2
     },
     {
       "date": "2026-04-23",
-      "count": 55
+      "count": 55,
+      "commits": 16,
+      "pulls": 11,
+      "issues": 28
     },
     {
       "date": "2026-04-24",
-      "count": 26
+      "count": 26,
+      "commits": 8,
+      "pulls": 8,
+      "issues": 10
     },
     {
       "date": "2026-04-25",
-      "count": 2
+      "count": 2,
+      "commits": 1,
+      "pulls": 1,
+      "issues": 0
     },
     {
       "date": "2026-04-26",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-04-27",
-      "count": 87
+      "count": 87,
+      "commits": 24,
+      "pulls": 24,
+      "issues": 39
     },
     {
       "date": "2026-04-28",
-      "count": 41
+      "count": 41,
+      "commits": 13,
+      "pulls": 13,
+      "issues": 15
     },
     {
       "date": "2026-04-29",
-      "count": 13
+      "count": 13,
+      "commits": 5,
+      "pulls": 5,
+      "issues": 3
     },
     {
       "date": "2026-04-30",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-05-01",
-      "count": 56
+      "count": 56,
+      "commits": 18,
+      "pulls": 18,
+      "issues": 20
     },
     {
       "date": "2026-05-02",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-05-03",
-      "count": 16
+      "count": 17,
+      "commits": 4,
+      "pulls": 4,
+      "issues": 9
     },
     {
       "date": "2026-05-04",
-      "count": 6
+      "count": 6,
+      "commits": 2,
+      "pulls": 2,
+      "issues": 2
     },
     {
       "date": "2026-05-05",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-05-06",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-05-07",
-      "count": 19
+      "count": 19,
+      "commits": 7,
+      "pulls": 8,
+      "issues": 4
     },
     {
       "date": "2026-05-08",
-      "count": 9
+      "count": 9,
+      "commits": 2,
+      "pulls": 2,
+      "issues": 5
     },
     {
       "date": "2026-05-09",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-05-10",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-05-11",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-05-12",
-      "count": 3
+      "count": 3,
+      "commits": 1,
+      "pulls": 1,
+      "issues": 1
     },
     {
       "date": "2026-05-13",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-05-14",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-05-15",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-05-16",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-05-17",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-05-18",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-05-19",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-05-20",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-05-21",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-05-22",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-05-23",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-05-24",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-05-25",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-05-26",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-05-27",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-05-28",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-05-29",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-05-30",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-05-31",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-06-01",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-06-02",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-06-03",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-06-04",
-      "count": 11
+      "count": 11,
+      "commits": 7,
+      "pulls": 2,
+      "issues": 2
     },
     {
       "date": "2026-06-05",
-      "count": 129
+      "count": 129,
+      "commits": 109,
+      "pulls": 7,
+      "issues": 13
     },
     {
       "date": "2026-06-06",
-      "count": 36
+      "count": 36,
+      "commits": 13,
+      "pulls": 13,
+      "issues": 10
     },
     {
       "date": "2026-06-07",
-      "count": 11
+      "count": 11,
+      "commits": 4,
+      "pulls": 4,
+      "issues": 3
     },
     {
       "date": "2026-06-08",
-      "count": 27
+      "count": 27,
+      "commits": 11,
+      "pulls": 11,
+      "issues": 5
     },
     {
       "date": "2026-06-09",
-      "count": 17
+      "count": 17,
+      "commits": 6,
+      "pulls": 7,
+      "issues": 4
     },
     {
       "date": "2026-06-10",
-      "count": 13
+      "count": 13,
+      "commits": 5,
+      "pulls": 5,
+      "issues": 3
     },
     {
       "date": "2026-06-11",
-      "count": 2
+      "count": 2,
+      "commits": 1,
+      "pulls": 1,
+      "issues": 0
     },
     {
       "date": "2026-06-12",
-      "count": 44
+      "count": 44,
+      "commits": 15,
+      "pulls": 15,
+      "issues": 14
     },
     {
       "date": "2026-06-13",
-      "count": 23
+      "count": 23,
+      "commits": 8,
+      "pulls": 8,
+      "issues": 7
     },
     {
       "date": "2026-06-14",
-      "count": 13
+      "count": 13,
+      "commits": 5,
+      "pulls": 5,
+      "issues": 3
     },
     {
       "date": "2026-06-15",
-      "count": 62
+      "count": 62,
+      "commits": 26,
+      "pulls": 26,
+      "issues": 10
     },
     {
       "date": "2026-06-16",
-      "count": 34
+      "count": 34,
+      "commits": 14,
+      "pulls": 14,
+      "issues": 6
     },
     {
       "date": "2026-06-17",
-      "count": 64
+      "count": 64,
+      "commits": 34,
+      "pulls": 21,
+      "issues": 9
     },
     {
       "date": "2026-06-18",
-      "count": 87
+      "count": 87,
+      "commits": 52,
+      "pulls": 33,
+      "issues": 2
     },
     {
       "date": "2026-06-19",
-      "count": 58
+      "count": 58,
+      "commits": 7,
+      "pulls": 4,
+      "issues": 47
     },
     {
       "date": "2026-06-20",
-      "count": 42
+      "count": 42,
+      "commits": 21,
+      "pulls": 0,
+      "issues": 21
     },
     {
       "date": "2026-06-21",
-      "count": 11
+      "count": 11,
+      "commits": 11,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-06-22",
-      "count": 108
+      "count": 108,
+      "commits": 45,
+      "pulls": 34,
+      "issues": 29
     },
     {
       "date": "2026-06-23",
-      "count": 51
+      "count": 51,
+      "commits": 34,
+      "pulls": 12,
+      "issues": 5
     },
     {
       "date": "2026-06-24",
-      "count": 154
+      "count": 154,
+      "commits": 125,
+      "pulls": 18,
+      "issues": 11
     },
     {
       "date": "2026-06-25",
-      "count": 61
+      "count": 61,
+      "commits": 26,
+      "pulls": 13,
+      "issues": 22
     },
     {
       "date": "2026-06-26",
-      "count": 68
+      "count": 68,
+      "commits": 34,
+      "pulls": 21,
+      "issues": 13
     },
     {
       "date": "2026-06-27",
-      "count": 43
+      "count": 43,
+      "commits": 30,
+      "pulls": 9,
+      "issues": 4
     },
     {
       "date": "2026-06-28",
-      "count": 25
+      "count": 25,
+      "commits": 15,
+      "pulls": 7,
+      "issues": 3
     },
     {
       "date": "2026-06-29",
-      "count": 31
+      "count": 31,
+      "commits": 13,
+      "pulls": 11,
+      "issues": 7
     },
     {
       "date": "2026-06-30",
-      "count": 23
+      "count": 23,
+      "commits": 14,
+      "pulls": 4,
+      "issues": 5
     },
     {
       "date": "2026-07-01",
-      "count": 140
+      "count": 140,
+      "commits": 74,
+      "pulls": 37,
+      "issues": 29
     },
     {
       "date": "2026-07-02",
-      "count": 98
+      "count": 98,
+      "commits": 64,
+      "pulls": 18,
+      "issues": 16
     },
     {
       "date": "2026-07-03",
-      "count": 86
+      "count": 86,
+      "commits": 65,
+      "pulls": 11,
+      "issues": 10
     },
     {
       "date": "2026-07-04",
-      "count": 24
+      "count": 24,
+      "commits": 14,
+      "pulls": 6,
+      "issues": 4
     },
     {
       "date": "2026-07-05",
-      "count": 40
+      "count": 40,
+      "commits": 20,
+      "pulls": 15,
+      "issues": 5
     },
     {
       "date": "2026-07-06",
-      "count": 60
+      "count": 60,
+      "commits": 44,
+      "pulls": 12,
+      "issues": 4
     },
     {
       "date": "2026-07-07",
-      "count": 67
+      "count": 67,
+      "commits": 62,
+      "pulls": 4,
+      "issues": 1
     },
     {
       "date": "2026-07-08",
-      "count": 90
+      "count": 90,
+      "commits": 65,
+      "pulls": 14,
+      "issues": 11
     },
     {
       "date": "2026-07-09",
-      "count": 110
+      "count": 110,
+      "commits": 77,
+      "pulls": 21,
+      "issues": 12
     },
     {
       "date": "2026-07-10",
-      "count": 122
+      "count": 122,
+      "commits": 95,
+      "pulls": 21,
+      "issues": 6
     },
     {
       "date": "2026-07-11",
-      "count": 3
+      "count": 3,
+      "commits": 2,
+      "pulls": 1,
+      "issues": 0
     },
     {
       "date": "2026-07-12",
-      "count": 80
+      "count": 80,
+      "commits": 58,
+      "pulls": 16,
+      "issues": 6
     },
     {
       "date": "2026-07-13",
-      "count": 5
+      "count": 5,
+      "commits": 3,
+      "pulls": 2,
+      "issues": 0
     },
     {
       "date": "2026-07-14",
-      "count": 3
+      "count": 3,
+      "commits": 2,
+      "pulls": 1,
+      "issues": 0
     },
     {
       "date": "2026-07-15",
-      "count": 48
+      "count": 48,
+      "commits": 26,
+      "pulls": 18,
+      "issues": 4
     },
     {
       "date": "2026-07-16",
-      "count": 28
+      "count": 28,
+      "commits": 14,
+      "pulls": 9,
+      "issues": 5
     },
     {
       "date": "2026-07-17",
-      "count": 59
+      "count": 59,
+      "commits": 33,
+      "pulls": 17,
+      "issues": 9
     },
     {
       "date": "2026-07-18",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-07-19",
-      "count": 26
+      "count": 26,
+      "commits": 14,
+      "pulls": 10,
+      "issues": 2
     },
     {
       "date": "2026-07-20",
-      "count": 33
+      "count": 33,
+      "commits": 20,
+      "pulls": 12,
+      "issues": 1
     },
     {
       "date": "2026-07-21",
-      "count": 16
+      "count": 16,
+      "commits": 9,
+      "pulls": 4,
+      "issues": 3
     },
     {
       "date": "2026-07-22",
-      "count": 47
+      "count": 47,
+      "commits": 25,
+      "pulls": 17,
+      "issues": 5
     },
     {
       "date": "2026-07-23",
-      "count": 71
+      "count": 71,
+      "commits": 40,
+      "pulls": 23,
+      "issues": 8
     },
     {
       "date": "2026-07-24",
-      "count": 4
+      "count": 4,
+      "commits": 2,
+      "pulls": 1,
+      "issues": 1
     },
     {
       "date": "2026-07-25",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-07-26",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-07-27",
-      "count": 6
+      "count": 6,
+      "commits": 3,
+      "pulls": 2,
+      "issues": 1
     },
     {
       "date": "2026-07-28",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-07-29",
-      "count": 19
+      "count": 19,
+      "commits": 9,
+      "pulls": 5,
+      "issues": 5
     },
     {
       "date": "2026-07-30",
-      "count": 23
+      "count": 23,
+      "commits": 9,
+      "pulls": 9,
+      "issues": 5
     },
     {
       "date": "2026-07-31",
-      "count": 17
+      "count": 17,
+      "commits": 9,
+      "pulls": 7,
+      "issues": 1
     },
     {
       "date": "2026-08-01",
-      "count": 162
+      "count": 162,
+      "commits": 85,
+      "pulls": 41,
+      "issues": 36
     },
     {
       "date": "2026-08-02",
-      "count": 7
+      "count": 7,
+      "commits": 4,
+      "pulls": 3,
+      "issues": 0
     },
     {
       "date": "2026-08-03",
-      "count": 20
+      "count": 20,
+      "commits": 9,
+      "pulls": 6,
+      "issues": 5
     },
     {
       "date": "2026-08-04",
-      "count": 37
+      "count": 37,
+      "commits": 15,
+      "pulls": 12,
+      "issues": 10
     },
     {
       "date": "2026-08-05",
-      "count": 141
+      "count": 141,
+      "commits": 82,
+      "pulls": 48,
+      "issues": 11
     },
     {
       "date": "2026-08-06",
-      "count": 93
+      "count": 93,
+      "commits": 56,
+      "pulls": 31,
+      "issues": 6
     },
     {
       "date": "2026-08-07",
-      "count": 50
+      "count": 50,
+      "commits": 25,
+      "pulls": 16,
+      "issues": 9
     },
     {
       "date": "2026-08-08",
-      "count": 21
+      "count": 21,
+      "commits": 9,
+      "pulls": 9,
+      "issues": 3
     },
     {
       "date": "2026-08-09",
-      "count": 44
+      "count": 44,
+      "commits": 18,
+      "pulls": 16,
+      "issues": 10
     },
     {
       "date": "2026-08-10",
-      "count": 191
+      "count": 191,
+      "commits": 120,
+      "pulls": 54,
+      "issues": 17
     },
     {
       "date": "2026-08-11",
-      "count": 207
+      "count": 207,
+      "commits": 118,
+      "pulls": 75,
+      "issues": 14
     },
     {
       "date": "2026-08-12",
-      "count": 146
+      "count": 146,
+      "commits": 85,
+      "pulls": 40,
+      "issues": 21
     },
     {
       "date": "2026-08-13",
-      "count": 166
+      "count": 166,
+      "commits": 123,
+      "pulls": 36,
+      "issues": 7
     },
     {
       "date": "2026-08-14",
-      "count": 17
+      "count": 17,
+      "commits": 8,
+      "pulls": 5,
+      "issues": 4
     },
     {
       "date": "2026-08-15",
-      "count": 78
+      "count": 78,
+      "commits": 34,
+      "pulls": 34,
+      "issues": 10
     },
     {
       "date": "2026-08-16",
-      "count": 19
+      "count": 19,
+      "commits": 10,
+      "pulls": 8,
+      "issues": 1
     },
     {
       "date": "2026-08-17",
-      "count": 47
+      "count": 47,
+      "commits": 22,
+      "pulls": 22,
+      "issues": 3
     },
     {
       "date": "2026-08-18",
-      "count": 5
+      "count": 5,
+      "commits": 2,
+      "pulls": 2,
+      "issues": 1
     },
     {
       "date": "2026-08-19",
-      "count": 50
+      "count": 50,
+      "commits": 21,
+      "pulls": 20,
+      "issues": 9
     },
     {
       "date": "2026-08-20",
-      "count": 71
+      "count": 71,
+      "commits": 42,
+      "pulls": 20,
+      "issues": 9
     },
     {
       "date": "2026-08-21",
-      "count": 47
+      "count": 47,
+      "commits": 24,
+      "pulls": 19,
+      "issues": 4
     },
     {
       "date": "2026-08-22",
-      "count": 12
+      "count": 12,
+      "commits": 6,
+      "pulls": 6,
+      "issues": 0
     },
     {
       "date": "2026-08-23",
-      "count": 0
+      "count": 0,
+      "commits": 0,
+      "pulls": 0,
+      "issues": 0
     },
     {
       "date": "2026-08-24",
-      "count": 2
+      "count": 2,
+      "commits": 1,
+      "pulls": 1,
+      "issues": 0
     },
     {
       "date": "2026-08-25",
-      "count": 289
+      "count": 289,
+      "commits": 147,
+      "pulls": 99,
+      "issues": 43
     },
     {
       "date": "2026-08-26",
-      "count": 535
+      "count": 535,
+      "commits": 280,
+      "pulls": 192,
+      "issues": 63
     },
     {
       "date": "2026-08-27",
-      "count": 112
+      "count": 112,
+      "commits": 50,
+      "pulls": 46,
+      "issues": 16
     },
     {
       "date": "2026-08-28",
-      "count": 26
+      "count": 26,
+      "commits": 10,
+      "pulls": 9,
+      "issues": 7
     },
     {
       "date": "2026-08-29",
-      "count": 164
+      "count": 164,
+      "commits": 91,
+      "pulls": 45,
+      "issues": 28
     },
     {
       "date": "2026-08-30",
-      "count": 449
+      "count": 449,
+      "commits": 280,
+      "pulls": 111,
+      "issues": 58
     },
     {
       "date": "2026-08-31",
-      "count": 296
+      "count": 296,
+      "commits": 221,
+      "pulls": 70,
+      "issues": 5
     },
     {
       "date": "2026-09-01",
-      "count": 117
+      "count": 117,
+      "commits": 61,
+      "pulls": 55,
+      "issues": 1
     },
     {
       "date": "2026-09-02",
-      "count": 86
+      "count": 86,
+      "commits": 44,
+      "pulls": 30,
+      "issues": 12
     },
     {
       "date": "2026-09-03",
-      "count": 161
+      "count": 161,
+      "commits": 84,
+      "pulls": 30,
+      "issues": 47
     },
     {
       "date": "2026-09-04",
-      "count": 243
+      "count": 243,
+      "commits": 150,
+      "pulls": 54,
+      "issues": 39
     },
     {
       "date": "2026-09-05",
-      "count": 164
+      "count": 164,
+      "commits": 101,
+      "pulls": 44,
+      "issues": 19
     },
     {
       "date": "2026-09-06",
-      "count": 9
+      "count": 9,
+      "commits": 3,
+      "pulls": 3,
+      "issues": 3
     },
     {
       "date": "2026-09-07",
-      "count": 70
+      "count": 70,
+      "commits": 44,
+      "pulls": 18,
+      "issues": 8
     },
     {
       "date": "2026-09-08",
-      "count": 147
+      "count": 149,
+      "commits": 101,
+      "pulls": 33,
+      "issues": 15
     },
     {
       "date": "2026-09-09",
-      "count": 105
+      "count": 107,
+      "commits": 65,
+      "pulls": 23,
+      "issues": 19
     },
     {
       "date": "2026-09-10",
-      "count": 179
+      "count": 179,
+      "commits": 122,
+      "pulls": 27,
+      "issues": 30
     },
     {
       "date": "2026-09-11",
-      "count": 183
+      "count": 186,
+      "commits": 119,
+      "pulls": 35,
+      "issues": 32
     },
     {
       "date": "2026-09-12",
-      "count": 93
+      "count": 93,
+      "commits": 59,
+      "pulls": 18,
+      "issues": 16
     },
     {
       "date": "2026-09-13",
-      "count": 182
+      "count": 182,
+      "commits": 120,
+      "pulls": 36,
+      "issues": 26
     },
     {
       "date": "2026-09-14",
-      "count": 133
+      "count": 143,
+      "commits": 104,
+      "pulls": 29,
+      "issues": 10
     },
     {
       "date": "2026-09-15",
-      "count": 60
+      "count": 321,
+      "commits": 229,
+      "pulls": 65,
+      "issues": 27
+    },
+    {
+      "date": "2026-09-16",
+      "count": 404,
+      "commits": 285,
+      "pulls": 82,
+      "issues": 37
+    },
+    {
+      "date": "2026-09-17",
+      "count": 192,
+      "commits": 124,
+      "pulls": 36,
+      "issues": 32
+    },
+    {
+      "date": "2026-09-18",
+      "count": 152,
+      "commits": 101,
+      "pulls": 34,
+      "issues": 17
+    },
+    {
+      "date": "2026-09-19",
+      "count": 91,
+      "commits": 60,
+      "pulls": 27,
+      "issues": 4
+    },
+    {
+      "date": "2026-09-20",
+      "count": 46,
+      "commits": 21,
+      "pulls": 19,
+      "issues": 6
+    },
+    {
+      "date": "2026-09-21",
+      "count": 35,
+      "commits": 16,
+      "pulls": 10,
+      "issues": 9
+    },
+    {
+      "date": "2026-09-22",
+      "count": 152,
+      "commits": 93,
+      "pulls": 45,
+      "issues": 14
+    },
+    {
+      "date": "2026-09-23",
+      "count": 174,
+      "commits": 101,
+      "pulls": 53,
+      "issues": 20
+    },
+    {
+      "date": "2026-09-24",
+      "count": 82,
+      "commits": 39,
+      "pulls": 21,
+      "issues": 22
+    },
+    {
+      "date": "2026-09-25",
+      "count": 91,
+      "commits": 61,
+      "pulls": 21,
+      "issues": 9
+    },
+    {
+      "date": "2026-09-26",
+      "count": 33,
+      "commits": 17,
+      "pulls": 9,
+      "issues": 7
+    },
+    {
+      "date": "2026-09-27",
+      "count": 7,
+      "commits": 5,
+      "pulls": 1,
+      "issues": 1
+    },
+    {
+      "date": "2026-09-28",
+      "count": 94,
+      "commits": 66,
+      "pulls": 18,
+      "issues": 10
+    },
+    {
+      "date": "2026-09-29",
+      "count": 100,
+      "commits": 51,
+      "pulls": 38,
+      "issues": 11
+    },
+    {
+      "date": "2026-09-30",
+      "count": 87,
+      "commits": 0,
+      "pulls": 61,
+      "issues": 26
+    },
+    {
+      "date": "2026-10-01",
+      "count": 56,
+      "commits": 0,
+      "pulls": 40,
+      "issues": 16
+    },
+    {
+      "date": "2026-10-02",
+      "count": 13,
+      "commits": 3,
+      "pulls": 9,
+      "issues": 1
+    },
+    {
+      "date": "2026-10-03",
+      "count": 16,
+      "commits": 0,
+      "pulls": 14,
+      "issues": 2
+    },
+    {
+      "date": "2026-10-04",
+      "count": 28,
+      "commits": 2,
+      "pulls": 23,
+      "issues": 3
+    },
+    {
+      "date": "2026-10-05",
+      "count": 37,
+      "commits": 1,
+      "pulls": 34,
+      "issues": 2
+    },
+    {
+      "date": "2026-10-06",
+      "count": 38,
+      "commits": 5,
+      "pulls": 33,
+      "issues": 0
+    },
+    {
+      "date": "2026-10-07",
+      "count": 17,
+      "commits": 1,
+      "pulls": 16,
+      "issues": 0
+    },
+    {
+      "date": "2026-10-08",
+      "count": 16,
+      "commits": 1,
+      "pulls": 15,
+      "issues": 0
+    },
+    {
+      "date": "2026-10-09",
+      "count": 13,
+      "commits": 0,
+      "pulls": 11,
+      "issues": 2
+    },
+    {
+      "date": "2026-10-10",
+      "count": 67,
+      "commits": 0,
+      "pulls": 63,
+      "issues": 4
+    },
+    {
+      "date": "2026-10-11",
+      "count": 51,
+      "commits": 0,
+      "pulls": 51,
+      "issues": 0
+    },
+    {
+      "date": "2026-10-12",
+      "count": 18,
+      "commits": 0,
+      "pulls": 18,
+      "issues": 0
     }
   ],
   "latestRelease": {
-    "tag": "digichat-v1.5.0",
-    "name": "digichat: v1.5.0",
-    "publishedAt": "2026-09-05T14:45:12Z",
-    "url": "https://github.com/digithings-ai/digithings/releases/tag/digichat-v1.5.0"
+    "tag": "digichat-v2.3.2",
+    "name": "digichat v2.3.2",
+    "publishedAt": "2026-09-21T12:38:12Z",
+    "url": "https://github.com/digithings-ai/digithings/releases/tag/digichat-v2.3.2"
   },
   "modules": {
     "digigraph": {
       "path": "digigraph",
-      "lastCommit": "2026-09-14T21:29:51Z",
-      "files": 153,
-      "lines": 22823
+      "lastCommit": "2026-10-02T14:55:30Z",
+      "files": 161,
+      "lines": 25276
     },
     "digiquant": {
       "path": "digiquant",
-      "lastCommit": "2026-09-15T14:27:04Z",
-      "files": 816,
-      "lines": 178909
+      "lastCommit": "2026-10-06T13:11:04Z",
+      "files": 875,
+      "lines": 214627
     },
     "digisearch": {
       "path": "digisearch",
-      "lastCommit": "2026-09-15T11:22:07Z",
-      "files": 122,
-      "lines": 12699
+      "lastCommit": "2026-10-02T17:10:27Z",
+      "files": 178,
+      "lines": 32486
     },
     "digichat": {
       "path": "apps/digichat",
-      "lastCommit": "2026-09-13T17:59:17Z",
-      "files": 692,
-      "lines": 92940
+      "lastCommit": "2026-10-06T03:41:25Z",
+      "files": 723,
+      "lines": 116363
     },
     "digikey": {
       "path": "digikey",
-      "lastCommit": "2026-09-11T21:57:22Z",
-      "files": 26,
-      "lines": 2922
+      "lastCommit": "2026-10-08T11:48:18Z",
+      "files": 30,
+      "lines": 4081
     },
     "digitrace": {
       "path": "digitrace",
-      "lastCommit": "2026-09-11T21:57:22Z",
+      "lastCommit": null,
       "files": 10,
-      "lines": 970
+      "lines": 1193
     },
     "digiclaw": {
       "path": "digiclaw",
-      "lastCommit": "2026-08-28T23:06:21Z",
-      "files": 18,
-      "lines": 1885
+      "lastCommit": "2026-09-15T19:05:55Z",
+      "files": 20,
+      "lines": 2060
     },
     "digibase": {
       "path": "digibase",
-      "lastCommit": "2026-09-14T18:27:33Z",
-      "files": 16,
-      "lines": 2326
+      "lastCommit": "2026-09-15T14:21:42Z",
+      "files": 17,
+      "lines": 3030
     },
     "digivault": {
       "path": "digivault",
-      "lastCommit": "2026-09-11T21:41:25Z",
+      "lastCommit": "2026-09-19T02:33:58Z",
       "files": 24,
-      "lines": 5003
+      "lines": 5238
     }
   }
 }
