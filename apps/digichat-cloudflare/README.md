@@ -48,7 +48,12 @@ Mac Compose remains **dev-only** — see
 
 ## Deploy
 
-Canonical deploy is the digithings-stack worker ([`deploy-digithings-stack-cloudflare.yml`](../../.github/workflows/deploy-digithings-stack-cloudflare.yml)) — the standalone below stays until cutover.
+> **There is no CI deploy lane for this Worker** (DIG-2843). The
+> `deploy-digithings-stack-cloudflare.yml` referenced here was deleted on 2026-10-01 by
+> `f54af7052` (#4919, Human Gate), so the recipe below is the whole deploy path. The build
+> half is still gated: `build-cloudflare-workers.yml` runs `wrangler deploy --dry-run` for
+> this app on every PR. See
+> [docs/DEPLOYMENT.md § Cloudflare Workers and Containers](../../docs/DEPLOYMENT.md#cloudflare-workers-and-containers).
 
 From **repo root** (Dockerfile context is monorepo root):
 
@@ -62,6 +67,7 @@ npx wrangler secret put DIGIGRAPH_INTERNAL_URL   # https://graph.digithings.ai
 npx wrangler secret put DIGIKEY_URL              # https://key.digithings.ai
 npx wrangler secret put DIGIKEY_BFF_TOKEN
 npx wrangler secret put DIGICHAT_PLAN_PROOF_SECRET
+npx wrangler secret put DIGICHAT_MONITOR_TOKENS   # optional (DIG-613); omit => free-turn gate applies to all
 npx wrangler secret put DIGICHAT_DASHBOARD_SUPABASE_URL
 npx wrangler secret put DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY
 
