@@ -1,12 +1,14 @@
-import type { CSSProperties, ReactNode } from "react";
+"use client";
+
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from "react";
 import { ICONS } from "../logos";
 
 /**
  * Marquee — the infinite "built on" strip promoted from the design reference
  * (data/marquee-ticker), in our terminal register: a mono row drifting behind
- * an edge-fade mask, looping seamlessly, pausing on hover. Pure CSS, so a
- * plain server component; reduced motion stops the drift and the strip reads
- * statically.
+ * an edge-fade mask, looping seamlessly. Hover pins the computed transform so
+ * the strip freezes where it is. Reduced motion stops the drift and the strip
+ * reads statically.
  *
  * Seamless loop mechanics: the content renders twice as two `.mq-group` spans
  * and the track translates exactly -50% per cycle. Each group carries the
@@ -18,7 +20,7 @@ import { ICONS } from "../logos";
  * Icons registry (components/logos.ts) and renders as a small glyph before the
  * name; an object without a resolvable icon renders text-only. Arbitrary
  * `children` are also duplicated into the two groups. The overflow + edge-fade
- * mask, the loop keyframes, pause-on-hover and the reduced-motion stop live in
+ * mask, the loop keyframes, the pause control and the reduced-motion stop live in
  * styles/marquee.css. Wiring (in the consuming app):
  *   globals.css   @import "@digithings/ui/styles/marquee.css";
  *                 @source "<path-to>/packages/ui/src/components/marquee";
@@ -56,6 +58,45 @@ const TONE: Record<"soft" | "mute", string> = {
   mute: "text-ink-mute",
 };
 
+/** Horizontal translation from a computed `matrix(...)` or our own `translateX(Npx)`. */
+export function matrixTranslateX(transform: string): number | null {
+  const value = transform.trim();
+  if (value === "" || value === "none") return 0;
+  const translate = value.match(/^translateX\(([-\d.]+)px\)$/);
+  if (translate) {
+    const n = Number(translate[1]);
+    return Number.isFinite(n) ? n : null;
+  }
+  const matrix = value.match(/^matrix\(([^)]+)\)$/);
+  if (!matrix) return null;
+  const parts = matrix[1].split(",").map((part) => Number(part.trim()));
+  if (parts.length !== 6 || parts.some((n) => !Number.isFinite(n))) return null;
+  return parts[4];
+}
+
+/**
+ * Progress through one loop, 0 inclusive to 1 exclusive.
+ * Left drift runs from 0 to `-period`. Right drift runs from `-period` to 0.
+ */
+export function loopProgress(
+  translateX: number,
+  periodPx: number,
+  direction: "left" | "right",
+): number {
+  if (!(periodPx > 0) || !Number.isFinite(translateX)) return 0;
+  const along = direction === "left" ? -translateX / periodPx : (translateX + periodPx) / periodPx;
+  let wrapped = along % 1;
+  if (wrapped < 0) wrapped += 1;
+  return wrapped || 0;
+}
+
+/** Negative delay that restarts a linear loop at `progress`. */
+export function resumeDelaySeconds(progress: number, durationSeconds: number): string {
+  const p = Number.isFinite(progress) ? Math.min(1, Math.max(0, progress)) : 0;
+  const d = Number.isFinite(durationSeconds) && durationSeconds > 0 ? durationSeconds : 0;
+  return `-${p * d}s`;
+}
+
 function Chip({ item, tone }: { item: string | MarqueeItem; tone: "soft" | "mute" }) {
   const isPlain = typeof item === "string";
   const name = isPlain ? item : item.name;
@@ -86,7 +127,56 @@ export function Marquee({
   className,
 }: MarqueeProps) {
   const dirClass = direction === "right" ? "mq-track--right" : "mq-track--left";
-  const style = { "--mq-speed": `${speed}s` } as CSSProperties;
+  const trackRef = useRef<HTMLDivElement>(null);
+  const hovering = useRef(false);
+  const [frozen, setFrozen] = useState<string | null>(null);
+  const [resumeDelay, setResumeDelay] = useState("0s");
+
+  const pin = () => {
+    const track = trackRef.current;
+    if (!track || frozen) return;
+    const tx = matrixTranslateX(getComputedStyle(track).transform);
+    if (tx === null) return;
+    setFrozen(`translateX(${tx}px)`);
+  };
+
+  const release = () => {
+    if (!frozen) return;
+    const track = trackRef.current;
+    const tx = matrixTranslateX(frozen) ?? 0;
+    const period = track ? track.scrollWidth / 2 : 0;
+    const progress = loopProgress(tx, period, direction);
+    setResumeDelay(resumeDelaySeconds(progress, speed));
+    setFrozen(null);
+  };
+
+  useEffect(() => {
+    if (paused || hovering.current || frozen === null) return;
+    const track = trackRef.current;
+    const tx = matrixTranslateX(frozen) ?? 0;
+    const period = track ? track.scrollWidth / 2 : 0;
+    setResumeDelay(resumeDelaySeconds(loopProgress(tx, period, direction), speed));
+    setFrozen(null);
+  }, [paused, frozen, direction, speed]);
+
+  const onPointerEnter = (event: PointerEvent<HTMLDivElement>) => {
+    hovering.current = true;
+    if (event.pointerType === "touch") return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    pin();
+  };
+
+  const onPointerLeave = () => {
+    hovering.current = false;
+    if (!paused) release();
+  };
+
+  const style = {
+    "--mq-speed": `${speed}s`,
+    animationDelay: frozen ? undefined : resumeDelay,
+    animation: frozen ? "none" : undefined,
+    transform: frozen ?? undefined,
+  } as CSSProperties;
   const group = (hidden: boolean) => (
     <span className="mq-group" aria-hidden={hidden || undefined}>
       {items
@@ -102,8 +192,10 @@ export function Marquee({
       className={`mq-row${className ? ` ${className}` : ""}`}
       aria-label={ariaLabel}
       data-paused={paused ? "true" : undefined}
+      onPointerEnter={onPointerEnter}
+      onPointerLeave={onPointerLeave}
     >
-      <div className={`mq-track ${dirClass}`} style={style}>
+      <div ref={trackRef} className={`mq-track ${dirClass}`} style={style}>
         {group(false)}
         {group(true)}
       </div>

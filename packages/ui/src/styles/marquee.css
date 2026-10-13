@@ -56,9 +56,20 @@
   animation: mq-right var(--mq-speed, 34s) linear infinite;
 }
 
-.mq-row:hover .mq-track,
+/* Pause from a control (`data-paused`). Hover does not use play-state: toggling
+   it restarts the loop at translateX(0), which jumps the strip to the right.
+   Marquee pins the computed transform instead. */
 .mq-row[data-paused="true"] .mq-track {
   animation-play-state: paused;
+}
+
+/* A short row would show the seamless copy beside the first. One group is at
+   least the viewport wide, so the copy starts off-screen and each logo is
+   visible once. */
+.mq-fill.mq-row .mq-group {
+  min-width: 100vw;
+  justify-content: space-evenly;
+  box-sizing: border-box;
 }
 
 @keyframes mq-left {

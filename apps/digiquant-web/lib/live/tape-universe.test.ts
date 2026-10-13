@@ -131,10 +131,13 @@ describe("loadTapeUniverse", () => {
     for (const ticker of marketBody.tickers) expect(universe).toContain(ticker);
   });
 
-  it("still covers the price tables when the market worker is unconfigured", async () => {
+  it("fills the baseline tape when the market worker is unconfigured", async () => {
     stubFeeds(null, { body: portfolioBody });
     const universe = await loadTapeUniverse();
     for (const ticker of held) expect(universe).toContain(ticker);
+    expect(universe).toContain("BTC-USD");
+    expect(universe).toContain("SPY");
+    expect(new Set(universe).size).toBe(universe.length);
   });
 
   // An unset NEXT_PUBLIC_MARKET_DATA_URL ships commented out, so the degraded
