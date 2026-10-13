@@ -22,3 +22,4 @@ function markFor(id: string) {
  * one: the folded `/modules/*` and `/architecture` routes this pane used to
  * back are gone, so `ModuleManifest` stays for the module prose it still
  * carries, not as a contract marker.
+ */
