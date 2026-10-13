@@ -62,12 +62,12 @@ _HOST_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Measured on the batch tree (chore/batch-ci-cron, post-develop-merge):
-# 6644 tracked files enumerated, 6516 read, 55778214 bytes scanned.
-# Replaces the develop pin below: the tree grew (new docs, tests and lanes
-# carrying endpoint literals) and three hosts appear for the first time
-# (app, hosts, hosts.occ). Regenerated with the file's own scanner, in the
-# open, per the design rule above.
+# Measured on the main back-merge tree (chore/main-into-develop-1013):
+# 6542 tracked files walked. Movement since the batch pin is three literals
+# from main's OCC release: occ.digithings.ai x2 as tenant-map keys in
+# tests/dg/test_occ_ticket_payload_retired.py, mcp.digithings.ai x1 in
+# review-5061-digichat-mcp-tool-allowlist.md prose. Regenerated with the
+# file's own scanner, in the open, per the design rule above.
 PINNED_CENSUS = {
     "api.digithings.ai": 1,
     "app.digithings.ai": 3,
@@ -83,8 +83,8 @@ PINNED_CENSUS = {
     "hosts.occ.digithings.ai": 1,
     "key.digithings.ai": 71,
     "langfuse.digithings.ai": 3,
-    "mcp.digithings.ai": 59,
-    "occ.digithings.ai": 142,
+    "mcp.digithings.ai": 60,
+    "occ.digithings.ai": 144,
     "search.digithings.ai": 54,
     "trace.digithings.ai": 20,
     "www.digiquant.io": 17,
