@@ -406,6 +406,10 @@ export const ToolCatalogEntrySchema = z
     id: z.string().min(1),
     default: z.boolean().optional(),
     label: z.string().optional(),
+    /** Individual tools under this entry, for per-tool session toggles. */
+    tools: z
+      .array(z.object({ id: z.string().min(1), label: z.string().optional() }).strict())
+      .optional(),
   })
   .strict();
 

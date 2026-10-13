@@ -350,10 +350,17 @@ export async function POST(req: Request) {
   let modelId = digigraphModelName();
   // A tenant with lockSessionControls pins the house default model (DIG-1210):
   // a visitor's /model pick or session_set_model result is never forwarded.
-  const requestedModel =
-    embedConfig?.lockSessionControls === true
-      ? undefined
-      : req.headers.get("x-digi-model")?.trim() || undefined;
+  // Exception: a locked tenant that curates its own `models.available` list
+  // lets the visitor pick from exactly that list (allowlist enforced below).
+  const lockedWithoutModelList =
+    embedConfig?.lockSessionControls === true &&
+    (embedConfig.models?.available?.length ?? 0) === 0;
+  const requestedModel = lockedWithoutModelList
+    ? undefined
+    : req.headers.get("x-digi-model")?.trim() || undefined;
+  // House-path session model (non-BYOK, allowlisted). digigraph only binds it
+  // when the slug is also on its own DIGI_SESSION_MODEL_ALLOWLIST.
+  let houseSessionModel: string | undefined;
   try {
     const { allowlistModelId } = await import("@/lib/deploy-config");
     if (byokKey) {
@@ -371,6 +378,7 @@ export async function POST(req: Request) {
         );
       }
       if (allowed) modelId = allowed;
+      if (requestedModel && allowed) houseSessionModel = allowed;
     } else if (configFailed && requestedModel) {
       // The deployment config could not be read, so we cannot prove the model
       // is allowed → fail closed rather than forward an unverified id.
@@ -648,6 +656,9 @@ export async function POST(req: Request) {
   }
 
   // BYOK: forward per-request key to digigraph; never log or persist.
+  if (!byokKey && houseSessionModel) {
+    upstreamHeaders["X-Digi-House-Model"] = houseSessionModel;
+  }
   if (byokKey) {
     upstreamHeaders["X-BYOK-Key"] = byokKey;
     if (byokProvider) {

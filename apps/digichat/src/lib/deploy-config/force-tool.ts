@@ -79,10 +79,19 @@ function extraDisableableIds(dep: DigichatDeployment | null | undefined): Set<st
   for (const e of dep?.tools?.catalog ?? []) {
     const id = e.id.trim().toLowerCase();
     if (id && id !== "web_search") out.add(id);
+    // Per-tool session toggles: individual tools the operator listed.
+    for (const t of e.tools ?? []) {
+      const sub = t.id.trim().toLowerCase();
+      if (sub && sub !== "web_search") out.add(sub);
+    }
   }
   for (const s of dep?.mcp?.servers ?? []) {
     const id = s.id.trim().toLowerCase();
     if (id) out.add(id);
+    // `<server>_<tool>` for each allowlisted remote tool (digigraph naming).
+    for (const t of s.allowedTools ?? []) {
+      out.add(`${id}_${t.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64)}`.toLowerCase());
+    }
   }
   return out;
 }

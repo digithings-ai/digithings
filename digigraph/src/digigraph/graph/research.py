@@ -464,6 +464,11 @@ def _run_document_rag_path(
     # digisearch tools (which fan out over the tenant index) are hidden, and each
     # dedicated tool is bound server-side to exactly one index.
     tenant_search_tools = _tenant_digisearch_tools(state.get("digisearch_tools"))
+    # Per-tool session toggles (X-Digi-Disabled-Tools) name dedicated tenant
+    # search tools exactly; a disabled one is never offered.
+    _session_disabled = {
+        str(t).strip().lower() for t in (state.get("disabled_tools") or []) if str(t).strip()
+    }
     if tenant_search_tools:
         _had_search = any(
             _tool_def_name(t) in ("digisearch", "digisearch_fetch_all") for t in tools_for_llm
@@ -473,6 +478,10 @@ def _run_document_rag_path(
             for t in tools_for_llm
             if _tool_def_name(t) not in ("digisearch", "digisearch_fetch_all")
         ]
+        if _session_disabled:
+            tenant_search_tools = {
+                k: v for k, v in tenant_search_tools.items() if k.lower() not in _session_disabled
+            }
         if _had_search:
             tools_for_llm = [
                 *(_tenant_search_schema(n, s) for n, s in tenant_search_tools.items()),

@@ -24,6 +24,7 @@ export function clientConfigFromEmbedTenant(
     // Only explicit `default: true` starts the tool on.
     default: e.default === true,
     ...(e.label ? { label: e.label } : {}),
+    ...(e.tools?.length ? { tools: e.tools.map((t) => ({ ...t })) } : {}),
   }));
   if (webSearch && !catalog.some((t) => t.id === "web_search")) {
     catalog.push({ id: "web_search", default: true, label: "Web search" });
@@ -79,6 +80,7 @@ export function clientConfigFromEmbedTenant(
         id: s.id,
         ...(s.label ? { label: s.label } : {}),
         ...(typeof s.default === "boolean" ? { default: s.default } : {}),
+        ...(s.tools?.length ? { tools: s.tools.map((t) => ({ ...t })) } : {}),
       })),
       allowUserServers: embed.mcp?.allowUserServers === true,
       allowAddForm: embed.mcp?.allowUserServers === true && embed.mcp?.allowAddForm === true,

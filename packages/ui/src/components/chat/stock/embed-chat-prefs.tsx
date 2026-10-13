@@ -66,7 +66,13 @@ export function createDefaultEmbedChatPrefs(
   };
 }
 
-export type CatalogToolRow = { id: string; label?: string; default?: boolean };
+export type CatalogToolRow = {
+  id: string;
+  label?: string;
+  default?: boolean;
+  /** Individual tools under this entry (per-tool session toggles). */
+  tools?: Array<{ id: string; label?: string }>;
+};
 
 export type EmbedChatPrefsApi = {
   prefs: EmbedChatPrefs;
@@ -165,6 +171,7 @@ export function catalogToolsFromClient(cfg: {
       id,
       ...(t.label ? { label: t.label } : {}),
       ...(typeof t.default === "boolean" ? { default: t.default } : {}),
+      ...(t.tools?.length ? { tools: t.tools.map((x) => ({ ...x })) } : {}),
     });
   }
   return out;
