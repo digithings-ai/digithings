@@ -148,6 +148,8 @@ def _digi_fields_from_request(http_request: Request) -> dict[str, Any]:
     updates["research_system_prompt_override"] = corpus.research_system_prompt
     # Operator-only, same unconditional write: a client body cannot unlock it.
     updates["lock_session_controls"] = bool(corpus.lock_session_controls)
+    # Same rule: dedicated per-index search tools come only from the tenant map.
+    updates["digisearch_tools"] = corpus.digisearch_tools
     # Hosted license gate (spec §7): corpus/vault headers request the hosted
     # corpus capability, which requires the ``digisearch-corpus`` license scope
     # (403 ``insufficient_license_scope`` when lacking). The gate sits after map

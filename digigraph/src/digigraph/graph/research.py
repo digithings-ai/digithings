@@ -38,7 +38,6 @@ from digigraph.trace_events import merge_rag_sources_accumulator
 logger = logging.getLogger(__name__)
 
 
-
 # Session controls a client tenant must never drive (DIG-1210): the model,
 # MCP servers and tool toggles stay operator-configured.
 LOCKED_SESSION_TOOLS = frozenset(
@@ -54,6 +53,7 @@ def _tool_def_name(tool: object) -> str:
         if isinstance(tool.get("name"), str):
             return tool["name"]
     return str(getattr(tool, "name", ""))
+
 
 _MAX_CONTINUATIONS = 2
 _CONTINUE_PROMPT = (
@@ -73,6 +73,7 @@ def answer_looks_unfinished(content: str | None) -> bool:
     if not text:
         return True
     return bool(_UNFINISHED_TAIL.search(text[-200:]))
+
 
 def _safe_stream_writer() -> StreamWriter:
     """get_stream_writer() raises RuntimeError when called outside a compiled graph's
@@ -458,6 +459,27 @@ def _run_document_rag_path(
     tools_for_llm = get_tools_for_skills(skill_ids, context)
     if state.get("lock_session_controls"):
         tools_for_llm = [t for t in tools_for_llm if _tool_def_name(t) not in LOCKED_SESSION_TOOLS]
+    # Dedicated per-index search tools (DIG-3269): when the tenant map names them,
+    # the model picks which corpus to search by picking the tool. The generic
+    # digisearch tools (which fan out over the tenant index) are hidden, and each
+    # dedicated tool is bound server-side to exactly one index.
+    tenant_search_tools = _tenant_digisearch_tools(state.get("digisearch_tools"))
+    if tenant_search_tools:
+        _had_search = any(
+            _tool_def_name(t) in ("digisearch", "digisearch_fetch_all") for t in tools_for_llm
+        )
+        tools_for_llm = [
+            t
+            for t in tools_for_llm
+            if _tool_def_name(t) not in ("digisearch", "digisearch_fetch_all")
+        ]
+        if _had_search:
+            tools_for_llm = [
+                *(_tenant_search_schema(n, s) for n, s in tenant_search_tools.items()),
+                *tools_for_llm,
+            ]
+        else:
+            tenant_search_tools = {}
     collected_stored: dict[str, dict] = {}
     collected_rag: list[dict] = []
 
@@ -470,10 +492,15 @@ def _run_document_rag_path(
             and data.get("name") in ("digisearch", "digisearch_fetch_all")
         ):
             data = {**data, "index_name": index_display_name}
+        elif event_type == "tool_call" and data and data.get("name") in tenant_search_tools:
+            data = {**data, "index_name": tenant_search_tools[data["name"]]["index"]}
         writer((event_type, data))
 
     def execute_one(name: str, args: dict) -> str | dict:
-        result = execute(name, args, context)
+        if name in tenant_search_tools:
+            result = _run_tenant_search_tool(tenant_search_tools[name]["index"], args, context)
+        else:
+            result = execute(name, args, context)
         if isinstance(result, dict) and result.get("stored_dataset_profile"):
             p = result["stored_dataset_profile"]
             if isinstance(p, dict) and p.get("ref"):
@@ -779,6 +806,59 @@ def _run_quant_or_augmented_path(
     except Exception as e:
         err_msg, err_code, err_detail = _user_facing_llm_error(e)
         return _research_fail(err_msg, code=err_code, detail=err_detail)
+
+
+def _tenant_digisearch_tools(raw: Any) -> dict[str, dict[str, str]]:
+    if not isinstance(raw, dict):
+        return {}
+    return {
+        str(n): {"index": str(s["index"]), "description": str(s["description"])}
+        for n, s in raw.items()
+        if isinstance(s, dict) and s.get("index") and s.get("description")
+    }
+
+
+def _tenant_search_schema(name: str, spec: dict[str, str]) -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": name,
+            "description": spec["description"],
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "What to look for, in any language.",
+                    },
+                    "top_k": {
+                        "type": "integer",
+                        "description": "How many results to return (default 5, max 20).",
+                    },
+                },
+                "required": ["query"],
+            },
+        },
+    }
+
+
+def _run_tenant_search_tool(index: str, args: dict, context: Any) -> str | dict:
+    """Run digisearch against exactly one tenant-configured index (DIG-3269).
+
+    The index comes from the tenant map, never from the model: a model-supplied
+    ``index_name`` is overwritten by ``_handle_digisearch`` from the bound context.
+    """
+    import dataclasses
+
+    from digigraph.orchestration.digisearch_tools import _handle_digisearch
+
+    if context.allowed_tool_names is not None and "digisearch" not in context.allowed_tool_names:
+        return "Tool not allowed for this session."
+    clean = {"query": args.get("query", "")}
+    top_k = args.get("top_k")
+    if isinstance(top_k, int) and top_k > 0:
+        clean["top_k"] = min(top_k, 20)
+    return _handle_digisearch(clean, dataclasses.replace(context, index_name=index))
 
 
 def research_node(state: WorkflowState) -> dict:
