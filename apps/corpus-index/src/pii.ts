@@ -41,13 +41,69 @@ export function containsRawIdentity(value: string): boolean {
   return EMAIL.test(value) || IBAN.test(value) || PHONE.test(value);
 }
 
-export function maskPii(text: string): string {
+const W = "[A-ZÄÖÜ][\\p{L}'’.-]+";
+const NAME_RUN = `${W}(?:\\s+(?:von|van|de|zu)?\\s*${W}){0,2}`;
+
+/** Quoted mail headers inline in a reply: `Von: Max Muster <…> Gesendet: …`. */
+const MAIL_HEADER = new RegExp(
+  `\\b(Von|From|An|To|Cc|Bcc|Reply-To|Antwort an)\\s*:\\s*[^\\n]*?(?=\\s(?:Von|From|An|To|Cc|Bcc|Gesendet|Sent|Datum|Date|Betreff|Subject)\\s*:|\\n|$)`,
+  "gu",
+);
+const GREETING = new RegExp(
+  `\\b(Hallo|Hi|Hello|Hey|Dear|Moin|Servus|Liebe[rs]?|Sehr geehrte[rs]?|Guten (?:Tag|Morgen|Abend))(\\s+(?:Frau|Herr|Hr\\.|Fr\\.|Mr\\.?|Mrs\\.?|Ms\\.?|Dr\\.))*\\s+(${NAME_RUN})`,
+  "gu",
+);
+const CLOSING = new RegExp(
+  `\\b(Grüßen|Grüße|Gruß|Gruss|Grüsse|regards|Regards|Cheers)([,!.]?)\\s+(${NAME_RUN})`,
+  "gu",
+);
+const HONORIFIC = new RegExp(`\\b(Frau|Herr|Herrn|Hr\\.|Fr\\.|Mr\\.?|Mrs\\.?|Ms\\.?|Dr\\.)\\s+(${NAME_RUN})`, "gu");
+const COMPANY = new RegExp(
+  `(?:${W}\\s+){0,4}${W}\\s+(?:gGmbH|GmbH(?:\\s*&\\s*Co\\.?\\s*KG)?|AG|KG|e\\.\\s?V\\.|UG|mbH|Ltd\\.?|Inc\\.?|LLC|SE|eG)\\b`,
+  "gu",
+);
+/** Words that look like names after a greeting/closing but are not. */
+const NOT_NAMES = new Set(["Team", "Support", "Ihr", "Ihre", "Euer", "Eure", "Zusammen", "Alle", "Allerseits", "OCC", "Online", "Compliance", "Center"]);
+
+function escapeRe(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Display names from header-like fields: `"Max Muster" <max@x.de>` → `Max Muster`. */
+export function namesFrom(values: unknown[]): string[] {
+  const out = new Set<string>();
+  for (const value of values) {
+    if (typeof value !== "string") continue;
+    for (const part of value.split(/[,;]/)) {
+      const name = part.replace(/<[^>]*>/g, "").replace(/["']/g, "").replace(EMAIL, "").trim();
+      if (name.length < 3 || /^[\d\W]+$/.test(name)) continue;
+      out.add(name);
+      for (const token of name.split(/\s+/)) if (token.length >= 3 && /^\p{Lu}/u.test(token)) out.add(token);
+    }
+  }
+  return [...out].sort((a, b) => b.length - a.length);
+}
+
+export function maskPii(text: string, names: string[] = []): string {
   const lines = text.split("\n").filter((line) => !IDENTITY_LINE.test(line.trim()));
-  return lines
+  let out = lines
     .join("\n")
     .replace(EMAIL, "[email]")
     .replace(IBAN, "[iban]")
-    .replace(PHONE, "[phone]");
+    .replace(PHONE, "[phone]")
+    .replace(MAIL_HEADER, (_m, key: string) => `${key}: [name]`);
+  for (const name of names) {
+    out = out.replace(new RegExp(`(?<![\\p{L}])${escapeRe(name)}(?![\\p{L}])`, "gu"), "[name]");
+  }
+  const keep = (lead: string, run: string) => {
+    const first = run.split(/\s+/)[0] ?? "";
+    return NOT_NAMES.has(first) ? `${lead}${run}` : `${lead}[name]`;
+  };
+  return out
+    .replace(GREETING, (_m, g: string, h = "", run: string) => keep(`${g}${h ?? ""} `, run))
+    .replace(CLOSING, (_m, c: string, p: string, run: string) => keep(`${c}${p} `, run))
+    .replace(HONORIFIC, (_m, h: string, run: string) => keep(`${h} `, run))
+    .replace(COMPANY, "[organization]");
 }
 
 export function assertCleanMetadata(metadata: Record<string, unknown>): void {

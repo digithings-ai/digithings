@@ -1,4 +1,4 @@
-import { assertCleanMetadata, maskPii } from "./pii";
+import { assertCleanMetadata, maskPii, namesFrom } from "./pii";
 import { chunkWords, prepareBody } from "./chunk";
 import { EMBED_DIMENSIONS, EMBED_MODEL_ID } from "./model";
 
@@ -8,7 +8,10 @@ export type TicketArticle = {
   internal?: boolean;
   content_type?: string;
   from?: string;
+  to?: string;
+  cc?: string;
   subject?: string;
+  created_by?: string;
 };
 
 export type TicketRecord = {
@@ -21,6 +24,8 @@ export type TicketRecord = {
   customer?: string;
   customer_name?: string;
   owner?: string;
+  organization?: string;
+  created_by?: string;
 };
 
 export type VectorRecord = {
@@ -35,8 +40,8 @@ function text(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
-function prefix(ticket: TicketRecord, body: string): string {
-  const title = maskPii(text(ticket.title));
+function prefix(ticket: TicketRecord, body: string, names: string[]): string {
+  const title = maskPii(text(ticket.title), names);
   const state = maskPii(text(ticket.state)) || "unknown";
   const header = [`Ticket ${ticket.id}`, title, `State: ${state}`, "Language: und"]
     .filter((line) => line.length > 0)
@@ -55,11 +60,16 @@ export async function buildTicketVectors(
   const ids: string[] = [];
   const articleIds: number[] = [];
   const chunkIndexes: number[] = [];
+  // Every person or organisation the ticket names is masked wherever it recurs.
+  const names = namesFrom([
+    ticket.customer, ticket.customer_name, ticket.owner, ticket.organization, ticket.created_by,
+    ...articles.flatMap((a) => [a.from, a.to, a.cc, a.created_by]),
+  ]);
   for (const article of articles) {
     if (skipInternal && article.internal === true) continue;
-    const body = prepareBody(text(article.body), article.content_type);
+    const body = prepareBody(text(article.body), article.content_type, names);
     if (!body) continue;
-    const chunks = chunkWords(prefix(ticket, body));
+    const chunks = chunkWords(prefix(ticket, body, names));
     chunks.forEach((chunk, index) => {
       ids.push(`t${ticket.id}-a${article.id}-c${index}`);
       articleIds.push(article.id);

@@ -50,7 +50,7 @@ export function chunkWords(text: string, size = DEFAULT_SIZE, overlap = DEFAULT_
   return out;
 }
 
-export function prepareBody(raw: string, contentType?: string): string {
+export function prepareBody(raw: string, contentType?: string, names: string[] = []): string {
   const asText = /html/i.test(contentType ?? "") || /<[a-z][\s\S]*>/i.test(raw) ? htmlToText(raw) : raw;
-  return maskPii(stripQuotesAndSignature(asText));
+  return maskPii(stripQuotesAndSignature(asText), names);
 }

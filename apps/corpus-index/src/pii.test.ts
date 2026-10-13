@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assertCleanMetadata, containsRawIdentity, maskPii } from "./pii";
+import { assertCleanMetadata, containsRawIdentity, maskPii, namesFrom } from "./pii";
 
 describe("maskPii", () => {
   it("replaces emails, phones and IBANs", () => {
@@ -46,5 +46,22 @@ describe("assertCleanMetadata", () => {
         model: "@cf/baai/bge-m3",
       }),
     ).not.toThrow();
+  });
+});
+
+describe("name masking (DIG-3269 gate)", () => {
+  it("masks quoted mail headers, greetings, closings, known names and companies", () => {
+    const names = namesFrom(['"Max Oppenlaender" <max@x.de>', "Jugendhilfe Nord gGmbH"]);
+    const raw =
+      "Hallo Leon, danke. Viele Grüßen Markus Pflüger t +49 711 1234567 Von: Max Oppenlaender < max@x.de > Gesendet: Dienstag Betreff: Zugang für Frau Hülpert bei Schloss Stutensee gGmbH und Jugendhilfe Nord gGmbH";
+    const out = maskPii(raw, names);
+    for (const leak of ["Leon", "Markus", "Pflüger", "Oppenlaender", "Hülpert", "Stutensee", "Jugendhilfe", "max@x.de"]) {
+      expect(out).not.toContain(leak);
+    }
+    expect(out).toContain("Hallo [name]");
+    expect(out).toContain("Gesendet: Dienstag");
+  });
+  it("keeps team sign-offs", () => {
+    expect(maskPii("Viele Grüße Ihr OCC Team")).toContain("Ihr OCC Team");
   });
 });
