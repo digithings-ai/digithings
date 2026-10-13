@@ -34,6 +34,7 @@ import {
   forwardFillCalendarGaps,
   isNavSeriesSeam,
   navRowContractLabel,
+  navSeriesPlotReadiness,
   type NavContract,
 } from './nav-series';
 import { buildPortfolioData, type PortfolioNavTipInput } from './portfolio';
@@ -413,8 +414,10 @@ export async function handleNavSeries(
     const hasSeam = sorted.some((r, i) =>
       i === 0 ? false : isNavSeriesSeam(r, sorted[i - 1].source ?? null),
     );
+    const plot = navSeriesPlotReadiness(points);
     return sliceOk(
       {
+        plot: { series: plot.series, accounting_nav: plot.accountingNav },
         tip: tip ? { date: tip.date, contract: navRowContractLabel(tip) } : null,
         points: points.map((p) => ({
           date: p.date,

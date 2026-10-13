@@ -398,6 +398,9 @@
         "DT_VARIANT": "var",
         "DigiChatContainer": "container"
       },
+      "apps/digidata-api/wrangler.toml": {
+        "TWELVEX_DB": "d1_database"
+      },
       "apps/digiquant-runner/wrangler.toml": {
         "ARCHIVE": "r2_bucket",
         "DigiQuantRunnerContainer": "container",

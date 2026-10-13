@@ -209,6 +209,12 @@ export interface LevelFixSeries {
   points: FxFixPoint[];
   /** True when `points` is just the eval anchors (no table history). */
   anchorsOnly: boolean;
+  /**
+   * The idea carries a bracket that is not publishable, so the levels above are
+   * withheld and the caller should show a pending state instead of an empty
+   * chart. False when the idea has no bracket at all (nothing to wait for).
+   */
+  levelsPending: boolean;
 }
 
 /**
@@ -240,7 +246,9 @@ export function buildLevelFixSeries(
   fixes: FxFixPoint[],
 ): LevelFixSeries {
   const tl = parseTradeLevels(idea.trade_levels);
-  const published = isPublishableBracket(tl) ? tl : null;
+  // Levels are withheld unless the bracket is complete; the fix line below is
+  // independent of the bracket and still publishes.
+  const publishable = isPublishableBracket(tl);
   const entryFix = evalRow?.entry_fix ?? null;
   const exitFix = evalRow?.exit_fix ?? null;
   const entryDate = evalRow?.entry_date ?? null;
@@ -259,13 +267,12 @@ export function buildLevelFixSeries(
 
   return {
     pair: idea.pair,
-    entryLow: published ? numOrNull(published.entry_low?.value) : null,
-    entryHigh: published ? numOrNull(published.entry_high?.value) : null,
-    stop: published ? numOrNull(published.stop?.value) : null,
-    targets: published
-      ? published.targets
-          .map((t) => numOrNull(t.value))
-          .filter((n): n is number => n !== null)
+    // A bracket publishes complete or not at all (DIG-260 L5 follow-up).
+    entryLow: publishable ? numOrNull(tl.entry_low?.value) : null,
+    entryHigh: publishable ? numOrNull(tl.entry_high?.value) : null,
+    stop: publishable ? numOrNull(tl.stop?.value) : null,
+    targets: publishable
+      ? tl.targets.map((t) => numOrNull(t.value)).filter((n): n is number => n !== null)
       : [],
     entryDate,
     exitDate,
@@ -273,5 +280,6 @@ export function buildLevelFixSeries(
     exitFix,
     points,
     anchorsOnly,
+    levelsPending: tl !== null && !publishable,
   };
 }

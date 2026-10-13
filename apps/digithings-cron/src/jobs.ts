@@ -7,7 +7,8 @@ export type JobKind =
   | "repository_dispatch"
   | "container"
   | "probe"
-  | "watch";
+  | "watch"
+  | "twelvex-watch";
 
 export type Job = {
   id: string;
@@ -36,6 +37,14 @@ export type Job = {
    * /v1/jobs — see house-run-watch.ts.
    */
   watch?: "digiquant-runner";
+  /** Set when kind is "twelvex-watch". Worker-only read of twelve-x Actions history. */
+  twelvexWatch?: "feed-confirm" | "session-heartbeat";
+  /**
+   * Worker-side pre-check before a workflow_dispatch. "twelvex-session-due" skips
+   * session_catchup.yml when no session can be due (see twelvex-watch.ts).
+   * A forced kick bypasses the gate.
+   */
+  gate?: "twelvex-session-due";
 };
 
 const MONOREPO = "digithings-ai/digithings" as const;
@@ -107,6 +116,19 @@ function wj(id: string, cron: string, watch: "digiquant-runner", opts: { enabled
     enabled: opts.enabled ?? true,
     watch,
   };
+}
+
+/**
+ * twelve-x watchdog run in this Worker (no GitHub runner). workflow + ref stay so
+ * GITHUB_OVERRIDE_JOBS can fall back to the original GHA watchdog workflow.
+ */
+function tw(
+  id: string,
+  cron: string,
+  workflow: string,
+  twelvexWatch: "feed-confirm" | "session-heartbeat",
+): Job {
+  return { id, cron, repo: TWELVE_X, kind: "twelvex-watch", workflow, ref: DEVELOP, enabled: true, twelvexWatch };
 }
 
 /** Container job. workflow + ref stay so GITHUB_OVERRIDE_JOBS can still dispatch. */
@@ -337,14 +359,20 @@ export const JOBS: readonly Job[] = [
   // the workflow is workflow_dispatch only. Off :00 and off the smoke-site minute
   // so nothing lands on a shared runner's worst moment.
   wd("secret-staleness", "17 6 1 * *", MONOREPO, "secret-staleness-check.yml"),
-  // Monthly uv.lock-vs-PyPI version radar (DIG-1515). This monorepo's floors are
-  // `>=`, so the floor is not what runs: the lock already sits majors past several
-  // stated floors with nobody having approved the jump. This makes that gap visible
-  // on purpose instead of mid-incident. Read-only, it changes no bound.
+  // uv.lock-vs-PyPI version radar (DIG-1515, cadence DIG-2277). This monorepo's
+  // floors are `>=`, so the floor is not what runs: the lock already sits majors
+  // past several stated floors with nobody having approved the jump. This makes
+  // that gap visible on purpose instead of mid-incident. Read-only, it changes no
+  // bound.
   // The clock lives here and not on the workflow, for the same reason as the row
   // above: develop carries no on.schedule, and the workflow is workflow_dispatch
-  // only. Off :17 so it never shares a runner minute with the monthly sweep.
-  wd("dependency-freshness", "23 6 1 * *", MONOREPO, "pipeline-dependency-freshness.yml"),
+  // only.
+  // Weekly, not monthly (DIG-2277): security-pip-audit and security-npm-audit
+  // already read this same lock weekly, so a monthly freshness clock put new
+  // versions at a lower reporting rate than known vulnerabilities. 06:23 is
+  // Monday-only and sits 10 min ahead of the 06:33 audit, so freshness and risk
+  // land in one review window.
+  wd("dependency-freshness", "23 6 * * MON", MONOREPO, "pipeline-dependency-freshness.yml"),
   pj("smoke-site", "17 6 * * *", "smoke-site.yml", "site"),
   // Hourly answer-integrity probe against DataTap production. Clock lives here,
   // not on the workflow: develop carries no on.schedule (#DIG-306). Read-only.
@@ -373,7 +401,12 @@ export const JOBS: readonly Job[] = [
     TWELVE_X,
     "primemarket_session_heartbeat.yml",
   ),
-  wd("twelve-x-session-catchup", "52 * * * MON-FRI", TWELVE_X, "session_catchup.yml"),
+  // Gated in the Worker: most hourly ticks found nothing due and still billed a
+  // private-repo Actions job. The gate only skips when every due slot is covered.
+  {
+    ...wd("twelve-x-session-catchup", "52 * * * MON-FRI", TWELVE_X, "session_catchup.yml"),
+    gate: "twelvex-session-due",
+  },
   // dry_run must be false: workflow defaults dispatch to dry_run=true and only
   // forced live on the old GHA schedule event. Pre-prune R2 dump stays on so the
   // transient market-context tables are always recoverable.
@@ -420,18 +453,21 @@ export const JOBS: readonly Job[] = [
   // inside the watchdog's 6h lookback, so ordinary Actions queueing cannot make
   // a healthy day look silent. Gap to the next confirm is ~22h, so a confirm
   // missed outright is caught the same day, not the next morning.
-  wd(
-    "twelve-x-feed-confirm-watchdog",
-    "23 16 * * MON-FRI",
-    TWELVE_X,
-    "feed_confirm_watchdog.yml",
-  ),
+  // Runs in this Worker now (twelvex-watch.ts); GITHUB_OVERRIDE_JOBS falls back to GHA.
+  tw("twelve-x-feed-confirm-watchdog", "23 16 * * MON-FRI", "feed_confirm_watchdog.yml", "feed-confirm"),
   // Hourly lost-house-run watcher (DIG-3065). Appended last so the deploy-config
   // contract, which compares wrangler.toml [triggers].crons to uniqueEnabledCrons()
   // in order, needs no reshuffle. Minute :23 is clear of the :17 cluster
   // (production-deploy-gate-watchdog, datatap-answer-check, smoke-site), :41
   // (token-canary) and :47, and clear of the 09:17 house-run start it watches.
   wj("digiquant-house-run-watch", "23 * * * *", "digiquant-runner"),
+  // Was the GHA `schedule: 40 */6 * * *` on primarketet_heartbeat_watchdog.yml.
+  tw(
+    "twelve-x-session-heartbeat-watchdog",
+    "40 */6 * * *",
+    "primarketet_heartbeat_watchdog.yml",
+    "session-heartbeat",
+  ),
 ];
 
 /**
