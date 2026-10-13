@@ -13,7 +13,7 @@ document's business, not this file's.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any  # score:allow untyped any — JSON tool args and results
 
 from digigraph.orchestration.registry import ToolContext
 from digigraph.skill_library.loader import (

@@ -456,6 +456,36 @@ env:
     - DIGICHAT_ALLOW_LOCAL_EMBED_PARENTS
   compose_literal_files:
     - infra/digichat-release/compose.profile-a-bundle.override.yml
+- name: DIGICHAT_ARTIFACT_CONVERSATION
+  description: Per-session conversation id for DigiChat artifact writes. Empty by default, and no
+    static default can name a live session; with it unset the tools render rows in full.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal: []
+- name: DIGICHAT_ARTIFACT_GRANT
+  description: Per-conversation grant for DigiChat artifact writes. Empty by default; issued per
+    conversation, so no static default can name a live one.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal: []
+- name: DIGICHAT_ARTIFACT_INGEST_URL
+  description: In-network DigiChat artifact ingest URL (service name plus the digichat container
+    port 3000). Oversized retrievals go to the artifact store instead of a spool in the caller.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal: []
 - name: DIGICHAT_AUTO_MIGRATE
   description: '`1` runs digichat migrations at boot.'
   secret: false

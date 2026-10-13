@@ -98,6 +98,7 @@ INTERNAL_MARKER_ALLOWLIST = (
     "scripts/zammad_mcp/README.md",
     "scripts/zammad_mcp/formatting.py",
     # Assertions that the tagging happens.
+    "tests/dg/test_occ_ticket_payload_retired.py",
     "tests/ds/test_multilingual_embedder.py",
     "tests/scripts/test_zammad_mcp.py",
     # This detector and its suite: a scanner that cannot name the marker cannot

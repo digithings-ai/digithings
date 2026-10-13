@@ -62,15 +62,19 @@ _HOST_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Measured on the DIG-3223 convergence union (lanes L4-L9 folded onto develop):
-# 6780 tracked files enumerated, 6652 read, 57859920 bytes scanned.
-# Replaces the batch/ci-cron pin below: the union added endpoint literals in
-# key.digithings.ai (+1) and search.digithings.ai (+1). Regenerated with the
-# file's own scanner, in the open, per the design rule above.
-# 2026-10-13: search.digithings.ai 55 -> 54. The removed literal is a rotated
-# repo-activity snapshot line (5132e29f0 dropped the PR-4067 summary mentioning
-# the hosted digisearch route), not the DIG-2703 migration: benign content
-# rotation, so the pin is refreshed, not the snapshot.
+# Measured on the back-merge tree after folding develop's L4-L9 convergence,
+# the repo-activity refresh (#5505) and the #5542 rotation note: movement
+# since the batch pin is five literals from two landings, minus one refresh
+# removal, with the rotation re-confirmed at 54. From main's OCC release:
+# occ.digithings.ai x2 as tenant-map keys in
+# tests/dg/test_occ_ticket_payload_retired.py, mcp.digithings.ai x1 in
+# docs/reviews/pr/review-5061-digichat-mcp-tool-allowlist.md prose. From the
+# L4-L9 union: key.digithings.ai (+1), search.digithings.ai (+1). The refresh
+# then dropped the snapshot's hosted-digisearch-route summary line (-1
+# search). #5542 re-measured search at 54 on develop (rotated repo-activity
+# snapshot line, PR-4067 summary dropped in 5132e29f0): benign content
+# rotation, and the merged tree still scans 54, so the pin holds. Regenerated
+# with the file's own scanner, in the open, per the design rule above.
 PINNED_CENSUS = {
     "api.digithings.ai": 1,
     "app.digithings.ai": 3,
@@ -86,8 +90,8 @@ PINNED_CENSUS = {
     "hosts.occ.digithings.ai": 1,
     "key.digithings.ai": 72,
     "langfuse.digithings.ai": 3,
-    "mcp.digithings.ai": 59,
-    "occ.digithings.ai": 142,
+    "mcp.digithings.ai": 60,
+    "occ.digithings.ai": 144,
     "search.digithings.ai": 54,
     "trace.digithings.ai": 20,
     "www.digiquant.io": 17,
