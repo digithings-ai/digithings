@@ -46,7 +46,18 @@ NautilusTrader is the sole backtest and live-trade execution engine. Its key pro
 
 The Polars-to-pandas boundary in `nautilus_runner.py` is a deliberate, documented exception to the "Polars only" rule. Nautilus's `BarDataWrangler.process()` requires a pandas DataFrame with a `timestamp` UTC index. All other data handling in digiquant (CSV loading, account report parsing, result assembly) uses Polars.
 
-**Version pinning:** `nautilus_trader` is pinned to `>=1.190,<2` in `pyproject.toml`. The 2.x series introduced an async-first API surface with breaking changes to `BacktestEngine.run()` and the Actor registration model.
+**Version pinning and lockfile authority ([ADR-0033](../docs/adr/0033-nautilus-trader-exact-pin.md)):**
+
+`nautilus_trader` is pinned **exactly** to `==1.230.0` in `pyproject.toml`. This is the build we ship. Do not widen it back to a range.
+
+- **Why exact.** A *minor* bump inside the old `>=1.190,<2` range moved the Python-visible return type of `PortfolioAnalyzer.realized_pnls()` between 1.228.0 and 1.230.0. Our honesty envelope reads that value, so a ranged pin meant "silently moves" rather than "compatible". This is a deliberate, recorded exception to the root `AGENTS.md` rule that runtime deps stay unbounded — the root rule's own escape hatch applies (a known incompatibility, with the reason commented next to the pin).
+- **One lock: the repo-root `uv.lock`.** It is the single authoritative lock for the whole uv workspace; `digiquant` is a `[tool.uv.workspace]` member. **No module ships its own `uv.lock`.** `digiquant/uv.lock` was deleted under ADR-0033 — it was inert (68 packages against the root lock's 297), referenced by nothing, and last touched at the April 2026 baseline; uv resolves the workspace root and never opened it. If you find a module-level `uv.lock`, it is dead weight that reads as a pin but pins nothing — delete it and say so in an ADR.
+- **Why the pin, not the lock, is the shipping control.** `digiquant/Dockerfile` copies only `digiquant/pyproject.toml` and runs `uv pip install --system -e ".[nautilus]"`. No lockfile is copied and `uv pip install` does not read `uv.lock`. So the `==1.230.0` in `pyproject.toml` is the **only** thing that pins `nautilus_trader` in that image — the one `docker-compose.yml` builds. Before ADR-0033 it resolved whatever was newest on PyPI at build time. **Scope of that claim:** the image is *not* reproducible. `polars`, `optuna`, `cryptography`, `fastapi`, `uvicorn`, `langgraph`, `httpx`, `requests`, `statsmodels` and every transitive dependency of `nautilus_trader` itself still float, so a rebuild of an unchanged commit produces different bytes. **The pin reaches one build surface, not the whole service:** the Cloudflare Workers stack builds `digiquant/Dockerfile.mcp`, which installs `[research,mcp]` with no `nautilus` extra, and `Dockerfile.digiquant-runner` already installs `--frozen` from the root lock. Nothing in the repository publishes this image — `publish-service-images.yml` was removed in `f54af7052` — so there is no `:latest` or `:v0.1.0` tag being overwritten; the live consequence of that removal is that `infra/self-host/compose.ghcr.yml:34-36` pulls a tag nobody publishes. ADR-0033 names reproducibility as open work, not as fixed.
+- **CI is frozen to the root lock.** 35 of the 40 `uv sync` invocations across 29 workflow files use `--frozen`. `test-digiquant.yml` syncs without the nautilus extra on purpose (Linux SIGABRT, #42); `test-nautilus.yml` is the mirror lane that does include it. Both run from the repo root. Editing a manifest without re-locking desyncs the lock and breaks every `--frozen` lane.
+- **Known gap.** A local venv that was not re-synced still runs whatever it installed. Local == CI only after `uv sync --frozen --package digiquant --extra nautilus`.
+- **Bumping is deliberate, with a checklist** — change the pin, `uv lock` at the repo root, read the diff (more than the `nautilus-trader` specifier line means stop), verify `uv lock --check` from the root and from inside `digiquant/`, update the version named here and in `AGENTS.md`, run the DIG-937 analyzer-shape matrix, and amend or supersede ADR-0033.
+
+The 2.x series introduced an async-first API surface with breaking changes to `BacktestEngine.run()` and the Actor registration model; the exact pin is also what keeps us off it.
 
 **Linux CI crash (SIGABRT / exit 134) — tracked in #42:**
 `BacktestEngine.run()` registers C++-level SIGTERM/SIGINT handlers in its Rust runtime. On Linux, `uvicorn[standard]` installs `uvloop` and sets it as the global asyncio event loop policy, which also claims those POSIX signal handlers via libuv. When both runtimes attempt to own signal handling, a C-level assertion fires → SIGABRT. Mitigation: `tests/dq/conftest.py` resets the asyncio policy to `DefaultEventLoopPolicy` before the dq suite runs, preventing uvloop from conflicting with Nautilus's signal registration. The three integration tests that run a real `BacktestEngine` are skipped on Linux CI (`CI=true`) until the per-component test suite (#43) re-enables pytest and the fix is confirmed green on Ubuntu.
@@ -322,6 +333,20 @@ repo-wide code-reference scan. Guard halves: `tests/dq/test_luxalgo_license_guar
 `luxalgo_*` names (including a future source-code name) answer HTTP 400 at
 `/v1/orchestrator_invoke` until a dispatch row exists. No Pine vendoring, no
 procurement (owner-side).
+
+**digiquant-web local gateway.** `apps/digiquant-web/gateway/live_gateway.py`
+is a development-only, read-scope adapter from the static browser app to one
+scrubbed stdio MCP child. It binds only `127.0.0.1`, accepts only exact loopback
+HTTP origins, exposes a fixed probe table (no tool passthrough), and never passes
+cookies or service keys to the child. The browser opts in with
+`NEXT_PUBLIC_DIGIQUANT_GATEWAY_URL`; `lib/gateway/gateway-client.ts` independently
+requires both the page and configured gateway to be loopback before it fetches.
+The LuxAlgo surface there is Library metadata search plus attribution only.
+The marketing hero chart is LuxAlgo Vela (`@luxalgo/vela`) on the public
+Coinbase feed: candles, volume, moving averages, and a cycling native overlay.
+Any non-local binding, edge auth, or deployment remains a human-gated
+network-exposure change.
+
 | `digiquant_fit_btc_power_law` | Fits the SDCA BTC power-law (RAQQR) valuation rails from cached daily price history (`data/prices/history_cache.py`, not a bespoke fetch) and persists the coefficients to `strategies/sdca/btc_power_law_coefficients.json` (#1082) |
 | `digiquant_build_sdca_risk_index` | Builds the SDCA `date`/`risk` parquet from a `RiskModel` + cached daily prices (`history_cache.py`, never a bespoke fetch) and writes it for `SdcaStrategy.risk_path` (#3168). `risk_model` selector: `btc_power_law` / `generic_valuation` / `rolling_z` (`sdca/providers.py`). Oscillators are computed from **that ticker's** OHLCV. `indicator_weights` JSON `{valuation, m2, rs_eth, dxy, weekly_rsi, weekly_macd, sma_band}` defaults to valuation=1 / extras=0 (published BTC charts unchanged). Macro extras need on-disk `m2_path` / `dxy_path` and/or cached `eth_ticker`. Returns `{path, row_count, date_start, date_end, null_risk_days}` or `{"error": ...}` |
 | `digiquant_fetch_bitview_series` | Fetch Bitview/BRK on-chain `day1` series (`mvrv`, `asopr_24h`, `puell_multiple`, `rhodl_ratio`) into `data/onchain/bitview/` parquet. JSON API only (no HTML scrape). `nupl` is refused by default (monotone of MVRV); `allow_derived=True` opts a caller who understands the caveat back in. Upstream base URL is **fixed** (no caller `base_url`, SSRF guard #3944); the code-only seam is an injected HTTP session / allowlisted host. Fail-soft + timeout. Hosted bitview.space is optional / no SLA — a vendor `mcp.bitview.space` MCP server already exists; prefer it for general Bitview access. Coin Metrics community CC BY-NC is **not** fetched and must not be republished commercially. Refs #1086 |

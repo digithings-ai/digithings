@@ -624,6 +624,30 @@
       "owner": "Security b14d7a18 + Counsel 0e57e884",
       "ticket": "DIG-1418",
       "reason": "vendor cookie/endpoint surface present since the merge base with main. Rule 2 did not name this host, so no approver exists yet."
+    },
+    {
+      "rule": "V1",
+      "path": "docs/VENDOR_CONTENT_BOUNDARY.md",
+      "match": "PRIMEMARKET_USERNAME",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-3130 / PR #5469",
+      "reason": "our own vendor session env names in the names-table (verdict Stay), new since the merge base with main via batch seed PR #5469. DIG-1418 rule 2 approved PRIMEMARKET_* only for docs/ops/SECRETS_INVENTORY.md; this path has no approver yet."
+    },
+    {
+      "rule": "V1",
+      "path": "docs/ops/credential-ownership.md",
+      "match": "PRIMEMARKET_DESK_API",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-3130 / PR #5469",
+      "reason": "twelve-x doc link whose filename carries our own PRIMEMARKET_* session name, new since the merge base with main via batch seed PR #5469. No approver yet for this path."
+    },
+    {
+      "rule": "V4",
+      "path": "docs/ops/credential-ownership.md",
+      "match": "PRIMEMARKET",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-3130 / PR #5469",
+      "reason": "vendor brand word inside the same twelve-x doc link, new since the merge base with main via batch seed PR #5469. No approver yet for this path."
     }
   ]
 }

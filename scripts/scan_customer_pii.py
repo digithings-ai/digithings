@@ -91,8 +91,8 @@ INTERNAL_MARKER_ALLOWLIST = (
     # Digits' operating note naming the marker as the exposure.
     "docs/ops/OCC_INVITE_KEY.md",
     # Review notes quoting the behaviour under review.
-    "review-4945.md",
-    "review-4963.md",
+    "docs/reviews/pr/review-4945.md",
+    "docs/reviews/pr/review-4963.md",
     # Source of the convention: the backfill script and the formatter tag.
     "scripts/index_occ_tickets.py",
     "scripts/zammad_mcp/README.md",

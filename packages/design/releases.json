@@ -1,5 +1,21 @@
 [
   {
+    "date": "2026-09-29",
+    "version": "digichat v2.4.0",
+    "title": "Search-engine preference, container license heartbeat, and the single-route embed",
+    "href": "https://github.com/digithings-ai/digithings/releases/tag/digichat-v2.4.0",
+    "tag": "release",
+    "product": "digichat"
+  },
+  {
+    "date": "2026-09-21",
+    "version": "digichat v2.3.2",
+    "title": "The embed Send button submits the composer, so the free-turn gate sees it",
+    "href": "https://github.com/digithings-ai/digithings/releases/tag/digichat-v2.3.2",
+    "tag": "fix",
+    "product": "digichat"
+  },
+  {
     "date": "2026-09-20",
     "version": "digichat v2.3.1",
     "title": "The embed paints one canvas token from the first byte",
