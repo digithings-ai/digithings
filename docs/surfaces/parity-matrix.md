@@ -26,7 +26,7 @@ Source of truth for Surfaces 1.0 scope (DIG-2693). Architecture: [`adr-surfaces-
 
 ## 2. digiquant: `clients/digiquant-tui` ↔ the Brief desk (`apps/digiquant-web` `/app/*`)
 
-The Brief desk is the one digiquant app (ADR D2, locked 2026-10-10). The Web column below was audited on `apps/digiquant-app`, which folds into the desk and then retires: every `yes` there that the desk lacks is a carry-over for the desk (`/fx/*`, `/settings`, `/settings/paper`, the access/tier ladder). The root fix for drift is the single catalog in ADR D2. DIG-2700's audit (document `digiquant-parity-audit`) has the per-block detail.
+The Brief desk is the one digiquant app (ADR D2, locked 2026-10-10), served at `/app` (`/app/brief` redirects there). `apps/digiquant-app` was deleted on 2026-10-11; its keyboard map moved to the desk (`docs/surfaces/digiquant-app-shortcuts.md`). The Web column below was audited on `apps/digiquant-app`, which folds into the desk and then retires: every `yes` there that the desk lacks is a carry-over for the desk (`/fx/*`, `/settings`, `/settings/paper`, the access/tier ladder). The root fix for drift is the single catalog in ADR D2. DIG-2700's audit (document `digiquant-parity-audit`) has the per-block detail.
 
 | # | Page / feature | TUI | Web (audited on `digiquant-app`; target: the desk) | Data / API | MCP | Gap | Owner ticket |
 |---|---|---|---|---|---|---|---|

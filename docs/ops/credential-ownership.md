@@ -6,6 +6,47 @@ This document registers every hand-held credential in the digithings monorepo wi
 
 ---
 
+## Never paste a credential value
+
+**A credential value is never pasted into a ticket, an issue, a comment, an interaction
+reason, or any chat surface — including by the credential owner, and including to help an
+agent diagnose.** No one is exempt. Helping an agent is not a reason.
+
+This is broader than "no secret values in docs" below. A doc is a file someone chose to
+publish; a chat surface is where credential problems get discussed at 23:00 by someone
+trying to be helpful. **DIG-1226** (2026-10-05) is why: the account holder rejected an
+agent's confirmation card and quoted the value inline in the reject reason, to explain why
+a refresh had failed. The reason text is stored on the interaction record itself, which
+Security cannot edit or delete — the Paperclip API has no route for it. One well-meant
+sentence became permanent on a third-party host.
+
+The value was non-working, so nothing was exposed. That was luck, not design.
+
+### When a refresh or a check fails, report this
+
+| Report this | Never report this |
+|---|---|
+| Which check failed: the shape check, the live vendor verify, or the secret write | The value, in whole or in any part |
+| The status the vendor returned (e.g. `401`) | Its length, its character count, or a prefix |
+| The script's exit code | A screenshot, a diff, or a pasted command line |
+| Which step of the documented refresh path you were on | A re-paste "just in case" |
+
+**Agents ask for the branch the tool took, never for the value.** The refresh scripts in
+this stack already name their own branch on stdout, so the branch plus the exit code is
+sufficient to diagnose every failure we have seen. If a script's error does not tell you
+which branch it took, that is a bug in the script — file it, do not ask for the value.
+
+Values move only by script (`bws`, `bw`, `wrangler secret put`, `gh secret set`, macOS
+Keychain via `dt-keys`). A value that reaches a human's hands to be copied is a value that
+will eventually be pasted. That is the whole reason to remove hand-held credentials, and it
+is the argument for retiring the twelve-x desk-session handoff (DIG-1226, action 5).
+
+Twelve-x's own rule for this credential path, with the per-script detail, is
+[`PRIMEMARKET_DESK_API.md`](https://github.com/digithings-ai/twelve-x/blob/develop/docs/PRIMEMARKET_DESK_API.md)
+§ *Interim: a human-supplied session*.
+
+---
+
 ## GLOOMBERB_SESSION_COOKIE
 
 **Used by**: `digifetch` session-gated tools (42 of 89 tools; see `docs/ops/gloomberb-session-cookie.md`)
@@ -22,6 +63,11 @@ This document registers every hand-held credential in the digithings monorepo wi
 **History**: Prior to 2026-10-04, this credential lived in two independent copies (GitHub `cron` secret + local `.env`). The `cron` secret expired 2026-09-25 → 2026-10-02, causing 8 days of silent 401 failures in scheduled `pipeline-digiquant.yml` runs while local runs succeeded. A manual refresh on 2026-10-02 fixed both copies by accident. This document establishes the single-owner rule to prevent recurrence.
 
 **Runbook entry**: When the `cron` secret expires, the next scheduled `pipeline-digiquant.yml` run (triggered by `digithings-cron` → `repository_dispatch: digiquant-baseline`) will fail fast with a clear 401/auth error. Platform on-call: refresh the secret per the refresh path above, then re-run the failed workflow.
+
+**If the refresh fails**: read the cookie out of the browser, take it to the shell, and
+`gh secret set` it. If that command errors, report *the command's error and its exit code*
+— never the cookie, never a prefix of it. See
+[Never paste a credential value](#never-paste-a-credential-value).
 
 ---
 
@@ -198,5 +244,6 @@ With retention disabled, all 33 tags stay pullable forever, including the two de
 - **No duplicate stores**: A credential must not be written to multiple independent stores (e.g., both GitHub secret and local `.env` as production sources).
 - **No secret values in docs**: This file and `.env.example` document *names* and *processes* only. Real values never appear here.
 - **Fingerprints are not values**: a SHA-256 plus a byte length per binding (see [`digichat-aca-secret-fingerprints.json`](digichat-aca-secret-fingerprints.json)) is the accepted way to make a single-copy secret drift-detectable without holding it. It is a one-way digest of a high-entropy value, not the value.
+- **No secret values in any chat surface** — not in an issue, a comment, an interaction reason, a ticket, or a chat, and not by the credential owner. See [Never paste a credential value](#never-paste-a-credential-value). An interaction reason in particular is **not editable and not deletable** once written, so a value pasted there is permanent.
 - **Detector required**: Every credential must have a failing-loud check. If the detector doesn't exist, the credential is not production-ready (see `DIG-345` for the Gloomberb detector).
 - **Reach is enforced, not remembered**: the DataTap Azure access register ([`config/datatap_azure_access_register.json`](../../config/datatap_azure_access_register.json)) is enforced by [`scripts/az-guard/az`](../../scripts/az-guard/az), which refuses every `az` command aimed at a subscription that is not on it. Runbook, install, rollback and the limits of that control: [`datatap-azure-az-guard.md`](datatap-azure-az-guard.md) (DIG-1725). The register is empty, so every `az` command is refused today — including the `az …` commands quoted elsewhere in this file.

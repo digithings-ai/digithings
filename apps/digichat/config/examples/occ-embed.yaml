@@ -35,18 +35,11 @@ hosts:
       speech: false
     backend:
       type: digigraph
-      digisearchIndex: occ_help
-      vaultPathPrefix: clients/online-compliance-center
+    # digisearch/digivault reach the model only as the MCP servers below
+    # (Help search, Knowledge vault) — no built-in duplicates in the tool list.
     tools:
       allowUserToggle: true
-      catalog:
-        - id: digisearch
-          default: true
-        - id: digivault
-          default: true
-        - id: web_search
-          default: true
-          label: Web search
+      catalog: []
     # Operator MCP servers stay on the BFF — URLs are never projected to the
     # browser. Zammad rides its `Token token=<x>` scheme as a raw authHeader
     # value (#3841); digigraph treats the dotless `zammad-mcp` name as
@@ -67,10 +60,23 @@ hosts:
           default: true
           tokenEnv: ZAMMAD_API_TOKEN
           authHeader: Authorization
+          # Read-only ticket tools. The MCP brake (DIG-284) refuses every tool
+          # of a server row without an explicit allowedTools list.
+          allowedTools:
+            - search_tickets
+            - list_tickets
+            - get_ticket
+            - ticket_report
+            - aggregate_tickets
+          # All five are read-only; an explicit empty list stops the brake
+          # from falling back to allowedTools and asking approval for each read.
+          mutatingTools: []
         - id: digisearch
           url: http://digisearch-mcp:8765/mcp
           label: Help search
           default: true
+          allowedTools: [semantic, web_search]
+          mutatingTools: []
           setup:
             # Docs only. The ticket corpus snapshot was retired in DIG-1380, so there is no second leg to fan out to.
             index_name: occ_help
@@ -78,6 +84,8 @@ hosts:
           url: http://digivault-mcp:8769/mcp
           label: Knowledge vault
           default: true
+          allowedTools: [search_notes, search_tag, backlinks]
+          mutatingTools: []
           setup:
             path_prefix: clients/online-compliance-center
     gate:
@@ -86,4 +94,4 @@ hosts:
       llmAccess: operator
       showByok: false
       showLanguageSelector: true
-      webSearch: true
+      webSearch: false
