@@ -108,7 +108,11 @@ def test_an_ordinary_word_under_a_strong_name_is_the_accepted_trade_off():
 
 def test_short_placeholders_stay_clean_under_a_strong_credential_name():
     """The fixed word list keeps working at the lower floor."""
-    for value in ('digichat', 'local', 'dev', 'development', 'test', 'localhost', 'none'):
+    # `digichat` is not in this list: it is a product name, and the product-name
+    # rule (folded from #5032, pinned in
+    # test_check_example_credentials_product_names.py) reports it under a
+    # credential-shaped variable.
+    for value in ('local', 'dev', 'development', 'test', 'localhost', 'none'):
         assert cec.looks_cred_val(value, 'OPENAI_API_KEY') is False
 
 
