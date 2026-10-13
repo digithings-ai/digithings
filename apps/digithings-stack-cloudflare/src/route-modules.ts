@@ -9,11 +9,17 @@
  * every other group keeps serving.
  *
  * Health model per group: `unloaded` (no request yet) → `loaded` (last
- * handling succeeded) / `degraded` (last handling failed, with `lastError`).
+ * handling succeeded with a non-5xx response) / `degraded` (last handling
+ * threw, or the upstream answer was a 5xx, with `lastError`).
  * A later success heals the entry back to `loaded` and clears `lastError`, so
  * a transient blip does not pin the status surface forever. Load AND route
  * failures both degrade: from the caller's side either one means "this group's
  * paths are down", and the distinction is preserved in the warning event name.
+ * Upstream 5xx responses (container evictions, boot timeouts, app crashes)
+ * degrade the same way a throw does, so an overnight eviction storm leaves a
+ * degraded entry plus one structured warn line per 5xx instead of reading
+ * healthy. 4xx responses stay on the success path: a client error is not an
+ * outage, and must never page.
  *
  * The warning sink is `console.warn` with a single JSON line (picked up by
  * Workers Logs; observability is enabled in wrangler.toml). It carries the
@@ -86,7 +92,7 @@ function errorMessage(error: unknown): string {
  */
 export function warnStackModule(
   module: StackModuleName,
-  event: "module-load-failed" | "route-failed",
+  event: "module-load-failed" | "route-failed" | "upstream-5xx",
   error: unknown,
 ): void {
   try {
@@ -111,7 +117,9 @@ export function warnStackModule(
  *   pass a throwing loader; prod passes the real dynamic import).
  * - Import failure → warn (`module-load-failed`), mark degraded, 503.
  * - Handler failure → warn (`route-failed`), mark degraded, 503.
- * - Success → mark loaded, clear `lastError`, return the handler response.
+ * - Upstream 5xx response → warn (`upstream-5xx`), mark degraded, pass the
+ *   response through unchanged (the caller still gets the real status/body).
+ * - Any other response → mark loaded, clear `lastError`, return it.
  *
  * Only this group's paths are affected; every other group keeps serving.
  */
@@ -130,6 +138,12 @@ export async function runIsolated<T>(
   }
   try {
     const response = await route(mod);
+    if (response.status >= 500) {
+      const message = `upstream HTTP ${response.status}`;
+      health[module] = { state: "degraded", lastError: message };
+      warnStackModule(module, "upstream-5xx", new Error(message));
+      return response;
+    }
     health[module] = { state: "loaded", lastError: null };
     return response;
   } catch (error) {

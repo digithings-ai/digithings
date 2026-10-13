@@ -172,6 +172,83 @@ describe("dashboard-api isolation (#4687)", () => {
   });
 });
 
+describe("upstream 5xx tracking (DIG-3228)", () => {
+  it("an upstream 503 degrades the group but passes the response through", async () => {
+    const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const res = await runIsolated(
+      "container-routes",
+      async () => ({}),
+      async () =>
+        new Response(
+          JSON.stringify({ code: "container_booting", message: "stack container not ready" }),
+          { status: 503, headers: { "Content-Type": "application/json" } },
+        ),
+    );
+    // The caller still gets the real status and body, not a rewritten 503.
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ code: "container_booting" });
+    expect(getStackStatus().modules["container-routes"]).toEqual({
+      state: "degraded",
+      lastError: "upstream HTTP 503",
+    });
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(spy.mock.calls[0][0])).toMatchObject({
+      level: "warn",
+      scope: "digithings-stack",
+      module: "container-routes",
+      event: "upstream-5xx",
+      error: "upstream HTTP 503",
+    });
+  });
+
+  it("a 4xx stays on the success path: client errors never page", async () => {
+    const spy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const res = await runIsolated(
+      "dashboard-api",
+      async () => ({}),
+      async () => new Response("digithings-stack: unauthorized", { status: 401 }),
+    );
+    expect(res.status).toBe(401);
+    expect(getStackStatus().modules["dashboard-api"]).toEqual({
+      state: "loaded",
+      lastError: null,
+    });
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("a later non-5xx heals an upstream-5xx degradation", async () => {
+    await runIsolated(
+      "key-proxy",
+      async () => ({}),
+      async () => new Response("evicted", { status: 503 }),
+    );
+    expect(getStackStatus().modules["key-proxy"].state).toBe("degraded");
+
+    const res = await runIsolated("key-proxy", async () => ({}), async () => ok());
+    expect(res.status).toBe(200);
+    expect(getStackStatus().modules["key-proxy"]).toEqual({
+      state: "loaded",
+      lastError: null,
+    });
+  });
+
+  it("an upstream 5xx in one group leaves siblings untouched", async () => {
+    await runIsolated(
+      "market-data",
+      async () => ({}),
+      async () => new Response("boom", { status: 500 }),
+    );
+    const res = await runIsolated("key-proxy", async () => ({}), async () => ok());
+    expect(res.status).toBe(200);
+    const status = getStackStatus();
+    expect(status.modules["market-data"]).toEqual({
+      state: "degraded",
+      lastError: "upstream HTTP 500",
+    });
+    expect(status.modules["key-proxy"]).toEqual({ state: "loaded", lastError: null });
+  });
+});
+
 describe("warning sink", () => {
   it("logs a structured JSON warning with module, event, and message only", async () => {
     const spy = vi.spyOn(console, "warn").mockImplementation(() => {});

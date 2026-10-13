@@ -12,9 +12,12 @@ main = "src/index.ts"
 compatibility_date = "2026-09-04"
 workers_dev = true
 
-# ~10 events/week; logs off to cut noise (cost epic). Re-enable when debugging.
+# Workers Logs stay on (DIG-3228): this worker serves production dashboard
+# reads, and an eviction/5xx storm here must leave a record. Volume is low
+# (~10 events/week), so retention cost is negligible. Do not disable again to
+# cut noise without a replacement record (Logpush or Analytics Engine).
 [observability]
-enabled = false
+enabled = true
 
 [vars]
 SUPABASE_URL = "https://rwagjbkvxkdwqmouagad.supabase.co"
