@@ -56,9 +56,29 @@ GitHub row were discarded and the run still answered `200 {ok:true}` with the
 row's static input — a silent wrong-input run.
 
 A key GitHub's workflow does not declare still comes back as GitHub's own
-refusal of the dispatch. #5220 turns that into a legible
-`400 undeclared_workflow_input` naming the key; until that lands it is an
-opaque 500.
+refusal of the dispatch, surfaced as a legible
+`400 undeclared_workflow_input` naming the key (last row below).
+Hidden (404) unless `CRON_KICK_SECRET` is set. `Authorization: Bearer
+$CRON_KICK_SECRET`, otherwise 401. Body `{ cron, force?, args? }`; every `args`
+value must be a string.
+
+400 responses, each with `error`:
+
+- `invalid_json` — the body did not parse.
+- `invalid_args` — an `args` value was not a string.
+- `cron_required` — `cron` was empty.
+- `undeclared_workflow_input` — GitHub refused the dispatch because a
+  `workflow_dispatch` input key is not declared in the workflow YAML. The body
+  also carries `cron` and a `detail` naming the workflow, the ref and the
+  offending key(s). It is the caller's own input, so it answers 400 and not 500.
+  `dispatchGithub` fails closed on the first attempt: a deterministic refusal
+  is never retried. Only `workflow_dispatch` / `repository_dispatch` rows can
+  reach this; `kind: container` and `kind: probe` never call GitHub unless the
+  job id is in `GITHUB_OVERRIDE_JOBS`.
+
+Every other failure keeps its previous shape. `dispatchGithub` throws, the
+error leaves the route, and the response is the Worker runtime's 500.
+
 
 ## Unique crons
 
@@ -225,8 +245,10 @@ pruned by this path (twelve-x `tests/test_backfill_snapshots.py`).
 
 ### Deployment caution
 
-Any push touching `apps/digithings-cron/**` deploys this Worker to production (see
-`## Deploy`). A PR against `develop` is therefore a production change. Nothing here is
+Any push to `main` touching `apps/digithings-cron/**` deploys this Worker to production,
+after the `production` environment gate is approved (see `## Deploy`). A PR against
+`develop` is not a production change: it reaches production only when `develop` is
+promoted into `main`. Nothing here is
 enabled by default: `BACKFILL_ENABLED = "0"` in `wrangler.toml`, and turning it on is a
 separate, explicit act.
 
@@ -292,11 +314,16 @@ npm run dev
 
 ## Deploy
 
-Deploy from `develop` and `main`. CI workflow:
-.github/workflows/deploy-digithings-cron.yml (push paths
-apps/digithings-cron/** + workflow_dispatch; Node 22; wrangler deploy).
+Deploy from `main` only, behind the `production` environment gate (DIG-3129). CI
+workflow: .github/workflows/deploy-digithings-cron.yml (push to `main`, paths
+apps/digithings-cron/**; plus workflow_dispatch; Node 22; wrangler deploy).
 Needs CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID and syncs GH_DISPATCH_TOKEN
 through the wrangler-action secret input without printing the value.
+
+A push to `develop` does not deploy. It is validated by the CI `web` lane
+(.github/workflows/test-web.yml, which runs this workspace's Vitest + typecheck)
+and by build-cloudflare-workers.yml, and reaches production only when `develop`
+is promoted into `main`.
 
 ## Migration
 
