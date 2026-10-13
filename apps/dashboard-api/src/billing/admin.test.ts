@@ -193,11 +193,18 @@ describe("createPostgrestAdmin", () => {
   });
 
   it("reports the CAS as lost when the out-of-order guard rejects the update", async () => {
-    // Empty representation array == the `or(is.null,lt.<created>)` filter matched
+    // Empty representation array == the `or=(is.null,lt.<created>)` filter matched
     // nothing, i.e. a newer event already moved last_stripe_event_created.
     const seen = stubFetch(() => jsonResponse(200, []));
     expect(await createPostgrestAdmin(ENV).casUpdateWorkspaceBilling("ws_1", 5, { plan_tier: "free" })).toBe(false);
-    expect(seen[0]).toContain("last_stripe_event_created=or.(is.null,lt.5)");
+    // A top-level logic tree, as the edge fn's `.or(...)` produced. PostgREST
+    // ANDs it with id=eq..., which is the CAS we mean.
+    expect(seen[0]).toContain("or=(last_stripe_event_created.is.null,last_stripe_event_created.lt.5)");
+    // `last_stripe_event_created=or.(...)` is NOT valid PostgREST: the value of a
+    // plain column key only accepts value operators, so it parsed as an error
+    // and every billing update 400'd.
+    expect(seen[0]).not.toContain("last_stripe_event_created=or.");
+    expect(seen[0]).toContain("workspaces?id=eq.ws_1");
   });
 
   it("reports the CAS as won when the update matched a row", async () => {
@@ -217,6 +224,45 @@ describe("createPostgrestAdmin", () => {
     // not become a 5xx to Stripe, because that makes Stripe retry the event.
     stubFetch(() => jsonResponse(500, { code: "X", message: "boom" }));
     expect(await createPostgrestAdmin(ENV).syncPlanTierClaims(["u1"], "desk")).toBe(false);
+  });
+
+  it("syncPlanTierClaims reads app_metadata from the auth admin URL, not under /rest/v1", async () => {
+    // rest() prefixes ${url}/rest/v1/, so reading auth/v1/admin/users through
+    // it 404'd: existing={} and the PUT clobbered every other key.
+    const seen = stubFetch(() => jsonResponse(200, { app_metadata: {} }));
+    expect(await createPostgrestAdmin(ENV).syncPlanTierClaims(["u1"], "desk")).toBe(true);
+    expect(seen[0]).toBe("https://core.supabase.co/auth/v1/admin/users/u1");
+    expect(seen[0]).not.toContain("/rest/v1/auth");
+  });
+
+  it("syncPlanTierClaims preserves the existing app_metadata keys it did not own", async () => {
+    const putBodies: Record<string, unknown>[] = [];
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === "PUT") {
+        putBodies.push(JSON.parse(String(init.body)));
+        return jsonResponse(200, {});
+      }
+      return jsonResponse(200, {
+        app_metadata: { stripe_role: "owner", plan_tier: "free", seeded: 1 },
+      });
+    });
+    expect(await createPostgrestAdmin(ENV).syncPlanTierClaims(["u1"], "desk")).toBe(true);
+    expect(putBodies).toHaveLength(1);
+    expect(putBodies[0]).toEqual({
+      app_metadata: { stripe_role: "owner", plan_tier: "desk", seeded: 1 },
+    });
+  });
+
+  it("syncPlanTierClaims does not write when the metadata read fails, so it cannot clobber", async () => {
+    const methods: (string | undefined)[] = [];
+    vi.stubGlobal("fetch", async (_input: RequestInfo | URL, init?: RequestInit) => {
+      methods.push(init?.method ?? "GET");
+      return jsonResponse(500, { code: "X", message: "boom" });
+    });
+    expect(await createPostgrestAdmin(ENV).syncPlanTierClaims(["u1"], "desk")).toBe(false);
+    // Read only: an unread app_metadata is not a licence to overwrite it.
+    expect(methods).not.toContain("PUT");
   });
 
   it("listWorkspaceMembers returns [] on error rather than throwing", async () => {

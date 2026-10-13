@@ -225,13 +225,27 @@ export function createPostgrestAdmin(env: BillingEnv): AdminDb {
       for (const userId of userIds) {
         // Never rethrow: a claim sync failure must not fail the Stripe webhook.
         try {
-          const current = await rest(
-            `auth/v1/admin/users/${encodeURIComponent(userId)}`,
-            { headers: {} },
-          );
+          // Read through the auth admin API directly: rest() prefixes
+          // ${url}/rest/v1/, which turned this into a 404 -> existing={} -> the
+          // PUT below clobbered every other app_metadata key.
+          const current = await fetch(`${url}/auth/v1/admin/users/${encodeURIComponent(userId)}`, {
+            headers: {
+              apikey: serviceKey,
+              Authorization: `Bearer ${serviceKey}`,
+            },
+          });
+          // A failed read leaves app_metadata unknown; skip the write rather
+          // than overwrite a set of keys we could not see.
+          if (!current.ok) {
+            ok = false;
+            continue;
+          }
+          const currentData = (await current.json()) as {
+            app_metadata?: Record<string, unknown> | null;
+          } | null;
           const existing =
-            current.data && typeof current.data === "object"
-              ? ((current.data as { app_metadata?: Record<string, unknown> }).app_metadata ?? {})
+            currentData && typeof currentData === "object"
+              ? (currentData.app_metadata ?? {})
               : {};
           const merged = { ...existing, plan_tier: planTier };
           const update = await fetch(`${url}/auth/v1/admin/users/${encodeURIComponent(userId)}`, {
@@ -296,8 +310,12 @@ export function createPostgrestAdmin(env: BillingEnv): AdminDb {
 
     async casUpdateWorkspaceBilling(workspaceId, eventCreated, patch) {
       const res = await rest(
+        // CAS as a TOP-LEVEL logic tree, as the edge fn's `.or(...)` produced.
+        // `last_stripe_event_created=or.(...)` is not valid PostgREST: a plain
+        // column key only accepts value operators, so it parsed as an error and
+        // every update 400'd. `or=(a,b)` is ANDed with `id=eq....` by PostgREST.
         `workspaces?id=eq.${encodeURIComponent(workspaceId)}` +
-          `&last_stripe_event_created=or.(is.null,lt.${eventCreated})`,
+          `&or=(last_stripe_event_created.is.null,last_stripe_event_created.lt.${eventCreated})`,
         {
           method: "PATCH",
           headers: { Prefer: "return=representation" },
