@@ -1666,10 +1666,13 @@ all = [
     { name = "digifetch" },
     { name = "digikey" },
     { name = "fastapi" },
+    { name = "huggingface-hub" },
     { name = "langgraph" },
     { name = "lightrag-hku" },
     { name = "markdownify" },
     { name = "mcp" },
+    { name = "numpy" },
+    { name = "onnxruntime" },
     { name = "openai" },
     { name = "pdfplumber" },
     { name = "psycopg", extra = ["binary"] },
@@ -1677,6 +1680,7 @@ all = [
     { name = "python-json-logger" },
     { name = "readability-lxml" },
     { name = "sentence-transformers" },
+    { name = "tokenizers" },
     { name = "trafilatura" },
     { name = "typer" },
     { name = "uvicorn", extra = ["standard"] },
@@ -1708,6 +1712,12 @@ edgar-corpus = [
 ]
 embedding = [
     { name = "openai" },
+]
+embedding-multilingual = [
+    { name = "huggingface-hub" },
+    { name = "numpy" },
+    { name = "onnxruntime" },
+    { name = "tokenizers" },
 ]
 ingestion = [
     { name = "beautifulsoup4" },
@@ -1772,6 +1782,7 @@ requires-dist = [
     { name = "digisearch", extras = ["azure"], marker = "extra == 'all'", editable = "digisearch" },
     { name = "digisearch", extras = ["chroma"], marker = "extra == 'all'", editable = "digisearch" },
     { name = "digisearch", extras = ["embedding"], marker = "extra == 'all'", editable = "digisearch" },
+    { name = "digisearch", extras = ["embedding-multilingual"], marker = "extra == 'all'", editable = "digisearch" },
     { name = "digisearch", extras = ["ingestion"], marker = "extra == 'all'", editable = "digisearch" },
     { name = "digisearch", extras = ["ingestion"], marker = "extra == 'dev'", editable = "digisearch" },
     { name = "digisearch", extras = ["lightrag"], marker = "extra == 'all'", editable = "digisearch" },
@@ -1783,11 +1794,14 @@ requires-dist = [
     { name = "digisearch", extras = ["web-search"], marker = "extra == 'all'", editable = "digisearch" },
     { name = "fastapi", marker = "extra == 'server'", specifier = ">=0.115" },
     { name = "httpx", specifier = ">=0.27" },
+    { name = "huggingface-hub", marker = "extra == 'embedding-multilingual'", specifier = ">=0.20" },
     { name = "langgraph", marker = "extra == 'agent'", specifier = ">=0.2" },
     { name = "langgraph", marker = "extra == 'dev'", specifier = ">=0.2" },
     { name = "lightrag-hku", marker = "extra == 'lightrag'", specifier = ">=1.4" },
     { name = "markdownify", marker = "extra == 'web-search'", specifier = ">=1.0" },
     { name = "mcp", marker = "extra == 'server'", specifier = ">=1.0,<2" },
+    { name = "numpy", marker = "extra == 'embedding-multilingual'", specifier = ">=1.24" },
+    { name = "onnxruntime", marker = "extra == 'embedding-multilingual'", specifier = ">=1.17" },
     { name = "openai", marker = "extra == 'embedding'", specifier = ">=1.0" },
     { name = "pdfplumber", marker = "extra == 'ingestion'", specifier = ">=0.10" },
     { name = "polars", specifier = ">=1.0" },
@@ -1798,11 +1812,12 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6" },
     { name = "readability-lxml", marker = "extra == 'web-search'", specifier = ">=0.8" },
     { name = "sentence-transformers", marker = "extra == 'rerank'", specifier = ">=3.0" },
+    { name = "tokenizers", marker = "extra == 'embedding-multilingual'", specifier = ">=0.21" },
     { name = "trafilatura", marker = "extra == 'web-search'", specifier = ">=2.0" },
     { name = "typer", marker = "extra == 'server'", specifier = ">=0.12" },
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'server'", specifier = ">=0.30" },
 ]
-provides-extras = ["server", "chroma", "embedding", "rerank", "azure", "pgvector", "lightrag", "ingestion", "agent", "edgar-corpus", "web-search", "dev", "otel", "all"]
+provides-extras = ["server", "chroma", "embedding", "embedding-multilingual", "rerank", "azure", "pgvector", "lightrag", "ingestion", "agent", "edgar-corpus", "web-search", "dev", "otel", "all"]
 
 [package.metadata.requires-dev]
 dev = [
