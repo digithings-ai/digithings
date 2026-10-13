@@ -72,7 +72,7 @@ services:
   profiles: []
 - name: searxng
   compose_file: docker-compose.yml
-  image: searxng/searxng:latest
+  image: searxng/searxng:2026.9.3-a1144dda3
   build_context: null
   ports:
   - 127.0.0.1:8080:8080

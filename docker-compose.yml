@@ -249,7 +249,12 @@ services:
   # Loopback-only on the host; digisearch reaches searxng as http://searxng:8080
   # via DIGISEARCH_SEARXNG_URL. ddgs remains the zero-infra fallback.
   searxng:
-    image: searxng/searxng:latest
+    # Tag pinned to the commit the production bundle builds from
+    # (Dockerfile.digithings-stack-cloudflare SEARXNG_COMMIT a1144dda…, #3239),
+    # so local search behaviour matches the container bundle. Upstream ships no
+    # bare `YYYY.M.D` tag, only `YYYY.M.D-<hash>`. The digest is still not
+    # enforced: see digisearch/ARCHITECTURE.md, owner decision #3871.
+    image: searxng/searxng:2026.9.3-a1144dda3
     container_name: digi-searxng
     ports:
       - "127.0.0.1:8080:8080"
