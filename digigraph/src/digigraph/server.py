@@ -800,6 +800,11 @@ def v1_run_product_graph(
 
 app.include_router(v1)
 
+# DIG-284 leaf 284.6: the route that consumes a recorded MCP decision.
+from digigraph.http_api.mcp_decisions import router as mcp_decisions_router
+
+app.include_router(mcp_decisions_router)
+
 register_fastapi_error_handlers(app, service="digigraph")
 
 
