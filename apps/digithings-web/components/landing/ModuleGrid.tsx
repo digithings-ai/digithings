@@ -18,8 +18,31 @@ function markFor(id: string) {
  * "ask digichat" hands the question to `/chat`.
  *
  * The dist/ contract is the mosaic's `aria-label="digithings modules, sized by
- * lines of code"`, checked by `scripts/build-digithings.sh`. It is the only
- * one: the folded `/modules/*` and `/architecture` routes this pane used to
- * back are gone, so `ModuleManifest` stays for the module prose it still
- * carries, not as a contract marker.
+ * lines of code"`, checked by `scripts/build-digithings.sh`.
+ *
+ * Band eyebrows (`SectionHead`) above the mosaic were dropped in #4898;
+ * the `#architecture` id on the section remains the jump target.
+ *
+ * Each tile names its module with that module's hero banner, built on
+ * scroll-in; a module the banner family has not reached yet keeps its text name.
  */
+const ITEMS: ModuleGridItem[] = modules.map((module) => ({
+  module,
+  lines: moduleLines(module.id),
+  version: moduleVersion(module.id),
+  counts: moduleCountLabel(module.id) || undefined,
+  mark: markFor(module.id),
+}));
+
+function ask(id: string) {
+  writeHandoff([], `What does ${id} do, and how do I use it?`);
+  window.location.href = "/chat";
+}
+
+export function ModuleGrid() {
+  return (
+    <section id="architecture" className="line-t line-b scroll-mt-[var(--dq-nav-h)]">
+      <KitModuleGrid items={ITEMS} onAsk={ask} />
+    </section>
+  );
+}
