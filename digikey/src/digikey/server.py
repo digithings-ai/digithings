@@ -6,6 +6,7 @@ import logging
 import os
 import secrets
 import time
+from datetime import datetime
 from typing import Any
 
 from digibase.cors import install_cors
@@ -494,6 +495,30 @@ class LicenseRevokeResponse(BaseModel):
     revoked: bool = Field(description="True when the row is revoked (idempotent)")
 
 
+class CustomerLicenseCount(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    customer_slug: str = Field(description="Customer tenant slug the licences belong to")
+    licences: int = Field(description="Number of digikey_licenses rows for this slug")
+
+
+class LicenseCensusResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    total_rows: int = Field(description="Total rows in digikey_licenses")
+    revoked_rows: int = Field(description="Rows with a non-null revoked_at")
+    expired_rows: int = Field(description="Rows whose expires_at is in the past")
+    oldest_issued_at: datetime | None = Field(
+        description="Earliest issued_at, or null when the table is empty"
+    )
+    newest_issued_at: datetime | None = Field(
+        description="Latest issued_at, or null when the table is empty"
+    )
+    per_customer: list[CustomerLicenseCount] = Field(
+        description="Row count per customer_slug, ordered by slug"
+    )
+
+
 @app.post(
     "/v1/licenses/heartbeat",
     dependencies=[Depends(rate_limit_dependency)],
@@ -655,6 +680,82 @@ def admin_revoke_license(license_id: str, request: Request) -> LicenseRevokeResp
         logger.error("license revoke store write failed: %s", e)
         raise HTTPException(status_code=503, detail="license_store_unavailable") from e
     return LicenseRevokeResponse(revoked=True)
+
+
+# ---------------------------------------------------------------------------
+# TEMPORARY licence census route (DIG-2203). Chris-approved on 2026-10-07 as the
+# only way to read the production licence counts, because DIGIKEY_DATABASE_URL
+# is a write-only Cloudflare Worker secret with no copy outside the Container.
+#
+# DELETE THIS ROUTE (and its two tests) after the one-time read, then redeploy.
+# It exists only to produce five numbers for DIG-2163.
+#
+# Read-only by construction, not by convention:
+#   * Two module-level constants. No string building, no interpolation, and no
+#     bound parameters -- so nothing a caller sends (body, query, header) can
+#     reach the SQL text. ``tests/dk/test_license_census.py`` pins both.
+#   * Both statements are ``SELECT``/aggregate only; no DML, no DDL, no commit.
+#   * The response carries counts and slugs only: never raw licence rows,
+#     never the signed JWTs, never key material.
+# ---------------------------------------------------------------------------
+_LICENSE_CENSUS_TOTALS_SQL = text(
+    "SELECT"
+    " count(*) AS total_rows,"
+    " count(*) FILTER (WHERE revoked_at IS NOT NULL) AS revoked_rows,"
+    " count(*) FILTER (WHERE expires_at < extract(epoch FROM now())::bigint)"
+    " AS expired_rows,"
+    " min(issued_at) AS oldest_issued_at,"
+    " max(issued_at) AS newest_issued_at"
+    " FROM digikey_licenses"
+)
+
+_LICENSE_CENSUS_BY_CUSTOMER_SQL = text(
+    "SELECT customer_slug, count(*) AS licences"
+    " FROM digikey_licenses"
+    " GROUP BY customer_slug"
+    " ORDER BY customer_slug"
+)
+
+
+@app.get(
+    "/v1/admin/licenses/census",
+    response_model=LicenseCensusResponse,
+    dependencies=[Depends(rate_limit_dependency)],
+    tags=["admin"],
+    summary="Temporary read-only licence census (DIG-2203, remove after use)",
+)
+def admin_license_census(request: Request) -> LicenseCensusResponse:
+    """Aggregate-only census of ``digikey_licenses`` -- TEMPORARY, see above.
+
+    Returns row counts overall and per ``customer_slug``. ``expires_at`` holds an
+    integer unix ``exp`` (``db_schema.LicenseRow``), hence the epoch cast in the
+    statement rather than a timestamp comparison.
+    """
+    _require_admin(request)
+    sf = session_factory()
+    try:
+        with sf() as session:
+            totals = session.execute(_LICENSE_CENSUS_TOTALS_SQL).mappings().one()
+            by_customer = session.execute(_LICENSE_CENSUS_BY_CUSTOMER_SQL).mappings().all()
+    except Exception as e:
+        # Log the exception type only, never `e` itself: SQLAlchemy errors can
+        # embed the connection URL, and DIGIKEY_DATABASE_URL must not reach logs.
+        logger.error("license census read failed: %s", type(e).__name__)
+        raise HTTPException(status_code=503, detail="license_store_unavailable") from e
+    return LicenseCensusResponse(
+        total_rows=int(totals["total_rows"]),
+        revoked_rows=int(totals["revoked_rows"]),
+        expired_rows=int(totals["expired_rows"]),
+        oldest_issued_at=totals["oldest_issued_at"],
+        newest_issued_at=totals["newest_issued_at"],
+        per_customer=[
+            CustomerLicenseCount(
+                customer_slug=row["customer_slug"],
+                licences=int(row["licences"]),
+            )
+            for row in by_customer
+        ],
+    )
 
 
 register_fastapi_error_handlers(app, service="digikey")
