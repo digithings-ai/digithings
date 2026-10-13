@@ -113,6 +113,50 @@ describe("live portfolio reads", () => {
     ).toEqual([]);
   });
 
+  it("points local preview at the same-origin house-book proxy", async () => {
+    const { dashboardApiBase, DEV_DASHBOARD_API, PUBLIC_DASHBOARD_API } = await import("./portfolio");
+    expect(dashboardApiBase({ NODE_ENV: "development" })).toBe(DEV_DASHBOARD_API);
+    expect(dashboardApiBase({ NODE_ENV: "production" })).toBe(PUBLIC_DASHBOARD_API);
+    expect(
+      dashboardApiBase({
+        NODE_ENV: "development",
+        NEXT_PUBLIC_DASHBOARD_API_URL: "http://127.0.0.1:8788/",
+      }),
+    ).toBe("http://127.0.0.1:8788");
+  });
+
+  it("accepts a bare tearsheet array and a data envelope", async () => {
+    const { rowsFromDashboardBody } = await import("./portfolio");
+    const row = { strategy_id: "btc_slapper", metrics: {} };
+    expect(rowsFromDashboardBody([row])).toEqual([row]);
+    expect(rowsFromDashboardBody({ data: [row] })).toEqual([row]);
+    expect(rowsFromDashboardBody({ data: { points: [] } })).toEqual([]);
+    expect(rowsFromDashboardBody(null)).toEqual([]);
+  });
+
+  it("maps tearsheet rows and keeps a requested slug order", async () => {
+    const { strategyReadsFromTable } = await import("./portfolio");
+    const row = {
+      strategy_id: "btc_slapper",
+      metrics: {
+        symbol: "BTC-USD",
+        label: "BTC slapper",
+        kind: "trend",
+        period_start: "2021-01-01",
+        period_end: "2026-01-01",
+        net_profit_pct: 212.5,
+        max_drawdown_pct: -18.2,
+        profit_factor: 1.4,
+        win_rate_pct: 54,
+        total_trades: 80,
+      },
+    };
+    const reads = strategyReadsFromTable([row, { strategy_id: "skip" }, null], ["missing", "btc_slapper"]);
+    expect(reads.map((read) => read.strategy)).toEqual(["btc_slapper"]);
+    expect(reads[0]?.netProfitPct).toBe(212.5);
+    expect(strategyReadsFromTable([row]).map((read) => read.symbol)).toEqual(["BTC-USD"]);
+  });
+
   it("degrades to empty, without throwing, when the env is absent", async () => {
     await expect(fetchNav()).resolves.toEqual([]);
     await expect(fetchStrategies(["btc_slapper"])).resolves.toEqual([]);
