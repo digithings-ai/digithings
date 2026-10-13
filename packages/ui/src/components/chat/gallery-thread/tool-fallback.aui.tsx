@@ -419,10 +419,11 @@ const offersInterruptAction = (
   approval: ToolCallMessagePart["approval"],
   interrupt: ToolCallMessagePart["interrupt"],
 ) =>
-  status?.type !== "requires-action" ||
-  status.reason !== "interrupt" ||
-  approval != null ||
-  interrupt != null;
+  // Only an explicit approval/interrupt request is a human gate. A server-run
+  // tool whose output never arrived (stream cut by a cold start / restart) is
+  // also "requires-action" (reason "tool-calls"); never offer Allow/Deny for it
+  // -- digichat tools are server-executed and read-only.
+  status?.type === "requires-action" && (approval != null || interrupt != null);
 
 function ToolFallbackApproval({
   className,
