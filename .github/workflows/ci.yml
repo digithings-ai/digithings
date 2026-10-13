@@ -267,6 +267,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Frontend canon guard
+        run: python3 scripts/check_frontend_canon.py
 
 # GLOOMBERB_ENABLED is the kill switch for the Gloomberb tool family, and
   # GLOOMBERB_SESSION_COOKIE is the per-deployer credential the family is now
