@@ -1,0 +1,28 @@
+---
+title: How digithings fits together
+order: 2
+summary: >-
+  The architecture of digithings in one chapter: a hub, a set of small
+  replaceable modules, and one stack that runs the same way on your own
+  machine and on Cloudflare.
+---
+
+Most AI platforms ask you to accept their shape whole. digithings takes the
+opposite position. It is a set of small modules, each with one job, tied
+together by a single hub and a handful of open protocols. You can run all of it,
+some of it, or replace any part of it with something you already own, and it
+behaves the same way on a laptop as it does in production.
+
+This chapter walks through that shape one idea per page. It starts with the
+whole system on a single page, then looks at the kinds of module, how they talk
+to each other, where the stack runs, and what happens to a single chat message
+from the browser to a model and back. It closes with the design decisions that
+produced this shape and with what you can build on top of it.
+
+The chapter stays at the level of architecture and reasons. Where you need the
+exact interfaces, configuration or commands, each page ends with a link to the
+reference document that owns that detail.
+
+<Reference kind="architecture" href="repo:ARCHITECTURE.md" title="The root architecture document">
+  The engineering view of the same system, kept next to the code.
+</Reference>

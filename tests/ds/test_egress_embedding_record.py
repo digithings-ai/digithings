@@ -166,7 +166,9 @@ def test_remote_embedding_call_emits_one_record(
     assert record.destination == "https://api.embeddings.example.test/v1"
     assert record.provider == "openai"
     assert record.model == "text-embedding-3-small"
-    assert record.decision is egress.EgressDecision.UNSCREENED
+    # #5471 wires art9 screening into this path, so a real verdict now exists:
+    # PASS is screened-and-allowed, not the UNSCREENED no-verdict fallback.
+    assert record.decision is egress.EgressDecision.PASS
     assert record.category_ids == ()
     assert record.outcome == "succeeded"
     assert record.cache_status == "miss"

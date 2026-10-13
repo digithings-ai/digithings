@@ -354,7 +354,7 @@
     "name": "luxalgo_trackers_datasets",
     "family": "luxalgo",
     "scope": "full",
-    "summary": "Market Trackers catalog of CC0 public-record datasets (anonymous).",
+    "summary": "Market Trackers catalog of CC0-1.0 public-record datasets (anonymous).",
     "params": [
       {
         "name": "dataset",

@@ -116,7 +116,7 @@ def test_secrets_manifest_carries_names_only() -> None:
     allowed = {
         "name", "consumers", "required_in", "source", "note", "notes",
         "renderable", "generate", "generate_field", "generate_kind",
-        "template", "same_as",
+        "generate_cwd", "template", "same_as",
     }
     forbidden_value_keys = {"value", "default", "password", "token", "secret_value"}
     for entry in manifest["secrets"]:

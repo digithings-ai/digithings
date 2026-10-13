@@ -208,3 +208,10 @@ workers:
     note: Pages project (static export + functions/). No [vars], no secrets by
       design; nothing for the generator to manage.
     contract_vars: false
+  - name: digidata-api
+    file: apps/digidata-api/wrangler.toml
+    workers_dev: false
+    durable_objects: []
+    contract_vars: false # backend switch lives in .dev.vars; no [vars] table yet.
+    note: D1-backed data API (DIG-2895). NOT deployed — no deploy workflow, no
+      routes, no custom domain. Deploying or adding routes needs Chris's approval.

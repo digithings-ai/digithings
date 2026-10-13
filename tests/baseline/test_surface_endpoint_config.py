@@ -62,12 +62,11 @@ _HOST_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Measured on the batch tree (chore/batch-ci-cron, post-develop-merge):
-# 6644 tracked files enumerated, 6516 read, 55778214 bytes scanned.
-# Replaces the develop pin below: the tree grew (new docs, tests and lanes
-# carrying endpoint literals) and three hosts appear for the first time
-# (app, hosts, hosts.occ). Regenerated with the file's own scanner, in the
-# open, per the design rule above.
+# Measured on the DIG-3223 convergence union (lanes L4-L9 folded onto develop):
+# 6780 tracked files enumerated, 6652 read, 57859920 bytes scanned.
+# Replaces the batch/ci-cron pin below: the union added endpoint literals in
+# key.digithings.ai (+1) and search.digithings.ai (+1). Regenerated with the
+# file's own scanner, in the open, per the design rule above.
 PINNED_CENSUS = {
     "api.digithings.ai": 1,
     "app.digithings.ai": 3,
@@ -81,11 +80,11 @@ PINNED_CENSUS = {
     "graph.digithings.ai": 102,
     "hosts.digithings.ai": 1,
     "hosts.occ.digithings.ai": 1,
-    "key.digithings.ai": 71,
+    "key.digithings.ai": 72,
     "langfuse.digithings.ai": 3,
     "mcp.digithings.ai": 59,
     "occ.digithings.ai": 142,
-    "search.digithings.ai": 54,
+    "search.digithings.ai": 55,
     "trace.digithings.ai": 20,
     "www.digiquant.io": 17,
     "www.digithings.ai": 82,

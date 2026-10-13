@@ -15,7 +15,7 @@ import pytest
 
 pytest.importorskip("openai")
 
-from digiquant.research.data import web_grounding
+from digiquant.research.data import search_refusals, web_grounding
 
 # Saved so the bearer-threading tests below exercise the real tool call (#3859 Task 2).
 _real_call_web_search_tool = web_grounding.call_web_search_tool
@@ -694,7 +694,8 @@ def test_scoped_empty_retries_unscoped(
     assert len(calls) == 2
     assert calls[0]["include_domains"] == ["reuters.com"]
     assert calls[1]["include_domains"] == []
-    assert calls[1]["exclude_domains"] == ["spam.example"]
+    # The operator's own exclusion survives; DIG-1133's refusals ride along.
+    assert calls[1]["exclude_domains"][-1] == "spam.example"
     assert calls[1]["max_results"] == 4
 
 
@@ -759,3 +760,197 @@ def test_scoped_and_unscoped_empty_raises_with_context(
         _real_call_web_search_tool(
             query="etf flows", include_domains=["reuters.com"], max_results=4
         )
+
+
+# --- DIG-1133: congressional-trades material never reaches the tool call -------
+
+
+@pytest.mark.unit
+def test_refused_domains_never_reach_the_tool_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The #4086 retry is the hole narrowing the yaml alone leaves open.
+
+    A scoped search that returns nothing retries *without* ``include_domains``,
+    so an allowlist edit by itself is not a control: the refused hosts must ride
+    in ``exclude_domains`` on both calls.
+    """
+    import digibase.service_auth as sa_mod
+    import digigraph.orchestration.web_search_tools as ws_mod
+
+    monkeypatch.setattr(sa_mod, "get_service_jwt", lambda **k: "svc-jwt")
+    calls: list[dict[str, Any]] = []
+
+    def fake_call(query: str, **kw: Any) -> dict[str, Any]:
+        calls.append({"query": query, **kw})
+        return {"results": []}  # force the unscoped retry
+
+    monkeypatch.setattr(ws_mod, "_call_digisearch_web_search", fake_call)
+    with pytest.raises(RuntimeError, match="no rows"):
+        _real_call_web_search_tool(
+            query="congressional trades",
+            include_domains=["capitoltrades.com", "reuters.com"],
+            max_results=4,
+        )
+    assert len(calls) == 2
+    assert calls[0]["include_domains"] == ["reuters.com"]
+    assert calls[1]["include_domains"] == []  # the retry, un-scoped
+    for call in calls:
+        assert not any(
+            search_refusals.is_refused_search_domain(d) for d in call["include_domains"]
+        )  # never asked for
+        for refused in search_refusals.REFUSED_SEARCH_DOMAINS:
+            assert refused in call["exclude_domains"]
+
+
+@pytest.mark.unit
+def test_rows_from_refused_hosts_are_dropped(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Defence in depth: the hosted providers post-filter, so a row can still
+    arrive from a refused host. It must not reach the summary."""
+    import digibase.service_auth as sa_mod
+    import digigraph.orchestration.web_search_tools as ws_mod
+
+    monkeypatch.setattr(sa_mod, "get_service_jwt", lambda **k: "svc-jwt")
+
+    def fake_call(query: str, **kw: Any) -> dict[str, Any]:
+        return {
+            "results": [
+                {
+                    "doc_id": "https://www.capitoltrades.com/senators/ticker/AAPL",
+                    "content": "bought",
+                    "metadata": {"title": "trades"},
+                },
+                {
+                    "doc_id": "https://data.quiverquant.com/feed.json",
+                    "content": "bought",
+                    "metadata": {"title": "feed"},
+                },
+                {
+                    "doc_id": "https://www.federalreserve.gov/newsevents/pressreleases.htm",
+                    "content": "held rates",
+                    "metadata": {"title": "FOMC"},
+                },
+            ]
+        }
+
+    monkeypatch.setattr(ws_mod, "_call_digisearch_web_search", fake_call)
+    out = _real_call_web_search_tool(
+        query="alt-politician-signals", include_domains=[], max_results=4
+    )
+    assert out["sources"] == ["https://www.federalreserve.gov/newsevents/pressreleases.htm"]
+    assert "capitoltrades" not in out["summary"]
+    assert "quiverquant" not in out["summary"]
+
+
+@pytest.mark.unit
+def test_a_refused_only_result_set_fails_loud(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Filtering everything out raises rather than shipping a thin memo — the
+    fail-loud contract of this module is unchanged by the deny."""
+    import digibase.service_auth as sa_mod
+    import digigraph.orchestration.web_search_tools as ws_mod
+
+    monkeypatch.setattr(sa_mod, "get_service_jwt", lambda **k: "svc-jwt")
+
+    def fake_call(query: str, **kw: Any) -> dict[str, Any]:
+        return {
+            "results": [
+                {
+                    "doc_id": "https://disclosures-clerk.house.gov/public_disc/financial-pdfs/2025FD.zip",
+                    "content": "STOCK Act report",
+                    "metadata": {"title": "clerk"},
+                }
+            ]
+        }
+
+    monkeypatch.setattr(ws_mod, "_call_digisearch_web_search", fake_call)
+    with pytest.raises(RuntimeError, match="no rows"):
+        _real_call_web_search_tool(query="congressional trades", include_domains=[], max_results=4)
+
+
+@pytest.mark.unit
+def test_a_refused_domain_in_the_yaml_allowlist_is_stripped(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A caller naming a refused host must not get it, and must hear about it."""
+    import digibase.service_auth as sa_mod
+    import digigraph.orchestration.web_search_tools as ws_mod
+
+    monkeypatch.setattr(sa_mod, "get_service_jwt", lambda **k: "svc-jwt")
+    seen: dict[str, Any] = {}
+    monkeypatch.setattr(ws_mod, "_call_digisearch_web_search", _fake_hub_results(seen))
+    with caplog.at_level("WARNING", logger="digiquant.research.data.web_grounding"):
+        _real_call_web_search_tool(
+            query="etf flows",
+            include_domains=["capitoltrades.com", "reuters.com"],
+            max_results=4,
+        )
+    assert seen["include_domains"] == ["reuters.com"]
+    assert "refused" in caplog.text
+
+
+@pytest.mark.unit
+def test_the_refusal_is_a_code_constant_not_yaml() -> None:
+    """The deny must not be tunable from an operator-edited file.
+
+    Pins the enforcement point itself: re-adding capitoltrades to
+    ``search_domains.yaml`` cannot re-enable the search, and the frozenset stays
+    a module constant with no env-var seam.
+    """
+    assert isinstance(search_refusals.REFUSED_SEARCH_DOMAINS, tuple)
+    assert "capitoltrades.com" in search_refusals.REFUSED_SEARCH_DOMAINS
+    assert "quiverquant.com" in search_refusals.REFUSED_SEARCH_DOMAINS
+    # The shipped yaml for this segment names none of them (the scoping half).
+    cfg = web_grounding._config()
+    shipped = cfg.get("per_segment", {}).get("alt-politician-signals", [])
+    for refused in search_refusals.REFUSED_SEARCH_DOMAINS:
+        assert refused not in shipped
+        assert refused not in cfg.get("web_allowed_websites", [])
+    # Even if the yaml were re-edited, the call-site guard still strips it.
+    scoped, excluded = web_grounding._apply_search_refusals(
+        list(shipped) + ["capitoltrades.com"], []
+    )
+    assert "capitoltrades.com" not in scoped
+    assert "capitoltrades.com" in excluded
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "value,refused",
+    [
+        ("capitoltrades.com", True),
+        ("CAPITOLTRADES.COM", True),
+        ("https://www.capitoltrades.com/a/b?c=d", True),
+        ("data.quiverquant.com", True),
+        ("disclosures-clerk.house.gov", True),
+        ("https://disclosures-clerk.house.gov/public_disc/x.zip", True),
+        ("", False),
+        ("   ", False),
+        ("reuters.com", False),
+        ("notcapitoltrades.com", False),
+        ("quiverquant.com.evil.example", False),
+    ],
+)
+def test_refused_matching_is_host_exact(value: str, refused: bool) -> None:
+    """Subdomains match, lookalikes do not — a matcher loose enough to catch
+    ``capitoltrades.com.evil.example`` would break unrelated grounding."""
+    assert search_refusals.is_refused_search_domain(value) is refused
+
+
+@pytest.mark.unit
+def test_the_operator_exclude_cap_cannot_truncate_the_refusals(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """digisearch caps ``exclude_domains`` at 20. Refused entries lead the list
+    so a full operator list cannot push the gate out of the request."""
+    monkeypatch.setattr(
+        web_grounding,
+        "REFUSED_SEARCH_DOMAINS",
+        tuple(f"refused{i}.example" for i in range(25)),
+    )
+    with caplog.at_level("WARNING", logger="digiquant.research.data.web_grounding"):
+        _, excluded = web_grounding._apply_search_refusals(
+            ["reuters.com"], [f"d{i}.example" for i in range(20)]
+        )
+    assert len(excluded) == web_grounding._MAX_EXCLUDED_DOMAINS
+    assert excluded[:25] == [f"refused{i}.example" for i in range(20)]
+    assert "exclude_domains" in caplog.text

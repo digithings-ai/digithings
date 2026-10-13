@@ -206,6 +206,12 @@ web:
   # `--check` and the model-routing validation, which an edit under this path
   # should still redden.
   - apps/dashboard-api/**
+  # digidata-api Worker data API (DIG-2895, workspace digidata-api). Same lane,
+  # same reason, as dashboard-api above: its vitest and tsc live in that package
+  # and this lane already pays the root `npm ci` that resolves the workspace's
+  # devDependencies. Without it, apps/digidata-api/package.json was an orphan
+  # install input and no lane ran its suite (#5404 review).
+  - apps/digidata-api/**
   - package.json
   - package-lock.json
   - .github/workflows/test-web.yml
@@ -244,6 +250,8 @@ nautilus_smoke:
   - tests/dq/test_balance_path_metrics.py
   - tests/dq/test_backtest.py
   - tests/dq/test_calibrations_loader.py
+  - tests/dq/test_charts.py
+  - tests/dq/test_honesty_series.py
   - tests/dq/test_nautilus_runner.py
   - tests/dq/test_pipeline_graph.py
   - tests/dq/test_strategies.py
