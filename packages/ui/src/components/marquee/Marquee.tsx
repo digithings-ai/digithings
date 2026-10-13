@@ -41,6 +41,8 @@ export type MarqueeProps = {
   speed?: number;
   /** Item text tone — reference dress is "soft"; "mute" for quieter strips. */
   tone?: "soft" | "mute";
+  /** Hold the drift still (a consumer's pause control). Hover pauses regardless. */
+  paused?: boolean;
   /** Accessible label for the strip. */
   "aria-label"?: string;
   /** Extra classes on the masked row wrapper. */
@@ -79,6 +81,7 @@ export function Marquee({
   direction = "left",
   speed = 34,
   tone = "soft",
+  paused,
   "aria-label": ariaLabel,
   className,
 }: MarqueeProps) {
@@ -95,7 +98,11 @@ export function Marquee({
   );
 
   return (
-    <div className={`mq-row${className ? ` ${className}` : ""}`} aria-label={ariaLabel}>
+    <div
+      className={`mq-row${className ? ` ${className}` : ""}`}
+      aria-label={ariaLabel}
+      data-paused={paused ? "true" : undefined}
+    >
       <div className={`mq-track ${dirClass}`} style={style}>
         {group(false)}
         {group(true)}
