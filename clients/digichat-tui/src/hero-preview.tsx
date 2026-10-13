@@ -6,15 +6,18 @@
 import { createCliRenderer } from "@opentui/core";
 import { createRoot, useKeyboard, useTerminalDimensions } from "@opentui/react";
 
-import { BANNERS } from "../../../packages/hero-banner/src/definitions";
+import { BANNERS, DIGIVOICE_VARIANTS } from "../../../packages/hero-banner/src/definitions";
 import { HeroBanner } from "./hero-banner";
 
-function Preview({ id, onQuit }: { id: keyof typeof BANNERS; onQuit: () => void }) {
+/** Shipped banners, plus the variations kept for review. */
+const PREVIEWS = { ...BANNERS, ...DIGIVOICE_VARIANTS };
+
+function Preview({ id, onQuit }: { id: keyof typeof PREVIEWS; onQuit: () => void }) {
   const { width, height } = useTerminalDimensions();
   useKeyboard((key) => {
     if (key.name === "q") onQuit();
   });
-  const def = BANNERS[id];
+  const def = PREVIEWS[id];
   return (
     <box width="100%" height="100%" flexDirection="column" justifyContent="center">
       <HeroBanner def={def} cols={width} rows={height} />
@@ -25,9 +28,9 @@ function Preview({ id, onQuit }: { id: keyof typeof BANNERS; onQuit: () => void 
 }
 
 if (import.meta.main) {
-  const id = (process.argv[2] ?? "digillm") as keyof typeof BANNERS;
-  if (!(id in BANNERS)) {
-    console.error(`unknown banner "${id}". One of: ${Object.keys(BANNERS).join(", ")}`);
+  const id = (process.argv[2] ?? "digillm") as keyof typeof PREVIEWS;
+  if (!(id in PREVIEWS)) {
+    console.error(`unknown banner "${id}". One of: ${Object.keys(PREVIEWS).join(", ")}`);
     process.exit(2);
   }
   const renderer = await createCliRenderer({ exitOnCtrlC: true });

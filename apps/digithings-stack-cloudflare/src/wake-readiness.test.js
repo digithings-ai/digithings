@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
  *
  * Every authenticated route verifies a digikey JWT, and the verifier fetches the
  * JWKS from the same container's digikey (:8005). The shared stack container
- * sleeps after 3 minutes idle (sleepAfter = "3m"), and digikey is the slowest
+ * sleeps after 1 minute idle (sleepAfter = "1m"), and digikey is the slowest
  * service to bind (container/start_digikey.sh waits up to 30s for redis). While
  * fetch() waited only for the requested service's port, a cold wake proxied
  * search.digithings.ai to digisearch before :8005 was listening, so the JWKS

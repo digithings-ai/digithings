@@ -2,7 +2,12 @@
  * Typed job map for digithings-cron.
  * Each enabled job.cron must appear in wrangler.toml [triggers] crons.
  */
-export type JobKind = "workflow_dispatch" | "repository_dispatch" | "container" | "probe";
+export type JobKind =
+  | "workflow_dispatch"
+  | "repository_dispatch"
+  | "container"
+  | "probe"
+  | "watch";
 
 export type Job = {
   id: string;
@@ -24,6 +29,13 @@ export type Job = {
   codeRef?: "main";
   /** Set when kind is "probe". Worker fetch; does not start the container. */
   probe?: "site" | "stack";
+  /**
+   * Set when kind is "watch". The service this job only READS. There is no
+   * `command`: a watch job has nothing to start, and nothing to time out. Its
+   * job is to notice a run the runner is still holding open. It never POSTs to
+   * /v1/jobs — see house-run-watch.ts.
+   */
+  watch?: "digiquant-runner";
 };
 
 const MONOREPO = "digithings-ai/digithings" as const;
@@ -71,6 +83,29 @@ function pj(
     ref: DEVELOP,
     enabled: opts.enabled ?? true,
     probe,
+  };
+}
+
+/**
+ * Watch job (DIG-3065). Read-only against the named service.
+ *
+ * `workflow` and `ref` stay, for the same reason they stay on `pj`/`cj`:
+ * GITHUB_OVERRIDE_JOBS can still redirect the id to a workflow dispatch, and
+ * `jobs.test.ts` asserts `ref === "develop"` on every non-repository_dispatch
+ * row. The watcher itself never uses either — it resolves its deadline from the
+ * house-run row via houseRunDeadlineSeconds(), so there is no second copy of
+ * 14400 to drift.
+ */
+function wj(id: string, cron: string, watch: "digiquant-runner", opts: { enabled?: boolean } = {}): Job {
+  return {
+    id,
+    cron,
+    repo: MONOREPO,
+    kind: "watch",
+    workflow: "pipeline-digiquant.yml",
+    ref: DEVELOP,
+    enabled: opts.enabled ?? true,
+    watch,
   };
 }
 
@@ -350,7 +385,27 @@ export const JOBS: readonly Job[] = [
   // house-run-09 at 09:17 (`17 9 * * MON`) or project-enforce-assignment at 09:23.
   // days input omitted — workflow default 14.
   wd("twelve-x-digisearch-parity", "8 9 * * MON", TWELVE_X, "digisearch_parity_check.yml"),
+  // Hourly lost-house-run watcher (DIG-3065). Appended last so the deploy-config
+  // contract, which compares wrangler.toml [triggers].crons to uniqueEnabledCrons()
+  // in order, needs no reshuffle. Minute :23 is clear of the :17 cluster
+  // (production-deploy-gate-watchdog, datatap-answer-check, smoke-site), :41
+  // (token-canary) and :47, and clear of the 09:17 house-run start it watches.
+  wj("digiquant-house-run-watch", "23 * * * *", "digiquant-runner"),
 ];
+
+/**
+ * The timeout_seconds the house-run watcher applies to a run the runner still
+ * reports open (DIG-3065).
+ *
+ * Resolved from the house-run job row rather than written into the watcher, so
+ * 14400 has exactly one home: changing house-run-09's timeout moves the
+ * deadline with it, and a test can assert the two agree instead of asserting a
+ * copied literal. `undefined` means the row is gone or unnamed — the watcher
+ * then refuses to evaluate rather than guessing a deadline.
+ */
+export function houseRunDeadlineSeconds(from: readonly Job[] = JOBS): number | undefined {
+  return from.find((job) => job.id === "house-run-09")?.timeoutSeconds;
+}
 
 /** Exact cron-string match; one trigger may map to multiple jobs. */
 export function jobsForCron(

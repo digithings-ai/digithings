@@ -168,11 +168,42 @@ def plan_up(profile: str, env: Mapping[str, str]) -> tuple[Step, ...]:
     # a getpass prompt and blocks forever on a TTY that never answers (DIG-2959).
     # Failing fast is the correct behaviour for a scripted stack bring-up; an
     # operator who wants to be asked runs `dt-secrets render` directly.
-    secrets = (*_tool(env, "secrets", ("scripts/dt-secrets",)), "render", "--no-prompt")
+    # --force BEFORE --no-prompt: the argv shape is pinned by
+    # test_localstack_orchestrate.py (argv[-1] must be --no-prompt), and --force
+    # means "preserve already-rendered generated-local values" rather than
+    # "overwrite the file". Without it a second `dt up` re-rolls every generated
+    # secret, which invalidates whatever the previous value initialised.
+    secrets = (
+        *_tool(env, "secrets", ("scripts/dt-secrets",)),
+        "render",
+        "--force",
+        "--no-prompt",
+    )
     supabase = _tool(env, "supabase", ("supabase",))
     compose = _tool(env, "compose", ("docker", "compose"))
+    # One multi-config session, because a service binding only resolves between
+    # workers started in the same session. -c is repeatable; with none, wrangler
+    # looks for a config in the repo root, finds none, and exits "Missing
+    # entry-point". The argv and the requires gate are the SAME tuple so they
+    # cannot drift apart again.
+    wrangler_session = (
+        "apps/dashboard-api/wrangler.toml",
+        "apps/digithings-cron/wrangler.toml",
+        "apps/digiquant-runner/wrangler.toml",
+    )
+    wrangler_cfg_args = tuple(tok for cfg in wrangler_session for tok in ("-c", cfg))
     wrangler = _tool(
-        env, "wrangler", ("npx", "wrangler", "dev", "--local", "--persist-to", ".wrangler/state")
+        env,
+        "wrangler",
+        (
+            "npx",
+            "wrangler",
+            "dev",
+            "--local",
+            "--persist-to",
+            ".wrangler/state",
+            *wrangler_cfg_args,
+        ),
     )
     proxy = _tool(env, "proxy", ("caddy", "run", "--config", "infra/local-proxy/Caddyfile"))
     seed = (*python, "scripts/seed/seed_all.py")
@@ -199,7 +230,7 @@ def plan_up(profile: str, env: Mapping[str, str]) -> tuple[Step, ...]:
                 "one multi-config session so service bindings resolve; "
                 "fixed ports so the health gate can address them"
             ),
-            requires=("apps/dashboard-api/wrangler.toml",),
+            requires=wrangler_session,
             owner="S3 (DIG-2771, PR #5353)",
         ),
         Step(
