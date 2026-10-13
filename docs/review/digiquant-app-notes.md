@@ -194,3 +194,8 @@ screenshot · suggested fix.
   pipeline/strategies, settled snapshots, screenshots in `screenshots/`.
   Open: sub-pages, chart-fill verification, keyboard/route/loading/animation
   sweep (press `?`, `d`, `[enter]/[tab]` affordances), second reviewer pass.
+- 13 Oct 2026 (board routing, Chris): implementation follow-ups owned outside
+  this ticket — DIG-3322 (tools routes + financial digichat), DIG-3323
+  (functional settings). The tools/settings observations in this file (R-04
+  and the open follow-up pass) route to those tickets after consolidation;
+  this ticket stays review-only and takes no fix.
