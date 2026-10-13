@@ -163,7 +163,7 @@ class_name = "DigiChatContainer"
 # file: ../.. is the repo root.
 image = "../../Dockerfile.digichat-cloudflare"
 image_build_context = "../.."
-max_instances = 2
+max_instances = 1
 # Next standalone: basic = 1 GiB (lite = 256MiB is far too small). Typical Next
 # standalone RSS is 200-500 MiB; revert to standard-1 if OOM.
 instance_type = "basic"
