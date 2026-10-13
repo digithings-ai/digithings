@@ -90,3 +90,12 @@ def test_locked_session_tools_filtered_by_name() -> None:
     kept = [t for t in tools if _tool_def_name(t) not in LOCKED_SESSION_TOOLS]
     assert [_tool_def_name(t) for t in kept] == ["session_set_language", "zammad_search_tickets"]
     assert {"session_upsert_mcp", "session_remove_mcp"} <= LOCKED_SESSION_TOOLS
+
+
+def test_workflow_request_carries_lock_into_state() -> None:
+    from digigraph.models import WorkflowRequest
+
+    req = WorkflowRequest.model_validate(
+        {"messages": [{"role": "user", "content": "hi"}], "lock_session_controls": True}
+    )
+    assert req.lock_session_controls is True

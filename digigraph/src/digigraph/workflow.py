@@ -372,6 +372,7 @@ def _initial_graph_state(req: WorkflowRequest, workflow_id: str) -> dict[str, An
     initial["digisearch_index"] = req.digisearch_index
     initial["vault_path_prefix"] = req.vault_path_prefix
     initial["research_system_prompt_override"] = req.research_system_prompt_override
+    initial["lock_session_controls"] = bool(req.lock_session_controls)
     initial["digi_subject"] = req.digi_subject
     initial["response_language"] = req.response_language
     initial["force_tool"] = req.force_tool

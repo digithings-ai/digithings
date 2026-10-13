@@ -201,6 +201,13 @@ class WorkflowRequest(BaseModel):
             "set it. digivault also enforces tenant→prefix server-side."
         ),
     )
+    lock_session_controls: bool = Field(
+        False,
+        description=(
+            "Tenant map lockSessionControls (DIG-1210). Overwritten server-side by "
+            "_with_digi_request_context, never trusted from the client."
+        ),
+    )
     research_system_prompt_override: str | None = Field(
         None,
         description=(
