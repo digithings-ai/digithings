@@ -11,13 +11,16 @@ import { ScrollBanner } from "@/components/landing/ScrollBanner";
 
 export const DT_CONTACT_EMAIL = "contact@digithings.ai";
 
-// The DIGITHINGS hero banner (DIG-2921), armed at mount and kept live: the top
-// bar is always on screen, so it does not wait for a scroll-in. One mark at
-// every width — it replaced both the text wordmark and the narrow-bar `d`
-// terminal mark. NavShell already wraps this in <a aria-label="digithings
-// home">; the canvas carries its own label.
+// The DIGITHINGS hero banner, armed at mount and kept live. It is on screen at
+// scroll 0, and it replays LOADING with the landing hero on every visit instead
+// of skipping to the settled mark after the first play in the tab.
 export const Brand = () => (
-  <ScrollBanner def={DIGITHINGS} inView={false} className="w-[8.5rem] max-[880px]:w-[7rem]" />
+  <ScrollBanner
+    def={DIGITHINGS}
+    inView={false}
+    replayLoading
+    className="w-[8.5rem] max-[880px]:w-[7rem]"
+  />
 );
 
 /** v7 nav shape (used by <DtNav />): wayfinding links on the left of the tail,

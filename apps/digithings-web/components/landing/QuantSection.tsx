@@ -298,12 +298,6 @@ const STRATEGIES: {
   },
 ];
 
-/**
- * The four cards the band shows, in order — also the live read's membership, so
- * an unexpected row in the table can never add a card here.
- */
-const STRATEGY_SLUGS = STRATEGIES.map((strategy) => strategy.slug);
-
 /** The card shape, whether the reads are the live index or the example set. */
 type StrategyCardData = (typeof STRATEGIES)[number];
 
@@ -537,7 +531,7 @@ function Book({
 
   return (
     <div className="flex min-w-0 flex-col gap-[0.8rem]">
-      <span className={GROUPED_LABEL}>{live ? "the book · live" : "the book · example"}</span>
+      <span className={GROUPED_LABEL}>{live ? "the book" : "the book · example"}</span>
       {/* Single column at the base for the same reason as the block above: an
           SVG chart measures its own pane, so an implicit `auto` track would size
           from that min-content and push the page wider than the viewport. */}
@@ -589,16 +583,15 @@ function Book({
 }
 
 export function QuantSection({ className }: { className?: string }) {
-  /* The dashboard's own backend, when this build has the public env. Without it
-     every read returns empty and the band keeps its badged example series. */
-  const live = useLiveBand(STRATEGY_SLUGS);
+  /* Public house book by default (graph.digithings.ai). The synthetic series
+     only remains when that read is off, which is the unit-test runtime. */
+  const live = useLiveBand();
+  const usingLive = live.configured;
   const liveIndex = live.nav.length > 1 ? indexLive(live.nav, live.benchmark) : null;
-  const book = liveIndex ?? { series: PERFORMANCE_SERIES, fullSpan: FULL_SPAN };
-  const cards: StrategyCardData[] =
-    live.strategies.length > 0 ? live.strategies.map(liveStrategyCard) : STRATEGIES;
-  /* Honesty: the fallback cards are deterministic examples, not live reads —
-     badge them as such and never show a live mark over them. */
-  const showExampleBadge = live.strategies.length === 0;
+  const book = usingLive ? liveIndex : { series: PERFORMANCE_SERIES, fullSpan: FULL_SPAN };
+  const cards: StrategyCardData[] = usingLive
+    ? live.strategies.map(liveStrategyCard)
+    : STRATEGIES;
 
   return (
     <div className={`relative ${className ?? ""}`}>
@@ -641,9 +634,7 @@ export function QuantSection({ className }: { className?: string }) {
             {/* Right: the library, in the kit's horizontal rail — the element
                 promoted from the design reference's changelog rail. */}
             <div className="flex min-w-0 flex-col justify-center gap-[0.5rem]">
-              <span className={GROUPED_LABEL}>
-                {showExampleBadge ? "flagship strategies · example" : "flagship strategies"}
-              </span>
+              <span className={GROUPED_LABEL}>strategies</span>
               <CardRail ariaLabel="Flagship digiquant strategies">
                 {cards.map((strategy) => (
                   <div key={strategy.slug} role="listitem" className="flex-[0_0_17rem] snap-start">
@@ -654,7 +645,6 @@ export function QuantSection({ className }: { className?: string }) {
                             <span className="ts-card-name">{strategy.name}</span>
                             <span className="ts-card-period">
                               {strategy.symbol} · {strategy.kind}
-                              {showExampleBadge ? " · example" : ""}
                             </span>
                           </div>
                         </div>
@@ -676,7 +666,13 @@ export function QuantSection({ className }: { className?: string }) {
             <PipelineRail />
           </div>
 
-          <Book series={book.series} fullSpan={book.fullSpan} live={Boolean(liveIndex)} />
+          {book ? (
+            <Book
+              series={book.series}
+              fullSpan={book.fullSpan}
+              live={usingLive && Boolean(liveIndex)}
+            />
+          ) : null}
         </div>
       </div>
     </div>

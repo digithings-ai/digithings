@@ -26,7 +26,13 @@ function markFor(id: string) {
  * Each tile names its module with that module's hero banner, built on
  * scroll-in; a module the banner family has not reached yet keeps its text name.
  */
-const ITEMS: ModuleGridItem[] = modules.map((module) => ({
+/** digistore and digilink are roadmap and have no hero banner. Leaving them
+ *  in the mosaic reserved empty weight. */
+const LANDING_MODULES = modules.filter(
+  (module) => module.id !== "digistore" && module.id !== "digilink",
+);
+
+const ITEMS: ModuleGridItem[] = LANDING_MODULES.map((module) => ({
   module,
   lines: moduleLines(module.id),
   version: moduleVersion(module.id),

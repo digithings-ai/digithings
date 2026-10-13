@@ -107,11 +107,20 @@ export function frameSrcForCsp(env = process.env) {
   return resolveDigichatEmbedOrigin(env) ?? DEFAULT_DIGICHAT_EMBED_ORIGIN;
 }
 
+/** Local digichat already allows `http://127.0.0.1:*` parents. Production
+ *  digithings.ai does not, so a localhost landing cannot frame it. */
+export const DEV_DIGICHAT_EMBED_ORIGIN = "http://127.0.0.1:3000";
+
 /**
- * Origin for `/chat` and `/chat/occ` iframes — same as CSP `frame-src`.
+ * Origin for `/chat` and the landing embed. Development uses the local
+ * digichat (tenant env is already loaded there). Every other runtime uses
+ * the CSP `frame-src` origin.
  * @param {NodeJS.ProcessEnv | Record<string, string | undefined>} [env]
  */
 export function embedOriginForChat(env = process.env) {
+  const resolved = resolveDigichatEmbedOrigin(env);
+  if (resolved) return resolved;
+  if (env.NODE_ENV === "development") return DEV_DIGICHAT_EMBED_ORIGIN;
   return frameSrcForCsp(env);
 }
 
