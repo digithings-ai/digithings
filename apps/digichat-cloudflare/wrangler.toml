@@ -78,11 +78,11 @@ new_sqlite_classes = ["DigiChatContainer"]
 # Embed tenant config (DIG-1210): non-secret JSON in KV key `embed-tenants`,
 # credentials referenced by name (tokenEnv) and set as Worker secrets.
 # Create once:  npx wrangler kv namespace create DIGICHAT_TENANTS_KV
-# then uncomment with the returned id. Without the binding the Worker uses
+# (created 2026-10-13). Without the binding the Worker uses
 # the legacy DIGICHAT_EMBED_TENANTS secret unchanged.
-# [[kv_namespaces]]
-# binding = "DIGICHAT_TENANTS_KV"
-# id = "<namespace id>"
+[[kv_namespaces]]
+binding = "DIGICHAT_TENANTS_KV"
+id = "361b710bee56466097053275404535ba"
 
 [vars]
 # Legacy generic anonymous embed is intentionally NOT set (OFF). A stock deploy
