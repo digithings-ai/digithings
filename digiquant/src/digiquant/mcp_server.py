@@ -713,23 +713,38 @@ def create_mcp_server(
         from digiquant.tool_refusals import is_refused
 
         def _register(fn):
+            from digiquant.tool_names import (
+                GLOOMBERB_PLATFORM_NOTE,
+                canonical_tool_name,
+                gloomberb_family,
+            )
+
             if is_refused(name):
                 return fn
             entitlement = _GLOOMBERB_ENTITLEMENTS.get(name)
             note_fn = _gloomberb_note
+            note_name = name
             if entitlement is None:
                 entitlement = _LUXALGO_ENTITLEMENTS.get(name)
                 note_fn = _luxalgo_note
             if entitlement is not None:
                 fn.entitlement = entitlement
-                fn.__doc__ = note_fn(name, fn.__doc__ or "")
+                fn.__doc__ = note_fn(note_name, fn.__doc__ or "")
+            if gloomberb_family(name):
+                doc = fn.__doc__ or ""
+                if GLOOMBERB_PLATFORM_NOTE not in doc:
+                    fn.__doc__ = f"{GLOOMBERB_PLATFORM_NOTE}\n\n{doc.lstrip()}"
             if (
                 entitlement in _GLOOMBERB_SESSION_ENTITLEMENTS
                 and not _gloomberb_session_tools_advertised
             ):
                 return fn
-            if enabled is None or name in enabled:
-                return mcp.tool(name=name)(fn)
+            public = canonical_tool_name(name)
+            if enabled is not None and name not in enabled and public not in enabled:
+                return fn
+            mcp.tool(name=public)(fn)
+            if public != name:
+                mcp.tool(name=name)(_gloomberb_alias(fn, name))
             return fn
 
         return _register
