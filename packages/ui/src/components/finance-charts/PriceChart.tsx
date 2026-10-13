@@ -4,8 +4,9 @@
  * PriceChart — the standard price-plotting primitive promoted from the design
  * reference (finance/price-chart): candlesticks (plus an optional volume
  * histogram tucked under the price pane) on TradingView Lightweight Charts.
- * Candles wear the `--up`/`--down` money colors — this IS a P&L read — the
- * volume wears the hairline token, and everything re-themes live on
+ * Candles and volume wear the digiquant chart scale (`--up` / `--down`) —
+ * this IS a P&L read. Volume follows the candle at the same time: up when
+ * the close is at or above the open. Everything re-themes live on
  * `data-theme` flips. Custom SVG candles are retired (see the finance
  * reference page's charting rules).
  *
@@ -73,13 +74,21 @@ export function PriceChart({ candles, volume, className, label }: PriceChartProp
         ? chart.addSeries(HistogramSeries, {
             priceFormat: { type: "volume" },
             priceScaleId: "vol",
-            color: p.hair,
           })
         : null;
-      if (volumeSeries && volume) {
+      const paintVolume = (palette: FinanceChartPalette) => {
+        if (!volumeSeries || !volume) return;
+        const direction = new Map(candles.map((c) => [c.time, c.close >= c.open]));
         volumeSeries.setData(
-          volume.map((v): HistogramData => ({ time: toChartTime(v.time), value: v.value }))
+          volume.map((v): HistogramData => ({
+            time: toChartTime(v.time),
+            value: v.value,
+            color: direction.get(v.time) === false ? palette.down : palette.up,
+          }))
         );
+      };
+      paintVolume(p);
+      if (volumeSeries) {
         chart.priceScale("vol").applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
       }
 
@@ -92,7 +101,7 @@ export function PriceChart({ candles, volume, className, label }: PriceChartProp
           wickUpColor: next.up,
           wickDownColor: next.down,
         });
-        volumeSeries?.applyOptions({ color: next.hair });
+        paintVolume(next);
       };
     },
     [candles, volume]

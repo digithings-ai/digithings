@@ -71,6 +71,12 @@ doc-check:
 adr-check:
 	python3 scripts/check_adr_numbering.py
 
+# Every agent skill link in a skills home must resolve. Read-only (DIG-2284).
+# Override the target, e.g. `make skills-links-check SKILLS_HOME=~/.claude/skills`.
+SKILLS_HOME ?= .claude/skills
+skills-links-check:
+	python3 scripts/check_agent_skills_links.py --skills-home "$(SKILLS_HOME)" --strict
+
 # Lint the digivault-managed docs/vision vault (wikilinks, frontmatter, taxonomy,
 # orphans) against docs/vision/.digivault.yml. Uses the digivault core (pydantic +
 # pyyaml only); -P keeps cwd off sys.path so the real package under digivault/src
@@ -378,6 +384,17 @@ secrets-scan:
 	  exit 127; \
 	}
 	@gitleaks detect --source . --config .gitleaks.toml --redact --verbose --no-banner
+
+# Refuse a payload carrying an unmasked customer email address. No-argument form
+# scans the working tree, which is the one to run before committing a new seed
+# payload; `make pii-scan-all` is the whole-tree form (use after containment).
+# Mirrors the PR step in .github/workflows/security-gitleaks.yml.
+.PHONY: pii-scan pii-scan-all
+pii-scan:
+	python3 scripts/check_pii_seed_payloads.py
+
+pii-scan-all:
+	python3 scripts/check_pii_seed_payloads.py --all
 
 # Match every `secrets.*` read under .github/ against each level (repo secret, repo
 # variable, org secret, environment secret) and report `dead`, `not repo-level`,

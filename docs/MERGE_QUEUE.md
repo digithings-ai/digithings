@@ -66,7 +66,10 @@ change and needs the CEO — it is not something an agent does on its own initia
 An approval is likewise asserted when the reviewer is not a distinct GitHub account:
 `--attest-review <role>` records which role reviewed. The merging role may **not** attest
 its own review, which is what stops a single-credential setup from silently collapsing
-into "I reviewed it and merged it".
+into "I reviewed it and merged it". Attestation satisfies the approval gate only —
+it is an assertion, and since DIG-3154 it does **not** satisfy review coverage: PRs
+#5489 and #5277 merged attested with zero reviews and zero comments, and the promotion
+gate refused both. A PR without review evidence needs the evidence, not an attestation.
 
 ## What may be merged
 
@@ -79,7 +82,8 @@ into "I reviewed it and merged it".
 | Other checks | Any other check in a failing conclusion blocks the merge. |
 | Mergeable | `mergeable == MERGEABLE`. Drafts and `CONFLICTING` do not queue. |
 | Up to date | `mergeStateStatus` must be `CLEAN`. `BEHIND`, `DIRTY`, `UNKNOWN` and `BLOCKED` do not queue. |
-| Review | An `APPROVED` review from a person who is neither the author nor a bot, or `--attest-review` from a role on the review path that is not the merging role. |
+| Review | An `APPROVED` review from a person who is neither the author nor a bot, or `--attest-review` from a role on the review path that is not the merging role. Attestation covers this gate only, never review coverage below. |
+| Review coverage | The same evidence `scripts/check_review_coverage.py` enforces at promotion: a completed Bot run, an approval, a Bot review, an in-session review with its findings comment, or `reviewed:owner`. `--attest-review` does not count — it asserts a review happened but leaves no artifact the promotion gate can see. |
 | Change requests | Any `CHANGES_REQUESTED` review blocks. |
 
 Two of these are deliberate choices worth stating plainly.
@@ -88,7 +92,7 @@ Two of these are deliberate choices worth stating plainly.
 is indistinguishable from a check that was never asked to run — which is exactly the hole
 being closed. This has a real cost: Bugbot reports `neutral` when it is out of quota, so a
 required Bugbot check would block merges indefinitely. Do not put a metered third-party
-service on the required list. See `CODE_REVIEW_BASELINE.md`.
+service on the required list. See `reviews/archive/CODE_REVIEW_BASELINE.md`.
 
 **A green commit status is not a passing build.** GitHub's commit status docs are explicit
 that "any person or integration with write permissions can set the state of any status

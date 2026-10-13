@@ -51,14 +51,20 @@ frozen at the last good seal. The exemption is therefore suspended only when
 *every* exempt macro series is ``history-only`` at once
 (:func:`_macro_leg_dead`), and the run then exits 1.
 
-Scope of that guard, precisely: it closes the ``history-only`` shape only, and
-only over series the manifest actually declared. Two neighbouring whole-leg
-freezes are *not* covered and still exit 0 — a panel that keeps serving rows
-inside its live window (``up-to-date``, so not a soft fail at all), and an
-unreadable manifest (``_resolve_macro_specs`` returns ``[]``, leaving the guard
-no exempt id to reason about). Partial legs and single-series manifests are
-also out of reach, by design. All four are recorded in
-``digiquant/ARCHITECTURE.md``; the first two predate this guard.
+Scope of that guard, precisely: it closes the *unanimous* ``history-only`` shape
+only, and only over series the manifest actually declared. Two neighbouring
+freezes are *not* covered by it — a panel that keeps serving rows inside its
+live window (``up-to-date``, so not a soft fail at all), and a single retired
+series among live ones, which the ``> 1`` floor plus the #4621 exemption let
+through. Both are closed instead by measuring the seal rather than the mode:
+``_macro_as_of_stale`` (:func:`_macro_as_of_stale`, DIG-1137/DIG-2405) compares
+each macro outcome's ``as_of`` against its own cadence window, so a panel that
+has stopped advancing is named whether the vendor still answers
+(``up-to-date``) or has stopped publishing (``history-only``). One freeze is
+still open and predates both guards: an unreadable manifest
+(``_resolve_macro_specs`` returns ``[]``, leaving no ids for any of these guards
+to reason about). Partial legs stay out of reach, by design. All of this is
+recorded in ``digiquant/ARCHITECTURE.md``.
 
 No vendor API key is needed on this path: the macro panel is sealed from
 anonymous Gloomberb ``econ_series`` pages (#4794). ``source=="fred"`` fetches
@@ -138,6 +144,19 @@ _SOFT_FAIL_MODES = frozenset({MODE_HISTORY_ONLY, MODE_ERROR})
 #: `as_of` age guard reads these instead, because a series the vendor has
 #: retired still comes back `full-repull` (DIG-1137).
 _MACRO_SUCCESS_MODES = frozenset({MODE_UP_TO_DATE, MODE_INCREMENTAL, MODE_FULL_REPULL})
+
+#: Modes the `as_of` age guard measures, as opposed to ``_MACRO_SUCCESS_MODES``'s
+#: "the fetch worked" claim. ``MODE_HISTORY_ONLY`` is added because a *retired*
+#: slow series arrives in that mode: its vendor stops publishing, the live
+#: window comes back empty, and the outcome carries the abandoned seal. The
+#: #4621 exemption forgives that outcome on cadence alone, and
+#: ``_macro_leg_dead`` needs unanimity over the whole exempt set, so one retired
+#: series among live ones was named by nothing (DIG-2405).
+#:
+#: ``MODE_ERROR`` is left to the soft-fail reduction, which never exempts it
+#: whatever its seal says, so it is already loud and judging its age would add
+#: nothing.
+_MACRO_JUDGED_MODES = _MACRO_SUCCESS_MODES | {MODE_HISTORY_ONLY}
 
 LIVE_WINDOW_DAYS = 45
 # The live fetch window must span at least one publication period of the series
@@ -881,6 +900,14 @@ def _macro_leg_dead(outcomes: list[dict[str, Any]], exempt: set[str]) -> bool:
     known limits, both recorded in ``digiquant/ARCHITECTURE.md`` -- a
     single-series manifest can never trip this guard, and a partial leg stays
     exempt exactly as it did before.
+
+    What the floor costs, and how it is paid back. It also means a *single*
+    retired series among live ones is not a dead leg by this guard's definition,
+    which used to leave that shape named by nothing: the #4621 exemption
+    forgives its ``history-only`` on cadence alone and the age guard skipped the
+    mode. It is now named by ``_macro_as_of_stale`` instead (DIG-2405) -- a
+    measurement of the seal, not a relaxation of unanimity. The floor stands,
+    because relaxing it would fire on every per-series vendor refusal.
     """
     silent = {
         o["ticker"] for o in outcomes if o["mode"] == MODE_HISTORY_ONLY and o["ticker"] in exempt
@@ -905,6 +932,7 @@ def _macro_as_of_stale(
     outcomes: list[dict[str, Any]],
     macro_specs: list[tuple[str, str, str | None]],
     run: str,
+    already: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """Macro series sealed older than their own cadence window (DIG-1137).
 
@@ -932,26 +960,46 @@ def _macro_as_of_stale(
     series is a finding rather than a coincidence -- and it can only ever *add*
     to ``failed``, never clear it.
 
-    Two limits, both accepted rather than hidden. ``history-only``/``error``
-    outcomes are left to ``_macro_leg_dead`` and the cadence exemption: a slow
-    series inside its window is quiet by design, and one past it has already
-    emptied its live window, so its age adds nothing to the leg test. And the
-    windows are calendar days, not open trading days like ``staleness_gate``'s
-    bound, so a monthly series is judged against months.
+    Two limits, both accepted rather than hidden. ``MODE_ERROR`` is left to the
+    soft-fail reduction, which never exempts it whatever its seal says, so it is
+    already loud and judging its age would add nothing. And the windows are
+    calendar days, not open trading days like ``staleness_gate``'s bound, so a
+    monthly series is judged against months.
+
+    ``MODE_HISTORY_ONLY`` used to be excluded here too, on the argument that a
+    past-window series "has already emptied its live window, so its age adds
+    nothing to the leg test". That argument was wrong and one retired monthly
+    series is its counterexample (DIG-2405). Emptying the live window is not
+    independent of the seal: both are the same measurement of how long the
+    vendor has been silent. A series sitting out its release cycle has an empty
+    window *and a fresh seal*, so age cannot separate that from a one-call
+    vendor refusal -- which is the ambiguity ``_macro_leg_dead`` needs unanimity
+    for, and it is why this guard leaves fresh-sealed ``history-only`` outcomes
+    alone. A series whose seal is itself older than its own window has no such
+    ambiguity left: the store and the vendor agree there is nothing in-window at
+    all, the cause is a single one, and it is retirement rather than silence.
+    That is why the exclusion was dropped rather than the threshold widened --
+    the bound is still the series' own ``_CADENCE_WINDOW_DAYS`` window, and a
+    quiet release cycle at 34 days is still quiet.
     """
     cadence_of = {f"{source}__{series}": cadence for source, series, cadence in macro_specs}
+    # Both guards can reach the same ticker now that a retired slow series is
+    # judged here too: an exempt series caught by unanimity *and* by its own age
+    # is one finding, not two. `already` keeps the addition additive and keeps
+    # the operator-facing list free of duplicates.
+    named = {o["ticker"] for o in already or ()}
     run_date = datetime.fromisoformat(run[:10]).date()
     aged: list[dict[str, Any]] = []
     for o in outcomes:
-        if o["ticker"] not in cadence_of or o["mode"] not in _MACRO_SUCCESS_MODES:
+        if o["ticker"] not in cadence_of or o["mode"] not in _MACRO_JUDGED_MODES:
             continue
         as_of = str(o.get("as_of") or "")
         if not as_of:
-            # A success-mode outcome with no seal carries no date to measure;
-            # the fetch branches that omit `as_of` all report a soft fail.
+            # A judged outcome with no seal carries no date to measure; the fetch
+            # branches that omit `as_of` all report a soft fail.
             continue
         age_days = (run_date - datetime.fromisoformat(as_of[:10]).date()).days
-        if age_days > _live_window_days(cadence_of[o["ticker"]]):
+        if age_days > _live_window_days(cadence_of[o["ticker"]]) and o["ticker"] not in named:
             aged.append(o)
     return aged
 
@@ -1572,7 +1620,10 @@ def main(argv: list[str] | None = None) -> int:
     # vendor that keeps answering lands on `up-to-date`, which `_macro_leg_dead`
     # cannot see. Measured against each series' own cadence window. Additive
     # only, like the exemption above -- it names series, it never clears them.
-    failed += _macro_as_of_stale(outcomes, macro_specs, run)
+    # Since DIG-2405 it also judges the cadence-exempt `history-only` outcomes,
+    # which is how a *single* retired slow series gets named at all; `failed` is
+    # passed in so a series both guards reached is named once, not twice.
+    failed += _macro_as_of_stale(outcomes, macro_specs, run, failed)
     stale = (not gate["ok"]) or bool(failed)
     manifest.update(build_manifest(new_as_of, datasets, stale=stale))
     digest = store.write_manifest(manifest)

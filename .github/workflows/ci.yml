@@ -40,6 +40,10 @@ jobs:
       e2e_contract: ${{ steps.filter.outputs.e2e_contract }}
       nautilus_smoke: ${{ steps.filter.outputs.nautilus_smoke }}
       research_graph: ${{ steps.filter.outputs.research_graph }}
+      # Added by hand for #2072 — as with digillm/digifetch above,
+      # generate_ci_path_filters.py rewrites only the embedded block, not this
+      # outputs map.
+      clients_tui: ${{ steps.filter.outputs.clients_tui }}
       # Added by hand (DIG-2940): generate_ci_path_filters.py only rewrites the
       # block between the CI_PATH_FILTERS markers, not this outputs map.
       bun_suites: ${{ steps.filter.outputs.bun_suites }}
@@ -125,6 +129,7 @@ jobs:
             web:
               - 'apps/digithings-web/**'
               - 'apps/digiquant-web/**'
+              - 'clients/digiquant-tui/src/**'
               - 'digiquant/src/digiquant/portfolio/graph.py'
               - 'apps/digithings-cron/**'
               - 'apps/digiquant-runner/**'
@@ -143,6 +148,9 @@ jobs:
               - 'package.json'
               - 'package-lock.json'
               - '.github/workflows/test-web.yml'
+            clients_tui:
+              - 'clients/**'
+              - '.github/workflows/test-clients-tui.yml'
             e2e_contract:
               - 'tests/test_e2e.py'
               - 'tests/test_e2e_contract.py'
@@ -315,6 +323,53 @@ jobs:
           python-version: "3.12"
       - name: Vendor-content gate
         run: python3 scripts/check_vendor_content.py
+  # ── Plaintext credential guard (DIG-179) — UNCONDITIONAL ────────────────────
+  # A live client mailbox password sat in plain text in a committed chat
+  # transcript and every existing guard missed it: gitleaks has no rule for the
+  # shape, and check_example_credentials.py only reads VAR=value lines out of
+  # .example/.template files. This job reads the whole tracked tree, so its
+  # verdict is a property of the tree rather than of the diff and a path filter
+  # would be the wrong tool for it -- the same argument as frontend-canon above,
+  # and it fires on every pull_request including workflow-only diffs.
+  #
+  # DIG-42 owns CI wiring for check_example_credentials.py. This job is separate
+  # and shares no code with it so that DIG-179 could land without waiting on an
+  # unmerged guard rewrite; the two unify once DIG-50/DIG-42 merge. The script
+  # prints path:line and rule id only, never a value, so this job's log is safe
+  # to paste into a ticket.
+  # Stdlib-only; no npm/pip install needed.
+  plaintext-credential-guard:
+    name: Plaintext credential guard
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Plaintext credential guard
+        run: python3 scripts/check_plaintext_credentials.py
+
+  # Example-credentials guard (DIG-3148, from the #5030 retro-review).
+  # Unconditional, same shape as vendor-content-gate above: no `needs:`, no
+  # path filter, so the job name is always reported and required on develop.
+  # scripts/check_example_credentials.py scans tracked .example/.template
+  # files for committed credential-shaped values; it is stdlib-only, so no
+  # install step. Shallow checkout is fine: the script reads `git ls-files`
+  # on the working tree, never history.
+  example-credentials-guard:
+    name: Example-credentials guard
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Example-credentials guard
+        run: python3 scripts/check_example_credentials.py
 
   # ── Per-component test suites (gated by paths) ───────────────────────────────
   digibase:
@@ -406,6 +461,13 @@ jobs:
     if: needs.changes.outputs.research_graph == 'true'
     uses: ./.github/workflows/test-research-graph.yml
 
+  # Bun TUI clients (#2072). Before this, clients/digiquant-tui,
+  # clients/digichat-tui and clients/digichat-devkit each declared
+  # `"test": "bun test"` and none of it ran anywhere in CI.
+  clients-tui:
+    needs: changes
+    if: needs.changes.outputs.clients_tui == 'true'
+    uses: ./.github/workflows/test-clients-tui.yml
   # Bun suites (DIG-2940). Before this, digivoice/tui, clients/digichat-tui and
   # packages/surface-config each declared `"test": "bun test"` and none of it
   # ran anywhere in CI — no workflow mentioned the bun tool at all.
@@ -421,9 +483,28 @@ jobs:
     uses: ./.github/workflows/security-pip-audit.yml
 
   # ── Dependency CVE audit (npm / GHSA) — root JS workspaces (#3523) ──────────
+  # The path filter answers "did this commit touch a manifest?"; the audit answers
+  # "which advisories exist right now?". Filtering the second by the first is what
+  # made this lane decorative on develop: pushes that touched no manifest reported
+  # `npm-audit: skipped` while `Required checks passed: success` stood behind them
+  # (develop head e45b12e7, 2026-10-07). A lane that never runs cannot gate, and the
+  # aggregate's success was a false negative rather than a pass — the five `next`
+  # advisories of 2026-10-07 had nowhere to land on develop, so they surfaced on
+  # PR #5107, whose lockfile was strictly better than develop's, and cost a round of
+  # auditing develop to rule out as the cause (DIG-2305).
+  #
+  # So on a push to develop/main the filter is dropped and the audit always runs:
+  # an advisory is caught where it lands instead of on an unrelated future PR. The
+  # cost is one extra audit per branch push — `--package-lock-only`, no install, a
+  # couple of minutes against a cache warm from the rest of the pipeline.
+  #
+  # On pull_request the filter stays. A doc-only PR should not pay for an audit, and
+  # `required-checks` still tolerates the resulting skip there — the invariant this
+  # buys is the narrower and achievable one: on a push, every lane this gate reports
+  # on has actually run. `scripts/ci_required_checks_aggregate.py` enforces it.
   npm-audit:
     needs: changes
-    if: needs.changes.outputs.npm_audit == 'true'
+    if: needs.changes.outputs.npm_audit == 'true' || github.event_name == 'push'
     uses: ./.github/workflows/security-npm-audit.yml
 
   # ── Root-level ruff + scripts unit tests ────────────────────────────────────
@@ -705,8 +786,10 @@ jobs:
     needs:
       - changes
       - frontend-canon
+      - example-credentials-guard
       - gloomberb-ci-guard
       - vendor-content-gate
+      - plaintext-credential-guard
       - digibase
       - digikey
       - digitrace
@@ -724,6 +807,7 @@ jobs:
       - e2e-contract
       - nautilus-smoke
       - research-graph
+      - clients-tui
       - bun-suites
       - pip-audit
       - npm-audit
@@ -759,7 +843,32 @@ jobs:
           print('required-checks needs matches all', len(jobs), 'other jobs in ci.yml')
           "
 
+      # Policy-gate drift guard (DIG-1982). The check above only sees ci.yml, so
+      # it cannot fail on a policy check living in another workflow file — and it
+      # would stay green no matter which one that was. This one reconciles the
+      # declared policy inventory (.github/policy-checks.yml) against the jobs the
+      # workflows actually define AND against develop's required status-check
+      # contexts (.github/required-contexts.txt), failing on both real bugs: a
+      # required context that can never report (every PR waits forever), and a
+      # policy check that reports and gates nothing (it goes red, merges continue).
+      #
+      # It reads contexts from the committed snapshot because reading branch
+      # protection needs `administration: read`, which cannot be granted to
+      # GITHUB_TOKEN at all. `--live` re-reads the API with the same
+      # enable_branch_protection.py call the human runbook uses; run it after
+      # changing branch protection. Detector only: it changes no setting.
+      - name: Verify policy checks match develop's branch protection
+        run: |
+          python3 -m pip install --quiet pyyaml
+          python3 scripts/check_required_policy_checks.py
+
       - name: Fail if any non-advisory dependency failed or was cancelled
         env:
           RESULTS: ${{ toJSON(needs) }}
+          # On a push, a lane in the aggregate's ALWAYS_EVALUATED_ON_PUSH set must have
+          # produced a real verdict. `skipped` is tolerated everywhere else — it is why
+          # this job exists, since no path-gated job can be named in branch protection —
+          # but tolerating it on develop is how `npm-audit` reported success having never
+          # run (DIG-2305). Carried on a push only, so a doc-only PR still skips cleanly.
+          PUSH_EVENT: ${{ github.event_name == 'push' }}
         run: python3 scripts/ci_required_checks_aggregate.py

@@ -353,3 +353,50 @@ def test_a_configured_url_is_never_env_expanded():
     )
     url, _ = contracts.resolve(check, {"DT_R2_URL": "http://x/${FOO}"})
     assert url == "http://x/${FOO}"
+
+
+def test_a_requires_url_gets_no_path_unless_the_check_opts_in():
+    """The default stays "exactly as configured" (DIG-2959).
+
+    resolve() must not append a probe path to a requires URL just because it
+    looks like an origin: a local binding route is keyed on the path the
+    caller supplied. Opting in is per-check and explicit.
+    """
+    check = contracts.Check(
+        name="r2-put-get",
+        kind="http",
+        url=None,
+        profiles=("core",),
+        source="test",
+        requires="DT_R2_URL",
+    )
+    url, reason = contracts.resolve(check, {"DT_R2_URL": "http://127.0.0.1:8787"})
+    assert reason is None
+    assert url == "http://127.0.0.1:8787"
+
+
+def test_dashboard_api_probes_healthz_not_the_origin():
+    """The gate must ask dashboard-api for /healthz, not for the origin.
+
+    apps/dashboard-api/src/index.ts routes only /healthz, /ledger,
+    /v1/tables/* and the MCP path; every other GET answers
+    errorResponse("bad_request", "unknown route ...") at :193. Probing the
+    origin alone therefore reads 400 from a healthy service.
+    """
+    check = next(c for c in contracts.BUILTIN_CHECKS if c.name == "dashboard-api")
+    assert check.path == "/healthz"
+    url, reason = contracts.resolve(check, {"DT_DASHBOARD_API_URL": "http://127.0.0.1:8788"})
+    assert reason is None
+    assert url == "http://127.0.0.1:8788/healthz"
+
+
+def test_with_path_does_not_double_an_already_complete_path():
+    """An operator who exports the full probe URL gets the same URL back."""
+    base = "http://127.0.0.1:8788/healthz"
+    assert contracts._with_path(base, "/healthz") == base
+
+
+def test_with_path_keeps_query_and_fragment():
+    base = "http://127.0.0.1:8788/prefix?a=1#f"
+    got = contracts._with_path(base, "/healthz")
+    assert got == "http://127.0.0.1:8788/prefix/healthz?a=1#f"
