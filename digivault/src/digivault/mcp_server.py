@@ -44,6 +44,18 @@ def run_mcp(
     """Run the MCP server. Default: streamable HTTP on 127.0.0.1:8769."""
     bind = host or os.environ.get("DIGIVAULT_MCP_HOST", "127.0.0.1")
     mcp.settings.host = bind
+    # FastMCP fixes its DNS-rebinding allowlist to loopback at construction; a
+    # container bind (0.0.0.0) must also accept the compose service name or every
+    # in-network call is refused 421. Extra hosts via DIGIVAULT_MCP_ALLOWED_HOSTS.
+    if bind not in ("127.0.0.1", "localhost", "::1"):
+        from mcp.server.transport_security import TransportSecuritySettings
+
+        extra = os.environ.get("DIGIVAULT_MCP_ALLOWED_HOSTS", "digivault-mcp:*")
+        hosts = ["127.0.0.1:*", "localhost:*", "[::1]:*"]
+        hosts += [h.strip() for h in extra.split(",") if h.strip()]
+        mcp.settings.transport_security = TransportSecuritySettings(
+            enable_dns_rebinding_protection=True, allowed_hosts=hosts
+        )
     mcp.settings.port = port
     mcp.run(transport=transport)
 
