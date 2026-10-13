@@ -59,8 +59,9 @@ import {
   DIGIQUANT_MCP_HOSTNAME,
   DIGIQUANT_MCP_PORT,
   MCP_CONTAINER_ID,
-  SHARED_STACK_CONTAINER_ID,
   portForHostname,
+  sharedStackContainerId,
+  stackContainerRev,
 } from "./ports";
 import {
   DIGICHAT_PORT,
@@ -431,6 +432,13 @@ export interface Env {
   DIGISEARCH_URL?: string;
   DIGIQUANT_URL?: string;
   DIGITRACE_URL?: string;
+  /**
+   * Deploying commit, injected by `scripts/deploy.mjs` at deploy time; the
+   * shared-stack Container id is derived from it (ports.ts, DIG-3229). NOT in
+   * wrangler.toml [vars] on purpose — unset means "this deploy carried no rev",
+   * and the id falls back to the pinned legacy value. Never hand-write it.
+   */
+  STACK_CONTAINER_REV?: string;
   OPENAI_API_BASE?: string;
   DIGI_LLM_MODE?: string;
   CHROMA_PATH?: string;
@@ -547,14 +555,42 @@ function isMcpHostname(hostname: string): boolean {
   return hostname.trim().toLowerCase() === DIGIQUANT_MCP_HOSTNAME;
 }
 
+/**
+ * The ONE place this Worker addresses the shared stack Container (DIG-3229).
+ *
+ * The Durable Object id is derived from the deploying commit
+ * (`STACK_CONTAINER_REV`, injected by scripts/deploy.mjs), so every deploy
+ * addresses a fresh instance instead of relying on the platform retiring the
+ * old one — `sleepAfter` does not evict a Container under steady traffic, and
+ * the hand-edited id that used to cover for that was forgotten twice (v16→v17
+ * PII re-ingest; v17→v18 digikey scope escalation). See ports.ts for the full
+ * history.
+ *
+ * Routing every shared-stack fetch through one helper is what makes a missed
+ * site impossible: there is no second place that could hand `getContainer` an
+ * id without the rev. src/container-id-deploy.test.js pins that this is the only
+ * `getContainer(workerEnv.STACK, ...)` call in the file.
+ */
+function stackContainer(workerEnv: Env): DurableObjectStub<DigiStackContainer> {
+  return getContainer(
+    workerEnv.STACK,
+    sharedStackContainerId(workerEnv.STACK_CONTAINER_REV),
+  );
+}
+
 export default {
   async fetch(request: Request, workerEnv: Env): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/_stack/meta") {
+      // containerId is derived from the deploying commit (DIG-3229), so it is
+      // the operator's proof that the running instance came from this deploy
+      // rather than from a stale one. stackRev is null exactly when the build
+      // carries no rev and the id fell back to the pinned legacy value.
       return Response.json({
         ok: true,
         service: "digithings-stack",
-        containerId: SHARED_STACK_CONTAINER_ID,
+        containerId: sharedStackContainerId(workerEnv.STACK_CONTAINER_REV),
+        stackRev: stackContainerRev(workerEnv.STACK_CONTAINER_REV),
         note: "Worker up; container ports may still be starting",
       });
     }
@@ -570,8 +606,8 @@ export default {
     if (url.pathname === "/_stack/key" || url.pathname.startsWith("/_stack/key/")) {
       // Lazy ports import per route group (#4685): a failing import degrades
       // only these paths (503); every other group keeps serving.
-      return runIsolated("key-proxy", () => import("./ports"), async ({ SHARED_STACK_CONTAINER_ID, DIGIKEY_PORT }) => {
-        const container = getContainer(workerEnv.STACK, SHARED_STACK_CONTAINER_ID);
+      return runIsolated("key-proxy", () => import("./ports"), async ({ DIGIKEY_PORT }) => {
+        const container = stackContainer(workerEnv);
         return container.fetch(switchPort(rewriteKeyStackPath(request), DIGIKEY_PORT));
       });
     }
@@ -596,7 +632,7 @@ export default {
         // Lazy ports import per route group (#4685): a failing import
         // degrades only these paths (503); the fail-closed 401 above stays
         // synchronous and untouched.
-        return runIsolated("mcp-edge", () => import("./ports"), async ({ SHARED_STACK_CONTAINER_ID }) => {
+        return runIsolated("mcp-edge", () => import("./ports"), async ({}) => {
           let stripped = slash === -1 ? "/" : rest.slice(slash);
           if (!stripped.endsWith("/")) {
             stripped += "/";
@@ -604,7 +640,7 @@ export default {
           const target = new URL(url.toString());
           target.pathname = stripped;
           const forwarded = new Request(target.toString(), request);
-          const container = getContainer(workerEnv.STACK, SHARED_STACK_CONTAINER_ID);
+          const container = stackContainer(workerEnv);
           return container.fetch(switchPort(forwarded, port));
         });
       }
@@ -678,7 +714,7 @@ export default {
 
     // Lazy ports import per route group (#4685): unknown-host 404 and the
     // shared-container proxy degrade only under this group on failure.
-    return runIsolated("container-routes", () => import("./ports"), async ({ SHARED_STACK_CONTAINER_ID, portForHostname }) => {
+    return runIsolated("container-routes", () => import("./ports"), async ({ portForHostname }) => {
       const port = portForHostname(url.hostname);
       if (port === null) {
         return new Response(
@@ -688,7 +724,7 @@ export default {
           { status: 404 },
         );
       }
-      const container = getContainer(workerEnv.STACK, SHARED_STACK_CONTAINER_ID);
+      const container = stackContainer(workerEnv);
       return container.fetch(switchPort(request, port));
     });
   },
