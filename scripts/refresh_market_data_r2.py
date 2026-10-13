@@ -65,22 +65,6 @@ still open and predates both guards: an unreadable manifest
 (``_resolve_macro_specs`` returns ``[]``, leaving no ids for any of these guards
 to reason about). Partial legs stay out of reach, by design. All of this is
 recorded in ``digiquant/ARCHITECTURE.md``.
-Scope of that guard, precisely: it closes the ``history-only`` shape only, and
-only over series the manifest actually declared. A neighbouring whole-leg freeze
-is *not* covered by it and still exits 0 — a panel that keeps serving rows
-inside its live window (``up-to-date``, so not a soft fail at all). Partial legs
-and single-series manifests are also out of reach, by design. All three are
-recorded in ``digiquant/ARCHITECTURE.md``; that one pre-dates this guard.
-
-An unreadable ``--macro-manifest`` (DIG-1371) is closed too, but not by this
-guard — there are no exempt ids to reason about when the manifest never parsed.
-:func:`_resolve_macro_specs` still does not raise: a raise at that point in
-``main`` aborts the run *before* :func:`refresh_universe`, so a broken macro
-manifest would take the equity leg down with it. It hands the cause back on a
-:class:`MacroSpecResolution` instead, and ``main`` turns it into a
-``macro-manifest-unreadable`` ``error`` outcome *after* the price leg has run,
-so the run fails loudly instead of reporting fresh with a frozen panel — and
-the core macro mirror reports the skip rather than a healthy-looking empty run.
 
 No vendor API key is needed on this path: the macro panel is sealed from
 anonymous Gloomberb ``econ_series`` pages (#4794). ``source=="fred"`` fetches
