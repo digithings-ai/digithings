@@ -554,10 +554,9 @@ export default {
         // degrades only these paths (503); the fail-closed 401 above stays
         // synchronous and untouched.
         return runIsolated("mcp-edge", () => import("./ports"), async ({ SHARED_STACK_CONTAINER_ID }) => {
-          let stripped = slash === -1 ? "/" : rest.slice(slash);
-          if (!stripped.endsWith("/")) {
-            stripped += "/";
-          }
+          // mcp>=1.26 serves streamable HTTP at exactly `/mcp` and 307s `/mcp/`
+          // to an absolute in-container URL, so forward the path unchanged.
+          const stripped = slash === -1 ? "/" : rest.slice(slash);
           const target = new URL(url.toString());
           target.pathname = stripped;
           const forwarded = new Request(target.toString(), request);
