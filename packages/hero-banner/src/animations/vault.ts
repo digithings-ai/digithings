@@ -108,13 +108,17 @@ function door(state: VaultState, x: number, y: number, turn: number, click: bool
   const dx = x - dial.cx;
   const dy = y - dial.cy;
   const d = Math.hypot(dx, dy);
-  if (Math.abs(d - dial.r) < 0.6) {
-    // The marker: the ring pixel nearest the dial angle (0 = 12 o'clock, clockwise).
+  if (d >= 1 && d < dial.r + 0.6) {
+    // The hand: a spoke cut from the hub to the ring at the dial angle (0 = 12
+    // o'clock, clockwise), filled with `glint` on each click. Cut, not tinted,
+    // so the turn shows in the shape and not only the colour: a terminal cell
+    // draws lit-or-empty, never tone, and a spoke spans enough columns to
+    // survive the terminal's narrower gaps.
     const a = Math.atan2(dx, -dy) / (2 * Math.PI);
     const off = Math.abs(((a - turn) % 1 + 1.5) % 1 - 0.5);
-    if (off < 0.5 / (2 * Math.PI * dial.r) + 0.02) return click ? GLINT : BOLT;
-    return click ? BOLT : RING;
+    if (off < 0.5 / (2 * Math.PI * d) + 0.02) return click ? GLINT : null;
   }
+  if (Math.abs(d - dial.r) < 0.6) return click ? BOLT : RING;
   if (d < 1) return RING;
   return PLATE;
 }

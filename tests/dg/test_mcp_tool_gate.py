@@ -52,11 +52,14 @@ MUTATING = "addCommentToJiraIssue"
 READ_ONLY = "searchIssues"
 
 
+_SERVER_URL = "https://mcp.example.invalid/rpc"
+
+
 def _server(**overrides) -> dict:
     """One operator MCP row, in the wire spelling ``http_api/context.py`` builds."""
     row = {
         "id": "acme",
-        "url": "https://mcp.example.invalid/rpc",
+        "url": _SERVER_URL,
         "auth": "bearer",
         "token": "not-a-real-token",
         "allowedTools": [MUTATING, READ_ONLY],
@@ -88,7 +91,9 @@ def transport(monkeypatch):
     calls: list[dict] = []
 
     def _fake_call_tool_blocking(server, tool, args):
-        calls.append({"server_id": server.get("id"), "tool": tool, "args": dict(args)})
+        calls.append(
+            {"server_id": server.get("id"), "url": server.get("url"), "tool": tool, "args": dict(args)}
+        )
         return {"ok": True, "content": f"called {tool}"}
 
     monkeypatch.setattr(mc, "_call_tool_blocking", _fake_call_tool_blocking)
@@ -155,7 +160,7 @@ def test_non_mutating_tool_still_executes(transport, audit):
     ctx = _context(server, allowed=["acme_searchIssues"])
     result = registry.execute("acme_searchIssues", {"jql": "project = DIG"}, ctx)
 
-    assert transport == [{"server_id": "acme", "tool": READ_ONLY, "args": {"jql": "project = DIG"}}]
+    assert transport == [{"server_id": "acme", "url": _SERVER_URL, "tool": READ_ONLY, "args": {"jql": "project = DIG"}}]
     assert result == {"ok": True, "content": f"called {READ_ONLY}"}
     assert ctx.state.get("pending_mcp_decision") is None
 
@@ -214,29 +219,32 @@ def test_decision_cannot_substitute_the_payload(transport, audit):
             pending_id,
             True,
             session_id="sess-1",
-            servers=[server],
             tool="deleteAllPages",
             args={"pageId": "P-1"},
         )
 
     # A decision from another session does not find the record.
-    wrong = registry.decide_mcp_call(pending_id, True, session_id="other-session", servers=[server])
+    wrong = registry.decide_mcp_call(pending_id, True, session_id="other-session")
     assert wrong["error"] == "unknown_pending_mcp_decision"
     assert transport == []
 
+    # 284.6: the answer now carries the decision's own status, because the
+    # client route treats a reply without one as an upstream failure. What the
+    # tool said is nested under "result", not merged into it.
     approved = registry.decide_mcp_call(pending_id, True, session_id="sess-1", servers=[server])
-    assert approved["ok"] is True
-    assert transport == [{"server_id": "acme", "tool": MUTATING, "args": {"issueKey": "JIRA-1234"}}]
+    assert approved["status"] == "approved"
+    assert approved["result"]["ok"] is True
+    assert transport == [{"server_id": "acme", "url": _SERVER_URL, "tool": MUTATING, "args": {"issueKey": "JIRA-1234"}}]
 
     # Exactly once: a replayed approval finds no record and runs nothing.
-    replay = registry.decide_mcp_call(pending_id, True, session_id="sess-1", servers=[server])
+    replay = registry.decide_mcp_call(pending_id, True, session_id="sess-1")
     assert replay["error"] == "unknown_pending_mcp_decision"
     assert len(transport) == 1
 
     denied = registry.execute(
         "acme_addCommentToJiraIssue", {"issueKey": "JIRA-9999"}, _context(server)
     )["pending_id"]
-    out = registry.decide_mcp_call(denied, False, session_id="sess-1", servers=[server])
+    out = registry.decide_mcp_call(denied, False, session_id="sess-1")
     assert out["status"] == "denied"
     assert len(transport) == 1
 
@@ -482,3 +490,356 @@ def test_shadowed_local_tool_is_gated_before_the_local_handler(monkeypatch, tran
     ran = registry.execute("session_upsert_mcp", {"server": {"id": "acme"}}, ctx2)
     assert ran == {"ok": True, "session_prefs": {"server": {"id": "acme"}}}
     assert transport == []
+
+
+@pytest.mark.unit
+def test_denied_pending_call_is_audited_and_never_reaches_the_transport(transport, audit):
+    """A refusal is a decision, so it leaves the same trail an approval does.
+
+    The deny half of test_decision_cannot_substitute_the_payload asserts the
+    transport did not grow. It does not assert that anything was RECORDED, so a
+    refusal that returned cleanly and wrote no audit row would pass today.
+    """
+    import digigraph.orchestration.registry as registry
+
+    server = _server()
+    pending_id = registry.execute(
+        f"{server['id']}_{MUTATING}", {"issueKey": "JIRA-1234"}, _context(server)
+    )["pending_id"]
+
+    denied = registry.decide_mcp_call(pending_id, False, session_id="sess-1")
+
+    assert denied["status"] == "denied"
+    assert transport == [], "a refused call must never reach the MCP transport"
+    denials = [(name, payload) for name, payload in audit if name == "mcp_call_denied_by_human"]
+    assert len(denials) == 1, f"expected exactly one denial audit row, got {audit}"
+    assert denials[0][1] == {"tool": MUTATING, "server_id": "acme", "pending_id": pending_id}
+
+
+@pytest.mark.unit
+def test_a_refusal_cannot_be_flipped_into_a_write_by_a_second_decision(transport, audit):
+    """The second decision on a pending id is refused, whichever way it points.
+
+    The replay arm that already exists approves twice, which the at-most-once pop
+    refuses. The dangerous direction is the one it does not cover: a caller that
+    is refused and then submits the SAME pending id again as an approval. If the
+    record were still live, that second call would perform the write the human
+    just said no to -- so this asserts the write never reaches the transport, not
+    merely that the second call returns an error.
+    """
+    import digigraph.orchestration.registry as registry
+
+    server = _server()
+    pending_id = registry.execute(
+        f"{server['id']}_{MUTATING}", {"issueKey": "JIRA-1234"}, _context(server)
+    )["pending_id"]
+
+    denied = registry.decide_mcp_call(pending_id, False, session_id="sess-1")
+    assert denied["status"] == "denied"
+
+    replayed_approval = registry.decide_mcp_call(
+        pending_id, True, session_id="sess-1"
+    )
+
+    assert transport == [], (
+        "a refusal was flipped into a write: the pending id was still live after a "
+        "denial, so the same id was approved a second time and the call executed"
+    )
+    assert replayed_approval["error"] == "unknown_pending_mcp_decision"
+    assert len([n for n, _ in audit if n == "mcp_call_denied_by_human"]) == 1
+
+
+@pytest.mark.unit
+def test_approval_answers_approved_so_the_client_can_tell_success_from_failure():
+    """The digichat route answers 502 unless ``status`` is approved or denied.
+
+    An approval that returns the raw tool payload makes a successful write look
+    like an upstream failure to the operator who approved it. The status is the
+    contract; the tool result travels beside it.
+    """
+    import digigraph.orchestration.registry as registry
+
+    server = _server()
+    pending_id = registry.execute(
+        f"{server['id']}_{MUTATING}", {"issueKey": "JIRA-1234"}, _context(server)
+    )["pending_id"]
+
+    decided = registry.decide_mcp_call(pending_id, True, session_id="sess-1", servers=[server])
+
+    assert decided.get("status") == "approved", (
+        f"an approval answered {decided.get('status')!r}, which the digichat route "
+        "reads as an upstream failure"
+    )
+    assert decided["pending_id"] == pending_id
+
+
+@pytest.mark.unit
+def test_the_captured_transport_never_reaches_the_public_event_or_the_audit(audit):
+    """The capture stays in the record beside ``args``, never on the way out.
+
+    ``as_public_event`` is what reaches the model and the checkpoint, and the
+    audit payload is what reaches the log. A captured token or URL in either is
+    a disclosure the 284.4 design deliberately excluded.
+    """
+    from digigraph.orchestration.registry import pending_mcp_decision
+
+    server = _server()
+    state: dict = {}
+    registry = __import__("digigraph.orchestration.registry", fromlist=["execute"])
+    pending_id = registry.execute(
+        f"{server['id']}_{MUTATING}", {"issueKey": "JIRA-1234"}, _context(server, state=state)
+    )["pending_id"]
+
+    event = state["pending_mcp_decision"]
+    for field in ("url", "token", "auth", "server", "transport"):
+        assert field not in event, f"{field} leaked into the public pending event"
+
+    record = pending_mcp_decision(pending_id, session_id="sess-1")
+    assert record is not None
+    public = record.as_public_event()
+    for field in ("url", "token", "auth", "server", "transport"):
+        assert field not in public, f"{field} leaked into the public pending event"
+        assert field not in record.target_arguments
+
+    assert audit, "the pending decision must be recorded"
+    for _name, payload in audit:
+        for field in ("url", "token", "auth", "server", "transport"):
+            assert field not in payload, f"{field} leaked into an audit payload"
+
+
+OPERATOR_ONLY_KEYS = (
+    "url",
+    "auth",
+    "token",
+    "authHeader",
+    "auth_header",
+    "allowedTools",
+    "mutatingTools",
+    "servers",
+    "mcp_servers",
+    "session_id",
+)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("key", OPERATOR_ONLY_KEYS)
+def test_the_decision_route_refuses_every_operator_only_key(key):
+    """The body carries a verdict and an id, and nothing that configures a server.
+
+    Each of these keys is refused BY NAME so the refusal says which one, rather
+    than reporting a generic bad request the operator cannot act on.
+    """
+    from digigraph.http_api.mcp_decisions import decision_from_request
+
+    body = {"pending_id": "a" * 32, "approve": True, key: "https://attacker.invalid/rpc"}
+    _fields, error = decision_from_request(body, session_id="sess-1")
+
+    assert error.get("error") == "decision_body_rejected", (
+        f"the route accepted an operator-only key {key!r}: {error}"
+    )
+    assert error.get("key") == key, f"the refusal does not name {key!r}: {error}"
+
+
+@pytest.mark.unit
+def test_the_decision_route_refuses_a_request_with_no_session_header():
+    """The session is the capability's scope; without it there is nothing to check."""
+    from digigraph.http_api.mcp_decisions import decision_from_request
+
+    _fields, error = decision_from_request(
+        {"pending_id": "a" * 32, "approve": True}, session_id=None
+    )
+
+    assert error.get("error") == "mcp_decision_requires_session", error
+
+
+@pytest.mark.unit
+def test_the_decision_route_refuses_a_verdict_that_is_not_a_boolean():
+    """ "true" as a string is not a decision; guessing at it would be an approval."""
+    from digigraph.http_api.mcp_decisions import decision_from_request
+
+    _fields, error = decision_from_request(
+        {"pending_id": "a" * 32, "approve": "true"}, session_id="sess-1"
+    )
+
+    assert error.get("error") == "decision_body_rejected", error
+
+
+@pytest.mark.unit
+def test_the_decision_route_accepts_exactly_the_two_keys_the_client_sends():
+    """The positive arm, so the refusals above are not passing for the wrong reason."""
+    from digigraph.http_api.mcp_decisions import decision_from_request
+
+    fields, error = decision_from_request(
+        {"pending_id": "a" * 32, "approve": False}, session_id="sess-1"
+    )
+
+    assert error == {}, f"a well-formed decision was refused: {error}"
+    assert fields == {"pending_id": "a" * 32, "approve": False}
+
+
+@pytest.mark.unit
+def test_the_decision_route_is_mounted_where_the_client_calls_it():
+    """``apps/digichat/.../approve/route.ts`` posts to ``/v1/mcp/decisions``.
+
+    A route under any other path leaves the operator clicking approve and getting
+    a 502 forever, so the path is pinned rather than left to review.
+    """
+    from digigraph.http_api.mcp_decisions import router
+
+    paths = {
+        (getattr(r, "path", None), tuple(sorted(getattr(r, "methods", ()) or ())))
+        for r in router.routes
+    }
+    assert ("/v1/mcp/decisions", ("POST",)) in paths, (
+        f"the digigraph decision route is not mounted where digichat calls it: {sorted(p for p, _ in paths)}"
+    )
+
+
+# --- DIG-284 leaf 284.6, CTO ruling of 2026-10-11 ---------------------------
+# The deciding request carries no transport. The executing row is the row the
+# call was recorded against, captured onto the record at refusal time and kept
+# in process memory on the same footing as ``args``.
+#
+# A previous commit (b71d9bb04) pinned the OPPOSITE design: it re-supplied the
+# transport and asserted that operator-side revocation between the refusal and
+# the decision took effect at execute time. The CTO rejected that design --
+# re-supplying transport is "D3 broken by another name". Those tests are
+# replaced here by tests that pin the real contract and name the residual it
+# leaves, so the gap is inherited by a reader instead of deleted.
+
+
+@pytest.mark.unit
+def test_a_pending_id_from_another_session_is_refused(transport):
+    """The id is not a global capability: it is keyed by the session that made it."""
+    from digigraph.orchestration import registry
+
+    server = _server()
+    context = _context(server, session_id="sess-1", state={})
+    refused = registry.execute(f"{server['id']}_{MUTATING}", {"issueKey": "JIRA-1234"}, context)
+    pending_id = refused["pending_id"]
+
+    decided = registry.decide_mcp_call(pending_id, True, session_id="sess-2")
+
+    assert decided.get("error") == "unknown_pending_mcp_decision", decided
+    assert transport == [], "a session executed a pending id it never created"
+
+
+@pytest.mark.unit
+def test_a_decision_consumes_the_record_so_a_replay_runs_nothing(transport):
+    """At-most-once survives the design change: the record is popped on use."""
+    from digigraph.orchestration import registry
+
+    server = _server()
+    context = _context(server, session_id="sess-1", state={})
+    refused = registry.execute(f"{server['id']}_{MUTATING}", {"issueKey": "JIRA-1234"}, context)
+    pending_id = refused["pending_id"]
+
+    first = registry.decide_mcp_call(pending_id, True, session_id="sess-1", servers=[server])
+    second = registry.decide_mcp_call(pending_id, True, session_id="sess-1", servers=[server])
+
+    assert first.get("status") == "approved", first
+    assert second.get("error") == "unknown_pending_mcp_decision", second
+    assert len(transport) == 1, (first, second)
+
+# --- DIG-284 leaf 284.6, CTO decision (2): the decision is checked against the
+# operator config live at execute time, not against a snapshot taken when the
+# call was refused. 98e32de0 supersedes cc795a07 on DIG-284.
+
+ROTATED_URL = "https://mcp-rotated.example.invalid/rpc"
+
+
+@pytest.mark.unit
+def test_a_stale_url_is_refused_because_the_recorded_server_is_gone(transport):
+    """A record whose server no longer resolves refuses, and stays refused.
+
+    "Stale" is not "the operator moved the endpoint" -- that is rotation, and
+    rotation has to take effect. Stale is the record naming a server the live
+    operator config cannot produce: the row is absent, or its id and url cannot
+    both be matched. The call must not run, and the at-most-once pop must have
+    already burned the record, so a retry cannot revive it.
+    """
+    import digigraph.orchestration.registry as registry
+
+    server = _server()
+    pending_id = registry.execute(
+        f"{server['id']}_{MUTATING}", {"issueKey": "JIRA-1234"}, _context(server)
+    )["pending_id"]
+
+    decided = registry.decide_mcp_call(pending_id, True, session_id="sess-1", servers=[])
+
+    assert decided["error"] == "mcp_server_not_available"
+    assert transport == [], "a call whose transport cannot be resolved must never reach it"
+    replayed = registry.decide_mcp_call(
+        pending_id, True, session_id="sess-1", servers=[server]
+    )
+    assert replayed["error"] == "unknown_pending_mcp_decision", (
+        "the record was not burned: a refused transport left the pending id live, "
+        "so the same decision could be replayed against a resolved transport"
+    )
+
+
+@pytest.mark.unit
+def test_a_rotated_allowlist_is_refused_so_a_tightening_takes_effect(transport):
+    """An allowlist that stopped listing the tool refuses the call at decide time.
+
+    The call was offered while the tool was allowed. The operator tightened the
+    allowlist afterwards. The decision must be judged against the allowlist live
+    at execute time, which is the whole reason the snapshot design was rejected.
+    """
+    import digigraph.orchestration.registry as registry
+
+    server = _server()
+    pending_id = registry.execute(
+        f"{server['id']}_{MUTATING}", {"issueKey": "JIRA-1234"}, _context(server)
+    )["pending_id"]
+
+    tightened = _server(allowedTools=[READ_ONLY], mutatingTools=[])
+    decided = registry.decide_mcp_call(
+        pending_id, True, session_id="sess-1", servers=[tightened]
+    )
+
+    assert decided["error"] == "mcp_tool_not_allowlisted"
+    assert "status" not in decided, "a tightened allowlist must not read as an approval"
+    assert transport == [], "a tool the operator removed must never reach the transport"
+
+
+@pytest.mark.unit
+def test_a_rotated_url_takes_effect_because_the_operator_moved_the_endpoint(transport):
+    """Same server id, new URL: the call runs against the NEW URL.
+
+    This is the test the refusal-time snapshot cannot pass. A snapshot frozen at
+    refusal would execute against the URL the operator has already retired; the
+    live re-resolution has to send the recorded arguments to the endpoint the
+    operator points at now.
+    """
+    import digigraph.orchestration.mcp_client as mc
+    import digigraph.orchestration.registry as registry
+
+    server = _server()
+    pending_id = registry.execute(
+        f"{server['id']}_{MUTATING}", {"issueKey": "JIRA-1234"}, _context(server)
+    )["pending_id"]
+
+    seen: list[dict] = []
+    original = mc._call_tool_blocking
+
+    def _capture(server_arg, tool, args):
+        seen.append({"id": server_arg.get("id"), "url": server_arg.get("url"), "tool": tool})
+        return original(server_arg, tool, args)
+
+    mc._call_tool_blocking = _capture
+    try:
+        moved = _server(url=ROTATED_URL)
+        decided = registry.decide_mcp_call(
+            pending_id, True, session_id="sess-1", servers=[moved]
+        )
+    finally:
+        mc._call_tool_blocking = original
+
+    assert decided.get("status") == "approved", decided
+    assert decided["result"]["ok"] is True
+    assert seen and seen[0]["url"] == ROTATED_URL, (
+        "the recorded arguments were sent to the retired endpoint instead of the "
+        f"one the operator moved them to: {seen}"
+    )
+    assert transport and transport[0]["args"] == {"issueKey": "JIRA-1234"}

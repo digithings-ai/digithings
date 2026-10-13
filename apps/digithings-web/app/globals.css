@@ -936,34 +936,48 @@ html {
   .pixel-word { width: 616px; }
 }
 
+/* The band holds the footer mark at page width. Two rules, both load-bearing:
+   the band carries NO height, so the mark sets it from its own 88x10 aspect
+   (8.8); and `overflow` clips the horizontal axis only, never the vertical one.
+   A fixed band height with `overflow: clip` on both axes shaved the top and
+   bottom glyph rows at every viewport wider than ~1280 — 7.8px at 1440, 26px at
+   1600, 37.8px at 1728 — and the mark read as squashed (DIG-2304).
+
+   These two rules are the pre-PR `develop` state, restored deliberately, and
+   they are what the design seat ruled on (DIG-2353, verdict on DIG-2364):
+   the footer mark stays inside the band, whole. A bleed is not available on
+   this artwork — the end glyphs are 7 cells wide with ink in column 0, so at
+   1440 a bleed of the size PR #5264 asked for (118%) removes 6.71 of 88 cells
+   a side and the mark reads IGITHING with the D and the S gone. Bleed is earned
+   by the artwork, and this artwork has no quiet margin to earn it with.
+   Do not reintroduce a band height, an `overflow` shorthand, or a width above
+   100% without taking the ruling back to the design seat. */
 .pixel-word-band {
   display: flex;
   justify-content: center;
   align-items: center;
-  /* min-height, not height: the mark is an 88:10 SVG, so at the enlarged
-     footer width it outgrows a fixed band and a fixed box would clip its top
-     and bottom glyph rows. The band grows with the mark instead. */
+  /* Same box as digiquant.io's footer mark: the page frame plus its gutters,
+     centred, so the mark sits inside the vertical grid lines at every width. */
+  width: 100%;
+  max-width: calc(var(--frame-w) + 2 * var(--page-pad));
+  margin-left: auto;
+  margin-right: auto;
+  /* min-height, not height: the mark is an 88:10 SVG and grows with the band;
+     a fixed box would clip its top and bottom glyph rows. */
   min-height: clamp(4.5rem, 12vw, 9rem);
   padding-left: var(--page-pad);
   padding-right: var(--page-pad);
-  /* x only: the mark deliberately bleeds past the gutters, but it must never
-     be clipped top or bottom. */
   overflow-x: clip;
 }
 
 .pixel-word.pixel-word-footer {
-  width: min(118%, 1600px);
+  /* Fills the band's content box and no more (was min(118%, 1600px), which
+     bled past the frame and off-page). */
+  width: 100%;
+  max-width: 100%;
   height: auto;
   margin: 0;
-  margin-top: 0;
-  /* A flex item shrinks by default, which would fold 118% straight back to the
-     band width and make the enlargement a no-op below the 1600px cap. */
   flex-shrink: 0;
-  /* …and `packages/design/site/site.css` puts `max-width: 100%` on every svg,
-     which caps the used width at the band's content box. flex-shrink cannot
-     lift a max-width; only this can. The site sheet arrives inside
-     layer(components), so this has to stay unlayered to outrank it. */
-  max-width: none;
 }
 
 .pixel-word .c { opacity: var(--f); }

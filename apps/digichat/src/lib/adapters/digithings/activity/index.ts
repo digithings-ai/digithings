@@ -7,6 +7,11 @@ import {
 import { mapDigisearchRagSources } from "./digisearch";
 import { mapDigivaultGetNote, mapDigivaultSearchNotes } from "./digivault";
 import { argsRecord, queryFromToolArgs, toolInputFromPayload } from "./tool-args";
+import {
+  describePendingMcpOperation,
+  isApprovableMcpTool,
+  pendingMcpDecisionFromEvent,
+} from "@/lib/ui-stream-parts";
 
 export type DigigraphTraceLike = {
   type: string;
@@ -15,6 +20,55 @@ export type DigigraphTraceLike = {
 
 /** LangGraph housekeeping trace types — never shown in the activity chain. */
 const SUPPRESSED_TRACE_TYPES = new Set(["graph_step", "span"]);
+
+/**
+ * digigraph's refusal code for a tool call held for a human
+ * (`orchestration.registry._refuse_for_human_approval`). The pending decision is
+ * `started`, not failed: the call is running and waiting on a person, and nothing
+ * has been lost. `ActivitySpan.status` has no pending member — chat-activity.ts is
+ * the disclosure allowlist and is not in this leaf's file list — so a pending
+ * decision is expressed as `started` plus a label that names the concrete
+ * operation and its target.
+ */
+const PENDING_DECISION_ERROR = "mcp_call_requires_human_approval";
+
+/**
+ * A decision for a meta tool is not renderable as an approvable confirmation
+ * (CTO bar item 10): `discover` / `executeRead` / `executeWrite` /
+ * `executeDestructive` decide for themselves what to call next, so a consent box
+ * naming one asks a human to approve a call nobody has named. Returns null, and
+ * the caller renders nothing.
+ */
+function mapPendingMcpDecision(
+  payload: Record<string, unknown>
+): ActivitySpan | null {
+  const decision = pendingMcpDecisionFromEvent(payload);
+  if (!decision) return null;
+  if (!isApprovableMcpTool(decision.tool)) return null;
+  const label = describePendingMcpOperation(decision);
+  const toolInput: Record<string, unknown> = {
+    pending_id: decision.pendingId,
+    server_id: decision.serverId,
+    target_arguments: decision.targetArguments,
+  };
+  return {
+    operation: "execute_tool",
+    status: "started",
+    label,
+    toolName: decision.tool,
+    toolInput,
+  };
+}
+
+/** True for any event carrying a pending human decision, whatever the trace type says. */
+function isPendingMcpDecisionEvent(trace: DigigraphTraceLike): boolean {
+  const payload = trace.payload ?? {};
+  return (
+    trace.type === "mcp_decision_pending" ||
+    payload.error === PENDING_DECISION_ERROR ||
+    (typeof payload.pending_id === "string" && !!payload.pending_id.trim())
+  );
+}
 
 function mapGraphUpdate(payload: Record<string, unknown>): ActivitySpan | null {
   const briefRaw = payload.research_brief;
@@ -76,8 +130,15 @@ export function mapDigigraphTraceToSpans(
 ): ActivitySpan[] {
   if (SUPPRESSED_TRACE_TYPES.has(trace.type)) return [];
 
+  // A pending human decision is matched BEFORE tool_call: digigraph refuses the
+  // call and returns a decision event instead of a call trace, but ordering it
+  // first means a future trace type carrying the same payload still reads as a
+  // decision rather than falling through to mapOpaque.
   let raw: ActivitySpan | null = null;
-  if (trace.type === "tool_call") {
+  if (isPendingMcpDecisionEvent(trace)) {
+    raw = mapPendingMcpDecision(trace.payload ?? {});
+    if (!raw) return [];
+  } else if (trace.type === "tool_call") {
     const payload = trace.payload ?? {};
     const tool =
       (typeof payload.tool === "string" && payload.tool.trim()) ||

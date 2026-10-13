@@ -147,5 +147,7 @@ bash tests/scripts/test_dt_routine_watch.sh              # the 15 checks, no net
 launchctl bootout gui/$(id -u)/com.digithings.routine-watch
 rm ~/Library/LaunchAgents/com.digithings.routine-watch.plist
 rm ~/.config/digithings/routine-watch.json ~/.config/digithings/routine-watch-state.json
-git -C ~/paperclip-workspace/kit revert 8d4eda7
+git -C ~/paperclip-workspace/kit revert 2e7da06 8d4eda7   # newest first
 ```
+
+The two kit commits are the whole footprint there: `8d4eda7` is the clock itself, `2e7da06` is the board-derived watch list and the shared suite resolution. Nothing else in the kit belongs to this change. A recipe naming only `8d4eda7` leaves the widened scope installed.

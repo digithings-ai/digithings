@@ -6,6 +6,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./chart-scale": "./src/components/finance-charts/chart-scale.ts",
     "./styles/web-theme.css": "./src/styles/web-theme.css",
     "./styles/docs.css": "./src/styles/docs.css",
     "./styles/diagrams.css": "./src/styles/diagrams.css",

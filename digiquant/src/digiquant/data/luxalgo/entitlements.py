@@ -1,5 +1,9 @@
 """Per-tool entitlement declarations for the LuxAlgo hosted family (#4779 P0, #4844).
 
+The trackers data licence was classified in DIG-1464: CC0-1.0, with
+per-family limits on congress-trades and short-volume that every note
+mentioning the licence has to carry.
+
 One vocabulary, declared once per tool and rendered on two surfaces:
 
 * the MCP registration (``mcp_server`` attaches ``fn.entitlement`` and appends
@@ -20,8 +24,9 @@ Deliberately NOT wrapped (see scope §P0, #4844):
 
 * ``library_get_source_code`` — CC BY-NC-SA: no paid-product embed without a
   commercial license;
-* ``trackers_query`` — ad-hoc dump search; the CC0 dumps stay the source of
-  record and live queries are freshness/ad-hoc lookups only;
+* ``trackers_query`` — ad-hoc dump search; the CC0-1.0 dumps (limits per
+  DIG-1464) stay the source
+  of record and live queries are freshness/ad-hoc lookups only;
 * ``broker_*`` — local-only keys; broker credentials are never sent to the
   hosted MCP;
 * ``journal_*`` (OAuth), ``propfirms_*`` — separate packages, not this wrap.
@@ -70,9 +75,29 @@ ENTITLEMENT_DESCRIPTIONS: dict[Entitlement, str] = {
     ),
 }
 
+#: The trackers note carries the same two per-family limits as
+#: :func:`digiquant.data.luxalgo.attribution.trackers_data_caveat`. An
+#: entitlement note is read by the model *before* the call, so a permissive
+#: sentence here is the more dangerous of the two places it could live — "CC0
+#: public records" with no limit reads as permission for congress-trades and
+#: short-volume alike, and neither one is that (DIG-1464, DIG-1472).
+_TRACKERS_ENTITLEMENT_NOTE = (
+    "Entitlement: free (anonymous; no key needed). Trackers rows are CC0-1.0 "
+    "public records — cite the primary source (provenance.sourceUrl); the "
+    "dumps are the source of record. The CC0 grant does not clear two families: "
+    "congress-trades rows are 13107(c) disclosure reports whose commercial use "
+    "5 U.S.C. 13107(c)(1)(B) restricts — and 13107(c)(2) runs to whoever "
+    "obtains or uses the report, so no vendor licence moves the exposure to "
+    "LuxAlgo; short-volume rows carry unresolved upstream FINRA terms. Do not "
+    "present either as plain CC0. DIG-1472."
+)
+
 #: Per-tool note overrides (#4844): the Edge Stats and Trackers families share
 #: the ``free`` entitlement but need their own description sentence — the
-#: Library source-code note would mislead on a preset stat or a CC0 row.
+#: Library source-code note would mislead on a preset stat or a CC0-1.0 row,
+#: so the trackers note repeats the per-family limits from
+#: :data:`attribution.LUXALGO_TRACKERS_DATA_CAVEATS` — congress-trades under
+#: 5 U.S.C. 13107 and short-volume under the unresolved FINRA terms.
 TOOL_NOTES: dict[str, str] = {
     "luxalgo_edge_symbols": (
         "Entitlement: free (anonymous; no key needed). Edge Stats content is "
@@ -89,21 +114,9 @@ TOOL_NOTES: dict[str, str] = {
         "LuxAlgo's — attribute and link back; precomputed historical "
         "frequencies, not predictions."
     ),
-    "luxalgo_trackers_datasets": (
-        "Entitlement: free (anonymous; no key needed). Trackers rows are CC0 "
-        "public records — cite the primary source (provenance.sourceUrl); "
-        "the dumps are the source of record."
-    ),
-    "luxalgo_trackers_latest": (
-        "Entitlement: free (anonymous; no key needed). Trackers rows are CC0 "
-        "public records — cite the primary source (provenance.sourceUrl); "
-        "the dumps are the source of record."
-    ),
-    "luxalgo_trackers_ticker": (
-        "Entitlement: free (anonymous; no key needed). Trackers rows are CC0 "
-        "public records — cite the primary source (provenance.sourceUrl); "
-        "the dumps are the source of record."
-    ),
+    "luxalgo_trackers_datasets": _TRACKERS_ENTITLEMENT_NOTE,
+    "luxalgo_trackers_latest": _TRACKERS_ENTITLEMENT_NOTE,
+    "luxalgo_trackers_ticker": _TRACKERS_ENTITLEMENT_NOTE,
 }
 
 

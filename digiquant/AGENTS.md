@@ -69,6 +69,18 @@ Beyond root `AGENTS.md`:
 - **ADDM drift is wired**: `GET /check_drift` accepts `current_sharpe`; `run_backtest` calls `record_sharpe()`. Heartbeat still needs product wiring to act on `drift_detected`.
 - **Human gate on live trading**: Broker adapter code (`digiquant/brokers/`) must never be called from any automated path without an explicit human gate.
 
+### NautilusTrader version pinning (ADR-0033)
+
+- **The build we ship is `nautilus_trader==1.230.0`.** It is pinned exactly in `pyproject.toml` under the `nautilus` extra. Do not widen it to a range. A minor bump inside the old `>=1.190,<2` moved the Python-visible return type of `PortfolioAnalyzer.realized_pnls()` (1.228.0 → 1.230.0) and silently changed dedup semantics in the honesty envelope.
+- **One lock only: the repo-root `uv.lock`.** `digiquant` is a `[tool.uv.workspace]` member; uv resolves the workspace root. **No module ships its own `uv.lock`.** `digiquant/uv.lock` was deleted under ADR-0033 — it was inert (68 packages vs the root lock's 297) and referenced by nothing, so it *looked* like a pin at 1.223.0 while pinning nothing. If you find a module-level `uv.lock`, it is dead weight: delete it and say so in an ADR.
+- **The pin is the shipping control for the engine, not the lock.** `digiquant/Dockerfile` copies no lockfile and runs `uv pip install --system -e ".[nautilus]"`, so the `==1.230.0` in `pyproject.toml` is the only thing pinning `nautilus_trader` in that image — the one `docker-compose.yml` builds. Before ADR-0033 even that floated to whatever was newest on PyPI. **Do not read this as "the image is reproducible."** Every other dependency in that image — including the transitive closure under `nautilus_trader` — still floats at build time. Same commit, different image bytes.
+- **The pin governs one build surface, not the whole service.** The other two digiquant images are unaffected: `apps/digithings-stack-cloudflare/wrangler.toml:115` builds `digiquant/Dockerfile.mcp`, which installs `[research,mcp]` and **no** `nautilus` extra, so the Workers stack never had an engine to pin; and `Dockerfile.digiquant-runner` (repo root) already runs `uv sync --frozen --package digiquant --extra nautilus`, i.e. it installs from the root lock and was correct before this pin existed.
+- **Nothing in the repo publishes the digiquant image.** `.github/workflows/publish-service-images.yml` was removed in `f54af7052` (strict-essentials cut, #4919); `RELEASES.md` records the removal and points operators at `docker compose build` / `make up`. Do not cite that workflow as a live publisher in a doc — several older pages still do.
+- **Never edit a manifest without re-locking the root.** 35 `uv sync --frozen` invocations across 29 workflow files depend on the root lock; a desynced lock breaks all of them. Use `uv lock` at the repo root, then read the diff — a version bump should touch only the `nautilus-trader` specifier line.
+- **Verify with `uv lock --check`** from the repo root *and* from inside `digiquant/`. Both must pass.
+- **Local venv may lag.** A checkout that was not re-synced still runs whatever it installed. Run `uv sync --frozen --package digiquant --extra nautilus` before trusting a local backtest to match CI.
+- **Bumping is deliberate.** Change the pin → `uv lock` at the root → read the diff → `uv lock --check` both locations → update the version named here and in `ARCHITECTURE.md` → run the DIG-937 analyzer-shape matrix against the new build → amend or supersede ADR-0033. Full rationale: [`../docs/adr/0033-nautilus-trader-exact-pin.md`](../docs/adr/0033-nautilus-trader-exact-pin.md).
+
 ---
 
 ## Test Commands
@@ -97,7 +109,7 @@ ruff check digiquant/ && ruff format --check digiquant/
 
 ## Dashboard (research + portfolio)
 
-Public path is **`/dashboard/`** only (`apps/dashboard`; ADR-0026). `/dashboard/` is retired — no redirect alias.
+Public path is **`/app`** on digiquant.io (`apps/digiquant-web`). `/dashboard/` redirects there. `apps/dashboard` stays in the tree and is no longer the served desk.
 
 When touching `digiquant/src/digiquant/dashboard/` **or** `apps/dashboard/` Group A queries:
 
@@ -809,7 +821,10 @@ place the `mcp.luxalgo.com` URL/logic lives — callers never supply a URL.
   companions `luxalgo_edge_symbols`, `luxalgo_edge_presets`,
   `luxalgo_edge_report` (preset reads with the honesty disclaimer) and
   `luxalgo_trackers_datasets`, `luxalgo_trackers_latest`,
-  `luxalgo_trackers_ticker` (freshness/ad-hoc lookups over the CC0 dumps) are
+  `luxalgo_trackers_ticker` (freshness/ad-hoc lookups over the CC0-1.0
+  dumps, per-family limits classified DIG-1464: congress-trades is a 13107
+  disclosure report and short-volume carries FINRA's non-commercial terms)
+  are
   registered in `mcp_server.py` (`_maybe_tool`, `READ_SCOPE_TOOLS`) and listed
   in `orchestrator_tools.py`. Default-ON behind `LUXALGO_ENABLED` — only
   `1`/`true`/`yes`/`on` enable it, any other explicit value fails closed to a
@@ -836,7 +851,9 @@ place the `mcp.luxalgo.com` URL/logic lives — callers never supply a URL.
   the upstream `data.disclaimer` field and the envelope `warnings`. Research
   reference only — never a pipeline primary. `library_get_source_code` is
   deliberately NOT wrapped (CC BY-NC-SA: no indicator source in paid
-  surfaces); `trackers_query` is deliberately NOT wrapped (the CC0 dumps stay
+  surfaces); `trackers_query` is deliberately NOT wrapped (the CC0-1.0 dumps,
+per-family limits classified DIG-1464 — congress-trades restricted by 5 U.S.C.
+13107, short-volume carrying unresolved FINRA terms — stay
   the source of record — live queries are freshness checks only);
   `broker_*` keys are never sent to the hosted MCP; `journal_*`/`propfirms_*`
   are separate packages.
@@ -849,6 +866,18 @@ place the `mcp.luxalgo.com` URL/logic lives — callers never supply a URL.
   repo-wide reference scan. Guard halves: `tests/dq/test_luxalgo_license_guard.py`
   (unit) + `scripts/check_luxalgo_license_boundary.py` (CI-adjacent, exit 1 on
   violations). Hub `/v1/orchestrator_invoke` 400s unknown `luxalgo_*` names.
+  **That guard is the _code_ licence only** (indicator Pine source, CC BY-NC-SA).
+  The _data_ licence that governs every trackers row is CC0-1.0 (classified
+  2026-10-06, DIG-1464, from the upstream `LICENSE` at `main`), and it carries
+  two per-family limits a copyright waiver cannot supply: congress-trades is
+  restricted by 5 U.S.C. 13107(c)(1)(B) and refused as a data class by Counsel
+  (DIG-1472, in service only by business decision), and short-volume carries
+  unresolved upstream FINRA terms (with Counsel). Both live in
+  `attribution.LUXALGO_TRACKERS_DATA_CAVEATS`; every trackers licence note and
+  entitlement note renders them via `attribution.trackers_data_caveat`. A CC0
+  claim without them is a defect, guarded in
+  `tests/dq/test_congress_trades_statute_and_ingest_provenance.py` across all
+  six claim surfaces.
 - **Tests are offline.** `httpx.MockTransport` straight into `LuxAlgoClient`
   (SSE-shaped `data:` bodies), or a patched `_build_luxalgo_client`; never hit
   the live MCP. Run `pytest tests/dq/test_mcp_luxalgo_tools.py

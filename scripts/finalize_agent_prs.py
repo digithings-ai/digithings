@@ -18,9 +18,11 @@ import os
 import re
 import subprocess
 import sys
+import time
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 AGENT_BRANCH_PREFIXES = ("cursor/", "copilot/", "bot/", "task/", "claude/")
@@ -34,6 +36,50 @@ ISSUE_LINK_RE = re.compile(r"(?i)(?:fixes|closes|resolves)\s+#(\d+)")
 FINALIZER_MARKER = "**Agent PR finalizer**"
 MIN_AGE_HOURS = 2  # let the authoring agent finish before we intervene
 
+# --- Query shape (DIG-3066) -------------------------------------------------
+# The single wide query this script used to make
+#   (--limit 100 + body, reviews, statusCheckRollup, ...)
+# is ~1.6 MB and exceeded the GraphQL request deadline on *every* attempt:
+# measured 2026-10-12 from the repo host, 4/4 attempts failed with
+# HTTP 502/504, all at 11.5-11.7 s, against a ~11 s upstream deadline. That is
+# the cause of the daily "no PR finalization output" failure, not a transient
+# blip — every other gh call in this script is single-PR and tiny.
+#
+# So the scan is split: a SMALL candidate query returns every open PR cheaply,
+# the filter runs on that, and the expensive fields are fetched per PR only for
+# the candidates that survive. Measured on the same host: candidate query
+# 8.1 s / 22 KB for all 129 open PRs; per-PR hydration ~1.1 s / ~12 KB each.
+CANDIDATE_FIELDS = "number,headRefName,baseRefName,isCrossRepository,isDraft,createdAt"
+# Fetched per candidate PR. Every one of these is consumed by evaluate_pr.
+HYDRATE_FIELDS = "title,body,labels,mergeable,reviewRequests,reviews,statusCheckRollup"
+# Raised from 100: the old page silently truncated the scan (23 of 42 agent-branch
+# PRs were never evaluated). The cheap query returns the full set in one call.
+PR_LIST_LIMIT = 300
+
+# Bounded retry for the GraphQL deadline. Retrying alone is NOT sufficient at the
+# old page size (4/4 attempts failed), which is why the query is also split above;
+# the retry is here for the genuinely transient tail.
+MAX_GH_ATTEMPTS = 3
+_GH_BACKOFF_SECONDS = (2.0, 8.0)
+# 4xx and "could not resolve" are deterministic — retrying them only burns the
+# job's 45-minute budget, so only transport/upstream failures are retried.
+_TRANSIENT_MARKERS = (
+    "500",
+    "502",
+    "503",
+    "504",
+    "bad gateway",
+    "gateway timeout",
+    "service unavailable",
+    "incomplete read",
+    "timed out",
+    "timeout",
+    "connection reset",
+    "connection refused",
+    "temporarily unavailable",
+    "eof occurred",
+)
+
 
 @dataclass
 class PrAction:
@@ -45,12 +91,46 @@ class PrAction:
     fix_via: str | None = None  # cursor | none
 
 
+def _is_transient(stderr: str) -> bool:
+    low = stderr.lower()
+    return any(marker in low for marker in _TRANSIENT_MARKERS)
+
+
 def _gh_json(*args: str) -> object:
-    out = subprocess.check_output(["gh", *args], text=True)
-    return json.loads(out)
+    """Run a `gh` JSON call, retrying only failures that can plausibly clear.
+
+    Raises ``subprocess.CalledProcessError`` when the attempts are exhausted, so
+    a hard failure still fails the step exactly as before (DIG-3066).
+    """
+    proc = subprocess.run(["gh", *args], text=True, capture_output=True)
+    last_stderr = proc.stderr
+    for attempt in range(MAX_GH_ATTEMPTS):
+        if proc.returncode == 0:
+            return json.loads(proc.stdout)
+        last_stderr = proc.stderr
+        if attempt == MAX_GH_ATTEMPTS - 1 or not _is_transient(proc.stderr):
+            break
+        delay = _GH_BACKOFF_SECONDS[min(attempt, len(_GH_BACKOFF_SECONDS) - 1)]
+        tail = (proc.stderr.strip().splitlines() or ["(no stderr)"])[-1]
+        print(
+            f"gh call failed ({tail}); retry {attempt + 1}/{MAX_GH_ATTEMPTS} in {delay}s",
+            file=sys.stderr,
+            flush=True,
+        )
+        time.sleep(delay)
+        proc = subprocess.run(["gh", *args], text=True, capture_output=True)
+    raise subprocess.CalledProcessError(
+        proc.returncode, ["gh", *args], output=proc.stdout, stderr=last_stderr
+    )
 
 
 def _list_agent_prs(repo: str) -> list[dict]:
+    """Candidate scan: cheap fields only, filtered down to agent PRs.
+
+    The heavy fields (``body``, ``reviews``, ``statusCheckRollup``) are NOT
+    requested here — see the DIG-3066 note on CANDIDATE_FIELDS. They are filled
+    in per PR by ``_hydrate_pr`` once this filter has run.
+    """
     prs = _gh_json(
         "pr",
         "list",
@@ -59,17 +139,17 @@ def _list_agent_prs(repo: str) -> list[dict]:
         "--state",
         "open",
         "--limit",
-        "100",
+        str(PR_LIST_LIMIT),
         "--json",
-        "number,headRefName,baseRefName,title,body,labels,createdAt,isDraft,mergeable,"
-        "reviewRequests,reviews,statusCheckRollup,isCrossRepository",
+        CANDIDATE_FIELDS,
     )
     # CWE-862 guard, same as agent-pr-autolabel.yml / agent-pr-automerge.yml: a
     # branch name matching an agent prefix is not proof of origin, and this
     # finalizer's ready_merge path does the same label-add + auto-merge those
     # two workflows guard — this script just didn't have the check yet.
     # isCrossRepository comes from the live PR object via the API, not the
-    # (attacker-controlled) branch name.
+    # (attacker-controlled) branch name. It is a cheap field, so it stays in the
+    # candidate query.
     #
     # Fail closed: require the field to be exactly `False`, not merely falsy.
     # `.get(..., False)` treats a MISSING field the same as a confirmed
@@ -83,6 +163,29 @@ def _list_agent_prs(repo: str) -> list[dict]:
         if pr["headRefName"].startswith(AGENT_BRANCH_PREFIXES)
         and pr.get("isCrossRepository") is False
     ]
+
+
+def _hydrate_pr(repo: str, number: int) -> dict[str, Any] | None:
+    """Fetch the expensive fields for one candidate PR.
+
+    Returns None when the read fails. Callers must treat None as "state unknown"
+    and must not let the PR reach ready_merge: an absent statusCheckRollup makes
+    _ci_pending_or_failed return (False, False), which would otherwise read as
+    "CI green".
+    """
+    try:
+        data = _gh_json(
+            "pr",
+            "view",
+            str(number),
+            "--repo",
+            repo,
+            "--json",
+            HYDRATE_FIELDS,
+        )
+    except (subprocess.CalledProcessError, json.JSONDecodeError, OSError):
+        return None
+    return data if isinstance(data, dict) else None
 
 
 def _issue_labels(repo: str, issue_number: int) -> list[str]:
@@ -283,7 +386,29 @@ def evaluate_all(
     prs = _list_agent_prs(repo)
     if cursor_only:
         prs = [pr for pr in prs if pr["headRefName"].startswith("cursor/")]
-    return [evaluate_pr(repo, pr, fetch_base=fetch_base) for pr in prs]
+    actions: list[PrAction] = []
+    for pr in prs:
+        heavy = _hydrate_pr(repo, pr["number"])
+        if heavy is None:
+            # Fail CLOSED (DIG-3066). The candidate query succeeded but the
+            # per-PR read did not, so we have no CI/review state. evaluate_pr
+            # would read the missing statusCheckRollup as "no checks", i.e.
+            # green, and could emit ready_merge for a PR whose CI is red. A
+            # human must look at this one.
+            actions.append(
+                PrAction(
+                    pr["number"],
+                    pr["headRefName"],
+                    "needs_human",
+                    "could not read CI/review state (gh query failed after retries)",
+                    fix_via="none",
+                )
+            )
+            continue
+        merged = dict(pr)
+        merged.update(heavy)
+        actions.append(evaluate_pr(repo, merged, fetch_base=fetch_base))
+    return actions
 
 
 def main() -> int:

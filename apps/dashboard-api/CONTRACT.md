@@ -70,7 +70,9 @@ All failures return HTTP status + this body (no other shape):
 Codes: `bad_request` (400, malformed `asOf`/`retrieval_pin`/params),
 `not_found` (404, no committed book or tip for `asOf`),
 `upstream_empty` (200-body is never empty-as-healthy; 502 when a required
-upstream read fails — never synthesize numbers), `internal` (500).
+upstream read fails — never synthesize numbers), `not_provisioned` (503, a
+write whose table is not migrated yet; nothing is written), `unauthorized` (401),
+`forbidden` (403), `internal` (500).
 Empty sessions (e.g. ledger with no events in range) are success with empty
 arrays plus honest `provenance`, never errors. Fail closed to `null`/`—`
 downstream — never invent P&L, fills, or weights.
@@ -348,6 +350,22 @@ Rules: computed by `computeLivePerformanceKpis` semantics (live quote vs
 Numbers here are `live marks` by definition and must never be labeled
 finalized accounting.
 
+Since-inception is defined once, identically to `GET /brief` (`/performance`,
+§6.4) and to the dashboard Brief desk: it is the **chained base-100 continuity
+index**, never a raw NAV ratio. The accounting rows are chained in date order
+into an index that starts at 100, each step taking the row's own
+`day_return_pct` when present (a step larger than 25% is treated as a level
+jump and clamped to 0) and otherwise the level ratio across non-seam,
+same-source consecutive rows (a legacy<->finalized flip is a seam and
+contributes 0). The live-vs-mark move is then applied to the **index tip**, and
+`since_inception_live_pct` is `index_tip_after_move - 100`. Raw
+`public_finalized_nav` levels carry flows and rebasing jumps that are not
+performance, so `nav / 100` is not a return and is not used anywhere on this
+route; `excess_live_pct` uses the same index figure for the portfolio leg (the
+benchmark leg stays level-based, since a price index has no flows). With fewer
+than two accounting rows the index has no return and every since-inception
+figure on this route is `null`.
+
 ### 6.6 `GET /nav-series`
 
 Shared NAV + close series. Replaces the `nav-seam.ts` ∥
@@ -360,6 +378,10 @@ Response `data`:
 
 ```json
 {
+  "plot": {
+    "series": "index",
+    "accounting_nav": { "contract": "legacy_estimate", "plottable": false, "reason": "all_legacy_estimate" }
+  },
   "tip": { "date": "2026-09-24", "contract": "legacy_estimate" },
   "points": [{ "index": 0, "date": "2026-09-24", "nav": 99.909, "day_return_pct": null, "contract": "legacy_estimate" }]
 }
@@ -369,6 +391,16 @@ Rules: same continuity-index semantics as §6.4 (per-row day returns,
 ≤ 4-day forward-fill, seam basis changes carry flat). Per-point contract
 labels preserved so consumers can badge tip flips (e.g.
 `finalized_accounting` → `legacy_estimate`).
+
+`plot` names the series a chart may draw, and separates the continuity
+`index` from the labeled accounting NAV (DIG-2802). `plot.series` is
+always `index`. `plot.accounting_nav.plottable` is `true` only when
+**every** point is `finalized_accounting`; an empty series is never
+`plottable`. Until the accounting NAV is whole — and while a date it does
+not carry is absent rather than filled from another scale — every NAV
+chart plots `points[].index` and never `points[].nav`.
+`plot.accounting_nav.contract` is `finalized_accounting`, `legacy_estimate`,
+`mixed` (both present) or `unavailable` (no points).
 
 ### 6.7 `GET /benchmarks`
 
@@ -438,6 +470,31 @@ without fill price or cost basis. `cumulative_return_since_event_pct` is
 post-event drift and must not be presented as trade return. Empty range →
 success with `"events": []` plus honest `provenance`.
 
+### 6.9 `GET /access/manifest`
+
+Which desks, pages, blocks and data routes the caller may see. The single
+source of entitlements: the dashboard builds its sidebar, page guards and
+locked-block states from this response only.
+
+Caller identity comes from edge-injected `x-digi-tier` (`free|brief|desk|studio|enterprise`, rank order) and
+`x-digi-groups` (comma-separated). Absent/unknown → `free`, no groups (fail
+closed). The worker does not authenticate; only expose behind the edge.
+
+`data`: `{ caller: {tier, groups}, desks: Desk[], routes: string[] }`
+- `Desk`: `{ id, label, blurb, access, reason?, pages: Page[] }`
+- `Page`: `{ path, label, status?, access, reason?, blocks: Block[] }`
+- `Block`: `{ id, route, access, reason? }`
+- `access` is `granted` or `locked`. Locked nodes are shown with `reason`
+  (e.g. `Requires brief`, `Requires the 12x group`); a lock on a desk or page
+  cascades to everything beneath it. Nodes gated `hidden` are omitted.
+- `routes`: de-duplicated data routes of every granted block (no query strings).
+
+Policy lives in `src/access.ts` (`DESKS`); `baseline` is open with brief/desk
+parts, `fx` requires the `12x` group and is omitted from the manifest until that
+group is present. `12x` is the app-facing group name; the edge maps the
+product grant `fx_hub` (client_product_grants.product_key) to group `12x` when it injects
+`x-digi-groups`. The worker never sees product keys.
+
 ## 7. Generic table reads
 
 `GET /v1/tables/:table` serves the dashboard's long-tail direct reads
@@ -487,3 +544,39 @@ subscriptions, and Edge Function calls (billing/Alpaca — stay direct).
 - Pagination beyond `GET /ledger` cursor (`limit`/`cursor` only there).
 - Any timeout, retry, rate-limit, or tool-call budget language — none
   specified, none implied.
+
+## 9. Phase 1–3 routes
+
+These sit on the registry, behind the same catalog gate as the sidebar.
+Success is still `{ data, as_of, retrieval_pin, provenance }`. A missing
+figure is `null` (the app shows "—"). An unconfigured reader is 502
+`upstream_empty`. A route the catalog does not grant is 403.
+
+Portfolio: `GET /allocations/enriched`, `/attribution`, `/theses`,
+`/theses/signals` (brief), `/ledger/cash`, `/performance/drawdown`,
+`/brief/decision`, `/brief/risks`, `/dossier/{ticker}`. Theses read the
+latest daily snapshot (`thesis_id`, `status` → active / watch / exited);
+signals are `CHALLENGED` theses. `/attribution` is the latest
+`position_attribution` date, a static-book lookback diagnostic (`basis`),
+not realized contribution. `/brief/risks` has no source table yet and is
+an empty list marked `unavailable`. Every `documents` read is pinned to the
+house workspace.
+
+Pipeline: `GET /pipeline/runs/latest/health` (optional `date=YYYY-MM-DD`),
+`/graph`, `/narrative`, `/trace`, `/artifacts`,
+`/nodes/selected/document` (optional `node=`). Cost and token fields on
+health stay null. The graph is the static ingest → research → decide →
+publish shape. Node state is the latest `node_runs` run's `outcome` for a
+node whose `node_name` matches the stage id exactly, else null; there is no
+guessed mapping. The narrative is the house `Daily Digest`.
+
+FX and rates (group `12x`): `GET /fx/summary`, `/fx/pairs`, `/fx/levels`,
+`/fx/sessions`, `/fx/ideas`, `/fx/ideas/{pair}`, `/fx/pairs/{pair}/path`,
+`/fx/flags/{pair}`, `/fx/paper-exposure`, `/fx/directives`,
+`/rates/summary`, `/rates/curve`, `/rates/watchlist`, `/rates/theses`.
+Bid, offer, and level pips stay null. Flags, paper exposure, and
+directives are typed empty until the draft tables exist.
+`flagged` is null until the flags table exists. The pair path is the newest
+500 one-hour Yahoo bars in time order. `PUT /fx/directives` returns 503
+`{ error.code: "not_provisioned" }` and does not write. Draft SQL: `migrations-draft/`. Do not apply it from this
+contract.

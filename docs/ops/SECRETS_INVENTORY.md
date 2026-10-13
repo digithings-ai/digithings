@@ -2,6 +2,13 @@
 
 Names and locations only. **This file never contains secret values.** Cloudflare Worker secrets are stored as `secret_text`, which is write-only: `wrangler secret list` returns each name and its type but never the value, so no readback path exists even for the operator. Local `.env` files and committed example templates are referenced by path and line; any literal found committed is masked `***` and labelled `plaintext-literal`. Every claim below carries a `file:line` or a named command.
 
+Every row below is a **name**, and a name is all that belongs in this file, on a ticket,
+a comment, or a chat. The rule that keeps it that way — including the "report the branch
+the tool took, never the value" wording agents use when a refresh fails — is in
+[`credential-ownership.md`](credential-ownership.md#never-paste-a-credential-value). It is
+stated there rather than here because it binds humans and agents equally, and an inventory
+is the file people read while holding a value.
+
 Rebuilt from four read-only sweeps (cloudflare / python / plumbing / docs) plus a live `wrangler secret list` against the three Workers, at `origin/develop` commit `35d91f641`. Two sweep claims were rechecked and corrected here: `.env.example:240` and `.env.example:278` are `replace-with-…` placeholders (not live values). A later recount of `.github/workflows` (53 workflow files, recounted 2026-10-08) found **1** job declaring `environment: production` (`deploy-digiquant-runner.yml`); the 2026-09 audit's "four workflows" list named files that are not in the tree. That gap is now closed for CI: **DIG-248 (2026-10-04)** added a third environment, `cron` (no reviewers, no wait timer, no branch policy), and declared it on **all 32 jobs that read a non-automatic `secrets.*` name**, so the only two job shapes left without a gate are `deploy-digiquant-runner.yml:deploy` (still `production`, deliberately) and jobs that read nothing but the automatic `GITHUB_TOKEN`. See [R13](#risk-register).
 
 ## How to read this table
@@ -34,6 +41,8 @@ Six repo secrets that no `.github` YAML read were deleted on 2026-09-17/18: `COP
 
 **Plaintext literal committed in config.** A real value committed to the repo. Two exist: the FRED / CoinGecko / Alpha Vantage keys, in a gitleaks-allowlisted path ([`.gitleaks.toml:14`](../../.gitleaks.toml)); and the `local-dev-unused-first-party` embed token, which the allowlist does **not** cover — the default ruleset simply does not detect it.
 
+**macOS Keychain, service `digithings` (interim, DIG-179).** `security add-generic-password -U -s digithings -a <account>`. This is the interim store that `keymaster-ops` sanctions while the Bitwarden bootstrap (DIG-95) is absent and `dt-login` is not installed: values are written by script straight from the source blob and read back in-process to compare, never printed. It holds interim keys that move to Bitwarden once DIG-95 lands. `dt-keys` writes the same service but only covers the key shapes it generates (`add opencode-go`, `gen`), so a credential recovered from an arbitrary file is written by a one-off script rather than by `dt-keys`.
+
 ## Inventory
 
 ### (a) identity, auth & signing
@@ -49,13 +58,14 @@ Six repo secrets that no `.github` YAML read were deleted on 2026-09-17/18: `COP
 | `DIGICHAT_EMBED_TENANTS` | `apps/digichat-cloudflare/src/index.ts:48` | `apps/digichat-cloudflare/wrangler.toml:51` | no — write-only | all tenant routing + per-tenant `token` | digichat Worker; release profiles | carries literal `MCP_EDGE_KEY` copy; profile value `plaintext-literal` |
 | `MCP_EDGE_KEY` · `MCP_EDGE_KEYS` | `apps/digithings-stack-cloudflare/src/index.ts:343` | `apps/digithings-stack-cloudflare/wrangler.toml:35` (comment) | no — write-only | `/_stack/mcp/*` returns 401 | literal inside `DIGICHAT_EMBED_TENANTS` | rotate both places |
 | `CRON_KICK_SECRET` | `apps/digithings-cron/src/index.ts:134` (also guards `:174,197`) | `apps/digithings-cron/wrangler.toml:28` (comment) | no — write-only | `POST /kick` returns 404 | cron Worker only | optional, fail-closed |
-| `GH_DISPATCH_TOKEN` | `apps/digithings-cron/src/dispatch.ts:289` (bearer `:298`) | `apps/digithings-cron/wrangler.toml:24` (comment) | no — write-only | all cron→GitHub dispatch | GH repo secret (source) | fine-grained PAT `digithings-cron-dispatch` (settings id 19179726, expires 2027-09-15). **Shared with the DIG-71 alarm — see R14.** Grants on `digithings-ai/digithings` + `digithings-ai/twelve-x`: **Actions: read and write**, **Issues: read and write** (added 2026-10-04). Editing the permission did **not** re-issue the value, so no Worker secret push was needed. No Contents grant — so the token can only be used over REST, not via `gh issue create` (GraphQL `defaultBranchRef`). Not yet in Bitwarden (DIG-95) |
+| `GH_DISPATCH_TOKEN` | `apps/digithings-cron/src/dispatch.ts:289` (bearer `:298`) | `apps/digithings-cron/wrangler.toml:24` (comment) | no — write-only | all cron→GitHub dispatch | GH repo secret (source) | fine-grained PAT `digithings-cron-dispatch` (settings id 19179726, expires 2027-09-15). **Shared with the DIG-71 alarm — see R14.** Grants on `digithings-ai/digithings` + `digithings-ai/twelve-x`: **Actions: read and write**, **Issues: read and write** (added 2026-10-04). Editing the permission did **not** re-issue the value, so no Worker secret push was needed. No Contents grant — so the token can only be used over REST, not via `gh issue create` (GraphQL `defaultBranchRef`). **Actions: read and write and Issues: read and write are both proved by the canary** (`scripts/check_workflow_tokens.py`, weekly — see [Fine-grained PAT grants](#gaps-and-unknowns)); no other grant exists, so the canary covers this token completely. Not yet in Bitwarden (DIG-95) |
 | `RUNNER_AUTH_TOKEN` | `apps/digithings-cron/src/index.ts:191` (guard `:184`); `apps/digithings-cron/src/dispatch.ts:139` (guard `:141`) | `apps/digithings-cron/wrangler.toml:29` (comment); `apps/digiquant-runner/wrangler.toml:10` (comment) | no — write-only | `GET /runs/:id` 503 without it; `container` dispatch refused | cron Worker + digiquant-runner — **must be the same value** on both | bearer; `build_child_env` strips it from the job's child env (`apps/digiquant-runner/container/exec_job.py:50`). **Not** in the `deploy-digithings-cron.yml` secrets list (which carries `GH_DISPATCH_TOKEN` only), so rotating it needs a direct `wrangler secret put` on both Workers. Not yet in Bitwarden (DIG-95) |
 | `DIGITHINGS_PROJECT_TOKEN` | 7 workflow files, 22 `secrets.*` refs (`agent-backlog-snapshot.yml:28` … `pipeline-maintenance.yml:910`) | GH repo secret | n/a (GH secret) | GitHub Projects v2 / GraphQL automation | widest CI token | see R13 |
 | `DIGIQUANT_DIGIKEY_API_KEY` · `DIGICLAW_DIGIKEY_API_KEY` · `DIGIKEY_API_KEY` | `digibase/src/digibase/service_auth.py:107`; `digiclaw/src/digiclaw/digikey_auth.py:13` | GH repo secret; `.env` | n/a | service-to-service JWT exchange fails | GH + local `.env` | `dgk_*` key, scopes per service |
 | `AUTH_OIDC_CLIENT_SECRET` | Auth.js OIDC flow | `apps/digichat/.env.example:24` | yes (`.env`) | OIDC login breaks | IdP + digichat env | empty default |
 | `DIGISEARCH_SEED_API_KEY` | `scripts/seed_digisearch_local.py:7` | shell export (`Makefile:159`) | n/a | local seed ingest 403 | dev only | needs `digisearch:ingest` |
 | `E2E_BEARER_TOKEN` | minted in `test-e2e.yml` from the compose stack (`digikey.cli issue-key` → `/v1/oauth/token`) | not stored at any level, by design (#4357) | n/a | protected-route e2e skips | CI only | test fixture; a stored JWT would expire |
+| `proton.twelve-x.mailbox.pass-a` · `proton.twelve-x.mailbox.pass-b` | none — a human mailbox, no service reads it | digithings-books `inbox/chat/twelve-x/2026-05-28.txt` (committed `82122ae6`; redacted in `13c1662` on every branch tip) | yes (macOS Keychain `digithings`, interim until DIG-95) | **Chris is the only holder** — a rotation is a human step with a CAPTCHA/2FA gate, not an agent one | 1 (two candidate values in one commit; which is live is unconfirmed) | **Client credential, not a digithings secret.** Live mailbox per Chris 2026-10-04. Values in Keychain only; never in this file. Rotation pending a recovery method on the mailbox — see Paperclip issue DIG-179. Guarded by `scripts/check_plaintext_credentials.py` (DIG-179) |
 
 ### (b) provider / LLM API keys
 
@@ -192,12 +202,19 @@ are populated is unverified — GitHub secrets are write-only, so I cannot read 
 back, only confirm the names exist. That is a gap, not a clean bill of health.
 
 This pair is still **live code**: `config.py:27-32` raises unless both are set, and
-`nodes/scrape.py:692` calls it as the last-resort login fallback after both supplied
-sessions fail. That ordering is deliberate and load-bearing — twelve-x
-`docs/PRIMEMARKET_DESK_API.md:139-152` explains that "try the supplied session, else
+`nodes/scrape.py:609` calls it as the login route taken when **no supplied
+`PRIMEMARKET_SESSION_TOKEN` is set** (`:605-607` returns early when one is). That
+ordering is deliberate and load-bearing — twelve-x
+`docs/PRIMEMARKET_DESK_API.md:193-198` explains that "try the supplied session, else
 fall back to credentials" is *not* implemented as a fallback chain, because a
 rejected session would then fire a real credential attempt against the live vendor
-account on every run. The chain is: session token, then cookie, then **this pair**.
+account on every run. The chain is: the supplied `PRIMEMARKET_SESSION_TOKEN`, and
+only when that name is unset, **this pair** — the `PRIMEMARKET_SESSION_COOKIE` link
+that used to sit between them was removed from the code by **DIG-266** (`ffbf354`,
+2026-10-05, "remove the unreachable cookie route and rename the refresh script"),
+on the same day **DIG-249** (`8368932`) had already taken it out of CI and the docs,
+and the desk cookie is now *derived* from the token rather than pasted separately
+(`nodes/scrape.py:568`).
 So these two values are the only thing standing between a stale session and a failed
 pipeline — and they are also the most damaging pair on this laptop, because they
 authenticate as a person, not as a job.
@@ -264,6 +281,11 @@ surface stop being anyone's problem:
 None of these are done here. This section records the owner and the refresh path so
 the next person is not guessing, and every claim above carries a `file:line`, a
 commit, or a named command.
+
+Every name in (g1) to (g3) is a credential **we hold a copy of**. There is one
+PrimeMarket credential where we hold no copy at all, and it is a standing
+prohibition rather than an owner to assign: [the vendor-published browser-bundle
+credential](#the-vendor-published-browser-bundle-credential-dig-1424) (DIG-1424).
 
 ## The digillm egress pepper — not a normal API key (DIG-1184)
 
@@ -557,6 +579,104 @@ the Supabase name. The takeaway for the next writer: **verify a line citation by
 reading the line on `github/develop`, not the working tree, and check the other
 repo before calling a shared name dead.**
 
+## The vendor-published browser-bundle credential (DIG-1424)
+
+Recorded here on 2026-10-06 from the vendor exposure reported to Security on
+DIG-1261 and split out as DIG-1424 (CTO's ruling). **No value was read, printed,
+copied, or transcribed** — not into this file, not into an issue, and not into any
+repository file. This record deliberately did **not** fetch the bundle to confirm
+the literal: a fetch would take the value through this process for no benefit, and
+a probe is a use. What was verified from our side is the absence claim in the table
+below. This section records a location and a prohibition. It carries no value, no
+prefix of one, and no length, and nothing here can be used to reconstruct one.
+
+| Name | Where the value lives | Copies we hold | Read by our code | Rotatable by us | Owner | Status |
+|---|---|---|---|---|---|---|
+| `NEXT_PUBLIC_API_TOKEN` (the value the vendor's bundle hardcodes as this variable's fallback literal) | the vendor's **public desk JS bundle**, served to every visitor's browser. The vendor app is a Next.js app, so the literal is inlined at build time and is present in the shipped `_next/static` chunks — the same property that makes every `NEXT_PUBLIC_*` value public, recorded under [Gaps and unknowns](#gaps-and-unknowns). The bundle presents that literal to a `userLogin` endpoint on the vendor's API host `frontendapi.primemarket-terminal.com` | **none.** Absent from the repo-secret and Worker-secret enumerations recorded above, and from every `.env`, from `digithings`, and from `twelve-x`. Verified by absence **of the name**: `git grep -i "NEXT_PUBLIC_API_TOKEN\|userLogin\|frontendapi"` in `twelve-x` on `github/develop` returns **nothing**. That proves the name is unused, not that the value is absent under some other name — no local command can prove the second half, and a credential we never wrote down could only have reached us by being read out of the bundle, which this record deliberately did not do | **nothing.** No digithings or twelve-x file reads this name. The scrape path is unchanged by this record and uses only the credentials in (g1) and (g2) | **no.** We hold no copy and the vendor is the only party who can change it. There is no `gh secret set`, no `wrangler secret put`, and no `refresh_*.sh` path that ends at this value, because we never store it | **Security** (agent `b14d7a18`), with Chris as the only human who can execute | **DELIBERATELY UNUSED. NEVER TO BE USED.** |
+
+### Why this is a standing prohibition
+
+It is an upstream **service** bearer token, not one of ours, and it reached
+every browser because the vendor shipped it in client-side code. Three facts put
+it out of bounds, and none of them is a preference:
+
+1. **It was leaked by the vendor, not provided to us.** The vendor's terms permit
+   programmatic access only for APIs *officially provided by them* (Section 12 —
+   see [`docs/plans/adr-0030/HOLD-Primarket.md`](../plans/adr-0030/HOLD-Primarket.md)).
+   Copying a token out of a bundle is the opposite of that exception, and using it
+   is the material breach that HOLD already records. Counsel owns the legal half on
+   DIG-1246 and has ruled that automated login is not permitted.
+2. **We cannot rotate it.** Rotation is the control this file exists to protect,
+   and here it does not exist. Any process depending on this value would break
+   silently, at a moment we choose by accident.
+3. **Using it makes the contractual position worse, not better.** A credential we
+   did not pay for and cannot revoke is a liability we would be importing.
+
+The CTO ruled the same on DIG-1261 (Security's half), which DIG-1424 splits out.
+Chris's incident on DIG-1226 — a credential value pasted into a Paperclip
+interaction reject-reason on 2026-10-05, where the record can no longer be edited
+or deleted — is the reason the rules below are written as prohibitions instead of
+as guidance.
+
+### The prohibitions
+
+- **Never use it** for any request, on any path, for any reason.
+- **Never wire it into `twelve-x`** — not into `.env`, not into
+  `config.py`, not into a workflow, and not as a fourth route behind the session keys
+  in (g1). The chain is the supplied session, then the desk login pair in (g2), and it
+  stops there: twelve-x `docs/PRIMEMARKET_DESK_API.md:193-198` records that "try the
+  supplied session, else fall back to credentials" is deliberately **not** implemented,
+  because a rejected session would then fire a real credential attempt against the live
+  vendor account on every run. A fourth route would break that on purpose.
+- **Never paste it** into a ticket, an issue comment, a chat message, a code
+  review, a commit message, a branch name, or any file in any repository. This
+  includes a **prefix** and includes a **length** — a prefix plus a length is
+  enough to confirm a candidate and to search a leak corpus. Report the
+  **location and the variable name** instead. The report-this / never-report-this
+  table is twelve-x `docs/PRIMEMARKET_DESK_API.md:158-162`, added there after the
+  DIG-1226 incident. In this repo,
+  [`docs/ops/credential-ownership.md`](credential-ownership.md) carries the ownership
+  side under **Enforcement → "No secret values in docs"**; its "Never paste a
+  credential value" section is **DIG-1226, not yet merged into `develop`**.
+- **Never write a script that fetches it or tests it.** A liveness probe is a use.
+  That is also why this section has no `file:line` probe command, unlike most rows
+  above.
+- **Never try to rotate it**, and never open a ticket that asks for it to be
+  rotated. Rotating is the reflex when a credential is unrotated and unauthenticated,
+  and here it is both impossible and wrong: we hold no copy, so there is nothing to
+  write back, and the only parties who could act are the vendor and Counsel. The
+  correct report for this finding is DIG-1424 itself, closed as a standing
+  prohibition.
+
+### This is a trap-guard, not a discovery
+
+The exposure is on the **vendor's** side and there is nothing for us to remediate
+on our side: we hold no copy, we cannot rotate it, and no code of ours reads it.
+That is precisely what makes it a trap. An agent that fetches the desk bundle will
+find a token-shaped literal in client-side JavaScript and can reasonably conclude
+"I have found an API token" and open new work — a probe, a rotation, a wiring
+change, or worse, a paste.
+
+**If you found a token in the desk bundle: this is DIG-1424, and there is no new
+work.** It is recorded, it is prohibited, and it needs no action from you. Do not
+test it, do not report its value, do not open an issue about it, and do not treat
+it as a discovery. Close the loop on DIG-1424 instead.
+
+### What this record is not
+
+This is not an access method. It adds no step-by-step recipe, no request example,
+and no reproducible command, and it deliberately stays inside the ADR-0030 hold
+([`docs/plans/adr-0030/HOLD-Primarket.md`](../plans/adr-0030/HOLD-Primarket.md)),
+which bars **PrimeMarket-specific examples in public files** until DIG-478
+(Card `295f3d75`, with Chris) is decided and Counsel confirms. The existing
+PrimeMarket rows above are themselves inside that hold: the session keys in (g1)
+and the login pair in (g2) are inventoried as **credentials we hold with a named
+owner and a recorded refresh path**, not as a way to obtain or use them.
+
+Related: DIG-1424 (this record), DIG-1261 (CTO ruling on the credential),
+DIG-1246 (Counsel, legal half), DIG-1226 (the never-paste rule and its
+precedent), DIG-478 and DIG-503 (the hold and its parent).
+
 ## Risk register
 
 **R1 — `DIGIKEY_PRIVATE_KEY_PEM` has no rollover path.** Severity: critical. Evidence: `digikey/src/digikey/crypto_keys.py:61`, `digikey/src/digikey/jwt_issue.py:88`, [`digikey/ARCHITECTURE.md`](../../digikey/ARCHITECTURE.md):305-335. Why: static `kid=digikey-1`, no JWKS overlap or grace period; rotating invalidates every outstanding JWT until each consumer refetches (300 s cache, `DIGIKEY_JWKS_CACHE_SEC`). Action: run `docs/ops/SECRETS_ROTATION.md`; implement multi-key JWKS overlap per `docs/adr/0029-secrets-management.md`.
@@ -614,6 +734,9 @@ as the sharpest point, is what Counsel put at the centre. The PrimeMarket half i
 DIG-461/DIG-478 and stays open there; nothing in this row is a clearance for it.
 
 **R17 — an accepted prohibited use, a credential with no custody, and a deployment state nobody can verify.** Severity: high. Evidence: the accepted-use record and custody blocker in [Vendor terms and what this file may publish](#gloomberb-the-accepted-use-the-custody-blocker-and-what-is-still-unverified); Counsel's memo (2026-10-05); Chris's acceptance and custody authorisation (2026-10-06, DIG-1194); `bws project list` → empty against `project create` → *"maximum number of projects (3) for this plan"*; `git grep GLOOMBERB -- .github/workflows/` → empty, so no scheduled ingest holds the cookie; `wrangler secret list` unrunnable for Security. Why: three separate weaknesses stack. (1) A Counsel-confirmed prohibited access method is in deliberate, documented use by decision — which is a legitimate state, but only while it stays internal, so its safety depends on tripwires nobody is watching. (2) The credential has no inventory entry with an owner or expiry and lives in one untracked `.env` line, because the Bitwarden write path is quota-blocked. (3) The inventory asserts a deployed Worker copy that cannot be confirmed, so the real blast radius of "keep it running" is unknown. Action: DevOps runs `wrangler secret list` on `digithings-stack` and reports whether `GLOOMBERB_SESSION_COOKIE` is set; owner grants the `keymaster` machine account a project so Security can complete the move on DIG-95; Security adds an expiry-bearing inventory row for this name as soon as it has a home; DIG-1233 keeps the deployed default off, which is now the only thing standing between an experiment and production traffic.
+**R18 — the client-pasted `datatap-dev` MCP `X-API-Key` stays in use by decision, and the only thing protecting it is an ignore rule.** Severity: high (accepted 2026-10-07, DIG-1723). Evidence: the key is named in the `datatap` client, not in this repo; it exists as plaintext in the `digithings-books` working tree at `inbox/chat/datatap/2026-10-06.txt` (516 bytes, single line, label `x-api-key` present once, value 385 chars, Shannon entropy 5.93, shape `<36>:<344>` — shape and metrics only, the value is never transcribed, per DIG-1653); containment is `inbox/chat/` in that repo's `.gitignore:125`; detection is `labeled-credential-long-value` and `labeled-credential-delimited-value` in this repo's `.gitleaks.toml` (PR #5235). Why: the client pasted the credential into a chat export in good faith, and the file is untracked, unstaged and ignored — but **ignored is not revoked**. The value is valid at DataTap's endpoint until DataTap issues and retires it, so anyone who reaches this Mac's filesystem, this repo's history before the ignore rule, or any copy of the chat export holds a working client-scoped credential. It is also invisible to the default gitleaks ruleset, which is why it survived from 17:12 on 2026-10-06 until 2026-10-07 untracked: the default `generic-api-key` rule cannot match a value longer than 150 characters (measured: hits at 146–150, misses at 151 and above) nor one containing a character outside `[A-Za-z0-9_\-+/=]` (measured: a single `:` at any offset inside the value is a miss), and this value violates both. Action: **accepted risk, not mitigated** — Chris rejected rotation on 2026-10-07 with the reason *"old one is fine to keep"*. Security's advice on the record is still to rotate, because ignoring the path is containment and the credential is already exposed to the client; the decision is Chris's as principal and this entry is the durable record of it. Security cannot rotate it: it is a client-scoped key (keymaster-ops red line, client systems beyond their scoped keys) and the request to DataTap is a client message Chris sends. Re-open if any of: the credential reaches a commit in any repository (the ignore rule is only a speed bump, `git add -f` and a file already tracked both bypass it); the chat export is shared outside the company; the credential is used anywhere outside the `datatap-dev` MCP endpoint, which widens blast radius; Bitwarden is bootstrapped (DIG-95), which changes custody and makes rotation cheap enough to be worth asking again; or the client asks us to rotate it. When it is rotated, the file at that path must be deleted, not re-ignored, and the inventory entry moves to the rotation log with both names recorded.
+
+**R16 — the vendor publishes an upstream bearer token in its own browser bundle, and we hold no copy of it.** Severity: high as a **trap for our own agents**, nil as a **storage** exposure. Evidence: [the vendor-published browser-bundle credential](#the-vendor-published-browser-bundle-credential-dig-1424) (DIG-1424); the vendor's desk app is a Next.js app, so the fallback literal for `NEXT_PUBLIC_API_TOKEN` is inlined into the shipped `_next/static` chunks and served to every visitor — the same inlining property already recorded for every `NEXT_PUBLIC_*` value under [Gaps and unknowns](#gaps-and-unknowns); absence of the name from our code verified by `git grep -i "NEXT_PUBLIC_API_TOKEN\|userLogin\|frontendapi"` in `twelve-x` on `github/develop`, which returns nothing; vendor terms Section 12 in [`docs/plans/adr-0030/HOLD-Primarket.md`](../plans/adr-0030/HOLD-Primarket.md). Why: this is the only entry in this file with **no stored copy, no reader, and no rotation path**, which makes it the one row a table cannot make safe on its own — the risk is that the next agent to read the desk bundle treats the literal as a credential it found, and acts. Everything else here is answered by owner + refresh path; this one is answered only by a prohibition, and a prohibition nobody reads is not a control. A token-shaped literal in public JavaScript is also the cheapest false positive for "I found a leaked API key", which is exactly the report shape that produced the permanent DIG-1226 record. Action: **no remediation is available or needed** — the exposure is vendor-side, we cannot rotate a credential we do not hold, and no code of ours reads it. DIG-1424 makes it a trap-guard: an agent who reports "I found an API token in the desk bundle" is answered with a link to DIG-1424, not with new work. Do not write a liveness probe for it — a probe is a use — and do not reopen it as "but if it works". Track any future vendor request to *officially provide* an API through DIG-478 (Card `295f3d75`) with Counsel, which is the only path by which the prohibition could ever change.
 
 ## Gaps and unknowns
 
@@ -629,6 +752,20 @@ DIG-461/DIG-478 and stays open there; nothing in this row is a clearance for it.
 - **Revocation strength.** Whether prod sets `DIGIKEY_BLOCKLIST_REDIS_URL`. The code default is fail-closed; `DIGIKEY_REQUIRE_BLOCKLIST=0` is the local opt-out (`blocklist.py` `require_blocklist_enabled`). Compose default `1` at `docker-compose.yml:35`; `.env.example:226`.
 - **Secret-manager adoption.** Cloudflare Secrets Store, 1Password, Infisical, and Doppler appear only as aspirational mentions; no repo evidence of use.
 - **Fine-grained PAT grants are not machine-readable.** The permissions on a fine-grained PAT (`GH_DISPATCH_TOKEN`) can only be viewed and edited on the GitHub settings page — GitHub exposes no REST or GraphQL endpoint for them, and the token value is shown once at creation and never again. So the grant recorded on the `GH_DISPATCH_TOKEN` row is operator-reported, not agent-verified, and it cannot be swept by `make secrets-audit`. Agent-side confirmation that a grant exists has to come from a real call against the endpoint it gates.
+
+  **The canary now proves two of them, weekly (DIG-362).** `scripts/check_workflow_tokens.py` covers exactly these grants on `GH_DISPATCH_TOKEN`, and nothing else — if a grant is added here, add a probe, or record here that it is unproven:
+
+  | grant | probe | gate | detects removal | detects downgrade to read-only |
+  | --- | --- | --- | --- | --- |
+  | Actions: read and write | `GET /repos/{repo}/actions/runs?per_page=1` | *Actions: read* | yes | n/a (no read-only tier below write) |
+  | Issues: read and write | `POST` + `DELETE` a comment on a pinned issue, weekly | *Issues: write* | yes | **yes** |
+  | Issues: read | `GET /repos/{repo}/issues/{n}`, paired with the write probe | *Issues: read* | yes | no — see below |
+
+  The write probe is the only one that separates *grant removed* from *grant downgraded*. GitHub offers just three levels for Issues — *no access*, *read*, *read and write* — so a token narrowed to "Read only" still satisfies an `issues: read` check, which is precisely the state DIG-93 believed the token was in on 2026-10-04. The paired read probe is what makes the failure output legible: read-pass + write-fail reads as *downgraded*, read-fail + write-fail as *removed*.
++
++  Known limit: the downgrade branch of the Issues write probe has no automated test. The board asked for a lighter test suite on 2026-10-05. The first proof of this branch will be a real failure, not a test run.
+
+  Cost and blast radius: **one comment posted and deleted per week** on a dedicated pinned issue (`TOKEN_CANARY_PROBE_ISSUE` repo variable), **no spend**, and **no artifact on success**. A failed `DELETE` is reported as a failure rather than swallowed, because a marker left behind would break the probe's own promise. Weekly rather than daily keeps watcher notifications near zero; the cost of that choice is that detection latency for this grant is up to 7 days, which is the point of the #3522 ≤24h canary applying to *liveness*, not to grant width. Until `TOKEN_CANARY_PROBE_ISSUE` is set the probe reports `skipped-by-design` and never files a tracker — an unarmed probe is a known gap, not a regression.
 - **`projects/**` and `.local/`** are gitignored and not auditable from this checkout.
 
 ## Folded stack worker — secret maintenance (2026-09-27)

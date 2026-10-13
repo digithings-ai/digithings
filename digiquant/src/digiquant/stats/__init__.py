@@ -10,6 +10,7 @@ from .honesty import (
     GuardResult,
     HalfStats,
     HonestRate,
+    HonestRateBlock,
     StabilitySplit,
     Wilson,
     apply_guards,
@@ -18,6 +19,7 @@ from .honesty import (
     stability_split,
     wilson,
 )
+from .series import normalize_series
 
 __all__ = [
     "DISCLAIMER",
@@ -27,11 +29,13 @@ __all__ = [
     "GuardResult",
     "HalfStats",
     "HonestRate",
+    "HonestRateBlock",
     "StabilitySplit",
     "Wilson",
     "apply_guards",
     "format_honest_rate",
     "honest_rate",
+    "normalize_series",
     "stability_split",
     "wilson",
 ]

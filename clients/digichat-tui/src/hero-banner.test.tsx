@@ -5,6 +5,7 @@
 import { testRender } from "@opentui/react/test-utils";
 import { afterEach, describe, expect, test } from "bun:test";
 
+import { streamPass, type ScrambleState } from "../../../packages/hero-banner/src/animations/scramble";
 import { BANNERS } from "../../../packages/hero-banner/src/definitions";
 import { preparedBanner } from "../../../packages/hero-banner/src/engine";
 import type { BannerDefinition } from "../../../packages/hero-banner/src/types";
@@ -107,4 +108,43 @@ test("DIGI_REDUCED_MOTION settles the banner exactly like NO_MOTION", async () =
 
   // And it must stay there, not merely land there.
   expect(await frameAt(def, size, Math.round(loadingMs * 0.8), { DIGI_REDUCED_MOTION: "1" })).toBe(settled);
+});
+
+/** The frame with colours: the digichat stream changes tones, not glyph shapes. */
+async function colorsAt(
+  def: BannerDefinition,
+  size: { width: number; height: number },
+  holdMs: number,
+  env: Record<string, string | undefined> = {},
+): Promise<string> {
+  await frameAt(def, size, holdMs, env);
+  return current!
+    .captureSpans()
+    .lines.map((line) => line.spans.map((s) => `${s.text}@${[s.fg.r, s.fg.g, s.fg.b].join(",")}`).join("|"))
+    .join("\n");
+}
+
+describe("digichat LIVE streams tokens in OpenTUI (DIG-2865)", () => {
+  const def = BANNERS.digichat;
+  const state = preparedBanner(def).state as ScrambleState;
+  const live = state.options.live;
+  const loadingMs = def.animation.loadingMs(state);
+  const quietMs = live?.kind === "stream" ? live.quietMs : 0;
+  const landAt = streamPass(state, 0);
+  const passAt = loadingMs + quietMs + landAt[Math.floor(landAt.length / 2)]! + 10;
+
+  for (const size of [{ width: 120, height: 30 }, { width: 80, height: 24 }]) {
+    test(`${size.width}x${size.height}: quiet, then a token pass, then settled; off and reduced stay still`, async () => {
+      expect(live?.kind).toBe("stream");
+      const settledChars = await frameAt(def, size, 0, { NO_MOTION: "1" });
+      const settled = await colorsAt(def, size, 0, { NO_MOTION: "1" });
+      expect(await colorsAt(def, size, loadingMs + quietMs / 2)).toBe(settled);
+      // Mid-pass: same letters, different tones (dim ghost ahead, flash at the head).
+      expect(await frameAt(def, size, passAt)).toBe(settledChars);
+      expect(await colorsAt(def, size, passAt)).not.toBe(settled);
+      expect(await colorsAt(def, size, loadingMs + state.streamPeriodMs - 1)).toBe(settled);
+      expect(await colorsAt(def, size, passAt, { HERO_BANNER_LIVE: "0" })).toBe(settled);
+      expect(await colorsAt(def, size, passAt, { NO_MOTION: "1" })).toBe(settled);
+    });
+  }
 });
