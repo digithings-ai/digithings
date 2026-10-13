@@ -20,6 +20,7 @@ import {
 } from "@/lib/embed-chat-tenant";
 import { resolveEmbedSeededTenant } from "@/lib/route-client-config";
 import { headers } from "next/headers";
+import { notFound } from "next/navigation";
 import EmbedClient from "./embed/embed-client";
 import { inviteRequiredButMissing } from "@/lib/embed-invite-only";
 
@@ -55,13 +56,10 @@ export default async function EmbedRouteShell({
     requestedHost,
     embedOriginHostOf(hdrs),
   );
-  // Invite-only hosts (OCC, DIG-1210): no valid invite token, no chat at all.
+  // Invite-only hosts (OCC, DIG-1210): no valid invite token -> the standard
+  // 404, no hint, no branding, no chat.
   if (inviteRequiredButMissing(requestedHost, initialTenantCfg.slug)) {
-    return (
-      <div className="flex h-dvh w-full items-center justify-center p-6 text-center">
-        <p data-testid="embed-invite-required">This chat requires a private invite link.</p>
-      </div>
-    );
+    notFound();
   }
   const { seeded: seededCfg, urlTheme } = resolveEmbedSeededTenant(
     initialTenantCfg,

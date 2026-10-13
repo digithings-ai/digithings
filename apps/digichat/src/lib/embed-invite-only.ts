@@ -2,7 +2,7 @@ import { normalizeEmbedHost } from "@/lib/embed-tenants";
 
 /**
  * Hosts served only through a private invite link (DIG-1210). Without the
- * tenant's valid invite token the embed renders a refusal page, never the
+ * tenant's valid invite token the embed answers the standard 404, never the
  * generic turn-limited chat.
  */
 export const INVITE_ONLY_EMBED_HOSTS: ReadonlyMap<string, string> = new Map([
