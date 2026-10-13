@@ -1044,3 +1044,102 @@ def test_the_generated_rule_adapters_carry_the_roster() -> None:
     assert "scripts/merge_queue.py" in rule
     for authority in mq.load_policy().merge_authorities:
         assert f"`{authority.role}`" in rule
+
+
+# --- review claims: a claimed review must have its artifact (DIG-3154) --------
+# PR #5526 merged with the `reviewed:agent` label, zero reviews and no findings
+# comment; the promotion gate (`scripts/check_review_coverage.py`) refused it and
+# the promotion turned red. The queue refuses that shape here, where the fix is
+# a comment instead of another promotion. Deliberately narrower than the full
+# promotion gate: a PR with no claim at all still merges.
+
+_MARKER = "<!-- in-session-review -->"
+
+
+def _labeled_pr(number: int, comments: list[dict[str, Any]] | None) -> dict[str, Any]:
+    pr = _pr(number)
+    pr["labels"] = [{"name": "reviewed:agent"}]
+    if comments is not None:
+        pr["comments"] = comments
+    return pr
+
+
+def _finding_comment() -> dict[str, Any]:
+    return {
+        "author": {"login": "chrizefan"},
+        "body": f"findings for this PR\n\n{_MARKER}\nsha 71bae0e9",
+        "createdAt": "2026-10-12T23:08:43Z",
+        "url": "https://github.com/digithings-ai/digithings/pull/5526#issuecomment-1",
+    }
+
+
+def test_a_claimed_review_with_its_findings_comment_merges() -> None:
+    """Label plus marker comment is the satisfied hatch — the queue must not add friction."""
+    verdict = mq.evaluate(
+        _labeled_pr(5526, [_finding_comment()]),
+        mq.load_policy(),
+        acting_role="cto",
+        base="develop",
+        attest_role="qa",
+    )
+    assert verdict.eligible
+    assert not any("reviewed:agent" in reason for reason in verdict.reasons)
+
+
+def test_a_claimed_review_without_its_findings_comment_is_refused() -> None:
+    """The #5526 shape: label, zero reviews, prose but no marker. Must not merge."""
+    pr = _labeled_pr(
+        5526,
+        [
+            {
+                "author": {"login": "chrizefan"},
+                "body": "looks good",
+                "createdAt": "2026-10-12T22:00:00Z",
+            }
+        ],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop", attest_role="qa")
+    assert not verdict.eligible
+    assert any(
+        "reviewed:agent" in reason and "in-session-review" in reason for reason in verdict.reasons
+    )
+
+
+def test_a_claimed_review_whose_comments_cannot_be_read_is_refused() -> None:
+    """Fail closed: without a repo to read comments from, the claim is unverifiable."""
+    pr = _labeled_pr(5526, None)
+    assert "comments" not in pr
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop", attest_role="qa")
+    assert not verdict.eligible
+    assert any("cannot be verified" in reason for reason in verdict.reasons)
+
+
+def test_a_claimed_review_fetches_comments_lazily(gh_stub: Any) -> None:
+    """`gh pr list` carries labels but no comments; the queue fetches them only for a claim."""
+    gh_stub(gh_rule(r"^pr view", stdout={"comments": [_finding_comment()]}))
+    pr = _labeled_pr(5526, None)
+    verdict = mq.evaluate(
+        pr,
+        mq.load_policy(),
+        acting_role="cto",
+        base="develop",
+        attest_role="qa",
+        repo="digithings-ai/digithings",
+    )
+    assert verdict.eligible
+
+
+def test_an_unreadable_comments_fetch_is_refused(gh_stub: Any) -> None:
+    """A failing comments read is a refused merge, not a skipped gate."""
+    gh_stub(gh_rule(r"^pr view", stdout="", stderr="boom", exit_code=1))
+    pr = _labeled_pr(5526, None)
+    verdict = mq.evaluate(
+        pr,
+        mq.load_policy(),
+        acting_role="cto",
+        base="develop",
+        attest_role="qa",
+        repo="digithings-ai/digithings",
+    )
+    assert not verdict.eligible
+    assert any("could not be read" in reason for reason in verdict.reasons)

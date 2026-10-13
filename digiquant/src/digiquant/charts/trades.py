@@ -12,6 +12,7 @@ from digiquant.charts.common import (
     _apply_layout,
     _extract_frame,
 )
+from digiquant.fonts import MONO_FONT_STACK
 from digiquant.stats.honesty import honest_rate
 
 
@@ -289,7 +290,7 @@ def _build_win_rate_donut(
             xref="paper",
             yref="paper",
             showarrow=False,
-            font=dict(size=18, color="#f1f5f9", family="'IBM Plex Mono', monospace"),
+            font=dict(size=18, color="#f1f5f9", family=MONO_FONT_STACK),
             align="center",
         )
         layout = dict(_CHART_LAYOUT)

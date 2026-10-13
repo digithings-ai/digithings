@@ -39,3 +39,8 @@ export {
   type UseLightweightChartResult,
 } from "./lw-chart";
 export { PRICE_CHART_DEMO, EQUITY_CURVE_DEMO, DRAWDOWN_DEMO } from "./demo-data";
+export {
+  DIGIQUANT_CHART,
+  readDigiquantChartScale,
+  type DigiquantChartScale,
+} from "./chart-scale";
