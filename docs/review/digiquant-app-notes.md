@@ -185,8 +185,69 @@ screenshot · suggested fix.
 6. P-02 merge the duplicated positions tiles (concern 3).
 7. P-03/L-05 decimal + unit trim (concern 5).
 8. B-07/L-04/L-03/B-02 dead columns + raw vocabulary (concerns 2, 3).
-9. Follow-up pass: sub-pages + P-04 chart-fill check (concern 4) + full
-   strategies catalog sample.
+9. Pass-2 additions (13 Oct late evening): H-01 donut not filling tile (concern
+   4 confirmed for donut; bar in A-01 fills fine — fix per chart), H-02 legend
+   omits Cash 45.08%, TH-01 theses as raw id slugs, SD-01 dash-stat grid +
+   trades-0 vs +5,818.61% contradiction, LD-01 ledger universe mismatch,
+   T-02 eternal Benchmarks spinner.
+10. Remaining: `d` desk switcher + `[enter]/[tab]` keyboard-only affordances;
+    tools/settings pages belong to DIG-3322/DIG-3323.
+
+## Findings — pass 2: sub-pages, charts, keyboard (13 Oct 2026 late evening)
+
+## Findings — pass 2: sub-pages, charts, keyboard (13 Oct 2026 late evening)
+
+- H-01 · holdings · donut chart does NOT fill its container · design · major ·
+  `screenshots/docs-review-holdings-chart.png` · Small donut top-left in a vast
+  empty tile (Chris concern 4 CONFIRMED for donut). Suggested fix: size the
+  chart to the tile (responsive viewBox) or centre it with the legend beside.
+- H-02 · holdings · donut legend omits Cash · data alignment · major ·
+  `screenshots/docs-review-holdings-chart.png` · Cash is 45.08% (largest slice)
+  yet the legend lists only UUP 29.97 / EWZ / GLD / XLV / XLF / DBO. Suggested
+  fix: include Cash in the legend (or label the slice); verify what the white
+  ring segment actually encodes.
+- A-01 · attribution · bar chart DOES fill width · design (positive) · nit ·
+  `screenshots/docs-review-attribution.png` · Diverging red/teal bars with bp
+  labels use the full tile — the pattern H-01 should copy. Nuance for P-04:
+  bar fills, donut does not; fix per chart, not globally.
+- LD-01 · ledger · position-events table renders real data · data alignment ·
+  minor · `screenshots/docs-review-ledger.png` · Healthy dense table, but its
+  universe (FXI, VGK, GLD adds) does not match the brief book (UUP/XLF/GLD/
+  XLV/EWZ/DBO). Suggested fix: confirm both pages read the same book date, or
+  badge the ledger's date range.
+- T-01 · tearsheet · NAV table CONTRACT column all `legacy_estimate` · data
+  alignment · minor · `screenshots/docs-review-tearsheet.png` · Same root cause
+  as P-01; DAY mixes `—` and `0.00%` (B-07 family). Suggested fix: with P-01.
+- T-02 · tearsheet · "Benchmarks · aligned" stuck `loading…` · loading · minor
+  · `screenshots/docs-review-tearsheet.png` · Still loading after the rest of
+  the page settled. Suggested fix: timeout to an error/empty line, never an
+  eternal spinner (R-03 family).
+- TH-01 · theses · 30+ raw ID slugs as text rows · design/text-only · major ·
+  `screenshots/docs-review-theses.png` · Worse than B-05: bare ids
+  (`consumer-sentiment-divergence`, `TH-RATES-20260922-01`, …), `active 16 /
+  watch 22 / exited 0`. Suggested fix: same badged-row treatment as B-05, with
+  titles not ids.
+- SD-01 · strategies/detail · tearsheet stat grid all `—` + `trades 0` beside
+  `+5,818.61%` profit · data alignment · major ·
+  `screenshots/docs-review-strategies-detail.png` · CAGR/MaxDD/Profit
+  factor/Win-rate all em-dash (empty stat grid where backtest viz belongs,
+  concern 7); paper track record claims +5,818.61% with trades 0 — a
+  contradiction, plus 2-decimal excess on a 4-digit percent (concern 5).
+  Suggested fix: verify the tearsheet source; hide uncomputed stats instead of
+  dashing them; trim to +5,819%.
+- SD-02 · strategies/detail · Overview as of 2026-09-02 · data alignment ·
+  minor · `screenshots/docs-review-strategies-detail.png` · 29 trading days old
+  — stalest read in the app so far; Parameters STATE column all `—` (B-07
+  family). Suggested fix: with R-01/R-02.
+- SD-03 · strategies/deploy · triplicated "not built" prose · UI · nit ·
+  `screenshots/docs-review-strategies-deploy.png` · "No targets." +
+  "Paper only. Live deploy is not built." + "No order is sent." + "Deploy is
+  not built yet." — four sentences for one state, but honestly worded.
+  Suggested fix: collapse to one empty-state line; keep the honesty.
+- K-01 · all pages · `?` shortcuts overlay works · behavior (positive) · nit ·
+  `screenshots/docs-review-shortcuts-overlay.png` · Modal renders, well-formed
+  table, visible `esc` affordance; `?` toggles. No defect. Remaining: `d` desk
+  switcher + `[enter]/[tab]` tile affordances under keyboard-only use.
 
 ## Pass log
 
@@ -199,3 +260,7 @@ screenshot · suggested fix.
   (functional settings). The tools/settings observations in this file (R-04
   and the open follow-up pass) route to those tickets after consolidation;
   this ticket stays review-only and takes no fix.
+- 13 Oct 2026 late evening (Code Reviewer): pass 2 — holdings (+Chart toggle),
+  attribution, ledger, tearsheet, theses, strategies/detail|deploy, `?`
+  overlay. Screenshots added (7). Chart verdict: donut fails concern 4 (H-01),
+  bar passes (A-01).
