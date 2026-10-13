@@ -87,9 +87,10 @@ class_name = "DigiStackContainer"
 # context (#4046).
 image = "../../Dockerfile.digithings-stack-cloudflare"
 image_build_context = "../.."
-max_instances = 5
+max_instances = 1
 # Multi-process Profile A needs real RAM/disk (lite = 256MiB is far too small).
-instance_type = "standard-2"
+# Cost (2026-10-13): observed peak 2.1 GiB RAM / 1.6 GB disk -> standard-1 (4 GiB).
+instance_type = "standard-1"
 
 # Dedicated digiquant-mcp market-data container (#3780, Task 8). Separate image
 # with the [research]+[mcp] extras serving FastMCP streamable-http on :8767 —
@@ -132,10 +133,11 @@ class_name = "DigiChatContainer"
 # file: ../.. is the repo root.
 image = "../../Dockerfile.digichat-cloudflare"
 image_build_context = "../.."
-max_instances = 5
+max_instances = 1
 # Next standalone needs real RAM/disk (lite = 256MiB is far too small);
 # explicit instance_type required — matches the two entries above.
-instance_type = "standard-2"
+# Cost (2026-10-13): observed peak ~250 MiB RAM / 0.3 GB disk -> basic (1 GiB).
+instance_type = "basic"
 
 # Ops SSH (wrangler containers ssh) — ed25519 debug key (private key not in repo).
 [[containers.authorized_keys]]

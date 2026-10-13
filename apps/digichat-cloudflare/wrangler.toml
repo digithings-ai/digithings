@@ -46,7 +46,7 @@ image = "../../Dockerfile.digichat-cloudflare"
 # DIGICHAT_VERSION for GET /api/health is baked from apps/digichat/package.json
 # inside Dockerfile.digichat-cloudflare. Do not pin it here or as a dashboard secret
 # (it would drift). Optional override: image_vars = { DIGICHAT_VERSION = "…" }.
-max_instances = 5
+max_instances = 1
 
 [[durable_objects.bindings]]
 name = "DIGICHAT"
