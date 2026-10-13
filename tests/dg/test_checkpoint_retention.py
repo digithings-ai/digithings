@@ -24,6 +24,19 @@ OLD = (NOW - timedelta(days=40)).isoformat()
 FRESH = (NOW - timedelta(hours=1)).isoformat()
 
 
+def _ago(**delta: float) -> str:
+    """An ISO timestamp measured back from the REAL clock.
+
+    Tests that reach ``apply_retention`` without an injected ``now`` let it read
+    ``datetime.now()``, so their fixtures must be built from the real clock too. A
+    literal ``NOW`` is safe only where the test passes ``now=`` explicitly: pinned to
+    the day it was written it stays "fresh" for exactly one window and then turns
+    stale, which is how the two wiring tests below passed locally and then failed in
+    CI the next day with ``threads_pruned=2`` instead of 1.
+    """
+    return (datetime.now(timezone.utc) - timedelta(**delta)).isoformat()
+
+
 def _saver(path: str) -> tuple[Any, sqlite3.Connection]:
     """Return an entered ``SqliteSaver`` over *path* plus its raw connection.
 
@@ -452,8 +465,8 @@ def test_get_checkpointer_runs_retention_when_it_builds_the_saver(tmp_path, monk
 
     path = str(tmp_path / "wired.sqlite")
     seeded, seed_conn = _saver(path)
-    _put(seeded, "old", OLD)
-    _put(seeded, "live", FRESH)
+    _put(seeded, "old", _ago(days=40))
+    _put(seeded, "live", _ago(hours=1))
     assert _threads(seed_conn) == {"live", "old"}
 
     monkeypatch.setenv("DIGI_CHECKPOINTER", "sqlite")
@@ -475,8 +488,8 @@ def test_apply_sqlite_retention_returns_what_it_deleted(tmp_path, monkeypatch) -
     from digigraph.graph import graph as graph_module
 
     saver, conn = _saver(str(tmp_path / "helper.sqlite"))
-    _put(saver, "old", OLD)
-    _put(saver, "live", FRESH)
+    _put(saver, "old", _ago(days=40))
+    _put(saver, "live", _ago(hours=1))
     monkeypatch.setenv(cr.RETAIN_DAYS_ENV, "1")
 
     result = graph_module._apply_sqlite_retention(saver)
@@ -505,8 +518,8 @@ def test_unusable_retain_days_env_falls_back_to_the_default(tmp_path, monkeypatc
     from digigraph.graph import graph as graph_module
 
     saver, conn = _saver(str(tmp_path / "ckpt.sqlite"))
-    _put(saver, "old", (NOW - timedelta(days=30)).isoformat())
-    _put(saver, "newer", (NOW - timedelta(days=1)).isoformat())
+    _put(saver, "old", _ago(days=30))
+    _put(saver, "newer", _ago(days=1))
     monkeypatch.setenv(cr.RETAIN_DAYS_ENV, "0")
 
     result = graph_module._apply_sqlite_retention(saver)
