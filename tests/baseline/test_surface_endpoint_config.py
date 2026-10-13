@@ -73,7 +73,12 @@ _HOST_RE = re.compile(
 # then dropped the snapshot's hosted-digisearch-route summary line (-1
 # search). #5542 re-measured search at 54 on develop (rotated repo-activity
 # snapshot line, PR-4067 summary dropped in 5132e29f0): benign content
-# rotation, and the merged tree still scans 54, so the pin holds. Regenerated
+# rotation, and the merged tree still scans 54, so the pin holds. #5567
+# (feat(web): polish the digithings landing) added 4 net-new
+# graph.digithings.ai literals under apps/digithings-web (PUBLIC_DASHBOARD_API
+# constant, dashboardApiBase comment, next.config destination rewrite,
+# portfolio comment), 102 -> 106, sanctioned here as intentional surface
+# wiring. Regenerated
 # with the file's own scanner, in the open, per the design rule above.
 PINNED_CENSUS = {
     "api.digithings.ai": 1,
@@ -85,7 +90,7 @@ PINNED_CENSUS = {
     "digithings-stack.example.workers.dev": 1,
     "docs.digithings.ai": 1,
     "foundry-tenant.digithings.ai": 2,
-    "graph.digithings.ai": 102,
+    "graph.digithings.ai": 106,
     "hosts.digithings.ai": 1,
     "hosts.occ.digithings.ai": 1,
     "key.digithings.ai": 72,
