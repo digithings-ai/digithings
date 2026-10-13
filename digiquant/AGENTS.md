@@ -495,8 +495,9 @@ and [`docs/adr/0021-digiquant-supabase-project-topology.md`](../docs/adr/0021-di
 
 Public MCP names use the **`gloomberb_` prefix** (DIG-3313), the same shape as
 `luxalgo_`. Describe them as programmatic extensions of the Gloomberb platform.
-`digifetch_*` remains a compatibility alias: the same handler is registered
-under both names, and `POST /v1/orchestrator_invoke` accepts either.
+The MCP server lists `gloomberb_*` only. `digifetch_*` is not a second tool.
+`POST /v1/orchestrator_invoke` and the in-process dispatcher still accept
+`digifetch_*` and call the same handler.
 `gloomberb_congress_trades` stays refused with `digifetch_congress_trades`.
 
 `src/digiquant/data/gloomberb/` is the digifetch x Gloomberb enrichment layer

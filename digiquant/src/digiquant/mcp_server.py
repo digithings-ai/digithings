@@ -10,12 +10,11 @@ Uses the same ``service_*`` functions as the HTTP API.
 
 from __future__ import annotations
 
-import functools
 import json
 import logging
 import os
 import time
-from typing import Any, Callable, Literal, overload  # score:allow untyped any — MCP payloads
+from typing import Any, Literal, overload  # score:allow untyped any — MCP payloads
 
 # The digifetch x Gloomberb client factory + §7 envelope serializer live in the
 # data package (#4146) so the MCP tools and the pipeline's in-process dispatch
@@ -36,22 +35,6 @@ from digiquant.data.luxalgo.agent_tools import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-def _gloomberb_alias(fn: Callable[..., str], alias_name: str) -> Callable[..., str]:
-    """A second registration of *fn* under the legacy ``digifetch_`` name.
-
-    FastMCP keys a tool by the function object it was given. Wrapping keeps the
-    public ``gloomberb_`` registration and the compatibility alias distinct.
-    """
-
-    @functools.wraps(fn)
-    def alias(*args: Any, **kwargs: Any) -> str:
-        return fn(*args, **kwargs)
-
-    alias.__name__ = alias_name
-    alias.entitlement = getattr(fn, "entitlement", None)  # type: ignore[attr-defined]
-    return alias
 
 
 # ── Market-data backend: Supabase vs versioned R2 history (#3780, Task 4) ──
@@ -760,9 +743,9 @@ def create_mcp_server(
             public = canonical_tool_name(name)
             if enabled is not None and name not in enabled and public not in enabled:
                 return fn
+            # One MCP name. ``digifetch_*`` is the internal key and the invoke
+            # redirect; it is not a second tool on this server (DIG-3313).
             mcp.tool(name=public)(fn)
-            if public != name:
-                mcp.tool(name=name)(_gloomberb_alias(fn, name))
             return fn
 
         return _register

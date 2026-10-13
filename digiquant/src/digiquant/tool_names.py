@@ -2,7 +2,9 @@
 
 The tools are programmatic extensions of the Gloomberb platform. Their public
 MCP name uses the ``gloomberb_`` prefix (the same shape as ``luxalgo_``).
-``digifetch_`` remains a compatibility alias so existing callers keep working.
+``digifetch_`` is the internal dispatch key. Invoke and the in-process
+dispatcher still accept it and call the same handler. It is not registered
+as a second MCP tool.
 """
 
 from __future__ import annotations

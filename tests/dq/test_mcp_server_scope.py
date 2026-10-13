@@ -22,9 +22,9 @@ from digiquant.tool_names import canonical_tool_name
 from digiquant import mcp_server
 
 
-def _gloomberb_aliases(names: set[str]) -> set[str]:
-    """Public names registered beside each legacy ``digifetch_`` tool."""
-    return {canonical_tool_name(name) for name in names if name.startswith("digifetch_")}
+def _advertised(names: set[str]) -> set[str]:
+    """MCP list: each ``digifetch_`` scope key is replaced by its ``gloomberb_`` name."""
+    return {canonical_tool_name(name) if name.startswith("digifetch_") else name for name in names}
 
 
 def _tool_names(server) -> set[str]:
@@ -203,18 +203,18 @@ COMPUTE_TOOLS = {
 @pytest.mark.unit
 def test_full_scope_is_default_and_complete():
     names = _tool_names(create_mcp_server())
-    assert READ_SCOPE_TOOLS <= names
-    assert COMPUTE_TOOLS <= names
     base = set(READ_SCOPE_TOOLS) | COMPUTE_TOOLS
-    assert names == base | _gloomberb_aliases(base)
+    assert names == _advertised(base)
+    assert not any(name.startswith("digifetch_") for name in names)
 
 
 @pytest.mark.unit
 def test_read_scope_exposes_only_read_tools():
     names = _tool_names(create_mcp_server(scope="read"))
     base = set(READ_SCOPE_TOOLS)
-    assert names == base | _gloomberb_aliases(base)
+    assert names == _advertised(base)
     assert not (names & COMPUTE_TOOLS)
+    assert not any(name.startswith("digifetch_") for name in names)
 
 
 @pytest.mark.unit
@@ -287,10 +287,12 @@ def test_tool_counts_pin_post_3855_surface():
     # 113 → 112: `digifetch_congress_trades` left the read scope (DIG-1057).
     assert len(READ_SCOPE_TOOLS) == 112
     assert len(COMPUTE_TOOLS) == 14
-    # 126 legacy registrations, plus one `gloomberb_` alias per digifetch tool
-    # that is actually registered (DIG-3313). The refused congress tool has none.
+    # 126 registrations. Each digifetch scope key is replaced by one gloomberb
+    # name, so the list does not grow (DIG-3313). The refused congress tool
+    # is absent under both prefixes.
     names = _tool_names(create_mcp_server())
-    assert len(names) == 126 + len(_gloomberb_aliases(names))
+    assert len(names) == 126
+    assert not any(name.startswith("digifetch_") for name in names)
 
 
 @pytest.mark.unit
@@ -340,17 +342,20 @@ def test_session_tools_disappear_without_an_authenticated_cookie():
         name for name, tier in TOOL_ENTITLEMENTS.items() if tier in {"session", "preview", "pro"}
     }
     gated_public = gated | {canonical_tool_name(name) for name in gated}
-    free = {name for name, tier in TOOL_ENTITLEMENTS.items() if tier == "free"}
     from digiquant.tool_refusals import REFUSED_TOOLS
 
-    free_listed = {name for name in free if name not in REFUSED_TOOLS}
+    free = {
+        name
+        for name, tier in TOOL_ENTITLEMENTS.items()
+        if tier == "free" and name not in REFUSED_TOOLS
+    }
     venue = {name for name, tier in TOOL_ENTITLEMENTS.items() if tier == "venue_session"}
-    expected_aliases = {canonical_tool_name(name) for name in free_listed | venue}
+    expected_public = {canonical_tool_name(name) for name in free | venue}
 
     assert gated, "the gate would have nothing to hide"
     assert not (full & gated_public), sorted(full & gated_public)[:5]
     assert not (read & gated_public), sorted(read & gated_public)[:5]
-    # The free family is untouched by the gate, on either scope, under both names.
-    assert free & full
-    assert expected_aliases <= full
-    assert len(full) == 126 - len(gated) + len(expected_aliases)
+    # The free family stays on the list under the public name only.
+    assert expected_public <= full
+    assert not (full & (free | venue))
+    assert len(full) == 126 - len(gated)

@@ -950,8 +950,8 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
     if tool.startswith("digifetch_") or tool.startswith("gloomberb_"):
         # digifetch x Gloomberb family (#4097): one shared in-process dispatcher
         # with the MCP + pipeline-agent surfaces, so hub callers get the same §7
-        # attribution envelope. ``gloomberb_*`` is the public name;
-        # ``digifetch_*`` stays as a compatibility alias (DIG-3313). Gated names
+        # attribution envelope. The MCP list uses ``gloomberb_*`` only.
+        # ``digifetch_*`` is a call-time redirect onto that handler (DIG-3313). Gated names
         # are deliberately *accepted* here (unlike the pipeline's
         # advertised-subset filter): with no GLOOMBERB_SESSION_COOKIE the
         # dispatcher answers the typed auth_required/pro_required envelope with
