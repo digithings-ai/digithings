@@ -337,7 +337,7 @@ describe("DigichatConfigSchema", () => {
     ]);
     expect(occHost?.mcp?.servers[0]?.tokenEnv).toBe("ZAMMAD_API_TOKEN");
     expect(occHost?.mcp?.servers[0]?.authHeader).toBe("Authorization");
-    expect(allowedForceTools(occHost)).toEqual(["digisearch", "digivault", "zammad"]);
+    expect(allowedForceTools(occHost)).toEqual(["zammad", "digisearch", "digivault"]);
   });
 
   it("parses operator MCP servers on the DataTap example without leaking URLs", () => {

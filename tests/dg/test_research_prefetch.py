@@ -33,7 +33,7 @@ def test_document_rag_hands_tools_to_the_model_and_does_not_prefetch(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The model must choose retrieval itself: no prefetch call before run_tools,
-    no injected "already fetched" context, and an explicit 4-round budget.
+    no injected "already fetched" context, and an explicit 6-round budget.
 
     ``always_retrieve_tools`` is set here to exercise the regression this test
     guards, not because production still sets it: this diff (#2240) dropped that
