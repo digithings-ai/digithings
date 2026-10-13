@@ -82,11 +82,11 @@ html[data-dq-hero="played"] :not([data-dq-live]) > [data-dq-stray] {
   }
 }
 
-/* Same pairing as digithings.ai: Inter for sans/display, Geist Mono for chrome.
-   Both stacks come from tokens.css, built off the faces in app/fonts.ts — no
-   font family is named here. */
+/* One mono voice (DIG-2695): Geist Mono serves sans, mono and display, the
+   same single-face setup as the dashboard. Both stacks come from tokens.css,
+   built off the face in app/fonts.ts — no font family is named here. */
 :root[data-theme] {
-  --font-sans: var(--font-stack-sans);
+  --font-sans: var(--font-stack-mono);
   --font-mono: var(--font-stack-mono);
   --font-display: var(--font-sans);
 }
