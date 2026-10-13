@@ -57,6 +57,7 @@ const TWELVE_X_ENABLED_IDS = [
   "twelve-x-market-context-weekly",
   "twelve-x-performance-eval",
   "twelve-x-primemarket-heartbeat",
+  "twelve-x-session-heartbeat-watchdog",
   "twelve-x-session-catchup",
   "twelve-x-archive-maintenance",
   "twelve-x-digisearch-parity",
@@ -291,7 +292,7 @@ describe("jobsForCron", () => {
     for (const id of TWELVE_X_ENABLED_IDS) {
       const job = JOBS.find((row) => row.id === id);
       expect(job?.enabled).toBe(true);
-      expect(job?.kind).toBe("workflow_dispatch");
+      expect(["workflow_dispatch", "twelvex-watch"]).toContain(job?.kind);
       expect(job?.repo).toBe("digithings-ai/twelve-x");
     }
   });
@@ -390,7 +391,8 @@ describe("jobsForCron", () => {
     expect(watchdog).toMatchObject({
       id: "twelve-x-feed-confirm-watchdog",
       repo: "digithings-ai/twelve-x",
-      kind: "workflow_dispatch",
+      kind: "twelvex-watch",
+      twelvexWatch: "feed-confirm",
       workflow: "feed_confirm_watchdog.yml",
       enabled: true,
     });
@@ -429,7 +431,9 @@ describe("jobsForCron", () => {
     // Neither is a GHA schedule in disguise — both are workflow_dispatch only,
     // so the Worker stays the authoritative clock.
     expect(confirm?.kind).toBe("workflow_dispatch");
-    expect(watchdog?.kind).toBe("workflow_dispatch");
+    // The watchdog now reads Actions history in the Worker (twelvex-watch.ts),
+    // still a different clock from the confirm it watches.
+    expect(watchdog?.kind).toBe("twelvex-watch");
     expect(confirm?.command).toBeUndefined();
     expect(watchdog?.command).toBeUndefined();
   });
