@@ -67,6 +67,10 @@ _HOST_RE = re.compile(
 # Replaces the batch/ci-cron pin below: the union added endpoint literals in
 # key.digithings.ai (+1) and search.digithings.ai (+1). Regenerated with the
 # file's own scanner, in the open, per the design rule above.
+# 2026-10-13: search.digithings.ai 55 -> 54. The removed literal is a rotated
+# repo-activity snapshot line (5132e29f0 dropped the PR-4067 summary mentioning
+# the hosted digisearch route), not the DIG-2703 migration: benign content
+# rotation, so the pin is refreshed, not the snapshot.
 PINNED_CENSUS = {
     "api.digithings.ai": 1,
     "app.digithings.ai": 3,
@@ -84,7 +88,7 @@ PINNED_CENSUS = {
     "langfuse.digithings.ai": 3,
     "mcp.digithings.ai": 59,
     "occ.digithings.ai": 142,
-    "search.digithings.ai": 55,
+    "search.digithings.ai": 54,
     "trace.digithings.ai": 20,
     "www.digiquant.io": 17,
     "www.digithings.ai": 82,
