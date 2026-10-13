@@ -9,7 +9,11 @@ async function ping(url: string, ms: number): Promise<boolean> {
     const t = setTimeout(() => ctrl.abort(), ms);
     const r = await fetch(url, { signal: ctrl.signal, cache: "no-store" });
     clearTimeout(t);
-    return r.ok;
+    if (!r.ok) return false;
+    // Stack worker answers liveness probes without booting the container
+    // ({container:"sleeping"}); that is not "ready".
+    const txt = await r.text().catch(() => "");
+    return !/"container"\s*:\s*"sleeping"/.test(txt);
   } catch {
     return false;
   }
@@ -23,7 +27,7 @@ export async function GET() {
   const eco = await getEcosystemEndpoints();
   const out: Record<string, "ready" | "waking"> = {};
   const key = process.env.DIGIKEY_URL?.trim();
-  if (key) out.auth = (await ping(`${key.replace(/\/$/, "")}/health`, 25_000)) ? "ready" : "waking";
+  if (key) out.auth = (await ping(`${key.replace(/\/$/, "")}/.well-known/jwks.json`, 25_000)) ? "ready" : "waking";
   if (isServiceCapabilityEnabled("digigraph"))
     out.assistant = (await ping(`${eco.digigraphUrl.replace(/\/$/, "")}/health`, 25_000)) ? "ready" : "waking";
   if (eco.digisearchUrl?.trim())
