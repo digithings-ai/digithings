@@ -62,12 +62,15 @@ _HOST_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Measured on the back-merge tree after folding develop's L4-L9 convergence:
-# movement since the batch pin is five literals from two landings. From main's
-# OCC release: occ.digithings.ai x2 as tenant-map keys in
+# Measured on the back-merge tree after folding develop's L4-L9 convergence
+# and the repo-activity refresh (#5505): movement since the batch pin is five
+# literals from two landings, minus one refresh removal. From main's OCC
+# release: occ.digithings.ai x2 as tenant-map keys in
 # tests/dg/test_occ_ticket_payload_retired.py, mcp.digithings.ai x1 in
 # review-5061-digichat-mcp-tool-allowlist.md prose. From the L4-L9 union:
-# key.digithings.ai (+1), search.digithings.ai (+1). Regenerated with the
+# key.digithings.ai (+1), search.digithings.ai (+1). The refresh then dropped
+# the snapshot's hosted-digisearch-route summary line (-1 search). Regenerated
+# with the
 # file's own scanner, in the open, per the design rule above.
 PINNED_CENSUS = {
     "api.digithings.ai": 1,
@@ -86,7 +89,7 @@ PINNED_CENSUS = {
     "langfuse.digithings.ai": 3,
     "mcp.digithings.ai": 60,
     "occ.digithings.ai": 144,
-    "search.digithings.ai": 55,
+    "search.digithings.ai": 54,
     "trace.digithings.ai": 20,
     "www.digiquant.io": 17,
     "www.digithings.ai": 82,
