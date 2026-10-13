@@ -682,12 +682,13 @@ const Composer: FC<{
               <ComposerPrimitive.Input
                 placeholder={placeholder}
                 className={cn(
-                  "aui-composer-input placeholder:text-muted-foreground/60 max-h-48 w-full resize-none overflow-hidden bg-transparent outline-none",
+                  "aui-composer-input placeholder:text-muted-foreground/60 w-full resize-none overflow-x-hidden overflow-y-auto break-words whitespace-pre-wrap bg-transparent outline-none",
                   compact
-                    ? "min-h-7 px-1.5 py-0 text-sm leading-7"
-                    : "min-h-[1.375rem] px-2.5 py-0.5 text-base leading-6",
+                    ? "min-h-7 max-h-[8.75rem] px-1.5 py-0 text-sm leading-7"
+                    : "min-h-[1.375rem] max-h-[7.75rem] px-2.5 py-0.5 text-base leading-6",
                 )}
                 rows={1}
+                maxRows={5}
                 autoFocus={autoFocus}
                 submitMode="enter"
                 enterKeyHint="send"
@@ -910,7 +911,7 @@ const AssistantMessage: FC = () => {
     <MessagePrimitive.Root
       data-slot="aui_assistant-message-root"
       data-role="assistant"
-      className="aui-msg fade-in slide-in-from-bottom-1 animate-in relative grid grid-cols-[minmax(0,1fr)] items-start -mb-7.5 pb-7.5 duration-150 [contain-intrinsic-size:auto_200px] [content-visibility:auto]"
+      className="aui-msg fade-in slide-in-from-bottom-1 animate-in relative grid grid-cols-[minmax(0,1fr)] items-start -mb-7.5 pb-7.5 duration-150"
     >
       <div
         data-slot="aui_assistant-message-content"
@@ -1127,7 +1128,7 @@ const UserMessage: FC = () => {
   return (
     <MessagePrimitive.Root
       data-slot="aui_user-message-root"
-      className="aui-msg fade-in slide-in-from-bottom-1 animate-in grid grid-cols-[1.25rem_minmax(0,1fr)_1.75rem] items-start gap-x-[0.55rem] gap-y-2 duration-150 [contain-intrinsic-size:auto_200px] [content-visibility:auto]"
+      className="aui-msg fade-in slide-in-from-bottom-1 animate-in grid grid-cols-[1.25rem_minmax(0,1fr)_1.75rem] items-start gap-x-[0.55rem] gap-y-2 duration-150"
       data-role="user"
     >
       <span className="aui-msg-marker" aria-hidden="true">

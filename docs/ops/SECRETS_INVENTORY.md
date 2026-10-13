@@ -2,6 +2,13 @@
 
 Names and locations only. **This file never contains secret values.** Cloudflare Worker secrets are stored as `secret_text`, which is write-only: `wrangler secret list` returns each name and its type but never the value, so no readback path exists even for the operator. Local `.env` files and committed example templates are referenced by path and line; any literal found committed is masked `***` and labelled `plaintext-literal`. Every claim below carries a `file:line` or a named command.
 
+Every row below is a **name**, and a name is all that belongs in this file, on a ticket,
+a comment, or a chat. The rule that keeps it that way — including the "report the branch
+the tool took, never the value" wording agents use when a refresh fails — is in
+[`credential-ownership.md`](credential-ownership.md#never-paste-a-credential-value). It is
+stated there rather than here because it binds humans and agents equally, and an inventory
+is the file people read while holding a value.
+
 Rebuilt from four read-only sweeps (cloudflare / python / plumbing / docs) plus a live `wrangler secret list` against the three Workers, at `origin/develop` commit `35d91f641`. Two sweep claims were rechecked and corrected here: `.env.example:240` and `.env.example:278` are `replace-with-…` placeholders (not live values). A later recount of `.github/workflows` (53 workflow files, recounted 2026-10-08) found **1** job declaring `environment: production` (`deploy-digiquant-runner.yml`); the 2026-09 audit's "four workflows" list named files that are not in the tree. That gap is now closed for CI: **DIG-248 (2026-10-04)** added a third environment, `cron` (no reviewers, no wait timer, no branch policy), and declared it on **all 32 jobs that read a non-automatic `secrets.*` name**, so the only two job shapes left without a gate are `deploy-digiquant-runner.yml:deploy` (still `production`, deliberately) and jobs that read nothing but the automatic `GITHUB_TOKEN`. See [R13](#risk-register).
 
 ## How to read this table
@@ -81,6 +88,7 @@ Six repo secrets that no `.github` YAML read were deleted on 2026-09-17/18: `COP
 | `DIGISEARCH_SMTP_USER` · `DIGISEARCH_SMTP_PASS` | `digisearch/src/digisearch/monitors/delivery.py:320` | `.env.example:109` | yes (`.env`) | monitor email delivery fails | local `.env` | |
 | `FRED_API_KEY` · `COINGECKO_API_KEY` · `ALPHA_VANTAGE_API_KEY` · `SEC_EDGAR_USER_AGENT` | `digiquant/.../research ingest` | `digiquant/src/digiquant/research/config/mcp.secrets.env.example:5-12`; history-only `digiquant/src/digiquant/olympus/atlas/config/mcp.secrets.env.example` (absent at HEAD, byte-identical literals, verified 2026-10-04) | n/a | research ingest fails | committed example, gitleaks-allowlisted | `plaintext-literal`; owner-confirmed dead 2026-06-18 |
 | `OMNIROUTE_API_KEY` · `OMNIROUTE_AUTH_PASSWORD` | `docker-compose.yml:358,384-385` | `.env.example:14-15` | yes (`.env`) | omniroute profile breaks | local `.env` | vendor default forbidden |
+| `DIGILLM_EGRESS_DIGEST_KEY` | `digillm/src/digillm/egress_record.py:78` (`DIGEST_KEY_ENV`), read per record at `:235` | `.env.example:244` (commented, no value) | yes (`.env`) / no — write-only (secret store) | no outage: records keep emitting with `digest_algorithm: "absent"` and `payload_digest: null` | none — one value per environment, never shared across them | HMAC pepper over the canonical outbound **messages** for the GDPR egress ledger. Floor 32 chars, no unkeyed fallback by design. **Unset in every environment as of 2026-10-06** — on a production request path this is the one secret in this inventory whose absence is silent, because the ledger still fills and nothing alerts (contrast `LANGSMITH_API_KEY`, `AZURE_SEARCH_API_KEY`, `COHERE_API_KEY`, `EXA_API_KEY`: all optional, all dormant-or-degraded when missing). **Must not be co-located with the ledger it protects** — see [the digillm egress pepper](#the-digillm-egress-pepper--not-a-normal-api-key-dig-1184) |
 
 ### (c) infrastructure tokens (Cloudflare / Supabase / DB)
 
@@ -191,12 +199,19 @@ are populated is unverified — GitHub secrets are write-only, so I cannot read 
 back, only confirm the names exist. That is a gap, not a clean bill of health.
 
 This pair is still **live code**: `config.py:27-32` raises unless both are set, and
-`nodes/scrape.py:692` calls it as the last-resort login fallback after both supplied
-sessions fail. That ordering is deliberate and load-bearing — twelve-x
-`docs/PRIMEMARKET_DESK_API.md:139-152` explains that "try the supplied session, else
+`nodes/scrape.py:609` calls it as the login route taken when **no supplied
+`PRIMEMARKET_SESSION_TOKEN` is set** (`:605-607` returns early when one is). That
+ordering is deliberate and load-bearing — twelve-x
+`docs/PRIMEMARKET_DESK_API.md:193-198` explains that "try the supplied session, else
 fall back to credentials" is *not* implemented as a fallback chain, because a
 rejected session would then fire a real credential attempt against the live vendor
-account on every run. The chain is: session token, then cookie, then **this pair**.
+account on every run. The chain is: the supplied `PRIMEMARKET_SESSION_TOKEN`, and
+only when that name is unset, **this pair** — the `PRIMEMARKET_SESSION_COOKIE` link
+that used to sit between them was removed from the code by **DIG-266** (`ffbf354`,
+2026-10-05, "remove the unreachable cookie route and rename the refresh script"),
+on the same day **DIG-249** (`8368932`) had already taken it out of CI and the docs,
+and the desk cookie is now *derived* from the token rather than pasted separately
+(`nodes/scrape.py:568`).
 So these two values are the only thing standing between a stale session and a failed
 pipeline — and they are also the most damaging pair on this laptop, because they
 authenticate as a person, not as a job.
@@ -263,6 +278,114 @@ surface stop being anyone's problem:
 None of these are done here. This section records the owner and the refresh path so
 the next person is not guessing, and every claim above carries a `file:line`, a
 commit, or a named command.
+
+Every name in (g1) to (g3) is a credential **we hold a copy of**. There is one
+PrimeMarket credential where we hold no copy at all, and it is a standing
+prohibition rather than an owner to assign: [the vendor-published browser-bundle
+credential](#the-vendor-published-browser-bundle-credential-dig-1424) (DIG-1424).
+
+## The digillm egress pepper — not a normal API key (DIG-1184)
+
+Not a `(g)` item: that series covers the twelve-x laptop `.env`, and this key is a
+digithings deployment secret with no laptop copy. It gets its own section because it is
+the one secret here whose failure mode is a ledger that silently stops proving anything.
+
+`DIGILLM_EGRESS_DIGEST_KEY` (added by DIG-1139 / PR #5152, documented for
+operators by DIG-1184) is the only secret in this inventory whose **absence is
+silent on a production request path**. Nothing breaks: a missing key is not a 401
+or a failed health check here, because with no pepper set digillm still writes
+every egress record — it just writes `digest_algorithm: "absent"` and
+`payload_digest: null`, because `egress_record.compute_payload_digest` refuses to
+substitute an unkeyed hash for a missing secret. (`LANGSMITH_API_KEY`,
+`AZURE_SEARCH_API_KEY`, `COHERE_API_KEY` and `EXA_API_KEY` are also silent when
+absent, but each is optional: tracing export stops, a backend is disabled, search
+is dormant. This one sits on every LLM call.)
+
+So the failure mode is not an outage, it is a **ledger that looks complete and
+cannot evidence what was sent**. Measured on `task/1139-digillm-egress-record` at
+`1c3346585`: `pytest digillm/tests/test_digillm.py` produced 83 records and the
+full `pytest digillm/tests` produced 156, every one of them `absent`. That is the
+correct code behaviour and the point of DIG-1139; it is also a privacy mechanism
+that is off in every shipped configuration today.
+
+Three rules that differ from every other row here:
+
+1. **Do not co-locate the pepper with the ledger.** By default both land in the
+   same checkout — the key in `.env`, the records in
+   `digiquant/results/egress/records.jsonl`, reachable by the same process under
+   the same operator. That is fine for local development and wrong anywhere a
+   second person can read. **This is not yet enforceable in this stack, and an
+   operator must not record it as done on the strength of a file mode.** No service
+   in `docker-compose.yml` declares a `user:`, and none of the Dockerfiles behind
+   the five digillm-importing compose services (`digiclaw`, `digigraph`,
+   `digiquant`, `digisearch`, `digitrace`) has a `USER` directive, so those
+   services run as uid 0 and root ignores file mode
+   bits: a ledger chmod-ed `0222` on a volume is separated from other operators but
+   not from the process that also holds the pepper in its environment. A GitHub
+   *org secret* is workflow-scoped and does not reach compose either, and Bitwarden
+   Secrets Manager is still an open migration here (DIG-95), so today neither is an
+   available delivery path. Real separation needs a sink the app cannot read back —
+   and `DIGILLM_EGRESS_LOG_PATH` only reaches a regular file (the sink opens the
+   path for append; the module has no syslog/OTLP branch, so a FIFO would block
+   the request path and a socket cannot be written at all). Genuine separation is
+   unavailable until `egress_record` grows a collector transport, or the deployment
+   consumes records through the in-process observer with `DIGILLM_EGRESS_LOG_PATH=off`.
+   Same mount, same backup, or same read grant defeats the mechanism: an HMAC next
+   to its own ledger is a dictionary for any candidate list the reader holds.
+2. **Set both variables on every service that imports digillm.** `digiclaw`,
+   `digigraph`, `digiquant`, `digisearch`, `digiskills` and `digitrace` all declare
+   the dependency (`digiskills` ships no compose service of its own, so its vars
+   ride with whichever service hosts it). A per-service compose `environment:` entry is per-service, so a
+   pepper on one service leaves the rest emitting `absent` into the same ledger —
+   which looks like the exact silent failure this section is about. And leave
+   `DIGILLM_EGRESS_LOG_PATH` set in containers (`off` for the observer route): no image copies `digiquant/` or
+   `.git`, so the default resolves inside the container's writable layer and the
+   GDPR ledger is destroyed on the next recreate while every health check stays
+   green.
+3. **One key per environment, never shared.** A reused pepper makes every
+   deployment's digests comparable, so one leaked ledger becomes a dictionary for
+   all of them. Rotation changes future digests, so a rotated environment can no
+   longer recompute historical records against new ones — keep the old key and
+   old ledger in separately-guarded custody if counsel must verify past entries.
+   `docs/ops/SECRETS_ROTATION.md` has no cadence row for this key yet; add one
+   there before this goes to production, and rotate it whenever the ledger store
+   changes custody.
+
+**Verification, before anyone relies on the ledger for a compliance question:**
+
+```bash
+# 1. the pepper is present AND long enough to produce a digest, without ever
+#    printing it. `-n` is not enough: a truncated paste or a placeholder is
+#    non-empty and still yields digest_algorithm "absent" on every record. Test the
+#    length, not the shape — after stripping, as the code does
+#    (`pepper.strip()` before measuring, so padding does not count). Never list
+#    a secret store here — `bws secret list`
+#    prints values, and this file's rule is that verification means behaviour,
+#    never readback (docs/ops/SECRETS_ROTATION.md:12).
+#    Run this on EVERY service listed above, not one.
+docker compose exec <digillm-service> sh -c \
+  'k=$(printf "%s" "$DIGILLM_EGRESS_DIGEST_KEY" | sed "s/^[[:space:]]*//;s/[[:space:]]*$//"); [ ${#k} -ge 32 ] && echo len-ok || echo TOO-SHORT-OR-MISSING'
+
+# 2. the separation actually holds. This check is necessary, not proof: it shows
+#    the process cannot read that file, not that records are being written.
+#    NO-SINK and LEAK are both failures (an unset or stale path must not read
+#    as "ok").
+docker compose exec <digillm-service> sh -c '[ -e "$DIGILLM_EGRESS_LOG_PATH" ] || { echo NO-SINK; exit 1; }; [ -r "$DIGILLM_EGRESS_LOG_PATH" ] && echo LEAK || echo ok'
+
+# 3. the ledger is not 100% "absent" — a count, no payload content. Two filters,
+#    both necessary: unit-test records (digillm/tests/test_digillm.py does not
+#    redirect DIGILLM_EGRESS_LOG_PATH, so a checkout-local ledger holds records
+#    with destinations like "<MagicMock …>") and cache-hit records, which carry no
+#    payload and are "absent" whether or not a pepper exists.
+jq -r 'select(.destination | startswith("http")) | .digest_algorithm' \
+  digiquant/results/egress/records.jsonl | sort | uniq -c
+```
+
+An `absent`-only distribution over real, non-cache-hit destinations is a finding:
+that environment never had a pepper, so its digests cannot be recomputed. A ledger
+that is *part* `absent` is not a total failure — it means the pepper was installed
+partway through the ledger's life, and only the earlier records are unverifiable.
+Wire the secret, then read the ledger.
 
 ## Vendor terms and what this file may publish (DIG-1194)
 
@@ -394,6 +517,51 @@ endpoint, not a local experiment — which is why R17 asks DevOps for one comman
 
 ## Review coverage for this section
 
+The digillm egress pepper section was reviewed in-session on 2026-10-06 twice by
+fresh-context reviewers — once on an operational lens, once adversarially on privacy and
+security. The second pass found the load-bearing defect in the whole change: **the
+prescribed separation is unenforceable as written.** The docs told an operator to put
+the ledger where digillm could "append to but not read back", but no service in
+`docker-compose.yml` declares a `user:` and none of the Dockerfiles behind the five
+digillm-importing compose services has a `USER` directive, so those services run as
+uid 0 and root ignores file mode bits — a `0222` ledger on
+a volume separates it from other operators and not from the process holding the pepper. An
+operator following the first draft would have marked that rule done while holding no
+separation at all. All four docs now state the constraint and the honest consequence:
+`DIGILLM_EGRESS_LOG_PATH` only reaches a regular file, so genuine separation is
+unavailable until `egress_record` grows a collector transport (or the deployment
+uses the observer with the path `off`) — and they ship the necessary (not
+sufficient) in-service check that reports `NO-SINK`/`LEAK`/`ok` without hanging
+on a FIFO.
+
+The same pass also forced: `absent` no longer being described as proof a pepper was
+missing (the `completion()` cache-hit record is `absent` with or without one, and a partly
+`absent` ledger means a partway key install, not a total failure); the presence check
+testing the 32-character floor rather than non-emptiness, so a truncated paste can no
+longer pass; the pepper generation command shown only in its piped form, since the bare
+form puts the value in terminal scrollback; the default ledger path documented with its
+`$CWD` fallback and the consequence that inside a container image — where nothing copies
+`digiquant/` or `.git` — the default lands in the writable layer and is destroyed on
+recreate; both variables set on every service that imports digillm rather than one; the
+"were sent" claim softened to "offered to the provider"; and two line citations corrected
+(`SECRETS_ROTATION.md:11` → `:12`; the BYOK key is at `client.py:696-703`, not `:1371`).
+
+The first pass forced eight corrections that had gone into the initial draft: a
+verification step that would have **printed the secret** (`bws secret list --search …` —
+`--search` does not exist on `bws` 2.1.0, and plain `secret list` emits every `"value"`);
+a delivery claim that a GitHub org secret reaches `docker compose`, which it cannot; four
+claims that the digest covers "the outbound payload" when it covers `messages` only; a
+record-count figure that did not reproduce (397 → 83 for the cited command, 156 for the
+full suite); an undisclosed fact that the test suite appends to the real default ledger; a
+table row that broke this file's own column conventions; an unsupported "the only secret
+whose absence is silent"; and an unresolvable "rotate on the usual cadence" with no
+cadence row to point at. It also corrected the digillm docs it accompanied —
+`digillm/ARCHITECTURE.md`, `digillm/AGENTS.md` and `.env.example` — on the `off`/`none`
+disabling values, the `compute_payload_digest(key=)` test seam, the module-map wording
+"per provider attempt" (the code records attempts that fail *before* the wire too), and a
+"duplicated locally" claim about the Art. 9 ids that named a canonical copy which does not
+exist — digibase has no GDPR module, so there is nothing to drift from.
+
 Reviewed in-session on 2026-10-05 by a fresh-context reviewer, which found and
 forced the correction of five substantive errors in the first draft: a claim that
 the `SUPABASE_SERVICE_KEY` copy could not satisfy its reader (it does — `config.py:38`
@@ -407,6 +575,104 @@ too and still passed by two workflows — and split "dead" from "uncanonical" fo
 the Supabase name. The takeaway for the next writer: **verify a line citation by
 reading the line on `github/develop`, not the working tree, and check the other
 repo before calling a shared name dead.**
+
+## The vendor-published browser-bundle credential (DIG-1424)
+
+Recorded here on 2026-10-06 from the vendor exposure reported to Security on
+DIG-1261 and split out as DIG-1424 (CTO's ruling). **No value was read, printed,
+copied, or transcribed** — not into this file, not into an issue, and not into any
+repository file. This record deliberately did **not** fetch the bundle to confirm
+the literal: a fetch would take the value through this process for no benefit, and
+a probe is a use. What was verified from our side is the absence claim in the table
+below. This section records a location and a prohibition. It carries no value, no
+prefix of one, and no length, and nothing here can be used to reconstruct one.
+
+| Name | Where the value lives | Copies we hold | Read by our code | Rotatable by us | Owner | Status |
+|---|---|---|---|---|---|---|
+| `NEXT_PUBLIC_API_TOKEN` (the value the vendor's bundle hardcodes as this variable's fallback literal) | the vendor's **public desk JS bundle**, served to every visitor's browser. The vendor app is a Next.js app, so the literal is inlined at build time and is present in the shipped `_next/static` chunks — the same property that makes every `NEXT_PUBLIC_*` value public, recorded under [Gaps and unknowns](#gaps-and-unknowns). The bundle presents that literal to a `userLogin` endpoint on the vendor's API host `frontendapi.primemarket-terminal.com` | **none.** Absent from the repo-secret and Worker-secret enumerations recorded above, and from every `.env`, from `digithings`, and from `twelve-x`. Verified by absence **of the name**: `git grep -i "NEXT_PUBLIC_API_TOKEN\|userLogin\|frontendapi"` in `twelve-x` on `github/develop` returns **nothing**. That proves the name is unused, not that the value is absent under some other name — no local command can prove the second half, and a credential we never wrote down could only have reached us by being read out of the bundle, which this record deliberately did not do | **nothing.** No digithings or twelve-x file reads this name. The scrape path is unchanged by this record and uses only the credentials in (g1) and (g2) | **no.** We hold no copy and the vendor is the only party who can change it. There is no `gh secret set`, no `wrangler secret put`, and no `refresh_*.sh` path that ends at this value, because we never store it | **Security** (agent `b14d7a18`), with Chris as the only human who can execute | **DELIBERATELY UNUSED. NEVER TO BE USED.** |
+
+### Why this is a standing prohibition
+
+It is an upstream **service** bearer token, not one of ours, and it reached
+every browser because the vendor shipped it in client-side code. Three facts put
+it out of bounds, and none of them is a preference:
+
+1. **It was leaked by the vendor, not provided to us.** The vendor's terms permit
+   programmatic access only for APIs *officially provided by them* (Section 12 —
+   see [`docs/plans/adr-0030/HOLD-Primarket.md`](../plans/adr-0030/HOLD-Primarket.md)).
+   Copying a token out of a bundle is the opposite of that exception, and using it
+   is the material breach that HOLD already records. Counsel owns the legal half on
+   DIG-1246 and has ruled that automated login is not permitted.
+2. **We cannot rotate it.** Rotation is the control this file exists to protect,
+   and here it does not exist. Any process depending on this value would break
+   silently, at a moment we choose by accident.
+3. **Using it makes the contractual position worse, not better.** A credential we
+   did not pay for and cannot revoke is a liability we would be importing.
+
+The CTO ruled the same on DIG-1261 (Security's half), which DIG-1424 splits out.
+Chris's incident on DIG-1226 — a credential value pasted into a Paperclip
+interaction reject-reason on 2026-10-05, where the record can no longer be edited
+or deleted — is the reason the rules below are written as prohibitions instead of
+as guidance.
+
+### The prohibitions
+
+- **Never use it** for any request, on any path, for any reason.
+- **Never wire it into `twelve-x`** — not into `.env`, not into
+  `config.py`, not into a workflow, and not as a fourth route behind the session keys
+  in (g1). The chain is the supplied session, then the desk login pair in (g2), and it
+  stops there: twelve-x `docs/PRIMEMARKET_DESK_API.md:193-198` records that "try the
+  supplied session, else fall back to credentials" is deliberately **not** implemented,
+  because a rejected session would then fire a real credential attempt against the live
+  vendor account on every run. A fourth route would break that on purpose.
+- **Never paste it** into a ticket, an issue comment, a chat message, a code
+  review, a commit message, a branch name, or any file in any repository. This
+  includes a **prefix** and includes a **length** — a prefix plus a length is
+  enough to confirm a candidate and to search a leak corpus. Report the
+  **location and the variable name** instead. The report-this / never-report-this
+  table is twelve-x `docs/PRIMEMARKET_DESK_API.md:158-162`, added there after the
+  DIG-1226 incident. In this repo,
+  [`docs/ops/credential-ownership.md`](credential-ownership.md) carries the ownership
+  side under **Enforcement → "No secret values in docs"**; its "Never paste a
+  credential value" section is **DIG-1226, not yet merged into `develop`**.
+- **Never write a script that fetches it or tests it.** A liveness probe is a use.
+  That is also why this section has no `file:line` probe command, unlike most rows
+  above.
+- **Never try to rotate it**, and never open a ticket that asks for it to be
+  rotated. Rotating is the reflex when a credential is unrotated and unauthenticated,
+  and here it is both impossible and wrong: we hold no copy, so there is nothing to
+  write back, and the only parties who could act are the vendor and Counsel. The
+  correct report for this finding is DIG-1424 itself, closed as a standing
+  prohibition.
+
+### This is a trap-guard, not a discovery
+
+The exposure is on the **vendor's** side and there is nothing for us to remediate
+on our side: we hold no copy, we cannot rotate it, and no code of ours reads it.
+That is precisely what makes it a trap. An agent that fetches the desk bundle will
+find a token-shaped literal in client-side JavaScript and can reasonably conclude
+"I have found an API token" and open new work — a probe, a rotation, a wiring
+change, or worse, a paste.
+
+**If you found a token in the desk bundle: this is DIG-1424, and there is no new
+work.** It is recorded, it is prohibited, and it needs no action from you. Do not
+test it, do not report its value, do not open an issue about it, and do not treat
+it as a discovery. Close the loop on DIG-1424 instead.
+
+### What this record is not
+
+This is not an access method. It adds no step-by-step recipe, no request example,
+and no reproducible command, and it deliberately stays inside the ADR-0030 hold
+([`docs/plans/adr-0030/HOLD-Primarket.md`](../plans/adr-0030/HOLD-Primarket.md)),
+which bars **PrimeMarket-specific examples in public files** until DIG-478
+(Card `295f3d75`, with Chris) is decided and Counsel confirms. The existing
+PrimeMarket rows above are themselves inside that hold: the session keys in (g1)
+and the login pair in (g2) are inventoried as **credentials we hold with a named
+owner and a recorded refresh path**, not as a way to obtain or use them.
+
+Related: DIG-1424 (this record), DIG-1261 (CTO ruling on the credential),
+DIG-1246 (Counsel, legal half), DIG-1226 (the never-paste rule and its
+precedent), DIG-478 and DIG-503 (the hold and its parent).
 
 ## Risk register
 
@@ -465,6 +731,8 @@ as the sharpest point, is what Counsel put at the centre. The PrimeMarket half i
 DIG-461/DIG-478 and stays open there; nothing in this row is a clearance for it.
 
 **R17 — an accepted prohibited use, a credential with no custody, and a deployment state nobody can verify.** Severity: high. Evidence: the accepted-use record and custody blocker in [Vendor terms and what this file may publish](#gloomberb-the-accepted-use-the-custody-blocker-and-what-is-still-unverified); Counsel's memo (2026-10-05); Chris's acceptance and custody authorisation (2026-10-06, DIG-1194); `bws project list` → empty against `project create` → *"maximum number of projects (3) for this plan"*; `git grep GLOOMBERB -- .github/workflows/` → empty, so no scheduled ingest holds the cookie; `wrangler secret list` unrunnable for Security. Why: three separate weaknesses stack. (1) A Counsel-confirmed prohibited access method is in deliberate, documented use by decision — which is a legitimate state, but only while it stays internal, so its safety depends on tripwires nobody is watching. (2) The credential has no inventory entry with an owner or expiry and lives in one untracked `.env` line, because the Bitwarden write path is quota-blocked. (3) The inventory asserts a deployed Worker copy that cannot be confirmed, so the real blast radius of "keep it running" is unknown. Action: DevOps runs `wrangler secret list` on `digithings-stack` and reports whether `GLOOMBERB_SESSION_COOKIE` is set; owner grants the `keymaster` machine account a project so Security can complete the move on DIG-95; Security adds an expiry-bearing inventory row for this name as soon as it has a home; DIG-1233 keeps the deployed default off, which is now the only thing standing between an experiment and production traffic.
+
+**R16 — the vendor publishes an upstream bearer token in its own browser bundle, and we hold no copy of it.** Severity: high as a **trap for our own agents**, nil as a **storage** exposure. Evidence: [the vendor-published browser-bundle credential](#the-vendor-published-browser-bundle-credential-dig-1424) (DIG-1424); the vendor's desk app is a Next.js app, so the fallback literal for `NEXT_PUBLIC_API_TOKEN` is inlined into the shipped `_next/static` chunks and served to every visitor — the same inlining property already recorded for every `NEXT_PUBLIC_*` value under [Gaps and unknowns](#gaps-and-unknowns); absence of the name from our code verified by `git grep -i "NEXT_PUBLIC_API_TOKEN\|userLogin\|frontendapi"` in `twelve-x` on `github/develop`, which returns nothing; vendor terms Section 12 in [`docs/plans/adr-0030/HOLD-Primarket.md`](../plans/adr-0030/HOLD-Primarket.md). Why: this is the only entry in this file with **no stored copy, no reader, and no rotation path**, which makes it the one row a table cannot make safe on its own — the risk is that the next agent to read the desk bundle treats the literal as a credential it found, and acts. Everything else here is answered by owner + refresh path; this one is answered only by a prohibition, and a prohibition nobody reads is not a control. A token-shaped literal in public JavaScript is also the cheapest false positive for "I found a leaked API key", which is exactly the report shape that produced the permanent DIG-1226 record. Action: **no remediation is available or needed** — the exposure is vendor-side, we cannot rotate a credential we do not hold, and no code of ours reads it. DIG-1424 makes it a trap-guard: an agent who reports "I found an API token in the desk bundle" is answered with a link to DIG-1424, not with new work. Do not write a liveness probe for it — a probe is a use — and do not reopen it as "but if it works". Track any future vendor request to *officially provide* an API through DIG-478 (Card `295f3d75`) with Counsel, which is the only path by which the prohibition could ever change.
 
 ## Gaps and unknowns
 

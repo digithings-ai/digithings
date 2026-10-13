@@ -5,6 +5,17 @@ import { isServiceCapabilityEnabled } from "@/lib/capabilities";
 import { getLicenseState } from "@/lib/license/state";
 import { resolveDigichatVersion } from "@/lib/license/version";
 
+// An upstream that merely answers a non-2xx status is recorded above as
+// `http_<status>`, so "unreachable" only ever means the fetch never completed:
+// a DNS/connect failure, or the 4 s abort below. Those are different faults
+// with different owners, and with no log line they are indistinguishable
+// after the fact.
+function describePingFailure(err: unknown): string {
+  if (err instanceof Error && err.name === "AbortError") return "aborted after 4000ms";
+  if (err instanceof Error) return `${err.name}: ${err.message}`;
+  return String(err);
+}
+
 async function pingHealth(base: string, label: string, checks: Record<string, string>) {
   try {
     const ctrl = new AbortController();
@@ -12,7 +23,10 @@ async function pingHealth(base: string, label: string, checks: Record<string, st
     const r = await fetch(`${base.replace(/\/$/, "")}/health`, { signal: ctrl.signal });
     clearTimeout(t);
     checks[label] = r.ok ? "ok" : `http_${r.status}`;
-  } catch {
+  } catch (err) {
+    // `base` is bounded by isAllowedServiceUrl(), so the host is safe to log
+    // and is what makes the failure attributable to one dependency.
+    console.error(`[health] ${label} unreachable at ${base}: ${describePingFailure(err)}`);
     checks[label] = "unreachable";
   }
 }
