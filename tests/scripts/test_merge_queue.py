@@ -849,6 +849,24 @@ def test_the_fetch_asks_github_for_the_fields_the_posted_verdict_needs() -> None
     assert "commits" in fields
 
 
+def test_the_default_limit_stays_under_github_node_cap() -> None:
+    """DIG-3240: the default fetch must stay under GitHub's 500,000-node cap.
+
+    The --json field list costs ~10,502 possible nodes per PR, so limit 50
+    (~525k) is rejected and `run` at the default exits 1 with an unreadable
+    queue. The default must stay at or below 47, with headroom preferred.
+    """
+    # Read the real default out of the script, not a copy of it.
+    source = SCRIPT.read_text()
+    match = re.search(r'add_argument\("--limit", type=int, default=(\d+)', source)
+    assert match is not None, "the --limit default is gone from merge_queue.py"
+    default = int(match.group(1))
+    assert default * 10502 < 500000, (
+        f"default --limit {default} costs ~{default * 10502} nodes, "
+        "over GitHub's 500,000 cap"
+    )
+
+
 def test_a_pr_with_no_evidence_at_all_is_refused_despite_attestation() -> None:
     """The #5489/#5277 shape: no labels, no reviews, no Bot runs — refused even attested."""
     pr = _pr(1)
