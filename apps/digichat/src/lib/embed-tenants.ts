@@ -682,6 +682,8 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
         ...(typeof server.tokenEnv === "string" ? { tokenEnv: server.tokenEnv } : {}),
         ...(setup ? { setup } : {}),
         ...(typeof server.authHeader === "string" ? { authHeader: server.authHeader } : {}),
+        ...(Array.isArray(server.allowedTools) ? { allowedTools: server.allowedTools as string[] } : {}),
+        ...(Array.isArray(server.mutatingTools) ? { mutatingTools: server.mutatingTools as string[] } : {}),
       };
     });
     const rawMcpRecord = rawMcp as Record<string, unknown>;
