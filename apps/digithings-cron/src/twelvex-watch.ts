@@ -29,7 +29,30 @@ export const SESSION_SLOTS: ReadonlyArray<[string, string, number]> = [
 ];
 export const LOOKBACK_DAYS = 3;
 
-type Run = { status?: string; conclusion?: string | null; created_at?: string; html_url?: string; id?: number };
+type Run = {
+  status?: string;
+  conclusion?: string | null;
+  created_at?: string;
+  html_url?: string;
+  id?: number;
+  run_started_at?: string;
+  updated_at?: string;
+};
+
+/**
+ * What the catch-up itself already did, read from its job names (the same facts
+ * session_catchup.yml reads): `fx-<session>` covers that session on the run's
+ * date, `repair-<date>` latches that date so it is never offered again.
+ */
+export type CatchupFacts = {
+  /** day -> sessions a success/in-flight catch-up run covered on that day */
+  covered: Record<string, Set<string>>;
+  /** dates already dispatched a dated repair */
+  repaired: Set<string>;
+};
+
+/** A decide-only catch-up tick finishes in well under this; longer runs ran a job. */
+const DECIDE_ONLY_MAX_MS = 45_000;
 
 async function listRuns(
   fetcher: GhFetch,
@@ -67,6 +90,7 @@ export type GateVerdict = { due: boolean; reason: string };
 export function evaluateCatchup(
   nowMs: number,
   runsBySession: Record<string, Run[]>,
+  facts: CatchupFacts = { covered: {}, repaired: new Set() },
 ): GateVerdict {
   const { today, past } = daysToCheck(nowMs);
   const now = new Date(nowMs);
@@ -74,13 +98,15 @@ export function evaluateCatchup(
   for (const [name, , slot] of SESSION_SLOTS) {
     const runs = runsBySession[name] ?? [];
     const on = (day: string) => runs.filter((r) => (r.created_at ?? "").slice(0, 10) === day);
+    const byCatchup = (day: string) => facts.covered[day]?.has(name) === true;
     if (isWeekday(nowMs) && minute >= slot) {
-      const covered = on(today).some(
-        (r) => r.conclusion === "success" || PENDING.has(r.status ?? ""),
-      );
+      const covered =
+        byCatchup(today) ||
+        on(today).some((r) => r.conclusion === "success" || PENDING.has(r.status ?? ""));
       if (!covered) return { due: true, reason: `${name} not covered ${today}` };
     }
     for (const day of past) {
+      if (facts.repaired.has(day) || byCatchup(day)) continue;
       if (!on(day).some((r) => r.conclusion === "success")) {
         return { due: true, reason: `${name} not succeeded ${day}` };
       }
@@ -106,7 +132,32 @@ export async function sessionCatchupDue(
         `created=%3E%3D${since}&per_page=100`,
       );
     }
-    return evaluateCatchup(nowMs, runsBySession);
+    const facts: CatchupFacts = { covered: {}, repaired: new Set() };
+    const catchups = await listRuns(
+      fetcher,
+      token,
+      "session_catchup.yml",
+      `created=%3E%3D${since}&per_page=100`,
+    );
+    for (const run of catchups) {
+      const pending = PENDING.has(run.status ?? "");
+      const ok = run.conclusion === "success" || pending;
+      const ms = Date.parse(run.updated_at ?? "") - Date.parse(run.run_started_at ?? run.created_at ?? "");
+      if (!pending && !(ms > DECIDE_ONLY_MAX_MS)) continue;
+      const res = await fetcher(`${API}/actions/runs/${run.id}/jobs?per_page=100`, {
+        headers: ghHeaders(token, false),
+      });
+      if (res.status !== 200) throw new Error(`catch-up jobs HTTP ${res.status}`);
+      const jobs = ((await res.json()) as { jobs?: Array<{ name?: string }> }).jobs ?? [];
+      const day = (run.created_at ?? "").slice(0, 10);
+      for (const { name = "" } of jobs) {
+        const repair = /repair-(\d{4}-\d{2}-\d{2})/.exec(name);
+        if (repair) facts.repaired.add(repair[1]);
+        const fx = /fx-(asia|london|new_york)/.exec(name);
+        if (fx && ok) (facts.covered[day] ??= new Set()).add(fx[1]);
+      }
+    }
+    return evaluateCatchup(nowMs, runsBySession, facts);
   } catch (err) {
     return { due: true, reason: `gate_unreadable: ${err instanceof Error ? err.message : String(err)}` };
   }

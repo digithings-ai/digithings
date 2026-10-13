@@ -38,6 +38,19 @@ describe("evaluateCatchup", () => {
     });
     expect(v.due).toBe(true);
   });
+  it("counts catch-up fx- jobs and repair latches", () => {
+    const now = Date.parse("2026-10-13T10:52:00Z");
+    const v = evaluateCatchup(
+      now,
+      {
+        asia: [ok("2026-10-09"), { conclusion: "failure", status: "completed", created_at: "2026-10-13T00:07:00Z" }],
+        london: allPast([ok("2026-10-13")]),
+        new_york: [ok("2026-10-12")],
+      },
+      { covered: { "2026-10-13": new Set(["asia"]) }, repaired: new Set(["2026-10-09"]) },
+    );
+    expect(v).toEqual({ due: true, reason: "asia not succeeded 2026-10-12" });
+  });
   it("fails open when GitHub is unreadable", async () => {
     const v = await sessionCatchupDue(async () => new Response("x", { status: 502 }), "t", Date.now());
     expect(v.due).toBe(true);
