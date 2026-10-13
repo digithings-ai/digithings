@@ -101,3 +101,24 @@ def test_parses_a_result_payload() -> None:
     vectors = provider.embed(["Guten Tag"])
     assert len(vectors) == 1
     assert len(vectors[0]) == BGE_M3_DIMENSIONS
+
+
+def test_stub_uses_workers_ai_only_for_listed_indexes(monkeypatch) -> None:
+    from digisearch.embedding.providers.workers_ai import WorkersAiEmbedder
+    from digisearch.search import _stub
+
+    monkeypatch.setenv("DIGISEARCH_WORKERS_AI_INDEXES", "occ-tickets, other-bge")
+    monkeypatch.setattr(_stub, "_resolved_embedding_provider", lambda: "default")
+    got = _stub._embedding_provider_for("occ-tickets", "acct", "tok")
+    assert isinstance(got, WorkersAiEmbedder)
+    assert _stub._embedding_provider_for("occ_help", "acct", "tok") == "default"
+
+
+def test_stub_prefers_worker_embed_url(monkeypatch) -> None:
+    from digisearch.search import _stub
+
+    monkeypatch.setenv("DIGISEARCH_WORKERS_AI_INDEXES", "occ-tickets")
+    monkeypatch.setenv("DIGISEARCH_BGE_M3_EMBED_URL", "https://corpus-index.example/embed")
+    monkeypatch.setenv("DIGISEARCH_BGE_M3_EMBED_TOKEN", "t")
+    got = _stub._embedding_provider_for("occ-tickets", "", "")
+    assert got._url == "https://corpus-index.example/embed"

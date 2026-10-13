@@ -59,3 +59,24 @@ describe("handleFetch", () => {
     expect(payload).toEqual({ ok: true, started: true });
   });
 });
+
+describe("POST /embed", () => {
+  const ai = { run: async (_m: unknown, input: { text: string[] }) => ({ data: input.text.map(() => new Array(1024).fill(0.1)) }) };
+  const env = (secret?: string) => ({ EMBED_SECRET: secret, AI: ai }) as never;
+  const req = (auth: string, body: unknown) =>
+    new Request("https://x/embed", { method: "POST", headers: { Authorization: auth }, body: JSON.stringify(body) });
+  const noop = async () => {};
+  it("404 without a secret, 401 with a wrong one", async () => {
+    expect((await handleFetch(req("Bearer s", { text: ["a"] }), env(), noop)).status).toBe(404);
+    expect((await handleFetch(req("Bearer nope", { text: ["a"] }), env("s"), noop)).status).toBe(401);
+  });
+  it("returns 1024-dim rows in the Workers AI shape", async () => {
+    const res = await handleFetch(req("Bearer s", { text: ["a", "b"] }), env("s"), noop);
+    const body = (await res.json()) as { result: { data: number[][] } };
+    expect(body.result.data).toHaveLength(2);
+    expect(body.result.data[0]).toHaveLength(1024);
+  });
+  it("rejects bad input", async () => {
+    expect((await handleFetch(req("Bearer s", { text: [] }), env("s"), noop)).status).toBe(400);
+  });
+});

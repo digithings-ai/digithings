@@ -36,7 +36,9 @@ class WorkersAiEmbedder(EmbeddingProvider):
         account_id: str | None = None,
         api_token: str | None = None,
         opener: Opener | None = None,
+        url: str | None = None,
     ) -> None:
+        self._url = (url or "").strip()
         self._embed_fn = embed_fn
         self._account_id = (
             account_id if account_id is not None else os.environ.get("CLOUDFLARE_ACCOUNT_ID", "")
@@ -55,11 +57,13 @@ class WorkersAiEmbedder(EmbeddingProvider):
             return []
         if self._embed_fn is not None:
             return _check(self._embed_fn(texts), len(texts))
-        if not self._account_id or not self._api_token:
+        if self._url and self._api_token:
+            pass
+        elif not self._account_id or not self._api_token:
             raise EmbeddingConfigError(
                 "Workers AI embedder needs CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN"
             )
-        url = (
+        url = self._url or (
             "https://api.cloudflare.com/client/v4/accounts/"
             f"{self._account_id}/ai/run/{BGE_M3_MODEL_ID}"
         )

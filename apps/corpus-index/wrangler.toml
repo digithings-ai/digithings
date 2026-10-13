@@ -25,7 +25,7 @@ CLOUDFLARE_ACCOUNT_ID = "ae2ea3eb4ce5f7cc9bec1478f6e60e15"
 # The id identifies an account namespace, not a client.
 [[kv_namespaces]]
 binding = "CORPUS_INDEX_KV"
-id = "00000000000000000000000000000000"
+id = "16160cf4676d4175a2ec4044f0aead1b"
 
 [[workflows]]
 name = "corpus-index-daily"

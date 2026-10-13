@@ -9,6 +9,8 @@ export type Env = {
   CLOUDFLARE_ACCOUNT_ID?: string;
   /** When unset, POST /run answers 404. */
   CRON_KICK_SECRET?: string;
+  /** Bearer for POST /embed (digisearch query embedder). When unset, /embed answers 404. */
+  EMBED_SECRET?: string;
   /** "1" fetches and masks but does not write vectors or the cursor. */
   DRY_RUN?: string;
 };

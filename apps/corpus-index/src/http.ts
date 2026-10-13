@@ -1,4 +1,5 @@
 import type { Env } from "./env";
+import { EMBED_MODEL_ID } from "./model";
 
 export type StartRun = (env: Env, instanceId: string) => Promise<void>;
 
@@ -30,6 +31,31 @@ export async function handleFetch(request: Request, env: Env, start: StartRun): 
     }
     await start(env, `manual-${Date.now()}`);
     return Response.json({ ok: true, started: true });
+  }
+  if (request.method === "POST" && path === "/embed") {
+    // Query-side bge-m3 for digisearch (same model as the stored vectors).
+    if (!env.EMBED_SECRET) return new Response("Not Found", { status: 404 });
+    if (!authorized(request, env.EMBED_SECRET)) {
+      return new Response("Unauthorized", { status: 401 });
+    }
+    let texts: unknown;
+    try {
+      texts = ((await request.json()) as { text?: unknown }).text;
+    } catch {
+      return new Response("Bad Request", { status: 400 });
+    }
+    if (
+      !Array.isArray(texts) ||
+      texts.length === 0 ||
+      texts.length > 32 ||
+      !texts.every((t) => typeof t === "string" && t.length <= 8000)
+    ) {
+      return new Response("Bad Request", { status: 400 });
+    }
+    const out = (await env.AI.run(EMBED_MODEL_ID as never, { text: texts } as never)) as {
+      data?: number[][];
+    };
+    return Response.json({ result: { data: out.data ?? [] } });
   }
   return new Response("Not Found", { status: 404 });
 }
