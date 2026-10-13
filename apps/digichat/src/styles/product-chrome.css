@@ -353,3 +353,37 @@ body:has(.dc-embed-shell[data-wide="1"]) {
   background: var(--background);
   color: var(--foreground);
 }
+
+/* ── Mobile (OCC phone testing) ───────────────────────────────────────────
+ * iOS Safari zooms on focus when an input's font-size is < 16px. Keep pinch
+ * zoom (no maximum-scale); just meet the 16px threshold on small screens.
+ * Popups (slash palette, /tools, /models, settings) fit the *visible* viewport
+ * (--dc-vvh tracks visualViewport, so the keyboard is accounted for). */
+@media (max-width: 640px), (pointer: coarse) {
+  .aui-composer-input,
+  textarea,
+  input[type="text"],
+  input[type="search"],
+  input:not([type]) {
+    font-size: 16px !important;
+  }
+  .aui-composer-trigger-popover,
+  [data-slot="composer-trigger-popover"],
+  [data-slot="dropdown-menu-content"],
+  [data-slot="popover-content"],
+  [data-slot="dialog-content"],
+  [role="dialog"] {
+    max-width: calc(100vw - 16px) !important;
+    max-height: min(70dvh, calc(var(--dc-vvh, 100dvh) - 140px)) !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    overflow-wrap: anywhere;
+  }
+  .aui-composer-trigger-popover * {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    min-width: 0;
+  }
+}

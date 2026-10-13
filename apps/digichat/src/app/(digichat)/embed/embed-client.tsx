@@ -57,6 +57,7 @@ import {
   EMBED_FREE_TURN_LIMIT,
 } from "@/lib/embed-gate";
 import { p } from "@/lib/base-path";
+import { startWarmup } from "@/lib/warmup-gate";
 import {
   decideEmbedSendGate,
   shouldArmGateCharge,
@@ -164,26 +165,20 @@ function EmbedPageInner({
   const host = searchParams.get("host") ?? undefined;
   const tenantCfg = useEmbedTenantConfig(token, host, initialTenantCfg);
 
-  // Warm-up on load: wake auth / assistant / search containers (they sleep on
-  // idle) so the first question doesn't hit a cold start. Polls /api/warmup
-  // until every service reports ready (bounded ~2 min); best effort.
+  // Warm-up on load: wake sleeping services; chat sends wait on the gate.
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      for (let i = 0; i < 12 && !cancelled; i++) {
-        try {
-          const r = await fetch(p("/api/embed/warmup"), { cache: "no-store" });
-          const j = (await r.json()) as { ready?: boolean };
-          if (j.ready) return;
-        } catch {
-          /* waking */
-        }
-        await new Promise((res) => setTimeout(res, 5_000));
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    startWarmup();
+  }, []);
+
+  // Track the visible viewport (mobile keyboard) for popup max-heights.
+  useEffect(() => {
+    const vv = typeof window !== "undefined" ? window.visualViewport : null;
+    if (!vv) return;
+    const upd = () =>
+      document.documentElement.style.setProperty("--dc-vvh", `${Math.round(vv.height)}px`);
+    upd();
+    vv.addEventListener("resize", upd);
+    return () => vv.removeEventListener("resize", upd);
   }, []);
 
   // Real boot milestone for the loader: the tenant/deploy config resolved.

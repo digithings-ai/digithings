@@ -117,7 +117,7 @@ export class DigiStackContainer extends Container {
     // pick per session. digigraph binds only slugs on this list.
     DIGI_SESSION_MODEL_ALLOWLIST:
       env.DIGI_SESSION_MODEL_ALLOWLIST ??
-      "deepseek/deepseek-v4-flash,google/gemini-3.1-flash-lite,z-ai/glm-5.3-flash,google/gemini-3.7-flash",
+      "deepseek/deepseek-v4.1-flash,z-ai/glm-5.3-flash,qwen/qwen3.8-flash,google/gemma-4-31b-it,xiaomi/mimo-v2.6-flash,z-ai/glm-4.7-flash",
     CHROMA_PATH: env.CHROMA_PATH ?? "/data/chroma",
     // Canonical shared Cloudflare credential pair (#2239 rename) -- one account +
     // token now authorizes both Vectorize and D1. VECTORIZE_*/D1_ACCOUNT_ID/
