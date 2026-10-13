@@ -9,6 +9,7 @@ import {
   useIsMarkdownCodeBlock,
 } from "@assistant-ui/react-markdown";
 import remarkGfm from "remark-gfm";
+import { isFollowableHref } from "../followable-href";
 import { type FC, memo, useMemo, useRef } from "react";
 import type { TextMessagePartProps } from "@assistant-ui/react";
 import {
@@ -149,14 +150,20 @@ const defaultComponents = memoizeMarkdownComponents({
       {...props}
     />
   ),
-  a: ({ className, ...props }) => (
+  a: ({ className, href, children, ...props }) =>
+    !isFollowableHref(href) ? (
+      <span className="aui-md-a-plain">{children}</span>
+    ) : (
     <a
+      href={href}
       className={cn(
         "aui-md-a text-primary hover:text-primary/80 underline underline-offset-2",
         className,
       )}
       {...props}
-    />
+    >
+      {children}
+    </a>
   ),
   blockquote: ({ className, ...props }) => (
     <blockquote
