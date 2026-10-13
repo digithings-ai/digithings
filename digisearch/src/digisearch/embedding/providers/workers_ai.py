@@ -74,6 +74,8 @@ class WorkersAiEmbedder(EmbeddingProvider):
             headers={
                 "Authorization": f"Bearer {self._api_token}",
                 "Content-Type": "application/json",
+                # Cloudflare's bot rules answer 403 to the default Python-urllib UA.
+                "User-Agent": "digisearch-workers-ai/1.0",
             },
             method="POST",
         )
