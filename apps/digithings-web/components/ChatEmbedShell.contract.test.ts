@@ -152,4 +152,41 @@ describe("ChatEmbedShell contracts", () => {
     expect(css).toContain("--chat-frame-canvas");
     expect(css).toContain("@digithings/ui/styles/digichat-boot-loader.css");
   });
+
+  it("strips the invite key from the address bar right after reading it (DIG-1437)", async () => {
+    // The key must not survive in browser history or in the visible address
+    // bar. It is read client-side inside the mount effect, so that is the only
+    // place the rewrite can happen; doing it during render would put the key
+    // back into the exported HTML this app ships as one shared artifact.
+    const { readFileSync } = await import("node:fs");
+    const { fileURLToPath } = await import("node:url");
+    const path = fileURLToPath(new URL("./ChatEmbedShell.tsx", import.meta.url));
+    const src = readFileSync(path, "utf8");
+
+    expect(src).toContain("stripInviteTokenFromUrl");
+
+    // One call site, and it is the rewrite. A second would mean the key is
+    // being scrubbed twice, which is churn, not defence.
+    expect(src.split("window.history.replaceState").length - 1).toBe(1);
+
+    // Gated on the route opt-in and on a non-empty key, so an ordinary /chat
+    // visit never touches history.
+    const readIndex = src.indexOf("readInviteToken(window.location.search)");
+    const stripIndex = src.indexOf("stripInviteTokenFromUrl(window.location.href)");
+    const guardIndex = src.indexOf("acceptsInviteToken\n        ?");
+    expect(guardIndex).toBeGreaterThan(-1);
+    expect(stripIndex).toBeGreaterThan(readIndex);
+    expect(stripIndex).toBeGreaterThan(-1);
+    expect(src).toContain("token ? stripInviteTokenFromUrl");
+
+    // The token stays in the effect's local state for the session and nowhere
+    // else — no store, no cookie, no sessionStorage. These match a USE
+    // (sessionStorage.setItem, document.cookie =), not the bare word: a
+    // guard on the bare name fires on this comment and on any prose that
+    // documents the rule, which is a test that cannot fail for its reason.
+    expect(src).not.toMatch(/sessionStorage\s*\.\s*(set|get|remove|clear)Item\s*\(/);
+    expect(src).not.toMatch(/localStorage\s*\.\s*(set|get|remove|clear)Item\s*\(/);
+    expect(src).not.toContain("setItem(");
+    expect(src).not.toMatch(/document\s*\.\s*cookie\s*=[^=]/);
+  });
 });

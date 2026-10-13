@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { BootLabOverlay } from "@digithings/ui/chat/boot-lab";
 import { readAndClearHandoff } from "@/lib/chatHandoff";
-import { readInviteToken } from "@/lib/inviteToken";
+import { readInviteToken, stripInviteTokenFromUrl } from "@/lib/inviteToken";
 
 const READY = "digichat:ready";
 const SEED = "digichat:seed";
@@ -227,6 +227,11 @@ export function ChatEmbedShell({
       const token = acceptsInviteToken
         ? readInviteToken(window.location.search)
         : undefined;
+      // The key has been read and now lives only in this effect's local state
+      // for the session, so it has no further reason to sit in the address bar
+      // (DIG-1437). Never a store, a cookie or sessionStorage.
+      const stripped = token ? stripInviteTokenFromUrl(window.location.href) : null;
+      if (stripped) window.history.replaceState(null, "", stripped);
       // The inline script above already rewrote the theme param when the
       // real theme is dark; only rebuild the src when the live attribute
       // still disagrees (client-only mounts, embed target changes).
