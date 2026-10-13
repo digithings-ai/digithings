@@ -159,5 +159,26 @@ kv f2_plain_write_changes "$(jget "$WORK/plain" changes | tr -d '\n ')"
 api GET "/issues/${ISSUE}" - >/dev/null; cp "$WORK/body" "$WORK/after2c"
 kv f2_title_final "$(jget "$WORK/after2c" title)"
 
+# 2c — the issue is ALREADY in_review and the PATCH re-sends status: in_review
+# alongside the reviewInteractionId. A guard written as `status !== "in_review"`
+# does not fire here, and assertInReviewReviewPath early-returns on the
+# already-in_review branch, so the field is dropped behind a 200 with an empty
+# changes map - the same silent-write fault. The transition guard refuses it.
+R=$(api PATCH "/issues/${ISSUE}" '{"status":"in_review"}')
+kv f2_reenter_setup_status "${R##* }"
+api GET "/issues/${ISSUE}" - >/dev/null; cp "$WORK/body" "$WORK/f2pre"
+kv f2_reenter_status_before "$(jget "$WORK/f2pre" status)"
+
+R=$(api PATCH "/issues/${ISSUE}" '{"reviewInteractionId":"cccccccc-dddd-4eee-8fff-000000000000","status":"in_review"}')
+kv f2_reenter_interaction_status "${R##* }"
+cp "$WORK/body" "$WORK/f2c"
+kv f2_reenter_interaction_code "$(jget "$WORK/f2c" details.code)"
+kv f2_reenter_interaction_error "$(jget "$WORK/f2c" error)"
+kv f2_reenter_interaction_changes "$(jget "$WORK/f2c" changes | tr -d '\n ')"
+
+api GET "/issues/${ISSUE}" - >/dev/null; cp "$WORK/body" "$WORK/after2d"
+kv f2_reenter_status_after "$(jget "$WORK/after2d" status)"
+kv f2_reenter_title_after "$(jget "$WORK/after2d" title)"
+
 kv issue_id_for_db "$ISSUE"
 kv done yes

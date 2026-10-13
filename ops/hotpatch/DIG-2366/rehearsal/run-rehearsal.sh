@@ -33,12 +33,31 @@ mkdir -p "$RESULTS"
 log()  { printf '%s\n' "$*"; }
 step() { printf '\n== %s\n' "$*"; }
 
+# The CLI's embedded PostgreSQL outlives a SIGTERM'd server, so a stale listener
+# on PGPORT (or a leftover server on PORT) from a previous attempt must be
+# cleared before the next boot. Both ports are dedicated to this rehearsal.
+free_port() {
+  local port="$1" pid
+  pid="$(lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null | head -1 || true)"
+  [ -z "$pid" ] && return 0
+  log "   clearing stale listener on :$port (pid $pid)"
+  kill -TERM "$pid" 2>/dev/null || true
+  sleep 2
+  pid="$(lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null | head -1 || true)"
+  [ -n "$pid" ] && kill -KILL "$pid" 2>/dev/null || true
+  return 0
+}
+free_port "$PGPORT"
+free_port "$PORT"
+
 RUNNING_TAG=''
 cleanup() {
   if [ -n "$RUNNING_TAG" ] && [ -f "$HERE/boot-${RUNNING_TAG}.pid" ]; then
     local pid; pid="$(cat "$HERE/boot-${RUNNING_TAG}.pid")"
     kill -TERM "$pid" 2>/dev/null || true
   fi
+  free_port "$PORT" || true
+  free_port "$PGPORT" || true
 }
 trap cleanup EXIT INT TERM
 
@@ -88,32 +107,43 @@ ensure_session() {
   rm -f "$COOKIE"
   local body
   body="$(curl -s -m 20 -c "$COOKIE" -X POST "${API}/auth/sign-up/email" -H "$CT" \
+    -H "Origin: http://127.0.0.1:${PORT}" -H "$FETCH" \
     -d "{\"email\":\"${EMAIL}\",\"password\":\"${PASSWORD}\",\"name\":\"DIG2366\"}")"
   if printf '%s' "$body" | grep -q '"token"'; then
     log "   created board account ${EMAIL}"
   else
     log "   board account ${EMAIL} already exists, signing in"
     body="$(curl -s -m 20 -c "$COOKIE" -X POST "${API}/auth/sign-in/email" -H "$CT" \
+      -H "Origin: http://127.0.0.1:${PORT}" -H "$FETCH" \
       -d "{\"email\":\"${EMAIL}\",\"password\":\"${PASSWORD}\"}")"
-    printf '%s' "$body" | grep -q '"token"' \
-      && log "   signed in" \
-      || { log "   FAILED to authenticate: $(printf '%s' "$body" | head -c 200)"; exit 1; }
+    if printf '%s' "$body" | grep -q '"token"'; then
+      log "   signed in"
+    else
+      # local_trusted needs no session: the loopback board actor is implicit and
+      # is instance_admin by construction (middleware/auth.js). Writes only need
+      # the same-origin browser headers, which the harness always sends.
+      log "   no email/password session (local_trusted loopback board actor is implicit); continuing"
+    fi
   fi
 
   local uid role
-  uid="$(psql_q "select id from \"user\" where email = '${EMAIL}';")"
-  role="$(psql_q "select role from instance_user_roles where user_id = '${uid}';")"
-  if [ "$role" != "instance_admin" ]; then
-    psql_q "insert into instance_user_roles (id,user_id,role,created_at,updated_at)
-            select gen_random_uuid(), '${uid}', 'instance_admin', now(), now()
-            where not exists (select 1 from instance_user_roles where user_id = '${uid}');" >/dev/null
-    log "   granted instance_admin to ${uid} (rehearsal database only)"
+  uid="$(psql_q "select id from \"user\" where email = '${EMAIL}';" 2>/dev/null || true)"
+  if [ -n "$uid" ]; then
+    role="$(psql_q "select role from instance_user_roles where user_id = '${uid}';")"
+    if [ "$role" != "instance_admin" ]; then
+      psql_q "insert into instance_user_roles (id,user_id,role,created_at,updated_at)
+              select gen_random_uuid(), '${uid}', 'instance_admin', now(), now()
+              where not exists (select 1 from instance_user_roles where user_id = '${uid}');" >/dev/null
+      log "   granted instance_admin to ${uid} (rehearsal database only)"
+    else
+      log "   board account already holds instance_admin"
+    fi
   else
-    log "   board account already holds instance_admin"
+    log "   no local user row; the implicit loopback board actor is instance_admin"
   fi
   curl -s -m 20 -b "$COOKIE" -o /dev/null -w '   get-session http=%{http_code}\n' "${API}/auth/get-session"
 
-  local companies body
+  local companies
   companies="$(curl -s -m 20 -b "$COOKIE" -H "Origin: http://127.0.0.1:${PORT}" -H "$FETCH" "${API}/companies")"
   COMPANY="$(printf '%s' "$companies" | python3 -c 'import json,sys
 d=json.load(sys.stdin); print(d[0]["id"] if d else "")' 2>/dev/null)"

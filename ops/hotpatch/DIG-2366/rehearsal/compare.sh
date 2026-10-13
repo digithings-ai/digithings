@@ -67,6 +67,18 @@ check 'control: the accompanying title is applied'           'probe title' "$(va
 check 'patched: answers 422'                                 422  "$(val "$PTD" f2_with_title_status)"
 check 'patched: the accompanying title is not applied'       'DIG-2366 rehearsal probe' "$(val "$PTD" f2_with_title_after)"
 
+printf '  2c, the issue is ALREADY in_review and the PATCH re-sends status: in_review\n'
+check 'control: the setup transition reaches in_review'      200       "$(val "$CTL" f2_reenter_setup_status)"
+check 'control: status is in_review before the probe'        in_review "$(val "$CTL" f2_reenter_status_before)"
+check 'control: answers 200 (this is the narrow-guard fault)' 200      "$(val "$CTL" f2_reenter_interaction_status)"
+check 'control: ...with an EMPTY changes map'                '{}'      "$(val "$CTL" f2_reenter_interaction_changes)"
+check 'patched: the setup transition reaches in_review'      200       "$(val "$PTD" f2_reenter_setup_status)"
+check 'patched: status is in_review before the probe'        in_review "$(val "$PTD" f2_reenter_status_before)"
+check 'patched: answers 422'                                 422       "$(val "$PTD" f2_reenter_interaction_status)"
+check 'patched: names the rule'                              review_interaction_requires_in_review "$(val "$PTD" f2_reenter_interaction_code)"
+check 'patched: status is unchanged (field not applied)'     in_review "$(val "$PTD" f2_reenter_status_after)"
+check 'patched: title is unchanged'                          'probe title' "$(val "$PTD" f2_reenter_title_after)"
+
 printf '\n--- no regression on ordinary writes\n'
 check 'control: plain PATCH still 200'                       200 "$(val "$CTL" f2_plain_write_status)"
 check 'patched: plain PATCH still 200'                       200 "$(val "$PTD" f2_plain_write_status)"

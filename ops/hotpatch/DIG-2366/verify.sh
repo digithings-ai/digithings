@@ -6,7 +6,12 @@
 #                recorded patched value, and reports which.
 #   2. parse   - both live files parse as ESM.
 #   3. markers - the fault-1 id fallback and the fault-2 422 guard are present
-#                in the bytes that are actually on disk.
+#                in the bytes that are actually on disk. The fault-2 markers
+#                include the transition CONDITION itself, so a tree that carries
+#                the narrow "status !== in_review" guard instead of the
+#                transition guard is refused as PARTIAL rather than counted as
+#                applied. The narrow guard leaves the silent-drop fault in place
+#                when an issue is already in_review (DIG-2365 review note).
 #
 # On "applied or not": that is a STATE, not a failure. The window card has the
 # operator run this script in three places - before applying, after applying, and
@@ -90,10 +95,10 @@ DOC="$LIVE_DIST/services/documents.js"
 ISS="$LIVE_DIST/routes/issues.js"
 
 markers_present=0
-markers_expected=3
+markers_expected=4
 
 marker() { # <description> <file> <pattern>
-  if grep -q "$3" "$2"; then
+  if grep -qF -- "$3" "$2"; then
     ok "$1"
     markers_present=$((markers_present + 1))
   else
@@ -104,6 +109,7 @@ marker() { # <description> <file> <pattern>
 marker "fault 1: resolveIssueDocumentKey wired into $(grep -c 'resolveIssueDocumentKey(db' "$DOC") request paths" "$DOC" 'resolveIssueDocumentKey'
 marker "fault 1: id fallback predicate eq(documents.id, key)" "$DOC" 'eq(documents.id, key)'
 marker "fault 2: 422 guard review_interaction_requires_in_review" "$ISS" 'review_interaction_requires_in_review'
+marker "fault 2: the guard condition is the in_review TRANSITION (not merely status===in_review)" "$ISS" '!(existing.status !== "in_review" && updateFields.status === "in_review")'
 
 if [[ "$markers_present" -eq "$markers_expected" ]]; then
   ok "all $markers_expected fault markers present"

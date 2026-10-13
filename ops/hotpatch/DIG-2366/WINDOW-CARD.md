@@ -32,10 +32,10 @@ Two files in the pinned bundle. Nothing else.
 | File | Fault | Change |
 |---|---|---|
 | `services/documents.js` | 1 — a write addressed by a **document id** finds no row (every lookup filters `issue_documents.key` only), creates a **second** document keyed by the uuid, answers **201**. That shadow row is what makes later reads disagree. | Add `resolveIssueDocumentKey()`: a `:key` that parses as a uuid is resolved through `documents.id`, so it lands on the original row. An id belonging to no document of this issue is refused **409** naming `details.resolvedBy: "documents.id"`. Applied to all 7 service sites. Bulk import untouched. |
-| `routes/issues.js` | 2 — `reviewInteractionId` is accepted by `updateIssueSchema` and read by nobody outside an `in_review` transition, so it was dropped behind a **200 with an empty `changes` map**. | 17-line guard: **422** with `details.code: "review_interaction_requires_in_review"` and the accepted kinds named, when `reviewInteractionId` is present without `status: "in_review"` in the same request. The field is **not** stripped from the schema; it still works during a transition. |
+| `routes/issues.js` | 2 — `reviewInteractionId` is accepted by `updateIssueSchema` and read by nobody outside an `in_review` transition, so it was dropped behind a **200 with an empty `changes` map**. | 21-line guard: **422** with `details.code: "review_interaction_requires_in_review"` and the accepted kinds named, whenever `reviewInteractionId` is present and the request is **not** the transition into `in_review`. The condition is the transition — `!(existing.status !== "in_review" && status === "in_review")` — not merely `status === "in_review"`: an issue already `in_review` that re-sends `status: "in_review"` is refused too, because `assertInReviewReviewPath` early-returns on that branch and would otherwise drop the field behind a 200 with an empty `changes` map (DIG-2365 §4). The field is **not** stripped from the schema; it still works during a genuine transition. |
 
-- Diff: `DIG-2366.compact.patch` — 147 lines, **65 insertions, 8 deletions**, two files.
-- Bytes and digests: `SHA256SUMS`. Originals kept beside the patched copies under `stage/bundle/dist/__original__/`.
+- Diff: `DIG-2366.compact.patch` — 151 lines, **69 insertions, 8 deletions**, two files.
+- Bytes and digests: `SHA256SUMS`. Originals kept byte-for-byte beside the patched copies under `baseline/`.
 - Total diff: **one helper plus seven call sites, and one guard.** No schema change, no migration, no data change.
 
 **Explicitly not in this window:** no CLI upgrade, no `install`/`update`, no change to `~/.paperclip/cli/current`, no change to the other ten locally-modified bundle files, and no attempt at the six already-orphaned rows from DIG-2232 — they become *addressable*, which is what makes them repairable, but repairing them is a separate data operation.
@@ -64,7 +64,7 @@ Two files in the pinned bundle. Nothing else.
 ops/hotpatch/DIG-2366/verify.sh
 ```
 
-It checks three independent things: (1) **bytes** — sha256 of each live file classified `PATCHED` / `BASELINE` / `UNKNOWN`; (2) **parse** — `node --check` on both files; (3) **fault markers** — `resolveIssueDocumentKey` present with `eq(documents.id, key)`, and `review_interaction_requires_in_review` present.
+It checks three independent things: (1) **bytes** — sha256 of each live file classified `PATCHED` / `BASELINE` / `UNKNOWN`; (2) **parse** — `node --check` on both files; (3) **fault markers** — `resolveIssueDocumentKey` present with `eq(documents.id, key)`, `review_interaction_requires_in_review` present, and the guard **condition** `!(existing.status !== "in_review" && updateFields.status === "in_review")` present. A tree that carries the narrow `status !== "in_review"` guard instead is refused as `PARTIAL` rather than reported as applied, so this checks the shape of the guard, not just its error code.
 
 Then prove the behaviour on the live instance, on a scratch issue — the same probes the rehearsal ran:
 
@@ -81,7 +81,7 @@ curl -s -o /dev/null -w '%{http_code}\n' -X PATCH "http://127.0.0.1:3100/api/iss
 # And the non-regression: a plain PATCH of a title must still be 200 with a non-empty changes map.
 ```
 
-Both failure modes were proved **before** and **after** on a full isolated copy of this exact bundle (port 3199, its own postgres): control answered 201-with-a-second-row and 200-with-empty-changes; patched answers 409 and 422 with one row and an unchanged title. Transcripts in `rehearsal/results/`.
+All three failure modes were proved **before** and **after** on a full isolated copy of this exact bundle (port 3199, its own postgres): control answered 201-with-a-second-row, 200-with-empty-changes, and (the already-`in_review` re-send) 200-with-empty-changes; patched answers 409 and 422 with one row and an unchanged title. The differential verdict is **42/42 checks**, in `rehearsal/results/`.
 
 **The one step rehearsal cannot prove on this host is the restart itself** — I did not restart the live server, by instruction. The 4.3s drain-aware figure comes from a real restart this platform already performed, not from a rehearsal.
 
@@ -90,7 +90,7 @@ Both failure modes were proved **before** and **after** on a full isolated copy 
 Restores the original bytes and re-verifies sha256, so the operator proves the restore rather than assumes it.
 
 ```
-ops/hotpack/DIG-2366/rollback.sh && paperclipai service restart
+ops/hotpatch/DIG-2366/rollback.sh && paperclipai service restart
 ```
 
 Restore source, sha256-checked against the recorded baseline before it is used, so a wrong or truncated source cannot be restored silently:

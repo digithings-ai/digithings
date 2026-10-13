@@ -190,12 +190,16 @@ def build_issues() -> None:
     )
 
     guard = '''        // Fault 2 (DIG-2365). updateIssueSchema advertises reviewInteractionId, but
-        // assertInReviewReviewPath returns null unless the same PATCH also sets
-        // status: in_review, and nothing else reads the field. Outside a transition
-        // it was dropped behind a 200 with an empty changes map. Refuse it instead
-        // of losing it; it stays accepted during the transition.
+        // assertInReviewReviewPath returns null unless the same PATCH also enters
+        // review from a non-review status, and nothing else reads the field. Outside
+        // that one transition it was dropped behind a 200 with an empty changes map.
+        // Refuse it instead of losing it; it stays accepted during the transition.
+        // The condition is the transition, not merely "status is in_review": an
+        // issue already in_review that re-sends status: in_review must still be
+        // refused, or assertInReviewReviewPath early-returns and the field is lost
+        // again (DIG-2365 §4).
         if (requestedReviewInteractionId !== undefined &&
-            updateFields.status !== "in_review") {
+            !(existing.status !== "in_review" && updateFields.status === "in_review")) {
             res.status(422).json({
                 error: "reviewInteractionId requires status: in_review in the same request",
                 details: {

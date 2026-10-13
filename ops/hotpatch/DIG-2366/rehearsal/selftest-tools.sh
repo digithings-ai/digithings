@@ -17,6 +17,10 @@
 #   7  rollback restores bytes  -> live shas equal baseline again
 #   8  verify.sh state modes    -> "not applied" is a state, not a failure; a
 #                                 half-applied tree IS a failure and is named
+#   9  narrow-guard tree       -> a tree that carries the narrow
+#                                 "status !== in_review" guard instead of the
+#                                 transition condition is refused, not counted
+#                                 as applied (the DIG-2365 review defect)
 #
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -201,8 +205,29 @@ set +e; DIG2366_CLI_ROOT="$CLONE_ROOT" "$HP/verify.sh" >"$HERE/selftest-verify-h
 check "verify: half-applied tree fails" 1 "$rc"
 grep -q "HALF-APPLIED" "$HERE/selftest-verify-half.log" && printf '  \033[32mok\033[0m    and names the reason\n' || printf '  \033[31mFAIL\033[0m  but did not name the reason\n'
 
+# -------------------------------------------------------------------- case 9
+# The bundle once carried a NARROW guard (status !== "in_review") instead of the
+# transition condition, and only review caught it. verify.sh now keys on the
+# transition condition itself, so a tree carrying the narrow guard must be
+# refused as PARTIAL rather than counted as applied.
+printf '\n-- case 9: a narrow-guard tree is refused, not counted as applied\n'
+reset_clone
+cp "$HP/patched/services/documents.js" "$DST_DIST/services/documents.js"
+python3 - "$HP/patched/routes/issues.js" "$DST_DIST/routes/issues.js" <<'PY'
+import sys, pathlib
+src = pathlib.Path(sys.argv[1]).read_text()
+transition = '!(existing.status !== "in_review" && updateFields.status === "in_review")) {'
+narrow = 'updateFields.status !== "in_review") {'
+assert transition in src, "case 9: the transition condition is not in the reviewed patch"
+pathlib.Path(sys.argv[2]).write_text(src.replace(transition, narrow, 1))
+PY
+set +e; DIG2366_CLI_ROOT="$CLONE_ROOT" "$HP/verify.sh" --expect patched >"$HERE/selftest-verify-narrow.log" 2>&1; rc=$?; set -e
+check "verify: a narrow-guard tree is refused" 1 "$rc"
+grep -q "PARTIAL PATCH" "$HERE/selftest-verify-narrow.log" && printf '  \033[32mok\033[0m    and names the partial patch\n' || printf '  \033[31mFAIL\033[0m  but did not name the partial patch\n'
+
 rm -f "$HERE/selftest-last.log" "$HERE/selftest-apply.log" "$HERE/selftest-verify.log" "$HERE/selftest-rollback.log" "$HERE/SHA256SUMS.orig" \
-      "$HERE/selftest-verify-base.log" "$HERE/selftest-verify-patched.log" "$HERE/selftest-verify-mismatch.log" "$HERE/selftest-verify-half.log"
+      "$HERE/selftest-verify-base.log" "$HERE/selftest-verify-patched.log" "$HERE/selftest-verify-mismatch.log" "$HERE/selftest-verify-half.log" \
+      "$HERE/selftest-verify-narrow.log"
 rm -rf "$CLONE_ROOT"
 
 printf '\n=== self-test: %d passed, %d failed ===\n' "$PASS" "$FAIL"
