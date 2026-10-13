@@ -146,7 +146,7 @@ async function runJobsForCron(
       args = checkpointArgs(opts.force === true, opts.args ?? {});
     }
     pending.push(
-      dispatch(env, job, cron, scheduledTime, { args }).then((result) =>
+      dispatch(env, job, cron, scheduledTime, { args, force: opts.force === true }).then((result) =>
         startedRun(job, result),
       ).catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : String(err);

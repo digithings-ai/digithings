@@ -13,6 +13,7 @@ import type { Env } from "./env";
 import { houseRunDeadlineSeconds, type Job } from "./jobs";
 import { checkHouseRuns, WATCH_TARGET, type HouseRunCheckResult } from "./house-run-watch";
 import { probeUrls, runProbe } from "./probe";
+import { runTwelvexWatch, sessionCatchupDue, type WatchOutcome } from "./twelvex-watch";
 
 const GH_API = "https://api.github.com";
 const GH_API_VERSION = "2022-11-28";
@@ -29,6 +30,10 @@ export type DispatchResult = {
   container_status?: string;
   /** Set only on the watch path (DIG-3065). Absent everywhere else. */
   watch?: HouseRunCheckResult;
+  /** Set only on the twelvex-watch path. */
+  twelvex?: WatchOutcome;
+  /** Set when a gate skipped a workflow_dispatch. */
+  gated?: string;
 };
 
 export function workflowDispatchUrl(repo: string, workflow: string): string {
@@ -159,7 +164,12 @@ function usesGithub(job: Job, env: Env): boolean {
   // through to `return true` and be dispatched to GitHub as a workflow — the
   // exact failure the arm exists to prevent, since a watch job's whole contract
   // is that it never starts anything.
-  if (job.kind === "container" || job.kind === "probe" || job.kind === "watch") {
+  if (
+    job.kind === "container" ||
+    job.kind === "probe" ||
+    job.kind === "watch" ||
+    job.kind === "twelvex-watch"
+  ) {
     return githubOverrideIds(env).includes(job.id);
   }
   return true;
@@ -389,10 +399,26 @@ export async function dispatch(
   job: Job,
   cron: string,
   scheduledTime = 0,
-  opts: { args?: Record<string, string> } = {},
+  opts: { args?: Record<string, string>; force?: boolean } = {},
 ): Promise<DispatchResult> {
   if (usesGithub(job, env)) {
-    if (job.kind === "container" || job.kind === "probe" || job.kind === "watch") {
+    if (job.gate === "twelvex-session-due" && !opts.force && env.DRY_RUN !== "1") {
+      const verdict = await sessionCatchupDue(
+        (input, init) => fetch(input, init),
+        env.GH_DISPATCH_TOKEN,
+        scheduledTime > 0 ? scheduledTime : Date.now(),
+      );
+      logLine({ cron, repo: job.repo, job: job.id, gate: job.gate, due: verdict.due, reason: verdict.reason });
+      if (!verdict.due) {
+        return { ok: true, status: 0, dry_run: false, gated: verdict.reason };
+      }
+    }
+    if (
+      job.kind === "container" ||
+      job.kind === "probe" ||
+      job.kind === "watch" ||
+      job.kind === "twelvex-watch"
+    ) {
       console.error(
         JSON.stringify({
           cron,
@@ -410,6 +436,21 @@ export async function dispatch(
   }
   if (job.kind === "watch") {
     return dispatchWatch(env, job, cron, scheduledTime);
+  }
+  if (job.kind === "twelvex-watch") {
+    if (!job.twelvexWatch) throw new Error(`job ${job.id}: twelvex-watch requires twelvexWatch`);
+    if (env.DRY_RUN === "1") {
+      logLine({ cron, repo: job.repo, job: job.id, twelvex_watch: job.twelvexWatch, dry_run: true });
+      return { ok: true, status: 0, dry_run: true };
+    }
+    const out = await runTwelvexWatch(
+      job.twelvexWatch,
+      (input, init) => fetch(input, init),
+      env.GH_DISPATCH_TOKEN,
+      scheduledTime > 0 ? scheduledTime : Date.now(),
+    );
+    logLine({ cron, repo: job.repo, job: job.id, twelvex_watch: job.twelvexWatch, ...out });
+    return { ok: out.ok, status: out.ok ? 200 : 0, dry_run: false, twelvex: out };
   }
   return dispatchContainer(env, job, cron, scheduledTime, opts.args ?? {});
 }
