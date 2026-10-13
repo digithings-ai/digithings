@@ -108,13 +108,37 @@ npx wrangler secret put GROQ_API_KEY
 # digiquant.io dashboard are separate tenants — do not share one CI key expecting
 # isolated routing.
 
-npx wrangler deploy
+# Deploy. Use `npm run deploy`, NOT `npx wrangler deploy` (see the note below):
+npm run deploy
 ```
+
+`npm run deploy` runs [`scripts/deploy.mjs`](scripts/deploy.mjs), which resolves the
+deploying commit (`git rev-parse --verify HEAD`), injects it as
+`--var STACK_CONTAINER_REV:<sha12>`, and then verifies the live
+`https://graph.digithings.ai/_stack/meta` reports the matching `containerId`.
+It **refuses to deploy** if the commit cannot be resolved.
+
+> **Never hand-edit a Container id, and never deploy with a bare
+> `npx wrangler deploy`.** The shared Profile A Container's Durable Object id used to be
+> a hand-edited string (`shared-v18`) that every image-changing deploy had to remember to
+> bump, because `sleepAfter` alone does not evict a Container under steady traffic — a
+> code-only redeploy left the old instance serving its old image. Forgetting the bump
+> shipped no real fix while CI stayed green, and it had already caused two incidents:
+> `shared-v16` → `v17` (a container re-ingesting a committed PII snapshot on every cold
+> start, DIG-1506 / DIG-1500) and `v17` → `v18` (a digikey JWT scope-escalation build,
+> #5283 / #5010, still in service). The id is now derived from the deploying commit, so
+> every deploy guarantees a fresh instance and there is nothing to forget. The full
+> history is in `src/ports.ts`.
+>
+> A bare `npx wrangler deploy` still works and still serves traffic, but it ships the
+> **legacy** id (`shared-v18`) and cannot guarantee eviction — which is the defect.
+> `STACK_CONTAINER_REV` is deliberately absent from `wrangler.toml [vars]`: unset means
+> "this deploy carried no rev". Inject it; never hand-write it.
 
 > **There is no CI deploy lane for this Worker** (DIG-2843). The
 > `deploy-digithings-stack-cloudflare.yml` that used to sit here — `workflow_dispatch` only,
 > behind the `production` environment gate — was deleted on 2026-10-01 by `f54af7052`
-> (#4919, Human Gate), so the `npx wrangler deploy` above is the whole deploy path. It is
+> (#4919, Human Gate), so `npm run deploy` above is the whole deploy path. It is
 > recoverable at `git show 'f54af7052^:.github/workflows/deploy-digithings-stack-cloudflare.yml'`;
 > restoring it is a decision recorded on DIG-2843. The build half is still gated:
 > `build-cloudflare-workers.yml` runs `wrangler deploy --dry-run` for this app on every PR,

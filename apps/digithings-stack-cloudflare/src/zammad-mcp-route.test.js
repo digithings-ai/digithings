@@ -42,7 +42,11 @@ describe("MCP edge paths", () => {
     expect(source).toContain('typeof port === "number"');
     expect(source).toContain('if (!stripped.endsWith("/"))');
     expect(source).toContain("switchPort(forwarded, port)");
-    expect(source).toContain("getContainer(workerEnv.STACK, SHARED_STACK_CONTAINER_ID)");
+    // The MCP edge path reaches the shared stack through the single
+// stackContainer() helper (DIG-3229), which is where the Container id is
+// derived from the deploying commit. Pinning the helper here, not the old
+// constant, keeps this guard honest about where the id now comes from.
+expect(source).toContain("function stackContainer(workerEnv: Env)");
   });
 
   it("supports per-server edge keys with the shared key as fallback", () => {
