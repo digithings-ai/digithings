@@ -338,9 +338,9 @@ describe("dispatch", () => {
     const result = await dispatch(env, job as Job, job?.cron ?? "", 1);
     expect(result).toEqual({ ok: true, status: 200, dry_run: false });
     expect(urls).toEqual([
-      "https://graph.digithings.ai/healthz",
-      "https://key.digithings.ai/healthz",
-      "https://search.digithings.ai/healthz",
+      "https://graph.digithings.ai/_stack/status",
+      "https://key.digithings.ai/_stack/status",
+      "https://search.digithings.ai/_stack/status",
     ]);
     expect(urls.some((url) => url.includes("api.github.com"))).toBe(false);
     expect(runnerFetch).not.toHaveBeenCalled();
@@ -412,5 +412,48 @@ describe("dispatch", () => {
       event_type: "digiquant-baseline",
       client_payload: {},
     });
+  });
+  it("reads the runner for a watch job and never POSTs /v1/jobs", async () => {
+    // DIG-3065. The load-bearing property is read-only: a watcher that could
+    // start a run would be a second thing with its own blast radius, and only
+    // Chris authorises that.
+    const fetchMock = vi.fn(async () => Response.json([], { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const runnerFetch = vi.fn(async (input: string) =>
+      input.includes("/healthz")
+        ? Response.json({ ok: true, running: [] })
+        : Response.json({ run_id: "run-1", status: "running", started_at: null }),
+    );
+    const job: Job = {
+      id: "digiquant-house-run-watch",
+      cron: "23 * * * *",
+      repo: "digithings-ai/digithings",
+      kind: "watch",
+      workflow: "pipeline-digiquant.yml",
+      ref: "develop",
+      watch: "digiquant-runner",
+      enabled: true,
+    };
+    const env: Env = {
+      DRY_RUN: "0",
+      GH_DISPATCH_TOKEN: "github-token",
+      RUNNER_AUTH_TOKEN: "runner-token",
+      GITHUB_OVERRIDE_JOBS: "",
+      RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
+    };
+    const result = await dispatch(env, job, job.cron, Date.parse("2026-10-12T13:23:00.000Z"));
+    // usesGithub must not divert a watch row to GitHub: on a clean tick the
+    // only GitHub calls allowed are none at all.
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(runnerFetch).toHaveBeenCalledOnce();
+    const [url, init] = runnerFetch.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("https://digiquant-runner/healthz");
+    // Read-only, proven from the wire: no request body was ever sent.
+    expect(init.method).toBe("GET");
+    expect(init.body).toBeUndefined();
+    expect(result.ok).toBe(true);
+    // The deadline came from house-run-09's own timeoutSeconds plus the grace.
+    expect(result.watch?.deadline_seconds).toBe(14400 + 120);
+    expect(result.watch).toMatchObject({ ok: true, open: 0, lost: [], unreadable: [] });
   });
 });

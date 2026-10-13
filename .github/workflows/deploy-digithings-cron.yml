@@ -1,11 +1,17 @@
 # Deploys the thin digithings-cron Worker (org production clocks, #3579).
 # No Containers. Syncs GH_DISPATCH_TOKEN via wrangler-action secrets input.
+#
+# Push to main (path-filtered) or workflow_dispatch. No schedule key.
+# environment: production — this lane publishes org-wide production clocks, so a
+# deploy is a human gate (DIG-3129). develop is not a deploy path: a change there
+# is validated by the CI `web` lane (test-web.yml, which owns this workspace's
+# Vitest + typecheck) and by build-cloudflare-workers.yml, and reaches production
+# only when develop is promoted into main.
 name: "Deploy: digithings-cron"
 
 on:
   push:
     branches:
-      - develop
       - main
     paths:
       - "apps/digithings-cron/**"
@@ -13,7 +19,12 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: deploy-digithings-cron
+  # Per-run group. environment: production can hold a run at the approval gate;
+  # a shared group with cancel-in-progress: false queues every later deploy
+  # behind that wait (#2541). A newer clock set is not always a superset of an
+  # in-flight workflow_dispatch ref, so this does not cancel it. Same pattern as
+  # deploy-digiquant-runner.yml.
+  group: deploy-digithings-cron-${{ github.run_id }}
   cancel-in-progress: false
 
 permissions:
@@ -22,8 +33,9 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    # DIG-248: CI-read secrets live at `cron` environment scope, not repo/org scope.
-    environment: cron
+    # DIG-248: CI-read secret names resolve at repo scope today; when they move
+    # to environment scope they belong at `production` for this lane.
+    environment: production
     steps:
       - uses: actions/checkout@v4
 

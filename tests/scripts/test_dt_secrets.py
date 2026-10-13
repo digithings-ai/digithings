@@ -325,7 +325,8 @@ def test_generator_needing_a_live_service_fails_cleanly(tmp_path):
 
 def test_render_is_all_or_nothing(tmp_path):
     """One unresolved value must leave NO file, not a half-filled one."""
-    only = "AUTH_SECRET,OPENROUTER_API_KEY"
+    # OPENROUTER is hosted-only; CHEAPERINFERENCE is required on selfhost and keychain-sourced.
+    only = "AUTH_SECRET,CHEAPERINFERENCE_API_KEY"
     out = tmp_path / ".dev.vars"
     proc = run("render", "--no-prompt", "--only", only, "--output", str(out), expect=1)
     assert not out.exists(), "a partial file was written"
@@ -450,5 +451,5 @@ def test_tool_makes_no_network_call():
 
 def test_check_reports_missing_without_writing(tmp_path):
     out = tmp_path / ".dev.vars"
-    run("check", "--only", "AUTH_SECRET,OPENROUTER_API_KEY", expect=1)
+    run("check", "--only", "AUTH_SECRET,CHEAPERINFERENCE_API_KEY", expect=1)
     assert not out.exists()

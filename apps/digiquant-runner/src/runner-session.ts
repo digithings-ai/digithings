@@ -11,6 +11,31 @@ export const HEARTBEAT_MS = 60_000;
 export const MAX_INFLIGHT = 2;
 /** Extra seconds past timeout_seconds before the DO marks a run timed_out. */
 export const WATCHDOG_GRACE_SECONDS = 120;
+/**
+ * Consecutive container "no such run" (HTTP 404) polls before the DO declares
+ * a run lost. The container keeps its run registry in memory, so a child
+ * restart or a Durable Object reset really does lose the run — but a single 404
+ * during a cold boot must not fail a live run. Poll cadence is HEARTBEAT_MS, so
+ * two confirmations is about a minute of lost-run evidence.
+ */
+export const LOST_CONFIRMATIONS = 2;
+/** RunRecord.error value for a run the runner container can no longer see. */
+export const RUN_LOST_ERROR = "house_run_lost";
+
+/**
+ * Raised by ContainerPort.readStatus when the container answers 404 for a run
+ * it was asked about. Distinct from a transport failure: only this one is
+ * evidence that the run itself is gone.
+ */
+export class RunLostError extends Error {
+  readonly run_id: string;
+  constructor(run_id: string) {
+    super(`container has no record of run ${run_id}`);
+    this.name = "RunLostError";
+    this.run_id = run_id;
+  }
+}
+
 const STATE_KEY = "runner-state";
 
 export const COMMANDS: Record<string, CommandSpec> = loadCommands(commandsJson);
@@ -51,6 +76,8 @@ export type RunRecord = {
   finished_at: string | null;
   git_sha: string;
   log_tail: string;
+  /** Machine-readable failure code (e.g. RUN_LOST_ERROR). Absent until a failure. */
+  error?: string | null;
   started_at_ms: number;
 };
 
@@ -85,6 +112,12 @@ type LockRecord = {
   concurrency: string;
   started_at_ms: number;
   timeout_seconds: number;
+  /**
+   * Consecutive container 404s seen for this run. Optional because load() does
+   * not normalise fields inside a stored lock record — read it as
+   * `(lock.lost_polls ?? 0)`.
+   */
+  lost_polls?: number;
 };
 
 type Ledger = {
@@ -353,10 +386,18 @@ export class RunnerSession {
       return false;
     }
     let remote: ContainerStatus | null = null;
+    let lost = false;
     try {
       remote = await this.deps.port.readStatus(lock.run_id);
-    } catch {
+      lock.lost_polls = 0;
+    } catch (err) {
       remote = null;
+      // Only an explicit "no such run" is evidence the run is gone. A transport
+      // error says nothing about the run, so the streak is left untouched.
+      if (err instanceof RunLostError) {
+        lost = true;
+        lock.lost_polls = (lock.lost_polls ?? 0) + 1;
+      }
     }
     if (remote) {
       this.applyRemote(run, remote);
@@ -370,6 +411,19 @@ export class RunnerSession {
           run.started_at_ms = remoteMs;
         }
       }
+    }
+    // A lost run is decided before the watchdog: the container has no record of
+    // it at all, so timed_out would claim a live-but-slow container and the lock
+    // would survive a DO reset forever. Fail loud with a distinguishable error,
+    // release the lock so hasActiveWork() can clear, and write no success.json —
+    // the house run did not land.
+    if (lost && (lock.lost_polls ?? 0) >= LOST_CONFIRMATIONS && !isTerminal(run.status)) {
+      run.status = "failed";
+      run.exit_code = null;
+      run.error = RUN_LOST_ERROR;
+      run.finished_at = new Date(this.now()).toISOString();
+      delete ledger.locks[group];
+      return false;
     }
     const ageSeconds = (this.now() - lock.started_at_ms) / 1000;
     const pastDeadline = ageSeconds > lock.timeout_seconds + WATCHDOG_GRACE_SECONDS;
@@ -413,6 +467,14 @@ export class RunnerSession {
         const message = err instanceof Error ? err.message : String(err);
         console.error(`house_ledger_write_failed ${message}`);
       }
+    } else {
+      // The skip-gate reads this object, so a house run that succeeded without
+      // writing it is invisible to the next kick. A failed put above already
+      // logs, so without this branch a missing binding or a missing run_date is
+      // the only way to complete with no marker and no trace.
+      console.error(
+        `house_ledger_not_written run=${run.run_id} reason=${runDate ? "archive_unbound" : "missing_run_date"}`,
+      );
     }
     const idempotencyKey = `allocation-shadow:${run.run_id}`;
     if (ledger.idem[idempotencyKey]) return;
@@ -444,6 +506,7 @@ export class RunnerSession {
     if (remote.git_sha) run.git_sha = remote.git_sha;
     if (remote.started_at) run.started_at = remote.started_at;
     if (remote.finished_at) run.finished_at = remote.finished_at;
+    if (remote.reason) run.error = remote.reason;
   }
 
   private async promote(ledger: Ledger): Promise<boolean> {
@@ -511,6 +574,7 @@ function publicRun(run: RunRecord): {
   finished_at: string | null;
   git_sha: string;
   log_tail: string;
+  error: string | null;
 } {
   return {
     run_id: run.run_id,
@@ -521,6 +585,7 @@ function publicRun(run: RunRecord): {
     finished_at: run.finished_at,
     git_sha: run.git_sha,
     log_tail: run.log_tail,
+    error: run.error ?? null,
   };
 }
 
