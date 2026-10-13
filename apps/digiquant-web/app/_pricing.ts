@@ -31,7 +31,7 @@ export const PRICING_TIERS: readonly PricingTier[] = [
     cadence: "· MIT",
     desc: "Run the full stack on your own infrastructure with your own model keys.",
     features: ["All core services", "Bring your own key", "Community support"],
-    // CTA rendered as <CloneRepoButton /> in the page (real self-host action).
+    // CTA: a GitHub link, rendered by components/start/pricing-strip.tsx.
   },
   {
     id: "managed",
@@ -58,8 +58,8 @@ export const PRICING_FAQ: readonly { q: string; a: string }[] = [
     a: "A container runtime (or a Python environment) and access to an LLM — any LiteLLM-supported provider or a local model. The rest ships in the open-core stack.",
   },
   {
-    q: "How is NautilusTrader licensed?",
-    a: "digiquant builds on NautilusTrader (open source) for all backtest, optimize, and live paths — see the NautilusTrader repository for its current license terms.",
+    q: "Which engine runs the backtests?",
+    a: "An open-source event-driven engine runs every backtest and optimize. It is NautilusTrader, installed as a dependency of the stack you self-host. See the NautilusTrader repository for its source and current license terms.",
   },
   {
     q: "Do I bring my own model keys?",
@@ -67,6 +67,6 @@ export const PRICING_FAQ: readonly { q: string; a: string }[] = [
   },
   {
     q: "Are there usage limits?",
-    a: "No artificial request caps on the self-hosted stack. Throughput is bounded only by your own infrastructure and provider limits.",
+    a: "No metered quota on the self-hosted stack. Each service applies per-IP rate limits you can see in its config (for example 10/min on backtest and workflow runs); beyond that, throughput is bounded by your own infrastructure and provider limits.",
   },
 ] as const;
