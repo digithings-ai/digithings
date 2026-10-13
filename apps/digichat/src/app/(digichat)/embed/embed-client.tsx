@@ -172,7 +172,7 @@ function EmbedPageInner({
     (async () => {
       for (let i = 0; i < 12 && !cancelled; i++) {
         try {
-          const r = await fetch(p("/api/warmup"), { cache: "no-store" });
+          const r = await fetch(p("/api/embed/warmup"), { cache: "no-store" });
           const j = (await r.json()) as { ready?: boolean };
           if (j.ready) return;
         } catch {
