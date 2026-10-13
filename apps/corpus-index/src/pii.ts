@@ -63,6 +63,7 @@ const COMPANY = new RegExp(
   "gu",
 );
 /** Signature-block contact details that the international PHONE pattern misses. */
+const SLASH_PHONE = /(?:\+\d{1,3}\s?)?\(?0?\d{2,5}\)?\s?\/\s?\d[\d\s-]{2,}\d/g;
 const NATIONAL_PHONE = /\b0\d{2,5}(?:\s?[/-]\s?|\s)\d{2,}(?:[\s-]\d{1,6})*\b/g;
 const STREET = /\b[\p{L}.-]*(?:straße|strasse|str\.|weg|platz|allee|gasse|ring|damm|ufer|chaussee)\s*\d+\s?[a-z]?\b/giu;
 const POSTCODE_CITY = /\b(?:D-|DE-)?\d{5}\s+[A-ZÄÖÜ][\p{L}-]+(?:\s(?:am|an der|im|bei)\s[A-ZÄÖÜ][\p{L}-]+)?/gu;
@@ -101,6 +102,7 @@ export function maskPii(text: string, names: string[] = []): string {
     .replace(WEBSITE, "[website]")
     .replace(STREET, "[address]")
     .replace(POSTCODE_CITY, "[address]")
+    .replace(SLASH_PHONE, "[phone]")
     .replace(NATIONAL_PHONE, "[phone]");
   for (const name of names) {
     out = out.replace(new RegExp(`(?<![\\p{L}])${escapeRe(name)}(?![\\p{L}])`, "gu"), "[name]");

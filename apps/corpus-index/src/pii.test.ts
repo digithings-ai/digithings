@@ -69,9 +69,9 @@ describe("name masking (DIG-3269 gate)", () => {
 describe("signature contact details (DIG-3269 gate)", () => {
   it("masks national phones, street, postcode city and website", () => {
     const out = maskPii(
-      "Musterstraße 22, 65232 Taunusstein Fon 06128/3333 Mobil 0151/12483766 Telefon: 02203-92072-0 Web: www.example-firma.de Industriestr. 8 * DE-65510 Idstein",
+      "fon +49 3491/6181-30 fax +49 3491/6181-18 Musterstraße 22, 65232 Taunusstein Fon 06128/3333 Mobil 0151/12483766 Telefon: 02203-92072-0 Web: www.example-firma.de Industriestr. 8 * DE-65510 Idstein",
     );
-    for (const leak of ["Musterstraße", "65232", "Taunusstein", "06128", "0151", "02203", "example-firma", "Industriestr", "Idstein"]) {
+    for (const leak of ["3491", "6181", "Musterstraße", "65232", "Taunusstein", "06128", "0151", "02203", "example-firma", "Industriestr", "Idstein"]) {
       expect(out).not.toContain(leak);
     }
   });
