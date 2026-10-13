@@ -1331,3 +1331,204 @@
     transition: none;
   }
 }
+
+/* ════════════════════════════════════════════════════════════════════════════
+ * Pipeline flow — DIG-3312.
+ *
+ * Replaces the terminal schematic inside the agent-orchestration cards. No
+ * legend, no notes column, no receipt: the shape of the chain (how many
+ * stages, which ones fan out) already tells the story, and the only job left
+ * for motion is to make it look alive. A pulse rides every conduit on an
+ * infinite loop, staggered by `--pflow-i` (the stage's own depth), so a
+ * four-stage chain and a six-stage chain read as two different rhythms
+ * without any per-card wiring — the data shapes the motion, not the other
+ * way round.
+ * ════════════════════════════════════════════════════════════════════════════ */
+
+.pflow {
+  --flow-bg: #08090b;
+  --flow-ink: #e7eaec;
+  --flow-mute: #7e858b;
+  --flow-hair: rgba(255, 255, 255, 0.1);
+  --flow-main: #e0b341;
+  --flow-model: #5aa3c4;
+  --flow-side: #6fa3a3;
+  --flow-fallback: #e5533e;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-width: 0;
+  background: var(--flow-bg);
+  color: var(--flow-ink);
+  border: 1px solid var(--flow-hair);
+  padding: 1.1rem 1rem 0.9rem;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.pflow__chain {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.pflow__stage {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* The conduit is the whole story's motion: a hairline trunk with a bright
+   dot travelling its length forever, delayed per stage so the eye reads a
+   single signal falling through the chain rather than four things blinking
+   independently. */
+.pflow__conduit {
+  position: relative;
+  align-self: center;
+  width: 1px;
+  height: 1.5rem;
+  background: var(--flow-hair);
+}
+
+.pflow__conduit[data-pending="true"] {
+  background-image: linear-gradient(var(--flow-mute) 0 2px, transparent 2px 5px);
+  background-repeat: repeat-y;
+  background-size: 1px 5px;
+  background-color: transparent;
+}
+
+.pflow__pulse {
+  position: absolute;
+  inset-inline-start: -2px;
+  top: -3px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--flow-side);
+  box-shadow: 0 0 6px 1px var(--flow-side);
+  opacity: 0;
+}
+
+.pflow[data-motion="on"] .pflow__conduit:not([data-pending="true"]) .pflow__pulse {
+  animation: pflow-fall 2.6s linear infinite;
+  animation-delay: calc(var(--pflow-i, 1) * -0.45s);
+}
+
+.pflow__nodes {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.5rem;
+  position: relative;
+  min-width: 0;
+}
+
+.pflow__nodes[data-parallel="true"] {
+  padding-top: 1.3rem;
+}
+
+.pflow__bus {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--flow-mute);
+  white-space: nowrap;
+}
+
+.pflow__node {
+  min-width: 0;
+  border: 1px solid var(--flow-hair);
+  padding: 0.4rem 0.75rem;
+  color: var(--flow-ink);
+  text-align: center;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.pflow__node[data-tone="main"] { border-color: color-mix(in srgb, var(--flow-main) 55%, var(--flow-hair)); }
+.pflow__node[data-tone="model"] { border-color: color-mix(in srgb, var(--flow-model) 55%, var(--flow-hair)); }
+.pflow__node[data-tone="side"] { border-color: color-mix(in srgb, var(--flow-side) 45%, var(--flow-hair)); }
+.pflow__node[data-tone="fallback"] { border-color: color-mix(in srgb, var(--flow-fallback) 55%, var(--flow-hair)); }
+.pflow__node[data-tone="pending"] {
+  border-style: dashed;
+  color: var(--flow-mute);
+}
+
+.pflow[data-motion="on"] .pflow__node[data-tone="main"] { animation: pflow-glow 3.2s ease-in-out infinite; }
+.pflow[data-motion="on"] .pflow__node[data-tone="model"] { animation: pflow-glow 3.2s ease-in-out infinite; animation-delay: 0.6s; }
+.pflow[data-motion="on"] .pflow__node[data-tone="side"] { animation: pflow-glow 3.2s ease-in-out infinite; animation-delay: 1.2s; }
+
+.pflow__node[data-tone="main"] { --flow-glow: var(--flow-main); }
+.pflow__node[data-tone="model"] { --flow-glow: var(--flow-model); }
+.pflow__node[data-tone="side"] { --flow-glow: var(--flow-side); }
+
+.pflow__loop {
+  margin: 0.35rem 0 0;
+  padding-top: 0.6rem;
+  border-top: 1px dotted var(--flow-hair);
+  color: var(--flow-mute);
+  font-size: 0.7rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pflow__loop-arc {
+  display: inline-block;
+  width: 0.7rem;
+  height: 0.7rem;
+  flex: none;
+  border: 1px dotted var(--flow-mute);
+  border-radius: 50%;
+  border-right-color: transparent;
+  border-bottom-color: transparent;
+}
+
+.pflow[data-motion="on"] .pflow__loop-arc {
+  animation: pflow-spin 3s linear infinite;
+}
+
+@keyframes pflow-fall {
+  0% { top: -3px; opacity: 0; }
+  8% { opacity: 1; }
+  92% { opacity: 1; }
+  100% { top: calc(100% - 2px); opacity: 0; }
+}
+
+@keyframes pflow-glow {
+  0%, 100% { box-shadow: none; }
+  50% { box-shadow: 0 0 10px 1px color-mix(in srgb, var(--flow-glow) 55%, transparent); }
+}
+
+@keyframes pflow-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 480px) {
+  .pflow__nodes {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .pflow__node {
+    text-align: start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pflow[data-motion="on"] .pflow__pulse,
+  .pflow[data-motion="on"] .pflow__node[data-tone="main"],
+  .pflow[data-motion="on"] .pflow__node[data-tone="model"],
+  .pflow[data-motion="on"] .pflow__node[data-tone="side"],
+  .pflow[data-motion="on"] .pflow__loop-arc {
+    animation: none;
+  }
+}
