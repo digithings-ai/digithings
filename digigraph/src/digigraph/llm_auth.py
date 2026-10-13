@@ -357,6 +357,8 @@ def push_lite_llm_proxy_header(request: Any) -> object:
     ``finally`` block) to restore the previous value.
     """
     raw = request.headers.get("x-litellm-proxy-key")
+    if os.environ.get("DIGIGRAPH_LOCAL_IGNORE_PROXY_KEY") == "1":
+        raw = None  # LOCAL-ONLY OCC fallback hack, do not commit
     val = raw.strip() if raw else None
     return set_proxy_key(val)
 
