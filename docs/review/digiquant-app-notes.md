@@ -248,6 +248,14 @@ screenshot · suggested fix.
   `screenshots/docs-review-shortcuts-overlay.png` · Modal renders, well-formed
   table, visible `esc` affordance; `?` toggles. No defect. Remaining: `d` desk
   switcher + `[enter]/[tab]` tile affordances under keyboard-only use.
+- K-02 · all pages · `d` desk switcher works · behavior (positive) · nit ·
+  `screenshots/docs-review-desk-switcher.png` · Dropdown lists Baseline (active)
+  + FX Hub with "Invite-only (12x group)" explanation — locked desks show what
+  unlocks them, as documented. No defect. The same screenshot visually confirms
+  R-02 (5 stale/warn badges on one viewport), B-05, and B-07. Keyboard sweep
+  closed: every documented shortcut fires; `[enter] open [tab] next` hints are
+  present on every tile (full keyboard-only traversal not exercised — noted as
+  a residual, not a finding).
 
 ## Pass log
 
@@ -264,3 +272,8 @@ screenshot · suggested fix.
   attribution, ledger, tearsheet, theses, strategies/detail|deploy, `?`
   overlay. Screenshots added (7). Chart verdict: donut fails concern 4 (H-01),
   bar passes (A-01).
+- 13 Oct 2026 night (Code Reviewer): pass 3 (final) — `d` desk switcher opens
+  with locked-desk explanation (K-02, positive); keyboard sweep closed.
+  Review complete: 33 findings, 15 screenshots. Consolidated fix list posted on
+  the ticket (comments 6fb104ac, 270c8749); implementation routes to DIG-3322
+  (tools + digichat) and DIG-3323 (settings).
