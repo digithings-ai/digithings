@@ -1882,6 +1882,78 @@ def _execute_tool_in_fan_out(
     return execute_tool(name, args)
 
 
+# DeepSeek V3.2+/V4 sometimes emits its native "DSML" tool-call markup as plain
+# content instead of structured tool_calls (OCC demo: raw "<｜DSML｜tool_calls>"
+# in the chat and the turn ending). The bar is U+FF5C; ASCII "|" is accepted too.
+_DSML_BAR = r"\s*[｜|]+\s*"
+_DSML_TAG = rf"<{_DSML_BAR}DSML{_DSML_BAR}"
+_DSML_END = rf"</{_DSML_BAR}DSML{_DSML_BAR}"
+_DSML_WRAP = r"\s*(?:tool_calls|function_calls|calls)\s*"
+_DSML_BLOCK_RE = re.compile(
+    rf"{_DSML_TAG}{_DSML_WRAP}>(.*?)(?:{_DSML_END}{_DSML_WRAP}>|\Z)",
+    re.S,
+)
+_DSML_INVOKE_RE = re.compile(
+    rf"{_DSML_TAG}\s*invoke\s+name=\"([^\"]+)\"\s*>(.*?)(?:{_DSML_END}\s*invoke\s*>|(?={_DSML_TAG}\s*invoke)|\Z)",
+    re.S,
+)
+_DSML_PARAM_RE = re.compile(
+    rf"{_DSML_TAG}\s*parameter\s+name=\"([^\"]+)\"(?:\s+string=\"(true|false)\")?\s*>(.*?){_DSML_END}\s*parameter\s*>",
+    re.S,
+)
+_DSML_MARK_RE = re.compile(_DSML_TAG)
+
+
+def _parse_dsml_tool_calls(content: str | None) -> tuple[str, list[dict[str, Any]]]:
+    """Lift DSML tool-call markup out of ``content`` into OpenAI-shaped tool_calls.
+
+    Returns (content with the markup removed, tool_calls). Leaves content untouched
+    and returns [] when there is no parseable markup.
+    """
+    if not content or not _DSML_MARK_RE.search(content):
+        return content or "", []
+    calls: list[dict[str, Any]] = []
+    for block in _DSML_BLOCK_RE.finditer(content):
+        for inv in _DSML_INVOKE_RE.finditer(block.group(1)):
+            args: dict[str, Any] = {}
+            for pname, is_str, raw in _DSML_PARAM_RE.findall(inv.group(2)):
+                value: Any = raw.strip() if is_str != "false" else raw.strip()
+                if is_str == "false":
+                    try:
+                        value = json.loads(raw.strip())
+                    except ValueError:
+                        value = raw.strip()
+                args[pname] = value
+            calls.append(
+                {
+                    "id": f"dsml_{len(calls)}",
+                    "type": "function",
+                    "function": {"name": inv.group(1).strip(), "arguments": json.dumps(args)},
+                }
+            )
+    if not calls:
+        return content, []
+    stripped = _DSML_BLOCK_RE.sub("", content).strip()
+    return stripped, calls
+
+
+def _emit_tool_result(
+    on_tool_step: Callable[[str, Any], None], name: str, result: str | dict[str, Any]
+) -> None:
+    """Emit one tool_result step, keyed by the *tool* name.
+
+    The tool name must win over any "name" key in the result: get_skill returns
+    {"name": <skill id>, ...}, and spreading the result last relabelled the
+    completion as a phantom tool named after the skill while the real row
+    never completed (OCC demo, DIG-3089).
+    """
+    body = result if isinstance(result, dict) else {"content": result}
+    payload = {**body, "name": name}
+    if isinstance(body.get("name"), str) and body["name"] != name:
+        payload["result_name"] = body["name"]
+    on_tool_step("tool_result", payload)
+
+
 @_traceable("run_tools")
 def run_tools(
     model: str,
@@ -2058,8 +2130,64 @@ def run_tools(
             )
         )
 
+    def _wrapup_turn(turn_messages: list[ChatCompletionMessage]) -> str:
+        """Tool-free wrap-up turn with DSML markup filtered from stream and result."""
+        nonlocal on_tool_step
+        outer = on_tool_step
+        held: list[str] = []
+        state = {"suppress": False}
+
+        def _filter(kind: str, payload: Any) -> None:
+            if outer is None:
+                return
+            if kind != "content" or not isinstance(payload, str):
+                outer(kind, payload)
+                return
+            if state["suppress"]:
+                return
+            held.append(payload)
+            text = "".join(held)
+            hit = _DSML_MARK_RE.search(text)
+            if hit:
+                state["suppress"] = True
+                held.clear()
+                if text[: hit.start()]:
+                    outer("content", text[: hit.start()])
+                return
+            cut = text.rfind("<")
+            if cut >= 0 and ">" not in text[cut:] and len(text) - cut < 24:
+                # Could be the start of a DSML tag split across deltas: hold it.
+                if text[:cut]:
+                    outer("content", text[:cut])
+                held[:] = [text[cut:]]
+                return
+            held.clear()
+            outer("content", text)
+
+        on_tool_step = _filter if outer is not None else None
+        try:
+            raw, _ = _produce_turn(turn_messages, None, response_format=final_response_format)
+        finally:
+            on_tool_step = outer
+        if held and not state["suppress"] and outer is not None:
+            outer("content", "".join(held))
+        cleaned, _ = _parse_dsml_tool_calls(raw)
+        if _DSML_MARK_RE.search(cleaned):
+            cleaned = cleaned[: _DSML_MARK_RE.search(cleaned).start()].rstrip()
+        return cleaned
+
     for round_idx in range(max_tool_rounds):
         content, tool_calls = _produce_turn(current, tools)
+        streamed_content = content
+        if not tool_calls and tools:
+            content, dsml_calls = _parse_dsml_tool_calls(content)
+            if dsml_calls:
+                logger.warning(
+                    "run_tools: lifted %d DSML tool call(s) out of round %d content",
+                    len(dsml_calls),
+                    round_idx,
+                )
+                tool_calls = dsml_calls
         if not tool_calls:
             if tool_choice == "required":
                 # tool_choice="required" is a floor a deployment opted into (see
@@ -2077,7 +2205,7 @@ def run_tools(
                 )
             return content or ""
 
-        if on_tool_step is not None and content:
+        if on_tool_step is not None and streamed_content:
             # This round's content already streamed live via on_tool_step("content", ...)
             # inside _produce_turn, before tool_calls was known — that is unavoidable for
             # a live per-token stream (buffering the whole round to decide "is this
@@ -2095,7 +2223,9 @@ def run_tools(
             # Empty-narration tool rounds deliberately skip this callback: there is no
             # streamed content to demote, and emitting a vacuous boundary would reorder
             # consumer callbacks ahead of tool_call (see digigraph rag_stream tests).
-            on_tool_step("round_boundary", {"round_idx": round_idx, "narration": content})
+            # streamed_content, not content: DSML markup lifted into tool_calls
+            # above already streamed live and must be demoted with the narration.
+            on_tool_step("round_boundary", {"round_idx": round_idx, "narration": streamed_content})
 
         asst_entries: list[ToolCallDict] = []
         for tc in tool_calls:
@@ -2172,6 +2302,8 @@ def run_tools(
                     result = {"content": str(e)}
                 else:
                     _note_tool_success()
+                if on_tool_step is not None:
+                    _emit_tool_result(on_tool_step, name, result)
                 ordered.append(((tc_id, name, args), result))
 
         for idx, ((tc_id, name, args), result) in enumerate(ordered):
@@ -2180,14 +2312,12 @@ def run_tools(
                     _note_tool_error(name, tool_errors[idx])
                 else:
                     _note_tool_success()
-            if on_tool_step is not None:
-                if run_parallel:
-                    on_tool_step("tool_call", {"name": name, "arguments": args})
-                payload = {
-                    "name": name,
-                    **(result if isinstance(result, dict) else {"content": result}),
-                }
-                on_tool_step("tool_result", payload)
+            # Sequential calls already emitted their result the moment each
+            # tool returned (below), so a slow round no longer leaves earlier
+            # rows "running" until the last tool of the round finishes.
+            if on_tool_step is not None and run_parallel:
+                on_tool_step("tool_call", {"name": name, "arguments": args})
+                _emit_tool_result(on_tool_step, name, result)
             msg_content = (
                 result.get("content", str(result)) if isinstance(result, dict) else str(result)
             )
@@ -2242,6 +2372,23 @@ def run_tools(
         # Enforcing the caller's output schema here stops the cheap model from
         # answering in prose or returning an empty body, which is what forced the
         # tool-free retry that could not re-ground.
-        final, _ = _produce_turn(current, None, response_format=final_response_format)
+        # With tool history in context, DeepSeek V4.x often answers this tool-free
+        # wrap-up with DSML tool-call markup instead of prose (OCC demo). The live
+        # stream is filtered so the markup never reaches the client, the returned
+        # text is stripped, and an all-markup answer gets one explicit retry.
+        final = _wrapup_turn(current)
+        if not final.strip():
+            logger.warning("run_tools: wrap-up returned only DSML tool calls; retrying for prose")
+            current.append(
+                {
+                    "role": "user",
+                    "content": (
+                        "No more tools are available. Do not call or write any tool calls. "
+                        "Write the final answer now in plain prose/markdown from the tool "
+                        "results above, and say what could not be retrieved."
+                    ),
+                }
+            )
+            final = _wrapup_turn(current)
         return final or ""
     return content or ""

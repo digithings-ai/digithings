@@ -248,8 +248,12 @@ def test_env_example_occ_index_is_occ_help_only() -> None:
 
 
 def test_occ_embed_example_uses_occ_help_only() -> None:
-    config = yaml.safe_load(_text(OCC_EMBED_YAML))
-    assert config["hosts"]["occ.digithings.ai"]["backend"]["digisearchIndex"] == "occ_help"
+    host = yaml.safe_load(_text(OCC_EMBED_YAML))["hosts"]["occ.digithings.ai"]
+    # backend.digisearchIndex was retired; Help search reaches the model only as
+    # the digisearch MCP server, whose setup names the occ_help index.
+    assert "digisearchIndex" not in host["backend"]
+    servers = {s["id"]: s for s in host["mcp"]["servers"]}
+    assert servers["digisearch"]["setup"]["index_name"] == "occ_help"
 
 
 def test_digichat_schema_test_expectation_matches_the_example() -> None:

@@ -148,7 +148,13 @@
   min-height: calc(1.375rem + 0.4rem);
   color: var(--ink);
   field-sizing: content;
-  overflow: hidden;
+  /* Long input wraps and the box grows to 5 rows, then scrolls (the old
+     overflow:hidden clipped everything past max-height with no scroll). */
+  max-height: calc(5 * 1.375rem + 0.4rem);
+  overflow-x: hidden;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
   box-sizing: border-box;
   /* Wordmark cursor: thick bar, not the OS I-beam. Clip so the block
      caret cannot paint over the attach cubes. */
@@ -504,7 +510,9 @@
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-input,
 .digichat-launcher .aui-composer-input {
   cursor: text;
-  overflow: hidden;
+  /* Vertical scroll once the box hits its 5-row max-height. */
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-composer-send {

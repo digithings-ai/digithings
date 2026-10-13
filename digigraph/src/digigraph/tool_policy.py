@@ -109,37 +109,40 @@ def apply_mcp_extra_tools(
     disabled_extra: frozenset[str],
     *,
     enable_web_search: bool,
-) -> frozenset[str] | None:
+) -> frozenset[str]:
     """Fold discovered remote-MCP tool names into an allowlist, web-search gated.
 
     Single policy point for ``research_node``'s MCP-extra union: subtract the
     disabled MCP tokens, then drop MCP-proxied web-search tools unless the
     request opted in.
-    Unrestricted sessions (``None``) stay unrestricted **unless** a gate forces
-    a concrete allowlist — the existing disabled-token fallback, or a
-    discovered ``{id}_web_search`` with no opt-in, which would otherwise be
-    admitted by the unrestricted ``None`` because the MCP proxy has no
-    handler-side availability check. The concrete fallback is
-    ``list_tool_names() | live``, the same shape the disabled-token path uses.
+
+    A concrete allowlist is always returned. The unrestricted-session fallback
+    (``list_tool_names() | live``) used to be conditional — it materialised only
+    when a token was disabled or web-search needed gating, and otherwise returned
+    ``None`` to mean "no restriction". That ``None`` is what made the gate
+    optional: an operator row with no ``allowedTools``, and a disabled-token or
+    web-search combination that happened not to line up, could leave the session
+    unrestricted with every discovered tool offered. Reaching this function at all
+    means operator MCP servers are configured, so the answer is always a set.
+
+    *extra_names* arrives already narrowed by the operator's per-row allowlist in
+    ``mcp_client.filter_tools_for_server``; this function only subtracts from it.
+    The asymmetry is deliberate and stays: a user disable list is session input
+    (``None`` = no user disables anything), while an operator allowlist is
+    configuration (``None`` = deny everything).
     """
     live = frozenset(n for n in extra_names if n not in disabled_extra)
-    gated = False
     if not enable_web_search:
-        stripped = strip_web_search_tools(live)
-        gated = stripped != live
-        live = stripped
+        live = strip_web_search_tools(live)
         # The base allowlist normally arrives already stripped by
-        # apply_web_search_opt_in; strip again so this function is safe to call
-        # with either input order (and never re-admits a proxied tool).
+        # apply_web_search_opt_in; strip again so this entry point is safe on its own.
         if names is not None:
             names = strip_web_search_tools(names)
     if names is not None:
         return names | live if live else names
-    if disabled_extra or gated:
-        from digigraph.orchestration.registry import list_tool_names
+    from digigraph.orchestration.registry import list_tool_names
 
-        return frozenset(list_tool_names()) | live
-    return None
+    return frozenset(list_tool_names()) | live
 
 
 def allowed_tool_names_for_workflow(

@@ -6,17 +6,22 @@
  * and ThreadListPrimitive sidebar (inside the runtime provider).
  */
 
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import type { UIMessage } from "ai";
 import { AssistantChatTransport, useAISDKRuntime } from "@assistant-ui/ai-sdk";
-import { useRemoteThreadListRuntime } from "@assistant-ui/react";
+import {
+  useAuiState,
+  useRemoteThreadListRuntime,
+  type AssistantRuntime,
+} from "@assistant-ui/react";
 import {
   ProductStockShell,
   buildProductRuntimeAdapters,
 } from "@/components/stock/product-shell";
 import { MemoryThreadListSidebar } from "@/components/stock/memory-thread-list-sidebar";
 import {
+  ArtifactsPanel,
   StockChatPrefsHost,
   useStockChatPrefs,
 } from "@digithings/ui/chat/stock";
@@ -24,6 +29,8 @@ import { p } from "@/lib/base-path";
 import type { DigichatClientConfig } from "@/lib/deploy-config";
 import { toStockChatPrefsConfig } from "@/lib/route-client-config";
 import {
+  setPendingForceTool,
+  setPendingTurnMode,
   takePendingForceTool,
   takePendingTurnMode,
   takePendingWebSearchForce,
@@ -86,6 +93,9 @@ function useShellThreadRuntime(
   getMcpSession: () => string | undefined,
   getEffort: () => string | undefined,
   getSearchEngine: () => string | undefined,
+  redoRef: { current: () => void } | null,
+  redoByThread?: { current: Map<string, () => void> },
+  threadId?: string,
 ) {
   const transport = useMemo(
     () =>
@@ -151,6 +161,30 @@ function useShellThreadRuntime(
   );
 
   const chat = useChat<UIMessage>({ transport });
+  useEffect(() => {
+    const run = () => {
+      const key = chat.id || sessionKey;
+      // Force-tool is send-only (#3466). Clear it before regenerate, and arm
+      // the turn mode on the key prepareSendMessagesRequest will read.
+      setPendingForceTool(sessionKey);
+      if (key !== sessionKey) setPendingForceTool(key);
+      setPendingTurnMode(key, "regenerate");
+      void chat.regenerate();
+    };
+    if (redoRef) {
+      redoRef.current = run;
+      return;
+    }
+    // Each mounted thread keeps its own regenerate closure. Switching the
+    // main thread does not remount earlier runtimes, so /redo looks up
+    // the closure for the thread id on screen.
+    if (!redoByThread || !threadId) return;
+    const byThread = redoByThread.current;
+    byThread.set(threadId, run);
+    return () => {
+      if (byThread.get(threadId) === run) byThread.delete(threadId);
+    };
+  }, [chat, redoByThread, redoRef, sessionKey, threadId]);
   const adapters = useMemo(
     () => buildProductRuntimeAdapters(clientConfig.features),
     [clientConfig.features],
@@ -166,13 +200,21 @@ function HomeStockClientSingle({
   userId?: string;
 }) {
   const sessionKey = userId ? `app:${userId}` : "app:anon";
+  const redoRef = useRef<() => void>(() => {});
+  // DIG-2882 DoD 4: this shell has no session store, so the panel opens in its
+  // "no session" state rather than silently listing nothing.
+  const [artifactsOpen, setArtifactsOpen] = useState(false);
+  const openArtifacts = useCallback(() => setArtifactsOpen(true), []);
   const prefs = useStockChatPrefs({
     config: toStockChatPrefsConfig(clientConfig),
-    deps: PREFS_DEPS,
+    deps: { ...PREFS_DEPS, onOpenArtifacts: openArtifacts },
     sessionKey,
     hasSessions: false,
+    hasArtifacts: true,
     newThread: () => {},
-    redo: () => {},
+    redo: () => {
+      redoRef.current();
+    },
   });
   const runtime = useShellThreadRuntime(
     clientConfig,
@@ -184,6 +226,7 @@ function HomeStockClientSingle({
     prefs.getMcpSession,
     prefs.getEffort,
     prefs.getSearchEngine,
+    redoRef,
   );
 
   const mode = clientConfig.chrome.mode;
@@ -208,6 +251,11 @@ function HomeStockClientSingle({
             onWebSearchChange={prefs.setWebSearch}
           />
         </PresentationFrame>
+        <ArtifactsPanel
+          conversationId={null}
+          open={artifactsOpen}
+          onClose={() => setArtifactsOpen(false)}
+        />
       </div>
     </StockChatPrefsHost>
   );
@@ -221,13 +269,27 @@ function HomeStockClientMemory({
   userId?: string;
 }) {
   const sessionKey = userId ? `app:${userId}` : "app:anon";
+  const redoByThread = useRef(new Map<string, () => void>());
+  const runtimeRef = useRef<AssistantRuntime | null>(null);
+  // DIG-2882 DoD 1/4: the panel is scoped to one conversation, and the main
+  // thread id is read at open time rather than subscribed per render - the
+  // same ref `redo` already reads. null means "closed".
+  const [artifactsConversation, setArtifactsConversation] = useState<string | null>(null);
+  const openArtifacts = useCallback(() => {
+    setArtifactsConversation(runtimeRef.current?.threads.getState().mainThreadId ?? null);
+  }, []);
   const prefs = useStockChatPrefs({
     config: toStockChatPrefsConfig(clientConfig),
-    deps: PREFS_DEPS,
+    deps: { ...PREFS_DEPS, onOpenArtifacts: openArtifacts },
     sessionKey,
     hasSessions: true,
+    hasArtifacts: true,
     newThread: () => {},
-    redo: () => {},
+    redo: () => {
+      const mainId = runtimeRef.current?.threads.getState().mainThreadId;
+      if (!mainId) return;
+      redoByThread.current.get(mainId)?.();
+    },
   });
   const [memoryAdapter] = useState(
     () => new SessionMemoryThreadListAdapter(memoryThreadStorageKey("app", userId)),
@@ -263,6 +325,7 @@ function HomeStockClientMemory({
 
   const runtimeHook = useMemo(() => {
     return function useMemoryThreadRuntime() {
+      const threadId = useAuiState((s) => s.threadListItem.id);
       return useShellThreadRuntime(
         configRef.current,
         sessionRef.current,
@@ -273,14 +336,19 @@ function HomeStockClientMemory({
         () => getMcpRef.current(),
         () => getEffortRef.current(),
         () => getSearchEngineRef.current(),
+        null,
+        redoByThread,
+        threadId,
       );
     };
-  }, []);
+  }, [redoByThread]);
 
   const runtime = useRemoteThreadListRuntime({
     adapter: memoryAdapter,
     runtimeHook,
   });
+  // eslint-disable-next-line react-hooks/refs -- /redo reads the live main thread
+  runtimeRef.current = runtime;
 
   const mode = clientConfig.chrome.mode;
 
@@ -302,6 +370,11 @@ function HomeStockClientMemory({
             onWebSearchChange={prefs.setWebSearch}
           />
         </PresentationFrame>
+        <ArtifactsPanel
+          conversationId={artifactsConversation}
+          open={artifactsConversation !== null}
+          onClose={() => setArtifactsConversation(null)}
+        />
       </div>
     </StockChatPrefsHost>
   );
