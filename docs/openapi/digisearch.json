@@ -1583,6 +1583,86 @@
         "title": "ResearchTurnTraceStep",
         "type": "object"
       },
+      "ScreenRequest": {
+        "description": "The transcript as digichat validated it. Messages stay opaque here.",
+        "properties": {
+          "conversation_id": {
+            "minLength": 1,
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "exception_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exception Ref"
+          },
+          "messages": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "minItems": 1,
+            "title": "Messages",
+            "type": "array"
+          },
+          "surface": {
+            "minLength": 1,
+            "title": "Surface",
+            "type": "string"
+          }
+        },
+        "required": [
+          "surface",
+          "conversation_id",
+          "messages"
+        ],
+        "title": "ScreenRequest",
+        "type": "object"
+      },
+      "ScreenResponse": {
+        "description": "The verdict. Identifiers and a stable code only, never a matched value.",
+        "properties": {
+          "categories": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Categories",
+            "type": "array"
+          },
+          "decision": {
+            "title": "Decision",
+            "type": "string"
+          },
+          "exception_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exception Ref"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision",
+          "categories",
+          "reason"
+        ],
+        "title": "ScreenResponse",
+        "type": "object"
+      },
       "UrlIngestResult": {
         "additionalProperties": false,
         "description": "Outcome of one successful URL ingest.",
@@ -3140,6 +3220,48 @@
           }
         },
         "summary": "Api Ingest Url"
+      }
+    },
+    "/internal/art9/screen": {
+      "post": {
+        "description": "Screen one transcript.\n\n200 allow, 422 on a policy refusal (including mask), 413 when the request is\nover a declared bound, 502 when the screening hop fails.",
+        "operationId": "screen_internal_art9_screen_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScreenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScreenResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Screen",
+        "tags": [
+          "art9"
+        ]
       }
     },
     "/query": {

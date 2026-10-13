@@ -1,0 +1,50 @@
+---
+title: A request, end to end
+order: 5
+summary: >-
+  Following one chat message from the browser to a model and back shows every
+  principle of the architecture at work.
+---
+
+The clearest way to see the architecture is to follow a single message. A
+person types a question into digichat; a few hundred milliseconds later an
+answer starts streaming back. In between, five parts of the system each do one
+job.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant B as browser
+  participant W as digichat
+  participant K as digikey
+  participant G as digigraph
+  participant S as vertical service
+
+  B->>W: sends a message
+  W->>K: exchanges the session for a scoped identity
+  K-->>W: signed, short-lived identity
+  W->>G: chat request, with that identity
+  G->>K: fetches public signing keys (cached)
+  G->>G: checks issuer, audience, expiry, scopes
+  G->>S: asks which tools it offers
+  S-->>G: tool descriptions
+  G->>S: calls the chosen tool
+  S-->>G: result
+  G-->>W: streamed answer, with a trace recorded
+  W-->>B: streamed answer
+```
+
+The interface never holds long-lived credentials. It trades the person's
+session for a short-lived, narrowly scoped identity and passes that along. The
+hub verifies that identity cryptographically instead of trusting the caller,
+then **asks the vertical what tools it has** rather than carrying a hard-coded
+list. That runtime discovery is why a vertical can ship a new tool without a new
+release of the hub.
+
+The answer streams back through the same path, and the hub records a trace of
+every step along the way, so an operator can later see which tools were called,
+in what order and how long each took.
+
+<Reference kind="API" href="/docs/api/" title="API reference">
+  The request and response shapes for each step above.
+</Reference>

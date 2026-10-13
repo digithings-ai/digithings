@@ -56,6 +56,7 @@ from digiquant.data.luxalgo.models import (  # noqa: E402
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TOOL_REFUSALS_PY = REPO_ROOT / "digiquant/src/digiquant/tool_refusals.py"
 TRACKERS_INGEST_PY = REPO_ROOT / "digisearch/src/digisearch/trackers_ingest.py"
+ATTRIBUTION_PY = REPO_ROOT / "digiquant/src/digiquant/data/luxalgo/attribution.py"
 PHASE1_ALTDATA_PY = REPO_ROOT / "digiquant/src/digiquant/research/phases/phase1_altdata.py"
 GLOOMBERB_AGENT_TOOLS_PY = REPO_ROOT / "digiquant/src/digiquant/data/gloomberb/agent_tools.py"
 
@@ -178,13 +179,10 @@ def test_tool_refusals_carries_the_dig_1479_cross_reference() -> None:
     assert "tool surface" in doc or "tool-surface" in doc
 
 
-def test_trackers_ingest_entry_point_carries_the_dig_1472_cross_reference() -> None:
-    """Same note next to the ingest that still runs, per DIG-1479."""
-    source = TRACKERS_INGEST_PY.read_text(encoding="utf-8")
-    assert "DIG-1472" in source
-    assert "Counsel" in source
-    assert "business decision" in source or "business owner" in source
+def test_trackers_ingest_entry_point_carries_the_refusal_cross_reference() -> None:
+    """Refusal supersedes retention at the entry point (batch DIG-3137).
 
+<<<<<<< HEAD
 
 def test_trackers_ingest_states_the_classified_licence_and_its_limit() -> None:
     """DIG-1464 closed: the licence is CC0-1.0 *and* 13107(c) still bites.
@@ -201,6 +199,41 @@ def test_trackers_ingest_states_the_classified_licence_and_its_limit() -> None:
     )
     assert "13107(c)(2)" in doc, "the copyright waiver cannot cure a statutory use limit"
     assert "DIG-1472" in doc and "not a clearance" in doc
+=======
+    The DIG-1472 business-decision retention this test used to pin was superseded
+    by the CTO REFUSED disposition (Counsel DIG-1291 item (i), DIG-1307,
+    implemented DIG-1329/PR #5178, folded here). The pin tracks the current
+    authority: the entry point must name the refusal, not the retention.
+    """
+    source = TRACKERS_INGEST_PY.read_text(encoding="utf-8")
+    assert "DIG-1291" in source
+    assert "DIG-1307" in source or "DIG-1329" in source
+    assert "RefusedDatasetError" in source
+    assert "Counsel" in source
+
+
+def test_attribution_states_the_classified_licence_and_its_limit() -> None:
+    """DIG-1464 closed: the licence is CC0-1.0 *and* 13107(c) still bites.
+
+    Reverses the old guard, which forbade any licence word while the question
+    was open. The claim is verified now, so the repo must say so — and the
+    verification must not become the thing that misleads, which is why the
+    statutory limit is asserted in the same breath.
+
+    Lives in :mod:`digiquant.data.luxalgo.attribution` (the classifier), not in
+    the refused ingest module: since the DIG-1307 refusal landed
+    (batch DIG-3137), ``trackers_ingest`` states the refusal and points at the
+    classifier instead of restating the licence.
+    """
+    src = ATTRIBUTION_PY.read_text(encoding="utf-8")
+    assert "CC0-1.0" in src
+    assert "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499" in src, (
+        "the classification must cite the artefact it was read from"
+    )
+    assert "13107(c)(2)" in src, "the copyright waiver cannot cure a statutory use limit"
+    assert "DIG-1472" in src and "not a clearance" in src
+    doc = inspect.getdoc(trackers_ingest) or ""
+>>>>>>> refs/rewritten/onto
     for stale in ("Do not assert a licence", "is unverified", "No licence is asserted"):
         assert stale not in doc, f"the withhold-pending-classification posture is stale: {stale}"
 

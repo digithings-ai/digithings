@@ -34,6 +34,52 @@ workflow_dispatch and logs `github_override` at error.
 
 Set secrets from this directory with wrangler secret put (never echo values).
 
+## POST /kick
+
+Body is `{ cron, force?, args? }`, authorised by `CRON_KICK_SECRET`. It fires
+every enabled row on `cron`; `force` also fires disabled rows.
+
+`args` reaches **every** dispatch path, never silently dropped:
+
+| Row kind | Where `args` goes |
+|---|---|
+| `workflow_dispatch` | `inputs` in the `POST /dispatches` body |
+| `repository_dispatch` | `client_payload` in the `POST /dispatches` body |
+| `container` | `args` in the digiquant-runner body |
+| `probe` | nothing to send — a probe fetches a URL and takes no input |
+
+**Conflict rule on a GitHub row: the caller's arg wins per key.** The row's
+static `inputs` are the defaults, and each key in `args` overrides that one
+key. Keys `args` does not mention keep the row's value, so a partial override
+cannot blank the rest of the inputs. Before this rule existed, `args` on a
+GitHub row were discarded and the run still answered `200 {ok:true}` with the
+row's static input — a silent wrong-input run.
+
+A key GitHub's workflow does not declare still comes back as GitHub's own
+refusal of the dispatch, surfaced as a legible
+`400 undeclared_workflow_input` naming the key (last row below).
+Hidden (404) unless `CRON_KICK_SECRET` is set. `Authorization: Bearer
+$CRON_KICK_SECRET`, otherwise 401. Body `{ cron, force?, args? }`; every `args`
+value must be a string.
+
+400 responses, each with `error`:
+
+- `invalid_json` — the body did not parse.
+- `invalid_args` — an `args` value was not a string.
+- `cron_required` — `cron` was empty.
+- `undeclared_workflow_input` — GitHub refused the dispatch because a
+  `workflow_dispatch` input key is not declared in the workflow YAML. The body
+  also carries `cron` and a `detail` naming the workflow, the ref and the
+  offending key(s). It is the caller's own input, so it answers 400 and not 500.
+  `dispatchGithub` fails closed on the first attempt: a deterministic refusal
+  is never retried. Only `workflow_dispatch` / `repository_dispatch` rows can
+  reach this; `kind: container` and `kind: probe` never call GitHub unless the
+  job id is in `GITHUB_OVERRIDE_JOBS`.
+
+Every other failure keeps its previous shape. `dispatchGithub` throws, the
+error leaves the route, and the response is the Worker runtime's 500.
+
+
 ## Unique crons
 
 `wrangler.toml` `[triggers].crons` matches `uniqueEnabledCrons()` in order

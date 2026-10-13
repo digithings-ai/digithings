@@ -13,6 +13,7 @@ import type { Env } from "./env";
 import { houseRunDeadlineSeconds, type Job } from "./jobs";
 import { checkHouseRuns, WATCH_TARGET, type HouseRunCheckResult } from "./house-run-watch";
 import { probeUrls, runProbe } from "./probe";
+import { runTwelvexWatch, sessionCatchupDue, type WatchOutcome } from "./twelvex-watch";
 
 const GH_API = "https://api.github.com";
 const GH_API_VERSION = "2022-11-28";
@@ -29,6 +30,10 @@ export type DispatchResult = {
   container_status?: string;
   /** Set only on the watch path (DIG-3065). Absent everywhere else. */
   watch?: HouseRunCheckResult;
+  /** Set only on the twelvex-watch path. */
+  twelvex?: WatchOutcome;
+  /** Set when a gate skipped a workflow_dispatch. */
+  gated?: string;
 };
 
 export function workflowDispatchUrl(repo: string, workflow: string): string {
@@ -70,6 +75,70 @@ function isRateLimited(status: number, body: string): boolean {
   );
 }
 
+/** Error prefix for a 422 that refuses a workflow input GitHub cannot see. */
+export const UNDECLARED_INPUT = "undeclared_workflow_input";
+
+/** Lower-cased fragment of GitHub's message for that 422. */
+const UNDECLARED_INPUT_MARKER = "unexpected inputs provided";
+
+/**
+ * Strings inside a GitHub error body that may carry the message.
+ * Only top-level string values are collected, never object field names: a
+ * field name is GitHub's own schema key, not a workflow input. A body that is
+ * not JSON is used as-is.
+ */
+function messageCandidates(body: string): string[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return [body];
+  }
+  if (typeof parsed === "string") return [parsed];
+  if (parsed === null || typeof parsed !== "object") return [body];
+  const strings = Object.values(parsed as Record<string, unknown>).filter(
+    (value): value is string => typeof value === "string",
+  );
+  return strings.length > 0 ? strings : [body];
+}
+
+/** Quoted tokens inside the first [...] group, as in ["bucket"]. */
+function bracketedKeys(message: string): string[] {
+  const group = /\[[^\]]*\]/.exec(message);
+  if (!group) return [];
+  return Array.from(group[0].matchAll(/["']([^"'\\]+)["']/g), (match) => match[1]);
+}
+
+/** `unexpected key(s) bucket, bucket2 relative to the expected inputs`. */
+function trailingKeys(message: string): string[] {
+  const match = /unexpected key\(s\)\s+(.+?)(?:,?\s+relative to\b|$)/is.exec(message);
+  if (!match) return [];
+  return match[1]
+    .split(",")
+    .map((key) => key.trim().replace(/^["']|["']$/g, ""))
+    .filter((key) => key.length > 0);
+}
+
+function keysFromMessage(message: string): string[] {
+  const bracketed = bracketedKeys(message);
+  return bracketed.length > 0 ? bracketed : trailingKeys(message);
+}
+
+/**
+ * Input keys GitHub refused, or null when this body is not that refusal and
+ * the caller must leave every other 422 alone. [] means recognised but nothing
+ * parseable, so the caller can still refuse loudly without naming a key it
+ * never actually read.
+ */
+function undeclaredInputKeys(body: string): string[] | null {
+  if (!body.toLowerCase().includes(UNDECLARED_INPUT_MARKER)) return null;
+  for (const message of messageCandidates(body)) {
+    const keys = keysFromMessage(message);
+    if (keys.length > 0) return keys;
+  }
+  return [];
+}
+
 function retryDelayMs(response: Response, attempt: number): number {
   const retryAfter = response.headers.get("Retry-After");
   if (retryAfter === null) return attempt * 1_000;
@@ -95,7 +164,12 @@ function usesGithub(job: Job, env: Env): boolean {
   // through to `return true` and be dispatched to GitHub as a workflow — the
   // exact failure the arm exists to prevent, since a watch job's whole contract
   // is that it never starts anything.
-  if (job.kind === "container" || job.kind === "probe" || job.kind === "watch") {
+  if (
+    job.kind === "container" ||
+    job.kind === "probe" ||
+    job.kind === "watch" ||
+    job.kind === "twelvex-watch"
+  ) {
     return githubOverrideIds(env).includes(job.id);
   }
   return true;
@@ -317,16 +391,34 @@ async function dispatchWatch(
  * skipped 202 responses are successful. Probe jobs fetch public URLs in this
  * Worker. DRY_RUN=1 logs and does not call. A job id in GITHUB_OVERRIDE_JOBS
  * uses workflow_dispatch and logs github_override.
+ * opts.args reaches every dispatch path: on a GitHub row it overrides the
+ * row's static inputs per key, on a container row it is sent as args.
  */
 export async function dispatch(
   env: Env,
   job: Job,
   cron: string,
   scheduledTime = 0,
-  opts: { args?: Record<string, string> } = {},
+  opts: { args?: Record<string, string>; force?: boolean } = {},
 ): Promise<DispatchResult> {
   if (usesGithub(job, env)) {
-    if (job.kind === "container" || job.kind === "probe" || job.kind === "watch") {
+    if (job.gate === "twelvex-session-due" && !opts.force && env.DRY_RUN !== "1") {
+      const verdict = await sessionCatchupDue(
+        (input, init) => fetch(input, init),
+        env.GH_DISPATCH_TOKEN,
+        scheduledTime > 0 ? scheduledTime : Date.now(),
+      );
+      logLine({ cron, repo: job.repo, job: job.id, gate: job.gate, due: verdict.due, reason: verdict.reason });
+      if (!verdict.due) {
+        return { ok: true, status: 0, dry_run: false, gated: verdict.reason };
+      }
+    }
+    if (
+      job.kind === "container" ||
+      job.kind === "probe" ||
+      job.kind === "watch" ||
+      job.kind === "twelvex-watch"
+    ) {
       console.error(
         JSON.stringify({
           cron,
@@ -337,13 +429,28 @@ export async function dispatch(
         }),
       );
     }
-    return dispatchGithub(env, job, cron);
+    return dispatchGithub(env, job, cron, opts.args ?? {});
   }
   if (job.kind === "probe") {
     return dispatchProbe(env, job, cron);
   }
   if (job.kind === "watch") {
     return dispatchWatch(env, job, cron, scheduledTime);
+  }
+  if (job.kind === "twelvex-watch") {
+    if (!job.twelvexWatch) throw new Error(`job ${job.id}: twelvex-watch requires twelvexWatch`);
+    if (env.DRY_RUN === "1") {
+      logLine({ cron, repo: job.repo, job: job.id, twelvex_watch: job.twelvexWatch, dry_run: true });
+      return { ok: true, status: 0, dry_run: true };
+    }
+    const out = await runTwelvexWatch(
+      job.twelvexWatch,
+      (input, init) => fetch(input, init),
+      env.GH_DISPATCH_TOKEN,
+      scheduledTime > 0 ? scheduledTime : Date.now(),
+    );
+    logLine({ cron, repo: job.repo, job: job.id, twelvex_watch: job.twelvexWatch, ...out });
+    return { ok: out.ok, status: out.ok ? 200 : 0, dry_run: false, twelvex: out };
   }
   return dispatchContainer(env, job, cron, scheduledTime, opts.args ?? {});
 }
@@ -365,6 +472,7 @@ async function postGithub(
   url: string,
   body: Record<string, unknown>,
   at: DispatchContext,
+  target: string,
 ): Promise<DispatchResult> {
   const token = env.GH_DISPATCH_TOKEN;
   if (!token) {
@@ -396,6 +504,26 @@ async function postGithub(
         attempt,
       });
       return { ok: true, status, dry_run: false };
+    }
+
+    // Ahead of the benign and rate-limit checks on purpose. An undeclared input is
+    // a deterministic refusal: it is not benign and retrying cannot change it.
+    const undeclared = undeclaredInputKeys(text);
+    if (undeclared !== null) {
+      const named = undeclared.length > 0 ? `: ${undeclared.join(", ")}` : "";
+      logLine({
+        cron: at.cron,
+        repo: at.repo,
+        job: at.job,
+        github_status: status,
+        dry_run: false,
+        note: UNDECLARED_INPUT,
+        undeclared_keys: undeclared,
+        error: text.slice(0, 500),
+      });
+      throw new Error(
+        `${UNDECLARED_INPUT}: job ${at.job}: ${target} does not declare the input key(s)${named}. GitHub refused the dispatch, so no run started.`,
+      );
     }
 
     if (status === 422 && isBenign422(text)) {
@@ -475,10 +603,19 @@ export async function dispatchWorkflow(
     return { ok: true, status: 0, dry_run: true };
   }
 
-  return postGithub(env, url, body, at);
+  return postGithub(env, url, body, at, `${target.workflow} on ref ${target.ref}`);
 }
 
-async function dispatchGithub(env: Env, job: Job, cron: string): Promise<DispatchResult> {
+async function dispatchGithub(
+  env: Env,
+  job: Job,
+  cron: string,
+  args: Record<string, string> = {},
+): Promise<DispatchResult> {
+  // A /kick arg is what the caller asked for right now, so it wins over the
+  // row's static value. Keys the caller did not mention keep the row's value,
+  // so a partial override cannot silently blank the rest of the inputs.
+  const inputs: Record<string, string> = { ...(job.inputs ?? {}), ...args };
   if (job.kind !== "repository_dispatch") {
     if (!job.workflow || !job.ref) {
       throw new Error(`job ${job.id}: workflow_dispatch requires workflow and ref`);
@@ -489,7 +626,7 @@ async function dispatchGithub(env: Env, job: Job, cron: string): Promise<Dispatc
       repo: job.repo,
       workflow: job.workflow,
       ref: job.ref,
-      inputs: job.inputs ?? {},
+      inputs,
     });
   }
 
@@ -497,7 +634,7 @@ async function dispatchGithub(env: Env, job: Job, cron: string): Promise<Dispatc
     throw new Error(`job ${job.id}: repository_dispatch requires event_type`);
   }
   const url = repositoryDispatchUrl(job.repo);
-  const body: Record<string, unknown> = { event_type: job.event_type, client_payload: {} };
+  const body: Record<string, unknown> = { event_type: job.event_type, client_payload: inputs };
 
   if (env.DRY_RUN === "1") {
     logLine({
@@ -512,5 +649,11 @@ async function dispatchGithub(env: Env, job: Job, cron: string): Promise<Dispatc
     return { ok: true, status: 0, dry_run: true };
   }
 
-  return postGithub(env, url, body, { cron, repo: job.repo, job: job.id });
+  return postGithub(
+    env,
+    url,
+    body,
+    { cron, repo: job.repo, job: job.id },
+    `repository_dispatch ${job.event_type} on ${job.repo}`,
+  );
 }

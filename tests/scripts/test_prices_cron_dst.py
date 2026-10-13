@@ -64,7 +64,7 @@ def worker_jobs() -> dict[str, str]:
     # this regex cannot name is a cron wrangler.toml declares and JOBS does not,
     # which is exactly what the parity assertion below is there to catch.
     pairs = re.findall(
-        r'(?:wd|rd|cj|pj|wj)\(\s*"([^"]+)"\s*,\s*"([^"]+)"',
+        r'(?:wd|rd|cj|pj|wj|tw)\(\s*"([^"]+)"\s*,\s*"([^"]+)"',
         JOBS_SOURCE.read_text(encoding="utf-8"),
         flags=re.DOTALL,
     )
@@ -144,7 +144,7 @@ def _configured_crons() -> list[str]:
 def _enabled_worker_crons_in_order() -> list[str]:
     """Unique enabled crons in JOBS source order (same as uniqueEnabledCrons())."""
     text = JOBS_SOURCE.read_text(encoding="utf-8")
-    call = re.compile(r'(?:wd|rd|cj|pj|wj)\(\s*"([^"]+)"\s*,\s*"([^"]+)"')
+    call = re.compile(r'(?:wd|rd|cj|pj|wj|tw)\(\s*"([^"]+)"\s*,\s*"([^"]+)"')
     matches = list(call.finditer(text))
     ordered: list[str] = []
     seen: set[str] = set()
