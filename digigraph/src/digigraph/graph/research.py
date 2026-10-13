@@ -38,6 +38,26 @@ from digigraph.trace_events import merge_rag_sources_accumulator
 logger = logging.getLogger(__name__)
 
 
+
+_MAX_CONTINUATIONS = 2
+_CONTINUE_PROMPT = (
+    "Your last message stopped before the answer was complete. Continue now: call "
+    "the tools you still need (skills are loaded with get_skill; ticket data comes "
+    "from the zammad tools), then give the complete final answer."
+)
+_UNFINISHED_TAIL = re.compile(
+    r"(?:\b(?:let me|let's|i will|i'll|i am going to|i'm going to|now i|next,? i|lass mich|ich werde)\b[^.!?]{0,120}|[:,;\-\u2014])\s*$",
+    re.IGNORECASE,
+)
+
+
+def answer_looks_unfinished(content: str | None) -> bool:
+    """True for an answer that ends mid-intent (e.g. a trailing "Let me")."""
+    text = (content or "").strip()
+    if not text:
+        return True
+    return bool(_UNFINISHED_TAIL.search(text[-200:]))
+
 def _safe_stream_writer() -> StreamWriter:
     """get_stream_writer() raises RuntimeError when called outside a compiled graph's
     invocation (e.g. a unit test calling a node function directly, bypassing
@@ -589,6 +609,24 @@ def _run_document_rag_path(
         if forced
         else ("required" if (state.get("require_tool_calls") or mcp_force) else "auto"),
     )
+    # A turn that stops mid-intent ("... Let me") after a tool error is not an
+    # answer: give the model up to two more tool-enabled passes to finish it
+    # (DIG-1210). The streamed prefix stays; the continuation appends to it.
+    for _ in range(_MAX_CONTINUATIONS):
+        if not answer_looks_unfinished(content):
+            break
+        llm_messages.append({"role": "assistant", "content": content})
+        llm_messages.append({"role": "user", "content": _CONTINUE_PROMPT})
+        more = run_tools(
+            model=get_model_for_mode(),
+            messages=llm_messages,
+            tools=tools_for_llm,
+            execute_tool=execute_search,
+            max_tool_rounds=4,
+            on_tool_step=stream_callback,
+            tool_choice="auto",
+        )
+        content = f"{content}{more}" if more else content
 
     planning_mode = bool(cfg.get_planning_mode()) if cfg else False
     plan = state.get("plan") if isinstance(state.get("plan"), list) else None
