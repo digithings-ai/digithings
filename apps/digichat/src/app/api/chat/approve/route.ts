@@ -164,8 +164,10 @@ export async function POST(req: Request): Promise<Response> {
   if (refusal) return refusal;
 
   const authResult = await requireDigiChatAuth(req);
-  if (!authResult.ok) return authResult.response as Response;
-  const { tenantSlug, ownerUserSub } = await resolveChatTenantContext(req, authResult);
+  if (authResult instanceof Response) return authResult;
+  const tenantCtx = await resolveChatTenantContext(req, authResult);
+  if (tenantCtx instanceof Response) return tenantCtx;
+  const { tenantSlug, ownerUserSub } = tenantCtx;
 
   const sessionId = sessionIdOf(req);
   if (!sessionId) {

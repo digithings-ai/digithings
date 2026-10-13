@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { mockAuthCtx } from "@/test/route-auth-mock";
+import { mockAuthCtx, unauthorizedResponse } from "@/test/route-auth-mock";
 import { POST, DIGIGRAPH_MCP_DECISION_PATH } from "./route";
 
 vi.mock("@/lib/request-auth", () => ({ requireDigiChatAuth: vi.fn() }));
@@ -40,7 +40,7 @@ let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(requireDigiChatAuth).mockResolvedValue({ ok: true, ...mockAuthCtx } as never);
+  vi.mocked(requireDigiChatAuth).mockResolvedValue(mockAuthCtx as never);
   vi.mocked(resolveChatTenantContext).mockResolvedValue({
     tenantSlug: "acme",
     ownerUserSub: "user-1",
@@ -138,10 +138,7 @@ describe("POST /api/chat/approve", () => {
   });
 
   it("requires authentication", async () => {
-    vi.mocked(requireDigiChatAuth).mockResolvedValue({
-      ok: false,
-      response: new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 }),
-    } as never);
+    vi.mocked(requireDigiChatAuth).mockResolvedValue(unauthorizedResponse as never);
     const res = await POST(request({ pendingId: PENDING_ID, decision: "approve" }));
     expect(res.status).toBe(401);
     expect(fetchMock).not.toHaveBeenCalled();
