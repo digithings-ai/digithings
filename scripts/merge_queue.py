@@ -223,7 +223,7 @@ def fetch_queue(repo: str, base: str, limit: int) -> list[dict[str, Any]]:
         "--json",
         "number,title,headRefName,headRefOid,baseRefName,isDraft,mergeable,"
         "mergeStateStatus,statusCheckRollup,reviewDecision,author,createdAt,reviews,"
-        "comments,commits",
+        "comments,commits,labels",
     )
     if not isinstance(prs, list):
         raise QueueError(f"gh pr list did not return a list for {repo}:{base}")
@@ -495,6 +495,109 @@ def _gate_review(pr: dict[str, Any], acting_role: str, attest_role: str | None) 
     return reasons
 
 
+def _coverage_module() -> Any:
+    """scripts/check_review_coverage.py: the main gate's hatch vocabulary.
+
+    Imported lazily so the label names, the marker, and the comment matching
+    have exactly one source of truth: whatever the promotion gate accepts here
+    is what this queue enforces. The module is stdlib-only with no import-time
+    side effects, so importing it changes nothing about this script's startup.
+    """
+    scripts_dir = str(Path(__file__).resolve().parent)
+    if scripts_dir not in sys.path:
+        sys.path.insert(0, scripts_dir)
+    import check_review_coverage
+
+    return check_review_coverage
+
+
+def _label_names(pr: dict[str, Any]) -> set[str]:
+    """Label names on a `gh pr list --json labels` row (dicts) or a test fixture."""
+    names: set[str] = set()
+    for label in pr.get("labels") or []:
+        name = label.get("name") if isinstance(label, dict) else label
+        if name:
+            names.add(str(name))
+    return names
+
+
+def _gate_review_coverage(pr: dict[str, Any], repo: str | None) -> list[str]:
+    """The promotion gate's evidence, enforced at merge time.
+
+    `scripts/check_review_coverage.py` refuses an unreviewed commit at promotion;
+    the queue merged such commits twice in one night as PR #5526 (a
+    `reviewed:agent` claim with no findings comment, DIG-3154) and PRs #5489 /
+    #5277 via `--attest-review` with no review artifact at all (this issue's
+    reopen). The failure in all three cases is the same: the queue accepted
+    something the promotion gate rejects. So the queue judges the exact same
+    evidence — a completed Bot run, an approval, a Bot review, an in-session
+    review with its findings comment, or `reviewed:owner` — by calling the main
+    gate's own `verdict_for` on the already-fetched PR dict.
+
+    Two deliberate properties worth stating plainly:
+
+    * `--attest-review` no longer substitutes for review evidence. Both
+      reopen cases merged attested by `qa` with zero reviews and zero
+      comments; attestation is an assertion, and an assertion with no artifact
+      is exactly what the promotion gate refuses. The attestation mechanism
+      itself is unchanged — it still satisfies `_gate_review` — but it does
+      not satisfy this gate.
+    * Comments are fetched lazily and only when a `reviewed:agent` label makes
+      them load-bearing (`fetch_queue` carries labels but not comments). An
+      unreadable comments read fails closed, for the same reason an absent
+      check fails closed: the alternative reads "no evidence" as "approved".
+    """
+    crc = _coverage_module()
+    labels = _label_names(pr)
+    comments = pr.get("comments")
+    if crc.AGENT_REVIEW_LABEL in labels and comments is None:
+        if repo is None:
+            return [
+                "review coverage: `reviewed:agent` is set but the findings "
+                "comment cannot be verified without a repo to read it from"
+            ]
+        try:
+            data = _gh_json(
+                "pr",
+                "view",
+                str(pr.get("number")),
+                "--repo",
+                repo,
+                "--json",
+                "comments",
+            )
+        except QueueError:
+            return [
+                "review coverage: `reviewed:agent` is set but its findings "
+                "comment could not be read"
+            ]
+        comments = (data or {}).get("comments") or []
+    state: dict[str, Any] = {
+        "labels": labels,
+        "approvals": [],
+        "bugbot": None,
+        "title": str(pr.get("title") or ""),
+        "owner_review": None,
+        "agent_tool": [],
+        "agent_review": None,
+    }
+    crc._apply_reviews_checks_comments(
+        state,
+        reviews=pr.get("reviews") or [],
+        checks=pr.get("statusCheckRollup") or [],
+        comments=comments if isinstance(comments, list) else [],
+    )
+    reviewed, why = crc.verdict_for(state)
+    if reviewed:
+        return []
+    return [
+        f"review coverage: {why} — the queue enforces the same evidence "
+        "scripts/check_review_coverage.py enforces at promotion "
+        "(completed Bot run, approval, Bot review, in-session findings, or "
+        "reviewed:owner)"
+    ]
+
+
 def evaluate(
     pr: dict[str, Any],
     policy: Policy,
@@ -502,6 +605,7 @@ def evaluate(
     base: str,
     acting_role: str,
     attest_role: str | None,
+    repo: str | None = None,
 ) -> Verdict:
     """Apply every gate to one PR. Returns the verdict, including why it failed."""
     reasons: list[str] = []
@@ -531,6 +635,7 @@ def evaluate(
 
     reasons.extend(_gate_checks(pr, policy))
     reasons.extend(_gate_review(pr, acting_role, attest_role))
+    reasons.extend(_gate_review_coverage(pr, repo))
 
     rollup = pr.get("statusCheckRollup") or []
     return Verdict(
@@ -554,10 +659,11 @@ def evaluate_all(
     base: str,
     acting_role: str,
     attest_role: str | None,
+    repo: str | None = None,
 ) -> list[Verdict]:
     """Every PR, in queue order, with its verdict."""
     verdicts = [
-        evaluate(pr, policy, base=base, acting_role=acting_role, attest_role=attest_role)
+        evaluate(pr, policy, base=base, acting_role=acting_role, attest_role=attest_role, repo=repo)
         for pr in prs
     ]
     verdicts.sort(key=Verdict.order_key)
@@ -732,6 +838,7 @@ def main(argv: list[str] | None = None) -> int:
                 base=args.base,
                 acting_role=args.acting_role,
                 attest_role=args.attest_review,
+                repo=args.repo,
             )
 
         if args.command == "list":

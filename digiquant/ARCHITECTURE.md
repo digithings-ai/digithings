@@ -46,7 +46,18 @@ NautilusTrader is the sole backtest and live-trade execution engine. Its key pro
 
 The Polars-to-pandas boundary in `nautilus_runner.py` is a deliberate, documented exception to the "Polars only" rule. Nautilus's `BarDataWrangler.process()` requires a pandas DataFrame with a `timestamp` UTC index. All other data handling in digiquant (CSV loading, account report parsing, result assembly) uses Polars.
 
-**Version pinning:** `nautilus_trader` is pinned to `>=1.190,<2` in `pyproject.toml`. The 2.x series introduced an async-first API surface with breaking changes to `BacktestEngine.run()` and the Actor registration model.
+**Version pinning and lockfile authority ([ADR-0033](../docs/adr/0033-nautilus-trader-exact-pin.md)):**
+
+`nautilus_trader` is pinned **exactly** to `==1.230.0` in `pyproject.toml`. This is the build we ship. Do not widen it back to a range.
+
+- **Why exact.** A *minor* bump inside the old `>=1.190,<2` range moved the Python-visible return type of `PortfolioAnalyzer.realized_pnls()` between 1.228.0 and 1.230.0. Our honesty envelope reads that value, so a ranged pin meant "silently moves" rather than "compatible". This is a deliberate, recorded exception to the root `AGENTS.md` rule that runtime deps stay unbounded — the root rule's own escape hatch applies (a known incompatibility, with the reason commented next to the pin).
+- **One lock: the repo-root `uv.lock`.** It is the single authoritative lock for the whole uv workspace; `digiquant` is a `[tool.uv.workspace]` member. **No module ships its own `uv.lock`.** `digiquant/uv.lock` was deleted under ADR-0033 — it was inert (68 packages against the root lock's 297), referenced by nothing, and last touched at the April 2026 baseline; uv resolves the workspace root and never opened it. If you find a module-level `uv.lock`, it is dead weight that reads as a pin but pins nothing — delete it and say so in an ADR.
+- **Why the pin, not the lock, is the shipping control.** `digiquant/Dockerfile` copies only `digiquant/pyproject.toml` and runs `uv pip install --system -e ".[nautilus]"`. No lockfile is copied and `uv pip install` does not read `uv.lock`. So the `==1.230.0` in `pyproject.toml` is the **only** thing that pins `nautilus_trader` in that image — the one `docker-compose.yml` builds. Before ADR-0033 it resolved whatever was newest on PyPI at build time. **Scope of that claim:** the image is *not* reproducible. `polars`, `optuna`, `cryptography`, `fastapi`, `uvicorn`, `langgraph`, `httpx`, `requests`, `statsmodels` and every transitive dependency of `nautilus_trader` itself still float, so a rebuild of an unchanged commit produces different bytes. **The pin reaches one build surface, not the whole service:** the Cloudflare Workers stack builds `digiquant/Dockerfile.mcp`, which installs `[research,mcp]` with no `nautilus` extra, and `Dockerfile.digiquant-runner` already installs `--frozen` from the root lock. Nothing in the repository publishes this image — `publish-service-images.yml` was removed in `f54af7052` — so there is no `:latest` or `:v0.1.0` tag being overwritten; the live consequence of that removal is that `infra/self-host/compose.ghcr.yml:34-36` pulls a tag nobody publishes. ADR-0033 names reproducibility as open work, not as fixed.
+- **CI is frozen to the root lock.** 35 of the 40 `uv sync` invocations across 29 workflow files use `--frozen`. `test-digiquant.yml` syncs without the nautilus extra on purpose (Linux SIGABRT, #42); `test-nautilus.yml` is the mirror lane that does include it. Both run from the repo root. Editing a manifest without re-locking desyncs the lock and breaks every `--frozen` lane.
+- **Known gap.** A local venv that was not re-synced still runs whatever it installed. Local == CI only after `uv sync --frozen --package digiquant --extra nautilus`.
+- **Bumping is deliberate, with a checklist** — change the pin, `uv lock` at the repo root, read the diff (more than the `nautilus-trader` specifier line means stop), verify `uv lock --check` from the root and from inside `digiquant/`, update the version named here and in `AGENTS.md`, run the DIG-937 analyzer-shape matrix, and amend or supersede ADR-0033.
+
+The 2.x series introduced an async-first API surface with breaking changes to `BacktestEngine.run()` and the Actor registration model; the exact pin is also what keeps us off it.
 
 **Linux CI crash (SIGABRT / exit 134) — tracked in #42:**
 `BacktestEngine.run()` registers C++-level SIGTERM/SIGINT handlers in its Rust runtime. On Linux, `uvicorn[standard]` installs `uvloop` and sets it as the global asyncio event loop policy, which also claims those POSIX signal handlers via libuv. When both runtimes attempt to own signal handling, a C-level assertion fires → SIGABRT. Mitigation: `tests/dq/conftest.py` resets the asyncio policy to `DefaultEventLoopPolicy` before the dq suite runs, preventing uvloop from conflicting with Nautilus's signal registration. The three integration tests that run a real `BacktestEngine` are skipped on Linux CI (`CI=true`) until the per-component test suite (#43) re-enables pytest and the fix is confirmed green on Ubuntu.
@@ -627,6 +638,92 @@ one frozen monthly series fires. Composes with `_macro_leg_dead` orthogonally �
 death = all slow series silent; staleness = any series' as_of outside its window.
 Limits: (1) undeclared cadence defaults to 45d; (2) calendar days, not trading days.
 
+**What this guard alone does not cover.** It closes the unanimous `history-only` shape only,
+and only over series the manifest actually declared. Read alongside the `_macro_as_of_stale`
+age guard, which covers the other two:
+
+| Shape | Why the guard cannot see it | Status |
+|---|---|---|
+| Partial leg (2 or 3 of 4 slow series dead) | indistinguishable from a rate-limit blip *while the silent series' seals are still inside their own windows*; a subset is not evidence of a mode, but each of them is evidence of its own age | accepted, by design **only while those seals are fresh**; DIG-2405 then names each one individually on its own age |
+| Panel serving stale rows in-window | outcome is `up-to-date`, not a soft fail, so it never enters the reduction | **closed (DIG-1142) — built as `_macro_as_of_stale`** |
+| Single **slow-cadence** series in the manifest | the `> 1` floor counts exempt ids, not manifest size — an 8-series panel with one monthly series has a frozen slow leg and cannot trip it | closed by DIG-1137 + DIG-2405 (`_macro_as_of_stale`; the `> 1` floor stands) |
+| Unreadable manifest | `_resolve_macro_specs` swallows the exception and returns `[]`, so `exempt` is empty and the guard has no ids to reason about | **open, pre-dates this guard** |
+
+The `> 1` floor stands. A single-series manifest still has no leg to judge, and a single
+silent series among several is not a mode-based death the leg test can see — the DIG-2405
+decision below is that it *is* worth naming, but it is named by measuring the seal's age,
+not by relaxing unanimity. Relaxing it would fire on every rate-limit blip.
+
+DIG-1137 / DIG-2405 close the two sibling routes by measuring rather than trusting
+`mode`. `_macro_as_of_stale(outcomes, macro_specs, run, already)` compares each macro
+outcome's `as_of` against the run date, in calendar days, against the same
+`_CADENCE_WINDOW_DAYS` bound the live fetch already used. It reads
+`_MACRO_JUDGED_MODES` = the success modes (a vendor that keeps *answering* while it stops
+*publishing* lands on `up-to-date`) plus `MODE_HISTORY_ONLY`, and skips `MODE_ERROR`
+because that mode is never cadence-exempt and is therefore already loud. The
+`history-only` inclusion is the DIG-2405 half: a retired slow series arrives in that mode
+with an abandoned seal, the #4621 exemption forgives it on cadence alone, and
+`_macro_leg_dead` needs unanimity over the whole exempt set, so one retired series among
+live ones was named by nothing. Age separates the two cases that mode cannot, because an
+empty window and a fresh seal are a quiet release cycle while an empty window on a
+*stale* seal is a retirement. `already` keeps a series both guards reached named once. The
+bound is each series' own window, not a widened threshold: a monthly series sealed 34 days
+old is still quiet.
+
+The unreadable manifest is still open. It needs its own fix — a loud outcome rather than an
+empty spec list — because with no specs there are no ids for any of these guards to reason
+about, whichever mode they read.
+
+**Design record for the frozen-but-serving panel (DIG-1142).** Recorded here because the
+summary above does not carry the reasoning. **Shipped** as `_macro_as_of_stale`; the shape
+below is what it shipped as.
+
+The gap is that `refresh_macro_series` returns `MODE_UP_TO_DATE` with `as_of=seal` whenever
+the live window is non-empty but carries nothing newer than the seal. `up-to-date` is not in
+`_SOFT_FAIL_MODES` and is not `history-only`, so the outcome never enters the reduction and
+the run exits 0 claiming fresh. Two healthy paths reach that same shape: a same-day FRED
+restatement (`MODE_FULL_REPULL`, `as_of=top2 == seal`) and an unchanged overlap that then
+finds nothing new.
+
+`_macro_as_of_stale(outcomes, macro_specs, run) -> set[str]`, defined next to
+`_live_window_days` and called in `main` between the `failed` list and `stale = ...`:
+
+- **Predicate.** For each macro series, take the declared cadence from `macro_specs`
+  (ticker key is `f"{source}__{series}"`, matching `_slow_macro_exempt_ids`), resolve the
+  window with the existing `_live_window_days`, and report the series when
+  `(run_date - as_of).days > window`. Age against the series' own window, **never**
+  `as_of == seal` and never `mode` — the two restatement paths above are healthy, so keying
+  on either would fail a healthy panel.
+- **Mode filter.** Success modes only (`MODE_UP_TO_DATE`, `MODE_INCREMENTAL`,
+  `MODE_FULL_REPULL`). `history-only` and `error` are already `_SOFT_FAIL_MODES` and stay
+  with `_macro_leg_dead`; an empty `as_of` is skipped rather than guessed.
+- **No declared cadence** defaults to the 45-day daily window via `_live_window_days`,
+  matching the live-fetch default rather than inventing a second one.
+- **Calendar days, not trading days.** `_CADENCE_WINDOW_DAYS` is calendar days (45/120/240).
+  `staleness_gate` (`digiquant/src/digiquant/data/prices/refresh_gate.py:49`) counts *open
+  trading days* against `bound_trading_days=5`; reusing it per series would call a 120-day
+  monthly series fresh after ~5 trading days. The file already has `_shift_days` for
+  calendar arithmetic.
+- **Per-outcome, composing with `_macro_leg_dead`.** `_macro_leg_dead` judges the leg
+  (`history-only` on every exempt series at once); this judges one series' age. They are
+  orthogonal, and the new names only ever *add* to `failed` — the guard never turns a stale
+  run fresh. **The DIG-981 "a subset is not evidence" reasoning does not carry over to age.**
+  That reasoning was about `history-only`, which has two causes (exhausted publication
+  window vs. per-series vendor refusal) where a rate-limit blip silences an arbitrary subset,
+  so a subset proves nothing. Age has one cause — the series is old — and it is measured, not
+  inferred from a mode. A single frozen monthly series past its window is evidence by
+  itself; the #4621 fuse already draws the line, fresh inside the window and loud outside it.
+  At 34 days the seal is still inside the 120-day window and the run **should** exit 0.
+- Staleness flag only. No money, rate or weight arithmetic, matching the other guards here.
+
+**Known limits accepted for this guard.** Both are recorded rather than fixed, in the same
+spirit as the two above:
+
+| Limit | Why it stays |
+|---|---|
+| Undeclared cadence is judged at the 45-day daily window | the manifest is the source of truth; omitting `cadence` opts into the daily default, so a genuinely monthly series missing it goes loud at 45 days |
+| The window is calendar days, not open trading days | deliberate, and consistent with `_CADENCE_WINDOW_DAYS`; reusing `staleness_gate` would fire ~5 trading days into a 120-day window |
+
 #### Market-data R2 read path (#3780 Task 10)
 
 `DIGIQUANT_MARKET_DATA_BACKEND=r2` routes the price/macro tools through
@@ -791,9 +888,11 @@ validate. Ported from LuxAlgo edge-stats `stats.ts` (MIT — code only, no
 disclaimer (`DISCLAIMER`). Every HTML tearsheet win-rate surface renders N +
 95% CI via `format_honest_rate` — categorized/full/risk stats tables, the KPI
 strip (thresholds act on the CI lower bound, not the point estimate), and the
-win/loss donut (caller-counted `(k, n)` from realized fills, never
-`round(rate * n)`). `BacktestResult` is untouched, so no model versioning was
-needed. Tests: `tests/dq/test_honesty.py` (upstream golden vectors),
+win/loss donut, whose `k` is caller-counted from realized **round trips**
+(`count_winning_trades(realized_pnls_series)`, counting `PnL > 0`) while its `n`
+is the **fill** count `num_trades` — so the pair is not a like-for-like sample,
+and the donut must never fall back to `round(rate * n)` as an observed count).
+Tests: `tests/dq/test_honesty.py` (upstream golden vectors),
 `tests/dq/test_tearsheet_honesty.py` (per-surface N + CI assertions).
 
 Existing published fixtures stay at older schema versions (no `ohlc_bars`, blank `entry_label`, no `signal_delay_days`) until regenerated, so consumers must tolerate all versions.
