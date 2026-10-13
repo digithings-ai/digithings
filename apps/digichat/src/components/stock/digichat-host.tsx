@@ -37,6 +37,7 @@ import {
   BootLabOverlay,
   type BootLabVariant,
 } from "@digithings/ui/chat/boot-lab";
+import { WarmupStatus } from "@/components/stock/warmup-status";
 import { DigichatBootLoader } from "@digithings/ui/chat/boot-loader";
 import type { DigichatHandoff } from "@digithings/ui/chat/boot-signal";
 import type {
@@ -259,6 +260,7 @@ export function DigiChatHost({
                 className="relative flex min-h-0 min-w-0 flex-1 flex-col"
 
               >
+                <WarmupStatus />
                 {ownsPage || clientConfig.chrome.skin === "digichat" ? null : headerSlot}
                 {!ownsPage && sessionKey && clientConfig.chrome.mode === "app" ? (
                   <ToolCatalogBar
