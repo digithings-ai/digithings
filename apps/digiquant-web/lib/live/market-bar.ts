@@ -10,9 +10,11 @@
  * per IP, 100 client msgs/s per IP: we open one socket and send one subscribe.
  *
  * The rest of the baseline universe (ETFs, commodities, currencies, crypto)
- * comes from official `/benchmarks`, then the R2 close archive. A symbol
- * neither source returns is left off the tape. Prices and percents are never
- * invented. The first paint has no quotes until a source returns one.
+ * comes from official `/benchmarks`, then the R2 close archive, refreshed on
+ * a 20s cadence. That archive plus the Coinbase ticker is the interim tape
+ * until the Gloomberb quote tool from DIG-3313 is wired into this page.
+ * A symbol neither source returns is left off the tape. Prices and percents
+ * are never invented. The first paint has no quotes until a source returns one.
  */
 import { useEffect, useState } from "react";
 import { officialGet, tapeFromBenchmarks } from "@/lib/official-api";
@@ -32,6 +34,8 @@ export const BACKOFF_BASE_MS = 1_000;
 export const BACKOFF_MAX_MS = 30_000;
 const STATUS_TICK_MS = 1_000;
 const FLUSH_MS = 400;
+/** Archive quote refresh. Inside the 15–30s band from the landing brief. */
+export const QUOTE_REFRESH_MS = 20_000;
 /** Failed attempts with no tick ever before the bar reads "offline". */
 const OFFLINE_AFTER_FAILURES = 3;
 
@@ -150,8 +154,17 @@ export function equityCell(symbol: string, series: { date: string; price: number
   if (series.length === 0) return null;
   const sorted = [...series].sort((a, b) => a.date.localeCompare(b.date));
   const last = sorted[sorted.length - 1];
-  const prev = sorted.length > 1 ? sorted[sorted.length - 2].price : null;
-  const changePct = prev !== null && prev > 0 ? ((last.price - prev) / prev) * 100 : null;
+  // The close feed repeats the last print across later dates, so the adjacent
+  // pair is often identical and the tape would read 0%. Compare with the last
+  // different close; a series that never moves stays without a percent.
+  let baseline: number | null = null;
+  for (let i = sorted.length - 2; i >= 0; i--) {
+    if (sorted[i].price !== last.price) {
+      baseline = sorted[i].price;
+      break;
+    }
+  }
+  const changePct = baseline !== null && baseline > 0 ? ((last.price - baseline) / baseline) * 100 : null;
   return {
     symbol,
     kind: "equity",
@@ -345,8 +358,8 @@ export function createCryptoFeed(opts: CryptoFeedOptions): CryptoFeed {
 
 const INITIAL: MarketBarState = { cells: [], status: "connecting", asOf: null };
 
-/** Matches the R2 worker cap in `fetchCloseSeries`. */
-const CLOSE_BATCH = 25;
+/** `/benchmarks` rejects a list longer than 20 symbols. */
+const BENCHMARK_BATCH = 20;
 
 export function isQuotedCell(cell: MarketCell): boolean {
   return Number.isFinite(cell.price) && cell.price > 0;
@@ -403,8 +416,8 @@ function cellFromPoints(symbol: string, points: { date: string; price: number }[
 
 async function loadArchiveQuotes(symbols: readonly string[]): Promise<MarketCell[]> {
   const found = new Map<string, MarketCell>();
-  for (let i = 0; i < symbols.length; i += CLOSE_BATCH) {
-    const batch = symbols.slice(i, i + CLOSE_BATCH);
+  for (let i = 0; i < symbols.length; i += BENCHMARK_BATCH) {
+    const batch = symbols.slice(i, i + BENCHMARK_BATCH);
     const read = await officialGet("/benchmarks", { tickers: batch.join(",") });
     if (!read.ok) continue;
     const series = tapeFromBenchmarks(read.body);
@@ -427,23 +440,28 @@ async function loadArchiveQuotes(symbols: readonly string[]): Promise<MarketCell
 
 export function useMarketBar(): MarketBarState {
   const [archive, setArchive] = useState<{ symbols: string[]; cells: MarketCell[] }>({
-    symbols: [],
+    symbols: [...TAPE_SYMBOLS],
     cells: [],
   });
   const [crypto, setCrypto] = useState<MarketBarState>(INITIAL);
 
   useEffect(() => {
     let cancelled = false;
-    void loadTapeUniverse()
-      .then((symbols) => loadArchiveQuotes(symbols).then((cells) => ({ symbols, cells })))
-      .then((next) => {
-        if (!cancelled) setArchive(next);
-      })
-      .catch(() => {
-        /* symbols without a quote stay unavailable */
-      });
+    const load = () => {
+      void loadTapeUniverse()
+        .then((symbols) => loadArchiveQuotes(symbols).then((cells) => ({ symbols, cells })))
+        .then((next) => {
+          if (!cancelled) setArchive(next);
+        })
+        .catch(() => {
+          /* symbols without a quote stay unavailable */
+        });
+    };
+    load();
+    const timer = setInterval(load, QUOTE_REFRESH_MS);
     return () => {
       cancelled = true;
+      clearInterval(timer);
     };
   }, []);
 

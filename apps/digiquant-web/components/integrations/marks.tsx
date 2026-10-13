@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { siBinance, siCoinbase, siSupabase } from "simple-icons";
+import { siBinance, siCloudflare, siCoinbase, siOptuna, siStripe, siSupabase } from "simple-icons";
 
 /** Marks for the integrations band. DigiThings, LuxAlgo and NautilusTrader use
  *  the vendors' own assets: the digithings favicon, the LuxAlgo app icon, and the
@@ -89,7 +89,10 @@ export type RowProviderId =
   | "yahoo"
   | "fred"
   | "supabase"
-  | "binance";
+  | "binance"
+  | "cloudflare"
+  | "stripe"
+  | "optuna";
 
 interface SimpleIcon {
   hex: string;
@@ -103,19 +106,26 @@ interface SimpleIcon {
  * so a mark is monochrome by construction and takes the row's ink colour on any
  * surface.
  *
- * A provider with NO entry here is a real gap, not a rendering failure to paper
- * over. Simple Icons 15.18.0 carries no official path for Alpaca, Interactive
- * Brokers, Kraken, Tradier, Yahoo Finance or FRED; public/marks/ holds only the
- * LuxAlgo and NautilusTrader assets; and the vendor sites serve favicons
- * (16–32px ICOs) or full-colour app icons rather than an official monochrome SVG.
- * Those rows keep the plain lozenge on purpose. A recoloured favicon or a
- * hand-drawn monogram is not the vendor's mark, and a scraped one carries no
- * provenance — so the missing six are named rather than faked.
+ * Simple Icons 15.18.0 has no path for Alpaca, Interactive Brokers, Kraken,
+ * Tradier, Yahoo Finance or FRED. Those rows use initials (DIG-3314). The
+ * initials are not a redraw of the vendor logo.
  */
 const ROW_MARKS: Partial<Record<RowProviderId, SimpleIcon>> = {
   coinbase: siCoinbase,
   supabase: siSupabase,
   binance: siBinance,
+  cloudflare: siCloudflare,
+  stripe: siStripe,
+  optuna: siOptuna,
+};
+
+const ROW_MONOGRAM: Partial<Record<RowProviderId, string>> = {
+  alpaca: "Al",
+  ibkr: "IB",
+  kraken: "Kr",
+  tradier: "Tr",
+  yahoo: "Y!",
+  fred: "F",
 };
 
 /** The official monochrome path for a row provider, or null when none exists. */
@@ -123,21 +133,33 @@ export function rowMark(id: RowProviderId): SimpleIcon | null {
   return ROW_MARKS[id] ?? null;
 }
 
-/** The row glyph: an official monochrome path, or nothing at all. */
+/** The row glyph: an official monochrome path, or initials when none exists. */
 export function RowMark({ id, size = 14 }: { id: RowProviderId; size?: number }) {
   const mark = rowMark(id);
-  if (!mark) return null;
+  if (mark) {
+    return (
+      <svg
+        viewBox="0 0 24 24"
+        width={size}
+        height={size}
+        aria-hidden="true"
+        focusable="false"
+        className="shrink-0"
+      >
+        <path d={mark.path} fill="currentColor" />
+      </svg>
+    );
+  }
+  const letter = ROW_MONOGRAM[id];
+  if (!letter) return null;
   return (
-    <svg
-      viewBox="0 0 24 24"
-      width={size}
-      height={size}
+    <span
       aria-hidden="true"
-      focusable="false"
-      className="shrink-0"
+      className="inline-grid shrink-0 place-items-center border border-current font-mono font-medium leading-none"
+      style={{ width: size, height: size, fontSize: Math.max(7, Math.round(size * 0.42)) }}
     >
-      <path d={mark.path} fill="currentColor" />
-    </svg>
+      {letter}
+    </span>
   );
 }
 

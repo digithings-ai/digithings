@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { IntegrationsBand } from "@/app/_bands/integrations";
+import { IntegrationsBand, PACKAGES_A, PACKAGES_B } from "@/app/_bands/integrations";
 import { rowMark, type RowProviderId } from "@/components/integrations/marks";
 
 describe("IntegrationsBand", () => {
@@ -16,7 +16,7 @@ describe("IntegrationsBand", () => {
     expect(html).toContain('href="https://nautilustrader.io/"');
     expect(html).toContain('href="https://digithings.ai"');
     expect(html).toContain("NautilusTrader");
-    expect(html).toContain("The live chart is the hero");
+    expect(html).toContain("market data");
   });
 
   it("does not mount the LuxAlgo library demo", () => {
@@ -29,49 +29,39 @@ describe("IntegrationsBand", () => {
     expect(html).not.toContain("The hero chart is live LuxAlgo Vela");
   });
 
-  it("uses the digithings hero wordmark and the modules this stack runs", () => {
-    expect(html).toContain("pixel-word-hero");
-    expect(html).toContain('aria-label="digithings"');
-    expect(html).toContain("The platform that drives the agentic side of digiquant.");
-    expect(html).toContain("digigraph");
-    expect(html).toContain("Orchestrates the research and portfolio runs.");
-    expect(html).toContain("digichat");
-    expect(html).toContain("The chat where a strategy idea starts.");
-    expect(html).toContain("digillm");
-    expect(html).toContain("digikey");
-    expect(html).toContain("digibase");
-    expect(html).toContain("digifetch");
-    expect(html).not.toContain("favicon-dg.svg");
-    expect(html).not.toMatch(/12x|fx hub/i);
-    expect(html).not.toContain("M-9 -5.5 -2 0 -9 5.5");
-  });
-
-  it("drops the big digiquant hero and the emblem icons; every module tile shows its own small banner", () => {
-    expect(html).not.toContain('aria-label="digiquant"');
-    expect(html).not.toContain("M0 -6 -9 8");
-    const modules = [
-      "digigraph", "digichat", "digillm", "digikey", "digibase", "digifetch",
-      "digisearch", "digitrace", "digivault", "digiclaw", "digivoice", "digidev", "digibook",
-    ];
-    for (const name of modules) {
-      expect(html).toMatch(new RegExp(`<canvas[^>]*aria-label="${name}"`));
-      expect(html).not.toContain(`>${name}</span>`);
+  it("names digithings and the modules this stack calls, without hero banners", () => {
+    expect(html).toContain(">digithings<");
+    expect(html).toContain("favicon-dg.svg");
+    expect(html).not.toContain("pixel-word-hero");
+    expect(html).not.toContain("<canvas");
+    for (const name of ["digigraph", "digichat", "digillm", "digikey", "digibase", "digifetch"]) {
+      expect(html).toContain(`>${name}<`);
     }
-    expect(html.match(/<canvas/g) ?? []).toHaveLength(modules.length);
+    for (const name of ["digisearch", "digitrace", "digivault", "digiclaw", "digivoice", "digidev", "digibook"]) {
+      expect(html).not.toContain(`>${name}<`);
+    }
     expect(html).toContain('aria-label="digiquant calls"');
-    expect(html).toContain('aria-label="the rest of digithings"');
+    expect(html).not.toContain('aria-label="the rest of digithings"');
+    expect(html).not.toMatch(/12x|fx hub/i);
   });
 
-  it("scrolls the packages this tree actually calls, in two directions", () => {
-    expect(html).toContain("Coinbase · public price feed");
-    expect(html).toContain("Alpaca · broker adapter");
-    expect(html).toContain("Interactive Brokers · broker adapter");
-    expect(html).toContain("Kraken · account snapshots");
-    expect(html).toContain("Tradier · account snapshots");
-    expect(html).toContain("Yahoo Finance · quote history");
+  it("scrolls every other provider once, in two directions", () => {
+    const ids = [...PACKAGES_A, ...PACKAGES_B].map((entry) => entry.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids.filter((id) => id === "supabase")).toHaveLength(1);
+    expect(html).toContain("Coinbase");
+    expect(html).toContain("Alpaca");
+    expect(html).toContain("Interactive Brokers");
+    expect(html).toContain("Kraken");
+    expect(html).toContain("Tradier");
+    expect(html).toContain("Yahoo Finance");
+    expect(html).toContain("Cloudflare");
+    expect(html).toContain("Stripe");
+    expect(html).toContain("Optuna");
     expect(html).not.toContain("FRED");
-    expect(html).toContain("Supabase · stored prices");
-    expect(html).toContain("Binance · chart prices");
+    expect(html).toContain("Supabase");
+    expect(html).toContain("Binance");
+    expect(html).toContain("mq-fill");
     expect(html).toContain("mq-track--left");
     expect(html).toContain("mq-track--right");
     expect(html).not.toContain("also connected");
@@ -95,23 +85,12 @@ describe("IntegrationsBand", () => {
   });
 });
 
-/**
- * DIG-2861 — a logo per provider in the two sliding rows.
- *
- * The acceptance asks for no text-only entries left. That is NOT met: Simple Icons
- * (the CC0 source of official monochrome brand paths this repo already uses) carries
- * no path for Alpaca, Interactive Brokers, Kraken, Tradier, Yahoo Finance or FRED.
- * These tests pin the two things that must be true either way — a provider with an
- * official mark shows it, and a provider without one is left plain rather than given
- * a lookalike — so the gap stays visible and cannot be closed with a fake.
- */
+/** A logo on every connected provider. Official paths stay monochrome; the rest are initials. */
 describe("connected-package row marks", () => {
   const html = renderToStaticMarkup(<IntegrationsBand />);
   const rowsHtml = html.slice(html.indexOf('aria-label="Connected packages"'));
 
-  /** Simple Icons 15.22.0 — verified by importing the pinned package, not by
-   *  reading a registry file. */
-  const WITH_OFFICIAL_MARK: RowProviderId[] = ["coinbase", "supabase", "binance"];
+  const WITH_OFFICIAL_MARK: RowProviderId[] = ["coinbase", "supabase", "binance", "cloudflare", "stripe", "optuna"];
   const WITHOUT_OFFICIAL_MARK: RowProviderId[] = ["alpaca", "ibkr", "kraken", "tradier", "yahoo", "fred"];
 
   it("knows which providers have an official monochrome path", () => {
@@ -128,19 +107,12 @@ describe("connected-package row marks", () => {
     expect(rowsHtml).not.toMatch(/<path[^>]*fill="#/);
   });
 
-  it("leaves a provider with no official mark plain, with no lookalike", () => {
-    // A scraped favicon, a recoloured app icon or a hand-drawn monogram would be
-    // something other than the vendor's own mark.
+  it("gives a provider with no official path an initials mark", () => {
     expect(rowsHtml).not.toContain("<img");
-    expect(rowsHtml).not.toMatch(/inline-grid[^"]*place-items-center/);
-    // every label still reads, marked or not
-    for (const label of [
-      "Alpaca · broker adapter",
-      "Interactive Brokers · broker adapter",
-      "Kraken · account snapshots",
-      "Tradier · account snapshots",
-      "Yahoo Finance · quote history",
-    ]) {
+    const monograms = rowsHtml.match(/inline-grid[^"]*place-items-center/g) ?? [];
+    const shown = [...PACKAGES_A, ...PACKAGES_B].filter((entry) => WITHOUT_OFFICIAL_MARK.includes(entry.id));
+    expect(monograms).toHaveLength(shown.length * 2);
+    for (const label of ["Alpaca", "Interactive Brokers", "Kraken", "Tradier", "Yahoo Finance"]) {
       expect(rowsHtml).toContain(label);
     }
   });

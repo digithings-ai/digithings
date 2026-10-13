@@ -359,6 +359,13 @@ body {
 /* The website hero glints in ink. This site's accent is teal, and that flash is the wrong mark. */
 .integrations-hero .pixel-word { margin-top: 0; --glint: var(--ink); }
 
+/* One logo row fills the band, so the seamless copy starts past the clip. */
+.mq-fill.mq-row .mq-group {
+  min-width: 100vw;
+  justify-content: space-evenly;
+  box-sizing: border-box;
+}
+
 .pixel-word .c { opacity: var(--f); }
 .pixel-word .n { opacity: 0; }
 
