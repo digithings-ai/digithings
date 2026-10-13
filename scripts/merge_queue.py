@@ -760,7 +760,12 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="role standing behind the review when no non-author approval exists",
     )
-    parser.add_argument("--limit", type=int, default=50, help="max PRs to inspect")
+    # DIG-3240: the --json field list below costs ~10,502 possible GraphQL nodes
+    # per PR, and GitHub rejects requests above 500,000 nodes. A default of 50
+    # (~525k nodes) made every `run` at the default exit 1 with an unreadable
+    # queue; 40 (~420k) leaves headroom. Keep comments/commits: the
+    # review-coverage gate reads them and fails closed when comments is None.
+    parser.add_argument("--limit", type=int, default=40, help="max PRs to inspect")
     parser.add_argument("--max-merges", type=int, default=1, help="max merges in run mode")
     parser.add_argument(
         "--dry-run", action="store_true", help="evaluate and report; change nothing"
