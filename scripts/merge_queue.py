@@ -407,28 +407,36 @@ def _label_names(pr: dict[str, Any]) -> set[str]:
     return names
 
 
-def _gate_review_claims(pr: dict[str, Any], repo: str | None) -> list[str]:
-    """A claimed review must have its artifact.
+def _gate_review_coverage(pr: dict[str, Any], repo: str | None) -> list[str]:
+    """The promotion gate's evidence, enforced at merge time.
 
-    This is the narrow form of the promotion gate (`scripts/check_review_coverage.py`):
-    a PR carrying `reviewed:agent` claims an in-session review ran, and the main
-    gate refuses that claim unless a comment carries the findings marker. The
-    queue merged exactly that shape as PR #5526 (label, zero reviews, no comment)
-    and the promotion turned red on it (DIG-3154), so the queue refuses it here,
-    where the fix is a comment instead of another promotion.
+    `scripts/check_review_coverage.py` refuses an unreviewed commit at promotion;
+    the queue merged such commits twice in one night as PR #5526 (a
+    `reviewed:agent` claim with no findings comment, DIG-3154) and PRs #5489 /
+    #5277 via `--attest-review` with no review artifact at all (this issue's
+    reopen). The failure in all three cases is the same: the queue accepted
+    something the promotion gate rejects. So the queue judges the exact same
+    evidence — a completed Bot run, an approval, a Bot review, an in-session
+    review with its findings comment, or `reviewed:owner` — by calling the main
+    gate's own `verdict_for` on the already-fetched PR dict.
 
-    Deliberately narrower than the full promotion gate: a PR with no review
-    evidence at all still merges (attestation and the approval path are
-    unchanged). Refusing every unreviewed PR would stall the ~60 open PRs that
-    predate review enforcement; that is a policy decision for the EM, not a
-    side effect of this gate. What never merges is a review that is claimed but
-    cannot be shown.
+    Two deliberate properties worth stating plainly:
+
+    * `--attest-review` no longer substitutes for review evidence. Both
+      reopen cases merged attested by `qa` with zero reviews and zero
+      comments; attestation is an assertion, and an assertion with no artifact
+      is exactly what the promotion gate refuses. The attestation mechanism
+      itself is unchanged — it still satisfies `_gate_review` — but it does
+      not satisfy this gate.
+    * Comments are fetched lazily and only when a `reviewed:agent` label makes
+      them load-bearing (`fetch_queue` carries labels but not comments). An
+      unreadable comments read fails closed, for the same reason an absent
+      check fails closed: the alternative reads "no evidence" as "approved".
     """
     crc = _coverage_module()
-    if crc.AGENT_REVIEW_LABEL not in _label_names(pr):
-        return []
+    labels = _label_names(pr)
     comments = pr.get("comments")
-    if comments is None:
+    if crc.AGENT_REVIEW_LABEL in labels and comments is None:
         if repo is None:
             return [
                 "review coverage: `reviewed:agent` is set but the findings "
@@ -450,13 +458,29 @@ def _gate_review_claims(pr: dict[str, Any], repo: str | None) -> list[str]:
                 "comment could not be read"
             ]
         comments = (data or {}).get("comments") or []
-    if crc._agent_review_from_comments(comments if isinstance(comments, list) else []):
+    state: dict[str, Any] = {
+        "labels": labels,
+        "approvals": [],
+        "bugbot": None,
+        "title": str(pr.get("title") or ""),
+        "owner_review": None,
+        "agent_tool": [],
+        "agent_review": None,
+    }
+    crc._apply_reviews_checks_comments(
+        state,
+        reviews=pr.get("reviews") or [],
+        checks=pr.get("statusCheckRollup") or [],
+        comments=comments if isinstance(comments, list) else [],
+    )
+    reviewed, why = crc.verdict_for(state)
+    if reviewed:
         return []
     return [
-        "review coverage: `reviewed:agent` is set but no comment carries "
-        f"`{crc.AGENT_REVIEW_MARKER}` — the label claims a review ran, so the "
-        "findings have to be posted before this merges "
-        "(scripts/check_review_coverage.py refuses this at promotion)"
+        f"review coverage: {why} — the queue enforces the same evidence "
+        "scripts/check_review_coverage.py enforces at promotion "
+        "(completed Bot run, approval, Bot review, in-session findings, or "
+        "reviewed:owner)"
     ]
 
 
@@ -497,7 +521,7 @@ def evaluate(
 
     reasons.extend(_gate_checks(pr, policy))
     reasons.extend(_gate_review(pr, acting_role, attest_role))
-    reasons.extend(_gate_review_claims(pr, repo))
+    reasons.extend(_gate_review_coverage(pr, repo))
 
     rollup = pr.get("statusCheckRollup") or []
     return Verdict(

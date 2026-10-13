@@ -75,8 +75,24 @@ def _pr(
     merge_state: str = "CLEAN",
     extra_checks: list[dict[str, Any]] | None = None,
     title: str = "",
+    approved: bool = False,
 ) -> dict[str, Any]:
     rollup: list[dict[str, Any]] = list(extra_checks or [])
+    if test_conclusion is not None:
+        rollup.append(
+            {
+                "__typename": "CheckRun",
+                "name": "test",
+                "status": test_status,
+                "conclusion": test_conclusion,
+            }
+        )
+    # Review evidence for tests whose subject is NOT the review gate: the queue
+    # enforces the promotion gate's evidence (DIG-3154), so a fixture that must
+    # merge carries a non-author approval. Refusal tests keep the default.
+    resolved_reviews = list(reviews) if reviews is not None else []
+    if approved:
+        resolved_reviews.append({"author": {"login": "reviewer"}, "state": "APPROVED"})
     if test_conclusion is not None:
         rollup.append(
             {
@@ -99,7 +115,7 @@ def _pr(
         "reviewDecision": "",
         "author": {"login": author},
         "createdAt": created,
-        "reviews": reviews if reviews is not None else [],
+        "reviews": resolved_reviews,
     }
 
 
@@ -206,6 +222,7 @@ def test_a_failing_non_required_check_also_blocks() -> None:
 def test_an_ignored_check_cannot_fail_the_queue() -> None:
     pr = _pr(
         1,
+        approved=True,
         extra_checks=[
             {
                 "__typename": "CheckRun",
@@ -477,7 +494,7 @@ def test_the_audit_comment_records_the_checks_actually_required(gh_stub: Any) ->
     `test` check that did not exist, which is the one claim the queue's whole
     comment exists to make reliable.
     """
-    prs = [_pr(42, head_sha="c" * 40, test_conclusion=None)]
+    prs = [_pr(42, head_sha="c" * 40, test_conclusion=None, approved=True)]
     prs[0]["statusCheckRollup"] = [
         {
             "__typename": "CheckRun",
@@ -591,16 +608,78 @@ def test_the_merging_role_cannot_attest_its_own_review() -> None:
     assert any("also the merging role" in reason for reason in verdict.reasons)
 
 
-def test_a_different_role_attesting_passes() -> None:
-    assert mq.evaluate(
+def test_attestation_alone_no_longer_suffices() -> None:
+    """Attestation without review evidence is refused (DIG-3154 reopen).
+
+    PRs #5489 and #5277 merged attested by `qa` with zero reviews and zero
+    comments, and the promotion gate refused both. An attestation asserts a
+    review happened; with no artifact the promotion gate cannot see it, so the
+    queue cannot accept it either. The attestation mechanism itself is
+    unchanged — it still satisfies `_gate_review` — but it does not satisfy
+    review coverage.
+    """
+    verdict = mq.evaluate(
         _pr(1), mq.load_policy(), acting_role="cto", base="develop", attest_role="qa"
+    )
+    assert not verdict.eligible
+    assert any("review coverage" in reason for reason in verdict.reasons)
+
+
+def test_attestation_with_review_evidence_still_passes() -> None:
+    """The mechanism is not removed: attestation plus an approval still merges."""
+    pr = _pr(1, approved=True)
+    assert mq.evaluate(
+        pr, mq.load_policy(), acting_role="cto", base="develop", attest_role="qa"
     ).eligible
 
 
 def test_an_em_merge_attested_by_the_cto_passes() -> None:
     assert mq.evaluate(
-        _pr(1), mq.load_policy(), acting_role="em", base="develop", attest_role="cto"
+        _pr(1, approved=True),
+        mq.load_policy(),
+        acting_role="em",
+        base="develop",
+        attest_role="cto",
     ).eligible
+
+
+def test_a_pr_with_no_evidence_at_all_is_refused_despite_attestation() -> None:
+    """The #5489/#5277 shape: no labels, no reviews, no Bot runs — refused even attested."""
+    pr = _pr(1)
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop", attest_role="qa")
+    assert not verdict.eligible
+    assert any("no completed agent review" in reason for reason in verdict.reasons)
+
+
+def test_a_bugbot_success_clears_review_coverage() -> None:
+    """The strongest hatch: attestation carries `_gate_review`, Bugbot carries coverage."""
+    pr = _pr(
+        1,
+        extra_checks=[
+            {
+                "__typename": "CheckRun",
+                "name": "Cursor Bugbot",
+                "status": "COMPLETED",
+                "conclusion": "SUCCESS",
+            }
+        ],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop", attest_role="qa")
+    assert verdict.eligible
+    assert not any("review coverage" in reason for reason in verdict.reasons)
+
+
+def test_a_reviewed_owner_label_clears_review_coverage() -> None:
+    """The accountability hatch: label read, actor recorded by the main gate.
+
+    Attestation still carries the `_gate_review` half here — the point is that
+    the *coverage* half is satisfied by the label alone.
+    """
+    pr = _pr(1)
+    pr["labels"] = [{"name": "reviewed:owner"}]
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop", attest_role="qa")
+    assert verdict.eligible
+    assert not any("review coverage" in reason for reason in verdict.reasons)
 
 
 # --- ordering: a queue, not a race --------------------------------------------
@@ -790,7 +869,7 @@ def test_run_merges_the_head_and_pins_the_evaluated_sha(gh_stub: Any) -> None:
     Without `--match-head-commit`, a push landing between evaluation and merge
     ships code whose checks nobody looked at. With it, the merge aborts instead.
     """
-    prs = [_pr(42, head_sha="b" * 40)]
+    prs = [_pr(42, head_sha="b" * 40, approved=True)]
     stub = _queue_stub(
         gh_stub(
             gh_rule(r"^pr list", stdout=prs),
@@ -823,7 +902,7 @@ def test_run_never_escalates_with_admin(gh_stub: Any) -> None:
     An operator can always escalate by hand and say so; a queue that escalates on
     its own is indistinguishable from one that ignores its own gates.
     """
-    prs = [_pr(42)]
+    prs = [_pr(42, approved=True)]
     stub = _queue_stub(
         gh_stub(
             gh_rule(r"^pr list", stdout=prs),
@@ -848,8 +927,8 @@ def test_run_re_reads_the_queue_after_every_merge(gh_stub: Any) -> None:
         gh_rule(r"^pr merge", stdout=""),
         gh_rule(r"^pr comment", stdout=""),
     )
-    stub.wrote("q1.json", json.dumps([_pr(1), _pr(2)]))
-    stub.wrote("q2.json", json.dumps([_pr(2)]))
+    stub.wrote("q1.json", json.dumps([_pr(1, approved=True), _pr(2, approved=True)]))
+    stub.wrote("q2.json", json.dumps([_pr(2, approved=True)]))
     stub.wrote("q3.json", json.dumps([]))
     done = _run(
         "run",
@@ -881,7 +960,7 @@ def test_run_stops_when_a_merge_makes_the_next_pr_ineligible(gh_stub: Any) -> No
         gh_rule(r"^pr merge", stdout=""),
         gh_rule(r"^pr comment", stdout=""),
     )
-    stub.wrote("q1.json", json.dumps([_pr(1), _pr(2)]))
+    stub.wrote("q1.json", json.dumps([_pr(1, approved=True), _pr(2, approved=True)]))
     # After #1 lands, #2 has gone conflicted against the new develop tip.
     stub.wrote("q2.json", json.dumps([_pr(2, mergeable="CONFLICTING")]))
     done = _run(
@@ -902,7 +981,7 @@ def test_run_stops_when_a_merge_makes_the_next_pr_ineligible(gh_stub: Any) -> No
 
 
 def test_dry_run_changes_nothing(gh_stub: Any) -> None:
-    prs = [_pr(42)]
+    prs = [_pr(42, approved=True)]
     stub = _queue_stub(gh_stub(gh_rule(r"^pr list", stdout=prs)), prs)
     done = _run(
         "run",
@@ -926,7 +1005,7 @@ def test_the_audit_comment_names_the_role_and_the_verdicts(gh_stub: Any) -> None
     It has to say which role merged and what the merge relied on, or a later
     reader cannot tell a routine queue merge from someone bypassing policy.
     """
-    prs = [_pr(42, head_sha="c" * 40)]
+    prs = [_pr(42, head_sha="c" * 40, approved=True)]
     stub = _queue_stub(
         gh_stub(
             gh_rule(r"^pr list", stdout=prs),
@@ -947,7 +1026,10 @@ def test_the_audit_comment_names_the_role_and_the_verdicts(gh_stub: Any) -> None
 
 def test_max_merges_defaults_to_one(gh_stub: Any) -> None:
     """One merge per invocation, re-read between invocations."""
-    prs = [_pr(1, created="2026-10-01T00:00:00Z"), _pr(2, created="2026-10-02T00:00:00Z")]
+    prs = [
+        _pr(1, created="2026-10-01T00:00:00Z", approved=True),
+        _pr(2, created="2026-10-02T00:00:00Z", approved=True),
+    ]
     stub = _queue_stub(
         gh_stub(
             gh_rule(r"^pr list", stdout=prs),
