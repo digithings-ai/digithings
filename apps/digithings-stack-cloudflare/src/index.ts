@@ -173,6 +173,10 @@ export class DigiStackContainer extends Container {
           DIGIGRAPH_PORT,
           DIGIKEY_PORT,
           ...(targetPort === DIGISEARCH_PORT ? [DIGISEARCH_PORT] : []),
+          // /_stack/mcp/{zammad,digivault} edge routes: wait for their own MCP
+          // port too, so a cold wake answers 503 container_booting instead of
+          // a 500 "container is not listening" (DIG-1210).
+          ...(EDGE_MCP_WAIT_PORTS.includes(targetPort) ? [targetPort] : []),
         ],
         cancellationOptions: {
           portReadyTimeoutMS: 180_000,
@@ -461,6 +465,7 @@ export interface Env {
 
 /** Secret-gated MCP edge paths (`/_stack/mcp/<id>/…`) → in-container ports. */
 const MCP_EDGE_PREFIX = "/_stack/mcp";
+const EDGE_MCP_WAIT_PORTS: readonly number[] = [8770, 8769];
 const MCP_EDGE_SERVERS: Record<string, number> = {
   zammad: 8770,
   digisearch: 8765,
