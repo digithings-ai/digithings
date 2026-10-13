@@ -8,7 +8,9 @@ digithings-ai/digithings and digithings-ai/twelve-x (FX Hub).
 
 Price and market-data jobs (`kind: container`) POST the private digiquant-runner
 Worker over the `RUNNER` service binding (#4761). This Worker still has no
-Containers of its own. twelve-x stays `workflow_dispatch`. Default branch stays
+Containers of its own. twelve-x market-context ingest and the session heartbeat
+(`kind: twelvex`) POST the private twelvex-runner over `TWELVEX_RUNNER`.
+The other twelve-x rows stay `workflow_dispatch`. Default branch stays
 develop. `GITHUB_OVERRIDE_JOBS` defaults to empty; a listed job id falls back to
 workflow_dispatch and logs `github_override` at error.
 

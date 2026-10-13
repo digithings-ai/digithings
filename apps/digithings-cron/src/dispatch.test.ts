@@ -614,9 +614,13 @@ describe("dispatch", () => {
     const job = JOBS.find(
       (row) => row.id === "twelve-x-market-context-daily",
     ) as Job;
-    expect(job.kind).toBe("workflow_dispatch");
+    expect(job.kind).toBe("twelvex");
     expect(job.inputs).toEqual({ bucket: "daily" });
-    const env: Env = { DRY_RUN: "0", GH_DISPATCH_TOKEN: "token" };
+    const env: Env = {
+      DRY_RUN: "0",
+      GH_DISPATCH_TOKEN: "token",
+      GITHUB_OVERRIDE_JOBS: job.id,
+    };
     await dispatch(env, job, job.cron, 0, { args: { bucket: "weekly" } });
     const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(JSON.parse(String(init.body))).toEqual({

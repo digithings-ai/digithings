@@ -292,7 +292,13 @@ describe("jobsForCron", () => {
     for (const id of TWELVE_X_ENABLED_IDS) {
       const job = JOBS.find((row) => row.id === id);
       expect(job?.enabled).toBe(true);
-      expect(["workflow_dispatch", "twelvex-watch"]).toContain(job?.kind);
+      const onRunner =
+        id.startsWith("twelve-x-market-context-") || id === "twelve-x-primemarket-heartbeat";
+      if (onRunner) {
+        expect(job?.kind).toBe("twelvex");
+      } else {
+        expect(["workflow_dispatch", "twelvex-watch"]).toContain(job?.kind);
+      }
       expect(job?.repo).toBe("digithings-ai/twelve-x");
     }
   });

@@ -13,6 +13,7 @@ import type { Env } from "./env";
 import { houseRunDeadlineSeconds, type Job } from "./jobs";
 import { checkHouseRuns, WATCH_TARGET, type HouseRunCheckResult } from "./house-run-watch";
 import { probeUrls, runProbe } from "./probe";
+import { dispatchTwelvex } from "./twelvex-dispatch";
 import { runTwelvexWatch, sessionCatchupDue, type WatchOutcome } from "./twelvex-watch";
 
 const GH_API = "https://api.github.com";
@@ -168,7 +169,8 @@ function usesGithub(job: Job, env: Env): boolean {
     job.kind === "container" ||
     job.kind === "probe" ||
     job.kind === "watch" ||
-    job.kind === "twelvex-watch"
+    job.kind === "twelvex-watch" ||
+    job.kind === "twelvex"
   ) {
     return githubOverrideIds(env).includes(job.id);
   }
@@ -417,7 +419,8 @@ export async function dispatch(
       job.kind === "container" ||
       job.kind === "probe" ||
       job.kind === "watch" ||
-      job.kind === "twelvex-watch"
+      job.kind === "twelvex-watch" ||
+      job.kind === "twelvex"
     ) {
       console.error(
         JSON.stringify({
@@ -436,6 +439,9 @@ export async function dispatch(
   }
   if (job.kind === "watch") {
     return dispatchWatch(env, job, cron, scheduledTime);
+  }
+  if (job.kind === "twelvex") {
+    return dispatchTwelvex(env, job, cron);
   }
   if (job.kind === "twelvex-watch") {
     if (!job.twelvexWatch) throw new Error(`job ${job.id}: twelvex-watch requires twelvexWatch`);

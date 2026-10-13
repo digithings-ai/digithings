@@ -1,0 +1,51 @@
+# twelvex-runner — on-demand container for twelve-x ingest + session heartbeat.
+# No public hostname. digithings-cron calls this Worker through the
+# TWELVEX_RUNNER service binding. The container starts per request and
+# sleeps after 2m (see src/runner.ts). It is not always-on.
+#
+# Do not deploy this Worker until the DevOps Lead checks it off.
+# GitHub workflows stay scheduled through digithings-cron until this
+# container has completed each job once. GITHUB_OVERRIDE_JOBS on
+# digithings-cron flips a job id back to workflow_dispatch.
+#
+# Secrets (wrangler secret put; never commit values). Unset CLOUDFLARE_API_TOKEN
+# in the shell first — it is also wrangler's own auth var:
+#   printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put NAME
+#
+#   RUNNER_AUTH_TOKEN            — Bearer on POST /run/* (same name as digithings-cron)
+#   GH_ISSUES_TOKEN              — Issues read/write on digithings-ai/twelve-x only
+#   PRIMEMARKET_SESSION_TOKEN    — desk session, forwarded into the container
+#   TWELVEX_SUPABASE_SERVICE_KEY — ingest writes, forwarded into the container
+#   TWELVEX_SUPABASE_URL         — optional; twelve-x has a code default
+#
+# Not required for these two jobs (checked against the workflow env blocks
+# and twelve_x market_context / heartbeat): CHEAPERINFERENCE_API_KEY,
+# TWELVEX_R2_*, SUPABASE_DB_URL. Ingest writes Supabase. It does not call
+# an LLM and it does not write R2.
+name = "twelvex-runner"
+account_id = "ae2ea3eb4ce5f7cc9bec1478f6e60e15"
+main = "src/index.ts"
+compatibility_date = "2026-10-13"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = false
+
+[observability]
+enabled = true
+
+[vars]
+DRY_RUN = "0"
+
+[[containers]]
+class_name = "TwelveXRunnerContainer"
+image = "../../Dockerfile.twelvex-runner"
+image_build_context = "../.."
+instance_type = "basic"
+max_instances = 1
+
+[[durable_objects.bindings]]
+name = "TWELVEX_CONTAINER"
+class_name = "TwelveXRunnerContainer"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["TwelveXRunnerContainer"]
