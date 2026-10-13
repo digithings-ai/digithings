@@ -74,6 +74,17 @@ def scrubbed_env() -> dict[str, str]:
     return env
 
 
+def mcp_child_env() -> dict[str, str]:
+    """Scrubbed env plus the anonymous Gloomberb switch.
+
+    ``GLOOMBERB_ENABLED=1`` is not a secret. The session cookie is never
+    copied, so cookie-gated tools stay unauthenticated on this surface.
+    """
+    env = scrubbed_env()
+    env["GLOOMBERB_ENABLED"] = "1"
+    return env
+
+
 class StdioBridge:
     def __init__(self) -> None:
         self._session: Any = None
@@ -91,7 +102,7 @@ class StdioBridge:
         params = StdioServerParameters(
             command=sys.executable,
             args=["-m", "digiquant.mcp_server", "--stdio", "--scope", "read"],
-            env=scrubbed_env(),
+            env=mcp_child_env(),
         )
         try:
             async with stdio_client(params) as (read, write):
@@ -576,7 +587,7 @@ PROBES: dict[str, Probe] = {
     for p in [
         Probe(
             "quote",
-            "digifetch_quote",
+            "gloomberb_quote",
             "Delayed quote for one symbol",
             {"symbol": SYM},
             lambda a: {"symbol": a["symbol"]},
@@ -585,7 +596,7 @@ PROBES: dict[str, Probe] = {
         ),
         Probe(
             "history",
-            "digifetch_price_history",
+            "gloomberb_price_history",
             "Daily bars for one symbol",
             {
                 "symbol": SYM,
@@ -597,7 +608,7 @@ PROBES: dict[str, Probe] = {
         ),
         Probe(
             "financials",
-            "digifetch_ticker_financials",
+            "gloomberb_ticker_financials",
             "Profile + key fundamentals (trimmed)",
             {"symbol": SYM},
             lambda a: {"symbol": a["symbol"]},
@@ -606,7 +617,7 @@ PROBES: dict[str, Probe] = {
         ),
         Probe(
             "congress",
-            "digifetch_congress_trades",
+            "gloomberb_congress_trades",
             "Latest US House disclosure trades (market-wide tape)",
             {
                 "limit": Param("int", default=10, lo=1, hi=25),
@@ -622,7 +633,7 @@ PROBES: dict[str, Probe] = {
         ),
         Probe(
             "predictions",
-            "digifetch_prediction_markets",
+            "gloomberb_prediction_markets",
             "Polymarket markets, open, by 24h volume",
             {"limit": Param("int", default=8, lo=1, hi=20)},
             lambda a: {"venue": "polymarket", "limit": 100},
@@ -635,7 +646,7 @@ PROBES: dict[str, Probe] = {
         ),
         Probe(
             "funds13f",
-            "digifetch_13f_funds",
+            "gloomberb_13f_funds",
             "Top 13F funds for a quarter",
             {
                 "quarter": Param("quarter", default=_prev_quarter()),
@@ -647,7 +658,7 @@ PROBES: dict[str, Probe] = {
         ),
         Probe(
             "yieldcurve",
-            "digifetch_yield_curve",
+            "gloomberb_yield_curve",
             "US Treasury yield curve",
             {},
             lambda a: {},
@@ -656,7 +667,7 @@ PROBES: dict[str, Probe] = {
         ),
         Probe(
             "econ",
-            "digifetch_econ_series",
+            "gloomberb_econ_series",
             "FRED-style macro series (latest observations)",
             {
                 "series_id": Param("symbol", required=True, doc="FRED id e.g. CPIAUCSL"),
@@ -668,7 +679,7 @@ PROBES: dict[str, Probe] = {
         ),
         Probe(
             "news",
-            "digifetch_news",
+            "gloomberb_news",
             "Market news headlines, optionally per ticker",
             {"symbol": Param("symbol"), "limit": Param("int", default=8, lo=1, hi=20)},
             lambda a: (
@@ -681,7 +692,7 @@ PROBES: dict[str, Probe] = {
         ),
         Probe(
             "search",
-            "digifetch_search",
+            "gloomberb_search",
             "Symbol search across venues",
             {"query": Param("query", required=True), "limit": Param("int", default=8, lo=1, hi=10)},
             lambda a: {"query": a["query"], "limit": a["limit"]},
@@ -690,7 +701,7 @@ PROBES: dict[str, Probe] = {
         ),
         Probe(
             "filings",
-            "digifetch_sec_filings",
+            "gloomberb_sec_filings",
             "Recent SEC filings for a symbol",
             {"symbol": SYM, "limit": Param("int", default=8, lo=1, hi=15)},
             lambda a: {"ticker": a["symbol"], "what": "filings", "count": a["limit"]},

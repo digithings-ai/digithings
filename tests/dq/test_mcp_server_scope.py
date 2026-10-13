@@ -17,8 +17,14 @@ pytest.importorskip("mcp.server.fastmcp")
 from digiquant.data.gloomberb import session_gate
 from digiquant.data.gloomberb.session_gate import SessionGateStatus
 from digiquant.mcp_server import READ_SCOPE_TOOLS, create_mcp_server
+from digiquant.tool_names import canonical_tool_name
 
 from digiquant import mcp_server
+
+
+def _gloomberb_aliases(names: set[str]) -> set[str]:
+    """Public names registered beside each legacy ``digifetch_`` tool."""
+    return {canonical_tool_name(name) for name in names if name.startswith("digifetch_")}
 
 
 def _tool_names(server) -> set[str]:
@@ -199,13 +205,15 @@ def test_full_scope_is_default_and_complete():
     names = _tool_names(create_mcp_server())
     assert READ_SCOPE_TOOLS <= names
     assert COMPUTE_TOOLS <= names
-    assert names == READ_SCOPE_TOOLS | COMPUTE_TOOLS
+    base = set(READ_SCOPE_TOOLS) | COMPUTE_TOOLS
+    assert names == base | _gloomberb_aliases(base)
 
 
 @pytest.mark.unit
 def test_read_scope_exposes_only_read_tools():
     names = _tool_names(create_mcp_server(scope="read"))
-    assert names == set(READ_SCOPE_TOOLS)
+    base = set(READ_SCOPE_TOOLS)
+    assert names == base | _gloomberb_aliases(base)
     assert not (names & COMPUTE_TOOLS)
 
 
@@ -279,8 +287,10 @@ def test_tool_counts_pin_post_3855_surface():
     # 113 → 112: `digifetch_congress_trades` left the read scope (DIG-1057).
     assert len(READ_SCOPE_TOOLS) == 112
     assert len(COMPUTE_TOOLS) == 14
-    # 127 → 126: the refused tool is registered on no scope, full included.
-    assert len(_tool_names(create_mcp_server())) == 126
+    # 126 legacy registrations, plus one `gloomberb_` alias per digifetch tool
+    # that is actually registered (DIG-3313). The refused congress tool has none.
+    names = _tool_names(create_mcp_server())
+    assert len(names) == 126 + len(_gloomberb_aliases(names))
 
 
 @pytest.mark.unit
@@ -292,7 +302,9 @@ def test_congress_trades_is_refused_on_every_scope():
     assert "digifetch_congress_trades" in REFUSED_TOOLS
     assert "digifetch_congress_trades" not in READ_SCOPE_TOOLS
     assert "digifetch_congress_trades" not in _tool_names(create_mcp_server())
+    assert "gloomberb_congress_trades" not in _tool_names(create_mcp_server())
     assert "digifetch_congress_trades" not in _tool_names(create_mcp_server(scope="read"))
+    assert "gloomberb_congress_trades" not in _tool_names(create_mcp_server(scope="read"))
 
 
 @pytest.mark.unit
@@ -327,11 +339,18 @@ def test_session_tools_disappear_without_an_authenticated_cookie():
     gated = {
         name for name, tier in TOOL_ENTITLEMENTS.items() if tier in {"session", "preview", "pro"}
     }
+    gated_public = gated | {canonical_tool_name(name) for name in gated}
     free = {name for name, tier in TOOL_ENTITLEMENTS.items() if tier == "free"}
+    from digiquant.tool_refusals import REFUSED_TOOLS
+
+    free_listed = {name for name in free if name not in REFUSED_TOOLS}
+    venue = {name for name, tier in TOOL_ENTITLEMENTS.items() if tier == "venue_session"}
+    expected_aliases = {canonical_tool_name(name) for name in free_listed | venue}
 
     assert gated, "the gate would have nothing to hide"
-    assert not (full & gated), sorted(full & gated)[:5]
-    assert not (read & gated), sorted(read & gated)[:5]
-    # The free family is untouched by the gate, on either scope.
+    assert not (full & gated_public), sorted(full & gated_public)[:5]
+    assert not (read & gated_public), sorted(read & gated_public)[:5]
+    # The free family is untouched by the gate, on either scope, under both names.
     assert free & full
-    assert len(full) == 126 - len(gated)
+    assert expected_aliases <= full
+    assert len(full) == 126 - len(gated) + len(expected_aliases)
