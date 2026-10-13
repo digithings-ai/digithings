@@ -15,7 +15,7 @@
  */
 import { buildPlan } from "./backfill";
 import { BackfillLedger, type RemediationState } from "./backfill-do";
-import { dispatch, dispatchWorkflow, type DispatchResult } from "./dispatch";
+import { dispatch, dispatchWorkflow, type DispatchResult, UNDECLARED_INPUT } from "./dispatch";
 import type { Env } from "./env";
 import { shouldDispatchAtOpen } from "./et-open";
 import { jobsForCron, type Job } from "./jobs";
@@ -165,6 +165,15 @@ async function runJobsForCron(
   ctx.waitUntil(Promise.all(pending));
   return { started, skipped, runs: [] };
 }
+
+/**
+ * Start keys already dispatched by this isolate. A repeat kick carrying the
+ * same key is a duplicate and must not reach the runner a second time (A.4).
+ * Best-effort and per-isolate by construction: it catches double-submits, not
+ * cross-isolate races. Bounded so a long-lived isolate cannot grow it without
+ * limit; eviction only risks a re-dispatch, never a dropped one.
+ */
+const seenStartKeys = new Set<string>();
 
 function normalizePath(pathname: string): string {
   if (pathname.length > 1 && pathname.endsWith("/")) {
@@ -474,11 +483,15 @@ export default {
       let cron = "";
       let force = false;
       let args: Record<string, string> = {};
+      let requestedTime: number | undefined;
+      let startKey: string | undefined;
       try {
         const body = (await request.json()) as {
           cron?: unknown;
           force?: unknown;
           args?: unknown;
+          scheduledTime?: unknown;
+          startKey?: unknown;
         };
         cron = typeof body.cron === "string" ? body.cron : "";
         force = body.force === true;
@@ -487,18 +500,66 @@ export default {
           return Response.json({ error: "invalid_args" }, { status: 400 });
         }
         args = parsedArgs;
+        if (body.scheduledTime !== undefined) {
+          // A non-numeric or fractional value is a caller mistake, not a
+          // coercion hint: reject it here so it can never reach the start key
+          // as NaN. Number.isInteger is false for NaN and both infinities.
+          if (typeof body.scheduledTime !== "number" || !Number.isInteger(body.scheduledTime)) {
+            return Response.json({ error: "invalid_args" }, { status: 400 });
+          }
+          requestedTime = body.scheduledTime;
+        }
+        if (body.startKey !== undefined) {
+          if (typeof body.startKey !== "string" || body.startKey.length === 0) {
+            return Response.json({ error: "invalid_args" }, { status: 400 });
+          }
+          startKey = body.startKey;
+        }
       } catch {
         return Response.json({ error: "invalid_json" }, { status: 400 });
       }
       if (!cron) {
         return Response.json({ error: "cron_required" }, { status: 400 });
       }
-      const result = await runJobsForCron(cron, Date.now(), env, ctx, {
-        force,
-        args,
-        awaitDispatch: true,
-        includeDisabled: true,
-      });
+      // One derivation, at the kick boundary. Flooring to the wall-clock minute
+      // gives a repeat kick inside the same minute the same scheduledTime. A
+      // kick is a distinct namespace from the cron path and does not resolve
+      // to the cron's firing slot: see DIG-47 spec section 9, decision D3.
+      const scheduledTime = requestedTime ?? Math.floor(Date.now() / 60_000) * 60_000;
+      // The start key names one kick. Only an explicit key dedupes: a
+      // repeat kick carrying the same key is a double-submit and answers 200
+      // without reaching the runner again (A.4). Kicks without a key always
+      // dispatch — deriving a key from the cron and minute here would
+      // wrongly collapse distinct kicks that happen to share a minute.
+      if (startKey !== undefined) {
+        const key = `${cron}\n${startKey}`;
+        if (seenStartKeys.has(key)) {
+          return Response.json(
+            { ok: true, cron, started: [], skipped: [], runs: [], duplicate: true },
+            { status: 200 },
+          );
+        }
+        if (seenStartKeys.size >= 5000) seenStartKeys.clear();
+        seenStartKeys.add(key);
+      }
+      let result;
+      try {
+        result = await runJobsForCron(cron, scheduledTime, env, ctx, {
+          force,
+          args,
+          awaitDispatch: true,
+          includeDisabled: true,
+        });
+      } catch (error) {
+        // The caller's own input is what GitHub refused, so it is a 400 and
+        // the message names the key. Every other failure keeps its old shape
+        // and still throws out of the route.
+        const detail = error instanceof Error ? error.message : String(error);
+        if (detail.startsWith(UNDECLARED_INPUT)) {
+          return Response.json({ error: UNDECLARED_INPUT, cron, detail }, { status: 400 });
+        }
+        throw error;
+      }
       return Response.json({ ok: true, cron, ...result }, { status: 200 });
     }
 
