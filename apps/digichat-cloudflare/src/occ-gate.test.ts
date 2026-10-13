@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { inviteTokenValid, isOccShellPath, occGate } from "./occ-gate";
+import { inviteTokenValid, isOccShellPath, OCC_INVITE_COOKIE, occGate } from "./occ-gate";
 
 const KEY = "fixture-invite-key";
 const pages = vi.fn(async (req: Request | string) => {
@@ -33,5 +33,25 @@ describe("occ gate", () => {
   it("serves the shell for the invite link", async () => {
     const r = await occGate(new Request(`https://digithings.ai/chat/occ/?token=${KEY}`), KEY, pages);
     expect(r.status).toBe(200);
+  });
+  it("sets a tab-session cookie on the invite link", async () => {
+    const r = await occGate(new Request(`https://digithings.ai/chat/occ/?token=${KEY}`), KEY, pages);
+    const c = r.headers.get("set-cookie") ?? "";
+    expect(c).toContain(`${OCC_INVITE_COOKIE}=`);
+    expect(c).toMatch(/HttpOnly/);
+    expect(c).toMatch(/SameSite=Strict/);
+    expect(c).not.toMatch(/Max-Age|Expires/);
+  });
+  it("serves the bare path on reload with the cookie", async () => {
+    const req = new Request("https://digithings.ai/chat/occ/", {
+      headers: { cookie: `other=1; ${OCC_INVITE_COOKIE}=${KEY}` },
+    });
+    expect((await occGate(req, KEY, pages)).status).toBe(200);
+  });
+  it("404s a wrong cookie", async () => {
+    const req = new Request("https://digithings.ai/chat/occ/", {
+      headers: { cookie: `${OCC_INVITE_COOKIE}=wrong` },
+    });
+    expect((await occGate(req, KEY, pages)).status).toBe(404);
   });
 });

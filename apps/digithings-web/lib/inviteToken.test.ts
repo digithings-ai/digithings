@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { INVITE_TOKEN_PARAM, readInviteToken, stripInviteTokenFromUrl } from "./inviteToken";
+import { rememberInviteToken } from "./inviteToken";
 
 describe("readInviteToken", () => {
   it("uses the same key digichat already enforces", () => {
@@ -117,5 +118,20 @@ describe("stripInviteTokenFromUrl (DIG-1437)", () => {
       const stripped = stripInviteTokenFromUrl(url.toString());
       expect(stripped !== null).toBe(key !== undefined);
     }
+  });
+});
+
+describe("rememberInviteToken", () => {
+  const mem = () => {
+    const m = new Map<string, string>();
+    return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v) };
+  };
+  it("stores a URL key and returns it after the URL is stripped", () => {
+    const s = mem();
+    expect(rememberInviteToken("k1", s)).toBe("k1");
+    expect(rememberInviteToken(undefined, s)).toBe("k1");
+  });
+  it("returns undefined with nothing stored", () => {
+    expect(rememberInviteToken(undefined, mem())).toBeUndefined();
   });
 });
