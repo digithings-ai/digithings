@@ -222,7 +222,8 @@ def fetch_queue(repo: str, base: str, limit: int) -> list[dict[str, Any]]:
         str(limit),
         "--json",
         "number,title,headRefName,headRefOid,baseRefName,isDraft,mergeable,"
-        "mergeStateStatus,statusCheckRollup,reviewDecision,author,createdAt,reviews",
+        "mergeStateStatus,statusCheckRollup,reviewDecision,author,createdAt,reviews,"
+        "labels",
     )
     if not isinstance(prs, list):
         raise QueueError(f"gh pr list did not return a list for {repo}:{base}")
@@ -380,6 +381,85 @@ def _gate_review(pr: dict[str, Any], acting_role: str, attest_role: str | None) 
     return reasons
 
 
+def _coverage_module() -> Any:
+    """scripts/check_review_coverage.py: the main gate's hatch vocabulary.
+
+    Imported lazily so the label names, the marker, and the comment matching
+    have exactly one source of truth: whatever the promotion gate accepts here
+    is what this queue enforces. The module is stdlib-only with no import-time
+    side effects, so importing it changes nothing about this script's startup.
+    """
+    scripts_dir = str(Path(__file__).resolve().parent)
+    if scripts_dir not in sys.path:
+        sys.path.insert(0, scripts_dir)
+    import check_review_coverage
+
+    return check_review_coverage
+
+
+def _label_names(pr: dict[str, Any]) -> set[str]:
+    """Label names on a `gh pr list --json labels` row (dicts) or a test fixture."""
+    names: set[str] = set()
+    for label in pr.get("labels") or []:
+        name = label.get("name") if isinstance(label, dict) else label
+        if name:
+            names.add(str(name))
+    return names
+
+
+def _gate_review_claims(pr: dict[str, Any], repo: str | None) -> list[str]:
+    """A claimed review must have its artifact.
+
+    This is the narrow form of the promotion gate (`scripts/check_review_coverage.py`):
+    a PR carrying `reviewed:agent` claims an in-session review ran, and the main
+    gate refuses that claim unless a comment carries the findings marker. The
+    queue merged exactly that shape as PR #5526 (label, zero reviews, no comment)
+    and the promotion turned red on it (DIG-3154), so the queue refuses it here,
+    where the fix is a comment instead of another promotion.
+
+    Deliberately narrower than the full promotion gate: a PR with no review
+    evidence at all still merges (attestation and the approval path are
+    unchanged). Refusing every unreviewed PR would stall the ~60 open PRs that
+    predate review enforcement; that is a policy decision for the EM, not a
+    side effect of this gate. What never merges is a review that is claimed but
+    cannot be shown.
+    """
+    crc = _coverage_module()
+    if crc.AGENT_REVIEW_LABEL not in _label_names(pr):
+        return []
+    comments = pr.get("comments")
+    if comments is None:
+        if repo is None:
+            return [
+                "review coverage: `reviewed:agent` is set but the findings "
+                "comment cannot be verified without a repo to read it from"
+            ]
+        try:
+            data = _gh_json(
+                "pr",
+                "view",
+                str(pr.get("number")),
+                "--repo",
+                repo,
+                "--json",
+                "comments",
+            )
+        except QueueError:
+            return [
+                "review coverage: `reviewed:agent` is set but its findings "
+                "comment could not be read"
+            ]
+        comments = (data or {}).get("comments") or []
+    if crc._agent_review_from_comments(comments if isinstance(comments, list) else []):
+        return []
+    return [
+        "review coverage: `reviewed:agent` is set but no comment carries "
+        f"`{crc.AGENT_REVIEW_MARKER}` — the label claims a review ran, so the "
+        "findings have to be posted before this merges "
+        "(scripts/check_review_coverage.py refuses this at promotion)"
+    ]
+
+
 def evaluate(
     pr: dict[str, Any],
     policy: Policy,
@@ -387,6 +467,7 @@ def evaluate(
     base: str,
     acting_role: str,
     attest_role: str | None,
+    repo: str | None = None,
 ) -> Verdict:
     """Apply every gate to one PR. Returns the verdict, including why it failed."""
     reasons: list[str] = []
@@ -416,6 +497,7 @@ def evaluate(
 
     reasons.extend(_gate_checks(pr, policy))
     reasons.extend(_gate_review(pr, acting_role, attest_role))
+    reasons.extend(_gate_review_claims(pr, repo))
 
     rollup = pr.get("statusCheckRollup") or []
     return Verdict(
@@ -439,10 +521,11 @@ def evaluate_all(
     base: str,
     acting_role: str,
     attest_role: str | None,
+    repo: str | None = None,
 ) -> list[Verdict]:
     """Every PR, in queue order, with its verdict."""
     verdicts = [
-        evaluate(pr, policy, base=base, acting_role=acting_role, attest_role=attest_role)
+        evaluate(pr, policy, base=base, acting_role=acting_role, attest_role=attest_role, repo=repo)
         for pr in prs
     ]
     verdicts.sort(key=Verdict.order_key)
@@ -617,6 +700,7 @@ def main(argv: list[str] | None = None) -> int:
                 base=args.base,
                 acting_role=args.acting_role,
                 attest_role=args.attest_review,
+                repo=args.repo,
             )
 
         if args.command == "list":

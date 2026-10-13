@@ -1,15 +1,15 @@
 provider: cerebras
-last_checked: 2026-08-30
+last_checked: 2026-10-11
 source: agent-research
 
 free_tier:
   available: true
-  tier_type: standing
-  credit_amount_usd: null
-  credit_expiry_days: null
+  tier_type: credits         # 2026-10-11: Aug-Sep 2026 sources describe a $5 trial credit (30 days) behind a payment method, not a standing free tier
+  credit_amount_usd: 5.0
+  credit_expiry_days: 30
   privacy_warning: null
   signup_required: false
-  cc_required: false
+  cc_required: true          # per Aug-Sep 2026 sources; older trackers said no card
   models:
     - name: llama-3.3-70b
       context_window: 128000
@@ -17,8 +17,8 @@ free_tier:
       max_output_tokens: 8192
       status: deprecated        # second consecutive cycle absent from official free-tier rate-limits page; probe still 404s
       verified: false
-      last_verified: 2026-08-30
-      last_verified_latency_ms: 294
+      last_verified: 2026-10-11
+      last_verified_latency_ms: 157
       verification_error: "Error code: 404 - {'message': 'Model does not exist or you do not have access to it.', 'type': 'not_found_error', 'param': 'model', 'code': 'model_not_found'}"
     - name: llama-4-scout
       context_window: 131072
@@ -75,9 +75,9 @@ free_tier:
       last_verified_latency_ms: null
       verification_error: null
   rate_limits:
-    rpm: 30              # LOW CONFIDENCE: official docs cite 5 RPM/30K TPM for gpt-oss-120b; third-party trackers still cite 30 RPM/60-100K TPM. Unresolved a second cycle running.
+    rpm: 5               # 2026-10-11: Vorp Labs (2026-08-15) and BenchLM (2026-09-14) agree on 5 RPM / 30K TPM / 1M TPD; older 30 RPM trackers treated as stale. Not read from Cerebras's own page.
     rpd: null              # not RPD-limited; bounded by 1M tokens/day total budget
-    tpm: 60000             # 60k-100k tokens/minute on free tier (see rpm note on source conflict)
+    tpm: 30000             # see rpm note
     input_tpm: null
     concurrent_requests: null
     reset_window: calendar_day
