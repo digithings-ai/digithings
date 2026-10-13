@@ -10,11 +10,12 @@ Uses the same ``service_*`` functions as the HTTP API.
 
 from __future__ import annotations
 
+import functools
 import json
 import logging
 import os
 import time
-from typing import Any, Literal, overload  # score:allow untyped any — MCP payloads
+from typing import Any, Callable, Literal, overload  # score:allow untyped any — MCP payloads
 
 # The digifetch x Gloomberb client factory + §7 envelope serializer live in the
 # data package (#4146) so the MCP tools and the pipeline's in-process dispatch
@@ -35,6 +36,23 @@ from digiquant.data.luxalgo.agent_tools import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _gloomberb_alias(fn: Callable[..., str], alias_name: str) -> Callable[..., str]:
+    """A second registration of *fn* under the legacy ``digifetch_`` name.
+
+    FastMCP keys a tool by the function object it was given. Wrapping keeps the
+    public ``gloomberb_`` registration and the compatibility alias distinct.
+    """
+
+    @functools.wraps(fn)
+    def alias(*args: Any, **kwargs: Any) -> str:
+        return fn(*args, **kwargs)
+
+    alias.__name__ = alias_name
+    alias.entitlement = getattr(fn, "entitlement", None)  # type: ignore[attr-defined]
+    return alias
+
 
 # ── Market-data backend: Supabase vs versioned R2 history (#3780, Task 4) ──
 #
@@ -713,23 +731,38 @@ def create_mcp_server(
         from digiquant.tool_refusals import is_refused
 
         def _register(fn):
+            from digiquant.tool_names import (
+                GLOOMBERB_PLATFORM_NOTE,
+                canonical_tool_name,
+                gloomberb_family,
+            )
+
             if is_refused(name):
                 return fn
             entitlement = _GLOOMBERB_ENTITLEMENTS.get(name)
             note_fn = _gloomberb_note
+            note_name = name
             if entitlement is None:
                 entitlement = _LUXALGO_ENTITLEMENTS.get(name)
                 note_fn = _luxalgo_note
             if entitlement is not None:
                 fn.entitlement = entitlement
-                fn.__doc__ = note_fn(name, fn.__doc__ or "")
+                fn.__doc__ = note_fn(note_name, fn.__doc__ or "")
+            if gloomberb_family(name):
+                doc = fn.__doc__ or ""
+                if GLOOMBERB_PLATFORM_NOTE not in doc:
+                    fn.__doc__ = f"{GLOOMBERB_PLATFORM_NOTE}\n\n{doc.lstrip()}"
             if (
                 entitlement in _GLOOMBERB_SESSION_ENTITLEMENTS
                 and not _gloomberb_session_tools_advertised
             ):
                 return fn
-            if enabled is None or name in enabled:
-                return mcp.tool(name=name)(fn)
+            public = canonical_tool_name(name)
+            if enabled is not None and name not in enabled and public not in enabled:
+                return fn
+            mcp.tool(name=public)(fn)
+            if public != name:
+                mcp.tool(name=name)(_gloomberb_alias(fn, name))
             return fn
 
         return _register

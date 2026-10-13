@@ -947,19 +947,23 @@ def v1_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
             "data": summary.model_dump(mode="json"),
         }
 
-    if tool.startswith("digifetch_"):
+    if tool.startswith("digifetch_") or tool.startswith("gloomberb_"):
         # digifetch x Gloomberb family (#4097): one shared in-process dispatcher
         # with the MCP + pipeline-agent surfaces, so hub callers get the same §7
-        # attribution envelope. Gated names are deliberately *accepted* here
-        # (unlike the pipeline's advertised-subset filter): with no
-        # GLOOMBERB_SESSION_COOKIE the dispatcher answers the typed
-        # auth_required/pro_required envelope with no request, never a 400.
+        # attribution envelope. ``gloomberb_*`` is the public name;
+        # ``digifetch_*`` stays as a compatibility alias (DIG-3313). Gated names
+        # are deliberately *accepted* here (unlike the pipeline's
+        # advertised-subset filter): with no GLOOMBERB_SESSION_COOKIE the
+        # dispatcher answers the typed auth_required/pro_required envelope with
+        # no request, never a 400.
         from digiquant.data.gloomberb.agent_tools import (
             DIGIFETCH_DISPATCH,
             build_digifetch_tool_dispatcher,
         )
+        from digiquant.tool_names import legacy_tool_name
 
-        if tool in DIGIFETCH_DISPATCH:
+        dispatch_name = tool if tool in DIGIFETCH_DISPATCH else legacy_tool_name(tool)
+        if dispatch_name in DIGIFETCH_DISPATCH:
             # #4556: the dispatcher returns {"content": <envelope json>, "ok": bool};
             # unwrap the content so the hub response shape is unchanged.
             result = build_digifetch_tool_dispatcher()(tool, args)

@@ -150,14 +150,31 @@ def env_denied_tools() -> frozenset[str]:
     return frozenset(token.strip().lower() for token in tokens if token.strip())
 
 
+def _refusal_aliases(tool_name: str) -> tuple[str, ...]:
+    """Names that share one refusal.
+
+    ``digifetch_congress_trades`` and ``gloomberb_congress_trades`` are the same
+    feed. Refusing one prefix and registering the other would reopen it.
+    """
+    if tool_name.startswith("digifetch_"):
+        return (tool_name, "gloomberb_" + tool_name[len("digifetch_") :])
+    if tool_name.startswith("gloomberb_"):
+        return (tool_name, "digifetch_" + tool_name[len("gloomberb_") :])
+    return (tool_name,)
+
+
 def is_refused(tool_name: str) -> bool:
     """Return True when ``tool_name`` must not be registered or dispatched.
 
     Deny-only: membership of :data:`REFUSED_TOOLS` short-circuits, so no
     environment value can permit a refused feed. The comparison of the
     environment denylist is case-insensitive, which can only match more names.
+    A Gloomberb alias of a refused ``digifetch_`` name is refused too.
     """
-    return tool_name in REFUSED_TOOLS or tool_name.lower() in env_denied_tools()
+    denied = env_denied_tools()
+    return any(
+        name in REFUSED_TOOLS or name.lower() in denied for name in _refusal_aliases(tool_name)
+    )
 
 
 def refusal_message(tool_name: str) -> str:
