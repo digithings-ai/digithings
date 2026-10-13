@@ -28,6 +28,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+from contextvars import ContextVar, Token
 from pathlib import Path
 
 import yaml
@@ -677,6 +678,34 @@ def operator_default_model() -> str:
     return _refuse_paid_in_free_mode(resolved, mode)
 
 
+# Session house-model pick (OCC model picker). Only a slug on the operator's
+# ``DIGI_SESSION_MODEL_ALLOWLIST`` (comma list, house upstream models only) is
+# ever bound; anything else is ignored and the operator default stays. BYOK wins:
+# a bound user key is never redirected by this.
+_house_model_override: ContextVar[str | None] = ContextVar(
+    "dg_house_model_override", default=None
+)
+
+
+def session_model_allowlist() -> frozenset[str]:
+    raw = os.environ.get("DIGI_SESSION_MODEL_ALLOWLIST") or ""
+    return frozenset(p.strip() for p in raw.split(",") if p.strip())
+
+
+def push_house_model(value: str | None) -> Token[str | None]:
+    """Bind an allowlisted session model for this request (None when not allowed)."""
+    slug = (value or "").strip()
+    return _house_model_override.set(slug if slug and slug in session_model_allowlist() else None)
+
+
+def pop_house_model(token: Token[str | None]) -> None:
+    _house_model_override.reset(token)
+
+
+def get_house_model_override() -> str | None:
+    return _house_model_override.get()
+
+
 def get_model_for_mode() -> str:
     """Return the fallback model for phases without a phase_models entry.
 
@@ -693,6 +722,9 @@ def get_model_for_mode() -> str:
     must not swap a free/local digithings install onto paid dashboard models.
     ``llm_mode: free`` refuses non-``:free`` (non-Ollama) model ids.
     """
+    override = _house_model_override.get()
+    if override and not get_byok_override():
+        return override
     return _apply_byok_model_override(operator_default_model())
 
 
