@@ -16,7 +16,7 @@
  * `public_accounting_nav_history`, closes via `GET /v1/market/closes`,
  * R2-API-only). Small envelope/param helpers below mirror CONTRACT.md
  * §1/§2 so this file is self-contained; the merge step swaps them for
- * `errorResponse` / `buildProvenance` / `parseCommonParams` from `./index`.
+ * `errorResponse` / `buildProvenance` / `parseCommonParams` from `./responses`.
  *
  * Pure builders live in `./portfolio`, `./allocations`, `./nav-series`,
  * `./invested`, `./book`, `./committed-book` (vitest parity targets).
@@ -34,6 +34,7 @@ import {
   forwardFillCalendarGaps,
   isNavSeriesSeam,
   navRowContractLabel,
+  navSeriesPlotReadiness,
   type NavContract,
 } from './nav-series';
 import { buildPortfolioData, type PortfolioNavTipInput } from './portfolio';
@@ -413,8 +414,10 @@ export async function handleNavSeries(
     const hasSeam = sorted.some((r, i) =>
       i === 0 ? false : isNavSeriesSeam(r, sorted[i - 1].source ?? null),
     );
+    const plot = navSeriesPlotReadiness(points);
     return sliceOk(
       {
+        plot: { series: plot.series, accounting_nav: plot.accountingNav },
         tip: tip ? { date: tip.date, contract: navRowContractLabel(tip) } : null,
         points: points.map((p) => ({
           date: p.date,

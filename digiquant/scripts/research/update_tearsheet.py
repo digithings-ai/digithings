@@ -752,6 +752,15 @@ def push_to_supabase(parsed_digests, docs, history, metrics, pj_positions):
                 )
 
     if position_rows:
+        # DIG-2816: DELIBERATELY NOT GATED AGAINST ``position_events``.
+        # This script is UPSTREAM of the ledger — it derives ``position_events`` from
+        # day-over-day book digests further down this file — so reconciling this write
+        # against the ledger would be circular: the book would be checked against the
+        # rows this same run is about to derive from it. The four DOWNSTREAM writers
+        # (``portfolio_materialize``, ``writers/commit_io``,
+        # ``sync_positions_from_rebalance``, ``refresh_performance_metrics.carry_forward``)
+        # are the ones that must reconcile. Do not wire this call site to
+        # ``ledger_replay.reconcile_book``.
         # Batch upsert in chunks (Supabase limit ~1000 rows per request)
         for i in range(0, len(position_rows), 500):
             chunk = position_rows[i : i + 500]

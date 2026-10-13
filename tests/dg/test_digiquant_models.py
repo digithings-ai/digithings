@@ -510,6 +510,44 @@ def test_empty_digiquant_model_tier_is_cheap(monkeypatch: pytest.MonkeyPatch) ->
 
 
 @pytest.mark.unit
+def test_empty_tier_stays_cheap_when_yaml_default_is_quality(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An empty DIGIQUANT_MODEL_TIER is a kill switch, not a fall-through to yaml."""
+    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "  ")
+    monkeypatch.setattr(
+        model_config,
+        "_load_digiquant_models",
+        lambda: model_config.DigiquantModelsConfig(default_tier="quality"),
+    )
+    assert get_digiquant_tier() == "cheap"
+
+
+@pytest.mark.unit
+def test_unknown_tier_does_not_follow_a_non_cheap_yaml_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DIGIQUANT_MODEL_TIER", "qualty")
+    monkeypatch.setattr(
+        model_config,
+        "_load_digiquant_models",
+        lambda: model_config.DigiquantModelsConfig(default_tier="quality"),
+    )
+    assert get_digiquant_tier() == "cheap"
+
+
+@pytest.mark.unit
+def test_unset_tier_still_uses_yaml_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("DIGIQUANT_MODEL_TIER", raising=False)
+    monkeypatch.setattr(
+        model_config,
+        "_load_digiquant_models",
+        lambda: model_config.DigiquantModelsConfig(default_tier="balanced"),
+    )
+    assert get_digiquant_tier() == "balanced"
+
+
+@pytest.mark.unit
 @pytest.mark.parametrize(
     "phase_slug",
     (

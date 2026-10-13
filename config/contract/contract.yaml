@@ -376,7 +376,8 @@ env:
   secret: false
   sources:
     wrangler_workers: []
-    compose_files: []
+    compose_files:
+    - docker-compose.yml
     env_example_files: []
     compose_literal:
     - CHEAPERINFERENCE_API_BASE
@@ -1201,6 +1202,17 @@ env:
     env_example_files:
     - .env.example
     compose_literal: []
+- name: DT_PROXY_PORT
+  description: Host port for the digithings.localhost reverse proxy (S4 compose
+    service groups, issue 5355). Interpolated in docker-compose.yml with a
+    default of 8088.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal: []
 - name: DT_TARGET
   description: Variant selector for UIs (selfhost|hosted, S1 identity,
     DIG-2759). Rendered by scripts/render_config_contract.py into wrangler
@@ -1915,3 +1927,11 @@ bindings:
   name: LANGFUSE_EVENTS
   bucket_name: digitrace-langfuse-events
   source: apps/digitrace-langfuse/wrangler.toml
+# DIG-2895 data API. The D1 database is a LOCAL placeholder id (no deploy, no
+# routes, no remote database); the binding exists so the parity contract can see
+# the name. A remote database_id is a cutover step and needs Chris's approval.
+- worker: digidata-api
+  type: d1_database
+  name: TWELVEX_DB
+  database_name: twelvex
+  source: apps/digidata-api/wrangler.toml

@@ -116,6 +116,7 @@
         "AUTH_SECRET",
         "AUTH_TRUST_HOST",
         "AUTH_URL",
+        "CHEAPERINFERENCE_API_BASE",
         "CHROMA_PATH",
         "DIGICHAT_AUTO_MIGRATE",
         "DIGICHAT_CHROME_SKIN",
@@ -392,6 +393,9 @@
         "DT_TARGET": "var",
         "DT_VARIANT": "var",
         "DigiChatContainer": "container"
+      },
+      "apps/digidata-api/wrangler.toml": {
+        "TWELVEX_DB": "d1_database"
       },
       "apps/digiquant-runner/wrangler.toml": {
         "ARCHIVE": "r2_bucket",

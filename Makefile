@@ -1,8 +1,7 @@
 # Digi Ecosystem – common targets (Phase 0+)
 # Use: make build, make test, make test-e2e, make up, make down
 
-.PHONY: build up down test test-unit test-e2e test-baseline doc-check adr-check vault-check package up-core up-chat up-trace up-edge up-all proxy-validate up-heartbeat up-digichat down-digichat digichat-release-up digichat-release-down digichat-profile-a-up digichat-profile-a-down digichat-profile-a-bundle-up digichat-profile-a-bundle-down digichat-dev digichat-health digichat-config-check stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init model-catalog model-catalog-check config-contract config-contract-check clean-imports find-stale commit pr task new-task status batch-candidates parse-error hooks-install up-observability down-observability research-validate supabase-migrations-check datatap-answer-check
-
+.PHONY: build up down test test-unit test-e2e test-baseline doc-check adr-check vault-check package up-core up-chat up-trace up-edge up-all proxy-validate up-heartbeat up-digichat down-digichat digichat-release-up digichat-release-down digichat-profile-a-up digichat-profile-a-down digichat-profile-a-bundle-up digichat-profile-a-bundle-down digichat-dev digichat-health digichat-config-check stack-local stack-local-stop up-digichat-db down-digichat-db seed-digisearch-local export-edgar-digisearch-dev seed-digisearch-edgar-dev seed-digisearch-edgar-dev-host edgar-digisearch-dev agents-init model-catalog model-catalog-check config-contract config-contract-check clean-imports find-stale commit pr task new-task status batch-candidates parse-error hooks-install up-observability down-observability research-validate supabase-migrations-check datatap-answer-check seed-local seed-local-no-r2
 build:
 	docker compose build
 
@@ -70,6 +69,12 @@ doc-check:
 # docs/adr/NNNN-*.md must be zero-padded, unique and gap-free. Same check as CI docs job (#3524).
 adr-check:
 	python3 scripts/check_adr_numbering.py
+
+# Every agent skill link in a skills home must resolve. Read-only (DIG-2284).
+# Override the target, e.g. `make skills-links-check SKILLS_HOME=~/.claude/skills`.
+SKILLS_HOME ?= .claude/skills
+skills-links-check:
+	python3 scripts/check_agent_skills_links.py --skills-home "$(SKILLS_HOME)" --strict
 
 # Lint the digivault-managed docs/vision vault (wikilinks, frontmatter, taxonomy,
 # orphans) against docs/vision/.digivault.yml. Uses the digivault core (pydantic +
@@ -209,6 +214,17 @@ down-digichat-db:
 # Ingest digisearch/seeds/* via POST /ingest (needs DIGISEARCH_SEED_API_KEY=dgk_live_... with digisearch:ingest). See docs/LOCAL_STACK.md.
 seed-digisearch-local:
 	@python3 scripts/seed_digisearch_local.py
+
+# DIG-2774: full synthetic seed for the self-host reference stack (plan section 5).
+# Deterministic (--seed 42) and idempotent, synthetic only, never writes to a
+# non-loopback target. Steps whose service is not running report `skipped`.
+# Use SEED=43 to prove the seed is load-bearing; SEED_ARGS='--dry-run' to preview.
+seed-local:
+	@python3 -m scripts.seed.seed_all --seed $(or $(SEED),42) $(SEED_ARGS)
+
+# Same, minus the R2 objects that need a running Miniflare bucket.
+seed-local-no-r2:
+	@python3 -m scripts.seed.seed_all --seed $(or $(SEED),42) $(SEED_ARGS) --skip r2
 
 # EDGAR-CORPUS dev slice → digisearch/devdata/edgar_sample (needs: pip install -e "./digisearch[edgar-corpus]").
 export-edgar-digisearch-dev:
@@ -378,6 +394,17 @@ secrets-scan:
 	  exit 127; \
 	}
 	@gitleaks detect --source . --config .gitleaks.toml --redact --verbose --no-banner
+
+# Refuse a payload carrying an unmasked customer email address. No-argument form
+# scans the working tree, which is the one to run before committing a new seed
+# payload; `make pii-scan-all` is the whole-tree form (use after containment).
+# Mirrors the PR step in .github/workflows/security-gitleaks.yml.
+.PHONY: pii-scan pii-scan-all
+pii-scan:
+	python3 scripts/check_pii_seed_payloads.py
+
+pii-scan-all:
+	python3 scripts/check_pii_seed_payloads.py --all
 
 # Match every `secrets.*` read under .github/ against each level (repo secret, repo
 # variable, org secret, environment secret) and report `dead`, `not repo-level`,

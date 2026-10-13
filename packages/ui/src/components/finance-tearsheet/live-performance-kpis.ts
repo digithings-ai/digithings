@@ -38,6 +38,15 @@ export interface LiveKpiPosition {
 export interface LiveKpiNavPoint {
   date: string;
   nav: number;
+  /**
+   * Accounting day return for the row (percent points). Preferred step for the
+   * continuity index; absent on rows that predate the accounting contract.
+   */
+  day_return_pct?: number | null;
+  /** Row source (`legacy_nav_history` / `finalized_accounting`). */
+  source?: string | null;
+  /** True on the first row after a legacy↔finalized flip. */
+  series_seam?: boolean | null;
 }
 
 export interface LiveKpiBenchmarkPoint {
@@ -126,6 +135,59 @@ export function derivePriceAsOfDate(positions: readonly LiveKpiPosition[]): stri
     if (markDate && (!markMax || markDate > markMax)) markMax = markDate;
   }
   return liveMax ?? markMax;
+}
+
+/** Mirror of `CONTINUITY_MAX_STEP_PCT` in `apps/dashboard-api/src/ssot.ts`. */
+const CONTINUITY_MAX_STEP_PCT = 25;
+
+/** Mirror of `isNavSeriesSeam` in `apps/dashboard-api/src/ssot.ts`. */
+function isNavSeriesSeam(
+  row: LiveKpiNavPoint,
+  prevSource: string | null | undefined,
+): boolean {
+  if (row.series_seam === true) return true;
+  if (prevSource == null) return false;
+  const source = row.source ?? null;
+  return source != null && prevSource != null && source !== prevSource;
+}
+
+/**
+ * One chain step (percent points). Prefers the row's own day return, clamps a
+ * move that cannot be performance, and returns 0 across a source seam — so a
+ * rebasing/flow level jump never enters the index.
+ */
+function continuityStepPct(row: LiveKpiNavPoint, previous: LiveKpiNavPoint | undefined): number {
+  const daily = row.day_return_pct;
+  if (daily != null && Number.isFinite(daily)) {
+    return Math.abs(daily) <= CONTINUITY_MAX_STEP_PCT ? daily : 0;
+  }
+  if (!isNavSeriesSeam(row, previous?.source ?? null) && previous != null && previous.nav > 0) {
+    const level = (row.nav / previous.nav - 1) * 100;
+    if (Number.isFinite(level) && Math.abs(level) <= CONTINUITY_MAX_STEP_PCT) return level;
+  }
+  return 0;
+}
+
+/**
+ * Base-100 continuity index over the accounting rows — the SAME chain `/brief`
+ * plots. Mirror of `buildContinuityNavSeries` (apps/dashboard-api/src/ssot.ts),
+ * without the 2dp rounding that module applies for display.
+ *
+ * Accounting NAV levels carry flows and rebasing that never appear in
+ * `day_return_pct`; dividing NAV by 100 counts those level jumps as returns.
+ */
+export function continuityIndexSeries(rows: readonly LiveKpiNavPoint[]): LiveKpiNavPoint[] {
+  const sorted = [...rows]
+    .filter((r) => Number.isFinite(r.nav) && r.nav > 0)
+    .sort((a, b) => a.date.localeCompare(b.date));
+  if (sorted.length === 0) return [];
+  const out: LiveKpiNavPoint[] = [{ date: sorted[0].date, nav: 100 }];
+  let index = 100;
+  for (let i = 1; i < sorted.length; i += 1) {
+    index *= 1 + continuityStepPct(sorted[i], sorted[i - 1]) / 100;
+    out.push({ date: sorted[i].date, nav: index });
+  }
+  return out;
 }
 
 /**
@@ -313,9 +375,16 @@ export function computeLivePerformanceKpis(input: LivePerformanceKpisInput): Liv
     liveNav != null && anchor != null && anchor > 0 ? (liveNav / anchor - 1) * 100 : null;
 
   const firstNavRow = sortedNav.length > 0 ? sortedNav[0] : null;
+  // Since-inception is the SAME base-100 continuity index `/brief` plots — never
+  // `nav / 100`. Accounting NAV levels carry flows and rebasing that never appear
+  // in `day_return_pct`, so a raw-level ratio reports non-performance level jumps
+  // as returns. The live move is applied to the INDEX tip, not the NAV tip.
+  const continuity = continuityIndexSeries(sortedNav);
+  const indexTip = continuity.length > 0 ? continuity[continuity.length - 1].nav : null;
+  const liveIndex = indexTip == null ? null : indexTip * (1 + liveVsMarkPct / 100);
   const sinceInceptionPct =
-    liveNav != null && firstNavRow != null
-      ? sinceInceptionPctFromNav(firstNavRow.nav, liveNav)
+    liveIndex != null && continuity.length >= 2
+      ? sinceInceptionPctFromNav(continuity[0].nav, liveIndex)
       : null;
 
   let portfolioReturnPct: number | null = sinceInceptionPct;
@@ -327,8 +396,8 @@ export function computeLivePerformanceKpis(input: LivePerformanceKpisInput): Liv
 
   if (
     liveNav != null &&
+    sinceInceptionPct != null &&
     firstNavRow != null &&
-    firstNavRow.nav > 0 &&
     benchmarkHistory?.length &&
     benchTickerOut
   ) {
@@ -343,7 +412,10 @@ export function computeLivePerformanceKpis(input: LivePerformanceKpisInput): Liv
     if (endDate) {
       const aligned = pickBenchmarkPoints(benchmarkHistory, startDate, endDate);
       if (aligned) {
-        portfolioReturnPct = (liveNav / firstNavRow.nav - 1) * 100;
+        // Portfolio leg is the index-based since-inception — the same number
+        // `/brief` reports, so the two can never disagree. The benchmark leg
+        // stays level-based: a price index carries no flows.
+        portfolioReturnPct = sinceInceptionPct;
         benchmarkReturnPct = (aligned.end.price / aligned.start.price - 1) * 100;
         excessReturnPct = portfolioReturnPct - benchmarkReturnPct;
 

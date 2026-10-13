@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 _DEBUG_REQUEST_LOG: list[dict] = []
 _DEBUG_REQUEST_LOG_MAX = 5
 
+from digibase.art9_middleware import install_art9_admission
 from digibase.cors import install_cors, resolve_cors_origins
 from digibase.errors import json_error_response, register_fastapi_error_handlers
 from digibase.http import install_request_id_logging, install_request_id_middleware
@@ -94,6 +95,12 @@ app = FastAPI(
 install_metrics(app, service="digigraph", version=__version__)
 install_cors(app, service="digigraph")
 app.add_middleware(DigiAuthMiddleware, service="digigraph", path_scopes=digigraph_path_scopes)
+# Art. 9 admission runs OUTSIDE DigiAuthMiddleware: FastAPI inserts each
+# add_middleware at index 0, so the last call is the outermost. Screening the
+# body before authentication is what makes a refusal observable at all -- behind
+# DigiAuth an unauthenticated Art. 9 request answers 401 and the checkpointer
+# assertion below becomes vacuous.
+install_art9_admission(app, app_name="digigraph")
 
 
 @app.middleware("http")
