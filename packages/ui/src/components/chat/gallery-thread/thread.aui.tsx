@@ -935,6 +935,7 @@ export function dedupeSourceParts(
   return out;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const MessageSources: FC<{ Source: SourceMessagePartComponent }> = ({
   Source,
 }) => {
@@ -1078,7 +1079,8 @@ const AssistantMessage: FC = () => {
             }
           }}
         </MessagePrimitive.GroupedParts>
-        <MessageSources Source={SourceComponent} />
+        {/* No auto-rendered source list (DIG-1210): the model cites inline
+            with markdown links in its answer instead. */}
         <MessageError />
       </div>
 

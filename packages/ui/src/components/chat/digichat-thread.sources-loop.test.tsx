@@ -91,8 +91,12 @@ describe("DigichatThread sources (digisearch + digivault_get_note)", () => {
     expect(loop).toBe(false);
     expect(host.textContent).toContain("Activate via the welcome mail.");
 
+    // DIG-1210: no auto-rendered source list at all; citations are inline links.
+    expect(host.querySelectorAll('[data-slot="aui_message-sources"]').length).toBe(0);
+    expect(host.querySelectorAll(".aui-source-row").length).toBe(0);
+    act(() => root.unmount());
+    return;
     const footer = host.querySelectorAll('[data-slot="aui_message-sources"]');
-    expect(footer.length).toBe(1);
     const rows = footer[0]!.querySelectorAll(".aui-source-row");
     expect(rows.length).toBe(HITS.length);
     // A url-bearing copy of a hit wins over its url-less duplicate.
@@ -141,9 +145,8 @@ describe("DigichatThread sources (digisearch + digivault_get_note)", () => {
     errors.mockRestore();
     expect(loop).toBe(false);
     expect(host.textContent).toContain("Activate via the welcome mail.");
-    const footer = host.querySelectorAll('[data-slot="aui_message-sources"]');
-    expect(footer.length).toBe(1);
-    expect(host.querySelectorAll(".aui-source-row").length).toBe(HITS.length);
+    expect(host.querySelectorAll('[data-slot="aui_message-sources"]').length).toBe(0);
+    expect(host.querySelectorAll(".aui-source-row").length).toBe(0);
     act(() => root.unmount());
   });
 });
