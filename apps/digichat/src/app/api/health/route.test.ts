@@ -121,4 +121,54 @@ describe("GET /api/health", () => {
       resetLicenseStateForTests();
     }
   });
+
+  // "unreachable" is a bare catch, so before DIG-3076 the cause was discarded
+  // and the 503 was undiagnosable after the fact. These two cases pin the
+  // distinction the run-watch ticket actually needed.
+  it("logs which dependency and how it failed when the fetch throws", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockRejectedValue(new TypeError("fetch failed"))
+      );
+      const res = await GET();
+      expect(res.status).toBe(503);
+
+      const lines = spy.mock.calls.map((c) => String(c[0]));
+      const digraphLines = lines.filter((l) => l.includes("[health] digraph"));
+      expect(digraphLines.length).toBeGreaterThanOrEqual(1);
+      // Names the dependency AND the host, so the failure is attributable.
+      expect(digraphLines[0]).toContain("127.0.0.1:8000");
+      // Distinguishes a connect/DNS failure from a timeout.
+      expect(digraphLines[0]).toContain("TypeError");
+      expect(digraphLines[0]).toContain("fetch failed");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("reports an aborted ping as a timeout, distinct from a connect failure", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockRejectedValue(
+          Object.assign(new Error("The operation was aborted."), {
+            name: "AbortError",
+          })
+        )
+      );
+      await GET();
+
+      const lines = spy.mock.calls.map((c) => String(c[0]));
+      const digraphLines = lines.filter((l) => l.includes("[health] digraph"));
+      expect(digraphLines.length).toBeGreaterThanOrEqual(1);
+      expect(digraphLines[0]).toContain("aborted after 4000ms");
+      // The timeout must NOT be reported as a connect error.
+      expect(digraphLines[0]).not.toContain("fetch failed");
+    } finally {
+      spy.mockRestore();
+    }
+  });
 });
