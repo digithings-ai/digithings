@@ -62,16 +62,19 @@ _HOST_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Measured on the back-merge tree after folding develop's L4-L9 convergence
-# and the repo-activity refresh (#5505): movement since the batch pin is five
-# literals from two landings, minus one refresh removal. From main's OCC
-# release: occ.digithings.ai x2 as tenant-map keys in
+# Measured on the back-merge tree after folding develop's L4-L9 convergence,
+# the repo-activity refresh (#5505) and the #5542 rotation note: movement
+# since the batch pin is five literals from two landings, minus one refresh
+# removal, with the rotation re-confirmed at 54. From main's OCC release:
+# occ.digithings.ai x2 as tenant-map keys in
 # tests/dg/test_occ_ticket_payload_retired.py, mcp.digithings.ai x1 in
-# review-5061-digichat-mcp-tool-allowlist.md prose. From the L4-L9 union:
-# key.digithings.ai (+1), search.digithings.ai (+1). The refresh then dropped
-# the snapshot's hosted-digisearch-route summary line (-1 search). Regenerated
-# with the
-# file's own scanner, in the open, per the design rule above.
+# docs/reviews/pr/review-5061-digichat-mcp-tool-allowlist.md prose. From the
+# L4-L9 union: key.digithings.ai (+1), search.digithings.ai (+1). The refresh
+# then dropped the snapshot's hosted-digisearch-route summary line (-1
+# search). #5542 re-measured search at 54 on develop (rotated repo-activity
+# snapshot line, PR-4067 summary dropped in 5132e29f0): benign content
+# rotation, and the merged tree still scans 54, so the pin holds. Regenerated
+# with the file's own scanner, in the open, per the design rule above.
 PINNED_CENSUS = {
     "api.digithings.ai": 1,
     "app.digithings.ai": 3,
