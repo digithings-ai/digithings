@@ -33,7 +33,7 @@ RUN uv pip install --system -e "./digifetch"
 COPY digiquant/pyproject.toml ./
 COPY digiquant/src ./src
 COPY digiquant/data ./data
-RUN uv pip install --system -e ".[nautilus]"
+RUN uv pip install --system -e ".[nautilus,mcp]"
 
 EXPOSE 8001
 CMD ["uvicorn", "digiquant.server:app", "--host", "0.0.0.0", "--port", "8001"]
