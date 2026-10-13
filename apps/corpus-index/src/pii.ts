@@ -62,6 +62,12 @@ const COMPANY = new RegExp(
   `(?:${W}\\s+){0,4}${W}\\s+(?:gGmbH|GmbH(?:\\s*&\\s*Co\\.?\\s*KG)?|AG|KG|e\\.\\s?V\\.|UG|mbH|Ltd\\.?|Inc\\.?|LLC|SE|eG)\\b`,
   "gu",
 );
+/** Signature-block contact details that the international PHONE pattern misses. */
+const NATIONAL_PHONE = /\b0\d{2,5}(?:\s?[/-]\s?|\s)\d{2,}(?:[\s-]\d{1,6})*\b/g;
+const STREET = /\b[\p{L}.-]*(?:straße|strasse|str\.|weg|platz|allee|gasse|ring|damm|ufer|chaussee)\s*\d+\s?[a-z]?\b/giu;
+const POSTCODE_CITY = /\b(?:D-|DE-)?\d{5}\s+[A-ZÄÖÜ][\p{L}-]+(?:\s(?:am|an der|im|bei)\s[A-ZÄÖÜ][\p{L}-]+)?/gu;
+const WEBSITE = /\b(?:https?:\/\/)?www\.[^\s,;|]+/gi;
+
 /** Words that look like names after a greeting/closing but are not. */
 const NOT_NAMES = new Set(["Team", "Support", "Ihr", "Ihre", "Euer", "Eure", "Zusammen", "Alle", "Allerseits", "OCC", "Online", "Compliance", "Center"]);
 
@@ -91,7 +97,11 @@ export function maskPii(text: string, names: string[] = []): string {
     .replace(EMAIL, "[email]")
     .replace(IBAN, "[iban]")
     .replace(PHONE, "[phone]")
-    .replace(MAIL_HEADER, (_m, key: string) => `${key}: [name]`);
+    .replace(MAIL_HEADER, (_m, key: string) => `${key}: [name]`)
+    .replace(WEBSITE, "[website]")
+    .replace(STREET, "[address]")
+    .replace(POSTCODE_CITY, "[address]")
+    .replace(NATIONAL_PHONE, "[phone]");
   for (const name of names) {
     out = out.replace(new RegExp(`(?<![\\p{L}])${escapeRe(name)}(?![\\p{L}])`, "gu"), "[name]");
   }

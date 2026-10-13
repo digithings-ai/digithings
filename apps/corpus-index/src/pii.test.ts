@@ -65,3 +65,14 @@ describe("name masking (DIG-3269 gate)", () => {
     expect(maskPii("Viele Grüße Ihr OCC Team")).toContain("Ihr OCC Team");
   });
 });
+
+describe("signature contact details (DIG-3269 gate)", () => {
+  it("masks national phones, street, postcode city and website", () => {
+    const out = maskPii(
+      "Musterstraße 22, 65232 Taunusstein Fon 06128/3333 Mobil 0151/12483766 Telefon: 02203-92072-0 Web: www.example-firma.de Industriestr. 8 * DE-65510 Idstein",
+    );
+    for (const leak of ["Musterstraße", "65232", "Taunusstein", "06128", "0151", "02203", "example-firma", "Industriestr", "Idstein"]) {
+      expect(out).not.toContain(leak);
+    }
+  });
+});
