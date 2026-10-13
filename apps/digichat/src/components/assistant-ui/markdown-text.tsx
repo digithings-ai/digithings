@@ -10,6 +10,7 @@ import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
 import remarkGfm from "remark-gfm";
 import { EChartsCard } from "@/components/echarts-card";
 import { parseChartEnvelope } from "@/lib/chart-spec";
+import { remarkStripModelBoilerplate } from "@/lib/strip-model-boilerplate";
 
 export const JsonChartFence: FC<SyntaxHighlighterProps> = ({
   code,
@@ -32,7 +33,7 @@ const MARKDOWN_BY_LANGUAGE = {
 
 export const MarkdownText: FC = () => (
   <MarkdownTextPrimitive
-    remarkPlugins={[remarkGfm]}
+    remarkPlugins={[remarkGfm, remarkStripModelBoilerplate]}
     className="aui-md"
     componentsByLanguage={MARKDOWN_BY_LANGUAGE}
   />
