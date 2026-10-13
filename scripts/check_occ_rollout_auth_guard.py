@@ -202,7 +202,7 @@ def run_scenario(
         # silent: a stripped token in CI is an auth error ten lines later, and a
         # leaked-through token locally is the behaviour the strip exists to prevent.
         if expect_token is not None and calls:
-            with_token = "token=yes" in calls
+            with_token = "token=yes" in calls  # score:allow potential hardcoded secret
             if with_token is not expect_token:
                 failures.append(
                     f"expected CLOUDFLARE_API_TOKEN present={expect_token} for wrangler "
