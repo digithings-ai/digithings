@@ -70,8 +70,10 @@ export function supabaseOriginForCsp(env = process.env) {
 }
 
 /**
- * dashboard-api origin (`NEXT_PUBLIC_DASHBOARD_API_URL`) for the digiquant band's
- * NAV and benchmark reads, or null when unset (no production default).
+ * dashboard-api origin (`NEXT_PUBLIC_DASHBOARD_API_URL`) for CSP connect-src,
+ * or null when that env is unset. Production page reads still default to
+ * `https://graph.digithings.ai/dashboard-api` in `dashboardApiBase()`; that
+ * host is already allowed via the market-data origin.
  * @param {NodeJS.ProcessEnv | Record<string, string | undefined>} [env]
  * @returns {string | null}
  */
