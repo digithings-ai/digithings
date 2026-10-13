@@ -122,6 +122,16 @@ describe("digithings-web security-headers", () => {
     expect(embedOriginForChat({})).toBe(frameSrcForCsp({}));
   });
 
+  it("frames the local digichat from a development landing", () => {
+    expect(embedOriginForChat({ NODE_ENV: "development" })).toBe("http://127.0.0.1:3000");
+    expect(
+      embedOriginForChat({
+        NODE_ENV: "development",
+        NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN: "https://staging-chat.example",
+      }),
+    ).toBe("https://staging-chat.example");
+  });
+
   // The landing page's price tape reads the public market-data Worker, so the
   // strict connect-src must allow that origin or the browser blocks the fetch
   // and the band sits on its connecting line forever.
