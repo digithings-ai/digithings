@@ -185,3 +185,12 @@ checks:
       Unconditional lane, folded into `Required checks passed` (in its
       `needs:`). Deliberately ungated directly: it reports on every PR and
       goes red, and merges continue. Required nowhere.
+
+  - context: Plaintext credential guard
+    workflow: ci.yml
+    job: plaintext-credential-guard
+    enforcement: advisory
+    reason: >-
+      Unconditional lane, folded into `Required checks passed` (in its
+      `needs:`). Deliberately ungated directly: it reports on every PR and
+      goes red, and merges continue. Required nowhere.

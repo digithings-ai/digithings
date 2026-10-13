@@ -88,7 +88,7 @@ PINNED_CENSUS = {
     "search.digithings.ai": 54,
     "trace.digithings.ai": 20,
     "www.digiquant.io": 17,
-    "www.digithings.ai": 81,
+    "www.digithings.ai": 82,
 }
 
 
