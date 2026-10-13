@@ -103,12 +103,13 @@ COPY scripts/merge_litellm_cheaperinference.py /app/scripts/merge_litellm_cheape
 # Read-only Zammad MCP for the OCC help chat (supervisord [program:zammad-mcp];
 # deps `mcp` + `httpx` already present via digigraph[mcp]).
 COPY scripts/zammad_mcp ./scripts/zammad_mcp
-# occ_tickets seed ingester (supervisord oneshot seed_chroma.sh calls
-# `python3 -m scripts.build_occ_tickets_seed --ingest /seed/occ_tickets.jsonl`).
-# Both files land under /app/scripts, where WORKDIR /app makes `scripts` an
-# importable namespace package so the sibling import resolves.
-COPY scripts/index_occ_tickets.py /app/scripts/index_occ_tickets.py
-COPY scripts/build_occ_tickets_seed.py /app/scripts/build_occ_tickets_seed.py
+# scripts/index_occ_tickets.py and scripts/build_occ_tickets_seed.py are
+# deliberately NOT copied here. They build the retired `occ_tickets` index,
+# which writes customer email, customer display name and `[internal]` staff
+# notes unmasked (DIG-1210). Nothing invokes them: no supervisor program and no
+# seed_chroma.sh step names either module, and seed/occ_tickets.jsonl is no
+# longer tracked on this branch. Leaving the writer in the production image only
+# kept it one supervisor edit away from running again.
 COPY apps/digithings-stack-cloudflare/container/supervisor/supervisord.conf \
      /etc/supervisor/conf.d/digithings.conf
 # SearXNG config — the SAME file docker-compose.yml mounts into the dev
