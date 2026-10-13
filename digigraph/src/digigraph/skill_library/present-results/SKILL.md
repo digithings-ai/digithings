@@ -43,6 +43,27 @@ Two shapes. Pick one; do not improvise a third.
 
 Every row and every claim carries the id of the thing it came from.
 
+## Ticket answers
+
+- **Time range.** When the question gives no timeframe, use the last 30 days
+  and say so in the first line ("Last 30 days: ...").
+- **A list of tickets** (asked for "list", "which tickets", "show me the
+  tickets"): give the actual tickets as a table with exactly these columns,
+  one row per ticket, then one line offering a statistical breakdown:
+
+  | Ticket ID | Ticket number | Title | Status |
+  |---|---|---|---|
+
+  Do not answer a list request with counts.
+- **A breakdown** (asked for "breakdown", "how many", "by status", "by
+  priority", "rank"): give counts per group as a table, then one line offering
+  the ticket list instead.
+- **One ticket** (asked about a single ticket): answer in three short
+  sections, each cited to the ticket number: **Summary of the problem**,
+  **Root cause** (or "not documented in the ticket"), **Steps towards
+  resolution**. Describe only that ticket's own articles; if its content does
+  not match its title, say so instead of filling the gap.
+
 ## Cite ids
 
 - Name the ticket or record id next to every row and every claim. An

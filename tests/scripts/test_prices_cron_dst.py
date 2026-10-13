@@ -57,11 +57,14 @@ def workflow() -> dict:
 
 @pytest.fixture(scope="module")
 def worker_jobs() -> dict[str, str]:
-    """Read literal ``wd``/``rd``/``cj``/``pj`` job IDs and crons from the typed Worker map."""
+    """Read literal ``wd``/``rd``/``cj``/``pj``/``wj`` job IDs and crons from the typed Worker map."""
     # pj = probe jobs (smoke-site, smoke-stack). Omitting it drops those crons
     # from this map and fails parity with wrangler.toml.
+    # wj = watch jobs (DIG-3065 digiquant-house-run-watch). Same rule: a builder
+    # this regex cannot name is a cron wrangler.toml declares and JOBS does not,
+    # which is exactly what the parity assertion below is there to catch.
     pairs = re.findall(
-        r'(?:wd|rd|cj|pj)\(\s*"([^"]+)"\s*,\s*"([^"]+)"',
+        r'(?:wd|rd|cj|pj|wj)\(\s*"([^"]+)"\s*,\s*"([^"]+)"',
         JOBS_SOURCE.read_text(encoding="utf-8"),
         flags=re.DOTALL,
     )
@@ -141,7 +144,7 @@ def _configured_crons() -> list[str]:
 def _enabled_worker_crons_in_order() -> list[str]:
     """Unique enabled crons in JOBS source order (same as uniqueEnabledCrons())."""
     text = JOBS_SOURCE.read_text(encoding="utf-8")
-    call = re.compile(r'(?:wd|rd|cj|pj)\(\s*"([^"]+)"\s*,\s*"([^"]+)"')
+    call = re.compile(r'(?:wd|rd|cj|pj|wj)\(\s*"([^"]+)"\s*,\s*"([^"]+)"')
     matches = list(call.finditer(text))
     ordered: list[str] = []
     seen: set[str] = set()
