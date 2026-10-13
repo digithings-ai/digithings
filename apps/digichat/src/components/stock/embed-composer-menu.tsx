@@ -1261,7 +1261,7 @@ export function EmbedComposerMenu({
                               onMouseEnter={() => setMcpSuggestIndex(index)}
                               onClick={() => applyMcpSuggestion(row.id)}
                             >
-                              <span className="min-w-0 shrink-0 font-medium">{row.id}</span>
+                              <span className="min-w-0 flex-1 font-medium break-words [overflow-wrap:anywhere]">{row.id}</span>
                               <span className="text-muted-foreground min-w-0 truncate text-right text-xs">
                                 {wellKnownMcpHost(row.url) || row.auth}
                               </span>
@@ -1473,9 +1473,9 @@ export function EmbedComposerMenu({
                   onClick={() => row.activate()}
                   onKeyDown={(e) => onRowKey(e, index)}
                 >
-                  <span className="min-w-0 shrink-0 font-medium">{row.label}</span>
+                  <span className="min-w-0 flex-1 font-medium break-words [overflow-wrap:anywhere]">{row.label}</span>
                   {row.value || (exclusive && row.checked) ? (
-                    <span className="text-muted-foreground flex min-w-0 items-center justify-end gap-2 truncate text-right text-xs">
+                    <span className="text-muted-foreground flex max-w-[45%] shrink-0 items-center justify-end gap-2 truncate text-right text-xs">
                       {row.value ? <span className="truncate">{row.value}</span> : null}
                       {exclusive && row.checked ? (
                         <span data-slot="dropdown-menu-radio-item-indicator" className="inline-flex shrink-0">
