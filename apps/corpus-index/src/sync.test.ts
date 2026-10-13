@@ -39,7 +39,7 @@ describe("syncTickets", () => {
       kv,
       {
         search: async (_base, query) => {
-          expect(query).toContain("updated_at:>=");
+          expect(query).toContain("updated_at:[");
           return [
             {
               id: 9,
@@ -129,7 +129,7 @@ describe("syncTickets", () => {
       new Date("2026-10-14T03:00:00.000Z"),
       false,
     );
-    expect(seen).toBe("updated_at:>=2026-10-13T02:50:00.000Z");
+    expect(seen).toBe("updated_at:[2026-10-13T02:50:00.000Z TO *]");
   });
 
   it("on Sunday deletes vectors for tickets that are gone", async () => {

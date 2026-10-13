@@ -99,9 +99,9 @@ export async function syncTickets(
   dryRun: boolean,
 ): Promise<{ tickets: number; vectors: number; deleted: number }> {
   const stored = await kv.get(cursorKey(job.id));
-  const query = stored
-    ? `updated_at:>=${overlapCursor(stored, now.getTime())}`
-    : "updated_at:>=1970-01-01T00:00:00.000Z";
+  // Zammad's search returns nothing for `updated_at:>=<ISO datetime>`; only
+  // the Elasticsearch range form matches a full timestamp.
+  const query = `updated_at:[${stored ? overlapCursor(stored, now.getTime()) : "1970-01-01T00:00:00.000Z"} TO *]`;
   let page = 1;
   let tickets = 0;
   let written = 0;
