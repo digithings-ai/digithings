@@ -40,6 +40,12 @@ export type StandardActivityContext = {
    * `_call` opened rather than minting an arg-less second row.
    */
   rowByCallId: Map<string, string>;
+  /**
+   * Source keys (url / path / title) already written this turn. Every
+   * retrieve span (digisearch, digivault_get_note, …) re-reports the same
+   * hits; writing each again stacked duplicate citation parts (OCC #185).
+   */
+  seenSources?: Set<string>;
 };
 
 export function createActivityWriteContext(): StandardActivityContext {
@@ -241,6 +247,12 @@ function writeSource(
   ctx: StandardActivityContext,
   doc: ActivityDocument,
 ): void {
+  const key = (doc.path || doc.title || "").trim().toLowerCase();
+  if (key) {
+    ctx.seenSources ??= new Set();
+    if (ctx.seenSources.has(key)) return;
+    ctx.seenSources.add(key);
+  }
   const sourceId = nextId(ctx, "src");
   if (isHttpUrl(doc.path)) {
     writer.write({

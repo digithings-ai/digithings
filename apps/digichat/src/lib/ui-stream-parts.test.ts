@@ -615,3 +615,22 @@ describe("callId row correlation", () => {
     });
   });
 });
+
+describe("writeStandardActivity sources (OCC digisearch + digivault_get_note)", () => {
+  it("writes each retrieved source once across repeated retrieve spans", () => {
+    const docs = [
+      { title: "Cloud Portal > 2.2 Activating a new account", path: "cloud-portal.md#2.2" },
+      { title: "OCC HelpCenter", path: "https://help.online-compliance-center.com/index.php" },
+    ];
+    const chunks = collect([
+      { operation: "retrieve", status: "completed", label: "digisearch", toolName: "digisearch", documents: docs },
+      { operation: "retrieve", status: "completed", label: "digivault_get_note", toolName: "digivault_get_note", documents: docs },
+      { operation: "retrieve", status: "completed", label: "digisearch", toolName: "digisearch", documents: docs },
+    ] as ActivitySpan[]);
+    const sources = chunks.filter((c) => c.type === "source-url" || c.type === "source-document");
+    expect(sources).toHaveLength(2);
+    // The tool results still carry their documents for the tool block.
+    const outputs = chunks.filter((c) => c.type === "tool-output-available");
+    expect(outputs).toHaveLength(3);
+  });
+});

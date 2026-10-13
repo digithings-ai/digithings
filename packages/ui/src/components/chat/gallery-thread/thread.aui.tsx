@@ -49,6 +49,7 @@ import {
   type FileMessagePartComponent,
   type ImageMessagePartComponent,
   type SourceMessagePartComponent,
+  type SourceMessagePartProps,
   type ToolCallMessagePartComponent,
   useAui,
   useAuiState,
@@ -58,6 +59,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ComponentPropsWithoutRef,
@@ -892,6 +894,67 @@ const AssistantWorkingIndicator: FC = () => {
   );
 };
 
+type SourcePart = SourceMessagePartProps;
+
+/** Key a citation by url (web) or filename/title (document). */
+function sourceKey(p: SourcePart): string {
+  const url = p.sourceType === "url" ? (p.url ?? "") : "";
+  const doc = p.sourceType === "url" ? "" : (p.filename ?? "");
+  return (url || doc || p.title || p.id || "").trim().toLowerCase();
+}
+
+/**
+ * Dedupe a message's source parts by url / filename / title. A url-bearing
+ * copy of a hit replaces an earlier url-less copy with the same title.
+ * Pure + exported for tests.
+ */
+export function dedupeSourceParts(
+  parts: readonly { type: string }[],
+): SourcePart[] {
+  const out: SourcePart[] = [];
+  const byKey = new Map<string, number>();
+  const byTitle = new Map<string, number>();
+  for (const raw of parts) {
+    if (raw.type !== "source") continue;
+    const p = raw as SourcePart;
+    const title = (p.title ?? "").trim().toLowerCase();
+    const key = sourceKey(p);
+    const hit = byKey.get(key) ?? (title ? byTitle.get(title) : undefined);
+    if (hit !== undefined) {
+      const prev = out[hit]!;
+      if (prev.sourceType !== "url" && p.sourceType === "url") {
+        out[hit] = p;
+        byKey.set(key, hit);
+      }
+      continue;
+    }
+    byKey.set(key, out.length);
+    if (title) byTitle.set(title, out.length);
+    out.push(p);
+  }
+  return out;
+}
+
+const MessageSources: FC<{ Source: SourceMessagePartComponent }> = ({
+  Source,
+}) => {
+  // Select the parts array itself (stable store reference) and derive in a
+  // memo: a selector returning a fresh array re-renders forever (#185).
+  const parts = useAuiState((s) => s.message.parts);
+  const sources = useMemo(() => dedupeSourceParts(parts), [parts]);
+  if (!sources.length) return null;
+  return (
+    <div
+      data-slot="aui_message-sources"
+      className="aui-message-sources mt-2 flex flex-col gap-0.5"
+    >
+      {sources.map((p) => (
+        <Source key={sourceKey(p) || p.id} {...p} />
+      ))}
+    </div>
+  );
+};
+
 const AssistantMessage: FC = () => {
   const {
     ToolFallback: ToolFallbackComponent = ToolFallback,
@@ -1004,12 +1067,15 @@ const AssistantMessage: FC = () => {
               case "indicator":
                 return <AssistantWorkingIndicator />;
               case "source":
-                return <SourceComponent {...part} />;
+                // Rendered once, deduped, in MessageSources below — inline
+                // rows split tool groups and repeated per retrieve span.
+                return null;
               default:
                 return null;
             }
           }}
         </MessagePrimitive.GroupedParts>
+        <MessageSources Source={SourceComponent} />
         <MessageError />
       </div>
 
