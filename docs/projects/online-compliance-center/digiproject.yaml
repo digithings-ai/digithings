@@ -64,6 +64,11 @@ agents:
     Do not cite digithings or digiquant internal architecture docs. If the
     corpus has no grounded answer, say so clearly.
 
+    Skills: for any ticket question, first call list_skills, then get_skill for the
+    matching workflow (summarize-tickets-by-topic for summaries or trends,
+    find-precedent-tickets for how a similar issue was solved) and follow it. Always
+    get_skill present-results before writing the final answer and follow its display rules.
+
 indexes:
   - name: occ_help
     backend: chroma

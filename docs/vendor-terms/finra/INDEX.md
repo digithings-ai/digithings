@@ -452,10 +452,10 @@ I advise; I do not sign, send, or decide. So, plainly:
   `LUXALGO_TRACKERS_ALLOWED_DATASETS` and stop serving it. If Chris elects to keep
   it, the caveat string must state Counsel's *ruled* position rather than
   "unresolved", so users are told the data is not cleared for the use being made of
-  it. Security's existing guards
-  (`test_no_user_visible_cc0_claim_is_left_unqualified`,
+  it. Security's proposed guards in open PR #5209
+  (`test_no_cc0_claim_is_left_unqualified`,
   `test_every_trackers_tool_note_carries_the_caveat`) are the right instrument and
-  should stay in place either way.
+  should stay in place either way once merged.
 - **Outreach is not mine.** Written permission from FINRA, and any commercial term
   with LuxAlgo, are Chris's decisions. Nothing in this record contacts either
   party.
@@ -476,8 +476,9 @@ is not close.**
 ## The caveat text this record requires in the product
 
 What we tell users about the terms of the data we serve is a legal artefact, so
-the wording is stated here rather than left to whoever edits the string. The
-current `LUXALGO_TRACKERS_DATA_CAVEATS["short-volume"]` in
+the wording is stated here rather than left to whoever edits the string. The proposed
+`LUXALGO_TRACKERS_DATA_CAVEATS["short-volume"]` (open PR #5209, not yet on
+`develop`) in
 `digiquant/src/digiquant/data/luxalgo/attribution.py` says the upstream terms
 are **"unresolved"**. They are not — this record resolves them. It also says the
 durable question is "the upstream FINRA redistribution terms, which no vendor
@@ -496,10 +497,10 @@ Two consequences, and only these two:
    affirmer disclaiming warranty of title and any duty to clear other people's
    rights or obtain their consents.
 2. **Nothing may present the family as cleared**, and that has to stay in the
-   same breath as the licence note, on every surface. Security's guards
-   (`test_no_user_visible_cc0_claim_is_left_unqualified`,
+   same breath as the licence note, on every surface. Security's proposed guards
+   (`test_no_cc0_claim_is_left_unqualified`,
    `test_every_trackers_tool_note_carries_the_caveat`) stay green on every branch
-   of the decision. The caveat **wording** changes; the guard may not be deleted
+   of the decision once PR #5209 merges. The caveat **wording** changes; the guard may not be deleted
    or weakened. If the family is removed, the guard has to keep passing with it
    absent rather than by being skipped around.
 
