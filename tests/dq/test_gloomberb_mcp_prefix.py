@@ -1,4 +1,4 @@
-"""Public Gloomberb MCP names, with digifetch aliases still callable (DIG-3313)."""
+"""Public Gloomberb MCP names. digifetch names are a call-time redirect (DIG-3313)."""
 
 from __future__ import annotations
 
@@ -29,9 +29,11 @@ def test_quote_is_advertised_under_the_gloomberb_prefix() -> None:
     assert "gloomberb_quotes_batch" in names
     assert "gloomberb_price_history" in names
     assert "gloomberb_quote" in _names("read")
+    assert not any(name.startswith("digifetch_") for name in names)
+    assert not any(name.startswith("digifetch_") for name in _names("read"))
 
 
-def test_digifetch_quote_still_calls_the_same_handler(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_gloomberb_quote_is_the_only_mcp_registration(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: list[tuple[str, dict]] = []
 
     class _Client:
@@ -53,13 +55,12 @@ def test_digifetch_quote_still_calls_the_same_handler(monkeypatch: pytest.Monkey
         lambda envelope, **_kwargs: json.dumps({"data": {"quote": {"symbol": "AAPL"}}}),
     )
     server = create_mcp_server()
+    assert server._tool_manager.get_tool("digifetch_quote") is None
     public = server._tool_manager.get_tool("gloomberb_quote").fn
-    legacy = server._tool_manager.get_tool("digifetch_quote").fn
     assert GLOOMBERB_PLATFORM_NOTE in (public.__doc__ or "")
     assert "digiquant" not in (public.__doc__ or "").lower()
     assert json.loads(public(symbol="AAPL"))["data"]["quote"]["symbol"] == "AAPL"
-    assert json.loads(legacy(symbol="AAPL"))["data"]["quote"]["symbol"] == "AAPL"
-    assert captured == [("quote", {"symbol": "AAPL", "exchange": None})] * 2
+    assert captured == [("quote", {"symbol": "AAPL", "exchange": None})]
 
 
 def test_dispatcher_accepts_the_public_name() -> None:
@@ -76,6 +77,8 @@ def test_dispatcher_accepts_the_public_name() -> None:
     execute = build_digifetch_tool_dispatcher(_Client())
     result = execute("gloomberb_quote", {"symbol": "AAPL"})
     assert result["ok"] is True
+    legacy = execute("digifetch_quote", {"symbol": "AAPL"})
+    assert legacy["ok"] is True
 
 
 def test_congress_alias_stays_refused() -> None:
