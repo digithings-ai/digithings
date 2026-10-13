@@ -94,6 +94,9 @@ RUN uv pip install --system -e "./digivault[service]"
 
 # LiteLLM proxy — pin below fastapi breakage (get_flat_dependant removed).
 RUN uv pip install --system "litellm[proxy]==1.72.6" "fastapi<0.116"
+# litellm pulls an old mcp (1.9.x) that breaks on new pydantic and lacks
+# transport_security; every *-mcp program crash-looped. Re-pin after litellm.
+RUN uv pip install --system "mcp>=1.26,<2" "pydantic>=2.13.5"
 
 # Profile A LiteLLM + digigraph config
 COPY infra/digichat-release/config /app/config
