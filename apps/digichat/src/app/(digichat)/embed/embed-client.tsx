@@ -164,6 +164,28 @@ function EmbedPageInner({
   const host = searchParams.get("host") ?? undefined;
   const tenantCfg = useEmbedTenantConfig(token, host, initialTenantCfg);
 
+  // Warm-up on load: wake auth / assistant / search containers (they sleep on
+  // idle) so the first question doesn't hit a cold start. Polls /api/warmup
+  // until every service reports ready (bounded ~2 min); best effort.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      for (let i = 0; i < 12 && !cancelled; i++) {
+        try {
+          const r = await fetch(p("/api/warmup"), { cache: "no-store" });
+          const j = (await r.json()) as { ready?: boolean };
+          if (j.ready) return;
+        } catch {
+          /* waking */
+        }
+        await new Promise((res) => setTimeout(res, 5_000));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Real boot milestone for the loader: the tenant/deploy config resolved.
   useEffect(() => {
     signalDigichatBootStep("config");
