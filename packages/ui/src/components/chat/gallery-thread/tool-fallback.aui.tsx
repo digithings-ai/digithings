@@ -276,7 +276,7 @@ function ToolFallbackArgs({
       </p>
       <pre
         data-slot="tool-fallback-dump"
-        className="aui-tool-fallback-args-value bg-muted/50 text-foreground/90 rounded-md p-2.5 text-xs whitespace-pre-wrap"
+        className="aui-tool-fallback-args-value bg-muted/50 text-foreground/90 rounded-md p-2.5 text-xs whitespace-pre-wrap break-words overflow-x-auto"
       >
         {formatJsonDump(argsText)}
       </pre>
@@ -304,7 +304,7 @@ function ToolFallbackResult({
       </p>
       <pre
         data-slot="tool-fallback-dump"
-        className="aui-tool-fallback-result-content bg-muted/50 text-foreground/90 mt-1 rounded-md p-2.5 text-xs whitespace-pre-wrap"
+        className="aui-tool-fallback-result-content bg-muted/50 text-foreground/90 mt-1 rounded-md p-2.5 text-xs whitespace-pre-wrap break-words overflow-x-auto"
       >
         {typeof result === "string" ? formatJsonDump(result) : formatJsonDump(result)}
       </pre>

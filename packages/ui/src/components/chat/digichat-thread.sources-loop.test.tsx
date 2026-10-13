@@ -7,7 +7,7 @@
  * Sources must render once, deduped, in a single footer outside the body.
  */
 import type { ChatModelAdapter, ThreadMessageLike } from "@assistant-ui/react";
-import { AssistantRuntimeProvider, useLocalRuntime } from "@assistant-ui/react";
+import { AssistantRuntimeProvider, useLocalRuntime, type AssistantRuntime } from "@assistant-ui/react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -98,6 +98,47 @@ describe("DigichatThread sources (digisearch + digivault_get_note)", () => {
     // A url-bearing copy of a hit wins over its url-less duplicate.
     expect(footer[0]!.querySelectorAll('a[data-slot="aui_source-url"]').length).toBe(3);
     // No source rows outside the footer (inline in the body).
+    expect(host.querySelectorAll(".aui-source-row").length).toBe(HITS.length);
+    act(() => root.unmount());
+  });
+
+  it("streams sources in many chunks without an update loop and keeps them out of the body", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const full = (MESSAGES[1]!.content as unknown[]).slice();
+    const streaming: ChatModelAdapter = {
+      async *run() {
+        for (let i = 1; i <= full.length; i++) {
+          await new Promise((r) => setTimeout(r, 2));
+          yield { content: full.slice(0, i) as never };
+        }
+      },
+    };
+    let rt: AssistantRuntime | undefined;
+    function StreamHarness() {
+      const runtime = useLocalRuntime(streaming);
+      rt = runtime;
+      return (
+        <AssistantRuntimeProvider runtime={runtime}>
+          <DigichatThread welcome="w" placeholder="p" />
+        </AssistantRuntimeProvider>
+      );
+    }
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    await act(async () => {
+      root.render(<StreamHarness />);
+    });
+    await act(async () => {
+      rt!.thread.append({ role: "user", content: [{ type: "text", text: "How do I activate an account?" }] });
+      await new Promise((r) => setTimeout(r, 300));
+    });
+    const loop = errors.mock.calls.some((c) => /Maximum update depth|#185/.test(String(c[0])));
+    errors.mockRestore();
+    expect(loop).toBe(false);
+    expect(host.textContent).toContain("Activate via the welcome mail.");
+    const footer = host.querySelectorAll('[data-slot="aui_message-sources"]');
+    expect(footer.length).toBe(1);
     expect(host.querySelectorAll(".aui-source-row").length).toBe(HITS.length);
     act(() => root.unmount());
   });
