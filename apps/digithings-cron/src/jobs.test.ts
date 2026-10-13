@@ -57,7 +57,7 @@ const TWELVE_X_ENABLED_IDS = [
   "twelve-x-market-context-weekly",
   "twelve-x-performance-eval",
   "twelve-x-primemarket-heartbeat",
-  "twelve-x-primemarket-heartbeat-watchdog",
+  "twelve-x-session-heartbeat-watchdog",
   "twelve-x-session-catchup",
   "twelve-x-archive-maintenance",
   "twelve-x-digisearch-parity",

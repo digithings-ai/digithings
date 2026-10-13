@@ -9,11 +9,20 @@
  *    already cover every due slot today and every complete weekday in the
  *    3-day repair window. It is deliberately a superset: any doubt (read
  *    error, missing data) dispatches, so it can only remove no-op runs.
- *  - feed-confirm watchdog and PrimeMarket heartbeat watchdog: ports of
+ *  - feed-confirm watchdog and desk session heartbeat watchdog: ports of
  *    feed_confirm_watchdog.yml and primarketet_heartbeat_watchdog.yml. Same
  *    labels, same thresholds, issues filed on digithings-ai/twelve-x.
  */
 import { ghHeaders } from "./house-run-watch";
+import { JOBS } from "./jobs";
+
+/** The heartbeat workflow file, read from its own dispatch row (one home). */
+export const HEARTBEAT_CRON = "3 6,18 * * *";
+function heartbeatWorkflow(): string {
+  const row = JOBS.find((j) => j.repo === REPO && j.cron === HEARTBEAT_CRON && j.kind === "workflow_dispatch");
+  if (!row?.workflow) throw new Error("heartbeat dispatch row missing");
+  return row.workflow;
+}
 
 export type GhFetch = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -165,7 +174,7 @@ export async function sessionCatchupDue(
 
 // ---------------------------------------------------------------- watchdogs
 
-export type TwelvexWatch = "feed-confirm" | "primemarket-heartbeat";
+export type TwelvexWatch = "feed-confirm" | "session-heartbeat";
 export type WatchOutcome = { ok: boolean; alarm: boolean; filed?: string; detail: string };
 
 export const FEED_LOOKBACK_HOURS = 6;
@@ -286,24 +295,24 @@ export async function runTwelvexWatch(
     }
     let runs: Run[] | null = null;
     try {
-      runs = await listRuns(fetcher, token, "primemarket_session_heartbeat.yml", "event=workflow_dispatch&per_page=1");
+      runs = await listRuns(fetcher, token, heartbeatWorkflow(), "event=workflow_dispatch&per_page=1");
     } catch {
       runs = null;
     }
     const v = evaluateHeartbeat(nowMs, runs);
     if (!v.alarm) return { ok: true, alarm: false, detail: v.detail };
     const body = [
-      "**The check did not run. No probe was performed.** The desk session credential is of **unknown** state — this is not an expiry verdict (that is `primemarket-session-expired`).",
+      "**The check did not run. No probe was performed.** The desk session credential is of **unknown** state — this is not an expiry verdict (that is the session-expired label).",
       "",
       `Evidence: ${v.detail}`,
       "",
       `The heartbeat is dispatched twice a day by digithings-cron; this fires when the last dispatch is older than ${HEARTBEAT_TOLERANCE_HOURS}h. Check the Worker first, then GH_DISPATCH_TOKEN's Actions:write grant on twelve-x, then whether the workflow is disabled.`,
       "",
-      `Checked by digithings-cron (twelve-x-primemarket-heartbeat-watchdog) at ${new Date(nowMs).toISOString()}.`,
+      `Checked by digithings-cron (twelve-x-session-heartbeat-watchdog) at ${new Date(nowMs).toISOString()}.`,
     ].join("\n");
     const url = await fileIssue(
       fetcher, token, HB_LABEL, "fbca04",
-      `PrimeMarket heartbeat did not run — ${isoDay(nowMs)}`, body, null,
+      `Desk session heartbeat did not run — ${isoDay(nowMs)}`, body, null,
     );
     return { ok: url !== undefined, alarm: true, filed: url, detail: v.detail };
   } catch (err) {

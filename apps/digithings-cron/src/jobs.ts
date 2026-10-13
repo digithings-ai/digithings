@@ -38,7 +38,7 @@ export type Job = {
    */
   watch?: "digiquant-runner";
   /** Set when kind is "twelvex-watch". Worker-only read of twelve-x Actions history. */
-  twelvexWatch?: "feed-confirm" | "primemarket-heartbeat";
+  twelvexWatch?: "feed-confirm" | "session-heartbeat";
   /**
    * Worker-side pre-check before a workflow_dispatch. "twelvex-session-due" skips
    * session_catchup.yml when no session can be due (see twelvex-watch.ts).
@@ -126,7 +126,7 @@ function tw(
   id: string,
   cron: string,
   workflow: string,
-  twelvexWatch: "feed-confirm" | "primemarket-heartbeat",
+  twelvexWatch: "feed-confirm" | "session-heartbeat",
 ): Job {
   return { id, cron, repo: TWELVE_X, kind: "twelvex-watch", workflow, ref: DEVELOP, enabled: true, twelvexWatch };
 }
@@ -457,10 +457,10 @@ export const JOBS: readonly Job[] = [
   wj("digiquant-house-run-watch", "23 * * * *", "digiquant-runner"),
   // Was the GHA `schedule: 40 */6 * * *` on primarketet_heartbeat_watchdog.yml.
   tw(
-    "twelve-x-primemarket-heartbeat-watchdog",
+    "twelve-x-session-heartbeat-watchdog",
     "40 */6 * * *",
     "primarketet_heartbeat_watchdog.yml",
-    "primemarket-heartbeat",
+    "session-heartbeat",
   ),
 ];
 
