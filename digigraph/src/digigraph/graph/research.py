@@ -581,7 +581,9 @@ def _run_document_rag_path(
         messages=llm_messages,
         tools=tools_for_llm,
         execute_tool=execute_search,
-        max_tool_rounds=4,
+        # 6, not 4: OCC ticket breakdowns page through list results and
+        # ran out of rounds, ending in a tool-free wrap-up (DIG-3089).
+        max_tool_rounds=6,
         on_tool_step=stream_callback,
         tool_choice="auto"
         if forced

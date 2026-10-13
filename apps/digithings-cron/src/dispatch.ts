@@ -5,9 +5,13 @@
  * unless the job id is listed in GITHUB_OVERRIDE_JOBS (default empty).
  * kind "probe" fetches public URLs inside this Worker. It does not call
  * RUNNER or api.github.com unless that same override list names the job id.
+ * kind "watch" (DIG-3065) READS digiquant-runner over the RUNNER binding and
+ * raises on GitHub when a run is open past its deadline. It never POSTs to
+ * /v1/jobs, so it has nothing to start, re-kick or re-run.
  */
 import type { Env } from "./env";
-import type { Job } from "./jobs";
+import { houseRunDeadlineSeconds, type Job } from "./jobs";
+import { checkHouseRuns, WATCH_TARGET, type HouseRunCheckResult } from "./house-run-watch";
 import { probeUrls, runProbe } from "./probe";
 
 const GH_API = "https://api.github.com";
@@ -23,6 +27,8 @@ export type DispatchResult = {
   run_id?: string;
   /** accepted | already_running | duplicate | skipped. Omitted on the GitHub path. */
   container_status?: string;
+  /** Set only on the watch path (DIG-3065). Absent everywhere else. */
+  watch?: HouseRunCheckResult;
 };
 
 export function workflowDispatchUrl(repo: string, workflow: string): string {
@@ -85,7 +91,11 @@ export function githubOverrideIds(env: Env): string[] {
 }
 
 function usesGithub(job: Job, env: Env): boolean {
-  if (job.kind === "container" || job.kind === "probe") {
+  // "watch" belongs on this arm (DIG-3065). Without it a watch row would fall
+  // through to `return true` and be dispatched to GitHub as a workflow — the
+  // exact failure the arm exists to prevent, since a watch job's whole contract
+  // is that it never starts anything.
+  if (job.kind === "container" || job.kind === "probe" || job.kind === "watch") {
     return githubOverrideIds(env).includes(job.id);
   }
   return true;
@@ -234,6 +244,74 @@ async function dispatchProbe(env: Env, job: Job, cron: string): Promise<Dispatch
 }
 
 /**
+ * Watch job (DIG-3065). Reads digiquant-runner over the RUNNER binding and
+ * raises one GitHub issue per run the runner still holds open past its deadline.
+ *
+ * Three deliberate properties:
+ *  - Read-only. Nothing here POSTs to /v1/jobs. The only writes are the label
+ *    and the issue, both on GitHub.
+ *  - Fail quiet. An unreadable health or run response is reported as unreadable
+ *    and never raised, so a transport fault cannot manufacture an alarm.
+ *  - No deadline of its own. It is read from the house-run job row, so the 14400
+ *    has one home. A missing row means no evaluation, not a guessed deadline.
+ */
+async function dispatchWatch(
+  env: Env,
+  job: Job,
+  cron: string,
+  scheduledTime: number,
+): Promise<DispatchResult> {
+  if (job.watch !== WATCH_TARGET) {
+    throw new Error(`job ${job.id}: watch requires watch "${WATCH_TARGET}"`);
+  }
+  const timeoutSeconds = houseRunDeadlineSeconds();
+  if (timeoutSeconds === undefined) {
+    console.error(
+      JSON.stringify({ cron, repo: job.repo, job: job.id, error: "house_run_row_missing" }),
+    );
+    return { ok: false, status: 0, dry_run: false };
+  }
+  if (env.DRY_RUN === "1") {
+    logLine({
+      cron,
+      repo: job.repo,
+      job: job.id,
+      watch: job.watch,
+      dry_run: true,
+    });
+    return { ok: true, status: 0, dry_run: true };
+  }
+  if (!env.RUNNER) {
+    throw new Error(`job ${job.id}: the RUNNER binding is required for watch jobs`);
+  }
+
+  const nowMs = scheduledTime > 0 ? scheduledTime : Date.now();
+  const watch = await checkHouseRuns({
+    fetchRunner: (input, init) => env.RUNNER!.fetch(input, init as RequestInit),
+    fetchGithub: (input, init) => fetch(input, init),
+    runnerToken: env.RUNNER_AUTH_TOKEN,
+    githubToken: env.GH_DISPATCH_TOKEN,
+    timeoutSeconds,
+    nowMs,
+  });
+  logLine({
+    cron,
+    repo: job.repo,
+    job: job.id,
+    watch: job.watch,
+    dry_run: false,
+    open: watch.open,
+    lost: watch.lost.length,
+    unreadable: watch.unreadable.length,
+    raised: watch.raised.filter((entry) => entry.raised).length,
+  });
+  // ok mirrors whether the check completed, not whether it found something. A
+  // tick that reads the runner cleanly and finds one lost run is a healthy tick
+  // that reported; callers must read watch.lost for the finding.
+  return { ok: watch.ok, status: watch.ok ? 200 : 0, dry_run: false, watch };
+}
+
+/**
  * Dispatch one job.
  * Container jobs POST digiquant-runner. Accepted, already-running, duplicate, and
  * skipped 202 responses are successful. Probe jobs fetch public URLs in this
@@ -248,7 +326,7 @@ export async function dispatch(
   opts: { args?: Record<string, string> } = {},
 ): Promise<DispatchResult> {
   if (usesGithub(job, env)) {
-    if (job.kind === "container" || job.kind === "probe") {
+    if (job.kind === "container" || job.kind === "probe" || job.kind === "watch") {
       console.error(
         JSON.stringify({
           cron,
@@ -263,6 +341,9 @@ export async function dispatch(
   }
   if (job.kind === "probe") {
     return dispatchProbe(env, job, cron);
+  }
+  if (job.kind === "watch") {
+    return dispatchWatch(env, job, cron, scheduledTime);
   }
   return dispatchContainer(env, job, cron, scheduledTime, opts.args ?? {});
 }
