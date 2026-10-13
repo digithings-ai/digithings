@@ -8,14 +8,15 @@
  * So one anon-readable table backs both the library index and every tearsheet;
  * updating a row updates the site with no redeploy.
  *
- * Reuses the shared browser client (`supabaseClient.ts`), which is `null` when the
- * public env vars are unset — callers degrade to a loading/empty state, and the
- * static export still builds.
+ * Reads go through the official API table route, which serves
+ * `strategy_tearsheets` under the same anon-parity invariant this module
+ * already asserts for every other entry: migration 046 creates the anon
+ * SELECT policy, 051 deliberately keeps it, and 129 lists it among the
+ * browser-read surfaces. There is no Supabase fallback and no invented
+ * performance: a withheld or unpublished read still renders honest-empty.
  */
 import { type StrategyIndexEntry, type TearsheetData } from "@/components/tearsheet/types";
-import { supabase } from "./supabaseClient";
-
-const TABLE = "strategy_tearsheets";
+import { officialGet, STRATEGY_ROUTE } from "@/lib/official-api";
 
 /** Project the index-card fields out of a full tearsheet payload. */
 function toIndexEntry(m: TearsheetData): StrategyIndexEntry {
@@ -44,22 +45,32 @@ function toIndexEntry(m: TearsheetData): StrategyIndexEntry {
   };
 }
 
-/** Full tearsheet payload for one strategy, or `null` if unavailable. */
-export async function fetchTearsheet(slug: string): Promise<TearsheetData | null> {
-  if (!supabase) return null;
-  const { data, error } = await supabase
-    .from(TABLE)
-    .select("metrics")
-    .eq("strategy_id", slug)
-    .maybeSingle();
-  if (error || !data) return null;
-  return data.metrics as TearsheetData;
+function metricsOf(row: unknown): TearsheetData | null {
+  if (typeof row !== "object" || row === null) return null;
+  const rec = row as { metrics?: unknown };
+  if (typeof rec.metrics !== "object" || rec.metrics === null) return null;
+  const metrics = rec.metrics as Record<string, unknown>;
+  // The column is `not null default '{}'`, so an unpublished row reads as an
+  // empty object. Without a strategy id it cannot name a card (`href` would be
+  // /strategies/undefined) or a tearsheet, so it is absent data, not a card.
+  if (typeof metrics.strategy !== "string" || metrics.strategy.length === 0) return null;
+  return metrics as unknown as TearsheetData;
 }
 
-/** Library index (one card per strategy), or `[]` if unavailable. */
+/** Full tearsheet payload for one strategy, or `null` if the API did not publish it. */
+export async function fetchTearsheet(slug: string): Promise<TearsheetData | null> {
+  const read = await officialGet(STRATEGY_ROUTE, {
+    select: "strategy_id,metrics",
+    "eq.strategy_id": slug,
+    limit: "1",
+  });
+  if (!read.ok || !Array.isArray(read.body)) return null;
+  return metricsOf(read.body[0]) ;
+}
+
+/** Library index (one card per strategy), or `[]` when the API withholds the table. */
 export async function fetchStrategyIndex(): Promise<StrategyIndexEntry[]> {
-  if (!supabase) return [];
-  const { data, error } = await supabase.from(TABLE).select("strategy_id, metrics");
-  if (error || !data) return [];
-  return data.map((row) => toIndexEntry(row.metrics as TearsheetData));
+  const read = await officialGet(STRATEGY_ROUTE, { select: "strategy_id,metrics", limit: "100" });
+  if (!read.ok || !Array.isArray(read.body)) return [];
+  return read.body.map(metricsOf).filter((m): m is TearsheetData => m !== null).map(toIndexEntry);
 }

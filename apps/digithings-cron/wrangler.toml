@@ -95,5 +95,6 @@ crons = [
   "3 6,18 * * *",
   "52 * * * MON-FRI",  # twelve-x-session-catchup
   "30 2 * * *",        # twelve-x-archive-maintenance
-  "8 9 * * MON"        # twelve-x-digisearch-parity (GHA was 0 9 * * 1; :08 offset)
+  "8 9 * * MON",       # twelve-x-digisearch-parity (GHA was 0 9 * * 1; :08 offset)
+  "23 * * * *"         # digiquant-house-run-watch (lost house-run watcher, DIG-3065)
 ]

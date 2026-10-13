@@ -23,7 +23,7 @@ const workerVars = env as unknown as Env;
 export class DigiChatContainer extends Container {
   defaultPort = 3000;
   /** Short idle tail: each wake bills for the whole sleepAfter window. */
-  sleepAfter = "3m";
+  sleepAfter = "1m";
   /**
    * Runtime env for the digichat Node process. Secrets come from
    * `wrangler secret put`; plain vars from wrangler.toml `[vars]`.

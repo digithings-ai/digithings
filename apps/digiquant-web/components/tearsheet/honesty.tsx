@@ -2,7 +2,7 @@ import { Badge } from "@digithings/ui/ui";
 
 /**
  * Public-honesty chips for remaining-book / DCA tearsheets.
- * Full-sample Nautilus vs-flat is not walk-forward OOS; do not badge a win.
+ * Full-sample vs-flat is not walk-forward OOS; do not badge a win.
  */
 
 export function BacktestOnlyChip({ className }: { className?: string }) {
@@ -10,7 +10,7 @@ export function BacktestOnlyChip({ className }: { className?: string }) {
     <Badge
       variant="outline"
       className={"text-ink-soft" + (className ? ` ${className}` : "")}
-      title="Illustrative Nautilus backtest — not a live trading strategy"
+      title="Illustrative backtest — not a live trading strategy"
       aria-label="Backtest only"
     >
       Backtest only

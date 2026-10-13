@@ -12,11 +12,21 @@ Subcommands (local-stack plan sections 3 and 6):
     dt status [--require-all]                     health gate (plan section 6)
     dt preflight                                  tool and disk checks only
     dt urls [--profile ...]                       the URL table on its own
+    dt deploy <surface> [--dry-run] [--env ...]   build and (dry-run) a wrangler
+                                                  deploy for one surface
+    dt doctor parity                              diff every surface's bindings
+                                                  against the recorded production
+                                                  census
 
 Every subcommand accepts ``--json`` for machine output and ``--dry-run`` for the
 orchestration subcommands.  Exit codes: 0 ok, 1 a check or a step failed, 2
 usage error.  ``dt status`` exits 1 on a failed check; ``--require-all`` also
 exits 1 when any check was skipped, which is how CI demands zero unknowns.
+
+``dt deploy`` refuses any real upload unless ``DT_DEPLOY_APPROVED_BY=chris`` is
+present in the environment.  That variable is set by Chris interactively.  No
+agent sets it, no agent runs a production deploy, and nothing here reads a
+production secret: bindings are reported by name and kind only.
 
 This script is a sibling of ``scripts/dt-secrets`` (S5) and the entry point the
 Makefile's ``local-stack*`` targets call; it does not replace either.
@@ -32,7 +42,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from scripts.localstack import contracts, health, orchestrate, preflight, render
+from scripts.localstack import (
+    contracts,
+    deploy,
+    health,
+    orchestrate,
+    preflight,
+    render,
+)
 
 DEFAULT_TIMEOUT = 5.0
 
@@ -83,6 +100,44 @@ def build_parser() -> argparse.ArgumentParser:
     )
     status.add_argument(
         "--timeout", type=float, default=DEFAULT_TIMEOUT, help="per-check timeout seconds"
+    )
+
+    # `deploy` and `doctor` are not orchestration plans, so they get their own
+    # arguments rather than the shared `common()` set.
+    deploy_parser = sub.add_parser("deploy", help="build and (dry-run) a wrangler deploy")
+    deploy_parser.add_argument(
+        "surface",
+        nargs="?",
+        help="worker name, app directory or config path (omit with --list)",
+    )
+    deploy_parser.add_argument("--json", action="store_true", help="machine-readable output")
+    deploy_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="build, run `wrangler deploy --dry-run`, print the bindings/routes diff",
+    )
+    deploy_parser.add_argument(
+        "--env",
+        default="dev",
+        choices=list(deploy.TARGET_ENVS),
+        help="target environment (default: dev)",
+    )
+    deploy_parser.add_argument(
+        "--list",
+        action="store_true",
+        help="list the deployable surfaces and exit",
+    )
+
+    doctor_parser = sub.add_parser("doctor", help="check the stack against its own records")
+    doctor_sub = doctor_parser.add_subparsers(dest="doctor_command", required=True)
+    parity = doctor_sub.add_parser(
+        "parity", help="diff surface bindings against the production census"
+    )
+    parity.add_argument("--json", action="store_true", help="machine-readable output")
+    parity.add_argument(
+        "--require-all",
+        action="store_true",
+        help="fail when any dimension is UNKNOWN, not only when one differs",
     )
     return parser
 
@@ -203,6 +258,79 @@ def cmd_plan(args: argparse.Namespace, root: Path) -> int:
     return code
 
 
+def cmd_parity(args: argparse.Namespace, root: Path) -> int:
+    rows = deploy.parity_rows(root, deploy.load_surfaces(root))
+    payload = deploy.parity_payload(rows)
+    emit(payload, args.json, deploy.render_parity_table(rows))
+    # A difference fails; an unknown is reported but does not fail, because the
+    # checklist asks for dimensions this check cannot see.  `--require-all` is the
+    # way to demand zero unknowns, exactly as `dt status` does.
+    code = 1 if payload["verdict"] == deploy.DIFFERS else 0
+    if getattr(args, "require_all", False) and payload["counts"][deploy.UNKNOWN]:
+        code = 1
+    return code
+
+
+def cmd_deploy(args: argparse.Namespace, root: Path) -> int:
+    env = _env()
+    surfaces = deploy.load_surfaces(root)
+    if args.list:
+        payload = {"surfaces": [s.to_dict() for s in surfaces]}
+        emit(
+            payload,
+            args.json,
+            render.render_table(
+                ("NAME", "KIND", "CONFIG", "ENTRYPOINT", "REGISTRY"),
+                (
+                    (
+                        s.name,
+                        s.kind,
+                        s.config_path,
+                        s.entrypoint or f"pages:{s.output_dir}",
+                        "yes" if s.in_registry else "NO",
+                    )
+                    for s in surfaces
+                ),
+            ),
+        )
+        return 0
+
+    surface = deploy.find_surface(surfaces, args.surface) if args.surface else None
+    if surface is None:
+        print(
+            f"unknown surface {args.surface!r}; known: {', '.join(deploy.surface_names(surfaces))}",
+            file=sys.stderr,
+        )
+        return 2
+
+    approved, reason = deploy.approval_state(env, args.env)
+    if not args.dry_run and not approved:
+        # A refusal is a usage error, not a failed step: nothing ran, and the
+        # reason must be legible so an agent stops rather than retries.
+        print(f"refusing a real deploy to {args.env}: {reason}", file=sys.stderr)
+        return 2
+
+    if surface.parse_error:
+        emit(
+            {"surface": surface.to_dict(), "steps": []},
+            args.json,
+            f"cannot plan {surface.name}: {surface.parse_error}",
+        )
+        return 1
+
+    report = deploy.run_deploy(surface, root, env, target_env=args.env, dry_run=args.dry_run)
+    emit(
+        {
+            "surface": surface.to_dict(),
+            "approval": {"approved": approved, "reason": reason, "dry_run": args.dry_run},
+            "steps": report.to_dict(),
+        },
+        args.json,
+        deploy.render_deploy_table(report, surface),
+    )
+    return 0 if report.ok else 1
+
+
 def main(argv: "list[str] | None" = None) -> int:
     args = build_parser().parse_args(argv)
     root = repo_root()
@@ -214,7 +342,12 @@ def main(argv: "list[str] | None" = None) -> int:
         "down": cmd_plan,
         "seed": cmd_plan,
         "reset": cmd_plan,
+        "deploy": cmd_deploy,
     }
+    if args.command == "doctor":
+        if args.doctor_command == "parity":
+            return cmd_parity(args, root)
+        raise ValueError(f"unknown doctor command {args.doctor_command!r}")
     return handlers[args.command](args, root)
 
 

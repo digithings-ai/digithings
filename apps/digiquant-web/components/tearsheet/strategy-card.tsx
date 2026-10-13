@@ -25,16 +25,19 @@ export function StrategyCard({ e }: { e: StrategyIndexEntry }) {
   const dca = isDcaIndexEntry(e);
 
   return (
-    <TearsheetCard href={`/strategies/${e.strategy}`}>
+    <TearsheetCard
+      href={`/strategies/${e.strategy}`}
+      className="gap-0 rounded-none p-0 [&_.ts-card-head]:px-3 [&_.ts-card-head]:py-2 [&_.ts-card-title]:gap-2"
+    >
       <div className="ts-card-head">
         <div className="ts-card-title">
-          <AssetLogoFor strategy={e.strategy} symbol={e.symbol} size={32} className="ts-card-logo" />
+          <AssetLogoFor strategy={e.strategy} symbol={e.symbol} size={24} className="ts-card-logo" />
           <div className="ts-card-title-text">
             <span className="ts-card-name">{strategyDisplayName(e.strategy, e.label) || asset}</span>
             <StrategyTypeChip strategy={e.strategy} kind={e.kind} className="ts-card-kind" />
             <span className="ts-card-period">{e.period_start} → {e.period_end}</span>
             {e.signal_delay_days ? (
-              <div className="mt-1.5">
+              <div className="mt-1">
                 <SignalDelayChip days={e.signal_delay_days} />
               </div>
             ) : null}
@@ -42,7 +45,7 @@ export function StrategyCard({ e }: { e: StrategyIndexEntry }) {
         </div>
         <LiveMetricsBadge generatedAt={e.generated_at} className="ts-card-live" />
       </div>
-      <TearsheetCardKpis>
+      <TearsheetCardKpis className="gap-x-3 gap-y-1 border-t border-hair px-3 py-2">
         <TearsheetCardKpi label={dca ? TOTAL_RETURN_KPI_LABEL : "CAGR"} value={<span className={toneClass(dca ? e.net_profit_pct : cagr)}>{fmtPct(dca ? e.net_profit_pct : cagr)}</span>} />
         <TearsheetCardKpi label="Max DD" value={<span className="is-neg">{fmtPct(e.max_drawdown_pct)}</span>} />
         {dca ? (
