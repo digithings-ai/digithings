@@ -14,6 +14,7 @@ import {
 } from "./paths";
 import { legacyEmbedEnabledValue } from "./embed-flag";
 import { resolveEmbedTenants } from "./tenants-kv";
+import { isOccPagePath, occInviteValid, siteNotFound } from "./occ-gate";
 
 /**
  * `env` from `cloudflare:workers` is untyped until `wrangler types` generates
@@ -93,6 +94,8 @@ export interface Env {
   DIGICHAT_EMBED_TENANTS?: string;
   /** KV with key `embed-tenants` (non-secret tenant config; refs via *Env). */
   DIGICHAT_TENANTS_KV?: KVNamespace;
+  /** OCC invite key (also referenced by the KV occ tenant tokenEnv). */
+  OCC_INVITE_KEY?: string;
   DIGIGRAPH_INTERNAL_URL?: string;
   DIGIKEY_URL?: string;
   DIGIKEY_BFF_TOKEN?: string;
@@ -104,6 +107,12 @@ export interface Env {
 export default {
   async fetch(request: Request, workerEnv: Env): Promise<Response> {
     const url = new URL(request.url);
+    // OCC page (Pages) is invite-only: valid key passes through, else 404.
+    if (isOccPagePath(url.pathname)) {
+      return occInviteValid(url, workerVars.OCC_INVITE_KEY)
+        ? fetch(request)
+        : siteNotFound(url);
+    }
     if (!shouldProxyToDigiChat(url.pathname)) {
       return new Response(
         "digichat Worker: path not routed. Marketing /chat shells are on Pages.",

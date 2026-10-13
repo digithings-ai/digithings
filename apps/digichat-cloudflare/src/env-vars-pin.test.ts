@@ -61,6 +61,8 @@ const WORKER_ONLY_ENV_MEMBERS: Record<string, string> = {
  *   oversight.
  */
 const DOCUMENTED_NOT_FORWARDED: Record<string, string> = {
+  OCC_INVITE_KEY:
+    "Worker-only: checked at the edge for /chat/occ and resolved into the KV occ tenant token (DIG-1210); the container never reads it by name.",
   DIGICHAT_DATABASE_URL:
     "Cloudflare container is intentionally DB-less; wrangler.toml documents it optional-only",
 };

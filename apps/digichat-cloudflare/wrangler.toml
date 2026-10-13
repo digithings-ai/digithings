@@ -34,6 +34,10 @@ zone_name = "digithings.ai"
 [[routes]]
 pattern = "digithings.ai/_dtchat*"
 zone_name = "digithings.ai"
+# OCC page gate (DIG-1210): Pages serves it; the Worker 404s it without the invite key.
+[[routes]]
+pattern = "digithings.ai/chat/occ*"
+zone_name = "digithings.ai"
 
 [[containers]]
 class_name = "DigiChatContainer"
