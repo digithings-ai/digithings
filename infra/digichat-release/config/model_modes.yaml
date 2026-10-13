@@ -7,8 +7,8 @@
 #   openai/…      → OPENAI_API_KEY (via LiteLLM when OPENAI_API_BASE points at proxy)
 
 defaults:
-  test: openrouter/deepseek/deepseek-chat
-  medium: openrouter/deepseek/deepseek-v4-flash
-  best: openrouter/google/gemini-2.5-flash
+  test: openrouter/deepseek/deepseek-v4.1-flash
+  medium: openrouter/deepseek/deepseek-v4.1-flash
+  best: openrouter/deepseek/deepseek-v4-pro
 
 phase_models: {}
