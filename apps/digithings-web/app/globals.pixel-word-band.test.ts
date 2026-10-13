@@ -129,6 +129,11 @@ function minOf(raw: string, basis: number): number {
   return Math.min(...min[1].split(",").map((token) => resolveLength(token, basis)));
 }
 
+/** The live mark is `100%` of the band. The pre-fix mark was a `min()`. */
+function declaredWidth(raw: string, basis: number): number {
+  return raw.startsWith("min(") ? minOf(raw, basis) : resolveLength(raw, basis);
+}
+
 const CLIPS: ReadonlySet<string> = new Set(["hidden", "clip", "scroll", "auto"]);
 
 /**
@@ -188,7 +193,7 @@ function measure(styles: string): Frame[] {
     const markHeightDecl = resolve(mark.height, viewport);
     const contentWidth = viewport - 2 * (resolve({ raw: PAGE_PAD }, viewport) ?? 0);
 
-    let markWidth = minOf(resolveKeyword(mark, "width") ?? "", contentWidth);
+    let markWidth = declaredWidth(resolveKeyword(mark, "width") ?? "", contentWidth);
     if (flex && markWidth > contentWidth) markWidth = contentWidth;
 
     const natural = markWidth / ASPECT;
@@ -236,11 +241,11 @@ describe("footer wordmark band (DIG-2304)", () => {
     expect(ASPECT).toBe(8.8);
   });
 
-  it("gives the band no height, so the mark sets it", () => {
+  it("gives the band no fixed height, so a box cannot crop the mark", () => {
     const band = declarations(css, ".pixel-word-band");
     expect(band.height).toBeUndefined();
-    expect(band.minHeight).toBeUndefined();
     expect(band.maxHeight).toBeUndefined();
+    expect(resolveKeyword(band, "min-height")).toBe("clamp(4.5rem, 12vw, 9rem)");
   });
 
   it("clips the horizontal axis only", () => {
@@ -272,24 +277,20 @@ describe("footer wordmark band (DIG-2304)", () => {
   // The ruling: the band's vertical space is padding, not a height. If padding
   // went away the band would collapse onto the mark instead of holding it, and
   // that is a different page, so it is pinned here too.
-  it("takes the band's vertical space from padding, not from a height", () => {
+  it("pads the band on the sides and does not use an overflow shorthand", () => {
     const band = declarations(css, ".pixel-word-band");
-    const padding = resolveKeyword(band, "padding");
-    expect(padding).toBe("clamp(3rem, 8vw, 6rem) var(--page-pad) 0");
-    // At the review's widths 8vw is between the 3rem floor and the 6rem ceiling.
-    for (const viewport of [1440, 1728, 1920]) {
-      const top = Math.min(Math.max(3 * REM, (8 / 100) * viewport), 6 * REM);
-      expect(top).toBeGreaterThanOrEqual(3 * REM);
-      expect(top).toBeLessThanOrEqual(6 * REM);
-    }
+    expect(resolveKeyword(band, "overflow")).toBeNull();
+    expect(resolveKeyword(band, "padding-left")).toBe("var(--page-pad)");
+    expect(resolveKeyword(band, "padding-right")).toBe("var(--page-pad)");
   });
 
   // The other half of the ruling: contained, not bleeding. The mark must not
   // exceed the band's content box at any width, in either rule's terms.
   it("keeps the mark inside the band rather than bleeding it", () => {
     const mark = declarations(css, ".pixel-word.pixel-word-footer");
-    expect(resolveKeyword(mark, "width")).toBe("min(100%, 1400px)");
-    expect(resolveKeyword(mark, "margin")).toBe("0 auto");
+    expect(resolveKeyword(mark, "width")).toBe("100%");
+    expect(resolveKeyword(mark, "max-width")).toBe("100%");
+    expect(resolveKeyword(mark, "margin")).toBe("0");
     for (const frame of measure(css)) {
       expect(frame.cropX).toBe(0);
       expect(frame.markWidth).toBeLessThanOrEqual(frame.contentWidth);
