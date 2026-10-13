@@ -223,7 +223,7 @@ def fetch_queue(repo: str, base: str, limit: int) -> list[dict[str, Any]]:
         "--json",
         "number,title,headRefName,headRefOid,baseRefName,isDraft,mergeable,"
         "mergeStateStatus,statusCheckRollup,reviewDecision,author,createdAt,reviews,"
-        "labels",
+        "comments,commits,labels",
     )
     if not isinstance(prs, list):
         raise QueueError(f"gh pr list did not return a list for {repo}:{base}")
@@ -347,11 +347,125 @@ def _gate_checks(pr: dict[str, Any], policy: Policy) -> list[str]:
     return reasons
 
 
+# --- a code-review verdict posted as a PR comment -----------------------------
+#
+# `docs/agents/CODE_REVIEW_POLICY.md` makes a PR comment the sanctioned place for
+# review findings, and a reviewer's verdict posted there is a real review signal
+# that GitHub's `reviewDecision` cannot see. twelve-x PR #347 posted "changes
+# requested — one finding blocks approval" at 22:07:11Z and merged at 22:13:57Z on
+# an attestation, because the queue only ever fetched `reviews`.
+#
+# Only the marker's `key=value` fields are read. The prose is not a contract: a
+# matcher on `## Verdict: changes requested (narrow)` would have to survive a
+# reviewer reformatting a heading, and a heading someone forgets to update is
+# indistinguishable from a verdict someone forgot to post.
+
+_MARKER_RE = re.compile(r"<!--\s*opencode-power-pack:code-review\b(?P<fields>[^>]*?)\s*-->")
+_MARKER_FIELD_RE = re.compile(r"(?P<key>[A-Za-z_][A-Za-z0-9_.-]*)=(?P<value>\S+)")
+_SCOPE_SHA_RE = re.compile(r"@(?P<sha>[0-9a-f]{7,40})\b")
+
+# `changes_needed` is read alongside `changes_requested` because DIG-1021's interim
+# discipline named the two verdicts "approve" and "changes needed"; a reviewer
+# writing that spelling must not slip past the gate.
+BLOCKING_VERDICTS = frozenset({"changes_requested", "changes_needed"})
+READABLE_VERDICTS = BLOCKING_VERDICTS | {"approved", "approve"}
+
+
+def _normalise_verdict(value: str) -> str:
+    return value.strip().strip("'\";").lower().replace("-", "_")
+
+
+def _posted_verdict(comment: dict[str, Any]) -> tuple[str, str] | None:
+    """`(verdict, scope_sha)` from a review marker comment, or None.
+
+    None means "this comment is not a verdict the queue can read" — which covers
+    both a plain comment and a marker whose `verdict=` is missing or misspelled.
+    That is a missing signal, not a clearance, and it must not be treated as one.
+    """
+    body = str(comment.get("body") or "")
+    for marker in _MARKER_RE.finditer(body):
+        fields = {
+            m.group("key").lower(): m.group("value")
+            for m in _MARKER_FIELD_RE.finditer(marker.group("fields"))
+        }
+        verdict = _normalise_verdict(fields.get("verdict", ""))
+        if verdict not in READABLE_VERDICTS:
+            continue
+        scope_sha = _SCOPE_SHA_RE.search(fields.get("scope", ""))
+        return verdict, (scope_sha.group("sha") if scope_sha else "")
+    return None
+
+
+def _on_pr_history(pr: dict[str, Any], sha: str) -> bool:
+    """Whether `sha` is the PR head, or a commit behind it.
+
+    Every commit GitHub lists for a PR is an ancestor of its head, so the commit
+    list is the ancestry proof the gate needs — without a repository or a network
+    round trip, which is what keeps `evaluate` a pure function the tests can pin.
+    """
+    if not sha:
+        return False
+    head = str(pr.get("headRefOid") or "")
+    if head and sha == head:
+        return True
+    return sha in {str(c.get("oid") or "") for c in (pr.get("commits") or [])}
+
+
+def _latest_readable_verdict(pr: dict[str, Any]) -> tuple[dict[str, Any], str, str] | None:
+    """The newest comment carrying a verdict the queue can read, with its scope.
+
+    Newest wins, so a reviewer who blocked and then came back and approved clears
+    their own block. Comments the queue cannot read are skipped rather than
+    counted as the newest: letting a typo'd marker displace a real block would
+    hand anyone who can comment a way to unlock the queue.
+    """
+    best: tuple[dict[str, Any], str, str] | None = None
+    best_at = ""
+    for comment in pr.get("comments") or []:
+        if not isinstance(comment, Mapping):
+            continue
+        parsed = _posted_verdict(comment)
+        if parsed is None:
+            continue
+        verdict, scope_sha = parsed
+        posted_at = str(comment.get("createdAt") or "")
+        if best is None or posted_at >= best_at:
+            best, best_at = (comment, verdict, scope_sha), posted_at
+    return best
+
+
+def _posted_verdict_reason(pr: dict[str, Any]) -> list[str]:
+    """A refusal when the newest readable posted verdict blocks this exact head."""
+    latest = _latest_readable_verdict(pr)
+    if latest is None:
+        return []
+    comment, verdict, scope_sha = latest
+    if verdict not in BLOCKING_VERDICTS:
+        return []
+    if not _on_pr_history(pr, scope_sha):
+        return []
+    login = str((comment.get("author") or {}).get("login") or "?")
+    where = (
+        f"comment {comment.get('id') or '?'}" if comment.get("id") else f"a comment from {login}"
+    )
+    scope = scope_sha[:12] if scope_sha else "an unstated commit"
+    return [
+        f"a code-review verdict of '{verdict}' was posted on this PR by {login} "
+        f"({where}) against {scope}, and that commit is still on this branch; "
+        "a new review must clear it"
+    ]
+
+
 def _gate_review(pr: dict[str, Any], acting_role: str, attest_role: str | None) -> list[str]:
     """Satisfied by an approving review from someone else, or by another role's attestation."""
     reasons: list[str] = []
     if str(pr.get("reviewDecision") or "").upper() == "CHANGES_REQUESTED":
         reasons.append("review has outstanding change requests")
+
+    # A blocking verdict is checked before the approval shortcut below. An approving
+    # review is a way *past* this gate, not a waiver of it: twelve-x PR #347 carried
+    # `--attest-review qa` and a posted "changes requested", and it merged.
+    reasons.extend(_posted_verdict_reason(pr))
 
     author = str((pr.get("author") or {}).get("login") or "")
     reviews = pr.get("reviews") or []
@@ -407,28 +521,36 @@ def _label_names(pr: dict[str, Any]) -> set[str]:
     return names
 
 
-def _gate_review_claims(pr: dict[str, Any], repo: str | None) -> list[str]:
-    """A claimed review must have its artifact.
+def _gate_review_coverage(pr: dict[str, Any], repo: str | None) -> list[str]:
+    """The promotion gate's evidence, enforced at merge time.
 
-    This is the narrow form of the promotion gate (`scripts/check_review_coverage.py`):
-    a PR carrying `reviewed:agent` claims an in-session review ran, and the main
-    gate refuses that claim unless a comment carries the findings marker. The
-    queue merged exactly that shape as PR #5526 (label, zero reviews, no comment)
-    and the promotion turned red on it (DIG-3154), so the queue refuses it here,
-    where the fix is a comment instead of another promotion.
+    `scripts/check_review_coverage.py` refuses an unreviewed commit at promotion;
+    the queue merged such commits twice in one night as PR #5526 (a
+    `reviewed:agent` claim with no findings comment, DIG-3154) and PRs #5489 /
+    #5277 via `--attest-review` with no review artifact at all (this issue's
+    reopen). The failure in all three cases is the same: the queue accepted
+    something the promotion gate rejects. So the queue judges the exact same
+    evidence — a completed Bot run, an approval, a Bot review, an in-session
+    review with its findings comment, or `reviewed:owner` — by calling the main
+    gate's own `verdict_for` on the already-fetched PR dict.
 
-    Deliberately narrower than the full promotion gate: a PR with no review
-    evidence at all still merges (attestation and the approval path are
-    unchanged). Refusing every unreviewed PR would stall the ~60 open PRs that
-    predate review enforcement; that is a policy decision for the EM, not a
-    side effect of this gate. What never merges is a review that is claimed but
-    cannot be shown.
+    Two deliberate properties worth stating plainly:
+
+    * `--attest-review` no longer substitutes for review evidence. Both
+      reopen cases merged attested by `qa` with zero reviews and zero
+      comments; attestation is an assertion, and an assertion with no artifact
+      is exactly what the promotion gate refuses. The attestation mechanism
+      itself is unchanged — it still satisfies `_gate_review` — but it does
+      not satisfy this gate.
+    * Comments are fetched lazily and only when a `reviewed:agent` label makes
+      them load-bearing (`fetch_queue` carries labels but not comments). An
+      unreadable comments read fails closed, for the same reason an absent
+      check fails closed: the alternative reads "no evidence" as "approved".
     """
     crc = _coverage_module()
-    if crc.AGENT_REVIEW_LABEL not in _label_names(pr):
-        return []
+    labels = _label_names(pr)
     comments = pr.get("comments")
-    if comments is None:
+    if crc.AGENT_REVIEW_LABEL in labels and comments is None:
         if repo is None:
             return [
                 "review coverage: `reviewed:agent` is set but the findings "
@@ -450,13 +572,29 @@ def _gate_review_claims(pr: dict[str, Any], repo: str | None) -> list[str]:
                 "comment could not be read"
             ]
         comments = (data or {}).get("comments") or []
-    if crc._agent_review_from_comments(comments if isinstance(comments, list) else []):
+    state: dict[str, Any] = {
+        "labels": labels,
+        "approvals": [],
+        "bugbot": None,
+        "title": str(pr.get("title") or ""),
+        "owner_review": None,
+        "agent_tool": [],
+        "agent_review": None,
+    }
+    crc._apply_reviews_checks_comments(
+        state,
+        reviews=pr.get("reviews") or [],
+        checks=pr.get("statusCheckRollup") or [],
+        comments=comments if isinstance(comments, list) else [],
+    )
+    reviewed, why = crc.verdict_for(state)
+    if reviewed:
         return []
     return [
-        "review coverage: `reviewed:agent` is set but no comment carries "
-        f"`{crc.AGENT_REVIEW_MARKER}` — the label claims a review ran, so the "
-        "findings have to be posted before this merges "
-        "(scripts/check_review_coverage.py refuses this at promotion)"
+        f"review coverage: {why} — the queue enforces the same evidence "
+        "scripts/check_review_coverage.py enforces at promotion "
+        "(completed Bot run, approval, Bot review, in-session findings, or "
+        "reviewed:owner)"
     ]
 
 
@@ -497,7 +635,7 @@ def evaluate(
 
     reasons.extend(_gate_checks(pr, policy))
     reasons.extend(_gate_review(pr, acting_role, attest_role))
-    reasons.extend(_gate_review_claims(pr, repo))
+    reasons.extend(_gate_review_coverage(pr, repo))
 
     rollup = pr.get("statusCheckRollup") or []
     return Verdict(

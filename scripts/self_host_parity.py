@@ -46,7 +46,7 @@ CONTRACT_DIR = REPO_ROOT / "config" / "contract"
 # Discovered by census on 2026-10-10 (`git ls-files`). tests/scripts/
 # test_self_host_parity.py pins these three counts, so a new compose or
 # .env.example file cannot slip in uncovered without turning the test red.
-EXPECTED_WRANGLER_FILES = 7
+EXPECTED_WRANGLER_FILES = 8
 COMPOSE_FILES = (
     "docker-compose.yml",
     "apps/digitrace-langfuse/docker-compose.local.yml",
@@ -456,8 +456,15 @@ def mode_contract() -> int:
                 bucket.update(str(k) for k in rows)
             elif isinstance(rows, list):
                 for row in rows:
-                    if isinstance(row, dict) and row.get("name"):
-                        bucket.add(str(row["name"]))
+                    if isinstance(row, dict):
+                        # A row identifies itself by `name` for almost every
+                        # binding kind, but a container is named by `class_name`
+                        # -- and wrangler_surface() records containers under
+                        # that same key, so harvesting only `name` reported six
+                        # DO classes that the contract plainly declares.
+                        for key in ("name", "class_name"):
+                            if row.get(key):
+                                bucket.add(str(row[key]))
                     elif isinstance(row, str):
                         bucket.add(row)
     surface = surface_signature()

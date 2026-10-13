@@ -18,11 +18,28 @@ describe("digivault VAULT", () => {
     const f = at(0);
     expect([...tones(f)]).toEqual(["accent"]);
     for (let y = 0; y < layout.height; y += 1) expect(pixelAt(f, state.seam, y)).toBeNull();
-    expect(count(f)).toBe(layout.width * layout.height - layout.height);
+    // Dark off the seam only where the dial's hand is cut, inside the dial.
+    const { cx, cy, r } = state.dial;
+    let cut = 0;
+    for (let y = 0; y < layout.height; y += 1) {
+      for (let x = 0; x < layout.width; x += 1) {
+        if (x === state.seam || pixelAt(f, x, y)) continue;
+        cut += 1;
+        expect(Math.hypot(x - cx, y - cy)).toBeLessThan(r + 0.6);
+      }
+    }
+    expect(cut).toBeGreaterThan(1);
+    expect(count(f)).toBe(layout.width * layout.height - layout.height - cut);
     for (const y of state.boltRows) {
       expect(pixelAt(f, state.seam - 1, y)?.alpha).toBe(0.9);
       expect(pixelAt(f, state.seam + 1, y)?.alpha).toBe(0.9);
     }
+  });
+
+  test("the turning hand changes the door's shape, not only its colour", () => {
+    const { turnMs } = state.options;
+    const lit = (f: Frame) => f.pixels.map((p) => (p ? 1 : 0)).join("");
+    expect(lit(at(turnMs * 0.1))).not.toBe(lit(at(turnMs * 1.5)));
   });
 
   test("the dial turns right, left, right and clicks at each stop", () => {
