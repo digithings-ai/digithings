@@ -118,6 +118,9 @@
         "AUTH_URL",
         "CHEAPERINFERENCE_API_BASE",
         "CHROMA_PATH",
+        "DIGICHAT_ARTIFACT_CONVERSATION",
+        "DIGICHAT_ARTIFACT_GRANT",
+        "DIGICHAT_ARTIFACT_INGEST_URL",
         "DIGICHAT_AUTO_MIGRATE",
         "DIGICHAT_CHROME_SKIN",
         "DIGICHAT_CONFIG_PATH",
@@ -189,6 +192,7 @@
       "infra/digichat-release/compose.profile-a-bundle.override.yml": [
         "DIGICHAT_ALLOW_LOCAL_EMBED_PARENTS",
         "DIGICHAT_EMBED_TENANTS",
+        "DIGISEARCH_EMBEDDING_PROVIDER",
         "DIGI_TENANT_CORPUS_MAP"
       ],
       "infra/digichat-release/compose.profile-a-bundle.yml": [
