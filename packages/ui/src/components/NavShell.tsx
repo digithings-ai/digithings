@@ -89,6 +89,24 @@ export interface NavShellProps {
    */
   autoHide?: "scroll" | "hover" | "pinned";
   /**
+   * Only read when `autoHide="scroll"`. Minimum cumulative upward scroll (in
+   * px) required before a bar hidden by scroll-down reappears. Default 0 —
+   * the canon behavior, any upward movement reveals. A surface where the
+   * reveal fires on the slightest wobble (trackpad jitter, an inertial
+   * micro-bounce) wants this raised so a deliberate scroll-up is what brings
+   * the bar back, not an incidental one.
+   */
+  scrollRevealDelta?: number;
+  /**
+   * Only read when `autoHide="scroll"`. When set, the bar also reveals while
+   * the cursor sits within this many px of the viewport top, independent of
+   * scroll position — a rescue path for a surface whose `scrollRevealDelta`
+   * is high enough that scrolling back up to the exact top is inconvenient.
+   * Unset (the default): no hover reveal in scroll mode, matching prior
+   * behavior.
+   */
+  hoverRevealZone?: number;
+  /**
    * Clip the bar's own band (its scrolled backdrop + bottom hairline) to the
    * page column instead of the viewport edges. The row was always capped to
    * `--wrap`; this is for a document whose sections are drawn between the
@@ -476,6 +494,8 @@ export function NavShell({
   currentPath,
   skipTo,
   autoHide = "scroll",
+  scrollRevealDelta = 0,
+  hoverRevealZone,
   clipToFrame = false,
 }: NavShellProps) {
   const navRef = useRef<HTMLElement>(null);
@@ -511,18 +531,46 @@ export function NavShell({
     const nav = navRef.current;
     if (!nav || (autoHide !== "scroll" && autoHide !== "pinned")) return;
     let last = 0;
+    // Cumulative upward scroll since the bar was last hidden (or since the
+    // top). Reset on any downward movement so a down/up wobble around the
+    // same y doesn't slowly creep past the threshold.
+    let upAccum = 0;
     const onScroll = () => {
       const y = window.scrollY;
       nav.classList.toggle("is-scrolled", y > 8);
       if (autoHide !== "scroll") return;
-      if (y > last && y > 180) nav.classList.add("is-hidden");
-      else nav.classList.remove("is-hidden");
+      const delta = y - last;
+      if (delta > 0 && y > 180) {
+        upAccum = 0;
+        nav.classList.add("is-hidden");
+      } else if (delta < 0) {
+        upAccum += -delta;
+        if (y <= 180 || upAccum >= scrollRevealDelta) {
+          nav.classList.remove("is-hidden");
+        }
+      }
       last = y;
     };
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
-  }, [autoHide]);
+  }, [autoHide, scrollRevealDelta]);
+
+  // Rescue reveal: in "scroll" mode, a hidden bar also reappears while the
+  // cursor dwells near the very top edge, regardless of accumulated upward
+  // scroll. Only attached when a caller opts in via `hoverRevealZone` — the
+  // canon "scroll" grammar otherwise has no hover behavior at all. Mouse-only
+  // by design, same as the "hover" grammar's own reveal; keyboard reach is
+  // handled by `:focus-within` in nav-shell.css regardless of mode.
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav || autoHide !== "scroll" || !hoverRevealZone) return;
+    const onMove = (e: MouseEvent) => {
+      if (e.clientY <= hoverRevealZone) nav.classList.remove("is-hidden");
+    };
+    window.addEventListener("mousemove", onMove, { passive: true });
+    return () => window.removeEventListener("mousemove", onMove);
+  }, [autoHide, hoverRevealZone]);
 
   // Hover grammar: starts hidden, reveals while the cursor sits in the top
   // strip. RELEASE_ZONE is deliberately wider than the bar itself (a flat
