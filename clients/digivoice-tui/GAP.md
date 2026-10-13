@@ -4,7 +4,7 @@ digivoice is TUI-first: there is no web app to compare against, so this table
 compares the terminal shell to the two things that came before it — the
 `digivoice setup --print` / `setup --json` surface (the canonical mock in
 `digivoice/mocks/cli-setup-wizard.md`, CHR-860 / #4953) and the legacy
-`digivoice/tui` screen (develop only). The OpenTUI shell reads the same CLI; it
+`digivoice/tui` screen. The CLI launches this shell. The retired tree is not started. The OpenTUI shell reads the same CLI; it
 does not re-implement speech.
 
 | Item | `setup --print` / legacy | Terminal | Status |
