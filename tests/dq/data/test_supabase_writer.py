@@ -34,17 +34,67 @@ class _FakeQuery:
     store: dict[str, list[dict[str, Any]]]
     _upsert: list[dict[str, Any]] | None = None
     _on_conflict: str | None = None
+    _returning: Any = None
 
-    def upsert(self, rows: list[dict[str, Any]], on_conflict: str | None = None) -> "_FakeQuery":
+    def upsert(
+        self,
+        rows: list[dict[str, Any]],
+        on_conflict: str | None = None,
+        *,
+        returning: Any = None,
+    ) -> "_FakeQuery":
         self._upsert = list(rows)
         self._on_conflict = on_conflict
+        self._returning = returning
         return self
 
     def execute(self) -> _FakeResponse:
         if self._upsert is not None:
             self.store.setdefault(self.table_name, []).extend(self._upsert)
+            if _is_minimal(self._returning):
+                # PostgREST honours Prefer: return=minimal with a 201 and an
+                # empty body — the rows are written, nothing is echoed back.
+                return _FakeResponse(data=[])
             return _FakeResponse(data=self._upsert)
         return _FakeResponse(data=[])
+
+
+def _is_minimal(returning: Any) -> bool:
+    """True when ``returning`` asks PostgREST for no representation body."""
+    return getattr(returning, "value", returning) == "minimal"
+
+
+@dataclass
+class _RecordingQuery(_FakeQuery):
+    """A fake that records the ``returning`` argument of every chunk."""
+
+    calls: list[dict[str, Any]] = field(default_factory=list)
+
+    def upsert(
+        self,
+        rows: list[dict[str, Any]],
+        on_conflict: str | None = None,
+        *,
+        returning: Any = None,
+    ) -> "_RecordingQuery":
+        self.calls.append(
+            {
+                "table": self.table_name,
+                "rows": len(rows),
+                "on_conflict": on_conflict,
+                "returning": returning,
+            }
+        )
+        return super().upsert(rows, on_conflict=on_conflict, returning=returning)
+
+
+@dataclass
+class _RecordingClient:
+    store: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    calls: list[dict[str, Any]] = field(default_factory=list)
+
+    def table(self, name: str) -> _RecordingQuery:
+        return _RecordingQuery(table_name=name, store=self.store, calls=self.calls)
 
 
 @dataclass
@@ -230,9 +280,9 @@ def test_upsert_instruments_uses_ticker_conflict_key() -> None:
     captured: dict[str, Any] = {}
 
     class _CaptureQuery(_FakeQuery):
-        def upsert(self, rows, on_conflict=None):
+        def upsert(self, rows, on_conflict=None, *, returning=None):
             captured["on_conflict"] = on_conflict
-            return super().upsert(rows, on_conflict=on_conflict)
+            return super().upsert(rows, on_conflict=on_conflict, returning=returning)
 
     class _CaptureClient:
         def __init__(self):
@@ -264,9 +314,9 @@ def test_upsert_macro_observations_uses_on_conflict() -> None:
     captured: dict[str, Any] = {}
 
     class _CaptureQuery(_FakeQuery):
-        def upsert(self, rows, on_conflict=None):
+        def upsert(self, rows, on_conflict=None, *, returning=None):
             captured["on_conflict"] = on_conflict
-            return super().upsert(rows, on_conflict=on_conflict)
+            return super().upsert(rows, on_conflict=on_conflict, returning=returning)
 
     class _CaptureClient:
         def __init__(self):
@@ -300,9 +350,9 @@ def test_upsert_fx_intraday_observations_uses_interval_ts_conflict_key() -> None
     captured: dict[str, Any] = {}
 
     class _CaptureQuery(_FakeQuery):
-        def upsert(self, rows, on_conflict=None):
+        def upsert(self, rows, on_conflict=None, *, returning=None):
             captured["on_conflict"] = on_conflict
-            return super().upsert(rows, on_conflict=on_conflict)
+            return super().upsert(rows, on_conflict=on_conflict, returning=returning)
 
     class _CaptureClient:
         def __init__(self):
@@ -348,7 +398,7 @@ def test_upsert_fx_intraday_5m_and_1h_coexist_at_same_ts() -> None:
             self._rows: list[dict[str, Any]] = []
             self._on_conflict: str | None = None
 
-        def upsert(self, rows, on_conflict=None):
+        def upsert(self, rows, on_conflict=None, *, returning=None):
             self._rows = list(rows)
             self._on_conflict = on_conflict
             return self
@@ -417,3 +467,102 @@ def test_upsert_price_technicals_round_trip() -> None:
     assert stored["date"] == "2025-01-01" and stored["ticker"] == "SPY"
     for col in TECHNICAL_COLUMNS:
         assert col in stored
+
+
+# ─── write egress: no representation body (DIG-1835) ───────────────────────
+#
+# Supabase bills egress on the response bytes a write sends back. postgrest-py
+# defaults `returning=ReturnMethod.representation`, so every chunk we POST is
+# echoed back in full and the body is charged. None of the five writers read
+# that body — they count their own input batch — so `returning="minimal"`
+# removes the write egress without changing what lands in the table.
+#
+# On the 2026-10-06 measurement (DIG-1811) `fx_intraday_observations` took 4,901
+# POST upserts/day at 500 rows/chunk: ~2.4M rows echoed back per day, against a
+# 270,358-row table that the writer only ever reads for its own row count.
+
+
+def _fx_rows(n: int) -> list[dict[str, Any]]:
+    return [
+        {
+            "source": "yahoo",
+            "series_id": f"FX/EUR{i}",
+            "interval": "1h",
+            "ts": f"2025-04-01T{i % 24:02d}:00:00+00:00",
+            "open": 1.08,
+            "high": 1.10,
+            "low": 1.07,
+            "close": 1.09,
+        }
+        for i in range(n)
+    ]
+
+
+@pytest.mark.unit
+def test_upsert_fx_intraday_requests_no_representation_body() -> None:
+    """The largest measured egress driver must not ask for the rows back."""
+    client = _RecordingClient()
+
+    upsert_fx_intraday_observations(client, _fx_rows(4), chunk=2)
+
+    assert len(client.calls) == 2
+    for call in client.calls:
+        assert _is_minimal(call["returning"]), (
+            "fx_intraday_observations POST must request return=minimal; "
+            f"got returning={call['returning']!r}"
+        )
+
+
+@pytest.mark.unit
+def test_upsert_fx_intraday_returns_input_row_count_not_response_rows() -> None:
+    """The row count must come from the input batch, not the echoed body.
+
+    This is the safety property that makes return=minimal safe: with the body
+    suppressed the writer still reports exactly what it was handed.
+    """
+    client = _RecordingClient()
+    rows = _fx_rows(7)
+
+    res = upsert_fx_intraday_observations(client, rows, chunk=3)
+
+    assert res.rows == 7
+    assert res.table == "fx_intraday_observations"
+    assert len(client.store["fx_intraday_observations"]) == 7
+
+
+@pytest.mark.unit
+def test_every_upsert_helper_requests_no_representation_body() -> None:
+    """Guard the whole writer surface, not just the one measured path.
+
+    A helper that omits `returning` keeps the postgrest-py default and bills
+    egress on every chunk, so the property belongs on all five helpers.
+    """
+    instrument = InstrumentMetadata(
+        ticker="XLE",
+        official_name="Energy Select Sector SPDR Fund",
+        instrument_type="ETF",
+        asset_class="EQUITY",
+        category="sector-energy",
+        provider="yahoo",
+        source_updated_at=datetime(2026, 7, 20, tzinfo=timezone.utc),
+    )
+    technicals = [{"date": "2025-01-01", "ticker": "SPY", **{c: 1.0 for c in TECHNICAL_COLUMNS}}]
+    macro = [{"source": "fred", "series_id": "DGS10", "obs_date": "2025-01-01", "value": 4.1}]
+    history = [{"date": "2025-01-01", "ticker": "SPY", "open": 1, "high": 1, "low": 1, "close": 1}]
+
+    cases = {
+        "upsert_price_history": (upsert_price_history, history),
+        "upsert_instruments": (upsert_instruments, [instrument]),
+        "upsert_price_technicals": (upsert_price_technicals, technicals),
+        "upsert_macro_observations": (upsert_macro_observations, macro),
+        "upsert_fx_intraday_observations": (upsert_fx_intraday_observations, _fx_rows(1)),
+    }
+
+    offenders = []
+    for name, (fn, payload) in cases.items():
+        client = _RecordingClient()
+        fn(client, payload)
+        assert client.calls, f"{name} issued no upsert at all — the guard would be vacuous"
+        offenders += [f"{name}: {c['returning']!r}" for c in client.calls if not _is_minimal(c["returning"])]
+
+    assert not offenders, "helpers still requesting a representation body: " + "; ".join(offenders)

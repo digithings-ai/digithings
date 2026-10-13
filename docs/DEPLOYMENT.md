@@ -162,6 +162,12 @@ the tree, requires Workers Paid, declares seven `digithings.ai` route patterns i
 digichat Node for digithings still runs on operator Compose + Cloudflare Tunnel; that is a
 different surface from the `digichat-cloudflare` Worker.
 
+The Worker fronts the `DigiChatContainer` Container (`apps/digichat-cloudflare/wrangler.toml`,
+`Dockerfile.digichat-cloudflare`); deploying it by hand is `npx wrangler deploy` from
+`apps/digichat-cloudflare/` with the build context at the monorepo root, per
+[`apps/digichat-cloudflare/README.md`](../apps/digichat-cloudflare/README.md). No workflow
+deploys it — the section below measures exactly that.
+
 ### digithings.ai — static landing page
 
 - **Source:** `apps/digithings-web/` (Next.js static export; and shared `packages/design/`, `packages/ui/`, `packages/digichat-ui/` assets). Those four are the app's transitive workspace closure, and `tests/scripts/test_deploy_build_inputs.py` asserts the deploy build check watches all of them.
@@ -282,7 +288,9 @@ It returns exactly two files.
 `npx wrangler deploy -c apps/digiquant-runner/wrangler.toml`, behind
 `environment: production`, with `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID`.
 `deploy-digithings-cron.yml` is the second one, and uses
-`cloudflare/wrangler-action@v3` rather than the CLI. Both push-to-branch.
+`cloudflare/wrangler-action@v3` rather than the CLI. Both push to `main` behind
+`environment: production` (DIG-3129 moved the cron lane off a push on `develop`
+and off the ungated `cron` environment).
 
 ### 2. A build check that deploys nothing (`build-cloudflare-workers.yml`)
 

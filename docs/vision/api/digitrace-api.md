@@ -2,7 +2,7 @@
 title: "digitrace — API reference"
 type: reference
 status: generated
-created: 2026-09-22
+created: 2026-10-02
 tags:
   - api
   - support
@@ -16,7 +16,7 @@ relevance:
 **Role:** Observability · spans · correlation IDs · **Tier:** support
 
 ## Overview
-Structured logging, Prometheus metrics, and OpenTelemetry spans thread through every request so a multi-hop run is traceable end to end.
+Structured logging, Prometheus metrics and OpenTelemetry spans thread through every request, so a multi-hop run is traceable.
 
 Audit events record a prompt's length and its IDs, never the prompt itself — tail events.jsonl and check. Optional LangSmith export runs a regex PII redactor on the way out.
 

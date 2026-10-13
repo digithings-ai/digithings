@@ -236,6 +236,7 @@ class PendingMcpCall:
     as the model wrote them. A decision carries only approve-or-deny: the
     consuming function below has no parameter for a tool name or for arguments,
     so a substituted payload cannot be spelled, let alone executed.
+
     """
 
     pending_id: str
@@ -344,7 +345,11 @@ def _requires_human_approval(
 
 
 def _refuse_for_human_approval(
-    name: str, args: dict[str, Any], context: ToolContext, server_id: str, remote: str
+    name: str,
+    args: dict[str, Any],
+    context: ToolContext,
+    server_id: str,
+    remote: str,
 ) -> dict[str, Any]:
     """Record the call once, audit it once, and refuse it without executing it."""
     from digigraph.audit import audit_log
@@ -416,23 +421,23 @@ def decide_mcp_call(
 ) -> dict[str, Any]:
     """Consume a pending decision. The only path that can execute a recorded call.
 
-    There is no parameter for a tool name or for arguments, and none may be
-    added: what runs is ``record.offered_name`` and ``record.args`` as they were
-    recorded. The record is consumed before the call leaves, so an approval
-    replays as unknown rather than running twice -- at-most-once is the correct
-    bias for a brake on unattended writes.
+    The decision carries a pending id and a verdict. It has no parameter for a
+    tool name or for arguments, so a substituted payload cannot be spelled, let
+    alone executed.
 
-    ``servers`` carries the transport only. The row that executes must be the one
-    the call was recorded against; a different row is refused rather than
-    substituted.
+    ``servers`` is transport only, and the caller that supplies it is the decide
+    route, which resolves it live from the session's own operator config -- never
+    from the deciding request. It is resolved at execute time, not recorded at
+    refusal time: a snapshot frozen at refusal defeats operator rotation between
+    the two, widening a stored auth row's lifetime and checking the operator's
+    configuration as it was rather than as it is (CTO decision on DIG-284,
+    2026-10-11, comment 98e32de0, superseding 98e32de0's predecessor cc795a07).
 
-    The record is consumed the moment the decision reaches this function, not the
-    moment it dispatches. An approval that arrives without a usable transport --
-    no ``servers``, or no row for the recorded server -- is therefore burned and
-    returns ``mcp_call_requires_servers`` / ``mcp_server_not_available``. That is
-    deliberate and is the same at-most-once bias as the replay case above: a
-    decision is spent once or never, and a caller that wants the call made again
-    records a fresh pending call.
+    The gate is therefore re-applied below rather than trusted: the recorded call
+    is resolved against the live rows, the operator allowlist is re-read, and the
+    meta-tool denies are re-checked. A tightening that landed while the call sat
+    pending takes effect. The record is popped before any of it runs, so a
+    refusal here burns the decision exactly like a denial does.
     """
     with _pending_mcp_lock:
         record = _pending_mcp_calls.pop((session_id, pending_id), None)
@@ -458,16 +463,33 @@ def decide_mcp_call(
             "server_id": record.server_id,
         }
 
-    if not servers:
-        return {"error": "mcp_call_requires_servers", "pending_id": record.pending_id}
-    if not any(
-        isinstance(s, dict) and s.get("id") == record.server_id and s.get("url") for s in servers
-    ):
+    from digigraph.orchestration.mcp_client import (
+        _refused_meta_tool,
+        call_prefixed_tool,
+        mcp_server_allows_raw_tool,
+    )
+
+    rows = servers or []
+    resolved = _remote_operation(record.offered_name, rows)
+    if resolved is None:
         return {"error": "mcp_server_not_available", "pending_id": record.pending_id}
+    server_id, remote, row = resolved
+    # The recorded call belongs to one server. A live set that no longer names
+    # it is a stale record, and a row without a usable URL is no endpoint to
+    # write to. Both burn the decision rather than leaving it re-runnable.
+    if server_id != record.server_id or not row.get("url"):
+        return {"error": "mcp_server_not_available", "pending_id": record.pending_id}
+    # Rules 2 and 8, independent of the allowlist: a meta tool selects its own
+    # operation, so no consent this record carries can describe what it calls.
+    if _refused_meta_tool(remote):
+        return {"error": "mcp_meta_tool_refused", "pending_id": record.pending_id}
+    # Rules 1 and 5, read live: an operator who tightened the allowlist after the
+    # call was recorded has withdrawn consent for it.
+    if not mcp_server_allows_raw_tool(row, remote):
+        return {"error": "mcp_tool_not_allowlisted", "pending_id": record.pending_id}
 
-    from digigraph.orchestration.mcp_client import call_prefixed_tool
-
-    return call_prefixed_tool(record.offered_name, record.args, servers)
+    result = call_prefixed_tool(record.offered_name, record.args, [row])
+    return {"status": "approved", "pending_id": record.pending_id, "result": result}
 
 
 def execute(name: str, args: dict[str, Any], context: ToolContext) -> str | dict[str, Any]:

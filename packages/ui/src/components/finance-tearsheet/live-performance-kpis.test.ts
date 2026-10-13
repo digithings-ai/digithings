@@ -367,3 +367,58 @@ describe('navHistoryForLiveOverlap', () => {
     ]);
   });
 });
+
+describe('since-inception is the chained base-100 index, never nav/100 (DIG-2801)', () => {
+  const benchmarkHistory = [
+    { date: '2026-09-01', price: 500 },
+    { date: '2026-09-30', price: 515 },
+    { date: '2026-10-01', price: 515 },
+  ];
+  // Level jumps on 02/08/30 Sep that the accounting day returns do not contain.
+  const seamNavHistory = [
+    { date: '2026-09-01', nav: 100, day_return_pct: null, source: 'legacy_nav_history' },
+    { date: '2026-09-02', nav: 104.93, day_return_pct: 0.004, source: 'legacy_nav_history' },
+    { date: '2026-09-08', nav: 108.55, day_return_pct: 0.001, source: 'legacy_nav_history' },
+    { date: '2026-09-30', nav: 121.85, day_return_pct: 0.002, source: 'legacy_nav_history' },
+    { date: '2026-10-01', nav: 121.85, day_return_pct: null, source: 'legacy_nav_history' },
+  ];
+  // Firing control: no level jumps, so the index and nav/100 are the same number.
+  const cleanNavHistory = [
+    { date: '2026-10-01', nav: 100, day_return_pct: null },
+    { date: '2026-10-02', nav: 101, day_return_pct: 1 },
+    { date: '2026-10-03', nav: 102.01, day_return_pct: 1 },
+  ];
+
+  it('reads the chained index, not the raw accounting level ratio', () => {
+    const kpis = computeLivePerformanceKpis({
+      positions,
+      navHistory: seamNavHistory,
+      benchmarkHistory,
+      benchmarkTicker: 'SPY',
+    });
+    expect(kpis.sinceInceptionPct).toBeCloseTo(100.007 * 1.012 - 100, 4);
+    expect(kpis.sinceInceptionPct).toBeCloseTo(1.207084, 4);
+    expect(kpis.sinceInceptionPct).not.toBeCloseTo(121.85 * 1.012 - 100, 1);
+  });
+
+  it('agrees with nav/100 when the book carries no level jumps (firing control)', () => {
+    const kpis = computeLivePerformanceKpis({
+      positions,
+      navHistory: cleanNavHistory,
+      benchmarkHistory,
+      benchmarkTicker: 'SPY',
+    });
+    expect(kpis.sinceInceptionPct).toBeCloseTo(102.01 * 1.012 - 100, 9);
+    expect(kpis.sinceInceptionPct).toBeCloseTo(3.23412, 6);
+  });
+
+  it('needs two accounting rows, matching the /brief series', () => {
+    const kpis = computeLivePerformanceKpis({
+      positions,
+      navHistory: [{ date: '2026-10-01', nav: 121.85 }],
+      benchmarkHistory,
+      benchmarkTicker: 'SPY',
+    });
+    expect(kpis.sinceInceptionPct).toBeNull();
+  });
+});

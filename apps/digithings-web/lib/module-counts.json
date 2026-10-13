@@ -1,13 +1,13 @@
 {
   "endpointSource": "docs/openapi/*.json (paths)",
-  "generatedAt": "2026-10-02T09:31:50Z",
+  "generatedAt": "2026-10-13T16:22:26Z",
   "mcpSource": "module MCP server decorator sites",
   "modules": {
     "digichat": {
       "endpoints": 7
     },
     "digigraph": {
-      "endpoints": 15,
+      "endpoints": 16,
       "mcpTools": 5
     },
     "digikey": {
@@ -18,7 +18,7 @@
       "mcpTools": 127
     },
     "digisearch": {
-      "endpoints": 36,
+      "endpoints": 37,
       "mcpTools": 16
     },
     "digitrace": {

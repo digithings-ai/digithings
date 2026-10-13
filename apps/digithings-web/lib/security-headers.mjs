@@ -70,6 +70,22 @@ export function supabaseOriginForCsp(env = process.env) {
 }
 
 /**
+ * dashboard-api origin (`NEXT_PUBLIC_DASHBOARD_API_URL`) for the digiquant band's
+ * NAV and benchmark reads, or null when unset (no production default).
+ * @param {NodeJS.ProcessEnv | Record<string, string | undefined>} [env]
+ * @returns {string | null}
+ */
+export function dashboardApiOriginForCsp(env = process.env) {
+  const raw = env.NEXT_PUBLIC_DASHBOARD_API_URL?.trim();
+  if (!raw) return null;
+  try {
+    return new URL(raw).origin;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * @param {NodeJS.ProcessEnv | Record<string, string | undefined>} [env]
  * @returns {string | null} absolute origin, or null if unset/invalid
  */
@@ -108,6 +124,7 @@ export function digithingsCsp(
   frameSrc = frameSrcForCsp(),
   marketOrigin = marketDataOriginForCsp(),
   supabaseOrigin = supabaseOriginForCsp(),
+  dashboardApiOrigin = dashboardApiOriginForCsp(),
 ) {
   const connectSrc = [
     "connect-src",
@@ -115,6 +132,7 @@ export function digithingsCsp(
     "https://api.github.com",
     marketOrigin,
     supabaseOrigin,
+    dashboardApiOrigin,
   ]
     .filter(Boolean)
     .join(" ");

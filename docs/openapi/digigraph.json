@@ -1147,6 +1147,27 @@
         ]
       }
     },
+    "/v1/mcp/decisions": {
+      "post": {
+        "description": "Apply one human decision to one recorded call, at most once.",
+        "operationId": "post_mcp_decision_v1_mcp_decisions_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Post Mcp Decision V1 Mcp Decisions Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Post Mcp Decision"
+      }
+    },
     "/v1/model-info": {
       "get": {
         "description": "Return the LLM model used for Project RAG completions. Use to validate config.",

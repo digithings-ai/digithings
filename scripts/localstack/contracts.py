@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import re
+import urllib.parse
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
@@ -57,6 +58,10 @@ class Check:
     expect_status: tuple[int, ...] = (200,)
     #: Path used to read back a value written by a ``roundtrip`` check.
     read_path: str | None = None
+    #: Probe path appended to a ``requires`` base URL. ``None`` = use the
+    #: configured URL exactly as given (the default, and what every check
+    #: except dashboard-api relies on).
+    path: str | None = None
 
     def in_profile(self, profile: str) -> bool:
         return profile in self.profiles or "all" in self.profiles
@@ -72,6 +77,7 @@ class Check:
             "method": self.method,
             "expect_status": list(self.expect_status),
             "read_path": self.read_path,
+            "path": self.path,
         }
 
 
@@ -166,7 +172,15 @@ BUILTIN_CHECKS: tuple[Check, ...] = (
         kind="http",
         url=None,
         profiles=("core", "chat", "all"),
-        source="apps/dashboard-api/src/index.ts serves /healthz; port owned by S3",
+        # The configured value is an ORIGIN. dashboard-api routes only
+        # /healthz, /ledger, /v1/tables/* and the MCP path; anything else
+        # falls through to errorResponse("bad_request", "unknown route")
+        # (apps/dashboard-api/src/index.ts:193). Probing the origin alone
+        # therefore returns 400 from a healthy service and the gate reports
+        # it as down. Opt in with path= rather than appending inside
+        # resolve(), which must return a requires URL exactly as configured.
+        path="/healthz",
+        source="apps/dashboard-api/src/index.ts:160 serves /healthz; :193 answers 400 on any other path",
         requires="DT_DASHBOARD_API_URL",
     ),
     Check(
@@ -364,6 +378,23 @@ def _expand_env(url: str | None, config: dict[str, str]) -> str | None:
     return _ENV_REF.sub(sub, url)
 
 
+def _with_path(base: str, path: str) -> str:
+    """Return ``base`` with ``path`` appended to its URL path.
+
+    Uses the same ``urlsplit``/``urlunsplit`` idiom as ``health.py``'s
+    ``read_path`` handling, so query and fragment survive. If ``base`` already
+    ends with ``path`` the value is returned unchanged, so an operator who
+    exports the full probe URL gets the same URL as one who exports the origin.
+    """
+    split = urllib.parse.urlsplit(base)
+    if split.path == path or split.path.endswith(path):
+        return base
+    joined = split.path.rstrip("/") + path
+    return urllib.parse.urlunsplit(
+        (split.scheme, split.netloc, joined, split.query, split.fragment)
+    )
+
+
 def resolve(check: Check, config: dict[str, str]) -> tuple[str | None, str | None]:
     """Resolve a check's URL from configuration.
 
@@ -377,5 +408,7 @@ def resolve(check: Check, config: dict[str, str]) -> tuple[str | None, str | Non
         # Returned exactly as configured: a local binding route is keyed on the
         # path it is given, so appending or stripping a trailing slash here
         # would silently address a route that does not exist.
+        if check.path:
+            return _with_path(value, check.path), None
         return value, None
     return _expand_env(check.url, config), None

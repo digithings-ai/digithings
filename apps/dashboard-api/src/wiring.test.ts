@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import app, { type Env } from "./index";
 import { STUB_NULL_AS_OF } from "./stubs";
 
-const NO_ENV: Env = {};
+const NO_ENV: Env = { DASHBOARD_DEV_CALLER: "enterprise+12x" }; // builders under test, not the access gate
 const get = (path: string) => new Request(`https://x${path}`);
 
 async function bodyOf(res: Response): Promise<Record<string, unknown>> {

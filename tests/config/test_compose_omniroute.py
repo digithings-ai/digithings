@@ -30,8 +30,11 @@ def test_omniroute_profile_is_opt_in_and_guards_password_at_start() -> None:
     services = data["services"]
     omni = services["omniroute"]
     guard = services["omniroute-auth-guard"]
-    assert omni.get("profiles") == ["omniroute"]
-    assert guard.get("profiles") == ["omniroute"]
+    # S4 (#5355) folds omniroute into the `core` stack (the digithings.localhost
+    # reverse proxy) and `all`; it stays opt-in only in the sense that it is not
+    # part of a bare `docker compose up` with no profile selected.
+    assert omni.get("profiles") == ["omniroute", "core", "all"]
+    assert guard.get("profiles") == ["omniroute", "core", "all"]
     assert omni.get("ports") == ["127.0.0.1:20128:20128"]
     depends = omni.get("depends_on") or {}
     assert "omniroute-auth-guard" in depends

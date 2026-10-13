@@ -376,7 +376,8 @@ env:
   secret: false
   sources:
     wrangler_workers: []
-    compose_files: []
+    compose_files:
+    - docker-compose.yml
     env_example_files: []
     compose_literal:
     - CHEAPERINFERENCE_API_BASE
@@ -444,6 +445,46 @@ env:
     env_example_files:
     - .env.example
     compose_literal: []
+- name: DIGICHAT_ARTIFACT_CONVERSATION
+  description: >-
+    Conversation an oversized Zammad retrieval is filed under (DIG-2785).
+    Empty by default and honestly so - the conversation is per-session, so
+    no static default can name a live one.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal:
+    - DIGICHAT_ARTIFACT_CONVERSATION
+- name: DIGICHAT_ARTIFACT_GRANT
+  description: >-
+    Bearer grant the zammad-mcp container presents to the artifact-ingest
+    door (DIG-2785). Names one conversation and authorises one write; it is
+    not an object-store key and not a database credential. Empty until a
+    conversation issues one.
+  secret: true
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal:
+    - DIGICHAT_ARTIFACT_GRANT
+- name: DIGICHAT_ARTIFACT_INGEST_URL
+  description: >-
+    DigiChat artifact-ingest door the zammad-mcp container posts an oversized
+    retrieval to (DIG-2785). In-network URL: service name plus the digichat
+    container port, same shape as DIGIGRAPH_INTERNAL_URL.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal:
+    - DIGICHAT_ARTIFACT_INGEST_URL
 - name: DIGICHAT_ALLOW_LOCAL_EMBED_PARENTS
   description: Allow localhost parents to embed digichat (local profile-a bundle override only).
   secret: false
@@ -455,6 +496,36 @@ env:
     - DIGICHAT_ALLOW_LOCAL_EMBED_PARENTS
   compose_literal_files:
     - infra/digichat-release/compose.profile-a-bundle.override.yml
+- name: DIGICHAT_ARTIFACT_CONVERSATION
+  description: Per-session conversation id for DigiChat artifact writes. Empty by default, and no
+    static default can name a live session; with it unset the tools render rows in full.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal: []
+- name: DIGICHAT_ARTIFACT_GRANT
+  description: Per-conversation grant for DigiChat artifact writes. Empty by default; issued per
+    conversation, so no static default can name a live one.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal: []
+- name: DIGICHAT_ARTIFACT_INGEST_URL
+  description: In-network DigiChat artifact ingest URL (service name plus the digichat container
+    port 3000). Oversized retrievals go to the artifact store instead of a spool in the caller.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal: []
 - name: DIGICHAT_AUTO_MIGRATE
   description: '`1` runs digichat migrations at boot.'
   secret: false
@@ -1201,6 +1272,17 @@ env:
     env_example_files:
     - .env.example
     compose_literal: []
+- name: DT_PROXY_PORT
+  description: Host port for the digithings.localhost reverse proxy (S4 compose
+    service groups, issue 5355). Interpolated in docker-compose.yml with a
+    default of 8088.
+  secret: false
+  sources:
+    wrangler_workers: []
+    compose_files:
+    - docker-compose.yml
+    env_example_files: []
+    compose_literal: []
 - name: DT_TARGET
   description: Variant selector for UIs (selfhost|hosted, S1 identity,
     DIG-2759). Rendered by scripts/render_config_contract.py into wrangler
@@ -1752,6 +1834,14 @@ secrets:
 - name: AUTH_SECRET
   worker: digithings-digichat, digithings-stack
   required: true
+- name: DIGICHAT_ARTIFACT_GRANT
+  worker: digithings-digichat, digithings-stack
+  required: false
+  note: >-
+    Per-conversation ingest grant the zammad-mcp container presents to
+    POST /api/artifact-ingest (DIG-2785). Names one conversation and
+    authorises one write; artifacts-repo re-checks ownership. Not an
+    object-store key and not a database credential.
 - name: DIGICHAT_EMBED_TENANTS
   worker: digithings-digichat, digithings-stack
   required: true
@@ -1915,3 +2005,11 @@ bindings:
   name: LANGFUSE_EVENTS
   bucket_name: digitrace-langfuse-events
   source: apps/digitrace-langfuse/wrangler.toml
+# DIG-2895 data API. The D1 database is a LOCAL placeholder id (no deploy, no
+# routes, no remote database); the binding exists so the parity contract can see
+# the name. A remote database_id is a cutover step and needs Chris's approval.
+- worker: digidata-api
+  type: d1_database
+  name: TWELVEX_DB
+  database_name: twelvex
+  source: apps/digidata-api/wrangler.toml
