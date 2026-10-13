@@ -428,13 +428,15 @@ export class RunnerSession {
     const ageSeconds = (this.now() - lock.started_at_ms) / 1000;
     const pastDeadline = ageSeconds > lock.timeout_seconds + WATCHDOG_GRACE_SECONDS;
     if (pastDeadline && !isTerminal(run.status)) {
-      // Container still alive: keep the lock. Releasing here drops
-      // hasActiveWork (platform can reap mid-write) and lets accept start a
-      // twin /run against the same command. The container kills its own
-      // child at timeout_seconds; only ledger-timeout when unreachable.
-      if (remote && !isTerminal(remote.status)) {
-        return true;
-      }
+      // The watchdog deadline is unconditional (DIG-3372). A stale or broken
+      // build can report a non-terminal status forever; keeping the lock for it
+      // pins hasActiveWork() true, so sleepAfter stays at 30m and the paid
+      // container never sleeps. Once timeout_seconds + grace has passed the
+      // lock is released and the run marked timed_out whether or not the
+      // container answers. Twin writers stay guarded: the container's own
+      // same-command check in exec_job.py refuses a second /run with HTTP 409
+      // (#4822), and accept cannot start a duplicate while a lock or queued run
+      // holds the group.
       run.status = "timed_out";
       run.exit_code = 124;
       run.finished_at = new Date(this.now()).toISOString();
