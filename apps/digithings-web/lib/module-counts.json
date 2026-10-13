@@ -1,6 +1,6 @@
 {
   "endpointSource": "docs/openapi/*.json (paths)",
-  "generatedAt": "2026-10-13T18:05:57Z",
+  "generatedAt": "2026-10-13T20:33:44Z",
   "mcpSource": "module MCP server decorator sites",
   "modules": {
     "digichat": {
@@ -11,7 +11,7 @@
       "mcpTools": 5
     },
     "digikey": {
-      "endpoints": 10
+      "endpoints": 9
     },
     "digiquant": {
       "endpoints": 23,
