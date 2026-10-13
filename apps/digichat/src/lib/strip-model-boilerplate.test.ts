@@ -18,3 +18,20 @@ describe("stripModelBoilerplate", () => {
     expect(tree.children[0].children[0].value).toBe("");
   });
 });
+
+describe("stripModelBoilerplate repeats and truncations", () => {
+  it("removes dozens of concatenated copies", () => {
+    expect(stripModelBoilerplate(LEAK.repeat(30))).toBe("");
+    expect(stripModelBoilerplate(`${LEAK}. ${LEAK}.\n${LEAK}`)).toBe("");
+  });
+  it("removes a trailing partial copy", () => {
+    expect(stripModelBoilerplate(`Answer.${LEAK}${LEAK.slice(0, 40)}`)).toBe("Answer.");
+    expect(stripModelBoilerplate(`Answer. Use the results below to formul`)).toBe("Answer.");
+  });
+  it("keeps text around repeats", () => {
+    expect(stripModelBoilerplate(`Intro.${LEAK}${LEAK} Body.`)).toBe("Intro. Body.");
+  });
+  it("handles line-wrapped copies", () => {
+    expect(stripModelBoilerplate(LEAK.replace(/ to /g, "\nto "))).toBe("");
+  });
+});

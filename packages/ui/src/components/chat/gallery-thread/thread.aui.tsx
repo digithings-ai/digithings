@@ -941,8 +941,11 @@ const MessageSources: FC<{ Source: SourceMessagePartComponent }> = ({
   // Select the parts array itself (stable store reference) and derive in a
   // memo: a selector returning a fresh array re-renders forever (#185).
   const parts = useAuiState((s) => s.message.parts);
+  // Sources are a footer for the finished answer: while the turn is still
+  // running they would land between tool groups and the streaming text.
+  const running = useAuiState((s) => s.message.status?.type === "running");
   const sources = useMemo(() => dedupeSourceParts(parts), [parts]);
-  if (!sources.length) return null;
+  if (running || !sources.length) return null;
   return (
     <div
       data-slot="aui_message-sources"

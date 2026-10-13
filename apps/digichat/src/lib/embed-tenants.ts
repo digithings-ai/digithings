@@ -167,6 +167,12 @@ export type EmbedTenantConfig = {
    */
   webSearch?: boolean;
   /**
+   * When true (DIG-1210), visitors cannot change the model, MCP servers or
+   * tool toggles: the X-Digi-Model header is ignored (house default model)
+   * and digigraph hides session_set_model / session_*_mcp / session_toggle_tool.
+   */
+  lockSessionControls?: boolean;
+  /**
    * Chain-of-thought view mode for this tenant's embeds (digichat skin):
    * hidden / compact / balanced / detailed. `balanced` (default) opens
    * reasoning + tool groups while they stream and collapses them when done.
@@ -548,6 +554,9 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
   if (v.showLanguageSelector !== undefined && typeof v.showLanguageSelector !== "boolean") {
     throw new Error(`${ctx}: showLanguageSelector must be a boolean`);
   }
+  if (v.lockSessionControls !== undefined && typeof v.lockSessionControls !== "boolean") {
+    throw new Error(`${ctx}: lockSessionControls must be a boolean`);
+  }
   if (v.webSearch !== undefined && typeof v.webSearch !== "boolean") {
     throw new Error(`${ctx}: webSearch must be a boolean`);
   }
@@ -730,6 +739,7 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     showLanguageSelector:
       typeof v.showLanguageSelector === "boolean" ? v.showLanguageSelector : undefined,
     webSearch: typeof v.webSearch === "boolean" ? v.webSearch : undefined,
+    ...(v.lockSessionControls === true ? { lockSessionControls: true } : {}),
     view: VIEW_MODES.includes(v.view as ViewMode) ? (v.view as ViewMode) : undefined,
     thinking: THINKING_MODES.includes(v.thinking as ThinkingMode)
       ? (v.thinking as ThinkingMode)

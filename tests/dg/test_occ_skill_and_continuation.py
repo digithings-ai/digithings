@@ -60,3 +60,33 @@ def test_unfinished_answers_detected(text: str) -> None:
 )
 def test_finished_answers_pass(text: str) -> None:
     assert not answer_looks_unfinished(text)
+
+
+def test_tenant_map_lock_session_controls_parses() -> None:
+    import json
+
+    from digigraph.corpus_routing import load_tenant_corpus_map, resolve_corpus_override
+
+    raw = json.dumps(
+        {
+            "occ": {"digisearchIndex": "occ_help", "lockSessionControls": True},
+            "digithings": {"digisearchIndex": "digithings_docs"},
+        }
+    )
+    table = load_tenant_corpus_map(raw)
+    assert resolve_corpus_override(headers={}, tenant_slug="occ", corpus_map=table).lock_session_controls
+    assert not resolve_corpus_override(
+        headers={}, tenant_slug="digithings", corpus_map=table
+    ).lock_session_controls
+
+
+def test_locked_session_tools_filtered_by_name() -> None:
+    from digigraph.graph.research import LOCKED_SESSION_TOOLS, _tool_def_name
+
+    tools = [
+        {"type": "function", "function": {"name": n}}
+        for n in ["session_set_model", "session_set_language", "zammad_search_tickets", "session_toggle_tool"]
+    ]
+    kept = [t for t in tools if _tool_def_name(t) not in LOCKED_SESSION_TOOLS]
+    assert [_tool_def_name(t) for t in kept] == ["session_set_language", "zammad_search_tickets"]
+    assert {"session_upsert_mcp", "session_remove_mcp"} <= LOCKED_SESSION_TOOLS

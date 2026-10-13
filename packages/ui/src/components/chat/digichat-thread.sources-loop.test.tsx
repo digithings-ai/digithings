@@ -99,6 +99,10 @@ describe("DigichatThread sources (digisearch + digivault_get_note)", () => {
     expect(footer[0]!.querySelectorAll('a[data-slot="aui_source-url"]').length).toBe(3);
     // No source rows outside the footer (inline in the body).
     expect(host.querySelectorAll(".aui-source-row").length).toBe(HITS.length);
+    // Completed citations carry a static mark, never the animated "searching" one.
+    const marks = footer[0]!.querySelectorAll(".aui-source-mark");
+    expect(marks.length).toBe(HITS.length);
+    for (const m of marks) expect(m.outerHTML).not.toMatch(/searching/);
     act(() => root.unmount());
   });
 

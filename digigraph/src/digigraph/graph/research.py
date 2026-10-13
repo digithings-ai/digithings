@@ -39,6 +39,22 @@ logger = logging.getLogger(__name__)
 
 
 
+# Session controls a client tenant must never drive (DIG-1210): the model,
+# MCP servers and tool toggles stay operator-configured.
+LOCKED_SESSION_TOOLS = frozenset(
+    {"session_set_model", "session_upsert_mcp", "session_remove_mcp", "session_toggle_tool"}
+)
+
+
+def _tool_def_name(tool: object) -> str:
+    if isinstance(tool, dict):
+        fn = tool.get("function")
+        if isinstance(fn, dict) and isinstance(fn.get("name"), str):
+            return fn["name"]
+        if isinstance(tool.get("name"), str):
+            return tool["name"]
+    return str(getattr(tool, "name", ""))
+
 _MAX_CONTINUATIONS = 2
 _CONTINUE_PROMPT = (
     "Your last message stopped before the answer was complete. Continue now: call "
@@ -440,6 +456,8 @@ def _run_document_rag_path(
             enable_web_search=bool(state.get("enable_web_search")),
         )
     tools_for_llm = get_tools_for_skills(skill_ids, context)
+    if state.get("lock_session_controls"):
+        tools_for_llm = [t for t in tools_for_llm if _tool_def_name(t) not in LOCKED_SESSION_TOOLS]
     collected_stored: dict[str, dict] = {}
     collected_rag: list[dict] = []
 
@@ -481,6 +499,8 @@ def _run_document_rag_path(
         return result
 
     def execute_search(name: str, args: dict) -> str | dict:
+        if state.get("lock_session_controls") and name in LOCKED_SESSION_TOOLS:
+            return f"Unknown tool: {name}"
         result = execute_one(name, args)
         if isinstance(result, dict):
             # #3417: load full notes after a locate so the model synthesizes
