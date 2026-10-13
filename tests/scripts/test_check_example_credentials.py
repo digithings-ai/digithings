@@ -55,10 +55,15 @@ def test_placeholder_values_pass(guard: Any) -> None:
         "your_api_key_here",
         "example_value",
         "",
-        "digichat",
         "localhost",
     ):
         assert guard.is_placeholder(v), f"{v!r} must read as a placeholder"
+    # NOTE (batch fold of #5523): this list carried "digichat" on develop.
+    # The batch product-name rule (folded from #5032, pinned in
+    # test_check_example_credentials_product_names.py) reports a product name
+    # under a credential-shaped variable, so "digichat" is no longer a bare
+    # placeholder. It stays clean under non-credential names via the length
+    # floor, which test_generic_placeholder_password_is_not_detected pins.
 
 
 def test_realistic_credential_value_is_not_a_placeholder(guard: Any) -> None:
