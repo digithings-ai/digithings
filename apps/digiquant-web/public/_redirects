@@ -19,10 +19,13 @@
 /app/brief /app/ 308
 /app/brief/ /app/ 308
 
-# Retired operator UI. /dashboard is the brief at /app. Known desk paths keep
-# their slug. Retired pages go to /app. No splat: login, signup, the Auth
-# callback and settings (incl. the Alpaca OAuth callback) still ship from
-# apps/dashboard. Same map as legacyDashboardRedirects().
+# Retired operator UI. Non-FX paths 308 to the brief desk at /app.
+# /dashboard and /dashboard/twelve-x are not in this list: FX Hub and
+# invite links (https://digiquant.io/dashboard?invite=) stay on
+# apps/dashboard until ROUTE_DASHBOARD_FX_HUB_TO_APP is flipped.
+# No splat: login, signup, the Auth callback, settings (incl. the Alpaca
+# OAuth callback) and FX Hub still ship from apps/dashboard.
+# Same map as legacyDashboardCloudflareLines().
 /dashboard/portfolio/attribution /app/portfolio/attribution/ 308
 /dashboard/portfolio/attribution/ /app/portfolio/attribution/ 308
 /dashboard/portfolio/tearsheet /app/portfolio/tearsheet/ 308
@@ -69,8 +72,6 @@
 /dashboard/research/ /app 308
 /dashboard/strategy /app 308
 /dashboard/strategy/ /app 308
-/dashboard/twelve-x /app 308
-/dashboard/twelve-x/ /app 308
 /dashboard/library /app 308
 /dashboard/library/ /app 308
 /dashboard/system /app 308
@@ -79,17 +80,15 @@
 /dashboard/house/ /app 308
 /dashboard/why /app 308
 /dashboard/why/ /app 308
-/dashboard /app 308
-/dashboard/ /app 308
 
 # Retired static digiquant.io URLs under /olympus. One hop straight to the
 # final destination (previously /olympus bounced through /dashboard, a 2-3
 # hop chain once /dashboard's own trailing-slash redirect is counted).
-# Account pages still live under /dashboard, never /olympus, so those keep
-# going there, where apps/dashboard serves them with no further redirect.
-# The trailing splat is safe here (unlike the /dashboard block) because
-# /olympus never served account pages for it to shadow. Same map as
-# legacyOlympusCloudflareLines().
+# Account pages and FX Hub still live under /dashboard, never /olympus, so
+# those keep going there, where apps/dashboard serves them with no further
+# redirect. The trailing splat is safe here (unlike the /dashboard block)
+# because /olympus never served account pages for it to shadow. FX Hub
+# rules sit before that splat. Same map as legacyOlympusCloudflareLines().
 /olympus/portfolio/attribution /app/portfolio/attribution/ 308
 /olympus/portfolio/attribution/ /app/portfolio/attribution/ 308
 /olympus/portfolio/tearsheet /app/portfolio/tearsheet/ 308
@@ -136,8 +135,6 @@
 /olympus/research/ /app/ 308
 /olympus/strategy /app/ 308
 /olympus/strategy/ /app/ 308
-/olympus/twelve-x /app/ 308
-/olympus/twelve-x/ /app/ 308
 /olympus/library /app/ 308
 /olympus/library/ /app/ 308
 /olympus/system /app/ 308
@@ -156,6 +153,9 @@
 /olympus/signup/ /dashboard/signup 308
 /olympus/login /dashboard/login 308
 /olympus/login/ /dashboard/login 308
+/olympus/twelve-x /dashboard/twelve-x 308
+/olympus/twelve-x/ /dashboard/twelve-x/ 308
+/olympus/twelve-x/* /dashboard/twelve-x/:splat 308
 /olympus /app/ 308
 /olympus/ /app/ 308
 /olympus/* /app/ 308
