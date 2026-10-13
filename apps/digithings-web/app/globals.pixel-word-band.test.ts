@@ -152,7 +152,13 @@ function computedOverflowY(decls: Decls): string {
 
 function resolveKeyword(decls: Decls, property: string): string | null {
   const length = decls[property];
-  if (!length || !("raw" in length)) return null;
+  if (!length) return null;
+  // A percentage is a length, not a keyword, but the contained-mark ruling is
+  // `width: 100%`. Returning it as written lets the width model and the
+  // assertion both see the declaration. Pixel lengths stay out: nothing here
+  // asks for them as a keyword.
+  if ("percent" in length) return `${length.percent}%`;
+  if (!("raw" in length)) return null;
   return length.raw;
 }
 
