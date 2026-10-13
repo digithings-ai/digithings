@@ -256,7 +256,8 @@ export function assembleTradeHistory(
           publishable && tl.targets.length > 0
             ? fmt(tl.targets[0].value, tl.targets[0].provenance)
             : null,
-        // Shape-only, by contract: "levels exist" stays distinct from "may be shown".
+        // `tl` is already null unless the bracket is publishable, so this is the
+        // published ladder, not the raw shape. A half bracket is not "levels".
         hasLevels: hasTradeLevels(tl),
         lifecycle: lifecycleOf(ev?.status),
         entryDate: ev?.entry_date ?? null,
