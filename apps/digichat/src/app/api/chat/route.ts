@@ -549,7 +549,7 @@ export async function POST(req: Request) {
       upstreamHeaders["X-Digi-Vault-Prefix"] = digigraphBackend.vaultPathPrefix;
     }
   }
-  if (litellmProxyApiKey) {
+  if (litellmProxyApiKey && process.env.DIGICHAT_LOCAL_DROP_PROXY_KEY !== "1") {
     upstreamHeaders["X-LiteLLM-Proxy-Key"] = litellmProxyApiKey;
   }
   if (languageCode !== "en") {
