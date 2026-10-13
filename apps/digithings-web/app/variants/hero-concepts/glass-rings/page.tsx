@@ -1,0 +1,42 @@
+import type { Metadata } from "next";
+
+import { DtFooter } from "@/components/DtFooter";
+import { StandardNav } from "@/app/_variants/headers";
+import { Doc, BlockLabel } from "@/app/_variants/parts";
+import { GlassRingsField } from "@/components/landing/concepts/GlassRingsField";
+
+// DIG-3319 concept 3 — glass rings. Exploration only, not wired into `/`.
+
+export const metadata: Metadata = {
+  title: "hero concept 3 · glass rings — exploration",
+  robots: { index: false, follow: false },
+};
+
+export default function HeroConceptGlassRings() {
+  return (
+    <>
+      <StandardNav />
+      <main id="main" tabIndex={-1} className="pt-[var(--dq-nav-h)]">
+        <section className="pixel-hero border-b border-hair">
+          <GlassRingsField />
+          <Doc className="relative z-10 flex flex-col items-center py-[4rem] text-center">
+            <BlockLabel>DIG-3319 · concept 3 of 3</BlockLabel>
+            <h1 className="m-0 mt-[1rem] font-display text-[1.6rem] font-semibold leading-[1.25] tracking-[-0.02em] text-ink sm:text-[1.9rem]">
+              Glass rings
+            </h1>
+            <p className="m-0 mt-[0.9rem] max-w-[46ch] text-[0.9375rem] leading-[1.6] text-ink-soft">
+              Nested square frames pulse outward from center — no map, no bitmap, pure geometry.
+              A literal echo of the hero&apos;s own headline: &ldquo;AI infrastructure, in a glass
+              box you own.&rdquo;
+            </p>
+            <p className="m-0 mt-[1.2rem] font-mono text-[0.78rem] text-ink-mute">
+              kept: pixel-grid cells · mouse trail · smooth perf — changed: subject (no map),
+              trail (monochrome ink, no rainbow)
+            </p>
+          </Doc>
+        </section>
+      </main>
+      <DtFooter />
+    </>
+  );
+}
