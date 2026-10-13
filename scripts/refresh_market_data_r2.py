@@ -93,6 +93,7 @@ import io
 import json
 import os
 import sys
+from collections.abc import Iterable
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable  # score:allow untyped any — R2 JSON + callbacks
@@ -198,6 +199,10 @@ SUPABASE_SERVICE_KEY_FALLBACK_ENV = "SUPABASE_SERVICE_ROLE_KEY"
 # deliberately excluded: its core readers moved to R2, so re-writing it would
 # resurrect a path that was retired on purpose.
 CORE_MIRROR_MACRO_SOURCES = frozenset({"yahoo"})
+# Synthetic outcome name for a ``--macro-manifest`` that could not be read
+# (DIG-1371). It is not a dataset, so it never appears in ``exempt`` and the
+# #4621 exemption cannot shield it: the macro leg is not slow, it is undeclared.
+UNREADABLE_MACRO_MANIFEST = "macro-manifest-unreadable"
 
 
 def _sibling(name: str) -> Any:
@@ -1461,13 +1466,50 @@ def build_store(postgres_uri: str) -> tuple[RefreshStore, dict[str, Any]]:
     return adapter, manifest
 
 
-def _resolve_macro_specs(
-    cli_specs: list[str], manifest_path: str
-) -> list[tuple[str, str, str | None]]:
+class MacroSpecResolution(list):
+    """The resolver's answer: resolved macro specs, plus why there are none.
+
+    A ``list`` subclass on purpose (DIG-1371). Every consumer of
+    :func:`_resolve_macro_specs` iterates the result — ``main``'s refresh loop,
+    :func:`_slow_macro_exempt_ids`, and the digiquant test doubles that replace
+    the resolver wholesale and hand back a plain ``list`` — so the return type
+    has to stay list-compatible. ``manifest_error`` is the one thing an empty
+    list cannot say: it is the only signal separating a manifest this run could
+    not read from a panel that legitimately declared nothing, and without it
+    ``main`` reported fresh while the macro panel stayed frozen at its last seal.
+    """
+
+    manifest_error: str
+
+    def __init__(
+        self,
+        specs: Iterable[tuple[str, str, str | None]] = (),
+        *,
+        manifest_error: str = "",
+    ) -> None:
+        super().__init__(specs)
+        self.manifest_error = manifest_error
+
+
+def _resolve_macro_specs(cli_specs: list[str], manifest_path: str) -> MacroSpecResolution:
     """``--macro-series SOURCE:SERIES`` or the research manifest + Yahoo FX.
 
     The third element is the series' native cadence (``None`` means daily), which
     sets the live fetch window in :func:`refresh_macro_series`.
+
+    ``None`` is a deliberate reading, not a gap (DIG-2406).
+    `_live_window_days` resolves it to `LIVE_WINDOW_DAYS`, the *narrowest*
+    of the four windows in `_CADENCE_WINDOW_DAYS`, so a series nobody wrote a
+    cadence down is judged at 45 days rather than at the slowest: an
+    undeclared cadence buys no patience. Every id the shipped manifest fetches
+    declares one -- see `research/config/macro_series.yaml`. The paths that
+    cannot are the `--macro-series` override below and the Yahoo FX
+    list, both daily by construction.
+    Never raises on an unreadable manifest (DIG-1371): it resolves no specs and
+    carries the cause on ``manifest_error`` instead, so ``main`` can report it
+    loudly *after* the equity leg has run. A raise here would abort the run
+    before :func:`refresh_universe` and turn a broken macro manifest into a
+    total market-data outage.
     """
     if cli_specs:
         out: list[tuple[str, str, str | None]] = []
@@ -1476,7 +1518,7 @@ def _resolve_macro_specs(
             if not source or not series:
                 raise SystemExit(f"--macro-series expects SOURCE:SERIES, got {spec!r}")
             out.append((source.lower(), series, None))
-        return out
+        return MacroSpecResolution(out)
     try:
         from digiquant.data.prices.gloomberb_macro import KEPT_SERIES_IDS
         from digiquant.data.prices.macro_ingest import YAHOO_FX_DEFAULT, MacroManifest
@@ -1488,10 +1530,16 @@ def _resolve_macro_specs(
             if s.get("id") and str(s.get("id")) in KEPT_SERIES_IDS
         ]
         yahoo = [("yahoo", cfg["series_id"], None) for cfg in YAHOO_FX_DEFAULT.values()]
-        return fred + yahoo
+        return MacroSpecResolution(fred + yahoo)
     except Exception as exc:
-        print(f"warn: macro manifest unreadable ({exc}); skipping macro refresh")
-        return []
+        print(f"warn: macro manifest unreadable ({exc}); the macro leg will fail this run")
+        return MacroSpecResolution([], manifest_error=f"{type(exc).__name__}: {exc}")
+
+
+def _report_core_macro_mirror(mirror: dict[str, Any]) -> None:
+    """One line for the core macro mirror (#3780), whether it ran or was skipped."""
+    note = f"; skipped {', '.join(map(str, mirror['skipped']))}" if mirror["skipped"] else ""
+    print(f"core macro mirror: {mirror['rows']} rows / {mirror['series']} series{note}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1539,6 +1587,9 @@ def main(argv: list[str] | None = None) -> int:
     macro_specs = (
         [] if args.skip_macro else _resolve_macro_specs(args.macro_series, args.macro_manifest)
     )
+    # Read with getattr: --skip-macro hands back a plain list, and digiquant's own
+    # test doubles replace the resolver with one that does too (DIG-1371).
+    manifest_error = getattr(macro_specs, "manifest_error", "")
     # No key skip (#4794): the macro panel fetches Gloomberb anonymously,
     # so a missing key is normal. Dropped panel ids never reach this list
     # (see _resolve_macro_specs); their pointers keep serving the last seal.
@@ -1562,6 +1613,20 @@ def main(argv: list[str] | None = None) -> int:
         universe, store, manifest, as_of=run, sealed=args.sealed, progress=print
     )
     macro_outcomes = []
+    # An unreadable manifest used to become an empty spec list, so the whole macro
+    # leg vanished and the run reported fresh with the panel frozen at its last
+    # seal (DIG-1371). Report it as an outcome instead — here, after
+    # refresh_universe, because raising at resolve time would abort the run
+    # before the equity leg. --skip-macro never resolves the manifest and so can
+    # never manufacture this failure.
+    if manifest_error:
+        unreadable = _outcome(
+            UNREADABLE_MACRO_MANIFEST,
+            MODE_ERROR,
+            note=f"macro manifest unreadable: {manifest_error}",
+        )
+        macro_outcomes.append(unreadable)
+        print(f"{unreadable['ticker']}: {unreadable['mode']} ({unreadable['note']})")
     for source, series, cadence in macro_specs:
         try:
             outcome = refresh_macro_series(
@@ -1577,7 +1642,14 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{outcome['ticker']}: {outcome['mode']} ({outcome['note']})")
 
     mirror: dict[str, Any] = {"rows": 0, "series": 0, "skipped": []}
-    if args.core_macro_mirror and macro_specs:
+    if manifest_error:
+        # No specs meant no mirror call, so the artifact would otherwise report
+        # {"rows": 0, "series": 0, "skipped": []} — byte-identical to a healthy
+        # but empty mirror, while twelve-x's Yahoo FX pairs quietly go stale in
+        # core macro_series_observations.
+        mirror["skipped"] = [f"macro manifest unreadable: {manifest_error}"]
+        _report_core_macro_mirror(mirror)
+    elif args.core_macro_mirror and macro_specs:
         try:
             mirror = mirror_macro_to_core(
                 store, macro_specs, run=run, client=build_core_supabase_client()
@@ -1588,8 +1660,7 @@ def main(argv: list[str] | None = None) -> int:
                 "series": 0,
                 "skipped": [f"mirror raised: {type(exc).__name__}"],
             }
-        note = f"; skipped {', '.join(map(str, mirror['skipped']))}" if mirror["skipped"] else ""
-        print(f"core macro mirror: {mirror['rows']} rows / {mirror['series']} series{note}")
+        _report_core_macro_mirror(mirror)
 
     outcomes = ticker_outcomes + macro_outcomes
     datasets = manifest.get("datasets") or {}
@@ -1604,7 +1675,9 @@ def main(argv: list[str] | None = None) -> int:
     # is suspended only when every exempt macro series is history-only at once
     # (#694 follow-up): a partial leg is indistinguishable from per-series
     # vendor refusals and must stay quiet. Suspending it only ever adds names
-    # to `failed`; it never turns a stale run fresh.
+    # to `failed`; it never turns a stale run fresh. An unreadable manifest
+    # (DIG-1371) resolves no specs, so its synthetic outcome is never in `exempt`
+    # and always reaches `failed` — the macro leg is undeclared, not slow.
     exempt = _slow_macro_exempt_ids(macro_specs)
     failed = [
         o
@@ -1620,10 +1693,24 @@ def main(argv: list[str] | None = None) -> int:
     # vendor that keeps answering lands on `up-to-date`, which `_macro_leg_dead`
     # cannot see. Measured against each series' own cadence window. Additive
     # only, like the exemption above -- it names series, it never clears them.
+    # Wrapped like the per-series work either side of it (DIG-2406). The guard
+    # reads `macro_specs`, so a divergence here must not ride over the
+    # manifest write below; a raising guard is recorded as a macro error, which
+    # fails the run loud instead of letting a possibly-frozen panel report
+    # itself fresh.
     # Since DIG-2405 it also judges the cadence-exempt `history-only` outcomes,
     # which is how a *single* retired slow series gets named at all; `failed` is
     # passed in so a series both guards reached is named once, not twice.
-    failed += _macro_as_of_stale(outcomes, macro_specs, run, failed)
+    try:
+        failed += _macro_as_of_stale(outcomes, macro_specs, run, failed)
+    except Exception as exc:
+        failed.append(
+            _outcome(
+                "macro__as_of_guard",
+                MODE_ERROR,
+                note=f"as_of age guard raised: {type(exc).__name__}: {exc}",
+            )
+        )
     stale = (not gate["ok"]) or bool(failed)
     manifest.update(build_manifest(new_as_of, datasets, stale=stale))
     digest = store.write_manifest(manifest)

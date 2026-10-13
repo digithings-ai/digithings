@@ -46,7 +46,7 @@ CONTRACT_DIR = REPO_ROOT / "config" / "contract"
 # Discovered by census on 2026-10-10 (`git ls-files`). tests/scripts/
 # test_self_host_parity.py pins these three counts, so a new compose or
 # .env.example file cannot slip in uncovered without turning the test red.
-EXPECTED_WRANGLER_FILES = 7
+EXPECTED_WRANGLER_FILES = 8
 COMPOSE_FILES = (
     "docker-compose.yml",
     "apps/digitrace-langfuse/docker-compose.local.yml",

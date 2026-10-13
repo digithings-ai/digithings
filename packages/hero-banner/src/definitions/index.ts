@@ -2,7 +2,7 @@ import { buildAnimation } from "../animations/build";
 import { equalizerAnimation } from "../animations/equalizer";
 import { riseAnimation } from "../animations/rise";
 import { routeAnimation } from "../animations/route";
-import { scrambleAnimation } from "../animations/scramble";
+import { scrambleAnimation, type ScrambleOptions } from "../animations/scramble";
 import { stackAnimation } from "../animations/stack";
 import { tumblerAnimation } from "../animations/tumbler";
 import { traverseAnimation } from "../animations/traverse";
@@ -76,7 +76,20 @@ export const DIGIQUANT: BannerDefinition = {
   seed: 0x9a17,
 };
 
-/** packages/ui/src/components/chat/digichat-wordmark.ts */
+/** LOADING timing of packages/ui/src/components/chat/digichat-wordmark.ts. */
+export const DIGICHAT_SCRAMBLE: ScrambleOptions = {
+  stepMs: 80,
+  spinMs: 240,
+  lockMs: 180,
+  holdMs: 960,
+  flashMs: 200,
+  settledMs: 2000,
+  idleGapMs: 6400,
+  pool: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!?#$%&*+-=/<>().,:;@",
+};
+
+/** packages/ui/src/components/chat/digichat-wordmark.ts for LOADING; LIVE is
+ *  the streaming-token pass (DIG-2865). */
 export const DIGICHAT: BannerDefinition = {
   id: "digichat",
   text: "DIGICHAT",
@@ -91,14 +104,8 @@ export const DIGICHAT: BannerDefinition = {
     flash: { hex: "#FFFFFF", cube: 231 }, // canon-allow: a banner palette is renderer data, not a CSS theme; a terminal has no cascade to read a token from
   },
   animation: scrambleAnimation({
-    stepMs: 80,
-    spinMs: 240,
-    lockMs: 180,
-    holdMs: 960,
-    flashMs: 200,
-    settledMs: 2000,
-    idleGapMs: 6400,
-    pool: "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!?#$%&*+-=/<>().,:;@",
+    ...DIGICHAT_SCRAMBLE,
+    live: { kind: "stream", quietMs: 5200, tokenMs: [70, 190], maxToken: 3 },
   }),
   live: true,
   seed: 0,

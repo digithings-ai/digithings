@@ -312,7 +312,7 @@ The MCP server (`mcp_server.py`) listens on `127.0.0.1:8767` by default with `st
 | `luxalgo_edge_symbols` | Hosted Edge Stats coverage (anonymous, #4844): symbols, session calendars, coverage windows, session counts, nightly build time. No parameters. Precomputed statistics only — no raw vendor bars |
 | `luxalgo_edge_presets` | Hosted Edge Stats preset catalog (anonymous, #4844): gap fills, opening-range breakouts, day-of-week effects, and more. `category` narrows to one category; ids feed `luxalgo_edge_report` |
 | `luxalgo_edge_report` | One precomputed Edge Stats result (anonymous, #4844): P(outcome \| conditions) with N, Wilson 95% CI, sample guards, first/second-half stability split, per-year counts. Every result carries the honesty disclaimer in `data.disclaimer` and envelope `warnings` |
-| `luxalgo_trackers_datasets` | Market Trackers CC0 catalog (anonymous, #4844): row counts, freshness, years with data, ticker-searchability. `dataset` selects one dataset's field roster — read before composing filters |
+| `luxalgo_trackers_datasets` | Market Trackers CC0-1.0 catalog (anonymous, #4844; two families limited — DIG-1464): row counts, freshness, years with data, ticker-searchability. `dataset` selects one dataset's field roster — read before composing filters |
 | `luxalgo_trackers_latest` | Newest ingestion day's rows for one Trackers dataset (anonymous, #4844): `dataset` required, `ticker`/`text`/`where` narrow, `sort` newest\|oldest, `limit` 1–100, `offset` pages. Freshness/ad-hoc lookups only — never a pipeline primary |
 | `luxalgo_trackers_ticker` | One ticker across every ticker-bearing Trackers dataset for one year (anonymous, #4844): `ticker` required, `year` 1900–2100, `limit` 1–25 per dataset. Ad-hoc lookups only — never a pipeline primary |
 
@@ -589,7 +589,8 @@ the window came back empty, `_fetch_macro` raised `empty live window`, and every
 scheduled refresh was marked stale. Each entry in
 `research/config/macro_series.yaml` may now declare a `cadence`
 (`daily`/`weekly`/`monthly`/`quarterly`), which selects the window
-(`_CADENCE_WINDOW_DAYS`: 45/60/120/240 days; absent = daily). The widened window
+(`_CADENCE_WINDOW_DAYS`: 45/45/120/240 days — weekly shares the daily constant;
+there is no 60, and absent = daily is also the narrowest of the four). The widened window
 then *contains* the series' seal row, so the live fetch is non-empty and the
 existing benign `up-to-date` path covers it. Note what does **not** change: an
 empty live window still returns `history-only` — `_fetch_macro` raises on empty
@@ -629,14 +630,91 @@ a stale run fresh. A daily or `error` outcome is never exempt at any cadence. St
 flag only — no money, rate or weight arithmetic. Contract tests:
 `tests/scripts/test_macro_death_is_not_silent.py`.
 
-**Panel serving stale rows in-window** — A macro outcome can return `up-to-date` with
-`as_of=seal` when the live window contains the seal but nothing newer (line 1113).
-`_macro_leg_dead` only catches `history-only`; `up-to-date` is not a soft-fail mode.
-New guard `_macro_as_of_stale` compares each outcome's `as_of` against the run date
-using the series' cadence window (45/120/240 calendar days; default 45). Per-outcome:
-one frozen monthly series fires. Composes with `_macro_leg_dead` orthogonally — leg
-death = all slow series silent; staleness = any series' as_of outside its window.
-Limits: (1) undeclared cadence defaults to 45d; (2) calendar days, not trading days.
+**What this guard alone does not cover.** It closes the unanimous `history-only` shape only,
+and only over series the manifest actually declared. Read alongside the `_macro_as_of_stale`
+age guard, which covers the other two:
+
+| Shape | Why the guard cannot see it | Status |
+|---|---|---|
+| Partial leg (2 or 3 of 4 slow series dead) | indistinguishable from a rate-limit blip *while the silent series' seals are still inside their own windows*; a subset is not evidence of a mode, but each of them is evidence of its own age | accepted, by design **only while those seals are fresh**; DIG-2405 then names each one individually on its own age |
+| Panel serving stale rows in-window | outcome is `up-to-date`, not a soft fail, so it never enters the reduction | closed by DIG-1137 |
+| Single **slow-cadence** series in the manifest | the `> 1` floor counts exempt ids, not manifest size — an 8-series panel with one monthly series has a frozen slow leg and cannot trip it | closed by DIG-1137 + DIG-2405 (`_macro_as_of_stale`; the `> 1` floor stands) |
+| Unreadable manifest | `_resolve_macro_specs` swallowed the exception and returned `[]`, so `exempt` was empty and the guard had no ids to reason about | **closed (DIG-1371)** — the resolver now returns a list carrying `manifest_error`; `main` reports it as a `macro-manifest-unreadable` `error` outcome *after* the equity leg has run (never a raise, which would abort before `refresh_universe`), so the run exits 1 with the cause in `failed` and `core_macro_mirror.skipped` names the manifest problem |
+
+The `> 1` floor stands. A single-series manifest still has no leg to judge, and a single
+silent series among several is not a mode-based death the leg test can see — the DIG-2405
+decision below is that it *is* worth naming, but it is named by measuring the seal's age,
+not by relaxing unanimity. Relaxing it would fire on every rate-limit blip.
+
+DIG-1137 / DIG-2405 close the two sibling routes by measuring rather than trusting
+`mode`. `_macro_as_of_stale(outcomes, macro_specs, run, already)` compares each macro
+outcome's `as_of` against the run date, in calendar days, against the same
+`_CADENCE_WINDOW_DAYS` bound the live fetch already used. It reads
+`_MACRO_JUDGED_MODES` = the success modes (a vendor that keeps *answering* while it stops
+*publishing* lands on `up-to-date`) plus `MODE_HISTORY_ONLY`, and skips `MODE_ERROR`
+because that mode is never cadence-exempt and is therefore already loud. The
+`history-only` inclusion is the DIG-2405 half: a retired slow series arrives in that mode
+with an abandoned seal, the #4621 exemption forgives it on cadence alone, and
+`_macro_leg_dead` needs unanimity over the whole exempt set, so one retired series among
+live ones was named by nothing. Age separates the two cases that mode cannot, because an
+empty window and a fresh seal are a quiet release cycle while an empty window on a
+*stale* seal is a retirement. `already` keeps a series both guards reached named once. The
+bound is each series' own window, not a widened threshold: a monthly series sealed 34 days
+old is still quiet.
+
+The unreadable manifest is still open. It needs its own fix — a loud outcome rather than an
+empty spec list — because with no specs there are no ids for any of these guards to reason
+about, whichever mode they read.
+
+**Design record for the frozen-but-serving panel (DIG-1142).** Recorded here because the
+summary above does not carry the reasoning. **Shipped** as `_macro_as_of_stale`; the shape
+below is what it shipped as.
+
+The gap is that `refresh_macro_series` returns `MODE_UP_TO_DATE` with `as_of=seal` whenever
+the live window is non-empty but carries nothing newer than the seal. `up-to-date` is not in
+`_SOFT_FAIL_MODES` and is not `history-only`, so the outcome never enters the reduction and
+the run exits 0 claiming fresh. Two healthy paths reach that same shape: a same-day FRED
+restatement (`MODE_FULL_REPULL`, `as_of=top2 == seal`) and an unchanged overlap that then
+finds nothing new.
+
+`_macro_as_of_stale(outcomes, macro_specs, run) -> set[str]`, defined next to
+`_live_window_days` and called in `main` between the `failed` list and `stale = ...`:
+
+- **Predicate.** For each macro series, take the declared cadence from `macro_specs`
+  (ticker key is `f"{source}__{series}"`, matching `_slow_macro_exempt_ids`), resolve the
+  window with the existing `_live_window_days`, and report the series when
+  `(run_date - as_of).days > window`. Age against the series' own window, **never**
+  `as_of == seal` and never `mode` — the two restatement paths above are healthy, so keying
+  on either would fail a healthy panel.
+- **Mode filter.** Success modes only (`MODE_UP_TO_DATE`, `MODE_INCREMENTAL`,
+  `MODE_FULL_REPULL`). `history-only` and `error` are already `_SOFT_FAIL_MODES` and stay
+  with `_macro_leg_dead`; an empty `as_of` is skipped rather than guessed.
+- **No declared cadence** defaults to the 45-day daily window via `_live_window_days`,
+  matching the live-fetch default rather than inventing a second one.
+- **Calendar days, not trading days.** `_CADENCE_WINDOW_DAYS` is calendar days (45/120/240).
+  `staleness_gate` (`digiquant/src/digiquant/data/prices/refresh_gate.py:49`) counts *open
+  trading days* against `bound_trading_days=5`; reusing it per series would call a 120-day
+  monthly series fresh after ~5 trading days. The file already has `_shift_days` for
+  calendar arithmetic.
+- **Per-outcome, composing with `_macro_leg_dead`.** `_macro_leg_dead` judges the leg
+  (`history-only` on every exempt series at once); this judges one series' age. They are
+  orthogonal, and the new names only ever *add* to `failed` — the guard never turns a stale
+  run fresh. **The DIG-981 "a subset is not evidence" reasoning does not carry over to age.**
+  That reasoning was about `history-only`, which has two causes (exhausted publication
+  window vs. per-series vendor refusal) where a rate-limit blip silences an arbitrary subset,
+  so a subset proves nothing. Age has one cause — the series is old — and it is measured, not
+  inferred from a mode. A single frozen monthly series past its window is evidence by
+  itself; the #4621 fuse already draws the line, fresh inside the window and loud outside it.
+  At 34 days the seal is still inside the 120-day window and the run **should** exit 0.
+- Staleness flag only. No money, rate or weight arithmetic, matching the other guards here.
+
+**Known limits accepted for this guard.** Both are recorded rather than fixed, in the same
+spirit as the two above:
+
+| Limit | Why it stays |
+|---|---|
+| Undeclared cadence is judged at the 45-day daily window | the manifest is the source of truth; omitting `cadence` opts into the daily default, so a genuinely monthly series missing it goes loud at 45 days |
+| The window is calendar days, not open trading days | deliberate, and consistent with `_CADENCE_WINDOW_DAYS`; reusing `staleness_gate` would fire ~5 trading days into a 120-day window |
 
 **What this guard alone does not cover.** It closes the unanimous `history-only` shape only,
 and only over series the manifest actually declared. Read alongside the `_macro_as_of_stale`
@@ -895,6 +973,26 @@ and the donut must never fall back to `round(rate * n)` as an observed count).
 Tests: `tests/dq/test_honesty.py` (upstream golden vectors),
 `tests/dq/test_tearsheet_honesty.py` (per-surface N + CI assertions).
 
+**Model versioning for `BacktestResult` (DIG-845 / L3).** The clause that stood
+here — "`BacktestResult` is untouched, so no model versioning was needed" —
+was true of the tearsheet 1.4 work and stopped being true once the honesty
+envelope reached the result model, so it is reworded here rather than dropped.
+Per `AGENTS.md` § Pre-Flight ("Confirm `BacktestResult` Pydantic model is
+unchanged or versioned if modified"), the decision is recorded: **additive,
+back-compatible, no version bump.** L3 adds exactly two fields to
+`models.BacktestResult`, both defaulting to an empty state —
+`honest_rate: HonestRateBlock | None` (default `None`) and
+`honest_rate_by_symbol: dict[str, HonestRateBlock]` (default `{}`) — so every
+payload that validated before still validates, and a consumer that has never
+heard of the envelope reads exactly what it read before. `num_trades` also
+gained a sharper description on the same leaf (a **fill** count, and explicitly
+*not* a win-rate denominator — `honest_rate.n` is the denominator), which is a
+description change and not a type or semantic change. No published surface
+depends on the old wording, so no migration, no `SCHEMA_VERSION` bump and no
+consumer notification are required. Consumers that want the envelope read
+`honest_rate`; they must never synthesize one from `num_trades` or from
+`round(rate * n)`.
+
 Existing published fixtures stay at older schema versions (no `ohlc_bars`, blank `entry_label`, no `signal_delay_days`) until regenerated, so consumers must tolerate all versions.
 
 **Public signal delay (#1462).** The public tearsheets lag reality by **3 calendar days** ("backtested strategies running live — signals delayed 3 days") to protect strategy IP: on a single-asset long/flat strategy a current equity curve trivially leaks the live position. The mechanism is an **end-date shift, not redaction** — `generate_tearsheets.py --signal-delay-days N` truncates the OHLCV frame (`apply_signal_delay`, cutoff = newest cached bar minus N calendar days) *before* the backtest, so the entire tearsheet is generated as if run N days ago. Every artifact (equity curve, drawdown, trade log, open-position state, headline metrics, `period_end`) is self-consistent by construction; there is no per-field redaction logic to get wrong. The lag is declared honestly: the static JSON, the `index.json` entry, and the `strategy_tearsheets` metrics all carry `signal_delay_days`, and a payload note states the as-of date. `generated_at` stays the true generation timestamp (the delay is marketed openly, not hidden). Default is `0` (exact no-op) for internal/undelayed runs; the scheduled pipeline (`pipeline-digiquant-tearsheets.yml`) passes `--signal-delay-days 3`. Side effect: the `_PUBLISHED_BASELINE` drift warning compares exact trade counts, so a trade opened within the delay window can transiently warn — informational only. Tests: `tests/dq/test_tearsheet_signal_delay.py`.
@@ -966,6 +1064,8 @@ Defined in `models.py`. Returned by `run_backtest()`, the pipeline's backtest no
 | `num_trades` | `int` | Row count of `generate_order_fills_report()` |
 | `per_symbol_pnl` | `dict[str, float]` | Populated for multi-symbol runs; empty for single-symbol |
 | `missing` | `list[str]` | Names that could not be produced — the machine-readable form of the "missing metrics" clause in `message`. Empty when `status` is `ok` |
+| `honest_rate` | `HonestRateBlock \| None` | Win rate with its denominator and interval. `None` when no realized-PnL series was extracted — never a fabricated zero and never `num_trades` |
+| `honest_rate_by_symbol` | `dict[str, HonestRateBlock]` | Per-symbol `honest_rate` blocks for multi-symbol backtests. Declared on the model by DIG-845 (L3); populated by DIG-847 (#5298), so it is `{}` until that leaf lands |
 | `status` | `str` | `ok` | `partial` | `error` |
 | `message` | `str` | Optional detail |
 
