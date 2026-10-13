@@ -21,6 +21,10 @@ const DEFAULT_ORIGINS = [
   "http://127.0.0.1:3100",
   "http://localhost:3101",
   "http://127.0.0.1:3101",
+  // The digiquant desk preview (:4202) reads the API cross-origin once it is
+  // served as a static export, which cannot use the dev-only /official-api proxy.
+  "http://localhost:4202",
+  "http://127.0.0.1:4202",
 ].join(",");
 
 export function resolveAllowlist(env: { DASHBOARD_API_ALLOWED_ORIGINS?: string }): string[] {
@@ -34,7 +38,9 @@ export function corsHeaders(origin: string | null, allowlist: string[]): Record<
   const headers: Record<string, string> = { Vary: "Origin" };
   if (origin && allowlist.map((o) => o.trim()).includes(origin)) {
     headers["Access-Control-Allow-Origin"] = origin;
-    headers["Access-Control-Allow-Methods"] = "GET, OPTIONS";
+    // Writes exist only for registered routes; the dispatcher gates them (x-digi-user + catalog).
+    headers["Access-Control-Allow-Methods"] = "GET, PUT, POST, DELETE, OPTIONS";
+    headers["Access-Control-Allow-Headers"] = "content-type, x-digi-user, x-digi-tier, x-digi-groups";
     headers["Access-Control-Max-Age"] = "86400";
   }
   return headers;
