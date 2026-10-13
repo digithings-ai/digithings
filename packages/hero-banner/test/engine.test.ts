@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import { paintFrame } from "../src/canvas";
-import { BANNERS, DIGICHAT, DIGITHINGS, DIGIVOICE } from "../src/definitions";
+import { BANNERS, DIGICHAT, DIGITHINGS, DIGIVOICE_BASELINE as DIGIVOICE } from "../src/definitions";
 import {
   assertDefinition,
   claimLoading,
@@ -116,11 +116,14 @@ describe("motion and live config", () => {
 
 describe("terminal fit", () => {
   for (const def of all) {
-    test(`${def.id} fits 120x30 and 80x24 as five half-block rows`, () => {
+    // Five half-block rows for the 10-row font; digiclaw adds two rows of claw headroom.
+    const lines = def.font.rows / 2;
+    test(`${def.id} fits 120x30 and 80x24 as ${lines} half-block rows`, () => {
       for (const [cols, rows] of [[120, 30], [80, 24]] as const) {
         const out = bannerLines(def, { cols, rows, t: 0, motion: "reduced", mode: "truecolor" });
         expect(out.compact).toBe(false);
-        expect(out.lines.length).toBe(5);
+        expect(out.lines.length).toBe(lines);
+        expect(lines).toBeLessThanOrEqual(7);
         expect(out.width).toBeLessThanOrEqual(cols - 2);
         for (const line of toPlain(out.lines)) expect(line.length).toBe(out.width);
       }

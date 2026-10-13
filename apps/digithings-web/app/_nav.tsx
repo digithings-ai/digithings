@@ -5,23 +5,19 @@
  *  Cross-domain: the header links out to digiquant.io (the quant product);
  *  digiquant.io intentionally does not link back in its header.
  */
-import { TerminalMark, type NavItem, type NavLink } from "@digithings/ui";
+import { type NavItem, type NavLink } from "@digithings/ui";
+import { DIGITHINGS } from "@digithings/hero-banner/definitions";
+import { ScrollBanner } from "@/components/landing/ScrollBanner";
 
 export const DT_CONTACT_EMAIL = "contact@digithings.ai";
 
-// The terminal lockup: `d` + block cursor, then the wordmark. One inline SVG in
-// currentColor, so it follows ink through [data-theme] — this replaces the two
-// theme-swapped QR <img>s (a single recolorable mark was unreliable there because
-// Lightning CSS drops mask-image; currentColor has no such problem).
-//
-// `variant="compact"` deliberately: the full `digi` lockup is five character
-// cells wide and closes up below ~64px, well above nav height. NavShell already
-// wraps this in <a aria-label="digithings home">, so the mark stays decorative.
+// The DIGITHINGS hero banner (DIG-2921), armed at mount and kept live: the top
+// bar is always on screen, so it does not wait for a scroll-in. One mark at
+// every width — it replaced both the text wordmark and the narrow-bar `d`
+// terminal mark. NavShell already wraps this in <a aria-label="digithings
+// home">; the canvas carries its own label.
 export const Brand = () => (
-  <>
-    <TerminalMark size={26} variant="compact" className="hidden max-[880px]:block" />
-    <span className="brand-word max-[880px]:hidden">digithings</span>
-  </>
+  <ScrollBanner def={DIGITHINGS} inView={false} className="w-[8.5rem] max-[880px]:w-[7rem]" />
 );
 
 /** v7 nav shape (used by <DtNav />): wayfinding links on the left of the tail,

@@ -1,6 +1,7 @@
 import "./terminal.css";
 import { ChatMessage, ChatTranscript, TerminalStepCaret, TerminalWordmark } from "@digithings/ui";
 import { ChatResponseLoader } from "@/components/terminal/chat-response-loader";
+import { ChatPlaybackReference } from "@/components/chat-playback-reference";
 import { CodeReviewReference } from "@/components/code-review-reference";
 import { CodeSampleReference } from "@/components/code-sample-reference";
 import { CopyCommandReference } from "@/components/terminal/copy-command-reference";
@@ -26,6 +27,7 @@ export default function TerminalPage() {
       <TerminalBudgetReference />
       <TerminalManifestReference />
       <StreamTranscriptReference />
+      <ChatPlaybackReference />
 
       <section className="section-block accent-digichat" id="container-boot-loader">
         <p className="kicker">{"// container-boot loader"}</p>

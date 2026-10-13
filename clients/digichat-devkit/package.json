@@ -1,0 +1,19 @@
+{
+  "name": "digichat-devkit",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "bin": {
+    "digichat-devkit": "./src/cli.ts"
+  },
+  "scripts": {
+    "start": "bun src/index.tsx",
+    "cli": "bun src/cli.ts",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@opentui/react": "0.5.14",
+    "js-yaml": "4.3.2",
+    "react": "19.2.4"
+  }
+}

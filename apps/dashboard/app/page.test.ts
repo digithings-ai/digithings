@@ -512,4 +512,17 @@ describe('Today (Overview) page', () => {
     expect(html).toContain('live marks');
     expect(html).not.toContain('finalized accounting');
   });
+
+  it('renders Brief panes instead of the scrolling workspace when the desk flag is on', () => {
+    process.env.NEXT_PUBLIC_DESK_SHELL = '1';
+    try {
+      const html = renderToStaticMarkup(createElement(OverviewPage));
+      expect(html).toContain('data-testid="brief-desk"');
+      expect(html).not.toContain('data-testid="daily-brief-workspace"');
+      expect(html).not.toContain('brief-kpi-hero');
+      expect(html).toContain('data-chrome-path="/house/brief"');
+    } finally {
+      delete process.env.NEXT_PUBLIC_DESK_SHELL;
+    }
+  });
 });
