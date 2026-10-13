@@ -34,6 +34,10 @@ zone_name = "digithings.ai"
 [[routes]]
 pattern = "digithings.ai/_dtchat*"
 zone_name = "digithings.ai"
+# DIG-1210: invite-gate the OCC Pages shell (valid ?token= passes through to Pages).
+[[routes]]
+pattern = "digithings.ai/chat/occ*"
+zone_name = "digithings.ai"
 
 [[containers]]
 class_name = "DigiChatContainer"

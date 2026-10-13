@@ -45,6 +45,8 @@ const indexSource = readFileSync(join(__dirname, "index.ts"), "utf-8");
 const WORKER_ONLY_ENV_MEMBERS: Record<string, string> = {
   DIGICHAT_LEGACY_EMBED_ENABLED:
     "resolved into the forwarded DIGICHAT_EMBED_ENABLED; never forwarded itself",
+  OCC_INVITE_KEY:
+    "Worker-only /chat/occ shell gate (DIG-1210); the container resolves it via tenant tokenEnv",
 };
 
 /**
