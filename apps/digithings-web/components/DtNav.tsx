@@ -15,9 +15,10 @@
  * `autoHide="hover"` explicitly for the non-scrolling chat shells.
  */
 import { usePathname } from "next/navigation";
-import { NavShell, GitHubGlyph, IconLink, CtaLink } from "@digithings/ui";
+import { NavShell, GitHubGlyph, IconLink } from "@digithings/ui";
+import { DIGICHAT } from "@digithings/hero-banner/definitions";
 import { Brand, DT_NAV_PRIMARY } from "@/app/_nav";
-import { DigiChatMark } from "@digithings/digichat-ui";
+import { ScrollBanner } from "@/components/landing/ScrollBanner";
 
 const NAV_HREFS = DT_NAV_PRIMARY.flatMap((item) =>
   "items" in item ? item.items.map((i) => i.href) : [item.href],
