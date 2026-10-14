@@ -31,10 +31,10 @@
 #
 # Environment:
 #   CORE_POSTGRES_URI   read-only DSN for the digithings core database
-#                       (same name digiquant/ops/checkpoint_archive.py uses)
+#                       (same name digiquant/src/digiquant/ops/checkpoint_archive.py uses)
 #   SUPABASE_DB_URL     read-only DSN for the twelve-x database
-#                       (session-pooler URI on port 6543; the name
-#                       .github/workflows/db-migrate.yml uses there)
+#                       (session-pooler URI on port 6543; the name the removed
+#                       db-migrate.yml workflow used — deleted in #4919)
 #   R2_ACCOUNT_ID       Cloudflare account id  } all four are required for
 #   R2_BUCKET           bucket name (digithings-archive) } the R2 copy; if
 #   R2_ACCESS_KEY_ID    access key id                     } any is absent
