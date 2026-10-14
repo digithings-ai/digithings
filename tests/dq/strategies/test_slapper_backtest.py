@@ -49,8 +49,8 @@ class TestSlapperBacktest:
         )
         # The strategy must actually trade — zero trades means signals never
         # fired (indicator init bug) or orders never flipped (sizing bug).
-        # Partial is fine and expected here: the only thing withheld is the chart
-        # series, because the pinned analyzer cannot confirm returns().
+        # Nothing may be lost here: the chart series comes off the account's own
+        # balance path, so the pinned analyzer's unverifiable alias is never read.
         assert result.success, f"backtest did not complete: status={result.status}"
         assert set(result.missing) <= {RETURNS_SERIES_MISSING}, (
             f"backtest lost a metric: {result.missing}"
