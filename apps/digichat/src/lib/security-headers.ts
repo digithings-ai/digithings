@@ -127,12 +127,3 @@ export function embedFrameAncestors(): string[] {
 export function embedFrameAncestorsCsp(): string {
   return `frame-ancestors ${embedFrameAncestors().join(" ")};`;
 }
-
-/**
- * @deprecated Use DIGICHAT_EMBED_BAKED_SECURITY_HEADERS in next.config and
- * embedFrameAncestorsCsp() from proxy. Kept for transitional test imports.
- */
-export const DIGICHAT_EMBED_SECURITY_HEADERS: ReadonlyArray<{
-  key: string;
-  value: string;
-}> = DIGICHAT_EMBED_BAKED_SECURITY_HEADERS;
