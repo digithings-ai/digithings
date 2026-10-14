@@ -7,7 +7,7 @@ DASHBOARD_DEV_CALLER=enterprise+12x
 # Local dev only: trust x-digi-tier / x-digi-groups / x-digi-user without DASHBOARD_EDGE_KEY.
 # Deployed workers set DASHBOARD_EDGE_KEY instead and never this.
 DASHBOARD_TRUST_IDENTITY_HEADERS=1
-# Allow the local digiquant-app dev server.
+# Allow a local dashboard dev server (was: retired digiquant-app, DIG-3401).
 DASHBOARD_API_ALLOWED_ORIGINS=http://localhost:3930,http://127.0.0.1:3930
 # MCP: x-digi-mcp-key must equal this on POST /mcp (unset = deny all).
 MCP_EDGE_KEY=dev-mcp-key
