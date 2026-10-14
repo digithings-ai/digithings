@@ -38,6 +38,8 @@ describe('thesis_id join normalization (F4)', () => {
   it('matches a lowercase position ticker to a vehicle- prefixed thesis id', () => {
     expect(thesisIdEquals('ewt', 'vehicle-ewt')).toBe(true);
     expect(thesisIdEquals('IJR', 'vehicle-ijr')).toBe(true);
+    expect(thesisIdEquals('ewg', 'veicle-ewg')).toBe(true);
+    expect(thesisIdEquals('VEICLE-GLD', 'gld')).toBe(true);
   });
   it('still matches identical ids and rejects genuine mismatches', () => {
     expect(thesisIdEquals('MT1', 'MT1')).toBe(true);
