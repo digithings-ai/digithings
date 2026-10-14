@@ -3,9 +3,9 @@ import { ChatPane } from "@/components/desk/desk-chat";
 
 export const metadata: Metadata = {
   title: "digichat — digiquant",
-  description: "digichat. Sessions and messages come from the official dashboard API.",
+  description: "Financial digichat. Sessions follow the active desk and the official dashboard API.",
 };
 
-export default function ToolsChatPage() {
+export default function ToolsDigichatPage() {
   return <ChatPane />;
 }

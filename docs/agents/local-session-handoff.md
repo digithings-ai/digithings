@@ -80,9 +80,9 @@ Trailing slash is on. `/app` and `/app/` are the brief. Also open:
 - `http://127.0.0.1:3910/app/pipeline/`
 - `http://127.0.0.1:3910/app/strategies/`
 - `http://127.0.0.1:3910/app/fx/`
-- `http://127.0.0.1:3910/app/tools/charts/`
+- `http://127.0.0.1:3910/app/tools/vela/`
 - `http://127.0.0.1:3910/app/tools/terminal/`
-- `http://127.0.0.1:3910/app/tools/chat/`
+- `http://127.0.0.1:3910/app/tools/digichat/`
 
 `/dashboard` redirects to `/app` (308, including `/dashboard/`). The old dashboard package is not the destination.
 
@@ -99,7 +99,7 @@ DQ_API_URL=http://127.0.0.1:8788 bun src/index.tsx
 
 Renders correctly means the same official read as the web pane on that route: same API, same withhold rules. An empty route shows `This read returned no values.` A stub shows the stub sentence and not `99.909` or `204.04`. A 502 shows the failed-route sentence with the API message. No invented prices.
 
-`/app/tools/terminal/`, `/app/tools/charts/`, and `/app/tools/chat/` are browser pages. This terminal does not draw them.
+`/app/tools/terminal/`, `/app/tools/gloomberb/`, `/app/tools/vela/`, and `/app/tools/digichat/` are browser pages. This terminal does not draw them.
 
 ## Homepage hero
 
@@ -134,7 +134,7 @@ make digichat-dev
 
 That is `cd apps/digichat && npm run dev` (`next dev --hostname 127.0.0.1`). The Makefile serves it at `http://127.0.0.1:3000`.
 
-Desk chat GETs stay 502 until digichat is configured. `GET /chat/sessions` (and the current-session and messages GETs) return `502` `upstream_empty` with message `digichat is not configured`. Starting `make digichat-dev` does not clear that. The worker has no digichat database. Do not invent sessions to fill the pane.
+Desk chat GETs stay 502 until the KV tenant record (`digiquant`) and the cheap inference key are both set. `GET /chat/sessions` (and the current-session and messages GETs) return `502` `upstream_empty` with message `digichat is not configured` when either is missing. Starting `make digichat-dev` does not clear that. Do not invent sessions to fill the pane, and do not put the inference key in the repo or in KV.
 
 ## Visual check order
 
@@ -142,9 +142,9 @@ Desk chat GETs stay 502 until digichat is configured. `GET /chat/sessions` (and 
 2. Desk brief in the browser (`/app` and `/app/brief/`).
 3. OpenTUI brief (`clients/digiquant-tui`, page `/brief`).
 4. The other desk pages: portfolio, pipeline, strategies, FX.
-5. Charts (`/app/tools/charts/`), then the terminal link (`/app/tools/terminal/`).
+5. Vela (`/app/tools/vela/`), then the terminal link (`/app/tools/terminal/`).
 6. Homepage. Look only. Do not retune the hero.
-7. Digichat: desk `/app/tools/chat/` (expect the 502 empty state), then `clients/digichat-tui`, then `clients/digichat-devkit` if that directory is present after the fast-forward, then `make digichat-dev`.
+7. Digichat: desk `/app/tools/digichat/` (expect the 502 empty state until the KV tenant and cheap key are set), then `clients/digichat-tui`, then `clients/digichat-devkit` if that directory is present after the fast-forward, then `make digichat-dev`.
 
 ## Do not
 

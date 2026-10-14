@@ -37,7 +37,7 @@ The Brief desk is the one digiquant app (ADR D2, locked 2026-10-10), served at `
 | Q3 | Pipeline | yes | yes | `desk` | `mcp` | check that the blocks match | DIG-2700 |
 | Q4 | Strategies, detail, deploy | yes; detail has `st-tearsheet`; deploy is plan/draft only | yes; **no `st-tearsheet`** (4 blocks vs 5) | `desk` | `mcp` | add tearsheet to the web; confirm deploy scope matches | DIG-2700 |
 | Q5 | FX Hub (summary, ideas, watch, rates, settings) + twelve-x group lock | yes (`access` in rail + command) | yes (locked by access) | `desk` | `mcp` | check the lock behaves the same | DIG-2700 |
-| Q6 | Chat (`/tools/chat`) | page + rail threads | "wip" (`ch-*` ×4) | `chat` BFF (ADR D3) | — | both on the DigiChat BFF | DIG-2699 + DIG-2700 |
+| Q6 | Chat (`/tools/digichat`) | page + rail threads | "wip" (`ch-*` ×4) | `chat` BFF (ADR D3) | — | both on the DigiChat BFF | DIG-2699 + DIG-2700 |
 | Q7 | Terminal (Gloomberb), Charts (Vela/LuxAlgo, `mk-*` ×9) | none ("browser pages") | "soon"; Gloomberb default-off (#5245) | vendor | — | TUI links out (ADR D8). Web featuring gated on legal | DIG-2704 |
 | Q8 | Settings, paper trading (`se-*` ×4) | `/fx/settings` only | `/settings`, `/settings/paper` | `desk` | — | add a TUI settings page | DIG-2700 |
 | Q9 | Integrations band, MCP band (`McpCli`), live portfolio island | none | yes | `desk`, `mcp` | `mcp` | MCP endpoint → DIG-2703; integrations → DIG-2704 | DIG-2703, DIG-2704 |

@@ -272,8 +272,9 @@ describe("surface tour", () => {
     for (const page of publicCatalogPages()) expect(screenKind(page.path)).not.toBe("undrawn");
     expect(screenKind("/fx")).toBe("undrawn");
     expect(screenKind("/fx/ideas")).toBe("undrawn");
-    expect(screenKind("/tools/charts")).toBe("undrawn");
-    expect(screenKind("/tools/chat")).toBe("undrawn");
+    expect(screenKind("/tools/vela")).toBe("undrawn");
+    expect(screenKind("/tools/gloomberb")).toBe("undrawn");
+    expect(screenKind("/tools/digichat")).toBe("undrawn");
     const brief = renderToStaticMarkup(<TerminalScreen path="/brief" />);
     expect(brief).toContain("Brief · scoreboard");
     expect(brief).not.toContain("01 / Book");

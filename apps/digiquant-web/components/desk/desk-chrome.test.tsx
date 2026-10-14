@@ -23,8 +23,9 @@ const baseline: ManifestDesk = {
     { path: "/portfolio", label: "Portfolio", access: "granted" },
     { path: "/portfolio/holdings", label: "Holdings", access: "granted" },
     { path: "/tools/terminal", label: "Terminal", status: "soon", access: "granted" },
-    { path: "/tools/charts", label: "Charts", status: "soon", access: "granted" },
-    { path: "/tools/chat", label: "digichat", status: "wip", access: "granted" },
+    { path: "/tools/gloomberb", label: "Gloomberb", status: "soon", access: "granted" },
+    { path: "/tools/vela", label: "Vela", status: "soon", access: "granted" },
+    { path: "/tools/digichat", label: "digichat", status: "wip", access: "granted" },
     { path: "/settings", label: "Settings", access: "granted" },
     { path: "/settings/paper", label: "Paper", access: "granted" },
     { path: "/fx/settings", label: "Settings", access: "granted" },
@@ -46,9 +47,14 @@ const manifest: Manifest = {
 };
 
 describe("desk chrome", () => {
-  it("keeps Terminal, Charts, and digichat and drops LuxAlgo", () => {
-    expect(WEB_SLOTS.map((slot) => slot.path)).toEqual(["/tools/terminal", "/tools/charts", "/tools/chat"]);
-    expect(WEB_SLOTS.map((slot) => slot.label)).toEqual(["Terminal", "Charts", "digichat"]);
+  it("keeps Terminal, Gloomberb, Vela, and digichat and drops LuxAlgo", () => {
+    expect(WEB_SLOTS.map((slot) => slot.path)).toEqual([
+      "/tools/terminal",
+      "/tools/gloomberb",
+      "/tools/vela",
+      "/tools/digichat",
+    ]);
+    expect(WEB_SLOTS.map((slot) => slot.label)).toEqual(["Terminal", "Gloomberb", "Vela", "digichat"]);
     expect(JSON.stringify(WEB_SLOTS)).not.toContain("luxalgo");
   });
 
@@ -95,7 +101,9 @@ describe("desk chrome", () => {
     expect(html).toContain('class="nav-tri');
     expect(html).toContain('class="nav-path"');
     expect(linked("/app/portfolio/")).toBe(true);
-    expect(linked("/app/tools/charts/")).toBe(true);
+    expect(linked("/app/tools/vela/")).toBe(true);
+    expect(linked("/app/tools/gloomberb/")).toBe(true);
+    expect(linked("/app/tools/digichat/")).toBe(true);
     expect(html).toContain(">/tools/terminal<");
     // Granted to this caller, so the rail names it. The locked FX desk stays hidden.
     expect(html).toContain(">/fx/settings<");

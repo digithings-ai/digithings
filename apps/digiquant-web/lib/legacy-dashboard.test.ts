@@ -33,6 +33,12 @@ describe("legacy dashboard redirects", () => {
     }
     expect(legacyDashboardTarget("/dashboard/portfolio")).toBe("/app/portfolio/");
     expect(legacyDashboardTarget("/dashboard/portfolio/holdings")).toBe("/app/portfolio/holdings/");
+    expect(legacyDashboardTarget("/dashboard/tools/charts")).toBe("/app/tools/vela/");
+    expect(legacyDashboardTarget("/dashboard/tools/charts/")).toBe("/app/tools/vela/");
+    expect(legacyDashboardTarget("/dashboard/tools/chat")).toBe("/app/tools/digichat/");
+    expect(legacyDashboardTarget("/dashboard/tools/vela")).toBe("/app/tools/vela/");
+    expect(legacyDashboardTarget("/dashboard/tools/digichat")).toBe("/app/tools/digichat/");
+    expect(legacyDashboardTarget("/dashboard/tools/gloomberb")).toBe("/app/tools/gloomberb/");
   });
 
   it("sends retired pages to /app and leaves account pages and other sites alone", () => {

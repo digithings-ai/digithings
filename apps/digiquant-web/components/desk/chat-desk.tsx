@@ -1,7 +1,10 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import { chatFailureSentence } from "../../../../clients/digiquant-tui/src/pages/chat-format";
+import { DESK_CHANGE_EVENT, DESK_STORAGE_KEY, financialDesk, financialDeskLabel, type FinancialDesk } from "./financial-desk";
+import { deskPathFromPathname } from "./paths";
 import {
   CHAT_ROUTES,
   messageRoute,
@@ -21,6 +24,8 @@ type ChatDeskValue = {
   notice: string | null;
   ready: boolean;
   running: boolean;
+  desk: FinancialDesk;
+  contextLabel: string;
   select: (id: string) => void;
   send: (text: string) => Promise<void>;
 };
@@ -39,7 +44,7 @@ function usable(read: OfficialRead): boolean {
   return read.result.status === "ok" || read.result.status === "empty";
 }
 
-/** Sessions and the open thread for /tools/chat. The rail and the pane share this.
+/** Sessions and the open thread for /tools/digichat. The rail and the pane share this.
  *  `active` is false on every other desk page so the shell can stay mounted. */
 export function ChatDesk({ children, active = true }: { children: ReactNode; active?: boolean }) {
   const [threads, setThreads] = useState<DeskThread[]>([]);
@@ -49,6 +54,32 @@ export function ChatDesk({ children, active = true }: { children: ReactNode; act
   const [ready, setReady] = useState(false);
   const [running, setRunning] = useState(false);
   const sessionRef = useRef<string | null>(null);
+  const pathname = usePathname() ?? "/app";
+  const [storedDesk, setStoredDesk] = useState<string | null>(null);
+  const desk = financialDesk(deskPathFromPathname(pathname), storedDesk);
+  const contextLabel = financialDeskLabel(desk);
+
+  useEffect(() => {
+    const read = () => {
+      try {
+        setStoredDesk(localStorage.getItem(DESK_STORAGE_KEY));
+      } catch {
+        setStoredDesk(null);
+      }
+    };
+    read();
+    window.addEventListener(DESK_CHANGE_EVENT, read);
+    window.addEventListener("storage", read);
+    return () => {
+      window.removeEventListener(DESK_CHANGE_EVENT, read);
+      window.removeEventListener("storage", read);
+    };
+  }, []);
+
+  const withDesk = useCallback((route: string) => {
+    const join = route.includes("?") ? "&" : "?";
+    return `${route}${join}desk=${desk}`;
+  }, [desk]);
 
   useEffect(() => {
     if (!active) return;
@@ -56,9 +87,9 @@ export function ChatDesk({ children, active = true }: { children: ReactNode; act
     let cancel = false;
     void (async () => {
       const [sessionRead, currentRead, messageRead] = await Promise.all([
-        readOfficial(CHAT_ROUTES.sessions, "fields", ac.signal),
-        readOfficial(CHAT_ROUTES.current, "fields", ac.signal),
-        readOfficial(CHAT_ROUTES.messages, "fields", ac.signal),
+        readOfficial(withDesk(CHAT_ROUTES.sessions), "fields", ac.signal),
+        readOfficial(withDesk(CHAT_ROUTES.current), "fields", ac.signal),
+        readOfficial(withDesk(CHAT_ROUTES.messages), "fields", ac.signal),
       ]);
       if (cancel) return;
       const failures = [sessionRead, currentRead, messageRead].filter(failed);
@@ -74,13 +105,13 @@ export function ChatDesk({ children, active = true }: { children: ReactNode; act
       cancel = true;
       ac.abort();
     };
-  }, [active]);
+  }, [active, desk, withDesk]);
 
   const select = useCallback((id: string) => {
     sessionRef.current = id;
     setActiveId(id);
     void (async () => {
-      const messageRead = await readOfficial(`/chat/sessions/${encodeURIComponent(id)}/messages`, "fields");
+      const messageRead = await readOfficial(withDesk(`/chat/sessions/${encodeURIComponent(id)}/messages`), "fields");
       if (sessionRef.current !== id) return;
       if (!usable(messageRead)) {
         setMessages([]);
@@ -90,7 +121,7 @@ export function ChatDesk({ children, active = true }: { children: ReactNode; act
       setNotice(null);
       setMessages(messageRows(messageRead.data));
     })();
-  }, []);
+  }, [withDesk]);
 
   const send = useCallback(async (text: string) => {
     const trimmed = text.trim();
@@ -99,7 +130,7 @@ export function ChatDesk({ children, active = true }: { children: ReactNode; act
     try {
       let id = sessionRef.current;
       if (!id) {
-        const created = await postOfficial("/chat/sessions", {});
+        const created = await postOfficial(withDesk("/chat/sessions"), { desk });
         if (!usable(created)) {
           setNotice(chatFailureSentence(created.result.lines));
           return;
@@ -108,16 +139,16 @@ export function ChatDesk({ children, active = true }: { children: ReactNode; act
         if (!id) return;
         sessionRef.current = id;
         setActiveId(id);
-        const sessionRead = await readOfficial(CHAT_ROUTES.sessions, "fields");
+        const sessionRead = await readOfficial(withDesk(CHAT_ROUTES.sessions), "fields");
         if (usable(sessionRead)) setThreads(sessionRows(sessionRead.data));
       }
-      const sent = await postOfficial(messageRoute(id), { text: trimmed });
+      const sent = await postOfficial(withDesk(messageRoute(id)), { text: trimmed, desk });
       if (!usable(sent)) {
         setNotice(chatFailureSentence(sent.result.lines));
         return;
       }
       const reply = replyText(sent.data);
-      const messageRead = await readOfficial(messageRoute(id), "fields");
+      const messageRead = await readOfficial(withDesk(messageRoute(id)), "fields");
       if (!usable(messageRead)) {
         setNotice(chatFailureSentence(messageRead.result.lines));
         return;
@@ -137,10 +168,10 @@ export function ChatDesk({ children, active = true }: { children: ReactNode; act
     } finally {
       setRunning(false);
     }
-  }, []);
+  }, [desk, withDesk]);
 
   const value: ChatDeskValue | null = active
-    ? { threads, messages, activeId, notice, ready, running, select, send }
+    ? { threads, messages, activeId, notice, ready, running, desk, contextLabel, select, send }
     : null;
 
   return <ChatDeskContext.Provider value={value}>{children}</ChatDeskContext.Provider>;
