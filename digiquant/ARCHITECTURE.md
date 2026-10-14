@@ -152,7 +152,7 @@ All three adapters (`IBAdapterStub`, `AlpacaAdapterStub`, `QuantConnectAdapterSt
 
 ## 3. API Surface
 
-REST endpoints, MCP hosting (`mcp.digithings.ai`, scope `digiquant:backtest`, container `DigiQuantMcpContainer`), the CLI, and market-data reads are in [API surface](docs/architecture/api-surface.md).
+REST endpoints, MCP hosting (scope `digiquant:backtest`, container `DigiQuantMcpContainer`), the CLI, and market-data reads are in [API surface](docs/architecture/api-surface.md). The public hostname stays in that file so it is not counted twice.
 
 ## 4. Data Model
 
