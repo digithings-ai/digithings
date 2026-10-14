@@ -504,7 +504,7 @@
   margin: 0 0 0.4rem;
   font-family: var(--font-family-mono);
   font-size: 12px;
-  color: var(--text-secondary);
+  color: var(--ink-soft);
 }
 .dc-byok-option-list {
   list-style: none;
@@ -526,7 +526,7 @@
   padding: 0.2rem 0.35rem;
   border: 0;
   background: transparent;
-  color: var(--text-primary);
+  color: var(--ink);
   font: inherit;
   text-align: left;
   cursor: pointer;
@@ -548,10 +548,10 @@
   max-width: 28rem;
   margin-top: 0.25rem;
   padding: 0.4rem 0.55rem;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--hair);
   border-radius: 0;
   background: var(--bg-term, transparent);
-  color: var(--text-primary);
+  color: var(--ink);
   font-family: var(--font-family-mono);
   font-size: 13px;
   outline: none;
@@ -569,7 +569,7 @@
   padding: 0;
   border: 0;
   background: none;
-  color: var(--text-secondary);
+  color: var(--ink-soft);
   font-family: var(--font-family-mono);
   font-size: 11px;
   cursor: pointer;
@@ -577,7 +577,7 @@
   text-underline-offset: 2px;
 }
 .dc-byok-action:hover {
-  color: var(--text-primary);
+  color: var(--ink);
 }
 .dc-byok-action-danger {
   color: var(--down, #e0654b);
