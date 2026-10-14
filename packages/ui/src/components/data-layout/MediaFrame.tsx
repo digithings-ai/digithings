@@ -72,7 +72,8 @@ export function MediaFrame({
       <div className="relative aspect-video w-full overflow-hidden bg-term-bg">
         {src ? (
           kind === "image" ? (
-            // eslint-disable-next-line @next/next/no-img-element -- package part, no next/image dependency
+            // Note: plain <img> is intentional — package part, no next/image dependency.
+            // (No next lint plugin runs on packages, so no disable directive here.)
             <img src={src} alt={caption} className="absolute inset-0 size-full object-cover" />
           ) : (
             <video

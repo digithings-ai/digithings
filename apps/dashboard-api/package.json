@@ -1,5 +1,13 @@
 {
   "name": "dashboard-api",
+  "description": "HTTP API for the digithings dashboard.",
+  "license": "MIT",
+  "homepage": "https://digithings.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/digithings-ai/digithings.git",
+    "directory": "apps/dashboard-api"
+  },
   "private": true,
   "type": "module",
   "scripts": {

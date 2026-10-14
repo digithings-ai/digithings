@@ -17,6 +17,11 @@ dependencies = [
     "pyyaml>=6",
 ]
 
+
+[project.urls]
+Homepage = "https://digithings.ai"
+Repository = "https://github.com/digithings-ai/digithings"
+
 [project.optional-dependencies]
 # FastAPI service + MCP server + CLI. The core library (frontmatter, wikilinks,
 # vault) imports none of these; ``import digivault`` never imports FastAPI.

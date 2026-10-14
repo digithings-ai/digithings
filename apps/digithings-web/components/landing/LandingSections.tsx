@@ -17,9 +17,9 @@ import { OpenSourceLive } from "./OpenSourceLive";
  *
  * The alternative repo variants (`RepoCompact`, `RepoCloneFirst`) and the three
  * digiquant variants that used to live here (`QuantPipeline`, `QuantFrame`,
- * `QuantSplit`) were retired once the Boot band and the digiquant band were
- * rebuilt — the live bands are `BootTerminal` and `QuantSection`, and the dead
- * exports only made this file harder to read. The hand-rolled two-blockquote
+ * `QuantSplit`) were retired once the digiquant band was rebuilt around
+ * `QuantSection`, and the dead exports only made this file harder to read.
+ * (`BootTerminal` was retired with it: zero importers, so the file is gone.) The hand-rolled two-blockquote
  * `Quotes` band is gone too, and the `Testimonials` reveal that replaced it was
  * removed entirely in round 6 ("i'd remove it remove the voices actually yeah").
  */
@@ -58,8 +58,8 @@ const FAQ: { q: string; a: string }[] = [
     a: "Two modules are roadmap rather than shipped, there is no hosted product, and the broker adapters raise NotImplementedError — live trading is guarded by a human review gate, not a runtime interlock. The security page lists the known limits.",
   },
   {
-    q: "Does it need NautilusTrader?",
-    a: "Only for the quant work. Every backtest and optimise path runs through it, so digiquant depends on it; the rest of the stack does not.",
+    q: "Does this site track me?",
+    a: "No ad pixels and no third-party analytics. Local storage holds only your colour theme and, if you set up chat, your provider and model choice — nothing else persists in your browser.",
   },
 ];
 

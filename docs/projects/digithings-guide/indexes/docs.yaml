@@ -5,8 +5,7 @@
 #
 # `sources` is a v1alpha1 forward-looking extension. The current
 # `_discover_indexes_from_dir` reads only `index_name` + `backend`; the
-# `sources` globs below are consumed by scripts/reindex_digithings_guide.py and
-# by the reindex-digithings-guide GitHub Action's `paths:` filter. When a
+# `sources` globs below are consumed by scripts/reindex_digithings_guide.py. When a
 # service-less ingest entry point lands in digisearch, it should consume this
 # same block.
 
@@ -20,8 +19,7 @@ description: |
   questions about how digithings works, what each component does, or
   why a design decision was made.
 
-# Source globs (relative to repo root). Keep in sync with the `paths:` filter
-# in .github/workflows/reindex-digithings-guide.yml.
+# Source globs (relative to repo root).
 sources:
   # Root-level docs
   - README.md
@@ -43,10 +41,10 @@ sources:
   - digibase/AGENTS.md
   - digibase/README.md
   - digibase/DIGI*.md
-  - digichat/ARCHITECTURE.md
-  - digichat/AGENTS.md
-  - digichat/README.md
-  - digichat/DIGI*.md
+  - apps/digichat/ARCHITECTURE.md
+  - apps/digichat/AGENTS.md
+  - apps/digichat/README.md
+  - apps/digichat/DIGI*.md
   - digiclaw/ARCHITECTURE.md
   - digiclaw/AGENTS.md
   - digiclaw/DIGI*.md
@@ -64,9 +62,9 @@ sources:
   - digisearch/ARCHITECTURE.md
   - digisearch/AGENTS.md
   - digisearch/DIGI*.md
-  - digismith/ARCHITECTURE.md
-  - digismith/AGENTS.md
-  - digismith/DIGI*.md
+  - digitrace/ARCHITECTURE.md
+  - digitrace/AGENTS.md
+  - digitrace/DIGI*.md
 
 # Chunking / embedding intentionally omitted — inherit digisearch defaults
 # (recursive 512/64 chunker; backend-configured embeddings). Override only

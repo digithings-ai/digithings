@@ -11,9 +11,8 @@
  * trace of the field everywhere, so it reads as a graph that already exists
  * across the page and is merely being revealed where you look.
  *
- * The lens centre eases toward the cursor at the same slow pace as the HeroMesh
- * blobs, so the revealed graph and the mesh shading move as one (no separate
- * glow here — the mesh provides the shading). Tuned to a wide / slow / sparse
+ * The lens centre eases toward the cursor at a slow pace (no separate glow
+ * here). Tuned to a wide / slow / sparse
  * feel. Theme-aware; renders one static, centered frame under reduced-motion.
  * pointer-events: none.
  */

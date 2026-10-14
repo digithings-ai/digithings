@@ -5,7 +5,6 @@ import {
   modules,
   type ModuleNode,
   StackRow,
-  Emblem,
   DocsLayout as DocsShell,
   DocsSearch,
   type DocsNavGroup,
@@ -15,6 +14,7 @@ import {
   DocsCodeBlock,
   Reveal,
 } from "@digithings/ui";
+import { ScrollBanner, bannerFor } from "@/components/landing/ScrollBanner";
 import {
   Badge,
   Button,
@@ -66,6 +66,7 @@ const NAV: DocsNavGroup[] = [
       .map((m) => ({ id: m.id, label: <ModuleWordmark id={m.id} /> })),
   })).filter((g) => g.items.length > 0),
   { label: "OpenAPI", items: [{ id: "openapi", label: "Explorer", href: "/docs/api/" }] },
+  { label: "Book", items: [{ id: "book", label: "Read the book", href: "/book" }] },
 ];
 
 // Sub-section anchors: `<entry>--<slug>`, so a heading shared by every module
@@ -261,11 +262,16 @@ function ModuleDoc({ m }: { m: ModuleNode }) {
       {/* Entrance on the section head only — the body stays static so the
           reference never gates content on scroll (#1450 polish). */}
       <Reveal as="header" className="doc-mod-head">
-        <Emblem id={m.emblem} size={32} />
         <div className="doc-mod-title">
           <h2>
-            <span className="dt-d">digi</span>
-            <span className="dt-s">{suffix}</span>
+            {bannerFor(m.id) ? (
+              <ScrollBanner def={bannerFor(m.id)!} className="w-[9rem]" />
+            ) : (
+              <>
+                <span className="dt-d">digi</span>
+                <span className="dt-s">{suffix}</span>
+              </>
+            )}
           </h2>
           <span className="doc-mod-role">{m.role}</span>
         </div>

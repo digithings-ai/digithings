@@ -28,7 +28,7 @@
     },
     {
       "id": "claim_f984130a418f499c99d52b163e2cdc33",
-      "statement": "digillm is provider-agnostic with LiteLLM as the house swap layer, hard deps openai plus pydantic only, no FastAPI, and digismith tracing as a degrading optional.",
+      "statement": "digillm is provider-agnostic with LiteLLM as the house swap layer, hard deps openai plus pydantic only, no FastAPI, and digitrace tracing as a degrading optional.",
       "evidence": [
         {
           "resource": "repo://digillm/ARCHITECTURE.md#L1-L19",
