@@ -381,6 +381,8 @@ def fullscreen_enter(stdout: TextIO) -> None:
             stdout.write(_ANSI_ALT_ON + _ANSI_HIDE)
             stdout.flush()
         except (OSError, ValueError):
+            # Best effort: entering the alternate screen on a broken stdout
+            # cannot work; stay on the main screen.
             return
     _fullscreen_depth += 1
 
@@ -396,6 +398,8 @@ def fullscreen_leave(stdout: TextIO) -> None:
             stdout.write(_ANSI_SHOW + _ANSI_ALT_OFF)
             stdout.flush()
         except (OSError, ValueError):
+            # Best effort: restoring the caller's screen on a closing stdout
+            # must not raise during teardown.
             pass
 
 
@@ -1339,6 +1343,8 @@ def _cursor(stdout: TextIO, show: bool) -> None:
         stdout.write(_ANSI_SHOW if show else _ANSI_HIDE)
         stdout.flush()
     except (OSError, ValueError):
+        # Best effort: cursor restore on a closing stdout must not raise
+        # during teardown.
         pass
 
 
@@ -1518,6 +1524,8 @@ def choose(
                     stdout.write(_MOUSE_OFF)
                     stdout.flush()
                 except (OSError, ValueError):
+                    # Best effort: mouse-mode reset on a closing stdout must
+                    # not raise during teardown.
                     pass
             termios.tcsetattr(fd, termios.TCSADRAIN, saved)
             _cursor(stdout, True)
@@ -1702,6 +1710,8 @@ def capture_binding(
                 stdout.write(_KITTY_POP + _MODIFY_POP)
                 stdout.flush()
             except (OSError, ValueError):
+                # Best effort: keyboard-protocol reset on a closing stdout
+                # must not raise during teardown.
                 pass
         termios.tcsetattr(fd, termios.TCSADRAIN, saved)
         _cursor(stdout, True)
@@ -1771,6 +1781,8 @@ def choose_many(
                 elif key in {"esc", "q", "Q"}:
                     return None
         except (OSError, ValueError):
+            # Expected: stdin closed mid-menu; fall through to the
+            # line-based fallback below.
             pass
         finally:
             termios.tcsetattr(fd, termios.TCSADRAIN, saved)
@@ -1806,6 +1818,7 @@ def _pause(
         try:
             _read_key(stdin)
         except (OSError, ValueError):
+            # Expected: stdin closed; treat as no input.
             pass
         finally:
             _cursor(stdout, True)
@@ -1815,6 +1828,7 @@ def _pause(
     try:
         stdin.readline()
     except (OSError, ValueError):
+        # Expected: stdin closed; treat as no input.
         pass
 
 

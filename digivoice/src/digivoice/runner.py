@@ -88,10 +88,14 @@ def _kill_group(proc: subprocess.Popen[str]) -> None:
         try:
             proc.kill()
         except (ProcessLookupError, OSError):
+            # Already gone: the SIGKILL target exited between the killpg
+            # attempt and the fallback.
             pass
     try:
         proc.wait(timeout=_KILL_WAIT_SECONDS)
     except subprocess.TimeoutExpired:
+        # Best effort: give the SIGKILLed group a grace period, then continue
+        # teardown regardless.
         pass
 
 
