@@ -1,6 +1,7 @@
 # Cloudflare deploy map, local CI design, and the end of auto-deploy from main
 
 Status: proposal only. No Cloudflare setting was changed. No repository was created.
+Decisions: all five are answered. Section 7 records each answer, who gave it, and when. One step is still closed to agents on Chris's own condition.
 
 ## 1. Scope and limits
 
@@ -31,7 +32,7 @@ I read these six Workers from the live Cloudflare account. The "modified" time i
 | `digithings-cron` | `apps/digithings-cron/wrangler.toml` | R5 `digithings-stack` | `release/stack` | `npx wrangler deploy -c apps/digithings-cron/wrangler.toml` |
 | `digithings-stack` | `apps/digithings-stack-cloudflare/wrangler.toml` | R5 `digithings-stack` | `release/stack` | `npx wrangler deploy -c apps/digithings-stack-cloudflare/wrangler.toml` |
 | `digithings-digichat` | `apps/digichat-cloudflare/wrangler.toml` | R5 `digithings-stack` | `release/stack` | `npx wrangler deploy -c apps/digichat-cloudflare/wrangler.toml` |
-| `corpus-index` | `apps/corpus-index/wrangler.toml`, on 2 unmerged branches, **not on develop** | **D-1, still open** | see D-1 | `npx wrangler deploy -c apps/corpus-index/wrangler.toml` |
+| `corpus-index` | `apps/corpus-index/wrangler.toml`, on 2 unmerged branches, **not on develop** | **R5 `digithings-stack`**, decided 2026-10-14 (D-1) | `release/stack` | `npx wrangler deploy -c apps/corpus-index/wrangler.toml` |
 
 Modified times for the six Workers:
 
@@ -113,6 +114,8 @@ crons = ["0 3 * * *"]
 The file states that the clock is on this Worker, at 03:00 UTC, and not on `digithings-cron`. Under the migration the AI binding, the KV namespace and the Workflow stay on the Cloudflare side. Only the trigger moves to the Mac. Section 6 does not need to change for it.
 
 **One small defect.** `apps/corpus-index/.wrangler/tmp/deploy-roabtC/index.js` is committed on `DIG-2203-census-deploy`. That is a build output. `develop` has 0 such paths. It should not merge.
+
+**The owner is now decided (D-1).** `apps/corpus-index/` joins R5 `digithings-stack` on `release/stack`, with the other Workers. It is the first Worker to land in the migration, because its source is on no trunk branch.
 
 ## 3. Table B. The two Pages projects
 
@@ -214,9 +217,9 @@ Three options. All three keep the deploy off GitHub Actions.
 | Local watcher | A local `launchd` job watches the remote release branch | the Mac | The Mac is always on |
 | Cloudflare Workers Builds | Cloudflare builds the Worker from the repository | Cloudflare | The Mac is sometimes off |
 
-**Recommendation: manual first, then the local watcher.** The manual step is safe because a person approves it. The watcher removes that approval. Add the watcher only after a month of clean manual deploys.
+**Recommendation, and now decided (D-4).** The build may move to Cloudflare Workers Builds, so a build does not need the Mac. The deploy stays manual and comes from a tag Chris cuts. **The local watcher is declined**, because it deploys without a person. No option in this table deploys by itself.
 
-**Fallback: Cloudflare Workers Builds.** This service builds a Worker from a connected repository. It uses Cloudflare's minutes, not GitHub's. Use it for a Worker that must deploy while the Mac is off. It does not support the container build the same way, so check a container Worker before you rely on it.
+**Fallback: Cloudflare Workers Builds.** This service builds a Worker from a connected repository. It uses Cloudflare's minutes, not GitHub's. Use it to build while the Mac is off. Do not let it deploy: D-4 keeps every deploy manual from a tag Chris cuts. It does not support the container build the same way, so check a container Worker before you rely on it.
 
 ### 5.6 The two crons in `digithings-cron`
 
@@ -236,6 +239,8 @@ So the two halves of this proposal need different tools. The Pages half needs a 
 
 Each step is separate. Each step needs Chris's approval. Do the steps in order. Stop after any step that fails.
 
+**Steps 1 and 3 are closed to every agent, on Chris's own condition (D-3).** Chris makes the dashboard change. He states that the auto-deploy switch-off itself still needs his explicit go before anyone touches the dashboard. This answer names the owner. It is not that go.
+
 | Step | Action | Tool needed | Effect | Risk |
 |---|---|---|---|---|
 | 0 | Do nothing | none | sites keep building from `main` | none |
@@ -251,41 +256,35 @@ Each step is separate. Each step needs Chris's approval. Do the steps in order. 
 
 ### 6.3 What each step does not fix
 
-This proposal does not set up a local CI. Section 5 describes that as a design. Step 4 makes a manual Mac deploy necessary. The local watcher in section 5.5 makes it automatic.
+No step in this table deploys by itself. Section 5.5 keeps the deploy manual, from a tag Chris cuts.
 
 This proposal does not move a repository. Section 2 and Table C name the destination. The move is a separate task.
 
 This proposal does not change the cron triggers in `digithings-cron`. See section 5.6.
 
-## 7. Decisions for Chris
+## 7. Decisions, answered
 
-### D-1. Which repo owns the corpus-index Worker?
+Chris answered all five on 2026-10-14 at 21:37 UTC through the board card `66ac0f5c`. The card summary reads: "Approved by Chris via One 23:36. D1 A (R5); D2 B (DevOps Lead reads Pages names); D3 A (Chris; switch-off still needs his explicit go before any dashboard change); D4 B (Workers Builds may build; deploys stay manual from tags Chris cuts. No auto-deploy.); D5 A."
 
-This is the only unresolved item in Table A. The source exists and is in this repository. Section 2.3 has the evidence. The question is only which R repo the directory joins.
+### D-1. Which repo owns the corpus-index Worker? Answer: A, R5 `digithings-stack`
 
-- **A.** R5 `digithings-stack`, with the other Workers. Its `wrangler.toml` names the same Cloudflare account.
-- **B.** R2 `digiquant-stack`. Pull request #5545 titles the branch feature `digisearch`, so the owning seat may read it as a digisearch component.
-- **C.** No repository. Keep it in Cloudflare only.
-- **D.** R6 `digichat-tenants`. It binds a KV namespace for a corpus and reads the helpdesk token.
+`apps/corpus-index/` joins R5 `digithings-stack` on `release/stack`, with the other Workers. Its `wrangler.toml` names the same Cloudflare account. Table A in section 2 now names R5. The disagreement between pull request 5545 and pull request 5580 about who owns it is settled in writing before the migration, which is why this was asked.
 
-**My recommendation stays A, for one reason that is now sharper.** The two open pull requests disagree about who owns it. #5545 calls it `feat(digisearch)`. #5580 carries it inside a `feat(digichat)` branch. That disagreement is the reason to settle the owner in writing before the migration rather than during it.
+### D-2. What are the two production Pages project names? Answer: B, the DevOps Lead reads them
 
-### D-2. What are the two production Pages project names?
+I cannot read a Pages project name. See section 3.1. The DevOps Lead reads the two names from the Cloudflare dashboard and passes them to whoever writes the local `wrangler pages deploy` commands. The gap stays open until those two names exist. It does not block the Workers half of this document.
 
-I could not read them. See section 3.1. I need the names to write the local `wrangler pages deploy` commands in section 3. The dashboard holds them.
+### D-3. Who makes the dashboard change in step 1? Answer: A, Chris makes it
 
-### D-3. Who makes the dashboard change in step 1?
+Chris makes the dashboard change in step 1. He states the condition: **the auto-deploy switch-off itself still needs his explicit go before anyone touches the dashboard.** So step 1 in section 6.2 is closed to every agent, this one included. Do not open a dashboard session for it. Do not read this answer as that go.
 
-I have no write access to the Cloudflare dashboard. I have a read-only tool. Step 1 needs a person.
+### D-4. Is the Mac always on? Answer: B, Workers Builds may build, deploys stay manual
 
-### D-4. Is the Mac always on?
+**No auto-deploy, for the build and for the deploy.** Workers Builds may build a Worker, so a build does not need the Mac to be on. The deploy stays manual and comes from a tag Chris cuts. The local watcher in section 5.5 is declined, because it deploys without a person. Section 5.5 is rewritten to match this answer.
 
-The local watcher needs the Mac. The Cloudflare Workers Builds fallback needs the Mac to be off. This answer decides option 2 or option 3 in section 5.5.
+### D-5. Which R0-R7 repo names do you accept? Answer: A, the names are accepted
 
-### D-5. Which R0–R7 repo names do you accept?
-
-Table A uses the repo names from the verified split plan at `develop@83a104a10`. That plan is dated 2026-10-14 at 02:49 CEST. Read `/Users/chrisstefan/Code/occ-backups/repo-split-docs/repo-split.md`. The names are R0 `digithings` (public), R1 `digiquant-strategies`, R2 `digiquant-stack`, R3 `digiquant-web`, R4 `digithings-web`, R5 `digithings-stack`, R6 `digichat-tenants`, R7 `twelve-x` (exists). The plan carries 14 open decisions of its own. I did not resolve them here.
-
+The R0-R7 names in section 2 come from the verified split plan at `develop@83a104a10`, dated 2026-10-14. They are accepted as written. That plan carries 14 open decisions of its own. They are not mine and this document does not resolve them.
 ## 8. Method and evidence
 
 I read the live Cloudflare account with one read-only tool: `workers-list`. The tool returns the Worker name, the script ID, and the modified time. I did not call a write tool. The account is `ae2ea3eb4ce5f7cc9bec1478f6e60e15`. That value is in tracked wrangler files. It is not a secret.
@@ -306,4 +305,4 @@ I did not run any deploy, and I did not run any dry run. Section 5 is a design, 
 
 ## 9. One-line summary
 
-Six Workers map cleanly to R2 and R5, The sixth, `corpus-index`, has its source in this repository on two unmerged branches and on no trunk branch at all, both sites build from `main` on Cloudflare's side with no GitHub Actions workflow involved, and the only deploy lane that works today is one that pushes `main`. Moving both sites to a release branch is two dashboard changes and stops the auto-deploy.
+All five decisions are answered. Six Workers map to R2 and R5, and the sixth, `corpus-index`, joins R5 with them. The build may move to Cloudflare Workers Builds, and every deploy stays manual from a tag Chris cuts. Stopping the auto-deploy needs one dashboard change per site, and Chris makes it himself.
