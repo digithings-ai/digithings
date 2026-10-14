@@ -1,4 +1,4 @@
-/** Gloomberb tools surface. Live tools wait on the Gloomberb migration. */
+/** Gloomberb tools surface. Names come from the MCP registry (`gloomberb_*`). */
 export function GloomberbTools({ tools = [] }: { tools?: readonly string[] }) {
   return (
     <section aria-label="Gloomberb" className="m-px flex min-h-0 flex-1 flex-col bg-surface">
