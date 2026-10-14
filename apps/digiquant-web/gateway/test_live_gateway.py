@@ -249,6 +249,31 @@ def test_port_from_env_rejects_invalid_values(monkeypatch: pytest.MonkeyPatch, r
         lg.port_from_env()
 
 
+def test_tool_call_rejects_names_outside_the_manifest() -> None:
+    c, bridge, _ = _client({"digifetch_quote": QUOTE})
+    r = c.post("/v1/tools/call", json={"name": "digifetch_quote", "arguments": {"symbol": "AAPL"}})
+    assert r.status_code == 404
+    assert r.json()["error"]["code"] == "not_found"
+    assert bridge.calls == []
+    bad = c.post("/v1/tools/call", json={"name": "Not A Tool", "arguments": {}})
+    assert bad.status_code == 400
+    assert bridge.calls == []
+
+
+def test_tool_call_runs_an_allowlisted_tool() -> None:
+    c, bridge, gw = _client({"digifetch_quote": QUOTE})
+    gw.tool_names = frozenset({"digifetch_quote"})
+    r = c.post(
+        "/v1/tools/call",
+        json={"name": "digifetch_quote", "arguments": {"symbol": "AAPL"}},
+        headers={"Origin": ORIGIN},
+    )
+    assert r.status_code == 200 and r.json()["ok"] is True
+    assert r.json()["tool"] == "digifetch_quote"
+    assert r.json()["data"]["data"]["quote"]["price"] == 333.0
+    assert bridge.calls == [("digifetch_quote", {"symbol": "AAPL"})]
+
+
 def test_catalog_lists_probes() -> None:
     c, _, _ = _client({})
     ids = {p["id"] for p in c.get("/v1/catalog").json()["probes"]}

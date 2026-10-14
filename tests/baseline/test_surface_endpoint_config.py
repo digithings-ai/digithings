@@ -67,8 +67,10 @@ _HOST_RE = re.compile(
 # since the batch pin is five literals from two landings, minus one refresh
 # removal, with the rotation re-confirmed at 54. From main's OCC release:
 # occ.digithings.ai x2 as tenant-map keys in
-# tests/dg/test_occ_ticket_payload_retired.py, mcp.digithings.ai x1 in
-# docs/reviews/pr/review-5061-digichat-mcp-tool-allowlist.md prose. From the
+# tests/dg/test_occ_ticket_payload_retired.py. (DIG-3393 deleted
+# docs/reviews/pr/review-5061-digichat-mcp-tool-allowlist.md, which carried the
+# 60th mcp.digithings.ai literal in prose: 60 -> 59, re-measured with this
+# file's own scanner.) From the
 # L4-L9 union: key.digithings.ai (+1), search.digithings.ai (+1). The refresh
 # then dropped the snapshot's hosted-digisearch-route summary line (-1
 # search). #5542 re-measured search at 54 on develop (rotated repo-activity
@@ -95,7 +97,7 @@ PINNED_CENSUS = {
     "hosts.occ.digithings.ai": 1,
     "key.digithings.ai": 72,
     "langfuse.digithings.ai": 3,
-    "mcp.digithings.ai": 60,
+    "mcp.digithings.ai": 59,
     "occ.digithings.ai": 144,
     "search.digithings.ai": 54,
     "trace.digithings.ai": 20,

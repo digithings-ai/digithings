@@ -1,18 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
-import { MCP_COMMAND, MCP_READ_COUNT, MCP_TOOLS } from "@/app/_mcp";
-import { fetchGatewayCatalog, fetchGatewayProbe, type CatalogProbe } from "@/lib/gateway/gateway-client";
-import {
-  cycleName,
-  exampleArgs,
-  groupByFamily,
-  runDemo,
-  type McpScope,
-  type McpTool,
-} from "@/lib/mcp-demo";
+import { useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
+import { Button } from "@digithings/ui/ui";
+import { MCP_COMMAND, MCP_TOOLS } from "@/app/_mcp";
+import { fetchGatewayCall } from "@/lib/gateway/gateway-client";
+import { cycleName, exampleArgs, groupByFamily, validateArgs, type McpTool } from "@/lib/mcp-demo";
 
-type TryResult = { status: number; ms: number; source: "gateway" | "demo"; body: string };
+type TryResult = { status: number; ms: number; source: "gateway"; body: string };
 
 const PROMPT = (
   <span aria-hidden="true" className="text-accent">
@@ -73,7 +67,7 @@ function ToolList({
                   {on ? "▸" : ">"}
                 </span>
                 <span className="truncate">{t.name}</span>
-                <span className="text-ink-mute">[{t.scope === "read" ? "r" : "f"}]</span>
+                <span className="text-ink-mute">{t.family}</span>
               </button>
             );
           })}
@@ -83,78 +77,64 @@ function ToolList({
   );
 }
 
-function queryFromArgs(raw: string): Record<string, string> | null {
-  try {
-    const parsed: unknown = raw.trim() ? JSON.parse(raw) : {};
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
-    const out: Record<string, string> = {};
-    for (const [key, value] of Object.entries(parsed)) {
-      if (value === undefined || value === null) continue;
-      out[key] = typeof value === "string" ? value : JSON.stringify(value);
-    }
-    return out;
-  } catch {
-    return null;
-  }
-}
-
-function ToolDetail({
-  tool,
-  serverScope,
-  probes,
-}: {
-  tool: McpTool;
-  serverScope: McpScope;
-  probes: CatalogProbe[];
-}) {
+function ToolDetail({ tool }: { tool: McpTool }) {
   const [args, setArgs] = useState(() => JSON.stringify(exampleArgs(tool), null, 2));
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<TryResult | null>(null);
-  const probe = probes.find((p) => p.tool === tool.name) ?? null;
 
   const execute = async () => {
     const started = performance.now();
-    if (probe) {
-      const query = queryFromArgs(args);
-      if (!query) {
-        setResult({ status: 400, ms: 0, source: "demo", body: "arguments are not a JSON object" });
-        return;
-      }
-      setBusy(true);
-      const live = await fetchGatewayProbe(probe.id, query);
-      setBusy(false);
-      if (!live.ok) {
-        setResult({ status: 0, ms: Math.round(performance.now() - started), source: "gateway", body: live.error });
-        return;
-      }
+    let parsed: unknown;
+    try {
+      parsed = args.trim() ? JSON.parse(args) : {};
+    } catch {
+      setResult({ status: 400, ms: 0, source: "gateway", body: "arguments are not valid JSON" });
+      return;
+    }
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      setResult({ status: 400, ms: 0, source: "gateway", body: "arguments must be a JSON object" });
+      return;
+    }
+    const errors = validateArgs(tool, parsed as Record<string, unknown>);
+    if (errors.length > 0) {
+      setResult({ status: 400, ms: 0, source: "gateway", body: errors.join("\n") });
+      return;
+    }
+    setBusy(true);
+    const live = await fetchGatewayCall(tool.name, parsed as Record<string, unknown>);
+    setBusy(false);
+    if (!live.ok) {
+      const reason =
+        live.error === "unset"
+          ? "The local gateway URL is not set. Start the gateway and set NEXT_PUBLIC_DIGIQUANT_GATEWAY_URL to its loopback address."
+          : live.error === "unsafe"
+            ? "The gateway URL is not a loopback address."
+            : live.error === "nonlocal-page"
+              ? "This page is not served from localhost, so the gateway stays closed."
+              : live.error;
       setResult({
-        status: live.status,
-        ms: live.envelope.latencyMs || Math.round(performance.now() - started),
+        status: 0,
+        ms: Math.round(performance.now() - started),
         source: "gateway",
-        body: JSON.stringify(live.envelope, null, 2),
+        body: reason,
       });
       return;
     }
-    const lines = runDemo(tool, args, serverScope);
-    const failed = lines.some((line) => line.kind === "err");
-    const body = lines.find((line) => line.kind === "out")?.text ?? lines.map((line) => line.text).join("\n");
     setResult({
-      status: failed ? 400 : 200,
-      ms: Math.round(performance.now() - started),
-      source: "demo",
-      body,
+      status: live.status,
+      ms: live.envelope.latencyMs || Math.round(performance.now() - started),
+      source: "gateway",
+      body: JSON.stringify(live.envelope, null, 2),
     });
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3">
+    <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-hair pb-2">
         <p className="m-0 text-ink">
           <span className="text-accent">POST</span> /tools/{tool.name}
         </p>
-        <p className="m-0 text-ink-mute">
-          [{tool.scope}] {probe ? "live · local gateway" : "demo · not executed"}
-        </p>
+        <p className="m-0 text-ink-mute">live · local gateway</p>
       </div>
       <p className="m-0 font-sans text-[0.8125rem] leading-[1.55] text-ink-soft">{tool.summary}</p>
 
@@ -184,7 +164,7 @@ function ToolDetail({
         )}
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex shrink-0 flex-col">
         <label htmlFor="mcp-args" className="m-0 block text-ink-mute">
           request body
         </label>
@@ -194,22 +174,24 @@ function ToolDetail({
           onChange={(e) => setArgs(e.target.value)}
           spellCheck={false}
           rows={4}
-          className="mt-1 block min-h-[5.5rem] w-full flex-1 resize-none border border-hair bg-transparent p-2 font-mono text-[0.72rem] leading-[1.5] text-ink focus-visible:border-ink-mute focus-visible:outline-none"
+          className="mt-1 block min-h-[5.5rem] w-full resize-y border border-hair bg-transparent p-2 font-mono text-[0.72rem] leading-[1.5] text-ink focus-visible:border-ink-mute focus-visible:outline-none"
         />
-        <div className="mt-2 flex items-center gap-3">
-          <button
+        <div className="mt-2 flex shrink-0 items-center gap-3">
+          <Button
             type="button"
+            variant="outline"
+            size="xs"
             onClick={() => void execute()}
             disabled={busy}
-            className="border border-hair bg-transparent px-3 py-1 font-mono text-[0.72rem] text-ink hover:bg-surface-2 focus-visible:bg-surface-2 disabled:opacity-50"
+            className="font-mono text-[0.72rem] font-normal"
           >
             {busy ? "sending" : "Execute"}
-          </button>
-          <span className="text-ink-mute">{probe ? `GET /v1/probe/${probe.id}` : "local signature check"}</span>
+          </Button>
+          <span className="text-ink-mute">POST /v1/tools/call</span>
         </div>
       </div>
 
-      <div aria-live="polite" className="min-h-[6rem] border border-hair p-2">
+      <div aria-live="polite" className="shrink-0 border border-hair p-2">
         {result ? (
           <>
             <p className={`m-0 ${result.status >= 400 || result.status === 0 ? "text-[var(--down)]" : "text-ink"}`}>
@@ -227,34 +209,21 @@ function ToolDetail({
   );
 }
 
-/** The MCP band's terminal: the server command, then the full tool registry.
- *  Arrow keys cycle tools. A tool the local gateway exposes is a live GET;
- *  everything else is a signature check styled like an OpenAPI try-it panel. */
+/** The MCP band's terminal: one list of every audited tool. Execute posts to the
+ *  local gateway, which calls that tool on the digiquant MCP server. */
 export function McpCli() {
   const [filter, setFilter] = useState("");
   const [selected, setSelected] = useState(MCP_TOOLS[0]?.name ?? "");
-  const [scope, setScope] = useState<McpScope>("full");
-  const [probes, setProbes] = useState<CatalogProbe[]>([]);
-
-  useEffect(() => {
-    let active = true;
-    void fetchGatewayCatalog().then((result) => {
-      if (active && result.ok) setProbes(result.probes);
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
 
   const visible = useMemo(() => {
     const q = filter.trim().toLowerCase();
-    return MCP_TOOLS.filter((t) => (scope === "read" ? t.scope === "read" : true)).filter(
+    return MCP_TOOLS.filter(
       (t) => !q || t.name.includes(q) || t.family.includes(q) || t.summary.toLowerCase().includes(q),
     );
-  }, [filter, scope]);
+  }, [filter]);
 
   const tool = MCP_TOOLS.find((t) => t.name === selected) ?? MCP_TOOLS[0];
-  const command = MCP_COMMAND.replace("--scope full", `--scope ${scope}`);
+  const command = MCP_COMMAND;
 
   const onShellKey = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
@@ -281,26 +250,11 @@ export function McpCli() {
           {PROMPT}
           {command}
         </p>
-        <div role="group" aria-label="Server scope" className="flex items-center gap-2 text-ink-mute">
-          <span># {visible.length} of {MCP_TOOLS.length} tools · scope</span>
-          {(["full", "read"] as const).map((s) => (
-            <button
-              key={s}
-              type="button"
-              aria-pressed={scope === s}
-              onClick={() => setScope(s)}
-              className={`border px-2 py-0 font-mono text-[0.68rem] hover:bg-surface-2 ${
-                scope === s ? "border-ink-mute bg-surface-2 text-ink" : "border-hair bg-transparent text-ink-mute"
-              }`}
-            >
-              {s}
-            </button>
-          ))}
-        </div>
+        <p className="m-0 text-ink-mute">
+          # {visible.length} of {MCP_TOOLS.length} tools
+        </p>
       </div>
-      <p className="m-0 px-4 text-ink-mute">
-        # {MCP_READ_COUNT} read-scope tools are what the dashboard chat gets; full adds backtest, optimize, export and fetches
-      </p>
+      <p className="m-0 px-4 text-ink-mute"># one list. Execute runs the tool on the local gateway.</p>
       <div className="grid min-h-0 flex-1 gap-x-4 px-4 pb-4 pt-3 md:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
         <div className="flex min-h-0 min-w-0 flex-col gap-2 border-hair md:border-e md:pe-4">
           <label className="flex items-baseline gap-2 text-ink">
@@ -320,7 +274,7 @@ export function McpCli() {
           </Pane>
         </div>
         <Pane className="min-h-[20rem] flex-1 max-md:mt-3">
-          {tool ? <ToolDetail key={tool.name} tool={tool} serverScope={scope} probes={probes} /> : null}
+          {tool ? <ToolDetail key={tool.name} tool={tool} /> : null}
         </Pane>
       </div>
     </div>
