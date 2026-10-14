@@ -27,19 +27,24 @@ Those two arms are the only difference; anything else diverging is a bug.
 **Before applying `01-branch-naming.json`, audit the refs it would reject:**
 
 ```
-git ls-remote --heads origin | sed 's|.*refs/heads/||'
+git ls-remote --heads https://github.com/digithings-ai/digithings.git | sed 's|.*refs/heads/||'
 ```
 
+`origin` on a digithings clone is the Cursor mirror, not this repo (see the
+opening paragraph). Listing that remote audits mirror heads, including
+`origin/<slug>` drafts the GitHub ruleset never sees.
+
 `release-please--branches--(develop|module/<component>)--components--<component>`
-is an arm of the pattern (#2557) — the same refs `release-please-digichat.yml`
-and `release-please-digiskills.yml` already push. Admitting them lets a
-maintainer push a follow-up fix onto the bot's branch without `--no-verify`.
-Targets other than `develop` / `module/*` (e.g. `main`) stay rejected.
+is an arm of the pattern (#2557). `release-please-digichat.yml` and
+`release-please-digiskills.yml` were removed in #4919, and nothing under
+`.github/workflows/` pushes those refs now. The arm stays so an existing
+branch of that shape still matches; targets other than `develop` / `module/*`
+(e.g. `main`) stay rejected.
 
 `bot/*` is the same class — `bot/[a-z0-9-]+` is an arm of the pattern, so the
-refs `project-stub-fields.yml`, `agent-backlog-snapshot.yml` and
-`pipeline-provider-review.yml` push are legal on the way in. They were only ever
-a cleanup backlog (#2465, now closed; 5 heads remain), never a rejection risk.
+refs `agent-backlog-snapshot.yml` and `pipeline-provider-review.yml` push are
+legal on the way in. `project-stub-fields.yml` was removed in #4919. These
+names were a cleanup backlog (#2465, now closed), never a rejection risk.
 
 ## Apply all four
 
@@ -54,7 +59,7 @@ done
 
 - **`02-protect-main.json` carries `required_linear_history`, and `main` does not
   have one.** Live protection has `required_linear_history: false`, `BRANCHING.md`
-  says linear history is not enforced, and `origin/main` is full of merge commits
+  says linear history is not enforced, and GitHub `main` is full of merge commits
   from the module-branch promotions. Applying this file blocks the promotion flow.
   Decide the policy first; do not adopt it as a side effect of a `for` loop.
 - These are `POST`s, so re-running the loop against a ruleset that already exists

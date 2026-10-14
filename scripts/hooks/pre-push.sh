@@ -28,8 +28,10 @@ origin_mirror_url_regex='^https://origin\.cursor\.com/chrizefan/digithings(\.git
 origin_local_url_regex='^https://origin\.cursor\.com/chrizefan/digithings(\.git)?/local/?$'
 origin_draft_regex='^origin/[a-z0-9][a-z0-9-]*$'
 
-# Allowed branch name taxonomy. Keep in sync with BRANCHING.md and the
-# GitHub branch-naming ruleset on origin.
+# Allowed branch name taxonomy. Keep in sync with BRANCHING.md and
+# scripts/github-rulesets/01-branch-naming.json. That file is the desired
+# GitHub ruleset; it is not applied on the repo (see that directory's README).
+# Do not say "on origin" — origin is the Cursor mirror, not GitHub.
 #
 # `DIG-<n>-<title-slug>` is the branch Paperclip checks out an execution
 # workspace on. It matched no arm here, so a bare `git push` from such a

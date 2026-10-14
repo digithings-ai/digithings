@@ -255,8 +255,9 @@ taxonomy, or one a workflow created outside it, must still be deletable — refu
 the delete only strands the branches the rule meant to discourage. Until #2463 the
 hook checked the name first and `exit 1`ed before it reached the deletion skip, so
 `git push origin --delete bot/stub-tsv-2459` failed with a name-taxonomy error and
-no server-side cause, and `bot/*` refs had piled up on `origin` behind it (~100 as
-of 2026-08-18; #2465 reaped them on 2026-08-19 and 5 heads remain). The `main`
+no server-side cause, and `bot/*` refs had piled up on the GitHub repo behind it
+(~100 as of 2026-08-18; #2465 reaped them on 2026-08-19 and bot/* heads remained).
+The `main`
 guard still covers deletions — deleting `main` is at least as serious as pushing
 to it, so it needs the same `ALLOW_MAIN_PUSH=1`.
 
@@ -268,9 +269,10 @@ to it, so it needs the same `ALLOW_MAIN_PUSH=1`.
   declares the same regex (bar the `main`/`develop` arms, which its
   `conditions.ref_name.exclude` covers instead) and reads `"enforcement":
   "active"`, but that file is desired state that was never applied — the only
-  ruleset on `origin` is `module-branch-protection`. Nothing currently proves this
+  ruleset on the GitHub repo is `module-branch-protection` (`origin` is the Cursor
+  mirror, not that repo). Nothing currently proves this
   the way the `release-please--branches--*--components--*` refs used to: those were
-  live on `origin` while the taxonomy still rejected them client-side, meaning the
+  live on GitHub while the taxonomy still rejected them client-side, meaning the
   hook was blocking even a maintainer's own follow-up push (e.g. a lockfile resync)
   onto a branch the bot itself had already pushed with no server-side rule stopping
   it — proof the JSON was never applied, found the hard way. The taxonomy now admits
