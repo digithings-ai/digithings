@@ -81,7 +81,9 @@ _HOST_RE = re.compile(
 # constant, dashboardApiBase comment, next.config destination rewrite,
 # portfolio comment), 102 -> 106, sanctioned here as intentional surface
 # wiring. #5640 deletes packages/design/smoke/index.html, which held the last
-# api.digithings.ai literal (1 -> 0). Regenerated
+# api.digithings.ai literal (1 -> 0). #5690 deletes embed-popup-config.ts.
+# The example host in that file's comment is not carried by the replacement
+# artifact-gate test, so occ.digithings.ai goes 144 -> 143. Regenerated
 # with the file's own scanner, in the open, per the design rule above.
 PINNED_CENSUS = {
     "app.digithings.ai": 3,
@@ -98,7 +100,7 @@ PINNED_CENSUS = {
     "key.digithings.ai": 72,
     "langfuse.digithings.ai": 3,
     "mcp.digithings.ai": 59,
-    "occ.digithings.ai": 144,
+    "occ.digithings.ai": 143,
     "search.digithings.ai": 54,
     "trace.digithings.ai": 20,
     "www.digiquant.io": 17,
