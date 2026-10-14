@@ -1,0 +1,40 @@
+---
+title: What writing surfaced
+order: 92
+summary: >-
+  Writing the book from the design documents surfaced places where the
+  documents and the running system disagree. Each became a ticket, so the
+  book improves the system it describes.
+---
+
+A book written from design documents is also an audit of those documents.
+Twice now, writing a chapter surfaced places where the written design and
+the running system say different things. Each one became a ticket under the
+book's epic, with the chapter section that surfaced it linked, so the review
+loop is part of how the book gets written rather than a separate activity.
+
+Findings come in two kinds, and they close differently. **Drift** means a
+document went stale while the system moved on: the fix is to update the
+document, and anyone can verify the fix by reading the two side by side.
+**Decision** means the document and the system disagree about intent — whether
+some work is planned or done, or which shape is meant to win. Editing prose
+on a decision item produces a document that reads confidently and is wrong,
+so those wait for a ruling first and only then get edited.
+
+Each finding goes to the seat that owns the surface it describes, even when
+the stale words sit in a document someone else touches. The owner of the
+facts fixes the words; the owner of the page reviews them.
+
+The loop also records its misses. Two candidates from the architecture
+chapter turned out to be false: both were measured against an out-of-date
+copy of the tree, and the documents were right. A process that only records
+hits teaches its authors nothing about checking the current tree first, so
+withdrawals stay in the record with the reason they failed.
+
+The live list of findings lives on the board under the book's epic, where
+each ticket carries its status. This appendix records the process, the
+template every finding follows, and what has been found so far.
+
+<Reference kind="guide" href="repo:docs/VISION.md" title="The digithings vision">
+  The design documents this loop audits, and the first place drift shows.
+</Reference>
