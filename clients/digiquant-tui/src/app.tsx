@@ -1,3 +1,4 @@
+import { API_BASE as API } from "./api";
 import { writeFile } from "node:fs/promises";
 import { useKeyboard, useRenderer } from "@opentui/react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -26,7 +27,6 @@ import { readBlock, type ReadResult } from "./read";
 import { ACCENT, BG, DANGER, DOWN, HAIR, HAIR_STRONG, INK, MUTE, SOFT, UP, WASH } from "./theme";
 import { asOfStatus } from "./format";
 
-const API = (process.env.DQ_API_URL ?? "http://127.0.0.1:8788").replace(/\/+$/, "");
 const STATUS = process.env.DQ_TUI_STATUS;
 
 type Key = { name?: string; shift?: boolean; sequence?: string };
