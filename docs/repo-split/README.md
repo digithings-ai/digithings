@@ -28,4 +28,4 @@ the tracking issue (DIG-3518), not in this public repo: they map where non-publi
 
 ## Status
 
-Gate decisions answered 2026-10-14 (Free plan, mono public until cutover, fresh R0, tags, self-hosted runners); plan revised to match. Later the same day Chris directed that the private repos live on **Cursor Origin**; the plan now covers that (Origin capabilities checked against Cursor's docs). Open: D-G5, D-G6 and D-O1 … D-O5 in [decisions.md](decisions.md). Nothing has moved yet.
+Gate decisions answered 2026-10-14 (Free plan, mono public until cutover, fresh R0, tags, self-hosted runners); plan revised to match. Later the same day Chris directed that the private repos live on **Cursor Origin**; the plan now covers that (Origin capabilities checked against Cursor's docs). D-O1 … D-O5 answered the same day (R0 stays GitHub-primary, Buildkite, agents on Chris's account). Open: D-G5 and D-G6 in [decisions.md](decisions.md). Nothing has moved yet.

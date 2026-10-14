@@ -10,7 +10,7 @@ stays **public until cutover** (D-G2 = no); R0 is a **fresh repo** (D-12′); R0
 and D-G6 (signed-tag deploy gate).
 
 **Revised again 2026-10-14 (Chris's direction):** R1–R7 move to **Cursor Origin**, not to GitHub.
-See [Source control on Cursor Origin](#source-control-on-cursor-origin). Open: D-O1 … D-O5.
+See [Source control on Cursor Origin](#source-control-on-cursor-origin). D-O1 … D-O5 answered 2026-10-14.
 
 Naming used below:
 - **mono** = today's `digithings-ai/digithings`. It stays public and keeps its name until the
@@ -51,17 +51,17 @@ Consequences:
 ## Source control on Cursor Origin
 
 **Revised 2026-10-14 (Chris's direction):** R1–R7 live on **Cursor Origin** as primary. The table
-above still applies to GitHub-hosted repos (mono until P5, and R0 if D-O1 = a). Origin capabilities
+above still applies to GitHub-hosted repos (mono until P5, and R0, which stays GitHub-primary per D-O1). Origin capabilities
 were checked against Cursor's docs, not assumed; see [review.md § Cursor Origin](review.md#cursor-origin-as-the-source-control-home-direction-of-2026-10-14).
-Open decisions: D-O1 … D-O5 in [decisions.md](decisions.md#cursor-origin-decisions-open).
+Decisions D-O1 … D-O5 (answered) are in [decisions.md](decisions.md#cursor-origin-decisions-answered).
 
-Placeholders: `<ns>` = the Origin namespace chosen in D-O2. Clone URL `https://origin.cursor.com/<ns>/<repo>.git`.
+Placeholders: `<ns>` = Chris's personal Origin namespace (D-O2). Clone URL `https://origin.cursor.com/<ns>/<repo>.git`.
 
 ### 1. Repo creation (visibility, ownership, naming)
 
 | Repo | Home | Visibility | How it is created |
 |---|---|---|---|
-| R0 `digithings` | D-O1 (a): **GitHub** `digithings-ai/digithings` primary + Origin inbound mirror `<ns>/digithings`. (b): Origin `<ns>/digithings` primary + GitHub push mirror. | GitHub: public. Origin: private (only option). | (a) `origin repo create-mirrored` after P3. (b) `origin repo create`, then the push mirror (§2). |
+| R0 `digithings` | **GitHub** `digithings-ai/digithings` primary + Origin inbound mirror `<ns>/digithings` (D-O1). | GitHub: public. Origin: private (only option). | Chris runs `origin repo create-mirrored` after P3. |
 | R1–R6 | Origin `<ns>/<repo>` | private | Empty repo; filtered history pushed in P4 (`git push` of `main`, `develop`, release tags only). |
 | R7 `twelve-x` | Origin `<ns>/twelve-x` | private | See §3. |
 | mono after P3 | **Stays on GitHub** (private, then archived in P5). Not moved to Origin. | private | — |
@@ -73,31 +73,12 @@ Placeholders: `<ns>` = the Origin namespace chosen in D-O2. Clone URL `https://o
 
 ### 2. Public repo and GitHub (direction of truth, CI, external PRs)
 
-**(a) Recommended — GitHub primary for R0, Origin inbound mirror.** Truth: GitHub → Origin (Origin
+**Decided (D-O1): GitHub primary for R0, Origin inbound mirror.** Truth: GitHub → Origin (Origin
 syncs branches, tags, PRs). Agents may clone from Origin; a push to the Origin mirror is forwarded to
 GitHub, so GitHub rulesets still apply. CI: GitHub Actions on hosted runners (free on public repos);
 PyPI trusted publishing keeps working unchanged. External PRs: native on GitHub, nothing to pull back.
-This keeps one source of truth with only documented features, and it differs from Chris's direction
-only for R0.
-
-**(b) Origin primary for R0 (as directed), built by us.**
-- Truth: Origin → GitHub, one way. A Buildkite step (or an Origin `repository pushed` webhook
-  receiver on the deploy host) runs on every push to `main`, `develop` or a release tag:
-  `git push github refs/heads/main refs/heads/develop 'refs/tags/*'`, no `--force`, no `--mirror`
-  (GitHub refuses `refs/pull/*`, and `--mirror` would delete GitHub-only refs).
-- The push credential is a GitHub **deploy key with write**, on R0 only, stored on the deploy host.
-  A GitHub ruleset on R0 allows pushes to `main`/`develop` only by that deploy key (bypass actor), so
-  nobody pushes to GitHub directly.
-- If the GitHub push is rejected (divergence), the job fails loudly and posts on the tracking issue.
-  Nothing is overwritten.
-- CI on GitHub: R0's Actions run on the mirrored commits (public, free hosted minutes). Signed tags
-  arrive by the mirror, so PyPI trusted publishing still runs on GitHub.
-- External PRs on GitHub: CI runs there as usual. To accept one, a maintainer agent runs
-  `git fetch github pull/<N>/head:gh/pr-<N>`, pushes `gh/pr-<N>` to Origin and opens an Origin PR
-  that links the GitHub PR. Merge with the `merge` method (keeps the contributor's commits and DCO
-  sign-off). When the mirror pushes `develop`, GitHub marks the PR merged because its commits are in
-  the base. Squash merges do not do that; the agent closes the GitHub PR with a link instead.
-- Cost: one more moving part that we own, two places where review happens, and a lag of one CI job between the repos.
+This keeps one source of truth with only documented features, and it differs from Chris's first
+direction only for R0. The Origin-primary option with a push mirror built by us was not chosen.
 
 ### 3. twelve-x with full history
 
@@ -109,7 +90,7 @@ R7 already exists as a private GitHub repo, and P4.7 adds the twelve-x paths fro
 3. **Findings:** `git filter-repo --replace-text denylist.txt` on the mirror clone, verify offline
    (same checks as P3 step 3), push to an empty Origin repo. PR history is not carried; the PR list is
    exported to the tracking issue first.
-4. The GitHub repo is made read-only (archived, private) for 90 days as a fallback, then deleted once the client gate in D-O5 allows it.
+4. The GitHub repo is made read-only (archived, private) for 90 days as a rollback source, then deleted (D-O5: no client contract applies).
 5. P4.7: extract the twelve-x paths from mono with `git filter-repo --paths-from-file r7.paths`,
    then merge them into the Origin repo with `--allow-unrelated-histories`, in a PR. History of both sources is kept.
 
@@ -126,7 +107,7 @@ R7 already exists as a private GitHub repo, and P4.7 adds the twelve-x paths fro
   from GitHub Actions (mono) and from Buildkite (R2–R7).
 - Scheduled jobs that `digithings-cron` dispatches through the GitHub API move to the Buildkite
   builds API (token on the deploy host, scoped to the pipelines it triggers).
-- Public CI stays on GitHub-hosted runners (both D-O1 options).
+- Public CI (R0) stays on GitHub-hosted runners (D-O1).
 
 ### 5. Cloudflare deploys after the move
 
@@ -146,9 +127,10 @@ R7 already exists as a private GitHub repo, and P4.7 adds the twelve-x paths fro
 - Agents run as Chris's macOS user. Git on this Mac already reaches Origin through Chris's
   credential helper. **Chris** does every login (`origin auth login` or `origin ssh-key add`);
   agents never log in and never handle a token.
-- D-O4 decides the identity. Recommended: a **separate Cursor account for agents**, invited as a
-  collaborator with write access, logged in once by Chris on the Mac. Chris's own account is the only
-  ruleset bypass actor. Then agents cannot push to `main` or create release tags at all.
+- Identity (D-O4, answered): agents **keep using Chris's account** through his existing credential
+  helper. There is no separate agent account, so Origin rulesets do not bind agents. The hard control
+  is the signed-tag deploy gate (D-G6): an agent can push a tag, but the `deploy` queue refuses any
+  tag that Chris did not sign with his hardware key.
 - Worktrees: no change in how they work (`git worktree add` from an Origin clone). Remote convention:
   `origin` = Origin, `github` = GitHub (R0 only). `dt-dev` bootstrap clones R1–R7 from Origin.
 - Tooling that calls `gh` must be ported before the first private repo moves (P2): merge queue
@@ -170,10 +152,12 @@ Rulesets live as code in `scripts/split/rulesets/origin/` and are applied by Chr
 - Per-package release branches `release/<component>` (R2–R6) are now protected for real.
 - Not available on Origin today: dismiss stale reviews, last-push approval, required thread
   resolution, signed tags. The signed-tag gate (D-G6) covers the last one.
-- These rulesets only bind agents if agents use a non-bypass identity (D-O4). With agents as Chris,
-  they document intent and stop accidents, nothing more.
-- Rulesets are proven on a scratch repo in P2 before any real repo depends on them (tag creation
-  blocked for a collaborator, allowed for Chris; direct push to `develop` refused).
+- Agents use Chris's account (D-O4), and Chris is the bypass actor, so these rulesets are
+  **advisory** for agents: they document intent and stop accidents, nothing more. Seat instructions
+  still forbid agents from pushing to `main`/`release/*` and from creating release tags.
+- Rulesets are proven on a scratch repo in P2 before any real repo depends on them: Chris checks the
+  applied config with `origin ruleset view`, and a direct push to `develop` without bypass is refused
+  (tested by Chris with bypass switched off for the test, then switched back on).
 
 ---
 
@@ -190,9 +174,8 @@ Mono stays public (D-G2); its `production` environment and required reviewers ke
 2. Remove `push` triggers from `deploy-digiquant-runner` / `deploy-digithings-cron` (dispatch only), in a PR into `develop`.
 3. Runner host (D-G5): Chris provisions the deploy host. DevOps installs the runner software but does **not** register it yet (registration happens per private repo in P2/P4).
 4. Signing key (D-G6): Chris creates an `ed25519-sk` SSH signing key on a FIDO2 key. Only the **public** key goes into `allowed_signers` (committed in each private repo and installed on the runner host).
-5. Origin (D-O1 … D-O5): Chris confirms the namespace and the repo names (permanent during beta),
-   creates the agent identity if D-O4 = yes, and creates the Buildkite organization and connects
-   Origin (D-O3). Agents do no logins. Nobody installs the Cloudflare app in Cursor.
+5. Origin (D-O1 … D-O5, answered): Chris confirms the namespace and the repo names (permanent during beta),
+   and creates the Buildkite organization and connects Origin (D-O3). No agent account (D-O4). Agents do no logins. Nobody installs the Cloudflare app in Cursor.
 
 Exit check: inventory posted; deploy workflows show `workflow_dispatch` only; runner host reachable
 by Chris; `git tag -s` + `git verify-tag` round-trip works with the new key on a scratch repo.
@@ -264,7 +247,7 @@ Rollback: each PR reverts on its own.
 
 Exit check: a dry-run release of one module (TestPyPI) and one npm package (`--dry-run`) green from mono;
 R7 gate test above passes all three cases; the same three cases pass on the Origin scratch repo via
-Buildkite; an agent-identity push to `develop` and an agent-created `*-v*` tag are refused by the rulesets (if D-O4 = yes).
+Buildkite (D-O4: agents use Chris's account, so this gate, not the rulesets, is what stops an agent-made tag).
 
 ---
 
@@ -290,7 +273,7 @@ Cutover day (Chris does the renames and visibility changes; agents prepare):
 6. Mono deploys switch to the gate: merge the prepared PR that sets mono's deploy jobs to `runs-on: [self-hosted, deploy]` and drops `environment: production`.
 7. Rename `digithings` → `digithings-mono`; make it **private**. Register the deploy runner on it (now allowed: private). Disable the runner hook allowlist entry for any public repo.
 8. Rename `digithings-next` → `digithings`; make it **public**. Apply rulesets from P2 step 7; install DCO; add CODEOWNERS, LICENSE (MIT), TRADEMARKS, SECURITY; `production`-style environment `pypi` with Chris as required reviewer.
-8b. Origin for R0 per D-O1: (a) Chris runs `origin repo create-mirrored` for the public R0 (inbound mirror); or (b) R0 was staged on Origin as primary and the push mirror (Origin §2) is switched on after a dry run against `digithings-next`.
+8b. Origin for R0 (D-O1): Chris runs `origin repo create-mirrored` for the public R0 (inbound mirror).
 9. Publish v0.x of PyPI modules and `@digithings/*` npm, and GHCR `digichat` / `digillm` images, from R0.
 10. In mono: R0 paths frozen (`moved-paths-guard` lists them). Development on public code moves to R0. Open mono PRs that touch only R0 paths are re-opened against R0 by their owners (list posted on the tracking issue).
 11. Update every remote: `~/Code/digithings*` worktrees, Paperclip project repositories, merge queue config, run-watch, worktree sweep, seat instructions that name the repo.
@@ -327,7 +310,7 @@ Validation and rollback per target:
 | 4.4 | R5 digithings-stack | stack, digichat, langfuse, cron, corpus-index each deployed once from a signed `stack-v*` tag; health checks on all routes listed in the proposal; cron dispatches R2/R7 workflows with the App token; tenant chat smoke per tenant. | `wrangler rollback` per Worker; cron rollback restores old dispatch targets. |
 | 4.5 | R3 digiquant-web | New Pages project `digiquant-io-r3` direct-uploaded by the deploy runner from a signed `web-v*` tag; preview checked against R2; move custom domain `digiquant.io`. Old project's Git builds disabled (production branch set to an unused name). | Move domain back to old project (minutes). |
 | 4.6 | R4 digithings-web | Same as R3 for `digithings.ai`; routes to R5 (`/api/*`, `/embed*`) checked. | Move domain back. |
-| 4.7 | R7 twelve-x | twelve-x desk surface + `digidata-api` moved; desk gate/palette in R3 made pluggable first (D-X1). twelve-x client gates apply. | Revert PRs in R3/R7; previous digidata-api version. |
+| 4.7 | R7 twelve-x | twelve-x desk surface + `digidata-api` moved; desk gate/palette in R3 made pluggable first (D-X1). No client-contract gate (D-O5). | Revert PRs in R3/R7; previous digidata-api version. |
 
 Why this order: R6 first removes the most sensitive data from the platform images; R1 before R2
 because R2 pins it; R2 before R5 because R5's cron binds to R2's Workers by name; web last because
@@ -370,4 +353,4 @@ held (guard in "warn" mode during extraction, "fail" mode after cut-over).
 
 One epic under G07 with one leaf per row of P1, one per P4 step, plus P0, P2, P3, P5, P6.
 The gate decisions are answered (2026-10-14), so the CTO can create the leaves. P0 steps 3–4 and
-P2 step 6 wait for D-G5 / D-G6. P0 step 5, P2 step 8 and all of P4 wait for D-O1 … D-O5.
+P2 step 6 wait for D-G5 / D-G6. D-O1 … D-O5 are answered; because of D-O4, no private repo deploys from Origin before D-G6 is proven.

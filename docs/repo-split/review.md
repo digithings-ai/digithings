@@ -87,23 +87,26 @@ What this means for the plan:
   **GitHub-primary** and Origin holds an inbound mirror (supported; recommended); or (b) R0 is
   Origin-primary (private) and **we build** a push mirror on the deploy host, and external GitHub PRs
   are pulled back by hand. (b) makes GitHub a copy that anyone with write access can make diverge.
+  **Answered: (a).**
 - **O2 — Private repos gain real protection.** Rulesets work on Origin-hosted private repos, which
   GitHub Free could not give us (F1). This only helps if agents push with an identity that is **not**
   a bypass actor (**D-O4**). Today agents act as Chris, so a ruleset that lets Chris bypass lets every agent bypass.
+  **Answered: agents keep using Chris's account**, so the rulesets are advisory and D-G6 is the hard control.
 - **O3 — The signed-tag deploy gate stays.** Origin has no signed-tag rule, so D-G6 remains the
   only gate that an agent with push access cannot pass. The gate moves from a GitHub runner hook to a
   CI-agent hook on the deploy host.
 - **O4 — New CI vendor.** GitHub Actions does not run on Origin pushes. Private repos need Buildkite
-  (recommended: native Origin provider, self-hosted agents keep D-G4) or Depot (**D-O3**).
+  (recommended: native Origin provider, self-hosted agents keep D-G4) or Depot (**D-O3**). **Answered: Buildkite, self-hosted agents.**
 - **O5 — A new silent auto-deploy path.** The Cloudflare app for Cursor would auto-deploy Workers on
   push. The plan forbids installing it (P0) and keeps deploys on the signed-tag gate.
 - **O6 — Beta risk.** Names are permanent during beta, the API had a breaking change two weeks ago,
-  and controls "may expand during early beta". twelve-x is a client repo (**D-O5**).
+  and controls "may expand during early beta". twelve-x is a client repo (**D-O5**). **Answered:** Chris confirms no client contract applies and he
+  has full control of the codebase; twelve-x moves to Origin in P4.7 with no extra gate.
 - **O7 — GitHub Packages is gone for private repos.** D-Q7 (`@digiquant/contract` from GitHub
   Packages npm) needs a replacement: a git dependency pinned to a tag on Origin.
 
 Details are in [migration-plan.md § Origin](migration-plan.md#source-control-on-cursor-origin) and
-the D-O decisions in [decisions.md](decisions.md#cursor-origin-decisions-open).
+the D-O decisions in [decisions.md](decisions.md#cursor-origin-decisions-answered).
 
 ## Review by dimension
 
