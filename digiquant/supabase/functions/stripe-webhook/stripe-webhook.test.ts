@@ -720,3 +720,76 @@ Deno.test("checkout/portal: non-owner → 403 WORKSPACE_FORBIDDEN", async () => 
     assertEquals(result.response.status, 403);
   }
 });
+
+// ---------------------------------------------------------------------------
+// extractWorkspaceId narrowing matrix (DIG-3615, CodeQL #1635)
+// ---------------------------------------------------------------------------
+
+const UNKNOWN_WS = "44444444-4444-4444-4444-444444444444";
+
+/**
+ * A subscription event with an arbitrary `metadata` shape and NO customer /
+ * subscription id on the payload, so resolveWorkspace cannot fall back to
+ * either. The only workspace hint in play is metadata.workspace_id, which is
+ * deliberately UNKNOWN. Therefore:
+ *   status "ignored"  => metadata was honoured (hint used, no such workspace)
+ *   status "applied"  => metadata was rejected, fell through to client_reference_id
+ */
+function metaProbeEvent(id: string, metadata: unknown): StripeEvent {
+  return {
+    id,
+    type: "customer.subscription.created",
+    created: 900,
+    data: {
+      object: {
+        id: "sub_probe",
+        status: "active",
+        metadata,
+        client_reference_id: WS_ID,
+        items: { data: [{ price: { id: PRICES.studioMonthly } }] },
+      },
+    },
+  };
+}
+
+Deno.test("extractWorkspaceId: only an object metadata with a non-empty string workspace_id is honoured", async () => {
+  // The honoured case is the control: without it every row below could read
+  // "applied" and the table would pass vacuously.
+  const cases: Array<[string, unknown, "ignored" | "applied"]> = [
+    ["metadata object with unknown workspace_id", { workspace_id: UNKNOWN_WS }, "ignored"],
+    ["metadata null", null, "applied"],
+    ["metadata undefined", undefined, "applied"],
+    ["metadata absent", "ABSENT", "applied"],
+    ["metadata string", "workspace-123", "applied"],
+    ["metadata number", 42, "applied"],
+    ["metadata zero", 0, "applied"],
+    ["metadata false", false, "applied"],
+    ["metadata empty string", "", "applied"],
+    ["metadata empty array", [], "applied"],
+    ["metadata empty object", {}, "applied"],
+    ["metadata array holding an object", [{ workspace_id: UNKNOWN_WS }], "applied"],
+    ["workspace_id not a string", { workspace_id: 42 }, "applied"],
+    ["workspace_id empty string", { workspace_id: "" }, "applied"],
+    // A plain property read walks the prototype chain, so an inherited
+    // workspace_id IS honoured. Unchanged by the refactor (the old code read
+    // `meta.workspace_id` the same way); kept as a non-regression row so a
+    // future own-properties-only tightening is caught rather than silent.
+    ["workspace_id inherited through the prototype", Object.create({ workspace_id: UNKNOWN_WS }), "ignored"],
+  ];
+
+  for (const [label, metadata, expected] of cases) {
+    setPriceEnv();
+    const store = freshStore();
+    const admin = createMockAdmin(store);
+    const evt = metaProbeEvent(`evt_meta_${label.replace(/\W+/g, "_")}`, metadata);
+    if (metadata === "ABSENT") delete (evt.data!.object as Record<string, unknown>).metadata;
+
+    const result = await handleStripeEvent(admin, evt);
+    assertEquals(result.status, expected, `case: ${label}`);
+    assertEquals(
+      store.workspaces.get(WS_ID)!.plan_tier,
+      expected === "applied" ? "studio" : "free",
+      `case: ${label} (plan_tier proves which workspace was resolved)`,
+    );
+  }
+});
