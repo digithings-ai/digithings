@@ -473,6 +473,24 @@
             "description": "Per-request digisearch index. Client-writable on this model but, when DIGI_TENANT_CORPUS_MAP is set, overwritten server-side from the authenticated tenant's map entry (headers/body cannot select another tenant's corpus). When the map is unset, X-Digi-Corpus-Index may set it.",
             "title": "digisearch index"
           },
+          "digisearch_tools": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Tenant map digisearchTools (DIG-3269): dedicated per-index search tools. Overwritten server-side from the tenant map, never trusted from the client.",
+            "title": "Digisearch Tools"
+          },
           "disabled_tools": {
             "anyOf": [
               {
@@ -532,6 +550,12 @@
             ],
             "description": "Optional per-request locate tool to run with the user string as its query (X-Digi-Force-Tool). Aliases: search/digisearch, docs/digivault. Extra operator MCP server ids (from X-Digi-Mcp-Servers) are also accepted: those hint the model with tool_choice=required rather than injecting a locate call.",
             "title": "Force Tool"
+          },
+          "lock_session_controls": {
+            "default": false,
+            "description": "Tenant map lockSessionControls (DIG-1210). Overwritten server-side by _with_digi_request_context, never trusted from the client.",
+            "title": "Lock Session Controls",
+            "type": "boolean"
           },
           "mcp_servers": {
             "anyOf": [
