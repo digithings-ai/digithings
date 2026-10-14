@@ -28,7 +28,7 @@ export function DeskShell({ children }: { children: ReactNode }) {
   }, [router]);
 
   return (
-    <ChatDesk active={path === "/tools/chat"}>
+    <ChatDesk active={path === "/tools/digichat"}>
       <DeskFrame current={path}>
         <div key={path} className="desk-page-settle flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           {children}

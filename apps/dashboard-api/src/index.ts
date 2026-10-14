@@ -81,6 +81,12 @@ export interface Env {
   FX_HUB_GRANT_SYNC_SECRET?: string;
   SUPABASE_SECRET_KEYS?: string;
   SUPABASE_PUBLISHABLE_KEYS?: string;
+   * KV binding for the digiquant financial-session tenant record (key `digiquant`).
+   * Unset keeps chat fail-closed. Do not put the inference key in this namespace.
+   */
+  DIGICHAT_TENANT?: { get(key: string): Promise<string | null> };
+  /** Worker secret for the cheap inference key. Never a committed value. */
+  DIGICHAT_CHEAP_INFERENCE_KEY?: string;
 }
 
 /** Exact paths the ported FX Hub module owns. Not dashboard catalog routes. */

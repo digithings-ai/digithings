@@ -31,7 +31,9 @@ describe("phase 4 shell, settings, chat", () => {
     const features = await app.fetch(new Request("https://x/features"), ENV);
     const flags = ((await features.json()) as { data: { flags: { key: string; tag: string }[] } }).data.flags;
     expect(flags.some((f) => f.key === "/tools/terminal" && f.tag === "soon")).toBe(true);
-    expect(flags.some((f) => f.key === "/tools/chat" && f.tag === "wip")).toBe(true);
+    expect(flags.some((f) => f.key === "/tools/gloomberb" && f.tag === "soon")).toBe(true);
+    expect(flags.some((f) => f.key === "/tools/vela" && f.tag === "soon")).toBe(true);
+    expect(flags.some((f) => f.key === "/tools/digichat" && f.tag === "wip")).toBe(true);
     const spine = await app.fetch(new Request("https://x/desks/active/spine"), ENV);
     const items = ((await spine.json()) as { data: { desk_id: string; items: { href: string }[] } }).data;
     expect(items.desk_id).toBe("baseline");
@@ -90,6 +92,54 @@ describe("phase 4 shell, settings, chat", () => {
     const sent = await app.fetch(new Request("https://x/chat/sessions/s1/messages", { method: "POST", headers: user, body: "{}" }), BRIEF);
     expect(sent.status).toBe(503);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("opens a financial session from KV and forwards with the cheap key on the header only", async () => {
+    const key = "cheap-key-sentinel";
+    const tenant = {
+      slug: "digiquant",
+      cheapModel: "groq/llama-3.1-8b-instant",
+      digichatOrigin: "https://chat.example.test",
+      gloomberbTools: ["digifetch_quote"],
+    };
+    const configured: Env = {
+      ...BRIEF,
+      DIGICHAT_CHEAP_INFERENCE_KEY: key,
+      DIGICHAT_TENANT: { get: async () => JSON.stringify(tenant) },
+    };
+    const fetchMock = vi.fn(async () => Response.json({ reply: "baseline desk run" }));
+    vi.stubGlobal("fetch", fetchMock);
+    const current = await app.fetch(new Request("https://x/chat/sessions/current?desk=baseline"), configured);
+    const currentBody = (await current.json()) as {
+      data: { id: string; context: string; tools: { gloomberb: string[]; luxalgo: string[]; app: string[] } };
+    };
+    expect(current.status).toBe(200);
+    expect(currentBody.data.id).toBe("fin-baseline");
+    expect(currentBody.data.context).toBe("baseline desk run");
+    expect(currentBody.data.tools.gloomberb).toEqual(["digifetch_quote"]);
+    expect(currentBody.data.tools.luxalgo).toContain("luxalgo_library_search");
+    expect(currentBody.data.tools.app).toEqual(["/portfolio", "/pipeline/runs/latest", "/theses"]);
+    expect(JSON.stringify(currentBody)).not.toContain(key);
+    const fx = await app.fetch(new Request("https://x/chat/sessions/current?desk=fx"), configured);
+    const fxBody = (await fx.json()) as { data: { context: string; tools: { app: string[] } } };
+    expect(fxBody.data.context).toBe("FX Hub");
+    expect(fxBody.data.tools.app).toContain("/fx/pairs");
+    const sent = await app.fetch(
+      new Request("https://x/chat/sessions/fin-fx/messages?desk=fx", {
+        method: "POST",
+        headers: user,
+        body: JSON.stringify({ text: "levels?" }),
+      }),
+      configured,
+    );
+    const sentBody = (await sent.json()) as { data: { reply: string } };
+    expect(sent.status).toBe(200);
+    expect(sentBody.data.reply).toBe("baseline desk run");
+    expect(JSON.stringify(sentBody)).not.toContain(key);
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect((init.headers as Record<string, string>).authorization).toBe(`Bearer ${key}`);
+    expect(String(init.body)).not.toContain(key);
+    expect(String(init.body)).toContain("/fx/pairs");
   });
 
   it("latest run reads run_health and leaves a missing duration null", async () => {

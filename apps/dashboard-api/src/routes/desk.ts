@@ -10,10 +10,18 @@
 
 import { DESKS, buildManifest, type Caller } from "../access";
 import { buildProvenance, errorResponse } from "../errors";
+import {
+  financialContext,
+  financialDeskFrom,
+  forwardFinancialTurn,
+  loadFinancialSession,
+  type FinancialSession,
+  type FinancialSessionEnv,
+} from "../financial-session";
 import { tableRows, type TableReadEnv } from "../table-read";
 import type { RouteCtx, RouteModule } from "./registry";
 
-type Env = TableReadEnv;
+type Env = TableReadEnv & FinancialSessionEnv;
 
 const SETTINGS_NOTE = "settings edge function is not configured";
 const CHAT_NOTE = "digichat is not configured";
@@ -42,6 +50,36 @@ function notProvisioned(pin: string | null, what: string): Response {
 
 function chatClosed(pin: string | null): Response {
   return errorResponse("upstream_empty", CHAT_NOTE, pin, { source: "digichat" });
+}
+
+function deskOf(req: Request, body?: unknown): "baseline" | "fx" {
+  const query = new URL(req.url).searchParams.get("desk");
+  const record = body && typeof body === "object" && !Array.isArray(body) ? body as { desk?: unknown } : null;
+  const posted = record?.desk;
+  const raw = typeof posted === "string" ? posted : query;
+  return financialDeskFrom(raw);
+}
+
+async function openSession(
+  req: Request,
+  env: Env,
+  body?: unknown,
+): Promise<{ pin: string | null; session: FinancialSession } | { response: Response }> {
+  const pinR = pinOf(req);
+  if ("error" in pinR) return { response: pinR.error };
+  const loaded = await loadFinancialSession(env, deskOf(req, body));
+  if (!loaded) return { response: chatClosed(pinR.pin) };
+  return { pin: pinR.pin, session: loaded.session };
+}
+
+function sessionList(session: FinancialSession) {
+  return {
+    sessions: [{ id: session.id, title: session.context }],
+    desk: session.desk,
+    context: session.context,
+    cheapModel: session.cheapModel,
+    tools: session.tools,
+  };
 }
 
 /** Desks the caller may see. A hidden invite desk stays out until the group matches. */
@@ -229,27 +267,54 @@ export const registerDesk: RouteModule<Env> = (reg) => {
   reg.get("/settings/keys/{id}", async (req, ctx) => keyOne(req, ctx));
   reg.add("DELETE", "/settings/keys/{id}", async (req) => notProvisioned(writePin(req), "key revoke"));
   reg.get("/pipeline/runs/latest", latestRun);
-  reg.get("/chat/sessions", async (req) => {
-    const pinR = pinOf(req);
-    return "error" in pinR ? pinR.error : chatClosed(pinR.pin);
+  reg.get("/chat/sessions", async (req, ctx) => {
+    const opened = await openSession(req, ctx.env);
+    if ("response" in opened) return opened.response;
+    return ok(sessionList(opened.session), "digichat", opened.pin);
   });
-  reg.get("/chat/sessions/current", async (req) => {
-    const pinR = pinOf(req);
-    return "error" in pinR ? pinR.error : chatClosed(pinR.pin);
+  reg.get("/chat/sessions/current", async (req, ctx) => {
+    const opened = await openSession(req, ctx.env);
+    if ("response" in opened) return opened.response;
+    return ok(opened.session, "digichat", opened.pin);
   });
-  reg.get("/chat/sessions/current/messages", async (req) => {
-    const pinR = pinOf(req);
-    return "error" in pinR ? pinR.error : chatClosed(pinR.pin);
+  reg.get("/chat/sessions/current/messages", async (req, ctx) => {
+    const opened = await openSession(req, ctx.env);
+    if ("response" in opened) return opened.response;
+    return ok({ messages: [] }, "digichat", opened.pin);
   });
-  reg.get("/chat/sessions/{id}", async (req) => {
-    const pinR = pinOf(req);
-    return "error" in pinR ? pinR.error : chatClosed(pinR.pin);
+  reg.get("/chat/sessions/{id}", async (req, ctx) => {
+    const opened = await openSession(req, ctx.env);
+    if ("response" in opened) return opened.response;
+    return ok(opened.session, "digichat", opened.pin);
   });
-  reg.get("/chat/sessions/{id}/messages", async (req) => {
-    const pinR = pinOf(req);
-    return "error" in pinR ? pinR.error : chatClosed(pinR.pin);
+  reg.get("/chat/sessions/{id}/messages", async (req, ctx) => {
+    const opened = await openSession(req, ctx.env);
+    if ("response" in opened) return opened.response;
+    return ok({ messages: [] }, "digichat", opened.pin);
   });
-  reg.add("POST", "/chat/sessions", async (req) => notProvisioned(writePin(req), "chat session create"));
+  reg.add("POST", "/chat/sessions", async (req, ctx) => {
+    const pin = writePin(req);
+    const loaded = await loadFinancialSession(ctx.env, deskOf(req));
+    if (!loaded) return notProvisioned(pin, "chat session create");
+    return ok({ id: loaded.session.id, context: loaded.session.context }, "digichat", pin);
+  });
   reg.add("PUT", "/chat/sessions/{id}", async (req) => notProvisioned(writePin(req), "chat session rename"));
-  reg.add("POST", "/chat/sessions/{id}/messages", async (req) => notProvisioned(writePin(req), "chat send"));
+  reg.add("POST", "/chat/sessions/{id}/messages", async (req, ctx) => {
+    const pin = writePin(req);
+    let body: unknown = null;
+    try {
+      body = await req.json();
+    } catch {
+      body = null;
+    }
+    const loaded = await loadFinancialSession(ctx.env, deskOf(req, body));
+    if (!loaded) return notProvisioned(pin, "chat send");
+    const text = body && typeof body === "object" && !Array.isArray(body) ? (body as { text?: unknown }).text : undefined;
+    if (typeof text !== "string" || text.trim().length === 0) {
+      return errorResponse("bad_request", "text is required", pin, {});
+    }
+    const turned = await forwardFinancialTurn(loaded.config, loaded.inferenceKey, loaded.session, text.trim());
+    if ("error" in turned) return errorResponse("upstream_empty", turned.error, pin, { source: "digichat" });
+    return ok({ id: loaded.session.id, reply: turned.reply, context: financialContext(loaded.session.desk) }, "digichat", pin);
+  });
 };
