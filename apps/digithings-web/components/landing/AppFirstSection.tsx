@@ -207,6 +207,8 @@ export function AppFirstSection() {
         finish();
         return;
       }
+      // CodeQL js/superfluous-trailing-arguments false positive: the DOM
+      // IntersectionObserver constructor takes (callback) — the argument is consumed.
       io = new IntersectionObserver(([entry]) => {
         if (!entry?.isIntersecting) return;
         io?.disconnect();

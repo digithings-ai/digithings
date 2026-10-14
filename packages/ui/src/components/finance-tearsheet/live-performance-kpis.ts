@@ -148,7 +148,8 @@ function isNavSeriesSeam(
   if (row.series_seam === true) return true;
   if (prevSource == null) return false;
   const source = row.source ?? null;
-  return source != null && prevSource != null && source !== prevSource;
+  // `prevSource` is non-null here (early return above); only `source` needs the check.
+  return source != null && source !== prevSource;
 }
 
 /**
@@ -424,7 +425,9 @@ export function computeLivePerformanceKpis(input: LivePerformanceKpisInput): Liv
           benchmarkHistory
         );
         const beta = olsBeta(port, bench);
-        if (beta != null && portfolioReturnPct != null && benchmarkReturnPct != null) {
+        // `portfolioReturnPct`/`benchmarkReturnPct` are numbers here (assigned from
+        // null-checked values above); only `beta` needs the null check.
+        if (beta != null) {
           // Jensen alpha on the total-return window using daily-estimated β.
           alphaPct = portfolioReturnPct - beta * benchmarkReturnPct;
         }

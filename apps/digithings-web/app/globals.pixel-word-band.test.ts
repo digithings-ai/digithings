@@ -57,7 +57,7 @@ function declarations(source: string, selector: string): Decls {
   let depth = 0;
   let start = 0;
 
-  for (let i = 0; i <= styles.length; i++) {
+  for (let i = 0; i < styles.length; i++) {
     const char = styles[i];
     if (char === "{") {
       if (depth === 0) {

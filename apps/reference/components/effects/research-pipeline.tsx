@@ -78,6 +78,8 @@ export function ResearchPipeline() {
 
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+    // CodeQL js/superfluous-trailing-arguments false positive: the DOM
+    // IntersectionObserver constructor takes (callback, options?) — both args are consumed.
     const io = new IntersectionObserver(
       (entries) =>
         entries.forEach((e) => {

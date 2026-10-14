@@ -37,6 +37,8 @@ export function ScrollBanner({
       const raf = requestAnimationFrame(() => setArmed(true));
       return () => cancelAnimationFrame(raf);
     }
+    // CodeQL js/superfluous-trailing-arguments false positive: the DOM
+    // IntersectionObserver constructor takes (callback, options?) — both args are consumed.
     const io = new IntersectionObserver(
       (entries) => {
         if (entries.some((e) => e.isIntersecting)) {

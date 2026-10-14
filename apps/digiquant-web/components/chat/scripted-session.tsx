@@ -107,6 +107,8 @@ export function ScriptedDigichatSession() {
       timerRef.current = window.setTimeout(step, next.delay);
     };
 
+    // CodeQL js/superfluous-trailing-arguments false positive: the DOM
+    // IntersectionObserver constructor takes (callback, options?) — both args are consumed.
     const io = new IntersectionObserver(
       (entries) => {
         if (!entries.some((entry) => entry.isIntersecting)) return;
