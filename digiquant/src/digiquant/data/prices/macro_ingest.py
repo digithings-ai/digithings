@@ -1,13 +1,13 @@
-"""Macro time-series ingestion — Yahoo FX (+ legacy FRED row mapping).
+"""Macro time-series ingestion — Yahoo FX.
 
 Consolidates two research scripts:
 
 * ``ingest_fred.py`` → :func:`fetch_fred` (removed #4794 PR3: the sealed panel
-  refreshes from gloomberb ``econ_series``; ``fred_observations_to_rows`` stays
-  as the row-mapping helper with its unit tests)
+  refreshes from gloomberb ``econ_series``, see ``gloomberb_macro``)
 * ``scripts/lib/macro_ingest.py`` helpers → private in this module
 
-The default daily pipeline pulls FRED + Yahoo FX (:func:`fetch_fx_yahoo`).
+The default daily pipeline pulls gloomberb ``econ_series`` (``gloomberb_macro``)
++ Yahoo FX (:func:`fetch_fx_yahoo`).
 Frankfurter FX and crypto Fear & Greed were dropped as default sources in
 issue #328 and their fetchers removed in the deslop pass (WS4b).
 
@@ -34,11 +34,6 @@ from math import isfinite
 from pathlib import Path
 from typing import Any, TypedDict
 
-# DIG-335: the keyed endpoint this constant pointed at is gone. Macro series are
-# ingested from anonymous gloomberb econ_series pages (see research/config/
-# macro_series.yaml); nothing here calls the FRED observations API any more.
-FRED_OVERLAP_DAYS = 14
-
 
 class FredSeriesEntry(TypedDict, total=False):
     """One FRED series entry from the macro manifest YAML (SIMP-014)."""
@@ -51,14 +46,6 @@ class FredSeriesEntry(TypedDict, total=False):
     # A series with no cadence is treated as daily by the R2 refresh, which is
     # the pre-#4588 behaviour. See scripts/refresh_market_data_r2.py.
     cadence: str | None
-
-
-class FredRawObservation(TypedDict, total=False):
-    """Single observation dict from the FRED JSON API (SIMP-014)."""
-
-    date: str
-    value: str
-    realtime_start: str
 
 
 class MacroObservationMeta(TypedDict, total=False):
@@ -184,44 +171,6 @@ def _retrying_session(
 # Public, stable alias so other ingest modules (e.g. fed_probabilities) don't depend on the
 # underscored private name.
 retrying_session = _retrying_session
-
-
-# ─── FRED row mapping (legacy; the live FRED API fetchers were removed ──────
-# in #4794 PR3 when the sealed panel moved to gloomberb ``econ_series``) ──────
-
-
-def fred_observations_to_rows(
-    series_id: str,
-    unit: str | None,
-    title: str | None,
-    observations: list[FredRawObservation],
-) -> list[MacroObservation]:
-    rows: list[MacroObservation] = []
-    for obs in observations:
-        d = obs.get("date")
-        raw = obs.get("value")
-        if not d or raw in (None, ".", ""):
-            continue
-        try:
-            val = float(raw)
-        except (TypeError, ValueError):
-            continue
-        meta: MacroObservationMeta = {}
-        if title:
-            meta["title"] = title
-        if rs := obs.get("realtime_start"):
-            meta["realtime_start"] = rs
-        row: MacroObservation = {
-            "source": "fred",
-            "series_id": series_id,
-            "obs_date": d,
-            "value": val,
-            "unit": unit,
-        }
-        if meta:
-            row["meta"] = meta
-        rows.append(row)
-    return rows
 
 
 # ─── Yahoo FX (replaces Frankfurter for the default daily pipeline) ─────────
@@ -589,7 +538,6 @@ def dedupe_observation_rows(rows: list[MacroObservation]) -> list[MacroObservati
 __all__ = [
     "YAHOO_FX_DEFAULT",
     "CandleObservation",
-    "FredRawObservation",
     "FredSeriesEntry",
     "MacroManifest",
     "MacroObservation",
@@ -597,7 +545,6 @@ __all__ = [
     "dedupe_observation_rows",
     "fetch_fx_intraday",
     "fetch_fx_yahoo",
-    "fred_observations_to_rows",
     "fx_intraday_payload_to_candles",
     "yahoo_fx_payload_to_rows",
 ]
