@@ -104,6 +104,10 @@ zone_name = "digithings.ai"
 [[routes]]
 pattern = "digithings.ai/_dtchat*"
 zone_name = "digithings.ai"
+# DIG-3585: invite-gate the OCC Pages shell. Same pattern on the rollback worker.
+[[routes]]
+pattern = "digithings.ai/chat/occ*"
+zone_name = "digithings.ai"
 
 [[containers]]
 class_name = "DigiStackContainer"

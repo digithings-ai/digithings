@@ -17,6 +17,14 @@ enabled = true
 # them from apps/digithings-stack-cloudflare/wrangler.toml to roll back.
 # Deleting the live digithings-digichat worker + its container app is a separate,
 # owner-approved step after the stack cutover is verified.
+# DIG-3585: this one route stays. A deploy of this worker without it deletes the
+# live /chat/occ binding and Pages serves the chat shell to everyone. The same
+# pattern is on apps/digithings-stack-cloudflare/wrangler.toml so a stack deploy
+# keeps the gate. Valid ?token= or the occ_invite cookie passes through to Pages.
+[[routes]]
+pattern = "digithings.ai/chat/occ*"
+zone_name = "digithings.ai"
+
 [[containers]]
 class_name = "DigiChatContainer"
 # Build context is monorepo root (two levels up from this package).
@@ -36,6 +44,7 @@ tag = "v1"
 new_sqlite_classes = ["DigiChatContainer"]
 
 # Secrets (wrangler secret put):
+#   OCC_INVITE_KEY           # Worker-only /chat/occ gate; never forwarded to the container
 #   AUTH_SECRET
 #   DIGICHAT_EMBED_TENANTS   # digithings + occ JSON — see README
 #   DIGIGRAPH_INTERNAL_URL   # reachable digigraph base URL

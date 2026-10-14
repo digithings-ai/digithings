@@ -20,7 +20,9 @@ import {
 } from "@/lib/embed-chat-tenant";
 import { resolveEmbedSeededTenant } from "@/lib/route-client-config";
 import { headers } from "next/headers";
+import { notFound } from "next/navigation";
 import EmbedClient from "./embed/embed-client";
+import { inviteRequiredButMissing } from "@/lib/embed-invite-only";
 
 /* Pre-paint theme pin for the embed document. Runs after the root layout's
    head scripts so it deliberately wins over them; mirrors [data-theme] onto
@@ -48,11 +50,17 @@ export default async function EmbedRouteShell({
 }) {
   const hdrs = await headers();
   const referer = hdrs.get("referer") ?? hdrs.get("referrer");
+  const requestedHost = resolveEmbedHostParamOrReferer(first(params.host), referer);
   const initialTenantCfg = resolveEmbedClientConfigForPaint(
     first(params.token),
-    resolveEmbedHostParamOrReferer(first(params.host), referer),
+    requestedHost,
     embedOriginHostOf(hdrs),
   );
+  // Invite-only hosts (OCC, DIG-1210): no valid invite token -> the standard
+  // 404, no hint, no branding, no chat.
+  if (inviteRequiredButMissing(requestedHost, initialTenantCfg.slug)) {
+    notFound();
+  }
   const { seeded: seededCfg, urlTheme } = resolveEmbedSeededTenant(
     initialTenantCfg,
     params,

@@ -20,11 +20,10 @@ const EMBED_ORIGIN = embedOriginForChat();
  * is forwarded verbatim to the embed as `?token=`, which is the parameter
  * digichat already enforces per tenant (`X-Embed-Token`).
  *
- * This route only *accepts* the key. As of this commit OCC is still on
- * digichat's first-party allowlist, so the tenant authorizes it without one —
- * the link is plumbed and ready, and it starts to matter the moment OCC leaves
- * that allowlist (the follow-up PR, which is deliberately a separate deploy
- * because it would otherwise take the live chat down with it).
+ * The edge gate (Worker route plus the Pages function) serves this shell only
+ * when the invite token or the occ_invite cookie is valid. OCC is not on the
+ * first-party allowlist, so a request that reaches the embed without the key
+ * answers 404.
  */
 export default function OccChatPage() {
   return (

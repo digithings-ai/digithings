@@ -33,7 +33,8 @@ variants:
     DT_BASE_URL: https://digithings.ai
     # Verified prod routes (do NOT extend without a wrangler.toml source):
     # - digithings.ai/embed*, /api/chat*, /api/embed*, /api/byok*,
-    #   /api/plan-proof*, /api/health, /_dtchat* (apps/digichat-cloudflare)
+    #   /api/plan-proof*, /api/health, /_dtchat*, /chat/occ*
+    #   (apps/digithings-stack-cloudflare and apps/digichat-cloudflare)
     # - graph.digithings.ai, key.digithings.ai, search.digithings.ai
     #   (apps/digithings-stack-cloudflare [[routes]])
     verified_routes:
@@ -44,6 +45,7 @@ variants:
       - digithings.ai/api/plan-proof*
       - digithings.ai/api/health
       - digithings.ai/_dtchat*
+      - digithings.ai/chat/occ*
       - graph.digithings.ai
       - key.digithings.ai
       - search.digithings.ai

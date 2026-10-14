@@ -40,10 +40,9 @@ export function readInviteToken(search: string | undefined): string | undefined 
 /**
  * Remove the invite key from the address bar once it has been read (DIG-1437).
  *
- * Until Act B2 removes occ.digithings.ai from FIRST_PARTY_EMBED_HOSTS nobody
- * needs the key, so a leftover one buys nothing; the moment it is removed every
- * staff member opens /chat/occ?token=..., and an unstripped key lands in browser
- * history and stays visible to anyone reading over a shoulder.
+ * An unstripped key lands in browser history and stays visible to anyone
+ * reading over a shoulder. The Worker gate accepts the matching occ_invite
+ * cookie after the key leaves the address bar (DIG-1437).
  *
  * Returns the cleaned URL, or null when there is nothing to strip — a missing,
  * empty or whitespace-only param is a no-op, which keeps readInviteToken the
