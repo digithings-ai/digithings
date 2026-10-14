@@ -264,19 +264,23 @@ body {
   .section-eyebrow__tick { width: 1.6rem; }
 }
 
-/* ── pinned band head (DIG-2854) ───────────────────────────────────────────
-   A band may pin its section head under the nav for the length of the band.
-   The head carries the hairline on its own bottom edge, so that rule is where
-   scrolling stops and the band body starts stacking below it.
+/* ── pinned band head (DIG-2854, DIG-3311) ─────────────────────────────────
+   A band may pin its section head — eyebrow + title + takeaway, as one
+   block — under the nav for the length of the band. The head carries the
+   hairline on its own bottom edge, so that rule is where scrolling stops and
+   the band body starts stacking below it.
 
-   `--band-pin-h` is authored ONCE, on the shell, and read twice: as the
-   head's own block size here, and by the band body as `--deck-top`. The
-   number that sizes the head is the same number that stops the deck, so a
-   stacked card can never ride up under the head and be cut off by it.
+   `--band-pin-h` is written by Band.tsx (a ResizeObserver against the head's
+   real rendered box, not a fixed guess — the takeaway's line count varies
+   with viewport width and font scaling, and a fixed number has undershot
+   before, letting a stacked card's top edge stick in behind the head) and
+   read by the band body as `--deck-top`'s offset. This sheet only supplies
+   a pre-hydration fallback for first paint.
 
    Wide only, matching deck.css: below 901px the deck drops sticky entirely,
-   so a pinned head would cost the reader screen height for nothing. The var
-   is 0 there, which leaves `--deck-top` at the plain nav clearance. */
+   so a pinned head would cost the reader screen height for nothing. Band.tsx
+   writes 0px there too, which leaves `--deck-top` at the plain nav
+   clearance. */
 .band-pin-shell {
   --band-pin-h: 0px;
 }
@@ -289,10 +293,10 @@ body {
 
 @media (min-width: 901px) {
   .band-pin-shell {
-    /* eyebrow (0.75rem) + 0.7rem gap + one title line + 0.75rem pad + 1px
-       rule. The title is clamp()-capped at 2.25rem, so one line and this
-       number hold at every width the deck stacks at. */
-    --band-pin-h: 4.95rem;
+    /* Pre-hydration fallback only: eyebrow + 0.7rem gap + one title line +
+       a two-line takeaway + 0.75rem pad + 1px rule. Band.tsx overwrites this
+       with the head's measured height the instant it mounts. */
+    --band-pin-h: 8.4rem;
   }
 
   .band-pin {
@@ -302,7 +306,10 @@ body {
        but below the nav, which sits outside the band's stacking context. */
     z-index: 2;
     box-sizing: border-box;
-    block-size: var(--band-pin-h);
+    /* Natural height, not clamped to --band-pin-h — that var is an output
+       of this box's real size (see Band.tsx), not an input to it. Clamping
+       it here would re-introduce the undershoot/clip this rewrite removed. */
+    block-size: auto;
     padding-block-end: 0.75rem;
   }
 
