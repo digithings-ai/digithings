@@ -132,8 +132,8 @@ function BaselineClientInner() {
     deps: PREFS_DEPS,
     sessionKey: "baseline",
     hasSessions: false,
-    newThread: () => {},
-    redo: () => {},
+    newThread: noop,
+    redo: noop,
   });
 
   const hrefFor = (nextSkin: string, nextTheme: string) => {
