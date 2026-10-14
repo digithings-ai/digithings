@@ -5,7 +5,7 @@ Public surface:
 Runtime entry points:
     - :class:`digiquant.research.state.ResearchState` — sub-graph state model.
     - :func:`digiquant.research.graph.build_research_graph` — compiled LangGraph entry point.
-    - :class:`digiquant.research.graph.ResearchInput` — digiclaw-facing invocation contract.
+    - :class:`digiquant.research.graph.ResearchInput` — digibot-facing invocation contract.
     - :func:`digiquant.research.skills.load_skill` — SKILL.md loader.
     - :func:`digiquant.research.schemas.load_schema` — JSON-Schema loader.
 

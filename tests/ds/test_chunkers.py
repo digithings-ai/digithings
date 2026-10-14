@@ -288,7 +288,7 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     prose only; RecursiveChunker unchanged.
     Hashes only (count still 60) re-recorded for #4165 (orchestrator web_search recency_days
     mapping note in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
-    Hashes only (count still 60) for the hosted-MCP docs pass: the digisearch MCP tool-table rows (digisearch_query -> semantic, digisearch_research_turn -> research_turn) and     the digiclaw attachment prose in ARCHITECTURE.md — fixture prose only.
+    Hashes only (count still 60) for the hosted-MCP docs pass: the digisearch MCP tool-table rows (digisearch_query -> semantic, digisearch_research_turn -> research_turn) and     the digibot attachment prose in ARCHITECTURE.md — fixture prose only.
     Re-recorded at count 61 for #4246 (MCP tool-table naming corrections plus merged
     develop prose in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
     Re-recorded at count 115 for the promotion sync union (module/digisearch <- develop):
@@ -335,8 +335,19 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Hashes only (count still 127) re-recorded for #4756 (model-id provider
     value in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
     Hashes only (count still 127) re-recorded for #4973 (grokipedia MCP tool
-    rows + module-map / digiclaw-attach notes in ARCHITECTURE.md) — fixture
+    rows + module-map / digibot-attach notes in ARCHITECTURE.md) — fixture
     prose only; RecursiveChunker unchanged.
+    Re-recorded at count 131 for #5045 (the Unseeded corpora section, the
+    /health degraded contract, the ingest exit-code block, and the fan-out
+    provenance note in ARCHITECTURE.md) — fixture prose only; RecursiveChunker
+    unchanged.
+    Re-recorded at count 132 for the #5088 review fix (the POST /query row of
+    Hashes only (count still 132) re-recorded for the digiclaw->digibot rename
+    and park (mechanical prose edits in ARCHITECTURE.md) - fixture prose only;
+    RecursiveChunker unchanged.
+    the unseeded-corpus per-caller table now documents the real `http_503`
+    error envelope in ARCHITECTURE.md) — fixture prose only; RecursiveChunker
+    unchanged.
     Hashes only (count still 127) re-recorded for DIG-1464 (LuxAlgo trackers
     data-licence classification: the module-map row and the CC0 public-records
     layer note now read CC0-1.0, the licence Security classified against the
@@ -370,7 +381,7 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
-        "de1607a6f3e430c1",
+        "97d6dbc8aeba1662",
         "a5e3d5fc972070ef",
         "7e6b7b2044358888",
         "cea76b9e90df056e",
@@ -401,8 +412,8 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "3850f4956a4c3be9",
         "7973399b6e155051",
         "e0ed75d4b266835e",
-        "5e1cdcae7ee033f5",
-        "866bf2f65945a727",
+        "46b2a904f9490a45",
+        "8d73d82e91867f5c",
         "62e24ed27153c8a1",
         "0ab88c4d28e41b7d",
         "ebd46ff18db018b4",
@@ -461,13 +472,13 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "00bffb9020b848f5",
         "0813ccac568b8df8",
         "8c4f082527d91953",
-        "ea4b9c63695d2f69",
+        "548549263c2a7f16",
         "367d6f1945838ddd",
-        "4187a3ee58add217",
+        "d84c7e7b4f2d53a4",
         "85cad0d45c341571",
         "d22113bcc2f23495",
         "3ec5f2b1fce1b494",
-        "66ce13f7ba2fafdc",
+        "fa14fb0b243b1919",
         "26ca223dcbe8b403",
         "ac5eea8b8b2f7820",
         "d3566df46fb1e726",
@@ -478,9 +489,9 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "cdf4f0c7a56c56e7",
         "8200c214c753f6dd",
         "2c221fc487c50f69",
-        "a261a5a8ca75360c",
-        "4bbb6da734e96059",
-        "70c3d41e152ffa11",
+        "beb390b4885ad1b9",
+        "316ba541e626f685",
+        "766d2cae1a246072",
         "81d310410772fb3e",
         "e46749bf5ec8f72a",
         "33c23cc6de00eece",
@@ -493,8 +504,8 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "b83a37a28a5a93eb",
         "e5277d39f1b19a14",
         "bccb4adcbacb44be",
-        "05bb8905105bc94e",
-        "d922a9899a8996a2",
+        "64d4a8d12ef0ee1f",
+        "05501c10a3d0de0f",
         "166b840aa01714e1",
         "6ffeafba73e75348",
         "79ae674b8661ea64",

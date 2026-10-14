@@ -52,7 +52,7 @@ Examples:
 - `ci(root): conventional-commit PR title lint`
 - `fix(digiquant): correct fill timestamp timezone`
 
-Canonical scopes live in [`.github/workflows/ci-pr-title.yml`](.github/workflows/ci-pr-title.yml) (includes digichat, digiskills, digillm, digifetch, digibase, digikey, digigraph, digivault, digiclaw, digismith, **digitrace**, digisearch, digiquant, digivoice, digidev, digiweb, ui, web, dashboard, root, deps, release).
+Canonical scopes live in [`.github/workflows/ci-pr-title.yml`](.github/workflows/ci-pr-title.yml) (includes digichat, digiskills, digillm, digifetch, digibase, digikey, digigraph, digivault, digibot, digismith, **digitrace**, digisearch, digiquant, digivoice, digidev, digiweb, ui, web, dashboard, root, deps, release).
 
 Exempt patterns (not blocked):
 

@@ -1804,8 +1804,8 @@ only; auth, config, embed-tenant, health, and all other routes keep answering.
 
 ### OpenClaw gateway integration
 
-digiclaw (`digiclaw/`) provides heartbeat, audit, and gateway functionality. digichat
-currently has no integration with digiclaw. Planned work includes routing all chat
+digibot (`digibot/`) provides heartbeat, audit, and gateway functionality. digichat
+currently has no integration with digibot. Planned work includes routing all chat
 requests through an OpenClaw gateway for rate limiting, audit logging, and policy
 enforcement at the BFF boundary.
 

@@ -33,7 +33,7 @@ digisearch is consumed as a **vertical** under digigraph (the hub). digigraph re
 
 - **digiflow** (Langflow) — via REST or MCP
 - **CLI operators** — via the `digisearch` Typer CLI
-- **digiclaw MCP clients** — via MCP attachment at `http://127.0.0.1:8765/mcp`
+- **digibot MCP clients** — via MCP attachment at `http://127.0.0.1:8765/mcp`
 - **Power users** — directly at `http://127.0.0.1:8002`
 
 In the federated hub model (`DIGI_HUB_MODE=federated`), digigraph exposes the `digisearch`, `digisearch_fetch_all`, `web_search`, and optionally `digisearch_research_delegate` tool names to its LLM. The tool schemas and dispatch logic live **entirely in digisearch**, not digigraph — which is the correct separation of concern.
@@ -609,14 +609,14 @@ ceiling (`DIGISEARCH_AUTH_RATE_LIMIT_MULTIPLIER` / `DIGISEARCH_IP_CEILING_MULTIP
 | `POST /v1/monitors/{watch_id}/trigger` | 201 `MonitorRun` | `watch_not_found` (404) | Body `{"mode": "manual"\|"poll"}` (default `manual`); a failed turn still returns its persisted `status="failed"` run rather than a 5xx |
 | `GET /v1/monitors/{watch_id}/runs` | 200 `{"runs": [...], "next_cursor": …}` | `run_not_found` (404, unknown cursor) | `limit` 1–100 (default 20); `cursor` is the last `run_id` of the previous page |
 | `GET /v1/monitors/{watch_id}/runs/{run_id}` | 200 `MonitorRun` | `run_not_found` (404) | — |
-| `POST /v1/monitors/tick` | 200 `{"runs": [...]}` | — | Runs every due + enabled watch once (digiclaw wake-up clock, §4.8) |
+| `POST /v1/monitors/tick` | 200 `{"runs": [...]}` | — | Runs every due + enabled watch once (digibot wake-up clock, §4.8) |
 | `POST /v1/monitors/exa_webhook` | 201 `MonitorRun` (200 `{"acknowledged": true}` for a non-terminal delivery; 200 stored run for a duplicate delivery) | `exa_bad_signature` (401), `exa_payload_invalid` (400/422), `exa_monitor_id_missing` (422), `watch_not_found` (404), `watch_backend_mismatch` (409) | Auth-exempt but per-watch-secret-gated: the delivery's `exa-signature` (`t=<unix>,v1=<hex>`, `HMAC-SHA256(per-monitor webhookSecret, f"{t}.{body}")`, ±300 s) is verified with the resolved watch's stored secret (`get_delivery_secret`); a valid signature translates the nested event envelope through the live-pinned (#4123) EXA adapter and persists the canonical run (watch resolved by `data.monitorId` → `exa_monitor_id`, datatap excluded). Any parseable non-terminal run status (`running`, `cancelled`, `queued`, …) acks without a run row — EXA retries non-2xx indefinitely; a redelivered terminal run answers 200 with the stored run, never 409 |
 
 | Error code | HTTP | Raised by |
 |------------|------|-----------|
 | `datatap_monitors_disabled` | 422 | `workspace_id="datatap"` on create/update (tick also skips it) |
 | `timezone_unknown` | 422 | `schedule.timezone` does not resolve via `ZoneInfo` |
-| `invalid_cron` | 422 | `digiclaw.cron.parse_cron` rejects the 5-field expression |
+| `invalid_cron` | 422 | `digibot.cron.parse_cron` rejects the 5-field expression |
 | `webhook_url_required` / `slack_url_required` | 422 | Non-`poll` delivery with no targets, or a webhook/slack target with no URL |
 | `webhook_url_private` / `slack_url_private` | 422 | Target URL is not https, carries userinfo, or resolves (or fails to resolve) to a non-global address |
 | `validation_error` | 422 | `PATCH` body fails `Watch` re-validation |
@@ -1760,7 +1760,7 @@ One-line responsibilities:
 **Storage.** One SQLite file (`sqlite3` stdlib), resolved explicit path →
 `DIGISEARCH_MONITORS_DB` → `{DIGI_WORKSPACE}/.digisearch/monitors.sqlite3` →
 `./.digisearch/monitors.sqlite3` (cwd fallback for host/test runs). WAL journal
-mode plus a 5s busy timeout let the HTTP process and the digiclaw tick process
+mode plus a 5s busy timeout let the HTTP process and the digibot tick process
 share the file; connections are thread-bound, so `get_monitor_store()` opens one
 store per request thread (`server.py`) and the MCP tools open one per call.
 
@@ -1810,7 +1810,7 @@ is re-detected (and fails loudly again) on the next run.
 failures: a recall failure contributes its persisted `status="failed"` run, an
 unexpected error is logged without aborting the tick. `is_due` owns all timezone
 conversion (naive `now` is UTC; wall clock evaluated in `schedule.timezone`) and
-imports the cron grammar from `digiclaw.cron` (`parse_cron` +
+imports the cron grammar from `digibot.cron` (`parse_cron` +
 `CronExpression.matches`) — never a copy. Cron fires once per matching minute (a
 previous start inside the same minute suppresses the second fire); interval fires
 when `last_run_at + interval_seconds <= now`, and a missing `last_run_at` means
@@ -1821,7 +1821,7 @@ outright (datatap stays OFF end-to-end).
 **Fail-hard semantics.** A recall exception persists `status="failed"` with
 `error=str(exc)` and re-raises `MonitorRunError` carrying the persisted `run_id`;
 the HTTP trigger route returns that stored run (201) instead of masking it with a
-5xx, while the digiclaw helper counts it as `failed`. `no_change` runs persist
+5xx, while the digibot helper counts it as `failed`. `no_change` runs persist
 and never deliver.
 
 ### Phase D websets (#4066)
@@ -1885,7 +1885,7 @@ digisearch uses `DigiAuthMiddleware` from `digikey.integrations.service_middlewa
 | `POST /v1/research_turn` | `digisearch:query` |
 | `POST /v1/monitors`, `GET /v1/monitors`, `GET\|PATCH\|DELETE /v1/monitors/{watch_id}` | `digisearch:query` (landed fallthrough — CRUD is not `digisearch:ingest`) |
 | `POST /v1/monitors/{watch_id}/trigger`, `GET /v1/monitors/{watch_id}/runs[/{run_id}]` | `digisearch:query` |
-| `POST /v1/monitors/tick` | `digisearch:query` (digiclaw service JWT) |
+| `POST /v1/monitors/tick` | `digisearch:query` (digibot service JWT) |
 | `POST /v1/monitors/exa_webhook` | **Auth-exempt** (local `_digisearch_path_scopes` exemption); the watch's stored per-monitor secret is verified in the handler against `exa-signature` (`t=<unix>,v1=<hex>`, `HMAC-SHA256(secret, f"{t}.{body}")`, ±300 s) — 401 `exa_bad_signature` when missing/unverifiable |
 | `GET /health` | Public |
 | `GET /azure_status` | `digisearch:query` |
@@ -2083,28 +2083,28 @@ The contract is versioned by `{"tools": [...], "version": 1}` in the tools respo
 
 `DIGISEARCH_INDEX` env on digigraph controls the default index name. When `DIGI_HUB_MODE=federated`, digigraph registers digisearch as a connector tool that the LLM can call directly.
 
-### digiclaw MCP attachment
+### digibot MCP attachment
 
-digiclaw may attach to the digisearch MCP server at `http://127.0.0.1:8765/mcp` (loopback in standalone/Docker profiles; in the Cloudflare stack the process binds 0.0.0.0 and is reachable only through the key-gated `/_stack/mcp/digisearch/*` edge route). Tools available: `semantic`, `web_search` (swappable `provider`; when `[web-search]` is installed), `search_strategies`, `research_turn` (when `[agent]` is installed), plus the `monitors_*` / `websets_*` chat surfaces and the unofficial `grokipedia_*` spike (§ MCP Tools). digigraph sees the same tools prefixed as `digisearch_semantic`, `digisearch_web_search`, `digisearch_search_strategies`, and `digisearch_research_turn` — plus the `digisearch_monitors_*` / `digisearch_websets_*` families (`{id}_{tool}`) and `digisearch_grokipedia_search` / `digisearch_grokipedia_get_page`.
+digibot may attach to the digisearch MCP server at `http://127.0.0.1:8765/mcp` (loopback in standalone/Docker profiles; in the Cloudflare stack the process binds 0.0.0.0 and is reachable only through the key-gated `/_stack/mcp/digisearch/*` edge route). Tools available: `semantic`, `web_search` (swappable `provider`; when `[web-search]` is installed), `search_strategies`, `research_turn` (when `[agent]` is installed), plus the `monitors_*` / `websets_*` chat surfaces and the unofficial `grokipedia_*` spike (§ MCP Tools). digigraph sees the same tools prefixed as `digisearch_semantic`, `digisearch_web_search`, `digisearch_search_strategies`, and `digisearch_research_turn` — plus the `digisearch_monitors_*` / `digisearch_websets_*` families (`{id}_{tool}`) and `digisearch_grokipedia_search` / `digisearch_grokipedia_get_page`.
 
 `grokipedia_search` / `grokipedia_get_page` wrap public grokipedia.com JSON APIs (`/api/full-text-search`, `/api/page-preview` — **`/api/page` 404s**). robots.txt currently `Disallow: /api/`; this is unofficial third-party use, polite-rate-limited, no HTML scrape, spike-only (HOLD hatch). See `grokipedia/README.md`.
 
 MCP clients (Langflow, IDE tools) attach to the same server. There is no per-client auth on the MCP server itself — access control is at network level (loopback binding, or the secret-gated edge route in the stack).
 
-### digiclaw monitor tick (#4065)
+### digibot monitor tick (#4065)
 
-The heartbeat profile's `web-watch-tick` agent (`digiclaw/agents/web-watch-tick.yaml`,
+The heartbeat profile's `web-watch-tick` agent (`digibot/agents/web-watch-tick.yaml`,
 continuous 60s) drives scheduled watches through
-`digiclaw/src/digiclaw/monitors_tick.py::run_due_monitors`, which POSTs
+`digibot/src/digibot/monitors_tick.py::run_due_monitors`, which POSTs
 `{DIGISEARCH_URL}/v1/monitors/tick` (compose: `http://digisearch:8002`) with a
 digikey service JWT minted by the landed
-`digibase.service_auth.get_service_jwt(key_env="DIGICLAW_DIGIKEY_API_KEY",
+`digibase.service_auth.get_service_jwt(key_env="DIGIBOT_DIGIKEY_API_KEY",
 digikey_url_env="DIGIKEY_URL", scopes=("digisearch:query",))`. Transport and
 auth failures raise, so the scheduler records the agent's `last_error` (never a
-silent successful tick) and `digiclaw schedule tick` prints the failed outcome.
+silent successful tick) and `digibot schedule tick` prints the failed outcome.
 The route calls `tick_due_watches` directly (the route itself is the tick);
 per-watch failures come back inside the `{"runs": [...]}` payload and are
-counted by the digiclaw helper as `failed`. Compose wiring and the
+counted by the digibot helper as `failed`. Compose wiring and the
 poll-vs-public-webhook ops choice are in §10.
 
 ### digiflow integration
@@ -2305,13 +2305,13 @@ dedup memory survive container recreate:
 ```
 
 The heartbeat service is the scheduler side: `DIGISEARCH_URL=http://digisearch:8002`,
-`DIGICLAW_AGENTS_DIR=/workspace/digiclaw/agents` (the read-only repo mount; the
-image ships no `agents/`), `DIGICLAW_SCHEDULER_STATE=/state/scheduler_state.json`
-on the `digiclaw_state` volume, and the bootstrap-then-loops command — `digiclaw
+`DIGIBOT_AGENTS_DIR=/workspace/digibot/agents` (the read-only repo mount; the
+image ships no `agents/`), `DIGIBOT_SCHEDULER_STATE=/state/scheduler_state.json`
+on the `digibot_state` volume, and the bootstrap-then-loops command — `digibot
 schedule start web-watch-tick || exit 1` (idempotent when already running; `||
 exit 1` catches only real bootstrap failures), the preserved 1800s heartbeat in
 the background, and the 60s tick loop in the foreground. See
-`digiclaw/ARCHITECTURE.md` §3 for the tick caller.
+`digibot/ARCHITECTURE.md` §3 for the tick caller.
 
 Tunnel-or-poll: local development uses delivery mode `poll` plus the manual
 `POST /v1/monitors/{watch_id}/trigger`, which needs no inbound path and is the

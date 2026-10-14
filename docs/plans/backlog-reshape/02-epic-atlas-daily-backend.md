@@ -8,7 +8,7 @@
 
 Atlas is a **usable, live product**: it ingests prices daily, recomputes its research outputs, and publishes a snapshot that the Atlas frontend (`apps/digiquant-atlas/cloudflare/`) can render without human intervention. This is the minimum viable "Atlas is running" deliverable and a stated P0 ship item.
 
-Scope is deliberately narrow: **refresh → recompute → publish**. Anything agentic, orchestrated, or multi-agent belongs to a later epic (digiclaw, ADDM, perf monitor).
+Scope is deliberately narrow: **refresh → recompute → publish**. Anything agentic, orchestrated, or multi-agent belongs to a later epic (digibot, ADDM, perf monitor).
 
 ## Child tasks
 
@@ -20,7 +20,7 @@ Scope is deliberately narrow: **refresh → recompute → publish**. Anything ag
 
 ## Non-goals (explicitly out of scope)
 
-- digiclaw integration (#173, #216–#221) — deferred to P2
+- digibot integration (#173, #216–#221) — deferred to P2
 - Multi-user custom research runs — separate epic ("Atlas user profiling")
 - Backtesting on demand — separate digiquant Phase 1 work (#156, #157)
 - Strategy deployment to broker (#181) — Phase 2
@@ -34,7 +34,7 @@ Scope is deliberately narrow: **refresh → recompute → publish**. Anything ag
 
 ## Why this epic exists
 
-The priorities stated in the current planning conversation put "Atlas with daily update backend" as the third ship item after digithings.ai and digichat. Previously this work was scattered across digiquant Phase 1 (#149–#161) and digiclaw (#173, #218) with no single umbrella; the digiclaw framing also over-engineered the solution (scheduler service vs. GHA cron). This epic re-scopes to the smallest thing that ships.
+The priorities stated in the current planning conversation put "Atlas with daily update backend" as the third ship item after digithings.ai and digichat. Previously this work was scattered across digiquant Phase 1 (#149–#161) and digibot (#173, #218) with no single umbrella; the digibot framing also over-engineered the solution (scheduler service vs. GHA cron). This epic re-scopes to the smallest thing that ships.
 
 ## Context
 

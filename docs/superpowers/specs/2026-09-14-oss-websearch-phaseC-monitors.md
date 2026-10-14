@@ -24,8 +24,8 @@ through the public wrappers in `web_search/service.py` — `search_web(req)`
 enrichment, line ~105) — returning `WebSearchResponse`) invoked by DIRECT
 IN-PROCESS CALL within the `digisearch` process per R2 (no same-process loopback
 HTTP to self; loopback `POST /v1/orchestrator_invoke {tool: web_search |
-digisearch_web_search}` survives only as an integration-test path) + digiclaw
-agent scheduler (`digiclaw/src/digiclaw/scheduler.py`, `schedule_schema.py`,
+digisearch_web_search}` survives only as an integration-test path) + digibot
+agent scheduler (`digibot/src/digibot/scheduler.py`, `schedule_schema.py`,
 `cron.py`) as the dumb clock + the LANDED
 `digibase.service_auth.get_service_jwt` helper
 (`digibase/src/digibase/service_auth.py`; keyword-only `key_env`,
@@ -57,7 +57,7 @@ their produced surfaces.
 ## 1. Architecture
 
 ```
-digiclaw scheduler (clock only)            digisearch :8002 (owns everything else)
+digibot scheduler (clock only)            digisearch :8002 (owns everything else)
 ─────────────────────────────            ─────────────────────────────────────────
 continuous agent, every 60s                POST /v1/monitors/tick
   │  run_due_monitors()  ───────────────▶  │ due evaluation (cron / interval)
@@ -72,14 +72,14 @@ continuous agent, every 60s                POST /v1/monitors/tick
 Design rules:
 
 - **digisearch owns schedule evaluation, execution, dedup, storage, delivery.**
-  digiclaw contributes only the wake-up tick (`POST /v1/monitors/tick`) via the
+  digibot contributes only the wake-up tick (`POST /v1/monitors/tick`) via the
   existing `Scheduler` + `AgentRunner` injection. No cron parsing is duplicated:
   watch schedules reuse the 5-field cron grammar by IMPORTING
-  `parse_cron`/`CronExpression.matches` from `digiclaw/cron.py` (same grammar
+  `parse_cron`/`CronExpression.matches` from `digibot/cron.py` (same grammar
   object, same rules — copying the grammar is forbidden, see §4.4), and
-  `interval_seconds` mirrors digiclaw `continuous` mode (sleep between
-  iterations) with a strict `ge=60` floor — stricter than digiclaw's own
-  `ge=1` (`digiclaw/schedule_schema.py:33-36`).
+  `interval_seconds` mirrors digibot `continuous` mode (sleep between
+  iterations) with a strict `ge=60` floor — stricter than digibot's own
+  `ge=1` (`digibot/schedule_schema.py:33-36`).
 - **Shallow recall is called directly, never over loopback HTTP (R2).**
   The runner calls `web_exa.exa_search(...)` when `is_exa_configured()`, else
   the OSS seam `web_search/service.py::search_web(WebSearchRequest(...))`
@@ -137,10 +137,10 @@ line-length 100.
 
 No new port. No new auth scope. No pandas. No embeddings or search internals
 (dedup is URL identity + content hash + token-set similarity only). One new
-dependency (R4): `digiclaw>=0.1.0` for the cron grammar IMPORT only — declared
+dependency (R4): `digibot>=0.1.0` for the cron grammar IMPORT only — declared
 in digisearch `[server]` (`digisearch/pyproject.toml`) and installed (local
 package) into both images (`digisearch/Dockerfile`,
-`Dockerfile.digithings-stack-cloudflare`); neither image installs digiclaw today.
+`Dockerfile.digithings-stack-cloudflare`); neither image installs digibot today.
 
 ---
 
@@ -159,15 +159,15 @@ digisearch/src/digisearch/server.py                 # +10 routes, _digisearch_pa
                                                     # wrapper, parameterized rate matcher
 digisearch/src/digisearch/mcp_server.py             # +4 tools (modify, §4)
 digisearch/src/digisearch/orchestrator_tools.py     # +2 tool defs (modify, §4)
-digisearch/pyproject.toml                           # digiclaw>=0.1.0 in [server] (R4)
-digisearch/Dockerfile                               # install local digiclaw (R4)
-Dockerfile.digithings-stack-cloudflare              # install local digiclaw (R4)
+digisearch/pyproject.toml                           # digibot>=0.1.0 in [server] (R4)
+digisearch/Dockerfile                               # install local digibot (R4)
+Dockerfile.digithings-stack-cloudflare              # install local digibot (R4)
 docker-compose.yml                                  # digisearch: DIGI_WORKSPACE +
                                                     # monitors volume (R12); heartbeat:
                                                     # DIGISEARCH_URL + tick loop (R9)
-digiclaw/src/digiclaw/cli.py                        # runner injection for the tick (R9)
-digiclaw/src/digiclaw/monitors_tick.py              # run_due_monitors() clock caller (new)
-digiclaw/agents/web-watch-tick.yaml                 # continuous 60s tick agent (new)
+digibot/src/digibot/cli.py                        # runner injection for the tick (R9)
+digibot/src/digibot/monitors_tick.py              # run_due_monitors() clock caller (new)
+digibot/agents/web-watch-tick.yaml                 # continuous 60s tick agent (new)
 tests/ds/test_monitors_models.py                    # new
 tests/ds/test_monitors_store.py                     # new
 tests/ds/test_monitors_dedup.py                     # new
@@ -201,11 +201,11 @@ migrations; queryable columns stay real columns.
 ```python
 class WatchSchedule(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    mode: Literal["cron", "interval"]          # cron: 5-field, same grammar as digiclaw/cron.py
+    mode: Literal["cron", "interval"]          # cron: 5-field, same grammar as digibot/cron.py
     cron: str | None = None                    # required when mode=cron
     interval_seconds: int | None = Field(default=None, ge=60)  # required when interval;
-                                               # mirrors digiclaw continuous sleep; this floor is
-                                               # deliberately stricter than digiclaw's ge=1
+                                               # mirrors digibot continuous sleep; this floor is
+                                               # deliberately stricter than digibot's ge=1
     enabled: bool = True
     timezone: str = "UTC"                      # IANA name; invalid -> 422 code timezone_unknown
 
@@ -405,13 +405,13 @@ bearer token is threaded through the runner. Any recall exception → persist
 carrying the persisted `run_id`. `tick_due_watches` runs all due + enabled
 watches, isolates per-watch failures (one watch failing never aborts the tick),
 and returns one `MonitorRun` per attempted watch. Tick-phase skew: the 60s
-digiclaw tick is a wake-up only, so a watch whose cadence boundary falls between
+digibot tick is a wake-up only, so a watch whose cadence boundary falls between
 ticks fires on the next tick (up to ~60s late); per-watch cadence stays exact
 relative to `last_run_at`. Timezone: `is_due` converts — `now` (assumed UTC when
 naive) and `last_run_at` are normalized to the watch's `schedule.timezone`
 inside `is_due` (callers pass UTC; the runner owns conversion, never the clock
 caller). Cron grammar: IMPORT, never copy — `is_due` cron evaluation imports
-`parse_cron`/`CronExpression.matches` from `digiclaw.cron` (R4; `digiclaw>=0.1.0`
+`parse_cron`/`CronExpression.matches` from `digibot.cron` (R4; `digibot>=0.1.0`
 is a real digisearch `[server]` dependency added with both image installs —
 packaging work is Task 8, see §3; duplicating the grammar is forbidden).
 
@@ -515,7 +515,7 @@ Orchestrator manifest additions (`orchestrator_tools.py`):
 `api_orchestrator_invoke` to the same runner/store functions (same envelope,
 `ok: False` + error string on failure — the established fail-hard shape).
 
-### 4.8 digiclaw clock (`digiclaw/monitors_tick.py` + `digiclaw/agents/web-watch-tick.yaml`)
+### 4.8 digibot clock (`digibot/monitors_tick.py` + `digibot/agents/web-watch-tick.yaml`)
 
 ```python
 def run_due_monitors(*, digisearch_url: str | None = None, bearer_token: str | None = None) -> dict: ...
@@ -527,8 +527,8 @@ falls back to env is the defined behavior — the module is callable without
 arguments from the tick runner). Resolves the service JWT via the LANDED
 `digibase.service_auth.get_service_jwt` (consumption only — the module exists;
 R11), calling it as
-`get_service_jwt(key_env="DIGICLAW_DIGIKEY_API_KEY", digikey_url_env="DIGIKEY_URL", scopes=("digisearch:query",))`
-(or reusing `digiclaw.digikey_auth.digikey_bearer_token()` — either is wired by
+`get_service_jwt(key_env="DIGIBOT_DIGIKEY_API_KEY", digikey_url_env="DIGIKEY_URL", scopes=("digisearch:query",))`
+(or reusing `digibot.digikey_auth.digikey_bearer_token()` — either is wired by
 Task 8) when no bearer is passed; imported lazily inside the function so the
 module never fails at import time. POSTs `/v1/monitors/tick`, returns
 `{"runs": n, "failed": m}`. Transport/auth failure raises (tick outcome
@@ -537,10 +537,10 @@ visible in scheduler `last_error`, never swallowed). The YAML agent defines the
 watch schedule, so the 60s tick is only a wake-up (up to ~60s tick-phase skew
 is expected and owned by `is_due`, see §4.4).
 
-The deployed tick is NOT wiring-free (R9 — this is Task 8 scope): digiclaw's
-`default_agent_runner` is a no-op (`digiclaw/scheduler.py:140-142`), the CLI
-constructs a runner-less `Scheduler` (`digiclaw/cli.py:96-101`), no supervisor
-loops `digiclaw schedule tick` (`docker-compose.yml:455-456` is a single-shot
+The deployed tick is NOT wiring-free (R9 — this is Task 8 scope): digibot's
+`default_agent_runner` is a no-op (`digibot/scheduler.py:140-142`), the CLI
+constructs a runner-less `Scheduler` (`digibot/cli.py:96-101`), no supervisor
+loops `digibot schedule tick` (`docker-compose.yml:455-456` is a single-shot
 heartbeat loop), and `DIGISEARCH_URL` is absent from the heartbeat env
 (`docker-compose.yml:443-450`). Task 8 therefore injects a runner that maps the
 tick agent to `run_due_monitors`, adds the loop, and adds the env — see Task 8
@@ -555,7 +555,7 @@ Step 3b.
   same path — zero errors. Polars only — never pandas (no pandas import
   anywhere; dedup uses stdlib).
 - Lowercase digi product names in prose/docs/commits (`digisearch`,
-  `digiclaw`, `digifetch`, `digigraph`).
+  `digibot`, `digifetch`, `digigraph`).
 - Entity naming drops the `Digi` prefix: `Watch`, `MonitorRun`,
   `MonitorStore`, `DeliveryReceipt` — never `DigiWatch`.
 - Every new HTTP route requires `digisearch:query` via the existing
@@ -569,7 +569,7 @@ Step 3b.
   the OSS `max_results le=10` cap at the seam with the clamp recorded in
   `query_snapshot` (R5/R6). Delivery fires only on `ok` runs — never on
   `no_change`, `failed`, or `poll` (R13).
-- `digiclaw>=0.1.0` is a real digisearch `[server]` dependency installed into
+- `digibot>=0.1.0` is a real digisearch `[server]` dependency installed into
   both images (R4); the cron grammar is IMPORTED (`parse_cron`/`matches`),
   never copied. The monitor SQLite file must be non-ephemeral in compose
   (`DIGI_WORKSPACE` + named volume — R12).
@@ -586,7 +586,7 @@ Step 3b.
   DataTap stays OFF end-to-end per plans 2026-09-11/12.
 - Every change traces to its implementation issue (`task/<N>-slug` branch or
   `Fixes #N`); update `digisearch/ARCHITECTURE.md` (§3 + §9) and
-  `digiclaw/ARCHITECTURE.md` (§3) on interface change.
+  `digibot/ARCHITECTURE.md` (§3) on interface change.
 - Human gate (R7g): REQUIRED for Tasks 5 and 6 before merge. Webhook/SMTP
   delivery is new EGRESS to caller-controlled endpoints (arbitrary https URLs
   + operator SMTP relay), which trips the root `AGENTS.md` human gate for
@@ -944,8 +944,8 @@ the returned `WebSearchResponse` is adapted to `WebSearchData` via
 clamp as `num_results_clamped_from`), dedups, persists, delivers only on `ok` +
 non-poll mode (threading the watch's stored `delivery_secret` into `deliver`
 for the `X-digi-signature` HMAC);
-`tick_due_watches` isolates per-watch errors. `is_due` IMPORTS the cron grammar from `digiclaw.cron`
-(`parse_cron` + `matches`; no copied grammar; R4 — the `digiclaw>=0.1.0`
+`tick_due_watches` isolates per-watch errors. `is_due` IMPORTS the cron grammar from `digibot.cron`
+(`parse_cron` + `matches`; no copied grammar; R4 — the `digibot>=0.1.0`
 dependency and image installs land in Task 8's packaging step) for cron mode
 and uses `last_run_at + interval <= now` for interval mode (missing
 `last_run_at` means due); timezone conversion lives in `is_due` per §4.4.
@@ -1242,7 +1242,7 @@ egress). `get_monitor_store()` is created in this task if Tasks 1–5 did not
 already need it. Route handlers call `run_watch`/`tick_due_watches` WITHOUT
 forwarding the caller's JWT — the runner's direct in-process recall needs no
 bearer (per R2); the JWT only authenticates the inbound HTTP request at the
-middleware layer (and the digiclaw→digisearch tick hop, which carries the
+middleware layer (and the digibot→digisearch tick hop, which carries the
 Task 8 service JWT).
 
 - [ ] **Step 4: Run tests to verify they pass**
@@ -1267,7 +1267,7 @@ Expected: zero errors
 **Interfaces:**
 - Consumes: Tasks 1–5 (same runner/store functions as Task 6).
 - Produces: hub-callable monitor capability for digigraph; MCP tools for
-  digiclaw MCP clients.
+  digibot MCP clients.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1323,21 +1323,21 @@ Expected: zero errors
 
 ---
 
-### Task 8: EXA adapter + digiclaw tick wiring + ops record (consumes landed `service_auth`)
+### Task 8: EXA adapter + digibot tick wiring + ops record (consumes landed `service_auth`)
 
 **Files:**
 - Create: `digisearch/src/digisearch/monitors/exa_adapter.py`
-- Create: `digiclaw/src/digiclaw/monitors_tick.py`
-- Create: `digiclaw/agents/web-watch-tick.yaml`
-- Modify: `digiclaw/src/digiclaw/cli.py` (inject a tick runner — no-op
+- Create: `digibot/src/digibot/monitors_tick.py`
+- Create: `digibot/agents/web-watch-tick.yaml`
+- Modify: `digibot/src/digibot/cli.py` (inject a tick runner — no-op
   `default_agent_runner` today, `scheduler.py:140-142`; R9)
 - Modify: `docker-compose.yml` (heartbeat: `DIGISEARCH_URL` + tick loop, R9;
   digisearch: `DIGI_WORKSPACE` + monitors volume, R12)
-- Modify: `digisearch/pyproject.toml` (`digiclaw>=0.1.0` in `[server]`, R4)
+- Modify: `digisearch/pyproject.toml` (`digibot>=0.1.0` in `[server]`, R4)
 - Modify: `digisearch/Dockerfile` + `Dockerfile.digithings-stack-cloudflare`
-  (install the local digiclaw package; neither image installs it today, R4)
+  (install the local digibot package; neither image installs it today, R4)
 - Modify: `digisearch/ARCHITECTURE.md` (§3 + §9: monitors module + routes),
-  `digiclaw/ARCHITECTURE.md` (§3: tick surface + env vars)
+  `digibot/ARCHITECTURE.md` (§3: tick surface + env vars)
 - Test: `tests/ds/test_monitors_exa_adapter.py`, `tests/dc/test_monitors_tick.py`
 
 **Interfaces:**
@@ -1385,7 +1385,7 @@ import pytest
 def test_tick_posts_with_service_jwt(monkeypatch):
     import httpx
     import digibase.service_auth as svc
-    from digiclaw import monitors_tick as mod
+    from digibot import monitors_tick as mod
     monkeypatch.setenv("DIGISEARCH_URL", "http://127.0.0.1:8002")
     calls: dict = {}
     def fake_jwt(**k):
@@ -1403,7 +1403,7 @@ def test_tick_posts_with_service_jwt(monkeypatch):
                 url, headers={"authorization": f"Bearer {token}"}).json())
     out = mod.run_due_monitors()
     assert seen["auth"] == "Bearer svc-jwt"
-    assert calls.get("key_env") == "DIGICLAW_DIGIKEY_API_KEY"      # R9
+    assert calls.get("key_env") == "DIGIBOT_DIGIKEY_API_KEY"      # R9
     assert calls.get("scopes") == ("digisearch:query",)            # landed tuple
     assert out == {"runs": 0, "failed": 0}
 ```
@@ -1428,7 +1428,7 @@ is keyword-only and `scopes` is a tuple. Tests live at
 `tests/db/test_service_auth.py`; `digibase/ARCHITECTURE.md` already documents
 the API. `monitors_tick.py` consumes it as-is — never re-create or shadow the
 module: import lazily inside `run_due_monitors` and call with
-`key_env="DIGICLAW_DIGIKEY_API_KEY"` (the heartbeat's provisioned key env,
+`key_env="DIGIBOT_DIGIKEY_API_KEY"` (the heartbeat's provisioned key env,
 `docker-compose.yml:447`) and `scopes=("digisearch:query",)`. Any new
 service_auth test goes to `tests/db/`. No `digibase/` file is modified by this
 task.
@@ -1470,17 +1470,17 @@ schedule:
   enabled: true
 ```
 
-digiclaw tick wiring (R9 — new work the pre-erratum spec omitted):
-`default_agent_runner` is a no-op (`digiclaw/scheduler.py:140-142`) and
+digibot tick wiring (R9 — new work the pre-erratum spec omitted):
+`default_agent_runner` is a no-op (`digibot/scheduler.py:140-142`) and
 `cli.py:96-101` builds a runner-less `Scheduler`, so inject a runner (e.g.
 `cli.py::_scheduler_from_args` maps the `web-watch-tick` agent name to
-`run_due_monitors`, or add a dedicated `digiclaw monitors-tick` command); add
-the supervisor/daemon loop that invokes `digiclaw schedule tick` on an
+`run_due_monitors`, or add a dedicated `digibot monitors-tick` command); add
+the supervisor/daemon loop that invokes `digibot schedule tick` on an
 interval (`docker-compose.yml:455-456` is a single-shot heartbeat loop today);
 add `DIGISEARCH_URL` (e.g. `http://digisearch:8002`) to the heartbeat service
 env (`docker-compose.yml:443-450`). The service JWT is minted with
-`get_service_jwt(key_env="DIGICLAW_DIGIKEY_API_KEY", digikey_url_env="DIGIKEY_URL")`
-(alternative: reuse `digiclaw.digikey_auth.digikey_bearer_token()`, which reads
+`get_service_jwt(key_env="DIGIBOT_DIGIKEY_API_KEY", digikey_url_env="DIGIKEY_URL")`
+(alternative: reuse `digibot.digikey_auth.digikey_bearer_token()`, which reads
 the same key env and is already provisioned for the heartbeat container).
 
 Store home (R12): the digisearch compose service (`docker-compose.yml:203-220`)
@@ -1489,10 +1489,10 @@ sets no `DIGI_WORKSPACE` and mounts only `digisearch_chroma`; add
 `DIGISEARCH_MONITORS_DB`) plus a named volume for the sqlite file so monitor
 history and dedup memory survive container recreate.
 
-Cron dependency packaging (R4): add `digiclaw>=0.1.0` to
-`digisearch/pyproject.toml` `[server]` and install the local digiclaw package
+Cron dependency packaging (R4): add `digibot>=0.1.0` to
+`digisearch/pyproject.toml` `[server]` and install the local digibot package
 in `digisearch/Dockerfile` and `Dockerfile.digithings-stack-cloudflare`
-(neither image installs digiclaw today) — the runner imports `digiclaw.cron`
+(neither image installs digibot today) — the runner imports `digibot.cron`
 in-container.
 
 Docs: ARCHITECTURE updates + ops record (SQLite path + volume mount,
@@ -1506,11 +1506,11 @@ poll is the portable path that works on both backends).
 ```bash
 pytest tests/ds/test_monitors_models.py tests/ds/test_monitors_store.py tests/ds/test_monitors_dedup.py tests/ds/test_monitors_runner.py tests/ds/test_monitors_delivery.py tests/ds/test_monitors_api.py tests/ds/test_monitors_exa_adapter.py tests/dc/test_monitors_tick.py -v
 pytest tests/ -m unit -v
-ruff check digisearch/src/digisearch/monitors/ digiclaw/src/digiclaw/monitors_tick.py digiclaw/src/digiclaw/cli.py && ruff format --check digisearch/src/digisearch/monitors/ digiclaw/src/digiclaw/monitors_tick.py digiclaw/src/digiclaw/cli.py
+ruff check digisearch/src/digisearch/monitors/ digibot/src/digibot/monitors_tick.py digibot/src/digibot/cli.py && ruff format --check digisearch/src/digisearch/monitors/ digibot/src/digibot/monitors_tick.py digibot/src/digibot/cli.py
 ```
 
 (Explicit paths do the collecting: the landed suite does not map `-k` filters
-to module names — `-k digiclaw` deselects all 23 tests in
+to module names — `-k digibot` deselects all 23 tests in
 `tests/dc/test_scheduler.py` and `-k digisearch` collects 1/12 of
 `tests/ds/test_orchestrator_invoke.py` (verified). If a keyword gate is
 wanted, use `-k monitors`; `-m unit` plus the explicit paths is the real gate.
@@ -1577,7 +1577,7 @@ the pin becomes a follow-up issue — it does not silently freeze assumed shapes
    only. No provider, extractor, embedding, or ranking code is added or
    modified; Phase B is called, never re-implemented.
 2. **No contradictions:** tool-only fail-hard, service-JWT headless auth for
-   the digiclaw→digisearch tick hop ONLY (runner recall is a direct
+   the digibot→digisearch tick hop ONLY (runner recall is a direct
    in-process call with no bearer, per R2), `digisearch:query` scope with no
    digikey change (sole exception: auth-exempt `exa_webhook`, handled by the
    LOCAL `_digisearch_path_scopes` wrapper with the mandatory secret check,
@@ -1590,8 +1590,8 @@ the pin becomes a follow-up issue — it does not silently freeze assumed shapes
    re-specified — are all inherited unchanged from the three consolidated
    plans and the live `server.py` / `web_exa.py` / `web_search/` contracts.
    `digibase.service_auth` has LANDED and is consumed by Task 8 (R11), never
-   re-created; the cron grammar is imported from `digiclaw.cron` with a real
-   `digiclaw>=0.1.0` dependency in both images (R4).
+   re-created; the cron grammar is imported from `digibot.cron` with a real
+   `digibot>=0.1.0` dependency in both images (R4).
 3. **Interchangeability is structural:** one `MonitorRun` envelope, one
    error-message vocabulary (`[webhook]: Required`,
    `[webhook.url]: ...localhost...`), one signed-delivery header

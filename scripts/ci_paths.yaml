@@ -23,10 +23,10 @@ digivault:
   - tests/dv/**
   - .github/workflows/test-digivault.yml
 
-digiclaw:
-  - digiclaw/**
+digibot:
+  - digibot/**
   - tests/dc/**
-  - .github/workflows/test-digiclaw.yml
+  - .github/workflows/test-digibot.yml
 
 digivoice:
   - digivoice/**
@@ -288,7 +288,7 @@ research_graph:
 
 ruff_and_scripts:
   - digibase/**
-  - digiclaw/**
+  - digibot/**
   - digigraph/**
   - digiquant/**
   - digisearch/**

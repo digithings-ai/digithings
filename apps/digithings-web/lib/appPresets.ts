@@ -256,7 +256,7 @@ const supportMorph: MorphStep[] = [
   {
     id: "m-hosting",
     label: "Your schedule fires from your own runner.",
-    line: "You move the loop onto a digiclaw runner on hardware you already own, so the same interval fires under your control. You keep the cadence and the triage history, and the runner answers to you.",
+    line: "You move the loop onto a digibot runner on hardware you already own, so the same interval fires under your control. You keep the cadence and the triage history, and the runner answers to you.",
     ids: ["launcher"],
     layers: ["hosting"],
     boxes: ["launcher"],
@@ -282,8 +282,8 @@ const financeMorph: MorphStep[] = [
   },
   {
     id: "m-runner",
-    label: "Nights move to digiclaw.",
-    line: "You fire the same pipeline from your digiclaw runner on your hardware, so nights run on your interval instead of their schedule. The hosting row drops to $0 marginal on your hardware.",
+    label: "Nights move to digibot.",
+    line: "You fire the same pipeline from your digibot runner on your hardware, so nights run on your interval instead of their schedule. The hosting row drops to $0 marginal on your hardware.",
     ids: ["launcher"],
     layers: ["hosting"],
     boxes: ["launcher"],

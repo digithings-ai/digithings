@@ -62,7 +62,7 @@ Attaches an ASGI middleware that records three metrics per request and exposes t
 - `environment` defaults to the `DIGI_ENV` env var, or `"dev"` when unset.
 - The `route` label uses the FastAPI route template (`/items/{id}`), not the raw path, to keep cardinality bounded.
 - Metric objects are cached per `(service, version, environment)` so multiple FastAPI apps or repeated test harness constructions in the same process are idempotent against the default Prometheus registry.
-- digiclaw does not expose `/metrics` — it is a CLI runner (`python -m digiclaw`) and has no HTTP surface.
+- digibot does not expose `/metrics` — it is a CLI runner (`python -m digibot`) and has no HTTP surface.
 
 No REST endpoints, no database, no background threads. The library is intentionally side-effect-free on import — all functions are pure or accept explicit parameters.
 
@@ -206,7 +206,7 @@ Registers two exception handlers on the FastAPI application instance: one for `S
 ### `digibase.audit`
 
 Sole fleet-wide JSONL audit emitter (CHR-151 / #1193). Component packages
-(`digigraph.audit`, `digiquant.audit`, `digiclaw.audit`) keep a thin `audit_log()`
+(`digigraph.audit`, `digiquant.audit`, `digibot.audit`) keep a thin `audit_log()`
 compat wrapper that delegates here — they must not open or append the audit file
 themselves.
 
@@ -506,11 +506,11 @@ The library has no internal circular dependencies. `errors.py` and `audit.py` de
 | digisearch | — | `json_error_response`, `register_fastapi_error_handlers` | — | `setup_otel_fastapi` |
 | digitrace | — | `register_fastapi_error_handlers` | — | `setup_otel_fastapi` |
 | digikey | — | `register_fastapi_error_handlers` | — | — |
-| digiclaw | — | — | `emit_event` (via thin `digiclaw.audit.audit_log`) | — |
+| digibot | — | — | `emit_event` (via thin `digibot.audit.audit_log`) | — |
 
 digigraph is the heaviest consumer: it uses `outbound_service_headers` in five locations (both connector modules, both vertical orchestrator hub modules, and the graph nodes module) to propagate correlation ids and bearer tokens on every outbound service-to-service call.
 
-digiclaw imports digibase for audit emission (`emit_event` / `redact_mapping`) via its thin `audit_log` wrapper.
+digibot imports digibase for audit emission (`emit_event` / `redact_mapping`) via its thin `audit_log` wrapper.
 
 ---
 

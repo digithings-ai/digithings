@@ -26,8 +26,8 @@ def test_digitrace_imports() -> None:
 
 
 @pytest.mark.baseline
-def test_digiclaw_imports() -> None:
-    import digiclaw  # noqa: F401
+def test_digibot_imports() -> None:
+    import digibot  # noqa: F401
 
 
 @pytest.mark.baseline

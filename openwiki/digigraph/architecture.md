@@ -28,7 +28,7 @@ generated: { by: "openwiki/0.5.0", at: "2026-09-23T13:25:31.068Z" }
 # digigraph Architecture
 
 digigraph (port 8000 HTTP, 8766 MCP streamable-http) is the central orchestration
-hub: every user request flows through it from digiclaw, digichat, Open WebUI, or
+hub: every user request flows through it from digibot, digichat, Open WebUI, or
 MCP clients, and it coordinates the verticals without owning their domain logic.
 Three roles, one rule: **coordinate, don't implement** — no quant pipeline
 ordering (digiquant's), no tiered RAG (digisearch's), no Python imports of

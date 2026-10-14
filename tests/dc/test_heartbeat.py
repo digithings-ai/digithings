@@ -1,4 +1,4 @@
-"""Integration-style tests for digiclaw heartbeat (Phase 3)."""
+"""Integration-style tests for digibot heartbeat (Phase 3)."""
 
 from __future__ import annotations
 
@@ -18,14 +18,14 @@ def test_main_exits_nonzero_when_services_unhealthy(
     monkeypatch.setenv("AUDIT_LOG_PATH", str(audit_path))
     monkeypatch.setenv("DIGIGRAPH_URL", "http://127.0.0.1:9")  # likely closed port
     monkeypatch.setenv("DIGIQUANT_URL", "http://127.0.0.1:9")
-    from digiclaw.heartbeat_runner import main
+    from digibot.heartbeat_runner import main
 
     assert main() == 1
 
 
 @pytest.mark.unit
-def test_heartbeat_checklist_finds_digiclaw_docs_path() -> None:
-    from digiclaw.heartbeat_runner import _heartbeat_checklist_path
+def test_heartbeat_checklist_finds_digibot_docs_path() -> None:
+    from digibot.heartbeat_runner import _heartbeat_checklist_path
 
     path = _heartbeat_checklist_path()
     assert path is not None
@@ -42,11 +42,11 @@ def test_heartbeat_checklist_respects_digi_workspace(
 
     repo_root = Path(__file__).resolve().parents[2]
     monkeypatch.setenv("DIGI_WORKSPACE", str(repo_root))
-    from digiclaw.heartbeat_runner import _heartbeat_checklist_path
+    from digibot.heartbeat_runner import _heartbeat_checklist_path
 
     path = _heartbeat_checklist_path()
     assert path is not None
-    assert path == repo_root / "digiclaw" / "docs" / "HEARTBEAT.md"
+    assert path == repo_root / "digibot" / "docs" / "HEARTBEAT.md"
 
 
 @pytest.mark.unit
@@ -57,7 +57,7 @@ def test_run_heartbeat_writes_heartbeat_event_to_audit(tmp_path: Path) -> None:
     os.environ["DIGIGRAPH_URL"] = "http://127.0.0.1:8000"
     os.environ["DIGIQUANT_URL"] = "http://127.0.0.1:8001"
     try:
-        from digiclaw.heartbeat_runner import run_heartbeat
+        from digibot.heartbeat_runner import run_heartbeat
 
         run_heartbeat()
         assert audit_path.exists()

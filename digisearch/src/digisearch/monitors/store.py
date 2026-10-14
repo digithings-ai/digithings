@@ -21,7 +21,7 @@ Connection and concurrency: each instance owns one connection opened in
 ``__init__``. ``sqlite3`` connections are thread-bound (``check_same_thread``
 keeps its default), so an instance is single-threaded — construct one store per
 thread or request (:func:`get_store` does). The file opens in WAL mode with a 5s
-busy timeout so the HTTP process and the digiclaw tick process can share it; the
+busy timeout so the HTTP process and the digibot tick process can share it; the
 store adds no in-process locking of its own.
 
 ``watch_id`` is a 26-char Crockford-base32 ULID (48-bit ms timestamp + 80-bit

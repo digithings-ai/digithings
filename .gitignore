@@ -173,8 +173,9 @@ canvases/
 # which ADR-0006 reserves for public, committed dogfood projects.
 # playwright-mcp scratch output (page snapshots, console logs)
 .playwright-mcp/
-# digiclaw scheduler durable state (local)
-.digiclaw/
+
+# digibot scheduler durable state (local)
+.digibot/
 .deno/
 # digivoice runtime data — model weights, recorded wavs, and the session
 # history JSONL. The data directory lives outside the repo by default

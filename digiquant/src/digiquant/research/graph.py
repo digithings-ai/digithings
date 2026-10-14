@@ -1,6 +1,6 @@
 """Compiled research sub-graph — research only.
 
-digiclaw (issue #219) and the chain orchestrator invoke the research pipeline
+digibot (issue #219) and the chain orchestrator invoke the research pipeline
 through ``build_research_graph`` + ``ResearchInput``. The contract is deliberately
 small and stable so callers never have to know about internal phase
 structure.
@@ -51,7 +51,7 @@ from digiquant.research.state import (
 
 @dataclass(frozen=True)
 class ResearchInput:
-    """Contract between digiclaw and the research sub-graph.
+    """Contract between digibot and the research sub-graph.
 
     Kept small on purpose — one job's worth of invocation data. The
     watchlist is part of the input (not the state) because Phase 7C's
@@ -179,7 +179,7 @@ def initial_state(
 ) -> ResearchState:
     """Build an ``ResearchState`` from ``ResearchInput``.
 
-    Separated from ``build_research_graph`` so tests and digiclaw can
+    Separated from ``build_research_graph`` so tests and digibot can
     construct states without touching the graph compiler.
 
     Pins ``knowledge_cutoff_at`` (UTC) **before** constructing state so

@@ -138,7 +138,7 @@ COMPONENT_TO_PROJECT = {
     "component:digichat":   5,
     "component:digikey":    6,
     "component:digismith":  7,
-    "component:digiclaw":   8,
+    "component:digibot":   8,
     "component:digibase":   9,
 }
 PRIO_FROM_LABEL = {"priority:critical": "P0", "priority:high": "P1",

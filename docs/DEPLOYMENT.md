@@ -58,7 +58,7 @@ make up-heartbeat
 
 Adds the `heartbeat` service. Audit events are appended to the path defined by `AUDIT_LOG_PATH` (default `digiquant/results/audit/events.jsonl`). If ADDM reports strategy drift (when implemented), re-optimize is triggered automatically.
 
-See [digiclaw/docs/HEARTBEAT.md](../digiclaw/docs/HEARTBEAT.md) for the checklist the heartbeat agent follows.
+See [digibot/docs/HEARTBEAT.md](../digibot/docs/HEARTBEAT.md) for the checklist the heartbeat agent follows.
 
 ## digichat
 
@@ -86,9 +86,9 @@ Every HTTP service in the core stack exposes a `/health` endpoint. digitrace add
 
 Current audit artifacts:
 
-- `digiclaw/audit.py` — append-only JSONL; single source of truth for the heartbeat/audit flow.
+- `digibot/audit.py` — append-only JSONL; single source of truth for the heartbeat/audit flow.
 - `digigraph/src/digigraph/audit.py` + `digiquant/src/digiquant/audit.py` — per-component audit sinks; to be consolidated into `digibase.audit` (Phase 5 of the cleanup epic [#31](https://github.com/digithings-ai/digithings/issues/31)).
-- Optional `AUDIT_SINK_URL` on digiclaw for NDJSON POST mirror.
+- Optional `AUDIT_SINK_URL` on digibot for NDJSON POST mirror.
 
 ## Tests
 
@@ -388,5 +388,5 @@ direct probe of the route.
 - [LOCAL_STACK.md](LOCAL_STACK.md) — no-Docker dev loop details.
 - [apps/digichat/ARCHITECTURE.md](../apps/digichat/ARCHITECTURE.md) — digichat module architecture.
 - [docs/adr/0018-digichat-path-routing.md](adr/0018-digichat-path-routing.md) — digichat path-routing decision (supersedes the `chat.digithings.ai` subdomain plan).
-- [digiclaw/docs/HEARTBEAT.md](../digiclaw/docs/HEARTBEAT.md) — heartbeat checklist.
+- [digibot/docs/HEARTBEAT.md](../digibot/docs/HEARTBEAT.md) — heartbeat checklist.
 - [docs/adr/0002-domain-unification.md](adr/0002-domain-unification.md) — two-domain strategy and migration plan.

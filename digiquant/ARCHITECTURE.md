@@ -30,9 +30,9 @@ digiquant is the deterministic quant engine of the digithings stack. Its primary
 digiquant operates as an internal vertical in the federated hub model. Typical callers are:
 
 - **digigraph** (orchestration hub) — calls via HTTP orchestrator endpoints and dispatches tool invocations through `/v1/orchestrator_invoke`
-- **MCP clients** (IDE, Claude Desktop, digiclaw) — attach directly via `streamable-http` or `stdio` transport on port 8767
+- **MCP clients** (IDE, Claude Desktop, digibot) — attach directly via `streamable-http` or `stdio` transport on port 8767
 - **Power users** — call HTTP endpoints directly or use the `digiquant` CLI
-- **digiclaw** (heartbeat service) — polls `/check_drift` for ADDM-triggered re-optimization
+- **digibot** (heartbeat service) — polls `/check_drift` for ADDM-triggered re-optimization
 
 ### NautilusTrader Integration
 
@@ -2112,7 +2112,7 @@ extended `redact=` tuple.
 
 The audit JSONL file is world-readable if default filesystem permissions apply.
 In Docker, the file is mounted at `./digiquant/results/audit` and shared with
-the digigraph and digiclaw containers. Access controls on this directory should
+the digigraph and digibot containers. Access controls on this directory should
 be reviewed.
 
 ---
@@ -2200,9 +2200,9 @@ popup that iframes digichat `/embed` (digigraph backend → digillm). Grounding,
 web search, and model tiers are digichat tenant config (`DIGICHAT_EMBED_TENANTS`
 for `digiquant.io`), not digiquant HTTP. Plan gate: `glassbox_economics` (Desk+).
 
-### digiclaw Heartbeat and ADDM Drift Detection
+### digibot Heartbeat and ADDM Drift Detection
 
-The digiclaw heartbeat container calls `GET /check_drift?strategy_id=…` on a schedule. The `check_drift()` function in `addm.py` performs a rolling Sharpe Z-score calculation against in-process history built by `record_sharpe()`. The HTTP handler accepts optional `current_sharpe` (wired from digiclaw when available) and `service_run_backtest()` records Sharpe after successful backtests. With fewer than three observations, `check_drift()` still returns `implemented=False`; operators must feed history via backtests or explicit `current_sharpe` before drift detection is meaningful. History is in-process only (not durable across restarts).
+The digibot heartbeat container calls `GET /check_drift?strategy_id=…` on a schedule. The `check_drift()` function in `addm.py` performs a rolling Sharpe Z-score calculation against in-process history built by `record_sharpe()`. The HTTP handler accepts optional `current_sharpe` (wired from digibot when available) and `service_run_backtest()` records Sharpe after successful backtests. With fewer than three observations, `check_drift()` still returns `implemented=False`; operators must feed history via backtests or explicit `current_sharpe` before drift detection is meaningful. History is in-process only (not durable across restarts).
 
 ---
 
@@ -2265,7 +2265,7 @@ digiquant:
     start_period: 10s
 ```
 
-The data volume is mounted **read-only** (`/app/data:ro`), preventing strategies from writing to the data directory. The results volume (`/app/results`) is writable, which is where exports and tearsheets land. The audit log is mounted into the digigraph and digiclaw containers at `./digiquant/results/audit`.
+The data volume is mounted **read-only** (`/app/data:ro`), preventing strategies from writing to the data directory. The results volume (`/app/results`) is writable, which is where exports and tearsheets land. The audit log is mounted into the digigraph and digibot containers at `./digiquant/results/audit`.
 
 The image always installs `digiquant[nautilus]` (NautilusTrader + Polars pipeline). It does **not** download upstream Nautilus test CSVs at build time — market samples for backtests are under `digiquant/data/` (compose-mounted). Optional Nautilus package fixtures for local unit tests: `python digiquant/scripts/fetch_nautilus_test_data.py`.
 
@@ -2343,7 +2343,7 @@ No ML or RL code exists. The approved packages (Qlib, FinRL, XGBoost) are named 
 
 ### ADDM Drift Detection (In-Process; Persistence Gap)
 
-`addm.py` implements rolling Sharpe Z-score drift detection. `service_run_backtest()` calls `record_sharpe()` when `sharpe_ratio` is present; `GET /check_drift` accepts optional `current_sharpe` and returns `implemented=False` until at least three observations exist for the strategy. History lives in an in-process `deque` — it is lost on restart and is not shared across replicas. Remaining work: persist history (Postgres or Redis), wire digiclaw to pass `current_sharpe`, and productize re-optimization when `drift_detected=true`.
+`addm.py` implements rolling Sharpe Z-score drift detection. `service_run_backtest()` calls `record_sharpe()` when `sharpe_ratio` is present; `GET /check_drift` accepts optional `current_sharpe` and returns `implemented=False` until at least three observations exist for the strategy. History lives in an in-process `deque` — it is lost on restart and is not shared across replicas. Remaining work: persist history (Postgres or Redis), wire digibot to pass `current_sharpe`, and productize re-optimization when `drift_detected=true`.
 
 ### Remote Worker Delegation
 
@@ -2410,13 +2410,13 @@ The `_run_trial()` function in `optimize.py` is already structured as a top-leve
 
 ### (e) ADDM Persistence and Heartbeat Wiring
 
-**Problem:** Sharpe history is in-process only; digiclaw may skip drift checks when no digikey bearer is configured (`drift_check_skipped`), even though `/check_drift` is implemented.
+**Problem:** Sharpe history is in-process only; digibot may skip drift checks when no digikey bearer is configured (`drift_check_skipped`), even though `/check_drift` is implemented.
 
 **Recommendation:**
 
 1. Persist rolling Sharpe history to Postgres or Redis keyed by `strategy_id` so restarts and replicas share state.
 2. Pass `current_sharpe` from the heartbeat when a baseline metric is available.
-3. When `drift_detected=True`, enqueue re-optimization with strategy-specific symbols (replace hardcoded `["AAPL", "MSFT", "GOOGL"]` in `digiclaw` heartbeat).
+3. When `drift_detected=True`, enqueue re-optimization with strategy-specific symbols (replace hardcoded `["AAPL", "MSFT", "GOOGL"]` in `digibot` heartbeat).
 
 ### (f) Prometheus Metrics for Backtest Throughput and Optimization Convergence
 

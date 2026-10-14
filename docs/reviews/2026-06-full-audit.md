@@ -14,7 +14,7 @@
 3. **Most scheduled GitHub workflows are red** for fixable reasons: `printf` flag parsing, missing `claude` CLI, org policy blocking bot PRs, Polars Date/Datetime bug in `compute-technicals`, and LLM rate limits on Atlas cron.
 4. **`make score` is policy-only** — enforced on `task/*` via `create_pr.sh` and agent dispatch, but **never runs in GHA**; e2e, integration, baseline, contracts, and provider_review pytest suites are also absent from CI.
 5. **digikey JWT revocation is implemented** (`blocklist.py`, revoke endpoint) but **docs still say absent**; default Compose never wires `DIGIKEY_BLOCKLIST_REDIS_URL`, so revoke is a no-op and live JWTs survive.
-6. **digiclaw heartbeat is auth-blocked** — drift check and `/run_optimize` require digikey scopes but send no `Authorization` header; failures are swallowed silently.
+6. **digibot heartbeat is auth-blocked** — drift check and `/run_optimize` require digikey scopes but send no `Authorization` header; failures are swallowed silently.
 7. **Olympus has no CI** and reads Supabase via public anon key with `USING (true)` RLS on all core tables; ~284 KB committed `dashboard-data.json` ships as a public artifact.
 8. **digichat embed/auth mismatch** — `/embed` posts to auth-gated `/api/chat` without session; SSRF allowlist has no unit tests and allows single-label hostnames.
 9. **LangGraph recompiled every request** in digigraph (`workflow.py`) and digiquant (`graph/pipeline.py`); model_modes YAML re-read per call — hot-path performance debt.
@@ -36,7 +36,7 @@ Counts are **distinct findings** aggregated across module reviews (doc-only item
 | digibase | 0 | 2 | 5 | 4 | **11** |
 | digismith | 0 | 1 | 6 | 4 | **11** |
 | digikey | 5 | 6 | 4 | 2 | **17** |
-| digiclaw | 1 | 3 | 4 | 2 | **10** |
+| digibot | 1 | 3 | 4 | 2 | **10** |
 | apps/digichat | 2 | 8 | 14 | 6 | **30** |
 | cloudflare/olympus + design + landings | 0 | 9 | 14 | 8 | **31** |
 | scripts + config + tests + agents | 0 | 4 | 18 | 7 | **29** |
@@ -115,16 +115,16 @@ Counts are **distinct findings** aggregated across module reviews (doc-only item
 
 ---
 
-### digikey + digiclaw — `01c8c7d9`
+### digikey + digibot — `01c8c7d9`
 
 | Sev | Finding | Location |
 |-----|---------|----------|
 | **Critical** | Docs say "no JWT revocation" — code implements ADR-0007 blocklist | `digikey/AGENTS.md:44`, `ARCHITECTURE.md` |
 | **Critical** | Compose never sets `DIGIKEY_BLOCKLIST_REDIS_URL` — revoke is no-op | `docker-compose.yml:18-25` |
-| **Critical** | digiclaw heartbeat calls protected digiquant routes without JWT | `heartbeat_runner.py:62-93` |
+| **Critical** | digibot heartbeat calls protected digiquant routes without JWT | `heartbeat_runner.py:62-93` |
 | **High** | BFF session tokens get `jti` but no `JtiIssuedRow` — no revocation path | `digikey/server.py:197-211` |
 | **High** | Redis blocklist not repopulated from `jti_issued` on restart | `blocklist.py` |
-| **High** | ADDM "stub" doc drift; `HEARTBEAT.md` path wrong for Docker | `digiclaw/AGENTS.md`, `ARCHITECTURE.md` |
+| **High** | ADDM "stub" doc drift; `HEARTBEAT.md` path wrong for Docker | `digibot/AGENTS.md`, `ARCHITECTURE.md` |
 | **Medium** | Revoke succeeds in DB but `jtis_invalidated=0` when Redis unset | `digikey/server.py:296-305` |
 
 ---
@@ -199,7 +199,7 @@ Counts are **distinct findings** aggregated across module reviews (doc-only item
 | AUDIT-001 | P0 | digisearch | `server.py:614` | Ingest writes stub only; Chroma/Azure never indexed | Route ingest through backend `add()` mirroring query router | L |
 | AUDIT-002 | P0 | digigraph | `mcp_server.py:193-213` | MCP on `0.0.0.0:8766` without auth | Default `127.0.0.1`; require gateway auth/TLS | M |
 | AUDIT-003 | P0 | digisearch | `mcp_server.py:212-214` | MCP on `0.0.0.0` without auth | Default loopback; document ACL | S |
-| AUDIT-004 | P0 | digiclaw | `heartbeat_runner.py:62-93` | No JWT on protected digiquant calls | Machine API key + Bearer on drift/optimize | M |
+| AUDIT-004 | P0 | digibot | `heartbeat_runner.py:62-93` | No JWT on protected digiquant calls | Machine API key + Bearer on drift/optimize | M |
 | AUDIT-005 | P0 | digikey | `docker-compose.yml:18-25` | `DIGIKEY_BLOCKLIST_REDIS_URL` never wired | Add Redis + env on digikey and consumers | M |
 | AUDIT-006 | P0 | workflows | `enforce-project-assignment.yml` | Daily cron 10/10 red — `printf` flag bug | Use `printf '%s\n'` or heredoc for list lines | S |
 | AUDIT-007 | P0 | workflows | `project-fields-coverage.yml` | Daily cron 10/10 red — bad TSV + unbound `pilot` | Fix model column values; initialize `pilot` | S |
@@ -267,9 +267,9 @@ Counts are **distinct findings** aggregated across module reviews (doc-only item
 | AUDIT-069 | P2 | digibase | `tests/integration/` | Request-id hops not in CI | Include in digibase-test job | S |
 | AUDIT-070 | P2 | digismith | `Dockerfile:20` | Missing `digibase[otel]` | Install otel extra when OTLP desired | S |
 | AUDIT-071 | P2 | digismith | `config.py:31-40` | `langsmith_host_sanitized` untested | Add credential-bearing URL tests | S |
-| AUDIT-072 | P2 | digiclaw | `digiclaw/ARCHITECTURE.md:40` | HEARTBEAT.md path wrong for Docker | Fix lookup or copy to workspace root | S |
-| AUDIT-073 | P2 | digiclaw | `heartbeat_runner.py:96-103` | Always exit 0 on unhealthy | Return non-zero for orchestration | S |
-| AUDIT-074 | P2 | digiclaw | `AGENTS.md:30` | ADDM "stub" wording stale | Match `digiquant/addm.py` behavior | S |
+| AUDIT-072 | P2 | digibot | `digibot/ARCHITECTURE.md:40` | HEARTBEAT.md path wrong for Docker | Fix lookup or copy to workspace root | S |
+| AUDIT-073 | P2 | digibot | `heartbeat_runner.py:96-103` | Always exit 0 on unhealthy | Return non-zero for orchestration | S |
+| AUDIT-074 | P2 | digibot | `AGENTS.md:30` | ADDM "stub" wording stale | Match `digiquant/addm.py` behavior | S |
 | AUDIT-075 | P2 | digichat | `digigraph-upstream.ts:23-70` | JWT exchange every message | Cache until exp minus skew | M |
 | AUDIT-076 | P2 | digichat | `chat-panel.tsx:41-42` | Markdown XSS risk | Add `rehype-sanitize` | S |
 | AUDIT-077 | P2 | digichat | `next.config.ts:14-43` | CSP only on embed | Global CSP for main app | M |
@@ -357,8 +357,8 @@ Consolidated doc-vs-code mismatches that mislead operators or agents.
 | DOC-02 | `SECURITY.md:167`, `ROADMAP.md:27` | Redis blocklist opt-in | Security reviews underestimate capability |
 | DOC-03 | `docs/adr/0007-digikey-revocation.md` status `proposed` | Implemented in tree | ADR process drift |
 | DOC-04 | `digiquant/AGENTS.md:45` "ADDM stub" | `addm.py` Z-score implementation | Heartbeat/drift expectations wrong |
-| DOC-05 | `digiclaw/AGENTS.md`, `ARCHITECTURE.md` ADDM stub | Same as DOC-04 + auth-blocked not logic-blocked | Operators think re-optimize inert |
-| DOC-06 | `digiclaw/docs/HEARTBEAT.md` path | Docker `DIGI_WORKSPACE=/workspace` — file not at root | Checklist gate never fires |
+| DOC-05 | `digibot/AGENTS.md`, `ARCHITECTURE.md` ADDM stub | Same as DOC-04 + auth-blocked not logic-blocked | Operators think re-optimize inert |
+| DOC-06 | `digibot/docs/HEARTBEAT.md` path | Docker `DIGI_WORKSPACE=/workspace` — file not at root | Checklist gate never fires |
 | DOC-07 | `digigraph/AGENTS.md:30` `require_scope` per route | `DigiAuthMiddleware` only | Agent pre-flight wrong |
 | DOC-08 | `digigraph/ARCHITECTURE.md:386-387` data_engineer gate | Gate only in execute_python, not registration | Security posture overstated |
 | DOC-09 | `digisearch/ARCHITECTURE.md` `/azure_status` public | Middleware requires `digisearch:query` | Integration config errors |
@@ -391,7 +391,7 @@ Consolidated doc-vs-code mismatches that mislead operators or agents.
 |----------|-------|------------|
 | Now | AUDIT-006, 007, 008, 009 — printf, TSV, claude CLI, Polars | Platform / digiquant |
 | Now | AUDIT-041 — backlog snapshot org PR policy or PAT | Org admin |
-| Now | AUDIT-004, 072, 073 — heartbeat auth + exit codes + HEARTBEAT path | digiclaw + digikey |
+| Now | AUDIT-004, 072, 073 — heartbeat auth + exit codes + HEARTBEAT path | digibot + digikey |
 | Week 2 | AUDIT-042, 043 — Atlas rate limits (quota upgrade or throttle) | digiquant ops |
 | Week 2 | AUDIT-044, 096, 097 — dead workflow refs; merge agent renames | Platform |
 

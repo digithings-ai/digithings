@@ -27,7 +27,7 @@
 
 | Pick 2 requirement | #2023 status | Evidence |
 |---|---|---|
-| Publish digikey / digigraph / digivault to GHCR | **Workflow only** | `.github/workflows/publish-service-images.yml` builds those three (+ digiquant, digisearch, digismith, digiclaw). Tags: `:sha-<12>`, `:latest`, `:v<pyproject>`. |
+| Publish digikey / digigraph / digivault to GHCR | **Workflow only** | `.github/workflows/publish-service-images.yml` builds those three (+ digiquant, digisearch, digismith, digibot). Tags: `:sha-<12>`, `:latest`, `:v<pyproject>`. |
 | Images actually pullable today | **Fail (ops)** | `gh api orgs/digithings-ai/packages/container/{digikey,digigraph,digivault}` → **404**. digichat packages exist (`v0.9.3`). Workflow `on.push.branches: [main]`; #2023 merge target was **develop** only (`3345a577`). PR test plan still has “after merge to main: run Publish once”. |
 | Compose overlay usable without monorepo **image** build | **Partial** | `infra/self-host/compose.ghcr.yml` + `make pull-ghcr` / `make up-ghcr` reset `build:` and set `image: ghcr.io/digithings-ai/<svc>:${DIGI_IMAGE_TAG:-latest}`. Still needs a **repo clone** for `docker-compose.yml`, `config/`, and `.env`. |
 | Profile A / INSTALL path without monorepo build | **Fail (glue)** | `infra/digichat-release/compose.profile-a.yml` still `build:` digikey / digigraph / digivault. `INSTALL.md` and `infra/digichat-release/README.md` still say “clone + `--build`”. |

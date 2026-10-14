@@ -106,7 +106,7 @@ agents:
 
     Write digi product names in lowercase always, including at the start of a sentence:
     digithings, digichat, digigraph, digiquant, digisearch, digikey, digitrace,
-    digivault, digiclaw, digibase, digiskills, digiweb, digillm, digifetch.
+    digivault, digibot, digibase, digiskills, digiweb, digillm, digifetch.
 
     Wrap every diagram and code sample in a fenced Markdown code block with a
     language tag — ```mermaid for diagrams, ```python / ```bash / etc. for code.

@@ -41,7 +41,7 @@
                                    terracotta #d97a5a and every other hue in the livery table. */
   --accent-digikey:    #d97a5a;
   --accent-digitrace:  #6fa3a3;
-  --accent-digiclaw:   #b87840;
+  --accent-digibot:   #b87840;
   --accent-digibase:   #9ea0a5;
   --accent-digistore:  #7b7fc7;
   --accent-digilink:   #4fa39b;
@@ -150,7 +150,7 @@
 .accent-digichat   { --accent: var(--accent-digichat);   --on-accent: #06110f; }
 .accent-digikey    { --accent: var(--accent-digikey);    --on-accent: #06110f; }
 .accent-digitrace  { --accent: var(--accent-digitrace);  --on-accent: #06110f; }
-.accent-digiclaw   { --accent: var(--accent-digiclaw);   --on-accent: #06110f; }
+.accent-digibot   { --accent: var(--accent-digibot);   --on-accent: #06110f; }
 .accent-digibase   { --accent: var(--accent-digibase);   --on-accent: #06110f; }
 .accent-digistore  { --accent: var(--accent-digistore);  --on-accent: #06110f; }
 .accent-digilink   { --accent: var(--accent-digilink);   --on-accent: #06110f; }
@@ -336,7 +336,7 @@
      digisearch 2.81:1, digitrace 2.82:1, digivault 2.91:1, digilink 2.98:1.
      Darkened here, light-theme only — the :root values above are untouched
      and still serve the dark theme. digichat (3.04:1), digikey (3.05:1),
-     digiclaw (3.62:1), and digistore (3.68:1) already clear 3:1 unmodified
+     digibot (3.62:1), and digistore (3.68:1) already clear 3:1 unmodified
      and are deliberately left out of this block. digiquant reuses
      --accent's own PRE-#2280 light hex (#0E8C7F, ruled 2026-07-03 above)
      rather than a new one, since that already IS digiquant's light-theme

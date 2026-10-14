@@ -151,7 +151,7 @@ describe("canon contrast contract (#4306, canon-audit S2)", () => {
       "accent-digilink": hexToken(light, "accent-digilink"),
       "accent-digichat": hexToken(light, "accent-digichat"),
       "accent-digikey": hexToken(light, "accent-digikey"),
-      "accent-digiclaw": hexToken(light, "accent-digiclaw"),
+      "accent-digibot": hexToken(light, "accent-digibot"),
       "accent-digistore": hexToken(light, "accent-digistore"),
     };
     const lightInk = hexToken(light, "ink");

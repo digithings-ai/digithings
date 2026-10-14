@@ -7,7 +7,7 @@ When editing paths under **Prefix**, read the **Doc** row first, then run **Test
 | `digigraph/` | [digigraph/AGENTS.md](../../digigraph/AGENTS.md) | [digigraph/ARCHITECTURE.md](../../digigraph/ARCHITECTURE.md) | 8000 | `pytest tests/dg/ tests/contracts/ -m unit -v --tb=short` (`agents.yml` / `test-digigraph.yml`) |
 | `digiquant/` | [digiquant/AGENTS.md](../../digiquant/AGENTS.md) | [digiquant/ARCHITECTURE.md](../../digiquant/ARCHITECTURE.md) | 8001 | `pytest tests/dq/ -m unit -v --tb=short` |
 | `digisearch/` | [digisearch/AGENTS.md](../../digisearch/AGENTS.md) | [digisearch/ARCHITECTURE.md](../../digisearch/ARCHITECTURE.md) | 8002 | `pytest tests/ds/ -m unit -v --tb=short` |
-| `digiclaw/` | [digiclaw/AGENTS.md](../../digiclaw/AGENTS.md) | [digiclaw/ARCHITECTURE.md](../../digiclaw/ARCHITECTURE.md) | — (heartbeat profile) | `pytest tests/dc/ -m unit -v --tb=short` |
+| `digibot/` | [digibot/AGENTS.md](../../digibot/AGENTS.md) | [digibot/ARCHITECTURE.md](../../digibot/ARCHITECTURE.md) | — (heartbeat profile) | `pytest tests/dc/ -m unit -v --tb=short` |
 | `digivoice/` | [digivoice/AGENTS.md](../../digivoice/AGENTS.md) | [digivoice/ARCHITECTURE.md](../../digivoice/ARCHITECTURE.md) | — (local CLI) | `pytest tests/dvo/ -m unit -v --tb=short` |
 | `digitrace/` | [digitrace/AGENTS.md](../../digitrace/AGENTS.md) | [digitrace/ARCHITECTURE.md](../../digitrace/ARCHITECTURE.md) | 8003 | `pytest tests/dsm/ -m unit -v --tb=short` |
 | `digikey/` | [digikey/AGENTS.md](../../digikey/AGENTS.md) | [digikey/ARCHITECTURE.md](../../digikey/ARCHITECTURE.md) | 8005 | `pytest tests/dk/ -m unit -v --tb=short` |

@@ -307,7 +307,7 @@ def monitors_create_watch(
 
     The one-time ``delivery_secret`` (used to verify delivery HMACs) appears in
     this response only — never on list/read. Provide ``schedule_cron`` (5-field
-    digiclaw grammar) or ``interval_seconds`` (>= 60); cron wins when both are
+    digibot grammar) or ``interval_seconds`` (>= 60); cron wins when both are
     given. The watch is named after the query. ``delivery_mode`` other than
     ``poll`` needs targets, which this surface cannot set, so those are rejected.
     This surface creates oss watches only: an EXA-backed watch (``backend``,

@@ -321,7 +321,7 @@ v1 = APIRouter(prefix="/v1", tags=["openai-compatible"])
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    """Legacy health check for Docker and digiclaw (kept for back-compat)."""
+    """Legacy health check for Docker and digibot (kept for back-compat)."""
     return {"status": "ok", "service": "digigraph"}
 
 
@@ -424,7 +424,7 @@ def _resolve_request_id(request: Request) -> str | None:
 )
 def api_run_digigraph_workflow(http_request: Request, req: WorkflowRequest) -> WorkflowResult:
     """
-    digiclaw custom skill: run_digigraph_workflow.
+    digibot custom skill: run_digigraph_workflow.
     Phase 0: user idea → backtest via digiquant → result in < 10s.
     """
     # WorkflowRequest.require_tool_calls is body-only (no X-Require-Tool-Calls header,

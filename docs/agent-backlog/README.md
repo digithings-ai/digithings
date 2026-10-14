@@ -14,7 +14,7 @@
 | Label | Meaning |
 |--------|---------|
 | `agent-task` | Suitable for a coding agent; has clear acceptance criteria |
-| `component:digigraph` / `digiquant` / `digisearch` / `digiclaw` / `digismith` / `digikey` / `digibase` / `digichat` | Primary code area |
+| `component:digigraph` / `digiquant` / `digisearch` / `digibot` / `digismith` / `digikey` / `digibase` / `digichat` | Primary code area |
 | `risk:low` / `risk:med` / `risk:high` | `high` = needs human review before merge |
 | `docs-only` | Markdown/doc changes only (see [AUTOMERGE.md](AUTOMERGE.md)) |
 

@@ -34,7 +34,7 @@ OPT = {
     },
     "area": {
         "DigiGraph": "64fb1b51", "DigiSearch": "c4d1712a", "DigiQuant": "320e44e0",
-        "DigiChat":  "f2e0930b", "DigiKey":    "87c52e14", "DigiClaw":  "2ab0471a",
+        "DigiChat":  "f2e0930b", "DigiKey":    "87c52e14", "Digibot":  "2ab0471a",
         "DigiSmith": "733214e8", "DigiBase":   "67bc54a2", "Website":   "61caae04",
         "Atlas":     "e78729ab", "Client Pilot": "e911491e", "Docs":      "820a5756",
         "Infra":     "d3fbf4c4", "Cross-cutting": "70e7b58f",
@@ -50,7 +50,7 @@ COMPONENT_TO_AREA = {
     "component:digiquant":  "digiquant",
     "component:digichat":   "digichat",
     "component:digikey":    "digikey",
-    "component:digiclaw":   "digiclaw",
+    "component:digibot":   "digibot",
     "component:digismith":  "digismith",
     "component:digibase":   "digibase",
     "component:website":    "Website",

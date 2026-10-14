@@ -57,21 +57,21 @@
       "gitHead": "2097e4e32fd839d68d539343a4f02017f3a47639",
       "sourceFingerprint": "sha256:ca58cc1da6291d83c91bcb12eef13d6a8d9433c53bebc66cf7195e047a999227"
     },
-    "/openwiki/digiclaw/architecture.md": {
+    "/openwiki/digibot/architecture.md": {
       "pageVersion": "sha256:58f997af310b8bdb07f7db44a12457dc8909ef3d0cc5f6a4c23bdfaf6b757710",
       "completedBy": "openwiki/0.5.0",
       "completedRunId": "7a17ee0e-d06a-4f0c-a7a4-252c47022e8d",
       "gitHead": "2097e4e32fd839d68d539343a4f02017f3a47639",
       "sourceFingerprint": "sha256:ca58cc1da6291d83c91bcb12eef13d6a8d9433c53bebc66cf7195e047a999227"
     },
-    "/openwiki/digiclaw/operations.md": {
+    "/openwiki/digibot/operations.md": {
       "pageVersion": "sha256:c435e13d8d0e12ba31a9f35f679cd906983756cf7862e995e8bc48fdfd69275d",
       "completedBy": "openwiki/0.5.0",
       "completedRunId": "7a17ee0e-d06a-4f0c-a7a4-252c47022e8d",
       "gitHead": "2097e4e32fd839d68d539343a4f02017f3a47639",
       "sourceFingerprint": "sha256:ca58cc1da6291d83c91bcb12eef13d6a8d9433c53bebc66cf7195e047a999227"
     },
-    "/openwiki/digiclaw/quickstart.md": {
+    "/openwiki/digibot/quickstart.md": {
       "pageVersion": "sha256:ce26567d9f3253f81f98d3388f36cca0439908a329aa61aeec8f8ca589b91a15",
       "completedBy": "openwiki/0.5.0",
       "completedRunId": "7a17ee0e-d06a-4f0c-a7a4-252c47022e8d",

@@ -85,7 +85,7 @@ agents:
 
     Write digi product names in lowercase always, including at the start of a sentence:
     digithings, digichat, digigraph, digiquant, digisearch, digikey, digitrace,
-    digivault, digiclaw, digibase, digiskills, digiweb, digillm, digifetch.
+    digivault, digibot, digibase, digiskills, digiweb, digillm, digifetch.
 
 indexes:
   - name: digithings_docs

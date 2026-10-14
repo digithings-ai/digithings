@@ -93,7 +93,7 @@ const DigiTrace = (p: P) => (
   </Svg>
 );
 // runtime — a heartbeat sealed in a ring (always-on, on an interval)
-const DigiClaw = (p: P) => (
+const Digibot = (p: P) => (
   <Svg {...p}>
     <circle cx="0" cy="0" r="12" fill="currentColor" fillOpacity={TINT} />
     <path d="M-8.5 0 -4 0 -1.5 -6 1.5 6 4 0 8.5 0" />
@@ -168,7 +168,7 @@ const execution = (p: P) => (
 
 export const emblems: Record<string, (p: P) => React.ReactNode> = {
   digigraph: DigiGraph, digiquant: DigiQuant, digisearch: DigiSearch, digichat: DigiChat,
-  digikey: DigiKey, digitrace: DigiTrace, digiclaw: DigiClaw, digibase: DigiBase,
+  digikey: DigiKey, digitrace: DigiTrace, digibot: Digibot, digibase: DigiBase,
   digivault: DigiVault,
   digistore: DigiStore, digilink: DigiLink,
   research: research, portfolio: portfolio, execution: execution,

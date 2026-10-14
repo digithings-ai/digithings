@@ -2763,6 +2763,12 @@
       "files": 10,
       "lines": 1193
     },
+    "digibot": {
+      "path": "digibot",
+      "lastCommit": "2026-08-28T23:06:21Z",
+      "files": 18,
+      "lines": 1885
+    },
     "digiclaw": {
       "path": "digiclaw",
       "lastCommit": "2026-09-15T19:05:55Z",

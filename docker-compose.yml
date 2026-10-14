@@ -618,8 +618,8 @@ services:
   heartbeat:
     build:
       context: .
-      dockerfile: digiclaw/Dockerfile
-    image: digi-digiclaw:latest
+      dockerfile: digibot/Dockerfile
+    image: digi-digibot:latest
     container_name: digi-heartbeat
     profiles:
       - heartbeat
@@ -631,26 +631,26 @@ services:
       - DIGIQUANT_URL=http://digiquant:8001
       - DIGISEARCH_URL=http://digisearch:8002
       - DIGIKEY_URL=${DIGIKEY_URL:-http://digikey:8005}
-      - DIGICLAW_DIGIKEY_API_KEY=${DIGICLAW_DIGIKEY_API_KEY:-}
+      - DIGIBOT_DIGIKEY_API_KEY=${DIGIBOT_DIGIKEY_API_KEY:-}
       - DIGIQUANT_DATA_DIR=/app/data
       - AUDIT_LOG_PATH=/audit/events.jsonl
       - DIGI_WORKSPACE=/workspace
       # Phase C tick (#4065): agents come from the mounted repo, scheduler state
-      # from the digiclaw_state volume (DIGI_WORKSPACE itself is read-only).
-      - DIGICLAW_AGENTS_DIR=/workspace/digiclaw/agents
-      - DIGICLAW_SCHEDULER_STATE=/state/scheduler_state.json
+      # from the digibot_state volume (DIGI_WORKSPACE itself is read-only).
+      - DIGIBOT_AGENTS_DIR=/workspace/digibot/agents
+      - DIGIBOT_SCHEDULER_STATE=/state/scheduler_state.json
     volumes:
       - ./digiquant/results/audit:/audit
       - ./:/workspace:ro
-      - digiclaw_state:/state
+      - digibot_state:/state
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
         # `schedule start` is idempotent when the agent is already running (exit 0,
         # re-arms it), so `|| exit 1` turns only real bootstrap failures into a loud exit.
-        digiclaw schedule start web-watch-tick || exit 1
-        while true; do python -m digiclaw; sleep 1800; done &
-        while true; do digiclaw schedule tick; sleep 60; done
+        digibot schedule start web-watch-tick || exit 1
+        while true; do python -m digibot; sleep 1800; done &
+        while true; do digibot schedule tick; sleep 60; done
     depends_on:
       digigraph:
         condition: service_healthy
@@ -853,7 +853,7 @@ volumes:
   digisearch_chroma:
   digisearch_monitors:
   digivault_data:
-  digiclaw_state:
+  digibot_state:
   prometheus_data:
   grafana_data:
   caddy_data:
