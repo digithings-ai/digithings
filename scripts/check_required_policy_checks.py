@@ -14,6 +14,11 @@ This script is the corrected inventory. It reconciles three sets:
   2. ``.github/policy-checks.yml``  vs  develop's required status-check contexts
   3. ``Required checks passed``     vs  ``required-checks.needs`` (done in ci.yml)
 
+and, since DIG-2223, a fourth: the script an operator runs to APPLY develop's
+contexts is executed and its output diffed against the committed snapshot. That
+coupling used to be absent, so the writer carried its own hardcoded fourth
+context and nothing noticed. See ``check_writer_coupling``.
+
 and it fails on exactly the two failure modes where a policy gate and the gate
 list disagree:
 
@@ -61,6 +66,7 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -72,6 +78,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
 INVENTORY_PATH = REPO_ROOT / ".github" / "policy-checks.yml"
 CONTEXTS_PATH = REPO_ROOT / ".github" / "required-contexts.txt"
+#: The script an operator runs to apply develop's contexts. It holds no list of
+#: its own — it reads CONTEXTS_PATH — but nothing stopped that from changing, so
+#: this script EXECUTES it and diffs what it would apply against the snapshot.
+WRITER_SCRIPT = REPO_ROOT / "scripts" / "set-branch-protection.sh"
 
 #: The ci.yml aggregator's check name. Its ``needs`` reconciliation is the
 #: pre-existing in-file check; this script only asserts the name is accounted
@@ -296,6 +306,84 @@ def read_live_contexts(repo: str, branch: str) -> list[str]:
     return [str(c) for c in contexts]
 
 
+def read_writer_contexts(writer: Path = WRITER_SCRIPT) -> list[str]:
+    """Ask the writer which contexts it would apply, by running it.
+
+    Deliberately executes the writer instead of parsing its source. A source scan
+    is a mirror, and a mirror goes blind the moment the payload is built any
+    other way — a generated list, a heredoc, a variable — after which zero
+    matches reads exactly like "the writer is in sync". Diffing what the script
+    *emits* cannot drift from what it would *apply*.
+
+    ``--print-contexts`` reads no API and needs no ``gh`` auth, which is what
+    makes it safe to run here: a writer whose print path demanded a credential
+    could not be checked at all.
+    """
+    if not writer.is_file():
+        raise GuardError(f"{writer} is missing, so develop's contexts have no owner")
+    try:
+        proc = subprocess.run(
+            ["bash", str(writer), "--print-contexts"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise GuardError(f"could not execute {writer.name} --print-contexts: {exc}") from exc
+    if proc.returncode != 0:
+        first = (proc.stderr or proc.stdout).strip().splitlines()
+        raise GuardError(
+            f"{writer.name} --print-contexts exited {proc.returncode}: "
+            f"{first[0] if first else 'no output'}"
+        )
+    contexts = [line.strip() for line in proc.stdout.splitlines() if line.strip()]
+    if not contexts:
+        raise GuardError(f"{writer.name} --print-contexts printed no contexts")
+    return contexts
+
+
+def check_writer_coupling(
+    snapshot: list[str],
+    writer: list[str],
+    writer_name: str = "set-branch-protection.sh",
+) -> list[Finding]:
+    """The writer and the committed snapshot must name the same contexts.
+
+    Before DIG-2223 the writer carried its own hardcoded list, so develop's
+    branch protection could be changed to a fourth context that no snapshot, no
+    inventory and no test mentioned — a gate applied by hand and enforced
+    against nothing. The writer now reads the snapshot, so drift is impossible
+    by construction; this check is what keeps it impossible, by failing the
+    moment a literal context comes back.
+    """
+    if writer == snapshot:
+        return []
+
+    extra = [c for c in writer if c not in snapshot]
+    missing = [c for c in snapshot if c not in writer]
+    detail: list[str] = []
+    if extra:
+        detail.append(
+            f"it would apply {len(extra)} context(s) the snapshot does not list "
+            f"({', '.join(extra)}) — a gate no inventory declares and no snapshot records"
+        )
+    if missing:
+        detail.append(
+            f"it would not apply {len(missing)} context(s) the snapshot lists "
+            f"({', '.join(missing)}) — a declared gate the writer never enforces"
+        )
+    return [
+        Finding(
+            "writer.snapshot-drift",
+            writer_name,
+            f"disagrees with {CONTEXTS_PATH.relative_to(REPO_ROOT)}: "
+            + "; ".join(detail)
+            + ". The snapshot is the single source of the context set, so the writer "
+            "must read it rather than name contexts itself",
+        )
+    ]
+
+
 # ── reconciliation ──────────────────────────────────────────────────────────
 
 
@@ -507,6 +595,15 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     findings = reconcile(inventory, tracked, facts_by_workflow, contexts, args.branch)
+    # The writer check always reads the snapshot, even under --live: the coupling
+    # is a property of the two committed files, not of the API.
+    try:
+        snapshot = read_contexts_file(args.contexts)
+        writer = read_writer_contexts()
+    except GuardError as exc:
+        print(f"check_required_policy_checks: {exc}", file=sys.stderr)
+        return 2
+    findings += check_writer_coupling(snapshot, writer, WRITER_SCRIPT.name)
     print(report(findings, inventory, contexts))
     return 1 if findings else 0
 

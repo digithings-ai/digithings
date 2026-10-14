@@ -18,8 +18,11 @@
 #   python3 scripts/check_required_policy_checks.py --live \
 #       --repo digithings-ai/digithings --branch develop
 #
-# `scripts/set-branch-protection.sh` writes protection; edit this file in the
-# same change. `scripts/check_required_policy_checks.py` fails if the two drift.
+# `scripts/set-branch-protection.sh` reads this file and applies exactly what is
+# here — it holds no list of its own, so there is no second copy to drift.
+# `scripts/check_required_policy_checks.py` executes that script and fails if the
+# two ever disagree, which makes this file the single place a context is added.
+# See docs/BRANCH_PROTECTION.md, "Ownership of develop's required contexts".
 
 Required checks passed
 doc-links + agents-init
