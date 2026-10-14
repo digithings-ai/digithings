@@ -81,9 +81,11 @@ function is configured. Strategy deploy stays a typed "soon" state.
 
 Domains register routes in `src/routes/` (`Registry`; `{param}` templates;
 exact beats template); `index.ts` consults it for paths the legacy table does
-not serve. PUT/POST/DELETE exist only for registered routes and need
-`x-digi-user` (401 `unauthorized` otherwise) plus a catalog route the caller's
-manifest grants (403). No auth/session logic in the worker.
+not serve. Catalog PUT/POST/DELETE need `x-digi-user` (401 `unauthorized`
+otherwise) plus a catalog route the caller's manifest grants (403). No
+auth/session logic in the worker. `POST /fx-hub-session` and
+`POST /fx-hub-grant-sync` are dispatched before that gate to the FX Hub
+module, which checks `X-Sync-Secret` itself.
 
 `src/table-read.ts`: `tableRead()` / `twelvexRead()` return the standard
 envelope over PostgREST and fail closed (`upstream_empty`) on missing env,

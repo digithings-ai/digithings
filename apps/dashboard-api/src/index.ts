@@ -4,7 +4,9 @@
  * Contract: apps/dashboard-api/CONTRACT.md. All digi product names stay
  * lowercase. No auth/session changes, no digikey/ code, no
  * digiquant/brokers/ code, no live-trading paths, no new public
- * hostname/routes on any domain (human gate).
+ * hostname on any domain (human gate). FX Hub paths
+ * `/fx-hub-session` and `/fx-hub-grant-sync` are mounted on this worker.
+ * They are not catalog routes and they are not a new hostname.
  *
  * Slice 2 scaffold: router + error envelope + provenance builder +
  * GET /healthz + GET /portfolio (with the book_as_of gate folded in per
@@ -26,6 +28,8 @@ import { buildManifest, callerFor, grantedRoutes, routeVerdict, tierAtLeast } fr
 import { adaptOnGet } from "./adapters";
 import { corsHeaders, resolveAllowlist, withCors } from "./cors";
 import { mountEnvelopeRoutes, type AddRoute, type RouteHandler } from "./envelope";
+import type { FxHubEnv } from "./fx-hub/env";
+import { createFxHubFetch, FX_HUB_PATHS } from "./fx-hub/router";
 import { tryHandleLedger } from "./ledger";
 import { tryHandleTables } from "./tables";
 import { registerBriefRoutes } from "./brief";
@@ -69,7 +73,18 @@ export interface Env {
   /** Optional twelve-x (FX hub) Supabase project; absent = FX reads fail closed (upstream_empty). */
   TWELVEX_SUPABASE_URL?: string;
   TWELVEX_SUPABASE_SERVICE_KEY?: string;
+  /**
+   * FX Hub module secrets. Unset until they are bound on the worker: the
+   * mounted routes still answer, and refuse (401 / API_KEYS_UNCONFIGURED).
+   * Not wrangler `[vars]` — values stay out of the repo.
+   */
+  FX_HUB_GRANT_SYNC_SECRET?: string;
+  SUPABASE_SECRET_KEYS?: string;
+  SUPABASE_PUBLISHABLE_KEYS?: string;
 }
+
+/** Exact paths the ported FX Hub module owns. Not dashboard catalog routes. */
+const FX_HUB_ROUTE_PATHS: ReadonlySet<string> = new Set(Object.values(FX_HUB_PATHS));
 
 // Section 1/2 primitives live in ./errors and ./responses: this module is the
 // worker entrypoint and may export only `default` (see the header of ./responses).
@@ -271,6 +286,11 @@ export default {
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
     const url = new URL(request.url);
     const path = normalizePath(url.pathname);
+    // FX Hub authenticates with X-Sync-Secret inside the module. Dispatch
+    // before the catalog so POST does not fall through to routeWrite.
+    if (FX_HUB_ROUTE_PATHS.has(path)) {
+      return withCors(await createFxHubFetch(env as FxHubEnv).fetch(request), cors);
+    }
     const res =
       path === MCP_PATH ? await handleMcp(request, env, (req) => routeGet(req, env)) : await routeGet(request, env);
     return withCors(res, cors);

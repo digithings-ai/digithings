@@ -64,6 +64,29 @@ describe("GET /healthz", () => {
   });
 });
 
+describe("FX Hub mount", () => {
+  it("answers GET /fx-hub-session from the mounted module", async () => {
+    const res = await app.fetch(new Request("https://x/fx-hub-session"), NO_ENV);
+    expect(res.status).toBe(405);
+    expect(await res.json()).toEqual({ ok: false, code: "METHOD_NOT_ALLOWED" });
+  });
+
+  it("answers POST /fx-hub-grant-sync with no secret as unauthorized", async () => {
+    const res = await app.fetch(
+      new Request("https://x/fx-hub-grant-sync", { method: "POST" }),
+      NO_ENV,
+    );
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ ok: false, code: "UNAUTHORIZED" });
+  });
+
+  it("strips a trailing slash before the FX Hub dispatch", async () => {
+    const res = await app.fetch(new Request("https://x/fx-hub-session/"), NO_ENV);
+    expect(res.status).toBe(405);
+    expect(await res.json()).toEqual({ ok: false, code: "METHOD_NOT_ALLOWED" });
+  });
+});
+
 describe("router", () => {
   it("rejects unknown routes with the envelope", async () => {
     const res = await app.fetch(new Request("https://x/nope"), NO_ENV);
