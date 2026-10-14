@@ -41,6 +41,14 @@ Unchanged by the move: D-G6 stays optional (Origin has no signed-tag rule, so a 
 gate would still need the runner hook — Chris deferred that), and D-G5 now runs the
 Buildkite `deploy` agent on Chris's Mac instead of a dedicated host.
 
+## Top-priority direction — answered by Chris 2026-10-14 22:09 (released)
+
+| ID | Direction | What it means for the plan |
+|---|---|---|
+| **D-X1** | GitHub Actions minutes exhausted: **migration off GitHub comes first** (local Mac CI + Cloudflare Worker fallback + Cursor Origin readiness ahead of extraction). | P0 leads with the Mac dispatcher (DIG-3561), Origin checks-API verification (DIG-3558) and the R0 mirror-lag watch (DIG-3560). Missing GitHub Actions checks are **not** failures; every PR records its local test pass in its body. |
+| **D-X2** | **No GitHub Packages, GHCR, or GitHub Actions dependence** in any moved repo. | R1/R2/R3/R4 registries move to non-GitHub homes (TBD, Chris); workflows become local-ci/cron jobs; deploys via per-package protected release branches (pending Chris approval). P2 steps 3–4 and P3 step 9 annotated accordingly. |
+| **D-X3** | Docs/code PRs into `develop` via feature branch stay fine; **no** Origin/GitHub repo creation, **no** history push, **no** Cloudflare config changes, **no** `main` merges, **no** production deploys. | Hard limits stand; anything needing those goes to Chris as a decision. Slices A–N, P deliver planning artefacts + develop PRs only. |
+
 ## Changed recommendations
 
 | ID | Proposal | Recommended now | Why |

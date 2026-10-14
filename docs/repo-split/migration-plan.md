@@ -13,6 +13,16 @@ deploys + CI run on Chris's Mac under his normal user with a Cloudflare Worker f
 **Revised again 2026-10-14 (Chris's direction):** R1–R7 move to **Cursor Origin**, not to GitHub.
 See [Source control on Cursor Origin](#source-control-on-cursor-origin). D-O1 … D-O5 answered 2026-10-14.
 
+**Revised again 2026-10-14 22:09 (Chris, TOP PRIORITY, released):** GitHub Actions minutes are
+exhausted, so **migration off GitHub comes first**: local Mac CI + Cloudflare Worker fallback +
+Cursor Origin readiness move ahead of extraction. Missing GitHub Actions checks are **not**
+failures; every PR records its local test pass in the PR body instead. Docs/code PRs into
+`develop` via feature branch stay fine. Hard limits stand: no Origin/GitHub repo creation, no
+history push, no Cloudflare config changes, no `main` merges, no production deploys — anything
+needing those goes to Chris as a decision. Slices A–N, P are folded in
+[Consolidated corrections](#consolidated-corrections-from-slices-an-p-dig-3573-2026-10-14);
+open inputs (no draft yet: A, K, L, M, N) are listed there, not invented.
+
 Naming used below:
 - **mono** = today's `digithings-ai/digithings`. It stays public and keeps its name until the
   cutover in P3, where it is renamed `digithings-ai/digithings-mono` and made private.
@@ -191,6 +201,11 @@ Mono stays public (D-G2); its `production` environment and required reviewers ke
 Exit check: inventory posted; deploy workflows show `workflow_dispatch` only; Mac agent reachable
 by Chris; if the signing key is adopted, `git tag -s` + `git verify-tag` round-trip works with the new key on a scratch repo.
 
+2026-10-14 22:09 ordering note: the Mac CI dispatcher design (DIG-3561), the Origin checks-API
+verification (DIG-3558, slice A) and the R0 mirror-lag watch (DIG-3560, slice C) are P0 work and
+land before any extraction. Under the no-GitHub-services direction, R2/R5 deploy workflows become
+local-ci/cron jobs at extraction (slices D/I notes); P0 step 2 (dispatch-only) is the interim only.
+
 Rollback: nothing irreversible in this phase.
 
 ---
@@ -233,7 +248,12 @@ Rollback: each PR reverts on its own.
 3. **Private Python (R1):** no GitHub Packages for Python (review F2). Use a git tag pin:
    `digiquant-strategies @ git+https://github.com/digithings-ai/digiquant-strategies@v0.1.0` locked by SHA in `uv.lock`;
    R2's Docker build reads it with a GitHub App installation token passed as a BuildKit secret (D-Q7).
+   2026-10-14 22:09: **no GitHub Packages at all** (slices E/P notes) — R2 consumes R1 from a
+   non-GitHub registry (private PyPI index on Chris's Mac, Origin artifacts, or vendored path pin;
+   decision outstanding, owned by R2/epic owner), read with a short-lived Origin token as a BuildKit secret.
 4. **Private npm (`@digiquant/contract`):** GitHub Packages npm from R2; R3's Actions reads it with `GITHUB_TOKEN` after granting R3 access on the package.
+   2026-10-14 22:09: same supersede — the contract reaches R3 from a non-GitHub registry (TBD, Chris);
+   no `.github/workflows` additions in R3 (local-ci instead).
 5. **GitHub App `digithings-release-bot`:** opens bump PRs, dispatches cron workflows. Installed per repo. It does **not** create deploy tags (it cannot sign them).
 6. **Deploy gate on the Mac agent (D-G5 + D-G6)** — replaces protected `release/*` + environment reviewers:
    - Deploy credentials (scoped Cloudflare tokens, Supabase access token) live only on Chris's
@@ -296,7 +316,9 @@ Cutover day (Chris does the renames and visibility changes; agents prepare):
 7. Rename `digithings` → `digithings-mono`; make it **private**. Register the Mac agent on it (now allowed: private). Disable the gate allowlist entry for any public repo.
 8. Rename `digithings-next` → `digithings`; make it **public**. Apply rulesets from P2 step 7; install DCO; add CODEOWNERS, LICENSE (MIT), TRADEMARKS, SECURITY; `production`-style environment `pypi` with Chris as required reviewer.
 8b. Origin for R0 (D-O1): Chris runs `origin repo create-mirrored` for the public R0 (inbound mirror).
-9. Publish v0.x of PyPI modules and `@digithings/*` npm, and GHCR `digichat` / `digillm` images, from R0.
+9. Publish v0.x of PyPI modules and `@digithings/*` npm, and `digichat` / `digillm` images, from R0.
+   2026-10-14 22:09: **no GHCR** — images publish to a non-GitHub registry (TBD, Chris); `@digithings/*`
+   likewise to a non-GitHub npm registry (TBD, Chris).
 10. In mono: R0 paths frozen (`moved-paths-guard` lists them). Development on public code moves to R0. Open mono PRs that touch only R0 paths are re-opened against R0 by their owners (list posted on the tracking issue).
 11. Update every remote: `~/Code/digithings*` worktrees, Paperclip project repositories, merge queue config, run-watch, worktree sweep, seat instructions that name the repo.
 
@@ -370,6 +392,108 @@ held (guard in "warn" mode during extraction, "fail" mode after cut-over).
 | `~/Code` layout | `dt-dev` bootstrap: clones R0–R7 side by side, `uv`/npm overlays for local cross-repo work. |
 
 ---
+
+## Consolidated corrections from slices A–N, P (DIG-3573, 2026-10-14)
+
+Slice sources: B (DIG-3559), C (DIG-3560), D (DIG-3561), E (DIG-3562), F (DIG-3563),
+G (DIG-3564), H (DIG-3565), I (DIG-3566), J (DIG-3567), P (DIG-3572) — each stored as the
+`plan` document on its issue. No draft yet (open inputs, §8): A (DIG-3558), K (DIG-3568),
+L (DIG-3569), M (DIG-3570), N (DIG-3571). Nothing below invents their content.
+
+### 1. Order: migration off GitHub first (Chris 22:09, released)
+
+P0 now leads with three items before any extraction: (a) Mac CI dispatcher design (slice D:
+one `com.digithings.ci-dispatch` launchd job, 2 concurrent / 1 heavy cap, ephemeral
+`~/Code/ci-runs/<repo>/<run-id>/` job dirs, per-repo minimal job lists, Worker fallback
+partial-only) — proposal, needs Chris D-CI2 (caps + disk home); (b) Origin checks/status-API
+verification (slice A, open); (c) R0 mirror-lag watch (slice C proposal: hourly HEAD+tag SHA
+compare, one `[run-watch] r0-mirror-lag` ticket on persistent mismatch). Missing GitHub Actions
+checks are not failures; each PR carries its local test pass in its body.
+
+### 2. Source control + mirror (slices B, C — confirm the plan)
+
+Slice B fixes exact names: Origin namespace = Chris's existing personal namespace (measured
+`origin` remote, not assumed); remotes `origin` = Origin, `github` = GitHub (R0 only); every repo
+`main` + `develop`; R0/R1 no release branches (tags only), R2/R5 `release/stack`, R3/R4
+`release/web`, R6 none, R7 as today; tag shape `^[a-z0-9-]+-v[0-9]+\.[0-9]+\.[0-9]+$`;
+rulesets as code in `scripts/split/rulesets/origin/` (Chris applies; agents audit only);
+token names only (P §7: `CURSOR_AUTH_TOKEN`, Origin App token, short-lived Origin token,
+`GITHUB_TOKEN`, `GH_DISPATCH_TOKEN`, `BUILDKITE_AGENT_TOKEN`, `CLOUDFLARE_API_TOKEN`,
+`CLOUDFLARE_ACCOUNT_ID`, Supabase access token, Pages direct-upload token). Slice C confirms
+§2 above (GitHub-primary R0, inbound mirror, no custom code) and adds: divergence policy
+(GitHub wins; never force-push the mirror; never detach R0), R0 Actions = publish + CI only,
+never the self-hosted runner on R0, never the Cloudflare Cursor app.
+
+### 3. Inventory corrections (slices E–J)
+
+- R1 (E): 58 strategy sources + SDCA-coupled modules + 44+ tests; entry points
+  `digiquant.strategies` / `digiquant.mcp_tools` / `digiquant.cli`; `generate_tearsheets.py`
+  may split R1/R2 if a production job.
+- R2 (F): `apps/dashboard-api/` is **127 files, not 117**; `research/config/` is **18, not 19**;
+  workflow is `sync-digiquant-runner-mail-secret**s**.yml` (plural); runner needs
+  `byok-providers.json` + `model-policy.json`, **not** `digiquant_models.yaml` (CI-side input);
+  `validate-providers.py:239` is a docstring, not a runtime load; two extra dashboard couplings
+  (`brief/load.test.ts`, `lib/api-client.test.ts`); `RESEARCH_POLICY_PATH` already exists
+  (new `DIGIQUANT_CONFIG_DIR` only for the other two paths); mount-test pins at
+  `dashboard-api-mount.test.js:209-210`. Open: `byok-providers.json` owner (R2+R5 consumers),
+  `config/contract/` + `compose-contract.env` + parity-baseline ownership,
+  `deploy-digiquant-cloudflare.yml` home, 68 untriaged `research/` files.
+- R3 (G): PixelWordmark + deploy-models copy + entrypoint imports rewired pre-extraction;
+  `apps/digiquant-web/` moves to R3 root.
+- R4 (H): 246 + brand 22 files; **PixelWordmark moves to shared UI/brand BEFORE extraction**
+  (R3 imports it).
+- R5 (I): blocking Dockerfile findings F1 (R5 cannot build its MCP image — `digiquant/Dockerfile.mcp`
+  COPYs four R0 trees), F2 (5× `image_build_context` must become `.` after packaging), F3
+  (digichat Dockerfile has 11 COPYs over 8 paths, not one), F4 (unreported `config/searxng` edge),
+  F5 (**image direction is backwards**: R5 *produces* the digichat image today; needs Chris
+  D-R5-1); F6 cron is the only clock for 30 dispatch rows; F7 two dead dispatches
+  (`smoke-stack.yml`, `smoke-site.yml` — reported to IT); F8/F9/F13 cross-repo workflows;
+  F11 unreported `LANGFUSE_EVENTS` bucket; F12 cron workflow must move to `release/stack`;
+  `docs/ops/` is 26 runbooks + configs + Grafana + OTel + SQL, not 35 runbooks. Open D-R5-1…D-R5-5.
+- R6 (J): corpora + seeds + KV-seed config + rollout/answer-check tooling + new `kv-sync`; R0
+  residue grep list before the R0 cleanup PR; D-12 scrub **after** KV write proven.
+- No-GitHub-services (E/G/H/P notes, Chris 22:09): no GitHub Packages / GHCR / Actions
+  dependence anywhere; registries TBD by Chris; workflows become local-ci/cron jobs.
+
+### 4. Secrets (slice P — names only, no values)
+
+On GitHub Free private repos have no secret storage, so every R1–R7 runtime secret lives on
+the Mac `deploy` agent (root-owned file) and is pushed to Cloudflare as Worker secrets or
+KV/R2 by tenant sync; repos hold names + wiring only. Per-repo name lists are slice P's
+document; Keychain `digithings-local/*` entries never enter any repo.
+
+### 5. Rollback (per phase, unchanged + two additions)
+
+P0–P2: nothing irreversible. P3: before step 8 rename-back; after step 8 delete/re-privatise
+R0 and yank packages. P4 per-target table above stands, plus: R0 mirror divergence → stop
+writing via Origin, finish on GitHub, re-run `create-mirrored` (Chris); Pages domain moves
+revert by moving the domain back (minutes); KV rollback re-runs `kv-sync` from the previous tag.
+
+### 6. Chris-approval gates (each: doer + verify)
+
+1. Namespace + eight repo names (permanent in beta) — Chris confirms; verify `origin repo list`.
+2. Buildkite org + Origin connect (D-O3) — Chris; verify org provider + queues `ci`, `deploy`.
+3. Mac dispatcher caps + `~/Code/ci-runs/` home (D-CI2) — Chris; verify agent reachable + week-one re-measure.
+4. Non-GitHub registries (PyPI/npm/images) — Chris; verify first publishes resolve off-GitHub.
+5. D-R5-1 image direction; `byok-providers.json` owner; `config/contract` home — Chris; verify plan edit.
+6. Every P4 cut-over deploy from a Chris-cut release tag; verify per-target validation receipt.
+7. P3 cutover renames + visibility + `create-mirrored` — Chris; verify SHA-equality table.
+
+### 7. Docs + openwiki updates (this slice)
+
+This PR updates `docs/repo-split/` only. P6 table additions from the slices: R0 README/CONTRIBUTING
+(state the non-GitHub registries + local-ci reporting once chosen); R5/R2 runbooks (Mac gate hook,
+`allowed_signers` rotation, tag-cut procedure); openwiki per-module pages (install from registries,
+`openwiki/dashboard` → R3); digibook architecture chapter (repo map + release flow); Paperclip
+bindings + seat instructions (Origin URLs, `origin`/`github` remotes, agents never cut release tags).
+`repo-split.md`/`CONTRIBUTING`/openwiki/digibook pages land per repo at extraction; the public-safe
+repo map lands in R0 at P3.
+
+### 8. Open inputs (no draft yet — not invented here)
+
+A (DIG-3558, Origin capabilities verification), K (DIG-3568, twelve-x inventory), L (DIG-3569,
+extraction scripts dry-run), M (DIG-3570, workspace config), N (DIG-3571, deploy hooks). Each
+lands as its issue's `plan` document; this section absorbs them without reordering the phases.
 
 ## Tracking
 
