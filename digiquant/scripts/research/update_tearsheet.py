@@ -34,15 +34,16 @@ try:
 except ImportError:
     _HAS_SUPABASE = False
 
+logger = logging.getLogger(__name__)
+
 try:
     from dotenv import load_dotenv
 
     load_dotenv(Path(__file__).parent.parent / "config" / "supabase.env")
     load_dotenv()  # also loads .env from cwd (lower priority)
-except ImportError:
-    pass
+except ImportError:  # python-dotenv is an optional probe; not fatal
+        logger.debug("python-dotenv is not installed; continuing without it")
 
-logger = logging.getLogger(__name__)
 
 from digiquant.research import dashboard_digest as _digest  # noqa: E402
 from digiquant.dashboard.performance_returns import calculate_performance_returns  # noqa: E402
@@ -344,7 +345,7 @@ def simulate_portfolio(digests):
                         ret = (p1 - p0) / p0
                         daily_return += weight * ret
                 except KeyError:
-                    pass
+                    logger.debug("no price for %s on %s", ticker, prev_date)
             nav = nav * (1.0 + daily_return)
 
         # Apply any digest published on or prior to this trading date
@@ -506,7 +507,7 @@ def compute_fx_impact(pj_positions, investor_currency):
                             f"yfinance close {prices.index[idx].strftime('%Y-%m-%d')}"
                         )
             except _PRICE_CELL_ERRORS:
-                pass
+                logger.debug("entry price unreadable for %s", ticker, exc_info=True)
 
         # --- Current price (USD) ---
         current_price = None
@@ -516,7 +517,7 @@ def compute_fx_impact(pj_positions, investor_currency):
                 if pd.notna(v):
                     current_price = float(v)
             except _PRICE_CELL_ERRORS:
-                pass
+                logger.debug("current price unreadable for %s", ticker, exc_info=True)
 
         usd_return_pct = None
         if entry_price and current_price and entry_price > 0:
@@ -533,7 +534,7 @@ def compute_fx_impact(pj_positions, investor_currency):
                     if pd.notna(v):
                         entry_usdx = float(v)
             except _PRICE_CELL_ERRORS:
-                pass
+                logger.debug("entry FX unreadable: %s / %s", ticker, fx_ticker, exc_info=True)
 
         fx_return_pct = None
         adj_return_pct = None

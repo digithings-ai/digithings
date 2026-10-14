@@ -28,6 +28,7 @@ It does not read or write the local agent scratch tree (see `data/agent-cache/`)
 
 import argparse
 import json
+import logging
 import os
 import re
 import sys
@@ -45,13 +46,15 @@ try:
 except ImportError:
     _HAS_SUPABASE = False
 
+logger = logging.getLogger(__name__)
+
 try:
     from dotenv import load_dotenv  # type: ignore
 
     load_dotenv(Path(__file__).parent.parent / "config" / "supabase.env")
     load_dotenv()
-except ImportError:
-    pass
+except ImportError:  # python-dotenv is an optional probe; not fatal
+        logger.debug("python-dotenv is not installed; continuing without it")
 
 
 from lib.roots import DIGEST_SNAPSHOT_SCHEMA

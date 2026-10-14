@@ -11,19 +11,22 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import sys
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any, Dict, List  # score:allow untyped any — duck-typed PostgREST rows
 
+logger = logging.getLogger(__name__)
+
 try:
     from dotenv import load_dotenv  # type: ignore
 
     load_dotenv(Path(__file__).parent.parent / "config" / "supabase.env")
     load_dotenv()
-except ImportError:
-    pass
+except ImportError:  # python-dotenv is an optional probe; not fatal
+        logger.debug("python-dotenv is not installed; continuing without it")
 
 try:
     from supabase import create_client  # type: ignore

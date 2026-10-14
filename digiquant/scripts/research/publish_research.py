@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import sys
 from datetime import date as dt_date
@@ -47,12 +48,14 @@ try:
 except ImportError:
     _HAS_SB = False
 
+logger = logging.getLogger(__name__)
+
 try:
     from dotenv import load_dotenv
     load_dotenv(Path(__file__).parent.parent / "config" / "supabase.env")
     load_dotenv()
-except ImportError:
-    pass
+except ImportError:  # python-dotenv is an optional probe; not fatal
+        logger.debug("python-dotenv is not installed; continuing without it")
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 

@@ -20,6 +20,7 @@ Environment: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (see config/supabase.env)
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import subprocess
 import sys
@@ -33,13 +34,15 @@ try:
 except ImportError:
     _HAS_SB = False
 
+logger = logging.getLogger(__name__)
+
 try:
     from dotenv import load_dotenv  # type: ignore
 
     load_dotenv(Path(__file__).parent.parent / "config" / "supabase.env")
     load_dotenv()
-except ImportError:
-    pass
+except ImportError:  # python-dotenv is an optional probe; not fatal
+        logger.debug("python-dotenv is not installed; continuing without it")
 
 ROOT = Path(__file__).parent.parent
 _REPO_ROOT = Path(__file__).resolve().parents[3]
