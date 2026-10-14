@@ -38,8 +38,13 @@ interface RecordedQuery {
 }
 
 const snapshotDb = vi.hoisted(() => ({
-  /** Row fixtures per table. A table with no fixture answers empty. */
-  rows: {} as Record<string, Record<string, unknown>[]>,
+  /**
+   * Row fixtures per table. A table with no fixture answers empty.
+   * `unknown[]` rather than `Record<string, unknown>[]`: the row types are
+   * interfaces with no index signature, so they are not assignable to a
+   * `Record<string, unknown>` without a cast at each of the 15 fixture sites.
+   */
+  rows: {} as Record<string, unknown[]>,
   queries: [] as {
     table: string;
     columns: string;
@@ -97,7 +102,9 @@ vi.mock('./supabase', () => {
       },
       then: (onFulfilled) => {
         snapshotDb.queries.push(record);
-        let rows = snapshotDb.rows[table] ?? [];
+        let rows = (snapshotDb.rows[table] ?? []).map(
+          (row) => row as Record<string, unknown>,
+        );
         rows = rows.filter((row) =>
           record.eq.every(([column, value]) => row[column] === value),
         );
@@ -118,8 +125,8 @@ vi.mock('./supabase', () => {
               ? (options as { ascending?: boolean }).ascending !== false
               : true;
           decorated.sort((a, b) => {
-            const av = a.row[column];
-            const bv = b.row[column];
+            const av = String(a.row[column]);
+            const bv = String(b.row[column]);
             if (av === bv) return a.i - b.i;
             const cmp = av < bv ? -1 : 1;
             return ascending ? cmp : -cmp;
@@ -164,9 +171,9 @@ function makeThrowawayBuilder() {
  * ------------------------------------------------------------------ */
 
 /** Newest generation on 2026-06-02. Verbatim from the CTO's frame. */
-const NEW_STAMP = '2026-07-23T22:43:39.052539+00';
+const NEW_STAMP = '2026-07-23T22:43:39.052539+00:00';
 /** Superseded generation on the same date. Verbatim from the CTO's frame. */
-const OLD_STAMP = '2026-06-30T23:00:54.339621+00';
+const OLD_STAMP = '2026-06-30T23:00:54.339621+00:00';
 
 const CONFLUENCE_DATE = '2026-06-02';
 
@@ -326,8 +333,12 @@ describe('DIG-57 leaf 4 — anchor-then-filter on the limited readers', () => {
     // stamp the fixture carries — read back out of the main query's recorded eq.
     const recorded = asOfEq(main);
     expect(recorded).toBe(NEW_STAMP);
-    // Falsifier for a broken test: if the stamp survived a toISOString() round
-    // trip this string would no longer equal what the anchor resolved.
+    // Falsifier for a broken test. Measured on this host's Node v26.10.0:
+    // `Date.parse` ACCEPTS `+00:00` and REJECTS the bare `+00` form, and
+    // `toISOString()` truncates 6 fractional-second digits to 3 — the stamp
+    // below becomes `...39.052Z`. So a round trip is provably a different
+    // string, and this assertion cannot be satisfied by one.
+    expect(new Date(NEW_STAMP).toISOString()).toBe('2026-07-23T22:43:39.052Z');
     expect(new Date(NEW_STAMP).toISOString()).not.toBe(NEW_STAMP);
     expect(anchor.columns).toBe('as_of');
   });
@@ -418,50 +429,50 @@ describe('DIG-57 leaf 4 — the permanent-surplus dates', () => {
         event_key: 'RETAIL',
         event_name: 'Retail Sales',
         mentions: 8,
-        as_of: '2026-07-16T09:19:07.998304+00',
+        as_of: '2026-07-16T09:19:07.998304+00:00',
       }),
       eventRow({
         run_date: '2026-07-16',
         event_key: 'RETAIL',
         event_name: 'Retail Sales',
         mentions: 5,
-        as_of: '2026-07-16T09:19:07.998304+00',
+        as_of: '2026-07-16T09:19:07.998304+00:00',
       }),
       eventRow({
         run_date: '2026-07-16',
         event_key: 'RETAIL',
         event_name: 'Retail Sales',
         mentions: 11,
-        as_of: '2026-07-16T13:23:45.54194+00',
+        as_of: '2026-07-16T13:23:45.54194+00:00',
       }),
       eventRow({
         run_date: '2026-07-16',
         event_key: 'GDP',
         event_name: 'GDP Advance',
         mentions: 7,
-        as_of: '2026-07-16T13:23:45.54194+00',
+        as_of: '2026-07-16T13:23:45.54194+00:00',
       }),
     ];
 
     const rows = await getEventOpinions('2026-07-16');
 
     expect(rows.map((r) => r.as_of)).toEqual([
-      '2026-07-16T13:23:45.54194+00',
-      '2026-07-16T13:23:45.54194+00',
+      '2026-07-16T13:23:45.54194+00:00',
+      '2026-07-16T13:23:45.54194+00:00',
     ]);
     expect(rows.map((r) => r.event_key)).toEqual(['RETAIL', 'GDP']);
   });
 
   it('2026-07-17 — keeps only the 13:02 publish across eight rows', async () => {
     const stamps = [
-      '2026-07-17T01:57:53.18852+00',
-      '2026-07-17T01:57:53.18852+00',
-      '2026-07-17T01:57:53.18852+00',
-      '2026-07-17T09:31:04.700112+00',
-      '2026-07-17T09:31:04.700112+00',
-      '2026-07-17T13:02:17.171707+00',
-      '2026-07-17T13:02:17.171707+00',
-      '2026-07-17T13:02:17.171707+00',
+      '2026-07-17T01:57:53.18852+00:00',
+      '2026-07-17T01:57:53.18852+00:00',
+      '2026-07-17T01:57:53.18852+00:00',
+      '2026-07-17T09:31:04.700112+00:00',
+      '2026-07-17T09:31:04.700112+00:00',
+      '2026-07-17T13:02:17.171707+00:00',
+      '2026-07-17T13:02:17.171707+00:00',
+      '2026-07-17T13:02:17.171707+00:00',
     ];
     snapshotDb.rows.fx_events_snapshot = stamps.map((as_of, i) =>
       eventRow({
@@ -476,7 +487,7 @@ describe('DIG-57 leaf 4 — the permanent-surplus dates', () => {
     const rows = await getEventOpinions('2026-07-17');
 
     expect(rows).toHaveLength(3);
-    expect(rows.every((r) => r.as_of === '2026-07-17T13:02:17.171707+00')).toBe(true);
+    expect(rows.every((r) => r.as_of === '2026-07-17T13:02:17.171707+00:00')).toBe(true);
     // The 01:57 rows outrank the 13:02 rows on mentions, so an unanchored read
     // with no limit returns a blend of two publishes. The surviving three are
     // the 13:02 rows, ranked mentions-descending.
