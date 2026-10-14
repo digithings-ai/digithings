@@ -26,9 +26,12 @@ grounding rule (DIG-100, DIG-509 G1', and the canonical text owned by
 ``docs/digichat/no-invent-guard.md``) holds that a source-or-refuse rule that
 also enumerates capabilities is the defect it exists to prevent, because an
 inventory read from configuration goes stale and the agent presents it as
-fact. These documents are handed to a client-visible agent, so they name no
-tool, no retrieval surface, no collection and no customer. ``tests/dg/
-test_skill_library.py`` pins that absence.
+fact. ``tests/dg/test_skill_library.py`` rejects that inventory
+(``azure_ai_search``, ``mcp``, "tool name" / "tool call" / "tool id", and the
+words index, corpus, and tenant). DIG-3355 workflows may still name the
+retrieval paths that brief requires — semantic search over past tickets,
+Zammad metadata tools, and help-docs search — so the agent can pick a path.
+``present-results`` still forbids reciting those paths to the reader.
 """
 
 from __future__ import annotations
