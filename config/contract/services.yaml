@@ -215,3 +215,11 @@ workers:
     contract_vars: false # backend switch lives in .dev.vars; no [vars] table yet.
     note: D1-backed data API (DIG-2895). NOT deployed — no deploy workflow, no
       routes, no custom domain. Deploying or adding routes needs Chris's approval.
+  - name: corpus-index
+    file: apps/corpus-index/wrangler.toml
+    workers_dev: true
+    durable_objects: []
+    contract_vars: false # [vars] are DRY_RUN/CLOUDFLARE_ACCOUNT_ID only; no DT_* block.
+    note: bge-m3 ticket-index Worker (DIG-3269, workspace `corpus-index`). Serves
+      /embed for the OCC occ-tickets search and runs the daily corpus-index-daily
+      Workflow. Upstream of the stack Worker's DIGISEARCH_BGE_M3_EMBED_URL.

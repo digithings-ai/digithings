@@ -182,11 +182,16 @@ def test_main_exit_nonzero_with_unified_diff_on_drift(
 
 
 def test_real_repo_blobs_agree(ccm: Any) -> None:
-    """The three real blobs agree at this commit — the drift gate has a green baseline."""
+    """The real blobs agree at this commit — the drift gate has a green baseline.
+
+    Two blobs since 2026-10-14 (82ed363fa): the wrangler ``[vars]`` copy was retired
+    because the OCC prompt pushed it past Cloudflare's 5.1 kB text-binding limit, so
+    ``src/index.ts`` carries the map as its fallback default instead.
+    """
+    assert ccm.load_wrangler_map(ccm.default_wrangler_file()) is None
     report = ccm.compare_maps(
         [
             ("embed", ccm.load_embed_map(ccm.default_compose_file())),
-            ("wrangler", ccm.load_wrangler_map(ccm.default_wrangler_file())),
             ("index.ts", ccm.load_index_ts_map(ccm.default_index_ts_file())),
         ]
     )
@@ -194,13 +199,15 @@ def test_real_repo_blobs_agree(ccm: Any) -> None:
 
 
 def _load_raw_corpus_maps(ccm: Any) -> dict[str, dict[str, Any]]:
-    """Parse the three real ``DIGI_TENANT_CORPUS_MAP`` blobs WITHOUT field reduction.
+    """Parse the real ``DIGI_TENANT_CORPUS_MAP`` blobs WITHOUT field reduction.
 
     The drift gate deliberately compares only ``digisearchIndex``/``vaultPathPrefix``
     (sibling keys such as the OCC ``researchSystemPrompt`` are out of its scope),
     so prompt parity is pinned here instead: the compose override's stack-service
-    value, the wrangler ``[vars]`` value, and the ``index.ts`` ``??`` fallback
-    (TS-decoded first — the runtime TS-evaluates the literal before parsing it).
+    value and the ``index.ts`` ``??`` fallback (TS-decoded first — the runtime
+    TS-evaluates the literal before parsing it). The wrangler ``[vars]`` copy is
+    included only when it is there; it was retired on 2026-10-14 (82ed363fa), since
+    the OCC prompt exceeded Cloudflare's 5.1 kB text-binding limit.
     """
     import tomllib
 
@@ -210,15 +217,17 @@ def _load_raw_corpus_maps(ccm: Any) -> dict[str, dict[str, Any]]:
     ]
     with open(ccm.default_wrangler_file(), "rb") as fh:
         wrangler_doc = tomllib.load(fh)
-    wrangler_raw = wrangler_doc["vars"]["DIGI_TENANT_CORPUS_MAP"]
+    wrangler_raw = (wrangler_doc.get("vars") or {}).get("DIGI_TENANT_CORPUS_MAP")
     index_src = ccm.default_index_ts_file().read_text(encoding="utf-8")
     match = ccm._FALLBACK_RE.search(index_src)
     assert match, "DIGI_TENANT_CORPUS_MAP fallback literal not found in index.ts"
-    return {
+    maps = {
         "compose": json.loads(compose_raw),
-        "wrangler": json.loads(wrangler_raw),
         "index.ts": json.loads(ccm.decode_ts_string_literal(match.group(1))),
     }
+    if isinstance(wrangler_raw, str) and wrangler_raw.strip():
+        maps["wrangler"] = json.loads(wrangler_raw)
+    return maps
 
 
 def test_decode_ts_string_literal_doubled_escapes(ccm: Any) -> None:
@@ -249,7 +258,7 @@ def test_real_blobs_occ_prompt_parity(ccm: Any) -> None:
 
 
 def test_real_blobs_digithings_carries_no_prompt(ccm: Any) -> None:
-    """digithings entries stay prompt-free in all three maps (generic project prompt)."""
+    """digithings entries stay prompt-free in every map (generic project prompt)."""
     raw = _load_raw_corpus_maps(ccm)
     for name, blob in raw.items():
         entry = blob["digithings"]

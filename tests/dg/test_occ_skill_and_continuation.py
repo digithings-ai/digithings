@@ -96,6 +96,6 @@ def test_workflow_request_carries_lock_into_state() -> None:
     from digigraph.models import WorkflowRequest
 
     req = WorkflowRequest.model_validate(
-        {"messages": [{"role": "user", "content": "hi"}], "lock_session_controls": True}
+        {"prompt": "hi", "lock_session_controls": True}
     )
     assert req.lock_session_controls is True

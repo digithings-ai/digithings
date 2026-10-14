@@ -88,6 +88,17 @@ jobs:
       - name: Test digiquant-runner allowlist
         run: python3 apps/digiquant-runner/container/exec_job_test.py
 
+      # corpus-index Worker (DIG-3269, workspace `corpus-index`): serves the bge-m3
+      # ticket index at /embed for OCC search. Same lane as the Workers above — the
+      # root `npm ci` has already installed the workspace. Its wrangler dry-run build
+      # lives in build-cloudflare-workers.yml; these two steps are the suite and the
+      # typecheck that no lane ran before #5580.
+      - name: Test corpus-index
+        run: npm run test --workspace corpus-index
+
+      - name: Typecheck corpus-index
+        run: npm run typecheck --workspace corpus-index
+
       - name: Lint digiquant-web
         run: npm run lint --workspace digiquant-web
 

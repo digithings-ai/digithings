@@ -564,6 +564,15 @@ KNOWN_REMAINING: dict[str, _Allowance] = {
     # routing table and which are a description.
     "apps/digithings-web/lib/appPresets.ts": _Allowance(2, 2),
     "digillm/src/digillm/client.py": _Allowance(17, 17),
+    # The OCC session model picker (2026-10-13, DIG-1210): the default of
+    # `env.DIGI_SESSION_MODEL_ALLOWLIST` in the stack Worker, i.e. the list
+    # digigraph binds against per session when the var is unset. The live worker
+    # carries no such var, so this literal *is* the served value. Registered for
+    # #5029 phase 2, which moves model names into config/.
+    "apps/digithings-stack-cloudflare/src/index.ts": _Allowance(1, 1),
+    # A JSON-schema description for SESSION_SET_MODEL_TOOL ("Model id, e.g. ...").
+    # Prose, not a routing table -- same class as the refusal message below.
+    "digigraph/src/digigraph/orchestration/session_prefs_tools.py": _Allowance(1, 1),
     # One refusal message naming the fallback model. A message is as much a
     # literal as a routing table -- the same reasoning #5046 applied when it
     # replaced digigraph's per-provider refusal examples.

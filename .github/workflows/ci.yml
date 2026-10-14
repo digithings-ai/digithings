@@ -146,6 +146,7 @@ jobs:
               - 'Dockerfile.digitrace-langfuse-worker'
               - 'apps/dashboard-api/**'
               - 'apps/digidata-api/**'
+              - 'apps/corpus-index/**'
               - 'package.json'
               - 'package-lock.json'
               - '.github/workflows/test-web.yml'
