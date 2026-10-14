@@ -1,0 +1,4 @@
+# Second-pass removals from the R5 extraction: the 10 OCC seed files that move to R6.
+# Applied as `git filter-repo --path <p> --invert` after the keep-pass.
+apps/digithings-stack-cloudflare/container/seed/occ_help
+apps/digithings-stack-cloudflare/container/seed/vault/clients/online-compliance-center

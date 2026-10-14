@@ -1,0 +1,11 @@
+# Known cross-repo path overlaps. Format: <repoA> <repoB> <path>.
+# R1 wins the SDCA scripts at migration (plan order R1 before R2); dry-run extractions each carry them.
+r1 r2 digiquant/scripts/generate_tearsheets.py
+r1 r2 digiquant/scripts/export_sdca_macro.py
+r1 r2 digiquant/scripts/plot_sdca_tearsheet.py
+# test-web.yml is a shared lane: R3 and R4 each keep their section (split at migration).
+r3 r4 .github/workflows/test-web.yml
+# OCC verify/fixture scripts guard R5+R6 surfaces (DIG-3566 F13); owner ruling owed by DIG-3567.
+r5 r6 scripts/verify_occ_invite_key.sh
+r5 r6 scripts/test_verify_occ_invite_key.sh
+r5 r6 scripts/occ_invite_key_fixture_server.mjs

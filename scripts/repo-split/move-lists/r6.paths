@@ -1,0 +1,26 @@
+# R6 digichat-tenants — client corpora, seeds, rollout tooling (DIG-3567, DIG-3518).
+# PROVISIONAL: DIG-3567 is still in_progress with no inventory doc yet. Sources below are
+# repo-split.md section R6 + the 10 OCC seed paths confirmed in DIG-3566 section A.1.
+# Verified present at github/develop d227b6ed5 (2026-10-14) unless marked NEW.
+apps/digithings-stack-cloudflare/container/seed/occ_help
+apps/digithings-stack-cloudflare/container/seed/vault/clients/online-compliance-center
+apps/digichat/config/datatap-trial-foundry.yaml
+apps/digichat/config/datatap-trial-test.yaml
+apps/digichat/config/examples/occ-embed.yaml
+apps/digichat/config/examples/datatap-mcp.yaml
+apps/digichat/config/examples/datatap-trial-deploy.md
+apps/digichat/src/lib/embed-suggestion-pools.ts
+apps/digichat/src/lib/embed-suggestion-pools.test.ts
+apps/digichat/src/app/(devkit)/devkit/devkit-looks.ts
+apps/digichat/src/app/(devkit)/devkit/devkit-looks.test.ts
+config/datatap_azure_access_register.json
+config/engagement-paths.json
+scripts/check_tenant_corpus_map.py
+scripts/verify_occ_invite_key.sh
+scripts/test_verify_occ_invite_key.sh
+scripts/occ_invite_key_fixture_server.mjs
+tests/scripts/test_check_tenant_corpus_map.py
+tests/dg/test_tenant_corpus_parity.py
+tests/dg/test_occ_ticket_payload_retired.py
+.github/workflows/datatap-answer-check.yml
+.github/workflows/occ-invite-key-rollout.yml

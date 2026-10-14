@@ -1,0 +1,10 @@
+# R4 digithings-web — digithings.ai site + digibook + brand (DIG-3565, DIG-3518).
+# Verified present at github/develop d227b6ed5 (2026-10-14). One path per line.
+# NOTE: .github/workflows/test-web.yml is SHARED with R3 (both keep a copy at migration).
+apps/digithings-web
+packages/brand
+.github/workflows/book-pdf.yml
+.github/workflows/deploy-digithings-cloudflare.yml
+.github/workflows/refresh-repo-activity.yml
+.github/workflows/test-web.yml
+scripts/build-digithings.sh
