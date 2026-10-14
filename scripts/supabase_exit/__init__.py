@@ -6,7 +6,8 @@ D1; the same file imports into D1 via ``wrangler d1 execute --local``) in
 explicit batches inside transactions. Verification is row counts plus a
 SHA-256 checksum per table over canonically ordered rows.
 
-Hard local-only guards (see ``_assert_local_only``):
+Hard local-only guards (``assert_local_dump_file`` in ``pg_dump_split``,
+``assert_local_target`` in ``d1_import``):
 
 * the dump must be a plain local file -- never a URL, never stdin-from-network;
 * the target must be a local SQLite file -- this package offers no remote

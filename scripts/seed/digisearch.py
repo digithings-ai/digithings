@@ -1,7 +1,7 @@
 """digisearch seeds for the local stack (plan section 5).
 
 The plan names `make seed-digisearch-local`, and that target already exists
-(Makefile:189) and already works: this module does not reimplement it. It
+(Makefile:215) and already works: this module does not reimplement it. It
 supplies the two things that target needs and cannot invent for itself:
 
 * the **corpus** — synthetic markdown dropped into `digisearch/seeds/`, the

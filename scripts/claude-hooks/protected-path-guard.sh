@@ -2,8 +2,8 @@
 # Block edits to protected paths unless we're on a properly-named branch
 # (task/N-slug or the repo's feat|fix|docs|chore taxonomy) or the caller
 # explicitly sets DIGI_ALLOW_PROTECTED=1 (must be human-set, not agent-set).
-# Issue traceability is still enforced separately by the "Require Fixes #N" CI
-# gate — this hook only gates *which branch shape* may touch these paths.
+# Issue linkage is a convention, not a CI gate (ADR 0024). This hook only
+# gates *which branch shape* may touch these paths.
 source "$(dirname "$0")/_lib.sh"
 
 path="$(hook_field file_path)"
