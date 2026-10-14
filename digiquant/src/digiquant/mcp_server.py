@@ -158,7 +158,8 @@ def _r2_is_stale(manifest_as_of: str, resolved_as_of: str) -> bool:
 # ``digiquant.data.gloomberb.agent_tools``) and are imported at the top of this
 # module under ``_build_gloomberb_client`` / ``_gloomberb_envelope_json``. The
 # builder remains the patchable seam tests use to inject a MockTransport-backed
-# client. ``GLOOMBERB_ENABLED`` defaults OFF (Counsel memo DIG-1233);
+# client. ``GLOOMBERB_ENABLED`` defaults ON since the DIG-2752 rescope (decision
+# d4922299, which superseded the DIG-1233 opt-in); set it to 0 to stop the family.
 # the session cookie is never logged or echoed into tool payloads.
 
 
@@ -1099,8 +1100,8 @@ def create_mcp_server(
 
     # ── digifetch x Gloomberb market-data reads (#4069, #4110) ──────────────
     # 33 enrichment tools over api.gloom.sh (plus a Yahoo-backed earnings
-    # calendar). Default-OFF behind GLOOMBERB_ENABLED (explicit opt-in
-    # re-enables); anonymous unless
+    # calendar). On by default since the DIG-2752 rescope;
+    # GLOOMBERB_ENABLED=0 stops the family. Anonymous unless
     # GLOOMBERB_SESSION_COOKIE is set for holders / analyst / corporate-actions
     # / research-search / transcripts / statements / tweets / short-interest /
     # equity-diagnostic (transcripts and screener additionally need a Pro
@@ -1116,8 +1117,8 @@ def create_mcp_server(
         """Latest quote for one listing via Gloomberb Cloud (anonymous; JSON envelope).
 
         `exchange` is optional. Enrichment only: free-tier data is delayed up
-        to 15 minutes and is never a pipeline primary. Disabled by the
-        GLOOMBERB_ENABLED kill switch (default OFF; explicit opt-in re-enables). Carries "Sourced from
+        to 15 minutes and is never a pipeline primary. On by default; set
+        GLOOMBERB_ENABLED=0 to stop the family. Carries "Sourced from
         Gloomberb" attribution and a term.gloom.sh deep link.
         """
         try:

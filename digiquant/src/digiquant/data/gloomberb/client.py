@@ -8,7 +8,8 @@ additionally require a Pro plan). The client owns endpoint constants, error
 mapping (§5.3), the 900s TTL cache, a circuit breaker, and the kill switch;
 ``digifetch`` stays the generic transport engine.
 
-The kill switch is ``GLOOMBERB_ENABLED`` (default OFF): tools are default-OFF in
+The kill switch is ``GLOOMBERB_ENABLED`` (default ON since DIG-2752's
+rescope; ``=0`` stops the family): tools are enabled in
 deployed environments, and an explicit opt-in (``1``/``true``/``yes``/``on``)
 re-enables the family. The session cookie is read from
 ``GLOOMBERB_SESSION_COOKIE`` - never logged, never part of tool input.
@@ -1224,14 +1225,19 @@ def _env_flag(name: str, *, default: bool) -> bool:
 
 
 def gloomberb_enabled() -> bool:
-    """Resolve the family kill switch from env (``GLOOMBERB_ENABLED``, default OFF).
+    """Resolve the family kill switch from env (``GLOOMBERB_ENABLED``, default ON).
+
+    DIG-2752 rescope (Chris, decision d4922299, 2026-10-14): the keyless
+    ("free") tier needs no credential, so it ships enabled. ``=0`` remains the
+    full-family stop, and an unrecognized value (a typo like ``ture``) still
+    resolves OFF - only an *absent* variable now means ON.
 
     The same predicate ``GloomberbClient`` resolves at construction. Exposed so
     the in-process agent surface can stop *advertising* a disabled family rather
     than registering schemas whose every call returns the typed disabled
     envelope (#4146 review F1).
     """
-    return _env_flag(GLOOMBERB_ENABLED_ENV, default=False)
+    return _env_flag(GLOOMBERB_ENABLED_ENV, default=True)
 
 
 def _parse_retry_after(value: str | None) -> float | None:
@@ -1408,7 +1414,7 @@ class GloomberbClient:
                           created and owned by the client when omitted.
         base_url:         API root; defaults to ``https://api.gloom.sh``.
         enabled:          Kill switch; ``None`` reads ``GLOOMBERB_ENABLED``
-                          (default OFF). ``False`` makes every call return a
+                          (default ON). ``False`` makes every call return a
                           typed ``upstream_error`` envelope without any request.
         session_cookie:   Optional Gloom session cookie; ``None`` reads
                           ``GLOOMBERB_SESSION_COOKIE``. Accepts either a bare
@@ -1499,7 +1505,7 @@ class GloomberbClient:
 
     @property
     def enabled(self) -> bool:
-        """Kill-switch state (default OFF)."""
+        """Kill-switch state (default ON)."""
         return self._enabled
 
     def close(self) -> None:

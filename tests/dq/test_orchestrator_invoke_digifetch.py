@@ -236,59 +236,60 @@ def test_client_fault_returns_error_not_an_envelope(
     assert body["data"] == {"error": "RuntimeError: boom"}
 
 
-def test_section12_hosted_surface_tripwire_cookie_gated_tools_unreachable_when_switch_unset(
+def test_section12_hosted_surface_tripwire_gated_tools_unreachable_without_a_cookie(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """
-    §12 tripwire: with the family switch unset (default OFF in every
-    environment), cookie-gated tools MUST NOT be reachable from routed/hosted
-    surfaces. Because the default is unconditional, the deployed configuration
-    is this same unset state.
+    """§12 tripwire, re-pinned after the DIG-2752 rescope (decision d4922299).
 
-    This test fails if a future change re-enables the family without an explicit
-    opt-in, which would violate the boundary policy (DIG-1233, DIG-1232).
-    The tripwire covers the orchestrator_invoke surface (digigraph hub dispatch).
+    The family no longer needs an opt-in, so the property is no longer "the kill
+    switch blocks everything". It is narrower and still zero-HTTP: from the
+    hosted /v1/orchestrator_invoke surface with NOTHING configured - no flag, no
+    cookie, exactly what a deployed environment looks like - a cookie-gated tool
+    MUST fail (now with the typed ``auth_required`` envelope instead of a
+    disabled ``upstream_error``) and MUST make no network request, while the
+    keyless ``free`` tools are reachable. The sibling tests above pin the same
+    ``auth_required`` envelope with the flag set explicitly; this one pins the
+    default, hosted, end-to-end shape that they do not cover.
     """
-    # Default state: GLOOMBERB_ENABLED is unset (default OFF), so a deployed
-    # environment with no secret set lands here too.
-    # No GLOOMBERB_SESSION_COOKIE is configured (no credential in CI/worker secrets).
     monkeypatch.delenv(GLOOMBERB_ENABLED_ENV, raising=False)
     monkeypatch.delenv(GLOOMBERB_SESSION_COOKIE_ENV, raising=False)
 
-    # The client should short-circuit on the kill switch, making zero HTTP requests.
-    # We patch with a handler that would fail if called, proving no request is made.
+    # Any handler would fail if called, proving no request is made.
     _patch_client(monkeypatch, _fail_handler)
 
-    # A session-gated tool (holders) must be blocked at the kill switch.
+    # A session-gated tool (holders) must not be reachable.
     r = client.post(
         "/v1/orchestrator_invoke",
         json={"tool": "digifetch_holders", "arguments": {"symbol": "AAPL"}},
     )
     assert r.status_code == 200
     body = r.json()
-    assert body["ok"] is False, "Cookie-gated tool must not succeed in deployed env"
-    # The kill switch returns a typed upstream_error envelope.
-    assert body["data"]["data"]["code"] == "upstream_error"
-    assert "kill switch" in body["data"]["data"]["message"].lower()
+    assert body["ok"] is False, "Cookie-gated tool must not succeed without a cookie"
+    assert body["data"]["data"]["code"] == "auth_required"
 
-    # A pro-gated tool (transcripts) must also be blocked at the kill switch.
+    # A pro-gated tool (transcripts) must not be reachable either.
     r = client.post(
         "/v1/orchestrator_invoke",
         json={"tool": "digifetch_transcripts", "arguments": {"ticker": "AAPL"}},
     )
     assert r.status_code == 200
     body = r.json()
-    assert body["ok"] is False, "Pro-gated tool must not succeed in deployed env"
-    assert body["data"]["data"]["code"] == "upstream_error"
-    assert "kill switch" in body["data"]["data"]["message"].lower()
+    assert body["ok"] is False, "Pro-gated tool must not succeed without a cookie"
+    assert body["data"]["data"]["code"] == "auth_required"
 
-    # Even a free tool must be blocked when the family is OFF.
+    # The keyless surface IS reachable now, and that is the decision: it must
+    # actually reach the transport, which a recording handler proves.
+    reached: list[str] = []
+
+    def _recording_handler(request: httpx.Request) -> httpx.Response:
+        reached.append(str(request.url))
+        return httpx.Response(200, json={"symbol": "AAPL", "price": 1.0})
+
+    _patch_client(monkeypatch, _recording_handler)
     r = client.post(
         "/v1/orchestrator_invoke",
         json={"tool": "digifetch_quote", "arguments": {"symbol": "AAPL"}},
     )
     assert r.status_code == 200
-    body = r.json()
-    assert body["ok"] is False, "Free tool must not succeed when family is OFF"
-    assert body["data"]["data"]["code"] == "upstream_error"
-    assert "kill switch" in body["data"]["data"]["message"].lower()
+    assert r.json()["ok"] is True, "A free tool must succeed with no credential"
+    assert reached, "the free tool must actually reach the transport"

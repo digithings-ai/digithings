@@ -143,7 +143,9 @@ def session_gate_status(cookie: str | None = None) -> SessionGateStatus:
     """
     if not gloomberb_enabled():
         return SessionGateStatus(
-            False, "disabled", "GLOOMBERB_ENABLED is not set; the whole family is off"
+            False,
+            "disabled",
+            "GLOOMBERB_ENABLED=0 (or an unrecognized value); the whole family is off",
         )
     raw = _read_cookie() if cookie is None else cookie.strip()
     if not raw:
