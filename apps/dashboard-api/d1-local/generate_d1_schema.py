@@ -316,11 +316,13 @@ def parse_table(sql, real, start, endpos):
             "uniques": uniques, "dropped": dropped}
 
 def main():
-    src = open(CORPUS, encoding="utf-8").read()
+    with open(CORPUS, encoding="utf-8") as f:
+        src = f.read()
     offs = []
-    for line in open(MANIFEST, encoding="utf-8"):
-        p = line.rstrip("\n").split("\t")
-        if len(p) >= 2: offs.append((int(p[0]), p[1]))
+    with open(MANIFEST, encoding="utf-8") as f:
+        for line in f:
+            p = line.rstrip("\n").split("\t")
+            if len(p) >= 2: offs.append((int(p[0]), p[1]))
     offs.sort()
     def file_of(pos):
         f = None
@@ -462,7 +464,8 @@ def main():
     print("order_unique        =", len(order), "of", len(set(order)))
     coll = {k: v.get("name_collisions") for k, v in tables.items() if v.get("name_collisions")}
     print("name_collisions     =", len(coll), coll)
-    json.dump({"tables": tables, "order": order}, open(os.path.join(WORK, "parsed.json"), "w"), indent=1)
+    with open(os.path.join(WORK, "parsed.json"), "w") as f:
+        json.dump({"tables": tables, "order": order}, f, indent=1)
     print("tables_parsed      =", len(order))
     print("redeclared         =", sum(t.get("redeclared", 0) for t in tables.values()))
     print("total_columns      =", sum(len(t["cols"]) for t in tables.values()))
@@ -482,7 +485,8 @@ def main():
 
 main()
 
-d = json.load(open(os.path.join(WORK, "parsed.json")))
+with open(os.path.join(WORK, "parsed.json")) as f:
+    d = json.load(f)
 tables, order = d["tables"], d["order"]
 
 DOMAIN = [

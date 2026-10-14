@@ -169,7 +169,7 @@ export function formatEmbedChatError(error: Error | undefined): string | null {
     return "Free tier quota is exhausted. Add your own API key to continue.";
   }
   if (code === "rate_limit" || code === "rate_limit_exceeded") {
-    return message ?? "Rate limited. Try again shortly, or continue with your own API key.";
+    return "Rate limited. Try again shortly, or continue with your own API key.";
   }
   if (NETWORK_ERROR_RE.test(raw)) {
     return (
@@ -187,10 +187,7 @@ export function formatEmbedChatError(error: Error | undefined): string | null {
     return BYOK_MODEL_REMEDIABLE_MESSAGE;
   }
   if (code && UPSTREAM_ERROR_CODES.has(code)) {
-    return (
-      message ??
-      "digichat could not reach digigraph or digikey. Check make stack-local, then retry."
-    );
+    return "digichat could not reach digigraph or digikey. Check make stack-local, then retry.";
   }
   return raw.length > 240 ? `${raw.slice(0, 240)}…` : raw;
 }

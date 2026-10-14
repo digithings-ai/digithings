@@ -99,6 +99,9 @@ export function RepoHeatmap({
       setArmed(true);
       return;
     }
+    // IntersectionObserver(callback, options) is the real DOM signature —
+    // the threshold option below is required behaviour, not a superfluous
+    // argument (CodeQL #3016 flagged for dismissal in GitHub UI).
     const observer = new IntersectionObserver(
       (entries) => {
         if (!entries.some((entry) => entry.isIntersecting)) return;
