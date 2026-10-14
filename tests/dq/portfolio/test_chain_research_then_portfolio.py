@@ -16,9 +16,6 @@ Two scenarios:
   outputs (phase_portfolio.asset_analysts, pm_direction_memo, sized_book) by the
   end. The fake Supabase client should record exactly one daily_snapshots
   upsert and the analyst/PM document writes.
-- ``test_monthly_chain_short_circuits_at_research`` — monthly run uses
-  research's phase_monthly path; portfolio does not run; state's H-slots stay
-  unset.
 """
 
 from __future__ import annotations
