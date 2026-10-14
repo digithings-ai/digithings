@@ -128,12 +128,16 @@ def load_embed_map(compose_path: Path) -> dict[str, dict[str, str]]:
     return extract_embed_corpus(tenants)
 
 
-def load_wrangler_map(wrangler_path: Path) -> dict[str, dict[str, str]]:
+def load_wrangler_map(wrangler_path: Path) -> dict[str, dict[str, str]] | None:
     with open(wrangler_path, "rb") as fh:
         doc = tomllib.load(fh)
     raw: Any = doc.get(_ENV_VAR, doc.get("vars", {}).get(_ENV_VAR))
     if not isinstance(raw, str) or not raw.strip():
-        raise ValueError(f"{_ENV_VAR} missing from {wrangler_path}")
+        # Retired from this file on 2026-10-14 (82ed363fa): with the OCC prompt
+        # the value exceeds Cloudflare's 5.1 kB text-binding limit, so the map
+        # ships in src/index.ts as the hardcoded fallback default and is checked
+        # by load_index_ts_map. The remaining legs still have to agree.
+        return None
     return _reduce_corpus_map(json.loads(raw))
 
 
@@ -196,12 +200,14 @@ def main(argv: list[str] | None = None) -> int:
 
     named = [
         ("embed", load_embed_map(args.compose_file)),
-        ("wrangler", load_wrangler_map(args.wrangler_file)),
         ("index.ts", load_index_ts_map(args.index_ts_file)),
     ]
+    wrangler_map = load_wrangler_map(args.wrangler_file)
+    if wrangler_map is not None:
+        named.insert(1, ("wrangler", wrangler_map))
     report = compare_maps(named)
     if report["ok"]:
-        print(f"corpus map ok: {len(named[0][1])} tenant(s) agree across 3 blobs")
+        print(f"corpus map ok: {len(named[0][1])} tenant(s) agree across {len(named)} blobs")
         return 0
     print("corpus map DRIFT:")
     for problem in report["problems"]:

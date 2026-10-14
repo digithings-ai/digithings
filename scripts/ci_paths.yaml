@@ -212,6 +212,14 @@ web:
   # devDependencies. Without it, apps/digidata-api/package.json was an orphan
   # install input and no lane ran its suite (#5404 review).
   - apps/digidata-api/**
+  # corpus-index Worker (workspace `corpus-index`, DIG-3269): serves the bge-m3
+  # ticket index at /embed and runs the daily corpus-index-daily Workflow. It is
+  # the upstream of the stack Worker's DIGISEARCH_BGE_M3_EMBED_URL. Same lane,
+  # same reason, as dashboard-api above: its vitest and tsc live in that package
+  # and this lane already pays the root `npm ci` that resolves its
+  # devDependencies. Without it, apps/corpus-index/package.json was an orphan
+  # install input and no lane built the Worker (#5580 review).
+  - apps/corpus-index/**
   - package.json
   - package-lock.json
   - .github/workflows/test-web.yml
