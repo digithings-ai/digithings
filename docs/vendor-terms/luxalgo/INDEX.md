@@ -1,7 +1,7 @@
 # LuxAlgo — terms record
 
 **Vendor:** LuxAlgo Global, LLC (Delaware)
-**Classification:** **CC0-1.0 CONFIRMED for the trackers dumps (Security, 2026-10-06)** — five families confirmed · **one Prohibited** (`short-volume`, Counsel 2026-10-06) · three items open with Counsel · see [Classification status](#classification-status)
+**Classification:** **CC0-1.0 CONFIRMED for the trackers dumps (Security, 2026-10-06)** — five families confirmed · **one Prohibited** (`short-volume`, Counsel 2026-10-06) · three items open with Counsel · **hosted-MCP access: Permitted; rendered-value redistribution Unclear → Counsel (Security, 2026-10-14)** · see [Classification status](#classification-status)
 **Record opened:** 2026-10-06 · **CTO**
 **Related:** DIG-1318 · DIG-1447 (three live trackers tools) · DIG-1251 (Counsel's ruling that *bounds* these tools — it is not their origin, and their absence from `REFUSED_TOOLS` is not a clearance)
 
@@ -420,6 +420,12 @@ the licence and theirs is about what we may do with it.
    answer it for anything the vendor delivers over the hosted MCP.
 3. Is the free/anonymous entitlement tier itself permitted for our use, given the
    exhaustion clause?
+4. **Hosted-MCP access method: Permitted (Security, 2026-10-14, DIG-1463).**
+   The Library (8) and Edge (3) tools run over the vendor's own documented
+   hosted interface: no replayed session, keys local, no brokerage password
+   reaches the vendor. That is the permitted shape. It does not answer item 2
+   (redistribution of rendered values) or item 3 (free-tier permissibility),
+   both of which stay Unclear with Counsel.
 
 Adjacent, and tracked separately: **DIG-1447** — three `luxalgo_trackers_*` tools
 are live, declared `free`, and absent from `REFUSED_TOOLS` in

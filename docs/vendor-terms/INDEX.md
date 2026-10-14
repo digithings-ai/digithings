@@ -111,14 +111,17 @@ and it stays his.
 
 | Vendor | Access method | Classification | Retrieved |
 |---|---|---|---|
-| [Bloomberg](bloomberg/INDEX.md) | no integration, no credential, no contact; one scoped news-retrieval domain | **pending Security** | 2026-10-06 |
-| [LuxAlgo](luxalgo/INDEX.md) | documented hosted MCP, 14 wrapped tools, live on `develop` | **data licence CONFIRMED CC0-1.0 per family · three items open with Counsel** | 2026-10-06 |
+| [Bloomberg](bloomberg/INDEX.md) | no integration, no credential, no contact; one scoped news-retrieval domain | **Prohibited absent written agreement; entitlement carve-out Unclear → Counsel (Security, 2026-10-14)** | 2026-10-06 |
+| [LuxAlgo](luxalgo/INDEX.md) | documented hosted MCP, 14 wrapped tools, live on `develop` | **data licence CONFIRMED CC0-1.0 per family · hosted-MCP access Permitted, redistribution Unclear → Counsel (Security, 2026-10-14)** | 2026-10-06 |
 | [FINRA](finra/INDEX.md) | none — **title record only**; we hold a normalised extract served inside a paid product | **PROHIBITED** (Counsel, 2026-10-06) | 2026-10-06 |
 
-"Pending Security" means the clauses are recorded and quoted but nobody has
-signed a classification yet. Under step 5 that blocks implementation on anything
-that adds access — it does not block the record existing, which is the point of
-writing it early.
+"Pending Security" meant the clauses were recorded and quoted but nobody had
+signed a classification yet. No record carries it now: Bloomberg is classified
+Prohibited-absent-agreement with the entitlement carve-out Unclear (Security,
+2026-10-14, DIG-1463) and LuxAlgo carries a per-family data-licence verdict plus
+a Permitted access verdict with redistribution Unclear. Under step 5 anything
+Unclear or Prohibited blocks implementation until Counsel records a position —
+it does not block the record existing, which is the point of writing it early.
 
 **The FINRA row is a different shape from the other two, and it is the one to
 learn from.** Bloomberg and LuxAlgo are access records: an integration exists and
