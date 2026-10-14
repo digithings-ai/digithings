@@ -155,10 +155,6 @@ export function languageLabel(code: string): string {
   return LANGUAGES.find((l) => l.code === code)?.label ?? code;
 }
 
-export function languageNative(code: string): string {
-  return LANGUAGES.find((l) => l.code === code)?.native ?? languageLabel(code);
-}
-
 /** Settings / nested list copy: `Italian · Italiano` when the autonym differs. */
 export function languageDisplayName(code: string): string {
   const row = LANGUAGES.find((l) => l.code === code);

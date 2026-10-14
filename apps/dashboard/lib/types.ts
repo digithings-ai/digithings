@@ -306,15 +306,6 @@ export interface MacroSeriesPoint {
   value: number | null;
 }
 
-/** One row in thesis_id history (theses table over time). */
-export interface ThesisHistoryPoint {
-  date: string;
-  thesis_id: string;
-  name: string;
-  status: string | null;
-  notes: string | null;
-}
-
 /** Portfolio meta / identity fields. */
 export interface PortfolioMeta {
   name: string;
