@@ -14,6 +14,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 MIGRATION_PATH = (
     Path(__file__).resolve().parents[3]
     / "digiquant"
