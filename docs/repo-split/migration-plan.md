@@ -442,14 +442,23 @@ never the self-hosted runner on R0, never the Cloudflare Cursor app.
   `apps/digiquant-web/` moves to R3 root.
 - R4 (H): 246 + brand 22 files; **PixelWordmark moves to shared UI/brand BEFORE extraction**
   (R3 imports it).
-- R5 (I): blocking Dockerfile findings F1 (R5 cannot build its MCP image — `digiquant/Dockerfile.mcp`
-  COPYs four R0 trees), F2 (5× `image_build_context` must become `.` after packaging), F3
-  (digichat Dockerfile has 11 COPYs over 8 paths, not one), F4 (unreported `config/searxng` edge),
-  F5 (**image direction is backwards**: R5 *produces* the digichat image today; needs Chris
-  D-R5-1); F6 cron is the only clock for 30 dispatch rows; F7 two dead dispatches
-  (`smoke-stack.yml`, `smoke-site.yml` — reported to IT); F8/F9/F13 cross-repo workflows;
-  F11 unreported `LANGFUSE_EVENTS` bucket; F12 cron workflow must move to `release/stack`;
-  `docs/ops/` is 26 runbooks + configs + Grafana + OTel + SQL, not 35 runbooks. Open D-R5-1…D-R5-5.
+- R5 (I, rev 2, answers by Chris 2026-10-14T20:14:46Z): blocking Dockerfile findings F1–F4 as
+  above; F5 answered **D-R5-1: R5 keeps producing, builds locally on the Mac, pushes to a
+  non-GitHub registry** (default evidenced: `datatapchatregistry.azurecr.io`; trigger becomes the
+  local pipeline on a release tag); **D-R5-2: self-host-parity homes in R5, contract published
+  from R0** (parity scripts are R5's; R0 inputs become a published artifact; publish precedes the
+  gate); **D-R5-3: zammad_mcp private** (closes D-T2; credential at runtime only);
+  **D-R5-4: delete both dead `pj()` rows** (`jobs.ts` L336/L376 — follow-up H1, not performed in
+  the inventory ticket); **D-R5-5: one shared local-ci pipeline with a repo argument**
+  (no per-repo copy; R2 globs become a second argument value); **new D-R5-6: re-point all 30
+  dispatch rows off the GHA `workflow_dispatch` transport onto the local pipeline** (cron keeps
+  the schedule in R5; credential replaces the GitHub token; 12 twelve-x rows unverified).
+  Sequencing: steps 1–2 (local CI + registry; shared-closure artifacts) parallel, everything below
+  step 3 waits on both; **step 9 (dispatch re-point) is what keeps the estate running — R5 can cut
+  over before it, but the 30 clocks stop when GHA retires without it.** Follow-ups H1–H6 routed
+  (dead-row deletion; shared pipeline; registry move; dispatch re-point; parity publish; **F15:
+  R0's digillm image lane + `docker-compose.yml` still name `ghcr.io` — must not be missed**).
+  F6/F7/F8/F10/F11/F12 and the `docs/ops/` triage stand as inventoried.
 - R6 (J): corpora + seeds + KV-seed config + rollout/answer-check tooling + new `kv-sync`; R0
   residue grep list before the R0 cleanup PR; D-12 scrub **after** KV write proven.
 - No-GitHub-services (E/G/H/P notes, Chris 22:09): no GitHub Packages / GHCR / Actions

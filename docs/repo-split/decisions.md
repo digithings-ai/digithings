@@ -49,6 +49,8 @@ Buildkite `deploy` agent on Chris's Mac instead of a dedicated host.
 | **D-X2** | **No GitHub Packages, GHCR, or GitHub Actions dependence** in any moved repo. | R1/R2/R3/R4 registries move to non-GitHub homes (TBD, Chris); workflows become local-ci/cron jobs; deploys via per-package protected release branches (pending Chris approval). P2 steps 3–4 and P3 step 9 annotated accordingly. |
 | **D-X3** | Docs/code PRs into `develop` via feature branch stay fine; **no** Origin/GitHub repo creation, **no** history push, **no** Cloudflare config changes, **no** `main` merges, **no** production deploys. | Hard limits stand; anything needing those goes to Chris as a decision. Slices A–N, P deliver planning artefacts + develop PRs only. |
 
+| **D-R5-1..D-R5-6** [scope] | R5 image/parity/zammad/dead-rows/build/dispatch questions (+ added cron-transport item), asked on card `cd158e1f` (DIG-3566). | **Answered 2026-10-14T20:14:46Z, all six**: keep producing + build locally + non-GitHub registry; parity homes in R5 with R0-published contract; zammad private; delete both dead rows (follow-up H1); shared local-ci pipeline with repo arg; re-point 30 dispatch rows off GHA (new). Follow-ups H1–H6 routed incl. F15 (R0 digillm lane). |
+
 ## Changed recommendations
 
 | ID | Proposal | Recommended now | Why |
