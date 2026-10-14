@@ -1021,6 +1021,14 @@ def run_and_write(
             f"NautilusTrader backtest, {settings['strategies'][strategy].get('label', strategy)}; "
             f"100% equity compounding, trade window from {trade_start}."
         ]
+    # DIG-945: the engine stamp renders through the one builder next to the
+    # model. This path never runs _verified_returns_series, so it reports
+    # unverified rather than borrowing another run's outcome.
+    from digiquant.models import build_engine_provenance, engine_provenance_note
+
+    provenance_notes.append(
+        engine_provenance_note(build_engine_provenance(returns_series_verified=False))
+    )
     notes.extend(provenance_notes)
     if signal_delay_days:
         notes.append(
