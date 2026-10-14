@@ -50,8 +50,6 @@ def node_validate(state: QuantPipelineState) -> dict[str, Any]:
         err = "strategy_name required"
     elif not state.get("symbols") or not isinstance(state["symbols"], list):
         err = "symbols must be a non-empty list"
-    elif len(state["symbols"]) == 0:
-        err = "symbols must be a non-empty list"
     elif not state.get("data_path") and not state.get("data_dir"):
         err = "data_path or data_dir required"
     if err:
