@@ -83,10 +83,11 @@ _HOST_RE = re.compile(
 # wiring. #5690 (chore(digichat): consolidated deep-review cleanups)
 # consolidated occ.digithings.ai literals into one OCC_HOST constant
 # (3 inline literals removed, 1 constant + 1 prose mention added),
-# 144 -> 143, net -1, consolidation not drift. Regenerated
+# 144 -> 143, net -1, consolidation not drift. #5640 deletes
+# packages/design/smoke/index.html, which held the last
+# api.digithings.ai literal (1 -> 0). Regenerated
 # with the file's own scanner, in the open, per the design rule above.
 PINNED_CENSUS = {
-    "api.digithings.ai": 1,
     "app.digithings.ai": 3,
     "atlas.digiquant.io": 3,
     "chat.digithings.ai": 50,
