@@ -75,7 +75,10 @@ export function ragToolDisplayName(tool: unknown): string {
   if (t === "digivault_search_notes") return "digivault_search_notes";
   if (t === "digivault_get_note") return "digivault_get_note";
   if (t === "digivault") return "digivault";
-  if (t === "digithings_docs" || t.startsWith("digisearch")) return "digisearch";
+  // Keep dedicated per-index tools (digisearch_occ_help, digisearch_zammad_tickets,
+  // DIG-3269) under their real name: the started row is keyed by that name, so
+  // collapsing the completion to "digisearch" spawned a second, generic row.
+  if (t === "digithings_docs") return "digisearch";
   return t.slice(0, MAX_DOC_FIELD_CHARS);
 }
 
