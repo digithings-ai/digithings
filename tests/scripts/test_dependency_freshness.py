@@ -17,6 +17,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 _SPEC = importlib.util.spec_from_file_location(
     "dependency_freshness",
     Path(__file__).resolve().parents[2] / "scripts" / "dependency_freshness.py",

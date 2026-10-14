@@ -38,7 +38,8 @@ from fontTools.pens.svgPathPen import SVGPathPen
 from fontTools.ttLib import TTFont
 
 BRAND = Path(__file__).resolve().parent
-REPO_ROOT = BRAND.parents[2]
+# packages/brand sits one directory under the repo root (parents[0] is packages/).
+REPO_ROOT = BRAND.parents[1]
 FONT = (
     REPO_ROOT / "node_modules" / "geist" / "dist" / "fonts" / "geist-mono" / "GeistMono-Regular.ttf"
 )

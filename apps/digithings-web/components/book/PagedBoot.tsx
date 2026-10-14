@@ -34,7 +34,6 @@ export default function PagedBoot({ enabled }: { enabled: boolean }) {
       try {
         const { Previewer } = await import("pagedjs");
         const previewer = new Previewer();
-        // `preview(content, stylesheets, renderTo)`: the SECOND argument is the
         // `preview(content, stylesheets, renderTo)`: the second argument is the
         // stylesheet list. It is the book's OWN sheet, and deliberately not
         // `undefined` (which means "strip the page's stylesheets and take the

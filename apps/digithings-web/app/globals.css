@@ -199,9 +199,10 @@ body {
    docs family (docs.css), the clean layout/type rules moved into their
    TSX as token utilities, and the terminal module manifest rides the shared
    <TerminalManifest> primitive (terminal-manifest.css, #1416). What remains
-   below is what must stay CSS — the mesh-hero entrance art + keyframes.
-   Namespaced `dq*` so nothing collides with shared site.css. Consumes
-   [data-theme] tokens only → light/dark safe.
+   below is what must stay CSS — nav tokens, page offsets, and the hero/pixel
+   keyframes. The historical `dq*` namespace now survives only as the
+   `--dq-nav-h` token alias. Consumes [data-theme] tokens only → light/dark
+   safe.
    ========================================================================== */
 :root {
   /* --nav-shell-h is the shared NavShell/nav-shell.css height knob (its

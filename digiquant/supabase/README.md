@@ -4,7 +4,7 @@ The single Supabase CLI project dir for the suite-wide **`core`** backend (dashb
 portfolio, market data, strategy store — see
 [ADR 0021](../../docs/adr/0021-digiquant-supabase-project-topology.md)). There is exactly
 **one** migration chain: the numbered files under [`migrations/`](migrations/) —
-`001`–`125` at time of writing, with `037`, `038` and `059` never used and `062`
+`001`–`143` at time of writing, with `037`, `038` and `059` never used and `062`
 **burned — see below, do not reuse it**; new work appends the next unused prefix. [`SCHEMA.md`](SCHEMA.md) inventories the live
 tables and views.
 

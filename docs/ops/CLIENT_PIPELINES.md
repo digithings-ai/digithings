@@ -19,7 +19,7 @@ manifests under `docs/projects/<client>/` (or private `projects/`). These are
 ## Related
 
 - Runbook: [`docs/digichat/CLIENT-DOCS-ONBOARD.md`](../digichat/CLIENT-DOCS-ONBOARD.md)
-- Plan: [`docs/superpowers/plans/2026-08-09-digichat-corpus-ingest.md`](../superpowers/plans/2026-08-09-digichat-corpus-ingest.md)
+- Plan: `2026-08-09-digichat-corpus-ingest.md` (removed DIG-3399; git history keeps it)
 - Client #0 (dogfood): [`docs/projects/digithings/`](../projects/digithings/)
 - Client #1 (OCC): [`docs/projects/online-compliance-center/`](../projects/online-compliance-center/)
 - OCC chat plan: [`docs/superpowers/plans/2026-08-10-occ-client-chat.md`](../superpowers/plans/2026-08-10-occ-client-chat.md)

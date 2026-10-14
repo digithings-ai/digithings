@@ -1,7 +1,7 @@
 # Olympus Daily Thesis + Edit-Mode Continuity (greenfield)
 
 **Date:** 2026-06-20 · **Status:** Draft for review (not committed)  
-**Implementation plan:** [`2026-06-20-olympus-daily-thesis.md`](../plans/2026-06-20-olympus-daily-thesis.md) · **Tracking:** GitHub #930 (absorbs #924)  
+**Implementation plan:** `2026-06-20-olympus-daily-thesis.md` (removed DIG-3399; git history keeps it) · **Tracking:** GitHub #930 (absorbs #924)  
 **Supersedes for graph topology:** [`2026-06-19-olympus-mvp-delta-design.md`](./2026-06-19-olympus-mvp-delta-design.md) — dual `run_type` graphs, `OLYMPUS_HERMES_LITE`, baseline-vs-delta as separate Hermes shapes, Jun-19 lite/collapse path (#931). Jun-19 forensics, cost targets, and ADR-0020 rationale remain valid (see §12.2).  
 **Builds on:** [ADR-0015](../../../docs/adr/0015-atlas-vs-hermes.md), [ADR-0020](../../../docs/adr/0020-olympus-mvp-daily-delta.md) (sizer + terminal-write *intent* — amend in `docs/adr-and-tracking` before Hermes work; lite/collapse bullets superseded), [PORTFOLIO_SUBGRAPH.md](../../../digiquant/src/digiquant/portfolio/docs/PORTFOLIO_SUBGRAPH.md) (**historical topology reference** — `MAX_ROUNDS=6`, recess/deep_dive, and `PMAllocationMemo` weights are **not** in v1; see §10, §11, §17 #5)
 
@@ -813,7 +813,7 @@ Deprecate `--run-type baseline|delta` → `--cadence daily` + `--refresh-scope`.
 
 ## 15. Implementation map (phased)
 
-Aligned with [`2026-06-20-olympus-daily-thesis.md`](../plans/2026-06-20-olympus-daily-thesis.md) **workflow map** (path-style step titles, not numbered phases).
+Aligned with `2026-06-20-olympus-daily-thesis.md` (removed DIG-3399; git history keeps it) **workflow map** (path-style step titles, not numbered phases).
 
 | Step | Title |
 |------|-------|

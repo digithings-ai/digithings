@@ -2,7 +2,7 @@
 
 **Status:** Scoping only — no production code in this document.  
 **Canonical spec:** [`2026-06-20-olympus-daily-thesis-design.md`](../../specs/2026-06-20-olympus-daily-thesis-design.md) §3.6, §7–§11, §13.2  
-**Plan steps:** [`2026-06-20-olympus-daily-thesis.md`](../2026-06-20-olympus-daily-thesis.md) — `hermes/thesis/*` + `hermes/portfolio/*`  
+**Plan steps:** `2026-06-20-olympus-daily-thesis.md` (removed DIG-3399; git history keeps it) — `hermes/thesis/*` + `hermes/portfolio/*`  
 **Branch:** `task/930-olympus-mvp-delta` → PR into `module/digiquant`
 
 ---
