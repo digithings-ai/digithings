@@ -200,7 +200,11 @@ occ_tickets*.jsonl
 occ_tickets*.ndjson
 seed_occ_tickets*
 *_occ_tickets_snapshot*.json
-# Agent review/report/scratch files belong in docs/reviews/pr/ (see AGENTS.md), never the repo root
+# Agent review/report/scratch files live on the Paperclip ticket, never in this repo (see AGENTS.md)
+docs/reviews/pr/
+docs/reviews/review-*.md
+docs/superpowers/plans/review-*
+docs/superpowers/specs/review-*
 /review-*.md
 /report-*.md
 /handoff-*.md
