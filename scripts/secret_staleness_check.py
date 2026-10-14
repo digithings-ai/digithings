@@ -571,10 +571,7 @@ def gate_markdown(
     if drift:
         lines += [
             "",
-            "**Drift.** A `cron` environment that gained a required reviewer or a wait "
-            "timer does not fail a build; it makes every job gated on it stop silently "
-            "(#2541). Fix the environment, then re-run to refresh "
-            "`.github/environments.json`.",
+            "**Drift.** A `cron` environment that gained a required reviewer or a wait timer does not fail a build; it makes every job gated on it stop silently (#2541). Fix the environment, then re-run to refresh `.github/environments.json`.",
             "",
         ]
         for name, lines_for in sorted(drift.items()):
@@ -652,8 +649,7 @@ def markdown(
                 [
                     ISSUE_MARKER,
                     "",
-                    "Environment-gate drift check only — `scripts/secret_staleness_check.py"
-                    " --gates-only` (#248, DIG-477).",
+                    "Environment-gate drift check only — `scripts/secret_staleness_check.py --gates-only` (#248, DIG-477).",
                     "",
                     "## Secret ageing",
                     "",

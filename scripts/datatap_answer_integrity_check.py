@@ -526,12 +526,12 @@ _PERSON_NAME_RE = re.compile(rf"{_NAME_PART}(?:\s+[A-Z]\.)?(?:\s+{_SURNAME_PART}
 _LIST_ITEM_SPLIT_RE = re.compile(
     # Line-start item: a bullet or "1." at the head of a line, with or without a
     # following space, optionally inside a blockquote.
-    r"(?m)^[ \t]*(?:>[ \t]*)*(?:[-*+•‣–—-][ \t]*|\d+[.)][ \t]*)"
+    r"(?m)^[ \t]*(?:>[ \t]*)*(?:[-*+•‣–—][ \t]*|\d+[.)][ \t]*)"
     # Inline enumeration: "1. Jane ... 2. Marcus ..." with a space before it, so
     # ordinary prose that merely contains a number is not torn apart.
-    r"|(?<=[ \t])(?:\d+[.)][ \t]*|[-*+•‣–—-][ \t]+)"
+    r"|(?<=[ \t])(?:\d+[.)][ \t]*|[-*+•‣–—][ \t]+)"
 )
-_LEADING_MARKER_RE = re.compile(r"^[ \t]*(?:>[ \t]*)*(?:[-*+•‣–—-][ \t]*|\d+[.)][ \t]*)")
+_LEADING_MARKER_RE = re.compile(r"^[ \t]*(?:>[ \t]*)*(?:[-*+•‣–—][ \t]*|\d+[.)][ \t]*)")
 _COMPANY_SUFFIXES = frozenset(
     {
         "ltd",

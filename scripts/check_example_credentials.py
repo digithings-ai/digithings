@@ -232,7 +232,7 @@ NON_SECRET_VALUE_SHAPES = [
 #: that merely contains an `@` (`P@ss:word`) is not a locator.
 _LOCATOR_SCHEME_RE = re.compile(r'[A-Za-z][A-Za-z0-9+.\-]*(?::[A-Za-z0-9+.\-]+)?://')
 _LOCATOR_USERINFO_RE = re.compile(r'[^\s:/@]+:[^\s:/@]*@[^\s:/@]+')
-_LOCATOR_SEPARATOR_RE = re.compile(r'[/\\?&#=;:@,;%+]+')
+_LOCATOR_SEPARATOR_RE = re.compile(r'[/\\?&#=:@,;%+]+')
 
 
 def is_connection_template(v):
