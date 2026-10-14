@@ -4,6 +4,7 @@
  * target store stays empty. Deploy renders the plan and the draft; it does
  * not send an order.
  */
+import { API_BASE as API } from "../api";
 import { useEffect, useState } from "react";
 import { BLOCKS, layoutFor, type BlockKind } from "../catalog";
 import { DASH, EMPTY_READ, STUB_READ, presentResponse, type ReadResult } from "../read";
@@ -14,7 +15,6 @@ import { shapeLines, strategyBlocks, type PaneBody } from "./shape";
 import { strategySheetBody } from "./strategy-sheet";
 import { asOfStatus, cell } from "../format";
 
-const API = (process.env.DQ_API_URL ?? "http://127.0.0.1:8788").replace(/\/+$/, "");
 const INDEX_PATH = "/strategies";
 const STUB_MARKS = ["99.909", "204.04", "legacy_estimate"];
 
