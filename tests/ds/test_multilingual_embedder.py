@@ -81,7 +81,11 @@ def test_factory_resolves_multilingual_pipeline(
     assert isinstance(unwrap_embedding_provider(pipeline), MultilingualEmbedder)
 
 
-def test_build_ticket_chunks_full_metadata_no_masking() -> None:
+def test_build_ticket_chunks_masks_pii_metadata_and_content() -> None:
+    # DIG-3578 (Chris, 14 Oct): the OCC ticket index rebuilds WITH masking.
+    # This pin previously asserted full customer identity in metadata; the
+    # masked contract below supersedes it. Structural keys and the
+    # internal-article tagging are unchanged.
     ticket = {
         "id": 231,
         "number": "28312",
@@ -121,11 +125,15 @@ def test_build_ticket_chunks_full_metadata_no_masking() -> None:
     first, second = chunks
     assert first.id == "zammad-231-1"
     assert first.doc_id == "zammad-ticket-231"
-    # Full customer identity, filterable id, snapshot marker.
-    assert first.metadata["customer"] == "jane.doe@example.test"
+    # Masked identity, filterable id, snapshot marker.
+    assert first.metadata["customer"] == "[NAME]"
     assert first.metadata["customer_id"] == 7
-    assert first.metadata["customer_name"] == "Jane Doe"
+    assert first.metadata["customer_name"] == "[NAME]"
     assert first.metadata["snapshot_date"] == SNAPSHOT_DATE
+    # The author address exact-matches a known value, so it lands on
+    # [NAME] before the email pattern pass; either way no raw address survives.
+    assert "jane.doe@example.test" not in first.content
+    assert "From: [NAME]" in first.content
     assert first.metadata["internal"] is False
     assert "***" not in first.content
     # Internal articles are indexed too (tagged, not omitted).
