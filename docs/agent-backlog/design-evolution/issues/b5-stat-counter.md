@@ -1,6 +1,6 @@
 ## Goal
 
-Build **`StatCounter`** — scroll-triggered animated metrics (x.ai API scale + Cursor enterprise %) for hero and feature bands ([`xai-full.md`](../../../../packages/design/references/scans/xai-full.md)).
+Build **`StatCounter`** — scroll-triggered animated metrics (x.ai API scale + Cursor enterprise %) for hero and feature bands (`xai-full.md` (retired)).
 
 ## Component
 

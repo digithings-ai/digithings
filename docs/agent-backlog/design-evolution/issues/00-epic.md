@@ -62,7 +62,7 @@ Full index: [`docs/agent-backlog/design-evolution/INDEX.md`](https://github.com/
 - Parent: #235 (shared design language epic)
 - Also: #1195 (hoist landing primitives), #240 (digichat tokens)
 - Strategy: [`packages/design/EVOLUTION.md`](https://github.com/digithings-ai/digithings/blob/develop/packages/design/EVOLUTION.md)
-- Scans: [`packages/design/references/scans/`](https://github.com/digithings-ai/digithings/blob/develop/packages/design/references/scans/INDEX.md)
+- Scans: `packages/design/references/scans/` (retired)
 
 ## Out of Scope
 

@@ -1,8 +1,8 @@
 "use client";
 /**
- * Full-bleed animated mesh-gradient hero (Stripe-style), ported from the locked
- * v7 prototype (packages/design/demos/digiquant-landing/07-scroll-driven.html)
- * via digiquant-web. Verbatim port — it consumes only the `.dqhero-*` classes and
+ * Full-bleed animated mesh-gradient hero (Stripe-style), ported from the
+ * locked v7 mesh prototype via digiquant-web. The HTML prototype was removed.
+ * Verbatim port — it consumes only the `.dqhero-*` classes and
  * [data-theme] tokens, no digiquant branding.
  *
  * The mesh blobs ease toward the cursor and parallax/fade as the hero scrolls

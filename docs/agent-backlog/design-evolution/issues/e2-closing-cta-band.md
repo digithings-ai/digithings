@@ -1,6 +1,6 @@
 ## Goal
 
-Build shared **`ClosingCtaBand`** primitive — full-width section before footer with headline + literal primary CTA + optional secondary ([Graphite/Cursor pattern](../../../../packages/design/references/scans/copy-patterns.md), [COPY_GUIDE.md §6](../../../../packages/design/COPY_GUIDE.md)).
+Build shared **`ClosingCtaBand`** primitive — full-width section before footer with headline + literal primary CTA + optional secondary (Graphite/Cursor pattern; the scan those names pointed at was removed), [COPY_GUIDE.md §6](../../../../packages/design/COPY_GUIDE.md).
 
 ## Component
 

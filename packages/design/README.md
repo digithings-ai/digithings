@@ -11,12 +11,10 @@ packaged as the `@digithings/design` npm workspace. Consumers
 import the package (or reference the files via relative paths for the
 static sites).
 
-**Strategy & external references:** [`EVOLUTION.md`](EVOLUTION.md) synthesizes
-our direction with deep scans of [Graphite](references/graphite.com.md),
-[Cursor](references/cursor.com.md), and [x.ai](references/x.ai.md) — use it
-before major landing or dashboard work. **Inspiration / tools dictionary:**
-[Designeer](references/designeer.xyz.md) (`designeer.xyz`) for galleries and craft sources. **Copy & IA:** [`COPY_GUIDE.md`](COPY_GUIDE.md).
-**Deep audits:** [`references/scans/`](references/scans/INDEX.md). Index: [`references/README.md`](references/README.md).
+**Strategy:** [`EVOLUTION.md`](EVOLUTION.md) is the historical ledger. The competitor
+scans, design mine, landing demos, and the static spec/smoke pages were removed
+so the next design reference can be built in digiweb (`apps/reference`) instead
+of extended here. **Copy & IA:** [`COPY_GUIDE.md`](COPY_GUIDE.md).
 
 See [ADR-0009 — Frontend umbrella](../../docs/adr/0009-frontend-umbrella.md)
 for the layout rationale.
@@ -152,7 +150,8 @@ clamp(2.5rem, 5vw, 4rem)` (section vertical rhythm).
 
 ### Radius
 
-`--radius-sm: 6px`, `--radius-md: 8px`, `--radius-lg: 12px`.
+`--radius-sm`, `--radius-md`, and `--radius-lg` are `0` (`tokens.css`). True circles
+may still use `999px` locally. That is geometry, not chrome.
 
 ### Motion
 
@@ -396,8 +395,8 @@ site sharing the same CSS). It will:
 
 ## Non-goals
 
-- No light mode yet. The palette is dark-first; a light variant is a
-  future PR with tokens overridden inside `@media (prefers-color-scheme: light)`.
+- Light and dark both ship under `[data-theme]` in `tokens.css`. The legacy
+  `:root` block above that layer stays dark-first for pages that have not migrated.
 - No component JS framework. Primitives are class-based CSS; interactivity
   is limited to the vanilla-JS modules documented above.
 - Confidential internal projects are out of scope. This design system
@@ -409,9 +408,9 @@ site sharing the same CSS). It will:
 
 Five additional primitives harvested from the landing-page exploration live
 alongside the base tokens + starfield. Each ships a CSS file, an ESM JS
-module, and (where useful) a `types.d.ts`. See the smoke-test page at
-[`smoke/index.html`](./smoke/index.html) for a minimal reviewer poke-surface
-for all five at once.
+module, and (where useful) a `types.d.ts`. The static smoke page that used
+to mount all five was removed with the old design reference; specimens now
+live in `apps/reference`.
 
 ### `living-architecture/` — interactive SVG diagram engine
 
@@ -448,40 +447,8 @@ SVG before hydrating; JS will clear it on `initDiagram`.
 **Reduced motion**: edge flow animation disabled, viewBox snaps instantly
 on `focus` / `reset` / `zoomTo`, bloom transitions removed.
 
-### `terminal/` — scripted terminal widget
-
-```js
-import { initTerminal } from '@digithings/design/terminal';
-import '@digithings/design/terminal/styles.css';
-
-initTerminal({
-  elementId: 'term',
-  lines: [
-    { kind: 'prompt',    text: 'digithings init' },
-    { kind: 'output',    text: 'ready.' },
-    { kind: 'comment',   text: 'all services ok' },
-    { kind: 'tool-call', text: 'digigraph.route' },
-    { kind: 'output',    text: 'const x = 1;', lang: 'js' },
-  ],
-  speed: 'normal',
-  onReady: () => {},
-});
-```
-
-| Line `kind`   | Rendering                                                   |
-| ------------- | ----------------------------------------------------------- |
-| `prompt`      | Mono `>` marker, neutral body.                              |
-| `output`      | Default body.                                               |
-| `comment`     | `//` marker in a muted accent.                              |
-| `tool-call`   | Body rendered as a chip.                                    |
-
-Compose multiple terminals side-by-side inside `<div class="terminal-group">`
-(no inter-widget coordination needed). `speed` is `"fast" | "normal" | "slow"`
-or a custom per-character base in milliseconds. Optional `lang` hint
-(`js|ts|tsx|py|sh|json`) swaps in naïve highlighted markup after the keystroke
-stream completes — this is decorative, not a real tokenizer.
-
-**Reduced motion**: no typewriter, no cursor blink; text appears instantly.
+`initTerminal` (`@digithings/design/terminal`) was removed in #1365. Do not
+revive it. digichat uses its own `.dc-term-*` chrome.
 
 ### `typography-motion/` — variable-weight + tracking shift
 
@@ -577,16 +544,8 @@ const shell = initAppShell({
 **Reduced motion**: no sidebar / palette transitions; everything resolves
 instantly.
 
-### Smoke-test page
-
-Run any static server from `packages/design/`:
-
-```bash
-cd frontend && python3 -m http.server 8765
-open http://localhost:8765/design/smoke/
-```
-
-The page renders one minimal instance of each primitive for review.
+The static smoke page and the HTML spec were removed with the old design
+reference. Live specimens belong in `apps/reference`.
 
 ---
 

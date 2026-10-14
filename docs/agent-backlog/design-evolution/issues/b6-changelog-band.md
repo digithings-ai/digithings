@@ -1,6 +1,6 @@
 ## Goal
 
-Build **`ChangelogBand`** — Cursor-style dated release rows for marketing landings ([`cursor-full.md`](../../../../packages/design/references/scans/cursor-full.md)).
+Build **`ChangelogBand`** — Cursor-style dated release rows for marketing landings (`cursor-full.md` (retired)).
 
 ## Component
 

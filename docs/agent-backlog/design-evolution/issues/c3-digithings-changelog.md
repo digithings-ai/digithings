@@ -1,6 +1,6 @@
 ## Goal
 
-Add a **changelog/releases band** to digithings.ai landing using the shared `ChangelogBand` primitive ([`cursor-full.md`](../../../../packages/design/references/scans/cursor-full.md)).
+Add a **changelog/releases band** to digithings.ai landing using the shared `ChangelogBand` primitive (`cursor-full.md` (retired)).
 
 ## Component
 

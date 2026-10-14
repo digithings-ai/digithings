@@ -2,7 +2,7 @@
 
 **Epic:** [#1200](https://github.com/digithings-ai/digithings/issues/1200)  
 **Strategy doc:** [`packages/design/EVOLUTION.md`](../../../packages/design/EVOLUTION.md)  
-**Reference scans:** [`packages/design/references/scans/`](../../../packages/design/references/scans/INDEX.md)
+**Reference scans:** `packages/design/references/scans/` (retired)
 
 ## Dependency graph
 
