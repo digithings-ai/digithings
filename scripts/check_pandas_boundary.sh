@@ -16,7 +16,8 @@ ALLOWLIST=(
   "digiquant/src/digiquant/charts/returns.py"
   "digiquant/src/digiquant/charts/drawdown.py"
   "digiquant/src/digiquant/charts/equity.py"
-  "digiquant/scripts/research/preload-history.py"
+  # preload-history moved to scripts/preload-history.py (Polars). Do not
+  # allowlist the old digiquant/scripts/research path; it is not in the tree.
   "digiquant/src/digiquant/strategies/bollinger_mr.py"
   "digiquant/src/digiquant/strategies/macd_trend.py"
   # SDCA walk-forward evaluator: BarDataWrangler boundary, same as nautilus_runner (#3174 / #3253).
