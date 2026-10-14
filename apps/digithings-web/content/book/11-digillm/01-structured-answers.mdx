@@ -1,0 +1,26 @@
+---
+title: Answers in shape, not in prose
+order: 1
+summary: >-
+  How structured answers let services exchange results machines can rely on,
+  and where that discipline pays off.
+---
+
+A model that answers in free prose leaves the caller parsing sentences.
+A model that answers in a declared shape hands over data. The shared layer
+makes the second the easy default: a caller declares the shape it needs,
+the library enforces it, and the result arrives ready to store, display or
+pass along.
+
+The shapes stay small on purpose — a judgement with its reasons, a list
+with its counts, a record with its fields. Small shapes survive model
+changes; elaborate ones shatter on the first new vendor. Services that need
+more compose small shapes rather than inventing large ones.
+
+<Reference kind="architecture" href="repo:digillm/ARCHITECTURE.md" title="digillm architecture">
+  The shared shapes and how callers declare them.
+</Reference>
+
+> **Why digithings.** Structured answers over an open format mean results
+> flow between services without translation layers — and without the
+> proprietary function-calling dialects that tie callers to one vendor.

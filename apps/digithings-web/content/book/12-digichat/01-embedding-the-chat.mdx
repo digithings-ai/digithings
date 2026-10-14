@@ -1,0 +1,26 @@
+---
+title: Embedding the chat elsewhere
+order: 1
+summary: >-
+  How a host site frames the chat for its own visitors, and the checks that
+  keep a framed visitor safe.
+---
+
+The chat does not only live on its own page. A host site can frame it, so
+visitors talk to the same backend without leaving the site they trust. That
+convenience carries a question the design answers explicitly: how does the
+backend know the framed visitor is legitimate?
+
+Two checks, in order. The host itself must be recognised — unknown hosts get
+nothing. Then the visit carries its own credential, verified per request
+like any other. Recognising the host authorises the framing; only the visit
+credential authorises the conversation. Either check failing ends the
+request politely, with nothing resolved and nothing leaked.
+
+<Reference kind="guide" href="repo:apps/digichat/INSTALL.md" title="digichat install guide">
+  Host registration and the embed setup.
+</Reference>
+
+> **Why digithings.** Embed works without sending your visitors to someone
+> else's domain or metering their questions. The chat you frame is the chat
+> you run — same backend, same data custody, same open code.

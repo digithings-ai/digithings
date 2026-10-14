@@ -1,0 +1,30 @@
+---
+title: The first run
+order: 1
+summary: >-
+  From checkout to a working stack, and what to look at when something does
+  not start.
+---
+
+The first run should feel uneventful. Fetch the checkout, start the
+composition, and watch each service report healthy in turn. Seed content
+loads on its own, so the chat answers questions and the examples resolve
+immediately. Total time is measured in minutes, most of it spent fetching
+model files on first use.
+
+When something does not start, the order of inspection is fixed. First the
+composition's own status: which service is unhealthy, and what did it log
+last? Then dependencies: did storage and the model runner come up before
+the services that need them? Then resources: is there memory and disk to
+spare? Nine first runs in ten end at one of those three steps. The tenth —
+a genuinely new failure — is worth reporting, because it improves the
+composition for everyone after.
+
+<Reference kind="guide" href="repo:docs/LOCAL_STACK.md" title="Local stack guide">
+  The commands and the troubleshooting checklist.
+</Reference>
+
+> **Why digithings.** Starting serious infrastructure with one command and
+> no account is the evaluation the product deserves. Nothing to procure,
+> nothing to expense, nothing to cancel if you walk away — the first run
+> costs minutes, not a purchasing process.

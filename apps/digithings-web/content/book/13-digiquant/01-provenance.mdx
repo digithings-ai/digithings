@@ -1,0 +1,27 @@
+---
+title: Provenance on every number
+order: 1
+summary: >-
+  What travels with a result so it can be believed later, and why a refused
+  estimate carries no number at all.
+---
+
+Every result the pipeline emits carries its history: the data it read, the
+parameters it ran with, and which stages produced it. That attachment is
+what turns a number into evidence. Months later, an operator can reopen a
+result and reconstruct the conditions behind it — or discover honestly that
+they can no longer be reconstructed, which is itself an answer.
+
+The harder rule concerns refusal. When the pipeline cannot stand behind an
+estimate — too little data, a stage that did not complete — it returns no
+number. A blank where a number would be is uncomfortable, and deliberately
+so: it refuses to manufacture confidence. Partial results are labelled
+partial, never rounded up into conclusions.
+
+<Reference kind="architecture" href="repo:digiquant/ARCHITECTURE.md" title="digiquant architecture">
+  Provenance records and the refusal rules.
+</Reference>
+
+> **Why digithings.** A research number you can audit beats a shinier number
+> you cannot. Open pipeline, open ordering rules, attached provenance — the
+> methodology is inspectable instead of marketed.

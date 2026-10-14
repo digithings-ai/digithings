@@ -1,0 +1,31 @@
+---
+title: Reading a trail
+order: 1
+summary: >-
+  A walk through one recorded trail, and what each entry tells the operator
+  who follows it.
+---
+
+A trail is read the way it was written: in order, step by step. It opens
+with the request — what was asked and under which identity. Then come the
+steps: which tool ran, what it was given, what it returned, how long it
+took. Tool calls nest where one step triggered another, so a hub step and
+the vertical step it caused read as parent and child rather than as two
+unrelated lines.
+
+The entries an operator looks for first are the unusual ones: a step that
+took ten times its neighbours, a tool that appears where it never did
+before, a retry that succeeded after failing. The trail makes those visible
+without interpretation — it records durations, attempts and order as facts,
+and leaves conclusions to the reader. When a result is disputed, the trail
+is the exhibit: not an explanation of what happened, but the record from
+which explanations are built.
+
+<Reference kind="architecture" href="repo:digitrace/ARCHITECTURE.md" title="digitrace architecture">
+  Trail format and what each entry carries.
+</Reference>
+
+> **Why digithings.** The trail belongs to the operator, in the open, on
+> chosen infrastructure. Disputing a result starts from shared evidence
+> rather than from a support ticket asking someone else what their system
+> did.
