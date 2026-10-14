@@ -239,7 +239,9 @@ def present_doctor(
         body = []
         for item in shown:
             body.extend(_doctor_lines(item, color=paint, width=max(8, _panel_width() - 3)))
-        frame = _paint_block(stdout, "Doctor", body, color=paint)
+        # Painted for the live refresh only; the value is never read
+        # (the final frame below overwrites it), so this is a bare call.
+        _paint_block(stdout, "Doctor", body, color=paint)
         time.sleep(pause)
     shown = list(checks)
     ready = doctor_ready(shown)
