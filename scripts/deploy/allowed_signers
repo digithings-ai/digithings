@@ -1,0 +1,9 @@
+# Public SSH keys allowed to sign a release tag.
+# git verify-tag reads this file (gpg.ssh.allowedSignersFile).
+#
+# One key per line, sshd allowed-signers format:
+#   <email> namespaces="git" <key-type> <public-key>
+#
+# Chris adds his ed25519-sk public key here. A file with no key lines
+# fails closed: every deploy job refuses the tag. Do not put a private
+# key in this file.
