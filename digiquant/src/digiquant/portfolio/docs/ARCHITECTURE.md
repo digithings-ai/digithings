@@ -3,7 +3,7 @@
 > Thesis-aware portfolio loop. Consumes research `DigestPayload`; produces analyst payloads,
 > deliberation summaries, PM direction memo, sized book, and terminal booking via commit.
 >
-> Boundary: [ADR-0015](../../../../../docs/adr/0015-research-vs-portfolio.md) · Canonical topology:
+> Boundary: [ADR-0015](../../../../../docs/adr/0015-atlas-vs-hermes.md) · Canonical topology:
 > [ADR-0020](../../../../../docs/adr/0020-dashboard-mvp-daily-delta.md) · Spec §13.2:
 > [`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../../../../../docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md)
 

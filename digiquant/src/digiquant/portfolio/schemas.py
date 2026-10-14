@@ -2,7 +2,7 @@
 
 Mirrors :mod:`digiquant.research.schemas` but resolves paths under
 ``digiquant/src/digiquant/portfolio/templates/``. Each engine's ``load_schema()`` only finds
-its own templates. See [ADR-0015](../../../../docs/adr/0015-research-vs-portfolio.md).
+its own templates. See [ADR-0015](../../../../docs/adr/0015-atlas-vs-hermes.md).
 """
 
 from __future__ import annotations

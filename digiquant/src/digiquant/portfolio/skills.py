@@ -3,7 +3,7 @@
 Mirrors :mod:`digiquant.research.skills` but resolves paths under
 ``digiquant/src/digiquant/portfolio/skills/``. Each engine's ``load_skill()`` only finds
 its own skills — research cannot resolve portfolio-side analyst / debate / PM
-skills and vice versa. See [ADR-0015](../../../../docs/adr/0015-research-vs-portfolio.md).
+skills and vice versa. See [ADR-0015](../../../../docs/adr/0015-atlas-vs-hermes.md).
 """
 
 from __future__ import annotations

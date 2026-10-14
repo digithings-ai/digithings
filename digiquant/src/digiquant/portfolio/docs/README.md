@@ -5,7 +5,7 @@ portfolio consumes a research [`DigestPayload`](../../research/snapshot.py) from
 opportunity screener → unified asset analyst → PM↔analyst deliberation → PM direction →
 deterministic risk sizing → **`commit_run`** terminal booking.
 
-See [ADR-0015](../../../../../docs/adr/0015-research-vs-portfolio.md) and
+See [ADR-0015](../../../../../docs/adr/0015-atlas-vs-hermes.md) and
 [ADR-0020](../../../../../docs/adr/0020-dashboard-mvp-daily-delta.md). Full topology:
 [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
