@@ -29,3 +29,16 @@ test("cloud chat uses digithings.ai; cloud mcp stays unset", () => {
   expect(endpoint("chat", { DIGI_ENV: "cloud" })).toBe("https://digithings.ai");
   expect(() => endpoint("mcp", { DIGI_ENV: "cloud" })).toThrow(/unset/);
 });
+
+test("cloud desk and graph use the product defaults", () => {
+  expect(endpoint("desk", { DIGI_ENV: "cloud" })).toBe(
+    "https://dashboard-api.chris-stefan.workers.dev",
+  );
+  expect(endpoint("graph", { DIGI_ENV: "cloud" })).toBe("https://graph.digithings.ai");
+});
+
+test("DIGI_DESK_URL wins over the cloud desk default", () => {
+  expect(endpoint("desk", { DIGI_ENV: "cloud", DIGI_DESK_URL: "https://desk.example/" })).toBe(
+    "https://desk.example",
+  );
+});
