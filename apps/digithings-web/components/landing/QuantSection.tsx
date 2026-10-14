@@ -85,7 +85,7 @@ import { PIPELINE_ENGINES } from "@/lib/digiquantPipeline";
  * Brand (#4900, digiquant.io's solid-black craft). The band wears no livery of
  * its own: no teal accent scope, no tinted gradient, no animated dashboard-mark
  * watermark. It sits on the page's own canvas between hairline rails like every
- * other band, in the page's Inter + JetBrains Mono, with ink as the only accent
+ * other band, in the page's Geist Mono, with ink as the only accent
  * (the chart's "accent" tone resolves to ink here). The one brand element is the
  * digiquant pixel wordmark from digiquant.io, which is also the link to it.
  *
