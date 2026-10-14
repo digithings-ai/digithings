@@ -77,6 +77,11 @@ export class DigiChatContainer extends Container {
     }
     return super.fetch(request);
   }
+
+  /** Re-read KV tenant config on the next boot (the DO outlives container sleeps). */
+  override onStop(): void {
+    this.tenantsResolved = false;
+  }
 }
 
 export interface Env {
