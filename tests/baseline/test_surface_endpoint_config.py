@@ -82,11 +82,14 @@ _HOST_RE = re.compile(
 # portfolio comment), 102 -> 106, sanctioned here as intentional surface
 # wiring. Regenerated
 # with the file's own scanner, in the open, per the design rule above.
+# DIG-3418 (S19) deleted the retired atlas-era plans under docs/plans and
+# docs/backlog: atlas.digiquant.io 3 -> 1, chat.digithings.ai 50 -> 43,
+# www.digiquant.io 17 -> 15. Decreases only.
 PINNED_CENSUS = {
     "api.digithings.ai": 1,
     "app.digithings.ai": 3,
-    "atlas.digiquant.io": 3,
-    "chat.digithings.ai": 50,
+    "atlas.digiquant.io": 1,
+    "chat.digithings.ai": 43,
     "dashboard-api.chris-stefan.workers.dev": 7,
     "digichat.digithings.ai": 15,
     "digithings-stack.example.workers.dev": 1,
@@ -101,7 +104,7 @@ PINNED_CENSUS = {
     "occ.digithings.ai": 144,
     "search.digithings.ai": 54,
     "trace.digithings.ai": 20,
-    "www.digiquant.io": 17,
+    "www.digiquant.io": 15,
     "www.digithings.ai": 82,
 }
 
