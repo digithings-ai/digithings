@@ -70,7 +70,7 @@ describe("financial digichat session", () => {
     const out = await forwardFinancialTurn(loaded!.config, loaded!.inferenceKey, loaded!.session, "levels?", fetchFn);
     expect(out).toEqual({ reply: "FX Hub book" });
     expect(fetchFn).toHaveBeenCalledOnce();
-    const [url, init] = fetchFn.mock.calls[0] as [URL, RequestInit];
+    const [url, init] = fetchFn.mock.calls[0] as unknown as [URL, RequestInit];
     expect(String(url)).toBe("https://chat.example.test/api/chat");
     const headers = init.headers as Record<string, string>;
     expect(headers.authorization).toBe(`Bearer ${KEY}`);
