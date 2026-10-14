@@ -80,10 +80,11 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   [ -z "$local_ref" ] && continue
 
   # Deletions are exempt from the taxonomy: a branch created outside it — a
-  # `bot/*` ref from project-stub-fields.yml, or anything predating a tightening
-  # of the rules — must still be deletable. Enforcing a name on the way out only
-  # strands the refs the rule was meant to discourage. The `main` guard below
-  # still applies: deleting main is at least as serious as pushing to it.
+  # leftover `bot/*` ref from a workflow that no longer exists (project-stub-fields.yml
+  # was removed in #4919), or anything predating a tightening of the rules — must
+  # still be deletable. Enforcing a name on the way out only strands the refs the
+  # rule was meant to discourage. The `main` guard below still applies: deleting
+  # main is at least as serious as pushing to it.
   is_deletion=0
   if is_zero_sha "$local_sha"; then
     is_deletion=1
@@ -110,13 +111,14 @@ while read -r local_ref local_sha remote_ref remote_sha; do
       echo "           main | develop | release/vX.Y.Z" >&2
       echo "           module/<component>  (e.g. module/digiquant, module/digigraph)" >&2
       echo "           release-please--branches--<target>--components--<component>" >&2
-      echo "                        (pushed by the release-please-*.yml workflows)" >&2
+      echo "                        (no release-please workflow remains; the pattern" >&2
+      echo "                        stays so a leftover ref can still be pushed)" >&2
       echo "           task/<N>-<slug>" >&2
       echo "           {claude,codex,cursor,copilot}/<slug>" >&2
       echo "           {${CONTRIBUTOR_HANDLES//|/,}}/<slug>  (human contributors by GitHub handle)" >&2
       echo "           {feat,fix,docs,chore}/<slug>" >&2
-      echo "           bot/<slug>  (pushed by project-stub-fields.yml," >&2
-      echo "                        agent-backlog-snapshot.yml, pipeline-provider-review.yml)" >&2
+      echo "           bot/<slug>  (pushed by agent-backlog-snapshot.yml" >&2
+      echo "                        and pipeline-provider-review.yml)" >&2
       echo "           DIG-<n>-<slug>  (a Paperclip execution workspace; push" >&2
       echo "                        per-issue, never blanket — BRANCHING.md)" >&2
       failed=1
