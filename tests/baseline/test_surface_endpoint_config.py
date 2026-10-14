@@ -80,10 +80,10 @@ _HOST_RE = re.compile(
 # graph.digithings.ai literals under apps/digithings-web (PUBLIC_DASHBOARD_API
 # constant, dashboardApiBase comment, next.config destination rewrite,
 # portfolio comment), 102 -> 106, sanctioned here as intentional surface
-# wiring. Regenerated
+# wiring. #5640 deletes packages/design/smoke/index.html, which held the last
+# api.digithings.ai literal (1 -> 0). Regenerated
 # with the file's own scanner, in the open, per the design rule above.
 PINNED_CENSUS = {
-    "api.digithings.ai": 1,
     "app.digithings.ai": 3,
     "atlas.digiquant.io": 3,
     "chat.digithings.ai": 50,
