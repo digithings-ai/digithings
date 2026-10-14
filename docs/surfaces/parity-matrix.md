@@ -48,7 +48,7 @@ The Brief desk is the one digiquant app (ADR D2, locked 2026-10-10), served at `
 
 ## 3. DigiVoice: `digivoice/tui` (TUI-only)
 
-`@opentui/core` in plain JS (ADR D1). DigiVoice has no web app. Its web presence is the marketing hero (`apps/digiquant-web/components/integrations/digivoice-hero.tsx`). Foundation work is DIG-2701 (in review).
+`@opentui/core` in plain JS (ADR D1). DigiVoice has no web app. Its web presence was the marketing hero (`apps/digiquant-web/components/integrations/digivoice-hero.tsx`, removed in the #5694 consolidation); there is currently no DigiVoice web surface. Foundation work is DIG-2701 (in review).
 
 | # | Feature | TUI | Web | Data / API | MCP | Gap | Owner ticket |
 |---|---|---|---|---|---|---|---|
@@ -56,8 +56,8 @@ The Brief desk is the one digiquant app (ADR D2, locked 2026-10-10), served at `
 | V2 | History, copy, delete (`/history/*`) | yes | n/a | local history store | — | — | DIG-2701 |
 | V3 | Settings (`/settings`), replace rules | yes | n/a | local config | — | — | DIG-2701 |
 | V4 | System: doctor, logs, update, reload, restart, reset | yes | n/a | local CLI | — | — | DIG-2701 |
-| V5 | Hero wordmark | yes (`hero.js`, `BUILD_MS` 1400, own glyph table) | marketing hero (`digivoice-wordmark.js`, another copy) | — | — | one wordmark model + `motion.json` (ADR D1, D6) | DIG-2702 |
-| V6 | Reduced motion | none | `prefers-reduced-motion` on the marketing hero | — | — | `DIGI_REDUCED_MOTION` (ADR D6) | DIG-2695 |
+| V5 | Hero wordmark | yes (`hero.js`, `BUILD_MS` 1400, own glyph table) | removed with the marketing hero (#5694) | — | — | one wordmark model + `motion.json` (ADR D1, D6) | DIG-2702 |
+| V6 | Reduced motion | none | removed with the marketing hero (#5694) | — | — | `DIGI_REDUCED_MOTION` (ADR D6) | DIG-2695 |
 | V7 | Endpoint config | `DIGIVOICE_TUI_START` only; local-only | n/a | — | — | none needed in 1.0 (no remote service) | — |
 
 ## 4. Dashboard: `apps/dashboard` (web-only)
