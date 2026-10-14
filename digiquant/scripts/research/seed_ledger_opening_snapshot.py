@@ -16,6 +16,7 @@ Environment: CORE_SUPABASE_URL / CORE_SUPABASE_SERVICE_KEY (or legacy SUPABASE_*
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from datetime import date as dt_date
 from pathlib import Path
@@ -37,13 +38,15 @@ from digiquant.research.supabase_io import (  # noqa: E402
 )
 from digiquant.dashboard.tenancy import eq_house_workspace  # noqa: E402
 
+logger = logging.getLogger(__name__)
+
 try:
     from dotenv import load_dotenv  # type: ignore[import-not-found]
 
     load_dotenv(Path(__file__).parent.parent / "config" / "supabase.env")
     load_dotenv()
-except ImportError:
-    pass
+except ImportError:  # python-dotenv is an optional probe; not fatal
+    logger.debug("python-dotenv is not installed; continuing without it")
 
 
 def _sb():

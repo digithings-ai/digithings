@@ -17,18 +17,21 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import logging
 import subprocess
 import sys
 from datetime import date as dt_date, timedelta
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 try:
     from dotenv import load_dotenv  # type: ignore
 
     load_dotenv(Path(__file__).parent.parent / "config" / "supabase.env")
     load_dotenv()
-except ImportError:
-    pass
+except ImportError:  # python-dotenv is an optional probe; not fatal
+    logger.debug("python-dotenv is not installed; continuing without it")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import execute_at_open as eat  # noqa: E402
