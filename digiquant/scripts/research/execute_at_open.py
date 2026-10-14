@@ -32,6 +32,7 @@ import argparse
 import json
 import math
 import sys
+import warnings
 from datetime import date as dt_date
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
@@ -43,8 +44,15 @@ try:
 
     load_dotenv(Path(__file__).parent.parent / "config" / "supabase.env")
     load_dotenv()
-except ImportError:
-    pass
+except ImportError:  # python-dotenv is optional; env vars may already be exported.
+    # Say so rather than swallow silently: a missing credential reported later
+    # is otherwise indistinguishable from a wrong credential.
+    warnings.warn(
+        "python-dotenv is not installed; config/supabase.env and the ambient "
+        "environment were NOT loaded",
+        RuntimeWarning,
+        stacklevel=2,
+    )
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 

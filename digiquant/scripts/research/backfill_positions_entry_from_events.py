@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import warnings
 from pathlib import Path
 from typing import Any, List, Set
 
@@ -32,8 +33,15 @@ try:
 
     load_dotenv(Path(__file__).parent.parent / "config" / "supabase.env")
     load_dotenv()
-except ImportError:
-    pass
+except ImportError:  # python-dotenv is optional; env vars may already be exported.
+    # Say so rather than swallow silently: a missing credential reported later
+    # is otherwise indistinguishable from a wrong credential.
+    warnings.warn(
+        "python-dotenv is not installed; config/supabase.env and the ambient "
+        "environment were NOT loaded",
+        RuntimeWarning,
+        stacklevel=2,
+    )
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 

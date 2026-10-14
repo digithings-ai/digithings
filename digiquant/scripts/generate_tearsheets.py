@@ -818,8 +818,11 @@ def run_and_write(
         ]
         try:
             load_btc_optimized_provenance()
-        except Exception:
-            pass
+        except (OSError, ValueError) as exc:
+            # The sidecar is checked in, so this means it was deleted or is
+            # malformed, not that it is optional. Report it. The public payload
+            # must still not claim an OOS beat, so we only log and continue.
+            logger.warning("btc_optimized provenance sidecar unreadable: %s", exc)
         # Public payload never claims an OOS beat (Stage 1 curve_simulator sidecar
         # is not a Nautilus walk-forward result).
         beats_flat_dca_oos = False

@@ -26,6 +26,7 @@ import argparse
 import os
 import re
 import sys
+import warnings
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -41,8 +42,15 @@ try:
 
     load_dotenv(Path(__file__).parent.parent / "config" / "supabase.env")
     load_dotenv()
-except ImportError:
-    pass
+except ImportError:  # python-dotenv is optional; env vars may already be exported.
+    # Say so rather than swallow silently: a missing credential reported later
+    # is otherwise indistinguishable from a wrong credential.
+    warnings.warn(
+        "python-dotenv is not installed; config/supabase.env and the ambient "
+        "environment were NOT loaded",
+        RuntimeWarning,
+        stacklevel=2,
+    )
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -147,8 +155,17 @@ def _extract_meta_kv(lines: Iterable[str]) -> tuple[Optional[bool], Optional[int
         if rm:
             try:
                 rounds = int(rm.group(1))
-            except (ValueError, TypeError):
-                pass
+            except ValueError as exc:
+                # group(1) is r"(\d+)", so it is always digits and TypeError
+                # cannot occur; this is CPython's sys.set_int_max_str_digits
+                # ceiling. Leave rounds unset (the caller already reads None as
+                # "not reported") rather than failing the whole transcript.
+                warnings.warn(
+                    f"**meta:** rounds= value not parseable ({exc}); "
+                    "leaving rounds unset",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
         am = re.search(r"final_action\s*=\s*([a-z_]+)", low)
         if am:
             final_action = am.group(1).upper()
