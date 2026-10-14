@@ -92,3 +92,12 @@ Every row and every claim carries the id of the thing it came from.
 If the answer is incomplete, say which part and why in one line. A confident
 incomplete answer is worse than an honest short one, because it is
 indistinguishable from a complete answer until someone checks.
+
+## Language of shown terms
+
+The chat language is the language the user writes in. When an answer shows a
+term, status, title, or quote that is not already in the chat language, put
+the chat-language wording first and the original in parentheses and quotes.
+When the chat is English: in progress ("in Bearbeitung"). When the source
+text is already in the chat language, do not add a translation. Do not show
+the internal names of the lookups that produced the answer.

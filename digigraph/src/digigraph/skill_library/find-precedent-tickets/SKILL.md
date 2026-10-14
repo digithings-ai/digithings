@@ -10,6 +10,15 @@ Use this when a new ticket needs an answer you may already have given: "has
 this happened before", "did we already solve this", "what did we do last time
 this came up".
 
+## Where to look
+
+Search past tickets with semantic search (`digisearch_zammad_tickets`). Use it
+to find similar cases and how they were resolved. It is not a count and it is
+not the live list. Read the closest matches before you advise a fix, and cite
+the ticket numbers that search returned. For the status, the articles, or the
+owner of one of those tickets, use the Zammad metadata tools (`get_ticket`,
+and `search_tickets` when you already have a number or a field filter).
+
 ## Order of work
 
 1. **Restate the symptom in the customer's words** before you search. Their
@@ -17,10 +26,11 @@ this came up".
 2. **Search on the symptom, not the diagnosis.** You do not yet know the cause,
    so a search on the cause quietly drops the hits.
 3. **Read what comes back before ranking it.** A title match is not a precedent.
+   Read how the ticket was resolved, not only its title.
 4. **Rank by closeness**, and say what made each one a match: same symptom,
   same root cause, or only the same product area.
-5. **Give the answer first**, then the evidence. Lead with what was done last
-  time; the tickets are how the reader checks it.
+5. **Advise the fix first**, then the evidence. Lead with what was done last
+  time and cite the precedent tickets; the tickets are how the reader checks it.
 
 ## Output shape
 
@@ -50,3 +60,11 @@ this came up".
 
 Give it, and label it as partly close. Dropping a partial match because it is
 not exact loses the one thing the reader was looking for.
+
+## Language of shown terms
+
+The chat language is the language the user writes in. When an answer shows a
+term, status, title, or quote that is not already in the chat language, put
+the chat-language wording first and the original in parentheses and quotes.
+When the chat is English: in progress ("in Bearbeitung"). When the source
+text is already in the chat language, do not add a translation.

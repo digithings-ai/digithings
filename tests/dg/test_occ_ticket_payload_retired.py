@@ -238,6 +238,14 @@ def test_prompt_still_grounds_answers_in_occ_help(blob: str, prompt: str) -> Non
     assert "digivault_search_notes" in prompt
 
 
+@pytest.mark.parametrize(("blob", "prompt"), _prompts())
+def test_prompt_points_at_the_help_docs_skill(blob: str, prompt: str) -> None:
+    """DIG-3355: docs questions load the manual map instead of searching blind."""
+    assert "get_skill guide-help-docs" in prompt, blob
+    assert "find-precedent-tickets" in prompt, blob
+    assert "summarize-tickets-by-topic" in prompt, blob
+
+
 # --- operator-facing copies ------------------------------------------------
 
 
