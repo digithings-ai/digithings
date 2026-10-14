@@ -192,14 +192,15 @@ def _opening_cash(*, client: Any, period_date: date) -> Decimal:
         head = period_head(client=client, period_date=day)
         if head is not None:
             cash = _decimal(head.get("closing_cash"))
-            if cash is not None and cash >= 0:
-                return cash
-            if cash is not None and cash < 0:
+            if cash is None:
+                continue
+            if cash < 0:
                 raise FinalizerDeclined(
                     f"prior accounting tip {day.isoformat()} has negative "
                     f"closing_cash={cash} — decline finalization for "
                     f"{period_date.isoformat()} (no fabricated cash stub, #4105)"
                 )
+            return cash
     resp = (
         _eq_house(client.table("nav_history").select("date, nav, cash_pct"))
         .lt("date", period_date.isoformat())

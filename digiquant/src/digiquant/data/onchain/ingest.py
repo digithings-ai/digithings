@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 from datetime import date
+from math import isnan
 from pathlib import Path
 from typing import Any
 
@@ -71,7 +72,7 @@ def frame_to_macro_rows(
             numeric = float(val)
         except (TypeError, ValueError):
             continue
-        if numeric != numeric:  # NaN
+        if isnan(numeric):
             continue
         rows.append(
             {

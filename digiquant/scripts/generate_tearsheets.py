@@ -492,6 +492,11 @@ def trades_from_positions(positions) -> list[dict]:
     """
 
     def _missing(x) -> bool:
+        # Self-inequality is deliberate and must stay (CodeQL DIG-3629 #2664).
+        # math.isnan() raises TypeError on the timestamps this helper actually
+        # receives (pd.NaT, pd.Timestamp, np.datetime64, None), where `x != x`
+        # returns a bool, so math.isnan would change behaviour. pandas.isna is
+        # correct here but pandas is not a declared digiquant dependency.
         return x is None or x != x  # NaN/NaT compare unequal to themselves
 
     rows = []

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from datetime import datetime
+from math import isnan
 from pathlib import Path
 
 from digiquant.strategies.sdca.chart_series import (
@@ -131,7 +132,7 @@ def plot_valuation_index(inputs: Mapping[str, object], path: Path) -> Path:
 
     prices = inputs["prices"]
     dates = _dates(inputs["dates"])  # type: ignore[arg-type]
-    finite = [(d, p) for d, p in zip(dates, prices, strict=True) if p == p and p > 0]
+    finite = [(d, p) for d, p in zip(dates, prices, strict=True) if not isnan(p) and p > 0]
     if finite:
         ax2 = ax.twinx()
         ax2.set_yscale("log")
@@ -267,7 +268,7 @@ def plot_allocation(inputs: Mapping[str, object], path: Path) -> Path:
         )
 
     prices = inputs["prices"]
-    finite = [(d, p) for d, p in zip(dates, prices, strict=True) if p == p and p > 0]
+    finite = [(d, p) for d, p in zip(dates, prices, strict=True) if not isnan(p) and p > 0]
     if finite:
         ax2 = ax.twinx()
         ax2.set_yscale("log")

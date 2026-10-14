@@ -9,6 +9,7 @@ never curve-rate-sign ``buy_days`` / ``sell_days``.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from math import isnan
 from typing import Literal
 
 import polars as pl
@@ -133,7 +134,7 @@ def indicator_curve_from_z(
         if z is None:
             continue
         zf = float(z)
-        if zf != zf:  # NaN
+        if isnan(zf):
             continue
         points.append({"t": day, "v": z_to_risk(zf)})
     return SdcaIndicatorCurve(
@@ -209,7 +210,7 @@ def power_law_z_from_rails(
     lows = [r[0] for r in rails]
     medians = [r[1] for r in rails]
     highs = [r[2] for r in rails]
-    price_vals = [None if p != p else float(p) for p in prices]
+    price_vals = [None if isnan(p) else float(p) for p in prices]
     z = valuation_z_score(
         pl.Series("price", price_vals, dtype=pl.Float64),
         pl.Series("low", lows, dtype=pl.Float64),
