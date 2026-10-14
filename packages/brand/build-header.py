@@ -31,11 +31,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 BRAND = Path(__file__).resolve().parent
-REPO_ROOT = BRAND.parents[2]
+# packages/brand sits one directory under the repo root (parents[0] is packages/).
+REPO_ROOT = BRAND.parents[1]
 OUT_DIR = BRAND / "headers"
 EMAIL_DIR = BRAND / "email"
 PUBLIC_BRAND = REPO_ROOT / "apps" / "reference" / "public" / "brand"
 PUBLIC_OG_PNG = REPO_ROOT / "apps" / "digithings-web" / "public" / "og.png"
+PUBLIC_DQ_OG_PNG = REPO_ROOT / "apps" / "digiquant-web" / "public" / "og.png"
 
 # Vertical rhythm as a fraction of WORD_EM. OG used ~0.86 between word and
 # tagline baselines and ~1.47 between tagline and domain (the domain sat as a
@@ -308,6 +310,7 @@ def kit_copies() -> list[tuple[Path, Path]]:
     pairs.append((BRAND / "og" / "digithings-og.svg", PUBLIC_BRAND / "og" / "digithings-og.svg"))
     pairs.append((BRAND / "og" / "digithings-og.png", PUBLIC_BRAND / "og" / "digithings-og.png"))
     pairs.append((BRAND / "og" / "digithings-og.png", PUBLIC_OG_PNG))
+    pairs.append((BRAND / "og" / "digiquant-og.png", PUBLIC_DQ_OG_PNG))
     pairs.append((EMAIL_DIR / "signoff.txt", PUBLIC_BRAND / "email" / "signoff.txt"))
     pairs.append((EMAIL_DIR / "signoff.html", PUBLIC_BRAND / "email" / "signoff.html"))
     return pairs

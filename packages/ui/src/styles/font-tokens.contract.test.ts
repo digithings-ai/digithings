@@ -20,21 +20,20 @@ const digichatTheme = at("packages/ui/src/styles/digichat-app-theme.css");
 const SURFACES = [
   { surface: "dashboard", config: "apps/dashboard/app/fonts.ts" },
   { surface: "digiquant.io", config: "apps/digiquant-web/app/fonts.ts" },
+  { surface: "digithings.ai", config: "apps/digithings-web/app/fonts.ts" },
 ] as const;
 
 /**
- * digithings-web and digichat were restored to develop's versions on this
- * branch (a15c4873), so they still load their own fonts in their layouts.
- * They rejoin SURFACES (with app/fonts.ts) when the Geist Mono port is redone
- * for them; until then the contract does not police them.
+ * digichat still loads Inter, IBM Plex and Geist Mono in its route layouts.
+ * It rejoins SURFACES when [DIG-3449] applies the 14 Oct Geist Mono decision.
+ * Until then the contract does not police it.
  */
-const PENDING_PORT = ["apps/digithings-web/", "apps/digichat/"];
+const PENDING_PORT = ["apps/digichat/"];
 
 /** Type-specimen galleries and demos show font alternatives on purpose. */
 const OUT_OF_SCOPE = [
   "apps/reference/",
   "apps/digichat/reference/",
-  "packages/design/demos/",
   "packages/design/references/",
 ];
 
