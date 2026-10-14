@@ -1524,7 +1524,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .pflow[data-motion="on"] .pflow__pulse,
+  .pflow[data-motion="on"] .pflow__conduit:not([data-pending="true"]) .pflow__pulse,
   .pflow[data-motion="on"] .pflow__node[data-tone="main"],
   .pflow[data-motion="on"] .pflow__node[data-tone="model"],
   .pflow[data-motion="on"] .pflow__node[data-tone="side"],
