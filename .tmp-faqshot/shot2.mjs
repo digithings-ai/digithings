@@ -1,0 +1,10 @@
+import { chromium } from "playwright";
+const browser = await chromium.launch();
+const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+await page.goto("http://127.0.0.1:4114/", { waitUntil: "domcontentloaded", timeout: 60000 });
+await page.waitForSelector(".faq-morph__faq", { timeout: 90000 });
+await page.waitForTimeout(3000);
+await page.locator(".faq-morph__faq").first().screenshot({ path: process.env.SC + "/faq.png" });
+const qs = await page.locator("details.disclosure-row summary").allTextContents();
+console.log("QUESTIONS=" + JSON.stringify(qs.map(s => s.replace("+","").trim())));
+await browser.close();
