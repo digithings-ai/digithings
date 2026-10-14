@@ -34,6 +34,16 @@ from pathlib import Path
 import polars as pl
 from pydantic import BaseModel, ConfigDict, field_validator
 
+from digiquant.strategies.sdca.quantile_rails import (
+    LABEL_BY_QUANTILE as _LABEL_BY_QUANTILE,
+)
+from digiquant.strategies.sdca.quantile_rails import (
+    MIN_FIT_HISTORY_DAYS,
+    QUANTILE_LABELS,
+    QUANTILES,
+    QuantileCoefficients,
+)
+
 logger = logging.getLogger(__name__)
 
 # Standard convention for public BTC power-law valuation models (e.g. Giovanni
@@ -41,30 +51,18 @@ logger = logging.getLogger(__name__)
 # origin of the log-time axis, chosen once and then fixed for reproducibility.
 BTC_GENESIS_DATE: date = date(2009, 1, 3)
 
-QUANTILES: tuple[float, ...] = (0.01, 0.10, 0.25, 0.50, 0.75, 0.95, 0.99)
-QUANTILE_LABELS: tuple[str, ...] = ("q01", "q10", "q25", "q50", "q75", "q95", "q99")
-_LABEL_BY_QUANTILE: dict[float, str] = dict(zip(QUANTILES, QUANTILE_LABELS, strict=True))
-
+# QUANTILES / QUANTILE_LABELS / QuantileCoefficients / MIN_FIT_HISTORY_DAYS come
+# from ``quantile_rails`` (shared with ``generic_valuation``) and are re-exported.
 # A quadratic-in-log-time fit needs real spread in ln(days_since_genesis) to
-# separate its linear and quadratic terms; below this many daily observations, or
-# this many calendar days between the first and last date (both enforced in
-# fit_btc_power_law — row count alone doesn't bound gaps between dates), the fit
-# is not considered reliable. Data-sufficiency guard per #1082's acceptance
-# criteria — a starting heuristic (2 years), not a value tuned against real data.
-MIN_FIT_HISTORY_DAYS = 730
+# separate its linear and quadratic terms; below MIN_FIT_HISTORY_DAYS daily
+# observations, or that many calendar days between the first and last date (both
+# enforced in fit_btc_power_law — row count alone doesn't bound gaps between
+# dates), the fit is not considered reliable. Data-sufficiency guard per #1082's
+# acceptance criteria — a starting heuristic (2 years), not a value tuned against
+# real data.
 
 _COEFFICIENTS_PATH = Path(__file__).parent / "btc_power_law_coefficients.json"
 _COEFFICIENTS_EXAMPLE_PATH = Path(__file__).parent / "btc_power_law_coefficients.example.json"
-
-
-class QuantileCoefficients(BaseModel):
-    """One quantile's fitted ``(c, a, b)`` for ``10 ** (c + a*x + b*x**2)``."""
-
-    model_config = ConfigDict(frozen=True, strict=True)
-
-    c: float
-    a: float
-    b: float
 
 
 class BtcPowerLawCoefficients(BaseModel):
