@@ -22,6 +22,10 @@ import {
 import { netCarriedIdeas } from './trade-history';
 import { keepNewestGenerationPerSeriesKey } from './snapshot-generation';
 import {
+  readNewestGeneration,
+  readNewestGenerationPerCurrency,
+} from './snapshot-generation-read';
+import {
   composeFixSeries,
   normalizeFixPair,
   pairFixSpec,
@@ -297,6 +301,10 @@ export async function getLatestDigest(): Promise<
 /**
  * Top-N confluence trade ideas for a given run_date, ascending by rank
  * (rank 1 = strongest). Returns `[]` when unconfigured or none exist.
+ *
+ * The generation is resolved in SQL first — anchor, then filter — because this
+ * read carries a limit and a superseded generation would otherwise compete for
+ * it inside PostgREST. See `snapshot-generation-read.ts`.
  */
 export async function getTopConfluence(
   runDate: string,
@@ -304,15 +312,20 @@ export async function getTopConfluence(
 ): Promise<FxConfluenceSnapshotRow[]> {
   if (!isTwelveXConfigured() || !twelveXSupabase) return [];
   if (!runDate) return [];
-  const rows = await querySupabase<FxConfluenceSnapshotRow[]>((sb) =>
-    sb
-      .from('fx_confluence_snapshot')
-      .select('run_date, rank, title, currency, direction, score, components, brief_keys, as_of')
-      .eq('run_date', runDate)
-      .order('rank', { ascending: true })
-      .limit(limit)
-  );
-  return rows ?? [];
+  return readNewestGeneration<FxConfluenceSnapshotRow>({
+    table: 'fx_confluence_snapshot',
+    runDate,
+    run: querySupabase,
+    build: (sb, anchor) => {
+      const scoped = sb
+        .from('fx_confluence_snapshot')
+        .select('run_date, rank, title, currency, direction, score, components, brief_keys, as_of')
+        .eq('run_date', runDate);
+      return (anchor ? scoped.eq('as_of', anchor) : scoped)
+        .order('rank', { ascending: true })
+        .limit(limit);
+    },
+  });
 }
 
 /** Resolve the latest run_date present in `fx_confluence_snapshot`, or `null`. */
@@ -331,6 +344,8 @@ async function getLatestConfluenceDate(): Promise<string | null> {
  * Ranked confluence trade ideas for the Intelligence tab. Defaults to the latest
  * run_date in `fx_confluence_snapshot`; pass `runDate` to pin a specific session.
  * Returns the full ranked set (rank 1 = strongest). `[]` when unconfigured/empty.
+ *
+ * Anchored, like `getTopConfluence`: this read carries a limit of its own.
  */
 export async function getIntelligence(
   runDate?: string,
@@ -339,15 +354,20 @@ export async function getIntelligence(
   if (!isTwelveXConfigured() || !twelveXSupabase) return [];
   const date = runDate ?? (await getLatestConfluenceDate());
   if (!date) return [];
-  const rows = await querySupabase<FxConfluenceSnapshotRow[]>((sb) =>
-    sb
-      .from('fx_confluence_snapshot')
-      .select('run_date, rank, title, currency, direction, score, components, brief_keys, as_of')
-      .eq('run_date', date)
-      .order('rank', { ascending: true })
-      .limit(limit)
-  );
-  return rows ?? [];
+  return readNewestGeneration<FxConfluenceSnapshotRow>({
+    table: 'fx_confluence_snapshot',
+    runDate: date,
+    run: querySupabase,
+    build: (sb, anchor) => {
+      const scoped = sb
+        .from('fx_confluence_snapshot')
+        .select('run_date, rank, title, currency, direction, score, components, brief_keys, as_of')
+        .eq('run_date', date);
+      return (anchor ? scoped.eq('as_of', anchor) : scoped)
+        .order('rank', { ascending: true })
+        .limit(limit);
+    },
+  });
 }
 
 /** Forward horizon, in days, of the "upcoming macro catalysts" window. */
@@ -514,17 +534,22 @@ export async function getUpcomingEvents(): Promise<FxEconomicCalendarRow[]> {
 export async function getEventOpinions(runDate: string): Promise<FxEventSnapshotRow[]> {
   if (!isTwelveXConfigured() || !twelveXSupabase) return [];
   if (!runDate) return [];
-  const rows = await querySupabase<FxEventSnapshotRow[]>((sb) =>
-    sb
-      .from('fx_events_snapshot')
-      .select(
-        'run_date, event_key, event_name, event_date, calendar_external_id, release_at, category, currencies, mentions, brokers, citations, as_of'
-      )
-      .eq('run_date', runDate)
-      .order('mentions', { ascending: false })
-      .order('event_date', { ascending: true })
-  );
-  return rows ?? [];
+  return readNewestGeneration<FxEventSnapshotRow>({
+    table: 'fx_events_snapshot',
+    runDate,
+    run: querySupabase,
+    build: (sb, anchor) => {
+      const scoped = sb
+        .from('fx_events_snapshot')
+        .select(
+          'run_date, event_key, event_name, event_date, calendar_external_id, release_at, category, currencies, mentions, brokers, citations, as_of'
+        )
+        .eq('run_date', runDate);
+      return (anchor ? scoped.eq('as_of', anchor) : scoped)
+        .order('mentions', { ascending: false })
+        .order('event_date', { ascending: true });
+    },
+  });
 }
 
 /* ------------------------------------------------------------------ *
@@ -1188,20 +1213,24 @@ export async function getIntelligenceWhy(
     getIntelligence(date, limit),
     // Canonical Tier-2 source: medium-horizon, weighted (mirrors getLatestConsensus's
     // filter), pinned to this run_date so the decomposition matches the idea's run.
-    querySupabase<FxConsensusSnapshotRow[]>((sb) =>
-      sb
-        .from('fx_consensus_snapshot')
-        .select(
-          'run_date, currency, weighted, score, confidence, agreement, tilt, n_eff, n_brokers, n_views, bullish_pct, bearish_pct, neutral_pct, watch_pct, as_of, timeframe, horizon_weeks'
-        )
-        .eq('weighted', true)
-        .eq('timeframe', 'medium')
-        .eq('run_date', date)
-    ),
+    // Unanchored, one query: this read has no limit, so the client resolves one
+    // generation per (run_date, currency) from the rows it already has.
+    readNewestGenerationPerCurrency<FxConsensusSnapshotRow>({
+      run: querySupabase,
+      build: (sb) =>
+        sb
+          .from('fx_consensus_snapshot')
+          .select(
+            'run_date, currency, weighted, score, confidence, agreement, tilt, n_eff, n_brokers, n_views, bullish_pct, bearish_pct, neutral_pct, watch_pct, as_of, timeframe, horizon_weeks'
+          )
+          .eq('weighted', true)
+          .eq('timeframe', 'medium')
+          .eq('run_date', date),
+    }),
     getLedger(date),
   ]);
 
-  return assembleIntelligenceWhy(confluence, consensus ?? [], ledger, date);
+  return assembleIntelligenceWhy(confluence, consensus, ledger, date);
 }
 
 /* ------------------------------------------------------------------ *
@@ -1313,16 +1342,20 @@ export async function getConsensusDivergence(
   if (!runDate) return {};
 
   const [consensus, biasRows, snapshotRows] = await Promise.all([
-    querySupabase<FxConsensusSnapshotRow[]>((sb) =>
-      sb
-        .from('fx_consensus_snapshot')
-        .select(
-          'run_date, currency, weighted, score, confidence, agreement, tilt, n_eff, n_brokers, n_views, bullish_pct, bearish_pct, neutral_pct, watch_pct, as_of, timeframe, horizon_weeks',
-        )
-        .eq('weighted', true)
-        .eq('timeframe', 'medium')
-        .eq('run_date', runDate),
-    ),
+    // Unanchored, one query: this read has no limit, so the client resolves one
+    // generation per (run_date, currency) from the rows it already has.
+    readNewestGenerationPerCurrency<FxConsensusSnapshotRow>({
+      run: querySupabase,
+      build: (sb) =>
+        sb
+          .from('fx_consensus_snapshot')
+          .select(
+            'run_date, currency, weighted, score, confidence, agreement, tilt, n_eff, n_brokers, n_views, bullish_pct, bearish_pct, neutral_pct, watch_pct, as_of, timeframe, horizon_weeks',
+          )
+          .eq('weighted', true)
+          .eq('timeframe', 'medium')
+          .eq('run_date', runDate),
+    }),
     querySupabase<SmartBiasJoinRow[]>((sb) =>
       sb
         .from('fx_smart_bias')
