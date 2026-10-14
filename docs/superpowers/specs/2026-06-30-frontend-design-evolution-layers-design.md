@@ -418,6 +418,5 @@ ProductFrame, BentoGrid, TrustStrip, reveal-up, ScrollyFeatures, StatCounter, Ch
 
 ## Related
 
-- [`docs/agent-backlog/design-evolution/INDEX.md`](../../agent-backlog/design-evolution/INDEX.md)
 - Epic [#1200](https://github.com/digithings-ai/digithings/issues/1200)
 - Parent design epic [#235](https://github.com/digithings-ai/digithings/issues/235)
