@@ -58,9 +58,15 @@ def _norm(ticker: str) -> str:
     return str(ticker).strip().upper()
 
 
-def _asset_classes_path() -> Path:
+def _bundled_asset_classes_path() -> Path:
     # this file: …/portfolio/sector_map.py → …/research/config/asset_classes.yaml
     return Path(__file__).resolve().parents[1] / "research" / "config" / "asset_classes.yaml"
+
+
+def _asset_classes_path() -> Path:
+    from digiquant.config_paths import resolve_config_file
+
+    return resolve_config_file("asset_classes.yaml", _bundled_asset_classes_path())
 
 
 @lru_cache(maxsize=1)

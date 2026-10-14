@@ -1,0 +1,11 @@
+# Neutral example for open-source / self-host installs (repo-split 1b).
+# Copy to $DIGIQUANT_CONFIG_DIR/asset_classes.yaml and extend.
+asset_classes:
+  equity-broad:
+    asset_class: EQUITY
+    label: Example Broad Equity
+    tickers: [EXAMPLE]
+  cash:
+    asset_class: CASH
+    label: Cash
+    tickers: [CASH]

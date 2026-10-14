@@ -614,7 +614,11 @@ def resolve_research_policy_path() -> Path:
     override = env_lookup(RESEARCH_POLICY_PATH).strip()
     if override:
         return Path(override)
-    return default_research_policy_path()
+    from digiquant.config_paths import resolve_config_file
+
+    return resolve_config_file(
+        "research_policy.yaml", default_research_policy_path()
+    )
 
 
 @lru_cache(maxsize=4)

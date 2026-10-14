@@ -39,8 +39,14 @@ class SectorConfig:
         )
 
 
-def _config_path() -> Path:
+def _bundled_path() -> Path:
     return Path(__file__).resolve().parent / "config" / "sectors.yaml"
+
+
+def _config_path() -> Path:
+    from digiquant.config_paths import resolve_config_file
+
+    return resolve_config_file("sectors.yaml", _bundled_path())
 
 
 @lru_cache(maxsize=1)

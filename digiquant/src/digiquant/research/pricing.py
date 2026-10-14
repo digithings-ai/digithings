@@ -129,7 +129,9 @@ def _config_path() -> Path:
     CWD-relative ``config/`` that ``digigraph.model_config`` reads, so the table does not
     depend on the process's working directory.
     """
-    override = (os.environ.get("DIGI_CONFIG_PATH") or "").strip()
+    override = (os.environ.get("DIGIQUANT_CONFIG_DIR") or "").strip() or (
+        os.environ.get("DIGI_CONFIG_PATH") or ""
+    ).strip()
     if override:
         return Path(override) / _CONFIG_FILENAME
     repo_root_config = _REPO_ROOT / "config" / _CONFIG_FILENAME

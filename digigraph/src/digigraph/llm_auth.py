@@ -73,7 +73,7 @@ logger = logging.getLogger(__name__)
 # of the process's working directory — hence the ``__file__``-relative
 # fallback is kept unchanged and only used when the env var is absent.
 def _resolve_byok_catalog_path() -> Path:
-    config_dir_override = os.environ.get("DIGI_CONFIG_PATH")
+    config_dir_override = os.environ.get("DIGIQUANT_CONFIG_DIR") or os.environ.get("DIGI_CONFIG_PATH")
     if config_dir_override:
         return Path(config_dir_override) / "byok-providers.json"
     return Path(__file__).resolve().parents[3] / "config" / "byok-providers.json"

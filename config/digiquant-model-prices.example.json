@@ -1,0 +1,13 @@
+{
+  "_comment": "Neutral example (repo-split 1b). Copy to $DIGIQUANT_CONFIG_DIR/digiquant-model-prices.json with real numbers. No real prices here.",
+  "prices_usd_per_1m": {
+    "example-model": {
+      "prompt_usd_per_1m": 1.0,
+      "completion_usd_per_1m": 1.0,
+      "source": "docs/providers/snapshots/example.json",
+      "snapshot_last_checked": "2026-01-01",
+      "rate": "standard",
+      "note": "placeholder"
+    }
+  }
+}
