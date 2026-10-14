@@ -8,7 +8,8 @@ export type JobKind =
   | "container"
   | "probe"
   | "watch"
-  | "twelvex-watch";
+  | "twelvex-watch"
+  | "occ-recrawl";
 
 export type Job = {
   id: string;
@@ -39,6 +40,8 @@ export type Job = {
   watch?: "digiquant-runner";
   /** Set when kind is "twelvex-watch". Worker-only read of twelve-x Actions history. */
   twelvexWatch?: "feed-confirm" | "session-heartbeat";
+  /** Set when kind is "occ-recrawl". Which OCC corpus this row recrawls. */
+  occRecrawl?: "help-docs";
   /**
    * Worker-side pre-check before a workflow_dispatch. "twelvex-session-due" skips
    * session_catchup.yml when no session can be due (see twelvex-watch.ts).
@@ -129,6 +132,23 @@ function tw(
   twelvexWatch: "feed-confirm" | "session-heartbeat",
 ): Job {
   return { id, cron, repo: TWELVE_X, kind: "twelvex-watch", workflow, ref: DEVELOP, enabled: true, twelvexWatch };
+}
+
+/**
+ * OCC worker-native recrawl row (DIG-3576). Runs inside this Worker (no GitHub
+ * runner): crawl the public help site, idempotent upsert keyed by URL +
+ * content hash, Vectorize write only for changed docs. `workflow` is omitted
+ * on purpose — there is no GHA workflow behind this id, so GITHUB_OVERRIDE_JOBS
+ * cannot redirect it. `ref` stays so `jobs.test.ts` (ref === "develop" on every
+ * non-repository_dispatch row) keeps pinning the row shape.
+ */
+function ow(
+  id: string,
+  cron: string,
+  occRecrawl: "help-docs",
+  opts: { enabled?: boolean } = {},
+): Job {
+  return { id, cron, repo: MONOREPO, kind: "occ-recrawl", ref: DEVELOP, enabled: opts.enabled ?? true, occRecrawl };
 }
 
 /** Container job. workflow + ref stay so GITHUB_OVERRIDE_JOBS can still dispatch. */
@@ -468,6 +488,15 @@ export const JOBS: readonly Job[] = [
     "primarketet_heartbeat_watchdog.yml",
     "session-heartbeat",
   ),
+  // OCC help-docs weekly recrawl (DIG-3576, Chris 14 Oct 18:26: WEEKLY, not
+  // daily; freshness alert > 8 days; tickets stay DAILY on DIG-3578). Worker-
+  // native row (ow): crawl help.online-compliance-center.com, idempotent upsert
+  // keyed by URL + content hash, Vectorize write only for changed docs.
+  // The cron string is unique in this file (exact-match routing), clear of the
+  // :11 daily finalizer and the Saturday weekly context job. Appended last so
+  // the deploy-config contract (wrangler.toml order == uniqueEnabledCrons()
+  // order) needs no reshuffle.
+  ow("occ-help-recrawl", "23 7 * * MON", "help-docs"),
 ];
 
 /**

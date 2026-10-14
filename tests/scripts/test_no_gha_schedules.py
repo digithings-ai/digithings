@@ -52,9 +52,10 @@ def test_jobs_map_does_not_claim_a_digisearch_parity_clock() -> None:
     # Both scrapes below name every builder in JOBS. A builder missing from this
     # alternation is invisible here, so the assertions below would pass against a
     # job they cannot see — a silent hole, not a green lane. wj = watch jobs
-    # (DIG-3065). Add your builder in the same edit that adds it to jobs.ts.
-    ids = re.findall(r'(?:wd|rd|cj|pj|wj)\(\s*"([^"]+)"', text)
-    workflows = re.findall(r'(?:wd|rd|cj|pj|wj)\([^)]*?"([^"]+\.yml)"', text, flags=re.DOTALL)
+    # (DIG-3065), ow = OCC worker-native rows (DIG-3576). Add your builder in
+    # the same edit that adds it to jobs.ts.
+    ids = re.findall(r'(?:wd|rd|cj|pj|wj|ow)\(\s*"([^"]+)"', text)
+    workflows = re.findall(r'(?:wd|rd|cj|pj|wj|ow)\([^)]*?"([^"]+\.yml)"', text, flags=re.DOTALL)
     assert "digisearch_parity" not in ids
     assert "digisearch-parity" not in ids
     assert "digisearch_parity.yml" not in workflows
