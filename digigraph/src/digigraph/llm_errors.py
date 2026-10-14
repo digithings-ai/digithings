@@ -64,7 +64,11 @@ def is_rate_limit_error(exc: BaseException) -> bool:
         if isinstance(exc, RateLimitError):
             return True
     except ImportError:
-        pass
+        import logging as _logging
+
+        _logging.getLogger(__name__).debug(
+            "openai package not installed; skipping openai rate-limit check"
+        )
     status = getattr(exc, "status_code", None)
     if status == 429:
         return True

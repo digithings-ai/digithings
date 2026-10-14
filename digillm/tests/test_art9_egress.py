@@ -421,10 +421,8 @@ def test_only_honest_decisions_are_reachable_through_the_screen(screen: None) ->
     for messages in (CLEAN_MESSAGES, REFUSING_MESSAGES):
         fake = _fake_client()
         client = client_mod.screened_client(fake)
-        try:
+        with pytest.raises(client_mod.Art9EgressRefused):
             client.chat.completions.create(model="gpt-4o-mini", messages=list(messages))
-        except client_mod.Art9EgressRefused:
-            pass
         decision, categories = client_mod.client_screen_fields(client)
         assert (categories == ()) == (decision is EgressDecision.PASS)
         reached.add(decision)
