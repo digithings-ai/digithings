@@ -83,7 +83,7 @@ Placeholders: `<ns>` = Chris's personal Origin namespace (D-O2). Clone URL `http
 |---|---|---|---|
 | R0 `digithings` | **GitHub** `digithings-ai/digithings` primary + Origin inbound mirror `<ns>/digithings` (D-O1). | GitHub: public. Origin: private (only option). | Chris runs `origin repo create-mirrored` after P3. |
 | R1–R6 | Origin `<ns>/<repo>` | private | Empty repo; filtered history pushed in P4 (`git push` of `main`, `develop`, release tags only). |
-| R7 `twelve-x` | Origin `<ns>/twelve-x` | private | See §3. |
+| R7 `twelve-x` | stays as-is (call (c)) | private | **ON HOLD 01:26** — no move until Chris rules whether the twelve-x desk moves. PR #5722 on hold. See §3. |
 | mono after P3 | **Stays on GitHub** (private, then archived in P5). Not moved to Origin. | private | — |
 
 - Names are **the same as on GitHub** and are permanent while Origin is in beta, so they are fixed in P0 and not changed later.
@@ -104,24 +104,22 @@ direction only for R0. The Origin-primary option with a push mirror built by us 
 
 No twelve-x detach is scheduled and P4.7 is struck: `chrizefan/twelve-x` is already a private
 inbound mirror (Matrix finding 9, live since the 2026-08-18 initial sync), and Chris forbids any
-detach. twelve-x stays as-is (GitHub private + existing inbound mirror). The R7 twelve-x-path move
+detach. twelve-x stays as-is (GitHub private + existing inbound mirror). **Call (c) 01:26: R7 / PR #5722 ON HOLD until Chris rules whether the twelve-x desk moves.** The R7 twelve-x-path move
 (desk surface + `digidata-api`) is undecided — it needs a new ruling, not this section. A later
 "move" would be a detach or a gated outbound transition, never a first create.
 
-### 4. CI on Origin — STRUCK Buildkite 2026-10-14 23:18 (Chris)
+### 4. CI on Origin (local-ci)
 
-- GitHub Actions does **not** run on Origin pushes. **Buildkite is struck (D-O3 struck)** and
-  **`origin repo clone-fast` is struck** (CloneKit is Enterprise-only; Matrix finding 6). The runner
-  is **local-ci on Chris's Mac** (DIG-3561 dispatcher design + N §5: one launchd job, 2 concurrent /
-  1 heavy, ephemeral job dirs; plain `git clone` with a short-lived token for checkout).
-- Rulesets that must hold are **`active`, never `evaluate`** — the "advisory" reading is struck.
+- GitHub Actions does **not** run on Origin pushes. The runner is **local-ci on Chris's Mac** (DIG-3561 dispatcher design + N §5: one launchd job, 2 concurrent / 1 heavy, ephemeral job dirs; plain `git clone` with a short-lived token for checkout).
+- Rulesets that must hold are **`active`, never `evaluate`.
+
+*Historical note (01:26): Buildkite was the D-O3 answer (Origin provider, self-hosted agents, `clone-fast` checkout, `.buildkite/` pipelines, `BUILDKITE_*` gate vars and token). Struck 23:18/23:36 — the runner is local-ci throughout, and no Buildkite org, pipeline, token, or adapter remains in any live step.*
   The agent identity is **not** a bypass actor: no agent seat holds bypass, so an `active` ruleset
   binds agents too. **Signed tags are mandatory before any private-repo deploy** (D-G6 now
   mandatory): the local-ci gate runs `git verify-tag` against `allowed_signers` on every release
   tag, and an unsigned tag is refused. (Origin has no signed-tag rule type — Matrix; the check
   lives in local-ci, which is also why it cannot be skipped.)
-- Workflows in `.github/workflows/` of R1–R7 are rewritten as local-ci jobs (no `.buildkite/`
-  tree). The P1.9 deploy workflows are plain scripts (`scripts/deploy/<target>.sh`) so the same
+- Workflows in `.github/workflows/` of R1–R7 are rewritten as local-ci jobs (local-ci job matrix). The P1.9 deploy workflows are plain scripts (`scripts/deploy/<target>.sh`) so the same
   script runs from GitHub Actions (mono, interim) and from local-ci (R1–R7).
 - Scheduled jobs that `digithings-cron` dispatches through the GitHub API move to the local-ci
   trigger API (D-R5-6; token on Chris's Mac, scoped to the pipelines it triggers).
@@ -202,7 +200,7 @@ Mono stays public (D-G2); its `production` environment and required reviewers ke
    key on a FIDO2 key. Only the **public** key goes into `allowed_signers` (committed in each private
    repo and installed on the Mac). Unsigned release tags are refused by the local-ci gate.
 5. Origin (D-O1, D-O2, D-O4, D-O5 answered; D-O3 STRUCK 23:36): Chris confirms the namespace and the repo names (permanent during beta).
-   ~~Creates the Buildkite organization and connects Origin (D-O3)~~ — STRUCK, no Buildkite org; local-ci needs no Origin connect. No agent account (D-O4). Agents do no logins. Nobody installs the Cloudflare app in Cursor.
+Local-ci needs no Origin connect and no Buildkite org exists. No agent account (D-O4). Agents do no logins. Nobody installs the Cloudflare app in Cursor.
 
 Exit check: inventory posted; deploy workflows show `workflow_dispatch` only; Mac agent reachable
 by Chris; if the signing key is adopted, `git tag -s` + `git verify-tag` round-trip works with the new key on a scratch repo.
@@ -223,17 +221,18 @@ each PR is independently shippable. Lane in brackets (operating rules).
 
 | # | Change | Unblocks | Lane |
 |---|---|---|---|
-| 1.1 | Path manifest script `scripts/split/manifest.py`: maps every tracked path to exactly one of R0–R7/delete; CI fails on unassigned paths. Pinned-SHA output stored as an artifact. | all | S |
-| 1.2 | `digiquant.plugin` surface + entry-point discovery (`digiquant.strategies`, `digiquant.mcp_tools`, `digiquant.cli`); private strategies, SDCA MCP, optimiser, SDCA charts and CLI subcommands register through it; dummy-plugin conformance test. | R1 | M |
-| 1.3 | `DIGIQUANT_CONFIG_DIR` + neutral example configs; production config only read via the env var. | R2 | S |
-| 1.4 | Unfold `dashboard-api` into its own Worker again; route `/dashboard-api/*` by zone route (D-Q2′); extract `@digiquant/contract` (types + pure functions shared by desk and API). | R2, R3 | M |
-| 1.5 | Supabase layering (D-Q6′): split migrations into `engine/` (tables the open pipeline reads/writes) and `prod/` (house-only); CI applies both in order on a scratch DB. | R0/R2 | M |
-| 1.6 | npm packages: tsup builds, `exports` maps, `private: false`, `license: MIT`; PixelWordmark → `@digithings/ui`; `@digithings/catalog` (byok-providers + openapi); apps import only via package exports (lint rule bans `../../packages/*/src`). | R3, R4 | M |
-| 1.7 | Tenant data out of code: `TENANT_CONFIG` KV read path with `digithings`-only fallback; seeds fetched from R2 at container boot; suggestion pools/looks from KV; production model list from KV/env. Prove on staging tenant first. | R5, R6 | M |
-| 1.8 | Dockerfiles consume packages/images, not sibling paths (runner, stack, digichat). | R2, R5 | M |
-| 1.9 | Deploy workflows for every Worker (stack, digichat, langfuse, cron, runner, dashboard-api, corpus-index, digidata-api) — tag/dispatch-triggered, clean checkout, written so the same file runs either on GitHub-hosted with `environment: production` (mono while public) or on the Mac `deploy` queue without an environment (private repos). Retire manual `wrangler deploy`; `occ_invite_key_rollout.sh` split into "write secret/KV" (R6) and "deploy" (R5). | R5, R6 | M |
-| 1.10 | Rotate any secret found by P0 gitleaks; move deploy tokens to per-target scoped Cloudflare tokens. | all | S |
-| 1.11 | Guard workflow `moved-paths-guard`: fails a PR touching a path whose manifest destination is already extracted (populated in P4). | P4 | S |
+| 1.1 (DIG-3690) | Path manifest script `scripts/split/manifest.py`: maps every tracked path to exactly one of R0–R7/delete; CI fails on unassigned paths. Pinned-SHA output stored as an artifact. | all | S |
+| 1.2 (DIG-3691) | `digiquant.plugin` surface + entry-point discovery (`digiquant.strategies`, `digiquant.mcp_tools`, `digiquant.cli`); private strategies, SDCA MCP, optimiser, SDCA charts and CLI subcommands register through it; dummy-plugin conformance test. | R1 | M |
+| 1.3 (DIG-3692) | `DIGIQUANT_CONFIG_DIR` + neutral example configs; production config only read via the env var. | R2 | S |
+| 1.4 (DIG-3693) | Unfold `dashboard-api` into its own Worker again; route `/dashboard-api/*` by zone route (D-Q2′); extract `@digiquant/contract` (types + pure functions shared by desk and API). | R2, R3 | M |
+| 1.5 (DIG-3694) | Supabase layering (D-Q6′): split migrations into `engine/` (tables the open pipeline reads/writes) and `prod/` (house-only); CI applies both in order on a scratch DB. | R0/R2 | M |
+| 1.6 (DIG-3695) | npm packages: tsup builds, `exports` maps, `private: false`, `license: MIT`; PixelWordmark → `@digithings/ui`; `@digithings/catalog` (byok-providers + openapi); apps import only via package exports (lint rule bans `../../packages/*/src`). | R3, R4 | M |
+| 1.7 (DIG-3699) | Tenant data out of code: `TENANT_CONFIG` KV read path with `digithings`-only fallback; seeds fetched from R2 at container boot; suggestion pools/looks from KV; production model list from KV/env. **Call (b) 01:26: tenant configs live in KV ONLY — no repo files synced to KV (no `kv-sync` from repo files).** Prove on staging tenant first. | R5, R6 | M |
+| 1.8 (DIG-3696) | Dockerfiles consume packages/images, not sibling paths (runner, stack, digichat). | R2, R5 | M |
+| 1.9 (DIG-3697) | Deploy workflows for every Worker (stack, digichat, langfuse, cron, runner, dashboard-api, corpus-index, digidata-api) — tag/dispatch-triggered, clean checkout, **local-ci only (call 01:26: no "same file runs on GitHub-hosted" — deploy jobs run on the Mac `deploy` job without an environment).** Retire manual `wrangler deploy`; `occ_invite_key_rollout.sh` split into "write secret/KV" (R6) and "deploy" (R5). | R5, R6 | M |
+| 1.10 (DIG-3698) | Rotate any secret found by P0 gitleaks; move deploy tokens to per-target scoped Cloudflare tokens. | all | S |
+| 1.11 (DIG-3700) | Guard workflow `moved-paths-guard`: fails a PR touching a path whose manifest destination is already extracted (populated in P4). | P4 | S |
+| 1.12 (DIG-3689) | R0 client-name scrub before D-12′: remove client-identifying names/paths from the R0 allowlist so the fresh public repo never carries them. | R0 | S |
 
 Exit check: manifest has zero unassigned paths; no import crosses a repo boundary
 (`scripts/split/check_boundaries.py`: Python imports, TS relative imports, Dockerfile COPY, workflow `paths`);
@@ -344,7 +343,7 @@ After step 8: delete or re-private R0 and yank packages. Point of no return: the
 Common recipe for every target Rn:
 1. `git clone --mirror` mono → `git filter-repo --paths-from-file rN.paths --path-rename …`.
 2. `gitleaks` + boundary check on the new repo; Chris creates `<ns>/Rn` on Origin (private); push `main`, `develop`, release tags; commit `allowed_signers`, CODEOWNERS, LICENSE (proprietary); Chris applies the Origin rulesets (§7).
-3. Switch imports to published R0 packages (pins); add the repo to the local-ci job matrix (no `.buildkite/` tree); install the Origin App (replaces the GitHub App for bump PRs); add Rn to the gate allowlist. Non-deploy CI values are local-ci secrets set by Chris or DevOps (never pasted into issues). Deploy credentials stay on Chris's Mac (plus Worker fallback). (R7: see Origin §3 for the history move.)
+3. Switch imports to published R0 packages (pins); add the repo to the local-ci job matrix (local-ci job matrix); install the Origin App (replaces the GitHub App for bump PRs); add Rn to the gate allowlist. Non-deploy CI values are local-ci secrets set by Chris or DevOps (never pasted into issues). Deploy credentials stay on Chris's Mac (plus Worker fallback). (R7: see Origin §3 for the history move.)
 4. **Cut-over deploy** from a Chris-cut release tag — one deploy per target, verified (below).
 5. Add Rn's paths to mono's `moved-paths-guard`; delete them from mono in one PR.
 6. Update Paperclip project binding, merge queue, run-watch, CODEOWNERS, seat instructions for Rn.
@@ -387,7 +386,7 @@ held (guard in "warn" mode during extraction, "fail" mode after cut-over).
 | Where | What to update |
 |---|---|
 | R0 `README.md`, `CONTRIBUTING.md`, `docs/DEPLOYMENT.md`, `docs/BRANCH_PROTECTION.md`, `docs/MERGE_QUEUE.md`, `docs/LICENSING.md`, `docs/SELF_HOST.md`, `docs/LOCAL_STACK.md` | Remove production deploy content (moves to R5/R2 runbooks); release model (tags + release-please); new repo map (public-safe version). |
-| R5 runbook | Deploy gate: Mac agent host, hook, `allowed_signers` rotation (if adopted), how Chris cuts a release tag (signing optional), how to add a repo to the allowlist. |
+| R5 runbook | Deploy gate: Mac local-ci host, hook, `allowed_signers` rotation, how Chris cuts a release tag (signing MANDATORY, D-G6), how to add a repo to the allowlist. |
 | openwiki | Per-module pages: install from PyPI/npm instead of monorepo paths; `openwiki/dashboard` → R3; `INSTRUCTIONS.md` repo map. |
 | digibook (R4 `content/book`) | System-architecture chapter: repo map and release flow; "how the book is built" (now R4 + R0 docs pulled at build). |
 | docs site (digithings.ai docs, openapi catalog) | Source openapi + byok catalog from `@digithings/catalog`; links to R0 instead of mono paths. |
@@ -450,6 +449,7 @@ never the self-hosted runner on R0, never the Cloudflare Cursor app.
   `config/contract/` + `compose-contract.env` + parity-baseline ownership,
   `deploy-digiquant-cloudflare.yml` home, 68 untriaged `research/` files.
 - R3 (G): PixelWordmark + deploy-models copy + entrypoint imports rewired pre-extraction;
+  **call (a) 01:26: R3 absorbs `apps/dashboard` (minus the R7 twelve-x paths); R2 absorbs the digiquant core pipeline (house pipeline, `execution/staging_secrets.py`, `vendor_secret_*`, gloomberb/luxalgo clients, `research/docs/RUNBOOK.md`, `config/contract/secrets.yaml`). Both are PRIVATE — the R0 definition excludes them.**
   `apps/digiquant-web/` moves to R3 root.
 - R4 (H): 246 + brand 22 files; **PixelWordmark moves to shared UI/brand BEFORE extraction**
   (R3 imports it).
@@ -492,7 +492,7 @@ revert by moving the domain back (minutes); KV rollback re-runs `kv-sync` from t
 ### 6. Chris-approval gates (each: doer + verify)
 
 1. Namespace + eight repo names (permanent in beta) — Chris confirms; verify `origin repo list`.
-2. ~~Buildkite org + Origin connect (D-O3)~~ STRUCK 23:36 — local-ci readiness instead: dispatcher installed, `ci` + disarmed `deploy` jobs present. — Chris; verify on the Mac.
+2. Local-ci readiness — dispatcher installed, `ci` + disarmed `deploy` jobs present. — Chris; verify on the Mac.
 3. Mac dispatcher caps + `~/Code/ci-runs/` home (D-CI2) — Chris; verify agent reachable + week-one re-measure.
 4. Non-GitHub registries (PyPI/npm/images) — Chris; verify first publishes resolve off-GitHub.
 5. D-R5-1 image direction; `byok-providers.json` owner; `config/contract` home — Chris; verify plan edit.
@@ -558,6 +558,19 @@ in the job matrix — a lane that reports "all local checks passed" without them
 
 Still open inputs (no draft): K (DIG-3568), M (DIG-3570). Each lands as its issue's `plan`
 document; this section absorbs them without reordering the phases.
+
+### 11. Overlap resolution + global rule (01:26, binding)
+
+Each file has exactly one owner. No `overlaps-known.txt` whitelist exists or is needed in this tree.
+
+- **R1:** `digiquant/scripts/export_sdca_macro.py`, `digiquant/scripts/plot_sdca_tearsheet.py`, SDCA parts of `optimize.py` (`_run_sdca_optimize`, SDCA imports).
+- **R2:** `digiquant/scripts/generate_tearsheets.py` (production job) after its SDCA imports (:66, :161-162) go through the plugin hook (refactor 1.2); generic `optimize.py` shell (private with the digiquant core, per call (a)).
+- **R6:** `scripts/verify_occ_invite_key.sh`, `occ_invite_key_fixture_server.mjs`, `occ_invite_key_rollout.sh` (write-secret/KV half, per refactor 1.9 split), `check_occ_rollout_auth_guard.py`, `index_occ_tickets.py`, `test_occ_rollout_scope_guard.sh`, `docs/ops/OCC_INVITE_KEY.md`.
+- **R5:** `apps/digithings-stack-cloudflare/container/seed_chroma.sh` (generic container infra; tenant seeds come from R2/KV at boot).
+
+**Global rule (all repo-split leaves):** no `.github/workflows` file moves into any private repo. Each workflow maps to a Cloudflare cron, a local-ci job on Chris's Mac, or deletion — recorded in DIG-3605 (crons/jobs off GitHub). Move lists drop every `.github/*` path. No Buildkite, no GitHub Packages/GHCR; signed release tags mandatory for private-repo deploys; no merges to main, no deploys, no repo creation.
+
+---
 
 ## Tracking
 
