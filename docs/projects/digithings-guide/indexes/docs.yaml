@@ -58,6 +58,7 @@ sources:
   - digikey/README.md
   - digikey/DIGI*.md
   - digiquant/ARCHITECTURE.md
+  - digiquant/docs/architecture/*.md
   - digiquant/AGENTS.md
   - digiquant/DIGI*.md
   - digisearch/ARCHITECTURE.md
