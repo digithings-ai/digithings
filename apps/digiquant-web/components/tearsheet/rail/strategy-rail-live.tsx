@@ -1,5 +1,5 @@
 "use client";
-/** Tearsheets band: every strategy stays mounted, and the visible one is compact. */
+/** Every strategy stays mounted. The landing band asks for the compact sheet. */
 import { useState } from "react";
 import { TabStrip, tabId, tabPanelId } from "@digithings/ui";
 import { PUBLISHED_STRATEGIES } from "../published";
@@ -7,7 +7,7 @@ import { TearsheetView } from "../tearsheet-view";
 
 const TAB_LABEL = "Strategy";
 
-export function StrategyRailLive() {
+export function StrategyRailLive({ compact = false }: { compact?: boolean }) {
   const [index, setIndex] = useState(0);
 
   return (
@@ -32,7 +32,7 @@ export function StrategyRailLive() {
           aria-labelledby={tabId(TAB_LABEL, item.id)}
           hidden={i !== index}
         >
-          <TearsheetView slug={item.id} embedded compact />
+          <TearsheetView slug={item.id} embedded compact={compact} />
         </div>
       ))}
     </div>

@@ -11,7 +11,7 @@ describe("landing tearsheets", () => {
   });
 
   it("preloads every strategy inside one box under a strategy banner", () => {
-    const html = renderToStaticMarkup(<StrategyRailLive />);
+    const html = renderToStaticMarkup(<StrategyRailLive compact />);
     expect(html).toContain(">Strategy<");
     for (const label of ["BTC L/S", "ETH L/S", "SOL L/S", "BTC-SDCA"]) {
       expect(html).toContain(label);

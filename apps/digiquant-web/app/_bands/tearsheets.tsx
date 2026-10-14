@@ -12,7 +12,7 @@ export function TearsheetsBand() {
     >
       <div className="min-w-0 border border-hair">
         <MarketBarShell />
-        <StrategyRailLive />
+        <StrategyRailLive compact />
       </div>
     </Band>
   );
