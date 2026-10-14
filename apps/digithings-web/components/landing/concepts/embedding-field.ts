@@ -141,8 +141,30 @@ export function createEmbeddingSubject(layout: EmbeddingLayout): (grid: Grid) =>
             if (q < 9) d += Math.exp(-q);
           }
         }
-        density[i] = 0.62 * smooth(0.22, 1.1, d) + outliers;
+        density[i] = 0.82 * smooth(0.22, 1.1, d) + outliers;
       }
+      // Filaments: a thin strand of points from each topic to its nearest
+      // neighbour, like the bridges a UMAP projection leaves between clusters.
+      hubs.forEach((a, n) => {
+        let best = -1;
+        let bestD = Infinity;
+        hubs.forEach((b, m) => {
+          const d = Math.hypot(b.x - a.x, b.y - a.y);
+          if (m !== n && d < bestD) {
+            bestD = d;
+            best = m;
+          }
+        });
+        const b = hubs[best];
+        if (!b) return;
+        const steps = Math.ceil(bestD / grid.pitch);
+        for (let s = 0; s <= steps; s++) {
+          const f = s / steps;
+          const sag = Math.sin(f * Math.PI) * 0.12 * bestD;
+          const i = cellAt(grid, a.x + (b.x - a.x) * f - ((b.y - a.y) / bestD) * sag, a.y + (b.y - a.y) * f + ((b.x - a.x) / bestD) * sag);
+          if (i >= 0) density[i] = Math.max(density[i] ?? 0, 0.55);
+        }
+      });
     }
     refresh(0);
 
@@ -207,12 +229,13 @@ export function createEmbeddingSubject(layout: EmbeddingLayout): (grid: Grid) =>
         for (let i = 0; i < count; i++) {
           state.kind[i] = 0;
           if (!lit[i]) {
-            state.target[i] = 0;
+            // Faint dot grid under the whole map: the empty space of the projection.
+            state.target[i] = 0.011 * (vignette[i] ?? 0);
             continue;
           }
           const off = ((ux[i] ?? 0) * grid.height - sweep) / band;
           const fresh = 0.82 + 0.5 * Math.exp(-off * off);
-          state.target[i] = 0.09 * fresh * (flicker[i] ?? 1) * (vignette[i] ?? 0);
+          state.target[i] = 0.15 * fresh * (flicker[i] ?? 1) * (vignette[i] ?? 0);
         }
 
         for (let n = 0; n < hot.length; n++) hot[n] = Math.max(0, (hot[n] ?? 0) - dt / 4500);
@@ -225,10 +248,22 @@ export function createEmbeddingSubject(layout: EmbeddingLayout): (grid: Grid) =>
             const t = phase / 1600;
             ringAt(state, hub.x, hub.y, t * ring, (1 - t) * (heat > 0 ? 0.5 : 0.22), heat > 0 ? 1 : 0);
           }
-          const i = cellAt(grid, hub.x, hub.y);
-          if (i < 0) return;
+          const center = cellAt(grid, hub.x, hub.y);
+          if (center < 0) return;
+          // Topic centroid: a solid 3x3 block, like the hubs on the base sketch.
           const pulse = 0.5 + 0.5 * Math.sin((time / 2400 + hash(n, 5)) * Math.PI * 2);
-          paintMax(state, i, (heat > 0 ? 0.5 + 0.3 * pulse : 0.24) * (vignette[i] ?? 0), heat > 0 ? 1 : 0);
+          const alpha = heat > 0 ? 0.6 + 0.3 * pulse : 0.34 + 0.08 * pulse;
+          const col = center % grid.cols;
+          const row = (center - col) / grid.cols;
+          for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+              const c = col + dx;
+              const r = row + dy;
+              if (c < 0 || r < 0 || c >= grid.cols || r >= grid.rows) continue;
+              const i = r * grid.cols + c;
+              paintMax(state, i, alpha * (vignette[i] ?? 0), heat > 0 ? 1 : 0);
+            }
+          }
         });
 
         // Queries: land near a cluster, reach for the three nearest topics.
