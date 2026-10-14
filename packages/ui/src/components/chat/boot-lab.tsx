@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { DotMatrix } from "./DotMatrix";
 import {
   DIGI_CHAT_BOOT_STEP_EVENT,
@@ -89,10 +95,16 @@ export type BootFacts = {
   toolLabels?: readonly string[];
   mcpServers?: number;
   backend?: string;
+  /**
+   * Sleep-on-idle services the host wakes before revealing the chat. When
+   * set, a "wake up services" row waits on the real `services` boot step.
+   */
+  services?: readonly string[];
 };
 
 /** Real milestones the app reports while the container comes up. */
-type BootMilestone = "image" | "config" | "runtime" | "loop" | "backend";
+type BootMilestone =
+  "image" | "config" | "runtime" | "loop" | "services" | "backend";
 
 /**
  * Container/agent commands; one row each, in order. Rows adapt to the facts
@@ -102,9 +114,7 @@ type BootMilestone = "image" | "config" | "runtime" | "loop" | "backend";
  * milestone that completes it (`ms` is the beat it keeps before that milestone
  * lands, and the cap when no signal ever does).
  */
-export function toolChainRows(
-  facts?: BootFacts,
-): readonly {
+export function toolChainRows(facts?: BootFacts): readonly {
   label: string;
   detail?: string;
   milestone: BootMilestone;
@@ -148,6 +158,14 @@ export function toolChainRows(
       milestone: "loop",
       ms: 720,
       detail: `${facts.mcpServers} servers`,
+    });
+  }
+  if (facts?.services) {
+    rows.push({
+      label: "wake up services",
+      milestone: "services",
+      ms: 0,
+      detail: facts.services.length ? facts.services.join(", ") : undefined,
     });
   }
   rows.push({
@@ -258,10 +276,13 @@ function useAppReady(enabled: boolean): { ready: boolean; timedOut: boolean } {
     const standalone = window.parent === window;
     // Standalone surfaces never receive the handshake, so they settle on
     // their own; embedded surfaces that time out surface a failure + retry.
-    const cap = setTimeout(() => {
-      if (standalone) setReady(true);
-      else setTimedOut(true);
-    }, standalone ? STANDALONE_CAP_MS : EMBEDDED_CAP_MS);
+    const cap = setTimeout(
+      () => {
+        if (standalone) setReady(true);
+        else setTimedOut(true);
+      },
+      standalone ? STANDALONE_CAP_MS : EMBEDDED_CAP_MS,
+    );
     return () => {
       window.removeEventListener(DIGI_CHAT_READY_EVENT, onReady);
       clearTimeout(cap);
@@ -344,7 +365,10 @@ function DotsLine() {
   }, []);
   return (
     <span className="dboot-lab-line">
-      loading<span className="dboot-lab-dots" aria-hidden="true">{".".repeat(count)}</span>
+      loading
+      <span className="dboot-lab-dots" aria-hidden="true">
+        {".".repeat(count)}
+      </span>
     </span>
   );
 }
@@ -555,15 +579,20 @@ function ToolChain({
       if (index === -1) return current;
       const row = rows[index];
       if (row === undefined) return current;
-      const previousDone = index === 0 ? mountClock.current : current[index - 1];
+      const previousDone =
+        index === 0 ? mountClock.current : current[index - 1];
       if (previousDone === null || previousDone === undefined) return current;
       const now = digichatBootClockMs();
       const reached =
         row.milestone === "backend"
           ? ready
-          : row.milestone === "config" || row.milestone === "runtime"
-            ? steps.has(row.milestone) || now - previousDone >= row.ms * 2
-            : now - previousDone >= row.ms;
+          : row.milestone === "services"
+            ? // Only the real edge completes it: the host reports it once every
+              // service is awake (or its own budget is spent).
+              steps.has("services") || ready
+            : row.milestone === "config" || row.milestone === "runtime"
+              ? steps.has(row.milestone) || now - previousDone >= row.ms * 2
+              : now - previousDone >= row.ms;
       if (!reached) return current;
       const next = [...current];
       next[index] = now;
@@ -589,7 +618,7 @@ function ToolChain({
         const start =
           index === 0
             ? mountClock.current
-            : doneAt[index - 1] ?? mountClock.current;
+            : (doneAt[index - 1] ?? mountClock.current);
         // Every row mounts with the chain; unseen rows only hide their paint
         // (visibility), so the block keeps its final height from the first
         // frame and new steps appear below the last one without nudging the
@@ -651,7 +680,9 @@ export function BootLabOverlay({
   // The tool chain runs to completion and then waits for the real ready
   // signal, so long cold starts keep a live row instead of looking done.
   // A failed boot never settles: the overlay keeps the error + retry up.
-  const active = isToolchain ? ready && chainDone && appReady && !failed : ready;
+  const active = isToolchain
+    ? ready && chainDone && appReady && !failed
+    : ready;
   useSettle(active, onSettled);
   const label = LABELS[variant];
   return (
@@ -660,7 +691,9 @@ export function BootLabOverlay({
       data-digichat-boot=""
       data-variant={variant}
       role="status"
-      style={accent ? ({ "--dboot-caret": accent } as CSSProperties) : undefined}
+      style={
+        accent ? ({ "--dboot-caret": accent } as CSSProperties) : undefined
+      }
     >
       {variant === "spinner" ? <SpinnerLine label={label} /> : null}
       {variant === "spinneronly" ? <SpinnerLine /> : null}
