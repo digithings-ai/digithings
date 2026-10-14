@@ -12,16 +12,18 @@ import polars as pl
 
 
 def _load_logo_base64() -> str:
+    repo_root = Path(__file__).resolve().parent.parent.parent.parent
+    logo_path = repo_root / "assets" / "dg_transparent.png"
+    if not logo_path.exists():
+        return ""
     try:
-        repo_root = Path(__file__).resolve().parent.parent.parent.parent
-        logo_path = repo_root / "assets" / "dg_transparent.png"
-        if logo_path.exists():
-            data = logo_path.read_bytes()
-            b64 = base64.b64encode(data).decode("ascii")
-            return f"data:image/png;base64,{b64}"
+        data = logo_path.read_bytes()
     except OSError:
-        pass
-    return ""
+        # The logo is decorative: an unreadable asset renders the tearsheet without
+        # it rather than failing the whole extraction.
+        return ""
+    b64 = base64.b64encode(data).decode("ascii")
+    return f"data:image/png;base64,{b64}"
 
 
 def _parse_balance(val: Any) -> float:

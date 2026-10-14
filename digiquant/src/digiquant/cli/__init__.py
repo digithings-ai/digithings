@@ -8,27 +8,28 @@ from pathlib import Path
 import click
 
 
+def _coerce_param_value(v: str) -> float | int | str:
+    """Parse one --param value: int, then float, then keep the raw string."""
+    for convert in (int, float):
+        try:
+            return convert(v)
+        except ValueError:
+            # This conversion does not apply to v, so try the next one; a value
+            # that is neither an int nor a float is kept as the raw string.
+            continue
+    return v
+
+
 def _parse_params(
     ctx: click.Context, param: click.Parameter, value: tuple[str, ...]
 ) -> dict[str, float | int | str]:
-    """Parse repeated --param key=value into a dict. Tries float, then int, then str."""
+    """Parse repeated --param key=value into a dict. Tries int, then float, then str."""
     out: dict[str, float | int | str] = {}
     for s in value:
         if "=" not in s:
             raise click.BadParameter(f"Invalid param: {s!r}. Use key=value.")
         k, v = s.split("=", 1)
-        k = k.strip()
-        try:
-            out[k] = int(v)
-            continue
-        except ValueError:
-            pass
-        try:
-            out[k] = float(v)
-            continue
-        except ValueError:
-            pass
-        out[k] = v
+        out[k.strip()] = _coerce_param_value(v)
     return out
 
 
