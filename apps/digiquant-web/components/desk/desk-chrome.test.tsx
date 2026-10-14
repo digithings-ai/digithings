@@ -185,7 +185,7 @@ describe("desk chrome", () => {
     const css = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
     expect(css).toContain(".desk-pane-body:focus-visible");
     expect(css).toContain(".vela-host:focus-visible");
-    expect(css).toMatch(/\.vela-host \.vela-callout-panel\s*\{\s*border-radius:\s*0/s);
-    expect(css).toMatch(/\.vela-host \.vela-callout-btn\s*\{\s*border-radius:\s*0/s);
+    expect(css).toMatch(/\.vela-host \*:not\(\.vela-callout\)\s*\{\s*border-radius:\s*0\s*!important/s);
+    expect(css).toContain(".vela-host button:focus-visible");
   });
 });

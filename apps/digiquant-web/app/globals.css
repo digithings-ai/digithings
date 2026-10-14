@@ -556,9 +556,24 @@ body {
   outline-offset: 2px;
 }
 
-/* Radius canon on the Vela chrome. Callout dots stay round: geometry. */
-.vela-host .vela-callout-panel { border-radius: 0; }
-.vela-host .vela-callout-btn { border-radius: 0; }
+/* Radius canon across the Vela widget chrome (toolbar, dialogs,
+   tooltips, inputs). The widget injects its stylesheet at mount, so it
+   wins equal-specificity ties by order: `!important` is the only lever
+   that holds. Callout dots stay round: circles are geometry. */
+.vela-host {
+  --vela-radius-sm: 0;
+  --vela-radius-md: 0;
+  --vela-radius-lg: 0;
+}
+.vela-host *:not(.vela-callout) { border-radius: 0 !important; }
+
+/* Every Vela control shows the same visible focus ring as the desk. */
+.vela-host button:focus-visible,
+.vela-host input:focus-visible,
+.vela-host [role="button"]:focus-visible {
+  outline: 1px solid var(--ink);
+  outline-offset: 2px;
+}
 
 /* Desk folder sidebar and desk selector, ported from the terminal draft.
    --win, --wash, and --mono are local because this site does not define them.
@@ -611,11 +626,17 @@ body {
 }
 .rail-step { width: 1.25rem; padding: 0; }
 .desk-pages { display: none; }
+/* The head scrolls internally; the shell around it never widens the
+   document. `hidden` (not `clip`: the toolchain drops `clip` at build)
+   keeps the page at the viewport width. The open palette list sits
+   inside the viewport, so it still paints. */
+.desk-shell {
+  overflow-x: hidden;
+}
 /* Desk name, blurb and path stay whole on one line. A narrow header scrolls
    them sideways. The track is not positioned, so the desk and path lists
    anchor to the header and are not clipped by the scroll. */
-.desk-head {
-  display: flex;
+.desk-head {  display: flex;
   flex: 1 1 auto;
   align-items: center;
   align-self: stretch;
@@ -673,11 +694,11 @@ body {
   .desk-shell > header .cmd {
     padding-inline: 0.2rem;
   }
-  /* Narrow screens collapse the path field to a / key. Focus opens it
+  /* Narrow screens collapse the path field to a / key. It never
+     shrinks (the picker keeps its width by design), and focus opens it
      over the header bar, so the document never widens. */
   .desk-head .cmd {
-    flex: 0 1 2.5rem;
-    min-width: 0;
+    flex: 0 0 2.5rem;
   }
   .desk-head .cmd-in {
     width: 2.5rem;
