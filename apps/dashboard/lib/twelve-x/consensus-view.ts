@@ -19,6 +19,7 @@ import { G10_CURRENCIES } from './types';
 import type { FxConsensusSnapshotRow } from './types';
 import { latestConsensusAverages, type ScorePoint } from './consensus-derive';
 import { scoreLabel } from './consensus-bar';
+import { keepNewestGenerationPerSeriesKey } from './snapshot-generation';
 
 /**
  * Canonical currency ordering shared by every consensus surface: the fixed G10
@@ -66,11 +67,21 @@ export interface ConsensusCurrencyRow {
  * run_date order and rolls them up via `latestConsensusAverages` (trailing-5
  * average family + momentum), then attaches the conviction `label` for the
  * latest raw score. Consumed by both the Today chart and the Consensus tab.
+ *
+ * A rerun of one run_date leaves a second generation of rows behind, so the
+ * series is reduced to the newest generation per (run_date, currency) BEFORE
+ * points are built. Without that step a duplicated date became two points: the
+ * trailing-5 window was really a trailing-5-*point* window, and `priorActual`,
+ * which walks back from `points.length - 2`, could compare two generations of
+ * the same day as if the older one were the prior run. Dedupe newest-per-key,
+ * never whole-generation, so a partly republished date keeps the currencies only
+ * the older generation published.
  */
 export function deriveConsensusRows(series: FxConsensusSnapshotRow[]): ConsensusCurrencyRow[] {
   const currencies = orderCurrencies(series.map((r) => r.currency));
+  const oneGeneration = keepNewestGenerationPerSeriesKey(series);
   return currencies.map((currency) => {
-    const points: ScorePoint[] = series
+    const points: ScorePoint[] = oneGeneration
       .filter((r) => r.currency === currency)
       .sort((a, b) => a.run_date.localeCompare(b.run_date))
       .map((r) => ({ score: r.score }));

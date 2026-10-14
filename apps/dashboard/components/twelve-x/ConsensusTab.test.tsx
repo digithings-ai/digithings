@@ -129,6 +129,99 @@ describe('pivotScoreSeries', () => {
 });
 
 /* ----------------------------------------------------------------------- */
+/* DIG-319 (DIG-57 leaf 2) — publish generations                            */
+/* ----------------------------------------------------------------------- */
+
+/**
+ * Fixture provenance: `fx_consensus_snapshot`, `run_date` 2026-06-02, read from
+ * production on 2026-10-04. That date holds three generations:
+ *   2026-06-17 14:47:45.587511+00  19 rows / 10 currencies
+ *   2026-06-30 23:00:54.339621+00   5 rows /  5 currencies  (partial rerun)
+ *   2026-07-23 22:43:39.052539+00  23 rows / 10 currencies
+ * The stamps keep their 6 fractional-second digits, which is what the database
+ * returns. Production holds more than one row per (run_date, currency) because
+ * the table key also holds `timeframe` and `weighted`; the fetch layer pins
+ * those two before the tab sees the series, so one row per currency per
+ * generation is what reaches `pivotScoreSeries`.
+ */
+const DUP_DATE = '2026-06-02';
+const G1 = '2026-06-17 14:47:45.587511+00';
+const G2 = '2026-06-30 23:00:54.339621+00';
+const G3 = '2026-07-23 22:43:39.052539+00';
+
+/** Three currencies, so a whole-generation drop would visibly blank a line. */
+const PLOT_CURRENCIES = ['USD', 'EUR', 'JPY'];
+
+/** The production three-generation date bracketed by two clean run_dates. */
+function threeGenerationSeries(): FxConsensusSnapshotRow[] {
+  const rows: FxConsensusSnapshotRow[] = [];
+  for (const currency of PLOT_CURRENCIES) {
+    rows.push(snap(currency, '2026-06-01', 0.2, { as_of: '2026-06-01T12:00:00Z' }));
+    // G1 published all three, G2 only USD/EUR/JPY's predecessors — here the
+    // partial middle generation republishes two of the three.
+    rows.push(snap(currency, DUP_DATE, 1.9, { as_of: G1 }));
+    rows.push(snap(currency, DUP_DATE, -1.9, { as_of: G2 }));
+    rows.push(snap(currency, DUP_DATE, 0.31, { as_of: G3 }));
+    rows.push(snap(currency, '2026-06-03', 0.6, { as_of: '2026-06-03T12:00:00Z' }));
+  }
+  return rows;
+}
+
+/** Two fixed permutations: no Math.random, so a failure is reproducible. */
+function reordered<T>(rows: T[]): T[] {
+  const cut = Math.floor(rows.length / 2);
+  return [...rows.slice(cut).reverse(), ...rows.slice(0, cut).reverse()];
+}
+
+describe('pivotScoreSeries — publish generations', () => {
+  it('emits one point per run_date, scored from the newest as_of', () => {
+    const rows = pivotScoreSeries(threeGenerationSeries(), PLOT_CURRENCIES);
+
+    expect(rows.map((r) => r.run_date)).toEqual(['2026-06-01', DUP_DATE, '2026-06-03']);
+    const dup = rows.find((r) => r.run_date === DUP_DATE)!;
+    expect(dup.USD).toBeCloseTo(0.31, 10);
+    expect(dup.EUR).toBeCloseTo(0.31, 10);
+    expect(dup.JPY).toBeCloseTo(0.31, 10);
+  });
+
+  it('does not let a losing generation blank a winning finite score with null', () => {
+    const rows = pivotScoreSeries(
+      [
+        snap('USD', DUP_DATE, 0.31, { as_of: G3 }),
+        snap('USD', DUP_DATE, Number.NaN, { as_of: G2 }),
+        snap('USD', DUP_DATE, 1.9, { as_of: G1 }),
+      ],
+      ['USD'],
+    );
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].USD).toBeCloseTo(0.31, 10);
+  });
+
+  it('still emits null when the winning generation itself has no finite score', () => {
+    // The guard resolves the generation, not the score: a genuinely unscored
+    // newest generation must read as a gap, not fall back to the stale value.
+    const rows = pivotScoreSeries(
+      [
+        snap('USD', DUP_DATE, 1.9, { as_of: G1 }),
+        snap('USD', DUP_DATE, Number.NaN, { as_of: G3 }),
+      ],
+      ['USD'],
+    );
+
+    expect(rows[0].USD).toBeNull();
+  });
+
+  it('returns the same rows whatever order the input arrives in', () => {
+    const series = threeGenerationSeries();
+    const expected = pivotScoreSeries(series, PLOT_CURRENCIES);
+
+    expect(pivotScoreSeries(reordered(series), PLOT_CURRENCIES)).toEqual(expected);
+    expect(pivotScoreSeries([...series].reverse(), PLOT_CURRENCIES)).toEqual(expected);
+  });
+});
+
+/* ----------------------------------------------------------------------- */
 /* Sub-nav + view switching                                                */
 /* ----------------------------------------------------------------------- */
 

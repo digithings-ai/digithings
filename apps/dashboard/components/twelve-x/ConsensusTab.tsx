@@ -34,6 +34,7 @@ import { ConsensusDataTable } from './ConsensusDataTable';
 import CurrencyDrilldownPanel from './CurrencyDrilldownPanel';
 import DivergencePanel from './DivergencePanel';
 import { augmentWithStaleSeries } from '@/lib/twelve-x/consensus-chart';
+import { keepNewestGenerationPerSeriesKey } from '@/lib/twelve-x/snapshot-generation';
 import { useTwelveX } from './context';
 
 const SCORE_MIN = -SCORE_MAX;
@@ -45,17 +46,31 @@ export interface ScoreSeriesRow {
   [currency: string]: number | string | null;
 }
 
+/**
+ * Pivots the raw score series to one chart point per run_date, one numeric key
+ * per currency.
+ *
+ * A rerun of one run_date publishes a second generation of rows next to the
+ * first, so several rows share a (run_date, currency) key. The series is
+ * reduced to the newest generation per key first: on an equal `as_of` the
+ * incumbent wins, so the pivot does not depend on input order. A losing
+ * duplicate must not overwrite a winning finite score with `null` — the guard
+ * runs before the write, so only the winning generation is ever written. When
+ * the winning generation itself has no finite score the cell stays `null`: a
+ * real gap reads as a gap rather than silently falling back to a stale value.
+ */
 export function pivotScoreSeries(
   series: FxConsensusSnapshotRow[],
   currencies: string[],
 ): ScoreSeriesRow[] {
-  const dates = [...new Set(series.map((r) => r.run_date))].sort((a, b) =>
+  const oneGeneration = keepNewestGenerationPerSeriesKey(series);
+  const dates = [...new Set(oneGeneration.map((r) => r.run_date))].sort((a, b) =>
     a.localeCompare(b),
   );
   const byDate = new Map<string, ScoreSeriesRow>();
   for (const d of dates) byDate.set(d, { run_date: d });
 
-  for (const r of series) {
+  for (const r of oneGeneration) {
     const row = byDate.get(r.run_date);
     if (row) row[r.currency] = Number.isFinite(r.score) ? r.score : null;
   }
