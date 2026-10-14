@@ -17,12 +17,3 @@ export function thesisIdEquals(a: string | null | undefined, b: string | null | 
   const right = normalizeThesisId(b);
   return Boolean(left && right && left === right);
 }
-
-/** Positions whose thesis_ids express `thesisId` under the normalized join. */
-export function joinPositionsToThesis<T extends { thesis_ids: string[] }>(
-  positions: T[],
-  thesisId: string | null | undefined
-): T[] {
-  if (!thesisId) return [];
-  return positions.filter((p) => p.thesis_ids.some((id) => thesisIdEquals(id, thesisId)));
-}
