@@ -41,7 +41,8 @@ if not os.path.exists(schema):
 _fd, _db = tempfile.mkstemp(prefix="d1_twelvex_", suffix=".db")
 os.close(_fd)
 try:
-    _sql = open(schema, "r", encoding="utf-8").read()
+    with open(schema, "r", encoding="utf-8") as _f:
+        _sql = _f.read()
     sqlite3.connect(_db).executescript(_sql)
 except Exception as exc:  # noqa: BLE001 - report, do not mask
     sys.exit("schema failed to apply: %s" % (exc,))
