@@ -228,6 +228,8 @@ def _skill_called_as_tool(
             "Use get_skill to load skills, then call the real tools it names.",
         }
     return out
+
+
 # --- 284.4: a mutating MCP call stops and asks ---------------------------------
 #
 # 284.3 refuses to OFFER a tool the operator did not allow. That stops a

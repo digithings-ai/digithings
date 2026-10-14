@@ -804,9 +804,7 @@ def operator_default_model() -> str:
 # ``DIGI_SESSION_MODEL_ALLOWLIST`` (comma list, house upstream models only) is
 # ever bound; anything else is ignored and the operator default stays. BYOK wins:
 # a bound user key is never redirected by this.
-_house_model_override: ContextVar[str | None] = ContextVar(
-    "dg_house_model_override", default=None
-)
+_house_model_override: ContextVar[str | None] = ContextVar("dg_house_model_override", default=None)
 
 
 def session_model_allowlist() -> frozenset[str]:
