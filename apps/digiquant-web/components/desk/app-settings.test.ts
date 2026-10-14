@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_SETTINGS,
   chatRequestBody,
+  clearDocumentPrefs,
+  applyDocumentPrefs,
   parseSettings,
   refreshIntervalMs,
   serializeSettings,
@@ -50,14 +52,22 @@ describe("app settings", () => {
     expect(serializeSettings(settings)).not.toContain(SENTINEL);
   });
 
-  it("puts the allowed model on a chat send and the tab key only on that request", () => {
-    const body = chatRequestBody("hello", DEFAULT_SETTINGS, SENTINEL);
-    expect(body.model).toBe(DEFAULT_SETTINGS.chatModel);
-    expect(body.byokKey).toBe(SENTINEL);
-    expect(serializeSettings(DEFAULT_SETTINGS)).not.toContain(SENTINEL);
-    const rejected = chatRequestBody("hello", { ...DEFAULT_SETTINGS, chatModel: "nope" }, "");
-    expect(rejected.model).toBe(DEFAULT_SETTINGS.chatModel);
-    expect(rejected.byokKey).toBeUndefined();
+  it("puts only the text and an allowed model on a chat send", () => {
+    expect(chatRequestBody("hello", DEFAULT_SETTINGS)).toEqual({ text: "hello", model: DEFAULT_SETTINGS.chatModel });
+    expect(chatRequestBody("hello", { ...DEFAULT_SETTINGS, chatModel: "nope" }).model).toBe(DEFAULT_SETTINGS.chatModel);
+  });
+
+  it("puts the pinned dark document back when the desk lets go", () => {
+    const attrs = new Map<string, string>();
+    const root = {
+      setAttribute: (name: string, value: string) => void attrs.set(name, value),
+      removeAttribute: (name: string) => void attrs.delete(name),
+    };
+    applyDocumentPrefs({ ...DEFAULT_SETTINGS, theme: "light", density: "compact" }, root);
+    expect(attrs.get("data-theme")).toBe("light");
+    clearDocumentPrefs(root);
+    expect(attrs.get("data-theme")).toBe("dark");
+    expect(attrs.has("data-density")).toBe(false);
   });
 
   it("turns a refresh choice into a timer and a stale notice into a banner", () => {

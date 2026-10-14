@@ -4,6 +4,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import {
   DEFAULT_SETTINGS,
   applyDocumentPrefs,
+  clearDocumentPrefs,
   parseSettings,
   refreshIntervalMs,
   serializeSettings,
@@ -13,28 +14,17 @@ import {
 const KEY = "dq.app-settings";
 
 const listeners = new Set<() => void>();
-const keyListeners = new Set<() => void>();
 
 let current: AppSettings = DEFAULT_SETTINGS;
 let hydrated = false;
-let sessionKey = "";
 
 function emit(): void {
   for (const listener of listeners) listener();
 }
 
-function emitKey(): void {
-  for (const listener of keyListeners) listener();
-}
-
 function subscribe(listener: () => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
-}
-
-function subscribeKey(listener: () => void): () => void {
-  keyListeners.add(listener);
-  return () => keyListeners.delete(listener);
 }
 
 /** Saved preferences. The first client render matches the server defaults, then storage loads. */
@@ -51,16 +41,6 @@ export function writeSettings(next: AppSettings): void {
     // Private mode: the in-memory copy still drives this tab.
   }
   emit();
-}
-
-export function readSessionKey(): string {
-  return sessionKey;
-}
-
-/** Tab memory only. Never written next to the saved preferences. */
-export function writeSessionKey(key: string): void {
-  sessionKey = key;
-  emitKey();
 }
 
 export function hydrateSettings(): void {
@@ -85,10 +65,6 @@ export function useAppSettings(): AppSettings {
   return useSyncExternalStore(subscribe, readSettings, () => DEFAULT_SETTINGS);
 }
 
-export function useSessionKey(): string {
-  return useSyncExternalStore(subscribeKey, readSessionKey, () => "");
-}
-
 /** Bumps when the saved refresh interval elapses. Zero means the user left refresh off. */
 export function useRefreshGeneration(): number {
   const settings = useAppSettings();
@@ -107,6 +83,7 @@ export function SettingsEffects() {
   const settings = useAppSettings();
   useEffect(() => {
     hydrateSettings();
+    return () => clearDocumentPrefs(document.documentElement);
   }, []);
   useEffect(() => {
     applyDocumentPrefs(settings, document.documentElement);

@@ -2,8 +2,8 @@ import rawModels from "../../../digichat/config/digichat-deploy-models.json";
 
 /**
  * Desk preferences the settings page can change.
- * A provider key never belongs in this document: it stays in tab memory.
  * Chat models are the digichat deploy allowlist, not a free string.
+ * No provider key: the desk chat send is not provisioned, so a key would have nowhere to go.
  */
 
 type ModelTable = { default: string; available: string[] };
@@ -51,7 +51,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
 export type ChatRequestBody = {
   text: string;
   model: string;
-  byokKey?: string;
 };
 
 function oneOf<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
@@ -117,12 +116,9 @@ export function staleBanner(state: "fresh" | "warn" | "stale" | null, notify: No
   return "This read is past the stale threshold.";
 }
 
-/** The body of one chat send. The key is present only for this request. */
-export function chatRequestBody(text: string, settings: AppSettings, sessionKey: string): ChatRequestBody {
-  const body: ChatRequestBody = { text, model: allowedModel(settings.chatModel) };
-  const key = sessionKey.trim();
-  if (key) body.byokKey = key;
-  return body;
+/** The body of one chat send. */
+export function chatRequestBody(text: string, settings: AppSettings): ChatRequestBody {
+  return { text, model: allowedModel(settings.chatModel) };
 }
 
 export function applyDocumentPrefs(
@@ -131,4 +127,13 @@ export function applyDocumentPrefs(
 ): void {
   root.setAttribute("data-theme", settings.theme);
   root.setAttribute("data-density", settings.density);
+}
+
+/** The rest of the site is pinned dark: put the document back when the desk unmounts. */
+export function clearDocumentPrefs(root: {
+  setAttribute(name: string, value: string): void;
+  removeAttribute(name: string): void;
+}): void {
+  root.setAttribute("data-theme", "dark");
+  root.removeAttribute("data-density");
 }

@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { Input, SegmentedControl } from "@digithings/ui/ui";
+import { SegmentedControl } from "@digithings/ui/ui";
 import { deskHomeHref } from "./desk-manifest";
 import { useDeskAccess } from "./desk-access";
 import {
@@ -19,7 +19,7 @@ import {
   type StaleSessions,
   type ThemeName,
 } from "./app-settings";
-import { useAppSettings, useSessionKey, writeSessionKey, writeSettings } from "./app-settings-store";
+import { useAppSettings, writeSettings } from "./app-settings-store";
 
 const LABEL = "m-0 text-[0.6875rem] tracking-[0.04em] text-ink-mute";
 
@@ -41,7 +41,6 @@ function refreshLabel(seconds: RefreshSec): string {
 /** Editable desk preferences. Each control writes the saved document and the app reads it back. */
 export function SettingsPage({ path }: { path: string }) {
   const settings = useAppSettings();
-  const sessionKey = useSessionKey();
   const { manifest, setDesk } = useDeskAccess();
   const router = useRouter();
   const desks = (manifest?.desks ?? []).filter((desk) => desk.access === "granted");
@@ -161,23 +160,6 @@ export function SettingsPage({ path }: { path: string }) {
             options={CHAT_MODELS.map((model) => ({ value: model, label: model }))}
             onChange={(chatModel) => patch({ chatModel })}
           />
-        </div>
-        <div className="flex max-w-md flex-col gap-1">
-          <p className={LABEL}>Provider key</p>
-          <Input
-            type="password"
-            name="provider-key"
-            autoComplete="off"
-            aria-label="Provider key"
-            value={sessionKey}
-            placeholder="Optional, this tab only"
-            onChange={(event) => writeSessionKey(event.target.value)}
-          />
-          <p className="m-0 text-[0.6875rem] leading-[1.4] text-ink-mute">
-            {sessionKey
-              ? "A key is set for this tab. A reload clears it. It is not saved."
-              : "Leave this empty to use the app default. A key stays in this tab and is not saved."}
-          </p>
         </div>
       </Section>
     </form>
