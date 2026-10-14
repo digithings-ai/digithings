@@ -5,6 +5,8 @@ from __future__ import annotations
 import pytest
 from digiquant.indicators.oscillators import RSI, BollingerBands
 
+pytestmark = pytest.mark.unit
+
 
 class TestRSI:
     def test_not_initialized_before_length_plus_one(self) -> None:
