@@ -37,11 +37,28 @@ All AI coding agents read [AGENTS.md](AGENTS.md) first. Human contributors: the 
 1. Pick or open an issue on the [GitHub Project](https://github.com/orgs/digithings-ai/projects/1). Scope the work.
 2. Branch: `feature/<short-description>` or `fix/<short-description>`.
 3. Implement with small, focused commits (conventional commit messages — `make commit MSG="feat(x): ..."` helps).
-4. Run `make score` and pass the PR gate (Security ≥ 8, Quality ≥ 8, Optimization ≥ 7, Accuracy ≥ 9). Rubrics: [docs/scoring/](docs/scoring/).
-5. Open a PR with the template. Include: what changed, why, how it was tested.
-6. CI runs lint, unit tests, and doc-link checks. Fix failures before requesting review.
+4. Open a PR with the template. Include: what changed, why, how it was tested. Quality bar is review ([CODE_REVIEW_POLICY.md](docs/agents/CODE_REVIEW_POLICY.md)), not a self-score.
+5. CI runs lint, unit tests, and doc-link checks. Fix failures before requesting review.
 
 For agent-driven work, the full end-to-end workflow is in [docs/agents/AGENT_WORKFLOW.md](docs/agents/AGENT_WORKFLOW.md).
+
+## PR titles (into develop)
+
+Pull requests targeting **develop** must use a [Conventional Commits](https://www.conventionalcommits.org/) title with a **required scope** from the module allow-list. Squash merges use the PR title as the commit subject, so scoped titles keep release-please working.
+
+Examples:
+
+- `feat(digillm): add streaming tool calls`
+- `ci(root): conventional-commit PR title lint`
+- `fix(digiquant): correct fill timestamp timezone`
+
+Canonical scopes live in [`.github/workflows/ci-pr-title.yml`](.github/workflows/ci-pr-title.yml) (includes digichat, digiskills, digillm, digifetch, digibase, digikey, digigraph, digivault, digiclaw, digismith, **digitrace**, digisearch, digiquant, digivoice, digidev, digiweb, ui, web, dashboard, root, deps, release).
+
+Exempt patterns (not blocked):
+
+- `chore(*): release …` / `chore(release): …` (release-please)
+- `chore: promote develop to main`
+- PRs labeled `autorelease: pending`
 
 ## Testing
 
@@ -63,4 +80,43 @@ For agent-driven work, the full end-to-end workflow is in [docs/agents/AGENT_WOR
 - Default to the most conservative, secure, and token-efficient option.
 - If unclear, open an issue on the [GitHub Project](https://github.com/orgs/digithings-ai/projects/1) referencing the relevant `ARCHITECTURE.md` section.
 
-By contributing, you agree to the technical constraints above and the license terms in [LICENSE](LICENSE).
+## Contributor terms — DCO 1.1
+
+digithings is open-core under the MIT license ([LICENSE](LICENSE)). The MIT
+license covers our code; it does not grant us any rights in the code *you*
+contribute. Every contribution therefore carries a Developer Certificate of
+Origin 1.1 sign-off, which is the record that you have the right to submit it.
+
+Sign off every commit:
+
+    git commit -s -m "feat(x): ..."
+
+or add the line automatically for this repo:
+
+    git config --local format.signoff true
+
+A pull request whose commits are missing the sign-off cannot be merged — the
+CI check enforces this. The full text is at <https://developercertificate.org/>.
+
+This applies from 2026-10-04 forward. Commits before that date are not retro-signed.
+
+Pull requests are squash-merged. A GitHub squash keeps the full message body of
+each squashed commit, separated by `---------`, so the `Signed-off-by` trailers
+of a pull request's commits land on the squash commit itself, on `develop`.
+Squash commit `cd54873e4` ("feat(root): land DCO 1.1 sign-off and
+TRADEMARKS.md") is the worked example: it carries four
+`Signed-off-by: Chris Stefan <chris.stefan@proton.me>` trailers.
+
+The trail is not continuous, so read it rather than assume it. A branch whose
+commits were never signed off squashes to a commit with no trailer, and a merge
+commit never carries one because git writes it. Find the commit that introduced
+a file, then read its body:
+
+    git log -1 --format='%H%n%B' -- <path>
+
+If that commit has no `Signed-off-by` line, fall back to the pull request and
+the commit shas — GitHub keeps those after the branch is deleted. So: cite
+`develop` when the trailer is there, and the pull request when it is not.
+
+MIT covers copyright only. See [TRADEMARKS.md](TRADEMARKS.md) for what you may
+not reuse.

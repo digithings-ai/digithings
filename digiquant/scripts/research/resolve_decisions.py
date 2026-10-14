@@ -36,7 +36,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 
 def _ensure_importable() -> None:
     """Add the monorepo ``*/src`` paths to sys.path so the research package imports."""
-    for rel in ("digiquant/src", "digigraph/src", "digibase/src", "digismith/src"):
+    for rel in ("digiquant/src", "digigraph/src", "digibase/src", "digitrace/src"):
         path = str(_REPO_ROOT / rel)
         if path not in sys.path:
             sys.path.insert(0, path)

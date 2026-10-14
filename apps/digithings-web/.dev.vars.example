@@ -6,4 +6,13 @@
 #   NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=https://digichat.digithings.ai
 # See infra/digichat-digithings/README.md.
 #
+# Local stack preview (make local-stack): the default origin is production
+# digithings.ai, whose frame-ancestors refuse a 127.0.0.1 parent, so the
+# landing chat stays blank. Build with the local digichat instead, and point the
+# digiquant band at the local dashboard-api:
+#   NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=http://127.0.0.1:3006   # digichat `next dev`
+#   NEXT_PUBLIC_DASHBOARD_API_URL=http://127.0.0.1:8887       # dashboard-api `wrangler dev`
+# digichat must register both `digithings.ai` and `127.0.0.1` in
+# DIGICHAT_EMBED_TENANTS (dev mode admits loopback parents only when registered).
+#
 # The retired POST /api/chat Function returns 410; these keys are unused for chat.

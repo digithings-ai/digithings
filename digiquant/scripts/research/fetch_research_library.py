@@ -75,8 +75,7 @@ def _query(sb, args: argparse.Namespace, select: str = "date,document_key,title,
     if args.type:
         q = q.eq("segment", args.type)
     if args.ticker:
-        # ticker stored in payload.ticker — use ilike on title as fallback
-        q = q.ilike("title", f"%{args.ticker}%")
+        q = q.eq("payload->>ticker", args.ticker)
     if args.since:
         q = q.gte("date", args.since)
     return q.limit(args.limit).execute()

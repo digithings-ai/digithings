@@ -3,6 +3,9 @@
 Wrappers are exercised through FastMCP's tool manager with a
 MockTransport-backed GloomberbClient patched over the env-seam builder. No
 network, no session cookie required (gated tools are exercised both ways).
+Since #2752 the secret gate is forced open by an autouse fixture here, because
+this module tests what each tool does once it is advertised; whether it is
+advertised at all is pinned in tests/dq/data/test_gloomberb_session_gate.py.
 """
 
 from __future__ import annotations
@@ -19,15 +22,19 @@ pytest.importorskip("mcp.server.fastmcp")
 
 pytestmark = pytest.mark.unit
 
-from digiquant.data.gloomberb import (  # noqa: E402
+from digiquant.data.gloomberb import (  # noqa: E402  # noqa: E402
     GLOOMBERB_ATTRIBUTION,
     GLOOMBERB_DELAY_NOTICE,
     PREVIEW_ACCESS_WARNING,
     EarningsEvent,
     GloomberbClient,
+    agent_tools,
+    session_gate,
 )
+from digiquant.data.gloomberb.session_gate import SessionGateStatus  # noqa: E402
 from digiquant.mcp_server import create_mcp_server  # noqa: E402
 from digiquant.orchestrator_tools import build_orchestrator_tool_manifest  # noqa: E402
+from digiquant.tool_refusals import REFUSED_TOOLS  # noqa: E402
 
 from digifetch import HttpFetcher, RateLimiter, RetryPolicy  # noqa: E402
 from digiquant import mcp_server  # noqa: E402
@@ -52,7 +59,9 @@ DIGIFETCH_TOOLS = {
     "digifetch_yield_curve",
     "digifetch_cds",
     "digifetch_research_search",
-    "digifetch_congress_trades",
+    # `digifetch_congress_trades` is deliberately absent: refused under 5 U.S.C.
+    # 13107(c)(1)(B) (DIG-1057) and registered on no scope. See
+    # `REFUSED_TOOLS` and `digiquant.tool_refusals`.
     "digifetch_transcripts",
     # coverage expansion (#4110 phase 2)
     "digifetch_statements",
@@ -71,7 +80,76 @@ DIGIFETCH_TOOLS = {
     "digifetch_equity_diagnostic",
     # coverage expansion (#4110 phase 4a)
     "digifetch_saved_searches",
+    # prediction-markets venue catalog (#4813)
+    "digifetch_prediction_markets",
+    # calculators + compositions (130-coverage Task 2, unattributed derived math)
+    "digifetch_options_calculator",
+    "digifetch_bond_calculator",
+    "digifetch_kelly_sizer",
+    "digifetch_dividend_yield",
+    "digifetch_fx_cross_rates",
+    "digifetch_vix_term_structure",
+    # options scenario (130-coverage Task 8: OSA, unattributed derived math)
+    "digifetch_options_scenario",
+    # portfolio-math compositions (130-coverage Task 3, unattributed derived math)
+    "digifetch_compare_performance",
+    "digifetch_correlation_matrix",
+    "digifetch_relationship_graph",
+    "digifetch_relative_valuation",
+    "digifetch_fundamental_graph",
+    "digifetch_valuation_graph",
+    "digifetch_custom_chart",
+    "digifetch_market_valuation",
+    "digifetch_money_markets",
+    "digifetch_rate_path",
+    # probe-backed tools (130-coverage Task 5, one per Task 4 GO verdict)
+    "digifetch_time_and_sales",
+    "digifetch_quote_recap",
+    "digifetch_estimate_revisions",
+    "digifetch_short_volume",
+    "digifetch_hiring",
+    "digifetch_central_bank_rates",
+    "digifetch_cdx",
+    "digifetch_sovereign_cds",
+    "digifetch_options_flow",
+    "digifetch_cot",
+    "digifetch_crypto_markets",
+    "digifetch_iv_screen",
+    "digifetch_iv_history",
+    "digifetch_iv_surface",
+    "digifetch_debt_maturities",
+    "digifetch_session_movers",
+    "digifetch_trending",
+    "digifetch_substack",
+    "digifetch_ipo_calendar",
+    # ToS/direct tools (130-coverage Task 6, venue-direct, unattributed)
+    "digifetch_fear_greed",
+    "digifetch_polls",
+    "digifetch_treasury_auctions",
+    "digifetch_market_halts",
+    "digifetch_hacker_news",
+    # Workspace writes + broker reads + approval-gated orders (130-coverage
+    # Task 7, session-gated; read-only posture except preview/dry-run)
+    "digifetch_portfolio_view",
+    "digifetch_watchlist_add",
+    "digifetch_watchlist_remove",
+    "digifetch_portfolio_add",
+    "digifetch_portfolio_remove",
+    "digifetch_alert_add",
+    "digifetch_alert_list",
+    "digifetch_note_add",
+    "digifetch_thesis_add",
+    "digifetch_view_add",
+    "digifetch_broker_positions",
+    "digifetch_ibkr_preview_order",
+    "digifetch_ibkr_execute_order",
 }
+
+#: Declared entitlements of refused tools are kept (the client code is retained so
+#: the route can come back if Counsel clears it) but the tools are never
+#: registered or advertised, so every surface assertion excludes them.
+REFUSED_DIGIFETCH = {name for name in REFUSED_TOOLS if name.startswith("digifetch_")}
+LIVE_DIGIFETCH_TOOLS = DIGIFETCH_TOOLS - REFUSED_DIGIFETCH
 
 #: Tools whose payload carries a term.gloom.sh deep link (one listing).
 LINKED_TOOLS = {
@@ -91,6 +169,15 @@ LINKED_TOOLS = {
     "digifetch_risk_reports",
     "digifetch_short_interest",
     "digifetch_equity_diagnostic",
+    # probe-backed tools (130-coverage Task 5) addressing one listing
+    "digifetch_time_and_sales",
+    "digifetch_quote_recap",
+    "digifetch_estimate_revisions",
+    "digifetch_short_volume",
+    "digifetch_hiring",
+    "digifetch_iv_history",
+    "digifetch_iv_surface",
+    "digifetch_debt_maturities",
 }
 
 AAPL_QUOTE = {
@@ -108,8 +195,31 @@ AAPL_QUOTE = {
 
 @pytest.fixture(autouse=True)
 def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No inherited Gloomberb env, and an authenticated secret gate (#2752).
+
+    Since #2752 a session/preview/pro tool is advertised only when the
+    configured cookie is *validated* against api.gloom.sh, not merely present.
+    This module exercises tool behaviour (envelopes, entitlement notes, wire
+    access), so it asks for a server that is authenticated and then drives every
+    tool with a mocked transport -- no request leaves the process either way.
+
+    The advertisement contract itself is pinned in
+    `tests/dq/data/test_gloomberb_session_gate.py`; the absent/invalid cases are
+    not asserted here because this module deliberately opens the gate.
+    """
     monkeypatch.delenv("GLOOMBERB_ENABLED", raising=False)
     monkeypatch.delenv("GLOOMBERB_SESSION_COOKIE", raising=False)
+    session_gate.reset_session_gate_cache()
+    monkeypatch.setattr(
+        session_gate,
+        "session_gate_status",
+        lambda *a, **k: SessionGateStatus(True, "ok", "authenticated for this test"),
+    )
+    monkeypatch.setattr(
+        agent_tools, "session_gate_status", session_gate.session_gate_status, raising=False
+    )
+    yield
+    session_gate.reset_session_gate_cache()
 
 
 def _mcp(name: str):
@@ -128,16 +238,228 @@ def _envelope(data: Any, status: str = "success", **extra: Any) -> httpx.Respons
 def _patch_client(monkeypatch: pytest.MonkeyPatch, handler: Any, **kwargs: Any) -> GloomberbClient:
     fetcher = HttpFetcher(
         transport=httpx.MockTransport(handler),
-        allowed_hosts=["api.gloom.sh"],
+        allowed_hosts=[
+            "api.gloom.sh",
+            # Venue-direct probe tools (130-coverage Task 5): Yahoo trending
+            # and the own-account Substack reader ride the same transport.
+            "query1.finance.yahoo.com",
+            "substack.com",
+            "examplepub.substack.com",
+            # ToS/direct tools (130-coverage Task 6): CNN, VoteHub, Fiscal
+            # Data, Nasdaq Trader, and Hacker News ride it too.
+            "production.dataviz.cnn.io",
+            "api.votehub.com",
+            "api.fiscaldata.treasury.gov",
+            "www.nasdaqtrader.com",
+            "hacker-news.firebaseio.com",
+        ],
     )
     kwargs.setdefault("rate_limiter", RateLimiter(0))
     kwargs.setdefault("retry_policy", RetryPolicy(attempts=1))
+    kwargs.setdefault("enabled", True)
     client = GloomberbClient(fetcher=fetcher, **kwargs)
     monkeypatch.setattr(mcp_server, "_build_gloomberb_client", lambda: client)
     return client
 
 
 def _sweep_handler(request: httpx.Request) -> httpx.Response:
+    host = request.url.host
+    if host == "gamma-api.polymarket.com" and request.url.path == "/events":
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "id": "1001",
+                    "title": "Fed December decision",
+                    "slug": "fed-december-decision",
+                    "tags": [{"label": "Macro"}],
+                    "markets": [
+                        {
+                            "question": "25bp hike in December?",
+                            "outcomes": '["Yes", "No"]',
+                            "outcomePrices": '["0.25", "0.75"]',
+                            "volume": "1234.5",
+                            "liquidity": "567.8",
+                            "endDate": "2026-12-16T00:00:00Z",
+                        }
+                    ],
+                }
+            ],
+        )
+    if host == "api.elections.kalshi.com" and request.url.path == "/trade-api/v2/events":
+        return httpx.Response(
+            200,
+            json={
+                "events": [
+                    {
+                        "event_ticker": "FED-26",
+                        "title": "Fed December decision",
+                        "category": "Economics",
+                        "markets": [
+                            {
+                                "ticker": "FED-26-Y1",
+                                "yes_bid": 24,
+                                "yes_ask": 26,
+                                "last_price": 25,
+                                "volume": 1000,
+                                "open_interest": 500,
+                                "close_time": "2026-12-16T00:00:00Z",
+                                "status": "open",
+                            }
+                        ],
+                    }
+                ]
+            },
+        )
+    if host == "api.elections.kalshi.com" and request.url.path == "/trade-api/v2/markets":
+        # Live KXFED ladder shape for the rate-path composition (cents wire).
+        return httpx.Response(
+            200,
+            json={
+                "markets": [
+                    {
+                        "ticker": "KXFED-26DEC-450",
+                        "event_ticker": "KXFED-26DEC",
+                        "floor_strike": 4.5,
+                        "strike_type": "greater",
+                        "yes_bid": 90,
+                        "yes_ask": 92,
+                        "last_price": 91,
+                        "close_time": "2026-12-16T00:00:00Z",
+                        "status": "open",
+                    },
+                    {
+                        "ticker": "KXFED-26DEC-475",
+                        "event_ticker": "KXFED-26DEC",
+                        "floor_strike": 4.75,
+                        "strike_type": "greater",
+                        "yes_bid": 40,
+                        "yes_ask": 42,
+                        "last_price": 41,
+                        "close_time": "2026-12-16T00:00:00Z",
+                        "status": "open",
+                    },
+                ],
+                "cursor": "",
+            },
+        )
+    # ToS/direct tools (130-coverage Task 6): venue fixtures for the free
+    # sweep calls (all five reach the wire with and without a cookie).
+    if host == "production.dataviz.cnn.io" and request.url.path.startswith(
+        "/index/fearandgreed/graphdata"
+    ):
+        series = {
+            "timestamp": "2026-09-29T16:00:00Z",
+            "score": 42.0,
+            "rating": "Fear",
+            "previous_close": 44.0,
+            "previous_1_week": 50.0,
+            "previous_1_month": 60.0,
+            "previous_1_year": 70.0,
+            "data": [{"x": 1790035200000, "y": 42.0, "rating": "Fear"}],
+        }
+        return httpx.Response(
+            200,
+            json={
+                "fear_and_greed": series,
+                "fear_and_greed_historical": {
+                    "data": [{"x": 1790035200000, "y": 42.0, "rating": "Fear"}]
+                },
+                "market_momentum_sp500": series,
+                "market_momentum_sp125": series,
+                "stock_price_strength": series,
+                "stock_price_breadth": series,
+                "put_call_options": series,
+                "market_volatility_vix": series,
+                "market_volatility_vix_50": series,
+                "safe_haven_demand": series,
+                "junk_bond_demand": series,
+            },
+        )
+    if host == "api.votehub.com" and request.url.path == "/polls":
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "id": "p1",
+                    "poll_type": "approval",
+                    "sample_size": 1500,
+                    "population": "lv",
+                    "url": "https://votehub.com/p/p1",
+                    "start_date": "2026-09-01",
+                    "end_date": "2026-09-05",
+                    "pollster": "Acme Polls",
+                    "answers": [
+                        {"choice": "Approve", "pct": 45.0},
+                        {"choice": "Disapprove", "pct": 52.0},
+                    ],
+                    "subject": "Presidential approval",
+                }
+            ],
+        )
+    if host == "api.fiscaldata.treasury.gov":
+        return httpx.Response(
+            200,
+            json={
+                "data": [
+                    {
+                        "record_date": "2026-09-24",
+                        "cusip": "912797AB1",
+                        "security_type": "Bill",
+                        "auction_date": "2026-09-22",
+                        "issue_date": "2026-09-25",
+                        "maturity_date": "2026-12-24",
+                        "high_yield": "4.125",
+                    }
+                ],
+                "meta": {"count": 1},
+            },
+        )
+    if host == "www.nasdaqtrader.com":
+        return httpx.Response(
+            200,
+            text=(
+                '<?xml version="1.0" encoding="utf-8"?>'
+                '<rss version="2.0" xmlns:ndaq="http://www.nasdaqtrader.com/ndaq">'
+                "<channel><title>NASDAQ Trade Halts</title>"
+                "<item>"
+                "<ndaq:IssueSymbol>XYZ</ndaq:IssueSymbol>"
+                "<ndaq:IssueName>XYZ Corp</ndaq:IssueName>"
+                "<ndaq:Market>NASDAQ</ndaq:Market>"
+                "<ndaq:HaltDate>09/29/2026</ndaq:HaltDate>"
+                "<ndaq:HaltTime>14:32:10</ndaq:HaltTime>"
+                "<ndaq:ReasonCode>T1</ndaq:ReasonCode>"
+                "<ndaq:ResumptionDate>09/29/2026</ndaq:ResumptionDate>"
+                "<ndaq:ResumptionQuoteTime>14:37:10</ndaq:ResumptionQuoteTime>"
+                "<ndaq:ResumptionTradeTime>14:37:15</ndaq:ResumptionTradeTime>"
+                "</item>"
+                "</channel></rss>"
+            ),
+        )
+    if host == "hacker-news.firebaseio.com":
+        if request.url.path == "/v0/topstories.json":
+            return httpx.Response(200, json=[111, 222, 333])
+        if request.url.path == "/v0/item/111.json":
+            return httpx.Response(
+                200,
+                json={
+                    "id": 111,
+                    "title": "Kept",
+                    "by": "a",
+                    "time": 1790000000,
+                    "score": 10,
+                    "descendants": 5,
+                    "url": "https://example.com/a",
+                },
+            )
+        if request.url.path == "/v0/item/222.json":
+            return httpx.Response(
+                200,
+                json={"id": 222, "title": "Ask", "by": "b", "time": 2, "score": 3},
+            )
+        if request.url.path == "/v0/item/333.json":
+            return httpx.Response(200, json={"id": 333, "deleted": True})
+        raise AssertionError(f"unexpected Hacker News path {request.url.path!r}")
     path = request.url.path
     if path == "/market/quote":
         return _envelope(AAPL_QUOTE)
@@ -155,12 +477,56 @@ def _sweep_handler(request: httpx.Request) -> httpx.Response:
             }
         )
     if path == "/market/history":
-        return _envelope([], currency="USD", providerMeta={"provider": "yahoo"})
+        symbol = request.url.params.get("symbol", "AAPL")
+        base = 200.0 if symbol == "MSFT" else 100.0
+        return _envelope(
+            [{"date": f"2026-09-{25 + i:02d}T00:00:00.000Z", "close": base + i} for i in range(5)],
+            currency="USD",
+            providerMeta={"provider": "yahoo"},
+        )
     if path == "/market/financials":
-        return _envelope({"quote": AAPL_QUOTE})
+        return _envelope(
+            {
+                "quote": AAPL_QUOTE,
+                "fundamentals": {
+                    "trailingPe": 30.0,
+                    "forwardPe": 25.0,
+                    "pegRatio": 1.5,
+                    "enterpriseToRevenue": 8.0,
+                    "dividendYield": 0.005,
+                },
+                "annualStatements": [
+                    {
+                        "date": "2025-09-27",
+                        "currency": "USD",
+                        "totalRevenue": 400.0,
+                        "netIncome": 100.0,
+                        "eps": 6.0,
+                    }
+                ],
+                "quarterlyStatements": [],
+            }
+        )
     if path == "/market/options":
         return _envelope(
-            {"underlyingSymbol": "AAPL", "expirationDates": [], "calls": [], "puts": []}
+            {
+                "underlyingSymbol": "AAPL",
+                "expirationDates": [1800000000.0],
+                # Options-scenario sweep leg (130-coverage Task 8: OSA): the
+                # scenario TOOL_CALLS entry matches this call row exactly.
+                "calls": [
+                    {
+                        "contractSymbol": "AAPL270115C00100000",
+                        "strike": 100.0,
+                        "expiration": 1800000000.0,
+                        "impliedVolatility": 0.25,
+                        "lastPrice": 10.4,
+                        "bid": 10.2,
+                        "ask": 10.6,
+                    }
+                ],
+                "puts": [],
+            }
         )
     if path == "/cloud/sec/filings":
         return httpx.Response(200, json={"filings": [], "hasMore": False, "nextOffset": 0})
@@ -288,6 +654,327 @@ def _sweep_handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
             200,
             json={"status": "success", "data": [{"symbol": "AAPL", "price": 200.0}]},
+        )
+    # Probe-backed tools (130-coverage Task 5): one branch per Task 4 GO
+    # verdict route (shapes mirror tests/dq/data/test_gloomberb_probe_tools.py).
+    if path.startswith("/cloud/tape/"):
+        return _envelope(
+            {
+                "symbol": "AAPL",
+                "exchange": "NASDAQ",
+                "sessionHigh": 201.5,
+                "sessionLow": 198.0,
+                "trades": [
+                    {
+                        "id": "t1",
+                        "timestamp": "2026-09-30T19:59:00Z",
+                        "price": 200.5,
+                        "size": 100,
+                        "exchange": "NASDAQ",
+                        "conditions": ["@"],
+                        "tape": "C",
+                    }
+                ],
+                "quotes": [
+                    {
+                        "bid": 200.4,
+                        "ask": 200.6,
+                        "bidSize": 5,
+                        "askSize": 8,
+                        "venues": ["NASDAQ"],
+                        "conditions": ["R"],
+                    }
+                ],
+                "capacity": 1000,
+                "dropped": 0,
+                "cancelled": 0,
+            }
+        )
+    if path.startswith("/cloud/research/estimates/"):
+        return _envelope(
+            {
+                "symbol": "AAPL",
+                "periods": [
+                    {
+                        "period": "Q3-2026",
+                        "current": 1.75,
+                        "recorded": 1.70,
+                        "lookback": 1.68,
+                        "source": "yahoo",
+                    }
+                ],
+                "breadth7d": {"up": 5, "down": 2},
+                "surprises": [{"period": "Q2-2026", "actual": 1.9, "estimate": 1.8}],
+                "guidance": "raised",
+                "coverage": ["Q3-2026"],
+                "gaps": [],
+            }
+        )
+    if path == "/cloud/short-volume":
+        return _envelope(
+            {
+                "symbol": "AAPL",
+                "scope": "nms",
+                "rows": [
+                    {
+                        "date": "2026-09-29",
+                        "shortVolume": 1000.0,
+                        "shortExemptVolume": 10.0,
+                        "totalVolume": 5000.0,
+                        "ratioPercent": 20.0,
+                        "markets": ["NASDAQ"],
+                        "sourceUrl": "https://example.test/finra",
+                    }
+                ],
+                "latest": {"date": "2026-09-29", "ratioPercent": 20.0},
+                "change": 1.5,
+                "percentile": 80.0,
+                "coverageStart": "2026-09-01",
+                "coverageEnd": "2026-09-29",
+            }
+        )
+    if path == "/cloud/jobs":
+        return _envelope(
+            {
+                "asOf": "2026-09-30",
+                "covered": 500,
+                "movers": [
+                    {
+                        "ticker": "NVDA",
+                        "openCount": 900,
+                        "employeeCount": 30000,
+                        "change30d": 25,
+                        "new7d": 10,
+                        "topFunction": "Engineering",
+                    }
+                ],
+            }
+        )
+    if path.endswith("/postings"):
+        return _envelope(
+            {
+                "postings": [{"id": "p1", "title": "Engineer", "location": "Cupertino"}],
+                "total": 120,
+            }
+        )
+    if path.startswith("/cloud/jobs/"):
+        return _envelope({"ticker": "AAPL", "status": "ready", "openCount": 120})
+    if path == "/cloud/econ/central-bank-rates":
+        return _envelope(
+            {
+                "rows": [
+                    {
+                        "bank": "Federal Reserve",
+                        "rate": 4.5,
+                        "rangeLow": 4.25,
+                        "rangeHigh": 4.5,
+                        "sourceSeriesIds": ["FEDTARRR", "EFFR"],
+                        "nextMeeting": "2026-10-29",
+                        "state": "confirmed",
+                    }
+                ]
+            }
+        )
+    if path == "/cloud/credit/cdx":
+        return _envelope(
+            {
+                "boards": [{"name": "CDX IG", "spread": 65.0, "maturity": "5Y", "onTheRun": True}],
+                "points": [{"date": "2026-09-29", "spread": 65.0}],
+            }
+        )
+    if path == "/cloud/credit/sovr":
+        return _envelope(
+            {
+                "rows": [
+                    {
+                        "sovereign": "Italy",
+                        "spreadBp": 120.0,
+                        "change1w": 5.0,
+                        "change1m": -10.0,
+                        "points": [{"date": "2026-09-29", "spread": 120.0}],
+                    }
+                ]
+            }
+        )
+    if path == "/market/scanner/flow/history":
+        return httpx.Response(
+            200,
+            json={
+                "events": [
+                    {
+                        "id": "f1",
+                        "at": "2026-09-30T19:00:00Z",
+                        "underlying": "AAPL",
+                        "contract": "AAPL260116C00200000",
+                        "right": "C",
+                        "strike": 200.0,
+                        "expiry": "2026-01-16",
+                        "side": "ask",
+                        "kind": "sweep",
+                        "size": 50,
+                        "price": 2.5,
+                        "premium": 12500.0,
+                        "vol": 100,
+                        "openInterest": 500,
+                        "volOi": 0.2,
+                        "iv": 0.35,
+                    }
+                ],
+                "hasMore": True,
+            },
+        )
+    if path == "/cloud/cot/board":
+        return _envelope(
+            {
+                "report": "legacy",
+                "traderClass": "managed-money",
+                "rows": [
+                    {
+                        "code": "134741",
+                        "contract": "3M SOFR",
+                        "asOf": "2026-09-22",
+                        "traderClass": "managed-money",
+                        "long": 1000,
+                        "short": 800,
+                        "spreading": 50,
+                        "net": 200,
+                        "pct1y": 90.0,
+                        "pct3y": 75.0,
+                    }
+                ],
+            }
+        )
+    if path.startswith("/cloud/cot/contracts/"):
+        return _envelope({"report": "legacy", "code": "134741", "rows": []})
+    if path == "/cloud/crypto/markets":
+        return _envelope(
+            {
+                "coins": [
+                    {
+                        "symbol": "BTC",
+                        "name": "Bitcoin",
+                        "price": 110000.0,
+                        "change24h": 2.5,
+                        "dayHigh": 111000.0,
+                        "dayLow": 108000.0,
+                        "volume24h": 5e10,
+                        "marketCap": 2.1e12,
+                        "supply": 19.8e6,
+                        "range52w": [38000.0, 112000.0],
+                        "priceYearAgo": 65000.0,
+                        "closes30d": [100000.0, 101000.0],
+                    }
+                ],
+                "source": {"name": "venue", "url": "https://example.test/btc"},
+            }
+        )
+    if path == "/cloud/iv/screen":
+        return _envelope(
+            {
+                "rows": [
+                    {
+                        "symbol": "SPY",
+                        "status": "ready",
+                        "iv30Value": 15.2,
+                        "iv30Date": "2026-09-29",
+                        "iv30Rank": 30.0,
+                        "iv30Percentile": 28.0,
+                        "iv90Value": 16.1,
+                        "iv90Date": "2026-09-29",
+                        "iv90Rank": 35.0,
+                        "iv90Percentile": 33.0,
+                        "latest": 15.2,
+                        "skew25d": -2.1,
+                    }
+                ]
+            }
+        )
+    if path == "/cloud/iv/history":
+        return _envelope(
+            {
+                "symbol": "AAPL",
+                "days": 30,
+                "status": "ready",
+                "points": [{"date": "2026-09-29", "iv30": 22.5, "iv90": 24.0}],
+                "iv30Rank": 40.0,
+                "iv30Percentile": 38.0,
+                "iv90Rank": 45.0,
+                "iv90Percentile": 42.0,
+                "latest": 22.5,
+            }
+        )
+    if path == "/cloud/iv/surface-dates":
+        return _envelope({"symbol": "AAPL", "dates": ["2026-09-26", "2026-09-29"]})
+    if path == "/cloud/iv/surface":
+        return _envelope(
+            {"symbol": "AAPL", "date": "2026-09-29", "surface": {"expiries": ["2026-10-17"]}}
+        )
+    if path == "/cloud/debt-maturities":
+        return _envelope(
+            {
+                "symbol": "AAPL",
+                "totalPrincipal": 100e9,
+                "next12mShare": 0.08,
+                "next3yShare": 0.25,
+                "interestExpense": 4e9,
+                "borrowingCost": 0.04,
+                "filings": [
+                    {
+                        "accession": "0000320193-26-000001",
+                        "filed": "2026-08-01",
+                        "form": "10-Q",
+                        "principal": 10e9,
+                    }
+                ],
+            }
+        )
+    if path == "/cloud/ipo/calendar":
+        return _envelope(
+            {
+                "deals": [
+                    {
+                        "id": "d1",
+                        "company": "Acme",
+                        "symbol": "ACME",
+                        "mic": "XNYS",
+                        "venue": "NYSE",
+                        "status": "priced",
+                        "priceLow": 20.0,
+                        "priceHigh": 22.0,
+                        "offerSize": 500e6,
+                        "filedDate": "2026-06-01",
+                        "listedDate": "2026-09-28",
+                        "firstDayOpen": 25.0,
+                        "firstDayClose": 27.5,
+                        "firstDayReturn": 0.25,
+                    }
+                ]
+            }
+        )
+    if host == "query1.finance.yahoo.com" and path == "/v1/finance/trending/US":
+        return httpx.Response(
+            200,
+            json={
+                "finance": {
+                    "result": [{"count": 2, "quotes": [{"symbol": "NVDA"}, {"symbol": "TSLA"}]}],
+                    "error": None,
+                }
+            },
+        )
+    if host == "examplepub.substack.com" and path == "/api/v1/posts":
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "id": 123,
+                    "title": "Hello",
+                    "subtitle": "World",
+                    "slug": "hello",
+                    "post_date": "2026-09-29T10:00:00Z",
+                    "audience": "everyone",
+                    "canonical_url": "https://examplepub.substack.com/p/hello",
+                }
+            ],
         )
     if path == "/cloud/sec/13f/funds":
         return httpx.Response(200, json=[{"name": "BERKSHIRE", "CIK": "0000949012"}])
@@ -451,23 +1138,147 @@ def _sweep_handler(request: httpx.Request) -> httpx.Response:
     raise AssertionError(f"unexpected Gloomberb path {path!r}")
 
 
-def test_all_34_tools_registered_in_full_and_read_scope() -> None:
-    assert len(DIGIFETCH_TOOLS) == 34
-    assert DIGIFETCH_TOOLS <= _names()
-    assert DIGIFETCH_TOOLS <= _names(scope="read")
+def test_all_88_live_tools_registered_in_full_and_read_scope() -> None:
+    assert REFUSED_DIGIFETCH == {"digifetch_congress_trades"}
+    assert len(DIGIFETCH_TOOLS) == 88
+    assert LIVE_DIGIFETCH_TOOLS == DIGIFETCH_TOOLS
+    assert LIVE_DIGIFETCH_TOOLS <= _names()
+    assert LIVE_DIGIFETCH_TOOLS <= _names(scope="read")
+
+
+def test_refused_tools_are_registered_on_no_scope_and_never_advertised() -> None:
+    """DIG-1057: a refused tool has no route into digiquant at all.
+
+    The client/normalizer stay so the route can be restored if Counsel clears
+    the feed; the surface must not.
+    """
+    rows = {row["function"]["name"] for row in build_orchestrator_tool_manifest()}
+    for name in sorted(REFUSED_DIGIFETCH):
+        assert name not in _names()
+        assert name not in _names(scope="read")
+        assert name not in rows
+        # The upstream route itself is untouched, so nothing is lost by refusing.
+        from digiquant.data.gloomberb.client import ENDPOINTS
+
+        assert ENDPOINTS["congress_trades"] == "/cloud/congress/house"
+
+
+def test_orchestrator_invoke_refuses_a_refused_tool() -> None:
+    from digiquant.server import OrchestratorInvokeRequest, v1_orchestrator_invoke
+
+    result = v1_orchestrator_invoke(
+        OrchestratorInvokeRequest(tool="digifetch_congress_trades", arguments={"limit": 3})
+    )
+    assert result["ok"] is False
+    assert result["refused"] is True
+    assert result["code"] == "tool_refused"
+    assert "congress" in result["error"]
+    assert "data" not in result
 
 
 def test_orchestrator_manifest_lists_each_tool_with_attribution() -> None:
     rows = {row["function"]["name"]: row for row in build_orchestrator_tool_manifest()}
-    missing = DIGIFETCH_TOOLS - set(rows)
+    missing = LIVE_DIGIFETCH_TOOLS - set(rows)
     assert not missing, f"missing orchestrator tools: {sorted(missing)}"
-    for name in sorted(DIGIFETCH_TOOLS - {"digifetch_earnings_calendar"}):
+    unattributed = {
+        "digifetch_earnings_calendar",
+        "digifetch_prediction_markets",
+        # Venue-direct (130-coverage Task 5): Yahoo trending and the
+        # own-account Substack reader must not claim terminal sourcing.
+        "digifetch_trending",
+        "digifetch_substack",
+        # ToS/direct tools (130-coverage Task 6): CNN, VoteHub, Fiscal Data,
+        # Nasdaq Trader, and Hacker News reads must not claim terminal
+        # sourcing either.
+        "digifetch_fear_greed",
+        "digifetch_polls",
+        "digifetch_treasury_auctions",
+        "digifetch_market_halts",
+        "digifetch_hacker_news",
+        # Calculators + compositions (130-coverage Task 2): derived math must
+        # not claim Gloomberb sourcing; the manifest names the math source.
+        "digifetch_options_calculator",
+        "digifetch_bond_calculator",
+        "digifetch_kelly_sizer",
+        "digifetch_dividend_yield",
+        "digifetch_fx_cross_rates",
+        "digifetch_vix_term_structure",
+        # Options scenario (130-coverage Task 8: OSA): derived math over the
+        # options_chain read; the manifest names the math source.
+        "digifetch_options_scenario",
+        # Portfolio-math compositions (130-coverage Task 3): derived math must
+        # not claim Gloomberb sourcing; the manifest names the math source.
+        "digifetch_compare_performance",
+        "digifetch_correlation_matrix",
+        "digifetch_relationship_graph",
+        "digifetch_relative_valuation",
+        "digifetch_fundamental_graph",
+        "digifetch_valuation_graph",
+        "digifetch_custom_chart",
+        "digifetch_market_valuation",
+        "digifetch_money_markets",
+        "digifetch_rate_path",
+    }
+    for name in sorted(LIVE_DIGIFETCH_TOOLS - unattributed):
         description = rows[name]["function"]["description"]
         assert "Gloomberb" in description, f"{name} description must name the source"
     # The earnings calendar is Yahoo-backed; it must not claim Gloomberb.
     earnings_description = rows["digifetch_earnings_calendar"]["function"]["description"]
     assert "Yahoo" in earnings_description
     assert "Gloomberb" not in earnings_description
+    # Prediction markets are venue-direct; the description names the venues,
+    # never Gloomberb.
+    markets_description = rows["digifetch_prediction_markets"]["function"]["description"]
+    assert "Polymarket" in markets_description
+    assert "Kalshi" in markets_description
+    assert "Gloomberb" not in markets_description
+    # Venue-direct (130-coverage Task 5): the descriptions name the venue,
+    # never Gloomberb.
+    trending_description = rows["digifetch_trending"]["function"]["description"]
+    assert "Yahoo" in trending_description
+    assert "Gloomberb" not in trending_description
+    substack_description = rows["digifetch_substack"]["function"]["description"]
+    assert "Substack" in substack_description
+    assert "Gloomberb" not in substack_description
+    # ToS/direct tools (130-coverage Task 6): the descriptions name the
+    # venue, never Gloomberb.
+    tos_markers = {
+        "digifetch_fear_greed": "CNN",
+        "digifetch_polls": "VoteHub",
+        "digifetch_treasury_auctions": "Fiscal",
+        "digifetch_market_halts": "Nasdaq",
+        "digifetch_hacker_news": "Hacker",
+    }
+    for name, venue in tos_markers.items():
+        description = rows[name]["function"]["description"]
+        assert venue in description, name
+        assert "Gloomberb" not in description, name
+    # Calculator + composition descriptions name the math source, never Gloomberb.
+    math_sources = {
+        "digifetch_options_calculator": "Black-Scholes",
+        "digifetch_bond_calculator": "discounting",
+        "digifetch_kelly_sizer": "Kelly",
+        "digifetch_dividend_yield": "corporate-actions",
+        "digifetch_fx_cross_rates": "exchange-rate",
+        "digifetch_vix_term_structure": "econ-series",
+        # Options scenario (130-coverage Task 8: OSA).
+        "digifetch_options_scenario": "options_chain",
+        # Portfolio-math compositions (130-coverage Task 3).
+        "digifetch_compare_performance": "price_history",
+        "digifetch_correlation_matrix": "price_history",
+        "digifetch_relationship_graph": "price_history",
+        "digifetch_relative_valuation": "ticker_financials",
+        "digifetch_fundamental_graph": "ticker_financials",
+        "digifetch_valuation_graph": "ticker_financials",
+        "digifetch_custom_chart": "series list",
+        "digifetch_market_valuation": "Shiller",
+        "digifetch_money_markets": "econ-series",
+        "digifetch_rate_path": "Kalshi",
+    }
+    for name, source in math_sources.items():
+        description = rows[name]["function"]["description"]
+        assert source in description, f"{name} description must name {source}"
+        assert "Gloomberb" not in description, f"{name} must not claim Gloomberb sourcing"
 
 
 def test_anon_quote_returns_attributed_envelope(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -624,17 +1435,22 @@ def test_news_with_ticker_carries_deep_link(monkeypatch: pytest.MonkeyPatch) -> 
     assert payload["attribution"] == GLOOMBERB_ATTRIBUTION
 
 
-def test_env_seam_builder_caches_per_env_pair_and_defaults_on(
+def test_env_seam_builder_caches_per_env_pair_and_defaults_off(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     first = mcp_server._build_gloomberb_client()
-    assert first.enabled is True
+    assert first.enabled is False
     assert mcp_server._build_gloomberb_client() is first
 
     monkeypatch.setenv("GLOOMBERB_SESSION_COOKIE", "token-value")
     second = mcp_server._build_gloomberb_client()
     assert second is not first
-    assert second.enabled is True
+    assert second.enabled is False
+
+    monkeypatch.setenv("GLOOMBERB_ENABLED", "1")
+    third = mcp_server._build_gloomberb_client()
+    assert third is not second
+    assert third.enabled is True
 
 
 TOOL_CALLS: dict[str, tuple[Any, ...]] = {
@@ -656,7 +1472,7 @@ TOOL_CALLS: dict[str, tuple[Any, ...]] = {
     "digifetch_yield_curve": (),
     "digifetch_cds": (),
     "digifetch_research_search": ("inflation",),
-    "digifetch_congress_trades": (),
+    # `digifetch_congress_trades` has no entry: refused (DIG-1057), not registered.
     "digifetch_transcripts": ("AAPL",),
     "digifetch_statements": ("AAPL",),
     "digifetch_ticker_tweets": ("AAPL",),
@@ -671,7 +1487,121 @@ TOOL_CALLS: dict[str, tuple[Any, ...]] = {
     "digifetch_risk_reports": ("AAPL",),
     "digifetch_short_interest": ("AAPL",),
     "digifetch_equity_diagnostic": ("AAPL",),
+    "digifetch_prediction_markets": (),
+    # calculators + compositions (130-coverage Task 2)
+    "digifetch_options_calculator": (100.0, 100.0, 0.05, 0.2, 1.0, "call"),
+    "digifetch_bond_calculator": (0.05, 100.0, 0.05, 10.0, 2),
+    "digifetch_kelly_sizer": (0.6, 2.0),
+    "digifetch_dividend_yield": ("AAPL",),
+    "digifetch_fx_cross_rates": (["EUR", "GBP"],),
+    "digifetch_vix_term_structure": (),
+    # options scenario (130-coverage Task 8: OSA) — legs_json matches the
+    # sweep chain fixture below (call 100 @ 1800000000).
+    "digifetch_options_scenario": (
+        "AAPL",
+        '[{"expiry": 1800000000, "strike": 100.0, "kind": "call", "qty": 1.0}]',
+        0.05,
+        [90.0, 100.0, 110.0, 120.0],
+        ["2026-09-30"],
+        [0.0],
+    ),
+    # portfolio-math compositions (130-coverage Task 3)
+    "digifetch_compare_performance": (["AAPL", "MSFT"],),
+    "digifetch_correlation_matrix": (["AAPL", "MSFT"],),
+    "digifetch_relationship_graph": ("AAPL", "MSFT"),
+    "digifetch_relative_valuation": (["AAPL", "MSFT"],),
+    "digifetch_fundamental_graph": ("AAPL",),
+    "digifetch_valuation_graph": ("AAPL",),
+    "digifetch_custom_chart": (
+        '[{"source": "price", "symbol": "AAPL"}, {"source": "fred", "ref": "CPIAUCSL"}]',
+    ),
+    "digifetch_market_valuation": (),
+    "digifetch_money_markets": (),
+    "digifetch_rate_path": (),
+    # probe-backed tools (130-coverage Task 5)
+    "digifetch_time_and_sales": ("AAPL", "NASDAQ"),
+    "digifetch_quote_recap": ("AAPL", "NASDAQ"),
+    "digifetch_estimate_revisions": ("AAPL",),
+    "digifetch_short_volume": ("AAPL",),
+    "digifetch_hiring": ("summary", "AAPL"),
+    "digifetch_central_bank_rates": (),
+    "digifetch_cdx": (),
+    "digifetch_sovereign_cds": (),
+    "digifetch_options_flow": (),
+    "digifetch_cot": (),
+    "digifetch_crypto_markets": (),
+    "digifetch_iv_screen": (["SPY"],),
+    "digifetch_iv_history": ("AAPL",),
+    "digifetch_iv_surface": ("AAPL",),
+    "digifetch_debt_maturities": ("AAPL",),
+    "digifetch_session_movers": ("premarket", "up"),
+    "digifetch_trending": (),
+    "digifetch_substack": ("examplepub",),
+    "digifetch_ipo_calendar": (),
+    # ToS/direct tools (130-coverage Task 6)
+    "digifetch_fear_greed": (),
+    "digifetch_polls": (),
+    "digifetch_treasury_auctions": (),
+    "digifetch_market_halts": (),
+    "digifetch_hacker_news": ("top", 3),
 }
+
+
+#: Pure calculators never touch the transport (local math only).
+_NO_WIRE_TOOLS = {
+    "digifetch_options_calculator",
+    "digifetch_bond_calculator",
+    "digifetch_kelly_sizer",
+}
+
+#: Tools that fan out to two upstream reads per call.
+_TWO_REQUEST_TOOLS = {
+    "digifetch_prediction_markets",
+    "digifetch_fx_cross_rates",
+    "digifetch_vix_term_structure",
+    # Yahoo trending hydrates its symbols with one quote-batch read.
+    "digifetch_trending",
+    # CNN Fear & Greed reads the graphdata endpoint plus the dated latest.
+    "digifetch_fear_greed",
+}
+
+#: Portfolio-math compositions (130-coverage Task 3): wire requests one sweep
+#: call makes (one per history/financials/series leg, one venue page for the
+#: rate path).
+_MULTI_REQUEST_TOOLS = {
+    "digifetch_compare_performance": [1, 1],
+    "digifetch_correlation_matrix": [1, 1],
+    "digifetch_relationship_graph": [1, 1],
+    "digifetch_relative_valuation": [1, 1],
+    "digifetch_fundamental_graph": [1],
+    "digifetch_valuation_graph": [1],
+    "digifetch_custom_chart": [1, 1],
+    "digifetch_market_valuation": [1],
+    "digifetch_money_markets": [1, 1, 1],
+    "digifetch_rate_path": [1],
+    # Hacker News reads one id list plus one item read per story (the sweep
+    # call passes limit=3).
+    "digifetch_hacker_news": [1, 1, 1, 1],
+}
+
+
+def _expected_wire_calls(name: str, *, with_cookie: bool) -> list[int]:
+    """Wire requests one sweep call makes (MockTransport request count).
+
+    The Yahoo-backed earnings calendar and the pure calculators never touch
+    the transport. ``digifetch_dividend_yield`` reads quote + corporate-actions
+    with a cookie, but only quote without one (the session-gated leg answers
+    ``auth_required`` with no request).
+    """
+    if name == "digifetch_earnings_calendar" or name in _NO_WIRE_TOOLS:
+        return []
+    if name in _MULTI_REQUEST_TOOLS:
+        return list(_MULTI_REQUEST_TOOLS[name])
+    if name in _TWO_REQUEST_TOOLS:
+        return [1, 1]
+    if name == "digifetch_dividend_yield":
+        return [1, 1] if with_cookie else [1]
+    return [1]
 
 
 @pytest.mark.parametrize(("name", "args"), sorted(TOOL_CALLS.items()))
@@ -686,11 +1616,57 @@ def test_every_tool_returns_attributed_json(
     )
     payload = json.loads(_mcp(name)(*args))
     assert "data" in payload, f"{name} returned no data slot"
-    attributed = name != "digifetch_earnings_calendar"
+    unattributed = {
+        "digifetch_earnings_calendar",
+        "digifetch_prediction_markets",
+        # Venue-direct (130-coverage Task 5): Yahoo trending and the
+        # own-account Substack reader must not claim terminal sourcing.
+        "digifetch_trending",
+        "digifetch_substack",
+        # ToS/direct tools (130-coverage Task 6): CNN, VoteHub, Fiscal Data,
+        # Nasdaq Trader, and Hacker News reads must not claim terminal
+        # sourcing either.
+        "digifetch_fear_greed",
+        "digifetch_polls",
+        "digifetch_treasury_auctions",
+        "digifetch_market_halts",
+        "digifetch_hacker_news",
+        # Calculators + compositions (130-coverage Task 2): derived math must
+        # not claim Gloomberb sourcing.
+        "digifetch_options_calculator",
+        "digifetch_bond_calculator",
+        "digifetch_kelly_sizer",
+        "digifetch_dividend_yield",
+        "digifetch_fx_cross_rates",
+        "digifetch_vix_term_structure",
+        # Options scenario (130-coverage Task 8: OSA): derived math over the
+        # options_chain read must not claim Gloomberb sourcing.
+        "digifetch_options_scenario",
+        # Portfolio-math compositions (130-coverage Task 3): derived math must
+        # not claim Gloomberb sourcing.
+        "digifetch_compare_performance",
+        "digifetch_correlation_matrix",
+        "digifetch_relationship_graph",
+        "digifetch_relative_valuation",
+        "digifetch_fundamental_graph",
+        "digifetch_valuation_graph",
+        "digifetch_custom_chart",
+        "digifetch_market_valuation",
+        "digifetch_money_markets",
+        "digifetch_rate_path",
+    }
+    attributed = name not in unattributed
     if attributed:
         assert payload["attribution"] == GLOOMBERB_ATTRIBUTION
         assert payload["delay_notice"] == GLOOMBERB_DELAY_NOTICE
         assert ("source_url" in payload) is (name in LINKED_TOOLS), f"{name} deep-link mismatch"
+    elif name == "digifetch_prediction_markets":
+        # Venue-direct: venue attribution lives inside data, never top-level,
+        # and no term.gloom.sh link is emitted for venue rows.
+        assert "attribution" not in payload
+        assert "source_url" not in payload
+        assert "Polymarket" in payload["data"]["attribution"]
+        assert payload["data"]["markets"], f"{name} returned no venue rows"
     else:
         # Yahoo-backed: must not claim Gloomberb attribution.
         assert "attribution" not in payload
@@ -856,17 +1832,17 @@ def test_transcripts_wrapper_maps_the_upstream_calls_payload(
     assert row["webcast_url"] == "https://example.test/call/t1"
 
 
-def test_congress_trades_upstream_500_maps_to_upstream_error(
+def test_congress_trades_refused_surface_makes_no_request(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(
-            500, text="Mistral OCR failed: 402 Customer monthly spending limit reached"
-        )
+    """DIG-1057: the refused tool is not registered, so a call cannot be made.
 
-    _patch_client(monkeypatch, handler)
-    payload = json.loads(_mcp("digifetch_congress_trades")())
-    assert payload["data"]["code"] == "upstream_error"
+    Upstream 500 mapping for this route is covered at the client layer in
+    tests/dq/data/test_gloomberb_client.py — the MCP wrapper is unreachable.
+    """
+    assert "digifetch_congress_trades" not in create_mcp_server()._tool_manager.list_tools()
+    assert "digifetch_congress_trades" not in _names()
+    assert "digifetch_congress_trades" not in _names(scope="read")
 
 
 def test_yield_curve_tool_returns_points_without_a_deep_link(
@@ -1388,7 +2364,10 @@ def test_every_digifetch_tool_declares_an_entitlement() -> None:
 
     from digiquant.data.gloomberb.entitlements import TOOL_ENTITLEMENTS, Entitlement
 
-    assert DIGIFETCH_TOOLS == set(TOOL_ENTITLEMENTS)
+    # Refused tools keep their declaration (client code is retained for a
+    # possible Counsel clearance) but are registered nowhere, so the live
+    # surface is the declared set minus the refused names.
+    assert DIGIFETCH_TOOLS | REFUSED_DIGIFETCH == set(TOOL_ENTITLEMENTS)
     assert set(TOOL_ENTITLEMENTS.values()) <= set(get_args(Entitlement))
 
 
@@ -1398,6 +2377,9 @@ def test_declared_entitlements_match_the_gate_behavior() -> None:
     assert {name for name, value in TOOL_ENTITLEMENTS.items() if value == "pro"} == {
         "digifetch_transcripts",
         "digifetch_screener",
+        # Probe-backed (130-coverage Task 5): FLOW is the one scanner with no
+        # delayed tier — the recorded-history route fails closed on denial.
+        "digifetch_options_flow",
     }
     assert {name for name, value in TOOL_ENTITLEMENTS.items() if value == "preview"} == {
         "digifetch_equity_diagnostic"
@@ -1412,6 +2394,43 @@ def test_declared_entitlements_match_the_gate_behavior() -> None:
         "digifetch_tweet_search",
         "digifetch_short_interest",
         "digifetch_saved_searches",
+        # Probe-backed tools (130-coverage Task 5): Cloud reads behind the
+        # session gate (zero-HTTP auth_required without the cookie).
+        "digifetch_time_and_sales",
+        "digifetch_quote_recap",
+        "digifetch_estimate_revisions",
+        "digifetch_short_volume",
+        "digifetch_hiring",
+        "digifetch_central_bank_rates",
+        "digifetch_cdx",
+        "digifetch_sovereign_cds",
+        "digifetch_cot",
+        "digifetch_crypto_markets",
+        "digifetch_iv_screen",
+        "digifetch_iv_history",
+        "digifetch_iv_surface",
+        "digifetch_debt_maturities",
+        "digifetch_session_movers",
+        # Workspace writes + broker reads + approval-gated orders (130-coverage
+        # Task 7): session-gated account-surface tools; read-only posture
+        # except the local preview ticket and dry-run paths.
+        "digifetch_portfolio_view",
+        "digifetch_watchlist_add",
+        "digifetch_watchlist_remove",
+        "digifetch_portfolio_add",
+        "digifetch_portfolio_remove",
+        "digifetch_alert_add",
+        "digifetch_alert_list",
+        "digifetch_note_add",
+        "digifetch_thesis_add",
+        "digifetch_view_add",
+        "digifetch_broker_positions",
+        "digifetch_ibkr_preview_order",
+        "digifetch_ibkr_execute_order",
+    }
+    assert {name for name, value in TOOL_ENTITLEMENTS.items() if value == "venue_session"} == {
+        # Own-account Substack reader: fail-soft without SUBSTACK_SESSION_COOKIE.
+        "digifetch_substack",
     }
 
 
@@ -1433,7 +2452,10 @@ def test_entitlement_zero_http_gating_matches_the_declaration(
     _patch_client(monkeypatch, handler, earnings_provider=lambda symbol: [])
     payload = json.loads(_mcp(name)(*args))
     # The Yahoo-backed earnings calendar never touches the Cloud transport.
-    expected_calls = [] if name == "digifetch_earnings_calendar" else [1]
+    # Pure calculators never touch any transport. Prediction markets fans out
+    # to one request per venue (Polymarket + Kalshi); the FX and VIX
+    # compositions fan out to one request per leg.
+    expected_calls = _expected_wire_calls(name, with_cookie=False)
     if entitlement == "free":
         # Anonymous tools are never gated: the request goes out and succeeds.
         assert calls == expected_calls, name
@@ -1454,6 +2476,9 @@ def test_entitlement_wire_access_with_a_session_cookie(
 
     assert name in TOOL_ENTITLEMENTS  # every digifetch tool declares one
     calls: list[int] = []
+    # The own-account Substack reader needs its venue cookie, not the
+    # Gloomberb one, to reach the wire.
+    monkeypatch.setenv("SUBSTACK_SESSION_COOKIE", "substack.sid=test")
 
     def handler(request: httpx.Request) -> httpx.Response:
         calls.append(1)
@@ -1466,7 +2491,7 @@ def test_entitlement_wire_access_with_a_session_cookie(
         earnings_provider=lambda symbol: [],
     )
     payload = json.loads(_mcp(name)(*args))
-    expected_calls = [] if name == "digifetch_earnings_calendar" else [1]
+    expected_calls = _expected_wire_calls(name, with_cookie=True)
     assert calls == expected_calls, name
     assert "code" not in payload["data"], name
 
@@ -1507,7 +2532,7 @@ def test_entitlement_note_is_surfaced_in_mcp_and_manifest() -> None:
 
     rows = {row["function"]["name"]: row for row in build_orchestrator_tool_manifest()}
     server = create_mcp_server()
-    for name in sorted(DIGIFETCH_TOOLS):
+    for name in sorted(LIVE_DIGIFETCH_TOOLS):
         expected = TOOL_ENTITLEMENTS[name]
         note = entitlement_note(name)
         assert note is not None

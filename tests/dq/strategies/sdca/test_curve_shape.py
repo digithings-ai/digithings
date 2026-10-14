@@ -6,7 +6,7 @@ import itertools
 
 import pytest
 from digiquant.strategies.sdca.curve import RISK_NODES, AccumDistCurve
-from digiquant.strategies.sdca.curve_shape import SdcaCurveShape
+from digiquant.strategies.sdca.curve_shape import SdcaCurveShape, risk50_linear_reference_curve
 
 pytestmark = pytest.mark.unit
 
@@ -126,3 +126,133 @@ class TestSdcaCurveShapePropertySweep:
             assert all(nodes[i] <= nodes[i - 1] + 1e-12 for i in range(1, len(nodes)))
             n_ok += 1
         assert n_ok >= 100
+
+
+class TestRisk50LinearReferenceCurve:
+    """Naive symmetric baseline for baseline-relative evaluation (post-mortem follow-up)."""
+
+    def test_builds_a_valid_shape(self) -> None:
+        shape = risk50_linear_reference_curve(10.0)
+        assert isinstance(shape, SdcaCurveShape)
+        nodes = shape.to_nodes()
+        assert len(nodes) == 21
+        AccumDistCurve(nodes)
+
+    def test_rate_at_0_and_100_hit_plus_minus_max_rate(self) -> None:
+        shape = risk50_linear_reference_curve(12.5)
+        assert shape.rate_at(0.0) == pytest.approx(12.5)
+        assert shape.rate_at(100.0) == pytest.approx(-12.5)
+
+    def test_rate_at_50_is_approximately_zero(self) -> None:
+        shape = risk50_linear_reference_curve(20.0)
+        assert shape.rate_at(50.0) == pytest.approx(0.0, abs=1e-9)
+
+    def test_buy_ramp_is_exactly_linear(self) -> None:
+        shape = risk50_linear_reference_curve(10.0)
+        # Equal risk steps produce equal rate decrements -- the defining
+        # property of a linear (curvature=1) ramp, independent of the
+        # exact knee position.
+        step1 = shape.rate_at(0.0) - shape.rate_at(10.0)
+        step2 = shape.rate_at(10.0) - shape.rate_at(20.0)
+        step3 = shape.rate_at(20.0) - shape.rate_at(30.0)
+        assert step1 == pytest.approx(step2, rel=1e-9)
+        assert step2 == pytest.approx(step3, rel=1e-9)
+
+    def test_sell_ramp_is_exactly_linear(self) -> None:
+        shape = risk50_linear_reference_curve(10.0)
+        step1 = shape.rate_at(90.0) - shape.rate_at(100.0)
+        step2 = shape.rate_at(80.0) - shape.rate_at(90.0)
+        step3 = shape.rate_at(70.0) - shape.rate_at(80.0)
+        assert step1 == pytest.approx(step2, rel=1e-9)
+        assert step2 == pytest.approx(step3, rel=1e-9)
+
+    def test_indistinguishable_from_single_knee_at_50_on_the_risk_node_grid(self) -> None:
+        """Only the risk=50 node falls inside the [50-eps, 50+eps] dead zone;
+        neighboring 45/55 nodes ramp continuously as if the knee were a
+        single point at exactly 50."""
+        shape = risk50_linear_reference_curve(10.0)
+        nodes = dict(zip(RISK_NODES, shape.to_nodes(), strict=True))
+        assert nodes[50.0] == pytest.approx(0.0, abs=1e-9)
+        assert nodes[45.0] == pytest.approx(10.0 * (4.9 / 49.9), rel=1e-9)
+        assert nodes[55.0] == pytest.approx(-10.0 * (4.9 / 49.9), rel=1e-9)
+
+    def test_rejects_eps_outside_the_node_gap(self) -> None:
+        with pytest.raises(ValueError, match="eps"):
+            risk50_linear_reference_curve(10.0, eps=5.0)
+        with pytest.raises(ValueError, match="eps"):
+            risk50_linear_reference_curve(10.0, eps=0.0)
+
+
+class TestTieredSdcaCurveShape:
+    def test_defaults_recover_single_knee_behavior(self) -> None:
+        baseline = _shape()
+        tiered_but_collapsed = _shape()  # no mid-tier overrides -> both None
+        for r in RISK_NODES:
+            assert tiered_but_collapsed.rate_at(r) == pytest.approx(baseline.rate_at(r))
+
+    def test_buy_mid_knee_reaches_half_of_max_rate(self) -> None:
+        shape = _shape(buy_max_rate=20.0, buy_knee_risk=40.0, buy_mid_knee_risk=10.0)
+        assert shape.rate_at(10.0) == pytest.approx(10.0)
+
+    def test_sell_mid_knee_reaches_half_of_max_rate(self) -> None:
+        shape = _shape(sell_max_rate=20.0, sell_knee_risk=60.0, sell_mid_knee_risk=90.0)
+        assert shape.rate_at(90.0) == pytest.approx(-10.0)
+
+    def test_buy_extreme_still_reaches_full_max_rate_when_tiered(self) -> None:
+        shape = _shape(buy_max_rate=20.0, buy_knee_risk=40.0, buy_mid_knee_risk=10.0)
+        assert shape.rate_at(0.0) == pytest.approx(20.0)
+
+    def test_sell_extreme_still_reaches_full_max_rate_when_tiered(self) -> None:
+        shape = _shape(sell_max_rate=20.0, sell_knee_risk=60.0, sell_mid_knee_risk=90.0)
+        assert shape.rate_at(100.0) == pytest.approx(-20.0)
+
+    def test_continuous_at_buy_mid_knee_boundary(self) -> None:
+        shape = _shape(
+            buy_max_rate=20.0,
+            buy_knee_risk=40.0,
+            buy_mid_knee_risk=10.0,
+            buy_curvature=2.0,
+            buy_mid_curvature=1.5,
+        )
+        just_above = shape.rate_at(10.0 + 1e-6)
+        just_below = shape.rate_at(10.0 - 1e-6)
+        assert just_above == pytest.approx(just_below, abs=1e-4)
+
+    def test_continuous_at_sell_mid_knee_boundary(self) -> None:
+        shape = _shape(
+            sell_max_rate=20.0,
+            sell_knee_risk=60.0,
+            sell_mid_knee_risk=90.0,
+            sell_curvature=2.0,
+            sell_mid_curvature=1.5,
+        )
+        just_above = shape.rate_at(90.0 + 1e-6)
+        just_below = shape.rate_at(90.0 - 1e-6)
+        assert just_above == pytest.approx(just_below, abs=1e-4)
+
+    def test_tiered_nodes_are_monotonic_non_increasing(self) -> None:
+        shape = _shape(
+            buy_max_rate=20.0,
+            buy_knee_risk=40.0,
+            buy_mid_knee_risk=15.0,
+            buy_mid_curvature=2.0,
+            sell_max_rate=20.0,
+            sell_knee_risk=60.0,
+            sell_mid_knee_risk=85.0,
+            sell_mid_curvature=2.0,
+        )
+        nodes = shape.to_nodes()
+        for a, b in itertools.pairwise(nodes):
+            assert a >= b - 1e-9
+
+    def test_buy_mid_knee_must_sit_strictly_inside_outer_knee(self) -> None:
+        with pytest.raises(ValueError):
+            _shape(buy_knee_risk=40.0, buy_mid_knee_risk=40.0)
+        with pytest.raises(ValueError):
+            _shape(buy_knee_risk=40.0, buy_mid_knee_risk=0.0)
+
+    def test_sell_mid_knee_must_sit_strictly_inside_outer_knee(self) -> None:
+        with pytest.raises(ValueError):
+            _shape(sell_knee_risk=60.0, sell_mid_knee_risk=60.0)
+        with pytest.raises(ValueError):
+            _shape(sell_knee_risk=60.0, sell_mid_knee_risk=100.0)

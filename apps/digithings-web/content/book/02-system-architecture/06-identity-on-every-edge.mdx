@@ -1,0 +1,31 @@
+---
+title: Identity on every edge
+order: 6
+summary: >-
+  digikey issues short-lived, signed identities, and every service checks them
+  itself. The network is never the security boundary.
+---
+
+Security in digithings is built on one rule: **every hop proves who is
+calling**. digikey is the module that makes that possible. It issues signed,
+short-lived identities and publishes the public keys anyone can use to verify
+them. Services check the signature, the intended audience, the expiry and the
+permissions on each request they receive.
+
+The alternative, which many stacks quietly adopt, is to trust anything that
+arrives from inside the network. It is simpler, and it means one compromised
+internal component can reach every other one. digithings pays a small, cached
+cost on each hop so that a single weak point does not become access to
+everything.
+
+Because the identities are standard signed tokens with published keys, the
+scheme is not proprietary. Any service you add, in any language, can verify
+them with an off-the-shelf library and join the same trust model.
+
+<Reference kind="architecture" href="repo:digikey/ARCHITECTURE.md" title="digikey architecture">
+  How identities are issued, scoped, rotated and revoked.
+</Reference>
+
+<Reference kind="reference" href="repo:SECURITY.md" title="Security policy">
+  How to report a vulnerability and what is in scope.
+</Reference>

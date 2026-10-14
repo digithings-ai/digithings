@@ -40,11 +40,23 @@
                                    Rose, 6.4:1 on the dark canvas (AA+), distinct from digikey's
                                    terracotta #d97a5a and every other hue in the livery table. */
   --accent-digikey:    #d97a5a;
-  --accent-digismith:  #6fa3a3;
+  --accent-digitrace:  #6fa3a3;
   --accent-digiclaw:   #b87840;
   --accent-digibase:   #9ea0a5;
   --accent-digistore:  #7b7fc7;
   --accent-digilink:   #4fa39b;
+  --accent-digivoice:  #cf6bd6; /* DIG-2922: orchid from the unassigned pool, the peak-cap colour of the
+                                   DIGIVOICE hero banner. Clear of digichat's pink #e2708a and
+                                   digivault's lavender #9d8fc9. */
+  --accent-digillm:    #b8c95a; /* DIG-2870: chartreuse from the unassigned pool, the routed-stream
+                                   colour of the DIGILLM hero banner. Distinct from digigraph's gold
+                                   #e5b765 and the research greens. */
+  --accent-digibook:   #d4c5a0; /* DIG-2878: parchment from the unassigned pool, the page colour of
+                                   the DIGIBOOK hero banner. Paler and less saturated than digigraph's
+                                   gold #e5b765; reads as paper next to the ink. */
+  --accent-digidev:    #6b9dff; /* DIG-2876: cursor blue from the unassigned pool, the block-cursor
+                                   colour of the DIGIDEV hero banner. Brighter and more saturated than
+                                   digisearch's #5aa3c4 and digistore's #7b7fc7. */
   --accent-digivault:  #9d8fc9; /* ruled 2026-07-04: the lavender returns from the unassigned pool —
                                    the Obsidian-kinship hue for the Obsidian-style vault. 6.67:1 on
                                    the dark canvas (AA+); distinct from digistore's deeper #7b7fc7. */
@@ -54,11 +66,19 @@
   --accent: var(--fg);
 
   /* --- Typography ------------------------------------------------------- */
-  /* Unthemed legacy slot. Themed surfaces remap this to --font-sans (mono)
-     under :root[data-theme] so Inter is not the live body default. Override
+  /* Font stacks are built HERE, once. Each reads the face variable a surface
+     sets through next/font, then a system fallback chain, so no stylesheet
+     outside this file names a font family. Swap a surface's face by editing
+     one loader line in that surface's fonts.ts — never this file. */
+  --font-stack-sans: var(--font-sans-face, "Inter"), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-stack-mono: var(--font-mono-face, "Geist Mono"), ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", "Segoe UI Symbol", monospace;
+  --font-stack-display: var(--font-mono-face, "Geist Mono"), ui-monospace, "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", "Segoe UI Symbol", monospace;
+
+  /* Legacy slot. Themed surfaces remap this to --font-sans (mono) under
+     :root[data-theme] so Inter is not the live body default. Override
      --font-sans locally for a sans/serif escape hatch; --font-family follows. */
-  --font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  --font-family-mono: 'JetBrains Mono', 'Fira Code', 'Space Mono', monospace;
+  --font-family: var(--font-stack-sans);
+  --font-family-mono: var(--font-stack-mono);
 
   --font-size-h1: clamp(3rem, 6vw, 4.5rem);
   --font-size-h2: 2.5rem;
@@ -129,7 +149,7 @@
 .accent-digisearch { --accent: var(--accent-digisearch); --on-accent: #06110f; }
 .accent-digichat   { --accent: var(--accent-digichat);   --on-accent: #06110f; }
 .accent-digikey    { --accent: var(--accent-digikey);    --on-accent: #06110f; }
-.accent-digismith  { --accent: var(--accent-digismith);  --on-accent: #06110f; }
+.accent-digitrace  { --accent: var(--accent-digitrace);  --on-accent: #06110f; }
 .accent-digiclaw   { --accent: var(--accent-digiclaw);   --on-accent: #06110f; }
 .accent-digibase   { --accent: var(--accent-digibase);   --on-accent: #06110f; }
 .accent-digistore  { --accent: var(--accent-digistore);  --on-accent: #06110f; }
@@ -179,6 +199,15 @@
   --up:   var(--accent-digiquant);
   --down: #E5533E;
   --warn: #E0B341;
+  /* Indicator palette. Teal-green starts it; yellow, orange, and the hues
+     between give each study its own color. Candles stay on --up / --down. */
+  --chart-sma: #1EC98A;
+  --chart-ema: #5AD4F0;
+  --chart-vwap: #F0D44A;
+  --chart-bollinger: #B0DC3A;
+  --chart-bollinger-band: #F09238;
+  --chart-supertrend-up: #54DC62;
+  --chart-supertrend-down: #6A96F0;
 
   /* Returns-matrix cell ink (finance-tearsheet.css). The heatmap wash is
      --up/--down over --surface, so the cell text has to clear AA against the
@@ -261,6 +290,14 @@
   --up:   #0C7C71;
   --down: #B2452E;
   --warn: #8F6220;
+  /* Same indicator palette, deepened so the hues hold on paper. */
+  --chart-sma: #187E58;
+  --chart-ema: #1B798E;
+  --chart-vwap: #806E18;
+  --chart-bollinger: #5D7817;
+  --chart-bollinger-band: #A15F1F;
+  --chart-supertrend-up: #1A8025;
+  --chart-supertrend-down: #3369D8;
 
   /* Non-financial danger/error/destructive red — see the dark-theme comment
      above (named --danger, not --destructive, for the same shadcn-collision
@@ -278,7 +315,12 @@
   /* Terminal converts with the theme: light panel, dark ink. */
   --term-bg:   #F1F0EB;
   --term-ink:  #1A1E22;
-  --term-mute: #6B7177;
+  /* #6B7177 measured 3.90 on the title bar and 4.33 on the body — under AA at
+     the 11.5px the terminal uses. Darkened to clear 4.5 on the bar, which is
+     the worse of the two grounds (--term-fill is a 5% overlay toward the ink
+     side in each theme, so the bar is darker than the body here and lighter
+     than it in dark). The dark value needs no change. */
+  --term-mute: #5F656C;
   --term-hair: rgba(10, 15, 20, 0.12);
   --term-fill: rgba(10, 15, 20, 0.05);
 
@@ -291,7 +333,7 @@
      --surface/--bg there) but seven of the eleven fall under the 3:1
      minimum for graphical objects against THIS theme's white --surface:
      measured digiquant 1.81:1, digigraph 1.86:1, digibase 2.62:1,
-     digisearch 2.81:1, digismith 2.82:1, digivault 2.91:1, digilink 2.98:1.
+     digisearch 2.81:1, digitrace 2.82:1, digivault 2.91:1, digilink 2.98:1.
      Darkened here, light-theme only — the :root values above are untouched
      and still serve the dark theme. digichat (3.04:1), digikey (3.05:1),
      digiclaw (3.62:1), and digistore (3.68:1) already clear 3:1 unmodified
@@ -314,7 +356,7 @@
   --accent-digigraph:  #B27C1E;
   --accent-digiquant:  #0E8C7F;
   --accent-digisearch: #408FB3;
-  --accent-digismith:  #5C8F8F;
+  --accent-digitrace:  #5C8F8F;
   --accent-digibase:   #84878D;
   --accent-digivault:  #8D7DC0;
   --accent-digilink:   #47938C;
@@ -322,6 +364,16 @@
 
 /* Shared (theme-independent) tokens for the redesign. */
 :root[data-theme] {
+  /* Candles and volume alias the --up / --down pair from the theme blocks
+     above (dark #3DD6C4 / #E5533E, light #0C7C71 / #B2452E). Indicator hues
+     are declared in those theme blocks. Grid and axis stay neutral. */
+  --chart-candle-up: var(--up);
+  --chart-candle-down: var(--down);
+  --chart-volume-up: var(--up);
+  --chart-volume-down: var(--down);
+  --chart-grid: var(--hair);
+  --chart-axis: var(--ink-mute);
+
   /* ruled 2026-07-08 (promoted from design-reference): research · portfolio · execution
      name backend langgraphs, not colored products — on redesigned surfaces
      their accents collapse to ink so any scope, livery, or stale persisted
@@ -335,9 +387,9 @@
      Serif/sans escape hatches set --font-display / --font-sans locally.
      Legacy --font-family follows --font-sans so themed consumers of
      components.css / app-shell-terminal do not fall through to Inter. */
-  --font-sans: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
-  --font-mono: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
-  --font-display: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
+  --font-sans: var(--font-stack-mono);
+  --font-mono: var(--font-stack-mono);
+  --font-display: var(--font-stack-display);
   --font-family: var(--font-sans);
   --font-family-mono: var(--font-mono);
 
@@ -356,15 +408,32 @@
   --section-y: clamp(4.5rem, 9vw, 8rem);
   --section-y-tight: clamp(2.5rem, 5vw, 4rem);
   --ease-glide: cubic-bezier(0.22, 1, 0.36, 1);
+  /* --ease and --duration-* mirror motion.json (motion-tokens.contract.test.ts). */
   --duration-reveal: 0.6s;
   --duration-hover: 0.18s;
   --duration-copied: 1.5s;
+  --duration-build: 1.4s;
 
   /* Marketing type ladder (the document scale). The instrument-panel display
      clamp stays reserved for a landing hero; every other surface uses this
-     smaller, denser ladder so a page reads as a document, not a poster. */
+     smaller, denser ladder so a page reads as a document, not a poster.
+     --type-display is the LANDING-ONLY register: the one headline a landing
+     page hangs on. Read against launch-ui (MIT), whose hero is md:text-8xl.
+     Two corrections after seeing it rendered: the ceiling came down from 6rem
+     to 5rem (mono is wider than their sans, so 96px broke a 33-character claim
+     across four lines and pushed the artefact off-screen), and the floor went
+     up so a narrow viewport still reads as a headline. Nothing but a landing
+     hero uses it.
+     --type-section-stand first: the section headings had no size between the
+     22px document register and the 32px page title, so every section heading
+     after a 80px hero read as fine print. This is the connecting step, and it
+     tops out ABOVE --type-page-title's clamp on purpose — when both resolved
+     to 32px the two beats were indistinguishable and the section rhythm
+     collapsed back into one flat cadence. */
+  --type-display: clamp(2.75rem, 6vw, 5rem);
   --type-hero: clamp(2rem, 4.5vw, 2.75rem);
   --type-page-title: clamp(1.5rem, 3vw, 2rem);
+  --type-section-stand: clamp(1.6rem, 3.2vw, 2.5rem);
   --type-section: 1.375rem;
   --type-sub-label: 1rem;
   --type-body: 1rem;

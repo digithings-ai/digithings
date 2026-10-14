@@ -26,9 +26,9 @@
 # one.
 name: "Watch: production deploy gate latency"
 
+# Clock: digithings-cron Worker (apps/digithings-cron/src/jobs.ts); this file is
+# workflow_dispatch only so the GitHub and Cloudflare clocks never double-fire.
 on:
-  schedule:
-    - cron: "17,47 * * * *"
   workflow_dispatch:
     inputs:
       max_age_minutes:

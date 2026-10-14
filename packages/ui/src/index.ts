@@ -2,11 +2,11 @@ export {
   ThemeProvider,
   ThemeToggle,
   useTheme,
-  themeInitScript,
   DirectionProvider,
   useDirection,
   type Direction,
 } from "./components/ThemeProvider";
+export { themeInitScript } from "./components/themeInit";
 export { MotionProvider, Reveal, Stagger, HeroEntrance, useMotionSafe, m, EASE } from "./motion/primitives";
 export {
   useScrollyFeatures,
@@ -37,6 +37,38 @@ export {
   type AuthOAuthProvider,
 } from "./components/account/AuthCard";
 export { ScrollyGraph, GraphSVG } from "./components/graph";
+export {
+  ArchitectureDiagram,
+  toMermaid,
+  type ArchitectureDiagramProps,
+  type ArchAlign,
+  type ArchEdge,
+  type ArchGroup,
+  type ArchIcon,
+  type ArchJunction,
+  type ArchService,
+  type ArchSide,
+  type ArchSpec,
+} from "./components/diagrams";
+export {
+  ArchitectureSvg,
+  type ArchitectureSvgProps,
+} from "./components/diagrams";
+export {
+  ArchitectureTour,
+  type ArchitectureTourProps,
+  type TourStep,
+  type TourVariant,
+} from "./components/diagrams";
+export { camTransform, fitCamera, type CamFrame } from "./components/diagrams";
+export {
+  TerminalSchematic,
+  type SchematicLegend,
+  type SchematicNode,
+  type SchematicRow,
+  type SchematicTone,
+  type TerminalSchematicProps,
+} from "./components/diagrams";
 export {
   Footer,
   Colophon,
@@ -78,6 +110,11 @@ export { PerfMetrics, type PerfMetric } from "./components/metrics/PerfMetrics";
 export { StatCounter, type CounterStat } from "./components/metrics/StatCounter";
 // promoted primitives (#1450)
 export { WordReveal, type WordRevealProps } from "./components/typography/WordReveal";
+export { MotionReveal, type MotionRevealProps } from "./components/typography/MotionReveal";
+export {
+  TypewriterReveal,
+  type TypewriterRevealProps,
+} from "./components/typography/TypewriterReveal";
 export { Marquee, type MarqueeItem, type MarqueeProps } from "./components/marquee/Marquee";
 export {
   TerminalManifest,
@@ -104,6 +141,13 @@ export { ChatMermaidBlock, type ChatMermaidBlockProps } from "./components/chat/
 export { ChatCodeBlock, ChatCopyButton, type ChatCodeBlockProps, type ChatCopyButtonProps } from "./components/chat/ChatCodeBlock";
 export { ChatToolCall, type ChatToolCallProps, type ChatToolCallStatus, type ChatToolCallLine } from "./components/chat/ChatToolCall";
 export { ChatThinking, type ChatThinkingProps } from "./components/chat/ChatThinking";
+export {
+  ChatPlayback,
+  type ChatPlaybackProps,
+  type ChatPlaybackStep,
+  type ChatPlaybackTool,
+  type ChatPlaybackTable,
+} from "./components/chat/ChatPlayback";
 export {
   ChatWidgetFrame,
   ChatWidgetButton,
@@ -163,6 +207,8 @@ export {
   PRICE_CHART_DEMO,
   EQUITY_CURVE_DEMO,
   DRAWDOWN_DEMO,
+  DIGIQUANT_CHART,
+  readDigiquantChartScale,
   type PriceChartProps,
   type EquityCurveProps,
   type DrawdownPlotProps,
@@ -174,11 +220,16 @@ export {
   type ChartTip,
   type UseLightweightChartConfig,
   type UseLightweightChartResult,
+  type DigiquantChartScale,
 } from "./components/finance-charts";
 
 // finance-composites family (#1450)
 export {
   StockTicker,
+  MarketBar,
+  type MarketBarProps,
+  type MarketBarCell,
+  type MarketBarStatus,
   OrderBook,
   SortableTable,
   PerformanceDashboard,
@@ -204,9 +255,21 @@ export {
   DotMatrixStat,
   BentoGrid,
   BentoCell,
+  CardRail,
   ProductFrame,
+  type CardRailProps,
+  MediaFrame,
+  type MediaFrameProps,
   FeatureCell,
   TestimonialWall,
+  ModuleGrid,
+  treemapAreas,
+  treemapAreasConstrained,
+  treemapAnchored,
+  type ModuleGridItem,
+  type ModuleGridProps,
+  type TreemapRect,
+  type TreemapMins,
   type OdometerStat,
   type DotMatrixStatProps,
   type BentoSpan,
@@ -227,6 +290,11 @@ export {
   tabId,
   tabPanelId,
   ToastStack,
+  HorizontalScrollTrack,
+  HorizontalTrackStepper,
+  useHorizontalTrack,
+  type HorizontalScrollTrackProps,
+  type HorizontalTrackState,
   type PipelineProps,
   type PipelineColumn,
   type PipelineNode,
@@ -274,6 +342,7 @@ export {
   viewWindowLastYear,
   matchLookbackPreset,
   viewsNear,
+  sliceByView,
   PRINT_FULL_VIEW,
   runTearsheetPrint,
   isOpenTrade,
@@ -341,6 +410,15 @@ export {
   type LiveKpiBenchmarkPoint,
   type LivePerformanceKpis,
   type LivePerformanceKpisInput,
+  StrategyTearsheet,
+  buildStrategyTearsheet,
+  seriesOrNull,
+  seriesSparkline,
+  sheetCagr,
+  type StrategySheetBar,
+  type StrategySheetMetric,
+  type StrategySheetModel,
+  type StrategySheetPoint,
 } from "./components/finance-tearsheet";
 
 // repo-activity family (#3445) — snapshot-first GitHub velocity, compact + detailed
@@ -363,6 +441,8 @@ export {
   type RepoHeatmapProps,
   type RepoActivityLiveConfig,
   type RepoActivitySnapshot,
+  type RepoContributor,
+  type RepoModuleRelease,
   type RepoFeature,
   type RepoIssueItem,
   type RepoModuleActivity,
@@ -462,4 +542,17 @@ export {
   FooterCells,
   type FooterCell,
   type FooterCellsProps,
+  type FooterMetaLink,
 } from "./components/footer";
+
+// page-geometry family (D1, #4429) — the persistent page structure and the
+// product-artefact depth treatment. `LayoutLines` is one fixed pair of dashed
+// vertical rules the whole page sits between; `MockupFrame` + `Mockup` + `Glow`
+// give a product shot layered depth instead of a flat border. Techniques read
+// out of launch-ui's source (MIT) and re-expressed in this kit's tokens.
+export {
+  LayoutLines,
+  Mockup,
+  MockupFrame,
+  Glow,
+} from "./components/page-geometry";

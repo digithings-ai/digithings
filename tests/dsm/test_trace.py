@@ -1,4 +1,4 @@
-"""Unit tests for digismith.trace."""
+"""Unit tests for digitrace.trace."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from digismith import trace as trace_mod
+from digitrace import trace as trace_mod
 
 
 @pytest.mark.unit

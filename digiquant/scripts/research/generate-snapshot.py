@@ -17,11 +17,12 @@ import json, re, sys, os
 from pathlib import Path
 from datetime import datetime
 
-ROOT = Path(__file__).parent.parent
-DAILY_DIR = ROOT / "data" / "agent-cache" / "daily"
-PORTFOLIO_JSON = ROOT / "config" / "portfolio.json"
+from lib.roots import AGENT_CACHE_ROOT, RESEARCH_CONFIG, SNAPSHOT_SCHEMA
 
-SCHEMA_PATH = ROOT / "templates" / "snapshot-schema.json"
+DAILY_DIR = AGENT_CACHE_ROOT / "daily"
+PORTFOLIO_JSON = RESEARCH_CONFIG / "portfolio.json"
+
+SCHEMA_PATH = SNAPSHOT_SCHEMA
 
 
 def load_portfolio_json():

@@ -80,7 +80,7 @@ def _ensure_importable() -> None:
         "digiquant/src",
         "digigraph/src",
         "digibase/src",
-        "digismith/src",
+        "digitrace/src",
     ]:
         p = str(_repo_root / rel)
         if p not in sys.path:

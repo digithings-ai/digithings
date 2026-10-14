@@ -154,6 +154,7 @@ As of the March 2026 codebase snapshot, the following modules are implemented an
 | Agent LangGraph pipeline (`plan → retrieve → aggregate`) | Implemented (optional `[agent]` extra) | `agent/pipeline.py` |
 | Agent citations helper | Implemented | `agent/citations.py` |
 | Crossref discovery | Implemented | `discovery/crossref.py` |
+| Grokopedia JSON client + MCP tools (unofficial spike) | Implemented (HOLD) | `grokipedia/` |
 | Bulk ingest worker | **Placeholder** — logs and exits | `ingest_worker.py` |
 | Canonical filesystem ingest (`ingest_source` / `ingest_paths`) | Implemented | `pipeline/ingest.py` |
 | Embed pipeline factory (`resolve_embedding_pipeline`) | Implemented | `embedding/factory.py` |
@@ -179,9 +180,19 @@ auth-exempt (CORS is enforced separately).
 
 #### `GET /health` and `GET /healthz`
 
-Public (no auth). Both endpoints are rate-limit-exempt. `/health` returns `{"status": "ok", "service": "digisearch"}` (legacy, kept for back-compat). `/healthz` returns `{"ok": true}` — the preferred liveness probe for load balancers and k8s (see AGENTS.md "Liveness vs status"). Used by Docker healthcheck and digigraph startup dependency.
+Public (no auth). Both endpoints are rate-limit-exempt. `/healthz` returns `{"ok": true}` — the preferred liveness probe for load balancers and k8s (see AGENTS.md "Liveness vs status"). Used by Docker healthcheck and digigraph startup dependency.
 
-**Gap:** Does not probe backend connectivity. A backend can be offline and both endpoints return 200. See [Redesign Recommendations](#12-redesign-recommendations).
+`/health` (legacy, kept for back-compat) returns `{"status": "ok", "service": "digisearch"}`, and returns `status: "degraded"` plus an `unseeded_indexes` array when the boot marked indexes as unseeded (#5045):
+
+```json
+{"status": "degraded", "service": "digisearch", "unseeded_indexes": ["occ_help", "occ_tickets"]}
+```
+
+Those collections are empty, so every query against them would answer "no results" and read as a confident miss. Reporting it here is what makes that failure diagnosable instead of silent — see [Unseeded corpora](#unseeded-corpora-5045).
+
+**HTTP stays 200 on both, deliberately.** Every consumer gates on the status code, not the body: `scripts/run_stack_local.sh` uses `curl -sf`, `tests/test_e2e.py::test_digisearch_health` asserts 200, and the Cloudflare Worker computes per-module health itself rather than proxying this body. `/healthz` remains the unconditional pure-liveness probe — AGENTS.md requires it, and `pipeline-digiquant.yml` calls it.
+
+**Gap:** Neither endpoint probes backend connectivity. A backend can be offline and both return 200. See [Redesign Recommendations](#12-redesign-recommendations).
 
 #### `GET /azure_status`
 
@@ -218,6 +229,28 @@ Key request fields:
 | `workspace_id` | `str?` | Tenant/workspace isolation hint |
 
 Response includes `backend` field: `vectorize` | `azure_ai_search` | `chroma` | `stub`.
+
+Multi-index fan-out (`index_name: "a,b"`) passes the caller's `skip`/`top_k`
+to each leg. Only stub legs are full-read then sliced; Vectorize/Chroma/Azure
+pages are fused as returned (Vectorize `skip > 0` raises, Chroma is capped at
+100, Azure at most 1000 per page). The fused `total_count` is set only when
+every leg is complete. `POST /query` returns `total: null` when
+`include_total_count: true` and the fused total is unknown; with
+`include_total_count: false` `total` stays the page length.
+
+Cross-namespace twin dedupe (#4823): before normalization, `run_query`
+collapses hits whose full chunk bodies are byte-identical and whose
+metadata paths are suffix-related at a `/` boundary (live path plus
+tenant-prefixed copy, e.g. `clients/digithings/...` — an index can hold
+both because vector IDs are path-derived, so a re-sync under a new prefix
+adds copies instead of overwriting). Identity comes from the vault
+namespace first (`metadata.vault_path`), then an http(s) `source_url`
+(URL-ingested chunks carry a tmp-staging `metadata.path` that must not
+shadow the shared URL, #4856 review), then `metadata.path`. A file-derived
+`source_url` is an ingest-location artifact, never an identity. The http(s)
+URL doubles as the keep-signal. Within a twin group the http(s)-URL
+carrier wins, else the longest (tenant-prefixed) path; `total` still
+reports the backend count. Helper: `search/namespace_dedupe.py`.
 
 #### `POST /ingest`
 
@@ -325,6 +358,8 @@ are wired as three parts (R12): the `TOOL_DIGISEARCH_WEBSETS_*` constants +
 Auth required (`digisearch:query` scope). Rate limited: 10 req/min per IP; token-bearing callers get 6× on their own token with a 6× per-IP ceiling (`DIGISEARCH_AUTH_RATE_LIMIT_MULTIPLIER` / `DIGISEARCH_IP_CEILING_MULTIPLIER`, #4106).
 
 Dispatches one named tool: `digisearch`, `digisearch_fetch_all`, `digisearch_research_delegate`, `web_search`, or the monitor/webset tools above. The hub calls this to execute search without importing digisearch Python code directly. Webset dispatch failures are `ok=false` with the stable code in `error` (`code: message`) — never a 4xx — so a missing webset or invalid criteria stays readable to the hub.
+
+An unseeded corpus (#5045) follows that same convention: **HTTP 200** with `{"ok": false, "error": "corpus_not_seeded: …"}`, naming the failing indexes. It is deliberately not a 4xx, and it is deliberately distinguishable from a genuine miss — a real zero-hit is `{"content": "No results found.", "results": [], "rag_sources": []}`. See [Unseeded corpora](#unseeded-corpora-5045).
 
 #### `POST /v1/research_turn`
 
@@ -970,6 +1005,8 @@ MCP server runs on port 8765 via `FastMCP` (`mcp_server.py`). Transport: streama
 | `websets_list_items` | Compact item text newest-first (`webset_id`, `verification`, `limit`, `cursor`) | No |
 | `websets_events` | Compact event tail oldest-first (`webset_id`, `after`, `limit`) | No |
 | `websets_export` | CSV/JSON export text for verified items (caps at 200 rows in chat) | No |
+| `grokipedia_search` | Unofficial spike: `GET /api/full-text-search` on grokipedia.com; JSON hits or `{ok:false}` | Spike (HOLD) |
+| `grokipedia_get_page` | Unofficial spike: `GET /api/page-preview?slug=` (`/api/page` 404s); content capped | Spike (HOLD) |
 
 The four monitor tools share the HTTP API's store/runner and its
 `watch_config_error` create gate (a watch whose cron could not parse would raise
@@ -1032,6 +1069,24 @@ Entry point: `digisearch` (Typer). All defined in `cli.py`.
 | `digisearch mcp [--port 8765]` | Start MCP server (real backend only; fails loud without one; port also via `DIGISEARCH_MCP_PORT`) |
 | `digisearch index build --config <path>` | Build/re-index (stub — prints guidance) |
 | `digisearch index inspect --index <name>` | Inspect stub index chunk counts |
+
+**Ingest exit codes (#5045).** `ingest` and `ingest-batch` share
+`_ingest_paths`, and **a total failure is a non-zero exit** — the contract that
+lets `seed_chroma.sh` detect it (`if ! seed_index …`):
+
+- `IngestError` → exit **1**.
+- Candidate files present but **no results recorded** → exit **1**. Keyed on
+  `not results`, *not* on `total == 0`, so a file that parsed successfully but
+  legitimately contains no embeddable text still exits **0**.
+- Missing source path, or a directory with no files → exit **1** (`_resolve_source`).
+- Directory expansion is `sorted(source.rglob("*"))`, so ingest order is
+  deterministic rather than filesystem-dependent.
+
+This matters because the pipeline runs with `skip_errors=True`: a per-file embed
+failure (a model that will not download, a provider that will not answer) was
+previously logged as a warning and skipped, leaving `total == 0` and **exit 0** —
+so the container seed wrote its success marker over an empty corpus and digisearch
+served nothing as healthy. See [Unseeded corpora](#unseeded-corpora-5045).
 
 **Note:** CLI and HTTP ingest both call `digisearch.pipeline.ingest.ingest_source`
 (batch via `ingest_paths`). That path writes through `route_add_chunks` —
@@ -1100,7 +1155,8 @@ Result
 ├── chunk: Chunk
 ├── score: float               # relevance score; backend-specific scale
 ├── source_doc: Document?      # populated when full document is needed
-└── rank: int?                 # 1-based rank after sorting
+├── rank: int?                 # 1-based rank after sorting
+└── index_names: list[str]     # originating indexes; #5045 provenance (see below)
 ```
 
 ### `SearchResponse`
@@ -1110,8 +1166,25 @@ SearchResponse
 ├── results: list[Result]
 ├── facets: dict[str, list[{value, count}]]?  # Azure facet counts
 ├── total_count: int?          # full match count when include_total_count=True
-└── backend: str?              # "vectorize" | "azure_ai_search" | "chroma" | "stub"
+├── backend: str?              # "vectorize" | "azure_ai_search" | "chroma" | "stub" | "multi"
+└── index_names: list[str]     # every index queried; "multi" fan-out only
 ```
+
+**Fan-out provenance (#4995).** On a multi-index query each `Result` records the
+indexes it came from in `index_names`. Index name **is** the storage table name —
+`ChromaBackend` resolves it via `get_or_create_collection(name=…)` — so it is the
+correct provenance label.
+
+Scoring is unchanged: RRF accumulates `1.0 / (k + rank)` exactly as before and
+ordering is bit-identical; this is observability only. When one chunk folds across
+indexes (the `scored[chunk.id]` duplicate path in `_rrf_merge_results`) **all**
+contributing names are kept, in fan-out order, deduped — not just the first.
+
+The field never reaches the wire. `normalize_query_hit()` extracts only
+`chunk_id`, `doc_id`, `rank`, `score`, `content`, `content_length`,
+`content_truncated`, and `metadata`, so `QueryResponse.results` (a `list[dict]`)
+and digigraph's strict parsing are untouched. `index_names` is additive, not a
+rename of anything that existed.
 
 ### Standard JSON hit shape
 
@@ -1197,7 +1270,16 @@ digisearch/src/digisearch/
 ├── orchestrator_tools.py      # OpenAI-style tool manifest for digigraph orchestration
 ├── cli.py                     # Typer CLI (digisearch) — thin wrapper over pipeline.ingest
 ├── pipeline/
-│   └── ingest.py              # Canonical filesystem ingest (HTTP + CLI + tests)
+│   ├── ingest.py              # Canonical filesystem ingest (HTTP + CLI + tests)
+│   └── url_ingest.py          # Sole URL-fetch site: ingest_url (HTML→markdown)
+│                              # + fetch_json_feed (JSON feeds, e.g. trackers)
+├── trackers_ingest.py         # luxalgo market-trackers-data CC0-1.0 ingest (#4826):
+│                              # per-dataset adapter pattern, per-family limits
+│                              # classified DIG-1464; refused at its entry points
+│                              # since DIG-1307 (no fetch, no write)
+├── trackers_wave2_ingest.py   # wave-2 ticker datasets (#4849): insider →
+│                              # 13F → short-volume → lobbying → gov-contracts
+│                              # (same pattern via a TRACKER_DATASETS table)
 ├── ingest_worker.py           # Bulk ingest placeholder (not implemented)
 ├── http_client.py             # HTTP client helpers for callers (query_digisearch, format_results_table)
 ├── client.py                  # digisearch Python client
@@ -1273,6 +1355,12 @@ digisearch/src/digisearch/
 │   ├── web_branch.py          # web-branch nodes + resolve_web_config() (#4064)
 │   └── citations.py           # rag_sources_from_hits()
 │
+├── grokipedia/                # Unofficial grokipedia.com JSON spike (HOLD hatch)
+│   ├── client.py              # httpx + polite limiter; search + page-preview only
+│   ├── models.py              # Pydantic search/page/error envelopes
+│   ├── rate_limit.py          # min-interval (≥300ms) + token bucket
+│   └── tools.py               # grokipedia_search / grokipedia_get_page JSON strings
+│
 ├── discovery/
 │   └── crossref.py            # DOI → EvidenceMetadata via Crossref REST API
 │
@@ -1309,6 +1397,133 @@ digisearch/src/digisearch/
 └── dev/
     └── edgar_sample_export.py # EDGAR-CORPUS slice exporter (dev/test only)
 ```
+
+### Unseeded corpora (#5045)
+
+**The failure mode this exists to prevent.** In production the container boots,
+`seed_chroma.sh` populates the markdown corpora, and digisearch opens Chroma.
+Until #5045 an ingest that embedded *nothing* still exited **0**, so the seed
+wrote its success marker and digisearch served an empty Chroma as healthy:
+`/health` said `ok`, every query returned zero hits, and nothing logged an
+error. That is the worst shape a retrieval failure can take — indistinguishable
+from a genuine miss.
+
+**Two layers, both required.** The shell-level gate only works because the CLI
+propagates failure (see [CLI Commands](#cli-commands)); a seed marker written on
+a total-failure ingest is what made the original outage silent.
+
+**1. The boot records what it could not populate.** `start_digisearch.sh` exports
+`DIGISEARCH_UNSEEDED_INDEXES` — a comma-separated index list — before it `exec`s
+uvicorn. A seed failure records that index; a timeout (bounded, 600 s chroma /
+900 s tickets) records every index it could not confirm. The value is read **per
+call**, not cached at import, so it can be set around a request in tests.
+
+**2. Every query refuses to answer for a named index.** `guard_unseeded()` is the
+first thing `query_index()` does after splitting the comma fan-out, so it covers
+both HTTP paths (`POST /query` and `/v1/orchestrator_invoke` share that funnel).
+It raises `CorpusNotSeededError(indexes=[…])` on the **intersection** of the
+requested indexes and the unseeded set — so a fan-out to `occ_help,occ_tickets`
+where only the ticket backfill failed still answers from `occ_help`, and only
+names `occ_tickets`.
+
+`CorpusNotSeededError` subclasses `SearchBackendError` but is deliberately **not**
+in `_BACKEND_ERRORS`, so the backend dispatcher cannot catch it and fall through
+to the next backend — which would reintroduce exactly the silent-empty answer.
+
+**Surfacing differs per caller, deliberately:**
+
+| Path | Response | Why |
+|------|----------|-----|
+| `POST /query` | **HTTP 503**, `error.code = "http_503"`, `error.message` starting `corpus_not_seeded:` and naming the indexes | The corpus is a not-yet-ready dependency the next boot retries |
+| `POST /v1/orchestrator_invoke` | **HTTP 200**, `{"ok": false, "error": "corpus_not_seeded: …"}` | The hub already branches on `inv["ok"]` at all three call sites and returns it to the model as tool content |
+| `GET /health` | **HTTP 200**, `status: "degraded"` + `unseeded_indexes` | Consumers gate on the status code; only the body is informative |
+| `GET /healthz` | **HTTP 200**, `{"ok": true}` | Pure liveness — AGENTS.md requires it unconditional |
+
+`digigraph` passes the `ok=false` body through unchanged
+(`digisearch_hub.invoke_digisearch_tool`) and every one of its three call sites in
+`digisearch_tools.py` returns it verbatim, so the model receives a diagnosable
+error naming the indexes instead of "No results found."
+
+**Not-configured still counts as unpopulated.** A boot with no Zammad
+credentials records `occ_tickets` as unseeded and exits **0** (the container must
+still boot, and `digithings_docs` / `occ_help` must still serve). A boot that
+*expected* to backfill tickets and failed exits **1**. Both arm the guard —
+because the corpus was genuinely not populated either way, and a tenant fanning
+out to it deserves a diagnosable error. Accepted consequence: a credential-less
+container reports `/health` degraded, which is accurate.
+
+### luxalgo market-trackers ingest (#4826)
+
+CC0-1.0 public-records layer **beside Gloomberg** (never replacing the terminal
+digest). `trackers_ingest.py` is where the per-dataset adapter pattern was
+proven — on the one dataset now **refused** (DIG-1307, closing counsel item
+(i) of DIG-1291). Its entry points raise `RefusedDatasetError` before any
+fetch and before any index write, so nothing parsed from it reaches the
+`trackers` index. The mechanics below are still live — the live wave-2
+adapters implement every one of them:
+The grant does not clear two families — congress-trades
+(5 U.S.C. 13107(c)(1)(B)) and short-volume (unresolved upstream FINRA
+terms); see `digiquant/src/digiquant/data/luxalgo/attribution.py`.
+
+- Fetch goes only through `pipeline.url_ingest.fetch_json_feed` — the single
+  URL-fetch site (digifetch `HttpFetcher` + `validate_fetch_url`;
+  `raw.githubusercontent.com` allowlisted, so validation is DNS-free). The
+  generic `ingest_url` HTML path is wrong for a JSON feed, so the JSON helper
+  reuses its identical guards minus extraction. The module never opens
+  sockets itself and never fetches directly. Manifest
+  (`market-trackers-data/main/manifest.json`, `datasets.<name>.stale`) is
+  checked first — an explicit `stale: true` raises `StaleDatasetError` before
+  any write; an unreadable manifest warns and proceeds (advisory signal).
+  Fetch/validation/shape failures raise `TrackersFetchError` (never confused
+  with a stale flag); a served-vs-manifest row-count mismatch warns and
+  proceeds.
+- The row mapper turns one live-schema row into `{doc_id, text, metadata}`,
+  carries `provenance.sourceUrl → Document.source / metadata[source_url]`
+  (every chunk carries `source_url`; `needsReview → needs_review`), and never
+  drops a null-ticker row silently (`ticker` key absent post-Chroma).
+- Idempotency: `Document.id` reuses research_ingest's `_stable_doc_id`
+  (seeded by the natural key); chunk ids are namespaced per dataset
+  (`luxalgo-trackers::<dataset>::<key>::<idx>`), so all backends upsert.
+  The `ingested`/`skipped` counts probe the stub index (exact in tests); on
+  production backends a rewritten row reports as ingested while storage still
+  dedupes. Same-key content updates are skip-not-replace (refresh = follow-up).
+- Dataset expansion order: wave 2 (#4849) first —
+  insider-transactions → thirteenf-holdings → short-volume →
+  lobbying-filings → gov-contracts. Remaining non-ticker datasets (bills,
+  hearings, fed-communications, patents, trials, FEC, wiki-pageviews) and
+  `cot-reports` (upstream `rows: 0, stale: true` — skipped until fresh) are
+  later waves; Parquet is out of scope (unverified upstream).
+
+### luxalgo market-trackers wave-2 expansion (#4849)
+
+`trackers_wave2_ingest.py` copies the per-dataset adapter pattern once
+per dataset behind a `TRACKER_DATASETS` spec table (manifest key, feed URL,
+`Document.doc_type`, ticker location). All five share the `trackers` index,
+the `fetch_json_feed` transport, the manifest stale-gate (per-dataset entry),
+`_stable_doc_id` seeding, and the chunker factory (`get_document_chunker()`,
+never hard-coded). Natural keys are `{dataset}:{upstream-id}`, namespaced so
+the five datasets cohabit one index without collision; chunk ids are
+`luxalgo-trackers::<dataset>::<upstream-id>::<idx>`.
+
+| Dataset (manifest key) | Feed (`exportDir/latest.json`) | Rows (manifest, 2026-09-30) | Ticker shape | Natural key |
+|------------------------|-------------------------------|-----------------------------|--------------|-------------|
+| `insider-transactions` | `insider/transactions` | ~17.5k | top-level `ticker` (rarely null) | `{dataset}:{accessionNumber}:{leg}` (`id`) |
+| `thirteenf-holdings` | `thirteenf/holdings` | ~111k | top-level `ticker`, **always null upstream** (`thirteenf-xml@1` skips CUSIP→ticker); rows keyed by issuer/cusip | `{dataset}:{accessionNumber}:{rowIndex}` (`id`) |
+| `short-volume` | `short-volume/daily` | ~122k daily | top-level `ticker` (required) | `{date}:{ticker}:{market}` (`id`) |
+| `lobbying-filings` | `lobbying/filings` | ~56k | `client.tickers[]` (often empty; primary = first) | filing `id` (= `filingUuid`) |
+| `gov-contracts` | `contracts/awards` | ~12.7k | `recipient.tickers[]` (often empty; primary = first) | award `id` |
+
+Null-ticker rows are ingested, never dropped (`ticker` key absent
+post-Chroma normalization; text falls back to issuer/client/recipient name).
+The full `tickers` list is stored alongside the primary `ticker` (Chroma
+normalization comma-joins lists).
+
+Performance (#4849 prerequisite, applied to both adapters): bulk entry points
+build the stub-index natural-key set **once** per run and thread it through
+`_known_keys` (new keys added as rows index) instead of rescanning per row —
+the deferred-minor O(n²) stub key-scan from #4826, which falls over on the
+100k+ row datasets. Pinned by scan-count tests on both bulk paths.
+Production backends are unaffected (they upsert by stable chunk id).
 
 ### Lazy package surface and install extras
 
@@ -1738,7 +1953,7 @@ The allowlist (`^[\w \t'\"<>=!(),./\\:\-\+\*\?%@]+$`) permits `*`, `?`, `@`, and
 
 ### Embedding model API key exposure
 
-The `OpenAIEmbedder` (and other cloud providers) read API keys from environment variables (`OPENAI_API_KEY`, `COHERE_API_KEY`, etc.). These are never logged or returned in API responses. The `Reranker._rerank_cohere()` reads `COHERE_API_KEY` at call time. The digismith/ARCHITECTURE.md spec prohibits including API keys in spans — this is respected in the current implementation.
+The `OpenAIEmbedder` (and other cloud providers) read API keys from environment variables (`OPENAI_API_KEY`, `COHERE_API_KEY`, etc.). These are never logged or returned in API responses. The `Reranker._rerank_cohere()` reads `COHERE_API_KEY` at call time. The digitrace/ARCHITECTURE.md spec prohibits including API keys in spans — this is respected in the current implementation.
 
 **Potential risk:** the `EmbeddingCache` stores embedding vectors in a local SQLite file. If the file is accessible to multiple processes or shared across container mounts, the vectors could in principle be used to reconstruct approximate original text via inversion attacks. This is a low-severity theoretical risk for most use cases.
 
@@ -1870,7 +2085,9 @@ The contract is versioned by `{"tools": [...], "version": 1}` in the tools respo
 
 ### digiclaw MCP attachment
 
-digiclaw may attach to the digisearch MCP server at `http://127.0.0.1:8765/mcp` (loopback in standalone/Docker profiles; in the Cloudflare stack the process binds 0.0.0.0 and is reachable only through the key-gated `/_stack/mcp/digisearch/*` edge route). Tools available: `semantic`, `web_search` (swappable `provider`; when `[web-search]` is installed), `search_strategies`, `research_turn` (when `[agent]` is installed), plus the `monitors_*` / `websets_*` chat surfaces (§ MCP Tools). digigraph sees the same tools prefixed as `digisearch_semantic`, `digisearch_web_search`, `digisearch_search_strategies`, and `digisearch_research_turn` — plus the `digisearch_monitors_*` / `digisearch_websets_*` families (`{id}_{tool}`).
+digiclaw may attach to the digisearch MCP server at `http://127.0.0.1:8765/mcp` (loopback in standalone/Docker profiles; in the Cloudflare stack the process binds 0.0.0.0 and is reachable only through the key-gated `/_stack/mcp/digisearch/*` edge route). Tools available: `semantic`, `web_search` (swappable `provider`; when `[web-search]` is installed), `search_strategies`, `research_turn` (when `[agent]` is installed), plus the `monitors_*` / `websets_*` chat surfaces and the unofficial `grokipedia_*` spike (§ MCP Tools). digigraph sees the same tools prefixed as `digisearch_semantic`, `digisearch_web_search`, `digisearch_search_strategies`, and `digisearch_research_turn` — plus the `digisearch_monitors_*` / `digisearch_websets_*` families (`{id}_{tool}`) and `digisearch_grokipedia_search` / `digisearch_grokipedia_get_page`.
+
+`grokipedia_search` / `grokipedia_get_page` wrap public grokipedia.com JSON APIs (`/api/full-text-search`, `/api/page-preview` — **`/api/page` 404s**). robots.txt currently `Disallow: /api/`; this is unofficial third-party use, polite-rate-limited, no HTML scrape, spike-only (HOLD hatch). See `grokipedia/README.md`.
 
 MCP clients (Langflow, IDE tools) attach to the same server. There is no per-client auth on the MCP server itself — access control is at network level (loopback binding, or the secret-gated edge route in the stack).
 
@@ -1949,7 +2166,7 @@ docker compose --profile digisearch-mcp up
 
 The `searxng` service (`searxng/searxng`) is loopback-only on the host (`127.0.0.1:8080`) with config at `config/searxng/settings.yml` (`search.formats: [html, json]`, engine allowlist). `valkey` backs its limiter. digisearch reaches it in-container via `DIGISEARCH_SEARXNG_URL=http://searxng:8080`. No new digisearch port: `POST /v1/web_search`, MCP `web_search`, and orchestrator `web_search` all ride the existing apps.
 
-Rollout ops: single flag `DIGISEARCH_WEB_SEARCH_BACKEND=auto|searxng|ddgs` (default `auto`); under `auto` a down sidecar or a ddgs 403/CAPTCHA fails over to the next backend, while an explicit `searxng`/`ddgs` fails closed instead of falling through (#4297), and the digigraph `web` skill stays corpus-only unless the session opts in (#3420) — fail-closed to corpus-only at every layer. Engine allowlist is `wikipedia, duckduckgo, bing, mojeek`; `search.formats` must keep `json` (the provider calls `/search?format=json`). `server.secret_key` ships as a dev-only placeholder — rotate before exposing beyond loopback. Upstream scrapers break without notice: `compose pull searxng` weekly, and watch per-engine 403/CAPTCHA rates as the early signal; grounding stays tool-only for the default corpus path (#3859), with the Phase B exception that an explicitly requested `source=web|auto` research turn runs OSS synthesis (see §3 `POST /v1/research_turn` web branch, #4064). Eval: `digisearch/tests/test_web_search_eval.py` (20 queries across news/macro/docs/earnings, mocked offline; live sampling behind `DIGISEARCH_WEB_SEARCH_LIVE=1` with p50 fetch+extract < 5s) plus `tests/ds/test_web_eval_live.py` (Phase B research-turn cases, mocked offline; same live gate). Known limitation: digiquant→hub calls carry the Task-1 service JWT (bearer threads via `ToolContext.state["digi_bearer"]`); legs without a token fail closed with `DashboardWebSearchError`, never silently ungrounded.
+Rollout ops: single flag `DIGISEARCH_WEB_SEARCH_BACKEND=auto|searxng|ddgs` (default `auto`); under `auto` a down sidecar or a ddgs 403/CAPTCHA fails over to the next backend, while an explicit `searxng`/`ddgs` fails closed instead of falling through (#4297), and the digigraph `web` skill stays corpus-only unless the session opts in (#3420) — fail-closed to corpus-only at every layer. Engine allowlist is `wikipedia, duckduckgo, bing, mojeek`; `search.formats` must keep `json` (the provider calls `/search?format=json`). `server.secret_key` ships as a dev-only placeholder — rotate before exposing beyond loopback. Upstream scrapers break without notice: the image is tag-pinned (see the pin record below), so `compose pull searxng` only re-pulls that one tag — watch per-engine 403/CAPTCHA rates as the early signal and re-pin when upstream fixes land; grounding stays tool-only for the default corpus path (#3859), with the Phase B exception that an explicitly requested `source=web|auto` research turn runs OSS synthesis (see §3 `POST /v1/research_turn` web branch, #4064). Eval: `digisearch/tests/test_web_search_eval.py` (20 queries across news/macro/docs/earnings, mocked offline; live sampling behind `DIGISEARCH_WEB_SEARCH_LIVE=1` with p50 fetch+extract < 5s) plus `tests/ds/test_web_eval_live.py` (Phase B research-turn cases, mocked offline; same live gate). Known limitation: digiquant→hub calls carry the Task-1 service JWT (bearer threads via `ToolContext.state["digi_bearer"]`); legs without a token fail closed with `DashboardWebSearchError`, never silently ungrounded.
 
 Live verification record (2026-09-11, #3859 Task 10 — honest not-measured + what remains):
 
@@ -1974,6 +2191,15 @@ Live verification record (2026-09-11, #3859 Task 10 — honest not-measured + wh
   Owner decision (#3871): searxng floats on latest — the digest above is a
   recorded observation, not an enforced pin; enforcing a digest pin is a
   networked ops follow-up (owner-side).
+  Pin update (#3239, 2026-10-13): compose no longer floats. It pins the tag
+  `searxng/searxng:2026.9.3-a1144dda3`, derived from the `SEARXNG_COMMIT`
+  this same bundle builds from, so the local sidecar runs the searxng
+  production runs. #3871 stands unamended for the **digest**: no image
+  digest is enforced and that stays a networked ops follow-up (owner-side).
+  The 2026-09-11 observation above therefore describes what `latest` carried
+  then, not the tag in use now. Pinned by
+  `tests/scripts/test_localstack_prod_bundle_parity.py` and
+  `tests/scripts/test_compose_searxng_sidecar.py`.
 - Eval live leg: skipped-with-reason (gate: sidecar must return rows; it
   returns 429, so no p50/quality measured). Supplementary offline evidence on
   this branch: `pytest digisearch/tests/test_web_search_eval.py -v` → 3
@@ -2020,6 +2246,7 @@ Live verification record (2026-09-11, #3859 Task 10 — honest not-measured + wh
 | `DIGISEARCH_INDEX_CONFIG` | _(unset)_ | Path to index YAML (field_mapping, schema) |
 | `DIGISEARCH_CONFIG_PATH` | _(unset)_ | Path to YAML/TOML DigiSearchConfig |
 | `DIGISEARCH_ALLOW_STUB` | `0` | Enable in-memory stub (unit tests only) |
+| `DIGISEARCH_UNSEEDED_INDEXES` | _(unset)_ | Comma-separated index names the boot sequence could **not** populate, exported by `container/start_digisearch.sh` before it `exec`s uvicorn. `guard_unseeded()` refuses to answer for any of them rather than returning a confident empty result, and `/health` reports `status: "degraded"` while the list is non-empty. Read **per call, not cached at import**, so a test can set it around a single request; unset (or empty) leaves the guard inert, which is what local compose and bare processes rely on (#5045). See [Unseeded corpora](#unseeded-corpora-5045) |
 | `DIGISEARCH_RETRIEVAL_BACKEND` | `pgvector` | `pgvector` \| `lightrag` — document-level RetrievalBackend (#402) |
 | `DIGISEARCH_DATABASE_URL` | _(unset)_ | Postgres DSN for PgvectorBackend / LightRAG PG storage |
 | `DIGISEARCH_PGVECTOR_URL` | _(unset)_ | Optional alias; wins over `DIGISEARCH_DATABASE_URL` |
@@ -2039,6 +2266,8 @@ Live verification record (2026-09-11, #3859 Task 10 — honest not-measured + wh
 | `DIGISEARCH_CACHE_PATH` | `.digisearch_embed_cache.db` | SQLite embedding cache path |
 | `DIGISEARCH_EMBED` | `1` (on when unset) | Set `0` to skip pipeline-level embed on ingest |
 | `DIGISEARCH_EMBEDDING_PROVIDER` | _(unset)_ | `minilm` \| `openai` \| model id (`Xenova/paraphrase-multilingual-MiniLM-L12-v2`) — explicit provider or model (fails loud if unloadable) |
+| `DIGISEARCH_MULTILINGUAL_MODEL_DIR` | _(unset)_ | Directory holding a pre-downloaded multilingual ONNX model (`onnx/model_quantized.onnx` + `tokenizer.json`), used instead of fetching from the HuggingFace Hub on first embed. Resolved **per provider load**, local `stat()`s only — `huggingface_hub` is never imported when it is set; unset and unreachable ⇒ `RuntimeError`. The stack image bakes it and sets `HF_HUB_OFFLINE=1` after the bake, so a missing bake fails the image build rather than the first cold start on the request path (#5045) |
+| `HF_HUB_OFFLINE` | _(unset)_ | Set `1` to forbid HuggingFace Hub downloads. The stack image sets it **after** the bake layer, so the build can fetch the weights but the running container cannot egress to fetch them lazily (#5045) |
 | `DIGISEARCH_EMBED_CACHE` | `1` | Wrap BatchEmbedder in EmbeddingCache |
 | `DIGISEARCH_EMBED_BATCH_SIZE` | `100` | BatchEmbedder batch size |
 | `DIGISEARCH_EMBEDDING_MODEL` | _(unset)_ | Active embedding model id (OpenAI model or versioning) |

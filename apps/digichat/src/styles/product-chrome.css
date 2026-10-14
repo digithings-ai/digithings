@@ -323,6 +323,111 @@ body:has(.dc-embed-shell[data-wide="1"]) {
   box-shadow: 0 1px 2px color-mix(in oklch, var(--foreground) 6%, transparent);
 }
 
+/* Terminal look for the first-party product (DIG-2983): the same dress as
+   digichat-tui and the digiquant embed. One canvas painted at the product
+   root, every surface above it transparent, one hairline colour for every box
+   rule, Geist Mono throughout, and the open chat marked with an arrow instead
+   of a filled row. Scoped to the stock product root; catalog skins are
+   untouched. Only chrome.mode app paints the canvas: /embed (incl. wide,
+   transparent embeds) keeps the shell canvas rules above, and the framed
+   modal/sidebar modes keep the host page behind them. */
+[data-stock-product][data-thread-skin="digichat"] {
+  --term-bg: #08090b;
+  --term-ink: #e7eaec;
+  --term-mute: #7e858b;
+  --term-hair: #2a2e33;
+}
+
+:root[data-theme="light"] [data-stock-product][data-thread-skin="digichat"] {
+  --term-bg: #f1f0eb;
+  --term-ink: #1a1c1e;
+  --term-mute: #6b7177;
+  --term-hair: #d4d1c8;
+}
+
+[data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"] {
+  background: var(--term-bg);
+  color: var(--term-ink);
+}
+
+body:has([data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"]) {
+  background: #08090b;
+}
+
+:root[data-theme="light"] body:has([data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"]) {
+  background: #f1f0eb;
+}
+
+[data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"] .digichat-thread,
+[data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"] .digichat-thread__footer,
+[data-stock-product][data-thread-skin="digichat"][data-chrome-mode="app"] .digichat-thread-list {
+  --bg: transparent;
+  --surface: transparent;
+  --hair: var(--term-hair);
+  background: transparent;
+}
+
+/* Box rules: the sidebar header and the tool row share one height, so their
+   bottom rules run as a single line across the page. */
+[data-stock-product][data-thread-skin="digichat"] .digichat-thread-list {
+  border-right-color: var(--term-hair);
+}
+
+[data-stock-product][data-thread-skin="digichat"] .digichat-thread-list > :first-child,
+[data-stock-product][data-thread-skin="digichat"] [data-tool-catalog] {
+  box-sizing: border-box;
+  height: 2.25rem;
+  border-bottom: 1px solid var(--term-hair);
+}
+
+[data-stock-product][data-thread-skin="digichat"] [data-tool-catalog] {
+  flex-wrap: nowrap;
+  gap: 0.5rem;
+  padding: 0 0.75rem;
+  overflow-x: auto;
+}
+
+[data-stock-product][data-thread-skin="digichat"] [data-tool-catalog] button {
+  height: 1.375rem;
+  border: 1px solid var(--term-hair);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 0 0.45rem;
+  color: var(--term-mute);
+  font-family: inherit;
+  font-size: 0.6875rem;
+}
+
+[data-stock-product][data-thread-skin="digichat"] [data-tool-catalog] button[aria-pressed="true"] {
+  border-color: var(--term-ink);
+  color: var(--term-ink);
+}
+
+[data-stock-product][data-thread-skin="digichat"] .aui-composer-root > :first-child {
+  border-color: var(--term-hair);
+  border-radius: 0;
+  background: transparent;
+}
+
+/* assistant-ui marks the open chat on the item root (data-active +
+   aria-current), not on the trigger, so the row is keyed off its parent. */
+[data-stock-product][data-thread-skin="digichat"] .digichat-thread-list__item {
+  color: var(--term-mute);
+  font-size: 0.6875rem;
+}
+
+[data-stock-product][data-thread-skin="digichat"] .digichat-thread-list__item:hover,
+[data-stock-product][data-thread-skin="digichat"] [aria-current="true"] > .digichat-thread-list__item {
+  background: transparent;
+  color: var(--term-ink);
+}
+
+[data-stock-product][data-thread-skin="digichat"] [aria-current="true"] > .digichat-thread-list__item::before {
+  content: "→ ";
+  color: var(--accent-digichat, var(--accent));
+}
+
 /* chrome.mode: sidebar (#4515). A docked panel beside the host content rather
    than the bare iframe. The modal mode needs no rules here — the launcher
    panel already sizes its own body (see digichat-launcher.css). */

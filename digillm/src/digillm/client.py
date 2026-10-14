@@ -1,7 +1,7 @@
 """Provider-agnostic, OpenAI-compatible LLM client.
 
 Extracted from the mature ``digigraph.llm`` implementation and made standalone:
-no FastAPI, no digigraph, no digismith hard dependencies. Speaks to any
+no FastAPI, no digigraph, no digitrace hard dependencies. Speaks to any
 OpenAI-compatible endpoint (LiteLLM proxy, Ollama, OpenRouter, OpenAI direct,
 or a registered external provider) and provides:
 
@@ -53,6 +53,7 @@ from typing import (  # score:allow untyped any — OpenAI message dict payloads
     Any,
     NoReturn,
 )
+from urllib.parse import urlsplit, urlunsplit
 from uuid import UUID, uuid4
 
 from openai import BadRequestError, OpenAI, Timeout
@@ -61,6 +62,12 @@ from openai.types.chat import ChatCompletion
 from digillm import cache as _cache
 from digillm import overrides as _overrides
 from digillm import types as _types
+from digillm.egress_record import (
+    NO_EGRESS_DESTINATION,
+    UNKNOWN_DESTINATION,
+    EgressDecision,
+    record_egress,
+)
 from digillm.telemetry import (
     ArtifactRef,
     CacheStatus,
@@ -102,13 +109,13 @@ _llm_cache_set = _cache.llm_cache_set
 
 logger = logging.getLogger(__name__)
 
-# Optional tracing: degrade to a no-op decorator when digismith is not installed.
+# Optional tracing: degrade to a no-op decorator when digitrace is not installed.
 try:
-    from digismith.trace import traceable as _traceable  # type: ignore[import-not-found]
-except ImportError:  # pragma: no cover - exercised only when digismith is absent
+    from digitrace.trace import traceable as _traceable  # type: ignore[import-not-found]
+except ImportError:  # pragma: no cover - exercised only when digitrace is absent
 
     def _traceable(name: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-        """No-op stand-in for ``digismith.trace.traceable`` when digismith is absent."""
+        """No-op stand-in for ``digitrace.trace.traceable`` when digitrace is absent."""
 
         def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
             return fn
@@ -405,6 +412,295 @@ _CONNECT_TIMEOUT_SECONDS = float(os.environ.get("DIGILLM_CONNECT_TIMEOUT_SECONDS
 _REQUEST_TIMEOUT = Timeout(_REQUEST_TIMEOUT_SECONDS, connect=_CONNECT_TIMEOUT_SECONDS)
 
 
+# ── Art. 9 egress screen (leaf L11, DIG-1085) ─────────────────────────────────
+# Defence in depth. The in-process screens (leaves 1, 2, 6) sit on digibase's own
+# ingest seams and therefore never see a prompt that reaches a model another way --
+# an MCP-originated prompt, or anything a caller sends straight at a client it got
+# from get_client_for_model(). This screen is installed on the *client object*, so
+# it covers every call that leaves through it, whoever made the call.
+#
+# ARCHITECTURAL NOTE -- digillm does not depend on digibase, and must not acquire
+# it: digibase requires fastapi, and digillm/AGENTS.md forbids "import fastapi ...
+# anywhere in the package". digillm/egress_record.py already sets the precedent for
+# this exact tension (DIG-1139 duplicated its digest rather than importing). So the
+# screen is a *pluggable seam* rather than an import: digillm resolves it lazily,
+# once, and digisearch -- which does hard-depend on digibase -- is where the
+# digibase-backed screen is normally supplied. Every consumer of digillm in the
+# stack (digigraph, digisearch, digiclaw) already has digibase installed.
+#
+# When no screen can be resolved the call proceeds UNSCREENED and the record says
+# so. That is deliberate and is the one honest option: this is a second line of
+# defence behind the in-process screens, so failing closed would take every
+# digillm consumer down for a control they may not have installed, while claiming
+# a verdict nobody computed would put a fabrication in the audit ledger. The
+# unscreened case is visible precisely because DIG-2708's validator makes
+# PASS (screened, found nothing) and UNSCREENED (never screened) distinct rows.
+
+_EGRESS_SCREEN_UNSET: Any = object()
+_egress_screen: Any = _EGRESS_SCREEN_UNSET
+
+
+class Art9EgressRefused(RuntimeError):
+    """Raised at the egress boundary when Art. 9 screening refuses a payload.
+
+    Carries the stable ``art9:<category>:<signal>`` machine code and the category
+    ids, never the matched value: this exception is raised inside retry and
+    telemetry machinery that can end up in a log aggregator or an error envelope,
+    and digibase's own contract for ``reason`` is that it stays safe to log.
+    """
+
+    def __init__(self, reason: str, categories: tuple[str, ...]) -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.categories = categories
+
+
+def _refusal_outcome(refusal: Art9EgressRefused) -> EgressScreenOutcome:
+    """The record-shaped view of a refusal.
+
+    The screen raises rather than returning, so the verdict would otherwise exist
+    only as an exception the caller has to already know about. Writing it onto the
+    client lets any caller read the verdict back off the object it holds --
+    including digisearch, which screens through this seam but must not import this
+    module's exception type.
+    """
+    return EgressScreenOutcome(EgressDecision.REFUSED, tuple(refusal.categories), refusal.reason)
+
+
+@dataclass(frozen=True)
+class EgressScreenOutcome:
+    """What the egress screen decided, in this module's own vocabulary.
+
+    ``masked_payload`` holds the redaction to substitute when ``decision`` is
+    MASKED. It is ``None`` whenever the screen did not produce one, which is the
+    case for every current digibase screen -- see :func:`screen_egress_payload`.
+    """
+
+    decision: EgressDecision
+    category_ids: tuple[str, ...]
+    reason: str
+    masked_payload: Any = None
+
+
+def set_egress_screen(screen: Any) -> None:
+    """Install the process-wide egress screen; pass ``None`` to restore the default.
+
+    Mirrors :func:`set_telemetry_observer` and the ``overrides`` seam: one
+    process-wide hook, resolvable once, no per-call plumbing for callers to forget.
+    """
+    global _egress_screen
+    _egress_screen = screen
+
+
+def get_egress_screen() -> Any:
+    """Return the installed egress screen, or ``None`` when none is available.
+
+    Resolution order: an explicitly installed screen, then digibase's
+    ``art9.screen_request`` reached through a function-local import. The import is
+    deliberately not at module scope -- that would make ``import digillm`` fail in
+    every environment without digibase, which is the coupling the seam exists to
+    avoid. The resolved value is cached, including a negative one: the answer
+    cannot change within a process, and re-attempting the import on every model
+    call would put a failed import on the hot path.
+    """
+    global _egress_screen
+    if _egress_screen is _EGRESS_SCREEN_UNSET:
+        try:
+            from digibase.art9 import screen_request
+        except ImportError:
+            _egress_screen = None
+        else:
+            _egress_screen = screen_request
+    return _egress_screen
+
+
+def screen_egress_payload(payload: Any) -> EgressScreenOutcome:
+    """Screen one outbound payload. Returns UNSCREENED when no screen is available.
+
+    The verdict vocabulary maps onto the egress record's own decision enum, and the
+    mapping is forced by ``EgressRecord._validate_shape``: MASKED and REFUSED must
+    carry their categories, and nothing else may carry any. So "screened and clean"
+    is PASS, "screened and tripped" is REFUSED, and "never screened" is UNSCREENED --
+    three different facts a data-subject request needs to tell apart.
+    """
+    screen = get_egress_screen()
+    if screen is None:
+        return EgressScreenOutcome(EgressDecision.UNSCREENED, (), "egress_screen_unavailable")
+
+    result = screen(payload)
+    categories = tuple(result.categories)
+    if result.decision == "allow":
+        return EgressScreenOutcome(EgressDecision.PASS, (), str(result.reason))
+
+    if result.decision == "mask":
+        # ``mask`` is reachable only alongside an Art. 9(2) exception_ref, and
+        # digibase's screen_text/screen_request return ``redacted=None`` on every
+        # path in leaf L1 -- there is no redaction implementation to honour the
+        # narrower outcome with. Substituting None would send *less* than was
+        # screened; sending the original unmasked payload would be the exact
+        # failure this epic exists to prevent. Refuse instead, and say so.
+        if result.redacted is None:
+            raise Art9EgressRefused(f"{result.reason}:mask_without_redaction", categories)
+        return EgressScreenOutcome(
+            EgressDecision.MASKED, categories, str(result.reason), result.redacted
+        )
+
+    raise Art9EgressRefused(str(result.reason), categories)
+
+
+class _ScreenedCompletions:
+    """``client.chat.completions`` with the outbound messages screened."""
+
+    __slots__ = ("_inner", "_owner")
+
+    def __init__(self, inner: Any, owner: "_ScreenedOpenAI") -> None:
+        self._inner = inner
+        self._owner = owner
+
+    def create(self, *args: Any, **kwargs: Any) -> Any:
+        if "messages" in kwargs:
+            messages = kwargs["messages"]
+            owner = self._owner
+            try:
+                screened = screen_egress_payload(messages)
+            except Art9EgressRefused as refusal:
+                owner.last_screen = _refusal_outcome(refusal)
+                raise
+            owner.last_screen = screened
+            if screened.decision is EgressDecision.MASKED:
+                kwargs["messages"] = screened.masked_payload
+        return self._inner.create(*args, **kwargs)
+
+
+class _ScreenedEmbeddings:
+    """``client.embeddings`` with the outbound inputs screened."""
+
+    __slots__ = ("_inner", "_owner")
+
+    def __init__(self, inner: Any, owner: "_ScreenedOpenAI") -> None:
+        self._inner = inner
+        self._owner = owner
+
+    def create(self, *args: Any, **kwargs: Any) -> Any:
+        if "input" in kwargs:
+            owner = self._owner
+            try:
+                screened = screen_egress_payload(kwargs["input"])
+            except Art9EgressRefused as refusal:
+                owner.last_screen = _refusal_outcome(refusal)
+                raise
+            owner.last_screen = screened
+            if screened.decision is EgressDecision.MASKED:
+                kwargs["input"] = screened.masked_payload
+        return self._inner.create(*args, **kwargs)
+
+
+class _ScreenedChat:
+    __slots__ = ("_inner", "_owner")
+
+    def __init__(self, inner: Any, owner: "_ScreenedOpenAI") -> None:
+        self._inner = inner
+        self._owner = owner
+
+    @property
+    def completions(self) -> _ScreenedCompletions:
+        return _ScreenedCompletions(self._inner.completions, self._owner)
+
+
+class _ScreenedOpenAI:
+    """Transparent proxy that screens every payload leaving a constructed client.
+
+    Screening at the client, rather than at the call sites inside digillm, is the
+    point of this leaf: ``get_client_for_model`` hands the object to callers, and a
+    caller that uses the client directly -- an MCP tool handler, for instance -- is
+    exactly the path no in-process screen covers.
+
+    Everything that is not ``chat.completions.create`` / ``embeddings.create``
+    delegates untouched, so the proxy cannot change a client's behaviour beyond
+    screening. ``base_url`` in particular must stay reachable: ``_egress_destination``
+    reads it to place the call in the ledger.
+    """
+
+    __slots__ = ("_inner", "chat", "embeddings", "last_screen")
+
+    def __init__(self, inner: OpenAI) -> None:
+        self._inner = inner
+        # Mirror whatever surfaces the wrapped object actually has. A real
+        # ``openai.OpenAI`` has both, but an embeddings-only client double does
+        # not, and a transparent proxy must not be the thing that decides a
+        # client is malformed: synthesising ``chat`` unconditionally raised
+        # AttributeError on construction and broke a landed leaf's suite. An
+        # unset slot falls through ``__getattr__`` to the inner object, so the
+        # proxy raises the same error the inner object would have.
+        chat = getattr(inner, "chat", None)
+        if chat is not None:
+            self.chat = _ScreenedChat(chat, self)
+        embeddings = getattr(inner, "embeddings", None)
+        if embeddings is not None:
+            self.embeddings = _ScreenedEmbeddings(embeddings, self)
+        self.last_screen: EgressScreenOutcome | None = None
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._inner, name)
+
+    def __enter__(self) -> "_ScreenedOpenAI":
+        self._inner.__enter__()
+        return self
+
+    def __exit__(self, *exc: Any) -> Any:
+        return self._inner.__exit__(*exc)
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return f"_ScreenedOpenAI({self._inner!r})"
+
+
+def screened_client(inner: OpenAI) -> _ScreenedOpenAI:
+    """Wrap a freshly constructed client in the Art. 9 egress screen."""
+    return _ScreenedOpenAI(inner)
+
+
+def client_screen_outcome(client: Any) -> EgressScreenOutcome | None:
+    """The full verdict the screen recorded for the call this client just made.
+
+    Returns ``None`` when no call has been screened through this client yet. A
+    caller that records the outbound payload needs ``masked_payload`` as well as
+    the decision: once a screen substitutes a redaction, the honest thing to
+    digest is what went on the wire, not the payload that was screened.
+    """
+    screened = getattr(client, "last_screen", None)
+    # ``last_screen`` is set only by the screen, and only to an
+    # EgressScreenOutcome -- but "the attribute is not None" is not the same
+    # statement as "a verdict was recorded". An object that fabricates
+    # attributes on access (a test double, a duck-typed client) answers the
+    # getattr with a mock, and forwarding that to the ledger would write a
+    # decision no screen ever made and a category set that fails to build the
+    # record at all. The isinstance is the whole guard: it asks who wrote the
+    # value, not merely whether there is one.
+    return screened if isinstance(screened, EgressScreenOutcome) else None
+
+
+def client_screen_fields(
+    client: Any,
+) -> tuple[EgressDecision, tuple[str, ...]]:
+    """Read the verdict the screen recorded for the call this client just made."""
+    screened = client_screen_outcome(client)
+    if screened is None:
+        return EgressDecision.UNSCREENED, ()
+    return screened.decision, screened.category_ids
+
+
+def wire_payload(client: Any, payload: Any) -> Any:
+    """The payload as it actually left, which is what a ledger row must digest.
+
+    Identical to ``payload`` unless the screen masked it, in which case the
+    substituted redaction is what the provider received.
+    """
+    screened = client_screen_outcome(client)
+    if screened is not None and screened.decision is EgressDecision.MASKED:
+        return screened.masked_payload
+    return payload
+
+
 def get_client() -> OpenAI:
     """Return an OpenAI client for the default (non-prefixed) path.
 
@@ -421,7 +717,9 @@ def get_client() -> OpenAI:
     byok_override = _byok_override.get()
     if byok_override and not _litellm_proxy_configured():
         api_key, base_url = byok_override
-        return OpenAI(api_key=api_key, base_url=base_url, timeout=_REQUEST_TIMEOUT)
+        return screened_client(
+            OpenAI(api_key=api_key, base_url=base_url, timeout=_REQUEST_TIMEOUT),
+        )
 
     api_key = _default_client_api_key()
     base_url = os.environ.get("OPENAI_API_BASE")
@@ -433,7 +731,7 @@ def get_client() -> OpenAI:
         kwargs: dict[str, Any] = {"api_key": api_key, "timeout": _REQUEST_TIMEOUT}
         if normalized_base:
             kwargs["base_url"] = normalized_base
-        client = OpenAI(**kwargs)
+        client = screened_client(OpenAI(**kwargs))
         _client_cache[cache_key] = client
     return client
 
@@ -530,7 +828,7 @@ def _cheaperinference_direct_client() -> OpenAI:
     cache_key: tuple[str, str | None] = (key, base)
     client = _client_cache.get(cache_key)
     if client is None:
-        client = OpenAI(api_key=key, base_url=base, timeout=_REQUEST_TIMEOUT)
+        client = screened_client(OpenAI(api_key=key, base_url=base, timeout=_REQUEST_TIMEOUT))
         _client_cache[cache_key] = client
     return client
 
@@ -737,7 +1035,9 @@ def get_client_for_model(model: str) -> OpenAI:
         api_key, base_url = byok_override
         cfg = _EXTERNAL_PROVIDERS.get(provider)
         if cfg and base_url.rstrip("/") == cfg["base_url"].rstrip("/"):
-            return OpenAI(api_key=api_key, base_url=base_url, timeout=_REQUEST_TIMEOUT)
+            return screened_client(
+                OpenAI(api_key=api_key, base_url=base_url, timeout=_REQUEST_TIMEOUT),
+            )
         expected = cfg["base_url"] if cfg else "a registered provider base_url"
         raise RuntimeError(
             f"BYOK api_base {base_url!r} does not match registered base for "
@@ -767,7 +1067,9 @@ def get_client_for_model(model: str) -> OpenAI:
     cached = _client_cache.get(cache_key)
     if cached is not None:
         return cached
-    client = OpenAI(api_key=api_key, base_url=cfg["base_url"], timeout=_REQUEST_TIMEOUT)
+    client = screened_client(
+        OpenAI(api_key=api_key, base_url=cfg["base_url"], timeout=_REQUEST_TIMEOUT),
+    )
     _client_cache[cache_key] = client
     return client
 
@@ -1211,6 +1513,64 @@ def _record_usage(**fields: Any) -> None:
         logger.debug("usage observer raised: %s", exc)
 
 
+# ── Egress record ─────────────────────────────────────────────────────────────
+# One record per physical attempt that reached the wire, plus one for the cache-hit
+# path where nothing left the process. The record carries a keyed digest of the
+# outbound messages, never the messages: see digillm.egress_record for why an
+# unkeyed fallback is worse than no digest at all.
+
+
+def _egress_destination(client: OpenAI) -> str:
+    """Resolve where a call is going, without ever reading the API key.
+
+    A base URL may legitimately carry credentials in its userinfo
+    (``https://user:token@proxy/v1``), so the userinfo is stripped before the
+    value reaches a plain-text ledger. When the client has no usable base URL the
+    destination is recorded as ``unknown`` rather than ``none``: ``none`` is the
+    no-egress sentinel, and an egress we cannot place must not be filed as one.
+    """
+    base_url = getattr(client, "base_url", None)
+    if not base_url:
+        return UNKNOWN_DESTINATION
+    text = str(base_url)
+    try:
+        parts = urlsplit(text)
+    except ValueError:  # pragma: no cover - urlsplit is very permissive
+        return text.split("@")[-1]
+    if "@" not in parts.netloc:
+        return text
+    host = parts.netloc.rsplit("@", 1)[1]
+    return urlunsplit((parts.scheme, host, parts.path, parts.query, parts.fragment))
+
+
+def _record_egress(
+    *,
+    scope: _AttemptScope,
+    destination: str,
+    provider: str,
+    model: str,
+    outcome: str,
+    decision: EgressDecision = EgressDecision.UNSCREENED,
+    category_ids: tuple[str, ...] = (),
+    payload: Any = None,
+) -> None:
+    """Emit one egress record for a call that left (or did not leave) the process."""
+    metadata = scope.metadata
+    record_egress(
+        call_id=scope.call_id,
+        attempt_id=uuid4(),
+        destination=destination,
+        provider=provider,
+        model=model,
+        purpose=str(metadata.purpose) if metadata is not None else "unknown",
+        cache_status=str(scope.cache_status),
+        outcome=outcome,
+        decision=decision,
+        category_ids=category_ids,
+        payload=payload,
+    )
+
+
 # ── Tool-argument normalization ───────────────────────────────────────────────
 
 
@@ -1302,14 +1662,81 @@ def _create_with_retry(
         requested_model = _requested_model or str(kwargs.get("model") or "unknown")
         provider = _provider_name(_provider)
         kwargs = _with_byok_litellm_pass_through(kwargs)
+        # The digest covers the messages as they go on the wire, which is after any
+        # DIGI_TOOL_MESSAGE_MAX_CHARS compaction -- and only the messages, never the
+        # whole kwargs dict, which can carry a BYOK key in extra_body.
+        #
+        # "As they go on the wire" is not this binding on its own. The screen
+        # substitutes the redacted copy *inside* create, on a fresh dict built by
+        # the **kwargs expansion, so on a masked attempt this binding still holds
+        # the text the screen withheld. Every record therefore digests through
+        # wire_payload(), which substitutes the copy the provider actually
+        # received; digests against the binding and the ledger describes an egress
+        # that did not happen.
+        outbound_payload = kwargs.get("messages")
+        destination = _egress_destination(client)
+        # Set by the client's egress screen during the attempt below. Bound before
+        # the loop so every record this function writes carries the verdict that
+        # actually applied to that attempt, rather than whatever a later attempt
+        # left behind on the client.
+        screen_decision, screen_categories = EgressDecision.UNSCREENED, ()
         for attempt in range(max_attempts):
             attempt_number, retry_reason, started_at = scope.start()
             try:
                 if on_attempt is not None:
                     on_attempt()
                 response = client.chat.completions.create(**kwargs)
+                screen_decision, screen_categories = client_screen_fields(client)
+            except Art9EgressRefused as refusal:
+                # The screen refused the payload, so nothing left the process. This
+                # gets its own branch ahead of the generic one below precisely so it
+                # is NOT recorded as a failed attempt: the comment there says an
+                # attempt "reached the wire (or failed to)", and this one never left
+                # the building. It is still recorded -- an Art. 9 refusal is exactly
+                # what the ledger exists to show -- under its own outcome, with the
+                # real destination (only a cache hit may claim "none") and the
+                # categories that triggered it. Never retried: the payload did not
+                # change between attempts, so a retry would be refused identically.
+                _record_egress(
+                    scope=scope,
+                    destination=destination,
+                    provider=provider,
+                    model=str(kwargs.get("model") or "unknown"),
+                    # Not "failed": nothing was attempted, so a reader filtering on
+                    # outcome would otherwise count this as a provider outage. The
+                    # record's outcome is a free-form string precisely so a blocked
+                    # call can say so; the telemetry enum below has no such member
+                    # and keeps FAILED, which is the closest thing it can express.
+                    outcome="refused",
+                    decision=EgressDecision.REFUSED,
+                    category_ids=refusal.categories,
+                    payload=wire_payload(client, outbound_payload),
+                )
+                _emit_attempt(
+                    scope=scope,
+                    attempt_number=attempt_number,
+                    retry_reason=retry_reason,
+                    provider=provider,
+                    requested_model=requested_model,
+                    started_at=started_at,
+                    outcome=ProviderAttemptOutcome.FAILED,
+                    error=refusal,
+                )
+                scope.terminal_outcome = ProviderCallOutcome.FAILED
+                raise
             except asyncio.CancelledError:
+                screen_decision, screen_categories = client_screen_fields(client)
                 scope.terminal_outcome = ProviderCallOutcome.CANCELLED
+                _record_egress(
+                    scope=scope,
+                    destination=destination,
+                    provider=provider,
+                    model=str(kwargs.get("model") or "unknown"),
+                    outcome=ProviderAttemptOutcome.CANCELLED.value,
+                    decision=screen_decision,
+                    category_ids=screen_categories,
+                    payload=wire_payload(client, outbound_payload),
+                )
                 _emit_attempt(
                     scope=scope,
                     attempt_number=attempt_number,
@@ -1321,6 +1748,19 @@ def _create_with_retry(
                 )
                 raise
             except Exception as error:
+                screen_decision, screen_categories = client_screen_fields(client)
+                # The attempt reached the wire (or failed to), so it gets a record
+                # even when the retry loop will try again.
+                _record_egress(
+                    scope=scope,
+                    destination=destination,
+                    provider=provider,
+                    model=str(kwargs.get("model") or "unknown"),
+                    outcome=ProviderAttemptOutcome.FAILED.value,
+                    decision=screen_decision,
+                    category_ids=screen_categories,
+                    payload=wire_payload(client, outbound_payload),
+                )
                 _emit_attempt(
                     scope=scope,
                     attempt_number=attempt_number,
@@ -1343,6 +1783,25 @@ def _create_with_retry(
                 )
                 delay = _sleep_transient_retry(delay)
                 continue
+            _record_egress(
+                scope=scope,
+                destination=destination,
+                provider=provider,
+                model=str(kwargs.get("model") or "unknown"),
+                # A streaming call has already sent the payload at this point, but
+                # its body has not been read yet, so the attempt's fate is still
+                # open. Recording "started" is the honest value; recording
+                # "succeeded" here would leave a permanent false success for every
+                # stream that dies mid-flight, which is the case counsel asks about.
+                outcome=(
+                    ProviderAttemptOutcome.STARTED.value
+                    if _defer_success
+                    else ProviderAttemptOutcome.SUCCEEDED.value
+                ),
+                decision=screen_decision,
+                category_ids=screen_categories,
+                payload=wire_payload(client, outbound_payload),
+            )
             if _defer_success:
                 return response, scope, attempt_number, retry_reason, started_at
             _emit_attempt(
@@ -1478,6 +1937,17 @@ def completion(
             logger.debug("LLM cache hit: model=%s key=%s…", effective_model, cache_key[:8])
             if attempt_scope is not None:
                 attempt_scope.cache_status = CacheStatus.HIT
+                # Nothing left the process, and the record has to say so: a log that
+                # omits the no-egress path is a spotty sample, not a ledger.
+                _record_egress(
+                    scope=attempt_scope,
+                    destination=NO_EGRESS_DESTINATION,
+                    provider=_provider_name(provider),
+                    model=effective_model,
+                    outcome=ProviderAttemptOutcome.SUCCEEDED.value,
+                    decision=EgressDecision.CACHE_HIT,
+                    payload=None,
+                )
             return ChatCompletion.model_validate_json(cached)
 
     kwargs: dict[str, Any] = {

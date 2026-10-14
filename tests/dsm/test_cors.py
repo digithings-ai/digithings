@@ -1,4 +1,4 @@
-"""CORS allowlist tests for digismith (uses shared digibase.cors helper)."""
+"""CORS allowlist tests for digitrace (uses shared digibase.cors helper)."""
 
 from __future__ import annotations
 
@@ -7,11 +7,11 @@ from digibase.cors import install_cors
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-SERVICE = "digismith"
+SERVICE = "digitrace"
 
 
 def _build(monkeypatch: pytest.MonkeyPatch, origins: str) -> TestClient:
-    monkeypatch.delenv("DIGISMITH_CORS_ORIGINS", raising=False)
+    monkeypatch.delenv("DIGITRACE_CORS_ORIGINS", raising=False)
     monkeypatch.delenv("DIGI_CORS_ORIGINS", raising=False)
     monkeypatch.delenv("DIGI_ALLOWED_ORIGINS", raising=False)
     monkeypatch.setenv("DIGI_CORS_ORIGINS", origins)
@@ -49,3 +49,17 @@ def test_disallowed_origin(monkeypatch: pytest.MonkeyPatch) -> None:
         },
     )
     assert r.headers.get("access-control-allow-origin") is None
+
+
+@pytest.mark.unit
+def test_legacy_digismith_cors_env_honored(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Phase 0 compat (#4929): DIGISMITH_CORS_ORIGINS seeds DIGITRACE_CORS_ORIGINS."""
+    import importlib
+    import os
+
+    import digitrace.server as srv
+
+    monkeypatch.delenv("DIGITRACE_CORS_ORIGINS", raising=False)
+    monkeypatch.setenv("DIGISMITH_CORS_ORIGINS", "https://legacy.example")
+    importlib.reload(srv)
+    assert os.environ.get("DIGITRACE_CORS_ORIGINS") == "https://legacy.example"

@@ -656,20 +656,33 @@ def _watchdog() -> dict[str, Any]:
     return yaml.safe_load(WATCHDOG.read_text(encoding="utf-8"))
 
 
+_CRON_JOBS = Path(__file__).resolve().parents[2] / "apps/digithings-cron/src/jobs.ts"
+
+
+def _watchdog_crons() -> list[str]:
+    """The clock lives on the digithings-cron Worker, not on the workflow."""
+    text = _CRON_JOBS.read_text(encoding="utf-8")
+    block = re.search(r'"production-deploy-gate-watchdog",\s*"([^"]+)"', text)
+    return [block.group(1)] if block else []
+
+
 def test_the_watchdog_schedules_far_often_enough_to_bound_the_blind_spot() -> None:
-    triggers = _watchdog().get("on") or _watchdog().get(True)
-    crons = [entry["cron"] for entry in triggers["schedule"]]
+    crons = _watchdog_crons()
     assert crons, "a watchdog with no schedule never runs"
     # Every 30 minutes: the incident was a ~19h stall nobody saw.
     assert any(re.fullmatch(r"\d+,\d+ \* \* \* \*", cron) for cron in crons), crons
 
 
 def test_the_watchdog_is_not_on_the_top_of_the_hour() -> None:
-    """Every other scheduled workflow in this repo fires on :00 — do not pile on."""
+    """Every other scheduled job in this repo fires on :00 — do not pile on."""
+    for cron in _watchdog_crons():
+        minutes = {int(part) for part in cron.split()[0].split(",")}
+        assert 0 not in minutes, f"schedule {cron} fires on the hour"
+
+
+def test_the_watchdog_has_no_github_schedule() -> None:
     triggers = _watchdog().get("on") or _watchdog().get(True)
-    for entry in triggers["schedule"]:
-        minutes = {int(part) for part in entry["cron"].split()[0].split(",")}
-        assert 0 not in minutes, f"schedule {entry['cron']} fires on the hour"
+    assert "schedule" not in triggers, "the Worker owns the clock; a GHA cron double-fires"
 
 
 def test_the_watchdog_can_also_be_dispatched() -> None:

@@ -62,6 +62,7 @@ from digiquant.dashboard.performance_returns import (
     calculate_performance_returns,
 )
 from digiquant.dashboard.tenancy import house_workspace_id
+from digiquant.portfolio.ledger_replay import fetch_ledger_state, reconcile_book
 from digiquant.research.data.queries import r2_close_rows
 
 _POSITION_INSERT_SKIP = frozenset({"id", "created_at", "updated_at"})
@@ -222,6 +223,18 @@ def carry_forward_positions(sb, as_of: str) -> int:
             row[k] = None
         inserts.append(row)
     CHUNK = 500
+    # DIG-2816: ``carry_forward`` copies the previous day's book wholesale, so without a
+    # check it propagates whatever drift an unreconciled writer left behind, one day at a
+    # time. Anchor the carried weights to ``position_events`` so the clone is a book the
+    # ledger agrees with; a carried ticker the ledger EXITed is refused rather than cloned
+    # forward as a phantom holding.
+    ledger_report = reconcile_book(
+        inserts,
+        fetch_ledger_state(sb, _house_id(), as_of),
+        writer="refresh_performance_metrics.carry_forward",
+        mode="anchor",
+    )
+    print(f"🔎 {ledger_report.summary()}")
     for i in range(0, len(inserts), CHUNK):
         sb.table("positions").upsert(
             inserts[i : i + CHUNK], on_conflict="workspace_id,date,ticker"

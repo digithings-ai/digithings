@@ -1,0 +1,101 @@
+"""Paste into the focused app: macOS only, never fatal."""
+
+from __future__ import annotations
+
+import pytest
+from digivoice.focus import FocusTarget
+from digivoice.paste import ACTIVATE_AND_PASTE_SCRIPT, KEYSTROKE_SCRIPT, copy_to_clipboard, paste
+
+from tests.dvo.fakes import FakeProbe, FakeReply, FakeRunner
+
+pytestmark = pytest.mark.unit
+
+TEXT = "ship it"
+DARWIN_TOOLS = {"pbcopy": "/usr/bin/pbcopy", "osascript": "/usr/bin/osascript"}
+ACCESSIBILITY_DENIED = FakeReply(
+    code=1,
+    stderr=(
+        "execution error: Not authorized to send Apple events to System Events. (-1743)\n"
+        "osascript: System Events got an error: Not allowed assistive access."
+    ),
+)
+
+
+def test_paste_off_darwin_is_a_skip_not_an_error() -> None:
+    runner = FakeRunner()
+    result = paste("linux", FakeProbe(commands=dict(DARWIN_TOOLS)), runner, TEXT)
+    assert result.attempted is False
+    assert result.pasted is False
+    assert "stdout" in result.detail
+    assert runner.calls == []
+
+
+def test_paste_copies_then_keystrokes() -> None:
+    runner = FakeRunner({"pbcopy": FakeReply(), "osascript": FakeReply()})
+    result = paste("darwin", FakeProbe(commands=dict(DARWIN_TOOLS)), runner, TEXT)
+    assert result.pasted is True
+    assert runner.programs == ["pbcopy", "osascript"]
+    copied, typed = runner.calls
+    # The transcript travels over stdin, never inside an AppleScript string.
+    assert copied.stdin == TEXT
+    assert copied.argv == ["/usr/bin/pbcopy"]
+    assert typed.argv == ["/usr/bin/osascript", "-e", KEYSTROKE_SCRIPT]
+    assert "v" in KEYSTROKE_SCRIPT and "command down" in KEYSTROKE_SCRIPT
+
+
+def test_paste_activates_the_app_that_had_focus() -> None:
+    runner = FakeRunner({"pbcopy": FakeReply(), "osascript": FakeReply()})
+    focus = FocusTarget(name="TextEdit", bundle_id="com.apple.TextEdit")
+    result = paste("darwin", FakeProbe(commands=dict(DARWIN_TOOLS)), runner, TEXT, focus)
+    assert result.pasted is True
+    assert result.detail == "pasted into TextEdit"
+    copied, typed = runner.calls
+    assert copied.stdin == TEXT
+    assert TEXT not in " ".join(typed.argv)
+    assert typed.argv == [
+        "/usr/bin/osascript",
+        "-e",
+        ACTIVATE_AND_PASTE_SCRIPT,
+        "com.apple.TextEdit",
+        "TextEdit",
+    ]
+    assert "-" not in typed.argv
+    assert "keystroke" in ACTIVATE_AND_PASTE_SCRIPT
+    assert "frontmost" in ACTIVATE_AND_PASTE_SCRIPT
+
+
+def test_denied_accessibility_is_reported_but_not_raised() -> None:
+    runner = FakeRunner({"pbcopy": FakeReply(), "osascript": ACCESSIBILITY_DENIED})
+    result = paste("darwin", FakeProbe(commands=dict(DARWIN_TOOLS)), runner, TEXT)
+    assert result.attempted is True
+    assert result.pasted is False
+    assert "Accessibility" in result.detail
+    assert "assistive access" in result.detail
+
+
+def test_a_missing_paste_tool_is_skipped() -> None:
+    runner = FakeRunner()
+    result = paste("darwin", FakeProbe(commands={"pbcopy": "/usr/bin/pbcopy"}), runner, TEXT)
+    assert result.attempted is False
+    assert "osascript" in result.detail
+    assert runner.calls == []
+
+
+def test_a_failed_clipboard_copy_does_not_keystroke() -> None:
+    runner = FakeRunner({"pbcopy": FakeReply(code=1, stderr="pbcopy: broken pipe")})
+    result = paste("darwin", FakeProbe(commands=dict(DARWIN_TOOLS)), runner, TEXT)
+    assert result.pasted is False
+    assert "broken pipe" in result.detail
+    assert runner.programs == ["pbcopy"]
+
+
+@pytest.mark.parametrize("blank", ["", "   ", "\n"])
+def test_blank_text_is_never_pasted_or_copied(blank: str) -> None:
+    runner = FakeRunner({"pbcopy": FakeReply(), "osascript": FakeReply()})
+    probe = FakeProbe(commands=dict(DARWIN_TOOLS))
+    pasted = paste("darwin", probe, runner, blank)
+    copied = copy_to_clipboard("darwin", probe, runner, blank)
+    assert (pasted.attempted, pasted.pasted) == (False, False)
+    assert (copied.attempted, copied.pasted) == (False, False)
+    assert "empty" in pasted.detail
+    assert runner.calls == []

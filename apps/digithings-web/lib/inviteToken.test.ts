@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { INVITE_TOKEN_PARAM, readInviteToken, stripInviteTokenFromUrl } from "./inviteToken";
+<<<<<<< HEAD
 import { rememberInviteToken } from "./inviteToken";
+=======
+>>>>>>> github/develop
 
 describe("readInviteToken", () => {
   it("uses the same key digichat already enforces", () => {
@@ -120,6 +123,7 @@ describe("stripInviteTokenFromUrl (DIG-1437)", () => {
     }
   });
 });
+<<<<<<< HEAD
 
 describe("rememberInviteToken", () => {
   const mem = () => {
@@ -135,3 +139,5 @@ describe("rememberInviteToken", () => {
     expect(rememberInviteToken(undefined, mem())).toBeUndefined();
   });
 });
+=======
+>>>>>>> github/develop

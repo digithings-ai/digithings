@@ -2,7 +2,7 @@
 title: "digikey — API reference"
 type: reference
 status: generated
-created: 2026-09-22
+created: 2026-10-02
 tags:
   - api
   - support
@@ -121,7 +121,7 @@ Response example:
 PyJWT, cryptography, bcrypt, SQLAlchemy, Postgres, Redis
 
 ## Related
-digichat, digigraph, digismith
+digichat, digigraph, digitrace
 
 ## Links
 - [Source](https://github.com/digithings-ai)

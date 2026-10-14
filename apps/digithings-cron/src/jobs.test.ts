@@ -1,15 +1,88 @@
 import { describe, expect, it } from "vitest";
-import { JOBS, jobsForCron, uniqueEnabledCrons } from "./jobs";
+import { houseRunDeadlineSeconds, JOBS, jobsForCron, uniqueEnabledCrons } from "./jobs";
+
+const RESUMED_PIPELINE_IDS = [
+  "prices-at-open-13",
+  "prices-at-open-14",
+  "prices-fx-refresh",
+  "prices-fx-refresh-sun",
+  "prices-eod-macro",
+  "market-data-refresh-morning",
+  "market-data-refresh-evening",
+  "checkpoint-archive",
+  "house-run-09",
+  "research-metrics",
+  "tearsheets",
+  "onchain",
+  "execution-cron-check",
+  "continuous-improvement",
+  "maintenance",
+  "provider-review",
+] as const;
+
+const DISABLED_HOUSE_RETRY_IDS = ["house-run-10", "house-run-11", "house-run-12"] as const;
+
+const PATH_A_TRAP_IDS = [
+  "agent-pr-finalizer",
+  "agent-backlog-snapshot",
+  "refresh-repo-activity",
+  "project-enforce-assignment",
+] as const;
+
+const PATH_A_ENABLED_IDS = [
+  "agent-pr-finalizer",
+  "agent-backlog-snapshot",
+  "ci-pr-hygiene",
+  "refresh-repo-activity",
+  "project-enforce-assignment",
+  "smoke-stack",
+  "security-pip-audit",
+  "security-npm-audit",
+  "token-canary",
+  "openwiki-update",
+  "production-deploy-gate-watchdog",
+  "secret-staleness",
+  "dependency-freshness",
+  "smoke-site",
+  "datatap-answer-check",
+  "digiquant-house-run-watch",
+] as const;
+
+const TWELVE_X_ENABLED_IDS = [
+  "twelve-x-asia",
+  "twelve-x-london",
+  "twelve-x-new-york",
+  "twelve-x-market-context-intraday",
+  "twelve-x-market-context-daily",
+  "twelve-x-market-context-weekly",
+  "twelve-x-performance-eval",
+  "twelve-x-primemarket-heartbeat",
+  "twelve-x-session-heartbeat-watchdog",
+  "twelve-x-session-catchup",
+  "twelve-x-archive-maintenance",
+  "twelve-x-digisearch-parity",
+  "twelve-x-feed-confirm",
+  "twelve-x-feed-confirm-watchdog",
+] as const;
+
+// The 40-expression list this file used to hardcode is gone. A copied list is a
+// second source of truth that drifts silently, and a copied list was the only
+// thing that noticed the deleted backstop — as a unit test nobody ran for five
+// weeks (DIG-553 Finding 1). The assertion of record is now
+// src/trigger-contract.test.ts: the required-trigger contract with its reasons,
+// checked against the trigger list read out of wrangler.toml and against the
+// deployed trigger list, failing with an alarm rather than a red test line.
 
 describe("jobsForCron", () => {
   it("matches exact cron strings only", () => {
-    const jobs = jobsForCron("5 22 * * *");
-    expect(jobs.map((j) => j.id)).toEqual(["research-metrics"]);
+    expect(jobsForCron("5 22 * * *").map((j) => j.id)).toEqual(["research-metrics"]);
   });
 
   it("keeps twelve-x new_york on weekday-only cron", () => {
     const jobs = jobsForCron("17 12 * * MON-FRI");
     expect(jobs.map((j) => j.id)).toEqual(["twelve-x-new-york"]);
+    expect(jobs[0].enabled).toBe(true);
+    expect(jobsForCron("17 12 * * *")).toEqual([]);
   });
 
   it("returns empty for unknown cron", () => {
@@ -22,6 +95,7 @@ describe("jobsForCron", () => {
       expect(jobs).toHaveLength(1);
       expect(jobs[0].etOpenGate).toBe(true);
       expect(jobs[0].inputs?.mode).toBe("at-open");
+      expect(jobs[0].enabled).toBe(true);
     }
   });
 
@@ -34,8 +108,30 @@ describe("jobsForCron", () => {
 
   it("workflow dispatches target the default develop branch", () => {
     for (const j of JOBS) {
-      if (j.kind === "workflow_dispatch") expect(j.ref).toBe("develop");
-      else expect(j.ref).toBeUndefined();
+      if (j.kind === "repository_dispatch") expect(j.ref).toBeUndefined();
+      else expect(j.ref).toBe("develop");
+    }
+  });
+
+  it("sends price and market-data clocks to digiquant-runner", () => {
+    expect(JOBS.some((job) => job.id === "prices-intraday")).toBe(false);
+    const fx = JOBS.find((job) => job.id === "prices-fx-refresh");
+    expect(fx?.kind).toBe("container");
+    expect(fx?.command).toBe("prices-fx-candles");
+    expect(fx?.codeRef).toBe("main");
+    expect(JSON.stringify(fx?.command)).not.toContain("fetch-macro");
+    const morning = JOBS.find((job) => job.id === "market-data-refresh-morning");
+    const evening = JOBS.find((job) => job.id === "market-data-refresh-evening");
+    expect(morning?.cron).toBe("0 13 * * *");
+    expect(evening?.cron).toBe("30 21 * * *");
+    expect(morning?.command).toBe("market-data-refresh");
+    expect(evening?.command).toBe("market-data-refresh");
+    expect(morning?.concurrency).toBe("market-data-refresh");
+    for (const job of [morning, evening, fx]) {
+      expect(job?.kind).toBe("container");
+      expect(job?.workflow).toBeTruthy();
+      expect(job?.ref).toBe("develop");
+      expect(job?.enabled).toBe(true);
     }
   });
 
@@ -52,16 +148,293 @@ describe("jobsForCron", () => {
     }
   });
 
-  it("runs house research/portfolio retries every day without a Sunday special", () => {
+  it("sends phase 2 clocks to digiquant-runner without a second schedule", () => {
+    const expected = [
+      ["onchain", "onchain-bitview", "40 22 * * *", 900],
+      ["tearsheets", "tearsheets", "12 0 * * *", 2700],
+      ["research-metrics", "research-metrics", "5 22 * * *", 1200],
+      ["execution-cron-check", "execution-cron-check", "15 12 * * *", 600],
+    ] as const;
+    for (const [id, command, cron, timeout] of expected) {
+      const job = JOBS.find((row) => row.id === id);
+      expect(job?.kind).toBe("container");
+      expect(job?.command).toBe(command);
+      expect(job?.cron).toBe(cron);
+      expect(job?.timeoutSeconds).toBe(timeout);
+      expect(job?.codeRef).toBe("main");
+      expect(job?.workflow).toBeTruthy();
+      expect(job?.ref).toBe("develop");
+      expect(job?.enabled).toBe(true);
+    }
+  });
+
+  it("collapses house-run to one Monday-morning clock", () => {
+    expect(JOBS.find((job) => job.id === "house-run-09")).toMatchObject({
+      id: "house-run-09",
+      cron: "17 9 * * MON",
+      kind: "container",
+      workflow: "pipeline-digiquant.yml",
+      command: "house-run",
+      concurrency: "digiquant-pipeline",
+      timeoutSeconds: 14400,
+      codeRef: "main",
+      enabled: true,
+    });
+    expect(jobsForCron("17 9 * * MON").map((job) => job.id)).toEqual(["house-run-09"]);
+    expect(jobsForCron("17 9 * * *")).toEqual([]);
     for (const [id, cron] of [
-      ["house-run-09", "17 9 * * *"],
       ["house-run-10", "17 10 * * *"],
       ["house-run-11", "17 11 * * *"],
       ["house-run-12", "17 12 * * *"],
     ] as const) {
-      expect(jobsForCron(cron).map((job) => job.id)).toEqual([id]);
+      expect(JOBS.find((job) => job.id === id)).toMatchObject({
+        id,
+        cron,
+        kind: "container",
+        workflow: "pipeline-digiquant.yml",
+        command: "house-run",
+        concurrency: "digiquant-pipeline",
+        timeoutSeconds: 14400,
+        codeRef: "main",
+        enabled: false,
+      });
+      expect(jobsForCron(cron)).toEqual([]);
+      expect(jobsForCron(cron, { includeDisabled: true }).map((job) => job.id)).toEqual([
+        id,
+      ]);
     }
     expect(JOBS.some((job) => job.id === "house-run-sun")).toBe(false);
     expect(jobsForCron("17 12 * * SUN")).toEqual([]);
+  });
+
+  it("sends smoke clocks to worker probes without a new cron", () => {
+    expect(JOBS.find((job) => job.id === "smoke-site")).toMatchObject({
+      kind: "probe",
+      probe: "site",
+      cron: "17 6 * * *",
+      workflow: "smoke-site.yml",
+      ref: "develop",
+    });
+    expect(JOBS.find((job) => job.id === "smoke-stack")).toMatchObject({
+      kind: "probe",
+      probe: "stack",
+      cron: "27 7 * * *",
+      workflow: "smoke-stack.yml",
+      ref: "develop",
+    });
+    expect(uniqueEnabledCrons()).toContain("17 6 * * *");
+    expect(uniqueEnabledCrons()).toContain("27 7 * * *");
+  });
+
+  it("wires checkpoint-archive to digiquant-runner at 13:30 UTC", () => {
+    expect(JOBS.find((job) => job.id === "checkpoint-archive")).toMatchObject({
+      kind: "container",
+      command: "checkpoint-archive",
+      concurrency: "checkpoint-archive",
+      timeoutSeconds: 3600,
+      cron: "30 13 * * *",
+      workflow: "pipeline-checkpoint-archive.yml",
+      ref: "develop",
+      codeRef: "main",
+      enabled: true,
+    });
+    expect(jobsForCron("30 13 * * *").map((job) => job.id)).toEqual(["checkpoint-archive"]);
+    expect(uniqueEnabledCrons()).toContain("30 13 * * *");
+  });
+
+  it("resumes twelve-x clocks and Path A traps; weekly Mon house-run only", () => {
+    expect(
+      JOBS.filter((job) => !job.enabled)
+        .map((job) => job.id)
+        .sort(),
+    ).toEqual([...DISABLED_HOUSE_RETRY_IDS].sort());
+    expect(
+      JOBS.filter((job) => job.enabled)
+        .map((job) => job.id)
+        .sort(),
+    ).toEqual(
+      [...RESUMED_PIPELINE_IDS, ...PATH_A_ENABLED_IDS, ...TWELVE_X_ENABLED_IDS].sort(),
+    );
+    // The full cron set this file used to hardcode is asserted against
+    // wrangler.toml in src/trigger-contract.test.ts, alongside the required FX
+    // triggers and their reasons.
+    expect(uniqueEnabledCrons()).toContain("52 * * * MON-FRI");
+    expect(uniqueEnabledCrons()).toContain("17 12 * * MON-FRI");
+    expect(uniqueEnabledCrons()).not.toContain("17 12 * * *");
+    expect(uniqueEnabledCrons()).not.toContain("17 9 * * *");
+    expect(uniqueEnabledCrons()).not.toContain("17 10 * * *");
+    expect(uniqueEnabledCrons()).not.toContain("17 11 * * *");
+    expect(uniqueEnabledCrons()).toContain("17 9 * * MON");
+    expect(uniqueEnabledCrons()).toContain("40 13 * * MON-FRI");
+    expect(uniqueEnabledCrons()).toContain("8 22 * * SUN");
+    expect(uniqueEnabledCrons()).toContain("11 7 * * *");
+    expect(uniqueEnabledCrons()).toContain("13 6 * * MON");
+    expect(uniqueEnabledCrons()).toContain("10 6 * * MON");
+    expect(uniqueEnabledCrons()).toContain("23 9 * * *");
+    const finalizer = JOBS.find((job) => job.id === "agent-pr-finalizer");
+    expect(finalizer).toMatchObject({
+      kind: "workflow_dispatch",
+      workflow: "agent-pr-finalizer.yml",
+      cron: "11 7 * * *",
+      enabled: true,
+      inputs: { dry_run: "false" },
+      repo: "digithings-ai/digithings",
+    });
+    for (const id of PATH_A_TRAP_IDS) {
+      const job = JOBS.find((row) => row.id === id);
+      expect(job?.enabled).toBe(true);
+      expect(job?.kind).toBe("workflow_dispatch");
+      expect(job?.repo).toBe("digithings-ai/digithings");
+    }
+    const archive = JOBS.find((job) => job.id === "twelve-x-archive-maintenance");
+    expect(archive?.enabled).toBe(true);
+    expect(archive?.inputs).toEqual({ dry_run: "false", dump_before_prune: "true" });
+    for (const id of TWELVE_X_ENABLED_IDS) {
+      const job = JOBS.find((row) => row.id === id);
+      expect(job?.enabled).toBe(true);
+      expect(["workflow_dispatch", "twelvex-watch"]).toContain(job?.kind);
+      expect(job?.repo).toBe("digithings-ai/twelve-x");
+    }
+  });
+
+  it("dispatches weekly twelve-x digisearch parity near Monday 09:00 UTC", () => {
+    const job = JOBS.find((row) => row.id === "twelve-x-digisearch-parity");
+    expect(job).toMatchObject({
+      id: "twelve-x-digisearch-parity",
+      cron: "8 9 * * MON",
+      repo: "digithings-ai/twelve-x",
+      kind: "workflow_dispatch",
+      workflow: "digisearch_parity_check.yml",
+      ref: "develop",
+      enabled: true,
+    });
+    expect(job?.inputs).toBeUndefined();
+    expect(jobsForCron("8 9 * * MON").map((row) => row.id)).toEqual([
+      "twelve-x-digisearch-parity",
+    ]);
+    // Prior GHA was `0 9 * * 1`. Offset :08 avoids house-run-09 at 09:17.
+    expect(jobsForCron("0 9 * * MON")).toEqual([]);
+    expect(jobsForCron("17 9 * * MON").map((row) => row.id)).toEqual(["house-run-09"]);
+  });
+
+  it("watches the digiquant runner hourly for a house run that never landed", () => {
+    const job = JOBS.find((row) => row.id === "digiquant-house-run-watch");
+    expect(job).toMatchObject({
+      id: "digiquant-house-run-watch",
+      cron: "23 * * * *",
+      repo: "digithings-ai/digithings",
+      kind: "watch",
+      watch: "digiquant-runner",
+      ref: "develop",
+      enabled: true,
+    });
+    expect(jobsForCron("23 * * * *").map((row) => row.id)).toEqual([
+      "digiquant-house-run-watch",
+    ]);
+    // Read-only: a watch row carries no command, so index.ts's house-run arg
+    // branch (gated on job.command === "house-run") cannot hand it run_date and
+    // it can never be mistaken for something the runner should start.
+    expect(job?.command).toBeUndefined();
+    expect(job?.timeoutSeconds).toBeUndefined();
+  });
+
+  it("resolves the watcher deadline from the house-run row, not a second copy", () => {
+    // Single source of truth (DIG-3065): change house-run-09's timeout and the
+    // watcher's deadline moves with it. A copied literal could drift silently.
+    const houseRun = JOBS.find((row) => row.id === "house-run-09");
+    expect(houseRun?.timeoutSeconds).toBe(14400);
+    expect(houseRunDeadlineSeconds()).toBe(houseRun?.timeoutSeconds);
+    expect(houseRunDeadlineSeconds()).toBe(14400);
+    // The watcher must not resolve a deadline when the row it reads is absent.
+    expect(houseRunDeadlineSeconds(JOBS.filter((row) => row.id !== "house-run-09"))).toBeUndefined();
+  });
+  // DIG-1073: the confirmation clock, and the clock that notices when the
+  // confirmation clock did not fire. Both assertions below exist because the
+  // thing being prevented is silence, so a quiet regression is the failure mode
+  // worth pinning.
+  //
+  // Ordering is compared in minutes-since-midnight, never as strings: these
+  // crons share a day-of-week suffix, so a lexicographic compare reads "23 16"
+  // as earlier than "41 14" and would pass a clock that fires before its own
+  // check.
+  const atMinute = (cron: string): number => {
+    const [m, h] = cron.split(" ").map(Number);
+    return h * 60 + m;
+  };
+
+  it("runs the feed-published confirm after the new_york session, on weekdays", () => {
+    const job = JOBS.find((row) => row.id === "twelve-x-feed-confirm");
+    expect(job).toMatchObject({
+      id: "twelve-x-feed-confirm",
+      repo: "digithings-ai/twelve-x",
+      kind: "workflow_dispatch",
+      workflow: "feed_published_confirm.yml",
+      enabled: true,
+    });
+    // Weekday-only: the check's expected-date rule is the weekday rule, so a
+    // weekend firing would report a gap that is not one.
+    expect(job?.cron).toBe("41 14 * * MON-FRI");
+    expect(job?.cron.endsWith("MON-FRI")).toBe(true);
+    // After twelve-x-new-york at 12:17Z, or the check would race the very
+    // session whose publication it is confirming.
+    const ny = JOBS.find((row) => row.id === "twelve-x-new-york");
+    expect(ny?.cron).toBe("17 12 * * MON-FRI");
+    expect(atMinute(job!.cron)).toBeGreaterThan(atMinute(ny!.cron));
+    expect(jobsForCron("41 14 * * MON-FRI").map((row) => row.id)).toEqual([
+      "twelve-x-feed-confirm",
+    ]);
+  });
+
+  it("runs the confirm watchdog later than the confirm, still inside its lookback", () => {
+    const confirm = JOBS.find((row) => row.id === "twelve-x-feed-confirm");
+    const watchdog = JOBS.find((row) => row.id === "twelve-x-feed-confirm-watchdog");
+    expect(watchdog).toMatchObject({
+      id: "twelve-x-feed-confirm-watchdog",
+      repo: "digithings-ai/twelve-x",
+      kind: "twelvex-watch",
+      twelvexWatch: "feed-confirm",
+      workflow: "feed_confirm_watchdog.yml",
+      enabled: true,
+    });
+    expect(watchdog?.cron).toBe("23 16 * * MON-FRI");
+    expect(atMinute(watchdog!.cron)).toBeGreaterThan(atMinute(confirm!.cron));
+    // The watchdog reads a 6h lookback. A gap smaller than that would let
+    // ordinary Actions queueing make a healthy day look silent — which is the
+    // same class of false page as the bug it exists to catch. Assert the margin
+    // rather than the literal minute so a retimed confirm cannot quietly break
+    // it.
+    const gapMinutes = atMinute(watchdog!.cron) - atMinute(confirm!.cron);
+    expect(gapMinutes).toBeGreaterThan(30);
+    expect(gapMinutes).toBeLessThan(6 * 60);
+    // Long enough that a missed confirm is caught the same day, not the next
+    // morning: the watchdog must land before the confirm's own next firing, so
+    // the wait between "the confirm did not run" and "somebody was told" stays
+    // inside one trading day.
+    expect(gapMinutes).toBeLessThan(12 * 60);
+    expect(jobsForCron("23 16 * * MON-FRI").map((row) => row.id)).toEqual([
+      "twelve-x-feed-confirm-watchdog",
+    ]);
+  });
+
+  it("watches a workflow rather than repeating the check's own verdict", () => {
+    // The watchdog's whole job is to answer a question the confirm cannot ask
+    // itself: "did I run at all?". If it ever dispatched the confirm's findings
+    // instead, a clean confirm would silence it and the two clocks would
+    // collapse into the single clock DIG-1073 exists to replace.
+    const confirm = JOBS.find((row) => row.id === "twelve-x-feed-confirm");
+    const watchdog = JOBS.find((row) => row.id === "twelve-x-feed-confirm-watchdog");
+    expect(watchdog?.workflow).not.toBe(confirm?.workflow);
+    // Neither job may reuse an existing cron: two jobs on one trigger would
+    // dispatch in the same instant, and the watchdog could not then tell a
+    // missing confirm from its own concurrent firing.
+    expect(watchdog?.cron).not.toBe(confirm?.cron);
+    // Neither is a GHA schedule in disguise — both are workflow_dispatch only,
+    // so the Worker stays the authoritative clock.
+    expect(confirm?.kind).toBe("workflow_dispatch");
+    // The watchdog now reads Actions history in the Worker (twelvex-watch.ts),
+    // still a different clock from the confirm it watches.
+    expect(watchdog?.kind).toBe("twelvex-watch");
+    expect(confirm?.command).toBeUndefined();
+    expect(watchdog?.command).toBeUndefined();
   });
 });

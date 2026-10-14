@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# Container ledger (Phase 3): pipeline-runs/house-run/<YYYY-MM-DD>/success.json
+# on digiquant-runner. This script remains the GitHub Actions gate.
 """Skip a later house cron when today's pipeline already succeeded.
 
 GitHub ``schedule`` at minute 0 is delayed for hours under load. House uses

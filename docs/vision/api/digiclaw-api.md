@@ -2,7 +2,7 @@
 title: "digiclaw — API reference"
 type: reference
 status: generated
-created: 2026-09-22
+created: 2026-10-02
 tags:
   - api
   - support
@@ -50,7 +50,7 @@ docker compose --profile heartbeat up -d heartbeat
 HTTPx, digibase
 
 ## Related
-digiquant, digismith
+digiquant, digitrace
 
 ## Links
 - [Source](https://github.com/digithings-ai)

@@ -25,7 +25,7 @@ const workerVars = env as unknown as Env;
 export class DigiChatContainer extends Container {
   defaultPort = 3000;
   /** Short idle tail: each wake bills for the whole sleepAfter window. */
-  sleepAfter = "3m";
+  sleepAfter = "1m";
   /**
    * Runtime env for the digichat Node process. Secrets come from
    * `wrangler secret put`; plain vars from wrangler.toml `[vars]`.
@@ -52,6 +52,7 @@ export class DigiChatContainer extends Container {
     DIGIKEY_URL: workerVars.DIGIKEY_URL ?? "",
     DIGIKEY_BFF_TOKEN: workerVars.DIGIKEY_BFF_TOKEN ?? "",
     DIGICHAT_PLAN_PROOF_SECRET: workerVars.DIGICHAT_PLAN_PROOF_SECRET ?? "",
+    DIGICHAT_MONITOR_TOKENS: workerVars.DIGICHAT_MONITOR_TOKENS ?? "",
     DIGICHAT_DASHBOARD_SUPABASE_URL: workerVars.DIGICHAT_DASHBOARD_SUPABASE_URL ?? "",
     DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY:
       workerVars.DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY ?? "",
@@ -105,6 +106,7 @@ export interface Env {
   DIGIKEY_URL?: string;
   DIGIKEY_BFF_TOKEN?: string;
   DIGICHAT_PLAN_PROOF_SECRET?: string;
+  DIGICHAT_MONITOR_TOKENS?: string;
   DIGICHAT_DASHBOARD_SUPABASE_URL?: string;
   DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY?: string;
 }

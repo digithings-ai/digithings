@@ -120,7 +120,16 @@ environment, and the Worker secret is deliberately not forwarded there); the
 server still authenticates to Zammad with its own environment (no Zammad token
 in the tenant entry).
 
-## Ticket search index (`occ_tickets`)
+## Ticket search index (`occ_tickets`) — retired
+
+> **Not on the boot path, and not part of the served corpus.** DIG-1380 retired
+> the ticket index: the committed `occ_tickets.jsonl` snapshot is deleted and
+> DIG-1438 removed the `[program:seed_occ_tickets]` boot step that re-imported
+> live tickets from the Zammad API, so nothing in the stack image populates
+> `occ_tickets` any more. The writer below is kept only because DIG-1210 still
+> owns its masking semantics. **Do not point a tenant at this index** — the OCC
+> tenant serves `occ_help` and reaches tickets through the read-only Zammad
+> tools.
 
 Separate from the `occ_help` docs corpus, `scripts/index_occ_tickets.py`
 backfills every visible ticket (GET-only) plus its articles — one Chunk per
@@ -142,41 +151,25 @@ loud if the var is pre-set to anything else. It then re-opens the
 collection to verify the model stamp. Never query `occ_tickets` with the
 `occ_help` provider or vice versa.
 
-### Production: committed snapshot, not a boot-time backfill
+Demo snapshot: data as of 2026-10-01. There is no sync job — re-run the
+script for a fresh snapshot.
 
-`/data` on the Cloudflare Container is **ephemeral**, so `seed_chroma.sh`
-re-ingests `digithings_docs` and `occ_help` from `/seed` on every cold boot.
-`occ_tickets` has to be refilled the same way or the OCC fan-out queries an
-empty index after each restart. The demo ships a committed point-in-time
-snapshot instead of a live crawl on every boot:
+## Serving tickets in OCC chat
 
-- payload: `apps/digithings-stack-cloudflare/container/seed/occ_tickets.jsonl`
-  → `/seed/occ_tickets.jsonl`, one JSON object per ticket article
-  (`id`, `doc_id`, `content`, `metadata`), built by
-  `scripts/build_occ_tickets_seed.py` from the same
-  `build_ticket_chunks` a live backfill uses — so a snapshot is
-  byte-identical to what a live backfill writes.
-- refresh: `ZAMMAD_API_TOKEN=... python -m scripts.build_occ_tickets_seed`
-  rebuilds the file in place; commit the diff.
-- ingest: `seed_chroma.sh` (marker `SEED_VER="v5"`) runs
-  `python -m scripts.build_occ_tickets_seed --ingest /seed/occ_tickets.jsonl`,
-  which uses the same `multilingual_index()` helper as the live backfill —
-  provider pinned to the model id, collection stamp verified afterwards.
-  A missing payload warns and is skipped rather than blocking digisearch;
-  OCC then degrades to `occ_help` docs only.
+**Do not fan the OCC tenant out to a ticket index.** `query_index` still accepts a
+comma-separated index list and merges the hits with RRF, but the tenant's
+`digisearchIndex` is `occ_help` alone (tenant map, `occ-embed.yaml`).
 
-This is a snapshot, not a sync: refresh it deliberately. Demo mode means the
-payload carries real customer names/emails — see [Privacy &
-exposure](#privacy--exposure) below.
+The ticket corpus was retired in DIG-1380: it was a committed
+`occ_tickets.jsonl` snapshot plus a `[program:seed_occ_tickets]` boot step, and
+neither is in the image any more (DIG-1438). Pointing the tenant back at a ticket
+index therefore searches an empty collection, or — if the writer is ever wired
+back in — one full of unmasked ticket bodies and sender metadata. For ticket
+questions use the read-only Zammad tools through the key-gated MCP route above;
+the OCC system prompt says so and tells the model to say when they do not ground
+the answer.
 
-## Serving tickets in OCC chat (multi-index fan-out)
-
-`query_index` accepts a comma-separated index list
-(`"occ_help,occ_tickets"`), fans out to each index, and merges with RRF —
-so the OCC tenant serves docs plus tickets with no routing-code changes:
-set the tenant's `digisearchIndex` to the comma pair (tenant map,
-`occ-embed.yaml`) after both indexes are (re)built with the multilingual
-model. All embeddings — ingest and query — must set
+All embeddings — ingest and query — must set
 `DIGISEARCH_EMBEDDING_PROVIDER` to the model id
 (`Xenova/paraphrase-multilingual-MiniLM-L12-v2`); same 384 dims across models
 means a mismatch retrieves silently wrong results (MiniLM vectors are not
@@ -191,16 +184,11 @@ interchangeable with multilingual ones).
    Replace the `occ_help` collection in place for the demo (delete +
    re-ingest under the same name); Chroma refuses cross-model writes via
    its model stamp, so a stale collection fails loud, not silent.
-2. Refresh tickets: rebuild the committed snapshot and commit it —
-   `ZAMMAD_API_TOKEN=... python -m scripts.build_occ_tickets_seed` (see
-   [Production: committed snapshot](#production-committed-snapshot-not-a-boot-time-backfill)).
-   No live backfill is needed at deploy time; the container re-ingests the
-   committed payload on each cold boot.
-3. Evaluate: run the gold queries in `tests/scripts/data/` against the
+2. Evaluate: run the gold queries in `tests/scripts/data/` against the
    live indexes; proceed past the agreed recall bar only.
-4. Rebuild + redeploy the stack image (the marker `v5` seed also carries
-   `occ_tickets`) and flip the tenant map to `"occ_help,occ_tickets"`;
-   rollback is a redeploy of the previous image + tenant map.
+3. Rebuild + redeploy the stack image (rebuild marker v11 carries the new
+   extra) with the tenant map at `occ_help`; rollback is a redeploy of the
+   previous image + tenant map.
 
 ## Privacy & exposure
 

@@ -57,6 +57,7 @@ export function stripInviteTokenFromUrl(href: string): string | null {
   url.searchParams.delete(INVITE_TOKEN_PARAM);
   return url.toString();
 }
+<<<<<<< HEAD
 
 /** sessionStorage key holding the invite key for this tab (DIG-1437). */
 export const INVITE_TOKEN_STORAGE_KEY = "digichat.occ.invite";
@@ -84,3 +85,5 @@ export function rememberInviteToken(
     return fromUrl;
   }
 }
+=======
+>>>>>>> github/develop

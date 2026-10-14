@@ -48,8 +48,8 @@ const ROWS: TerminalManifestRow[] = [
       "the keymaster — short-lived JWTs, scoped API keys, and nothing\nshared that should not be.\n\nstack   PyJWT  ·  FastAPI",
   },
   {
-    id: "digismith",
-    name: "digismith",
+    id: "digitrace",
+    name: "digitrace",
     port: 8003,
     status: "online",
     blurb: "tracing · every hop on record",

@@ -1,0 +1,4 @@
+{
+  "_comment": "Hand-maintained escape hatches for the model-catalog coverage test (see docs/superpowers/specs/2026-10-03-unified-model-catalog-design.md, decision D8). One entry per model id that config/ pins but models.dev does not carry, each with a reason. `make model-catalog-check` fails when an entry loses its reason and when an entry's id has become resolvable -- a stale exemption silently excuses a future real problem with the same id, so it is deleted rather than left behind. Empty means every strictly-checked pin resolves upstream. IDs that are advisory-only (OpenRouter `:free` route spellings, ollama-cloud `:cloud` tags) are NOT exempt here; they are reported by the advisory test in tests/config/test_model_catalog.py instead.",
+  "exemptions": []
+}

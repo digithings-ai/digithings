@@ -67,10 +67,14 @@ popup, the `DigichatLauncher`, and a pinned Docker image. There is no terminal
 binary. A real CLI also cannot reuse the browser auth contract unchanged:
 `requireDigiChatAuth()` rejects a bare `dgk_live_…` digikey key before upstream
 exchange; a CLI needs a `digi_live_…` machine key or an explicit auth-contract
-change. Direct MCP access is not a shortcut: digigraph's MCP server binds
-`0.0.0.0:8766` without authentication, and its workflow/chat tools bypass
-`DigiAuthMiddleware`, HTTP rate limiting, and CORS. Access therefore requires a
-gateway or private-network decision.
+change. Direct MCP access is not a shortcut: digigraph's MCP `run_mcp` defaults to
+loopback (`127.0.0.1:8766` via `DIGIGRAPH_MCP_HOST`) and is unauthenticated
+unless `DIGI_MCP_REQUIRE_AUTH=1`. `workflow` skips DigiAuthMiddleware, HTTP rate
+limiting, and CORS by calling `run_digigraph_workflow` in-process. `chat` posts
+`/v1/chat/completions` and is re-checked by DigiAuthMiddleware (pass-through,
+not a bypass). A missing bearer is 401 when digikey auth is active and 503
+`auth_not_configured` when it is not. Access therefore requires a gateway or
+private-network decision.
 
 The platform roadmap is not primarily a renderer choice. No bot-profile model
 exists: conversations have no `bot_id`, and today's “multiple bots” are separate

@@ -40,5 +40,8 @@ DEFAULT_BFF_SESSION_SCOPES: list[str] = [
     "digiquant:optimize",
     "digisearch:query",
     "digisearch:ingest",
+    # DIG-1177: screening call from digichat. Callers that send no
+    # requested_scopes inherit this list, so it must stay here.
+    "digisearch:screen",
     "digivault:read",
 ]

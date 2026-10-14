@@ -48,7 +48,7 @@ def _auth_ok() -> str | None:
 
 def _nesting_ok() -> bool:
     from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase, build_pipeline
-    from digismith.trace import LANGSMITH_SDK_AVAILABLE, traceable
+    from digitrace.trace import LANGSMITH_SDK_AVAILABLE, traceable
 
     if not LANGSMITH_SDK_AVAILABLE:
         print("NESTING: FAIL — langsmith SDK not importable")

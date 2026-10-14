@@ -46,6 +46,15 @@ Three traps to know:
   copy of the repo-root `config/byok-providers.json`; the two must stay in sync
   (see `tests/dg/test_llm_auth.py::TestByokCatalogVendoredCopy`, which compares
   parsed JSON — not byte-for-byte — and fails CI if the *content* drifts).
+- `model-policy.json` — digigraph's flagship markers + mode-ladder `fallback_model`
+  for `model_config.py`. A vendored copy of the repo-root
+  `config/model-policy.json`, guarded the same way by
+  `tests/dg/test_model_config.py::TestModelPolicyVendoredCopy`.
+- **Required, and load-fail-loud at import.** This directory shadows the image's
+  baked-in `config/` rather than merging with it, so omitting `byok-providers.json`
+  or `model-policy.json` crash-loops digigraph at startup. `model_modes.yaml` is
+  optional — its loader degrades to an empty config and the ladder falls through to
+  `fallback_model` from `model-policy.json`.
 - digigraph reads this path via `DIGI_CONFIG_PATH` and `DIGI_PROJECT_CONFIG`.
   Keep filenames stable.
 
@@ -60,7 +69,7 @@ Three traps to know:
 | LiteLLM | LLM router (loopback) |
 | Redis | digikey blocklist |
 
-**Not in Profile A:** digiquant, digismith HTTP, Ollama, heartbeat. Do not set
+**Not in Profile A:** digiquant, digitrace HTTP, Ollama, heartbeat. Do not set
 `DIGIQUANT_DATA_DIR` or probe digiquant from digichat
 (`DIGICHAT_ENABLED_SERVICES=digigraph`).
 

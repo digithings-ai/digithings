@@ -11,7 +11,7 @@
     --hair-2:rgba(255,255,255,.16);
     --ink:#eceef0; --soft:#9aa0a6; --mute:#6b7177;
     --accent:#3dd6c4; --pink:#e2708a; --warn:#e0b341; --danger:#e5533e;
-    --mono:"Geist Mono","JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --mono:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,"DejaVu Sans Mono","Segoe UI Symbol",monospace;
   }
   *{box-sizing:border-box}
   html{scroll-behavior:smooth}
@@ -423,7 +423,7 @@
   <div class="grid g2">
     <div class="card tight">
       <ul style="margin:0">
-        <li><strong>Mono everything.</strong> Geist Mono for text and UI (<code>--font-geist-mono</code>, loaded per layout).</li>
+        <li><strong>Mono everything.</strong> Geist Mono for text and UI (loaded once per app, in <code>src/app/fonts.ts</code>).</li>
         <li><strong>Zero radius.</strong> <code>--radius: 0</code> — the terminal look. The theme flattens any rounded utility inside the skin scope.</li>
         <li><strong>Block caret.</strong> Native <code>caret-shape: block</code> where supported; a painted overlay where it isn't.</li>
       </ul>
@@ -552,7 +552,7 @@
       <tr><td><code>DIGICHAT_DATABASE_URL</code></td><td>server</td><td>Postgres, when thread persistence is <code>server</code>.</td></tr>
       <tr><td><code>DIGICHAT_AUTO_MIGRATE</code></td><td>server</td><td>Run Drizzle migrations on boot. Recommended in Docker.</td></tr>
       <tr><td><code>DIGICHAT_BOOTSTRAP_API_KEY</code></td><td>server</td><td>A static machine key for bootstrapping clients, compared timing-safely.</td></tr>
-      <tr><td><code>DIGICHAT_DEV_AUTH</code> · <code>DIGICHAT_DEV_PASSWORD</code></td><td>server, dev only</td><td>Registers the dev password provider. Guarded so it cannot activate in production.</td></tr>
+      <tr><td><code>DIGICHAT_DEV_AUTH</code> · <code>DIGICHAT_DEV_PASSWORD</code></td><td>server, dev only</td><td>Registers the dev password provider. Local development only. When it is set to <code>1</code> together with <code>NODE_ENV=production</code>, digichat refuses to start and names both variables.</td></tr>
       <tr><td><code>DIGICHAT_ALLOW_DEV_GLOBAL</code></td><td>server, dev only</td><td>Must never be <code>1</code> in production.</td></tr>
       <tr><td><code>NEXT_PUBLIC_DIGICHAT_BASE_PATH</code></td><td><span class="chip teal" style="font-size:10px;padding:0 5px">browser</span></td><td>Client mirror of the sub-path, for serving under <code>/chat</code>.</td></tr>
     </tbody>

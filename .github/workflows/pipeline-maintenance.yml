@@ -7,6 +7,11 @@ name: "Pipeline: scheduled maintenance"
 
 on:
   workflow_dispatch:         # Manual trigger anytime
+    inputs:
+      start_key:
+        description: "Dedupe key from digithings-cron: <job.id>:<scheduledTime>. Blank when dispatched by hand."
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -18,6 +23,8 @@ jobs:
   dependency-audit:
     name: Dependency CVE audit
     runs-on: ubuntu-latest
+    # DIG-248: CI-read secrets live at `cron` environment scope, not repo/org scope.
+    environment: cron
     steps:
       - uses: actions/checkout@v4
 
@@ -109,6 +116,8 @@ jobs:
   stale-branches:
     name: Stale branch cleanup
     runs-on: ubuntu-latest
+    # DIG-248: CI-read secrets live at `cron` environment scope, not repo/org scope.
+    environment: cron
     steps:
       - uses: actions/checkout@v4
         with:
@@ -205,6 +214,8 @@ jobs:
   doc-links:
     name: Broken doc links
     runs-on: ubuntu-latest
+    # DIG-248: CI-read secrets live at `cron` environment scope, not repo/org scope.
+    environment: cron
     steps:
       - uses: actions/checkout@v4
 
@@ -270,6 +281,8 @@ jobs:
   adr-numbering:
     name: ADR numbering audit
     runs-on: ubuntu-latest
+    # DIG-248: CI-read secrets live at `cron` environment scope, not repo/org scope.
+    environment: cron
     steps:
       - uses: actions/checkout@v4
 
@@ -333,6 +346,8 @@ jobs:
   agents-drift:
     name: agents-init drift check
     runs-on: ubuntu-latest
+    # DIG-248: CI-read secrets live at `cron` environment scope, not repo/org scope.
+    environment: cron
     steps:
       - uses: actions/checkout@v4
 
@@ -405,6 +420,8 @@ jobs:
   architecture-drift:
     name: ARCHITECTURE.md drift heuristic
     runs-on: ubuntu-latest
+    # DIG-248: CI-read secrets live at `cron` environment scope, not repo/org scope.
+    environment: cron
     steps:
       - uses: actions/checkout@v4
         with:
@@ -473,6 +490,8 @@ jobs:
   stale-issues:
     name: Stale issue sweep
     runs-on: ubuntu-latest
+    # DIG-248: CI-read secrets live at `cron` environment scope, not repo/org scope.
+    environment: cron
     permissions:
       issues: write
       contents: read
@@ -533,6 +552,8 @@ jobs:
   stale-prs:
     name: Stale PR sweep
     runs-on: ubuntu-latest
+    # DIG-248: CI-read secrets live at `cron` environment scope, not repo/org scope.
+    environment: cron
     permissions:
       pull-requests: write
       contents: read
@@ -593,6 +614,8 @@ jobs:
   label-coverage:
     name: Label coverage drift
     runs-on: ubuntu-latest
+    # DIG-248: CI-read secrets live at `cron` environment scope, not repo/org scope.
+    environment: cron
     permissions:
       issues: write
       contents: read
@@ -694,6 +717,8 @@ jobs:
   workflow-health:
     name: Workflow health digest
     runs-on: ubuntu-latest
+    # DIG-248: CI-read secrets live at `cron` environment scope, not repo/org scope.
+    environment: cron
     permissions:
       actions: read
       issues: write
@@ -799,6 +824,8 @@ jobs:
   duplicate-issues:
     name: Duplicate issue scan
     runs-on: ubuntu-latest
+    # DIG-248: CI-read secrets live at `cron` environment scope, not repo/org scope.
+    environment: cron
     permissions:
       issues: write
       contents: read
@@ -901,6 +928,8 @@ jobs:
   project-fields-backfill:
     name: Project fields backfill
     runs-on: ubuntu-latest
+    # DIG-248: CI-read secrets live at `cron` environment scope, not repo/org scope.
+    environment: cron
     permissions:
       issues: write
       contents: read
