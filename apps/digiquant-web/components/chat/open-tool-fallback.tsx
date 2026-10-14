@@ -8,7 +8,7 @@ import {
   ToolFallbackResult,
   ToolFallbackRoot,
   ToolFallbackTrigger,
-} from "../../../../packages/ui/src/components/chat/gallery-thread/tool-fallback.aui";
+} from "../../../../packages/ui/src/components/chat/stock/tool-fallback.aui";
 
 /**
  * The digichat tool row, held open so an example result is on screen.
@@ -29,7 +29,7 @@ export const OpenToolFallback: ToolCallMessagePartComponent = ({
       : status;
   return (
     <ToolFallbackRoot open={open} onOpenChange={setOpen}>
-      <ToolFallbackTrigger toolName={toolName} argsText={argsText} status={effective} />
+      <ToolFallbackTrigger toolName={toolName} title={toolName} status={effective} />
       <ToolFallbackContent>
         <ToolFallbackArgs argsText={argsText} />
         {result !== undefined && !isError ? <ToolFallbackResult result={result} /> : null}
