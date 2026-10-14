@@ -172,6 +172,12 @@ function usesGithub(job: Job, env: Env): boolean {
   ) {
     return githubOverrideIds(env).includes(job.id);
   }
+  // "occ-recrawl" (DIG-3576) never uses GitHub: there is no workflow behind the
+  // id, so even a GITHUB_OVERRIDE_JOBS listing must not redirect it into
+  // dispatchGithub with an undefined workflow. Worker-native, always.
+  if (job.kind === "occ-recrawl") {
+    return false;
+  }
   return true;
 }
 
@@ -451,6 +457,19 @@ export async function dispatch(
     );
     logLine({ cron, repo: job.repo, job: job.id, twelvex_watch: job.twelvexWatch, ...out });
     return { ok: out.ok, status: out.ok ? 200 : 0, dry_run: false, twelvex: out };
+  }
+  if (job.kind === "occ-recrawl") {
+    if (!job.occRecrawl) throw new Error(`job ${job.id}: occ-recrawl requires occRecrawl`);
+    if (env.DRY_RUN === "1") {
+      logLine({ cron, repo: job.repo, job: job.id, occ_recrawl: job.occRecrawl, dry_run: true });
+      return { ok: true, status: 0, dry_run: true };
+    }
+    // Live crawl + D1/Vectorize store land once the Vectorize token prerequisite
+    // is granted (ticket prerequisite; Chris grants). Fail closed until then:
+    // a weekly tick that cannot reach its store must read as a failure, never
+    // as a silent green week.
+    logLine({ cron, repo: job.repo, job: job.id, occ_recrawl: job.occRecrawl, error: "store_unwired" });
+    return { ok: false, status: 0, dry_run: false };
   }
   return dispatchContainer(env, job, cron, scheduledTime, opts.args ?? {});
 }
