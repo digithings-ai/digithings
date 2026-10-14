@@ -97,15 +97,51 @@ does not change `main`, so it reports them instead of fixing them.
 
 ## The Worker's clock table is multi-repo
 
-`jobs.ts` names 48 workflow-targeting rows. Sixteen of them name a workflow
-that is absent from `.github/workflows/` here: fourteen `twelve-x-*` rows and
-the two `smoke-*` probe rows.
+`jobs.ts` names 48 workflow-targeting rows covering 38 distinct workflow files.
+All 38 resolve, and no row dispatches a workflow that no longer exists:
 
-Those rows dispatch into `digithings-ai/twelve-x`; the dispatch repository is
-overridable per row and defaults to `MONOREPO`, which is
-`digithings-ai/digithings`. An invariant of the form "every clock target exists
-in this repository" is therefore wrong, and the DIG-3605 guard is scoped to
-digithings-owned workflows only for that reason.
+| where the target lives | distinct targets | rows |
+| --- | --- | --- |
+| `.github/workflows/` in this repository | 24 | 32 |
+| `.github/workflows/` in `digithings-ai/twelve-x` | 12 | 14 |
+| in-Worker probe, no workflow file expected | 2 | 2 |
+
+The dispatch repository is overridable per row and defaults to `MONOREPO`,
+which is `digithings-ai/digithings`. An invariant of the form "every clock
+target exists in this repository" is therefore wrong, and the DIG-3605 guard is
+scoped to digithings-owned workflows only for that reason.
+
+### The two `smoke-*` rows are the trap in that table
+
+They are `pj()` rows, so `kind: "probe"`, and a probe row runs **inside the
+Worker**: `usesGithub()` returns true for a probe row only when its id appears
+in `GITHUB_OVERRIDE_JOBS`, which is empty by default. The `workflow` field on
+those rows exists so that an override can fall back to a GitHub workflow — the
+builder's own docstring says so. `smoke-site.yml` and `smoke-stack.yml` were
+deleted from this repository after their last schedule run, which is expected:
+the probes still run. **An absent `smoke-*.yml` is not a stale clock.**
+
+## No de-clocked workflow was left without a clock
+
+The inverse direction was audited on 2026-10-15. Every workflow that has ever
+produced a `schedule` run in this repository and is still present on `develop`
+carries an **enabled** Worker clock: 17 such workflows, 17 clocks, **zero
+orphans**. So the migration's "port, then disable" contract holds — no workflow
+was de-clocked and left with nothing to fire it.
+
+Method: `GET /repos/digithings-ai/digithings/actions/runs?event=schedule`,
+paged, collecting each run's `.path`, then intersected with
+`git ls-tree -r github/develop .github/workflows/`. The harvest is a **floor,
+not a census** — the API returns 1000 rows against a `total_count` of 2500 — so
+a workflow whose only schedule runs predate the window is simply not
+represented. That bounds the *absence* claim only: a workflow present in the
+harvest provably fired on a schedule, which is the direction the zero-orphan
+result rests on. The newest schedule run in the window is `openwiki-update.yml`
+at `2026-09-28T16:31:42Z`, the de-clock boundary.
+
+This audit is a measurement, not a pin. `test_migrated_workflows_still_clocked.py`
+enforces clock-to-workflow; the workflow-to-clock direction above was checked by
+hand and is not asserted by a test.
 
 ## Maintenance rule
 
