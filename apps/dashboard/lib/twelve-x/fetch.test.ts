@@ -1170,7 +1170,7 @@ describe('resolveCanonicalRunDate', () => {
     expect(resolveCanonicalRunDate(OCT_7_FLAT_SESSION)).toBe('2026-10-07');
   });
 
-  it('ignores confluence even when it is the ONLY candidate', () => {
+  it('falls back to confluence when it is the only candidate', () => {
     // With no base row at all there is nothing better to fall back to, so confluence
     // is still returned rather than null — but it is now last, not first.
     expect(resolveCanonicalRunDate({ confluence: '2026-10-06' })).toBe('2026-10-06');

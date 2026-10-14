@@ -276,15 +276,6 @@ export interface ConsensusDeltaSet {
   movers: Mover[];
 }
 
-/** The catalyst a confluence idea hangs on, resolved against the events feed. */
-export interface ConfluenceCatalyst {
-  eventKey: string | null;
-  eventName: string | null;
-  eventDate: string | null;
-  calendarExternalId: string | null;
-  daysToCatalyst: number | null;
-}
-
 /* ------------------------------------------------------------------ *
  * Intelligence "why" drill-down (P5) — assembled, read-only view types.
  *
