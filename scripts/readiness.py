@@ -357,7 +357,9 @@ def collect() -> list[tuple[str, str, str, str]]:
                 except (subprocess.CalledProcessError, ValueError):
                     continue
                 behind[branch] = n
-    except Exception:
+    except (subprocess.CalledProcessError, OSError):
+        # Branch-routing is advisory: if ls-remote fails the section reports
+        # no data instead of failing the whole readiness panel.
         pass
     safe("Branch routing health", m_branches, behind)
     try:

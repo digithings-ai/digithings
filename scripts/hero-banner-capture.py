@@ -61,6 +61,7 @@ def record(banner, cols, rows, seconds, env_extra):
     try:
         os.kill(pid, 9)
     except ProcessLookupError:
+        # The recorded process already exited on its own; nothing left to kill.
         pass
     os.waitpid(pid, 0)
     header = {"version": 2, "width": cols, "height": rows, "env": {"TERM": env["TERM"], "COLORTERM": env.get("COLORTERM", "")}}

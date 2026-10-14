@@ -185,6 +185,9 @@ def preflight(repo: str) -> Preflight:
             if not plan:
                 plan = "unknown"
     except ProtectionError:
+        # Org plan unreadable (e.g. token lacks admin:org scope): plan stays
+        # "unknown" (advisory, per this function's docstring). The apply call
+        # is what settles whether protection can be written.
         pass
 
     blocked: str | None = None
