@@ -167,7 +167,11 @@ def migrate_project_file(
         if tmp_path.exists():
             try:
                 tmp_path.unlink()
-            except OSError:
-                pass
+            except OSError as exc:
+                import logging as _logging
+
+                _logging.getLogger(__name__).debug(
+                    "temp migration file cleanup skipped for %s (%s)", tmp_path, exc
+                )
 
     return dest_path, mig_report, val_report

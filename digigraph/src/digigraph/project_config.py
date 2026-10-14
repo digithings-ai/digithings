@@ -238,8 +238,8 @@ class DigiProjectConfig:
                 cached = _config_cache.get(cache_key)
                 if cached is not None:
                     return cached
-            except OSError:
-                pass
+            except OSError as exc:
+                logger.debug("config cache stat failed for %s (%s); reloading", resolved, exc)
 
         data = load_project_config(path)
         obj = cls(data, config_path=resolved)
@@ -248,8 +248,8 @@ class DigiProjectConfig:
             try:
                 mtime = resolved.stat().st_mtime
                 _config_cache[(str(resolved.resolve()), mtime)] = obj
-            except OSError:
-                pass
+            except OSError as exc:
+                logger.debug("config cache write skipped for %s (%s)", resolved, exc)
         return obj
 
     def get_enabled_agents(self) -> list[str]:
