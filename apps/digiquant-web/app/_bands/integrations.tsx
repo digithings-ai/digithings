@@ -8,10 +8,40 @@ import {
 } from "@/components/integrations/marks";
 import { Band } from "../_chrome/Band";
 
+<<<<<<< HEAD
 const DRIVERS: { id: IntegrationId; name: string; role: string }[] = [
   { id: "gloomberb", name: "Gloomberg", role: "market data" },
   { id: "luxalgo", name: "LuxAlgo", role: "live chart" },
   { id: "nautilus", name: "NautilusTrader", role: "engine" },
+=======
+const toolCount = (prefix: string) => MCP_TOOLS.filter((t) => t.name.startsWith(prefix)).length;
+
+const CARD =
+  "flex h-auto min-h-full w-full min-w-0 shrink flex-col items-stretch gap-2.5 overflow-hidden bg-surface p-[1.15rem] text-start font-sans text-[length:inherit] font-normal whitespace-normal no-underline hover:bg-surface-2";
+
+const DRIVERS: { id: IntegrationId; name: string; role: string; line: string; fact: string }[] = [
+  {
+    id: "gloomberb",
+    name: "Gloomberg",
+    role: "market data",
+    line: "Quotes, filings, macro and options for the research stages. Enrichment, never the record the backtests run on.",
+    fact: `${toolCount("gloomberb_")} MCP tools`,
+  },
+  {
+    id: "luxalgo",
+    name: "LuxAlgo",
+    role: "Vela backbone · live signals",
+    line: "The live chart is the hero.",
+    fact: `${toolCount("luxalgo_")} MCP tools · live on hero`,
+  },
+  {
+    id: "nautilus",
+    name: "NautilusTrader",
+    role: "engine",
+    line: "The event-driven engine every backtest and optimize run goes through. One engine, no second code path.",
+    fact: "validate → backtest → optimize → export",
+  },
+>>>>>>> origin/develop
 ];
 
 /** Modules digiquant calls. Names only — the hero banners do not fit this band. */

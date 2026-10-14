@@ -493,6 +493,13 @@ and [`docs/adr/0021-digiquant-supabase-project-topology.md`](../docs/adr/0021-di
 
 ## Gloomberb market-data client (#4069)
 
+Public MCP names use the **`gloomberb_` prefix** (DIG-3313), the same shape as
+`luxalgo_`. Describe them as programmatic extensions of the Gloomberb platform.
+The MCP server lists `gloomberb_*` only. `digifetch_*` is not a second tool.
+`POST /v1/orchestrator_invoke` and the in-process dispatcher still accept
+`digifetch_*` and call the same handler.
+`gloomberb_congress_trades` stays refused with `digifetch_congress_trades`.
+
 `src/digiquant/data/gloomberb/` is the digifetch x Gloomberb enrichment layer
 (spec: [`../docs/superpowers/specs/2026-09-12-digifetch-scoping-design.md`](../docs/superpowers/specs/2026-09-12-digifetch-scoping-design.md)).
 It is the **only** place the `api.gloom.sh` URL/site logic lives — `digifetch`
