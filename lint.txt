@@ -1,0 +1,62 @@
+[0m[1m[31merror[no-import-prefix][0m: [0m[1mInline 'npm:', 'jsr:' or 'https:' dependency not allowed[0m
+  [0m[38;5;12m-->[0m [0m[36m/Users/chrisstefan/Code/digithings-wt-dig3615/digiquant/supabase/functions/stripe-webhook/stripe-webhook.test.ts[0m[0m[33m:13:8[0m
+  [0m[38;5;12m | [0m
+[0m[38;5;12m13 | [0m} from "https://deno.land/std@0.224.0/assert/mod.ts";
+  [0m[38;5;12m | [0m       [0m[1m[31m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+   [0m[38;5;12m=[0m [0m[1mhint[0m: Add it as a dependency in a deno.json or package.json instead and reference it here via its bare specifier
+
+  [0m[38;5;12mdocs[0m: https://docs.deno.com/lint/rules/no-import-prefix
+
+
+[0m[1m[31merror[prefer-const][0m: [0m[1m`filters` is never reassigned[0m
+   [0m[38;5;12m-->[0m [0m[36m/Users/chrisstefan/Code/digithings-wt-dig3615/digiquant/supabase/functions/stripe-webhook/stripe-webhook.test.ts[0m[0m[33m:142:9[0m
+   [0m[38;5;12m | [0m
+[0m[38;5;12m142 | [0m    let filters: Filter[] = [];
+   [0m[38;5;12m | [0m        [0m[1m[31m^^^^^^^[0m
+    [0m[38;5;12m=[0m [0m[1mhint[0m: Use `const` instead
+
+  [0m[38;5;12mdocs[0m: https://docs.deno.com/lint/rules/prefer-const
+
+
+[0m[1m[31merror[require-await][0m: [0m[1mAsync method 'thenResolve' has no 'await' expression or 'await using' declaration.[0m
+   [0m[38;5;12m-->[0m [0m[36m/Users/chrisstefan/Code/digithings-wt-dig3615/digiquant/supabase/functions/stripe-webhook/stripe-webhook.test.ts[0m[0m[33m:197:7[0m
+   [0m[38;5;12m | [0m
+[0m[38;5;12m197 | [0m      async thenResolve(): Promise<unknown[]> {
+   [0m[38;5;12m | [0m      [0m[1m[31m^^^^^[0m
+    [0m[38;5;12m=[0m [0m[1mhint[0m: Remove 'async' keyword from the function or use 'await' expression or 'await using' declaration inside.
+
+  [0m[38;5;12mdocs[0m: https://docs.deno.com/lint/rules/require-await
+
+
+[0m[1m[31merror[require-await][0m: [0m[1mAsync method 'rpc' has no 'await' expression or 'await using' declaration.[0m
+   [0m[38;5;12m-->[0m [0m[36m/Users/chrisstefan/Code/digithings-wt-dig3615/digiquant/supabase/functions/stripe-webhook/stripe-webhook.test.ts[0m[0m[33m:293:5[0m
+   [0m[38;5;12m | [0m
+[0m[38;5;12m293 | [0m    async rpc(fn: string, args?: Record<string, unknown>) {
+   [0m[38;5;12m | [0m    [0m[1m[31m^^^^^[0m
+    [0m[38;5;12m=[0m [0m[1mhint[0m: Remove 'async' keyword from the function or use 'await' expression or 'await using' declaration inside.
+
+  [0m[38;5;12mdocs[0m: https://docs.deno.com/lint/rules/require-await
+
+
+[0m[1m[31merror[require-await][0m: [0m[1mAsync method 'getUserById' has no 'await' expression or 'await using' declaration.[0m
+   [0m[38;5;12m-->[0m [0m[36m/Users/chrisstefan/Code/digithings-wt-dig3615/digiquant/supabase/functions/stripe-webhook/stripe-webhook.test.ts[0m[0m[33m:305:9[0m
+   [0m[38;5;12m | [0m
+[0m[38;5;12m305 | [0m        async getUserById(userId: string) {
+   [0m[38;5;12m | [0m        [0m[1m[31m^^^^^[0m
+    [0m[38;5;12m=[0m [0m[1mhint[0m: Remove 'async' keyword from the function or use 'await' expression or 'await using' declaration inside.
+
+  [0m[38;5;12mdocs[0m: https://docs.deno.com/lint/rules/require-await
+
+
+[0m[1m[31merror[require-await][0m: [0m[1mAsync method 'updateUserById' has no 'await' expression or 'await using' declaration.[0m
+   [0m[38;5;12m-->[0m [0m[36m/Users/chrisstefan/Code/digithings-wt-dig3615/digiquant/supabase/functions/stripe-webhook/stripe-webhook.test.ts[0m[0m[33m:319:9[0m
+   [0m[38;5;12m | [0m
+[0m[38;5;12m319 | [0m        async updateUserById(
+   [0m[38;5;12m | [0m        [0m[1m[31m^^^^^[0m
+    [0m[38;5;12m=[0m [0m[1mhint[0m: Remove 'async' keyword from the function or use 'await' expression or 'await using' declaration inside.
+
+  [0m[38;5;12mdocs[0m: https://docs.deno.com/lint/rules/require-await
+
+
+Found 6 problems
+Checked 2 files
