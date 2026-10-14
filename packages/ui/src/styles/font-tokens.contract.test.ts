@@ -111,6 +111,18 @@ describe("font tokens contract", () => {
     expect(callers.filter((file) => !allowed.has(file))).toEqual([]);
   });
 
+  it("loads no Inter face in any surface config (DIG-2695: one mono voice)", () => {
+    for (const { surface, config } of SURFACES) {
+      expect(at(config), `${surface} ${config} has no Inter loader`).not.toMatch(/Inter\(\{/);
+    }
+  });
+
+  it("points the digiquant.io themed sans voice at the mono stack", () => {
+    const dq = at("apps/digiquant-web/app/globals.css");
+    expect(dq).toMatch(/--font-sans:\s*var\(--font-stack-mono\)/);
+    expect(dq).not.toMatch(/--font-sans:\s*var\(--font-stack-sans\)/);
+  });
+
   it("retires the JetBrains and IBM Plex Mono variables everywhere", () => {
     const retired =
       /jetbrains|plex\s?mono|IBM_Plex_Mono|--font-jbmono|--font-ibm-plex-mono|--font-jetbrains-mono/i;

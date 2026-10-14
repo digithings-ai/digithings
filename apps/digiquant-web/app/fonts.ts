@@ -1,10 +1,11 @@
-import { Geist_Mono, Inter } from "next/font/google";
+import { Geist_Mono } from "next/font/google";
 
 /**
  * digiquant.io font config — the only file in this app that calls next/font.
  *
- * Self-hosted at build time, so no request leaves for Google at runtime. Same
- * pairing as digithings.ai.
+ * Self-hosted at build time, so no request leaves for Google at runtime. One
+ * mono voice (DIG-2695): Geist Mono serves display, body and chrome, the same
+ * single-face setup as the dashboard canonical config.
  *
  * SWAP A FACE = change the loader on the line below (plus its import). Every
  * stylesheet reads `--font-sans` / `--font-mono` / `--font-display` from
@@ -13,14 +14,7 @@ import { Geist_Mono, Inter } from "next/font/google";
  * packages/design/README.md.
  */
 
-/** Sans / display voice: headings, prose. */
-export const sans = Inter({
-  subsets: ["latin"],
-  variable: "--font-sans-face",
-  display: "swap",
-});
-
-/** Chrome voice: labels, code, figures. */
+/** The one voice: display, prose, labels, code, figures. */
 export const mono = Geist_Mono({
   subsets: ["latin"],
   variable: "--font-mono-face",
@@ -28,4 +22,4 @@ export const mono = Geist_Mono({
 });
 
 /** The class the root layout puts on <html>. */
-export const fontVariables = `${sans.variable} ${mono.variable}`;
+export const fontVariables = mono.variable;

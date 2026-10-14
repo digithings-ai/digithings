@@ -103,15 +103,17 @@ class TestStrategyBacktestSmoke:
                 data_dir=tmp,
             )
         assert result is not None
-        # Partial is the expected status here. Two causes, both known: the pinned
-        # nautilus_trader's returns() alias cannot be confirmed against
-        # portfolio_returns(), so the chart series is withheld rather than charted;
-        # and rsi_momentum (1 trade) and bollinger_mr (0 trades) have too few balance
-        # rows for a Sharpe, which is the pre-existing partial cause. Nothing else may
-        # appear on the list.
-        assert result.status == "partial"
-        assert RETURNS_SERIES_MISSING in result.missing
-        assert set(result.missing) <= {RETURNS_SERIES_MISSING, "sharpe_ratio"}, (
+        # ``ok``, or ``partial`` over the Sharpe alone. The chart series is derived
+        # from the account's own balance path, so it is no longer withheld; rsi_momentum
+        # (1 trade) and bollinger_mr (0 trades) have too few balance rows for a Sharpe,
+        # which is the surviving partial cause. Nothing else may appear on the list.
+        # (Under the previous design the pinned nautilus_trader's returns() alias could
+        # not be confirmed against portfolio_returns(), so the series was withheld too.)
+        assert result.status in {"ok", "partial"}, (
+            f"{strategy_name} did not complete: status={result.status}"
+        )
+        assert RETURNS_SERIES_MISSING not in result.missing
+        assert set(result.missing) <= {"sharpe_ratio"}, (
             f"{strategy_name} lost something else: {result.missing}"
         )
         # missing names the metrics that really are absent — asserted both ways so a

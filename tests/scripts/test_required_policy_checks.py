@@ -16,6 +16,7 @@ from __future__ import annotations
 import dataclasses
 import importlib.util
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -386,3 +387,156 @@ def test_script_exits_nonzero_when_the_inventory_is_mutated(tmp_path: Path) -> N
     assert proc.returncode == 1, proc.stdout + proc.stderr
     assert "policy.ungated" in proc.stdout
     assert "All commits signed off" in proc.stdout
+
+
+# ── the writer and the snapshot are coupled (DIG-2223) ───────────────────────
+#
+# Before this, develop's required contexts had two committed sources: the
+# snapshot the guard reads, and a hardcoded list inside the writer. Nothing
+# compared them. `gitleaks-scan` sat in the second one for six days — not live,
+# declared `advisory` in the inventory, and one command away from becoming a gate
+# enforced against nothing. These pin the fix, and each one fails if the coupling
+# arm is deleted.
+
+
+def test_writer_and_snapshot_agree_on_this_repository() -> None:
+    """The positive case, read off the real script rather than a list held here.
+
+    Executing the writer is the point. Diffing two committed files would still
+    pass if the writer had grown a payload of its own that happened to match
+    today, which is the state this issue was filed against.
+    """
+    snapshot = guard.read_contexts_file(CONTEXTS)
+    emitted = guard.read_writer_contexts()
+    assert emitted == snapshot
+    assert guard.check_writer_coupling(snapshot, emitted) == []
+
+
+def test_the_writer_body_names_no_context_literal() -> None:
+    """It must hold no list of its own; the snapshot is the only source.
+
+    Scanned over the executable body only. The header quotes context names in
+    prose ('gitleaks-scan left this file on 2026-10-14'), so a whole-file scan
+    would be measuring the documentation rather than the code — and a guard that
+    fires on its own documentation is a guard nobody leaves switched on.
+    """
+    text = guard.WRITER_SCRIPT.read_text(encoding="utf-8")
+    marker = "set -euo pipefail"
+    assert marker in text, "the writer's body marker moved; re-point this scan"
+    body = text[text.index(marker) :]
+    for context in guard.read_contexts_file(CONTEXTS) + ["gitleaks-scan"]:
+        assert f'"{context}"' not in body, f"the writer body hardcodes {context!r}"
+
+
+def test_a_writer_that_would_apply_an_undeclared_context_is_caught(tmp_path: Path) -> None:
+    """A list bolted onto a writer is caught by running it, not by diffing files."""
+    stub = tmp_path / "set-branch-protection.sh"
+    contexts = guard.read_contexts_file(CONTEXTS) + ["gitleaks-scan"]
+    stub.write_text(
+        "#!/usr/bin/env bash\n"
+        "# a writer that names contexts itself: the shape this leaf removes\n"
+        "printf '%s\\n' " + " ".join(f'"{c}"' for c in contexts) + "\n",
+        encoding="utf-8",
+    )
+    findings = guard.check_writer_coupling(
+        guard.read_contexts_file(CONTEXTS), guard.read_writer_contexts(stub)
+    )
+    assert _codes(findings) == {"writer.snapshot-drift"}
+    message = str(findings[0])
+    assert "gitleaks-scan" in message
+    assert "snapshot" in message
+
+
+def test_a_writer_that_would_drop_a_declared_context_is_caught() -> None:
+    """Drift the other way: a gate that is declared and then never enforced."""
+    snapshot = guard.read_contexts_file(CONTEXTS)
+    assert len(snapshot) > 1, "need at least two contexts for the drop to mean anything"
+    dropped = [c for c in guard.read_writer_contexts() if c != snapshot[0]]
+    findings = guard.check_writer_coupling(snapshot, dropped)
+    assert _codes(findings) == {"writer.snapshot-drift"}
+    message = str(findings[0])
+    assert "would not apply" in message
+    assert snapshot[0] in message
+
+
+def test_a_writer_that_prints_nothing_raises_rather_than_passing(tmp_path: Path) -> None:
+    """An unreadable writer must fail the guard, not read as 'in sync'."""
+    stub = tmp_path / "silent.sh"
+    stub.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    with pytest.raises(guard.GuardError):
+        guard.read_writer_contexts(stub)
+
+
+def test_a_missing_writer_raises(tmp_path: Path) -> None:
+    """No writer means no owner. Silence here would be a green guard."""
+    with pytest.raises(guard.GuardError):
+        guard.read_writer_contexts(tmp_path / "absent.sh")
+
+
+def test_a_failing_writer_raises_naming_its_own_stderr(tmp_path: Path) -> None:
+    stub = tmp_path / "broken.sh"
+    stub.write_text(
+        '#!/usr/bin/env bash\necho "ERROR: snapshot is missing." >&2\nexit 1\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(guard.GuardError, match="snapshot is missing"):
+        guard.read_writer_contexts(stub)
+
+
+def test_the_real_writer_refuses_to_apply_without_the_snapshot(tmp_path: Path) -> None:
+    """Run against a copy of the real script, so this is the wrapper's own behaviour.
+
+    It matters because the wrapper's alternative to reading the snapshot is a
+    baked-in list, and a fallback that quietly still works is exactly how a
+    snapshot could go missing with nothing noticing.
+    """
+    repo = tmp_path / "repo"
+    (repo / "scripts").mkdir(parents=True)
+    (repo / ".github").mkdir(parents=True)
+    name = guard.WRITER_SCRIPT.name
+    shutil.copy(guard.WRITER_SCRIPT, repo / "scripts" / name)
+    shutil.copy(guard.REPO_ROOT / "scripts" / "enable_branch_protection.py", repo / "scripts")
+
+    without = subprocess.run(
+        ["bash", str(repo / "scripts" / name), "--print-contexts"],
+        capture_output=True,
+        text=True,
+    )
+    assert without.returncode != 0, without.stdout
+    assert "required-contexts.txt" in without.stderr
+
+    # Control: the same command on a tree that HAS the snapshot emits, so the
+    # refusal above is the snapshot's absence and not bash failing to run at all.
+    shutil.copy(guard.CONTEXTS_PATH, repo / ".github" / "required-contexts.txt")
+    with_snapshot = subprocess.run(
+        ["bash", str(repo / "scripts" / name), "--print-contexts"],
+        capture_output=True,
+        text=True,
+    )
+    assert with_snapshot.returncode == 0, with_snapshot.stderr
+    assert with_snapshot.stdout.strip().splitlines() == guard.read_contexts_file(CONTEXTS)
+
+
+def test_the_cli_fails_when_the_writer_and_snapshot_drift(tmp_path: Path) -> None:
+    """The DoD test for the coupling, run through the real CLI.
+
+    A mutated snapshot plus a writer stub is the only way to drive the drift
+    through main(), since the real writer reads the real snapshot by path. The
+    finding text is asserted so this cannot pass by exiting non-zero for an
+    unrelated reason.
+    """
+    mutated = tmp_path / "required-contexts.txt"
+    mutated.write_text(
+        "# a snapshot with one gate too many\n"
+        + "".join(f"{c}\n" for c in guard.read_contexts_file(CONTEXTS) + ["gitleaks-scan"]),
+        encoding="utf-8",
+    )
+    # --contexts redirects the snapshot the writer coupling is checked against.
+    proc = subprocess.run(
+        [sys.executable, str(SCRIPT), "--contexts", str(mutated)],
+        capture_output=True,
+        text=True,
+        cwd=REPO_ROOT,
+    )
+    assert proc.returncode == 1, proc.stdout + proc.stderr
+    assert "writer.snapshot-drift" in proc.stdout

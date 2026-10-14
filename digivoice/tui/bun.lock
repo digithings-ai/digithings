@@ -3,7 +3,7 @@
   "configVersion": 0,
   "workspaces": {
     "": {
-      "name": "digivoice-tui",
+      "name": "digivoice-tui-legacy",
       "dependencies": {
         "@opentui/core": "^0.5.10",
       },

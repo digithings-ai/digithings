@@ -9,7 +9,7 @@ import pytest
 def test_e2e_module_documents_bearer_requirement():
     import tests.test_e2e as mod
 
-    assert "E2E_BEARER_TOKEN" in mod.__doc__ or True
+    assert "E2E_BEARER_TOKEN" in (mod.__doc__ or "")
 
 
 @pytest.mark.unit
