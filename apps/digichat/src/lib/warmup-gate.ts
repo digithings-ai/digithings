@@ -4,6 +4,7 @@
  * wait on `waitForWarmup()` and go out automatically once ready, so a cold
  * start never surfaces as "assistant not available". Best effort: after the
  * budget elapses the request is released anyway (server retries too).
+ * (Container env, incl. tenant config, is fixed per container boot.)
  */
 import { p } from "@/lib/base-path";
 
