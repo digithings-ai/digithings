@@ -213,13 +213,15 @@ Three options. All three keep the deploy off GitHub Actions.
 
 | Option | Trigger | Deploys on | Fits when |
 |---|---|---|---|
-| Manual | A person runs the script | the Mac | Chris alone deploys |
+| Manual from a signed tag | A Chris-signed release tag on the package release branch | the Mac, in a `local-ci` job | Chris alone deploys |
 | Local watcher | A local `launchd` job watches the remote release branch | the Mac | The Mac is always on |
 | Cloudflare Workers Builds | Cloudflare builds the Worker from the repository | Cloudflare | The Mac is sometimes off |
 
 **Recommendation, and now decided (D-4).** The build may move to Cloudflare Workers Builds, so a build does not need the Mac. The deploy stays manual and comes from a tag Chris cuts. **The local watcher is declined**, because it deploys without a person. No option in this table deploys by itself.
 
-**Fallback: Cloudflare Workers Builds.** This service builds a Worker from a connected repository. It uses Cloudflare's minutes, not GitHub's. Use it to build while the Mac is off. Do not let it deploy: D-4 keeps every deploy manual from a tag Chris cuts. It does not support the container build the same way, so check a container Worker before you rely on it.
+**The trigger is mandatory, and the tag must be signed (D-6).** Earlier text in this document treated a signed release tag as optional. It is not optional. A `local-ci` job on Chris's Mac runs a deploy only when a **Chris-signed release tag** names that package's release branch. An unsigned tag does not deploy. **DIG-3697 builds those jobs.** This document designs what the jobs do and where they run. It does not build them.
+
+**Fallback: Cloudflare Workers Builds.** This service builds a Worker from a connected repository. It uses Cloudflare's minutes, not GitHub's. Use it to build while the Mac is off. Do not let it deploy: D-4 keeps every deploy manual, and D-6 keeps it manual from a Chris-signed release tag only. It does not support the container build the same way, so check a container Worker before you rely on it.
 
 ### 5.6 The two crons in `digithings-cron`
 
@@ -256,7 +258,7 @@ Each step is separate. Each step needs Chris's approval. Do the steps in order. 
 
 ### 6.3 What each step does not fix
 
-No step in this table deploys by itself. Section 5.5 keeps the deploy manual, from a tag Chris cuts.
+No step in this table deploys by itself. Section 5.5 keeps the deploy manual, and D-6 makes that tag a signed, mandatory one.
 
 This proposal does not move a repository. Section 2 and Table C name the destination. The move is a separate task.
 
@@ -280,11 +282,20 @@ Chris makes the dashboard change in step 1. He states the condition: **the auto-
 
 ### D-4. Is the Mac always on? Answer: B, Workers Builds may build, deploys stay manual
 
-**No auto-deploy, for the build and for the deploy.** Workers Builds may build a Worker, so a build does not need the Mac to be on. The deploy stays manual and comes from a tag Chris cuts. The local watcher in section 5.5 is declined, because it deploys without a person. Section 5.5 is rewritten to match this answer.
+**No auto-deploy, for the build and for the deploy.** Workers Builds may build a Worker, so a build does not need the Mac to be on. The deploy stays manual and comes from a tag Chris cuts. The local watcher in section 5.5 is declined, because it deploys without a person. Section 5.5 is rewritten to match this answer. D-6 makes that tag signed and mandatory, and names the runner. Read D-6 for the trigger rule.
 
 ### D-5. Which R0-R7 repo names do you accept? Answer: A, the names are accepted
 
 The R0-R7 names in section 2 come from the verified split plan at `develop@83a104a10`, dated 2026-10-14. They are accepted as written. That plan carries 14 open decisions of its own. They are not mine and this document does not resolve them.
+
+### D-6. Must the release tag be signed? Answer: yes, mandatory, and the runner is `local-ci` (DIG-3697)
+
+Chris answered by comment on 2026-10-14 at 23:28 UTC, not by card. A deploy runs only from a **Chris-signed release tag** on that package's release branch, inside a `local-ci` job on Chris's Mac. **DIG-3697 builds those jobs.** This document designs what those jobs do and where they run. It does not build them. Section 5.5 now states the rule in the trigger table itself, so it does not live only in this section.
+
+**The same comment said this document mentions Buildkite twice. It did not, and it never carried a live reference to the word.** Every count in this paragraph is from the branch tip as it stood before this edit, because this edit cites the word and would otherwise falsify its own receipt. On that tip `grep -c -i buildkite docs/repo-split/cloudflare-deploy-map.md` returned 0 lines, with two firing controls on the same file in the same run: `wrangler` = 34 and `digithings-stack` = 10. A pickaxe for the word over every local ref, restricted to this path, returned no commit that added or removed it, while the same pickaxe for `digithings-stack` returned 2, so the instrument fired. The board `plan` document was byte-for-byte that file, so it carried the same zero. After this edit the same grep returns 2 lines and the same pickaxe returns exactly one commit, this one. Both lines are the citations in this entry, and the two controls read 36 and 11 because those lines quote them.
+
+The word is still in the repository, on another seat's branch. `github/DIG-3518-repo-split-plan` carries 18 mentions across 4 files of `docs/repo-split/`: `README.md`, `decisions.md`, `migration-plan.md` and `review.md`. Those files belong to DIG-3573, assigned to the Software Architect seat, and its own tip commit is titled "remove remaining Buildkite refs per Chris 23:36 hold". Of the 18 mentions, the six I read are decision records: `D-O3 (Buildkite) STRUCK 23:36`, `STRUCK Buildkite 2026-10-14 23:18`, and `no Buildkite org`. Striking a name in place and keeping the record is this document's own convention, so I did not rewrite another seat's files or its history. That branch's tip is not an ancestor of `develop`, so `develop` carries 0 mentions too, with `wrangler` present in 225 files as the control.
+
 ## 8. Method and evidence
 
 I read the live Cloudflare account with one read-only tool: `workers-list`. The tool returns the Worker name, the script ID, and the modified time. I did not call a write tool. The account is `ae2ea3eb4ce5f7cc9bec1478f6e60e15`. That value is in tracked wrangler files. It is not a secret.
@@ -305,4 +316,4 @@ I did not run any deploy, and I did not run any dry run. Section 5 is a design, 
 
 ## 9. One-line summary
 
-All five decisions are answered. Six Workers map to R2 and R5, and the sixth, `corpus-index`, joins R5 with them. The build may move to Cloudflare Workers Builds, and every deploy stays manual from a tag Chris cuts. Stopping the auto-deploy needs one dashboard change per site, and Chris makes it himself.
+All five decisions are answered. Six Workers map to R2 and R5, and the sixth, `corpus-index`, joins R5 with them. The build may move to Cloudflare Workers Builds, and every deploy runs only from a Chris-signed release tag, inside a `local-ci` job on Chris's Mac. DIG-3697 builds those jobs. Stopping the auto-deploy needs one dashboard change per site, and Chris makes it himself.
