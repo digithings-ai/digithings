@@ -1,4 +1,5 @@
 /** @jsxImportSource @opentui/react */
+import { API_BASE as API } from "../api";
 import { useEffect, useState } from "react";
 import { BLOCKS, layoutFor, type BlockKind } from "../catalog";
 import { EMPTY_READ, STUB_READ, isStubEnvelope, presentResponse, readBlock, type ReadResult } from "../read";
@@ -13,7 +14,6 @@ import { thesesBody } from "./theses-format";
 import { shapeLines, type PaneBody } from "./shape";
 import { asOfStatus } from "../format";
 
-const API = (process.env.DQ_API_URL ?? "http://127.0.0.1:8788").replace(/\/+$/, "");
 
 /** Portfolio family. Tearsheet and performance share one layout. No dossier. */
 export const PORTFOLIO_PATHS = [
