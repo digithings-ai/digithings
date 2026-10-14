@@ -148,6 +148,8 @@ def test_node_scope_records_failure_and_reraises_the_original_error() -> None:
     with pytest.raises(RuntimeError, match="boom"):
         with usage.node_run_scope("n"):
             raise RuntimeError("boom")
+    # NB: CodeQL py/unreachable-statement flags the next line as unreachable,
+    # but it runs: pytest.raises catches the raise above, so control reaches here.
     (record,) = usage.node_runs_snapshot()
     assert record.outcome is NodeRunOutcome.FAILED
     assert record.finished_at is not None
@@ -161,6 +163,8 @@ def test_node_scope_never_replaces_the_node_error_with_a_telemetry_error() -> No
     with pytest.raises(RuntimeError, match="boom"):
         with usage.node_run_scope("n", fanout_key="x" * 5000):
             raise RuntimeError("boom")
+    # NB: CodeQL py/unreachable-statement flags the next line as unreachable,
+    # but it runs: pytest.raises catches the raise above, so control reaches here.
     (record,) = usage.node_runs_snapshot()
     assert record.fanout_key is not None
     assert len(record.fanout_key) == 200

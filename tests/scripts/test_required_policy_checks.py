@@ -275,12 +275,12 @@ def test_an_undeclared_required_context_is_detected() -> None:
     [
         "checks: []\n",  # no checks at all
         "tracked_workflows: []\nchecks:\n  - context: a\n    workflow: ci.yml\n"
-        "    job: required-checks\n    enforcement: required\n    reason: r\n",
+        + "    job: required-checks\n    enforcement: required\n    reason: r\n",
         "tracked_workflows: [ci.yml]\nchecks:\n  - context: a\n    workflow: ci.yml\n",
         "tracked_workflows: [ci.yml]\nchecks:\n  - context: a\n    workflow: ci.yml\n"
-        "    job: required-checks\n    enforcement: nonsense\n    reason: r\n",
+        + "    job: required-checks\n    enforcement: nonsense\n    reason: r\n",
         "tracked_workflows: [ci.yml]\nchecks:\n  - context: a\n    workflow: ci.yml\n"
-        "    job: required-checks\n    enforcement: required\n",  # no reason
+        + "    job: required-checks\n    enforcement: required\n",  # no reason
     ],
 )
 def test_a_malformed_inventory_raises_rather_than_checking_nothing(tmp_path, body: str) -> None:

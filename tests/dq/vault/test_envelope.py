@@ -433,6 +433,8 @@ def test_lease_is_closed_even_when_the_body_raises(
         with unseal_credential(envelope, aad=aad, key=KEY_ONE) as lease:
             escaped = lease
             raise RuntimeError("boom")
+    # NB: CodeQL py/unreachable-statement flags the next line as unreachable,
+    # but it runs: pytest.raises catches the raise above, so control reaches here.
     assert escaped is not None
     with pytest.raises(CredentialLeaseExpiredError):
         _ = escaped.credential

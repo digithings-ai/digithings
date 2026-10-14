@@ -252,8 +252,8 @@ def test_flag_off_disables_the_guard(repo):
             "--input-type=module",
             "-e",
             "const m = await import(process.argv[1]);"
-            "const hooks = await m.ProjectsPathGuard({ directory: process.argv[2],"
-            " worktree: process.argv[2], client: { app: { log: async () => {} } } });"
+            + "const hooks = await m.ProjectsPathGuard({ directory: process.argv[2],"
+            + " worktree: process.argv[2], client: { app: { log: async () => {} } } });"
             "console.log(Object.keys(hooks).length);",
             (REPO_ROOT / ".opencode" / "plugins" / "projects-path-guard.js").as_uri(),
             str(repo),
@@ -301,9 +301,9 @@ def test_repo_binding_resolves_through_the_repo_mapping(repo):
             "--input-type=module",
             "-e",
             "const m = await import(process.argv[1]);"
-            "const g = m.createGuard({ env: { [m.ENGAGEMENT_ENV]: process.argv[2] },"
-            " cwd: process.argv[3], repoRoot: process.argv[3],"
-            " mappingPath: process.argv[4] });"
+            + "const g = m.createGuard({ env: { [m.ENGAGEMENT_ENV]: process.argv[2] },"
+            + " cwd: process.argv[3], repoRoot: process.argv[3],"
+            + " mappingPath: process.argv[4] });"
             "console.log(JSON.stringify(g.config()));",
             (REPO_ROOT / ".opencode" / "plugins" / "projects-path-guard.js").as_uri(),
             "twelve-x",
