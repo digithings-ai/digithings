@@ -87,8 +87,13 @@ export class DigiStackContainer extends Container {
    * the JWKS the verifiers fetch), so it can never be optional.
    */
   requiredPorts = [DIGIGRAPH_PORT];
-  /** Cold starts are seamless (#4323); each wake bills the whole tail, so keep it minimal. */
-  sleepAfter = "1m";
+  /**
+   * Cold starts are seamless (#4323), but the idle timer also runs while
+   * supervisord is still booting: at 1m a slow cold boot (digigraph + digikey
+   * well past 60s) was stopped mid-boot by "Activity expired" and never bound
+   * its ports (OCC outage 2026-10-14). 5m covers the 180s port wait.
+   */
+  sleepAfter = "5m";
 
   /**
    * Runtime env for supervisord processes. Secrets from `wrangler secret put`;
