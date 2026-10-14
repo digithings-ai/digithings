@@ -1089,6 +1089,62 @@ without confirming the key exists**: `get_performance_stats_pnls()` has no
 `Max Drawdown %` key, and the missing key used to fall through to a wrong
 fallback silently.
 
+### Result provenance (DIG-945, decision)
+
+Every published `models.BacktestResult` (the Nautilus path above) carries its
+own build inside the artifact — a resolved engine stamp plus the lock it was
+resolved from — rather than asserting the build in CI. Decided 2026-10-14;
+DIG-427 (balance-path Sharpe/drawdown fix) is merged and verified, so the
+sequencing hold that delayed this stamp is lifted.
+
+Contract (`EngineProvenance`, owned next to the model in `models.py`):
+
+| Field | Type | Source (never hand-written) |
+|---|---|---|
+| `engine` | literal `"nautilus_trader"` | constant |
+| `resolved_version` | `str \| None` | `importlib.metadata.version("nautilus-trader")` in the producing process; `None` when the extra is absent |
+| `pin` | `str` | specifier text from the `nautilus` extra in `digiquant/pyproject.toml` (currently `nautilus_trader==1.230.0`, ADR-0033) — read off the manifest, not retyped |
+| `lock` | `{file, sha256_12}` | `uv.lock` at the repo root (the one lock, ADR-0033) + first 12 hex of its bytes at generation time |
+| `arithmetic` | literal `"balance_path"` | the `_balance_path_metrics` source (DIG-462/DIG-427): Sharpe, drawdown and total return derive from one balance path |
+| `returns_series_verified` | `bool` | the `_verified_returns_series` outcome for this run |
+
+Rules:
+
+- Populated once, in `run_backtest`, from the live process. Never copied from
+  another run, never asserted in CI. The research-venv drift that motivated
+  this leaf (1.228.0 / 1.223.0 installed against a 1.230.0 lock) is detected
+  exactly this way: `resolved_version != pin` is visible on the artifact.
+- `resolved_version=None` (e.g. the Workers MCP image, which ships no
+  `nautilus` extra) is fail-closed: `status` is `partial`,
+  `engine_provenance` joins `missing`, and the tearsheet renders the block as
+  "engine unresolved — not citable". Same shape as the DIG-427 missing-list
+  guard: withhold, never fabricate.
+- One builder owns all rendering — `engine_provenance_note(provenance)` next
+  to the model. `generate_tearsheets.py` appends its output to
+  `provenance_notes` (the line-762 / line-1024 insertion point) and formats no
+  version string of its own. A second hand-formatted version line is a second
+  answer to the same question and will drift; there is exactly one.
+- Scope is the Nautilus path only. The `research/backtest.py` dataclass of
+  the same name is a decision-sequence result (no Nautilus engine inside), so
+  it carries no engine field — stamping a Nautilus version there would be
+  false attribution.
+- DIG-428's envelope is the same object: `honest_rate` is the stats half,
+  `provenance` is the build half. One block, one owner, built once — never a
+  one-off field in `generate_tearsheets.py` alongside a separate field on the
+  model.
+- The rejected alternative was a CI step failing when installed != locked.
+  It passes by construction wherever `uv sync --frozen` runs (CI, runner
+  image: installed == locked) and says nothing about which build produced
+  last month's number. Only the in-artifact stamp attributes past numbers.
+
+Why the delay-then-lift sequencing was right: stamping a precise build onto
+the known-wrong Sharpe (-76.34, double-annualised) would have laundered it
+into something citable. The counter-argument (stamp + caveat is more
+informative than no stamp) is adopted structurally instead of temporally:
+the stamp carries `arithmetic: balance_path` with it, so any future
+arithmetic regression names the arithmetic it claims and cannot hide behind
+a bare version string.
+
 ### OptimizationConstraints
 
 Applied as a hard filter before scoring candidates. Any trial that fails these constraints is discarded; if all trials fail, `OptimizeResult.status` is `partial`.
