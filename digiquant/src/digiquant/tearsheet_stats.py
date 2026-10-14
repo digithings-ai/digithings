@@ -9,9 +9,12 @@ from typing import NamedTuple
 from digiquant.models import BacktestResult
 from digiquant.stats.honesty import REFUSE_FLOOR, format_honest_rate
 
-#: A counted ``k`` cannot be paired with a fill count. Kept as a named string
-#: so every surface refuses it in the same words, and so the refusal is
-#: assertable rather than an implied consequence of a floor.
+# A counted ``k`` cannot be paired with an ``n`` this resolver cannot show to
+#: share its population. Kept as a named string so every surface refuses it in
+#: the same words, and so the refusal is assertable rather than an implied
+#: consequence of a floor. The wording still reads "fill count": since
+#: DIG-1808 ``num_trades`` is closed round trips, and renaming a rendered
+#: refusal string is left to its owner. See the ``wins is not None`` arm.
 MIXED_POPULATION = "REFUSED — counted wins and the fill count are different populations"
 
 #: Nautilus emits this count under a trades name, but it counts fill rows.
@@ -51,7 +54,8 @@ def resolve_win_rate(
 
     ``result.honest_rate`` is authoritative: ``k``, ``n`` and the sample-size
     floors come straight off the block, so no surface reconstructs ``k`` from
-    a rate and no surface uses the fill count as a denominator.
+    a rate and no surface uses the closed round-trip count as a
+    denominator.
 
     The fallback exists solely for results whose block is ``None`` — older
     fixtures and any caller that has not been through L3. It prefers a
@@ -73,13 +77,13 @@ def resolve_win_rate(
     n = result.num_trades
     usable = isinstance(rate, (int, float)) and not math.isnan(rate)
     if wins is not None:
-        # A counted k is closed round trips; the only n a blockless result
-        # carries is a fill count. Publishing the pair is the
-        # mixed-population rate this resolver exists to remove, and it is
-        # live: nautilus_runner.py:706 builds the multi-symbol aggregate
-        # with num_trades summed over fills and no honest_rate block. So the
-        # pair is refused rather than rendered, and counted stays False so
-        # the donut is handed no k to slice out of the fill count either.
+        # A counted k is closed round trips. Since DIG-1808 ``num_trades`` is also
+        # closed round trips (one realized PnL per closed position), so the two
+        # now name the same population and the mixed-population objection that
+        # justified this refusal no longer applies. The arm is nevertheless left
+        # exactly as it was: rendering a rate where none was rendered before is a
+        # product decision this leaf was not given. ``counted`` stays False, so
+        # the donut is still handed no k to slice.
         return WinRateCounts(min(n, max(0, wins)), n, False, True, MIXED_POPULATION)
     if usable:
         wr = float(rate)
@@ -95,7 +99,7 @@ def _honest_win_rate_text(value: object, result: BacktestResult) -> str:
     """Honest win-rate string for a Nautilus ``Win Rate`` stat (fraction).
 
     Delegates to :func:`resolve_win_rate`, so the denominator is the honest
-    block's ``n`` when one exists and the legacy fill-count fallback
+    block's ``n`` when one exists and the legacy closed round-trip fallback
     otherwise. Returns an em-dash for missing/non-numeric input, ``REFUSED``
     below the refuse floor, and ``"{pct}% (k/n, n=N, 95% CI …)"`` otherwise —
     never a bare percentage.

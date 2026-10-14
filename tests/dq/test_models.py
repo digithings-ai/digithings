@@ -92,9 +92,13 @@ class TestBacktestResult:
         assert r.honest_rate is None
         assert r.honest_rate_by_symbol == {}
 
-    def test_num_trades_is_labelled_a_fill_count(self) -> None:
+    def test_num_trades_is_labelled_a_closed_round_trip_count(self) -> None:
+        # DIG-1808: the description has to say what N counts. The old "fill
+        # count" wording is precisely what let a reader read a doubled sample.
         d = BacktestResult.model_fields["num_trades"].description or ""
-        assert "Fill count" in d
+        assert "Closed round trips" in d
+        assert "still open at the end of the run does not count" in d
+        assert "Fill count" not in d
         assert "NOT a win-rate denominator" in d
 
 

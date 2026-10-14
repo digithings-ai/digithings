@@ -130,11 +130,12 @@ class _PinnedStubAnalyzer:
 
 
 class _StubTrader:
-    def __init__(self, account_report) -> None:
+    def __init__(self, account_report, *, fill_rows: int = 1) -> None:
         self._account_report = account_report
+        self._fill_rows = fill_rows
 
     def generate_order_fills_report(self):
-        return pd.DataFrame([{"qty": 1.0}])
+        return pd.DataFrame([{"qty": 1.0} for _ in range(self._fill_rows)])
 
     def generate_account_report(self, venue):
         return self._account_report
@@ -178,6 +179,7 @@ def _symbol_result(
     pnl: float = 100.0,
     missing: list[str] | None = None,
     honest_rate: HonestRateBlock | None = None,
+    num_trades: int = 3,
 ) -> BacktestResult:
     return BacktestResult(
         run_id=f"r-{symbol}",
@@ -189,7 +191,7 @@ def _symbol_result(
         total_return_pct=1.0,
         sharpe_ratio=sharpe,
         max_drawdown_pct=dd,
-        num_trades=3,
+        num_trades=num_trades,
         missing=list(missing or []),
         honest_rate=honest_rate,
         status=status,
@@ -534,12 +536,15 @@ class TestBuildResult:
             hr = self._result(realized=series).honest_rate
             assert 0 <= hr.k <= hr.n
 
-    def test_n_is_not_the_fill_count(self) -> None:
-        # 4 closed positions, 2 fills each -> num_trades=8, n=4.
-        r = self._result(realized={"p1": 1.0, "p2": -1.0, "p3": 2.0, "p4": -2.0}, num_trades=8)
+    def test_n_and_num_trades_are_the_same_population(self) -> None:
+        # DIG-1808: 4 closed positions -> num_trades=4 and n=4. They are the same
+        # population (closed round trips), so a caller cannot pair them wrongly.
+        # The derivation itself is pinned at the _run_backtest_ohlcv level in
+        # TestNumTradesCountsClosedRoundTrips below.
+        r = self._result(realized={"p1": 1.0, "p2": -1.0, "p3": 2.0, "p4": -2.0}, num_trades=4)
         assert r.honest_rate.n == 4
-        assert r.num_trades == 8
-        assert r.honest_rate.n != r.num_trades
+        assert r.num_trades == 4
+        assert r.num_trades == r.honest_rate.n
 
     def test_breakeven_close_counts_as_a_loss(self) -> None:
         r = self._result(realized={"p1": 5.0, "p2": 0.0, "p3": -5.0})
@@ -1071,3 +1076,139 @@ class TestMultiSymbolHonestStatus:
         result = self._run({"AAA": _symbol_result("AAA"), "BBB": _symbol_result("BBB")})
         assert result is not None
         assert result.honest_rate_by_symbol == {}
+
+
+# ---------------------------------------------------------------------------
+# DIG-1808: num_trades counts closed round trips, not order fills
+# ---------------------------------------------------------------------------
+
+# Four closed positions, two of them profitable. Every closed position realizes
+# exactly one PnL, so the length of this series IS the round-trip count.
+_FOUR_CLOSED = [1.0, -1.0, 2.0, -2.0]
+
+# A balance path with two day-over-day moves, so `_balance_path_metrics` can
+# produce both sharpe and max drawdown and a run lands `ok` instead of
+# `partial`. Those two metrics come from the balance path, not the analyzer, so
+# no analyzer stat can stand in for it.
+_HEALTHY_ACCOUNT = [
+    {"total": 1_000_000.0},
+    {"total": 1_050_000.0},
+    {"total": 1_100_000.0},
+]
+
+
+class _RealizedAnalyzer(_StubAnalyzer):
+    """A ``_StubAnalyzer`` that can report a non-empty realized-PnL series.
+
+    The base stub always returns an empty one, which is the honest default for
+    every other test in this file; only the trade-count tests need a real one.
+    """
+
+    def __init__(self, realized: list[float] | None = None, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._realized = realized
+
+    def realized_pnls(self, usd):
+        if self._realized is None:
+            return pd.Series(dtype="float64")
+        return _series(self._realized)
+
+
+class _RoundTripEngine(_StubEngine):
+    """An engine whose fill report and realized-PnL series disagree on purpose.
+
+    A closed round trip produces two order fills (entry + exit), so the default
+    is exactly that 2:1 shape — which is the whole defect DIG-1808 removes.
+    """
+
+    def __init__(self, analyzer, account_report, *, fill_rows: int = 1) -> None:
+        super().__init__(analyzer, account_report)
+        self.trader = _StubTrader(account_report, fill_rows=fill_rows)
+
+    def fill_count(self) -> int:
+        return len(self.trader.generate_order_fills_report())
+
+
+@pytest.mark.unit
+class TestNumTradesCountsClosedRoundTrips:
+    """The published ``num_trades`` is the count of closed round trips."""
+
+    def _run(self, realized: list[float] | None, *, fills_per_position: int = 2):
+        engine = _RoundTripEngine(
+            _RealizedAnalyzer(realized=realized),
+            _account_report(_HEALTHY_ACCOUNT),
+            fill_rows=fills_per_position * len(realized or []),
+        )
+        with _patched_single_run(engine):
+            result = run_nautilus_backtest(
+                strategy_name="s", symbols=["BTC"], data_path="BTC.csv"
+            )
+        assert result is not None
+        return result, engine.fill_count()
+
+    def test_num_trades_equals_the_closed_round_trip_series(self) -> None:
+        # (1) equality with the series — the primary assertion.
+        result, _ = self._run(_FOUR_CLOSED)
+        assert result.num_trades == len(_FOUR_CLOSED)
+        assert result.honest_rate is not None
+        assert result.num_trades == result.honest_rate.n == 4
+
+    def test_num_trades_is_not_the_fill_count(self) -> None:
+        # (2) the assertion that kills the original bug: 4 closed positions
+        # produced 8 fills and the published count is 4, not 8.
+        result, fill_count = self._run(_FOUR_CLOSED)
+        assert fill_count == 2 * len(_FOUR_CLOSED)
+        assert result.num_trades == len(_FOUR_CLOSED)
+        assert result.num_trades != fill_count
+
+    def test_no_closed_positions_publishes_zero(self) -> None:
+        # (3) a run that never closed a position publishes 0, not None.
+        result, _ = self._run(None, fills_per_position=0)
+        assert result.num_trades == 0
+        assert result.honest_rate is None
+        assert result.status == "ok"
+
+    def test_num_trades_is_zero_iff_the_series_is_none(self) -> None:
+        # (5) the invariant, both arms.
+        closed, _ = self._run(_FOUR_CLOSED)
+        assert closed.num_trades != 0
+        assert closed.honest_rate is not None
+        empty, _ = self._run(None, fills_per_position=0)
+        assert (empty.num_trades == 0) is (empty.honest_rate is None)
+
+    def test_multi_symbol_sums_each_symbol_once(self) -> None:
+        # (4) two symbols, each driven through the real per-symbol runner, so the
+        # per-symbol counts are derived rather than supplied. Nautilus positions
+        # are keyed by instrument_id, so a round trip cannot straddle the symbol
+        # boundary and the aggregate must be the plain sum.
+        by_symbol = {"AAA": _FOUR_CLOSED, "BBB": [1.0, 1.0]}
+        engines = [
+            _RoundTripEngine(
+                _RealizedAnalyzer(realized=pnls),
+                _account_report(_HEALTHY_ACCOUNT),
+                fill_rows=2 * len(pnls),
+            )
+            for pnls in by_symbol.values()
+        ]
+        fills = sum(e.fill_count() for e in engines)
+        with (
+            patch(
+                "digiquant.nautilus_runner._prepare_bar_data",
+                return_value=(object(), object(), _stub_bars(), None),
+            ),
+            patch("digiquant.nautilus_runner._build_engine", side_effect=list(engines)),
+        ):
+            result = _run_multi_symbol_backtest(
+                symbol_dfs={"AAA": _ohlcv_df(), "BBB": _ohlcv_df()},
+                strategy_name="s",
+                symbols=["AAA", "BBB"],
+            )
+        assert result is not None
+        expected = sum(len(v) for v in by_symbol.values())
+        assert result.num_trades == expected == 6
+        assert fills == 2 * expected
+        assert sorted(result.honest_rate_by_symbol) == ["AAA", "BBB"]
+        assert all(
+            block.n == len(by_symbol[sym])
+            for sym, block in result.honest_rate_by_symbol.items()
+        )

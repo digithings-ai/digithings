@@ -787,8 +787,12 @@ def _run_backtest_ohlcv(
     )
 
     run_id = f"nautilus-{uuid.uuid4().hex[:8]}"
+    # The fill report holds one row per order fill, and a closed round trip
+    # produces two of them (entry + exit), so len(fills) is twice the trade
+    # count (DIG-1808). The report itself is unchanged and still reaches the
+    # tearsheet as fills_report below; only the published count moves, and it is
+    # derived from the realized-PnL series instead.
     fills = engine.trader.generate_order_fills_report()
-    num_trades = len(fills) if fills is not None else 0
     account_report = engine.trader.generate_account_report(Venue(venue_name))
     start_ts = bars[0].ts_init
     end_ts = bars[-1].ts_init
@@ -796,6 +800,15 @@ def _run_backtest_ohlcv(
     pnl_errors: list[str] = []
     total_pnl, total_return_pct = _extract_pnl(account_report, errors=pnl_errors)
     perf = _extract_perf_stats(engine, USD, account_report)
+
+    # num_trades is the sample size (N) printed beside the strategy's statistics,
+    # so it counts closed round trips: each closed position contributes exactly
+    # one realized PnL. A position still open at the end of the run never
+    # realizes, so it does not count. realized_pnls_series is None (not empty)
+    # when nothing closed, which is what makes num_trades 0 rather than an
+    # invented figure (DIG-1808).
+    realized = perf.get("realized_pnls_series")
+    num_trades = len(realized) if realized is not None else 0
 
     engine.dispose()
 
@@ -935,6 +948,9 @@ def _run_multi_symbol_backtest(
             per_symbol_sharpe[sym] = result.sharpe_ratio
         if result.max_drawdown_pct is not None:
             per_symbol_max_dd[sym] = result.max_drawdown_pct
+        # Per-symbol closed round trips, summed. Nautilus positions are keyed by
+        # instrument_id, so no position can close across a symbol boundary and
+        # the sum cannot double count a round trip (DIG-1808).
         num_trades_total += result.num_trades
         if start_time is None or result.start_time < start_time:
             start_time = result.start_time
