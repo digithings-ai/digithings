@@ -1,6 +1,6 @@
 "use client";
 
-import { ensureWarm, markWarmActivity } from "@/lib/warmup-gate";
+import { warmFetch } from "@/lib/warmup-gate";
 import { useCallback, useEffect, useMemo } from "react";
 import { useChat } from "@ai-sdk/react";
 import { AssistantChatTransport, useAISDKRuntime } from "@assistant-ui/ai-sdk";
@@ -263,12 +263,7 @@ export function useEmbedDigiChat({
       new AssistantChatTransport({
         api: p("/api/chat"),
         // Hold sends made during cold boot until warm-up reports ready.
-        fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
-          await ensureWarm();
-          const res = await fetch(input, init);
-          markWarmActivity();
-          return res;
-        }) as typeof fetch,
+        fetch: warmFetch as typeof fetch,
         prepareSendMessagesRequest: ({ messages, body, trigger }) => {
           const urlAuth = readEmbedUrlAuth();
           const effectiveToken = urlAuth.token ?? token;

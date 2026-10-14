@@ -83,6 +83,28 @@ export async function ensureWarm(): Promise<void> {
   // Even on timeout, release the request (the server retries digikey too).
 }
 
+const TRANSIENT_RE = /container|not running|disconnected|digraph unreachable|upstream_auth|service_unavailable/i;
+
+/**
+ * fetch for chat requests: waits out sleeping services first, and if the
+ * request still lands on a container that is mid-restart (non-OK 5xx before
+ * any stream, e.g. "Container suddenly disconnected"), re-runs warm-up and
+ * resends (up to 3 tries). Non-transient errors pass through unchanged.
+ */
+export async function warmFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  await ensureWarm();
+  let res = await fetch(input, init);
+  for (let attempt = 1; attempt < 3 && !res.ok && res.status >= 500; attempt++) {
+    const body = await res.clone().text().catch(() => "");
+    if (!TRANSIENT_RE.test(body)) break;
+    lastWarmAt = 0;
+    await runWarmup(0);
+    res = await fetch(input, init);
+  }
+  if (res.ok) lastWarmAt = Date.now();
+  return res;
+}
+
 /** Call when a chat response completes so idle is measured from activity. */
 export function markWarmActivity(): void {
   lastWarmAt = Date.now();
