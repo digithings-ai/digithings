@@ -18,10 +18,6 @@ vi.mock('@/components/theme-provider', () => ({
     theme: mocks.theme,
     setTheme: mocks.setTheme,
   }),
-  useDashboardTheme: () => ({
-    theme: mocks.theme,
-    setTheme: mocks.setTheme,
-  }),
 }));
 
 function render(overrides: Partial<Parameters<typeof SettingsContent>[0]> = {}): string {
