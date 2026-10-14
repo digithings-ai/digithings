@@ -118,7 +118,7 @@ digichat forwards `X-Digi-Corpus-Index` / `X-Digi-Vault-Prefix`; digigraph
 `corpus_routing` applies them to digisearch / digivault tools.
 
 The OCC tenant also gets the read-only Zammad ticket MCP (`search_tickets` /
-`list_tickets` / `get_ticket` / `ticket_report`) via the `mcp.servers` entry in the live tenant
+`list_tickets` / `get_ticket` / `ticket_report` / `aggregate_tickets`) via the `mcp.servers` entry in the live tenant
 JSON below. `zammad-mcp` is not a separate Cloudflare container — it runs as a
 program inside the `digithings-stack` container (see
 [`scripts/zammad_mcp/README.md`](../../scripts/zammad_mcp/README.md), §
@@ -155,7 +155,7 @@ make digichat-profile-a-bundle-up
 ```
 
 Details: [`apps/digithings-stack-cloudflare/README.md`](../../apps/digithings-stack-cloudflare/README.md)
-(local `docker run` / compose). digiquant, digismith HTTP, and Ollama stay off.
+(local `docker run` / compose). digiquant, digitrace HTTP, and Ollama stay off.
 
 ### Monorepo build (full N-container stack)
 
@@ -226,7 +226,7 @@ The Pages Function OpenRouter digivault loop is **retired**.
 1. `curl -sf https://graph.digithings.ai/healthz` and `https://key.digithings.ai/healthz`
 2. Open https://digithings.ai/chat — no `/login` wall
 3. Ask a vault-grounded question; expect digigraph tool activity
-4. OCC: https://digithings.ai/chat/occ — activity should show digisearch against `occ_help`
+4. OCC: https://digithings.ai/chat/occ — activity should show digisearch against the `occ_help` index
 
 ## Onboard corpus
 

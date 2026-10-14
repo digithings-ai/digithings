@@ -10,8 +10,11 @@ are covered by digillm/tests/test_digillm.py.
 
 from __future__ import annotations
 
+import ast
+import json
 from pathlib import Path
 
+import digigraph.model_config as model_config
 import pytest
 from digigraph.model_config import (
     ModelModesConfig,
@@ -21,6 +24,296 @@ from digigraph.model_config import (
     resolve_effective_model,
     resolve_request_model,
 )
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _non_docstring_string_literals(module_path: Path) -> set[str]:
+    """Every string *constant* in *module_path* that is not a docstring.
+
+    Docstrings are excluded on purpose: prose is allowed to talk about what a
+    configured value looks like ("OpenAI BYOK models are bare ids") — what #5029
+    forbids is the id itself being a literal the code routes on.
+    """
+    tree = ast.parse(module_path.read_text(encoding="utf-8"))
+    docstrings: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            doc = ast.get_docstring(node, clean=False)
+            if doc is not None:
+                docstrings.add(doc)
+    return {
+        node.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant)
+        and isinstance(node.value, str)
+        and node.value not in docstrings
+    }
+
+
+@pytest.mark.unit
+class TestModelPolicyConfig:
+    """``config/model-policy.json`` owns flagship classification + the last-resort model.
+
+    #5029 moved the provider model-id markers and the mode ladder's hard last resort out
+    of this module and into config. Two halves are pinned here, because either one alone
+    is worthless: the policy must actually be *read* (a marker that exists only in a
+    temp file changes the verdict), and it must be *required* — a missing, malformed, or
+    empty policy raises instead of degrading, because a silently empty marker set makes
+    every model classify as non-flagship and quietly re-routes every phase model.
+    """
+
+    def _write_policy(self, tmp_path: Path, **overrides: object) -> Path:
+        policy: dict[str, object] = {
+            "flagship_model_id_markers": ["frontier"],
+            "balanced_flagship_markers": ["midtier"],
+            "fallback_model": "vendor/tiny",
+        }
+        policy.update(overrides)
+        path = tmp_path / "model-policy.json"
+        path.write_text(json.dumps(policy), encoding="utf-8")
+        return path
+
+    def test_missing_policy_file_raises(self, tmp_path: Path) -> None:
+        with pytest.raises(FileNotFoundError, match="model-policy.json"):
+            model_config._load_model_policy(tmp_path / "model-policy.json")
+
+    def test_malformed_json_raises(self, tmp_path: Path) -> None:
+        bad = tmp_path / "model-policy.json"
+        bad.write_text("{not json", encoding="utf-8")
+        with pytest.raises(ValueError, match="not valid JSON"):
+            model_config._load_model_policy(bad)
+
+    def test_empty_marker_set_is_refused(self, tmp_path: Path) -> None:
+        """The one degradation that must never be silent: no markers, nothing is flagship."""
+        path = self._write_policy(tmp_path, flagship_model_id_markers=[])
+        with pytest.raises(ValueError, match="empty"):
+            model_config._load_model_policy(path)
+
+    def test_missing_marker_key_is_refused(self, tmp_path: Path) -> None:
+        path = tmp_path / "model-policy.json"
+        path.write_text(json.dumps({"fallback_model": "vendor/tiny"}), encoding="utf-8")
+        with pytest.raises(ValueError, match="flagship_model_id_markers"):
+            model_config._load_model_policy(path)
+
+    @pytest.mark.parametrize("bad", ["a-string", {"a": "b"}, 7, None])
+    def test_markers_must_be_a_list_of_strings(self, tmp_path: Path, bad: object) -> None:
+        path = self._write_policy(tmp_path, flagship_model_id_markers=bad)
+        with pytest.raises(ValueError):
+            model_config._load_model_policy(path)
+
+    @pytest.mark.parametrize("marker", ["", "   "])
+    def test_a_blank_marker_is_refused(self, tmp_path: Path, marker: str) -> None:
+        """``"" in slug`` is always True, so a blank marker flags *every* model."""
+        path = self._write_policy(tmp_path, flagship_model_id_markers=[marker])
+        with pytest.raises(ValueError, match="blank"):
+            model_config._load_model_policy(path)
+
+    @pytest.mark.parametrize("blank", ["", "   "])
+    def test_a_blank_fallback_model_is_refused(self, tmp_path: Path, blank: str) -> None:
+        path = self._write_policy(tmp_path, fallback_model=blank)
+        with pytest.raises(ValueError, match="fallback_model"):
+            model_config._load_model_policy(path)
+
+    def test_a_missing_fallback_model_is_refused(self, tmp_path: Path) -> None:
+        path = tmp_path / "model-policy.json"
+        path.write_text(json.dumps({"flagship_model_id_markers": ["x"]}), encoding="utf-8")
+        with pytest.raises(ValueError, match="fallback_model"):
+            model_config._load_model_policy(path)
+
+    def test_balanced_markers_may_be_empty(self, tmp_path: Path) -> None:
+        """Empty is safe here and only here: it blocks more, never less.
+
+        Unlike the flagship set, an empty ``balanced_flagship_markers`` means "no
+        frontier model is cleared for ``balanced``" — a stricter deployment, which is
+        exactly what an operator emptying that list is asking for.
+        """
+        policy = model_config._load_model_policy(
+            self._write_policy(tmp_path, balanced_flagship_markers=[])
+        )
+        assert policy.balanced_flagship_markers == []
+
+    def test_markers_are_stripped_and_lowercased(self, tmp_path: Path) -> None:
+        """Matching lowercases the slug, so an un-normalized marker silently never hits."""
+        policy = model_config._load_model_policy(
+            self._write_policy(tmp_path, flagship_model_id_markers=["  Vendor-Frontier  "])
+        )
+        assert policy.flagship_model_id_markers == ["vendor-frontier"]
+
+    def test_fallback_model_keeps_its_case(self, tmp_path: Path) -> None:
+        """The last resort is handed to digillm verbatim, so it is only stripped."""
+        policy = model_config._load_model_policy(
+            self._write_policy(tmp_path, fallback_model="  Vendor/Tiny  ")
+        )
+        assert policy.fallback_model == "Vendor/Tiny"
+
+    def test_a_marker_that_only_exists_in_config_drives_classification(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """The read is real: a config-only marker flips the verdict through the public API.
+
+        Installs the *config-derived* policy as the module's, leaving the classifier
+        logic untouched — so this fails if the classifier ever stops consulting it.
+        """
+        shipped = model_config._MODEL_POLICY
+        assert not model_config.is_flagship_openrouter_model("vendor/frontier-x"), (
+            "the shipped policy must not already contain this marker, or the swap "
+            "below proves nothing"
+        )
+        monkeypatch.setattr(
+            model_config,
+            "_MODEL_POLICY",
+            model_config._load_model_policy(self._write_policy(tmp_path)),
+        )
+        assert model_config.is_flagship_openrouter_model("vendor/frontier-x")
+        assert not model_config.is_flagship_openrouter_model("vendor/open-weight-x")
+        assert model_config.tier_allows_phase_model("vendor/frontier-x", "cheap") is False
+        assert model_config.tier_allows_phase_model("vendor/frontier-x", "balanced") is False
+        assert model_config.tier_allows_phase_model("vendor/midtier-x", "balanced") is True
+        assert model_config.tier_allows_phase_model("vendor/open-weight-x", "cheap") is True
+        assert shipped.flagship_model_id_markers  # sanity: the shipped set is non-empty
+
+    def test_configured_fallback_model_is_the_ladder_last_resort(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """With no configured default for the mode, the ladder ends at the policy value."""
+        _clear_explicit_llm_env(monkeypatch)
+        monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))  # no model_modes.yaml
+        monkeypatch.setenv("DIGI_LLM_MODE", "best")
+        monkeypatch.setattr(
+            model_config,
+            "_MODEL_POLICY",
+            model_config._load_model_policy(self._write_policy(tmp_path)),
+        )
+        assert get_model_for_mode() == "vendor/tiny"
+        assert model_config.effective_llm_settings()["source"] == "default"
+
+    def test_a_configured_default_still_beats_the_policy_last_resort(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """The policy value is a *last* resort: ``defaults[mode]`` still wins."""
+        _clear_explicit_llm_env(monkeypatch)
+        (tmp_path / "model_modes.yaml").write_text("defaults:\n  best: vendor/configured\n")
+        monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
+        monkeypatch.setenv("DIGI_LLM_MODE", "best")
+        monkeypatch.setattr(
+            model_config,
+            "_MODEL_POLICY",
+            model_config._load_model_policy(self._write_policy(tmp_path)),
+        )
+        assert get_model_for_mode() == "vendor/configured"
+
+    def test_the_shipped_policy_is_the_one_the_module_loaded(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """No override set → the repo-root policy, loaded fresh, is what is in use.
+
+        Guards against the policy silently resolving somewhere else (a stray
+        ``DIGI_CONFIG_PATH``, a packaging path change) while the file it names is not
+        the one whose contents are live.
+        """
+        monkeypatch.delenv("DIGI_CONFIG_PATH", raising=False)
+        from digigraph.model_config import _MODEL_POLICY_PATH, _resolve_model_policy_path
+
+        resolved = _resolve_model_policy_path()
+        assert resolved == _REPO_ROOT / "config" / "model-policy.json"
+        assert resolved.exists()
+        assert _MODEL_POLICY_PATH == resolved
+        assert model_config._load_model_policy(resolved) == model_config._MODEL_POLICY
+
+
+@pytest.mark.unit
+class TestModelPolicyPathResolution:
+    """``DIGI_CONFIG_PATH`` override, matching ``llm_auth._resolve_byok_catalog_path``.
+
+    Both files are required, so an operator who points digigraph at their own config
+    directory has to be able to supply the policy there too.
+    """
+
+    def test_digi_config_path_override_wins(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        override_dir = tmp_path / "custom-config"
+        override_dir.mkdir()
+        (override_dir / "model-policy.json").write_text(
+            json.dumps(
+                {
+                    "flagship_model_id_markers": ["vendor-frontier"],
+                    "fallback_model": "vendor/tiny",
+                }
+            ),
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("DIGI_CONFIG_PATH", str(override_dir))
+        from digigraph.model_config import _load_model_policy, _resolve_model_policy_path
+
+        resolved = _resolve_model_policy_path()
+        assert resolved == override_dir / "model-policy.json"
+        assert resolved != _REPO_ROOT / "config" / "model-policy.json"
+        assert _load_model_policy(resolved).fallback_model == "vendor/tiny"
+
+    def test_missing_file_still_raises_with_override_set(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
+        from digigraph.model_config import _load_model_policy, _resolve_model_policy_path
+
+        with pytest.raises(FileNotFoundError):
+            _load_model_policy(_resolve_model_policy_path())
+
+
+@pytest.mark.unit
+class TestModelPolicyIsNotHardcodedInSource:
+    """#5029: no configured model id survives as a literal in digigraph's own source.
+
+    Driven from the config file, so adding an id to the policy and hardcoding it in
+    code fails here rather than passing review. Covers the three modules that read
+    either the policy or the BYOK catalog — ``model_config``, ``llm_auth`` and
+    ``server`` — because a refusal message is as much a literal as a routing table.
+    """
+
+    @pytest.mark.parametrize("module_name", ["model_config", "llm_auth", "server"])
+    def test_no_configured_model_id_is_a_literal_in_digigraph_source(
+        self, module_name: str
+    ) -> None:
+        import importlib
+
+        module = importlib.import_module(f"digigraph.{module_name}")
+        policy = model_config._MODEL_POLICY
+        configured = (
+            set(policy.flagship_model_id_markers)
+            | set(policy.balanced_flagship_markers)
+            | {policy.fallback_model}
+        )
+        assert configured, "policy carries no ids, so this assertion would be vacuous"
+
+        literals = _non_docstring_string_literals(Path(module.__file__))
+        # Substring, not equality: "gpt-4o-mini" contains the "gpt-4o" marker, so an
+        # equality check would miss the exact literal this issue is about.
+        hits = sorted(
+            (value, marker) for value in literals for marker in configured if marker in value
+        )
+        assert not hits, (
+            f"{module_name}.py hardcodes model ids that belong in config/model-policy.json: {hits}"
+        )
+
+
+@pytest.mark.unit
+class TestModelPolicyVendoredCopy:
+    """The digichat-release config mount replaces the baked-in directory, not merges it.
+
+    A mount missing this file crash-loops digigraph at startup (fail-loud by design),
+    so the vendored copy must carry it and must not drift from the canonical one.
+    """
+
+    def test_vendored_copy_matches_canonical_policy(self) -> None:
+        canonical = _REPO_ROOT / "config" / "model-policy.json"
+        vendored = _REPO_ROOT / "infra" / "digichat-release" / "config" / "model-policy.json"
+        assert canonical.exists(), canonical
+        assert vendored.exists(), vendored
+        assert json.loads(canonical.read_text(encoding="utf-8")) == json.loads(
+            vendored.read_text(encoding="utf-8")
+        )
 
 
 @pytest.mark.unit

@@ -69,6 +69,18 @@ Beyond root `AGENTS.md`:
 - **ADDM drift is wired**: `GET /check_drift` accepts `current_sharpe`; `run_backtest` calls `record_sharpe()`. Heartbeat still needs product wiring to act on `drift_detected`.
 - **Human gate on live trading**: Broker adapter code (`digiquant/brokers/`) must never be called from any automated path without an explicit human gate.
 
+### NautilusTrader version pinning (ADR-0033)
+
+- **The build we ship is `nautilus_trader==1.230.0`.** It is pinned exactly in `pyproject.toml` under the `nautilus` extra. Do not widen it to a range. A minor bump inside the old `>=1.190,<2` moved the Python-visible return type of `PortfolioAnalyzer.realized_pnls()` (1.228.0 → 1.230.0) and silently changed dedup semantics in the honesty envelope.
+- **One lock only: the repo-root `uv.lock`.** `digiquant` is a `[tool.uv.workspace]` member; uv resolves the workspace root. **No module ships its own `uv.lock`.** `digiquant/uv.lock` was deleted under ADR-0033 — it was inert (68 packages vs the root lock's 297) and referenced by nothing, so it *looked* like a pin at 1.223.0 while pinning nothing. If you find a module-level `uv.lock`, it is dead weight: delete it and say so in an ADR.
+- **The pin is the shipping control for the engine, not the lock.** `digiquant/Dockerfile` copies no lockfile and runs `uv pip install --system -e ".[nautilus]"`, so the `==1.230.0` in `pyproject.toml` is the only thing pinning `nautilus_trader` in that image — the one `docker-compose.yml` builds. Before ADR-0033 even that floated to whatever was newest on PyPI. **Do not read this as "the image is reproducible."** Every other dependency in that image — including the transitive closure under `nautilus_trader` — still floats at build time. Same commit, different image bytes.
+- **The pin governs one build surface, not the whole service.** The other two digiquant images are unaffected: `apps/digithings-stack-cloudflare/wrangler.toml:115` builds `digiquant/Dockerfile.mcp`, which installs `[research,mcp]` and **no** `nautilus` extra, so the Workers stack never had an engine to pin; and `Dockerfile.digiquant-runner` (repo root) already runs `uv sync --frozen --package digiquant --extra nautilus`, i.e. it installs from the root lock and was correct before this pin existed.
+- **Nothing in the repo publishes the digiquant image.** `.github/workflows/publish-service-images.yml` was removed in `f54af7052` (strict-essentials cut, #4919); `RELEASES.md` records the removal and points operators at `docker compose build` / `make up`. Do not cite that workflow as a live publisher in a doc — several older pages still do.
+- **Never edit a manifest without re-locking the root.** 35 `uv sync --frozen` invocations across 29 workflow files depend on the root lock; a desynced lock breaks all of them. Use `uv lock` at the repo root, then read the diff — a version bump should touch only the `nautilus-trader` specifier line.
+- **Verify with `uv lock --check`** from the repo root *and* from inside `digiquant/`. Both must pass.
+- **Local venv may lag.** A checkout that was not re-synced still runs whatever it installed. Run `uv sync --frozen --package digiquant --extra nautilus` before trusting a local backtest to match CI.
+- **Bumping is deliberate.** Change the pin → `uv lock` at the root → read the diff → `uv lock --check` both locations → update the version named here and in `ARCHITECTURE.md` → run the DIG-937 analyzer-shape matrix against the new build → amend or supersede ADR-0033. Full rationale: [`../docs/adr/0033-nautilus-trader-exact-pin.md`](../docs/adr/0033-nautilus-trader-exact-pin.md).
+
 ---
 
 ## Test Commands
@@ -97,7 +109,7 @@ ruff check digiquant/ && ruff format --check digiquant/
 
 ## Dashboard (research + portfolio)
 
-Public path is **`/dashboard/`** only (`apps/dashboard`; ADR-0026). `/dashboard/` is retired — no redirect alias.
+Public path is **`/app`** on digiquant.io (`apps/digiquant-web`). `/dashboard/` redirects there. `apps/dashboard` stays in the tree and is no longer the served desk.
 
 When touching `digiquant/src/digiquant/dashboard/` **or** `apps/dashboard/` Group A queries:
 
@@ -202,7 +214,12 @@ the full module map.
   not 90-day rolling z. Preset `btc_optimized` sells (`long_only: false`)
   with a concentrated remaining-book curve (high max daily % of remaining
   cash/coins at the extremes). Walk-forward OOS `beats_flat_dca_oos` is
-  still false — in-sample richness, not a proven OOS beat. Allocation
+  still false — do not claim an OOS win over flat DCA unless a new run
+  actually prints true. Extras are also searched as Stage 0 solos (OOS vs
+  `power_law_solo`); `indicator_weights` only change when an operator
+  passes `--persist-settings` *and* combined OOS is not worse. The Stage 0
+  CLI default is sidecar-only — a 2-trial `curve_simulator` Stage B is not
+  a published-weight flip. Allocation
   charts draw MTM allocated % plus fill dots; do not draw a percent-cash
   line (it is the inverse of allocated).
 - **Public copy.** User-facing name is **BTC-SDCA** (asset then type; never
@@ -257,11 +274,14 @@ on the extra-indicator allowlist.
 4. Allowlist extras: generic (`weekly_rsi`, `weekly_macd`, `sma_band`) vs
    plugins (BTC M2/rs_eth/dxy; on-chain #1086 later). No put/call scrape
    in this WP.
-5. Stage A backtest keep/drop (`optimize_stage_a_by_backtest` over
-   `stage_a_search_names(profile)`) → Stage B → `regularize`. Cycle
+5. Stage 0 solo books (`run_stage_0`, OOS vs `power_law_solo`) then
+   Stage 1 survivor weights (`optimize_stage_1_survivor_weights`, no 0 on
+   the grid) → Stage B → `regularize`. Legacy Stage A IS keep/drop
+   (`optimize_stage_a_by_backtest`) remains for diagnostics. Cycle
    overlap is diagnostic. Platform MCP: `digiquant_fit_sdca_weights` /
    `digiquant_run_optimize` (`strategy_name=sdca`, freeze `*_weight` keys).
-   Do not publish until the backtest looks comfortable.
+   Do not publish until the backtest looks comfortable. Do not claim
+   `beats_flat_dca_oos` unless a new run prints true.
 6. Only then add `settings.json`. `SdcaAssetProfile.eth_research_v1()` is
    research-only — not `eth_sdca` in settings, no `--push-supabase`, no
    live-trading. Do not change publish `signal_delay_days`.
@@ -478,14 +498,15 @@ and [`docs/adr/0021-digiquant-supabase-project-topology.md`](../docs/adr/0021-di
 It is the **only** place the `api.gloom.sh` URL/site logic lives — `digifetch`
 stays a generic transport engine (no URLs, no env reads).
 
-- **34 tools, read scope, default ON.** `digifetch_quote`, `digifetch_quotes_batch`,
+- **89 tools, read scope, default OFF (#4069, #4110, #4813, #4837
+  130-coverage).** `digifetch_quote`, `digifetch_quotes_batch`,
   `digifetch_price_history`, `digifetch_ticker_financials`, `digifetch_options_chain`,
   `digifetch_sec_filings`, `digifetch_holders`, `digifetch_analyst_research`,
   `digifetch_corporate_actions`, `digifetch_earnings_calendar`,
   `digifetch_exchange_rate`, `digifetch_search`, `digifetch_news`, plus the #4110
   phase-1 cohort `digifetch_econ_calendar`, `digifetch_econ_series`,
   `digifetch_yield_curve`, `digifetch_cds`, `digifetch_research_search`,
-  `digifetch_congress_trades`, `digifetch_transcripts`, the #4110 phase-2
+  `digifetch_congress_trades`†, `digifetch_transcripts`, the #4110 phase-2
   cohort `digifetch_statements`, `digifetch_ticker_tweets`,
   `digifetch_tweet_search`, `digifetch_venues`, `digifetch_screener`,
   `digifetch_13f_funds`, `digifetch_13f_holdings`, and the #4110 phase-3
@@ -493,12 +514,53 @@ stays a generic transport engine (no URLs, no env reads).
   `digifetch_filing_events`, `digifetch_risk_reports`,
   `digifetch_short_interest`, `digifetch_equity_diagnostic`, and the #4110
   phase-4a `digifetch_saved_searches` (`digifetch_transcripts` also gained a
-  `transcript_id` detail mode) are registered in
+  `transcript_id` detail mode), the #4813 `digifetch_prediction_markets`
+  (Polymarket + Kalshi venue-direct catalog, free, in `MACRO_TOOLS`), and the
+  #4837 130-coverage cohorts below are registered in
   `mcp_server.py` (`_maybe_tool`, `READ_SCOPE_TOOLS`) and listed in
-  `orchestrator_tools.py`. Keep them read-scope; the family is default-ON behind
+  `orchestrator_tools.py`. Keep them read-scope — every digifetch tool is
+  read-scope, including the 13 inert write-shaped workspace/broker tools
+  (inert by verdict, not by scope: read-scope membership is not a read-only
+  guarantee); the family is default-OFF behind
   `GLOOMBERB_ENABLED` — only `1`/`true`/`yes`/`on` enable it, and any other value
-  (a typo included) disables the family, returning a typed `upstream_error`
+  (a typo included) leaves the family off, returning a typed `upstream_error`
   without a request.
+  - **Calculators + compositions (local math, no transport).**
+    `digifetch_options_calculator`, `digifetch_bond_calculator`,
+    `digifetch_kelly_sizer`, `digifetch_dividend_yield`,
+    `digifetch_fx_cross_rates`, `digifetch_vix_term_structure`, and the
+    multi-leg `digifetch_options_scenario` composer — all `free`, all
+    `attributed=False` (derived math, never Cloud-sourced).
+  - **Portfolio-math compositions (derived math over tooled routes).**
+    `digifetch_compare_performance`, `digifetch_correlation_matrix`,
+    `digifetch_relationship_graph`, `digifetch_relative_valuation`,
+    `digifetch_fundamental_graph`, `digifetch_valuation_graph`,
+    `digifetch_custom_chart`, `digifetch_market_valuation`,
+    `digifetch_money_markets`, `digifetch_rate_path` — all `free`.
+  - **Probe-backed Cloud reads (session-gated).** `digifetch_time_and_sales`,
+    `digifetch_quote_recap`, `digifetch_estimate_revisions`,
+    `digifetch_short_volume`, `digifetch_hiring`,
+    `digifetch_central_bank_rates`, `digifetch_cdx`,
+    `digifetch_sovereign_cds`, `digifetch_cot`, `digifetch_crypto_markets`,
+    `digifetch_iv_screen`, `digifetch_iv_history`, `digifetch_iv_surface`,
+    `digifetch_debt_maturities`, `digifetch_session_movers` (`session`;
+    the IV trio's entitlement is a guess pending live smoke), plus
+    `digifetch_options_flow` (`pro`), `digifetch_trending` and
+    `digifetch_ipo_calendar` (`free`), and `digifetch_substack`
+    (`venue_session` — own Substack account, fail-soft).
+  - **ToS/direct venue readers (anonymous).** `digifetch_fear_greed`,
+    `digifetch_polls`, `digifetch_treasury_auctions`,
+    `digifetch_market_halts`, `digifetch_hacker_news` — all `free`,
+    all `attributed=False` (venue-direct, never "Sourced from Gloomberb").
+  - **Workspace-read-only + approval-gated broker tools (inert).**
+    `digifetch_portfolio_view`, `digifetch_watchlist_add/remove`,
+    `digifetch_portfolio_add/remove`, `digifetch_alert_add/list`,
+    `digifetch_note_add`, `digifetch_thesis_add`, `digifetch_view_add`,
+    `digifetch_broker_positions` (all `session`, read-only posture: no
+    personal Cloud write route verified), plus
+    `digifetch_ibkr_preview_order` (mints a local single-use 15-minute HMAC
+    ticket) and `digifetch_ibkr_execute_order` (**DISABLED** pending human
+    review of the approval-gate design — only `dry_run` returns data).
 - **Pacing.** 900s TTL cache whose expired entries are evicted on access (and
   which is size-bounded); retries narrowed to timeouts/5xx; a 429 `Retry-After`
   is honored with a bounded injectable sleep; the circuit breaker counts only
@@ -512,6 +574,19 @@ stays a generic transport engine (no URLs, no env reads).
   (ISO `YYYY-MM-DD`, mutually exclusive with `range`, #4100) widens history reads
   past the caps by sending `rangeKey=ALL` + `startDate`/`endDate`; the
   delay/rate limits still stand. Do not rewire prices/history/technicals onto it.
+  **Panel exception (owner lock 2026-09-29, #4794):** anonymous `econ_series`
+  is the writer for the 23 kept macro ids sealed to R2 `fred__*` generations
+  (`data/prices/gloomberb_macro.py`). Delay on econ prints is publisher lag
+  (a monthly CPI print), not the 15-minute equity delay — do not stamp
+  "delayed up to 15 minutes" on these parquet rows.
+  **twelve-x exception (owner lock 2026-10-04, DIG-20):** the twelve-x FX pipeline — and only that
+  pipeline — uses Gloomberb as its price source of record: spot fixes, daily price history and
+  technicals. The 15-minute free-tier delay, rate limits, §5.2 resolution/range caps and the
+  measured 24–101 bps same-date disagreement against the core fix are accepted as known and
+  documented. On any Gloomberb failure the run fails loudly and publishes no board; core
+  substitution is permitted only as an explicit, default-off opt-in with feed attribution on every
+  artefact and a report to the board. `GLOOMBERB_ENABLED=0` on this path means refused-or-declared,
+  never silent. The enrichment-only rule stands for every other pipeline.
 - **Envelope contract.** Every call returns `DigifetchEnvelope[T]` with `data`
   either the payload or a typed `DigifetchError` (`auth_required` / `pro_required` /
   `not_found` / `rate_limited` / `upstream_error` / `invalid_input`); tools never raise. Keep the
@@ -519,15 +594,20 @@ stays a generic transport engine (no URLs, no env reads).
   `dataSource: "delayed"` / `delayMinutes > 0` → `"Free-tier data delayed up to
   15 minutes"` (not stale).
 - **Session cookie.** `GLOOMBERB_SESSION_COOKIE` (bare token or `name=value`) is
-  attached **only** to the ten gated endpoints: holders / analyst research /
-  corporate actions / research search / transcripts / statements / ticker
-  tweets / tweet search / short interest / equity diagnostic (screener is gated
-  too, and Pro-only). Never log it, never put it in a tool payload; without it
-  those tools return `auth_required` with no request. SEC filings, econ, credit,
-  congress, news, venues, 13F, the anonymous `/market/search` listings lookup,
-  and the open `/public/proxies/*` + `/public/risks/*` + `/public/events/*`
-  filing reads stay anonymous (the `/cloud/search` research search is the
-  cookie-gated one).
+  attached **only** to the 41 cookie-gated tools (37 `session` + 1 `preview` +
+  3 `pro`, declared once in `data/gloomberb/entitlements.py`):
+  the original nine reads (holders / analyst research / corporate actions /
+  research search / statements / ticker tweets / tweet search / short interest /
+  saved searches) plus equity diagnostic (preview) and
+  transcripts / screener / options-flow (pro), the 15 probe-backed Cloud reads,
+  and the 13 inert workspace/broker tools (`digifetch_substack` instead needs
+  its own `SUBSTACK_SESSION_COOKIE`). Never log it, never put it in a tool
+  payload; without it those tools return `auth_required` with no request.
+  SEC filings, econ, credit, congress, news, venues, 13F, the anonymous
+  `/market/search` listings lookup, and the open `/public/proxies/*` +
+  `/public/risks/*` + `/public/events/*` filing reads stay anonymous (the
+  `/cloud/search` research search is the cookie-gated one). Operator runbook:
+  [`docs/ops/gloomberb-session-cookie.md`](../docs/ops/gloomberb-session-cookie.md).
 - **Plan and upstream caveats (#4110 phase 1).** `digifetch_transcripts` requires
   a **Gloomberb Pro** plan: a free (email-verified) session's non-JSON
   `Pro plan required` body maps to a typed `pro_required` with the upstream
@@ -536,11 +616,14 @@ stays a generic transport engine (no URLs, no env reads).
   (a bare 402 with no recognizable plan body keeps the generic `auth_required`
   mapping), and the plan-gate path must not trip the circuit breaker. Read transcript rows from the upstream `calls`
   key (`companyName`/`callAt`/`webcastUrl`); `transcripts` is accepted only as a
-  wrapped variant. `digifetch_congress_trades` is exposed but its upstream
-  Mistral OCR dependency currently answers HTTP 500 (`402 Customer monthly
-  spending limit reached`), surfaced as a typed `upstream_error`; its typed
-  fields follow the known live names (`memberName`/`assetName`/`sourceUrl`/
-  `filingDate`/`notificationDate`) and extras carry the rest.
+  wrapped variant. † `digifetch_congress_trades` is **REFUSED on every
+  digiquant surface** — see "Refused tools" below; do not re-add it to
+  `READ_SCOPE_TOOLS`, the orchestrator manifest, or any pipeline subset
+  without Counsel's written clearance. Its upstream is live, not failing
+  (probed 2026-10-05: `GET https://api.gloom.sh/cloud/congress/house?limit=3`
+  → HTTP 200, `source: "house-clerk"`, `filingCount: 407`, `filingsParsed: 20`),
+  so an earlier note here claiming a Mistral OCR spend-cap HTTP 500 was wrong.
+  Client, normalizer and models are retained in-tree for a possible clearance.
   `digifetch_econ_calendar` takes **no parameters** — upstream ignores `limit`
   (fixed ~105-row window), so do not reintroduce a page-size knob.
   `digifetch_cds.days` is bounded 1–90 in the **input model** (the upstream
@@ -553,6 +636,36 @@ stays a generic transport engine (no URLs, no env reads).
   the description rather than promising `data.delay_note`. Do not tighten the
   deliberately permissive wire types (`float | str`, `str | int`) for the
   partly-probed routes without a live probe.
+- **Refused tools (DIG-1057).** `digiquant.tool_refusals` holds a deny-by-default
+  `REFUSED_TOOLS` frozenset — currently `{"digifetch_congress_trades"}` — naming
+  tools Counsel has ruled we must not obtain or serve (currently 5 U.S.C.
+  13107(c)(1)(B)). A refused name is dropped in `mcp_server._maybe_tool` **before**
+  registration, so it is absent from `create_mcp_server(scope="read")` *and*
+  `scope="full"` — dropping it from `READ_SCOPE_TOOLS` alone is not enough.
+  `build_orchestrator_tool_manifest()` filters refused names out of the
+  `POST /v1/orchestrator_tools` manifest, and `server.v1_orchestrator_invoke`
+  answers `{"ok": false, "refused": true, "code": "tool_refused", …}` before any
+  dispatch branch, so the HTTP invoke path cannot reach the upstream even though
+  `DIGIFETCH_DISPATCH` still carries the name. The refusal is
+  registration-level by design: client, normalizer, models and the `free`
+  entitlement entry stay in-tree so a Counsel clearance is a one-line removal
+  from the frozenset.
+- **The refusal env denylist is additive only (DIG-1251 Q5).** The effective rule
+  is `refused = REFUSED_TOOLS | env_denied_tools(DIGIQUANT_REFUSED_TOOLS)`, where
+  `DIGIQUANT_REFUSED_TOOLS` is a separator-delimited list (`,` `;` or whitespace)
+  of extra tool names, read per call. It can only **add** refusals: there is no
+  allow/negate/un-refuse syntax, so `-name`, `!name` and `allow=name` parse as
+  unknown tokens rather than permissions, and no value can lift a
+  `REFUSED_TOOLS` member. Missing, empty or whitespace-only means *no extra
+  names*, which leaves the code constant in force (fail closed); a malformed value
+  yields tokens and never raises past the refusal check. Counsel approved this
+  shape on condition that the code constant stays the carrier of the refusal — an
+  env var is not a legal gate, and the real gate is Counsel's written clearance
+  plus the CTO's merge. Proof is
+  `tests/dq/test_tool_refusals_env_denylist.py`, not a log line: it pins every
+  `REFUSED_TOOLS` member as still refused under every legal value of the variable
+  *and* pins that the variable does add refusals, so a parser that ignored the
+  environment entirely could not pass.
 - **Plan and upstream caveats (#4110 phase 2).** `digifetch_screener` is the
   second Pro-only tool and has **two plan-gate shapes** that must map to the
   same non-retryable `pro_required`: the 402 text body
@@ -611,21 +724,23 @@ stays a generic transport engine (no URLs, no env reads).
   generation (the server's `refreshAllowedAt` hints at de-dupe, unverified).
   Free sessions only ever get
   `access="preview"`, and the verdict/summary are the model's reading — say so
-  in copy, never as advice. The remaining plugin panes are deliberately out of
-  scope: correlation/relationship (client math over history), dividend yield /
-  Yahoo fallback, world indices / FX / futures (quote composition), volatility /
-  credit conditions (FRED composition over `digifetch_econ_series`), treasury
-  auctions (fiscaldata), prediction markets (local model), scanner (websocket).
-  See ARCHITECTURE §5 for the full list; the per-transcript detail route
+  in copy, never as advice. The old "remaining plugin panes" out-of-scope list
+  is superseded by the #4837 full-function coverage: every one of the 130
+  command-bar functions now carries exactly one status in the
+  [function matrix](../docs/superpowers/plans/2026-09-30-gloomberb-function-matrix.md)
+  (57 DONE, 24 COMP, 4 CALC, 1 TOS, 11 WRITE, 2 GATE, 1 NATIVE, 30 OUT), with
+  OUT reasons in ARCHITECTURE §5. The per-transcript detail route
   (`/cloud/transcripts/{id}`) is `digifetch_transcripts`' `transcript_id` mode,
   and `digifetch_saved_searches` covers `/cloud/search/saved`.
-- **Entitlements (#4110 phase 5).** Every digifetch tool declares exactly one
+- **Entitlements (#4110 phase 5, #4837 130-coverage).** Every digifetch tool declares exactly one
   entitlement in `data/gloomberb/entitlements.py` (`TOOL_ENTITLEMENTS`):
-  `free` (anonymous), `session` (`GLOOMBERB_SESSION_COOKIE` required; without
-  it the tool returns `auth_required` with no HTTP request), `preview`
+  `free` (anonymous; 47 of the 89), `session` (`GLOOMBERB_SESSION_COOKIE` required; without
+  it the tool returns `auth_required` with no HTTP request; 37 tools), `preview`
   (session required, but a free session still gets a labeled preview —
-  `digifetch_equity_diagnostic` only), or `pro` (session **and** a Gloomberb
-  Pro plan — `digifetch_transcripts`, `digifetch_screener`). The declaration is
+  `digifetch_equity_diagnostic` only), `pro` (session **and** a Gloomberb
+  Pro plan — `digifetch_transcripts`, `digifetch_screener`,
+  `digifetch_options_flow`), or `venue_session` (own-venue session —
+  `digifetch_substack` needs `SUBSTACK_SESSION_COOKIE`, fail-soft). The declaration is
   surfaced in the MCP registration (`_maybe_tool` sets `fn.entitlement` and
   appends the note to the description), as a top-level `entitlement` key on the
   orchestrator manifest entry plus the same description note, and therefore in
@@ -645,7 +760,11 @@ stays a generic transport engine (no URLs, no env reads).
   in this phase.
 - **Attribution (spec §7).** Payloads carry "Sourced from Gloomberb" + the delay
   notice and a `term.gloom.sh/?ticker=` deep link where one listing is addressed.
-  The Yahoo-backed earnings calendar must **not** claim Gloomberb attribution.
+  39 tools opt out explicitly (`attributed=False`): the calculators/compositions
+  (derived math, never Cloud-sourced), the venue-direct readers (prediction
+  markets, the five ToS tools, trending, substack), the Yahoo-backed earnings
+  calendar, and the 13 inert workspace/broker tools — their attribution, if
+  any, lives inside `data`, never top-level, and none emits a term.gloom.sh link.
 - **Human gate.** `api.gloom.sh` is a new external service dependency — the
   implementation PR cannot self-merge (`agents.yml` `human_gates`), and the
   container-egress / ToS spike items (spec §12 item 5) stay open.
@@ -654,7 +773,8 @@ stays a generic transport engine (no URLs, no env reads).
   generated from the `orchestrator_tools.py` manifest builders (never hand-copy
   schemas), `build_digifetch_tool_dispatcher()` routes name → input model →
   `GloomberbClient` method and returns the attribution envelope, and the
-  curated subsets `EQUITY_TOOLS` / `MACRO_TOOLS` / `PM_TOOLS` (each ≤16 names)
+  curated subsets `EQUITY_TOOLS` / `MACRO_TOOLS` / `PM_TOOLS` (each at the 16-name
+  prompt-budget cap)
   are wired through `build_grounding(digifetch_tools=...)` +
   `SegmentNodeSpec.digifetch_tools`: equity + sector phases take EQUITY, macro
   takes MACRO, portfolio analyst + direction take PM. Unlike the MCP surface (which
@@ -663,8 +783,14 @@ stays a generic transport engine (no URLs, no env reads).
   `available_digifetch_tools` returns no digifetch tools at all when
   `GLOOMBERB_ENABLED` disables the family, and drops session/preview/pro names
   when `GLOOMBERB_SESSION_COOKIE` is unset (CI has neither → never advertised);
-  the client still applies both gates per call. `digifetch_congress_trades`
-  stays MCP-only (its upstream OCR answers HTTP 500) and is not in `MACRO_TOOLS`.
+  the client still applies both gates per call.
+  `digifetch_polls`, `digifetch_hacker_news`,
+  `digifetch_compare_performance`, `digifetch_correlation_matrix`, and
+  `digifetch_relative_valuation` stay MCP-only (the first three for upstream
+  reliability/ToS reasons, the last three until an owner-signed subset
+  eviction frees a prompt-budget slot) and are not in any subset.
+  `digifetch_congress_trades` is in no subset either and must stay out: it is
+  refused outright (DIG-1057, 5 U.S.C. 13107(c)(1)(B)), not merely MCP-only.
   deliberation stays off (research-tools-only by #2908) and legacy Phase 7D is unwired.
   Enrichment-only is enforced structurally: the subset attaches **only when a
   primary data/research executor built**. The client factory + envelope
@@ -676,6 +802,87 @@ stays a generic transport engine (no URLs, no env reads).
   `digifetch.HttpFetcher`, or a patched `_build_gloomberb_client`; never hit the
   live API. Run `pytest tests/dq/test_mcp_gloomberb_tools.py tests/dq/data/test_gloomberb_*.py`
   plus `pytest tests/dq/test_mcp_server_scope.py`.
+
+---
+
+## LuxAlgo hosted thin wrap (#4779 P0, #4844 companions)
+
+`src/digiquant/data/luxalgo/` is the LuxAlgo Library research layer, mirroring
+the Gloomberb layering (`attribution` / `entitlements` / `models` / `client` /
+`agent_tools`, same MCP + manifest + dispatcher surfaces). It is the **only**
+place the `mcp.luxalgo.com` URL/logic lives — callers never supply a URL.
+
+- **8 Library tools + 6 edge/trackers companions, read scope, default ON, all
+  keyless (`free`).**
+  `luxalgo_library_search`, `luxalgo_library_get_concept`,
+  `luxalgo_library_get_indicator` (metadata only), `luxalgo_library_list_concepts`,
+  `luxalgo_library_list_indicators`, `luxalgo_library_list_tags`,
+  `luxalgo_library_list_families`, `luxalgo_library_get_family`, plus the #4844
+  companions `luxalgo_edge_symbols`, `luxalgo_edge_presets`,
+  `luxalgo_edge_report` (preset reads with the honesty disclaimer) and
+  `luxalgo_trackers_datasets`, `luxalgo_trackers_latest`,
+  `luxalgo_trackers_ticker` (freshness/ad-hoc lookups over the CC0-1.0
+  dumps, per-family limits classified DIG-1464: congress-trades is a 13107
+  disclosure report and short-volume carries FINRA's non-commercial terms)
+  are
+  registered in `mcp_server.py` (`_maybe_tool`, `READ_SCOPE_TOOLS`) and listed
+  in `orchestrator_tools.py`. Default-ON behind `LUXALGO_ENABLED` — only
+  `1`/`true`/`yes`/`on` enable it, any other explicit value fails closed to a
+  typed `upstream_error` with no request.
+- **Upstream contract.** One `tools/call` JSON-RPC round trip per tool over
+  streamable HTTP (SSE `data:` lines; bare JSON also accepted). Every upstream
+  tool requires a `context` string — the client injects the fixed generic
+  `LUXALGO_CONTEXT` server-side and always overwrites any caller value, so no
+  PII reaches the upstream. Library results answer `structuredContent`; the
+  edge/trackers tools answer MCP content blocks whose text part is the JSON
+  payload — both shapes unwrap to the same envelope `data`. Upstream payloads
+  pass through unchanged (shapes vary); errors map to `not_found` /
+  `rate_limited` / `upstream_error` / `invalid_input`. 900s size-bounded TTL
+  cache; no rate-limiter/breaker in this phase (low-volume keyless reads). An
+  upstream `stale` flag on a trackers payload folds into the envelope `stale`
+  bit.
+- **Attribution + license boundary.** Every payload carries a per-family
+  "Sourced from LuxAlgo ..." attribution (`attribution_fields_for` in
+  `attribution.py`; the edge/trackers families do NOT reuse the Library
+  sentence) plus a canonical link. Library payloads additionally state the
+  `LUXALGO_COMMERCIAL_LICENSE` flag state they were produced under
+  (`commercial_license` + `license_state`, #4845). Every `edge_report` result
+  carries the honesty disclaimer (`digiquant.stats.honesty.DISCLAIMER`) in both
+  the upstream `data.disclaimer` field and the envelope `warnings`. Research
+  reference only — never a pipeline primary. `library_get_source_code` is
+  deliberately NOT wrapped (CC BY-NC-SA: no indicator source in paid
+  surfaces); `trackers_query` is deliberately NOT wrapped (the CC0-1.0 dumps,
+per-family limits classified DIG-1464 — congress-trades restricted by 5 U.S.C.
+13107, short-volume carrying unresolved FINRA terms — stay
+  the source of record — live queries are freshness checks only);
+  `broker_*` keys are never sent to the hosted MCP; `journal_*`/`propfirms_*`
+  are separate packages.
+- **License guard (#4845).** `data/luxalgo/license_guard.py` (stdlib-only) is
+  the enforcement point: default-OFF commercial flag, dispatcher runtime
+  refusal with no request while OFF, `source_code_violations` surface
+  assertions (only the dispatcher may add the 9th tool, and only when
+  licensed), `payload_contains_source_code` /
+  `assert_payload_has_no_source_code` for persist/render sinks, and the
+  repo-wide reference scan. Guard halves: `tests/dq/test_luxalgo_license_guard.py`
+  (unit) + `scripts/check_luxalgo_license_boundary.py` (CI-adjacent, exit 1 on
+  violations). Hub `/v1/orchestrator_invoke` 400s unknown `luxalgo_*` names.
+  **That guard is the _code_ licence only** (indicator Pine source, CC BY-NC-SA).
+  The _data_ licence that governs every trackers row is CC0-1.0 (classified
+  2026-10-06, DIG-1464, from the upstream `LICENSE` at `main`), and it carries
+  two per-family limits a copyright waiver cannot supply: congress-trades is
+  restricted by 5 U.S.C. 13107(c)(1)(B) and refused as a data class by Counsel
+  (DIG-1472, in service only by business decision), and short-volume carries
+  unresolved upstream FINRA terms (with Counsel). Both live in
+  `attribution.LUXALGO_TRACKERS_DATA_CAVEATS`; every trackers licence note and
+  entitlement note renders them via `attribution.trackers_data_caveat`. A CC0
+  claim without them is a defect, guarded in
+  `tests/dq/test_congress_trades_statute_and_ingest_provenance.py` across all
+  six claim surfaces.
+- **Tests are offline.** `httpx.MockTransport` straight into `LuxAlgoClient`
+  (SSE-shaped `data:` bodies), or a patched `_build_luxalgo_client`; never hit
+  the live MCP. Run `pytest tests/dq/test_mcp_luxalgo_tools.py
+  tests/dq/test_mcp_luxalgo_edge_trackers_tools.py` plus
+  `pytest tests/dq/test_mcp_server_scope.py`.
 
 ---
 

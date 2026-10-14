@@ -13,11 +13,13 @@ import re
 import secrets
 import time as _time
 from collections import deque as _deque
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from threading import Lock as _Lock
+from types import MappingProxyType
 from typing import Any, Literal
 
+from digibase.art9_middleware import install_art9_admission
 from digibase.cors import install_cors
 from digibase.errors import json_error_response, register_fastapi_error_handlers
 from digibase.http import install_request_id_logging, install_request_id_middleware
@@ -27,8 +29,16 @@ from digikey.integrations.service_middleware import DigiAuthMiddleware, digisear
 
 from digisearch import __version__
 from digisearch.agent.pipeline_models import ResearchTurnOutput
+from digisearch.art9_screen import router as art9_screen_router
 from digisearch.backend_require import require_real_search_backend
+from digisearch.client import (
+    SURFACE_KIND_HTTP,
+    Art9SurfaceRefusal,
+    declare_art9_surface,
+    require_art9_clear,
+)
 from digisearch.core.models import Query
+from digisearch.indexes.backends.backend_errors import CorpusNotSeededError
 from digisearch.indexes.backends.vectorize import MAX_TOP_K as _VECTORIZE_MAX_TOP_K
 from digisearch.logging import configure_logging
 from digisearch.monitors.exa_adapter import (
@@ -61,7 +71,7 @@ from digisearch.orchestrator_tools import (
 )
 from digisearch.pipeline.ingest import IngestError, ingest_source
 from digisearch.pipeline.url_ingest import UrlIngestResult, ingest_url
-from digisearch.search._stub import query_index
+from digisearch.search._stub import query_index, unseeded_indexes
 from digisearch.web_search.models import (
     WebSearchConfigError,
     WebSearchErrorResponse,
@@ -161,7 +171,18 @@ app = FastAPI(
 )
 install_metrics(app, service="digisearch", version=__version__)
 install_cors(app, service="digisearch")
+# Art. 9 admission floor, added BEFORE DigiAuthMiddleware on purpose: Starlette runs the
+# most recently added middleware outermost, so digikey auth rejects an unscoped caller
+# before the admission screen reads its body. Registered last it would read and screen
+# request bodies for callers the auth layer was going to turn away anyway (DIG-1083).
+install_art9_admission(app, app_name="digisearch", service="digisearch")
 app.add_middleware(DigiAuthMiddleware, service="digisearch", path_scopes=_digisearch_path_scopes)
+
+# Art. 9 transcript screening (DIG-1176). One route, mounted on the existing app.
+# The route is authenticated by default: _digisearch_path_scopes falls through to
+# digisearch:query for an unknown path, so no digikey change is needed and no
+# public-path exemption is added. The digisearch middleware mount is leaf 10's.
+app.include_router(art9_screen_router)
 
 
 _rl_windows: dict[str, _deque] = {}
@@ -179,6 +200,9 @@ _RATE_LIMITS: dict[str, tuple[int, int]] = {
     # § Interfaces websets statics (creation is a DoS surface); the
     # parameterized webset routes follow the same two-tier mechanism (D17).
     "/v1/websets": (10, 60),
+    # Art. 9 transcript screening (DIG-1176). The caller is digichat screening
+    # each conversation turn before it is stored, so the budget is per-transcript.
+    "/internal/art9/screen": (120, 60),
 }
 _DEFAULT_RATE_LIMIT = (30, 60)
 _UNLIMITED_PATHS = {"/health", "/healthz"}
@@ -437,7 +461,7 @@ class QueryResponse(BaseModel):
     results: list[dict]
     query: str
     index_name: str
-    total: int
+    total: int | None
     formatted: str | None = Field(
         default=None, description="When format=table, markdown table string for display"
     )
@@ -534,16 +558,31 @@ class ResearchTurnRequest(BaseModel):
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
-    """Legacy health check for Docker and digigraph (kept for back-compat)."""
-    return {"status": "ok", "service": "digisearch"}
+def health() -> dict[str, Any]:
+    """Legacy health check for Docker and digigraph (kept for back-compat).
+
+    Reports ``degraded`` when a boot marked indexes as unseeded (#5045): their
+    collections are empty, so every query would answer "no results" and read as
+    a confident miss. HTTP stays 200 on purpose — every consumer gates on the
+    status code (``scripts/run_stack_local.sh`` uses ``curl -sf``,
+    ``tests/test_e2e.py::test_digisearch_health`` asserts 200) and none read this
+    body. ``/healthz`` stays the pure liveness probe the CI pipeline calls.
+    """
+    unseeded = sorted(unseeded_indexes())
+    body: dict[str, Any] = {
+        "status": "degraded" if unseeded else "ok",
+        "service": "digisearch",
+    }
+    if unseeded:
+        body["unseeded_indexes"] = unseeded
+    return body
 
 
 @app.get("/healthz")
 def healthz() -> dict[str, bool]:
     """Minimal liveness probe. Auth-exempt, rate-limit-exempt, secret-free.
 
-    Returns HTTP 200 with ``{"ok": true}``. Pair with digismith's ``/v1/status``
+    Returns HTTP 200 with ``{"ok": true}``. Pair with digitrace's ``/v1/status``
     for richer diagnostics.
     """
     return {"ok": True}
@@ -611,6 +650,44 @@ def _build_query_filters(req: QueryRequest) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+def _twin_entry(result: Any, position: int) -> dict[str, Any]:
+    """Extract the dedupe-relevant fields from one backend ``Result``.
+
+    Identity comes from the vault namespace first (``vault_path``), then an
+    http(s) ``source_url`` (URL-ingested chunks carry a tmp-staging
+    ``metadata.path`` that must not shadow the shared URL, #4856 review),
+    then ``path``. A file-derived ``source_url`` is an ingest-location
+    artifact, never an identity. The http(s) URL doubles as the keep-signal
+    preserving the only citable link.
+    """
+    from digisearch.search.namespace_dedupe import is_http_url
+
+    chunk = getattr(result, "chunk", None)
+    metadata = dict(getattr(chunk, "metadata", None) or {})
+    source_url = metadata.get("source_url")
+    http_source = source_url if is_http_url(source_url) else None
+    return {
+        "path": metadata.get("vault_path") or http_source or metadata.get("path") or "",
+        "content": getattr(chunk, "content", "") or "",
+        "url": getattr(result, "url", None) or metadata.get("url") or http_source,
+        "position": position,
+    }
+
+
+def _drop_namespace_twins(results: list[Any]) -> list[Any]:
+    """Drop stale cross-namespace twin hits (#4823).
+
+    Full chunk bodies only exist pre-normalization, so this runs on backend
+    ``Result`` objects: entries collapse on exact body equality plus
+    suffix-related metadata paths, and survivors flow into ``normalize``.
+    """
+    from digisearch.search.namespace_dedupe import dedupe_namespace_copies
+
+    entries = [_twin_entry(result, position) for position, result in enumerate(results)]
+    keep = {entry["position"] for entry in dedupe_namespace_copies(entries)}
+    return [result for position, result in enumerate(results) if position in keep]
+
+
 def run_query(req: QueryRequest) -> QueryResponse:
     """Core query implementation; shared by ``POST /query`` and orchestrator invoke."""
     from digisearch.core.standard_hits import normalize_query_hit
@@ -642,6 +719,7 @@ def run_query(req: QueryRequest) -> QueryResponse:
     )
     response = query_index(q, index_name=req.index_name)
     results = response.results
+    results = _drop_namespace_twins(results)
     out_results: list[dict] = [normalize_query_hit(r, content_preview_max=500) for r in results]
     summary: dict[str, Any] | None = None
     use_summary = (req.response_mode or "").strip().lower() == "summary" or (
@@ -658,7 +736,13 @@ def run_query(req: QueryRequest) -> QueryResponse:
         from digisearch.http_client import format_results_table
 
         formatted = format_results_table(out_results, req.text, top_k=req.top_k)
-    total = response.total_count if response.total_count is not None else len(results)
+    total: int | None
+    if response.total_count is not None:
+        total = response.total_count
+    elif req.include_total_count:
+        total = None
+    else:
+        total = len(results)
     effective = effective_query_mode(mode, response.backend)
     if effective != mode:
         logger.info(
@@ -686,7 +770,19 @@ def run_query(req: QueryRequest) -> QueryResponse:
 @app.post("/query", response_model=QueryResponse)
 def api_query(req: QueryRequest) -> QueryResponse:
     """Search documents. Use format=table to get response.formatted as markdown table."""
-    return run_query(req)
+    try:
+        return run_query(req)
+    except CorpusNotSeededError as exc:
+        # 503, not 500: the corpus is a dependency that is not ready yet, and
+        # the next container boot retries the seed (#5045). An unseeded index
+        # must never look like a query that legitimately matched nothing.
+        # `detail` stays a string: the registered digibase error handler renders
+        # `HTTPException.detail` verbatim into `error.message`, and a dict here
+        # would reach API consumers as a Python repr.
+        raise HTTPException(
+            status_code=503,
+            detail=f"corpus_not_seeded: {exc}",
+        ) from exc
 
 
 class OrchestratorToolsRequest(BaseModel):
@@ -1046,6 +1142,22 @@ def _invoke_webset_tool(tool: str, args: dict[str, Any]) -> OrchestratorInvokeRe
     return OrchestratorInvokeResponse(ok=True, service="digisearch", tool=tool, data=data)
 
 
+def _orchestrator_run_query(qreq: QueryRequest, tool: str) -> OrchestratorInvokeResponse:
+    """Run a hub-dispatched query, mapping an unseeded corpus onto the error shape.
+
+    digigraph reads ``inv["ok"]`` (``digisearch_tools.py``) and surfaces
+    ``error`` when it is false, so returning ``ok=False`` here is what turns
+    "zero hits" into a diagnosable failure instead of a confident non-answer
+    (#5045). Staying on this function's own ``ok=False`` convention also keeps
+    the HTTP status 200, which is what the hub's manifest/invoke client expects.
+    """
+    try:
+        resp = run_query(qreq)
+    except CorpusNotSeededError as exc:
+        return OrchestratorInvokeResponse(ok=False, error=f"corpus_not_seeded: {exc}")
+    return OrchestratorInvokeResponse(ok=True, service="digisearch", tool=tool, data=resp)
+
+
 @app.post("/v1/orchestrator_invoke")
 def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvokeResponse:
     """Execute one digisearch orchestrator tool by name (hub dispatch)."""
@@ -1068,13 +1180,7 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
         )
         if not qreq.text.strip():
             return OrchestratorInvokeResponse(ok=False, error="query is required")
-        resp = run_query(qreq)
-        return OrchestratorInvokeResponse(
-            ok=True,
-            service="digisearch",
-            tool=tool,
-            data=resp,
-        )
+        return _orchestrator_run_query(qreq, tool)
 
     if tool == TOOL_DIGISEARCH_FETCH_ALL:
         page_size = min(100, _resolve_fetch_all_max(None))
@@ -1115,7 +1221,10 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
                 # Exhaustive pagination must not reorder each partial page (#2441).
                 skip_rerank=True,
             )
-            resp = run_query(qreq)
+            try:
+                resp = run_query(qreq)
+            except CorpusNotSeededError as exc:
+                return OrchestratorInvokeResponse(ok=False, error=f"corpus_not_seeded: {exc}")
             payload = resp.model_dump(mode="json")
             results = payload.get("results") or []
             if not results:
@@ -1899,6 +2008,29 @@ async def api_exa_webhook(request: Request) -> dict[str, Any] | JSONResponse:
         return _monitor_error(
             request, 422, "exa_payload_invalid", "EXA webhook payload must be a JSON object."
         )
+    # Art. 9 (spec DIG-912 §5.4, acceptance test 7). Two floors miss this route on
+    # purpose-and-consequence: `_digisearch_path_scopes` returns None for it, so the
+    # digikey layer treats it as public, and it sits outside every declared ingest
+    # prefix, so `check_route("digisearch", ...)` allows it and leaf 3's admission
+    # middleware passes it through unscreened. The digisearch surface registry is the
+    # only remaining place a screen can stand, which is what "an explicit mechanism,
+    # not by path" means. A route that is public but undeclared is REFUSED here rather
+    # than waved through - otherwise losing the registration would silently unscreen
+    # the webhook (finding F11).
+    surface = _auth_exempt_surface(request)
+    if surface is None:
+        return _monitor_error(
+            request,
+            403,
+            "art9:surface_unregistered",
+            "EXA webhook is an auth-exempt route with no Art. 9 surface declared for it.",
+        )
+    try:
+        require_art9_clear(surface, payload)
+    except Art9SurfaceRefusal as refusal:
+        return _monitor_error(
+            request, 403, refusal.result.reason, f"Art. 9 screening refused: {refusal}"
+        )
     try:
         exa_monitor_id = exa_monitor_id_from_payload(payload)
     except ExaAdapterError as exc:
@@ -2342,3 +2474,42 @@ def api_export_webset(
 
 register_fastapi_error_handlers(app, service="digisearch")
 setup_otel_fastapi(app, service_name="digisearch", service_version=__version__)
+
+
+# --- Art. 9 surfaces for the routes digikey leaves public ---------------------
+# Runs last, after every route above has been registered. Keys are the router's own
+# path templates read off `app.routes` - a hand-written route string is exactly how a
+# registry drifts from the app and stops covering anything (finding F3) - and exemption
+# is decided by probing the app's own `_digisearch_path_scopes`, never by a second,
+# possibly-disagreeing copy of the policy.
+def _register_auth_exempt_surfaces() -> Mapping[str, str]:
+    """Declare an Art. 9 surface for every served route digikey leaves public.
+
+    Returns path template -> surface id.
+    """
+    surfaces: dict[str, str] = {}
+    for route in app.routes:
+        path = getattr(route, "path", None)
+        methods = getattr(route, "methods", None)
+        if not isinstance(path, str) or not methods:
+            continue
+        if any(_digisearch_path_scopes(method, path) is None for method in sorted(methods)):
+            surface = f"{SURFACE_KIND_HTTP}:{path}"
+            declare_art9_surface(surface, SURFACE_KIND_HTTP)
+            surfaces[path] = surface
+    return MappingProxyType(surfaces)
+
+
+AUTH_EXEMPT_SURFACES: Mapping[str, str] = _register_auth_exempt_surfaces()
+
+
+def _auth_exempt_surface(request: Request) -> str | None:
+    """Surface id screening ``request``, or ``None`` when its route is not public.
+
+    Looks the route up by the template the router matched, falling back to the request
+    path (the two coincide for the literal routes that can be auth-exempt).
+    """
+    template = getattr(request.scope.get("route"), "path", None)
+    if not isinstance(template, str):
+        template = request.url.path
+    return AUTH_EXEMPT_SURFACES.get(template)

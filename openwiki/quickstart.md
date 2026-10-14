@@ -19,15 +19,15 @@ sources:
   - id: openwiki-source-d16d9586117b95e03b7f1549
     resource: repo://digisearch/AGENTS.md
   - id: openwiki-source-9a612bb5c480c0f9c10eeafd
-    resource: repo://digismith/AGENTS.md
+    resource: repo://digitrace/AGENTS.md
   - id: openwiki-source-5c7b6be6bf0bcff60bbd689d
-    resource: repo://digismith/Dockerfile
+    resource: repo://digitrace/Dockerfile
   - id: openwiki-source-e502a2c67cf187dc015ba472
-    resource: repo://digismith/src/digismith/config.py
+    resource: repo://digitrace/src/digitrace/config.py
   - id: openwiki-source-01a7f90e3c3e6e8ce426b71e
-    resource: repo://digismith/src/digismith/server.py
+    resource: repo://digitrace/src/digitrace/server.py
   - id: openwiki-source-c00fdd1354f900a1d45b111a
-    resource: repo://digismith/src/digismith/trace.py
+    resource: repo://digitrace/src/digitrace/trace.py
   - id: openwiki-source-a18bc9b1229d0282f121b666
     resource: repo://digivault/AGENTS.md
   - id: openwiki-source-a49bd70bd0f6d776441b838b
@@ -50,7 +50,7 @@ service, verify with health/status curls, run the unit gates — per its
 | Run the hub, call a workflow, stream chat | [digigraph Quickstart](/openwiki/digigraph/quickstart.md) |
 | Backtest / optimize a strategy | [digiquant Quickstart](/openwiki/digiquant/quickstart.md) |
 | Ingest docs, run RAG queries, web search, monitors | [digisearch Quickstart](/openwiki/digisearch/quickstart.md) |
-| Add LangSmith tracing, check trace status | [digismith quickstart](#digismith-tracing) (below) |
+| Add LangSmith tracing, check trace status | [digitrace quickstart](#digitrace-tracing) (below) |
 | Work with the markdown vault | [digivault Quickstart](/openwiki/digivault/quickstart.md) |
 | Issue keys, exchange JWTs | [digikey Quickstart](/openwiki/digikey/quickstart.md) |
 | Run the chat UI (assistant-ui skins, multi-backend, deploy-config) | [digichat Quickstart](/openwiki/digichat/quickstart.md) |
@@ -67,14 +67,14 @@ make stack-local # host backends (8000–8003, 8005) or: make up
 curl -s http://localhost:8000/healthz # digigraph
 curl -s http://localhost:8001/healthz # digiquant
 curl -s http://localhost:8002/health # digisearch
-curl -s http://localhost:8003/healthz # digismith
+curl -s http://localhost:8003/healthz # digitrace
 curl -s http://localhost:8005/healthz # digikey
-pytest tests/ -m unit -k "digigraph or digiquant or digisearch or digismith or digikey" -v
+pytest tests/ -m unit -k "digigraph or digiquant or digisearch or digitrace or digikey" -v
 ```
 
-## digismith tracing
+## digitrace tracing
 
-digismith gives you optional LangSmith tracing through one decorator, plus
+digitrace gives you optional LangSmith tracing through one decorator, plus
 a tiny HTTP service (port 8003) that reports whether tracing is configured.
 Nothing here requires a key to try: without configuration everything is a
 safe no-op.
@@ -84,7 +84,7 @@ safe no-op.
 Install with the LangSmith extra and decorate:
 
 ```python
-from digismith.trace import traceable
+from digitrace.trace import traceable
 
 @traceable("chat_completion")
 def chat_completion(...): ...
@@ -99,7 +99,7 @@ Gate optional behavior at runtime with `tracing_enabled()`, which re-reads
 the environment on every call:
 
 ```python
-from digismith.config import tracing_enabled
+from digitrace.config import tracing_enabled
 
 if tracing_enabled():
     ...
@@ -110,18 +110,18 @@ if tracing_enabled():
 From the repo root with Docker Compose:
 
 ```bash
-docker compose build digismith
-docker compose up digismith
+docker compose build digitrace
+docker compose up digitrace
 ```
 
-Or directly (from `digismith/`):
+Or directly (from `digitrace/`):
 
 ```bash
-uvicorn digismith.server:app --host 0.0.0.0 --port 8003
+uvicorn digitrace.server:app --host 0.0.0.0 --port 8003
 ```
 
-The image installs `digismith[langsmith]` and serves
-`digismith.server:app` on port 8003, published on the host as
+The image installs `digitrace[langsmith]` and serves
+`digitrace.server:app` on port 8003, published on the host as
 `127.0.0.1:8003`.
 
 ### 3. Verify it
@@ -141,15 +141,15 @@ will flip `tracing_configured` to true.
 ### 4. Run the tests and lint
 
 ```bash
-pytest tests/ -m unit -k "digismith" -v
-ruff check digismith/ && ruff format --check digismith/
+pytest tests/ -m unit -k "digitrace" -v
+ruff check digitrace/ && ruff format --check digitrace/
 ```
 
 ### Where next
 
-- [digismith Architecture](/openwiki/digismith/architecture.md) — library
+- [digitrace Architecture](/openwiki/digitrace/architecture.md) — library
 vs service, conditional-tracing pattern, consumer boundaries.
-- [Tracing and Redaction](/openwiki/digismith/tracing-and-redaction.md) —
+- [Tracing and Redaction](/openwiki/digitrace/tracing-and-redaction.md) —
 decorator semantics, config helpers, PII patterns, `DIGI_PII_PATTERNS`.
-- [Status API and Operations](/openwiki/digismith/status-api-and-operations.md) —
+- [Status API and Operations](/openwiki/digitrace/status-api-and-operations.md) —
 health, status, metrics, CORS, OTel, container wiring.

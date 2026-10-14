@@ -74,9 +74,114 @@ pipeline being written.
 
 ### Retroactive note
 
-This boundary applies **prospectively**. An audit of **Gloomber** (flagged in
+This boundary applies **prospectively**. An audit of **Gloomberb** (flagged in
 DIG-503, owned by Security as DIG-1194) applies the same boundary to the same
 cookie-replay pattern.
+
+### A control is satisfied per branch, and re-verified after promotion
+
+A vendor-content control is satisfied only on the branch it was verified on. Any
+hand-ported change to a second branch must be diffed against the source branch
+before merge, and the verification is repeated on the merged result.
+
+The hand-port is the case this exists for. A change verified on one branch and
+copied by hand onto another has two independently-wrong halves: the copy is not
+the verified change, and the verdict on the source branch says nothing about it.
+Diffing the copy against the source makes it provably the verified change and
+nothing else. Re-running the verification on the merged result is a separate
+obligation, because the merged result is the artefact that actually ships.
+
+### Coverage includes the prose that explains a removal
+
+The control covers content wherever it appears in a file, including prose that
+records, quotes or explains a removed item.
+
+The second half of that sentence is where this has been found to leak. A file
+that correctly removed a method can still publish the method in the paragraph
+explaining the removal — and the explanation is the part that reads as
+compliant, because it is describing a redaction rather than performing an
+access. Covering content "wherever it appears" removes the reading in which the
+explanation is exempt from the control it is an instance of.
+
+### Security's three rules (DIG-1418)
+
+Adopted from Security's ruling on DIG-1418 in the forms quoted there. These are
+the durable forms; where this boundary and that ruling could be read as
+differing, the ruling is the source of these three rules.
+
+#### Rule 1 — a rule about content, not about git state
+
+**Branch-independent, definitively. This is a rule about content, not about git
+state.**
+
+Publication status is a property of the reachable tree. `develop` in this
+repository is public — an unauthenticated fetch returns HTTP 200 today. Content
+on a public ref is published the moment the ref exists, not when it is promoted.
+There is no "internal" branch in a public repository.
+
+> any ref of `digithings-ai/digithings` that an unauthenticated client can fetch
+> is public, and the rule applies to all of them, including branches created
+> after this ruling. Branch age, merge state and promotion status are
+> irrelevant.
+
+Two reasons this is not a matter of judgment. A rule keyed to branch state
+cannot be satisfied consistently: the DIG-503 scrub was applied to `main` and
+never to `develop`, and was reported done while the exposure sat in a public
+branch the whole time. That is a structural failure of a state-triggered rule,
+not a human error to retrain. And once compliance depends on "which ref am I
+on", there is always a ref nobody checked.
+
+#### Rule 2 — our names are not their names
+
+**The rule is not "names are safe." The rule is: our own configuration
+identifiers and a public login page stay; names that locate the credential on
+someone else's system go.**
+
+| String | Whose name it is | Verdict |
+|--------|------------------|---------|
+| `PRIMEMARKET_USERNAME`, `PRIMEMARKET_PASSWORD`, `PRIMEMARKET_SESSION_TOKEN`, `PRIMEMARKET_SESSION_COOKIE` | Ours — our own configuration identifiers | **Stay.** An attacker who learns them learns the shape of our env file, which any repository of ours already shows them, and gets no access to any value. There is no secret in the name and no actionable step it enables; removing them reduces attack surface by exactly zero. |
+| `https://desk.prime-terminal.com` | Theirs, but public — a login page reachable by anyone | **Stay.** It is load-bearing provenance: this credential authenticates *as a person*, which is why the refresh path is a human sign-in rather than an API call. Deleting the URL makes the audit row unactionable and reduces nothing. |
+| The session-token storage-slot key — the `localStorage` key naming the slot on the vendor's own page | Theirs, and **on their page** | **Go.** It must not appear in the public tree in any form. |
+
+The third row is the reason this rule is not a blanket "names stay". That key is
+the single identifier that turns "look in the browser" into a mechanical,
+non-interactive extraction: anyone who knows the slot name can obtain the
+credential unaided, while anyone who has only the URL must guess at storage
+layout. A blanket names-stay rule would have let it through.
+
+That row is described rather than quoted, deliberately. The ruling is that the
+string must not appear in the public tree in any form, and a policy that
+reproduced it in its own table would be the instance it forbids. Recorded here
+so nobody later reads the omission as an oversight and "completes" it; the
+allowlist and the gate carry the literal patterns.
+
+#### Rule 3 — a redaction is not an amendment
+
+**A redaction is not an amendment.** Deleting a step from the operative document
+does not license republishing the step in the document that explains the
+deletion. The explanation exists to tell a future reader *that* something was
+removed, *why*, and *where the canonical copy lives*. It does not need to carry
+the removed text to do that job — and carrying it is the only part of that
+paragraph with any attack value.
+
+**The test, which generalises:**
+
+> **Can a reader who has nothing else execute the step from the sentence alone?**
+
+That single question resolves the tension that made this ambiguous — a finding
+must stay, a method must go — without a special case for a passage that is
+somehow both. A negative finding and a `file:line` citation are not executable,
+and a finding that cannot be executed is a finding, so it stays. A sentence
+that gives the reader the vendor, the browser, the storage slot and the key to
+copy is the whole procedure, so it goes.
+
+The standard for the compliant form:
+
+> mechanism named, key and steps absent, every operational fact retained.
+
+The record survives without the text. Naming the row, the date, the reason and
+the location of the canonical copy makes the paragraph **more** useful as an
+audit record, not less.
 
 ---
 
@@ -84,6 +189,41 @@ cookie-replay pattern.
 
 Before a change touching a vendor merges, the author (or reviewer) completes
 this checklist and attaches it as a PR comment:
+
+### Before step 1: read the data licence, not the repository's `LICENSE`
+
+**This is the mistake we have made twice, so it is a step of its own rather
+than a note.**
+
+Every vendor in this boundary ships an open-source SDK and a separately-licensed
+data product. Gloomberb's terms put MIT on the source code and said in the same
+paragraph that the terms govern "the data and content we provide" (§2). Reading
+the repository's `LICENSE` tells you nothing about the data licence — it is a
+different document, from a different grantor, covering a different subject.
+
+Three corollaries that each cost us time:
+
+- **A wrapper is ours, the credential is theirs.** Wrapping a vendor SDK but
+  authenticating with a copied browser session does not change whose terms
+  govern. The transport does not launder the credential.
+- **A licence claim inherited from a repo is an assumption wearing a citation.**
+  If our code asserts a data licence, that assertion needs the vendor's terms
+  behind it, not a note in a sibling module. See the
+  [LuxAlgo record](vendor-terms/luxalgo/INDEX.md), where an unverified "CC0"
+  claim sits next to a guard that only covers the code licence.
+- **"Client brings their own account" must come from the vendor's terms.** It was
+  permitted in Gloomberb's §12 ("for yourself **or for users who have their own
+  access**"). That reading is Gloomberb's and does not transfer without reading
+  theirs.
+
+### Where the record lives
+
+Step 6 writes to `docs/vendor-terms/<vendor>/INDEX.md`, indexed from
+[`docs/vendor-terms/INDEX.md`](vendor-terms/INDEX.md). The standing line lives
+there too:
+
+> No third-party data access merges without a `docs/vendor-terms/<vendor>/INDEX.md`
+> entry. The check runs when the integration is proposed, not at review time.
 
 | Step | Action | Evidence Required |
 |------|--------|-------------------|
@@ -214,7 +354,7 @@ without us republishing it.
    there a repository you want excluded, on the record?
 
 **Answered, not open.** Counsel's position on the two that were theirs: the
-Gloomber audit is correctly homed with Security as DIG-1194; and the escalation
+Gloomberb audit is correctly homed with Security as DIG-1194; and the escalation
 path is Counsel and Security for a recorded position, with no further signatory
 required. Adding one would recreate the defect fixed in step 5 — a gate nobody
 can satisfy is a gate that gets ignored.
@@ -229,7 +369,7 @@ can satisfy is a gate that gets ignored.
   *when we merged*.
 - **Counsel cannot advise on what they cannot see.** "The terms could not be
   retrieved" is not a defensible position when the URL returns 200.
-- **The pattern is systematic.** PrimeMarket and Gloomber both use
+- **The pattern is systematic.** PrimeMarket and Gloomberb both use
   cookie-replay. A boundary catches the class, not just the instance.
 - **A policy that contradicts itself gets copied.** One table withholding a
   field while the next publishes it teaches an author nothing except which row

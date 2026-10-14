@@ -70,8 +70,8 @@
 
 /* Welcome body typewriter caret: same blink grammar as the composer block
    caret, tinted with the tenant accent. Typing is client-only and degrades
-   to the full copy under prefers-reduced-motion, so no reduced-motion rule
-   is needed here. */
+   to the full copy under prefers-reduced-motion; the infinite blink still
+   needs an explicit animation: none under reduce (contract test). */
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-thread-welcome-caret {
   display: inline-block;
   width: 0.55em;
@@ -83,6 +83,12 @@
   vertical-align: text-bottom;
   background: var(--tenant-accent, var(--accent, var(--ink)));
   animation: aui-caret-blink 1.06s steps(1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-thread-welcome-caret {
+    animation: none;
+  }
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-thread-welcome-suggestions {
@@ -132,6 +138,20 @@
    composer, so typing cannot shove the welcome around. */
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-thread-viewport-footer {
   margin-top: auto;
+  gap: 0.55rem;
+  padding-bottom: 0.45rem;
+}
+
+/* The stock thread column uses px-4 / gap-y-6 / mb-14. Pull that air in so
+   turns, the welcome, and the composer share one inset. */
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_thread-viewport"] > div {
+  padding-inline: 0.9rem;
+  padding-top: 0.75rem;
+}
+
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_message-group"] {
+  gap: 0.85rem;
+  margin-bottom: 1rem;
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_thread-viewport"] {
@@ -324,7 +344,8 @@
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_composer-shell"] {
   border-color: var(--hair);
-  background: var(--bg);
+  --composer-bg: transparent;
+  background: transparent;
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_composer-shell"]:focus-within {
@@ -636,10 +657,27 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md[data-status="running"]::after,
-  :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-md[data-status="running"] *::after {
-    animation: none;
-  }
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) :where(.aui-md[data-status="running"]):empty::after,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) :where(.aui-md[data-status="running"])
+  > :where(:not(ol):not(ul):not(pre)):last-child::after,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) :where(.aui-md[data-status="running"]) > pre:last-child code::after,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) :where(.aui-md[data-status="running"])
+  > :where(:is(ol, ul):last-child)
+  > :where(li:last-child:not(:has(* > li)))::after,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) :where(.aui-md[data-status="running"])
+  > :where(:is(ol, ul):last-child)
+  > :where(li:last-child)
+  > :where(:is(ol, ul):last-child)
+  > :where(li:last-child:not(:has(* > li)))::after,
+:is(.aui-theme-stage, [data-thread-skin="digichat"]) :where(.aui-md[data-status="running"])
+  > :where(:is(ol, ul):last-child)
+  > :where(li:last-child)
+  > :where(:is(ol, ul):last-child)
+  > :where(li:last-child)
+  > :where(:is(ol, ul):last-child)
+  > :where(li:last-child)::after {
+  animation: none;
+}
 }
 
 /* Increment 6 — cube matrix. Snap on/off; color by data-state. */
@@ -1335,7 +1373,7 @@
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) [data-slot="aui_composer-shell"][data-dragging="true"] {
   border-style: dashed;
   border-color: var(--hair);
-  background: var(--bg);
+  background: transparent;
 }
 
 :is(.aui-theme-stage, [data-thread-skin="digichat"]) .aui-user-message-attachments {
@@ -1512,8 +1550,7 @@
 .digichat-launcher__panel,
 .digichat-launcher__body,
 .digichat-launcher .aui-root,
-.digichat-launcher .aui-thread-viewport-footer,
-.digichat-launcher [data-slot="aui_composer-shell"] {
+.digichat-launcher .aui-thread-viewport-footer {
   --background: var(--bg);
   --foreground: var(--ink);
   --popover: var(--bg);
@@ -1532,6 +1569,8 @@
 
 .digichat-launcher [data-slot="aui_composer-shell"] {
   gap: 0.25rem;
+  --composer-bg: transparent;
+  background: transparent;
 }
 
 /* Portaled attach / more / tooltip / dialog must stack above the launcher

@@ -98,14 +98,19 @@ ALLOWED_LIVE_MENTIONS = {
             ),
         }
     ),
+    "scripts/secret_staleness_check.py": (
+        {
+            "were `CURSOR_API_KEY` and `FRED_API_KEY` at 165 days.": (
+                "module docstring naming FRED_API_KEY as one of the oldest org "
+                "secret names in a hand-recorded rotation audit. Prose about a "
+                "past measurement, not a read: the script only calls `gh secret "
+                "list` / `gh api .../actions/secrets`, which return names and "
+                "dates, never values. Added 2026-10-05 when develop's 8d7c5edbf "
+                "brought it in and the guard correctly failed closed on it"
+            ),
+        }
+    ),
 }
-
-# Ported to main under DIG-1267. ``scripts/secret_staleness_check.py`` does not
-# exist on main (it arrived on develop after the merge-base), so its row is
-# dropped here rather than carried into a tree it cannot protect. If that script
-# is ever promoted to main, bring the row back with it.
-# The surviving row above is a human-owned placeholder (DIG-78 / PR #5034):
-# "…is exempt from the FRED guard but no longer exists -- drop the row".
 
 # Paths that keep the name on purpose, for a reason that is *not* a live
 # requirement. Anything added here is a decision to review, not a default.
@@ -114,9 +119,12 @@ ALLOWED_ELSEWHERE = {
         "human lock held by DIG-124; the inventory records the exposure and "
         "must not be edited from this leaf"
     ),
-    # Ported to main under DIG-1267. The two ``apps/digiquant-runner/`` rows on
-    # develop are dropped: ``apps/digiquant-runner/`` does not exist on main at
-    # all, so they protect nothing here. Re-add them if that app reaches main.
+    "apps/digiquant-runner/src/commands.test.ts": (
+        "negative assertion -- asserts FRED_API_KEY is absent from the spec"
+    ),
+    "apps/digiquant-runner/src/runner.test.ts": (
+        "negative assertion -- asserts FRED_API_KEY is not forwarded"
+    ),
 }
 
 # FRED splits its API in two. ``api.stlouisfed.org`` is the JSON/CSV

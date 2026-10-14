@@ -1,5 +1,0 @@
----
-description: Optionally run `make score` (Security/Quality/Optimization/Accuracy rubrics) on staged changes. Not a required pre-PR gate — review skills own those dimensions.
----
-
-`make score` is an optional human/CI tool. Run it on the staged diff if you want rubric findings. If a dimension fails, read `docs/scoring/<DIMENSION>.md` and fix what is real. Do not treat a passing self-score as a substitute for review ([CODE_REVIEW_POLICY.md](docs/agents/CODE_REVIEW_POLICY.md)).

@@ -287,6 +287,31 @@ def test_recompute_technicals_rejects_malformed_and_inverted_dates() -> None:
     assert "must be on or before" in inverted.output
 
 
+def test_compute_technicals_rejects_a_blank_ticker_list(tmp_path) -> None:
+    for tickers in (",", " ", " , "):
+        result = CliRunner().invoke(
+            compute_technicals_cmd,
+            ["--tickers", tickers, "--dry-run", "--cache-dir", str(tmp_path)],
+        )
+        assert result.exit_code != 0
+        assert "did not contain any symbols" in result.output
+
+
+def test_blank_tickers_are_not_an_empty_override(tmp_path) -> None:
+    """A comma-only or whitespace ``--tickers`` must not yield an empty universe."""
+    from click import UsageError
+    from digiquant.cli.prices import _resolve_universe
+
+    watchlist = tmp_path / "watchlist.md"
+    watchlist.write_text("| SPY |\n", encoding="utf-8")
+
+    with pytest.raises(UsageError, match="did not contain any symbols"):
+        _resolve_universe(",", watchlist, False)
+    assert _resolve_universe("   ", watchlist, False) == ["SPY"]
+    with pytest.raises(UsageError, match="Provide --watchlist or --tickers"):
+        _resolve_universe("   ", None, False)
+
+
 def test_recompute_technicals_needs_a_universe() -> None:
     result = CliRunner().invoke(recompute_technicals_cmd, [])
     assert result.exit_code != 0
@@ -409,9 +434,7 @@ def test_fetch_macro_fred_only_exits_zero_without_api_key(
     assert '"DGS10": 1' in result.output
 
 
-def test_fetch_macro_ignores_a_set_fred_api_key(
-    monkeypatch: pytest.MonkeyPatch, tmp_path
-) -> None:
+def test_fetch_macro_ignores_a_set_fred_api_key(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     """A set key does not dual-write: the panel stays Gloomberb-only."""
     monkeypatch.setenv("FRED_API_KEY", "test-key")
     monkeypatch.delenv("DIGIQUANT_MARKET_DATA_BACKEND", raising=False)
@@ -587,3 +610,79 @@ def test_fetch_fx_intraday_requires_credentials() -> None:
 
     assert result.exit_code != 0
     assert "Supabase credentials not set" in result.output
+
+
+# ─── fetch-fx-intraday upsert chunk size (DIG-1835) ───────────────────────
+#
+# Measured on core: /rest/v1/fx_intraday_observations took 2,265 requests in
+# the 12h before the egress restriction, ~2,209 of them POST upserts, from
+# python-httpx with the service role. At DEFAULT_CHUNK=500 that is roughly
+# 1.1M rows moved per 12h window, and every one of those rows is also echoed
+# back by PostgREST (see DIG-2112). Request COUNT is the lever here: a wider
+# chunk is strictly fewer round trips for the same rows.
+
+
+def test_fetch_fx_intraday_passes_default_chunk_to_writer() -> None:
+    """The CLI must plumb an explicit chunk, not silently inherit DEFAULT_CHUNK."""
+    with (
+        patch(_FETCH_INTRADAY, return_value=_fake_candles()),
+        patch(f"{_WRITER}.build_supabase_client", return_value=Mock()),
+        patch(f"{_WRITER}.upsert_fx_intraday_observations", return_value=Mock(rows=2)) as upsert,
+    ):
+        result = CliRunner().invoke(fetch_fx_intraday_cmd, ["--supabase"])
+
+    assert result.exit_code == 0, result.output
+    chunk = upsert.call_args.kwargs.get("chunk")
+    assert chunk is not None, "fetch-fx-intraday must pass chunk= to the writer"
+    assert chunk > 0
+
+
+def test_fetch_fx_intraday_chunk_exceeds_writer_default() -> None:
+    """The whole point: fewer requests than DEFAULT_CHUNK=500 for the same rows."""
+    from digiquant.data.prices.supabase_writer import DEFAULT_CHUNK
+
+    with (
+        patch(_FETCH_INTRADAY, return_value=_fake_candles()),
+        patch(f"{_WRITER}.build_supabase_client", return_value=Mock()),
+        patch(f"{_WRITER}.upsert_fx_intraday_observations", return_value=Mock(rows=2)) as upsert,
+    ):
+        result = CliRunner().invoke(fetch_fx_intraday_cmd, ["--supabase"])
+
+    assert result.exit_code == 0, result.output
+    chunk = upsert.call_args.kwargs.get("chunk")
+    assert chunk is not None, "fetch-fx-intraday must pass chunk= to the writer"
+    assert chunk > DEFAULT_CHUNK, f"chunk {chunk} must beat DEFAULT_CHUNK {DEFAULT_CHUNK}"
+
+
+def test_fetch_fx_intraday_chunk_flag_overrides_default() -> None:
+    """An operator can drop to a small chunk on a constrained gateway."""
+    with (
+        patch(_FETCH_INTRADAY, return_value=_fake_candles()),
+        patch(f"{_WRITER}.build_supabase_client", return_value=Mock()),
+        patch(f"{_WRITER}.upsert_fx_intraday_observations", return_value=Mock(rows=2)) as upsert,
+    ):
+        result = CliRunner().invoke(fetch_fx_intraday_cmd, ["--supabase", "--chunk", "250"])
+
+    assert result.exit_code == 0, result.output
+    assert upsert.call_args.kwargs.get("chunk") == 250
+
+
+def test_fetch_fx_intraday_chunk_rejects_non_positive() -> None:
+    """A zero or negative chunk would spin forever in _chunks()."""
+    with (
+        patch(_FETCH_INTRADAY, return_value=_fake_candles()),
+        patch(f"{_WRITER}.build_supabase_client", return_value=Mock()),
+        patch(f"{_WRITER}.upsert_fx_intraday_observations", return_value=Mock(rows=2)),
+    ):
+        result = CliRunner().invoke(fetch_fx_intraday_cmd, ["--supabase", "--chunk", "0"])
+
+    assert result.exit_code != 0
+    # Must reject the VALUE, not merely reject --chunk as an unknown option.
+    assert "No such option" not in result.output, result.output
+
+
+def test_fetch_fx_intraday_help_documents_chunk() -> None:
+    result = CliRunner().invoke(fetch_fx_intraday_cmd, ["--help"])
+
+    assert result.exit_code == 0, result.output
+    assert "--chunk" in result.output

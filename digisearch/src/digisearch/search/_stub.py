@@ -17,11 +17,12 @@ from __future__ import annotations
 import logging
 import os
 import time
+from dataclasses import replace
 from typing import TYPE_CHECKING, Callable
 
 from digisearch.core.models import Chunk, Query, Result, SearchResponse
 from digisearch.core.standard_hits import BACKEND_CHROMA, BACKEND_STUB, BACKEND_VECTORIZE
-from digisearch.indexes.backends.backend_errors import SearchBackendError
+from digisearch.indexes.backends.backend_errors import CorpusNotSeededError, SearchBackendError
 from digisearch.indexes.backends.vectorize_errors import VectorizeBackendError
 
 if TYPE_CHECKING:
@@ -33,6 +34,32 @@ _BackendFn = Callable[[Query, str], "SearchResponse | None"]
 _backends: list[_BackendFn] = []
 
 _BACKEND_ERRORS = (ImportError, OSError, RuntimeError, TypeError, ValueError)
+
+#: Comma-separated index names the current boot's seed failed to populate, set by
+#: the stack's ``start_digisearch.sh``. Empty/absent means seeded, so this guard
+#: is inert everywhere but that deployment (#5045).
+UNSEEDED_INDEXES_ENV = "DIGISEARCH_UNSEEDED_INDEXES"
+
+
+def unseeded_indexes() -> frozenset[str]:
+    """Indexes this boot's seed could not populate.
+
+    Read per call rather than cached at import: tests set it around individual
+    requests, and a container's value is fixed for its whole life anyway.
+    """
+    raw = os.environ.get(UNSEEDED_INDEXES_ENV, "")
+    return frozenset(name.strip() for name in raw.split(",") if name.strip())
+
+
+def guard_unseeded(index_names: list[str]) -> None:
+    """Refuse to serve from a collection this boot's seed never populated.
+
+    Raises :class:`CorpusNotSeededError` naming the offending indexes. Partial
+    failure only takes down the indexes that actually failed.
+    """
+    missing = sorted(set(index_names) & unseeded_indexes())
+    if missing:
+        raise CorpusNotSeededError(missing)
 
 
 def _first_env(*names: str) -> str:
@@ -234,32 +261,142 @@ def _maybe_rerank(query: Query, resp: SearchResponse) -> SearchResponse:
 
     provider = (os.environ.get("DIGISEARCH_RERANK_PROVIDER") or "bge").strip().lower() or "bge"
     reranker = _get_reranker(provider)
+    # Reranker providers rebuild Result objects (chunk/score/rank only), which
+    # would silently drop #5045 index provenance. Snapshot it by chunk id and
+    # restore after rerank; observability only — order and scores come from the
+    # reranker untouched. (source_doc loss on this path is pre-existing.)
+    provenance = {r.chunk.id: r.index_names for r in resp.results if r.index_names}
     resp.results = reranker.rerank(query.text, resp.results, top_n=query.top_k)
+    for result in resp.results:
+        if not result.index_names:
+            result.index_names = provenance.get(result.chunk.id)
     return resp
 
 
 def _rrf_merge_results(
-    results_list: list[list[Result]], top_k: int | None, k: int = 60
+    results_list: list[tuple[str, list[Result]]], top_k: int | None, k: int = 60
 ) -> list[Result]:
     """Merge per-index result lists with RRF (multi-index fan-out).
+
+    Each entry is ``(index_name, results)``. Merged hits carry provenance in
+    ``Result.index_names``: every contributing index name, in fan-out order,
+    deduped — a chunk present in two indexes records both (#5045). The index
+    name on a result's own ``index_names`` (stamped by ``_query_single_index``)
+    wins over the tuple name, which is the fallback for direct callers.
 
     Rank falls back to position when a backend leaves ``Result.rank`` unset.
     """
     scored: dict[str, list] = {}
-    for results in results_list:
+    for index_name, results in results_list:
         for position, result in enumerate(results):
             rank = result.rank if result.rank is not None else position + 1
+            names = list(result.index_names) if result.index_names else [index_name]
             entry = scored.get(result.chunk.id)
             if entry is None:
-                scored[result.chunk.id] = [result, 1.0 / (k + rank)]
+                scored[result.chunk.id] = [result, 1.0 / (k + rank), names]
             else:
                 entry[1] += 1.0 / (k + rank)
+                entry[2].extend(name for name in names if name not in entry[2])
     ranked = sorted(scored.values(), key=lambda item: item[1], reverse=True)
     merged = [
-        Result(chunk=result.chunk, score=score, source_doc=result.source_doc, rank=index + 1)
-        for index, (result, score) in enumerate(ranked)
+        Result(
+            chunk=result.chunk,
+            score=score,
+            source_doc=result.source_doc,
+            rank=index + 1,
+            index_names=names,
+        )
+        for index, (result, score, names) in enumerate(ranked)
     ]
     return merged[:top_k] if top_k else merged
+
+
+def _with_index_name(resp: SearchResponse, index_name: str) -> SearchResponse:
+    """Stamp index provenance on a single-index response (#5045, observability only).
+
+    Sets ``SearchResponse.index_names`` and, on every hit that does not already
+    carry provenance, ``Result.index_names = [index_name]``. The index name is the
+    Chroma collection name (strictly 1:1), so it is the correct corpus label.
+    Mutates and returns ``resp``; touches no field that affects scoring or order.
+    """
+    for result in resp.results:
+        if not result.index_names:
+            result.index_names = [index_name]
+    resp.index_names = [index_name]
+    return resp
+
+
+def _leg_is_complete(response: SearchResponse, page_size: int, skip: int = 0) -> bool:
+    """True when *response* holds every match that leg can return.
+
+    A reported total wins. A later page with no total already dropped a prefix,
+    so it is not the whole leg. A short first page with no total means the leg
+    stopped early, except when the backend truncates before the page ends: a Vectorize
+    page clamped at MAX_TOP_K 50 is not exhaustive when it lands exactly on
+    the clamp, and a Chroma page is not exhaustive when skip+top_k needs more
+    than the 100-result cap (the over-fetch was capped, so a short page is a
+    prefix, not the leg). A full page with no total is not the end of the leg.
+    """
+    if response.total_count is not None:
+        return len(response.results) >= response.total_count
+    # No reported total. A later page has already dropped a prefix, so it is
+    # not the whole match set (Chroma's offset is a capped over-fetch; Vectorize
+    # has no offset and raises instead of returning this page).
+    if max(int(skip or 0), 0) > 0:
+        return False
+    backend = response.backend or ""
+    if backend == BACKEND_VECTORIZE:
+        try:
+            from digisearch.indexes.backends.vectorize import MAX_TOP_K as _vmax
+        except ImportError:
+            _vmax = 50
+        effective = min(max(int(page_size or 0), 1), int(_vmax))
+        return len(response.results) < effective
+    if backend == BACKEND_CHROMA:
+        n = min(max(int(page_size or 0), 0), 100)
+        if n <= 0:
+            return True
+        if max(int(skip or 0), 0) + n > 100:
+            return False
+        return len(response.results) < n
+    return len(response.results) < max(page_size, 1)
+
+
+def _read_fanout_leg(query: Query, index_name: str) -> SearchResponse:
+    """Read one leg for fan-out fusion.
+
+    The caller's skip/top_k pass through untouched so backends that apply
+    pagination themselves (Vectorize raises on skip>0, Chroma over-fetches
+    skip+top_k capped at 100, Azure applies skip/include_total_count) serve
+    the requested page. Only the in-memory stub -- which scans every match --
+    is full-read in one pass (skip=0, top_k=total) so the fused ranking can be
+    sliced afterwards. Other backends are never re-read with top_k=total: for
+    Azure that fuses a <=1000 prefix as the whole leg.
+    """
+    page_size = max(int(query.top_k or 0), 0)
+    probe = replace(query, include_total_count=True)
+    first = _query_single_index(probe, index_name)
+    if first.backend != BACKEND_STUB:
+        return first
+    total = first.total_count
+    if total is None:
+        return _query_single_index(
+            replace(
+                query,
+                skip=0,
+                top_k=max(page_size, 10000),
+                include_total_count=True,
+            ),
+            index_name,
+        )
+    if len(first.results) >= total:
+        return first
+    if int(total) <= 0:
+        return first
+    return _query_single_index(
+        replace(query, skip=0, top_k=int(total), include_total_count=True),
+        index_name,
+    )
 
 
 def _query_single_index(query: Query, index_name: str) -> SearchResponse:
@@ -295,7 +432,7 @@ def _query_single_index(query: Query, index_name: str) -> SearchResponse:
                     "top_k": query.top_k,
                 },
             )
-            return resp
+            return _with_index_name(resp, index_name)
 
     allow_stub = os.environ.get("DIGISEARCH_ALLOW_STUB", "0").strip().lower() in (
         "1",
@@ -314,11 +451,19 @@ def _query_single_index(query: Query, index_name: str) -> SearchResponse:
                 "backend": None,
             },
         )
-        return SearchResponse(results=[], facets=None, backend=None)
+        return _with_index_name(SearchResponse(results=[], facets=None, backend=None), index_name)
 
     chunks = _stub_index.get(index_name, [])
     if not chunks:
-        return SearchResponse(results=[], facets=None, backend=BACKEND_STUB)
+        return _with_index_name(
+            SearchResponse(
+                results=[],
+                facets=None,
+                backend=BACKEND_STUB,
+                total_count=0 if query.include_total_count else None,
+            ),
+            index_name,
+        )
 
     logger.warning(
         "DIGISEARCH_ALLOW_STUB=1: in-memory substring index for '%s' (not for production).",
@@ -332,8 +477,7 @@ def _query_single_index(query: Query, index_name: str) -> SearchResponse:
     if isinstance(fd.get("structured"), list):
         structured = fd["structured"]
     text_lower = query.text.lower()
-    out: list[Result] = []
-    rank = 0
+    matches: list[Chunk] = []
     for c in chunks:
         if text_lower not in c.content.lower():
             continue
@@ -341,51 +485,16 @@ def _query_single_index(query: Query, index_name: str) -> SearchResponse:
             continue
         if not chunk_matches_workspace(c.metadata, query.workspace_id):
             continue
-        rank += 1
-        out.append(Result(chunk=c, score=0.9, rank=rank))
-        if len(out) >= query.top_k:
-            break
-    return SearchResponse(results=out, facets=None, backend=BACKEND_STUB)
-
-
-def _query_fanout_leg(
-    query: Query, name: str
-) -> tuple[SearchResponse | None, BaseException | None]:
-    """Query one fan-out leg, returning ``(response, None)`` or ``(None, error)``.
-
-    Fan-out exists so one tenant can be served by several indexes; a single
-    broken index must not deny it the others. This catches *every* exception,
-    not just the ones a backend lists in its own ``_BACKEND_ERRORS`` set, so
-    Chroma's ``EmbeddingModelMismatchError`` (raised when an index was written
-    under a different embedder than the one now configured) degrades one leg
-    instead of aborting the whole query.
-
-    ``SearchBackendError`` / ``VectorizeBackendError`` are the deliberate
-    exception: they assert that *this* index is authoritative and its failure
-    must reach the caller rather than be answered from somewhere else (see
-    ``_vectorize_backend``). Dropping such a leg would quietly return the other
-    index's hits, so they propagate and abort the fan-out as before.
-
-    The error is logged with the index name and returned rather than raised, so
-    a dropped leg is visible in the service log instead of surfacing only as an
-    opaque tool failure at the caller.
-    """
-    try:
-        return _query_single_index(query, name), None
-    except (SearchBackendError, VectorizeBackendError):
-        # Authoritative-index failure: never silently answered from another leg.
-        raise
-    except Exception as exc:
-        logger.exception(
-            "fan-out leg failed; index dropped from this query",
-            extra={
-                "operation": "query_index",
-                "outcome": "degraded",
-                "index_name": name,
-                "error_type": type(exc).__name__,
-            },
-        )
-        return None, exc
+        matches.append(c)
+    start = max(int(query.skip or 0), 0)
+    page_size = max(int(query.top_k or 0), 0)
+    page = matches[start : start + page_size]
+    out = [Result(chunk=c, score=0.9, rank=index) for index, c in enumerate(page, start=1)]
+    total = len(matches) if query.include_total_count else None
+    return _with_index_name(
+        SearchResponse(results=out, facets=None, backend=BACKEND_STUB, total_count=total),
+        index_name,
+    )
 
 
 def query_index(query: Query, index_name: str = "default") -> SearchResponse:
@@ -393,24 +502,12 @@ def query_index(query: Query, index_name: str = "default") -> SearchResponse:
 
     A comma-separated ``index_name`` (e.g. ``"occ_help,occ_tickets"``) fans
     out to each index and merges with RRF, so one tenant can serve docs plus
-    tickets without routing changes upstream.
-
-    Each leg is isolated (see :func:`_query_fanout_leg`): an index that fails
-    is dropped from *that* query and the surviving legs still answer. If every
-    leg fails the first exception is re-raised, because an empty response from
-    a fan-out would otherwise read downstream as "this index has no matching
-    rows" — a confident wrong answer rather than a visible failure.
-
-    ``SearchBackendError`` / ``VectorizeBackendError`` are exempt: they mark an
-    authoritative index whose failure must reach the caller, so they abort the
-    fan-out instead of degrading to the surviving legs.
-
-    Every index on a fan-out should still share one ``DIGISEARCH_EMBEDDING_PROVIDER``;
-    isolation contains the damage of a mismatch, it does not make the mismatched
-    index searchable.
+    tickets without routing changes upstream. Backend errors still propagate
+    per index (fail-closed, never answered from a different corpus).
     """
     names = [name.strip() for name in str(index_name or "default").split(",")]
     names = [name for name in names if name] or ["default"]
+    guard_unseeded(names)
     if len(names) == 1:
         return _maybe_rerank(query, _query_single_index(query, names[0]))
     logger.info(
@@ -422,19 +519,40 @@ def query_index(query: Query, index_name: str = "default") -> SearchResponse:
             "top_k": query.top_k,
         },
     )
-    responses: list[SearchResponse] = []
-    errors: list[BaseException] = []
-    for name in names:
-        response, error = _query_fanout_leg(query, name)
-        if response is not None:
-            responses.append(response)
-        if error is not None:
-            errors.append(error)
-    if not responses:
-        # Every leg failed: raise a real error rather than return nothing.
-        raise errors[0]
-    merged = _rrf_merge_results([response.results for response in responses], top_k=query.top_k)
-    return _maybe_rerank(query, SearchResponse(results=merged, facets=None, backend="multi"))
+    # One fused ranking for every page. Stub legs are read in full (the stub
+    # scans every match in memory), then the fused list is sliced by the
+    # caller's skip/top_k. Remote legs already applied the caller's skip, so
+    # their pages are fused and truncated -- never sliced a second time.
+    skip = max(int(query.skip or 0), 0)
+    page_size = max(int(query.top_k or 0), 0)
+    responses = [_read_fanout_leg(query, name) for name in names]
+    merged = _rrf_merge_results(
+        [(name, response.results) for name, response in zip(names, responses)],
+        top_k=None,
+    )
+    if all(response.backend == BACKEND_STUB for response in responses):
+        window = merged[skip : skip + page_size] if page_size else []
+    else:
+        window = merged[:page_size] if page_size else []
+    page = [
+        Result(
+            chunk=result.chunk,
+            score=result.score,
+            source_doc=result.source_doc,
+            index_names=result.index_names,
+            rank=index,
+        )
+        for index, result in enumerate(window, start=1)
+    ]
+    total_count = None
+    if query.include_total_count and all(
+        _leg_is_complete(response, page_size, skip) for response in responses
+    ):
+        total_count = len(merged)
+    return _maybe_rerank(
+        query,
+        SearchResponse(results=page, facets=None, backend="multi", index_names=names, total_count=total_count),
+    )
 
 
 def _stub_add_chunks(index_name: str, chunks: list[Chunk]) -> None:

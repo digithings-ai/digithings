@@ -41,6 +41,7 @@
  */
 import { Container, getContainer, switchPort } from "@cloudflare/containers";
 import { env as workerEnvBinding } from "cloudflare:workers";
+import { containerEvictedResponse, isContainerEvictedError } from "./container-errors";
 import { getStackStatus, runIsolated } from "./route-modules";
 // ports.ts stays a static import: the two Container subclasses below need
 // their ports synchronously at instantiation (class fields cannot await), and
@@ -87,7 +88,7 @@ export class DigiStackContainer extends Container {
    */
   requiredPorts = [DIGIGRAPH_PORT];
   /** Cold starts are seamless (#4323); each wake bills the whole tail, so keep it minimal. */
-  sleepAfter = "3m";
+  sleepAfter = "1m";
 
   /**
    * Runtime env for supervisord processes. Secrets from `wrangler secret put`;
@@ -110,7 +111,7 @@ export class DigiStackContainer extends Container {
     DIGIVAULT_URL: env.DIGIVAULT_URL ?? "http://127.0.0.1:8004",
     DIGISEARCH_URL: env.DIGISEARCH_URL ?? "http://127.0.0.1:8002",
     DIGIQUANT_URL: env.DIGIQUANT_URL ?? "",
-    DIGISMITH_URL: env.DIGISMITH_URL ?? "",
+    DIGITRACE_URL: env.DIGITRACE_URL ?? "",
     OPENAI_API_BASE: env.OPENAI_API_BASE ?? "http://127.0.0.1:4000/v1",
     DIGI_LLM_MODE: env.DIGI_LLM_MODE ?? "test",
     // Session model picker (OCC settings): house-upstream slugs a visitor may
@@ -201,9 +202,26 @@ export class DigiStackContainer extends Container {
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      // DIG-3226: a confirmed eviction is not a cold start — return the
+      // non-retryable 410 so callers stop retrying a container that is gone
+      // (same distinction as digiquant-runner RunLostError, runner.ts).
+      if (isContainerEvictedError(message)) {
+        return containerEvictedResponse("stack", message);
+      }
       return containerBootingResponse("stack", message);
     }
-    return this.containerFetch(request, targetPort);
+    // An eviction can also land between start and fetch: map only the
+    // confirmed-evicted signal to 410, rethrow everything else so the
+    // existing failure behavior is unchanged.
+    try {
+      return await this.containerFetch(request, targetPort);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (isContainerEvictedError(message)) {
+        return containerEvictedResponse("stack", message);
+      }
+      throw err;
+    }
   }
 }
 
@@ -222,10 +240,10 @@ export class DigiQuantMcpContainer extends Container {
   requiredPorts = [DIGIQUANT_MCP_PORT];
   /**
    * Cold-start policy: a cold start pays only the FastMCP import, never a data
-   * load (R2 is the cache), so the container may sleep freely; a 3-minute idle
+   * load (R2 is the cache), so the container may sleep freely; a 1-minute idle
    * tail keeps the billed wake window minimal.
    */
-  sleepAfter = "3m";
+  sleepAfter = "1m";
 
   /**
    * Runtime env for the MCP process. Secrets from `wrangler secret put`.
@@ -256,9 +274,21 @@ export class DigiQuantMcpContainer extends Container {
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      // DIG-3226: confirmed eviction -> non-retryable 410, not boot 503.
+      if (isContainerEvictedError(message)) {
+        return containerEvictedResponse("mcp", message);
+      }
       return containerBootingResponse("mcp", message);
     }
-    return this.containerFetch(request, DIGIQUANT_MCP_PORT);
+    try {
+      return await this.containerFetch(request, DIGIQUANT_MCP_PORT);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (isContainerEvictedError(message)) {
+        return containerEvictedResponse("mcp", message);
+      }
+      throw err;
+    }
   }
 }
 
@@ -276,7 +306,7 @@ export class DigiChatContainer extends Container {
   defaultPort = DIGICHAT_PORT;
   requiredPorts = [DIGICHAT_PORT];
   /** Short idle tail: each wake bills for the whole sleepAfter window. */
-  sleepAfter = "3m";
+  sleepAfter = "1m";
 
   /**
    * Runtime env for the digichat Next process. Mirrors the standalone
@@ -314,6 +344,7 @@ export class DigiChatContainer extends Container {
     DIGIKEY_URL: env.DIGIKEY_URL ?? "",
     DIGIKEY_BFF_TOKEN: env.DIGIKEY_BFF_TOKEN ?? "",
     DIGICHAT_PLAN_PROOF_SECRET: env.DIGICHAT_PLAN_PROOF_SECRET ?? "",
+    DIGICHAT_MONITOR_TOKENS: env.DIGICHAT_MONITOR_TOKENS ?? "",
     // Canonical fallbacks (#4700): the DIGICHAT_DASHBOARD names are legacy
     // duplicates of the canonical SUPABASE names. Old names still win when
     // set, so this stays backward compatible across the manual deploy lag.
@@ -340,9 +371,21 @@ export class DigiChatContainer extends Container {
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      // DIG-3226: confirmed eviction -> non-retryable 410, not boot 503.
+      if (isContainerEvictedError(message)) {
+        return containerEvictedResponse("digichat", message);
+      }
       return containerBootingResponse("digichat", message);
     }
-    return this.containerFetch(request, targetPort);
+    try {
+      return await this.containerFetch(request, targetPort);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (isContainerEvictedError(message)) {
+        return containerEvictedResponse("digichat", message);
+      }
+      throw err;
+    }
   }
 }
 
@@ -371,6 +414,10 @@ export const CONTAINER_BOOTING_CODE = "container_booting";
  * Poll hint (seconds) for a booting container. Small enough that a ready
  * container is picked up promptly, large enough that a full ~240s boot costs
  * ~50 upstream polls. The BFF clamps this into its own [1s, 30s] window.
+ *
+ * DIG-3226: a confirmed container eviction (see ./container-errors.ts) never
+ * uses this code — it answers 410 `container_evicted` with no `Retry-After`
+ * so callers stop retrying an instance that is gone.
  */
 const CONTAINER_BOOT_RETRY_AFTER_SECONDS = 5;
 
@@ -403,7 +450,7 @@ export interface Env {
   DIGIVAULT_URL?: string;
   DIGISEARCH_URL?: string;
   DIGIQUANT_URL?: string;
-  DIGISMITH_URL?: string;
+  DIGITRACE_URL?: string;
   OPENAI_API_BASE?: string;
   DIGI_LLM_MODE?: string;
   DIGI_SESSION_MODEL_ALLOWLIST?: string;
@@ -479,6 +526,7 @@ export interface Env {
   DIGIGRAPH_INTERNAL_URL?: string;
   DIGIKEY_URL?: string;
   DIGICHAT_PLAN_PROOF_SECRET?: string;
+  DIGICHAT_MONITOR_TOKENS?: string;
   DIGICHAT_DASHBOARD_SUPABASE_URL?: string;
   DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY?: string;
 }

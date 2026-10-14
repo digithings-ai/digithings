@@ -36,6 +36,25 @@ export interface NavSeriesPoint {
 export const CONTINUITY_MAX_STEP_PCT = 25;
 
 /**
+ * Which basis a series carries: one of the two contracts, `mixed` when both
+ * are present, or `unavailable` when there is nothing to plot.
+ */
+export type NavSeriesPlotContract = NavContract | 'mixed' | 'unavailable';
+
+/** Plot verdict for one §6.6 series. */
+export interface NavSeriesPlotReadiness {
+  /** The only series a NAV chart may plot. Never the raw mixed-scale NAV. */
+  series: 'index';
+  accountingNav: {
+    contract: NavSeriesPlotContract;
+    /** True only when every point is finalized accounting, so one scale. */
+    plottable: boolean;
+    /** Stable machine reason. Never carries a NAV value. */
+    reason: string;
+  };
+}
+
+/**
  * Maximum calendar-day gap for deriving a day return from adjacent NAV rows.
  * Covers a weekend + one holiday; wider gaps are finalizer holes.
  */
@@ -206,4 +225,39 @@ export function forwardFillCalendarGaps(
     out.push({ ...points[i] });
   }
   return out;
+}
+
+/**
+ * Plot verdict for CONTRACT §6.6: `index` is always the plottable series, and
+ * the labeled accounting NAV is separately declared plottable only when every
+ * point is finalized accounting (one scale). A legacy estimate anywhere in the
+ * range means the raw NAV column mixes scales, so it stays unplottable until the
+ * finalized series is whole. An empty series is never "whole" — the rule is not
+ * satisfied by having nothing to violate it.
+ */
+export function navSeriesPlotReadiness(
+  points: ReadonlyArray<Pick<NavInputRow, 'contract' | 'source'>>,
+): NavSeriesPlotReadiness {
+  const contracts = new Set(points.map((point) => navRowContractLabel(point)));
+  if (contracts.size === 0) {
+    return {
+      series: 'index',
+      accountingNav: { contract: 'unavailable', plottable: false, reason: 'no_points' },
+    };
+  }
+  if (!contracts.has('legacy_estimate')) {
+    return {
+      series: 'index',
+      accountingNav: { contract: 'finalized_accounting', plottable: true, reason: 'all_finalized' },
+    };
+  }
+  const mixed = contracts.has('finalized_accounting');
+  return {
+    series: 'index',
+    accountingNav: {
+      contract: mixed ? 'mixed' : 'legacy_estimate',
+      plottable: false,
+      reason: mixed ? 'mixed_finalized_and_legacy_estimate' : 'all_legacy_estimate',
+    },
+  };
 }

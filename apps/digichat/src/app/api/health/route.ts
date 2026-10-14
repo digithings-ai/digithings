@@ -5,6 +5,17 @@ import { isServiceCapabilityEnabled } from "@/lib/capabilities";
 import { getLicenseState } from "@/lib/license/state";
 import { resolveDigichatVersion } from "@/lib/license/version";
 
+// An upstream that merely answers a non-2xx status is recorded above as
+// `http_<status>`, so "unreachable" only ever means the fetch never completed:
+// a DNS/connect failure, or the 4 s abort below. Those are different faults
+// with different owners, and with no log line they are indistinguishable
+// after the fact.
+function describePingFailure(err: unknown): string {
+  if (err instanceof Error && err.name === "AbortError") return "aborted after 4000ms";
+  if (err instanceof Error) return `${err.name}: ${err.message}`;
+  return String(err);
+}
+
 async function pingHealth(base: string, label: string, checks: Record<string, string>) {
   try {
     const ctrl = new AbortController();
@@ -12,7 +23,10 @@ async function pingHealth(base: string, label: string, checks: Record<string, st
     const r = await fetch(`${base.replace(/\/$/, "")}/health`, { signal: ctrl.signal });
     clearTimeout(t);
     checks[label] = r.ok ? "ok" : `http_${r.status}`;
-  } catch {
+  } catch (err) {
+    // `base` is bounded by isAllowedServiceUrl(), so the host is safe to log
+    // and is what makes the failure attributable to one dependency.
+    console.error(`[health] ${label} unreachable at ${base}: ${describePingFailure(err)}`);
     checks[label] = "unreachable";
   }
 }
@@ -23,7 +37,7 @@ export async function GET() {
   };
 
   const eco = await getEcosystemEndpoints();
-  // digigraph/digiquant/digismith always have a default URL (see ecosystem.ts
+  // digigraph/digiquant/digitrace always have a default URL (see ecosystem.ts
   // DEFAULTS), unlike digisearchUrl, so URL presence alone can't signal
   // "not deployed here" for them — check the capability flag directly.
   if (isServiceCapabilityEnabled("digigraph")) {
@@ -32,8 +46,8 @@ export async function GET() {
   if (isServiceCapabilityEnabled("digiquant")) {
     await pingHealth(eco.digiquantUrl, "digiquant", checks);
   }
-  if (isServiceCapabilityEnabled("digismith")) {
-    await pingHealth(eco.digismithUrl, "digismith", checks);
+  if (isServiceCapabilityEnabled("digitrace")) {
+    await pingHealth(eco.digitraceUrl, "digitrace", checks);
   }
   if (eco.digisearchUrl?.trim()) {
     await pingHealth(eco.digisearchUrl, "digisearch", checks);
@@ -53,13 +67,13 @@ export async function GET() {
 
   const digraphOk = !isServiceCapabilityEnabled("digigraph") || checks.digraph === "ok";
   const digiquantOk = !isServiceCapabilityEnabled("digiquant") || checks.digiquant === "ok";
-  const digismithOk = !isServiceCapabilityEnabled("digismith") || checks.digismith === "ok";
+  const digitraceOk = !isServiceCapabilityEnabled("digitrace") || checks.digitrace === "ok";
   const digisearchOk = !eco.digisearchUrl?.trim() || checks.digisearch === "ok";
 
   const ok =
     digraphOk &&
     digiquantOk &&
-    digismithOk &&
+    digitraceOk &&
     digisearchOk &&
     (checks.database === "ok" || checks.database === "skipped");
 

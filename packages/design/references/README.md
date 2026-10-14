@@ -12,6 +12,7 @@ navigation, layout rhythm, typography roles, motion, and product framing.
 | [Herdr](herdr.dev.md) | https://herdr.dev | Diegetic terminal hero, ink/paper dual ground, sharp chrome | digichat, agent runtime surfaces, install CTAs |
 | [AgentMail](agentmail.to.md) | https://www.agentmail.to | Sparse dark API hero, white CTA, live code proof | digithings.ai API pages, digikey docs |
 | [Omarchy](omarchy.org.md) | https://omarchy.org | Mono-everything utilitarian voice, terminal colour as punctuation | dashboard density, digichat transcript voice |
+| [Langfuse](langfuse.com.md) | https://langfuse.com | Lightness + product marketing clarity; sparse chrome (next polish-pass reference, not a copy target) | digithings.ai home, digiquant-web marketing polish |
 
 **Active blend (2026-08):** utilitarian terminal simplicity — Instrument Panel tokens + herdr’s diegetic proof + agentmail’s sparse hero + omarchy’s mono confidence. Pick treatments live on the reference app’s [`/iterate`](../../../apps/reference/app/iterate/page.tsx) page; ledger lands in [`BLEND.md`](BLEND.md).
 
@@ -25,7 +26,16 @@ navigation, layout rhythm, typography roles, motion, and product framing.
 
 **The design mine (extracted specimens + convergence blends, static page):** [`mine/index.html`](mine/index.html) — serve `packages/design/` and open `/references/mine/index.html`
 
+**Inspiration hub / tools dictionary:** [`designeer.xyz.md`](designeer.xyz.md) — [Designeer](https://designeer.xyz) curated galleries, kits, reading (Mobbin, Land-book, navbar.design, SaaSFrame, Figma/Framer, Refactoring UI, Animations.dev, Shape of AI, …). Use when hunting patterns for digiquant dashboard, FX Hub / twelve-x, and other digiweb UI — not a visual north star.
+
 ---
+
+## Inspiration hubs (living dictionary)
+
+| Hub | URL | Role |
+|-----|-----|------|
+| [Designeer](designeer.xyz.md) | https://designeer.xyz | Curated design galleries, component libraries, tools, reading — seed list for digiweb exploration |
+
 
 ## How to use these docs
 

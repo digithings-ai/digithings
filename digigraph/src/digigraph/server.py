@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 _DEBUG_REQUEST_LOG: list[dict] = []
 _DEBUG_REQUEST_LOG_MAX = 5
 
+from digibase.art9_middleware import install_art9_admission
 from digibase.cors import install_cors, resolve_cors_origins
 from digibase.errors import json_error_response, register_fastapi_error_handlers
 from digibase.http import install_request_id_logging, install_request_id_middleware
@@ -94,6 +95,12 @@ app = FastAPI(
 install_metrics(app, service="digigraph", version=__version__)
 install_cors(app, service="digigraph")
 app.add_middleware(DigiAuthMiddleware, service="digigraph", path_scopes=digigraph_path_scopes)
+# Art. 9 admission runs OUTSIDE DigiAuthMiddleware: FastAPI inserts each
+# add_middleware at index 0, so the last call is the outermost. Screening the
+# body before authentication is what makes a refusal observable at all -- behind
+# DigiAuth an unauthenticated Art. 9 request answers 401 and the checkpointer
+# assertion below becomes vacuous.
+install_art9_admission(app, app_name="digigraph")
 
 
 @app.middleware("http")
@@ -158,6 +165,7 @@ async def byok_header_context(request: Request, call_next):
         BYOK_ROUTABLE_PROVIDERS,
         byok_default_model_refusal,
         byok_model_required,
+        byok_model_required_refusal,
         byok_model_routes_elsewhere,
         byok_provider_supported,
         pop_byok,
@@ -182,10 +190,7 @@ async def byok_header_context(request: Request, call_next):
             return json_error_response(
                 status_code=400,
                 code="byok_model_required",
-                message=(
-                    f"BYOK provider {provider!r} requires X-BYOK-Model "
-                    "(e.g. openai/gpt-4o-mini, gemini/gemini-2.5-flash, claude-sonnet-4-6)."
-                ),
+                message=byok_model_required_refusal(provider),
                 request=request,
                 service="digigraph",
             )
@@ -329,7 +334,7 @@ def healthz() -> dict[str, bool]:
     """Minimal liveness probe. Auth-exempt, rate-limit-exempt, secret-free.
 
     Contract: returns HTTP 200 with ``{"ok": true}``. Intended for load
-    balancers and k8s probes. For richer diagnostics, see digismith's
+    balancers and k8s probes. For richer diagnostics, see digitrace's
     ``/v1/status``.
     """
     return {"ok": True}
@@ -798,6 +803,11 @@ def v1_run_product_graph(
 
 
 app.include_router(v1)
+
+# DIG-284 leaf 284.6: the route that consumes a recorded MCP decision.
+from digigraph.http_api.mcp_decisions import router as mcp_decisions_router
+
+app.include_router(mcp_decisions_router)
 
 register_fastapi_error_handlers(app, service="digigraph")
 

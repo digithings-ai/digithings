@@ -28,6 +28,7 @@ import {
   BASELINE_EMBED_WELCOME_BODY,
 } from "@/lib/baseline-embed";
 import { parseEmbedTenants, type EmbedTenantConfig } from "@/lib/embed-tenants";
+import { DEPLOY_DEFAULT_MODELS } from "./deploy-models";
 import { DEFAULT_THINKING_MODE, DEFAULT_VIEW_MODE } from "@/lib/view-modes";
 import {
   isThreadSkin,
@@ -373,24 +374,8 @@ export function loadDigichatConfig(opts: LoadDigichatConfigOptions = {}): Digich
           },
           persistence: "none",
           auth: "anonymous",
-          models: {
-            default: "deepseek/deepseek-v4.1-flash",
-            available: [
-              "deepseek/deepseek-v4.1-flash",
-              "deepseek/deepseek-v4-flash",
-              "deepseek/deepseek-v4-pro",
-              "openai/gpt-6-luna",
-              "openai/gpt-5.6-luna",
-              "openai/gpt-5-mini",
-              "z-ai/glm-5.3-flash",
-              "xiaomi/mimo-v2.6-flash",
-              "qwen/qwen3.8-flash",
-              "google/gemini-3.1-flash-lite",
-              "google/gemini-3.7-flash",
-              "minimax/minimax-m3",
-            ],
-            allowPicker: true,
-          },
+          // Table lives in config/digichat-deploy-models.json (#5029).
+          models: { ...DEPLOY_DEFAULT_MODELS, allowPicker: true },
           backend: { type: "digigraph" },
           // Least-privilege fallback: the unconfigured container opts into
           // nothing; BYOK / user MCP / web search require an explicit config.

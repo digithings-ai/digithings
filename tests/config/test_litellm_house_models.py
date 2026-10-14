@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import functools
+import importlib.util
 import json
 import re
+import sys
 from pathlib import Path
 from typing import Any  # score:allow untyped any
 
@@ -82,6 +85,26 @@ def _load_byok_catalog() -> list[dict[str, Any]]:
     raw = json.loads((CONFIG / "byok-providers.json").read_text(encoding="utf-8"))
     assert isinstance(raw, list) and raw
     return raw
+
+
+@functools.lru_cache(maxsize=1)
+def _model_catalog_generator() -> Any:
+    """The catalog generator, which owns the BYOK -> models.dev provider map.
+
+    Imported by path because ``scripts/`` is not a package — the same
+    ``importlib`` dance tests/scripts/test_refresh_model_routes.py uses, and
+    the same one tests/config/test_model_catalog.py::_load_generator uses.
+    Duplicated as a two-line loader rather than shared, because the sibling is a
+    test module, not an importable package.
+    """
+    spec = importlib.util.spec_from_file_location(
+        "refresh_model_catalog", REPO_ROOT / "scripts" / "refresh_model_catalog.py"
+    )
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["refresh_model_catalog"] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 def _model_entries(path: Path) -> dict[str, dict[str, Any]]:
@@ -211,6 +234,33 @@ def test_digillm_catalog_api_bases_match_byok_providers_json() -> None:
     assert catalog == set(_BYOK_CATALOG_API_BASES)
 
 
+def test_every_base_url_digillm_trusts_has_rows_in_the_model_catalog() -> None:
+    """Close the loop from digillm's trust boundary to the catalog (#4994).
+
+    ``_BYOK_CATALOG_API_BASES`` is the set of upstream hosts digillm will
+    clientside-auth a caller key against. The test above already pins those
+    hosts to ``config/byok-providers.json``; this one pins the providers they
+    name to actual rows in the generated ``config/model-catalog.json``, so a
+    host digillm trusts cannot be one the catalog knows nothing about.
+
+    The catalog deliberately carries no base URL (spec D1 -- it is a module
+    import, so there is no URL to validate), which is exactly why the
+    connection has to be made here, by provider identity, rather than by
+    comparing URLs. Extended into this file rather than added as a separate
+    test so the digillm constant has exactly one pin site.
+    """
+    generator = _model_catalog_generator()
+    catalog = json.loads((CONFIG / "model-catalog.json").read_text(encoding="utf-8"))
+    catalogued = set(catalog["_meta"]["providers"])
+
+    unmapped = []
+    for entry in _load_byok_catalog():
+        provider = generator.byok_provider_to_catalog_provider(str(entry["id"]))
+        if provider is None or provider not in catalogued:
+            unmapped.append(f"{entry['id']} -> {provider!r}")
+    assert not unmapped, f"BYOK hosts digillm trusts with no catalogued provider: {unmapped}"
+
+
 def test_omniroute_overlay_parses_and_is_optional() -> None:
     overlay = CONFIG / "litellm.omniroute.yaml"
     assert overlay.is_file()
@@ -292,15 +342,15 @@ def _assert_ci_only_product_picker(models: dict) -> None:
 def test_digichat_public_picker_is_ci_cheap_only() -> None:
     """digithings.ai / dashboard pickers: CI cheap slugs only — never OpenRouter."""
     embed = yaml.safe_load(
-        (
-            REPO_ROOT / "apps/digichat/config/examples/digithings-ai-embed.yaml"
-        ).read_text(encoding="utf-8")
+        (REPO_ROOT / "apps/digichat/config/examples/digithings-ai-embed.yaml").read_text(
+            encoding="utf-8"
+        )
     )
     _assert_ci_only_product_picker(embed["hosts"]["digithings.ai"]["models"])
     dashboard = yaml.safe_load(
-        (
-            REPO_ROOT / "apps/digichat/config/examples/dashboard-modal.yaml"
-        ).read_text(encoding="utf-8")
+        (REPO_ROOT / "apps/digichat/config/examples/dashboard-modal.yaml").read_text(
+            encoding="utf-8"
+        )
     )
     _assert_ci_only_product_picker(dashboard["deployment"]["models"])
 

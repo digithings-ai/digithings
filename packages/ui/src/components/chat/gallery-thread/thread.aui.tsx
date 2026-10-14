@@ -1,5 +1,6 @@
 "use client";
 
+import { useDigichatWarmupPhase } from "../use-warmup-phase";
 import {
   ComposerAddAttachment,
   ComposerAttachments,
@@ -1033,6 +1034,7 @@ const AssistantWorkingIndicator: FC = () => {
     }
     return state;
   });
+  const wakePhase = useDigichatWarmupPhase();
   if (toolRunning) return null;
   return (
     <span
@@ -1044,7 +1046,9 @@ const AssistantWorkingIndicator: FC = () => {
         label="Assistant is working"
         className="size-3.5"
       />
-      {connectionState === "warming_up" ? (
+      {wakePhase === "waking" ? (
+        <span className="text-sm text-muted-foreground">Waking up services…</span>
+      ) : connectionState === "warming_up" ? (
         <span className="text-sm text-muted-foreground">Warming up…</span>
       ) : connectionState === "connecting" ? (
         <span className="text-sm text-muted-foreground">Connecting…</span>

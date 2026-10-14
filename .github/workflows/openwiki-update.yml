@@ -1,9 +1,9 @@
 name: OpenWiki Update
 
+# Clock: digithings-cron Worker (apps/digithings-cron/src/jobs.ts); this file is
+# workflow_dispatch only so the GitHub and Cloudflare clocks never double-fire.
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "0 8 * * 1"
 
 permissions:
   contents: write

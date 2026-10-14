@@ -5,7 +5,7 @@ import {
   workflowDispatchUrl,
 } from "./dispatch";
 import type { Env } from "./env";
-import type { Job } from "./jobs";
+import { JOBS, type Job } from "./jobs";
 
 const baseJob: Job = {
   id: "test-job",
@@ -95,6 +95,100 @@ describe("dispatch", () => {
     await expect(dispatch(env, baseJob, baseJob.cron)).rejects.toThrow(/403/);
   });
 
+  it("names an undeclared workflow_dispatch input and does not retry", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            message: 'Unexpected inputs provided to workflow: ["buckett"]',
+            documentation_url:
+              "https://docs.github.com/rest/actions/workflows#create-a-workflow-dispatch-event",
+          }),
+          { status: 422 },
+        ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const env: Env = { DRY_RUN: "0", GH_DISPATCH_TOKEN: "token" };
+    // A row with static inputs: that is what GitHub refuses. /kick args are not
+    // merged into this body on develop, so the test must not rely on them.
+    const job: Job = {
+      ...baseJob,
+      id: "twelve-x-market-context-daily",
+      workflow: "market_context_ingest.yml",
+      inputs: { bucket: "intraday" },
+    };
+
+    const thrown: unknown = await dispatch(env, job, job.cron).catch((error: unknown) => error);
+
+    expect(thrown).toBeInstanceOf(Error);
+    const message = (thrown as Error).message;
+    // Anchored on values GitHub could not have produced itself: the prefix, the
+    // workflow, the ref and the misspelled key.
+    expect(message.startsWith("undeclared_workflow_input:")).toBe(true);
+    expect(message).toContain("market_context_ingest.yml");
+    expect(message).toContain("develop");
+    expect(message).toContain("buckett");
+    // Fail closed on the first attempt. A deterministic refusal must not be retried.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toEqual({
+      ref: "develop",
+      inputs: { bucket: "intraday" },
+    });
+  });
+
+  it("prefers the undeclared refusal over the benign 422 check", async () => {
+    // GitHub does not send both phrases in one body. This pins the ordering
+    // anyway: an undeclared key is not benign, and swallowing it as a success
+    // would report a run that never started.
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            message:
+              'Workflow is already running. Unexpected inputs provided to workflow: ["buckett"]',
+          }),
+          { status: 422 },
+        ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const env: Env = { DRY_RUN: "0", GH_DISPATCH_TOKEN: "token" };
+    const job: Job = {
+      ...baseJob,
+      workflow: "market_context_ingest.yml",
+      inputs: { bucket: "intraday" },
+    };
+
+    const thrown: unknown = await dispatch(env, job, job.cron).catch((error: unknown) => error);
+
+    expect(thrown).toBeInstanceOf(Error);
+    expect((thrown as Error).message.startsWith("undeclared_workflow_input:")).toBe(true);
+    expect((thrown as Error).message).toContain("buckett");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("still names the refusal when the 422 body is not JSON", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response('Unexpected inputs provided to workflow: ["buckett"]', { status: 422 }),
+      ),
+    );
+    const env: Env = { DRY_RUN: "0", GH_DISPATCH_TOKEN: "token" };
+    const job: Job = {
+      ...baseJob,
+      workflow: "market_context_ingest.yml",
+      inputs: { bucket: "intraday" },
+    };
+
+    const thrown: unknown = await dispatch(env, job, job.cron).catch((error: unknown) => error);
+
+    expect(thrown).toBeInstanceOf(Error);
+    expect((thrown as Error).message.startsWith("undeclared_workflow_input:")).toBe(true);
+    expect((thrown as Error).message).toContain("buckett");
+  });
+
   it("retries rate limits instead of reporting success", async () => {
     const fetchMock = vi
       .fn()
@@ -135,6 +229,303 @@ describe("dispatch", () => {
     expect(timeoutSpy).toHaveBeenCalledWith(expect.any(Function), 1_000);
   });
 
+  it("POSTs a container job to the runner and does not call GitHub", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const runnerFetch = vi.fn(
+      async () =>
+        Response.json({ ok: true, run_id: "run-1", status: "accepted" }, { status: 202 }),
+    );
+    const job: Job = {
+      id: "market-data-refresh-morning",
+      cron: "0 13 * * *",
+      repo: "digithings-ai/digithings",
+      kind: "container",
+      workflow: "pipeline-market-data-refresh.yml",
+      ref: "develop",
+      command: "market-data-refresh",
+      concurrency: "market-data-refresh",
+      timeoutSeconds: 1800,
+      codeRef: "main",
+      enabled: true,
+    };
+    const env: Env = {
+      DRY_RUN: "0",
+      GH_DISPATCH_TOKEN: "github-token",
+      RUNNER_AUTH_TOKEN: "runner-token",
+      GITHUB_OVERRIDE_JOBS: "",
+      RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
+    };
+    const result = await dispatch(env, job, job.cron, 1_700_000_000_000);
+    expect(result).toEqual({
+      ok: true,
+      status: 202,
+      dry_run: false,
+      run_id: "run-1",
+      container_status: "accepted",
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(runnerFetch).toHaveBeenCalledOnce();
+    const [url, init] = runnerFetch.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("https://digiquant-runner/v1/jobs");
+    const headers = init.headers as Record<string, string>;
+    expect(headers.Authorization).toBe("Bearer runner-token");
+    const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+    expect(body).toEqual({
+      job_id: "market-data-refresh-morning",
+      command: "market-data-refresh",
+      args: {},
+      concurrency: "market-data-refresh",
+      timeout_seconds: 1800,
+      code_ref: "main",
+      cron: "0 13 * * *",
+      scheduled_time: 1_700_000_000_000,
+      idempotency_key: "market-data-refresh-morning:1700000000000",
+    });
+    expect(JSON.stringify(body)).not.toContain("runner-token");
+    expect(JSON.stringify(body)).not.toContain("RUNNER_AUTH_TOKEN");
+  });
+
+  it("treats runner already_running as success", async () => {
+    const runnerFetch = vi.fn(
+      async () =>
+        Response.json(
+          { ok: true, run_id: "run-held", status: "already_running" },
+          { status: 202 },
+        ),
+    );
+    const job: Job = {
+      id: "prices-fx-refresh",
+      cron: "19 */2 * * MON-FRI",
+      repo: "digithings-ai/digithings",
+      kind: "container",
+      workflow: "pipeline-digiquant-prices.yml",
+      ref: "develop",
+      command: "prices-fx-candles",
+      concurrency: "digiquant-fx-candles",
+      timeoutSeconds: 600,
+      codeRef: "main",
+      enabled: true,
+    };
+    const env: Env = {
+      DRY_RUN: "0",
+      RUNNER_AUTH_TOKEN: "runner-token",
+      RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
+    };
+    const result = await dispatch(env, job, job.cron, 42);
+    expect(result.ok).toBe(true);
+    expect(result.container_status).toBe("already_running");
+    expect(result.run_id).toBe("run-held");
+  });
+
+  it("treats a skipped container run as success", async () => {
+    const runnerFetch = vi.fn(
+      async () =>
+        Response.json(
+          { ok: true, run_id: "run-finished", status: "skipped" },
+          { status: 202 },
+        ),
+    );
+    const job: Job = {
+      id: "house-run-09",
+      cron: "17 9 * * *",
+      repo: "digithings-ai/digithings",
+      kind: "container",
+      workflow: "pipeline-digiquant.yml",
+      ref: "develop",
+      command: "house-run",
+      concurrency: "digiquant-pipeline",
+      timeoutSeconds: 14400,
+      codeRef: "main",
+      enabled: true,
+    };
+    const env: Env = {
+      DRY_RUN: "0",
+      RUNNER_AUTH_TOKEN: "runner-token",
+      RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
+    };
+
+    const result = await dispatch(env, job, job.cron, 42);
+
+    expect(result.ok).toBe(true);
+    expect(result.container_status).toBe("skipped");
+    expect(result.run_id).toBe("run-finished");
+  });
+
+  it("requires RUNNER_AUTH_TOKEN and does not call the runner without it", async () => {
+    const runnerFetch = vi.fn();
+    const job: Job = {
+      id: "prices-eod-macro",
+      cron: "27 21 * * MON-FRI",
+      repo: "digithings-ai/digithings",
+      kind: "container",
+      workflow: "pipeline-digiquant-prices.yml",
+      ref: "develop",
+      command: "prices-eod-macro",
+      concurrency: "digiquant-eod-macro",
+      timeoutSeconds: 1200,
+      codeRef: "main",
+      enabled: true,
+    };
+    const env: Env = {
+      DRY_RUN: "0",
+      RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
+    };
+    await expect(dispatch(env, job, job.cron, 1)).rejects.toThrow(
+      "RUNNER_AUTH_TOKEN is required",
+    );
+    expect(runnerFetch).not.toHaveBeenCalled();
+  });
+
+  it("logs github_override and uses workflow_dispatch when the job id is listed", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const runnerFetch = vi.fn();
+    const job: Job = {
+      id: "market-data-refresh-evening",
+      cron: "30 21 * * *",
+      repo: "digithings-ai/digithings",
+      kind: "container",
+      workflow: "pipeline-market-data-refresh.yml",
+      inputs: {},
+      ref: "develop",
+      command: "market-data-refresh",
+      concurrency: "market-data-refresh",
+      timeoutSeconds: 1800,
+      codeRef: "main",
+      enabled: true,
+    };
+    const env: Env = {
+      DRY_RUN: "0",
+      GH_DISPATCH_TOKEN: "token",
+      RUNNER_AUTH_TOKEN: "runner-token",
+      GITHUB_OVERRIDE_JOBS: "market-data-refresh-evening, prices-eod-macro",
+      RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
+    };
+    const result = await dispatch(env, job, job.cron, 9);
+    expect(result).toEqual({ ok: true, status: 204, dry_run: false });
+    expect(runnerFetch).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const logged = errorSpy.mock.calls.map((call) => String(call[0])).join("\n");
+    expect(logged).toContain('"github_override":true');
+    expect(logged).toContain('"error":"github_override"');
+  });
+
+  it("merges opts.args into the body of a forced-over row", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const runnerFetch = vi.fn();
+    const job: Job = {
+      id: "market-data-refresh-evening",
+      cron: "30 21 * * *",
+      repo: "digithings-ai/digithings",
+      kind: "container",
+      workflow: "pipeline-market-data-refresh.yml",
+      inputs: { scope: "evening", refresh_scope: "auto" },
+      ref: "develop",
+      command: "market-data-refresh",
+      concurrency: "market-data-refresh",
+      timeoutSeconds: 1800,
+      codeRef: "main",
+      enabled: true,
+    };
+    const env: Env = {
+      DRY_RUN: "0",
+      GH_DISPATCH_TOKEN: "token",
+      RUNNER_AUTH_TOKEN: "runner-token",
+      GITHUB_OVERRIDE_JOBS: "market-data-refresh-evening",
+      RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
+    };
+    // The override reroutes a container row onto the GitHub path, so /kick args
+    // must survive the reroute: the caller wins on refresh_scope and the row's
+    // own scope is kept, and the runner must not also see them.
+    await dispatch(env, job, job.cron, 9, { args: { refresh_scope: "all" } });
+    expect(runnerFetch).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toEqual({
+      ref: "develop",
+      inputs: { scope: "evening", refresh_scope: "all" },
+    });
+    expect(errorSpy).toHaveBeenCalled();
+  });
+
+  it("probe smoke-stack fetches healthz and does not call the runner or GitHub", async () => {
+    const urls: string[] = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      urls.push(String(input));
+      return Response.json({ ok: true });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const runnerFetch = vi.fn();
+    const job = JOBS.find((row) => row.id === "smoke-stack");
+    expect(job?.kind).toBe("probe");
+    const env: Env = {
+      DRY_RUN: "0",
+      GH_DISPATCH_TOKEN: "github-token",
+      RUNNER_AUTH_TOKEN: "runner-token",
+      GITHUB_OVERRIDE_JOBS: "",
+      RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
+    };
+    const result = await dispatch(env, job as Job, job?.cron ?? "", 1);
+    expect(result).toEqual({ ok: true, status: 200, dry_run: false });
+    expect(urls).toEqual([
+      "https://graph.digithings.ai/_stack/status",
+      "https://key.digithings.ai/_stack/status",
+      "https://search.digithings.ai/_stack/status",
+    ]);
+    expect(urls.some((url) => url.includes("api.github.com"))).toBe(false);
+    expect(runnerFetch).not.toHaveBeenCalled();
+  });
+
+  it("DRY_RUN probe logs the url list and does not fetch", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const runnerFetch = vi.fn();
+    const job = JOBS.find((row) => row.id === "smoke-site") as Job;
+    const env: Env = {
+      DRY_RUN: "1",
+      RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
+    };
+    const result = await dispatch(env, job, job.cron);
+    expect(result).toEqual({ ok: true, status: 0, dry_run: true });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(runnerFetch).not.toHaveBeenCalled();
+    const logged = logSpy.mock.calls.map((call) => String(call[0])).join("\n");
+    expect(logged).toContain("https://digithings.ai/");
+    expect(logged).toContain("https://digiquant.io/og.png");
+    expect(logged).toContain("https://digiquant.io/build-info.json");
+    expect(logged).not.toContain("api.github.com");
+  });
+
+  it("logs github_override and workflow_dispatch when a probe job id is listed", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const runnerFetch = vi.fn();
+    const job = JOBS.find((row) => row.id === "smoke-site") as Job;
+    const env: Env = {
+      DRY_RUN: "0",
+      GH_DISPATCH_TOKEN: "token",
+      RUNNER_AUTH_TOKEN: "runner-token",
+      GITHUB_OVERRIDE_JOBS: "smoke-site",
+      RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
+    };
+    const result = await dispatch(env, job, job.cron, 9);
+    expect(result).toEqual({ ok: true, status: 204, dry_run: false });
+    expect(runnerFetch).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [url] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toContain("api.github.com");
+    expect(url).toContain("smoke-site.yml");
+    const logged = errorSpy.mock.calls.map((call) => String(call[0])).join("\n");
+    expect(logged).toContain('"github_override":true');
+    expect(logged).toContain('"error":"github_override"');
+  });
+
   it("POSTs repository_dispatch body", async () => {
     const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
     vi.stubGlobal("fetch", fetchMock);
@@ -154,6 +545,146 @@ describe("dispatch", () => {
     expect(JSON.parse(String(init.body))).toEqual({
       event_type: "digiquant-baseline",
       client_payload: {},
+    });
+  });
+  it("reads the runner for a watch job and never POSTs /v1/jobs", async () => {
+    // DIG-3065. The load-bearing property is read-only: a watcher that could
+    // start a run would be a second thing with its own blast radius, and only
+    // Chris authorises that.
+    const fetchMock = vi.fn(async () => Response.json([], { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const runnerFetch = vi.fn(async (input: string) =>
+      input.includes("/healthz")
+        ? Response.json({ ok: true, running: [] })
+        : Response.json({ run_id: "run-1", status: "running", started_at: null }),
+    );
+    const job: Job = {
+      id: "digiquant-house-run-watch",
+      cron: "23 * * * *",
+      repo: "digithings-ai/digithings",
+      kind: "watch",
+      workflow: "pipeline-digiquant.yml",
+      ref: "develop",
+      watch: "digiquant-runner",
+      enabled: true,
+    };
+    const env: Env = {
+      DRY_RUN: "0",
+      GH_DISPATCH_TOKEN: "github-token",
+      RUNNER_AUTH_TOKEN: "runner-token",
+      GITHUB_OVERRIDE_JOBS: "",
+      RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
+    };
+    const result = await dispatch(env, job, job.cron, Date.parse("2026-10-12T13:23:00.000Z"));
+    // usesGithub must not divert a watch row to GitHub: on a clean tick the
+    // only GitHub calls allowed are none at all.
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(runnerFetch).toHaveBeenCalledOnce();
+    const [url, init] = runnerFetch.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("https://digiquant-runner/healthz");
+    // Read-only, proven from the wire: no request body was ever sent.
+    expect(init.method).toBe("GET");
+    expect(init.body).toBeUndefined();
+    expect(result.ok).toBe(true);
+    // The deadline came from house-run-09's own timeoutSeconds plus the grace.
+    expect(result.watch?.deadline_seconds).toBe(14400 + 120);
+    expect(result.watch).toMatchObject({ ok: true, open: 0, lost: [], unreadable: [] });
+  });
+
+  it("forwards opts.args into the workflow_dispatch body", async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const env: Env = { DRY_RUN: "0", GH_DISPATCH_TOKEN: "token" };
+    const result = await dispatch(env, baseJob, baseJob.cron, 0, {
+      args: { bucket: "weekly", note: "kicked" },
+    });
+    expect(result.ok).toBe(true);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toContain("pipeline-research-metrics.yml");
+    expect(JSON.parse(String(init.body))).toEqual({
+      ref: "develop",
+      inputs: { bucket: "weekly", note: "kicked" },
+    });
+  });
+
+  it("lets opts.args win over a static input on the row", async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const job = JOBS.find(
+      (row) => row.id === "twelve-x-market-context-daily",
+    ) as Job;
+    expect(job.kind).toBe("workflow_dispatch");
+    expect(job.inputs).toEqual({ bucket: "daily" });
+    const env: Env = { DRY_RUN: "0", GH_DISPATCH_TOKEN: "token" };
+    await dispatch(env, job, job.cron, 0, { args: { bucket: "weekly" } });
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toEqual({
+      ref: job.ref,
+      inputs: { bucket: "weekly" },
+    });
+  });
+
+  it("keeps the row inputs that opts.args does not mention", async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const job = JOBS.find(
+      (row) => row.id === "twelve-x-archive-maintenance",
+    ) as Job;
+    expect(job.inputs).toEqual({ dry_run: "false", dump_before_prune: "true" });
+    const env: Env = { DRY_RUN: "0", GH_DISPATCH_TOKEN: "token" };
+    await dispatch(env, job, job.cron, 0, { args: { dry_run: "true" } });
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(init.body)).inputs).toEqual({
+      dry_run: "true",
+      dump_before_prune: "true",
+    });
+  });
+
+  it("forwards opts.args into the repository_dispatch client_payload", async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const job: Job = {
+      id: "house-run-09",
+      cron: "17 9 * * *",
+      repo: "digithings-ai/digithings",
+      kind: "repository_dispatch",
+      event_type: "digiquant-baseline",
+      enabled: true,
+    };
+    const env: Env = { DRY_RUN: "0", GH_DISPATCH_TOKEN: "token" };
+    await dispatch(env, job, job.cron, 0, { args: { bucket: "weekly" } });
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toEqual({
+      event_type: "digiquant-baseline",
+      client_payload: { bucket: "weekly" },
+    });
+  });
+
+  it("still passes opts.args to the container runner", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const runnerFetch = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({ ok: true, run_id: "run-1", status: "accepted" }),
+          { status: 202, headers: { "content-type": "application/json" } },
+        ),
+    );
+    const job = JOBS.find((row) => row.id === "house-run-09") as Job;
+    expect(job.kind).toBe("container");
+    const env: Env = {
+      DRY_RUN: "0",
+      RUNNER_AUTH_TOKEN: "runner-token",
+      RUNNER: { fetch: runnerFetch } as unknown as Fetcher,
+    };
+    await dispatch(env, job, job.cron, 1_700_000_000_000, {
+      args: { refresh_scope: "all" },
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    const [, init] = runnerFetch.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(init.body)).args).toEqual({
+      refresh_scope: "all",
     });
   });
 });

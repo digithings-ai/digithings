@@ -118,7 +118,7 @@ def healthz() -> dict[str, bool]:
     """Minimal liveness probe. Auth-exempt, rate-limit-exempt, secret-free.
 
     Returns HTTP 200 with ``{"ok": true}``. Intended for load-balancer and
-    k8s liveness checks. For richer cross-service diagnostics, call digismith's
+    k8s liveness checks. For richer cross-service diagnostics, call digitrace's
     ``/v1/status``.
     """
     return {"ok": True}

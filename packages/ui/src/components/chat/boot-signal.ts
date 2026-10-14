@@ -117,3 +117,24 @@ export function resolveHandoff(): DigichatHandoff {
     beat: modes.has("beat"),
   };
 }
+
+/**
+ * Service warm-up phase (sleep-on-idle backends). The app sets it while it
+ * waits for /api/embed/warmup; the boot loader and the assistant pending row
+ * read it to say "Waking up services…" instead of a separate banner.
+ */
+export type DigichatWarmupPhase = "idle" | "waking" | "ready" | "error";
+export const DIGI_CHAT_WARMUP_EVENT = "digichat:warmup";
+
+export function setDigichatWarmupPhase(phase: DigichatWarmupPhase): void {
+  if (typeof document === "undefined") return;
+  const root = document.documentElement;
+  if (root.dataset.digichatWarmup === phase) return;
+  root.dataset.digichatWarmup = phase;
+  window.dispatchEvent(new CustomEvent(DIGI_CHAT_WARMUP_EVENT, { detail: phase }));
+}
+
+export function getDigichatWarmupPhase(): DigichatWarmupPhase {
+  if (typeof document === "undefined") return "idle";
+  return (document.documentElement.dataset.digichatWarmup as DigichatWarmupPhase) || "idle";
+}

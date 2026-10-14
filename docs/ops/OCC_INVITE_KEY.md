@@ -307,5 +307,10 @@ OCC_INVITE_KEY="$(security find-generic-password -s occ-invite-key -w)" \
 
 Mint the key once with `openssl rand -hex 32` straight into the keychain
 (`security add-generic-password -s occ-invite-key -a occ -w "$(openssl rand -hex 32)"`).
-The rotation **changes production behaviour** (it turns the `/chat/occ` gate on and
-redeploys the digichat Worker), so it is never a background secret update.
+The rotation **changes production behaviour** (it puts the key in the live OCC tenant
+and redeploys the digichat Worker), so it is never a background secret update.
+
+The rotation is Act B1. It does **not** turn the `/chat/occ` gate on: while
+`occ.digithings.ai` is in `FIRST_PARTY_EMBED_HOSTS`, a first-party `Origin` still
+admits OCC with no key (see [Why the key changes nothing on its own](#why-the-key-changes-nothing-on-its-own--read-this-before-scheduling-the-deploy)).
+The gate closes only with Act B2, a separate deploy after B1 is verified.

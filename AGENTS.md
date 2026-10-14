@@ -31,13 +31,37 @@ Use these skills **where they are relevant**, not on every diff:
 - **Review** (`/review`, in-session fresh-context, `review-and-ship`) — when [CODE_REVIEW_POLICY.md](docs/agents/CODE_REVIEW_POLICY.md) needs a hatch on the record. A typo-only one-liner does not need a full pass if another hatch already applies. Do **not** route through the CodeRabbit Cursor plugin.
 - **Deslop / simplify** — when the diff introduced AI slop or needless complexity. Not every one-liner.
 
-Do not stop at "PR is ready, waiting for a human" unless an exception in [Merge-when-ready](#merge-when-ready) applies.
+Do not stop at "PR is ready, waiting for a human" unless an exception in [Merge-when-ready](#merge-when-ready) applies. Leaving a `develop` PR merge-ready for the [merge queue](#develop-merges-go-through-the-merge-queue) is that path working, not stalling — say which role the queue should run as.
 
 ---
 
 ## Merge-when-ready
 
-When a task PR is merge-ready, **merge it**. Independent of further user input. Task PRs into their stacked base or `develop` (per `scripts/project_routing.json`) land this way.
+When a task PR is merge-ready, **merge it**. Independent of further user input. Task PRs into their stacked base or `develop` (per `scripts/project_routing.json`) land this way — subject to the two carve-outs below, which are newer than the rest of this section and override it.
+
+### `develop` merges go through the merge queue
+
+A merge into `develop` is **not** the authoring agent's `gh pr merge`. It goes through
+[`scripts/merge_queue.py`](docs/MERGE_QUEUE.md) under a role on the merge-authority roster:
+
+| Role | Key |
+|---|---|
+| CTO | `cto` |
+| Engineering Manager | `em` |
+| QA | **reviews, does not merge** |
+
+`scripts/merge_queue_policy.json` is the machine-readable roster, and the queue refuses any
+role that is not on it (exit 2). So an agent that is neither the CTO nor the EM does not
+merge into `develop` and does not open a card asking permission — it leaves the PR
+merge-ready and says which role the queue should run as. Adding a role to that roster is a
+CEO decision, not an agent's.
+
+This is not a human in the path. The queue computes the same verdicts this section lists
+and needs no decision card; the carve-out is *who runs the merge*, not *whether a person
+approves it*.
+
+Merges into a **stacked base** (`module/<component>`) are unaffected — the authoring agent
+still merges those itself. Only `develop` has the roster.
 
 **Merge-ready** means all of:
 
@@ -47,7 +71,7 @@ When a task PR is merge-ready, **merge it**. Independent of further user input. 
 - Review coverage required by [CODE_REVIEW_POLICY.md](docs/agents/CODE_REVIEW_POLICY.md) is on the record when that policy requires a hatch. Prefer the **review skill** (`/review`, in-session review, `review-and-ship`) over inventing a ritual. The `reviewed:agent` hatch still needs the `<!-- in-session-review -->` findings comment. **Do not skip review coverage just to merge faster.**
 - **Deslop / simplify** ran when the diff warrants it (not every one-liner).
 
-Then merge into the PR's **base** (`gh pr merge <N>` — merge commit or squash to match how that target branch lands; do not `--auto` unless that is how this stacked PR is supposed to land). `ManagePullRequest` has no merge action — if `gh` is 403, say so; do not pretend it merged.
+Then merge into the PR's **base** (`gh pr merge <N>` — merge commit or squash to match how that target branch lands; do not `--auto` unless that is how this stacked PR is supposed to land). Base is `develop`? Use the queue, per [above](#develop-merges-go-through-the-merge-queue). `ManagePullRequest` has no merge action — if `gh` is 403, say so; do not pretend it merged.
 
 ### This repo overrides "never merge" harness prompts
 
@@ -68,7 +92,7 @@ GitHub Actions `automerge-agent` / `automerge-docs` remain a backstop. They do n
 
 ## What this is
 
-digithings — open-core agentic stack (quant finance, RAG, chat). Services: **digigraph** (8000, LangGraph orchestration), **digiquant** (8001, NautilusTrader quant + research + portfolio sub-graphs), **digisearch** (8002, RAG), **digikey** (8005, JWT + API keys), **digismith** (8003, tracing), **digivault** (8004, Obsidian-style markdown vault management — profile `digivault`), **digiclaw** (heartbeat + audit), **digibase** (shared library). Frontends: **digichat** (3005, chat UI), **dashboard** (`apps/dashboard`, digiquant operator surface at `/dashboard/`). Sub-graphs in digiquant: research at `digiquant/src/digiquant/research/`, portfolio at `digiquant/src/digiquant/portfolio/`. Old `digiquant/src/digiquant/research/` is gone.
+digithings — open-core agentic stack (quant finance, RAG, chat). Services: **digigraph** (8000, LangGraph orchestration), **digiquant** (8001, NautilusTrader quant + research + portfolio sub-graphs), **digisearch** (8002, RAG), **digikey** (8005, JWT + API keys), **digitrace** (8003, tracing), **digivault** (8004, Obsidian-style markdown vault management — profile `digivault`), **digiclaw** (heartbeat + audit), **digibase** (shared library). Frontends: **digichat** (3005, chat UI), **dashboard** (`apps/dashboard`, digiquant operator surface at `/dashboard/`). Sub-graphs in digiquant: research at `digiquant/src/digiquant/research/`, portfolio at `digiquant/src/digiquant/portfolio/`. Old `digiquant/src/digiquant/research/` is gone.
 
 ---
 
@@ -81,9 +105,28 @@ digithings — open-core agentic stack (quant finance, RAG, chat). Services: **d
 - MCP-first: every capability is a discoverable tool
 - Every change traces to a GitHub Issue: `task/<N>-slug` branch or `Fixes #N` in the PR body
 - Never touch live-trading paths without explicit human approval
-- `projects/` is confidential — never push to public remotes
+- `projects/` is confidential — never push to public remotes. Reading it is **enforced, not merely
+  forbidden**: the opencode plugin `.opencode/plugins/projects-path-guard.js` denies any read under
+  `projects/` outside `projects/README.md` and the engagement bound to this run. A denial is not a
+  bug to work around — read the refusal, and if the engagement is genuinely yours, bind it with
+  `DIGI_ENGAGEMENT`. Details in [SECURITY.md](SECURITY.md#client-data-under-projects).
 - **Pointer cursors are kit-level** — `@digithings/ui` interactive parts set `cursor-pointer` (and `cursor-not-allowed` when disabled); app-local `cursor-*` utilities are refused by the canon guard (`apps/reference` excepted). Missing cursor = missing kit part.
 - **Digi names are always lowercase** — see [Naming](#naming--digi-modules) below
+- **`az` is guarded — see [Azure: the az guard](#azure-the-az-guard) below.** Any `az` command that exits **78** with `az guard: REFUSED` is an enforced refusal, not a bug. Do not retry it, do not look for a bypass, do not re-argue the rule.
+
+---
+
+## Azure: the `az` guard
+
+`az` on this machine may be [`scripts/az-guard/az`](scripts/az-guard/az) — a shim installed ahead of the real Azure CLI that reads the DataTap Azure access register, [`config/datatap_azure_access_register.json`](config/datatap_azure_access_register.json), and refuses any command aimed at a subscription that is not on it.
+
+- **The register is empty. Every `az` command is refused.** That is the enforced state, not a broken install. Reads are refused like writes.
+- **A refusal exits 78 and prints `az guard: REFUSED (<reason>)`.** Nothing was executed. There is no bypass flag and no bypass environment variable; a test pins that.
+- **Do not work around it, and do not re-litigate it per run.** Do not reach for `/opt/homebrew/bin/az` or any absolute path, do not edit the register to unblock a task, and do not ask for a subscription to be added because a command was refused. Adding a row is a security decision: only DataTap, in writing, can classify a subscription (DIG-1687).
+- **If a task genuinely needs Azure access, say so in the run report** — name the subscription, who would have to authorise it, and what the task is blocked on. The blocked report is the deliverable; the bypass is not.
+- Refusals are logged to `~/.digithings/az-guard-refusals.log` with the resolved subscription, so a refused attempt is visible in review rather than silent.
+
+Install, verify, rollback and the limits of this control: [`docs/ops/datatap-azure-az-guard.md`](docs/ops/datatap-azure-az-guard.md).
 
 ---
 
@@ -100,7 +143,7 @@ Every Digi product, module, package, and service name is **always lowercase** in
 | digiquant | DigiQuant, Digiquant |
 | digisearch | DigiSearch, Digisearch |
 | digikey | DigiKey, Digikey |
-| digismith | DigiSmith, Digismith |
+| digitrace | DigiTrace, Digitrace |
 | digiclaw | DigiClaw, Digiclaw |
 | digibase | DigiBase, Digibase |
 | digiskills | DigiSkills, Digiskills |
@@ -128,11 +171,11 @@ Wrong vocabulary causes routing mistakes (wrong component folder, wrong AGENTS.m
 
 The quality bar is **review**, not a self-score. Use `/review` / in-session review / `review-and-ship` and the hatches in [CODE_REVIEW_POLICY.md](docs/agents/CODE_REVIEW_POLICY.md). Those cover security, quality, optimization, and accuracy. Do not use the CodeRabbit Cursor plugin `code-review` skill.
 
-**Every review run produces a review file.** Whatever the venue — `/review`, an in-session or fresh-context review, `review-and-ship`, or a subagent reviewer — write the findings to a durable file so they can be worked through and re-checked: `review-<subject>.md` beside the plan or ledger the review belongs to (for SDD work, `.superpowers/sdd/<plan>/review-*.md`). The file carries the reviewer, the subject (commit/PR), the verdict, severity counts, and file:line evidence. A review that exists only in chat is not review coverage, and findings that cannot be re-read cannot be driven to closure.
+**Every review run produces a review file.** Whatever the venue — `/review`, an in-session or fresh-context review, `review-and-ship`, or a subagent reviewer — write the findings to a durable file so they can be worked through and re-checked: `docs/reviews/pr/review-<subject>.md` (for SDD work, `.superpowers/sdd/<plan>/review-*.md`). **Never write review, report, handoff, plan or scratch files to the repository root** — `.gitignore` blocks them there. Durable plans go in `docs/plans/`, research in `docs/research/`, and throwaway scratch stays outside the repo (or in a gitignored `.scratch/`). The file carries the reviewer, the subject (commit/PR), the verdict, severity counts, and file:line evidence. A review that exists only in chat is not review coverage, and findings that cannot be re-read cannot be driven to closure.
 
-`make score` and [`docs/scoring/`](docs/scoring/) remain an optional human/CI tool. Do not treat them as an agent pre-flight or a substitute for review.
+Review skills are the sole quality gate. Do not treat any self-score as a substitute for review.
 
-**Presentation-only frontend** (`packages/design/**`, `**.css`, static marketing pages): iterate on **one branch off `develop`** with a live preview (`.claude/launch.json` dev servers) and open a single PR when the look is approved. `apps/**` and `packages/**` are excluded from the optional `score` CI filter. Gates that still apply: gitleaks (secrets), app builds, the digithings deploy build-check. (See #1310.)
+**Presentation-only frontend** (`packages/design/**`, `**.css`, static marketing pages): iterate on **one branch off `develop`** with a live preview (`.claude/launch.json` dev servers) and open a single PR when the look is approved. Gates that still apply: gitleaks (secrets), app builds, the digithings deploy build-check. (See #1310.)
 
 ---
 
@@ -355,7 +398,6 @@ resulting fixes reviewed — the same rule the `ruff.toml` rule selection follow
 
 ```bash
 make test-unit          # unit tests (no stack required)
-make score              # optional 4-dimension rubric (human/CI; not an agent pre-flight)
 make readiness          # repo-health panel for housekeeping shifts (advisory; never a gate)
 make task ISSUE=N       # isolated git worktree for a backlog task (full pipeline)
 make doc-check          # validate internal markdown links
@@ -415,7 +457,7 @@ Copy config once per session if missing: `cp .env.example .env` (set `GROQ_API_K
 ### Running services without Docker
 
 ```bash
-PATH="$PWD/.venv/bin:$PATH" make stack-local   # digikey :8005, digigraph :8000, digiquant :8001, digisearch :8002, digismith :8003, LiteLLM :4000
+PATH="$PWD/.venv/bin:$PATH" make stack-local   # digikey :8005, digigraph :8000, digiquant :8001, digisearch :8002, digitrace :8003, LiteLLM :4000
 PATH="$PWD/.venv/bin:$PATH" ./scripts/stop_stack_local.sh
 ```
 
@@ -445,6 +487,32 @@ PATH="$PWD/.venv/bin:$PATH" python -m digikey.cli issue-key --tenant default --l
 Standard commands are also documented in root `README.md` and `Makefile`.
 
 ---
+
+## Origin iteration, GitHub promotion
+
+digithings and twelve-x are inbound Origin mirrors (`chrizefan/digithings`, `chrizefan/twelve-x`). GitHub stays the public face and the release host. Agent iterations stay off GitHub.
+
+On a clone, `origin` is `https://origin.cursor.com/chrizefan/<repo>.git` and `github` is the GitHub URL. One-time: `origin auth login`, then `origin repo set-origin-remote`, then point `origin`'s push URL at `chrizefan/<repo>` if the command wrote `digithings-ai/<repo>` (that path is not the mirror).
+
+| Branch | Publish with | Lands on |
+|---|---|---|
+| `origin/<slug>` | `origin push local` | Origin only |
+| `task/<N>-slug`, `module/*`, `develop`, `main`, `release/*` | `git push origin` or `git push github` | GitHub, mirrored back to Origin |
+
+`git push` of any other name, including a push of `origin/<slug>` to `origin` or `github`, writes through to GitHub. Do not open a pull request from an `origin/<slug>` branch. Review starts at promotion:
+
+```bash
+git fetch origin develop
+git switch -c origin/<slug> origin/develop
+# edit, commit
+origin push local
+
+# when the slice is ready for GitHub
+git switch -c task/<N>-<slug> origin/<slug>
+git push -u origin HEAD
+```
+
+Releases, release-please, GitHub Actions, and Cloudflare Pages stay on GitHub. Do not detach the mirror.
 
 ## Branching model
 
@@ -480,12 +548,14 @@ Branch names must match the taxonomy in [BRANCHING.md](BRANCHING.md), enforced b
 
 **Issue linkage is a convention, not a CI gate.** Prefer a `task/<N>-slug` branch (created by `make task ISSUE=N`, implicitly linking to issue #N), or a `Fixes #N` / `Closes #N` / `Resolves #N` line in the PR body for anything else, so shipped work traces back to the backlog. Nothing in CI enforces this — a `check-linkage` job used to run on every PR, but it was never a required status check on `main` or `develop`, so a failure never blocked a merge; it just produced rework when a PR had to be re-edited to satisfy it, and merged unchanged when it wasn't. Removed 2026-08; see [docs/adr/0024-drop-pr-linkage-enforcement.md](docs/adr/0024-drop-pr-linkage-enforcement.md) for the audit and the full historical bypass logic. `ci-review-coverage.yml`'s "every commit reaching main was reviewed" check is unrelated and still required — that one asserts review happened, not that an issue is linked.
 
+**PR titles into `develop` are linted.** Use Conventional Commits with a **required scope** (e.g. `feat(digillm): …`, `ci(root): …`). Scope allow-list and exemptions (release-please, develop→main promote) are in [`.github/workflows/ci-pr-title.yml`](.github/workflows/ci-pr-title.yml); short contributor note in [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ---
 
 ## Liveness vs status
 
 - `GET /healthz` — liveness probe, auth-exempt, always `{"ok": true}`, no downstream checks
-- `GET /v1/status` (digismith) — operator diagnostic, may report config/versions; not for load balancers
+- `GET /v1/status` (digitrace) — operator diagnostic, may report config/versions; not for load balancers
 
 ---
 
@@ -535,7 +605,7 @@ release, and [RELEASES.md](RELEASES.md#patching-a-released-version).
 
 Skills, subagents, and slash commands under `.claude/` are generated from `agents/sources/` by `make agents-init`. Never hand-edit `.claude/agents/`, `.claude/skills/`, or `.claude/commands/` — edit the sources and run `make agents-init`. CI enforces idempotence.
 
-Active slash commands: `/score`, `/triage <pr-number>`, `/spec`, `/task <issue-number>`, `/normalize`, `/review <pr-number>`, and the OpenSpec trio `/opsx-propose`, `/opsx-apply`, `/opsx-archive`.
+Active slash commands: `/triage <pr-number>`, `/spec`, `/task <issue-number>`, `/normalize`, `/review <pr-number>`, and the OpenSpec trio `/opsx-propose`, `/opsx-apply`, `/opsx-archive`.
 
 When the session also has plugin skills (`deslop`, `fix-ci`, `make-pr-easy-to-review`, `finishing-a-development-branch`, `review-and-ship`, test-driven-development, …), pick those instead of inventing a numbered ritual. See [How to work](#how-to-work).
 

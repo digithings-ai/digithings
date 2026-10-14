@@ -94,6 +94,21 @@ def load_settings() -> dict:
     return json.loads(SETTINGS_PATH.read_text())
 
 
+def _honest_win_rate_log(win_rate_pct: float | None, total_trades: int) -> str:
+    """Honest one-line win-rate for the publish log — N + CI, never bare %.
+
+    NOTE: k here is reconstructed as round(pct / 100 * n) — no fills are
+    available in this context, so the count is an estimate, not observed.
+    (Contrast the tearsheet donut, which takes caller-counted (k, n).)
+    """
+    if win_rate_pct is None:
+        return "n/a"
+    from digiquant.stats.honesty import format_honest_rate
+
+    k = min(total_trades, max(0, round(win_rate_pct / 100.0 * total_trades)))
+    return format_honest_rate(k, total_trades)
+
+
 def strategy_type_of(settings: dict, strategy: str) -> str:
     """Family selector (#3170). Missing field inherits defaults.strategy_type, then slapper."""
     entry = settings["strategies"][strategy]
@@ -1052,7 +1067,7 @@ def run_and_write(
         td.net_profit_pct,
         td.max_drawdown_pct,
         f"{td.profit_factor:.2f}" if td.profit_factor is not None else "n/a",
-        f"{td.win_rate_pct:.1f}%" if td.win_rate_pct is not None else "n/a",
+        _honest_win_rate_log(td.win_rate_pct, td.total_trades),
         td.total_trades,
     )
     baseline = _PUBLISHED_BASELINE.get(strategy)

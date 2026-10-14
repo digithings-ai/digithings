@@ -3,7 +3,10 @@
 
 from __future__ import annotations
 
+from digiquant.fonts import GOOGLE_FONTS_HREF, MONO_FONT_STACK
 from digiquant.models import BacktestResult
+from digiquant.stats.honesty import DISCLAIMER, wilson
+from digiquant.tearsheet_stats import resolve_win_rate
 
 
 def _build_page(
@@ -42,11 +45,36 @@ def _build_page(
     risk_metrics_html: str = "",
     categorized_stats_html: str = "",
     logo_data_url: str = "",
+    win_rate_wins: int | None = None,
 ) -> str:
     md_val = result.max_drawdown_pct
     md = f"{md_val:.1f}%" if md_val is not None else "—"
     sharpe_str = f"{result.sharpe_ratio:.2f}" if result.sharpe_ratio is not None else "—"
-    win_rate_str = f"{win_rate * 100:.1f}%" if win_rate is not None else "—"
+    if win_rate is None and result.honest_rate is None:
+        win_rate_str = "—"
+        win_rate_cls = ""
+    else:
+        # The honest block owns k, n and the sample-size floors; the fill count
+        # is only a fallback denominator for results that predate L3.
+        counts = resolve_win_rate(result, win_rate, wins=win_rate_wins)
+        win_rate_str = counts.text
+        # A refusal publishes no interval, so it publishes no band either:
+        # recolouring a REFUSED card red is a rate claim the block disclaimed.
+        w = None if counts.refused else wilson(counts.k, counts.n)
+        lo = w.lo if w is not None else None
+        # Thresholds act on the CI lower bound, never the point estimate.
+        if lo is None:
+            win_rate_cls = ""
+        elif lo > 0.5:
+            win_rate_cls = "positive"
+        elif lo < 0.4:
+            win_rate_cls = "negative"
+        else:
+            win_rate_cls = ""
+    # The disclaimer belongs to the frequency block: when the honest block is
+    # present it carries its own, otherwise the module default. It is rendered
+    # once, here — never on a KPI card and never on a PnL or Sharpe row.
+    disclaimer_str = result.honest_rate.disclaimer if result.honest_rate is not None else DISCLAIMER
     pf_str = f"{profit_factor:.2f}" if profit_factor is not None else "—"
     sortino_str = f"{sortino:.2f}" if sortino is not None else "—"
     calmar_str = f"{calmar:.2f}" if calmar is not None else "—"
@@ -67,15 +95,7 @@ def _build_page(
         )
         + kpi("SORTINO", sortino_str, "positive" if sortino and sortino > 1 else "")
         + kpi("MAX DRAWDOWN", md, md_cls)
-        + kpi(
-            "WIN RATE",
-            win_rate_str,
-            "positive"
-            if win_rate and win_rate > 0.5
-            else "negative"
-            if win_rate and win_rate < 0.4
-            else "",
-        )
+        + kpi("WIN RATE", win_rate_str, win_rate_cls)
         + kpi(
             "PROFIT FACTOR",
             pf_str,
@@ -85,7 +105,8 @@ def _build_page(
             if profit_factor and profit_factor < 1
             else "",
         )
-        + kpi("TOTAL TRADES", str(result.num_trades))
+        # num_trades is the fill count, not closed round trips — label it so.
+        + kpi("TOTAL FILLS", str(result.num_trades))
         + kpi("CALMAR", calmar_str, "positive" if calmar and calmar > 1 else "")
     )
 
@@ -97,7 +118,7 @@ def _build_page(
   <title>Backtest Report — {strategy_display}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link href="{GOOGLE_FONTS_HREF}" rel="stylesheet">
   <style>
     /* ── Reset & Root ────────────────────────────────────── */
     *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
@@ -117,7 +138,7 @@ def _build_page(
       --negative: #f87171;
       --warn: #fbbf24;
       --purple: #a78bfa;
-      --font-mono: 'IBM Plex Mono', 'Courier New', monospace;
+      --font-mono: {MONO_FONT_STACK};
       --font-sans: 'IBM Plex Sans', system-ui, sans-serif;
     }}
     [data-theme="light"] {{
@@ -297,6 +318,11 @@ def _build_page(
     .chart-unavailable-title {{ color: var(--text-muted); font-family: var(--font-mono); font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; margin: 0 0 0.5rem; }}
     .chart-unavailable-detail {{ color: #64748b; font-size: 0.8rem; margin: 0; }}
     /* ── Footer ──────────────────────────────────────────── */
+    .disclaimer {{
+      margin-top: 2rem; padding: 0.75rem 1rem; text-align: center;
+      font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-muted);
+      background: var(--card); border: 1px solid var(--border2); border-radius: 8px;
+    }}
     .footer {{
       margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--border2);
       font-family: var(--font-mono); font-size: 0.65rem; color: var(--text-dim);
@@ -398,6 +424,8 @@ def _build_page(
     <div class="chart-wrap h-xl"><div class="chart-wrap-title">Price + Bollinger Bands + Entries &amp; Exits</div>{price_tab}</div>
   </div>
 
+  <div class="disclaimer">{disclaimer_str}</div>
+
   <div class="footer">
     <span>digiquant Backtest Report — Generated from NautilusTrader</span>
     <span id="gen-time"></span>
@@ -411,14 +439,14 @@ def _build_page(
   const DARK_LAYOUT = {{
     paper_bgcolor: 'rgba(0,0,0,0)',
     plot_bgcolor: 'rgba(255,255,255,0.03)',
-    font: {{ color: '#94a3b8', family: "'IBM Plex Mono','Courier New',monospace", size: 11 }},
+    font: {{ color: '#94a3b8', family: "{MONO_FONT_STACK}", size: 11 }},
     xaxis: {{ gridcolor: 'rgba(255,255,255,0.05)', linecolor: 'rgba(255,255,255,0.1)', tickfont: {{ color: '#64748b', size: 10 }} }},
     yaxis: {{ gridcolor: 'rgba(255,255,255,0.05)', linecolor: 'rgba(255,255,255,0.1)', tickfont: {{ color: '#64748b', size: 10 }} }},
   }};
   const LIGHT_LAYOUT = {{
     paper_bgcolor: 'rgba(0,0,0,0)',
     plot_bgcolor: 'rgba(0,0,0,0.02)',
-    font: {{ color: '#475569', family: "'IBM Plex Mono','Courier New',monospace", size: 11 }},
+    font: {{ color: '#475569', family: "{MONO_FONT_STACK}", size: 11 }},
     xaxis: {{ gridcolor: 'rgba(0,0,0,0.05)', linecolor: 'rgba(0,0,0,0.1)', tickfont: {{ color: '#94a3b8', size: 10 }} }},
     yaxis: {{ gridcolor: 'rgba(0,0,0,0.05)', linecolor: 'rgba(0,0,0,0.1)', tickfont: {{ color: '#94a3b8', size: 10 }} }},
   }};

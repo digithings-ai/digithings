@@ -1,5 +1,13 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+/* Canon token theme (zero emitted bytes): @reference registers the
+   web-theme @theme inline keys (ink/hair/surface/accent-weak/…)
+   for utility generation. The devkit entry has no tailwind import of its
+   own, so without this the token utilities (border-hair, text-ink-mute,
+   bg-surface, ease-brand, …) silently never generate and borders/text
+   fall back to currentColor. Only classes already present in scanned
+   sources gain working rules; no other surface's CSS changes. */
+@reference "@digithings/ui/styles/web-theme.css";
 /* Shared digichat app theme bridge (WS1) — variants, keyframes, dark
    variant, shadcn @theme, :root, .dark, @layer base. Byte-identical to the
    blocks this file and (digichat)/globals.css used to duplicate. */

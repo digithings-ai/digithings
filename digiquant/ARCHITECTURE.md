@@ -46,7 +46,18 @@ NautilusTrader is the sole backtest and live-trade execution engine. Its key pro
 
 The Polars-to-pandas boundary in `nautilus_runner.py` is a deliberate, documented exception to the "Polars only" rule. Nautilus's `BarDataWrangler.process()` requires a pandas DataFrame with a `timestamp` UTC index. All other data handling in digiquant (CSV loading, account report parsing, result assembly) uses Polars.
 
-**Version pinning:** `nautilus_trader` is pinned to `>=1.190,<2` in `pyproject.toml`. The 2.x series introduced an async-first API surface with breaking changes to `BacktestEngine.run()` and the Actor registration model.
+**Version pinning and lockfile authority ([ADR-0033](../docs/adr/0033-nautilus-trader-exact-pin.md)):**
+
+`nautilus_trader` is pinned **exactly** to `==1.230.0` in `pyproject.toml`. This is the build we ship. Do not widen it back to a range.
+
+- **Why exact.** A *minor* bump inside the old `>=1.190,<2` range moved the Python-visible return type of `PortfolioAnalyzer.realized_pnls()` between 1.228.0 and 1.230.0. Our honesty envelope reads that value, so a ranged pin meant "silently moves" rather than "compatible". This is a deliberate, recorded exception to the root `AGENTS.md` rule that runtime deps stay unbounded — the root rule's own escape hatch applies (a known incompatibility, with the reason commented next to the pin).
+- **One lock: the repo-root `uv.lock`.** It is the single authoritative lock for the whole uv workspace; `digiquant` is a `[tool.uv.workspace]` member. **No module ships its own `uv.lock`.** `digiquant/uv.lock` was deleted under ADR-0033 — it was inert (68 packages against the root lock's 297), referenced by nothing, and last touched at the April 2026 baseline; uv resolves the workspace root and never opened it. If you find a module-level `uv.lock`, it is dead weight that reads as a pin but pins nothing — delete it and say so in an ADR.
+- **Why the pin, not the lock, is the shipping control.** `digiquant/Dockerfile` copies only `digiquant/pyproject.toml` and runs `uv pip install --system -e ".[nautilus]"`. No lockfile is copied and `uv pip install` does not read `uv.lock`. So the `==1.230.0` in `pyproject.toml` is the **only** thing that pins `nautilus_trader` in that image — the one `docker-compose.yml` builds. Before ADR-0033 it resolved whatever was newest on PyPI at build time. **Scope of that claim:** the image is *not* reproducible. `polars`, `optuna`, `cryptography`, `fastapi`, `uvicorn`, `langgraph`, `httpx`, `requests`, `statsmodels` and every transitive dependency of `nautilus_trader` itself still float, so a rebuild of an unchanged commit produces different bytes. **The pin reaches one build surface, not the whole service:** the Cloudflare Workers stack builds `digiquant/Dockerfile.mcp`, which installs `[research,mcp]` with no `nautilus` extra, and `Dockerfile.digiquant-runner` already installs `--frozen` from the root lock. Nothing in the repository publishes this image — `publish-service-images.yml` was removed in `f54af7052` — so there is no `:latest` or `:v0.1.0` tag being overwritten; the live consequence of that removal is that `infra/self-host/compose.ghcr.yml:34-36` pulls a tag nobody publishes. ADR-0033 names reproducibility as open work, not as fixed.
+- **CI is frozen to the root lock.** 35 of the 40 `uv sync` invocations across 29 workflow files use `--frozen`. `test-digiquant.yml` syncs without the nautilus extra on purpose (Linux SIGABRT, #42); `test-nautilus.yml` is the mirror lane that does include it. Both run from the repo root. Editing a manifest without re-locking desyncs the lock and breaks every `--frozen` lane.
+- **Known gap.** A local venv that was not re-synced still runs whatever it installed. Local == CI only after `uv sync --frozen --package digiquant --extra nautilus`.
+- **Bumping is deliberate, with a checklist** — change the pin, `uv lock` at the repo root, read the diff (more than the `nautilus-trader` specifier line means stop), verify `uv lock --check` from the root and from inside `digiquant/`, update the version named here and in `AGENTS.md`, run the DIG-937 analyzer-shape matrix, and amend or supersede ADR-0033.
+
+The 2.x series introduced an async-first API surface with breaking changes to `BacktestEngine.run()` and the Actor registration model; the exact pin is also what keeps us off it.
 
 **Linux CI crash (SIGABRT / exit 134) — tracked in #42:**
 `BacktestEngine.run()` registers C++-level SIGTERM/SIGINT handlers in its Rust runtime. On Linux, `uvicorn[standard]` installs `uvloop` and sets it as the global asyncio event loop policy, which also claims those POSIX signal handlers via libuv. When both runtimes attempt to own signal handling, a C-level assertion fires → SIGABRT. Mitigation: `tests/dq/conftest.py` resets the asyncio policy to `DefaultEventLoopPolicy` before the dq suite runs, preventing uvloop from conflicting with Nautilus's signal registration. The three integration tests that run a real `BacktestEngine` are skipped on Linux CI (`CI=true`) until the per-component test suite (#43) re-enables pytest and the fix is confirmed green on Ubuntu.
@@ -152,12 +163,46 @@ All endpoints bind on `127.0.0.1:8001` by default. Auth is enforced by `DigiAuth
 | `GET` | `/health` | None | Legacy health check; returns `{"status": "ok", "service": "digiquant"}` (back-compat; prefer `/healthz`) |
 | `GET` | `/healthz` | None | Liveness probe; returns `{"ok": true}` (auth-exempt, rate-limit-exempt; see AGENTS.md "Liveness vs status") |
 | `GET` | `/strategies` | `digiquant:backtest` | List registered strategies (name, aliases, description, default_params) |
+| `GET` | `/bars` | None (keyless) | OHLCV bars for dashboard charts (#4880); query params: `symbol` (required), `timeframe` (`1m`/`5m`/`15m`/`30m`/`1h`/`1d` default/`1wk`/`1mo`), `limit` (1–500, default 120). Returns `BarsResponse` (newest-last bars, `source: gloomberb`, `stale` + `delay_note`). See §3.1 |
 | `GET` | `/check_drift` | `digiquant:backtest` | ADDM drift check for a strategy; query params: `strategy_id`, `baseline_run_id` |
 | `POST` | `/run_backtest` | `digiquant:backtest` | Synchronous NautilusTrader backtest; returns `BacktestResult` |
 | `POST` | `/run_optimize` | `digiquant:optimize` | Parameter optimization (grid/bayesian/random); returns `OptimizeResult` |
 | `POST` | `/run_export` | `digiquant:backtest` | Export strategy config to artifact; returns `ExportResult` |
 | `POST` | `/run_pipeline` | `digiquant:backtest` + `digiquant:optimize` | Full pipeline via internal LangGraph; returns `{trace, backtest, optimize, export}` |
 | `POST` | `/v1/workflow` | `digiquant:backtest` + `digiquant:optimize` | Versioned alias for `/run_pipeline` |
+
+#### 3.1 Keyless bars (`GET /bars`, #4880)
+
+Display-only OHLCV for dashboard charts; feeds #4879 Vela wiring (dashboard
+fetches keyless, passes bars to Vela's offline `data` option — no keyed
+provider, no Pine/scripting).
+
+- **Keyless:** auth-exempt via `digiquant_path_scopes` (`GET /bars` → `None`;
+  every other method/path keeps its scope). Rate limit is the 30/min default.
+- **Read-only:** implemented in `digiquant/bars.py::fetch_bars` over the
+  **anonymous** Gloomberb `price_history` path — no session cookie, no API
+  keys, no order/broker imports. Symbols normalize to uppercase (same
+  convention as the orchestrator `_normalize_symbols`).
+- **Timeframe/range:** `timeframe` is exactly the Gloomberb resolution vocab
+  (`1m`…`1mo`); each maps to a contract-safe upstream range
+  (`DEFAULT_RANGE_BY_TIMEFRAME`: `1m`/`5m`→`1W`, `15m`→`1M`, `30m`→`6M`,
+  `1h`→`3M`, `1d`→`1Y`, `1wk`→`5Y`, `1mo`→`ALL` — each within its §5.2 cap).
+  Unknown timeframes are 422 with no request (rejected, never clamped).
+  The upstream read is tail-sliced to `limit` (1–500, default 120).
+- **Contract:** `BarsBar{timestamp, open, high, low, close, volume?}` +
+  `BarsResponse{symbol, timeframe, limit, count, bars, source="gloomberb",
+  stale, delay_note}` (`models.py`). Carries no Sharpe/PnL/drawdown — no
+  performance claims originate here.
+- **Errors:** typed envelope → HTTP (`invalid_input`→422, `not_found`→404,
+  `rate_limited`→429, anything else incl. kill-switch-disabled →502);
+  transport exceptions →502, never a raw traceback.
+- **Not a pipeline primary:** free-tier data may be delayed up to 15 minutes
+  (`delay_note`) — this stays a chart-display read and must never feed
+  backtest/optimize (the Gloomberb "enrichment only" rule). No MCP twin:
+  `digifetch_price_history` already covers the agent surface.
+- **Tests:** `tests/dq/test_bars.py` (offline — `httpx.MockTransport` into a
+  real `GloomberbClient` via the `digiquant.bars._build_gloomberb_client`
+  seam; never live HTTP).
 
 #### Async job endpoints
 
@@ -222,7 +267,7 @@ The MCP server (`mcp_server.py`) listens on `127.0.0.1:8767` by default with `st
 | `digiquant_export` | Exports strategy config to a target artifact |
 | `digiquant_run_pipeline` | Runs the full LangGraph pipeline |
 | `digiquant_fetch_coinbase_ohlcv` | Fetches OHLCV from Coinbase (CCXT) into the price-history cache. Default `start` is Coinbase BTC listing `2015-07-20` (ETH/SOL return from the first available Coinbase daily bar). Do not prefix-clip to 900 days. `timeframe`/`end`/`through_yesterday` widen beyond the daily-only default (a vendor `ccxt-mcp` server already covers full CCXT generality; prefer it for anything beyond this). Intraday timeframes write under `price-history/{timeframe}/` so ISO timestamps never overwrite the daily `{ticker}.csv` cache (#3944). |
-| `digifetch_quote` | Latest quote for one listing via Gloomberb Cloud (`api.gloom.sh`, anonymous; **enrichment only** — free-tier data is delayed up to 15 minutes and is never a pipeline primary). Default-ON behind `GLOOMBERB_ENABLED`; payload carries "Sourced from Gloomberb" attribution + `term.gloom.sh/?ticker=` deep link (#4069) |
+| `digifetch_quote` | Latest quote for one listing via Gloomberb Cloud (`api.gloom.sh`, anonymous; **enrichment only** — free-tier data is delayed up to 15 minutes and is never a pipeline primary). Default-OFF behind `GLOOMBERB_ENABLED` (explicit opt-in re-enables); payload carries "Sourced from Gloomberb" attribution + `term.gloom.sh/?ticker=` deep link (#4069) |
 | `digifetch_quotes_batch` | Batch quotes for 1–20 listings (Gloomberb Cloud, anonymous). Per-item `status`/stale preserved: a stale listing is a null quote + reason code, not a failed batch |
 | `digifetch_price_history` | OHLCV bars for one listing. Resolution × range caps (spec §5.2): 5m→1wk, 15m→1mo, 1h→3mo, 1d→5y (default), 1wk→5y, 1mo→all-time; out-of-contract requests return typed `invalid_input` — rejected, never silently clamped. An explicit `start_date`/`end_date` window (ISO `YYYY-MM-DD`, mutually exclusive with `range`) bypasses the caps for long history — sent as `rangeKey=ALL` + `startDate`/`endDate` (live: 610 weekly bars back to 2015; #4100) |
 | `digifetch_ticker_financials` | Quote, profile, fundamentals, statements, and daily price history for one listing. `extended_statements=true` requests the SEC-sourced extended history; statement rows type the common fields and preserve the rest |
@@ -240,7 +285,7 @@ The MCP server (`mcp_server.py`) listens on `127.0.0.1:8767` by default with `st
 | `digifetch_yield_curve` | Treasury yield-curve tenors (`/cloud/econ/yield-curve`, anonymous). Points carry `maturity`/`maturityYears`/`yield`/`asOf`/`stale` (`yield` is a Python keyword, so the attribute is `yield_`); any stale tenor folds into the envelope `stale` flag |
 | `digifetch_cds` | DTCC PPD CDS trade tape (`/cloud/credit/cds`, anonymous). `issuer` (≤200 chars)/`days`/`limit` filter the tape; `days` is bounded 1–90 **client-side** — an out-of-range value is a typed `invalid_input` and no request is made (the route would answer 400). Trade rows type the dissemination/notional/rate fields and preserve the rest |
 | `digifetch_research_search` | Full-text research search across transcripts/news/filings (`/cloud/search`, session-gated). Requires `GLOOMBERB_SESSION_COOKIE`; HTTP 401/402 (or a missing cookie) is a typed `auth_required` with no request. `query`/`limit`/`offset` page the result; hits carry `docType`/`ticker`/`title`/`url`/`snippet`, and `data.pagination` types `total`/`hasMore`/`nextOffset`/`countCapped` (live-verified) |
-| `digifetch_congress_trades` | US House disclosure trades (`/cloud/congress/house`, anonymous). `year`/`limit` filter the tape. **Upstream is currently failing** — the Mistral OCR dependency returns HTTP 500 (`Mistral OCR failed: 402 Customer monthly spending limit reached`), surfaced as a typed `upstream_error`; the tool stays exposed so coverage completes when upstream recovers. The typed subset follows the known live field names (`memberName`/`assetName`/`sourceUrl`/`filingDate`/`notificationDate`); everything else is preserved as extras |
+| `digifetch_congress_trades` | **REFUSED on every digiquant surface** (5 U.S.C. 13107(c)(1)(B); DIG-1057) — not registered in any MCP scope, filtered out of the orchestrator manifest, and answered with a typed `tool_refused` envelope by `POST /v1/orchestrator_invoke`. Do not re-add it without Counsel's written clearance. The underlying route is US House disclosure trades (`/cloud/congress/house`, anonymous; `year`/`limit` filter the tape) and **its upstream is live, not failing** — probed 2026-10-05: `GET https://api.gloom.sh/cloud/congress/house?limit=3` → HTTP 200, `source: "house-clerk"`, `filingCount: 407`, `filingsParsed: 20`, with parsed trade rows in the body. That liveness is exactly why the tool is refused rather than left inert. Rows are not raw: they carry `party`, `committees`, `stateDistrict`, `memberName`, `owner`/`rawOwner`, `sourceUrl` and upstream-computed `returnSinceTx`/`returnSinceFiling`/`returnAsOf`, and the envelope returns sibling `members` and `tickers`. Client, normalizer, models and the `free` entitlement row are retained in-tree so the route can be restored without re-deriving the endpoint shape |
 | `digifetch_transcripts` | Earnings-call transcripts (`/cloud/transcripts`, session-gated, **requires Gloomberb Pro**). Requires `GLOOMBERB_SESSION_COOKIE`; a free (email-verified) session answers a non-JSON `Pro plan required` body (HTTP 402 is the live status), mapped to a typed `pro_required` carrying the upstream text — never an empty success. Rows come from the upstream `calls` list (`companyName`/`callAt`/`webcastUrl`; the `transcripts` key is also accepted). Provide exactly one of `ticker` (list that listing's calls) or `transcript_id` (fetch one call by id from `GET /cloud/transcripts/{id}`; #4110 phase 4a). Adds a `term.gloom.sh/?ticker=` deep link; detail mode links only when the payload carries a ticker. |
 | `digifetch_saved_searches` | The signed-in session's saved searches (`/cloud/search/saved`, session-gated; #4110 phase 4a). No parameters; a missing cookie is a typed `auth_required` with no request. Rows carry the saved-search id/name/query with unknown fields preserved (the live row shape stays probe-pending — the probed session returned an empty list). No deep link |
 | `digifetch_statements` | Annual/quarterly statement rows (`/market/statements`, session-gated; live-verified 401 anon / 200 with cookie). `period` selects annual\|quarterly\|both; rows are sparse line items — `date`/`currency` plus a few typed fundamentals fields, with the long tail (hundreds of line items) preserved as extras. Adds a `term.gloom.sh/?ticker=` deep link |
@@ -256,6 +301,52 @@ The MCP server (`mcp_server.py`) listens on `127.0.0.1:8767` by default with `st
 | `digifetch_risk_reports` | 10-K risk-factor reports, diffed year-over-year (`/public/risks/{ticker}` + `/{year}`, anonymous; live-verified). `what=list` lists report years with risk/group/word counts and an overview; `what=report` returns one year's extracted risk factors, groups, the added/removed/reworded diff against the prior year, and notes (requires `year`). Adds a deep link. Cached/delayed — cross-check against EDGAR |
 | `digifetch_short_interest` | Biweekly short-interest settlements (`/market/short-interest?symbol=&years=`, session-gated; live-verified: 401 anon → 200 with cookie). `years` is 1–10 client-side (live: 1→24 points, 5→120, 10→209; 0/11/99 silently fall back to the 3-year window upstream). Points carry shares short, prior shares short, average daily volume, days to cover, change percent, and a revised flag. Adds a deep link. Exchange-reported data, delayed by reporting cadence |
 | `digifetch_equity_diagnostic` | On-demand AI evidence review for one listing (`POST /research/equity-diagnostic`, session-gated; live-verified). `symbol`/`exchange`/`mode` (cache-first\|refresh); the first request per symbol answers HTTP 202 with a `pending` payload (`status=generating` + `retryAfterMs`) and retries eventually yield a report whose findings keep `observation` and `interpretation` separate. Free sessions only receive `access=preview`. The payload's own `status` field is not the market-envelope discriminator (`direct_payload`), pending payloads are **never** client-cached, and complete reports are cached normally. Adds a deep link. Model-generated reading of Gloomberb's data — not investment advice |
+| `luxalgo_library_search` | Full-text search over the LuxAlgo Library, concepts + indicators (hosted LuxAlgo MCP `mcp.luxalgo.com/mcp`, anonymous; #4779 P0). `query` free text, `limit` 1–50. Rows carry kind/slug/name/family plus the canonical `url`/`md_url`. Research reference only: "Sourced from LuxAlgo Library" attribution + `source_url` on every payload |
+| `luxalgo_library_get_concept` | One Library concept page by `slug` (e.g. rsi; anonymous). Returns slug/name/family/aliases, the canonical `url`/`md_url`, and `content_markdown`. Research reference only |
+| `luxalgo_library_get_indicator` | One Library indicator's **metadata** by `slug` (anonymous). Metadata only — indicator source code is not exposed (CC BY-NC-SA license boundary). Research reference only |
+| `luxalgo_library_list_concepts` | List Library concept pages (anonymous). `limit` 1–200. Research reference only |
+| `luxalgo_library_list_indicators` | List Library indicator entries (anonymous). `limit` 1–200. Metadata only, no source code. Research reference only |
+| `luxalgo_library_list_tags` | List Library tags (anonymous). No parameters. Research reference only |
+| `luxalgo_library_list_families` | List Library indicator families (anonymous). No parameters. Research reference only |
+| `luxalgo_library_get_family` | One Library indicator family by `family` name/slug (anonymous). Research reference only |
+| `luxalgo_edge_symbols` | Hosted Edge Stats coverage (anonymous, #4844): symbols, session calendars, coverage windows, session counts, nightly build time. No parameters. Precomputed statistics only — no raw vendor bars |
+| `luxalgo_edge_presets` | Hosted Edge Stats preset catalog (anonymous, #4844): gap fills, opening-range breakouts, day-of-week effects, and more. `category` narrows to one category; ids feed `luxalgo_edge_report` |
+| `luxalgo_edge_report` | One precomputed Edge Stats result (anonymous, #4844): P(outcome \| conditions) with N, Wilson 95% CI, sample guards, first/second-half stability split, per-year counts. Every result carries the honesty disclaimer in `data.disclaimer` and envelope `warnings` |
+| `luxalgo_trackers_datasets` | Market Trackers CC0-1.0 catalog (anonymous, #4844; two families limited — DIG-1464): row counts, freshness, years with data, ticker-searchability. `dataset` selects one dataset's field roster — read before composing filters |
+| `luxalgo_trackers_latest` | Newest ingestion day's rows for one Trackers dataset (anonymous, #4844): `dataset` required, `ticker`/`text`/`where` narrow, `sort` newest\|oldest, `limit` 1–100, `offset` pages. Freshness/ad-hoc lookups only — never a pipeline primary |
+| `luxalgo_trackers_ticker` | One ticker across every ticker-bearing Trackers dataset for one year (anonymous, #4844): `ticker` required, `year` 1900–2100, `limit` 1–25 per dataset. Ad-hoc lookups only — never a pipeline primary |
+
+**LuxAlgo license boundary (#4845).** The 9th hosted tool,
+`library_get_source_code`, serves indicator Pine source under CC BY-NC-SA and
+is deliberately unwrapped: no source payload may be persisted (Chroma /
+Supabase / `documents` rows) or rendered into paid surfaces (tearsheets,
+briefs, chat answers). Enforcement is `data/luxalgo/license_guard.py` —
+`LUXALGO_COMMERCIAL_LICENSE` opt-in flag (default OFF; only
+`1`/`true`/`yes`/`on` enable), dispatcher runtime refusal with a typed
+`invalid_input` envelope and no request while OFF, per-state attribution
+(`commercial_license` + `license_state` on every Library payload), the
+`source_code_violations` surface assertions (MCP full/read, read scope,
+manifest, entitlements, schemas, research subset stay at 14 even when licensed;
+only the dispatcher may add the 9th, and only with the license), and the
+repo-wide code-reference scan. Guard halves: `tests/dq/test_luxalgo_license_guard.py`
+(unit) + `scripts/check_luxalgo_license_boundary.py` (CI-adjacent). Unknown
+`luxalgo_*` names (including a future source-code name) answer HTTP 400 at
+`/v1/orchestrator_invoke` until a dispatch row exists. No Pine vendoring, no
+procurement (owner-side).
+
+**digiquant-web local gateway.** `apps/digiquant-web/gateway/live_gateway.py`
+is a development-only, read-scope adapter from the static browser app to one
+scrubbed stdio MCP child. It binds only `127.0.0.1`, accepts only exact loopback
+HTTP origins, exposes a fixed probe table (no tool passthrough), and never passes
+cookies or service keys to the child. The browser opts in with
+`NEXT_PUBLIC_DIGIQUANT_GATEWAY_URL`; `lib/gateway/gateway-client.ts` independently
+requires both the page and configured gateway to be loopback before it fetches.
+The LuxAlgo surface there is Library metadata search plus attribution only.
+The marketing hero chart is LuxAlgo Vela (`@luxalgo/vela`) on the public
+Coinbase feed: candles, volume, moving averages, and a cycling native overlay.
+Any non-local binding, edge auth, or deployment remains a human-gated
+network-exposure change.
+
 | `digiquant_fit_btc_power_law` | Fits the SDCA BTC power-law (RAQQR) valuation rails from cached daily price history (`data/prices/history_cache.py`, not a bespoke fetch) and persists the coefficients to `strategies/sdca/btc_power_law_coefficients.json` (#1082) |
 | `digiquant_build_sdca_risk_index` | Builds the SDCA `date`/`risk` parquet from a `RiskModel` + cached daily prices (`history_cache.py`, never a bespoke fetch) and writes it for `SdcaStrategy.risk_path` (#3168). `risk_model` selector: `btc_power_law` / `generic_valuation` / `rolling_z` (`sdca/providers.py`). Oscillators are computed from **that ticker's** OHLCV. `indicator_weights` JSON `{valuation, m2, rs_eth, dxy, weekly_rsi, weekly_macd, sma_band}` defaults to valuation=1 / extras=0 (published BTC charts unchanged). Macro extras need on-disk `m2_path` / `dxy_path` and/or cached `eth_ticker`. Returns `{path, row_count, date_start, date_end, null_risk_days}` or `{"error": ...}` |
 | `digiquant_fetch_bitview_series` | Fetch Bitview/BRK on-chain `day1` series (`mvrv`, `asopr_24h`, `puell_multiple`, `rhodl_ratio`) into `data/onchain/bitview/` parquet. JSON API only (no HTML scrape). `nupl` is refused by default (monotone of MVRV); `allow_derived=True` opts a caller who understands the caveat back in. Upstream base URL is **fixed** (no caller `base_url`, SSRF guard #3944); the code-only seam is an injected HTTP session / allowlisted host. Fail-soft + timeout. Hosted bitview.space is optional / no SLA — a vendor `mcp.bitview.space` MCP server already exists; prefer it for general Bitview access. Coin Metrics community CC BY-NC is **not** fetched and must not be republished commercially. Refs #1086 |
@@ -274,10 +365,14 @@ The MCP server (`mcp_server.py`) listens on `127.0.0.1:8767` by default with `st
 | `dashboard_get_policy_gate_evaluation` | Fetch a gate-evaluation summary by `evaluation_id` |
 
 `create_mcp_server(scope=...)` gates registration: `scope="full"` (default)
-registers all 58 tools; `scope="read"` registers only the 44 dashboard-chat
+registers all 127 tools; `scope="read"` registers only the 113 dashboard-chat
 reads (strategy list, price/macro reads, causal trade levels, `query_research`,
 policy replay/comparison reads, gate reads + evaluations, the coinmetrics
-catalog, and the 34 `digifetch_*` Gloomberb enrichment reads).
+catalog, the 14 luxalgo hosted reads (#4779 P0 Library + #4844 edge/trackers),
+and the 89 `digifetch_*` Gloomberb
+enrichment reads — every digifetch tool is read-scope, including the 13
+write-shaped workspace/broker tools, which are inert by the Task 7 read-only
+verdict, not by scope: read-scope membership is not a read-only guarantee).
 `--scope` / `DIGIQUANT_MCP_SCOPE` select the scope; `host`/`port` live on the
 `FastMCP(...)` constructor — `run()` takes transport only.
 
@@ -308,7 +403,7 @@ flag for the equity/sector (`EQUITY_TOOLS`) and macro (`MACRO_TOOLS`) phases, an
 #2908; its evidence path is the bundle + amendment flow) and the legacy Phase 7D
 path is unwired.
 
-Gating: the family is default-ON behind `GLOOMBERB_ENABLED`;
+Gating: the family is default-OFF behind `GLOOMBERB_ENABLED`; an explicit opt-in (``1``/``true``/``yes``/``on``) re-enables it;
 `available_digifetch_tools` applies that kill switch **and** the session-cookie
 gate to the advertised list, so a pipeline LLM is never handed a digifetch tool
 whose only answer is a typed disabled/`auth_required`/`pro_required` error. The
@@ -413,7 +508,7 @@ touches the container; once the custom-domain route is enabled it can be pinged
 manually:
 `curl -sS https://mcp.digithings.ai/mcp -H 'Accept: application/json'`.
 
-Per-component secrets (`wrangler secret put`, never committed): `FRED_API_KEY`,
+Per-component secrets (`wrangler secret put`, never committed):
 `GLOOMBERB_SESSION_COOKIE` (session-gated digifetch tools, #4260), and the four
 R2 names `R2_ACCOUNT_ID` / `R2_BUCKET` / `R2_ACCESS_KEY_ID` /
 `R2_SECRET_ACCESS_KEY` (same `digithings-archive` bucket as the checkpoint
@@ -433,7 +528,6 @@ Owner applies the six secrets from `apps/digithings-stack-cloudflare/`
 `env -u` per the `CLOUDFLARE_API_TOKEN` trap noted in `wrangler.toml`):
 
 ```bash
-printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put FRED_API_KEY
 printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put GLOOMBERB_SESSION_COOKIE
 printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_ACCOUNT_ID
 printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_BUCKET
@@ -476,7 +570,18 @@ prediction-market odds (`get_fed_rate_probabilities`; no R2 generation; D2).
 
 `scripts/refresh_market_data_r2.py` also exits non-zero when any macro series
 lands in a soft-fail mode (`history-only`/`error`), so the live fetch window has
-to span at least one publication period of the series (#4588). `LIVE_WINDOW_DAYS`
+to span at least one publication period of the series (#4588). No `FRED_API_KEY`
+is read anywhere on this path (#4794): `source=="fred"` fetches the newest
+anonymous Gloomberb `econ_series` page per kept series (`window_limit` by
+cadence: 60/16/8/4; 1000-row tail on bootstrap, sealed with a `truncated` note)
+and merges it into the existing `fred__*` generation, keeping sealed rows older
+than the page. A same-seal revision takes the window-merge path, never a full
+1990 re-pull. Only the 23 kept panel ids
+(`data/prices/gloomberb_macro.py::KEPT_SERIES_IDS`) are selected; the 8 dropped
+ids are never fetched and their `latest` pointers keep serving the last seal.
+`digiquant prices fetch-macro` reads the same panel the same way (`--dry-run`
+prints ids without a client; `--backfill` is a 1000-row tail, not 1990).
+`LIVE_WINDOW_DAYS`
 (45) assumes a daily series; a monthly FRED series (`M2SL`, `UNRATE`, `MANEMP`,
 `CPIAUCSL`, `PCEPI`) legitimately has no new observation inside it — release lag
 plus the pending release puts the newest month up to ~90 days behind the run — so
@@ -484,7 +589,8 @@ the window came back empty, `_fetch_macro` raised `empty live window`, and every
 scheduled refresh was marked stale. Each entry in
 `research/config/macro_series.yaml` may now declare a `cadence`
 (`daily`/`weekly`/`monthly`/`quarterly`), which selects the window
-(`_CADENCE_WINDOW_DAYS`: 45/60/120/240 days; absent = daily). The widened window
+(`_CADENCE_WINDOW_DAYS`: 45/45/120/240 days — weekly shares the daily constant;
+there is no 60, and absent = daily is also the narrowest of the four). The widened window
 then *contains* the series' seal row, so the live fetch is non-empty and the
 existing benign `up-to-date` path covers it. Note what does **not** change: an
 empty live window still returns `history-only` — `_fetch_macro` raises on empty
@@ -501,6 +607,200 @@ wider monthly window: a revision to a monthly print that is 45–120 days old is
 inside the window and takes the `_restated` path (a full-history re-pull) where it
 used to be invisible; that is the intended sealing behaviour, at the cost of an
 occasional extra re-pull.
+
+The cadence exemption is per-series, so it also needs a whole-leg guard. `history-only`
+on a slow-cadence series is exempt on its own (one series sitting out its release cycle
+is not an outage), but a *total* macro-feed death made every outcome exempt at once:
+`failed` came back empty, `staleness_gate` is only a date-gap check over the max
+`as_of` that a whole-leg freeze does not move, and the run exited 0 claiming fresh with
+the macro panel frozen at the last good seal (DIG-694 / DIG-981).
+`_macro_leg_dead(outcomes, exempt)` suspends the exemption when **every** exempt
+series is `history-only` at once (with a `> 1` floor, so a single-series manifest cannot
+trip it), so the operator sees the `fred__*` ids in `artifact["failed"]`. Unanimity, not a
+majority: `history-only` on a slow series has two causes — an exhausted 120/240-day
+publication window, or a per-series vendor refusal — and `_fetch_macro` builds a fresh
+client per series, so a rate-limit blip silences an arbitrary subset. A partial leg is
+indistinguishable from that blip, and firing the gate on a healthy panel is how operators
+learn to ignore it. `main` emits exactly one outcome per macro spec, so the exempt ids and
+their outcomes always line up. Two known limits follow from the floor and the unanimity,
+both accepted rather than half-solved by a magic constant: a manifest with a single exempt
+series cannot trip the guard, and a partial leg stays exempt exactly as it did before this
+guard existed. Suspending the exemption only ever *adds* names to `failed` — it never turns
+a stale run fresh. A daily or `error` outcome is never exempt at any cadence. Staleness
+flag only — no money, rate or weight arithmetic. Contract tests:
+`tests/scripts/test_macro_death_is_not_silent.py`.
+
+**What this guard alone does not cover.** It closes the unanimous `history-only` shape only,
+and only over series the manifest actually declared. Read alongside the `_macro_as_of_stale`
+age guard, which covers the other two:
+
+| Shape | Why the guard cannot see it | Status |
+|---|---|---|
+| Partial leg (2 or 3 of 4 slow series dead) | indistinguishable from a rate-limit blip *while the silent series' seals are still inside their own windows*; a subset is not evidence of a mode, but each of them is evidence of its own age | accepted, by design **only while those seals are fresh**; DIG-2405 then names each one individually on its own age |
+| Panel serving stale rows in-window | outcome is `up-to-date`, not a soft fail, so it never enters the reduction | closed by DIG-1137 |
+| Single **slow-cadence** series in the manifest | the `> 1` floor counts exempt ids, not manifest size — an 8-series panel with one monthly series has a frozen slow leg and cannot trip it | closed by DIG-1137 + DIG-2405 (`_macro_as_of_stale`; the `> 1` floor stands) |
+| Unreadable manifest | `_resolve_macro_specs` swallowed the exception and returned `[]`, so `exempt` was empty and the guard had no ids to reason about | **closed (DIG-1371)** — the resolver now returns a list carrying `manifest_error`; `main` reports it as a `macro-manifest-unreadable` `error` outcome *after* the equity leg has run (never a raise, which would abort before `refresh_universe`), so the run exits 1 with the cause in `failed` and `core_macro_mirror.skipped` names the manifest problem |
+
+The `> 1` floor stands. A single-series manifest still has no leg to judge, and a single
+silent series among several is not a mode-based death the leg test can see — the DIG-2405
+decision below is that it *is* worth naming, but it is named by measuring the seal's age,
+not by relaxing unanimity. Relaxing it would fire on every rate-limit blip.
+
+DIG-1137 / DIG-2405 close the two sibling routes by measuring rather than trusting
+`mode`. `_macro_as_of_stale(outcomes, macro_specs, run, already)` compares each macro
+outcome's `as_of` against the run date, in calendar days, against the same
+`_CADENCE_WINDOW_DAYS` bound the live fetch already used. It reads
+`_MACRO_JUDGED_MODES` = the success modes (a vendor that keeps *answering* while it stops
+*publishing* lands on `up-to-date`) plus `MODE_HISTORY_ONLY`, and skips `MODE_ERROR`
+because that mode is never cadence-exempt and is therefore already loud. The
+`history-only` inclusion is the DIG-2405 half: a retired slow series arrives in that mode
+with an abandoned seal, the #4621 exemption forgives it on cadence alone, and
+`_macro_leg_dead` needs unanimity over the whole exempt set, so one retired series among
+live ones was named by nothing. Age separates the two cases that mode cannot, because an
+empty window and a fresh seal are a quiet release cycle while an empty window on a
+*stale* seal is a retirement. `already` keeps a series both guards reached named once. The
+bound is each series' own window, not a widened threshold: a monthly series sealed 34 days
+old is still quiet.
+
+The unreadable manifest is still open. It needs its own fix — a loud outcome rather than an
+empty spec list — because with no specs there are no ids for any of these guards to reason
+about, whichever mode they read.
+
+**Design record for the frozen-but-serving panel (DIG-1142).** Recorded here because the
+summary above does not carry the reasoning. **Shipped** as `_macro_as_of_stale`; the shape
+below is what it shipped as.
+
+The gap is that `refresh_macro_series` returns `MODE_UP_TO_DATE` with `as_of=seal` whenever
+the live window is non-empty but carries nothing newer than the seal. `up-to-date` is not in
+`_SOFT_FAIL_MODES` and is not `history-only`, so the outcome never enters the reduction and
+the run exits 0 claiming fresh. Two healthy paths reach that same shape: a same-day FRED
+restatement (`MODE_FULL_REPULL`, `as_of=top2 == seal`) and an unchanged overlap that then
+finds nothing new.
+
+`_macro_as_of_stale(outcomes, macro_specs, run) -> set[str]`, defined next to
+`_live_window_days` and called in `main` between the `failed` list and `stale = ...`:
+
+- **Predicate.** For each macro series, take the declared cadence from `macro_specs`
+  (ticker key is `f"{source}__{series}"`, matching `_slow_macro_exempt_ids`), resolve the
+  window with the existing `_live_window_days`, and report the series when
+  `(run_date - as_of).days > window`. Age against the series' own window, **never**
+  `as_of == seal` and never `mode` — the two restatement paths above are healthy, so keying
+  on either would fail a healthy panel.
+- **Mode filter.** Success modes only (`MODE_UP_TO_DATE`, `MODE_INCREMENTAL`,
+  `MODE_FULL_REPULL`). `history-only` and `error` are already `_SOFT_FAIL_MODES` and stay
+  with `_macro_leg_dead`; an empty `as_of` is skipped rather than guessed.
+- **No declared cadence** defaults to the 45-day daily window via `_live_window_days`,
+  matching the live-fetch default rather than inventing a second one.
+- **Calendar days, not trading days.** `_CADENCE_WINDOW_DAYS` is calendar days (45/120/240).
+  `staleness_gate` (`digiquant/src/digiquant/data/prices/refresh_gate.py:49`) counts *open
+  trading days* against `bound_trading_days=5`; reusing it per series would call a 120-day
+  monthly series fresh after ~5 trading days. The file already has `_shift_days` for
+  calendar arithmetic.
+- **Per-outcome, composing with `_macro_leg_dead`.** `_macro_leg_dead` judges the leg
+  (`history-only` on every exempt series at once); this judges one series' age. They are
+  orthogonal, and the new names only ever *add* to `failed` — the guard never turns a stale
+  run fresh. **The DIG-981 "a subset is not evidence" reasoning does not carry over to age.**
+  That reasoning was about `history-only`, which has two causes (exhausted publication
+  window vs. per-series vendor refusal) where a rate-limit blip silences an arbitrary subset,
+  so a subset proves nothing. Age has one cause — the series is old — and it is measured, not
+  inferred from a mode. A single frozen monthly series past its window is evidence by
+  itself; the #4621 fuse already draws the line, fresh inside the window and loud outside it.
+  At 34 days the seal is still inside the 120-day window and the run **should** exit 0.
+- Staleness flag only. No money, rate or weight arithmetic, matching the other guards here.
+
+**Known limits accepted for this guard.** Both are recorded rather than fixed, in the same
+spirit as the two above:
+
+| Limit | Why it stays |
+|---|---|
+| Undeclared cadence is judged at the 45-day daily window | the manifest is the source of truth; omitting `cadence` opts into the daily default, so a genuinely monthly series missing it goes loud at 45 days |
+| The window is calendar days, not open trading days | deliberate, and consistent with `_CADENCE_WINDOW_DAYS`; reusing `staleness_gate` would fire ~5 trading days into a 120-day window |
+
+**What this guard alone does not cover.** It closes the unanimous `history-only` shape only,
+and only over series the manifest actually declared. Read alongside the `_macro_as_of_stale`
+age guard, which covers the other two:
+
+| Shape | Why the guard cannot see it | Status |
+|---|---|---|
+| Partial leg (2 or 3 of 4 slow series dead) | indistinguishable from a rate-limit blip *while the silent series' seals are still inside their own windows*; a subset is not evidence of a mode, but each of them is evidence of its own age | accepted, by design **only while those seals are fresh**; DIG-2405 then names each one individually on its own age |
+| Panel serving stale rows in-window | outcome is `up-to-date`, not a soft fail, so it never enters the reduction | **closed (DIG-1142) — built as `_macro_as_of_stale`** |
+| Single **slow-cadence** series in the manifest | the `> 1` floor counts exempt ids, not manifest size — an 8-series panel with one monthly series has a frozen slow leg and cannot trip it | closed by DIG-1137 + DIG-2405 (`_macro_as_of_stale`; the `> 1` floor stands) |
+| Unreadable manifest | `_resolve_macro_specs` swallows the exception and returns `[]`, so `exempt` is empty and the guard has no ids to reason about | **open, pre-dates this guard** |
+
+The `> 1` floor stands. A single-series manifest still has no leg to judge, and a single
+silent series among several is not a mode-based death the leg test can see — the DIG-2405
+decision below is that it *is* worth naming, but it is named by measuring the seal's age,
+not by relaxing unanimity. Relaxing it would fire on every rate-limit blip.
+
+DIG-1137 / DIG-2405 close the two sibling routes by measuring rather than trusting
+`mode`. `_macro_as_of_stale(outcomes, macro_specs, run, already)` compares each macro
+outcome's `as_of` against the run date, in calendar days, against the same
+`_CADENCE_WINDOW_DAYS` bound the live fetch already used. It reads
+`_MACRO_JUDGED_MODES` = the success modes (a vendor that keeps *answering* while it stops
+*publishing* lands on `up-to-date`) plus `MODE_HISTORY_ONLY`, and skips `MODE_ERROR`
+because that mode is never cadence-exempt and is therefore already loud. The
+`history-only` inclusion is the DIG-2405 half: a retired slow series arrives in that mode
+with an abandoned seal, the #4621 exemption forgives it on cadence alone, and
+`_macro_leg_dead` needs unanimity over the whole exempt set, so one retired series among
+live ones was named by nothing. Age separates the two cases that mode cannot, because an
+empty window and a fresh seal are a quiet release cycle while an empty window on a
+*stale* seal is a retirement. `already` keeps a series both guards reached named once. The
+bound is each series' own window, not a widened threshold: a monthly series sealed 34 days
+old is still quiet.
+
+The unreadable manifest is still open. It needs its own fix — a loud outcome rather than an
+empty spec list — because with no specs there are no ids for any of these guards to reason
+about, whichever mode they read.
+
+**Design record for the frozen-but-serving panel (DIG-1142).** Recorded here because the
+summary above does not carry the reasoning. **Shipped** as `_macro_as_of_stale`; the shape
+below is what it shipped as.
+
+The gap is that `refresh_macro_series` returns `MODE_UP_TO_DATE` with `as_of=seal` whenever
+the live window is non-empty but carries nothing newer than the seal. `up-to-date` is not in
+`_SOFT_FAIL_MODES` and is not `history-only`, so the outcome never enters the reduction and
+the run exits 0 claiming fresh. Two healthy paths reach that same shape: a same-day FRED
+restatement (`MODE_FULL_REPULL`, `as_of=top2 == seal`) and an unchanged overlap that then
+finds nothing new.
+
+`_macro_as_of_stale(outcomes, macro_specs, run) -> set[str]`, defined next to
+`_live_window_days` and called in `main` between the `failed` list and `stale = ...`:
+
+- **Predicate.** For each macro series, take the declared cadence from `macro_specs`
+  (ticker key is `f"{source}__{series}"`, matching `_slow_macro_exempt_ids`), resolve the
+  window with the existing `_live_window_days`, and report the series when
+  `(run_date - as_of).days > window`. Age against the series' own window, **never**
+  `as_of == seal` and never `mode` — the two restatement paths above are healthy, so keying
+  on either would fail a healthy panel.
+- **Mode filter.** Success modes only (`MODE_UP_TO_DATE`, `MODE_INCREMENTAL`,
+  `MODE_FULL_REPULL`). `history-only` and `error` are already `_SOFT_FAIL_MODES` and stay
+  with `_macro_leg_dead`; an empty `as_of` is skipped rather than guessed.
+- **No declared cadence** defaults to the 45-day daily window via `_live_window_days`,
+  matching the live-fetch default rather than inventing a second one.
+- **Calendar days, not trading days.** `_CADENCE_WINDOW_DAYS` is calendar days (45/120/240).
+  `staleness_gate` (`digiquant/src/digiquant/data/prices/refresh_gate.py:49`) counts *open
+  trading days* against `bound_trading_days=5`; reusing it per series would call a 120-day
+  monthly series fresh after ~5 trading days. The file already has `_shift_days` for
+  calendar arithmetic.
+- **Per-outcome, composing with `_macro_leg_dead`.** `_macro_leg_dead` judges the leg
+  (`history-only` on every exempt series at once); this judges one series' age. They are
+  orthogonal, and the new names only ever *add* to `failed` — the guard never turns a stale
+  run fresh. **The DIG-981 "a subset is not evidence" reasoning does not carry over to age.**
+  That reasoning was about `history-only`, which has two causes (exhausted publication
+  window vs. per-series vendor refusal) where a rate-limit blip silences an arbitrary subset,
+  so a subset proves nothing. Age has one cause — the series is old — and it is measured, not
+  inferred from a mode. A single frozen monthly series past its window is evidence by
+  itself; the #4621 fuse already draws the line, fresh inside the window and loud outside it.
+  At 34 days the seal is still inside the 120-day window and the run **should** exit 0.
+- Staleness flag only. No money, rate or weight arithmetic, matching the other guards here.
+
+**Known limits accepted for this guard.** Both are recorded rather than fixed, in the same
+spirit as the two above:
+
+| Limit | Why it stays |
+|---|---|
+| Undeclared cadence is judged at the 45-day daily window | the manifest is the source of truth; omitting `cadence` opts into the daily default, so a genuinely monthly series missing it goes loud at 45 days |
+| The window is calendar days, not open trading days | deliberate, and consistent with `_CADENCE_WINDOW_DAYS`; reusing `staleness_gate` would fire ~5 trading days into a 120-day window |
 
 #### Market-data R2 read path (#3780 Task 10)
 
@@ -574,9 +874,9 @@ cleared per sample, no network): Task 1 Supabase technicals p50 1413.2ms
 
 Prod gate (human): Worker-edge digikey JWT enforcement (scope
 `digiquant:backtest`) must land before production MCP use — not
-implemented here. Owner actions: `FRED_API_KEY` + `CORE_POSTGRES_URI`
-are MISSING from GitHub secrets (refresh cron + backfill need them); live
-refresh runs stay supervised with the operator.
+implemented here. Owner actions: `CORE_POSTGRES_URI` is MISSING from GitHub
+secrets (refresh cron + backfill need it); live refresh runs stay supervised
+with the operator.
 
 ### CLI (`python -m digiquant` / `digiquant`)
 
@@ -655,6 +955,44 @@ Slapper dumps omit these keys.
 
 **Tearsheet schema 1.2** adds `signal_delay_days: int` (default `0`, back-compatible) — see the public signal delay below.
 
+**Tearsheet schema 1.4** (`tearsheet_data.SCHEMA_VERSION`, #4828) adds the
+honesty envelope to every `StatBlock`: `win_rate_n: int | None` (sample size
+behind `percent_profitable`) and `win_rate_ci95: tuple[float, float] | None`
+(Wilson 95% CI fractions). Both default to null, so 1.0–1.3 fixtures still
+validate. Ported from LuxAlgo edge-stats `stats.ts` (MIT — code only, no
+`data/`, no rebrand) into `digiquant.stats.honesty`: `wilson(k, n)`,
+`apply_guards(n)` (warn 30 / refuse 10, identical to upstream),
+`stability_split` (CI-overlap agree), Pydantic `HonestRate`, and the verbatim
+disclaimer (`DISCLAIMER`). Every HTML tearsheet win-rate surface renders N +
+95% CI via `format_honest_rate` — categorized/full/risk stats tables, the KPI
+strip (thresholds act on the CI lower bound, not the point estimate), and the
+win/loss donut, whose `k` is caller-counted from realized **round trips**
+(`count_winning_trades(realized_pnls_series)`, counting `PnL > 0`) while its `n`
+is the **fill** count `num_trades` — so the pair is not a like-for-like sample,
+and the donut must never fall back to `round(rate * n)` as an observed count).
+Tests: `tests/dq/test_honesty.py` (upstream golden vectors),
+`tests/dq/test_tearsheet_honesty.py` (per-surface N + CI assertions).
+
+**Model versioning for `BacktestResult` (DIG-845 / L3).** The clause that stood
+here — "`BacktestResult` is untouched, so no model versioning was needed" —
+was true of the tearsheet 1.4 work and stopped being true once the honesty
+envelope reached the result model, so it is reworded here rather than dropped.
+Per `AGENTS.md` § Pre-Flight ("Confirm `BacktestResult` Pydantic model is
+unchanged or versioned if modified"), the decision is recorded: **additive,
+back-compatible, no version bump.** L3 adds exactly two fields to
+`models.BacktestResult`, both defaulting to an empty state —
+`honest_rate: HonestRateBlock | None` (default `None`) and
+`honest_rate_by_symbol: dict[str, HonestRateBlock]` (default `{}`) — so every
+payload that validated before still validates, and a consumer that has never
+heard of the envelope reads exactly what it read before. `num_trades` also
+gained a sharper description on the same leaf (a **fill** count, and explicitly
+*not* a win-rate denominator — `honest_rate.n` is the denominator), which is a
+description change and not a type or semantic change. No published surface
+depends on the old wording, so no migration, no `SCHEMA_VERSION` bump and no
+consumer notification are required. Consumers that want the envelope read
+`honest_rate`; they must never synthesize one from `num_trades` or from
+`round(rate * n)`.
+
 Existing published fixtures stay at older schema versions (no `ohlc_bars`, blank `entry_label`, no `signal_delay_days`) until regenerated, so consumers must tolerate all versions.
 
 **Public signal delay (#1462).** The public tearsheets lag reality by **3 calendar days** ("backtested strategies running live — signals delayed 3 days") to protect strategy IP: on a single-asset long/flat strategy a current equity curve trivially leaks the live position. The mechanism is an **end-date shift, not redaction** — `generate_tearsheets.py --signal-delay-days N` truncates the OHLCV frame (`apply_signal_delay`, cutoff = newest cached bar minus N calendar days) *before* the backtest, so the entire tearsheet is generated as if run N days ago. Every artifact (equity curve, drawdown, trade log, open-position state, headline metrics, `period_end`) is self-consistent by construction; there is no per-field redaction logic to get wrong. The lag is declared honestly: the static JSON, the `index.json` entry, and the `strategy_tearsheets` metrics all carry `signal_delay_days`, and a payload note states the as-of date. `generated_at` stays the true generation timestamp (the delay is marketed openly, not hidden). Default is `0` (exact no-op) for internal/undelayed runs; the scheduled pipeline (`pipeline-digiquant-tearsheets.yml`) passes `--signal-delay-days 3`. Side effect: the `_PUBLISHED_BASELINE` drift warning compares exact trade counts, so a trade opened within the delay window can transiently warn — informational only. Tests: `tests/dq/test_tearsheet_signal_delay.py`.
@@ -678,7 +1016,7 @@ python digiquant/scripts/generate_tearsheets.py --from-supabase --push-supabase 
 # One-shot BTC-SDCA only: add --strategy btc_sdca (skips Slapper calibrations).
 ```
 
-`--from-supabase` loads fitted params from `strategy_calibrations`. `--push-supabase` upserts the **full tearsheet payload** into `strategy_tearsheets.metrics` — the complete `TearsheetData` (headline metrics, equity/drawdown curves, OHLC bars, trades) plus a derived `current_signal` (position / last signal date / last price) and the index extras (`label`/`kind`/`avg_trade_pct`) — and refreshes the normalized `strategy_signals` row. digiquant.io reads that one anon-readable row live, so updating it updates the site with no deploy. The scheduled job (`pipeline-digiquant-tearsheets.yml`) is fetch Coinbase → stage SDCA macro CSVs → generate `--push-supabase --signal-delay-days 3 --cache-dir digiquant/data/price-history`, no repo write. The explicit `--cache-dir` keeps the job correct while checkout is pinned to `main` (#1626) even if `DEFAULT_CACHE` on that ref lags. Targets are every `settings.json` strategy (L/S Slappers + `btc_sdca`). Push upserts the public `strategies` catalog row first — `strategy_tearsheets.strategy_id` FKs that table, and SDCA was never inserted by the Slapper-only calibrations sync.
+`--from-supabase` loads fitted params from `strategy_calibrations`. `--push-supabase` upserts the **full tearsheet payload** into `strategy_tearsheets.metrics` — the complete `TearsheetData` (headline metrics, equity/drawdown curves, OHLC bars, trades) plus a derived `current_signal` (position / last signal date / last price) and the index extras (`label`/`kind`/`avg_trade_pct`) — and refreshes the normalized `strategy_signals` row. digiquant.io reads that one anon-readable row live, so updating it updates the site with no deploy. The job (`pipeline-digiquant-tearsheets.yml`) is fetch Coinbase → stage SDCA macro CSVs → generate `--push-supabase --signal-delay-days 3 --cache-dir digiquant/data/price-history`, no repo write. Phase 2 of #4761 runs that sequence as digiquant-runner command `tearsheets` (digithings-cron `12 0 * * *`). The workflow stays `workflow_dispatch` and has no `schedule`. Coinbase fetch keeps `uv run --frozen --with ccxt`. `export_sdca_macro.py` runs only when that file is in the image. The explicit `--cache-dir` keeps the job correct while the image is pinned to `main` (#1626) even if `DEFAULT_CACHE` on that ref lags. Targets are every `settings.json` strategy (L/S Slappers + `btc_sdca`). Push upserts the public `strategies` catalog row first — `strategy_tearsheets.strategy_id` FKs that table, and SDCA was never inserted by the Slapper-only calibrations sync.
 
 **One-time upload** (after optimizing in TradingView):
 
@@ -693,7 +1031,10 @@ python digiquant/scripts/verify_strategy_calibrations_rls.py
 The separate `pipeline-digiquant-prices.yml` job owns `position_events` writes at the
 market open and the surviving macro ingest; price/technicals ingest moved to the R2
 refresh (`pipeline-market-data-refresh.yml`) and migration 127 dropped the Supabase
-`price_history`/`price_technicals` tables (#4053). It does
+`price_history`/`price_technicals` tables (#4053). Phase 1 of #4761 moves those
+clocks onto digithings-cron `kind: container` → the private digiquant-runner
+Worker (`docs/ops/digiquant-runner.md`). The market-data workflow keeps
+`workflow_dispatch` and has no `schedule`. It does
 **not** regenerate these public tearsheets. Two UTC crons cover New York daylight
 and standard time. `market_open_gate.py` selects the season-correct cron and keeps
 it valid after the open even when GitHub delivers it late, while rejecting the
@@ -718,12 +1059,35 @@ Defined in `models.py`. Returned by `run_backtest()`, the pipeline's backtest no
 | `end_time` | `str` | ISO 8601 UTC, derived from last bar `ts_init` |
 | `total_pnl` | `float` | `final_balance - 1_000_000.0` (hardcoded starting capital) |
 | `total_return_pct` | `float` | `total_pnl / 1_000_000.0 * 100` |
-| `sharpe_ratio` | `float | None` | Annualised (252 days) from Nautilus portfolio analyzer |
-| `max_drawdown_pct` | `float | None` | Negative percent (e.g. `-15` is −15%), from `get_performance_stats_pnls()` or returns series fallback |
+| `sharpe_ratio` | `float | None` | Annualised from the account-report **balance path**, never from the analyzer (DIG-462) |
+| `max_drawdown_pct` | `float | None` | Negative percent (e.g. `-15` is −15%), from the same balance path |
 | `num_trades` | `int` | Row count of `generate_order_fills_report()` |
 | `per_symbol_pnl` | `dict[str, float]` | Populated for multi-symbol runs; empty for single-symbol |
+| `missing` | `list[str]` | Names that could not be produced — the machine-readable form of the "missing metrics" clause in `message`. Empty when `status` is `ok` |
+| `honest_rate` | `HonestRateBlock \| None` | Win rate with its denominator and interval. `None` when no realized-PnL series was extracted — never a fabricated zero and never `num_trades` |
+| `honest_rate_by_symbol` | `dict[str, HonestRateBlock]` | Per-symbol `honest_rate` blocks for multi-symbol backtests. Declared on the model by DIG-845 (L3); populated by DIG-847 (#5298), so it is `{}` until that leaf lands |
 | `status` | `str` | `ok` | `partial` | `error` |
 | `message` | `str` | Optional detail |
+
+`sharpe_ratio`, `max_drawdown_pct` and `total_return_pct` all derive from one
+source: the balance column of `generate_account_report(Venue("SIM"))`, one row
+per fill. Returns are the percent change between consecutive balance rows,
+`years = (last_ts - first_ts) / 365.25 days`, and the annualisation factor is
+`sqrt(n_returns / years)` — **not** `sqrt(252)`. The fill path is irregular in
+time, so the observation count is the only correct scaler; `sqrt(252)` on a
+per-position series produced `sharpe_ratio = -76.34` against a true `-3.10%`
+return. `sharpe_ratio` stays `None` rather than a fabricated `0.0` when there
+are fewer than two returns, when dispersion is zero, or when no usable
+timestamps exist; such results are `partial`.
+
+Two of those `missing` names are worth knowing: `returns_series` (the chart
+return series could not be confirmed against `analyzer.portfolio_returns()`
+and was withheld rather than published unverified — see
+`_verified_returns_series`) and `returns_series (k/n symbols)` (same, counted
+for a multi-symbol run). **Never take a metric from a Nautilus stats dict
+without confirming the key exists**: `get_performance_stats_pnls()` has no
+`Max Drawdown %` key, and the missing key used to fall through to a wrong
+fallback silently.
 
 ### OptimizationConstraints
 
@@ -993,24 +1357,25 @@ upstream for cached price history.
 | `sdca/rolling_z.py` | Short-series fallback / basic valuation tier (#1086): causal rolling log-price mean ± z·std as rails. |
 | `sdca/asset_profile.py` | `SdcaAssetProfile` — per-asset `symbol`, `risk_model`, `SdcaOscillatorSpec`, `cycle_windows`, extra-indicator allowlist, `signal_delay_days` (default 0; publish delay stays in `generate_tearsheets`). Factories: `btc_v1()`, `eth_research_v1()` (research-only, not in `settings.json`). `daily_closes_from_cache` / `technicals_from_ohlcv` are the shared OHLCV path (full cache, no 900-day cap). `union_date_range` is the overlay x-axis helper — union of spans, not an inner join that would clip BTC to ETH. |
 | `sdca/btc_power_law.py` | `BtcPowerLawRiskModel` — the first concrete `RiskModel` (#1082): fits 7 quantile rails (`q01`…`q99`) as `price_q(t) = 10 ** (c + a*x + b*x**2)`, `x = ln(days_since_genesis(t)) - mu`, one quantile regression (`statsmodels.QuantReg`, lazily imported) per rail. `rails()`/`rails_full()` sort each row's fitted quantiles ascending (rearrangement method) so independently-fit curves never cross. `fit_btc_power_law()`/`save_coefficients()`/`load_coefficients()` handle fitting and JSON persistence; `load_coefficients()` prefers the real fit (`btc_power_law_coefficients.json`, committed as of #3173) and falls back to the checked-in synthetic placeholder (`btc_power_law_coefficients.example.json`) with a warning. The `digiquant_fit_btc_power_law` MCP tool is the orchestration layer — this module has no data-fetching or MCP dependency of its own. `low_quantile`/`high_quantile` (default `q10`/`q95`) pick which fitted rails map to the protocol's `low`/`high`; this default and the model itself are unvalidated against the reference artifact — network access to it was blocked in the environment #1082 was built in. |
-| `sdca/composite_risk.py` | `IndicatorWeight` (strict Pydantic v2 model: `name`, `z: pl.Series`, `weight`, `enabled`) and `compute_composite_risk()` — weight-normalized blend of enabled indicators' z-scores into `composite_z` (`[-3, 3]`) and `risk` (`[0, 100]`, 0 = max buy, 100 = max sell). Formula: `composite_z = clip(Σ(zᵢ·wᵢ)/Σ(wᵢ), -3, 3)`, `risk = 50 − composite_z×50/3`. Zero-weight extras are omitted (`enabled`/weight 0), so they cannot null a day. Rejects duplicate enabled names and a non-finite/zero total weight. |
-| `sdca/indicator_catalog.py` | Named extras: **generic technicals** `weekly_rsi` (MTF weekly+monthly dead-zone) / `weekly_macd` (weekly log-MACD) / `sma_band` plus **BTC-plugin** **m2** / **rs_eth** / **dxy**. `SdcaCompositeWeights` defaults `valuation=1`, extras `0`. Published `btc_sdca` weights live in `settings.json` (sidecar `btc_richer_composite.json`). `allowlist=` from `SdcaAssetProfile.extra_indicators` blocks BTC plugins on a second asset. Omitted: Mayer/200w, alpha residual, on-chain MVRV/SOPR (#1086), equity CAPE (#3176), put/call, RS rotation pool (#1084), pi-cycle (wrong-signed in 2025). |
+| `sdca/composite_risk.py` | `IndicatorWeight` (strict Pydantic v2 model: `name`, `z: pl.Series`, `weight`, `enabled`) and `compute_composite_risk()` — weight-normalized blend of enabled indicators' z-scores into `composite_z` (`[-3, 3]`) and `risk` (`[0, 100]`, 0 = max buy, 100 = max sell). Formula: `composite_z = clip(Σ(zᵢ·wᵢ)/Σ(wᵢ), -3, 3)`, `risk = 50 − composite_z×50/3`. Weight-0 members are omitted (`enabled`/weight 0), so `0 × null` cannot wipe a solo extra. Rejects duplicate enabled names and a non-finite/zero total weight. |
+| `sdca/indicator_catalog.py` | Named extras: **generic technicals** `weekly_rsi` (MTF weekly+monthly dead-zone) / `weekly_macd` (weekly log-MACD) / `sma_band` plus **BTC-plugin** **m2** / **rs_eth** / **dxy**. `SdcaCompositeWeights` defaults `valuation=1`, extras `0`. Published `btc_sdca` weights live in `settings.json` (sidecar `btc_richer_composite.json`). M2 YoY and DXY rolling-z run on the **full** FRED/DXY calendar, then align onto BTC dates — do not `shift(365)` after joining onto Coinbase days (that amputates leading years). `rs_eth` still needs overlapping BTC/ETH so its warmup is ETH-list-date bound. `allowlist=` from `SdcaAssetProfile.extra_indicators` blocks BTC plugins on a second asset. Omitted: Mayer/200w, alpha residual, on-chain MVRV/SOPR (#1086), equity CAPE (#3176), put/call, RS rotation pool (#1084), pi-cycle (wrong-signed in 2025). |
 | `sdca/price_oscillators.py` | `SdcaOscillatorSpec` + weekly/monthly resample + SMA-band z. Completed ISO weeks / calendar months only; `join_asof(..., strategy="backward")`. Weekly RSI uses a **dead zone + cap** (mid-cycle 30–80 is near 0; RSI 85 is max-sell). Weekly MACD is **log-MACD** with a sloped top cap, not 52-week histogram z. `mtf_rsi_z` blends weekly+monthly into the `weekly_rsi` extra. |
 | `sdca/cycle_windows.py` | Per-asset pin sets. `btc_v1()` (2017/2021/2025 highs, 2018/2022 lows, ±45d). `eth_research_v1()` (2018-01-13 / 2018-12-14 / 2021-11-10 / 2022-06-18 — ETH's June 2022 trough, not BTC's November). Stage A must not invent ad-hoc date lists. |
 | `sdca/stage_a.py` | Weight search that maximizes cycle overlap: mean risk in peak windows minus mean risk in trough windows, plus accumulate/distribute band fractions. Equal objective prefers fewer extras then higher `valuation` (parsimony). Default `search_names` is the full extra catalog; missing `extra_z` series skip those combos. |
-| `sdca/weight_search.py` | Stage A keep/drop by **in-sample** walk-forward `vs_flat_dca_pct` with a frozen curve. Searches every extra that has data (`search_names_with_data`). OOS is reported, not used to pick. Rails are fit once per fold. Published BTC uses this, not cycle overlap, to decide which extras stay. |
+| `sdca/weight_search.py` | Stage A keep/drop by **in-sample** walk-forward `vs_flat_dca_pct` with a frozen curve (legacy joint 0/0.5/1 grid). `optimize_stage_1_survivor_weights` searches survivors only on a `(0, 1]` grid (no 0 — turning an extra off cannot cheaply beat power law) and ranks by **OOS** vs-flat plus Stage B capital/drawdown feasibility. Searches every extra that has data (`search_names_with_data`). Rails are fit once per fold. |
 | `sdca/fit_weights.py` | Platform helper for Stage A: `resolve_sdca_profile` + `fit_sdca_weights_from_cache` (cached OHLCV → valuation-z → `optimize_stage_a_weights` → `regularize_weights`). MCP tool `digiquant_fit_sdca_weights`. |
 | `data/onchain/bitview.py` | Fail-soft Bitview/BRK `day1` client (`mvrv` / `asopr_24h` / `puell_multiple` / `rhodl_ratio`). HTTP-free `series_data_to_frame`. MCP tool `digiquant_fetch_bitview_series`. Library auto-fetch kill-switch `DIGIQUANT_BITVIEW_FETCH=0` (not a secret; MCP invoke is already opt-in). Hosted bitview.space is optional / no SLA. BRK MIT; Coin Metrics community CC BY-NC is research-only (not fetched). |
 | `data/onchain/ingest.py` | Scheduled/CLI path (#1086): `ingest_bitview` → parquet under `data/onchain/bitview/` + optional `macro_series_observations` upsert (`source=bitview`). `frame_to_macro_rows` is HTTP-free. Workflow: `pipeline-digiquant-onchain.yml` (daily 22:40 UTC, persistent failure tracker). |
+| `sdca/stage_0.py` | Solo-indicator remaining-book books. Each catalog extra and power law (`valuation` code id; user-facing **power law**) gets a one-hot index (unused members omitted). Curve search via `run_stage_b_frozen` / `curve_simulator`. Keep extras that beat named baseline `power_law_solo` on the same walk-forward OOS folds (plus Stage B capital/drawdown feasibility); drop never-sell dumps. IS is diagnostic. `beats_flat_dca_oos` stays false on this sidecar. Operator: `python -m digiquant.strategies.sdca.stage_0` or `digiquant sdca-stage0`. |
 | `sdca/curve_sim.py` | Injected Stage B evaluator via `run_backtest` when Nautilus SIGABRTs (#42). Provenance records `evaluator=curve_simulator`. Not a published backtest. |
 | `sdca/regularize.py` | Round Stage A weights to tenths (or 0.05) and renormalize; shrink curve max rates and round them to one decimal. |
-| `sdca/two_stage.py` | Freeze Stage A weights, run existing walk-forward curve search, persist `btc_composite_aggressive.json` + `btc_composite_regularized.json`. |
+| `sdca/two_stage.py` | Freeze Stage A weights, run existing walk-forward curve search, persist `{stem}_aggressive.json` + `{stem}_regularized.json` (default stem `btc_composite`; a stem with path separators raises). Stage 0 uses stem `btc_solo_then_combine` so the package dir is a safe `--out-dir`. |
 | `sdca/curve.py` | `AccumDistCurve` — 21-node (risk 0, 5, …, 100) piecewise-linear map from risk to a daily trade rate (% of remaining cash on buys, % of remaining holdings on sells). `value_at_risk()` interpolates and clamps risk to `[0, 100]`, rejecting non-finite risk. Nodes are fully configurable and must be finite: all-positive = long-only accumulation, signed = accumulation + distribution. The no-arg default (`DEFAULT_BTC_NODES`) is the issue's documented BTC-reference curve shape, not a hardcoded valuation constant — callers targeting another asset pass their own `nodes`. This is the **runtime** representation; it is unchanged by #3169. |
 | `sdca/curve_shape.py` | `SdcaCurveShape` (frozen Pydantic v2, #3169) — the **authoring and optimization** surface. Six parameters (`buy_max_rate`, `buy_knee_risk`, `sell_knee_risk`, `sell_max_rate`, `buy_curvature`, `sell_curvature`) generate the 21 nodes via `to_nodes()`. Enforces a non-empty dead zone, sign/monotonicity, and `*_max_rate <= 100` (the generated-path answer to #2552). The raw `AccumDistCurve` constructor stays unbounded. |
 | `sdca/backtest.py` | `run_backtest(dates, price, risk, curve, initial_cash) -> (SdcaBacktestReport, pl.DataFrame)` — the daily state loop and its strict Pydantic v2 summary report. `size_trade()` is the remaining-book sizer (`buy_usd = cash * rate/100`, `sell_units = holdings * |rate|/100`). Validates non-empty, equal-length inputs; a non-null, strictly-increasing `dates` series (#2539, #2544); and a finite, positive, non-null price series and `initial_cash` before running. Export frame includes `flat_dca_value` (#3171); the report's `vs_flat_dca_pct` is ×100, same as `vs_lump_pct`. CI-only — never the published number. |
 | `sdca/dca_metrics.py` | Schema 1.3 DCA block from Nautilus fills + daily MTM (`breakdown_from_daily`, `fills_from_nautilus_report`). Publish path uses this; tests assert parity with `SdcaBacktestReport`. Overlays include `allocated_pct_curve` (MTM % in the asset, never `capital_deployed`) and `fill_markers` (`|trade_usd|/portfolio`). |
 | `sdca/chart_series.py` | Allocation %, fill-dot sizing, power-law display names, knee lookup, reconstruction from 1.3 payloads that lack the new overlay keys. Does not emit a cash-% series (inverse of allocated). |
-| `sdca/risk_index.py` | `build_risk_index(dates, price, risk_model, extra_indicators=None, valuation_weight=1.0) -> pl.DataFrame` and `write_risk_index(df, path)` (#3168). Pure wiring: `risk_model.rails()` → `valuation_z_score()` → `IndicatorWeight(name="valuation")` + extras from `indicator_catalog` → `compute_composite_risk()`. Returns `date`/`risk` plus diagnostics (`price`, `low`, `median`, `high`, `valuation_z`, `composite_z`, and `{name}_z` for each extra). Default extras-off matches a single-indicator index. |
+| `sdca/risk_index.py` | `build_risk_index(dates, price, risk_model, extra_indicators=None, valuation_weight=1.0) -> pl.DataFrame` and `write_risk_index(df, path)` (#3168). Pure wiring: `risk_model.rails()` → `valuation_z_score()` → optional `IndicatorWeight(name="valuation")` + extras from `indicator_catalog` → `compute_composite_risk()`. Weight-0 valuation is **omitted** from the blend so a Stage 0 solo extra is not nulled by `0 × null`. Returns `date`/`risk` plus diagnostics (`price`, `low`, `median`, `high`, `valuation_z`, `composite_z`, and `{name}_z` for each extra). Default extras-off matches a single-indicator index. |
 | `sdca/nautilus_strategy.py` | `SdcaStrategyConfig` (frozen `StrategyConfig`: `instrument_id`, `bar_type`, `initial_cash`, `risk_path`, `curve_nodes` default `DEFAULT_BTC_NODES`, `long_only` default `False`) and `SdcaStrategy(Strategy)` — the NautilusTrader wrapper (#1081). Registered as `btc_sdca` (#3170) with `risk_path` omitted from `default_params`. `risk_path` is produced by `sdca/risk_index.py` (#3168), not assembled by hand. Not wired to broker live-trading. |
 | `sdca/presets.py` / `sdca/presets.json` | `SdcaPreset` (frozen Pydantic v2 model: `curve_nodes`, `long_only`, `description`, optional `shape`, validated at load time), `list_presets() -> list[str]`, `load_preset(name) -> SdcaPreset` — named public curve personalities. Since #3169, `presets.json` stores `SdcaCurveShape` parameters; nodes are generated at load. `btc_optimized` (#3174) is the walk-forward slot. |
 | `sdca/walk_forward.py` | Walk-forward folds, held-out tail, DCA-native objective (`vs_flat_dca_pct` s.t. capital floor + drawdown cap). Rails **must** be refit on each fold's IS window (#3173). Extra-z is a full-calendar causal precompute sliced per window (no OOS refit, no leakage). |
@@ -1059,15 +1424,29 @@ that default unless callers pass extras. Walk-forward (`method=random` /
 explicit `param_grid`) searches the extra weights; auto-grid does not, so a
 default optimize run still matches the power-law-only chart.
 
-**Two-stage fit.** Stage A for published BTC (`weight_search.optimize_stage_a_by_backtest`) grids every extra that has a z-series (`m2` / `rs_eth` / `dxy` / `weekly_rsi` / `weekly_macd` / `sma_band`) and keeps weights that raise in-sample `vs_flat_dca_pct` on a frozen distribute curve. Cycle-window overlap (`stage_a.optimize_stage_a_weights` / `digiquant_fit_sdca_weights`) remains a diagnostic, not the keep/drop rule. `stage_a_search_names(btc_v1())` includes BTC plugins; ETH research stays generic technicals only. Stage B
-is `digiquant_run_optimize` with `strategy_name=sdca` (existing walk-forward
-curve optimize, `vs_flat_dca_pct`, floors/caps, IS-only rails). Freeze Stage A
-weights by passing `regularized_weight_params` as `strategy_params` `*_weight`
-keys. After the aggressive fit, `regularize.py` rounds weights to tenths and
-shrinks max rates (rounded to one decimal); both variants are persisted. Equal
-Stage A scores prefer fewer extras. The aggressive fit will overfit — that is
-expected. Do not publish a second asset until that backtest looks comfortable.
-There is no separate SDCA app or second optimizer product.
+**Two-stage fit.** Published BTC extras were originally dropped by Stage A
+(`optimize_stage_a_by_backtest`) on **in-sample** vs-flat with a frozen
+power-law curve. The operator path is now **solo-then-combine**: Stage 0
+(`stage_0.run_stage_0`) fits a remaining-book curve to each extra and to
+power law alone; extras must beat named baseline `power_law_solo` on the
+**same walk-forward OOS folds** (plus Stage B capital floor / drawdown
+feasibility, matching walk-forward ranking) and must sell. IS vs-flat is
+reported, not the keep rule. If no extra beats OOS, power-law-only remains
+published — do not force extras back in. Stage 1
+(`optimize_stage_1_survivor_weights`) then searches survivors on a `(0, 1]`
+grid (no 0) and Stage B (`run_stage_b_frozen`) + `regularize` retunes the
+combined curve. The operator default writes sidecars only
+(`btc_stage0.json`, `btc_stage1_weights.json`,
+`btc_solo_then_combine_{aggressive,regularized}.json`). `settings.json` is
+overwritten only with `--persist-settings` **and** combined OOS not worse
+than the published sidecar — a 2-trial Stage B is not a published-weight
+flip. `beats_flat_dca_oos` is true only when that combined run's mean OOS
+vs-flat is actually positive. Cycle-window overlap
+(`stage_a.optimize_stage_a_weights`) remains a diagnostic.
+`stage_a_search_names(btc_v1())` includes BTC plugins; ETH research stays
+generic technicals only. Charts still plot weight-0 extras; user-facing
+copy says **power law**, not that unused series voted. The aggressive fit
+will overfit — that is expected. Do not `--push-supabase`.
 
 **How to add an asset.** The reusable core is technicals + composite +
 two-stage weight/curve fit + regularize. Extra series per asset is manual
@@ -1086,7 +1465,9 @@ research; do not scrape put/call or paid on-chain here.
    `sma_band`) vs asset-specific plugins (BTC: M2 / rs_eth / DXY; on-chain
    z via `OnChainValuationProvider` — research only until skip-missing;
    equity put/call later). Do not enable BTC plugins on a second asset.
-5. Run Stage A (backtest keep/drop of extras, cycle overlap as diagnostic) → Stage B (walk-forward curve) → regularize.
+5. Run Stage 0 (solo OOS vs power-law) → Stage 1 (survivor weights, no 0
+   on the grid) → Stage B (walk-forward curve) → regularize. Legacy Stage A
+   IS keep/drop and cycle overlap stay diagnostic.
    Trust the composite as a top/bottom indicator only when that historical
    backtest looks comfortable.
 6. Only then consider a `settings.json` entry. `eth_research_v1()` is
@@ -1234,7 +1615,7 @@ logic, no env reads) and the site logic lives here:
 
 | Module | Responsibility |
 |--------|----------------|
-| `data/gloomberb/models.py` | Pydantic v2 input/output models for the 34 tools, the shared `DigifetchEnvelope[T]`/`DigifetchError` contract, the §5.2 resolution × range caps (reject, never clamp), and the #4100 explicit date window (`start_date`/`end_date`, mutually exclusive with `range`) |
+| `data/gloomberb/models.py` | Pydantic v2 input/output models for the 89 tools, the shared `DigifetchEnvelope[T]`/`DigifetchError` contract, the §5.2 resolution × range caps (reject, never clamp), and the #4100 explicit date window (`start_date`/`end_date`, mutually exclusive with `range`) |
 | `data/gloomberb/normalizers.py` | Ported §5.4 normalizers: GBp/GBX→GBP divisor, interval tokens, exchange-timezone bar dates, malformed-intraday rejection, day-range reconciliation, and the §5.3 freshness union (wire `stale` vs `dataSource`/`delayMinutes`) |
 | `data/gloomberb/client.py` | `GloomberbClient` on `digifetch.HttpFetcher`/`RateLimiter`/`with_retry`: endpoint map, wire→error mapping, 900s TTL cache, circuit breaker (half-open probe), kill switch, optional session cookie, Yahoo/yfinance earnings path |
 | `data/gloomberb/attribution.py` | §7 attribution: "Sourced from Gloomberb", delay notice, `term.gloom.sh/?ticker=` deep links |
@@ -1256,7 +1637,7 @@ the payload itself (e.g. a quote's `data.stale`, spec §3.2) — maps to
 `"Free-tier data delayed up to 15 minutes"` with `stale=false`. Both signals
 stay distinct.
 
-**Pacing and safety.** The client is default-ON behind `GLOOMBERB_ENABLED`; only
+**Pacing and safety.** The client is default-OFF behind `GLOOMBERB_ENABLED`; an explicit opt-in (``1``/``true``/``yes``/``on``) re-enables it; only
 `1`/`true`/`yes`/`on` enable it, and any other value (a typo included) fails
 closed to disabled (see Environment Variables). A 900s TTL cache matches the R2
 market-data-cache convention; expired entries are evicted on access and the
@@ -1273,10 +1654,14 @@ surfaced in the typed error, not slept on). Only upstream-health failures
 toward the circuit breaker — deterministic 4xx outcomes such as `auth_required`
 never open it. N consecutive failures open the breaker, which fails fast to a
 typed `upstream_error` with a half-open probe after the reset window.
-`GLOOMBERB_SESSION_COOKIE` is attached only to the ten gated endpoints
-(holders, analyst research, corporate actions, research search, transcripts,
-statements, ticker tweets, tweet search, short interest, equity diagnostic —
-screener is also gated and Pro-only), is never logged, never appears in tool
+`GLOOMBERB_SESSION_COOKIE` is attached only to the 41 cookie-gated tools
+(37 `session` + 1 `preview` + 3 `pro`, declared once in
+`data/gloomberb/entitlements.py`): the original nine reads (holders, analyst
+research, corporate actions, research search, statements, ticker tweets, tweet
+search, short interest, saved searches) plus equity diagnostic (preview) and
+transcripts/screener/options-flow (pro), the 15 probe-backed Cloud reads, and
+the 13 inert workspace/broker tools (`digifetch_substack` instead needs its
+own `SUBSTACK_SESSION_COOKIE`). It is never logged, never appears in tool
 payloads, and is forwarded only to same-origin redirect hops. The
 `/public/proxies/*`, `/public/risks/*`, and `/public/events/*` filing reads are
 open (no account, no cookie). Plan-gated routes are detected from the response
@@ -1298,10 +1683,66 @@ descriptions an agent reads. Vocabulary:
 
 | Entitlement | Meaning | Tools |
 |-------------|---------|-------|
-| `free` | Anonymous read; no session cookie needed | `digifetch_quote`, `quotes_batch`, `price_history`, `ticker_financials`, `options_chain`, `sec_filings`, `earnings_calendar`, `exchange_rate`, `search`, `news`, `econ_calendar`, `econ_series`, `yield_curve`, `cds`, `congress_trades`, `venues`, `13f_funds`, `13f_holdings`, `shiller`, `proxy_statements`, `filing_events`, `risk_reports` |
+| `free` | Anonymous read; no session cookie needed | `digifetch_quote`, `quotes_batch`, `price_history`, `ticker_financials`, `options_chain`, `sec_filings`, `earnings_calendar`, `exchange_rate`, `search`, `news`, `econ_calendar`, `econ_series`, `yield_curve`, `cds`, `congress_trades`†, `venues`, `13f_funds`, `13f_holdings`, `shiller`, `proxy_statements`, `filing_events`, `risk_reports` |
 | `session` | `GLOOMBERB_SESSION_COOKIE` required; without it `auth_required` with **no HTTP request** | `digifetch_holders`, `analyst_research`, `corporate_actions`, `research_search`, `statements`, `ticker_tweets`, `tweet_search`, `short_interest`, `saved_searches` |
 | `preview` | Session required; a free (email-verified) session still gets a labeled preview | `digifetch_equity_diagnostic` |
 | `pro` | Session **and** a Gloomberb Pro plan; a free session is gated with `pro_required` | `digifetch_transcripts`, `digifetch_screener` |
+
+† `digifetch_congress_trades` keeps its `free` entitlement declaration so the
+client and normalizer stay coherent if Counsel clears the refusal, but it is
+**refused on every surface** and is not reachable — see the refusal list below.
+
+**Refused tools (DIG-1057).** `digiquant.tool_refusals` holds a deny-by-default
+`REFUSED_TOOLS` frozenset — currently `{"digifetch_congress_trades"}` — naming
+tools Counsel has ruled we must not obtain or serve, currently under 5 U.S.C.
+13107(c)(1)(B) (no House/Senate disclosure report for a commercial purpose other
+than news-and-communications-media dissemination). A refused tool is enforced in
+three places, so it cannot be reached by any route that matters:
+
+- `mcp_server._maybe_tool` returns without registering, so the name is absent
+  from `create_mcp_server(scope="read")` **and** `scope="full"` — it is not
+  merely dropped from `READ_SCOPE_TOOLS`;
+- `build_orchestrator_tool_manifest()` filters refused names out of the
+  `POST /v1/orchestrator_tools` manifest, so no schema advertises it;
+- `server.v1_orchestrator_invoke` answers a typed
+  `{"ok": false, "refused": true, "code": "tool_refused", …}` envelope **before**
+  any dispatch branch, so the HTTP invoke path cannot reach the upstream even
+  though `DIGIFETCH_DISPATCH` still carries the name.
+
+The refusal is deliberately *registration-level*, not deletion: the Gloomberb
+client method, the normalizer, the Pydantic models and the entitlement entry all
+stay in-tree so a clearance is a one-line removal from the frozenset rather than
+a re-derivation of the endpoint shape. Tests pin all four properties: absent from
+both scopes, absent from the manifest, typed refusal from the invoke route, and
+the client `ENDPOINTS` entry still present.
+
+**The refusal env denylist is additive only (DIG-1251 Q5).** Counsel approved the
+env-deny-only shape on condition that it can never *permit* a refused feed, so the
+effective rule is a union:
+
+```text
+refused = REFUSED_TOOLS ∪ env_denied_tools(DIGIQUANT_REFUSED_TOOLS)
+```
+
+`DIGIQUANT_REFUSED_TOOLS` is a separator-delimited list (`,`, `;` or whitespace) of
+extra tool names, read per call so a deployment change applies on the next
+request. Three properties make condition 1 structural rather than aspirational:
+`REFUSED_TOOLS` membership short-circuits before the variable is consulted; the
+parser has **no allow / negate / un-refuse syntax**, so `-name`, `!name` and
+`allow=name` are unknown tokens rather than permissions; and case-folding can only
+match more names. Missing, empty or whitespace-only contributes no names, leaving
+the code constant in force (fail closed), and a malformed value yields tokens
+rather than raising past the refusal check.
+
+The code constant stays the carrier of `digifetch_congress_trades`: an env var is
+not a legal gate, and the real gate is Counsel's written clearance plus the CTO's
+merge. `tests/dq/test_tool_refusals_env_denylist.py` proves it rather than logging
+it — every `REFUSED_TOOLS` member stays refused under every legal value of the
+variable, *and* the variable demonstrably adds refusals, so an implementation that
+ignored the environment entirely could not pass.
+
+Note for readers: the three `luxalgo_trackers_*` tools are **not** in
+`REFUSED_TOOLS`. Their absence is not a clearance — see DIG-1251.
 
 `pro_required` is distinct from `auth_required` on purpose: `auth_required`
 means no/misconfigured session (fix `GLOOMBERB_SESSION_COOKIE`), while
@@ -1328,12 +1769,20 @@ against (e.g. a future tier→entitlement map); **no billing or entitlement
 upgrade code exists here**, and `GLOOMBERB_SESSION_COOKIE` remains the only
 way to supply a Pro session today.
 
-**Exposure.** All 34 tools are registered in `mcp_server.py` via the
+**Exposure.** All 89 tools are registered in `mcp_server.py` via the
 `_maybe_tool` pattern (read scope) and in the `orchestrator_tools.py` manifest.
 The lazily-cached `_build_gloomberb_client()` seam is keyed on the kill-switch +
 cookie env pair, so tests inject a `MockTransport`-backed client and an env
 change gets a fresh client. Attribution/deep links are appended by
-`_gloomberb_envelope_json`; the Yahoo earnings tool opts out explicitly.
+`_gloomberb_envelope_json`; 39 tools pass `attributed=False` and opt out of the
+top-level "Sourced from Gloomberb" claim and the term.gloom.sh link: the six
+Task 2 calculators/compositions plus `digifetch_options_scenario` and the ten
+Task 3 portfolio-math compositions (derived math, never Cloud-sourced — their
+attribution, if any, lives inside `data`), the venue-direct readers
+(`digifetch_prediction_markets`, the five Task 6 ToS tools, `digifetch_trending`,
+`digifetch_substack`), the Yahoo-backed `digifetch_earnings_calendar`, and the
+13 write-shaped Task 7 workspace/broker tools (inert posture payloads, nothing
+to attribute).
 
 **Coverage expansion (#4110 phase 1).** Seven read tools joined the family on
 the same envelope/attribution/pacing semantics: `digifetch_econ_calendar`
@@ -1344,10 +1793,14 @@ validated 1–90 client-side), and the session-gated
 `digifetch_research_search` (401/402 → `auth_required`; `offset` + a typed
 pagination block) and `digifetch_transcripts` (requires Gloomberb Pro; the
 live 402 `Pro plan required` body → `pro_required`; rows live under the
-upstream `calls` key). `digifetch_congress_trades` is exposed but its upstream
-OCR path currently answers HTTP 500 (Mistral monthly spend cap), which surfaces
-as a typed `upstream_error`; its typed subset follows the known live field
-names (`memberName`/`assetName`/`sourceUrl`/`filingDate`/`notificationDate`)
+upstream `calls` key). `digifetch_congress_trades` is **refused on every surface** — see the
+refusal-list section below; it is not registered in any MCP scope, filtered out
+of the manifest, and typed-refused by `v1_orchestrator_invoke`. Its upstream is
+live (probed 2026-10-05: HTTP 200, `source: "house-clerk"`, `filingCount: 407`,
+`filingsParsed: 20`), which is why it is refused rather than left inert. Its
+client, normalizer and models are retained in-tree for a possible Counsel
+clearance. While it was live its typed subset followed the known field names
+(`memberName`/`assetName`/`sourceUrl`/`filingDate`/`notificationDate`)
 and the rest is preserved. These routes answer direct payloads (bare arrays
 included) rather than the `/market/*` envelope, so `_request_json` takes
 `allow_array` for them; array rows' `stale` flags fold into the envelope via
@@ -1409,21 +1862,102 @@ transcript detail row shape **probe-pending** (the models stay permissive) until
 a Pro-account probe re-records it. The `saved`-key fallback is retained as an
 unverified variant.
 
-**Deliberately out of scope (client-side or non-Cloud sources).** The remaining
-plugin panes compute from already-tooled routes or call third parties
-directly, so no new tool was added: correlation / relationship graph (client
-math over `/market/history`), dividend yield and the Yahoo short-interest
-fallback (`query1.finance.yahoo.com`), world indices / FX matrix / futures
-(quote + history composition; futures are Yahoo continuous symbols),
-volatility term structure and credit conditions (FRED series composition over
-`digifetch_econ_series`), treasury auctions (`api.fiscaldata.treasury.gov`),
-prediction markets (kelly-sizer is a local model with no data endpoint),
-market movers / scanner (already-tooled `/market/screener` plus Yahoo
-trending; the live scanner is a websocket stream), and short-interest coverage
-is the Cloud proxy above. The per-transcript detail route
-(`/cloud/transcripts/{id}`) shipped as `digifetch_transcripts`'
-`transcript_id` mode (#4110 phase 4a); `digifetch_saved_searches` covers
-`/cloud/search/saved`.
+**Prediction markets (#4813).** `digifetch_prediction_markets` is the
+family's first venue-direct tool: no Cloud route exists, so the client reads
+the Polymarket Gamma `/events` catalog and the Kalshi trade `/events` catalog
+straight through the shared digifetch transport (`_request_json` takes a
+`base_url` + `label` so venue calls share pacing/retry/breaker with
+venue-named errors; a venue 401/402/403 maps to `upstream_error`, never to the
+session-cookie `auth_required`). Only `limit` (plus Kalshi's `open` status) is
+sent upstream — the venues' search/category/tab parameters are unprobed, so
+`query`/`category`/`tab` filter client-side and `limit` (1–100) slices the
+merged rows. Gamma's JSON-encoded `outcomes`/`outcomePrices` resolve the Yes
+probability; Kalshi's dollar-or-cent prices scale by 100 when above 1. Each
+venue fails soft into the result `warnings`; all-requested-venues-down is a
+typed `upstream_error`. Rows carry the venue deep link
+(`polymarket.com/event/{slug}`, `kalshi.com/markets/{ticker}`); the envelope
+`provider_id` is `prediction-markets-venues`, the result attribution names the
+venues with a polling notice, and both surfaces pass `attributed=False`, so no
+top-level attribution or term.gloom.sh link is ever emitted. Entitlement is
+`free`; the tool joins `MACRO_TOOLS` only (now at the 16-name prompt-budget
+cap; subsets stay distinct). Not live-probed: venue shapes are parsed
+defensively from the plugin's documented reads, and the offline suite drives
+both venues through `MockTransport`.
+
+**Full-function coverage (#4837).** All 130 command-bar functions now carry
+exactly one status in the
+[function matrix](../docs/superpowers/plans/2026-09-30-gloomberb-function-matrix.md):
+57 DONE, 24 COMP, 4 CALC, 1 TOS, 11 WRITE, 2 GATE, 1 NATIVE
+(`digiquant_run_backtest` — no gloomberb tool), and 30 OUT. New cohorts since
+#4813: calculators + compositions (`digifetch_options_calculator`,
+`digifetch_bond_calculator`, `digifetch_kelly_sizer`, `digifetch_dividend_yield`,
+`digifetch_fx_cross_rates`, `digifetch_vix_term_structure` — the kelly-sizer is
+no longer "a local model with no data endpoint", it is a shipped tool);
+portfolio-math compositions (`digifetch_compare_performance`,
+`digifetch_correlation_matrix`, `digifetch_relationship_graph`,
+`digifetch_relative_valuation`, `digifetch_fundamental_graph`,
+`digifetch_valuation_graph`, `digifetch_custom_chart`,
+`digifetch_market_valuation`, `digifetch_money_markets`,
+`digifetch_rate_path`); the options-scenario composer
+(`digifetch_options_scenario`, multi-leg valuation over options-chain rows);
+probe-backed Cloud reads (`digifetch_time_and_sales`,
+`digifetch_quote_recap`, `digifetch_estimate_revisions`,
+`digifetch_short_volume`, `digifetch_hiring`,
+`digifetch_central_bank_rates`, `digifetch_cdx`,
+`digifetch_sovereign_cds`, `digifetch_options_flow`, `digifetch_cot`,
+`digifetch_crypto_markets`, `digifetch_iv_screen`, `digifetch_iv_history`,
+`digifetch_iv_surface`, `digifetch_debt_maturities`,
+`digifetch_session_movers`, `digifetch_trending`, `digifetch_substack`,
+`digifetch_ipo_calendar`); venue-direct ToS readers (`digifetch_fear_greed`,
+`digifetch_polls`, `digifetch_treasury_auctions`, `digifetch_market_halts`,
+`digifetch_hacker_news`); and the session-gated workspace/broker cohort, which
+is inert by verdict (below). The curated subsets sit at their 16-name
+prompt-budget caps (EQUITY/MACRO/PM 16/16/16); `digifetch_polls`, `digifetch_hacker_news`, `digifetch_compare_performance`,
+`digifetch_correlation_matrix`, and `digifetch_relative_valuation` stay
+MCP-only until an owner-signed eviction frees a slot;
+`digifetch_congress_trades` is on none of them at all — it is refused
+(DIG-1057, 5 U.S.C. 13107(c)(1)(B)) and must not be added back to a subset
+without Counsel's written clearance.
+
+**Composition behaviors worth knowing.** `digifetch_dividend_yield` inherits the
+`corporate_actions` session gate without a cookie: both legs are attempted, the
+gate failure lands in `warnings`, and the tool answers a typed
+`upstream_error`, never a partial yield. The IV-history entitlement is a guess
+pending live smoke: the IV trio stays `session` with `pro_gated` readers, so a
+server plan denial surfaces verbatim as `pro_required`. The VIX far leg
+defaults to the FRED id `VXVCLS` — `VIX3M` as such is the Yahoo/CBOE index
+symbol `^VIX3M`, not a FRED id. `digifetch_rate_path` reads a single page of
+open Kalshi `KXFED` threshold markets and groups by meeting. The 13
+write-shaped workspace/broker tools are inert and read-only in this phase (no
+personal Cloud write route verified — the 2026-09-30 source probe found only
+team-scoped account APIs): without a cookie they answer `auth_required` with
+zero HTTP, with one they answer the typed read-only `upstream_error`, also with
+zero HTTP. `digifetch_ibkr_preview_order` mints a local HMAC approval ticket
+(single-use, 15-minute TTL); `digifetch_ibkr_execute_order` ships DISABLED
+pending human review of the approval-gate design — only `dry_run` returns data
+(the would-be request, zero brokerage traffic). Enablement additionally
+requires the order exchange to match a pre-enabled local-gateway venue: orders
+route through the local IBKR gateway, never Cloud REST.
+
+**Deliberately out of scope (the 30 OUT rows).** No data endpoint exists for the
+AI surfaces (`AI` BYOK key, `AGENT` BYOK key, `ASKG` Cloud AI chat), the live
+video pane (`TV`), the account surfaces (`CHAT`, `DM`, `TEAM`, `FOCUS`, `TBO`,
+`ACM`, `UPGRADE`), or the 16 layout/settings panes (`GL`, `LAY`, `LMA`, `WIN`,
+`PS`, `PL`, `TH`, `LANG`, `FONT`, `SB`, `VF`, `CR`, `CONN`, `CHG`, `HELP`, `FB`
+— app chrome, no API surface). `FUT`/`CTM` stay on Yahoo continuous symbols by
+prior decision. `HILO` is a socket-only streaming scanner with no REST
+equivalent and no tool-shaped equivalent; 52-week extremes already surface in
+quotes/screener. The single sanctioned split is `MOST`: gainers/losers/most-active
+via `digifetch_screener`, premarket/afterhours/gaps via
+`digifetch_session_movers`, trending via the Yahoo venue-direct
+`digifetch_trending`. NO-ROUTE verdicts compose over tooled routes without a
+dedicated endpoint (`HVG`/`HVT` realized-vol over price history + options-chain
+ATM overlay, `EE` over corporate actions + analyst research + financials, `INS`
+over SEC Form 4 content, `CRD` over econ-series FRED credit ids); `GUID`
+harvests guidance quotes from transcripts text, labeled as such. The
+per-transcript detail route (`/cloud/transcripts/{id}`) shipped as
+`digifetch_transcripts`' `transcript_id` mode (#4110 phase 4a);
+`digifetch_saved_searches` covers `/cloud/search/saved`.
 
 **Not a pipeline primary.** The 15-minute free-tier delay, rate limits, and
 `1wk→5y` range cap disqualify the Cloud surface as a primary data source. It
@@ -1597,7 +2131,7 @@ The `_normalize_symbols()` helper in `server.py` normalizes symbols in `v1_orche
 
 `DigiAuthMiddleware` from `digikey.integrations.service_middleware` is mounted as an ASGI middleware before route handlers. It validates JWT Bearer tokens against the digikey JWKS endpoint (`DIGIKEY_JWKS_URL`), checks issuer (`DIGIKEY_ISSUER`), audience (`DIGIKEY_AUDIENCE`), and required scopes via `digiquant_path_scopes()`. When digikey is not available or misconfigured, the middleware behavior depends on the digikey package's failure mode.
 
-### digismith Tracing
+### digitrace Tracing
 
 OpenTelemetry instrumentation is set up via `setup_otel_fastapi(app, service_name="digiquant")` from `digibase.otel`. This instruments all FastAPI routes with spans. The OTEL exporter is configured via the standard `OTEL_EXPORTER_OTLP_ENDPOINT` env var. When the endpoint is not set, tracing is a no-op. digiquant does not explicitly add custom span attributes with `workflow_id`, `request_id`, or `session_id` — these would need to be added from `request.state.request_id` (set by the correlation ID middleware) if tracing is actively used.
 
@@ -1713,8 +2247,10 @@ The sandbox runs as UID `10001` (`sandbox`). It does not install digiquant itsel
 | `DIGIKEY_ISSUER` | `http://digikey:8005` | JWT issuer |
 | `DIGIKEY_AUDIENCE` | `digi-ecosystem` | JWT audience |
 | `DIGIKEY_PUBLIC_KEY_PEM` | `""` | Inline PEM for offline JWT verification |
-| `GLOOMBERB_ENABLED` | unset (ON) | Kill switch for the 34 `digifetch_*` Gloomberb tools. Only `1`/`true`/`yes`/`on` enable the family; any other value (including a typo) disables it, and every call then returns a typed `upstream_error` without a request |
-| `GLOOMBERB_SESSION_COOKIE` | `""` | Optional Gloom session cookie for the session-gated endpoints (holders, analyst research, corporate actions, research search, statements, ticker tweets, tweet search, short interest, saved searches, equity diagnostic — screener is also gated and, like transcripts, additionally needs a Pro plan; 15 gated call sites in `client.py`). The `/public/proxies/*`, `/public/risks/*`, and `/public/events/*` filing reads are open and never send it. Bare token or `name=value`; never logged, never echoed into payloads, forwarded only to same-origin redirect hops — operator runbook: [docs/ops/gloomberb-session-cookie.md](../docs/ops/gloomberb-session-cookie.md) |
+| `GLOOMBERB_ENABLED` | unset (OFF) | Kill switch for the 89 `digifetch_*` Gloomberb tools. Only `1`/`true`/`yes`/`on` enable the family; any other value (including a typo) disables it, and every call then returns a typed `upstream_error` without a request |
+| `LUXALGO_ENABLED` | unset (ON) | Kill switch for the 14 `luxalgo_*` hosted tools (#4779 P0 Library + #4844 edge/trackers). Only `1`/`true`/`yes`/`on` enable the family; any other explicit value disables it, and every call then returns a typed `upstream_error` without a request |
+| `LUXALGO_COMMERCIAL_LICENSE` | unset (OFF) | Commercial Library license flag for LuxAlgo indicator source code (#4845). Default OFF: unset, blank, or any non-truthy value keeps the 9th tool (`library_get_source_code`, CC BY-NC-SA) out of every surface — the dispatcher refuses it with a typed `invalid_input` envelope and no request. Only `1`/`true`/`yes`/`on` enable it, and even then only the dispatcher may carry the 9th tool (MCP, manifest, entitlements, read scope stay at 14). Procurement is owner-side; nothing is wired yet |
+| `GLOOMBERB_SESSION_COOKIE` | `""` | Optional Gloom session cookie for the 41 cookie-gated tools (37 `session` + 1 `preview` + 3 `pro`, declared once in `data/gloomberb/entitlements.py`): the original nine reads (holders, analyst research, corporate actions, research search, statements, ticker tweets, tweet search, short interest, saved searches) plus equity diagnostic (preview) and transcripts/screener/options-flow (pro), the 15 probe-backed Cloud reads, and the 13 inert workspace/broker tools. The `/public/proxies/*`, `/public/risks/*`, and `/public/events/*` filing reads are open and never send it. Bare token or `name=value`; never logged, never echoed into payloads, forwarded only to same-origin redirect hops — operator runbook: [docs/ops/gloomberb-session-cookie.md](../docs/ops/gloomberb-session-cookie.md) |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `""` | OpenTelemetry collector endpoint |
 | `LOG_LEVEL` | `"INFO"` | Logging level for MCP server |
 
@@ -1771,7 +2307,7 @@ Each `BacktestResult` has a `run_id` but no persistent store. The audit JSONL is
 
 ### Gloomberb Market-Data Integration (#3927, implemented in #4069; coverage expanded in #4110)
 
-Scoping spec: [`2026-09-12-digifetch-scoping-design.md`](../docs/superpowers/specs/2026-09-12-digifetch-scoping-design.md). The original 13 `digifetch_*` tools (12 over Gloomberb Cloud `api.gloom.sh`, including ungated news; 3 session-gated; one Yahoo-backed earnings calendar) landed in #4069. #4110 phase 1 added 7 more read tools on the same envelope/attribution semantics: `digifetch_econ_calendar`, `digifetch_econ_series`, `digifetch_yield_curve`, `digifetch_cds` (`days` 1–90 validated client-side), session-gated `digifetch_research_search`, `digifetch_congress_trades`, and `digifetch_transcripts` (**requires Gloomberb Pro** — the free-session `Pro plan required` body is a typed `pro_required`). `digifetch_congress_trades` is currently blocked upstream by the Mistral OCR spend cap (HTTP 500 → typed `upstream_error`); the route is exposed so coverage completes when upstream recovers. **#4110 phase 2** added the remaining 7: `digifetch_statements`, `digifetch_ticker_tweets`, `digifetch_tweet_search`, `digifetch_venues`, `digifetch_screener` (Pro-only; the 200 `PRO_REQUIRED` envelope and the 402 text body share the typed `pro_required` error), `digifetch_13f_funds`, and `digifetch_13f_holdings` (`cik` zero-padded to 10 digits; live-probed against the real API, with the 13F `holders` route still answering upstream 400 for every period format probed). **#4110 phase 3** closed the plugin-only panes that had a real endpoint with 6 more: `digifetch_shiller` (valuation), `digifetch_proxy_statements` and `digifetch_risk_reports` (executives / risk factors; anonymous `/public/*` open reads), `digifetch_filing_events`, `digifetch_short_interest` (session-gated), and `digifetch_equity_diagnostic` (POST AI review; pending-or-report). **#4110 phase 5** added the entitlement layer (`pro_required` vs `auth_required`, the per-tool `entitlement` declaration on MCP + manifest, and the preview marker) — see Entitlements above. **#4110 phase 4a** shipped the two residual endpoints: `digifetch_transcripts` gained its `transcript_id` detail mode (`GET /cloud/transcripts/{id}`) and the new session-gated `digifetch_saved_searches` covers `GET /cloud/search/saved` (probed 2026-09-16; the saved-searches route is session-gated, not Pro, and the transcript detail shape stays probe-pending until a Pro-account probe). The family is 34 read tools total; the remaining panes are client-side compositions or non-Cloud third-party calls and are documented as out of scope in §5. It remains an **enrichment** read path for agents, digichat, and a future same-origin dashboard market-data page — plus external deep links with "Sourced from Gloomberb" attribution. It is explicitly **not** a pipeline data-source replacement (15-minute free-tier delay, rate limits, 5Y history caps).
+Scoping spec: [`2026-09-12-digifetch-scoping-design.md`](../docs/superpowers/specs/2026-09-12-digifetch-scoping-design.md). The original 13 `digifetch_*` tools (12 over Gloomberb Cloud `api.gloom.sh`, including ungated news; 3 session-gated; one Yahoo-backed earnings calendar) landed in #4069. #4110 phase 1 added 7 more read tools on the same envelope/attribution semantics: `digifetch_econ_calendar`, `digifetch_econ_series`, `digifetch_yield_curve`, `digifetch_cds` (`days` 1–90 validated client-side), session-gated `digifetch_research_search`, `digifetch_congress_trades`, and `digifetch_transcripts` (**requires Gloomberb Pro** — the free-session `Pro plan required` body is a typed `pro_required`). `digifetch_congress_trades` was among them but is now **refused on every surface** (DIG-1057; 5 U.S.C. 13107(c)(1)(B) forbids obtaining or using a House/Senate disclosure report for a commercial purpose other than news-and-communications-media dissemination). It is a deny-list entry in `digiquant.tool_refusals`, not a deletion — its client, normalizer and models stay in-tree so the route can be restored if Counsel clears it. Its upstream is **live**, not dead: probed 2026-10-05, `GET https://api.gloom.sh/cloud/congress/house?limit=3` → HTTP 200, `source: "house-clerk"`, `filingCount: 407`, `filingsParsed: 20`. Earlier notes in this document claiming a Mistral OCR spend-cap HTTP 500 for this route were wrong and are corrected above. **#4110 phase 2** added the remaining 7: `digifetch_statements`, `digifetch_ticker_tweets`, `digifetch_tweet_search`, `digifetch_venues`, `digifetch_screener` (Pro-only; the 200 `PRO_REQUIRED` envelope and the 402 text body share the typed `pro_required` error), `digifetch_13f_funds`, and `digifetch_13f_holdings` (`cik` zero-padded to 10 digits; live-probed against the real API, with the 13F `holders` route still answering upstream 400 for every period format probed). **#4110 phase 3** closed the plugin-only panes that had a real endpoint with 6 more: `digifetch_shiller` (valuation), `digifetch_proxy_statements` and `digifetch_risk_reports` (executives / risk factors; anonymous `/public/*` open reads), `digifetch_filing_events`, `digifetch_short_interest` (session-gated), and `digifetch_equity_diagnostic` (POST AI review; pending-or-report). **#4110 phase 5** added the entitlement layer (`pro_required` vs `auth_required`, the per-tool `entitlement` declaration on MCP + manifest, and the preview marker) — see Entitlements above. **#4110 phase 4a** shipped the two residual endpoints: `digifetch_transcripts` gained its `transcript_id` detail mode (`GET /cloud/transcripts/{id}`) and the new session-gated `digifetch_saved_searches` covers `GET /cloud/search/saved` (probed 2026-09-16; the saved-searches route is session-gated, not Pro, and the transcript detail shape stays probe-pending until a Pro-account probe). **#4813** added the venue-direct `digifetch_prediction_markets` (Polymarket + Kalshi catalog). **#4837** (130-function coverage) took the family to 89 tools: calculators + compositions, portfolio-math compositions, the options-scenario composer, 15 probe-backed session-gated Cloud reads, 5 venue-direct ToS readers, and 13 inert session-gated workspace/broker tools (read-only posture, execute disabled) — see §5. It remains an **enrichment** read path for agents, digichat, and a future same-origin dashboard market-data page — plus external deep links with "Sourced from Gloomberb" attribution. It is explicitly **not** a pipeline data-source replacement (15-minute free-tier delay, rate limits, 5Y history caps).
 
 Phase 1 (the `data/gloomberb/` data layer + unit tests, `digifetch`/`httpx` declared) and Phase 2 (MCP registration + orchestrator manifest + attribution) landed in #4069; #4110 phases 1–3 (macro/credit/search/transcript; statements/tweets/venues/screener/13F; valuation/executives/risk/filing-events/short-interest/equity-diagnostic) merged via #4112/#4119/#4126 (entitlement layer #4135), and the remaining surface (plugin-only panes, digiquant surface integration) stays open in that issue. #4097 wired the **`/v1/orchestrator_invoke` dispatch branch** for the family: a `digifetch_*` name declared in `DIGIFETCH_DISPATCH` routes through the same shared `build_digifetch_tool_dispatcher()` the pipeline agents use, so hub callers get the §7 attribution envelope under `data`. Gated names are accepted rather than filtered (the endpoint never 400s a declared tool): a gated call without `GLOOMBERB_SESSION_COOKIE` returns the typed `auth_required` envelope (`pro_required` once a free session is supplied for the Pro-only tools), reported as `ok: false` with the typed message at `error` and the full envelope preserved under `data`. The coinbase/BGeometrics/CoinMetrics fetch tools remain manifest-only (no dispatch branch). Remaining open items from #4069: the **human gate** (new external service dependency `api.gloom.sh` — the implementation PR may not self-merge per `agents.yml` `human_gates`), the `bunx gloomberb api list --json` diff, the `1wk`/`ALL` truncation (widened by #4100's explicit `startDate`/`endDate` window; `rangeKey=ALL` alone still returns the ~29-bar default), container-egress verification including `Origin`/User-Agent, and the ToS/volume review (spec §12 item 5).
 
@@ -1836,7 +2372,7 @@ The `_run_trial()` function in `optimize.py` is already structured as a top-leve
 - `digiquant_job_queue_size` (gauge) — tracks in-flight async jobs
 - `digiquant_rate_limit_rejections_total` (counter, labeled by `path`) — identifies rate limit pressure
 
-These metrics complement digismith's LLM-level tracing by providing infrastructure-level observability on the compute-intensive quant path.
+These metrics complement digitrace's LLM-level tracing by providing infrastructure-level observability on the compute-intensive quant path.
 
 ## Observability
 
@@ -3999,10 +4535,10 @@ are tests pinning the negative property; do not relax them into a ceiling withou
 `cost_usd` in the usage snapshot is `0.0` on every run and this alert could never fire. `_row`
 therefore resolves `est_cost_usd` once — the reported cost when it is positive, otherwise
 `pricing.estimate_cost_usd(usage["by_model"])` against the committed per-model table in
-`research/pricing.py` — and feeds the SAME value to both `spend_alert` and the `est_cost_usd`
-column. The estimator returns `None` when no tokens were priced (no priced model, or a priced
-model whose tokens are all zero/junk), so behaviour is unchanged when no price is known (never
-fabricate `$0`).
+`config/digiquant-model-prices.json` (loaded by `research/pricing.py`) — and feeds the SAME
+value to both `spend_alert` and the `est_cost_usd` column. The estimator returns `None` when no
+tokens were priced (no priced model, or a priced model whose tokens are all zero/junk), so
+behaviour is unchanged when no price is known (never fabricate `$0`).
 
 Each price is taken verbatim from the repo's own committed snapshot,
 `docs/providers/snapshots/<provider>.yaml` (`paid_tier.models[].cost_per_1m_input` /
@@ -4010,8 +4546,30 @@ Each price is taken verbatim from the repo's own committed snapshot,
 rate. A price no snapshot corroborates fails
 `tests/dq/research/test_pricing.py::TestThePriceTable::test_every_committed_price_is_corroborated_by_a_committed_snapshot`.
 `google/gemini-3.7-flash` is a house slug with no price: it is absent from the committed
-`gemini.yaml` (the snapshot predates the model), so it is listed in `_UNPRICED_SLUGS` until
-that snapshot is refreshed.
+`gemini.yaml` (the snapshot predates the model), so it is listed in the config file's
+`unpriced_slugs` until that snapshot is refreshed.
+
+**The table is config, not code (#5029).** The slugs and their prices live in
+`config/digiquant-model-prices.json`, read by `load_price_table()` (mtime-cached on
+`(path, mtime)`, so an edited file takes effect without a restart). `DIGI_CONFIG_PATH`
+overrides the directory exactly as it does for `digigraph.model_config`; unset, the repo root
+is tried before the CWD-relative `config/`. Two consequences worth knowing before editing:
+
+- **Provenance is required, not decorative.** Every price entry carries the `source` snapshot it
+  came from and its `last_checked` date, and a rate that is not the obvious one carries
+  `rate` + `note`. `ModelPrice` carries these onto the parsed row, so the audit trail is
+  readable without opening the JSON. The loader **drops** an entry whose `source` is missing or
+  does not point under `docs/providers/snapshots/` — an uncitable price is not a price. A bad
+  entry is dropped by name with a warning and the rest of the table still loads, because one
+  bad row must not under-report every other model's spend.
+- **Failing soft is loud.** A missing/unreadable/corrupt config yields an empty table plus a
+  `warning`, never an exception — telemetry must not break a chain run. An empty table means
+  `estimate_cost_usd` returns `None` and the caller falls back to the provider's own `0.0`,
+  i.e. the pre-#4596 behaviour, so the warning is the only signal that spend went unmeasured.
+  Production runs the chain in CI (`python -m digiquant.portfolio.chain`) with the repo checked
+  out, so `config/` is present there; the `digiquant` **container** mounts no `config/` and sets
+  no `DIGI_CONFIG_PATH`, so in that deployment the table resolves empty and only the warning
+  fires.
 
 It is computed in `_row` rather than through `register_breakdown_contributor` because **that seam
 is `state -> dict` and spend does not live in state** — it arrives in the `digigraph.usage`
@@ -4042,6 +4600,20 @@ Contributors are pure, fail-soft (an exception is logged and swallowed), may not
 existing key, and run **once per run** inside `_segment_counts`. Note the split:
 `_segment_totals` is the pure counter used by `research_produced`, which the chain calls
 *mid-run* to gate portfolio — contributors must never see that half-populated state.
+
+## Stage contracts (ADR-0030)
+
+Swappable handoffs live in `digiquant.stages`. `ResearchDigest` is the stage-1
+briefing (`date`, `body`, `regime_label`) plus `source` and `composition_id`.
+`TradeIdeaSnapshot` is the stage-2 trade-idea row. `refuse_order_intent` raises
+`ExecutionOptInRequired` and does not build an `OrderIntent`.
+
+Consensus timeframes are `medium` and `long`. Other strings are display-only
+(`split_timeframe`). twelve-x trade generation stays in the twelve-x repo.
+twelve-x does not execute. `PortfolioState` remains an alias of `ResearchState`.
+The portfolio `--from-digest` CLI still loads a full `ResearchState`.
+
+Plan: `docs/plans/adr-0030/README.md`. Decision: ADR-0030.
 
 ## execution contracts
 

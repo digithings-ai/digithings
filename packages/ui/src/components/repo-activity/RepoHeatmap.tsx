@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import * as HeatGraph from "heat-graph";
 
 import { bucketContributions, levelFor, type HeatDay } from "./heatmap";
@@ -16,6 +17,20 @@ export type RepoHeatmapProps = {
   weeks?: number;
   /** Window end (UTC day). Defaults to today. Test seam only. */
   end?: Date;
+  /**
+   * Grow the squares to fill the container instead of scrolling it. The cell
+   * size is normally a fixed 10px and `.ra-heat-body` scrolls when the history
+   * is wider than its column; with `fit` the grid takes 100% of the column and
+   * each cell keeps a 1:1 aspect ratio, so the squares get bigger as the column
+   * widens and smaller as it narrows — the count still picks how many weeks are
+   * drawn (see `weeks`), the layout picks how large they are drawn.
+   */
+  fit?: boolean;
+  /**
+   * Build the cubes and the month names left to right, once, when the graph
+   * scrolls into view. Off by default so existing heatmaps stay settled.
+   */
+  build?: boolean;
   className?: string;
 };
 
@@ -36,6 +51,26 @@ const COLOR_SCALE = [
 
 const DAY_LABELS = new Set(["Mon", "Wed", "Fri"]);
 
+/** One column of cubes, then the next. A year of weeks stays under ~1.2s. */
+const BUILD_COLUMN_MS = 22;
+
+/**
+ * Hover text for one square. States the day, the total, and — when the caller
+ * bucketed the sources — the split behind it, because "5 contributions" and
+ * "5 commits" are different facts and the graph alone cannot tell them apart.
+ */
+function cellTitle(date: string, count: number, day: HeatDay | undefined): string {
+  const noun = count === 1 ? "contribution" : "contributions";
+  if (day && (day.commits != null || day.pulls != null || day.issues != null)) {
+    const parts: string[] = [];
+    if (day.commits) parts.push(`${day.commits} commit${day.commits === 1 ? "" : "s"}`);
+    if (day.pulls) parts.push(`${day.pulls} PR${day.pulls === 1 ? "" : "s"}`);
+    if (day.issues) parts.push(`${day.issues} issue${day.issues === 1 ? "" : "s"}`);
+    if (parts.length) return `${date} — ${count} ${noun}: ${parts.join(", ")}`;
+  }
+  return `${date} — ${count} ${noun}`;
+}
+
 export function RepoHeatmap({
   pulls,
   commits = [],
@@ -43,17 +78,55 @@ export function RepoHeatmap({
   data,
   weeks = 53,
   end,
+  fit = false,
+  build = false,
   className,
 }: RepoHeatmapProps) {
   const days: HeatDay[] =
     data ?? bucketContributions(pulls, commits, closedIssues, weeks, end ?? new Date());
   const total = days.reduce((m, d) => m + d.count, 0);
-  const cls = ["ra-heat", className ?? ""].filter(Boolean).join(" ");
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [armed, setArmed] = useState(!build);
+  useEffect(() => {
+    if (!build) return;
+    const el = rootRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") {
+      setArmed(true);
+      return;
+    }
+    const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+    if (reduced) {
+      setArmed(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        setArmed(true);
+        observer.disconnect();
+      },
+      { threshold: 0.35 },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [build]);
+  const cls = [
+    "ra-heat",
+    fit ? "ra-heat--fit" : "",
+    build ? "ra-heat--build" : "",
+    build && armed ? "is-armed" : "",
+    className ?? "",
+  ]
+    .filter(Boolean)
+    .join(" ");
   const range = weeks >= 50 ? "the last year" : `the last ${weeks} weeks`;
   const points = days.map((d) => ({ date: d.date, count: d.count }));
+  // The grid hands back its own cells, so the per-day split is looked up by
+  // date to build the hover title.
+  const byDate = new Map(days.map((d) => [d.date, d]));
 
   return (
-    <div className={cls}>
+    <div className={cls} ref={rootRef}>
       <p className="ra-heat-total">
         {grouped(total)} contributions in {range}
       </p>
@@ -86,7 +159,10 @@ export function RepoHeatmap({
                   <span
                     key={`${label.month}-${label.column}`}
                     className="ra-heat-month"
-                    style={{ left: `${(label.column / totalWeeks) * 100}%` }}
+                    style={{
+                      left: `${(label.column / totalWeeks) * 100}%`,
+                      ...(build ? { animationDelay: `${label.column * BUILD_COLUMN_MS}ms` } : {}),
+                    }}
                   >
                     {HeatGraph.MONTH_SHORT[label.month]}
                   </span>
@@ -117,7 +193,12 @@ export function RepoHeatmap({
                       key={`${cell.column}-${cell.row}`}
                       className="ra-heat-cell"
                       data-level={cell.level}
-                      title={`${date} — ${n} contribution${n === 1 ? "" : "s"}`}
+                      title={cellTitle(date, n, byDate.get(date))}
+                      style={
+                        build
+                          ? { animationDelay: `${cell.column * BUILD_COLUMN_MS}ms` }
+                          : undefined
+                      }
                     />
                   );
                 }}

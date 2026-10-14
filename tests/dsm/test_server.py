@@ -1,9 +1,9 @@
-"""Unit tests for digismith.server."""
+"""Unit tests for digitrace.server."""
 
 from __future__ import annotations
 
 import pytest
-from digismith.server import app
+from digitrace.server import app
 from fastapi.testclient import TestClient
 
 _client = TestClient(app)
@@ -35,3 +35,11 @@ def test_status_never_exposes_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
     assert r.status_code == 200
     assert "super_secret_token" not in r.text
     assert "lsv2_" not in r.text
+
+
+@pytest.mark.unit
+def test_smith_status_compat_alias() -> None:
+    """Phase 0 compat (#4929): pre-rename SmithStatus aliases TraceStatus."""
+    from digitrace.config import SmithStatus, TraceStatus
+
+    assert SmithStatus is TraceStatus

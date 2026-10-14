@@ -392,6 +392,27 @@ class TestFetchResearchLibraryIgnoresOverlay:
         rows = mod._query(sb, args).data
         assert [r["payload"]["marker"] for r in rows] == ["house"]
 
+    def test_ticker_matches_payload_not_title(self) -> None:
+        mod = _load("fetch_research_library")
+        mentioned = _doc(
+            workspace_id=_HOUSE,
+            document_key="research/sector/spy-wrap",
+            payload={"ticker": "SPY"},
+        )
+        mentioned["title"] = "NVDA mentioned in the SPY note"
+        mentioned["segment"] = "sector"
+        sector = _doc(
+            workspace_id=_HOUSE,
+            document_key="research/sector/nvda-wrap",
+            payload={"ticker": "NVDA"},
+        )
+        sector["title"] = "Sector wrap"
+        sector["segment"] = "sector"
+        sb = FakeSupabaseClient(canned_reads={"documents": [mentioned, sector]})
+        args = argparse.Namespace(type=None, ticker="NVDA", since=None, limit=10)
+        rows = mod._query(sb, args).data
+        assert [r["title"] for r in rows] == ["Sector wrap"]
+
     def test_fetch_one_drops_overlay_listed_first(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:

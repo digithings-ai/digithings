@@ -17,7 +17,7 @@ digithings (digithings.ai) is an open-core modular agentic stack for building co
 | **digigraph** | 8000 | LangGraph orchestration hub; OpenAI-compatible API; delegates to verticals | JWT (digikey) — 503 if not configured | core (always on) | Yes — `python -m digigraph.mcp_server` | Shipped |
 | **digiquant** | 8001 | NautilusTrader backtest/optimize; ordered quant pipeline; orchestrator endpoints | JWT (`digiquant:backtest`, `digiquant:optimize`) | core | Yes — `python -m digiquant.mcp_server` | Shipped |
 | **digisearch** | 8002 | RAG pipeline; document ingestion; vector search (Chroma/Azure) | JWT (`digisearch:query`, `digisearch:ingest`) | core | Yes — `docker compose --profile digisearch-mcp up`; stack loopback :8765 via supervisord | Shipped |
-| **digismith** | 8003 | LangSmith-aligned tracing helpers (library); health + `/v1/status` endpoint | None (public metadata) | core | No | Shipped |
+| **digitrace** | 8003 | Backend-neutral tracing helpers (library; LangSmith backend); health + `/v1/status` endpoint | None (public metadata) | core | No | Shipped |
 | **digivault** | 8004 | Obsidian-style markdown vault management (frontmatter, wikilinks, backlinks, tags) | JWT (`digivault:read`, `digivault:write`) | digivault | Yes — `docker compose --profile digivault-mcp up`; stack loopback :8769 via supervisord | New |
 | **LiteLLM** | 4000 | LLM routing proxy (100+ providers); response cache; rate limiting | `LITELLM_MASTER_KEY` Bearer | core | No | Shipped |
 | **digikey** | 8005 | API key issuance; JWT exchange (RS256); JWKS endpoint | Admin token for key issuance | core | No | Shipped |
@@ -106,7 +106,7 @@ sequenceDiagram
 
 ## 4. MCP Server Topology
 
-MCP (Model Context Protocol) is the standard for tool discovery and invocation at the edge of the digithings ecosystem. digigraph, digiquant, digisearch, and digivault each expose MCP servers. digikey, digismith, and digiclaw do not (digiclaw MCP integration is Phase 2).
+MCP (Model Context Protocol) is the standard for tool discovery and invocation at the edge of the digithings ecosystem. digigraph, digiquant, digisearch, and digivault each expose MCP servers. digikey, digitrace, and digiclaw do not (digiclaw MCP integration is Phase 2).
 
 | Component | MCP Server Command | Host Port | Exposed Tools (examples) | Typical Clients |
 |-----------|-------------------|-----------|--------------------------|-----------------|
@@ -129,7 +129,7 @@ MCP (Model Context Protocol) is the standard for tool discovery and invocation a
 
 ### Default / Core (no profile flag)
 
-**Includes:** digikey (8005), digikey-blocklist-redis (Redis 7, internal only), Ollama (11435), digismith (8003), digigraph (8000), digiquant (8001), digisearch (8002), LiteLLM (4000)
+**Includes:** digikey (8005), digikey-blocklist-redis (Redis 7, internal only), Ollama (11435), digitrace (8003), digigraph (8000), digiquant (8001), digisearch (8002), LiteLLM (4000)
 
 **When to use:** Standard developer stack. All core services. No chat UI, no LiteLLM response-cache Redis, no heartbeat agent. `digikey-blocklist-redis` has no profile, so it always runs and digikey waits for it (`condition: service_healthy`); it backs JWT revocation (ADR-0007).
 
@@ -139,7 +139,7 @@ make up
 # or: docker compose up -d
 ```
 
-**Startup order:** digikey → {digiquant, digisearch, LiteLLM} → digismith → digigraph
+**Startup order:** digikey → {digiquant, digisearch, LiteLLM} → digitrace → digigraph
 
 ---
 
@@ -217,7 +217,7 @@ docker compose --profile digivault-mcp up -d
 
 **Adds:** `prometheus` (127.0.0.1:9090) + `grafana` (127.0.0.1:3001, provisioned dashboards backed by Prometheus)
 
-**When to use:** Scrape and visualize the `GET /metrics` endpoint every FastAPI service mounts via `digibase.metrics.install_metrics`. Prometheus scrapes digigraph, digiquant, digisearch, digismith, and digikey over the internal network (digivault mounts `/metrics` too but is not in the default scrape config).
+**When to use:** Scrape and visualize the `GET /metrics` endpoint every FastAPI service mounts via `digibase.metrics.install_metrics`. Prometheus scrapes digigraph, digiquant, digisearch, digitrace, and digikey over the internal network (digivault mounts `/metrics` too but is not in the default scrape config).
 
 Requires `GRAFANA_ADMIN_PASSWORD` in `.env` — Grafana fails fast without it (`${GRAFANA_ADMIN_PASSWORD:?...}`).
 
@@ -343,7 +343,7 @@ Observability in digithings operates across three layers. Metrics are scraped by
 
 ### Layer 1: Distributed Tracing
 
-**LangSmith (conditional):** digigraph wraps LLM calls with `digismith.trace.traceable`. When `LANGSMITH_API_KEY` is set and the `langsmith` package is installed, traces are sent directly from digigraph to LangSmith (or a custom `LANGSMITH_ENDPOINT`). The `digismith` library is a thin no-op wrapper when LangSmith is not configured — no crash, no implicit data leakage.
+**LangSmith (conditional):** digigraph wraps LLM calls with `digitrace.trace.traceable`. When `LANGSMITH_API_KEY` is set and the `langsmith` package is installed, traces are sent directly from digigraph to LangSmith (or a custom `LANGSMITH_ENDPOINT`). The `digitrace` library is a thin no-op wrapper when LangSmith is not configured — no crash, no implicit data leakage.
 
 Required span attributes: `workflow_id`, `request_id` (mirrors `X-Request-ID`), `session_id`. Optional: `job_id` (digiquant backtest job), `tool` name, `run_name`.
 
@@ -351,7 +351,7 @@ Prohibited in spans: raw prompts, API keys, bearer tokens, file paths outside ap
 
 **OpenTelemetry (optional per service):** Install `digibase[otel]` on any service and set `OTEL_EXPORTER_OTLP_ENDPOINT` to export infra-level traces. This complements LangSmith; it does not replace it. Same PII rules apply on span attributes.
 
-**digismith status endpoint:** `GET /v1/status` (port 8003) returns version flags and sanitized LangSmith host only. It is intentionally public — never add secrets or keys to this payload.
+**digitrace status endpoint:** `GET /v1/status` (port 8003) returns version flags and sanitized LangSmith host only. It is intentionally public — never add secrets or keys to this payload.
 
 ### Layer 2: Audit Logs
 
@@ -365,9 +365,9 @@ Prohibited in spans: raw prompts, API keys, bearer tokens, file paths outside ap
 
 Every service exposes `GET /health` returning `{"status": "ok"}` (used by Docker Compose healthchecks and digiclaw heartbeat). digichat exposes `GET /api/health` which also checks the digigraph upstream and Postgres connection.
 
-digichat's ecosystem side panel displays health badges for digigraph, digiquant, digismith, and digisearch (configurable via `DIGICHAT_ENABLED_SERVICES`).
+digichat's ecosystem side panel displays health badges for digigraph, digiquant, digitrace, and digisearch (configurable via `DIGICHAT_ENABLED_SERVICES`).
 
-**Metrics:** every FastAPI service (digigraph, digiquant, digisearch, digikey, digismith, and digivault) mounts `GET /metrics` via `digibase.metrics.install_metrics` — HTTP request counters/histograms and an in-flight gauge, labelled by `service`, `version`, and `environment`. `/metrics` is auth-exempt (the same trust boundary as `/health`) so Prometheus can scrape it on the internal network. The default `docs/ops/prometheus/prometheus.yml` scrapes the first five, not digivault. Prometheus + Grafana ship under the opt-in `observability` profile (`make up-observability`, requires `GRAFANA_ADMIN_PASSWORD`); OTLP spans ship under the `otel` profile.
+**Metrics:** every FastAPI service (digigraph, digiquant, digisearch, digikey, digitrace, and digivault) mounts `GET /metrics` via `digibase.metrics.install_metrics` — HTTP request counters/histograms and an in-flight gauge, labelled by `service`, `version`, and `environment`. `/metrics` is auth-exempt (the same trust boundary as `/health`) so Prometheus can scrape it on the internal network. The default `docs/ops/prometheus/prometheus.yml` scrapes the first five, not digivault. Prometheus + Grafana ship under the opt-in `observability` profile (`make up-observability`, requires `GRAFANA_ADMIN_PASSWORD`); OTLP spans ship under the `otel` profile.
 
 ### Gap Analysis
 
@@ -472,7 +472,7 @@ make digichat-dev         # cd apps/digichat && npm run dev → http://127.0.0.1
 
 Requires Python 3.12+ virtual environment with all packages installed editable:
 ```bash
-pip install -e ./digibase -e ./digillm -e ./digifetch -e "./digismith[langsmith]" -e ./digikey \
+pip install -e ./digibase -e ./digillm -e ./digifetch -e "./digitrace[langsmith]" -e ./digikey \
             -e "./digigraph[dev]" -e "./digiquant[dev]" \
             -e "./digisearch[dev]"
 ```
@@ -547,7 +547,7 @@ graph TD
         DG[digigraph Deployment\nreplicas: 2+\nPostgres checkpointer\nRedis rate limiter]
         DQ[digiquant Deployment\nreplicas: 1–2\nStateless backtest workers]
         DS[digisearch Deployment\nreplicas: 2+\nAzure AI Search or Qdrant backend]
-        SM[digismith Deployment\nreplicas: 1]
+        SM[digitrace Deployment\nreplicas: 1]
         LM[LiteLLM Deployment\nreplicas: 2+\nRedis cache]
     end
     subgraph ns-auth [Namespace: digi-auth]
@@ -605,7 +605,7 @@ Each service maintains its own detailed architecture document. The root `ARCHITE
 | digigraph | [digigraph/ARCHITECTURE.md](digigraph/ARCHITECTURE.md) |
 | digiquant | [digiquant/ARCHITECTURE.md](digiquant/ARCHITECTURE.md) |
 | digisearch | [digisearch/ARCHITECTURE.md](digisearch/ARCHITECTURE.md) |
-| digismith | [digismith/ARCHITECTURE.md](digismith/ARCHITECTURE.md) |
+| digitrace | [digitrace/ARCHITECTURE.md](digitrace/ARCHITECTURE.md) |
 | digibase | [digibase/ARCHITECTURE.md](digibase/ARCHITECTURE.md) |
 | digiclaw | [digiclaw/ARCHITECTURE.md](digiclaw/ARCHITECTURE.md) |
 | digikey | [digikey/ARCHITECTURE.md](digikey/ARCHITECTURE.md) |

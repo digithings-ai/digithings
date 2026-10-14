@@ -33,6 +33,7 @@ export {
   viewWindowLastYear,
   matchLookbackPreset,
   viewsNear,
+  sliceByView,
   type CandlestickChartProps,
   type TimeSeriesProps,
   type MultiTimeSeriesProps,
@@ -103,3 +104,14 @@ export {
   type LivePerformanceKpisInput,
 } from "./live-performance-kpis";
 export { TEARSHEET_DEMO } from "./demo-data";
+export { StrategyTearsheet } from "./StrategyTearsheet";
+export {
+  buildStrategyTearsheet,
+  seriesOrNull,
+  seriesSparkline,
+  sheetCagr,
+  type StrategySheetBar,
+  type StrategySheetMetric,
+  type StrategySheetModel,
+  type StrategySheetPoint,
+} from "./strategy-sheet-model";

@@ -3,6 +3,7 @@ import Image from "next/image";
 import { Emblem, emblems, StackRow, type StackItem } from "@digithings/ui";
 import { Glyph, glyphNames } from "@/components/symbols/glyph";
 import { DigiquantMark, Wordmark } from "@/components/symbols/marks";
+import { PixelWordmark } from "@/components/symbols/pixel-wordmark";
 import {
   AnimatedLockup,
   HairlineWordmark,
@@ -153,6 +154,12 @@ export default function SymbolsPage() {
           </figure>
         </div>
         <div className="sym-grid sym-grid--wide">
+          <figure className="sym-cell sym-cell--wide">
+            <PixelWordmark />
+            <figcaption className="sym-label">
+              pixel wordmark · the digithings.ai welcome lockup
+            </figcaption>
+          </figure>
           <figure className="sym-cell sym-cell--wide">
             <AnimatedLockup className="block text-[2.6rem]" />
             <figcaption className="sym-label">

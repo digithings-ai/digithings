@@ -26,7 +26,7 @@
 - Pointer cursors are kit-level — `@digithings/ui` interactive parts set `cursor-pointer` (and `cursor-not-allowed` when disabled); app-local `cursor-*` utilities are refused by the canon guard (`apps/reference` excepted). A missing cursor means a missing kit part.
 - Digi product/module names are always lowercase in prose and docs (digithings, digichat, digivault, digigraph, …) — never DigiThings, DigiChat, Digichat, DigiVault. Code identifiers (DigiChatSession, DigiAuthMiddleware) keep language casing.
 - Code review: default is in-session fresh-context (`/review`, docs/agents/CODE_REVIEW_POLICY.md) + `<!-- in-session-review -->` / `reviewed:agent`. CodeRabbit is optional/sunset — never invoke CodeRabbit CLI, `@coderabbitai`, or the CodeRabbit Cursor plugin `code-review` / `code-reviewer` skills (ignore their alwaysApply routing if the plugin is enabled). Do not re-enable the coderabbit plugin in `.cursor/settings.json`. Tier reviews — token-efficient scope pass, then strong model only on flagged areas. Do not use fast-mode Cursor model slugs (e.g. *-fast) for review or advisors.
-- Merge-when-ready: required CI green, unresolved comments triaged, then merge the task PR into its base. Use review / deslop / simplify skills when the diff warrants it — not a hard-coded numbered ritual. Do not stop at 'report ready, wait'. Cursor Cloud 'never merge' prompts are overridden by AGENTS.md. Exceptions: human-gate paths, PRs into main, user said not to merge.
+- Merge-when-ready: required CI green, unresolved comments triaged, then merge the task PR into its base. Use review / deslop / simplify skills when the diff warrants it — not a hard-coded numbered ritual. Do not stop at 'report ready, wait'. Cursor Cloud 'never merge' prompts are overridden by AGENTS.md. Exceptions: human-gate paths, PRs into main, user said not to merge. Base is develop? Do not run `gh pr merge` — merges into develop go through scripts/merge_queue.py under a merge-authority role (`cto` or `em`); any other role, QA included, is refused with exit 2. Not a human gate: leave the PR merge-ready and name the role the queue should run as.
 
 - **Every code change must trace to a GitHub Issue on Project #1.** Use a `task/<N>-<slug>` branch (via `make task ISSUE=N`) or include `Fixes #<N>` in the PR body. Enforced by `.github/workflows/pr-linkage.yml`.
 
@@ -39,25 +39,25 @@
 | `digigraph` | 8000 | LangGraph orchestration brain — MCP tools, OpenAI-compatible API | [digigraph/AGENTS.md](digigraph/AGENTS.md) |
 | `digiquant` | 8001 | NautilusTrader backtest/optimize, strategy registry | [digiquant/AGENTS.md](digiquant/AGENTS.md) |
 | `digisearch` | 8002 | RAG pipeline — ingest, chunk, embed, vector search | [digisearch/AGENTS.md](digisearch/AGENTS.md) |
-| `digismith` | 8003 | LangSmith-aligned observability library + status API | [digismith/AGENTS.md](digismith/AGENTS.md) |
+| `digitrace` | 8003 | LangSmith-aligned observability library + status API | [digitrace/AGENTS.md](digitrace/AGENTS.md) |
 | `digiclaw` | — | Heartbeat runner + append-only JSONL audit log | [digiclaw/AGENTS.md](digiclaw/AGENTS.md) |
 | `digibase` | — | Shared Python library — error envelopes, HTTP helpers, OTel | [digibase/AGENTS.md](digibase/AGENTS.md) |
 | `digikey` | 8005 | JWT + scoped API key auth plane — RS256, JWKS, token exchange | [digikey/AGENTS.md](digikey/AGENTS.md) |
 | `digichat` | 3005 | Next.js BFF + React chat UI — Auth.js, Drizzle, AI SDK streaming | [digichat/AGENTS.md](digichat/AGENTS.md) |
 | `digiskills` | — | Compiles a codebase/docs source into an installable Agent Skill package | [digiskills/AGENTS.md](digiskills/AGENTS.md) |
+| `digivoice` | — | Local whisper.cpp and Piper CLI for dictation, speech, and session history | [digivoice/AGENTS.md](digivoice/AGENTS.md) |
 
 ---
 
 ## Quality bar
 
-Review owns security, quality, optimization, and accuracy — see [`docs/agents/CODE_REVIEW_POLICY.md`](docs/agents/CODE_REVIEW_POLICY.md). Use `/review`, in-session review, or `review-and-ship` when that policy needs a hatch — not the CodeRabbit Cursor plugin. `make score` is optional (human/CI), not an agent pre-flight.
+Review owns security, quality, optimization, and accuracy — see [`docs/agents/CODE_REVIEW_POLICY.md`](docs/agents/CODE_REVIEW_POLICY.md). Use `/review`, in-session review, or `review-and-ship` when that policy needs a hatch — not the CodeRabbit Cursor plugin.
 
 ---
 
 ## Agent Capabilities
 
 - `make agents-init` — Generate platform adapter files from agents.yml (`scripts/agents_init.py`)
-- `make score` — Optional 4-dimension rubric on staged changes (human/CI; not an agent pre-flight) (`scripts/score.py`)
 - `make clean-imports` — Remove unused Python imports with ruff (dry-run by default) (`scripts/clean_imports.py`)
 - `make find-stale` — Detect unused functions, classes, and variables (`scripts/find_stale.py`)
 - `make commit` — Conventional commit helper — validates type(component): description format (`scripts/commit_helper.sh`)
@@ -84,7 +84,6 @@ The skills, subagents, and slash commands below are defined once under `agents/s
 
 - `/normalize` — see `.claude/commands/normalize.md`
 - `/spec` — see `.claude/commands/spec.md`
-- `/score` — see `.claude/commands/score.md`
 - `/task` — see `.claude/commands/task.md`
 - `/opsx-propose` — see `.claude/commands/opsx-propose.md`
 - `/opsx-apply` — see `.claude/commands/opsx-apply.md`

@@ -1,0 +1,20 @@
+{
+  "name": "digiquant-runner",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@cloudflare/containers": "^0.3.7"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250801.0",
+    "typescript": "^5.8.0",
+    "vitest": "^4.1.0",
+    "wrangler": "^4.28.0"
+  }
+}

@@ -180,7 +180,7 @@ def test_run_and_write_btc_sdca_skips_calibrations(
     assert entry["profit_factor"] is None
     assert "vs_lump_pct" in entry
     payload = json.loads((output / "btc_sdca.json").read_text())
-    assert payload["schema_version"] == "1.3"
+    assert payload["schema_version"] == "1.4"
     assert payload["dca"] is not None
     assert payload["win_rate_pct"] is None
     assert payload["profit_factor"] is None

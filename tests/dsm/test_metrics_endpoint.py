@@ -1,9 +1,9 @@
-"""Smoke test: digismith exposes /metrics with service/version/environment labels."""
+"""Smoke test: digitrace exposes /metrics with service/version/environment labels."""
 
 from __future__ import annotations
 
 import pytest
-from digismith.server import app
+from digitrace.server import app
 from fastapi.testclient import TestClient
 
 from tests.conftest import assert_prom_metrics_labels
@@ -16,4 +16,4 @@ def test_metrics_endpoint_live() -> None:
     client.get("/health")
     r = client.get("/metrics")
     assert r.status_code == 200
-    assert_prom_metrics_labels(r.text, service="digismith")
+    assert_prom_metrics_labels(r.text, service="digitrace")

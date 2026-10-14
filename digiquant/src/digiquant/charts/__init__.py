@@ -22,6 +22,7 @@ from digiquant.charts.trades import (
     _build_realized_pnl_chart,
     _build_trade_pnl_distribution_chart,
     _build_win_rate_donut,
+    count_winning_trades,
 )
 
 __all__ = [
@@ -44,4 +45,5 @@ __all__ = [
     "_build_underwater_from_returns",
     "_build_win_rate_donut",
     "_build_yearly_returns_chart",
+    "count_winning_trades",
 ]

@@ -36,6 +36,8 @@ concurrency:
 jobs:
   probe:
     runs-on: ubuntu-latest
+    # DIG-248: CI-read secrets live at `cron` environment scope, not repo/org scope.
+    environment: cron
     timeout-minutes: 10
     env:
       CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL }}

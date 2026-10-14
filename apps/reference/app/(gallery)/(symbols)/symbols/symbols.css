@@ -183,4 +183,60 @@
   display: inline-flex;
   color: var(--ink);
 }
+
+/* Pixel wordmark — the DIGITHINGS lockup from the welcome. */
+
+.pixel-word {
+  display: block;
+  width: 264px;
+  max-width: 100%;
+  height: auto;
+  color: var(--ink);
+  shape-rendering: crispEdges;
+  --glint: var(--accent);
+}
+
+@media (min-width: 380px) {
+  .pixel-word { width: 352px; }
+}
+
+@media (min-width: 640px) {
+  .pixel-word { width: 528px; }
+}
+
+@media (min-width: 768px) {
+  .pixel-word { width: 616px; }
+}
+
+.pixel-word .c { opacity: var(--f); }
+.pixel-word .n { opacity: 0; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .pixel-word .c { animation: pixel-build var(--t) linear var(--d) both; }
+  .pixel-word .g {
+    animation:
+      pixel-build var(--t) linear var(--d) both,
+      pixel-glint var(--gp) step-end var(--g) infinite;
+  }
+  .pixel-word .n { animation: pixel-stray var(--t) linear var(--d) both; }
+}
+
+@keyframes pixel-build {
+  0% { opacity: 0; }
+  0.1%, 33% { opacity: var(--a); }
+  33.1%, 66% { opacity: var(--b); }
+  66.1%, 99.9% { opacity: var(--c); }
+  100% { opacity: var(--f); }
+}
+
+@keyframes pixel-stray {
+  0% { opacity: 0; }
+  0.1%, 99.9% { opacity: 0.25; }
+  100% { opacity: 0; }
+}
+
+@keyframes pixel-glint {
+  0% { fill: var(--glint); opacity: 1; }
+  5%, 100% { fill: currentColor; opacity: var(--f); }
+}
 }

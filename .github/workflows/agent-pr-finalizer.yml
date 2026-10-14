@@ -23,6 +23,10 @@ on:
         options:
           - "true"
           - "false"
+      start_key:
+        description: "Dedupe key from digithings-cron: <job.id>:<scheduledTime>. Blank when dispatched by hand."
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -37,6 +41,8 @@ jobs:
   finalize:
     name: Finalize agent-branch PRs
     runs-on: ubuntu-latest
+    # DIG-248: CI-read secrets live at `cron` environment scope, not repo/org scope.
+    environment: cron
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4

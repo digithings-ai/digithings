@@ -27,9 +27,10 @@ members = [
     "digiquant",
     "digisearch",
     "digiskills",
-    "digismith",
     "digithings-workspace",
+    "digitrace",
     "digivault",
+    "digivoice",
 ]
 
 [[package]]
@@ -1301,7 +1302,7 @@ dependencies = [
     { name = "digibase" },
     { name = "digikey" },
     { name = "digillm" },
-    { name = "digismith" },
+    { name = "digitrace" },
     { name = "fastapi" },
     { name = "httpx" },
     { name = "jsonschema" },
@@ -1351,7 +1352,7 @@ requires-dist = [
     { name = "digibase", extras = ["otel"], marker = "extra == 'otel'", editable = "digibase" },
     { name = "digikey", editable = "digikey" },
     { name = "digillm", editable = "digillm" },
-    { name = "digismith", editable = "digismith" },
+    { name = "digitrace", editable = "digitrace" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "jsonschema", specifier = ">=4.21" },
@@ -1457,12 +1458,12 @@ modes = [
     { name = "pyyaml" },
 ]
 trace = [
-    { name = "digismith" },
+    { name = "digitrace" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "digismith", marker = "extra == 'trace'", editable = "digismith" },
+    { name = "digitrace", marker = "extra == 'trace'", editable = "digitrace" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.2,<2" },
     { name = "openai", specifier = ">=1.0" },
     { name = "pydantic", specifier = ">=2" },
@@ -1603,7 +1604,7 @@ requires-dist = [
     { name = "langgraph", specifier = ">=0.2" },
     { name = "matplotlib", marker = "extra == 'visualization'", specifier = ">=3.8" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.2,<2" },
-    { name = "nautilus-trader", marker = "extra == 'nautilus'", specifier = ">=1.190,<2" },
+    { name = "nautilus-trader", marker = "extra == 'nautilus'", specifier = "==1.230.0" },
     { name = "numpy", marker = "extra == 'indicators'", specifier = ">=1.26" },
     { name = "optuna", specifier = ">=4.7.0" },
     { name = "optuna", marker = "extra == 'optimize'", specifier = ">=3.0" },
@@ -1665,11 +1666,15 @@ all = [
     { name = "digiclaw" },
     { name = "digifetch" },
     { name = "digikey" },
+    { name = "digillm" },
     { name = "fastapi" },
+    { name = "huggingface-hub" },
     { name = "langgraph" },
     { name = "lightrag-hku" },
     { name = "markdownify" },
     { name = "mcp" },
+    { name = "numpy" },
+    { name = "onnxruntime" },
     { name = "openai" },
     { name = "pdfplumber" },
     { name = "psycopg", extra = ["binary"] },
@@ -1677,6 +1682,7 @@ all = [
     { name = "python-json-logger" },
     { name = "readability-lxml" },
     { name = "sentence-transformers" },
+    { name = "tokenizers" },
     { name = "trafilatura" },
     { name = "typer" },
     { name = "uvicorn", extra = ["standard"] },
@@ -1707,7 +1713,14 @@ edgar-corpus = [
     { name = "datasets" },
 ]
 embedding = [
+    { name = "digillm" },
     { name = "openai" },
+]
+embedding-multilingual = [
+    { name = "huggingface-hub" },
+    { name = "numpy" },
+    { name = "onnxruntime" },
+    { name = "tokenizers" },
 ]
 ingestion = [
     { name = "beautifulsoup4" },
@@ -1768,10 +1781,12 @@ requires-dist = [
     { name = "digiclaw", marker = "extra == 'server'", editable = "digiclaw" },
     { name = "digifetch", marker = "extra == 'web-search'", editable = "digifetch" },
     { name = "digikey", marker = "extra == 'server'", editable = "digikey" },
+    { name = "digillm", marker = "extra == 'embedding'", editable = "digillm" },
     { name = "digisearch", extras = ["agent"], marker = "extra == 'all'", editable = "digisearch" },
     { name = "digisearch", extras = ["azure"], marker = "extra == 'all'", editable = "digisearch" },
     { name = "digisearch", extras = ["chroma"], marker = "extra == 'all'", editable = "digisearch" },
     { name = "digisearch", extras = ["embedding"], marker = "extra == 'all'", editable = "digisearch" },
+    { name = "digisearch", extras = ["embedding-multilingual"], marker = "extra == 'all'", editable = "digisearch" },
     { name = "digisearch", extras = ["ingestion"], marker = "extra == 'all'", editable = "digisearch" },
     { name = "digisearch", extras = ["ingestion"], marker = "extra == 'dev'", editable = "digisearch" },
     { name = "digisearch", extras = ["lightrag"], marker = "extra == 'all'", editable = "digisearch" },
@@ -1783,11 +1798,14 @@ requires-dist = [
     { name = "digisearch", extras = ["web-search"], marker = "extra == 'all'", editable = "digisearch" },
     { name = "fastapi", marker = "extra == 'server'", specifier = ">=0.115" },
     { name = "httpx", specifier = ">=0.27" },
+    { name = "huggingface-hub", marker = "extra == 'embedding-multilingual'", specifier = ">=0.20" },
     { name = "langgraph", marker = "extra == 'agent'", specifier = ">=0.2" },
     { name = "langgraph", marker = "extra == 'dev'", specifier = ">=0.2" },
     { name = "lightrag-hku", marker = "extra == 'lightrag'", specifier = ">=1.4" },
     { name = "markdownify", marker = "extra == 'web-search'", specifier = ">=1.0" },
     { name = "mcp", marker = "extra == 'server'", specifier = ">=1.0,<2" },
+    { name = "numpy", marker = "extra == 'embedding-multilingual'", specifier = ">=1.24" },
+    { name = "onnxruntime", marker = "extra == 'embedding-multilingual'", specifier = ">=1.17" },
     { name = "openai", marker = "extra == 'embedding'", specifier = ">=1.0" },
     { name = "pdfplumber", marker = "extra == 'ingestion'", specifier = ">=0.10" },
     { name = "polars", specifier = ">=1.0" },
@@ -1798,11 +1816,12 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6" },
     { name = "readability-lxml", marker = "extra == 'web-search'", specifier = ">=0.8" },
     { name = "sentence-transformers", marker = "extra == 'rerank'", specifier = ">=3.0" },
+    { name = "tokenizers", marker = "extra == 'embedding-multilingual'", specifier = ">=0.21" },
     { name = "trafilatura", marker = "extra == 'web-search'", specifier = ">=2.0" },
     { name = "typer", marker = "extra == 'server'", specifier = ">=0.12" },
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'server'", specifier = ">=0.30" },
 ]
-provides-extras = ["server", "chroma", "embedding", "rerank", "azure", "pgvector", "lightrag", "ingestion", "agent", "edgar-corpus", "web-search", "dev", "otel", "all"]
+provides-extras = ["server", "chroma", "embedding", "embedding-multilingual", "rerank", "azure", "pgvector", "lightrag", "ingestion", "agent", "edgar-corpus", "web-search", "dev", "otel", "all"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -1860,9 +1879,14 @@ dev = [
 ]
 
 [[package]]
-name = "digismith"
+name = "digithings-workspace"
+version = "0.0.0"
+source = { virtual = "." }
+
+[[package]]
+name = "digitrace"
 version = "0.1.0"
-source = { editable = "digismith" }
+source = { editable = "digitrace" }
 dependencies = [
     { name = "digibase" },
     { name = "fastapi" },
@@ -1880,6 +1904,9 @@ langsmith = [
 otel = [
     { name = "digibase", extra = ["otel"] },
 ]
+tracing = [
+    { name = "langsmith" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -1895,10 +1922,11 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27" },
     { name = "langsmith", marker = "extra == 'langsmith'", specifier = ">=0.1" },
+    { name = "langsmith", marker = "extra == 'tracing'", specifier = ">=0.1" },
     { name = "pydantic", specifier = ">=2" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
 ]
-provides-extras = ["langsmith", "otel", "dev"]
+provides-extras = ["tracing", "langsmith", "otel", "dev"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -1906,11 +1934,6 @@ dev = [
     { name = "pytest-cov", specifier = ">=4,<8" },
     { name = "ruff", specifier = ">=0.16,<0.17" },
 ]
-
-[[package]]
-name = "digithings-workspace"
-version = "0.0.0"
-source = { virtual = "." }
 
 [[package]]
 name = "digivault"
@@ -1951,6 +1974,29 @@ requires-dist = [
     { name = "uvicorn", marker = "extra == 'service'", specifier = ">=0.29" },
 ]
 provides-extras = ["service", "supabase"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8,<10" },
+    { name = "ruff", specifier = ">=0.16,<0.17" },
+]
+
+[[package]]
+name = "digivoice"
+version = "0.1.0"
+source = { editable = "digivoice" }
+dependencies = [
+    { name = "pydantic" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "pydantic", specifier = ">=2" }]
 
 [package.metadata.requires-dev]
 dev = [

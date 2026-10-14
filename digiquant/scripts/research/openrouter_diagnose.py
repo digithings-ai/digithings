@@ -63,7 +63,7 @@ PASS, FAIL, SKIP = _green("PASS"), _red("FAIL"), _yellow("SKIP")
 def _ensure_importable() -> None:
     """Add monorepo src paths to sys.path so digillm/digigraph import when run from the repo."""
     repo_root = Path(__file__).resolve().parents[3]
-    for rel in ("digigraph/src", "digillm/src", "digibase/src", "digismith/src"):
+    for rel in ("digigraph/src", "digillm/src", "digibase/src", "digitrace/src"):
         p = str(repo_root / rel)
         if p not in sys.path:
             sys.path.insert(0, p)

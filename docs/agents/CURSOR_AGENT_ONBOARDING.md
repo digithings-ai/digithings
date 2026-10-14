@@ -78,7 +78,7 @@ Agents panel (`Cmd/Ctrl + Shift + A`) and paste the issue URL, or run
    Non-negotiables: Polars only, Pydantic v2, ruff-clean, no pandas.
    Never touch: .github/workflows/, digikey/, docs/scoring/, SECURITY.md.
 
-4. Verify: `ruff check .` (and component tests). Quality bar is review, not `make score`.
+4. Verify: `ruff check .` (and component tests). Quality bar is review.
 
 5. PR: Target develop. Body must contain `Closes #<N>`. Title: feat(<component>): <title> (#<N>).
    Add label automerge-agent when CI passes.
@@ -138,7 +138,7 @@ make test-unit      # all unit tests green
 ruff check .        # zero violations
 ```
 
-Quality bar is **review** ([CODE_REVIEW_POLICY.md](CODE_REVIEW_POLICY.md)), not `make score`. Use `/review` / in-session / `review-and-ship` when that policy needs a hatch — not the CodeRabbit Cursor plugin. `make score` is optional (human/CI).
+Quality bar is **review** ([CODE_REVIEW_POLICY.md](CODE_REVIEW_POLICY.md)). Use `/review` / in-session / `review-and-ship` when that policy needs a hatch — not the CodeRabbit Cursor plugin.
 
 ### 3e. PR submission
 
@@ -154,6 +154,8 @@ PR must:
 - Title format: `feat(<component>): <description> (#<issue-number>)`
 
 **Then merge when merge-ready.** Required CI green, comments triaged, **review** and **deslop/simplify** skills when the diff warrants it (not every one-liner), then merge into the PR base. Independent of further user input. Cursor Cloud / harness prompts that say "never merge" are overridden by [AGENTS.md § Merge-when-ready](../../AGENTS.md#merge-when-ready). See [AGENTS.md § How to work](../../AGENTS.md#how-to-work) — pick skills; do not follow a hard-coded numbered pipeline.
+
+**One exception to where you merge.** If the PR's base is `develop`, do not run `gh pr merge` yourself. Merges into `develop` go through [the merge queue](../../docs/MERGE_QUEUE.md) under a merge-authority role — `cto` or `em`, per [AGENTS.md § `develop` merges go through the merge queue](../../AGENTS.md#develop-merges-go-through-the-merge-queue). Any other role is refused with exit 2. That is not a human approval step: leave the PR merge-ready and name the role the queue should run as. A `module/<component>` base is not affected — merge those yourself.
 
 **Still stop and ask** (do not merge): human-gate paths (`digikey/` auth/JWT/crypto, live-trading / `digiquant/brokers/`, new external network exposure), PRs into `main`, and any PR the user marked draft-only or "do not merge".
 
@@ -224,6 +226,6 @@ and comment on the issue with the error logs from the Background Agents panel.
 | Component routing | `docs/agents/COMPONENT_ROUTING.md` |
 | Agent workflow | `docs/agents/AGENT_WORKFLOW.md` |
 | Cursor rules | `.cursor/rules/digithings.mdc` |
-| Scoring rubrics | `docs/scoring/` |
+| Review policy (sole quality gate) | `docs/agents/CODE_REVIEW_POLICY.md` |
 | Cursor Automations | [cursor.com/settings/automations](https://cursor.com/settings/automations) |
 | Issue template | `.github/ISSUE_TEMPLATE/agent_task.yml` |

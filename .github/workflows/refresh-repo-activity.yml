@@ -24,6 +24,11 @@ name: "Refresh: repo activity snapshot"
 
 on:
   workflow_dispatch:
+    inputs:
+      start_key:
+        description: "Dedupe key from digithings-cron: <job.id>:<scheduledTime>. Blank when dispatched by hand."
+        required: false
+        default: ""
 
 concurrency:
   group: refresh-repo-activity

@@ -60,7 +60,7 @@ issue, `agent-pr-autolabel.yml` adds `automerge-agent`.
 live-trading, workflows, scoring rubrics) and enables squash auto-merge.
 Minimal-gate paths never auto-merge — that is path-based now, not label-based.
 
-**Daily PR finalizer:** `agent-pr-finalizer.yml` runs at 07:00 UTC as backstop for agent PRs.
+**Daily PR finalizer:** `agent-pr-finalizer.yml` runs at 07:11 UTC via digithings-cron as backstop for agent PRs.
 
 ### cursor tier — Cursor Cloud Agent (@cursor dispatch)
 

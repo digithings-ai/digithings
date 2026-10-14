@@ -1,69 +1,92 @@
 /**
- * Client warm-up gate: on embed load, poll /api/embed/warmup until the chat
- * services (which sleep on idle) report ready. Chat requests sent during boot
- * wait on `waitForWarmup()` and go out automatically once ready, so a cold
- * start never surfaces as "assistant not available". Best effort: after the
- * budget elapses the request is released anyway (server retries too).
+ * Client warm-up gate for sleep-on-idle chat services.
+ *
+ * - Page load: `startWarmup()` polls /api/embed/warmup; the boot loader shows
+ *   a "Waking up services…" step and only completes once every service is
+ *   ready (or the budget elapses -> "error" phase, chat still revealed).
+ * - Mid-session: chat requests go through `ensureWarm()`. If the last confirmed
+ *   activity is older than the idle-sleep window, it re-checks warm-up first;
+ *   the pending assistant row reads the phase and says "Waking up services…".
+ *   The message is held (queued) and auto-sent once ready.
  * (Container env, incl. tenant config, is fixed per container boot.)
  */
 import { p } from "@/lib/base-path";
+import {
+  getDigichatWarmupPhase,
+  setDigichatWarmupPhase,
+  type DigichatWarmupPhase,
+} from "@digithings/ui/chat/boot-signal";
 
-export type WarmupPhase = "idle" | "waking" | "almost" | "ready";
+export type WarmupPhase = DigichatWarmupPhase;
 
-let phase: WarmupPhase = "idle";
-let started = false;
-const listeners = new Set<(ph: WarmupPhase) => void>();
-let resolveReady: () => void = () => {};
-const readyPromise = new Promise<void>((r) => (resolveReady = r));
+/** Services sleep after ~3 min idle; re-check a bit before that. */
+const IDLE_RECHECK_MS = 150_000;
+const BUDGET_MS = 120_000;
 
-function set(ph: WarmupPhase) {
-  phase = ph;
-  for (const l of listeners) l(ph);
-  if (ph === "ready") resolveReady();
+let lastWarmAt = 0;
+let inflight: Promise<boolean> | null = null;
+
+async function probe(): Promise<boolean> {
+  try {
+    const r = await fetch(p("/api/embed/warmup"), { cache: "no-store" });
+    const j = (await r.json()) as { ready?: boolean };
+    return j.ready === true;
+  } catch {
+    return false;
+  }
+}
+
+/** Poll until ready (true) or budget elapses (false). Shares one in-flight run. */
+function runWarmup(showWakingAfterMs: number): Promise<boolean> {
+  if (inflight) return inflight;
+  inflight = (async () => {
+    const t0 = Date.now();
+    const show = setTimeout(() => setDigichatWarmupPhase("waking"), showWakingAfterMs);
+    try {
+      while (Date.now() - t0 < BUDGET_MS) {
+        if (await probe()) {
+          lastWarmAt = Date.now();
+          setDigichatWarmupPhase("ready");
+          return true;
+        }
+        setDigichatWarmupPhase("waking");
+        await new Promise((res) => setTimeout(res, 3_000));
+      }
+      setDigichatWarmupPhase("error");
+      return false;
+    } finally {
+      clearTimeout(show);
+      inflight = null;
+    }
+  })();
+  return inflight;
 }
 
 export function getWarmupPhase(): WarmupPhase {
-  return phase;
+  return getDigichatWarmupPhase();
 }
 
-export function subscribeWarmup(l: (ph: WarmupPhase) => void): () => void {
-  listeners.add(l);
-  return () => listeners.delete(l);
+/** Page load: wake every service the tenant needs. */
+export function startWarmup(): Promise<boolean> {
+  if (typeof window === "undefined") return Promise.resolve(true);
+  return runWarmup(600);
 }
 
-export function startWarmup(budgetMs = 150_000): void {
-  if (started || typeof window === "undefined") return;
-  started = true;
-  const t0 = Date.now();
-  // Only show the status line if boot is actually slow (warm stacks answer fast).
-  const showTimer = setTimeout(() => phase !== "ready" && set("waking"), 1_500);
-  (async () => {
-    while (Date.now() - t0 < budgetMs) {
-      try {
-        const r = await fetch(p("/api/embed/warmup"), { cache: "no-store" });
-        const j = (await r.json()) as { ready?: boolean; services?: Record<string, string> };
-        if (j.ready) break;
-        const s = Object.values(j.services ?? {});
-        if (s.length && s.filter((v) => v === "ready").length >= Math.ceil(s.length / 2) && phase === "waking")
-          set("almost");
-      } catch {
-        /* still waking */
-      }
-      if (Date.now() - t0 > 35_000 && phase === "waking") set("almost");
-      await new Promise((res) => setTimeout(res, 4_000));
-    }
-    clearTimeout(showTimer);
-    set("ready");
-  })();
+/** Before a chat request: re-check if services may have gone to sleep. */
+export async function ensureWarm(): Promise<void> {
+  if (typeof window === "undefined") return;
+  if (inflight) {
+    await inflight;
+  } else if (Date.now() - lastWarmAt > IDLE_RECHECK_MS) {
+    await runWarmup(400);
+  }
+  // Even on timeout, release the request (the server retries digikey too).
 }
 
-export function waitForWarmup(): Promise<void> {
-  if (!started || phase === "ready") return Promise.resolve();
-  return readyPromise;
+/** Call when a chat response completes so idle is measured from activity. */
+export function markWarmActivity(): void {
+  lastWarmAt = Date.now();
 }
 
-export function warmupStatusText(ph: WarmupPhase): string | null {
-  if (ph === "waking") return "Waking up chat services…";
-  if (ph === "almost") return "Almost ready…";
-  return null;
-}
+/** @deprecated kept for older call sites */
+export const waitForWarmup = ensureWarm;

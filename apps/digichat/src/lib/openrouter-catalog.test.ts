@@ -1,5 +1,34 @@
 import { describe, expect, it } from "vitest";
-import { bucketOpenRouterModels, OPENROUTER_CATALOG_ENTRY_CAP } from "./openrouter-catalog";
+import {
+  bucketOpenRouterModels,
+  isOpenSource,
+  OPENROUTER_CATALOG_ENTRY_CAP,
+} from "./openrouter-catalog";
+
+describe("isOpenSource", () => {
+  it("treats an entry as open source when the catalog says open weights", () => {
+    // No hugging_face_id, no known publisher prefix — only the catalog's flag.
+    expect(isOpenSource({ id: "vendor/new-open-weights-7b" }, true)).toBe(true);
+  });
+
+  it("still treats a known publisher prefix as open source", () => {
+    // The prefix list survives: live OpenRouterCatalogEntry rows carry no
+    // open_weights field, and only 174 of openrouter's 390 catalog rows are
+    // flagged, so dropping the list would shrink the opensource bucket.
+    expect(isOpenSource({ id: "meta-llama/llama-3.3-70b-instruct" }, false)).toBe(true);
+  });
+
+  it("treats an unflagged, unprefixed, unfixtured entry as not open source", () => {
+    expect(isOpenSource({ id: "vendor/closed-weights-7b" })).toBe(false);
+    expect(isOpenSource({ id: "vendor/closed-weights-7b" }, false)).toBe(false);
+  });
+
+  it("still honours hugging_face_id when the catalog flag is absent", () => {
+    expect(
+      isOpenSource({ id: "vendor/model", hugging_face_id: "vendor/Model-7B" }),
+    ).toBe(true);
+  });
+});
 
 describe("bucketOpenRouterModels", () => {
   it("buckets a $0/$0 model as free", () => {

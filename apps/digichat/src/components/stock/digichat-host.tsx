@@ -9,6 +9,7 @@
  * mode (baseline) arrives in a later step.
  */
 
+import { useDigichatWarmupPhase } from "@digithings/ui/chat/use-warmup-phase";
 import type {
   ComponentProps,
   CSSProperties,
@@ -37,7 +38,6 @@ import {
   BootLabOverlay,
   type BootLabVariant,
 } from "@digithings/ui/chat/boot-lab";
-import { WarmupStatus } from "@/components/stock/warmup-status";
 import { DigichatBootLoader } from "@digithings/ui/chat/boot-loader";
 import type { DigichatHandoff } from "@digithings/ui/chat/boot-signal";
 import type {
@@ -187,6 +187,7 @@ export function DigiChatHost({
   className,
   composerLayout,
 }: DigiChatHostProps) {
+  const wakePhase = useDigichatWarmupPhase();
   return (
     <AssistantRuntimeProvider runtime={runtime} config={auiConfig}>
       <RuntimeAdapterProvider
@@ -244,6 +245,13 @@ export function DigiChatHost({
                   ) : (
                     <DigichatBootLoader
                       ready={bootReady}
+                      statusText={
+                        wakePhase === "waking"
+                          ? "Waking up services…"
+                          : wakePhase === "error"
+                            ? "Services are slow to respond. Your message will send once they are ready."
+                            : null
+                      }
                       onSettled={onBootSettled}
                       welcome={headline}
                       welcomeBody={(skinChrome.welcomeBody ?? []).join(" ")}
@@ -260,7 +268,6 @@ export function DigiChatHost({
                 className="relative flex min-h-0 min-w-0 flex-1 flex-col"
 
               >
-                <WarmupStatus />
                 {ownsPage || clientConfig.chrome.skin === "digichat" ? null : headerSlot}
                 {!ownsPage && sessionKey && clientConfig.chrome.mode === "app" ? (
                   <ToolCatalogBar

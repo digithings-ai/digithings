@@ -111,12 +111,18 @@ npx wrangler secret put GROQ_API_KEY
 npx wrangler deploy
 ```
 
-Manual deploys also run through
-[`deploy-digithings-stack-cloudflare.yml`](../../.github/workflows/deploy-digithings-stack-cloudflare.yml)
-(`workflow_dispatch` only, behind the `production` environment gate — stays
-human-approved; PRs touching the stack run the `check` job only). The digiquant-mcp
-container reads its market-data secrets from the Worker environment — set each value via
-stdin (`$VALUE`-only, never commit values):
+> **There is no CI deploy lane for this Worker** (DIG-2843). The
+> `deploy-digithings-stack-cloudflare.yml` that used to sit here — `workflow_dispatch` only,
+> behind the `production` environment gate — was deleted on 2026-10-01 by `f54af7052`
+> (#4919, Human Gate), so the `npx wrangler deploy` above is the whole deploy path. It is
+> recoverable at `git show 'f54af7052^:.github/workflows/deploy-digithings-stack-cloudflare.yml'`;
+> restoring it is a decision recorded on DIG-2843. The build half is still gated:
+> `build-cloudflare-workers.yml` runs `wrangler deploy --dry-run` for this app on every PR,
+> and the stack's `tsc --noEmit` + `vitest run` now run in `test-web.yml`. See
+> [docs/DEPLOYMENT.md § Cloudflare Workers and Containers](../../docs/DEPLOYMENT.md#cloudflare-workers-and-containers).
+
+The digiquant-mcp container reads its market-data secrets from the Worker environment — set
+each value via stdin (`$VALUE`-only, never commit values):
 
 ```bash
 printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_ACCOUNT_ID
@@ -231,7 +237,7 @@ Do **not** treat `/chat` UI E2E as done here — leave for a smoke agent.
 
 **Recommendation:** for website digichat (Profile A), run **one** stack container
 instead of N monorepo services. Keep digichat (+ Postgres) separate — Node vs
-Python, different secrets and scale. Do **not** put digiquant / digismith HTTP /
+Python, different secrets and scale. Do **not** put digiquant / digitrace HTTP /
 Ollama in this path unless you need them.
 
 ### Chat-only service set
@@ -262,7 +268,7 @@ limiter URL is satisfied by aliasing the name `valkey` to the in-container
 `[program:redis]` (both `127.0.0.1:6379`). No new external dependency or
 secret — everything ships in this image.
 
-**Omitted on purpose:** digiquant, digismith HTTP, Ollama, heartbeat.
+**Omitted on purpose:** digiquant, digitrace HTTP, Ollama, heartbeat.
 
 digigraph chat-only env (entrypoint / bundle compose; `DIGIQUANT_URL` is a `wrangler.toml` var):
 
@@ -288,7 +294,7 @@ Published host ports clash (`8000` / `8005` / `3005` / `5433`):
 docker compose --profile digichat --profile digivault --profile litellm-cache down
 # or surgically:
 docker stop digi-digigraph digi-digikey digi-digisearch digi-digivault \
-  digi-litellm digi-digismith digi-digiquant digi-ollama \
+  digi-litellm digi-digitrace digi-digiquant digi-ollama \
   digi-litellm-redis digi-digikey-blocklist-redis digi-digichat digi-digichat-db
 ```
 

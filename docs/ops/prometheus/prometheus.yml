@@ -33,12 +33,12 @@ scrape_configs:
         labels:
           service: digisearch
 
-  - job_name: digismith
+  - job_name: digitrace
     metrics_path: /metrics
     static_configs:
-      - targets: ["digismith:8003"]
+      - targets: ["digitrace:8003"]
         labels:
-          service: digismith
+          service: digitrace
 
   - job_name: digikey
     metrics_path: /metrics

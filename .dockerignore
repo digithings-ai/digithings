@@ -1,13 +1,18 @@
 # Root build context is shared by every service compose builds with `context: .`
-# (digikey, digigraph, digiquant, digismith, digiclaw, digichat). Their
+# (digikey, digigraph, digiquant, digitrace, digiclaw, digichat). Their
 # Dockerfiles COPY the service source dirs, so exclude only what no image needs.
 .git
 .github
+# digiquant-runner house-run reads only these two files. The rest of .github stays out.
+!.github/digiquant-pipeline.yml
+!.github/workflows/pipeline-digiquant-allocation-shadow.yml
 .worktrees
 .claude
 .playwright-mcp
 node_modules
 **/node_modules
+# Host virtualenvs are not the image. uv sync builds /app/.venv.
+**/.venv
 **/.next
 **/out
 dist
@@ -20,18 +25,25 @@ scripts
 # Dockerfile.digithings-stack-cloudflare (Cloudflare Containers, root context)
 # needs this one file; re-include it without un-ignoring the rest of scripts/.
 !scripts/merge_litellm_cheaperinference.py
+# digiquant-runner (Dockerfile.digiquant-runner) runs this refresh entrypoint.
+!scripts/refresh_market_data_r2.py
+# refresh dynamically loads this sibling for R2StoreAdapter / parquet helpers.
+!scripts/backfill_market_data_r2.py
+# execution-cron-check probe wrapper (Phase 2, #4761).
+!scripts/execution_cron_check.py
+# checkpoint-archive (Phase 4, #4761).
+!scripts/digiquant_archive_checkpoints.py
+!scripts/digiquant_checkpoint_size_gate.py
 # Zammad MCP server (scripts/zammad_mcp/Dockerfile.mcp) also builds from the
 # root context; re-include just that package.
 !scripts/zammad_mcp
-# OCC ticket-search seeding (#4987): seed_chroma.sh runs
-# `python3 -m scripts.build_occ_tickets_seed --ingest /seed/occ_tickets.jsonl`,
-# which imports scripts.index_occ_tickets. Both COPY lines were added to the
-# stack Dockerfile without these re-includes, so the image build failed with
-# "failed to calculate checksum ... /scripts/build_occ_tickets_seed.py: not
-# found" (#4988). tests/scripts/test_stack_dockerignore_context.py pins every
-# `COPY scripts/<file>` in the stack Dockerfile against this list.
+# scripts/index_occ_tickets.py is NOT copied into the stack image (DIG-1438
+# dropped [program:seed_occ_tickets], its only caller). The re-include stays
+# because DIG-1210 still has to change what this script writes.
+# (tests/scripts/test_stack_dockerignore_context.py pins this re-include, but it
+# is on `main` only — it does not exist on develop, so do not cite it as the
+# gate here.)
 !scripts/index_occ_tickets.py
-!scripts/build_occ_tickets_seed.py
 agents
 apps/digithings-web
 apps/digiquant-web

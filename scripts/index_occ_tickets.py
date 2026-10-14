@@ -24,8 +24,6 @@ from __future__ import annotations
 
 import argparse
 import os
-from collections.abc import Iterator
-from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Any
 
@@ -196,27 +194,6 @@ def backfill(
     }
     if dry_run or not chunks:
         return summary
-    with multilingual_index(index_name, chunks) as raw_provider:
-        summary["truncated_texts"] = raw_provider.truncated_texts
-    return summary
-
-
-@contextmanager
-def multilingual_index(index_name: str, chunks: list[Any]) -> Iterator[Any]:
-    """Embed ``chunks`` into ``index_name`` with the multilingual provider.
-
-    Yields the raw embedder (for its ``truncated_texts`` counter); on exit the
-    collection stamp is verified against the vectors that were written.
-
-    The backend re-resolves its provider from env when stamping the
-    collection: an unset var is pinned to the model id here, but a
-    conflicting pre-set (e.g. minilm) aborts loud instead of stamping the
-    wrong model id over multilingual vectors (same 384 dims, silently
-    wrong retrieval). Scoped + restored: no process-global side effects.
-
-    Shared with :mod:`scripts.build_occ_tickets_seed` so the committed
-    snapshot and a live backfill can never disagree about the model.
-    """
     from digisearch.embedding.factory import (
         resolve_backend_embedding_provider,
         unwrap_embedding_provider,
@@ -231,6 +208,11 @@ def multilingual_index(index_name: str, chunks: list[Any]) -> Iterator[Any]:
 
     raw_provider = get_default_multilingual_embedder()
     provider = wrap_embedding_pipeline(raw_provider, batch_size=64, use_cache=False)
+    # The backend re-resolves its provider from env when stamping the
+    # collection: an unset var is pinned to the model id here, but a
+    # conflicting pre-set (e.g. minilm) aborts loud instead of stamping the
+    # wrong model id over multilingual vectors (same 384 dims, silently
+    # wrong retrieval). Scoped + restored: no process-global side effects.
     preset_provider = os.environ.get("DIGISEARCH_EMBEDDING_PROVIDER")
     if preset_provider is None:
         os.environ["DIGISEARCH_EMBEDDING_PROVIDER"] = MULTILINGUAL_MODEL_ID
@@ -247,14 +229,15 @@ def multilingual_index(index_name: str, chunks: list[Any]) -> Iterator[Any]:
             )
     try:
         index_chunks(index_name, chunks, embedding_provider=provider)
-        yield raw_provider
     finally:
         if preset_provider is None:
             os.environ.pop("DIGISEARCH_EMBEDDING_PROVIDER", None)
         else:
             os.environ["DIGISEARCH_EMBEDDING_PROVIDER"] = preset_provider
+    summary["truncated_texts"] = raw_provider.truncated_texts
     # Chroma-side verification: confirm the collection stamp matches the vectors.
     _verify_collection_model(index_name)
+    return summary
 
 
 def _verify_collection_model(index_name: str) -> None:
@@ -283,10 +266,6 @@ def _verify_collection_model(index_name: str) -> None:
     chroma_path = os.environ.get("CHROMA_PATH", "").strip() or None
     chroma_host = os.environ.get("CHROMA_HOST", "").strip() or None
     if not chroma_path and not chroma_host:
-        print(
-            f"note: no CHROMA_PATH/CHROMA_HOST set; skipped model-stamp check for {index_name!r} "
-            "(nothing on disk to disagree with)"
-        )
         return
     from digisearch.indexes.backends.chroma import (
         ChromaBackend,

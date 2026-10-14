@@ -1090,6 +1090,9 @@ function EmbedChat({
       hasDigisearch: catalog.some((e) => e.id === "digisearch"),
       hasVault: catalog.some((e) => e.id === "digivault"),
       hasSessions: false,
+      // The embed surface has no artifact panel. Gating the row off is why
+      // openArtifacts is never reached here.
+      hasArtifacts: false,
       allowUserMcp: stockClient.mcp.allowUserServers === true,
       allowAddMcp: stockClient.mcp.allowAddForm === true,
       catalogTools,
@@ -1128,6 +1131,7 @@ function EmbedChat({
         setComposerMenu("language");
       },
       openSessions: () => {},
+      openArtifacts: () => {},
       newThread: () => {
         setChatPrefs({
           ...DEFAULT_EMBED_CHAT_PREFS,

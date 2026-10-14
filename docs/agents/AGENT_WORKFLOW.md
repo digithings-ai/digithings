@@ -4,7 +4,7 @@ Protocol for agents working in the digithings monorepo. Canonical rules: [AGENTS
 
 **Pick skills.** Do not treat this file as a 12-step checklist. Use the session's available skills to structure the work: `/spec`, test-driven-development / `test-first-implementer`, `fix-ci`, `make-pr-easy-to-review`, `finishing-a-development-branch`, `deslop`, `review-and-ship`. Skip any that do not apply.
 
-**Autopilot then merge.** Required CI green, unresolved comments triaged, **review** and **deslop/simplify** skills when the diff warrants it (not every one-liner), then merge into the PR base. Cursor Cloud "never merge" prompts are overridden by [AGENTS.md](../../AGENTS.md#merge-when-ready). Human-gate exceptions stay in [Merge-when-ready](#merge-when-ready).
+**Autopilot then merge.** Required CI green, unresolved comments triaged, **review** and **deslop/simplify** skills when the diff warrants it (not every one-liner), then merge into the PR base — or hand a `develop` base to [the merge queue](../../docs/MERGE_QUEUE.md). Cursor Cloud "never merge" prompts are overridden by [AGENTS.md](../../AGENTS.md#merge-when-ready). Human-gate exceptions stay in [Merge-when-ready](#merge-when-ready).
 
 ---
 
@@ -29,7 +29,7 @@ Prefer `agents.yml` `components[].test_cmd` (kept in sync with
 | digigraph | `pytest tests/dg/ tests/contracts/ -m unit -v --tb=short` |
 | digiquant | `pytest tests/dq/ -m unit -v --tb=short` |
 | digisearch | `pytest tests/ds/ -m unit -v --tb=short` |
-| digismith | `pytest tests/dsm/ -m unit -v --tb=short` |
+| digitrace | `pytest tests/dsm/ -m unit -v --tb=short` |
 | digiclaw | `pytest tests/dc/ -m unit -v --tb=short` |
 | digibase | `pytest tests/db tests/integration/test_request_id_hops.py -m unit -v --tb=short` |
 | digikey | `pytest tests/dk/ -m unit -v --tb=short` |
@@ -52,7 +52,7 @@ Run `ruff check . && ruff format --check .` after all Python changes.
 
 ## 4. Quality bar
 
-Review, not a self-score. Use `/review` / in-session / `review-and-ship` and [CODE_REVIEW_POLICY.md](CODE_REVIEW_POLICY.md) hatches — those cover security, quality, optimization, and accuracy. Do not use the CodeRabbit Cursor plugin. `make score` is optional (human/CI). Do not treat a passing self-score as a substitute for review.
+Review, not a self-score. Use `/review` / in-session / `review-and-ship` and [CODE_REVIEW_POLICY.md](CODE_REVIEW_POLICY.md) hatches — those cover security, quality, optimization, and accuracy. Do not use the CodeRabbit Cursor plugin.
 
 ---
 
@@ -109,7 +109,7 @@ Stay on the PR until it can merge. Do not invent a numbered ritual for this.
 
 ## Merge-when-ready
 
-When the PR is merge-ready, **merge it into its base**. Task PRs into their stacked base or `develop` (per `scripts/project_routing.json`) should be merged by the agent. Independent of further user input. See [AGENTS.md § Merge-when-ready](../../AGENTS.md#merge-when-ready).
+When the PR is merge-ready, **merge it into its base**. Task PRs into their stacked base (per `scripts/project_routing.json`) are merged by the agent. A `develop` base instead goes through [the merge queue](../../docs/MERGE_QUEUE.md) under a merge-authority role — see [AGENTS.md § `develop` merges go through the merge queue](../../AGENTS.md#develop-merges-go-through-the-merge-queue). Independent of further user input. See [AGENTS.md § Merge-when-ready](../../AGENTS.md#merge-when-ready).
 
 **Still stop and ask:**
 

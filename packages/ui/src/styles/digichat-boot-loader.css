@@ -124,7 +124,7 @@
 }
 
 .dboot-composer[data-solid="true"] {
-  background: var(--bg);
+  background: transparent;
   border-color: color-mix(in srgb, var(--ink) 12%, transparent);
 }
 
@@ -426,3 +426,16 @@
 .dboot-lab-tools [data-visible="false"] {
   visibility: hidden;
 }
+
+/* Boot step line ("Waking up services…") under the loader dock. */
+.dboot-status {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 7.5rem);
+  text-align: center;
+  font-size: 0.75rem;
+  opacity: 0.7;
+  pointer-events: none;
+}
+.dboot-status[data-error] { opacity: 0.9; }

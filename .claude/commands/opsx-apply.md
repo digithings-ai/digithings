@@ -18,6 +18,6 @@ Steps:
 6. After all tasks are done:
    - Run `make test-unit` and confirm it passes
    - Run `ruff check . && ruff format .`
-   - Ship with review skills when [CODE_REVIEW_POLICY.md](docs/agents/CODE_REVIEW_POLICY.md) needs a hatch — not `make score`
+   - Ship with review skills when [CODE_REVIEW_POLICY.md](docs/agents/CODE_REVIEW_POLICY.md) needs a hatch
 7. Print a summary of what was implemented and what files changed.
 8. Suggest: "Run `/opsx-archive` once the PR is merged."
