@@ -880,3 +880,90 @@ describe("heartbeat re-armed after a Durable Object reset (DIG-3061)", () => {
     expect(seen).toEqual(["getAlarm"]);
   });
 });
+
+describe("GET /v1/jobs/house-status landing check (DIG-3456)", () => {
+  const get = (session: RunnerSession, runDate: string) =>
+    session.fetch(new Request(`https://digiquant-runner/v1/jobs/house-status?run_date=${runDate}`));
+
+  it("reports landed when the skip-gate marker exists", async () => {
+    const archive = memoryArchive({
+      "pipeline-runs/house-run/2026-10-12/success.json": '{"run_id":"old"}',
+    });
+    const { session } = harness({ archive });
+    const res = await get(session, "2026-10-12");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      run_date: "2026-10-12",
+      landed: true,
+      open_house_runs: [],
+      verifiable: true,
+    });
+  });
+
+  it("reports not landed with no open run when nothing started", async () => {
+    const { session } = harness({ archive: memoryArchive() });
+    const res = await get(session, "2026-10-12");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      run_date: "2026-10-12",
+      landed: false,
+      open_house_runs: [],
+      verifiable: true,
+    });
+  });
+
+  it("lists the open house run instead of reporting never-dispatched", async () => {
+    const { session } = harness({ archive: memoryArchive() });
+    const accepted = await session.accept(
+      job({
+        command: "house-run",
+        job_id: "house-run-09",
+        concurrency: "digiquant-pipeline",
+        timeout_seconds: 14400,
+        idempotency_key: "house-run-09:open",
+        args: { refresh_scope: "none", run_date: "2026-10-12" },
+      }),
+    );
+    const res = await get(session, "2026-10-12");
+    expect(await res.json()).toEqual({
+      run_date: "2026-10-12",
+      landed: false,
+      open_house_runs: [accepted.run_id],
+      verifiable: true,
+    });
+  });
+
+  it("answers unverifiable, never landed, when the archive binding is absent", async () => {
+    const { session } = harness();
+    const res = await get(session, "2026-10-12");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      run_date: "2026-10-12",
+      landed: false,
+      open_house_runs: [],
+      verifiable: false,
+    });
+  });
+
+  it("refuses a run_date it cannot parse, so a typo never reads as missing", async () => {
+    const { session } = harness({ archive: memoryArchive() });
+    for (const bad of ["today", "2026-10-12T09:17:00Z", ""]) {
+      const res = await session.fetch(
+        new Request(`https://digiquant-runner/v1/jobs/house-status?run_date=${encodeURIComponent(bad)}`),
+      );
+      expect(res.status, bad).toBe(400);
+      expect(await res.json()).toEqual({ error: "invalid_run_date" });
+    }
+  });
+
+  it("is not shadowed by the run-id branch: the exact path wins", async () => {
+    const { session } = harness({ archive: memoryArchive() });
+    const res = await get(session, "2026-10-12");
+    // A run-id lookup for an unknown id answers 404 not_found; the exact
+    // house-status path must answer 200 with the landing shape instead.
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.run_date).toBe("2026-10-12");
+    expect("error" in body).toBe(false);
+  });
+});
