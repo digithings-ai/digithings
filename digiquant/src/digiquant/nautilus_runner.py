@@ -801,14 +801,15 @@ def _run_backtest_ohlcv(
     total_pnl, total_return_pct = _extract_pnl(account_report, errors=pnl_errors)
     perf = _extract_perf_stats(engine, USD, account_report)
 
-    # num_trades is the sample size (N) printed beside the strategy's statistics,
-    # so it counts closed round trips: each closed position contributes exactly
-    # one realized PnL. A position still open at the end of the run never
-    # realizes, so it does not count. realized_pnls_series is None (not empty)
-    # when nothing closed, which is what makes num_trades 0 rather than an
-    # invented figure (DIG-1808).
+    # num_trades is the sample size (N) printed beside the strategy's statistics.
+    # It counts closed positions, the same population as honest_rate.n.
+    # nautilus 1.230 returns one row per realization part, so len(raw) counts
+    # a position closed in two parts as two. normalize_series collapses those
+    # parts to one position. An open position never realizes, so it does not
+    # count. A missing or empty series publishes 0 (DIG-1808).
     realized = perf.get("realized_pnls_series")
-    num_trades = len(realized) if realized is not None else 0
+    normalized = normalize_series(realized)
+    num_trades = len(normalized[1]) if normalized else 0
 
     engine.dispose()
 

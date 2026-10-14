@@ -1212,3 +1212,31 @@ class TestNumTradesCountsClosedRoundTrips:
             block.n == len(by_symbol[sym])
             for sym, block in result.honest_rate_by_symbol.items()
         )
+
+    def test_a_position_closed_in_parts_counts_once(self) -> None:
+        # nautilus 1.230 returns list[(position_id, ts_event, pnl)]. Two parts
+        # of one position are one closed round trip. len(raw) is 3; N is 2.
+        rows = [
+            ("P-1", 1_700_000_000_000_000_000, 10.0),
+            ("P-1", 1_700_086_400_000_000_000, -4.0),
+            ("P-2", 1_700_172_800_000_000_000, 5.0),
+        ]
+
+        class _RowAnalyzer(_RealizedAnalyzer):
+            def realized_pnls(self, usd):
+                return rows
+
+        engine = _RoundTripEngine(
+            _RowAnalyzer(),
+            _account_report(_HEALTHY_ACCOUNT),
+            fill_rows=4,
+        )
+        with _patched_single_run(engine):
+            result = run_nautilus_backtest(
+                strategy_name="s", symbols=["BTC"], data_path="BTC.csv"
+            )
+        assert result is not None
+        assert len(rows) == 3
+        assert result.num_trades == 2
+        assert result.honest_rate is not None
+        assert result.num_trades == result.honest_rate.n
