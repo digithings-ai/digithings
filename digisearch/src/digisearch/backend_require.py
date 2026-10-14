@@ -12,11 +12,30 @@ from __future__ import annotations
 import logging
 import os
 
-from digisearch.search._stub import _first_env
-
 logger = logging.getLogger(__name__)
 
 _LEGACY_WARNED: set[str] = set()
+
+
+def _first_env(*names: str) -> str:
+    """Return the first non-empty, stripped env var among ``names``.
+
+    Canonical-first, legacy-fallback precedence (#2239 credential rename):
+    every credential read tries ``CLOUDFLARE_ACCOUNT_ID`` /
+    ``CLOUDFLARE_API_TOKEN`` first, then the legacy ``VECTORIZE_*`` / ``D1_*``
+    names. Single home for this helper (S18 review): ``search._stub`` and
+    ``embedding.factory`` import it from here instead of redefining it.
+    """
+    for name in names:
+        value = os.environ.get(name, "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _env_truthy(name: str, default: str = "0") -> bool:
+    """True when env *name* (or *default* when unset) reads as truthy."""
+    return os.environ.get(name, default).strip().lower() in ("1", "true", "yes", "on")
 
 
 def _warn_legacy_env(canonical: str, *legacy: str) -> None:
