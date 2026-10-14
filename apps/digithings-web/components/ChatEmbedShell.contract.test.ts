@@ -91,11 +91,14 @@ describe("ChatEmbedShell contracts", () => {
     const src = readFileSync(path, "utf8");
     expect(src).toContain("BootLabOverlay");
     expect(src).toContain('variant="tooltask"');
-    expect(src).toContain("readyEdge={embedReady}");
+    expect(src).toContain("readyEdge={revealed}");
+    // The chat is revealed only once digichat is ready AND every service is awake.
+    expect(src).toContain("const revealed = (embedReady && servicesReady) || forceReveal");
+    expect(src).toContain(`signalDigichatBootStep("services")`);
     expect(src).toContain("WARMUP_DELAY_MS");
     expect(src).toContain("dc-chat-frame");
     expect(src).toContain("digichat:ready");
-    expect(src).toContain("opacity: embedReady ? 1 : 0");
+    expect(src).toContain("opacity: revealed ? 1 : 0");
     // Curated per-host copy rides into the iframe URL. The strings themselves
     // live in lib/embedCopy.ts now, so the landing page's FAQ band can mount the
     // same conversation with the same welcome — assert both halves: the URL
