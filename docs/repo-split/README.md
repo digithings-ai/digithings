@@ -28,4 +28,4 @@ the tracking issue (DIG-3518), not in this public repo: they map where non-publi
 
 ## Status
 
-Proposed. Nothing is moved until Chris answers the gate decisions in [decisions.md](decisions.md).
+Gate decisions answered 2026-10-14 (Free plan, mono public until cutover, fresh R0, tags, self-hosted runners); plan revised to match. Open: D-G5 (deploy runner host) and D-G6 (signed-tag deploy gate) in [decisions.md](decisions.md). Nothing has moved yet.

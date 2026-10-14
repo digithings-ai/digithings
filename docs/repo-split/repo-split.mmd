@@ -3,17 +3,17 @@ flowchart TB
   subgraph PUB["PUBLIC"]
     R0["<b>R0 digithings</b> (new public repo, scrubbed history)<br/>PyPI: digibase digikey digifetch digigraph digillm<br/>digisearch digivault digitrace digiclaw digivoice digiskills digiquant<br/>digiquant core + digiquant.plugin API + engine schema<br/>npm @digithings/: design, ui, digichat-ui, hero-banner, surface-config, catalog<br/>apps/digichat engine + GHCR images, MCP tooling, clients/*, docs, openwiki<br/>releases: tags + release-please on main"]
   end
-  subgraph PRIV["PRIVATE (GitHub Team: protected release/*, env secrets)"]
+  subgraph PRIV["PRIVATE (GitHub Free · self-hosted runners · deploys only from tags signed by Chris)"]
     R1["<b>R1 digiquant-strategies</b><br/>proprietary strategies, optimiser, SDCA MCP/CLI<br/>plugin via entry points · git-tag releases"]
     R2["<b>R2 digiquant-stack</b><br/>digiquant-runner, dashboard-api (own Worker + zone route)<br/>prod Supabase migrations, prod config, pipeline workflows<br/>publishes @digiquant/contract"]
-    R3["<b>R3 digiquant-web</b><br/>Brief desk /app + digiquant.io<br/>Pages direct upload from release/web"]
-    R4["<b>R4 digithings-web</b><br/>digithings.ai, digibook, brand<br/>Pages direct upload from release/web"]
-    R5["<b>R5 digithings-stack</b><br/>stack Worker + container, digichat Worker<br/>langfuse, cron, corpus-index · tag deploys only"]
+    R3["<b>R3 digiquant-web</b><br/>Brief desk /app + digiquant.io<br/>Pages direct upload on signed web tag"]
+    R4["<b>R4 digithings-web</b><br/>digithings.ai, digibook, brand<br/>Pages direct upload on signed web tag"]
+    R5["<b>R5 digithings-stack</b><br/>stack Worker + container, digichat Worker<br/>langfuse, cron, corpus-index · signed-tag deploys only"]
     R6["<b>R6 digichat-tenants</b><br/>client tenant corpora + seeds, kv-sync<br/>writes KV/R2/secrets, never deploys Workers"]
     R7["<b>R7 twelve-x</b> (exists)<br/>+ twelve-x desk surface<br/>+ digidata-api"]
     MONO["digithings-mono (archived, private)<br/>full original history, rollback source"]
   end
-  KV[("Cloudflare KV TENANT_CONFIG + R2 seeds<br/>+ GH environments / secrets<br/>(client configs &amp; deploy secrets, never in a repo)")]
+  KV[("Cloudflare KV TENANT_CONFIG + R2 seeds<br/>+ deploy runner host secrets<br/>(client configs &amp; deploy secrets, never in a repo)")]
 
   R1 -->|digiquant.plugin API| R0
   R2 -->|pins PyPI| R0

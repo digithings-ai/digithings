@@ -32,6 +32,31 @@ Smaller gaps:
 - **G6 Actions minutes.** Public repos run Actions free. The monorepo ran 1,000+ workflow runs from 13 Oct 00:00 to 14 Oct ~14:30, ≥2,186 run-minutes (wall clock; billable job-minutes are higher because jobs run in parallel). Every workflow that moves private is billed at $0.006/min (Linux 2-core) beyond the plan's included minutes. Confidence: UNSURE on the monthly total, LIKELY on the order of magnitude (tens of thousands of minutes/month if all CI went private).
 - **G7 The repo-split docs themselves are sensitive.** A precise map of where client prompts and strategies sit in public history tells a reader what to fetch before the scrub. This PR therefore commits the plan at directory granularity only; the file:line manifest stays on the issue (DIG-3518 documents) and in the private repos.
 
+## Outcome of the gate decisions (2026-10-14)
+
+Chris answered the gate cards: **stay on GitHub Free** (D-G1 no), **keep the repo public until the
+end** (D-G2 no, so M1's day-0 flip is dropped), **fresh public repo** (D-12′, M1's second half kept),
+**tags in R0** (D-R3), **self-hosted runners** for private repos (D-G4).
+
+What changes:
+- F1 is not solved by an upgrade. The replacement gate is the **deploy runner**: deploy credentials
+  live only on a dedicated self-hosted runner, and a job-started hook refuses any job that is not on a
+  release tag signed by Chris with a hardware-backed key. Agents can push and tag, but they cannot sign,
+  so they cannot deploy. Rulesets stay in code, ready for a later Team upgrade. Details: migration plan P2 step 6.
+- F3 is accepted risk until cutover. To keep the window short the cutover (R0 public, mono private)
+  moves before the private-repo extractions; mono's deploys switch to the runner gate on cutover day.
+- G6 goes away: public repos keep free hosted minutes; private repos use self-hosted runners.
+
+Residual risks Chris accepts with these answers:
+1. The paths named on the tracking issue stay publicly fetchable until cutover (P1 + P2, about two weeks).
+2. Private repos have no enforced branch protection. A direct push to `main`/`develop` is possible;
+   it is caught by a nightly audit, not blocked. It cannot deploy (the signed-tag gate still holds).
+3. The deploy gate depends on one host. If it is down, nothing deploys until it is back (fail-closed).
+4. Self-hosted runners must never be attached to a public repo (fork-PR code execution). Mono gets a
+   runner only after it is private.
+
+Open: D-G5 (where the deploy runner runs) and D-G6 (accept the signed-tag gate).
+
 ## Review by dimension
 
 ### 1. Repo boundaries, public vs private — agree, with notes
@@ -50,23 +75,23 @@ The rule holds in the proposal: nothing public depends on private; the only priv
 - The cron Worker (R5) dispatching R2 and R7 workflows is acceptable runtime coupling, but the job list then lives in R5 while the jobs live elsewhere. Acceptable for now; record it in R5's README as an explicit cross-repo contract.
 
 ### 3. CI/CD, protected release branches, stopping auto-deploy from `main`
-- Blocked by F1 until the org is on Team. With Team, the human gate moves from "environment required reviewers" (not available on private Team) to **"`release/*` is protected and requires a CODEOWNERS (Chris) approval"** plus a **deployment-branch policy** so `production` secrets are only readable from `release/*` and release tags. That is equivalent in effect: nothing deploys unless Chris approved the PR into `release/*`.
-- **Pages:** switch both projects from Git integration to **direct upload from GitHub Actions** (`wrangler pages deploy` on push to `release/web`). Cloudflare does not let you add Git integration to an existing direct-upload project, and moving a Git-connected project to another repo means disconnect/reconnect in the dashboard. Creating a fresh Pages project per site, deploying it from the new repo, and then moving the custom domain gives a cutover whose rollback is "move the domain back". It also removes the need for the Cloudflare GitHub app to read private repos.
-- **Workers:** every Worker gets exactly one deploy workflow, triggered by a release tag on its repo, `environment: production`, `wrangler deploy` from a clean checkout of that tag. Manual `wrangler deploy` is retired: the deploy API token lives only in the GitHub environment.
+- *Superseded 2026-10-14: the org stays on Free; the gate is the signed-tag deploy runner (see "Outcome" above). Original analysis kept for the record:* Blocked by F1 until the org is on Team. With Team, the human gate moves from "environment required reviewers" (not available on private Team) to **"`release/*` is protected and requires a CODEOWNERS (Chris) approval"** plus a **deployment-branch policy** so `production` secrets are only readable from `release/*` and release tags. That is equivalent in effect: nothing deploys unless Chris approved the PR into `release/*`.
+- **Pages:** switch both projects from Git integration to **direct upload from GitHub Actions** (`wrangler pages deploy` from the deploy runner on a signed `web-v*` tag). Cloudflare does not let you add Git integration to an existing direct-upload project, and moving a Git-connected project to another repo means disconnect/reconnect in the dashboard. Creating a fresh Pages project per site, deploying it from the new repo, and then moving the custom domain gives a cutover whose rollback is "move the domain back". It also removes the need for the Cloudflare GitHub app to read private repos.
+- **Workers:** every Worker gets exactly one deploy workflow, triggered by a release tag on its repo, `wrangler deploy` from a clean checkout of that tag on the `[self-hosted, deploy]` runner. Manual `wrangler deploy` is retired: the deploy API token lives only on the deploy runner host.
 - **R0 release branches.** The proposal keeps 16 protected `release/<module>` branches in R0 where nothing deploys. Publishing is already driven by tags (`<name>-vX.Y.Z`). Release branches add value only for backports. Recommendation: release-please on `main`, protected tag rulesets (`*-v*` creatable only by the release bot), and `release/<pkg>-X.Y` maintenance branches created on demand. This trims the G07 "per-package release branches" for the public repo only; it needs Chris's yes (decision D-R3).
 
 ### 4. Git history preservation and scrubbing
 - `git filter-repo` per target from a fresh `--mirror` clone is right. Add: `--paths-from-file` generated by the manifest script (G2), `--path-rename` for the new layout, `--replace-message` for client names, then `gitleaks detect` and a denylist grep over **all** objects (`git rev-list --all --objects`) before the first push.
 - **Scrubbing the public repo in place does not remove the data.** GitHub keeps `refs/pull/*/head` for the 30 open PRs and all closed ones; those cannot be force-pushed by us and stay fetchable by SHA until GitHub Support purges them. 478 branches and 45 tags would all need rewriting, and every open PR would be invalidated.
 - Existing forks are outside our control; check them against the private-path list before the cut (details on the tracking issue).
-- **Recommendation (M1):** do not scrub in place. Rename the current repo to `digithings-mono` and make it **private on day 0**, so exposure ends immediately and PRs, issues and Actions history survive. Create a **new public `digithings-ai/digithings`** (R0) later from a scrubbed, allowlist-filtered export with history. The old name's redirect ends when the new repo is created, which is the intended effect. Cost: 1 star, the fork network (desirable to detach), and Actions minutes while the monorepo is private (G6).
+- *2026-10-14: Chris kept the fresh repo but declined the day-0 private flip; the rename and flip now happen at cutover (plan P3).* **Recommendation (M1):** do not scrub in place. Rename the current repo to `digithings-mono` and make it **private on day 0**, so exposure ends immediately and PRs, issues and Actions history survive. Create a **new public `digithings-ai/digithings`** (R0) later from a scrubbed, allowlist-filtered export with history. The old name's redirect ends when the new repo is created, which is the intended effect. Cost: 1 star, the fork network (desirable to detach), and Actions minutes while the monorepo is private (G6).
 
 ### 5. Secrets, KV, GitHub environments
-- Agree with "never in a repo": tenant config to KV `TENANT_CONFIG`, seeds to R2, deploy keys in GH environments.
+- Agree with "never in a repo": tenant config to KV `TENANT_CONFIG`, seeds to R2. Deploy keys: on Free, private repos have no environment secrets, so deploy keys live only on the deploy runner host (not in GitHub at all).
 - Add: use a **GitHub App** (installed on R2 and R7 only) for cron's workflow dispatch and for R2's read of R1, instead of `GH_DISPATCH_TOKEN`-style PATs. Apps give per-repo scope, short-lived tokens and no person-bound expiry.
 - Add: **one Cloudflare API token per repo**, scoped to that repo's Workers/KV/R2/Pages (R6 gets KV+R2 write only, no Workers deploy). Today's account-wide tokens become the rotation target in the cut-over of each repo.
 - Add: rotate anything that was ever printed in a public workflow log or committed; `gitleaks` over full history in Phase 0 tells us if that list is non-empty.
-- Org-level secrets with a selected-repos list are fine for shared non-deploy values (LLM gateway keys), but deploy credentials stay environment-scoped.
+- Org-level secrets with a selected-repos list are fine for shared non-deploy values (LLM gateway keys), but deploy credentials stay on the deploy runner host only.
 
 ### 6. Licensing
 - **L1 (fact, not fixable by scrub):** everything that was in the public MIT repo was published under MIT. Anyone who copied a file while it was public holds it under MIT; scrubbing history stops further spread but does not revoke that grant. CONFIRMED (MIT has no revocation clause; the repo's `LICENSE` is MIT). Practical consequence: plan R1's value on what has not been public (calibrations, new research).
@@ -81,4 +106,5 @@ The rule holds in the proposal: nothing public depends on private; the only priv
 - A cross-repo change (engine fix + stack bump) becomes: PR in R0 → release tag → Renovate/bot bump PR in R2/R5. For local work, a `dt-dev` script clones all repos side by side and uses `uv` path sources / `npm` workspaces overlay to develop against local R0 without publishing.
 - Paperclip: one project per repo (or project-repository bindings), `dt-create-issue --project` mapping, `com.digithings.merge-queue` (today drains only `digithings` and `twelve-x`) extended to all repos, worktree sweep and run-watch pointed at the new repos, DCO app installed on each.
 - Seat instructions and skills that hard-code monorepo paths (`apps/...`, `digiquant/...`) must be updated in the same phase as the move; otherwise agents open PRs against dead paths.
-- CI cost: keep heavy test matrices in public R0 (free minutes). Private repos run only their own tests plus a nightly "latest R0" compatibility job.
+- CI cost: keep heavy test matrices in public R0 (free minutes). Private repos run only their own tests plus a nightly "latest R0" compatibility job, on self-hosted `[self-hosted, ci]` runners (D-G4).
+- Agents never create release tags; they prepare the release PR and changelog, and Chris signs the tag.
