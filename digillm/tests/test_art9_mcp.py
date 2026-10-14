@@ -278,7 +278,8 @@ def test_the_module_does_not_import_fastapi():
     scan for "fastapi" fires on this module's own comment explaining that it does
     not import fastapi — a guard that scans for a name cannot be satisfied by
     prose that names it. The AST can only see real import statements."""
-    tree = ast.parse(open(_module_path(), encoding="utf-8").read())
+    with open(_module_path(), encoding="utf-8") as f:
+        tree = ast.parse(f.read())
     imported: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
@@ -294,7 +295,8 @@ def test_the_module_does_not_import_digibase_at_module_scope():
     """The detector import must stay lazy; a module-scope import would make
     digibase a hard dependency and break the digillm install. Nested imports are
     allowed anywhere, so only top-level ones are collected here."""
-    tree = ast.parse(open(_module_path(), encoding="utf-8").read())
+    with open(_module_path(), encoding="utf-8") as f:
+        tree = ast.parse(f.read())
     top_level: set[str] = set()
     for node in tree.body:
         if isinstance(node, ast.Import):
@@ -307,7 +309,8 @@ def test_the_module_does_not_import_digibase_at_module_scope():
 def test_the_detector_import_is_lazy_and_guarded():
     """Both halves of the lazy contract: the import happens inside a function,
     and an ImportError becomes a refusal rather than an exception."""
-    source = open(_module_path(), encoding="utf-8").read()
+    with open(_module_path(), encoding="utf-8") as f:
+        source = f.read()
     assert "from digibase.art9 import screen_request" in source
     tree = ast.parse(source)
     top_level_imports = [
