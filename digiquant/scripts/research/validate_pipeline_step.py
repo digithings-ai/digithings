@@ -39,10 +39,13 @@ except ImportError:
 try:
     from dotenv import load_dotenv  # type: ignore
 
+    _HAS_DOTENV = True
+except ImportError:
+    _HAS_DOTENV = False
+
+if _HAS_DOTENV:
     load_dotenv(Path(__file__).resolve().parent.parent / "config" / "supabase.env")
     load_dotenv()
-except ImportError:
-    pass
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 from lib.roots import DIGEST_SNAPSHOT_SCHEMA, schema_file  # noqa: E402

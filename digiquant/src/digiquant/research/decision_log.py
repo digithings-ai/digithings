@@ -326,27 +326,31 @@ def _holding_days(state: ResearchState) -> int:
     when no analyst payloads exist or the conviction data is missing.
     """
     # Explicit preference takes priority.
-    raw = state.config.preferences.get("holding_days") if state.config.preferences else None
-    if raw is not None:
-        try:
-            days = int(raw)
-        except (TypeError, ValueError):
-            pass
-        else:
-            if days >= 1:
-                return days
+    days = _coerce_int(
+        state.config.preferences.get("holding_days") if state.config.preferences else None
+    )
+    if days is not None and days >= 1:
+        return days
 
     # Conviction-derived: collect all conviction scores from this run's analysts.
     analysts = analyst_payloads(state)
     convictions: list[float] = []
-    for payload in (analysts or {}).values():
+    for ticker, payload in (analysts or {}).items():
         if isinstance(payload, dict):
             raw_conv = payload.get("conviction_score")
             if raw_conv is not None:
                 try:
                     convictions.append(float(raw_conv))
                 except (TypeError, ValueError):
-                    pass
+                    # A non-numeric conviction_score is a data defect, not a reason
+                    # to abandon the run: drop this analyst, and if none parse, fall
+                    # through to DEFAULT_HOLDING_DAYS below. Matches the unparseable
+                    # run_date warning at line 188.
+                    logger.warning(
+                        "decision_log: analyst %s has non-numeric conviction_score %s; skipped",
+                        ticker,
+                        str(raw_conv)[:60],
+                    )
 
     if not convictions:
         return DEFAULT_HOLDING_DAYS
