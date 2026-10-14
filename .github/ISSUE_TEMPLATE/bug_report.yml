@@ -1,0 +1,67 @@
+name: Bug report
+description: Something in digithings does not behave as documented
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Read [CONTRIBUTING.md](https://github.com/digithings-ai/digithings/blob/develop/CONTRIBUTING.md) first.
+        Security vulnerabilities do not belong here. Use [SECURITY.md](https://github.com/digithings-ai/digithings/blob/develop/SECURITY.md).
+        Agent work uses the Agent task form.
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: The module where the defect shows up.
+      options:
+        - digibase
+        - digichat
+        - digiclaw
+        - digifetch
+        - digigraph
+        - digikey
+        - digillm
+        - digiquant
+        - digisearch
+        - digiskills
+        - digitrace
+        - digivault
+        - digivoice
+        - website / root docs
+        - other
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead.
+      placeholder: The health check returns 500 after `make up`.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Commands, versions, and the smallest path that shows the defect.
+      placeholder: |
+        1. `cp .env.example .env`
+        2. `make up`
+        3. `curl -s http://127.0.0.1:8000/healthz`
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, commit or tag, and whether this is Docker, local Python, or Cloudflare.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Paste the relevant output. Remove secrets, tokens, and client data before you send this.
+    validations:
+      required: false
