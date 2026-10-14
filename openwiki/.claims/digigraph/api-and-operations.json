@@ -7,7 +7,7 @@
       "statement": "digigraph serves GET /health (legacy) and GET /healthz (preferred liveness) plus POST /workflow and POST /v1/chat/completions, with thread and file routes gated behind policy flags.",
       "evidence": [
         {
-          "resource": "repo://digigraph/src/digigraph/server.py#L1053-L1053",
+          "resource": "repo://digigraph/src/digigraph/server.py#L322-L328",
           "version": "repo-lines-v1:sha256:5e40b38ac1237120f43414dab0a7c2937e0529a6803149733f82afe978ad265c:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNWU0MGIzOGFjMTIzNzEyMGY0MzQxNGRhYjBhN2MyOTM3ZTA1MjlhNjgwMzE0OTczM2Y4MmFmZTk3OGFkMjY1YyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNWU0MGIzOGFjMTIzNzEyMGY0MzQxNGRhYjBhN2MyOTM3ZTA1MjlhNjgwMzE0OTczM2Y4MmFmZTk3OGFkMjY1YyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYTkxMTk3MWZlYTRiZTJhY2Y5MGYxZGVmYWI3NWRmNzA5NGYwZjkwNzBkZmE4NTU5ZmY0ZjEwY2ZiNDExMjc0NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiM2EwZmZhNzAyN2ZjYjJkYzA1YjBmYTYzMWVlMGU0MjQyN2JlZGM0ZTc4MzM0NjRjYzFhZTQzYjNkMDI3YjZmMiJ9"
         },
         {
