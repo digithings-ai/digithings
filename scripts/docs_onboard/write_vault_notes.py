@@ -132,12 +132,6 @@ def _pdf_document(path: Path) -> Any:
     return ParserRegistry().parse(path)
 
 
-def _pdf_text(path: Path) -> str:
-    """Extract PDF text via digisearch parsers (no pdfplumber vendored here)."""
-    doc = _pdf_document(path)
-    return (doc.content or "").strip() + "\n"
-
-
 def _note_body_for(
     classified: ClassifiedPage, workspace: Workspace
 ) -> tuple[str, str, list[Segment]]:

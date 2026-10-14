@@ -3,9 +3,8 @@
 
 This is the trade-level parity oracle: it runs ``pine_backtest.run_backtest`` on the
 same OHLCV the TradingView chart used (Coinbase daily), then matches our entries to
-TradingView's entry rows by date + direction. Results are broken down by signal family
-(MR vs Trend vs Reversal) so an indicator regression is easy to localize — e.g. a DPSD
-divergence shows up as missed *Trend* entries while MR entries stay matched.
+TradingView's entry rows by date + direction. Misses and extras are counted by the
+raw TradingView signal string.
 
 Usage:
     python scripts/validation/compare_tv.py <strategy> <ohlcv_csv> <tv_export_csv> [start_date]
@@ -52,23 +51,13 @@ def parse_tv_entries(path: str | Path) -> list[dict]:
     return entries
 
 
-def _family(label: str) -> str:
-    low = label.lower()
-    if "reversal" in low:
-        return "reversal"
-    if "trend" in low and "mr" in low:
-        return "mr+trend"
-    if "trend" in low:
-        return "trend"
-    return "mr"
-
-
 def compare(strategy: str, ohlcv_csv: str | Path, tv_export_csv: str | Path,
             start_date: str | None = None) -> dict:
     """Run the parity check and return a structured result (no printing).
 
-    Keys: strategy, tv_entries, our_entries, matched, match_pct, wrong_direction,
-    tv_only (missed) and ours_only (extra), each as a list of {date,direction,signal}.
+    Keys: strategy, tv_entries, our_entries, matched, match_pct.
+    wrong_direction is a list of date strings. tv_only and ours_only are lists
+    of {date, direction, signal}.
     """
     out = run_backtest(strategy, ohlcv_csv, start_date=start_date)
     ours = [{"date": t.entry_date, "direction": t.direction, "signal": t.entry_label} for t in out.trades]
