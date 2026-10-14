@@ -80,10 +80,12 @@ _HOST_RE = re.compile(
 # graph.digithings.ai literals under apps/digithings-web (PUBLIC_DASHBOARD_API
 # constant, dashboardApiBase comment, next.config destination rewrite,
 # portfolio comment), 102 -> 106, sanctioned here as intentional surface
-# wiring. #5640 deletes packages/design/smoke/index.html, which held the last
-# api.digithings.ai literal (1 -> 0). #5690 deletes embed-popup-config.ts.
-# The example host in that file's comment is not carried by the replacement
-# artifact-gate test, so occ.digithings.ai goes 144 -> 143. Regenerated
+# wiring. #5690 (chore(digichat): consolidated deep-review cleanups)
+# consolidated occ.digithings.ai literals into one OCC_HOST constant
+# (3 inline literals removed, 1 constant + 1 prose mention added),
+# 144 -> 143, net -1, consolidation not drift. #5640 deletes
+# packages/design/smoke/index.html, which held the last
+# api.digithings.ai literal (1 -> 0). Regenerated
 # with the file's own scanner, in the open, per the design rule above.
 PINNED_CENSUS = {
     "app.digithings.ai": 3,
