@@ -155,7 +155,7 @@ def incremental_update(
                 merged = _merge_ohlcv(old, new)
                 save_cached(t, merged, cache_dir)
                 result[t] = merged
-        for t, old, s in to_update:
+        for t, old, _ in to_update:
             if t not in result:
                 result[t] = old
 
