@@ -448,6 +448,7 @@ body {
 }
 .cmd-in {
   width: 100%;
+  max-width: 100%;
   font-family: var(--mono);
   font-size: 11px;
   line-height: 1;
@@ -509,6 +510,55 @@ body {
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+
+/* Visually hidden route name. One h1 per route, read but never painted. */
+.desk-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Skip link. Off screen until it takes keyboard focus. Tokens only. */
+.desk-skip {
+  position: fixed;
+  left: 0.5rem;
+  top: -3rem;
+  z-index: 100;
+  padding: 0.5rem 0.75rem;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--ink);
+  font: 0.75rem/1 var(--font-mono);
+  text-decoration: none;
+}
+.desk-skip:focus-visible {
+  top: 0.5rem;
+  outline: 1px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* Skip-link target. Programmatic focus only, never a focus ring. */
+#desk-main:focus { outline: none; }
+
+/* Scrollable pane bodies take keyboard focus, so the ring must show. */
+.desk-pane-body:focus-visible {
+  outline: 1px solid var(--ink);
+  outline-offset: -1px;
+}
+
+/* Chart hosts are Tab stops with a visible ring. */
+.desk-chart:focus-visible,
+.vela-host:focus-visible {
+  outline: 1px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* Radius canon on the Vela chrome. Callout dots stay round: geometry. */
+.vela-host .vela-callout-panel { border-radius: 0; }
+.vela-host .vela-callout-btn { border-radius: 0; }
 
 /* Desk folder sidebar and desk selector, ported from the terminal draft.
    --win, --wash, and --mono are local because this site does not define them.
@@ -580,7 +630,8 @@ body {
 .desk-head > * { flex-shrink: 0; }
 .desk-head .desk-pick,
 .desk-head .cmd { position: static; }
-.desk-head .cmd { flex: 1 0 auto; }
+/* The path field shrinks with the header instead of widening the document. */
+.desk-head .cmd { flex: 1 1 auto; min-width: 0; }
 .desk-head .desk-list { left: 0.5rem; }
 .desk-head .cmd-list {
   left: auto;
@@ -621,6 +672,29 @@ body {
   .desk-pick { padding-inline: 0.15rem; }
   .desk-shell > header .cmd {
     padding-inline: 0.2rem;
+  }
+  /* Narrow screens collapse the path field to a / key. Focus opens it
+     over the header bar, so the document never widens. */
+  .desk-head .cmd {
+    flex: 0 1 2.5rem;
+    min-width: 0;
+  }
+  .desk-head .cmd-in {
+    width: 2.5rem;
+  }
+  .desk-head .cmd:focus-within {
+    position: absolute;
+    left: 0.4rem;
+    right: 0.4rem;
+    top: 0.2rem;
+    bottom: 0.2rem;
+    flex: none;
+    z-index: 60;
+    background: var(--term-bg);
+    border: 1px solid var(--hair-strong);
+  }
+  .desk-head .cmd:focus-within .cmd-in {
+    width: 100%;
   }
   .rail-size { display: none; }
   .desk-shell .rail {

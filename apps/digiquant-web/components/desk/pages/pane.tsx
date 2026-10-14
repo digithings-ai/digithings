@@ -297,6 +297,9 @@ export function DeskPane({
       </header>
       <div
         ref={bodyRef}
+        role="region"
+        aria-label={`${title} body`}
+        tabIndex={0}
         className={`desk-pane-body flex min-h-0 flex-1 flex-col gap-1.5 overflow-auto px-2.5 py-1.5 ${PANE_COPY} ${tone}`}
         onClick={() => {
           if (window.getSelection()?.toString()) return;
