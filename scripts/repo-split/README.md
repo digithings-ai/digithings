@@ -42,13 +42,15 @@ Anything needing those goes to Chris as a decision.
   `scripts/occ_invite_key_fixture_server.mjs` — guard R5+R6 surfaces (DIG-3566 F13);
   ruling owed by DIG-3567 (R6 owner).
 
-## Provisional inputs
+## Delivered inputs (J/K landed 14 Oct)
 
-R6/R7 move lists are provisional: DIG-3567/DIG-3568 are still `in_progress` with no
-inventory docs. R6 paths come from repo-split.md section R6 + the 10 OCC seeds
-confirmed in DIG-3566 section A.1; R7 paths from repo-split.md section R7
-(109 dashboard paths + 13 `apps/digidata-api` files, counts re-verified at tip).
-Re-run `dry-run.sh` + `check-overlaps.sh` once J/K land and amend.
+R6 follows DIG-3567 (done), R7 follows DIG-3568 (in_review); both re-verified
+path-by-path at `github/develop d227b6ed5` by these scripts' own gates. Three
+ref-specific discrepancies were measured while regenerating and are recorded in
+`move-lists/r6.paths` notes 1-3 (`start_digiseed.sh` name miss, devkit-looks
+presence, occ_help 4-vs-6 count). The R5/R6 double-claim on 9 rollout scripts +
+runbook (DIG-3566 E.1/F13 vs DIG-3567 section D) is recorded in
+`overlaps-known.txt`; the ruling is owed by those owners, not resolved here.
 
 ## Open decisions blocking a real migration (not this leaf)
 

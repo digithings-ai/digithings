@@ -16,7 +16,7 @@ nothing pushed, clones deleted after the run.
 | R3 digiquant-web | 333 | 231 | 166,436 | 164,824 | 0 |
 | R4 digithings-web | 446 | 273 | 155,284 | 152,172 | 0 |
 | R5 digithings-stack | 842 | 185 | 152,316 | 150,356 | 4 |
-| R6 digichat-tenants | 104 | 30 | 148,992 | 148,708 | 2 |
+| R6 digichat-tenants | 290 | 50 | 149,940 | 149,224 | 6 |
 | R7 twelve-x additions | 90 | 122 | 149,804 | 148,776 | 0 |
 
 File counts match the leaf inventories within triage deltas (R2 489 vs 432+
@@ -32,6 +32,9 @@ a live credential here.
 - R6 `scripts/test_verify_occ_invite_key.sh:19` (2 commits) — key-shaped fixture
   in a test script. Standing rule (Chris, 14 Oct) says test keys are generated at
   runtime, never committed: this file violates it. Owner: DIG-2779 / DIG-3567.
+- R6 `scripts/test_occ_rollout_scope_guard.sh:35,36` (2 commits) — same
+  `NEW_KEY`/`KEY2` fixtures as the R5 finding above (file now in both move
+  lists; double-claim recorded). Owner: DIG-2779.
 - R2 `digiquant/src/digiquant/research/config/mcp.secrets.env.example:5,7,9`
   (2 commits) — example values in an `.example` file. Owner: R2 executor.
 - R2 `digiquant/supabase/functions/settings/settings.test.ts:241,359`

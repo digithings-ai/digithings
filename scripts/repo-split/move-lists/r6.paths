@@ -1,9 +1,18 @@
-# R6 digichat-tenants — client corpora, seeds, rollout tooling (DIG-3567, DIG-3518).
-# PROVISIONAL: DIG-3567 is still in_progress with no inventory doc yet. Sources below are
-# repo-split.md section R6 + the 10 OCC seed paths confirmed in DIG-3566 section A.1.
-# Verified present at github/develop d227b6ed5 (2026-10-14) unless marked NEW.
+# R6 digichat-tenants — client corpora, seeds, rollout tooling (DIG-3567 done, DIG-3518).
+# Primary source: DIG-3567 plan doc (delivered, status done). All paths verified
+# present at github/develop d227b6ed5 (2026-10-14) unless marked.
+# NOTE 1: DIG-3567 names container/start_digiseed.sh — that path does NOT exist at
+#   this ref (only seed_chroma.sh + start_digikey/digisearch.sh do); only the
+#   verified seed_chroma.sh is listed. NOTE 2: DIG-3567 says devkit-looks.ts is
+#   absent at its measuring ref, but it IS present at github/develop d227b6ed5,
+#   so it stays listed. NOTE 3: occ_help/ holds 6 files at this ref (DIG-3567
+#   counted 4 at its ref); the directory entry covers the full set.
+# NOTE 4: 9 entries below are ALSO claimed by R5 (DIG-3566 E.1/F13) — recorded in
+#   overlaps-known.txt; owner ruling owed by DIG-3566/DIG-3567, not resolved here.
 apps/digithings-stack-cloudflare/container/seed/occ_help
 apps/digithings-stack-cloudflare/container/seed/vault/clients/online-compliance-center
+apps/digithings-stack-cloudflare/container/seed_chroma.sh
+docs/projects/online-compliance-center
 apps/digichat/config/datatap-trial-foundry.yaml
 apps/digichat/config/datatap-trial-test.yaml
 apps/digichat/config/examples/occ-embed.yaml
@@ -19,8 +28,16 @@ scripts/check_tenant_corpus_map.py
 scripts/verify_occ_invite_key.sh
 scripts/test_verify_occ_invite_key.sh
 scripts/occ_invite_key_fixture_server.mjs
+scripts/occ_invite_key_rollout.sh
+scripts/check_occ_rollout_auth_guard.py
+scripts/index_occ_tickets.py
+scripts/test_occ_rollout_scope_guard.sh
+scripts/datatap_answer_integrity_check.py
 tests/scripts/test_check_tenant_corpus_map.py
 tests/dg/test_tenant_corpus_parity.py
 tests/dg/test_occ_ticket_payload_retired.py
+tests/scripts/test_datatap_answer_check_clock.py
+tests/scripts/test_datatap_answer_integrity_check.py
+docs/ops/OCC_INVITE_KEY.md
 .github/workflows/datatap-answer-check.yml
 .github/workflows/occ-invite-key-rollout.yml
