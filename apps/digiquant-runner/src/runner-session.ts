@@ -208,6 +208,17 @@ export class RunnerSession {
     if (request.method === "GET" && path === "/healthz") {
       return Response.json(await this.health());
     }
+    // Landing check for the never-dispatched watcher (DIG-3456). Exact path,
+    // before the run-id branch below: without this, "house-status" would read
+    // as a run id and answer 404 not_found, which the watcher must not mistake
+    // for "no run". Bearer-gated at the worker edge with every /v1/jobs route.
+    if (request.method === "GET" && path === "/v1/jobs/house-status") {
+      const runDate = url.searchParams.get("run_date") ?? "";
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(runDate)) {
+        return Response.json({ error: "invalid_run_date" }, { status: 400 });
+      }
+      return Response.json(await this.houseStatus(runDate));
+    }
     if (request.method === "POST" && path === "/v1/jobs") {
       let parsed: unknown;
       try {
@@ -258,6 +269,36 @@ export class RunnerSession {
   async hasActiveWork(): Promise<boolean> {
     const ledger = await this.load();
     return Object.keys(ledger.locks).length > 0 || ledger.queue.length > 0;
+  }
+
+  /**
+   * Landing check for one run_date (DIG-3456). Reads the same R2 key the
+   * skip-gate reads, so "landed" means the marker the next kick would defer
+   * to — not a second opinion about it. `verifiable` is false when the answer
+   * was not actually read (no archive binding, or the read threw): the
+   * watcher treats that as unreadable and never raises on it, because an
+   * alarm that fires on its own failure mode is worse than no alarm.
+   */
+  async houseStatus(runDate: string): Promise<{
+    run_date: string;
+    landed: boolean;
+    open_house_runs: string[];
+    verifiable: boolean;
+  }> {
+    const ledger = await this.load();
+    const openHouseRuns = Object.values(ledger.locks)
+      .map((lock) => lock.run_id)
+      .filter((id) => ledger.runs[id]?.command === "house-run");
+    const key = `pipeline-runs/house-run/${runDate}/success.json`;
+    if (!this.deps.archive) {
+      return { run_date: runDate, landed: false, open_house_runs: openHouseRuns, verifiable: false };
+    }
+    try {
+      const hit = await this.deps.archive.head(key);
+      return { run_date: runDate, landed: hit != null, open_house_runs: openHouseRuns, verifiable: true };
+    } catch {
+      return { run_date: runDate, landed: false, open_house_runs: openHouseRuns, verifiable: false };
+    }
   }
 
   async accept(request: RunJobRequest): Promise<RunJobResponse> {

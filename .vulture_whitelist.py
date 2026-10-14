@@ -14,32 +14,12 @@
 
 # LangGraph TypedDict state fields — accessed by graph nodes via state["field"]
 # and serialized/deserialized by the checkpoint backend. Vulture can't see these.
-# from digigraph.models import WorkflowState
+# (DIG-3398: path was digigraph.models, which no longer exists; the class lives
+# in digigraph.graph.state.)
+# from digigraph.graph.state import WorkflowState
 # WorkflowState.workflow_id   # checkpoint serialization
-# WorkflowState.messages      # supervisor node reads/writes
 # WorkflowState.request_id    # span attribute propagation
 # WorkflowState.session_id    # audit trail
-
-# MCP tool functions — registered dynamically via the MCP registry, not called
-# directly from Python code. Vulture sees them as unused because the call comes
-# from LangGraph's tool node at runtime.
-# from digigraph.orchestration.builtin import search_tool, execute_tool
-# search_tool   # registered via MCP registry
-# execute_tool  # registered via MCP registry
-
-# ── digitrace ────────────────────────────────────────────────────────────────
-
-# configure_tracer is called at service startup via import side-effect in main.py
-# Vulture flags it as unused because it's not called within the library itself.
-# from digitrace.tracer import configure_tracer
-# configure_tracer  # called at service startup
-
-# ── digisearch ────────────────────────────────────────────────────────────────
-
-# Backend classes are registered in the backend registry and instantiated via
-# string lookup — vulture can't see the dynamic dispatch.
-# from digisearch.backends.qdrant import QdrantBackend
-# QdrantBackend  # registered in backend registry
 
 # ── digikey ───────────────────────────────────────────────────────────────────
 
@@ -52,10 +32,10 @@
 
 # ApiErrorEnvelope fields are serialized to JSON via .model_dump() — Pydantic
 # accesses them dynamically so vulture may flag them as unused attributes.
-# from digibase.models import ApiErrorEnvelope
+# (DIG-3398: path was digibase.models, which does not exist; the class lives
+# in digibase.errors, and its payload field is `error` (an ApiErrorBody).)
+# from digibase.errors import ApiErrorEnvelope
 # ApiErrorEnvelope.error    # JSON response field
-# ApiErrorEnvelope.detail   # JSON response field
-# ApiErrorEnvelope.code     # JSON response field
 
 # ── Triage log (issue #15, 2026-04-18) ────────────────────────────────────────
 #
