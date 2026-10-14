@@ -20,7 +20,7 @@ from digiquant.execution.remaining_hops import (
 
 pytestmark = pytest.mark.unit
 
-_TS = Path("apps/dashboard/lib/remaining-hops.ts")
+_TS = Path(__file__).resolve().parents[4] / "apps" / "dashboard" / "lib" / "remaining-hops.ts"
 
 
 def _ts_source() -> str:

@@ -275,7 +275,7 @@ def test_gated_tool_count_matches_the_entitlement_table():
     assert gloomberb_cli._GATED_TOOL_COUNT == expected == 41
 
 
-def test_the_keychain_probe_is_live(tmp_path):
+def test_the_keychain_probe_is_live(tmp_path, _offline):
     """Positive control for the autouse fixture.
 
     `_keychain_read` is stubbed to return "empty" and to record the call, so a
@@ -287,6 +287,7 @@ def test_the_keychain_probe_is_live(tmp_path):
         gloomberb_cli.gloomberb, ["status", "--env-file", str(tmp_path / ".env")]
     )
     assert result.exit_code == 0, result.output
+    assert "keychain_read" in _offline
 
 
 def test_status_and_shell_consult_every_store_before_failing_closed(tmp_path, _offline):
