@@ -147,6 +147,20 @@ export function QuantField() {
       frame.dataset.heroBeat = name;
     };
 
+    // Vela paints its own <canvas> elements with no accessible name. The
+    // host div above carries role="img" + the chart label, so unlabelled
+    // inner canvases are decorative duplicates — hide them, or axe counts
+    // six unlabelled canvases on every page with a hero. A canvas carrying
+    // its own aria-label (Vela's keyboard-interactive chart surface) is
+    // left alone: it is named, and hiding it would remove that path.
+    const hideDecorativeCanvases = () => {
+      for (const canvas of host.querySelectorAll("canvas")) {
+        if (!canvas.getAttribute("aria-label")) {
+          canvas.setAttribute("aria-hidden", "true");
+        }
+      }
+    };
+
     beat("chrome");
     host.style.transition = reduced ? "none" : `opacity ${HERO_FADE_MS}ms ease`;
     if (reduced) host.style.opacity = "1";
@@ -189,6 +203,7 @@ export function QuantField() {
       if (rows.length < 2 && !hasBars) return;
       shown = true;
       mountStudies();
+      hideDecorativeCanvases();
       lockFrame(rows);
       chart?.resize();
       lockFrame(loadedSeries());
@@ -283,6 +298,7 @@ export function QuantField() {
           if (hasBars) fadeIn();
         });
         await chart.ready().catch(() => undefined);
+        hideDecorativeCanvases();
       }
       if (dead || !chart) return;
       hasBars = true;
@@ -344,6 +360,7 @@ export function QuantField() {
       <div ref={frameRef} data-hero-beat="chrome" className="absolute inset-0 -z-10 h-full min-h-full w-full">
         <div
           ref={ref}
+          role="img"
           aria-label={watermark || "price chart"}
           className="hero-chart absolute inset-0 h-full w-full [transform:translateZ(0)]"
         />

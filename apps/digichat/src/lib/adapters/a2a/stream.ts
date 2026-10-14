@@ -25,6 +25,7 @@ import {
   isRecord,
   iterateSse,
   parseSseJson,
+  protocolJsonHeaders,
   stringField,
   writeFailureStatus,
   writeGatedSpan,
@@ -131,11 +132,10 @@ export async function createA2aStreamResponse(opts: {
   apiKey: string | null;
   signal?: AbortSignal;
 }): Promise<Response> {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    Accept: "text/event-stream, application/json",
-  };
-  if (opts.apiKey) headers.Authorization = `Bearer ${opts.apiKey}`;
+  const headers = protocolJsonHeaders({
+    apiKey: opts.apiKey,
+    accept: "text/event-stream, application/json",
+  });
   const body = JSON.stringify({
     jsonrpc: "2.0",
     id: crypto.randomUUID(),

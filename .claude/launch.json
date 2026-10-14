@@ -69,25 +69,16 @@
       "port": 4012
     },
     {
-      "name": "demos",
-      "runtimeExecutable": "/bin/bash",
+      "name": "design-reference",
+      "runtimeExecutable": "npm",
       "runtimeArgs": [
-        "-c",
-        "cd \"$(git rev-parse --show-toplevel)\" && .venv/bin/python -m http.server 4020 --directory packages/design/demos/digiquant-landing"
+        "--workspace",
+        "design-reference",
+        "run",
+        "dev"
       ],
-      "port": 4020
-    },
-    {
-      "name": "design-smoke-local",
-      "runtimeExecutable": "python3",
-      "runtimeArgs": [
-        "-m",
-        "http.server",
-        "4030",
-        "--directory",
-        "packages/design"
-      ],
-      "port": 4030
+      "port": 4013,
+      "autoPort": true
     },
     {
       "name": "dashboard",

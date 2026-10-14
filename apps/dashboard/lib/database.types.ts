@@ -25,7 +25,7 @@ export interface Database {
       positions: {
         Row: {
           id: string;
-          /** T0 house/overlay book (migration 097). Dashboard reads filter house via houseBook(). */
+          /** T0 house/overlay book (migration 097). Dashboard Group A reads pin house via apiHouseBook(). */
           workspace_id?: string;
           date: string;
           ticker: string;
@@ -104,7 +104,7 @@ export interface Database {
       position_events: {
         Row: {
           id: string;
-          /** T0 house/overlay book (migration 097). Dashboard reads filter house via houseBook(). */
+          /** T0 house/overlay book (migration 097). Dashboard Group A reads pin house via apiHouseBook(). */
           workspace_id?: string;
           date: string;
           ticker: string;
@@ -158,7 +158,7 @@ export interface Database {
       portfolio_metrics: {
         Row: {
           id: string;
-          /** T0 house/overlay book (migration 097). Dashboard reads filter house via houseBook(). */
+          /** T0 house/overlay book (migration 097). Dashboard Group A reads pin house via apiHouseBook(). */
           workspace_id?: string;
           date: string;
           pnl_pct: number | null;

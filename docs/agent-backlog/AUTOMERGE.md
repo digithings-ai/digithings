@@ -1,5 +1,7 @@
 # Doc-only auto-merge policy
 
+> **Status (2026-10-14):** `.github/workflows/agent-docs-automerge.yml` was deleted on 2026-10-01 in #4919. Nothing applies `automerge-docs` or runs the `Doc paths gate` today; doc-only PRs into `develop` go through the merge queue like any other PR. `scripts/verify_doc_only_pr.py` and its tests remain. The rest of this page describes the policy as it was.
+
 Pull requests that change **only** allowlisted paths may enable **squash auto-merge** after CI passes, when the label **`automerge-docs`** is applied.
 
 ## GitHub settings (maintainers)
