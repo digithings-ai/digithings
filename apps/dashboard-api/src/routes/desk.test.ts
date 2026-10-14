@@ -107,7 +107,9 @@ describe("phase 4 shell, settings, chat", () => {
       DIGICHAT_CHEAP_INFERENCE_KEY: key,
       DIGICHAT_TENANT: { get: async () => JSON.stringify(tenant) },
     };
-    const fetchMock = vi.fn(async () => Response.json({ reply: "baseline desk run" }));
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      Response.json({ reply: "baseline desk run" }),
+    );
     vi.stubGlobal("fetch", fetchMock);
     const current = await app.fetch(new Request("https://x/chat/sessions/current?desk=baseline"), configured);
     const currentBody = (await current.json()) as {
@@ -136,7 +138,8 @@ describe("phase 4 shell, settings, chat", () => {
     expect(sent.status).toBe(200);
     expect(sentBody.data.reply).toBe("baseline desk run");
     expect(JSON.stringify(sentBody)).not.toContain(key);
-    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    const init = fetchMock.mock.calls[0]?.[1];
+    if (init === undefined) throw new Error("missing request init");
     expect((init.headers as Record<string, string>).authorization).toBe(`Bearer ${key}`);
     expect(String(init.body)).not.toContain(key);
     expect(String(init.body)).toContain("/fx/pairs");
