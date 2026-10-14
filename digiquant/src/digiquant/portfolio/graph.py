@@ -1,6 +1,6 @@
 """Compiled portfolio sub-graph — thesis-first thesis–commit (PR 4a–4d).
 
-Per [ADR-0015](../../../../docs/adr/0015-research-vs-portfolio.md), portfolio consumes
+Per [ADR-0015](../../../../docs/adr/0015-atlas-vs-hermes.md), portfolio consumes
 an research digest and produces analyst, deliberation, PM, and reflection outputs
 via ``state.phase_portfolio`` slots.
 """
