@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from digigraph import model_config
 from digigraph.tool_policy import expand_disabled_tool_tokens
+
+from digigraph import model_config
 
 
 def test_house_model_only_binds_allowlisted(monkeypatch) -> None:

@@ -216,7 +216,7 @@ def _skill_called_as_tool(
         from digigraph.skill_library.loader import list_skill_documents
 
         known = {doc.name for doc in list_skill_documents()}
-    except Exception:  # noqa: BLE001 - a broken library must not mask the unknown-tool path
+    except Exception:  # a broken library must not mask the unknown-tool path
         return None
     if name not in known:
         return None

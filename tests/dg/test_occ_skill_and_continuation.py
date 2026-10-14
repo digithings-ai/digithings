@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import digigraph.orchestration.builtin  # noqa: F401  (registers get_skill)
 import pytest
 from digigraph.graph.research import answer_looks_unfinished
-import digigraph.orchestration.builtin  # noqa: F401  (registers get_skill)
 from digigraph.orchestration import registry
 from digigraph.orchestration.registry import ToolContext
 
