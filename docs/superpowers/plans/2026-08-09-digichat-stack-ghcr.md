@@ -322,7 +322,7 @@ Until a config bundle ships (see stack-ghcr plan Task 4), this compose still mou
 `config/` from a digithings checkout for LiteLLM / digigraph. You need the **files**,
 not a local image build.
 
-Full monorepo stack (all Python services) alternative: [`docs/templates/self-host/README.md`](../templates/self-host/README.md) (`make up-ghcr` + `--profile digivault --profile digichat`).
+Full monorepo stack (all Python services) alternative: [`docs/templates/self-host/README.md`](../../templates/self-host/README.md) (`make up-ghcr` + `--profile digivault --profile digichat`).
 ```
 
 - [ ] **Step 2: Update `infra/digichat-release/README.md` inventory**
