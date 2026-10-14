@@ -1,6 +1,6 @@
 # ADR-0010 — Atlas first-class thesis + deliberation tables
 
-- **Status:** Accepted
+- **Status:** Accepted (product names historical — see [ADR-0026](0026-retire-olympus-atlas-hermes-kairos.md))
 - **Date:** 2026-04-20
 - **Deciders:** Chris Stefan (founder), Atlas Wave 1 worktree agents
 - **Related:** [ADR-0008 Atlas research schema](0008-atlas-research-schema.md), [ADR-0011 Atlas Supabase persistence](0011-atlas-supabase-persistence.md)

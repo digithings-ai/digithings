@@ -9,9 +9,9 @@
  *    strings in SVG props, hence the getComputedStyle read (cached once per
  *    theme flip) instead of `var(--token)` strings.
  *
- * 2. CATEGORICAL / benchmark series (sleeve palette, SPY/QQQ…, currencies,
- *    event markers, signal legs): FIXED literals. This block is the
- *    sanctioned raw-hex allowlist for the whole app — series identity must
+ * 2. CATEGORICAL series (sleeve palette, currencies, event markers): FIXED
+ *    literals. This block is the sanctioned raw-hex allowlist for the whole
+ *    app — series identity must
  *    stay stable across themes and must not collapse into one another
  *    (e.g. in dark mode --up equals --accent, which would merge OPEN and ADD
  *    event markers if they were token-driven). Preserve these hues; do not
@@ -130,7 +130,7 @@ export function withAlpha(color: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-/* ── 2. Categorical / benchmark series — SANCTIONED FIXED LITERALS ─────── */
+/* ── 2. Categorical series — SANCTIONED FIXED LITERALS ─────────────────── */
 
 /**
  * Rotating palette for N-way categorical series (sleeve allocation bands,
@@ -150,17 +150,6 @@ export const CATEGORICAL_SERIES: readonly string[] = [
   '#14B8A6',
 ] as const;
 
-/** Benchmark overlay hues (performance workspace). */
-export const BENCHMARK_COLORS: Record<string, string> = {
-  SPY: '#a1a1aa',
-  QQQ: '#8b5cf6',
-  IWM: '#f472b6',
-  EEM: '#22c55e',
-  TLT: '#06b6d4',
-  GLD: '#f59e0b',
-  IBIT: '#f97316',
-};
-
 /** twelve-x currency hues (consensus bars / matrix). */
 export const CURRENCY_COLORS: Record<string, string> = {
   USD: '#3B82F6',
@@ -179,20 +168,6 @@ export const CURRENCY_COLORS: Record<string, string> = {
 export const CURRENCY_FALLBACK = '#94a3b8';
 
 /**
- * Comparable-overlay stroke: the fixed benchmark hue when known, otherwise a
- * stable hash-derived hsl so ad-hoc tickers keep a consistent identity.
- */
-export function comparableLineColor(t: string): string {
-  if (BENCHMARK_COLORS[t]) return BENCHMARK_COLORS[t];
-  let h = 0;
-  for (let i = 0; i < t.length; i++) {
-    h = t.charCodeAt(i) + ((h << 5) - h);
-  }
-  const hue = Math.abs(h) % 360;
-  return `hsl(${hue} 62% 58%)`;
-}
-
-/**
  * Position-event markers (price/contribution charts). Deliberately FIXED,
  * not token-driven: in the dark theme --up === --accent (both the digiquant
  * phosphor), which would make OPEN and ADD markers indistinguishable. The
@@ -204,20 +179,4 @@ export const EVENT_COLORS: Record<'OPEN' | 'EXIT' | 'ADD' | 'TRIM' | 'DEFAULT', 
   ADD: '#38bdf8',
   TRIM: '#f59e0b',
   DEFAULT: '#71717a',
-};
-
-/** Intelligence composite signal legs (IntelligenceTab / WhyPanel). */
-export const SIGNAL_SERIES: Record<'consensus' | 'event' | 'breadth', string> = {
-  consensus: '#3B82F6',
-  event: '#10B981',
-  breadth: '#8B5CF6',
-};
-
-/** WhyPanel leg-score bars — consensus blue family, light-to-dark ramp. */
-export const LEG_COLORS: readonly string[] = ['#3B82F6', '#6db6ff', '#8B5CF6'] as const;
-
-/** Rolling-metrics chart: Sharpe vs volatility series. */
-export const ROLLING_SERIES: Record<'sharpe' | 'vol', string> = {
-  sharpe: '#8b5cf6',
-  vol: '#06b6d4',
 };

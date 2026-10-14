@@ -12,7 +12,7 @@ Components and ports:
 - `digigraph` (8000) — LangGraph orchestration, OpenAI-compatible API, tool registry
 - `digiquant` (8001) — NautilusTrader backtest/optimize, strategy registry, research + portfolio sub-graphs
 - `digisearch` (8002) — RAG, document ingest, vector search
-- `digitrace` (8003) — LangSmith tracing helpers, status API ✅ done (pilot — do not regenerate unless stale)
+- `digitrace` (8003) — LangSmith + OTLP tracing helpers, status API (pilot pages predate dual-export; regenerate when stale)
 - `digivault` (8004) — Obsidian-style markdown vault management
 - `digikey` (8005) — JWT + scoped API key auth plane
 - `digichat` (3005) — Next.js BFF + React chat UI
@@ -20,7 +20,7 @@ Components and ports:
 - `digibase` — shared HTTP/audit **library** (Python package, not a service)
 - `digillm`, `digifetch`, `digiskills` — supporting libraries
 - `digivoice` — local speech CLI (whisper.cpp + Piper). No network service
-- `frontend/dashboard` — digiquant operator surface
+- `apps/dashboard` — digiquant operator surface
 - Repo-level: branching model, `make` targets, review/merge policy (brief — pointer to AGENTS.md, not a duplicate)
 
 Do not add pages for `digismith` (removed; tracing lives in `digitrace`) or `digibot` (not in this tree). Do NOT document `projects/` (confidential). Do not name client workspaces in these pages. Keep each component to
