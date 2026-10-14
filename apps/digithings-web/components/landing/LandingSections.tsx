@@ -39,27 +39,32 @@ import { OpenSourceLive } from "./OpenSourceLive";
 // Answers are drawn from /security and /legal/privacy — the same
 // facts those pages state, in the landing page's shorter voice. No new claim
 // originates here. These are also the questions the ask box below the list can
-// answer from cache, so the two never disagree.
+// answer from cache, so the two never disagree. High-level questions only
+// (DIG-3555): no package-specific questions live here.
 const FAQ: { q: string; a: string }[] = [
   {
+    q: "What is digithings?",
+    a: "An open-source stack of trading-intelligence modules — chat, research, quant, search and more. Each module runs standalone or composes with the rest, on your own hardware.",
+  },
+  {
+    q: "How do I run it?",
+    a: "Clone the repo and run the stack locally with your own provider key. There is no hosted product and no account to create — it runs on your hardware, under your control.",
+  },
+  {
+    q: "Does it work with my existing stack?",
+    a: "Yes. The vector store and the LLM provider both sit behind interfaces, so taking one module and leaving the others is a supported path, not a fork. Your provider key lives in the page's memory for the current tab and nowhere else.",
+  },
+  {
+    q: "Why run this instead of a hosted product?",
+    a: "Your keys, your hardware, your data. Nothing leaves your machine except the model calls you make with your own key, and there is no vendor lock-in — the code is yours to keep.",
+  },
+  {
+    q: "Is it really open source?",
+    a: "Yes — MIT-licensed on GitHub. Clone it, fork it, contribute back. The repo activity, backlog and releases are public, and the open-source band above shows them live.",
+  },
+  {
     q: "What does it cost?",
-    a: "You don't pay for the software. It runs on your hardware, with your own provider key; model usage is billed by that provider. We charge for integration work only, with no hosted tier.",
-  },
-  {
-    q: "Where does my provider key live?",
-    a: "In the page's memory for the current tab, and nowhere else. The stack writes your provider and model choice to local storage and never persists the key; it is forwarded per request and gone when the tab closes.",
-  },
-  {
-    q: "Do I have to run every module?",
-    a: "No. Each runs standalone or composes with the rest. The vector store and the LLM provider both sit behind interfaces, so taking one module and leaving the others is a supported path, not a fork.",
-  },
-  {
-    q: "What is not built?",
-    a: "Two modules are roadmap rather than shipped, there is no hosted product, and the broker adapters raise NotImplementedError — live trading is guarded by a human review gate, not a runtime interlock. The security page lists the known limits.",
-  },
-  {
-    q: "Does this site track me?",
-    a: "No ad pixels and no third-party analytics. Local storage holds only your colour theme and, if you set up chat, your provider and model choice — nothing else persists in your browser.",
+    a: "You don't pay for the software. Model usage is billed by your own provider; we charge for integration work only, with no hosted tier.",
   },
 ];
 
