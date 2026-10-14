@@ -18,5 +18,5 @@ This directory holds the **June 2026 full-stack audit** artifacts. They are plan
 
 ## Other review records
 
-- [`pr/`](./pr/) — RETIRED 2026-10 (DIG-3393): per-PR review files now live on the Paperclip ticket, never in the repo. Do not add new files here.
+- Per-PR review files — RETIRED 2026-10 (DIG-3393): they live on the Paperclip ticket, never in the repo; the former `pr/` directory was removed. Do not add new files here.
 - [`archive/`](./archive/) — superseded baselines and audits kept for provenance (2026-03 code review baseline and improvement plan, dashboard architecture/frontend audits).
