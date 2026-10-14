@@ -128,7 +128,7 @@ COPILOT_TEMPLATE = """\
 
 {rules}
 
-- **Every code change must trace to a GitHub Issue on Project #1.** Use a `task/<N>-<slug>` branch (via `make task ISSUE=N`) or include `Fixes #<N>` in the PR body. Enforced by `.github/workflows/pr-linkage.yml`.
+- **Every code change must trace to a GitHub Issue on Project #1.** Use a `task/<N>-<slug>` branch (via `make task ISSUE=N`) or include `Fixes #<N>` in the PR body. Linkage is a convention, not a CI gate — [ADR 0024](docs/adr/0024-drop-pr-linkage-enforcement.md). `.github/workflows/pr-linkage.yml` is not in the tree.
 
 ---
 
@@ -221,7 +221,7 @@ alwaysApply: true
 
 {rules}
 
-- **Every code change must trace to a GitHub Issue on Project #1.** Use a `task/<N>-<slug>` branch (via `make task ISSUE=N`) or include `Fixes #<N>` in the PR body. Enforced by `.github/workflows/pr-linkage.yml`.
+- **Every code change must trace to a GitHub Issue on Project #1.** Use a `task/<N>-<slug>` branch (via `make task ISSUE=N`) or include `Fixes #<N>` in the PR body. Linkage is a convention, not a CI gate — [ADR 0024](docs/adr/0024-drop-pr-linkage-enforcement.md). `.github/workflows/pr-linkage.yml` is not in the tree.
 
 ---
 
