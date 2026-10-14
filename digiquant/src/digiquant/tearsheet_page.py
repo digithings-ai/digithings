@@ -54,8 +54,9 @@ def _build_page(
         win_rate_str = "—"
         win_rate_cls = ""
     else:
-        # The honest block owns k, n and the sample-size floors; the fill count
-        # is only a fallback denominator for results that predate L3.
+        # The honest block owns k, n and the sample-size floors; the closed
+        # round-trip count is only a fallback denominator for results that
+        # predate L3.
         counts = resolve_win_rate(result, win_rate, wins=win_rate_wins)
         win_rate_str = counts.text
         # A refusal publishes no interval, so it publishes no band either:
@@ -105,8 +106,9 @@ def _build_page(
             if profit_factor and profit_factor < 1
             else "",
         )
-        # num_trades is the fill count, not closed round trips — label it so.
-        + kpi("TOTAL FILLS", str(result.num_trades))
+        # num_trades is the closed round-trip count. The honest block owns k, n
+        # and the sample-size floors, so this KPI carries no rate.
+        + kpi("TOTAL TRADES", str(result.num_trades))
         + kpi("CALMAR", calmar_str, "positive" if calmar and calmar > 1 else "")
     )
 
