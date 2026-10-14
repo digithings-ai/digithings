@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 from datetime import date
 from typing import Any  # score:allow untyped any — used for fake-completion dict shape
@@ -148,11 +149,13 @@ class TestPhase4AssetClasses:
                 None,
             )
             if inputs_part is not None:
-                try:
+                # A malformed PHASE_INPUTS payload is skipped, not recorded:
+                # the assertions below on received_inputs catch any real
+                # breakage, so a quiet skip cannot mask a regression.
+                # (json.JSONDecodeError subclasses ValueError.)
+                with contextlib.suppress(ValueError):
                     text = inputs_part["text"].split(":", 1)[1].strip()
                     received_inputs.append(json.loads(text))
-                except (ValueError, json.JSONDecodeError):
-                    pass
             return _dispatch(_model, messages)
 
         compiled = build_pipeline(ResearchState, [build_phase3(), build_phase4()])

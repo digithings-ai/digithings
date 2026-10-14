@@ -185,6 +185,9 @@ def _require_docker() -> str:
     if os.environ.get("CI") == "true":
         pytest.fail(message)
     pytest.skip(message)
+    # pytest.fail/pytest.skip always raise (NoReturn); the explicit raise
+    # documents that no path may fall through and return None implicitly.
+    raise AssertionError("unreachable: pytest.skip always raises")
 
 
 def _psql_argv(

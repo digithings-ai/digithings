@@ -471,13 +471,16 @@ def test_default_embedder_singleton_is_thread_safe() -> None:
     minilm_module.MiniLMEmbedder = _SlowStubEmbedder  # type: ignore[misc]
     minilm_module._default_minilm_singleton = None
     results: list[object] = []
-    errors: list[BaseException] = []
+    errors: list[Exception] = []
 
     def _worker() -> None:
         try:
             barrier.wait(timeout=5)
             results.append(vectorize_module._get_default_embedder())
-        except BaseException as exc:
+        except Exception as exc:
+            # Exception (not BaseException): worker threads never receive
+            # KeyboardInterrupt/SystemExit, and every failure a barrier or a
+            # stub constructor can raise derives from Exception.
             errors.append(exc)
 
     threads = [threading.Thread(target=_worker) for _ in range(8)]

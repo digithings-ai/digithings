@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import io
 import os
 import pty
@@ -252,11 +253,11 @@ def _drain_master(master: int) -> None:
     """
 
     def _run() -> None:
-        try:
+        # The drain loop ends when the master fd is closed, which surfaces
+        # as OSError on read — that is this thread's normal exit path.
+        with contextlib.suppress(OSError):
             while os.read(master, 65536):
                 pass
-        except OSError:
-            pass
 
     threading.Thread(target=_run, daemon=True).start()
 
