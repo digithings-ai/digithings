@@ -390,8 +390,7 @@ function ContributorAvatar({ contributor }: { contributor: RepoContributor }) {
   if (contributor.avatarUrl) {
     return (
       // Plain <img>: the kit ships no next/image dependency and the avatar is a
-      // single fixed-size square.
-      // eslint-disable-next-line @next/next/no-img-element
+      // single fixed-size square (no next lint plugin runs on packages).
       <img
         className="ra-avatar"
         src={contributor.avatarUrl}
