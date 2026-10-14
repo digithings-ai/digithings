@@ -17,6 +17,7 @@ import {
 import { isInviteSurface } from "./public-surface";
 
 const DESK_KEY = "dq-desk";
+const DESK_CHANGE_EVENT = "dq-desk";
 
 /** Drop invite rows the caller is not granted. The public rail does not name them. */
 function publicNav(groups: NavGroup[]): NavGroup[] {
@@ -105,6 +106,7 @@ export function DeskAccess({ children, manifest: seed }: { children: ReactNode; 
     } catch {
       /* storage unavailable */
     }
+    window.dispatchEvent(new Event(DESK_CHANGE_EVENT));
   }, []);
   const nav = useMemo(() => (desk ? publicNav(navFromDesk(desk)) : []), [desk]);
   const value = useMemo<Ctx>(() => ({ manifest, err, desk, setDesk, nav }), [manifest, err, desk, setDesk, nav]);

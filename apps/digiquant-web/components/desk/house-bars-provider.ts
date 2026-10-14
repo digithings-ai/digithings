@@ -2,7 +2,7 @@
  * House market-data provider for the Vela charts (DIG-2814; Refs #4879/#4880).
  *
  * Vela's default feed is a registry of vendor providers, and the desk was
- * registering the browser-side Binance and Coinbase ones: the `/tools/charts`
+ * registering the browser-side Binance and Coinbase ones: the `/tools/vela`
  * route then rendered `binance:BTCUSDT` and every load tried to reach
  * `api.binance.com` and `fapi.binance.com` straight from the browser, which the
  * render audit recorded as a CORS failure (surfaces-audit.md finding 4). Neither

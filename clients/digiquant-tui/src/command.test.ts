@@ -35,7 +35,8 @@ test("a query matches the public path, label, and web href", () => {
     "/portfolio/tearsheet",
     "/portfolio/theses",
   ]);
-  expect(searchCommandPages("charts", "baseline")[0]?.path).toBe("/tools/charts");
+  expect(searchCommandPages("vela", "baseline")[0]?.path).toBe("/tools/vela");
+  expect(searchCommandPages("gloomberb", "baseline")[0]?.path).toBe("/tools/gloomberb");
   expect(searchCommandPages("digichat", "baseline").map((hit) => hit.label)).toEqual(["digichat"]);
   expect(searchCommandPages("/app/tools/terminal/", "baseline").map((hit) => hit.label)).toEqual(["Terminal"]);
   expect(searchCommandPages("fx", "baseline")).toEqual([]);

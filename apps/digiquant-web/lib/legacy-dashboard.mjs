@@ -27,8 +27,15 @@ export const LEGACY_DESK_PATHS = [
   "/strategies/detail",
   "/strategies/deploy",
   "/tools/terminal",
-  "/tools/charts",
-  "/tools/chat",
+  "/tools/gloomberb",
+  "/tools/vela",
+  "/tools/digichat",
+];
+
+/** Old tool slugs. One hop to the branded route, on /app, /dashboard and /olympus. */
+export const TOOL_ROUTE_ALIASES = [
+  ["/tools/charts", "/tools/vela"],
+  ["/tools/chat", "/tools/digichat"],
 ];
 
 /** Retired apps/dashboard pages with no desk twin. They go to /app. */
@@ -74,6 +81,8 @@ export function legacyDashboardTarget(pathname) {
   if (path !== "/dashboard" && !path.startsWith("/dashboard/")) return null;
   const rest = path.slice("/dashboard".length).replace(/\/+$/, "");
   if (rest === "") return "/app";
+  const alias = TOOL_ROUTE_ALIASES.find(([from]) => from === rest);
+  if (alias) return legacyDeskHref(alias[1]);
   if (LEGACY_DESK_PATHS.includes(rest)) return legacyDeskHref(rest);
   if (RETIRED_DASHBOARD_PATHS.includes(rest)) return "/app";
   return null;
@@ -91,6 +100,28 @@ function accountPathsLongestFirst() {
   return [...DASHBOARD_ACCOUNT_PATHS].sort((a, b) => b.length - a.length || a.localeCompare(b));
 }
 
+function aliasRedirectRules(prefix) {
+  /** @type {{ source: string, destination: string, permanent: true }[]} */
+  const rules = [];
+  for (const [from, to] of TOOL_ROUTE_ALIASES) {
+    const destination = legacyDeskHref(to);
+    rules.push({ source: `${prefix}${from}`, destination, permanent: true });
+    rules.push({ source: `${prefix}${from}/`, destination, permanent: true });
+  }
+  return rules;
+}
+
+function aliasCloudflareLines(prefix) {
+  /** @type {string[]} */
+  const lines = [];
+  for (const [from, to] of TOOL_ROUTE_ALIASES) {
+    const destination = legacyDeskHref(to);
+    lines.push(`${prefix}${from} ${destination} 308`);
+    lines.push(`${prefix}${from}/ ${destination} 308`);
+  }
+  return lines;
+}
+
 /** Next.js redirects(). Specific desk paths, then retired pages, then the root. */
 export function legacyDashboardRedirects() {
   /** @type {{ source: string, destination: string, permanent: true }[]} */
@@ -100,6 +131,8 @@ export function legacyDashboardRedirects() {
     rules.push({ source: `/dashboard${path}`, destination, permanent: true });
     rules.push({ source: `/dashboard${path}/`, destination, permanent: true });
   }
+  rules.push(...aliasRedirectRules("/app"));
+  rules.push(...aliasRedirectRules("/dashboard"));
   for (const path of retiredLongestFirst()) {
     rules.push({ source: `/dashboard${path}`, destination: "/app", permanent: true });
     rules.push({ source: `/dashboard${path}/`, destination: "/app", permanent: true });
@@ -120,6 +153,7 @@ export function legacyDashboardCloudflareLines() {
     lines.push(`/dashboard${path} ${destination} 308`);
     lines.push(`/dashboard${path}/ ${destination} 308`);
   }
+  lines.push(...aliasCloudflareLines("/dashboard"));
   for (const path of retiredLongestFirst()) {
     lines.push(`/dashboard${path} /app 308`);
     lines.push(`/dashboard${path}/ /app 308`);
@@ -148,6 +182,7 @@ export function legacyOlympusCloudflareLines() {
     lines.push(`/olympus${path} ${destination} 308`);
     lines.push(`/olympus${path}/ ${destination} 308`);
   }
+  lines.push(...aliasCloudflareLines("/olympus"));
   for (const path of retiredLongestFirst()) {
     lines.push(`/olympus${path} /app/ 308`);
     lines.push(`/olympus${path}/ /app/ 308`);

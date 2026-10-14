@@ -56,7 +56,7 @@ test("every page block has one route, and web-only pages are absent", () => {
   expect(joined.includes("/charts/")).toBe(false);
   expect(joined.includes("/chat/")).toBe(false);
   expect(BLOCKS["pl-canvas"]?.kind).toBe("graph");
-  expect(PAGES.some((p) => p.path === "/tools/chat")).toBe(false);
+  expect(PAGES.some((p) => p.path === "/tools/digichat")).toBe(false);
 });
 
 test("a page change does not keep the previous page's blocks", () => {

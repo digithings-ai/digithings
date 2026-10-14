@@ -211,7 +211,7 @@ export function DeskRail({
             })}
           </div>
         ))}
-        {current === "/tools/chat" ? <RailThreads onNavigate={onNavigate} /> : null}
+        {current === "/tools/digichat" ? <RailThreads onNavigate={onNavigate} /> : null}
       </nav>
     </aside>
   );

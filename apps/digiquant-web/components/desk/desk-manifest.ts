@@ -119,7 +119,7 @@ export function parseManifest(body: unknown): Manifest | null {
 /**
  * Desk pages → folder groups. A page is a child when its parent path is also
  * a page; otherwise it is top-level, grouped under its first segment when it
- * has two (`/tools/charts` → "tools").
+ * has two (`/tools/vela` → "tools").
  */
 export function navFromDesk(desk: ManifestDesk): NavGroup[] {
   const pages = desk.pages;

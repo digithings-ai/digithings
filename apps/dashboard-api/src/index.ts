@@ -69,6 +69,13 @@ export interface Env {
   /** Optional twelve-x (FX hub) Supabase project; absent = FX reads fail closed (upstream_empty). */
   TWELVEX_SUPABASE_URL?: string;
   TWELVEX_SUPABASE_SERVICE_KEY?: string;
+  /**
+   * KV binding for the digiquant financial-session tenant record (key `digiquant`).
+   * Unset keeps chat fail-closed. Do not put the inference key in this namespace.
+   */
+  DIGICHAT_TENANT?: { get(key: string): Promise<string | null> };
+  /** Worker secret for the cheap inference key. Never a committed value. */
+  DIGICHAT_CHEAP_INFERENCE_KEY?: string;
 }
 
 // Section 1/2 primitives live in ./errors and ./responses: this module is the
