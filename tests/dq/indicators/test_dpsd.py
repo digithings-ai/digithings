@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import pytest
 from digiquant.indicators.dpsd import DPSDTrend
+
+pytestmark = pytest.mark.unit
 
 
 def _feed(dpsd: DPSDTrend, prices: list[float]) -> None:
