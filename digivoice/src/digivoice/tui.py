@@ -1521,7 +1521,6 @@ def choose(
                     pass
             termios.tcsetattr(fd, termios.TCSADRAIN, saved)
             _cursor(stdout, True)
-        return None
     _write_numbered(stdout, title, listed, blocks, paging=paging)
     try:
         raw = stdin.readline()
