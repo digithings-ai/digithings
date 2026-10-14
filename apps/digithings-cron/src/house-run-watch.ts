@@ -123,6 +123,29 @@ export type HouseRunCheckResult = {
   lost: HouseRunVerdict[];
   unreadable: string[];
   raised: RaisedAlarm[];
+  /** Mondays with no landing past the deadline and no open house run (DIG-3456). */
+  neverDispatched: NeverDispatchedFinding[];
+};
+
+export type NeverDispatchedReason =
+  | "not-due"
+  | "unverifiable"
+  | "landed"
+  | "open-house-run"
+  | "never-dispatched";
+
+export type NeverDispatchedFinding = {
+  run_date: string;
+  lost: boolean;
+  reason: NeverDispatchedReason;
+};
+
+/** The runner's landing answer for one run_date, or null when unreadable. */
+export type HouseStatus = {
+  run_date: string;
+  landed: boolean;
+  open_house_runs: string[];
+  verifiable: boolean;
 };
 
 export function ghHeaders(token: string | undefined, json: boolean): Record<string, string> {
