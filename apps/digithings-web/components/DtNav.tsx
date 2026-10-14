@@ -6,29 +6,33 @@
  * portal sheet, body scroll lock, Escape/scrim dismissal and focus return are
  * owned by NavShell; everything digithings-specific arrives here as props — the
  * brand mark, the wayfinding links, the skip-link target, the GitHub icon in
- * the tail, and the digichat hero banner (sheet, plus the wide-bar tail). The
- * banner is the chat entry: it builds on load and stays live.
+ * the tail, and the chat entry (an icon link plus the sheet CTA). The chat
+ * entry is a theme-aware icon, never a canvas wordmark, so it stays legible in
+ * both themes at every scroll position.
  *
  * The bar is pinned: it settles after 8px but never yields on scroll-down
  * (owner: the top bar should stay fixed to the top). Pass
  * `autoHide="hover"` explicitly for the non-scrolling chat shells.
  */
 import { usePathname } from "next/navigation";
-import { NavShell, GitHubGlyph, IconLink } from "@digithings/ui";
-import { DIGICHAT } from "@digithings/hero-banner/definitions";
+import { NavShell, GitHubGlyph, CtaLink, IconLink } from "@digithings/ui";
+import { DigiChatMark } from "@digithings/digichat-ui";
 import { Brand, DT_NAV_PRIMARY } from "@/app/_nav";
-import { ScrollBanner } from "@/components/landing/ScrollBanner";
 
 const NAV_HREFS = DT_NAV_PRIMARY.flatMap((item) =>
   "items" in item ? item.items.map((i) => i.href) : [item.href],
 ).filter((href) => href.startsWith("/"));
 
-/** digichat hero banner. It replaces the old ask button in the bar and the sheet. */
-function DigichatNavMark({ className }: { className?: string }) {
+/** Chat entry: an icon-only link in the tail (same ghost icon-button dress
+ *  and size as the theme toggle and GitHub icons) plus a labelled CTA in the
+ *  narrow sheet. The icon is currentColor stroke, so it stays legible in both
+ *  themes — the fixed-palette canvas wordmark it replaces washed out on light
+ *  backgrounds. */
+function ChatTailIcon() {
   return (
-    <a href="/chat" aria-label="digichat" className={className}>
-      <ScrollBanner def={DIGICHAT} inView={false} replayLoading className="w-[7.2rem]" />
-    </a>
+    <IconLink href="/chat" label="Ask digichat">
+      <DigiChatMark size={18} />
+    </IconLink>
   );
 }
 
@@ -66,10 +70,14 @@ export function DtNav({ autoHide = "pinned" }: { autoHide?: "scroll" | "hover" |
           >
             <GitHubGlyph />
           </IconLink>
-          <DigichatNavMark className="inline-flex items-center max-[880px]:hidden!" />
+          <ChatTailIcon />
         </>
       }
-      cta={<DigichatNavMark className="inline-flex items-center" />}
+      cta={
+        <CtaLink href="/chat" aria-label="Ask digichat" icon={<DigiChatMark size={18} />}>
+          Ask digichat
+        </CtaLink>
+      }
     />
   );
 }
