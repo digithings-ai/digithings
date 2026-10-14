@@ -34,11 +34,6 @@
     opacity 0.4s var(--transition-ease),
     stroke-width 0.3s var(--transition-ease);
 }
-.la-edge.la-is-hot {
-  stroke: var(--accent, var(--fg));
-  stroke-width: 1.6;
-  opacity: 1;
-}
 
 @keyframes la-flow {
   from { stroke-dashoffset: 0; }
