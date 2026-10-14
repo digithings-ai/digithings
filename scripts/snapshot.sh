@@ -250,6 +250,10 @@ case "$TARGET" in
   *) TARGETS=("$TARGET") ;;
 esac
 
+# One sidecar for the whole run. Truncating inside the loop kept only the
+# last target, so `all` (core then twelve-x) dropped core's digests.
+: > "$RUN_DIR/SHA256SUMS"
+
 for t in "${TARGETS[@]}"; do
   dsn="$(read_dsn "$(target_env_for "$t")" "$t")"
   export_dsn_parts "$dsn"
@@ -267,7 +271,7 @@ for t in "${TARGETS[@]}"; do
   [ "${entries:-0}" -gt 0 ] || die "pg_restore -l listed no entries for $t — archive is unusable"
   note "$t: $entries table-of-contents entries"
 
-  ( cd "$RUN_DIR" && shasum -a 256 "$t.dump" "$t.dump.list" > SHA256SUMS )
+  ( cd "$RUN_DIR" && shasum -a 256 "$t.dump" "$t.dump.list" >> SHA256SUMS )
   ( cd "$RUN_DIR" && shasum -a 256 -c SHA256SUMS >/dev/null ) \
     || die "local SHA256 verification failed for $t"
 
