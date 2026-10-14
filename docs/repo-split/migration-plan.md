@@ -23,6 +23,12 @@ needing those goes to Chris as a decision. Slices A–N, P are folded in
 [Consolidated corrections](#consolidated-corrections-from-slices-an-p-dig-3573-2026-10-14);
 open inputs (no draft yet: A, K, L, M, N) are listed there, not invented.
 
+**Revised again 2026-10-14 23:18 (Chris, send-back, released):** R0 stays on GitHub, inbound
+Origin mirror only. **Detach is forbidden for R0**, and **no twelve-x detach is scheduled
+(P4.7 struck)**. Only the R0 public repo stays on GitHub; moving CI and crons off GitHub stays
+top priority (local-ci, Cloudflare crons) — the suggestion to keep GitHub primary until 1 Nov
+was NOT taken.
+
 Naming used below:
 - **mono** = today's `digithings-ai/digithings`. It stays public and keeps its name until the
   cutover in P3, where it is renamed `digithings-ai/digithings-mono` and made private.
@@ -94,34 +100,33 @@ PyPI trusted publishing keeps working unchanged. External PRs: native on GitHub,
 This keeps one source of truth with only documented features, and it differs from Chris's first
 direction only for R0. The Origin-primary option with a push mirror built by us was not chosen.
 
-### 3. twelve-x with full history
+### 3. twelve-x — STRUCK 2026-10-14 23:18 (Chris)
 
-R7 already exists as a private GitHub repo, and P4.7 adds the twelve-x paths from mono.
-1. `gitleaks detect --log-opts="--all"` on a mirror clone of the GitHub repo. Rotate any hit first.
-2. **No findings:** Chris runs `origin repo create-mirrored` for it (full history, branches, tags,
-   PRs), checks it, then **detaches** it (one-way; Origin becomes primary). Detach needs Chris's user
-   credential and admin on the GitHub repo.
-3. **Findings:** `git filter-repo --replace-text denylist.txt` on the mirror clone, verify offline
-   (same checks as P3 step 3), push to an empty Origin repo. PR history is not carried; the PR list is
-   exported to the tracking issue first.
-4. The GitHub repo is made read-only (archived, private) for 90 days as a rollback source, then deleted (D-O5: no client contract applies).
-5. P4.7: extract the twelve-x paths from mono with `git filter-repo --paths-from-file r7.paths`,
-   then merge them into the Origin repo with `--allow-unrelated-histories`, in a PR. History of both sources is kept.
+No twelve-x detach is scheduled and P4.7 is struck: `chrizefan/twelve-x` is already a private
+inbound mirror (Matrix finding 9, live since the 2026-08-18 initial sync), and Chris forbids any
+detach. twelve-x stays as-is (GitHub private + existing inbound mirror). The R7 twelve-x-path move
+(desk surface + `digidata-api`) is undecided — it needs a new ruling, not this section. A later
+"move" would be a detach or a gated outbound transition, never a first create.
 
-### 4. CI on Origin
+### 4. CI on Origin — STRUCK Buildkite 2026-10-14 23:18 (Chris)
 
-- GitHub Actions does **not** run on Origin pushes. Private repos use **Buildkite** with Origin
-  connected as the repository provider (D-O3). Buildkite posts check runs to Origin PRs, so
-  `require_status_checks` rulesets can use them.
-- Agents are **self-hosted** (D-G4 stands): queue `ci` on Chris's Mac, no credentials;
-  queue `deploy` on the Mac `deploy` agent only (D-G5), with the Cloudflare Worker fallback.
-- Checkout uses `origin repo clone-fast` in a Buildkite `checkout` hook; Buildkite mints the short-lived Origin token.
-- Workflows in `.github/workflows/` of R1–R7 are rewritten as `.buildkite/pipeline.yml`. The P1.9
-  deploy workflows are written as plain scripts (`scripts/deploy/<target>.sh`) so the same script runs
-  from GitHub Actions (mono) and from Buildkite (R2–R7).
-- Scheduled jobs that `digithings-cron` dispatches through the GitHub API move to the Buildkite
-  builds API (token on Chris's Mac, scoped to the pipelines it triggers).
-- Public CI (R0) stays on GitHub-hosted runners (D-O1).
+- GitHub Actions does **not** run on Origin pushes. **Buildkite is struck (D-O3 struck)** and
+  **`origin repo clone-fast` is struck** (CloneKit is Enterprise-only; Matrix finding 6). The runner
+  is **local-ci on Chris's Mac** (DIG-3561 dispatcher design + N §5: one launchd job, 2 concurrent /
+  1 heavy, ephemeral job dirs; plain `git clone` with a short-lived token for checkout).
+- Rulesets that must hold are **`active`, never `evaluate`** — the "advisory" reading is struck.
+  The agent identity is **not** a bypass actor: no agent seat holds bypass, so an `active` ruleset
+  binds agents too. **Signed tags are mandatory before any private-repo deploy** (D-G6 now
+  mandatory): the local-ci gate runs `git verify-tag` against `allowed_signers` on every release
+  tag, and an unsigned tag is refused. (Origin has no signed-tag rule type — Matrix; the check
+  lives in local-ci, which is also why it cannot be skipped.)
+- Workflows in `.github/workflows/` of R1–R7 are rewritten as local-ci jobs (no `.buildkite/`
+  tree). The P1.9 deploy workflows are plain scripts (`scripts/deploy/<target>.sh`) so the same
+  script runs from GitHub Actions (mono, interim) and from local-ci (R1–R7).
+- Scheduled jobs that `digithings-cron` dispatches through the GitHub API move to the local-ci
+  trigger API (D-R5-6; token on Chris's Mac, scoped to the pipelines it triggers).
+- Public CI (R0) stays on GitHub-hosted runners while minutes last (D-O1); a missing Actions check
+  is not a failure — the local test pass in the PR body is the record.
 
 ### 5. Cloudflare deploys after the move
 
@@ -160,16 +165,17 @@ Rulesets live as code in `scripts/split/rulesets/origin/` and are applied by Chr
 
 | Ruleset kind | Refs | Rules | Bypass |
 |---|---|---|---|
-| `merge_branch` | `~DEFAULT_BRANCH`, `develop`, `release/**` | `pull_request` (1 approval; code owners on `main` and `release/**`; merge methods `merge`, `squash`), `require_status_checks` (Buildkite `ci`), `require_branch_up_to_date` | Chris only |
+| `merge_branch` | `~DEFAULT_BRANCH`, `develop`, `release/**` | `pull_request` (1 approval; code owners on `main` and `release/**`; merge methods `merge`, `squash`), `require_status_checks` (local-ci), `require_branch_up_to_date` | Chris only |
 | `push_branch` | same | `deletion`, `non_fast_forward`, `block_direct_updates` | Chris only |
 | `push_tag` | `*-v*` | `deletion`, `non_fast_forward`, `ref_name_pattern` `^[a-z0-9-]+-v[0-9]+\.[0-9]+\.[0-9]+$`, `block_direct_updates` (no one but the bypass actor can create a release tag) | Chris only |
 
 - Per-package release branches `release/<component>` (R2–R6) are now protected for real.
 - Not available on Origin today: dismiss stale reviews, last-push approval, required thread
   resolution, signed tags. The optional signed-tag step (D-G6) covers the last one only when used.
-- Agents use Chris's account (D-O4), and Chris is the bypass actor, so these rulesets are
-  **advisory** for agents: they document intent and stop accidents, nothing more. Seat instructions
-  still forbid agents from pushing to `main`/`release/*` and from creating release tags.
+- 23:18: the "advisory" reading is struck. Rulesets that must hold are **`active`**; the agent
+  identity is **not** a bypass actor (no agent seat holds bypass). Seat instructions still forbid
+  agents from pushing to `main`/`release/*` and from creating release tags — and now an `active`
+  ruleset enforces it too. Chris alone holds bypass.
 - Rulesets are proven on a scratch repo in P2 before any real repo depends on them: Chris checks the
   applied config with `origin ruleset view`, and a direct push to `develop` without bypass is refused
   (tested by Chris with bypass switched off for the test, then switched back on).
@@ -354,7 +360,7 @@ Validation and rollback per target:
 | 4.4 | R5 digithings-stack | stack, digichat, langfuse, cron, corpus-index each deployed once from a Chris-cut `stack-v*` tag; health checks on all routes listed in the proposal; cron dispatches R2/R7 workflows with the App token; tenant chat smoke per tenant. | `wrangler rollback` per Worker; cron rollback restores old dispatch targets. |
 | 4.5 | R3 digiquant-web | New Pages project `digiquant-io-r3` direct-uploaded by the Mac agent from a Chris-cut `web-v*` tag; preview checked against R2; move custom domain `digiquant.io`. Old project's Git builds disabled (production branch set to an unused name). | Move domain back to old project (minutes). |
 | 4.6 | R4 digithings-web | Same as R3 for `digithings.ai`; routes to R5 (`/api/*`, `/embed*`) checked. | Move domain back. |
-| 4.7 | R7 twelve-x | twelve-x desk surface + `digidata-api` moved; desk gate/palette in R3 made pluggable first (D-X1). No client-contract gate (D-O5). | Revert PRs in R3/R7; previous digidata-api version. |
+| 4.7 | R7 twelve-x — STRUCK 23:18 | No detach scheduled; twelve-x stays as-is. The desk-surface move is undecided (needs a new ruling). | n/a (struck). |
 
 Why this order: R6 first removes the most sensitive data from the platform images; R1 before R2
 because R2 pins it; R2 before R5 because R5's cron binds to R2's Workers by name; web last because
@@ -394,6 +400,12 @@ held (guard in "warn" mode during extraction, "fail" mode after cut-over).
 ---
 
 ## Consolidated corrections from slices A–N, P (DIG-3573, 2026-10-14)
+
+**23:18 correction (Chris): no CI fallback exists today.** A dark Mac blocks merges — there is no
+second runner to take over. The Cloudflare Worker fallback is a **design only** (DIG-3561 §8,
+partial checks, never a full pass), and **Workers Builds auto-deploy on push is not allowed**
+(never connect it to an Origin repo). Any plan text suggesting otherwise is superseded by this
+paragraph.
 
 Slice sources: B (DIG-3559), C (DIG-3560), D (DIG-3561), E (DIG-3562), F (DIG-3563),
 G (DIG-3564), H (DIG-3565), I (DIG-3566), J (DIG-3567), P (DIG-3572) — each stored as the
@@ -488,7 +500,17 @@ revert by moving the domain back (minutes); KV rollback re-runs `kv-sync` from t
 6. Every P4 cut-over deploy from a Chris-cut release tag; verify per-target validation receipt.
 7. P3 cutover renames + visibility + `create-mirrored` — Chris; verify SHA-equality table.
 
-### 7. Docs + openwiki updates (this slice)
+### 7. Order gates (23:18, binding)
+
+1. **DIG-3605 (crons and jobs off GHA) completes before DIG-3608** (disable-GHA-workflows).
+   The 30-row dispatch re-point (D-R5-6) is what keeps the estate running once GHA retires.
+2. **Section-1 refactors land on `develop` before any extraction or filter-repo push.**
+   Extraction PR #5726 (slice L, open) is dry-run only until the boundary checks are green on
+   `develop`.
+3. **The fresh public repo (D-12′) waits until a KV read of tenant config is proven**
+   (R6 `kv-sync` to staging, tenant chat answering from KV). No public history is cut before that.
+
+### 8. Docs + openwiki updates (this slice)
 
 This PR updates `docs/repo-split/` only. P6 table additions from the slices: R0 README/CONTRIBUTING
 (state the non-GitHub registries + local-ci reporting once chosen); R5/R2 runbooks (Mac gate hook,
@@ -498,11 +520,45 @@ bindings + seat instructions (Origin URLs, `origin`/`github` remotes, agents nev
 `repo-split.md`/`CONTRIBUTING`/openwiki/digibook pages land per repo at extraction; the public-safe
 repo map lands in R0 at P3.
 
-### 8. Open inputs (no draft yet — not invented here)
+### 9. Local-ci merge rule (23:18)
 
-A (DIG-3558, Origin capabilities verification), K (DIG-3568, twelve-x inventory), L (DIG-3569,
-extraction scripts dry-run), M (DIG-3570, workspace config), N (DIG-3571, deploy hooks). Each
-lands as its issue's `plan` document; this section absorbs them without reordering the phases.
+A swap or disk-guard skip in local-ci posts a **failure status, not nothing** — a skipped gate is
+a red gate, so a dark-Mac-adjacent skip can never read as green. **Fork PR path:** fork heads are
+not mirrored to Origin (Matrix finding 7) — external review and CI for fork PRs stay on GitHub;
+local-ci never executes fork code. Local-ci gates, per repo job list: **pytest, actionlint,
+compose-validate and the audits are gated**; anything not gated is listed explicitly as not gated
+in the job matrix — a lane that reports "all local checks passed" without them is misreporting.
+
+### 10. Slices A, L, N — drafts folded (correction: drafts exist)
+
+- **A (DIG-3558, in_review): capability matrix** (`plan` doc, 13,522 chars). Folded findings:
+  `internal` needs no Teams plan (live `chrizefan/digithings` is `internal`); live inbound mirror
+  already carries `evaluate` rulesets (`active` untested); "advisory" fails as a product claim
+  (enforcement can be `active`); outbound mirroring gated-off, do not plan a push mirror — detach
+  is the documented path (but forbidden for R0, struck for twelve-x); GHA minutes exhausted
+  (matrix finding 5, = 22:09); **CloneKit fails on Ultra** (plain clone + short-lived token);
+  fork heads never mirror; local check posts need an app token and **403 on mirrors** (local PR-body
+  record is the working path); no signed-tag rule type (local `verify-tag` only); no native runner;
+  no package registry (git tag pins stand); **`chrizefan/twelve-x` already a private inbound
+  mirror** (finding 9 — the fact behind striking P4.7).
+- **L (DIG-3569, in_review): extraction scripts, PR #5726 open** into `develop`
+  (branch `DIG-3569-repo-split-extraction-scripts` @ `7f18d256f`, +507/-0, signed). Dry run at
+  `d227b6ed5`: R1 488/114, R2 1441/489, R3 333/231, R4 446/273, R5 842/185, R6 290/50, R7 90/122
+  (commits/files); gates green (dry-run 7/7, overlaps 0 unlisted, bash -n, 7/7 extractions).
+  R6/R7 regenerated from delivered inventories. R5/R6 double-claim on 10 files recorded, ruling
+  owed. Dry-run only until order gate F4-2 clears.
+- **N (DIG-3571, in_review): deploy map + local-ci wrangler design + auto-deploy-off-main
+  proposal** (`plan` doc, 17,497 chars). Folded: 6 live Workers mapped to R2/R5 (+1 sourceless
+  `corpus-index` worker — open D-1: recommendation R5); 2 Pages projects (names unverified — open
+  D-2); dead lane `deploy-digiquant-runner.yml` (delete); no workflow deploys Pages; 2 Workers
+  already Mac-deployed; local-ci `wrangler deploy` rule (build on Mac, dry-run gate first,
+  `--var` not `--define`, Docker needed even for dry-run on container Workers); crons stay in
+  Cloudflare (never edit `[triggers]`); auto-deploy-off-main steps (Pages production branch =
+  dashboard session D-3; `release/web` must exist first). Open D-1…D-5 (owner, Pages names,
+  dashboard actor, Mac always-on, repo names).
+
+Still open inputs (no draft): K (DIG-3568), M (DIG-3570). Each lands as its issue's `plan`
+document; this section absorbs them without reordering the phases.
 
 ## Tracking
 
