@@ -58,8 +58,8 @@ const FAQ: { q: string; a: string }[] = [
     a: "Two modules are roadmap rather than shipped, there is no hosted product, and the broker adapters raise NotImplementedError — live trading is guarded by a human review gate, not a runtime interlock. The security page lists the known limits.",
   },
   {
-    q: "Does it need NautilusTrader?",
-    a: "Only for the quant work. Every backtest and optimise path runs through it, so digiquant depends on it; the rest of the stack does not.",
+    q: "Does this site track me?",
+    a: "No ad pixels and no third-party analytics. Local storage holds only your colour theme and, if you set up chat, your provider and model choice — nothing else persists in your browser.",
   },
 ];
 
