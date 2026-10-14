@@ -80,7 +80,10 @@ _HOST_RE = re.compile(
 # graph.digithings.ai literals under apps/digithings-web (PUBLIC_DASHBOARD_API
 # constant, dashboardApiBase comment, next.config destination rewrite,
 # portfolio comment), 102 -> 106, sanctioned here as intentional surface
-# wiring. Regenerated
+# wiring. #5690 (chore(digichat): consolidated deep-review cleanups)
+# consolidated occ.digithings.ai literals into one OCC_HOST constant
+# (3 inline literals removed, 1 constant + 1 prose mention added),
+# 144 -> 143, net -1, consolidation not drift. Regenerated
 # with the file's own scanner, in the open, per the design rule above.
 PINNED_CENSUS = {
     "api.digithings.ai": 1,
@@ -98,7 +101,7 @@ PINNED_CENSUS = {
     "key.digithings.ai": 72,
     "langfuse.digithings.ai": 3,
     "mcp.digithings.ai": 59,
-    "occ.digithings.ai": 144,
+    "occ.digithings.ai": 143,
     "search.digithings.ai": 54,
     "trace.digithings.ai": 20,
     "www.digiquant.io": 17,
