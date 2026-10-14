@@ -35,7 +35,7 @@ export function VelaPane() {
   return (
     <div className="flex h-full min-h-0 w-full flex-1 flex-col bg-black">
       <div className="relative min-h-0 flex-1">
-        <div ref={ref} className="absolute inset-0" />
+        <div ref={ref} role="img" aria-label="LuxAlgo Vela chart" tabIndex={0} className="vela-host absolute inset-0" />
       </div>
       {failed ? (
         <p aria-live="polite" className="m-0 flex h-7 shrink-0 items-center border-t border-hair px-2.5 font-mono text-[0.6875rem] tracking-[0.04em] text-ink-mute">

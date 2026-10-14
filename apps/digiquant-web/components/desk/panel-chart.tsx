@@ -87,7 +87,14 @@ export function PanelChart({ shape, type, points, unit, label }: Input & { label
   }, [key]);
 
   return (
-    <div role="img" aria-label={label} data-chart={type} data-engine={engine} className="relative block h-full min-h-[10rem] w-full font-mono">
+    <div
+      role="img"
+      aria-label={label}
+      data-chart={type}
+      data-engine={engine}
+      tabIndex={0}
+      className="desk-chart relative block h-full min-h-[10rem] w-full font-mono"
+    >
       <div ref={ref} className="absolute inset-0" />
       {failedKey === key ? (
         <p aria-live="polite" className="absolute inset-x-0 bottom-0 m-0 font-mono text-[0.6875rem] tracking-[0.04em] text-ink-mute">

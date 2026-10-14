@@ -69,4 +69,23 @@ describe("desk slash field", () => {
     expect(css).toMatch(/\.cmd-list\s*\{[^}]*position:\s*absolute/s);
     expect(css).not.toMatch(/\.cmd-list\s*\{[^}]*position:\s*static/s);
   });
+
+  it("collapses the path field on narrow screens instead of widening the document", () => {
+    const view = readFileSync(new URL("./desk-command.tsx", import.meta.url), "utf8");
+    // No inline min-width: the field shrinks with the header.
+    expect(view).not.toMatch(/minWidth/);
+    const css = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
+    const narrow = css.slice(css.indexOf("@media (max-width: 759px)"));
+    expect(narrow).toContain(".desk-head .cmd:focus-within");
+    expect(narrow).toMatch(/\.desk-head \.cmd\s*\{[^}]*flex:\s*0 1 2\.5rem/s);
+  });
+
+  it("nests no interactive content inside palette options", () => {
+    const view = readFileSync(new URL("./desk-command.tsx", import.meta.url), "utf8");
+    expect(view).not.toContain("<Button");
+    expect(view).toContain('role="option"');
+    expect(view).toContain('className="cmd-hit"');
+    const html = renderToStaticMarkup(createElement(DeskCommand, { pathname: "/app/brief/" }));
+    expect(html).not.toContain("<button");
+  });
 });
