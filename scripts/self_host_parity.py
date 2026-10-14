@@ -169,8 +169,10 @@ def wrangler_surface() -> dict[str, dict[str, str]]:
         # Pages projects keep vars at top level; Workers use [[workers]] or [vars].
         for key, value in (data.get("vars") or {}).items():
             entries[key] = "var"
+        # Top-level worker keys are environment facts and are never recorded
+        # in the surface, even if a [vars] table ever reuses one of the names.
         for key in ("main", "name", "compatibility_date", "pages_build_output_dir", "account_id"):
-            del key  # never recorded: values of these are environment facts
+            entries.pop(key, None)
         if isinstance(workers, list):
             for entry in workers:
                 for key, _ in (entry.get("vars") or {}).items():
