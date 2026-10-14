@@ -34,7 +34,7 @@ import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import pandas as pd
 import polars as pl
@@ -42,9 +42,6 @@ import polars as pl
 from digiquant.constraints import normalize_drawdown_pct
 from digiquant.models import BacktestResult
 from digiquant.stats import HonestRateBlock, normalize_series, stability_split
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.getLogger(__name__)
 
