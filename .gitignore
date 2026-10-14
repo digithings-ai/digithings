@@ -150,6 +150,8 @@ coverage.xml
 **/.DS_Store
 # Editor / tooling
 .vscode/
+# Cursor local hook state (machine-absolute paths, regenerated)
+.cursor/hooks/state/
 .idea/
 *.bak
 # DesignSync local tooling output (node_modules, bundles, screenshots, canvases — generated)
