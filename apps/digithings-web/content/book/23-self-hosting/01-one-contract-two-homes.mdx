@@ -1,0 +1,41 @@
+---
+title: One contract, two homes
+order: 1
+summary: >-
+  Both variants read the same names and the same layout. A variant supplies
+  values, never names — and drift is a failure, not a difference.
+---
+
+Two homes for one stack only stay honest through a shared contract. The
+contract names every setting, every service address shape, and every secret
+slot once. Your machine and the hosted platform each supply values for
+those names. Neither side renames, reorders or reinterprets them — because
+the moment one side invents a name, local verification stops predicting
+production behaviour.
+
+```mermaid
+flowchart TD
+  C[shared contract: names, layout, secret slots]
+  C --> L[your machine supplies values]
+  C --> H[hosted platform supplies values]
+  L --> P[parity checks compare]
+  H --> P
+  P --> OK{equal?}
+  OK -->|yes| TRUST[local runs predict hosted runs]
+  OK -->|no| RED[change fails until the names agree]
+```
+
+Three properties make the contract hold. Settings are named once, in one
+manifest, and both homes read from it. Secrets are rendered per home from
+that manifest with strict file permissions, and never echoed. And the
+parity checks run automatically: they compare the two homes' settings and
+fail the change when they disagree, so drift is caught at review time
+rather than discovered during an outage.
+
+<Reference kind="guide" href="repo:docs/SELF_HOST.md" title="Self-hosting reference">
+  The contract, the profiles, and what each plan slice adds.
+</Reference>
+
+> **Why digithings.** Configuration drift is how most self-hosted setups
+> die: the documented path rots while production moves on. A contract both
+> homes read, checked on every change, keeps the documented path alive.

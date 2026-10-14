@@ -1,0 +1,45 @@
+---
+title: Seeing what runs
+order: 1
+summary: >-
+  Traces describe a request, health signals describe a service, and the audit
+  trail describes an action. Three instruments, three questions, one replay.
+---
+
+A request that cannot be replayed cannot be understood. Every request the
+hub routes carries identifiers from edge to edge, and each step it takes —
+which tools ran, in what order, how long each took — is recorded as a span
+beside the answer. When an answer surprises you, the trace is the first
+thing you read: it shows the path the request actually took, not the path
+you expected.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant O as operator
+  participant T as trace
+  participant H as health
+  participant A as audit
+
+  O->>T: why was this answer slow?
+  T-->>O: the tool calls, in order, with durations
+  O->>H: is the service itself well?
+  H-->>O: liveness plus a public status page
+  O->>A: who asked for the consequential step?
+  A-->>O: the action, its actor, its request identifiers
+```
+
+Three properties keep the instruments honest. The trace identifiers travel
+with the request, so a span from any service joins the same story. Health
+signals are deliberately minimal and free of secrets, so they can be probed
+continuously and even publicly without leaking anything. And the audit
+trail records consequential actions immutably, with the identifiers that
+tie each entry back to the trace that caused it.
+
+<Reference kind="architecture" href="repo:SECURITY.md" title="Security posture">
+  Which signals are public by design, and which records stay private.
+</Reference>
+
+> **Why digithings.** A surprise you can replay is a question; a surprise
+> you cannot is an incident. Open tracing over standard protocols means the
+> replay never depends on a vendor's dashboard being available.
