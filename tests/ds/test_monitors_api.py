@@ -356,7 +356,9 @@ def test_patch_exa_monitor_id_refuses_cross_watch_id_and_allows_same_value(monke
 
     recorded: list[dict] = []
     monkeypatch.setattr(srv, "delete_exa_monitor", lambda **kwargs: recorded.append(kwargs))
-    assert c.delete(f"/v1/monitors/{alpha['watch_id']}").status_code == 200
+    # code-quality #2457 (py/side-effect-in-assert): HTTP call hoisted out of assert.
+    delete_resp = c.delete(f"/v1/monitors/{alpha['watch_id']}")
+    assert delete_resp.status_code == 200
     assert recorded == [{"exa_monitor_id": "exa_mon_a"}]  # never the other watch's id
 
 
@@ -588,7 +590,9 @@ def test_watch_and_run_not_found_codes(monkeypatch, tmp_path):
     c = _monitor_client()
     assert c.get("/v1/monitors/nope").json()["error"]["code"] == "watch_not_found"
     assert c.patch("/v1/monitors/nope", json={"name": "x"}).status_code == 404
-    assert c.delete("/v1/monitors/nope").json()["error"]["code"] == "watch_not_found"
+    # code-quality #2458 (py/side-effect-in-assert): HTTP call hoisted out of assert.
+    delete_missing = c.delete("/v1/monitors/nope")
+    assert delete_missing.json()["error"]["code"] == "watch_not_found"
     assert c.post("/v1/monitors/nope/trigger", json={}).json()["error"]["code"] == "watch_not_found"
 
     wid = _create_watch(c)["watch"]["watch_id"]
