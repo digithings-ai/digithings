@@ -57,6 +57,54 @@ Residual risks Chris accepts with these answers:
 
 Open: D-G5 (where the deploy runner runs) and D-G6 (accept the signed-tag gate).
 
+## Cursor Origin as the source-control home (direction of 2026-10-14)
+
+Chris's direction: the seven private repos live on **Cursor Origin** as primary. The public
+`digithings` also lives on Origin as primary and is mirrored to GitHub for public visibility.
+I checked Origin against Cursor's own docs and OpenAPI spec (fetched 2026-10-14; Origin is
+**early beta**, launched 2026-08-17). I did not assume GitHub parity. Sources:
+[Origin overview](https://cursor.com/docs/origin.md), [Origin API + OpenAPI](https://cursor.com/docs/api/origin.md),
+[Migrations API](https://cursor.com/docs/api/origin/migrations.md), [CloneKit CI](https://cursor.com/docs/origin/clonekit-ci.md),
+[API changelog](https://cursor.com/docs/api/origin/changelog.md), Cloudflare [Workers Builds Git integration](https://developers.cloudflare.com/workers/ci-cd/builds/git-integration/).
+
+| Area | What Origin does (source) | vs GitHub | Confidence |
+|---|---|---|---|
+| Plans | Start, Pro, Pro+, Ultra, Teams, Enterprise; not free plans. Staged rollout. (overview) | — | VERIFIED |
+| Namespace | Codebase name is claimed and **cannot be changed during beta**. Personal namespaces hold private repos shared by collaborator invite; team namespaces add `internal`. Chris's personal namespace already exists and already holds an inbound mirror of mono. (overview; local git remote) | Rename is free on GitHub | VERIFIED |
+| Visibility | `internal` or `private` only. **No public repos.** (OpenAPI update-repo `visibility` enum) | GitHub has public | VERIFIED |
+| Mirroring | **Inbound only**: GitHub → Origin. On a mirror, GitHub stays the source of truth; a push to the mirror is forwarded to GitHub. Branches, tags, PRs sync; issues, Actions, secrets do not. "Detach" is one-way and makes Origin primary; it needs Chris's user credential (`repository:mirror:delete`), not an app. **No outbound Origin → GitHub mirror is documented.** (overview, Migrations API) | — | VERIFIED (absence = not in docs on 2026-10-14) |
+| CI | **No native CI.** Documented paths: Buildkite (Origin as repository provider; hosted or self-hosted agents; check runs on PRs), Depot, or GitHub Actions cloning from Origin with an Origin App token. Checks API for check runs/suites. (overview, CloneKit CI) | GitHub Actions is built in | VERIFIED |
+| Branch/tag protection | Rulesets via API, on **Origin-hosted repos only (not mirrors)**. Kinds: `merge_branch`, `push_branch`, `push_tag`, `push_repository`. Rules: `pull_request` (approvals, code owners, merge methods), `require_status_checks`, `require_branch_up_to_date`, `deletion`, `non_fast_forward`, `block_direct_updates`, `block_merges`, `ref_name_pattern`, `required_linear_history`. Bypass: user, team, app, Origin role. **Not supported yet:** dismiss stale reviews, last-push approval, thread resolution. **No signed-commit or signed-tag rule.** Bypass users changed to public user IDs on 2026-09-28 (breaking). (OpenAPI `Ruleset*` schemas, changelog) | Works on private repos, unlike GitHub Free | VERIFIED |
+| Webhooks | Origin App webhooks: repository pushed/created/deleted, `pull_request.*` (incl. merged, `merge_when_ready`), check runs, installation. Signed, retried, auto-disabled on repeated failure. (OpenAPI) | Similar | VERIFIED |
+| Auth | Users: `origin auth login` (browser) installs a git credential helper; SSH keys and SSH certificate authorities; `CURSOR_AUTH_TOKEN` for non-interactive use. Apps: App JWT + scoped installation tokens. Cloud agents use the account's Origin access. Team Admin API keys do **not** work. (overview, API) | Similar | VERIFIED |
+| Cloudflare | Workers Builds has a native **Cursor Origin** integration (install the Cloudflare app in Cursor) that **auto-deploys on every push** to the chosen branch. (Cloudflare docs, updated 2026-10-01) | Same as GitHub | VERIFIED |
+| Packages | No package registry is documented. | GitHub Packages (npm, containers) | VERIFIED (absence) |
+
+What this means for the plan:
+
+- **O1 — "Origin primary + public GitHub mirror" is not a supported setup.** Origin cannot host a
+  public repo, and it cannot push to GitHub. Two ways out, both need Chris (**D-O1**): (a) R0 stays
+  **GitHub-primary** and Origin holds an inbound mirror (supported; recommended); or (b) R0 is
+  Origin-primary (private) and **we build** a push mirror on the deploy host, and external GitHub PRs
+  are pulled back by hand. (b) makes GitHub a copy that anyone with write access can make diverge.
+- **O2 — Private repos gain real protection.** Rulesets work on Origin-hosted private repos, which
+  GitHub Free could not give us (F1). This only helps if agents push with an identity that is **not**
+  a bypass actor (**D-O4**). Today agents act as Chris, so a ruleset that lets Chris bypass lets every agent bypass.
+- **O3 — The signed-tag deploy gate stays.** Origin has no signed-tag rule, so D-G6 remains the
+  only gate that an agent with push access cannot pass. The gate moves from a GitHub runner hook to a
+  CI-agent hook on the deploy host.
+- **O4 — New CI vendor.** GitHub Actions does not run on Origin pushes. Private repos need Buildkite
+  (recommended: native Origin provider, self-hosted agents keep D-G4) or Depot (**D-O3**).
+- **O5 — A new silent auto-deploy path.** The Cloudflare app for Cursor would auto-deploy Workers on
+  push. The plan forbids installing it (P0) and keeps deploys on the signed-tag gate.
+- **O6 — Beta risk.** Names are permanent during beta, the API had a breaking change two weeks ago,
+  and controls "may expand during early beta". twelve-x is a client repo (**D-O5**).
+- **O7 — GitHub Packages is gone for private repos.** D-Q7 (`@digiquant/contract` from GitHub
+  Packages npm) needs a replacement: a git dependency pinned to a tag on Origin.
+
+Details are in [migration-plan.md § Origin](migration-plan.md#source-control-on-cursor-origin) and
+the D-O decisions in [decisions.md](decisions.md#cursor-origin-decisions-open).
+
 ## Review by dimension
 
 ### 1. Repo boundaries, public vs private — agree, with notes

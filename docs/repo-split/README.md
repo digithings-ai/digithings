@@ -18,14 +18,14 @@ the tracking issue (DIG-3518), not in this public repo: they map where non-publi
 | # | Repo | Visibility | Role |
 |---|---|---|---|
 | R0 | `digithings` | public | OSS modules, SDKs, UI packages, digichat engine, MCP tooling |
-| R1 | `digiquant-strategies` | private | proprietary strategies + optimiser (plugin) |
-| R2 | `digiquant-stack` | private | production backend (runner, desk API, schema, pipeline) |
-| R3 | `digiquant-web` | private | Brief desk + digiquant.io |
-| R4 | `digithings-web` | private | digithings.ai, digibook, brand |
-| R5 | `digithings-stack` | private | shared production platform (stack, digichat Worker, Langfuse, cron) |
-| R6 | `digichat-tenants` | private | client tenant corpora + rollout tooling (writes KV/R2) |
-| R7 | `twelve-x` (exists) | private | client desk + digidata-api |
+| R1 | `digiquant-strategies` | private (Origin) | proprietary strategies + optimiser (plugin) |
+| R2 | `digiquant-stack` | private (Origin) | production backend (runner, desk API, schema, pipeline) |
+| R3 | `digiquant-web` | private (Origin) | Brief desk + digiquant.io |
+| R4 | `digithings-web` | private (Origin) | digithings.ai, digibook, brand |
+| R5 | `digithings-stack` | private (Origin) | shared production platform (stack, digichat Worker, Langfuse, cron) |
+| R6 | `digichat-tenants` | private (Origin) | client tenant corpora + rollout tooling (writes KV/R2) |
+| R7 | `twelve-x` (exists) | private (Origin) | client desk + digidata-api |
 
 ## Status
 
-Gate decisions answered 2026-10-14 (Free plan, mono public until cutover, fresh R0, tags, self-hosted runners); plan revised to match. Open: D-G5 (deploy runner host) and D-G6 (signed-tag deploy gate) in [decisions.md](decisions.md). Nothing has moved yet.
+Gate decisions answered 2026-10-14 (Free plan, mono public until cutover, fresh R0, tags, self-hosted runners); plan revised to match. Later the same day Chris directed that the private repos live on **Cursor Origin**; the plan now covers that (Origin capabilities checked against Cursor's docs). Open: D-G5, D-G6 and D-O1 … D-O5 in [decisions.md](decisions.md). Nothing has moved yet.

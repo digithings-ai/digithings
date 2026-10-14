@@ -1,18 +1,18 @@
 %%{init: {'theme':'base','themeVariables':{'fontSize':'18px'},'flowchart':{'curve':'basis','nodeSpacing':40,'rankSpacing':80,'wrappingWidth':600}}}%%
 flowchart TB
-  subgraph PUB["PUBLIC"]
+  subgraph PUB["PUBLIC on GitHub (Origin mirror or primary: D-O1)"]
     R0["<b>R0 digithings</b> (new public repo, scrubbed history)<br/>PyPI: digibase digikey digifetch digigraph digillm<br/>digisearch digivault digitrace digiclaw digivoice digiskills digiquant<br/>digiquant core + digiquant.plugin API + engine schema<br/>npm @digithings/: design, ui, digichat-ui, hero-banner, surface-config, catalog<br/>apps/digichat engine + GHCR images, MCP tooling, clients/*, docs, openwiki<br/>releases: tags + release-please on main"]
   end
-  subgraph PRIV["PRIVATE (GitHub Free · self-hosted runners · deploys only from tags signed by Chris)"]
+  subgraph PRIV["PRIVATE on Cursor Origin (Buildkite self-hosted agents · deploys only from tags signed by Chris)"]
     R1["<b>R1 digiquant-strategies</b><br/>proprietary strategies, optimiser, SDCA MCP/CLI<br/>plugin via entry points · git-tag releases"]
-    R2["<b>R2 digiquant-stack</b><br/>digiquant-runner, dashboard-api (own Worker + zone route)<br/>prod Supabase migrations, prod config, pipeline workflows<br/>publishes @digiquant/contract"]
+    R2["<b>R2 digiquant-stack</b><br/>digiquant-runner, dashboard-api (own Worker + zone route)<br/>prod Supabase migrations, prod config, pipeline workflows<br/>@digiquant/contract via git tag"]
     R3["<b>R3 digiquant-web</b><br/>Brief desk /app + digiquant.io<br/>Pages direct upload on signed web tag"]
     R4["<b>R4 digithings-web</b><br/>digithings.ai, digibook, brand<br/>Pages direct upload on signed web tag"]
     R5["<b>R5 digithings-stack</b><br/>stack Worker + container, digichat Worker<br/>langfuse, cron, corpus-index · signed-tag deploys only"]
     R6["<b>R6 digichat-tenants</b><br/>client tenant corpora + seeds, kv-sync<br/>writes KV/R2/secrets, never deploys Workers"]
     R7["<b>R7 twelve-x</b> (exists)<br/>+ twelve-x desk surface<br/>+ digidata-api"]
-    MONO["digithings-mono (archived, private)<br/>full original history, rollback source"]
   end
+  MONO["digithings-mono on GitHub (archived, private)<br/>full original history, rollback source<br/>split source for R0 and R1–R7"]
   KV[("Cloudflare KV TENANT_CONFIG + R2 seeds<br/>+ deploy runner host secrets<br/>(client configs &amp; deploy secrets, never in a repo)")]
 
   R1 -->|digiquant.plugin API| R0
@@ -25,11 +25,11 @@ flowchart TB
   R3 -.->|HTTP via @digiquant/contract| R2
   R4 -.->|/api, /embed routes| R5
   R5 -.->|service binding RUNNER| R2
-  R5 -.->|workflow_dispatch via GitHub App| R7
-  R5 -.->|workflow_dispatch via GitHub App| R2
+  R5 -.->|build trigger via Buildkite API| R7
+  R5 -.->|build trigger via Buildkite API| R2
   R6 ==>|writes| KV
   KV ==>|read at runtime| R5
-  MONO -.->|filter-repo: scrubbed R0 + one export per private repo| R0
+  MONO -.->|filter-repo: scrubbed R0 + one export per Origin repo| R0
 
   classDef pub fill:#d4f7dc,stroke:#1e8e3e,stroke-width:3px,color:#0b3d1a;
   classDef priv fill:#fde2e1,stroke:#c5221f,stroke-width:3px,color:#5c0e0c;

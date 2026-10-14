@@ -23,13 +23,29 @@ Gate decisions go on the Paperclip Decisions board (question cards on DIG-3518).
 | **D-G5** [money] [security] | Where does the self-hosted **deploy** runner run? It holds the Cloudflare and Supabase deploy credentials. | **A dedicated small host, not Chris's Mac** (a small cloud VM, about €5–10 a month, or a spare machine). Agents run on the Mac as Chris's user, so they could read credentials stored there. CI-only runners (no deploy credentials) can run on the Mac. | On the Mac under a separate macOS user that agents cannot use. Weaker isolation; temporary only. |
 | **D-G6** [security] | Deploy gate on Free: deploys run only from a **release tag signed by Chris** with a key that needs a physical touch (`ed25519-sk` on a FIDO2 key). The runner checks the signature before the job starts. | **Yes.** Without GitHub Team it is the only human gate that agents with push access cannot get around. Cost: one tap per release. | Gate by convention only: anyone with write access (every agent using Chris's token) can deploy by pushing a tag. |
 
+## Cursor Origin decisions (open)
+
+Created by Chris's direction of 2026-10-14 (private repos on Cursor Origin; public repo Origin-primary
+with a GitHub mirror). Evidence: [review.md § Cursor Origin](review.md#cursor-origin-as-the-source-control-home-direction-of-2026-10-14).
+
+| ID | Question | Recommended | If not |
+|---|---|---|---|
+| **D-O1** [scope] | Origin has **no public repos** and **no outbound mirror** to GitHub. Where is the public R0 primary? | **(a) GitHub primary, Origin inbound mirror.** Documented and supported; external PRs, CI, PyPI publishing stay native. This is a change from the direction, for R0 only. | (b) Origin primary + a push mirror we build and run on the deploy host (Origin → GitHub, no force). External GitHub PRs are pulled into Origin by an agent. One more system to own; GitHub can drift if someone pushes there. |
+| **D-O2** [scope] | Which Origin namespace owns R1–R7? The name **cannot be changed during beta**. | **Chris's existing personal namespace.** Already claimed and already used for the mono mirror. Repos are private, shared by collaborator invite. | A new team namespace (needs a Teams plan, cost per seat; adds `internal` visibility and team bypass actors). Can be done later only by moving repos. |
+| **D-O3** [money] [external] | CI for Origin repos (GitHub Actions does not run on Origin). | **Buildkite** with Origin as repository provider and **self-hosted agents** (keeps D-G4). Chris creates the account and connects Origin. Plan cost: check before signing up. | Depot (runs existing Actions workflows, hosted, new vendor), or a webhook receiver of our own on the deploy host (no vendor, more code to own). |
+| **D-O4** [money] [security] | Which identity do agents use on Origin? | **A separate Cursor account for agents**, collaborator with write; only Chris's account bypasses rulesets. Then Origin rulesets really stop agents from pushing to `main`/`release/*` and from creating release tags. Chris logs it in once on the Mac. Needs a second paid Cursor plan. | Agents keep using Chris's account. Rulesets are then advisory for agents; the signed-tag gate (D-G6) is the only hard control. |
+| **D-O5** [client] [security] | twelve-x is a client repo; Origin is early beta (names fixed, breaking API changes, controls may change). | **Move twelve-x last (P4.7)**, after the other repos run on Origin for two weeks; keep the GitHub repo archived as read-only fallback for 90 days. **Chris first confirms the client contract allows hosting code with Cursor.** | Keep twelve-x on GitHub (private) until Origin leaves beta; the rest of the plan does not change. |
+
+Unchanged by the move: D-G6 (signed-tag gate — Origin has no signed-tag rule, so it is still needed)
+and D-G5 (deploy host — it now runs the Buildkite `deploy` agent instead of a GitHub runner).
+
 ## Changed recommendations
 
 | ID | Proposal | Recommended now | Why |
 |---|---|---|---|
 | D-Q2′ | dashboard-api own Worker, reached via R5 service binding | **Own Worker on its own zone route** (no R5 → R2 edge) | An R5 deploy can never take the desk API down. |
 | D-Q6′ | R0 ships a minimal self-host schema, R2 owns 184 files | **Layered migrations:** R0 owns `engine/` migrations for tables the open pipeline uses; R2 owns `prod/` migrations applied after | One definition per table; no drift between open engine and production. |
-| D-Q7 (new) | R1 published to GitHub Packages (PyPI) | **Git tag pin + `uv.lock` SHA, read by a GitHub App token** | GitHub Packages has no Python registry. |
+| D-Q7′ (new) | R1 published to GitHub Packages (PyPI); `@digiquant/contract` on GitHub Packages npm | **Git tag pins on Origin** for both (`uv.lock` SHA for R1; git dependency on an R2 tag for the contract), read with a short-lived Origin token | GitHub Packages has no Python registry, and Origin has no package registry. |
 | D-R3 (new) | 16 protected `release/<module>` branches in R0 | **Tags + release-please on `main` in R0** (answered: yes). In R2–R6 a `release/*` branch is kept as the place a release is cut from, but on Free it is not protected; the gate is the signed tag (D-G6). | Nothing deploys from R0. |
 | D-11′ | `@digithings/*` on npm, interim GitHub Packages | **npmjs only, no interim** | GitHub Packages npm needs a PAT even for public installs. |
 | D-13′ | Delete agent wiring dirs from public | **Move only after confirming nothing reads them**; private `digithings-ops` if still used | They drive the fleet today. |
