@@ -31,6 +31,8 @@ from digiquant.portfolio.models.forecast_calibration import (
 )
 from pydantic import ValidationError
 
+pytestmark = pytest.mark.unit
+
 _TS = datetime(2026, 1, 2, 15, 30, tzinfo=UTC)
 _BASE_ID = UUID("11111111-1111-4111-8111-111111111111")
 _EFF_ID = UUID("22222222-2222-4222-8222-222222222222")

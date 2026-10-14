@@ -123,6 +123,29 @@ export type HouseRunCheckResult = {
   lost: HouseRunVerdict[];
   unreadable: string[];
   raised: RaisedAlarm[];
+  /** Mondays with no landing past the deadline and no open house run (DIG-3456). */
+  neverDispatched: NeverDispatchedFinding[];
+};
+
+export type NeverDispatchedReason =
+  | "not-due"
+  | "unverifiable"
+  | "landed"
+  | "open-house-run"
+  | "never-dispatched";
+
+export type NeverDispatchedFinding = {
+  run_date: string;
+  lost: boolean;
+  reason: NeverDispatchedReason;
+};
+
+/** The runner's landing answer for one run_date, or null when unreadable. */
+export type HouseStatus = {
+  run_date: string;
+  landed: boolean;
+  open_house_runs: string[];
+  verifiable: boolean;
 };
 
 export function ghHeaders(token: string | undefined, json: boolean): Record<string, string> {
@@ -260,6 +283,136 @@ export async function readRun(
   return body as HouseRunObservation;
 }
 
+export function houseStatusUrl(runDate: string): string {
+  return `https://digiquant-runner/v1/jobs/house-status?run_date=${encodeURIComponent(runDate)}`;
+}
+
+/**
+ * GET /v1/jobs/house-status?run_date=. Strict shape check on purpose: a body
+ * this code does not understand (a health body, a proxy page, anything) is
+ * unreadable, never "not landed". Without this, every misrouted response
+ * would read as a missing Monday run.
+ */
+export async function readHouseStatus(
+  fetcher: WatchFetch,
+  runDate: string,
+  token: string | undefined,
+): Promise<HouseStatus | null> {
+  const { status, body } = await readJson(fetcher, houseStatusUrl(runDate), ghHeaders(token, false));
+  if (!OK_STATUSES.has(status) || body === null || typeof body !== "object") return null;
+  const row = body as Record<string, unknown>;
+  if (row.run_date !== runDate) return null;
+  if (typeof row.landed !== "boolean" || typeof row.verifiable !== "boolean") return null;
+  if (!Array.isArray(row.open_house_runs)) return null;
+  if (!row.open_house_runs.every((id): id is string => typeof id === "string")) return null;
+  return {
+    run_date: runDate,
+    landed: row.landed,
+    open_house_runs: row.open_house_runs,
+    verifiable: row.verifiable,
+  };
+}
+
+/**
+ * The run_date the Monday 09:17 tick carries: the most recent Monday (UTC).
+ * `houseArgs` stamps `run_date` as the scheduled day, so the expected
+ * success.json key for any tick this week is under last Monday's date.
+ */
+export function lastMondayRunDate(nowMs: number): string {
+  const now = new Date(nowMs);
+  const daysSinceMonday = (now.getUTCDay() + 6) % 7;
+  const monday = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - daysSinceMonday),
+  );
+  return monday.toISOString().slice(0, 10);
+}
+
+/** The Monday 09:17 UTC start house-run-09 declares, for a run_date Monday. */
+export function mondayStartMs(runDate: string): number {
+  return Date.parse(`${runDate}T09:17:00.000Z`);
+}
+
+/**
+ * Decide one Monday. Pure: every input injected, so "a Monday with no
+ * landing" is an arithmetic fact rather than a timing race.
+ *
+ * `lost` is true on exactly one condition: past the deadline for last
+ * Monday's start, the landing read succeeded and says absent, and no house
+ * run is still open (an open one belongs to the past-deadline arm, which
+ * reads the run itself rather than the absence of a marker).
+ */
+export function evaluateNeverDispatched(
+  runDate: string,
+  opts: { nowMs: number; deadlineSeconds: number },
+  status: HouseStatus | null,
+): NeverDispatchedFinding {
+  const startMs = mondayStartMs(runDate);
+  if (!(opts.nowMs > startMs + opts.deadlineSeconds * 1000)) {
+    return { run_date: runDate, lost: false, reason: "not-due" };
+  }
+  if (!status || !status.verifiable) {
+    return { run_date: runDate, lost: false, reason: "unverifiable" };
+  }
+  if (status.landed) {
+    return { run_date: runDate, lost: false, reason: "landed" };
+  }
+  if (status.open_house_runs.length > 0) {
+    return { run_date: runDate, lost: false, reason: "open-house-run" };
+  }
+  return { run_date: runDate, lost: true, reason: "never-dispatched" };
+}
+
+export function neverDispatchedTitle(runDate: string): string {
+  return `digiquant house-run for ${runDate} never landed`;
+}
+
+export function neverDispatchedBody(runDate: string, deadlineSeconds: number): string {
+  const lines = [
+    `No success marker exists for the Monday ${runDate} house run, past its deadline, and the runner holds no open house run for it.`,
+    "",
+    `- run date: \`${runDate}\``,
+    `- expected marker: \`pipeline-runs/house-run/${runDate}/success.json\``,
+    `- deadline: Monday 09:17 UTC + ${deadlineSeconds}s (timeout_seconds + ${WATCHDOG_GRACE_SECONDS}s watchdog grace)`,
+    `- read it: \`GET https://digiquant-runner/v1/jobs/house-status?run_date=${runDate}\` (runner bearer token)`,
+    "",
+    `This is the never-dispatched class, not a lost run: the DIG-3065 arm watches runs the runner still reports open, and there is nothing open here. Either the Monday dispatch never reached the runner, or the run vanished without a lock. GHA silence is expected since the Oct-1 container cutover and is not evidence either way.`,
+    "",
+    `Run-watch keys: \`${RUN_WATCH_KEY}\` (DIG-3061) and \`run-watch:house-run:no-dispatch-since-2026-09-28\` (DIG-3456). A recurrence of the same condition belongs on those keys, not in a new ticket.`,
+    "",
+    "**This watcher is read-only.** It has not re-kicked, re-run, redeployed or rolled anything back, and will not. Repair is Chris's call.",
+    "",
+    `Detector: DIG-3456, hourly (\`23 * * * *\`) beside the DIG-3065 lost-run arm.`,
+  ];
+  return lines.join("\n");
+}
+
+/** Raising never throws, exactly as `trigger-alarm.ts` states. */
+export async function raiseNeverDispatchedAlarm(
+  token: string | undefined,
+  runDate: string,
+  deadlineSeconds: number,
+  fetcher: WatchFetch,
+): Promise<RaisedAlarm> {
+  const run_id = `house-run:${runDate}`;
+  const title = neverDispatchedTitle(runDate);
+  try {
+    const existing = await findOpenOccurrence(fetcher, token, title);
+    if (existing) return { run_id, raised: false, url: existing };
+    await ensureLabel(fetcher, token);
+    const { status, body } = await postJson(
+      fetcher,
+      `https://api.github.com/repos/${ALERT_REPO}/issues`,
+      token,
+      { title, body: neverDispatchedBody(runDate, deadlineSeconds), labels: [HOUSE_RUN_WATCH_LABEL] },
+    );
+    if (!WRITE_OK_STATUSES.has(status)) return { run_id, raised: false };
+    const html = (body as { html_url?: unknown } | null)?.html_url;
+    return typeof html === "string" ? { run_id, raised: true, url: html } : { run_id, raised: false };
+  } catch {
+    return { run_id, raised: false };
+  }
+}
+
 async function ensureLabel(fetcher: WatchFetch, token: string | undefined): Promise<void> {
   const headers = ghHeaders(token, true);
   const existing = await fetcher(
@@ -374,6 +527,7 @@ export async function checkHouseRuns(opts: {
     lost: [],
     unreadable: [],
     raised: [],
+    neverDispatched: [],
   };
 
   if (!opts.runnerToken) {
@@ -401,6 +555,22 @@ export async function checkHouseRuns(opts: {
     result.lost.push(verdict);
     result.raised.push(
       await raiseHouseRunAlarm(opts.githubToken, verdict, deadlineSeconds, opts.fetchGithub),
+    );
+  }
+
+  // The never-dispatched arm (DIG-3456). The loop above only sees runs the
+  // runner still holds open; a Monday that never started leaves no lock, so
+  // open=0 reads healthy here. The landing read below is what sees it. It
+  // runs on every tick — the not-due and landed arms are what keep it quiet
+  // six days a week — and it raises through the same one-issue-per-occurrence
+  // dedup as the lost-run arm.
+  const runDate = lastMondayRunDate(nowMs);
+  const status = await readHouseStatus(opts.fetchRunner, runDate, opts.runnerToken);
+  const never = evaluateNeverDispatched(runDate, { nowMs, deadlineSeconds }, status);
+  if (never.lost) {
+    result.neverDispatched.push(never);
+    result.raised.push(
+      await raiseNeverDispatchedAlarm(opts.githubToken, runDate, deadlineSeconds, opts.fetchGithub),
     );
   }
   return result;
