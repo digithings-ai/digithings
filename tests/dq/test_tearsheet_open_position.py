@@ -5,6 +5,8 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
+import pytest
+
 _SCRIPT = Path(__file__).resolve().parents[2] / "digiquant" / "scripts" / "generate_tearsheets.py"
 _spec = importlib.util.spec_from_file_location("generate_tearsheets", _SCRIPT)
 assert _spec and _spec.loader
@@ -12,6 +14,8 @@ _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 build_equity_and_trades = _mod.build_equity_and_trades
 carry_open_at_period_end = _mod.carry_open_at_period_end
+
+pytestmark = pytest.mark.unit
 
 
 def test_carry_open_at_period_end() -> None:
