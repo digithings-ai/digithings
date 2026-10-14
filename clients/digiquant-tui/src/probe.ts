@@ -1,7 +1,7 @@
+import { API_BASE as api } from "./api";
 import { BLOCKS, PAGES, PAGE_LAYOUTS } from "./catalog";
 import { readBlock } from "./read";
 
-const api = (process.env.DQ_API_URL ?? "http://127.0.0.1:8788").replace(/\/+$/, "");
 
 const seen = new Map<string, { kind: "fields" | "graph"; blocks: string[] }>();
 for (const page of PAGES) {

@@ -1,3 +1,4 @@
+import { API_BASE as API } from "../api";
 import { useEffect, useState } from "react";
 import { BLOCKS, layoutFor, type BlockKind } from "../catalog";
 import { EMPTY_READ, STUB_READ, presentResponse, type ReadResult } from "../read";
@@ -9,7 +10,6 @@ import { asOfStatus } from "../format";
 
 /** Brief desk. One block per official read. A down API or a stub stays a sentence. */
 const PATH = "/brief";
-const API = (process.env.DQ_API_URL ?? "http://127.0.0.1:8788").replace(/\/+$/, "");
 
 const STUB_MARKS = ["99.909", "204.04", "legacy_estimate"];
 
