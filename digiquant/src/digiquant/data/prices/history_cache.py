@@ -39,7 +39,21 @@ def cache_path(ticker: str, cache_dir: Path | str = DEFAULT_CACHE_DIR) -> Path:
     if not is_safe_ticker(ticker):
         raise ValueError(f"unsafe ticker for cache path: {ticker!r}")
     dest = Path(cache_dir) / f"{ticker}.csv"
-    if dest.resolve().parent != Path(cache_dir).resolve():
+    # Containment, CodeQL-canonical form: normalize via resolve(), then require
+    # the result to sit inside the resolved cache dir (relative_to raises
+    # ValueError otherwise). The flat-file invariant (parent == base) is kept
+    # as a second leg: the allowlist admits no separators, so any nesting
+    # here would mean a future caller bypassed the validator.
+    base = Path(cache_dir).resolve()
+    try:
+        resolved = dest.resolve()
+    except OSError as exc:
+        raise ValueError(f"unsafe ticker for cache path: {ticker!r}") from exc
+    try:
+        resolved.relative_to(base)
+    except ValueError:
+        raise ValueError(f"unsafe ticker for cache path: {ticker!r}")
+    if resolved.parent != base:
         raise ValueError(f"unsafe ticker for cache path: {ticker!r}")
     return dest
 

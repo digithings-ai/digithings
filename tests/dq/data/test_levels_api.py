@@ -162,6 +162,18 @@ def test_cache_path_rejects_traversal(tmp_path, evil: str) -> None:
         cache_path(evil, tmp_path)
 
 
+def test_cache_path_containment_holds_on_unresolved_cache_dir(tmp_path) -> None:
+    """DIG-3664: the resolve()+relative_to containment leg pins the cache dir
+    itself, not just the ticker — a cache_dir carrying ``..`` segments (str
+    form) still resolves inside, and the returned path stays flat."""
+    from digiquant.data.prices.history_cache import cache_path
+
+    dodgy = str(tmp_path) + "/../" + tmp_path.name
+    dest = cache_path("EUR-USD", dodgy)
+    assert dest.resolve().parent == tmp_path.resolve()
+    assert dest.name == "EUR-USD.csv"
+
+
 # ─── MCP function + manifest + dispatch ───────────────────────────────────────
 
 
