@@ -622,17 +622,32 @@ export function EmbedComposerMenu({
         },
       ];
     }
-    return toolRows.map((t) => {
+    // Each group row is followed by its individual tools (per-tool toggles).
+    return toolRows.flatMap((t): MenuRow[] => {
       const on = connectedToolIsOn(t.id, toolOnInput);
-      return {
+      const group: MenuRow = {
         id: t.id,
         label: slashName(t.slash),
         value: on ? "On" : "Off",
         checked: on,
         activate: () => toggleTool(t.id),
       };
+      const subs = (t.tools ?? []).map((sub): MenuRow => {
+        const subOn = on && api.extraToolOn(sub.id);
+        return {
+          id: `${t.id}::${sub.id}`,
+          label: `  ↳ ${sub.label?.trim() || sub.id}`,
+          value: subOn ? "On" : "Off",
+          checked: subOn,
+          activate: () => {
+            if (!on) return;
+            api.setExtraTool(sub.id, !api.extraToolOn(sub.id));
+          },
+        };
+      });
+      return [group, ...subs];
     });
-  }, [kind, onClose, toggleTool, toolOnInput, toolRows]);
+  }, [api, kind, onClose, toggleTool, toolOnInput, toolRows]);
 
   const mcpRows = useMemo((): MenuRow[] => {
     const rows: MenuRow[] = mcpConfigs.map((s) => {
@@ -1246,7 +1261,7 @@ export function EmbedComposerMenu({
                               onMouseEnter={() => setMcpSuggestIndex(index)}
                               onClick={() => applyMcpSuggestion(row.id)}
                             >
-                              <span className="min-w-0 shrink-0 font-medium">{row.id}</span>
+                              <span className="min-w-0 flex-1 font-medium break-words [overflow-wrap:anywhere]">{row.id}</span>
                               <span className="text-muted-foreground min-w-0 truncate text-right text-xs">
                                 {wellKnownMcpHost(row.url) || row.auth}
                               </span>
@@ -1458,9 +1473,9 @@ export function EmbedComposerMenu({
                   onClick={() => row.activate()}
                   onKeyDown={(e) => onRowKey(e, index)}
                 >
-                  <span className="min-w-0 shrink-0 font-medium">{row.label}</span>
+                  <span className="min-w-0 flex-1 font-medium break-words [overflow-wrap:anywhere]">{row.label}</span>
                   {row.value || (exclusive && row.checked) ? (
-                    <span className="text-muted-foreground flex min-w-0 items-center justify-end gap-2 truncate text-right text-xs">
+                    <span className="text-muted-foreground flex max-w-[45%] shrink-0 items-center justify-end gap-2 truncate text-right text-xs">
                       {row.value ? <span className="truncate">{row.value}</span> : null}
                       {exclusive && row.checked ? (
                         <span data-slot="dropdown-menu-radio-item-indicator" className="inline-flex shrink-0">

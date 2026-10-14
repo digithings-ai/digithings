@@ -46,7 +46,7 @@ CONTRACT_DIR = REPO_ROOT / "config" / "contract"
 # Discovered by census on 2026-10-10 (`git ls-files`). tests/scripts/
 # test_self_host_parity.py pins these three counts, so a new compose or
 # .env.example file cannot slip in uncovered without turning the test red.
-EXPECTED_WRANGLER_FILES = 8
+EXPECTED_WRANGLER_FILES = 9
 COMPOSE_FILES = (
     "docker-compose.yml",
     "apps/digitrace-langfuse/docker-compose.local.yml",
@@ -110,10 +110,14 @@ BINDING_KINDS = {
 # still records these, so a new or removed container class is still surfaced.
 CLASS_NAME_KINDS = frozenset({"container"})
 # Container and DO namespacing tables: key is a table name, value is a per-entry key.
-NAMESPACED_BINDING_TABLES = {
-    "durable_objects": "bindings",
-    "kv_namespaces": "id",
-}
+# No namespaced inner key is recorded. This baseline holds binding NAMES and
+# binding KINDS only -- tests/scripts/test_self_host_parity.py calls a binding id
+# in this file "a secret-shaped accident" -- and scripts/localstack/deploy.py's
+# binding_census, the reader of this baseline, records `row["binding"]`, never
+# `row["id"]`. Recording a kv namespace id as a second `kv_namespace` entry made
+# every surface with a KV namespace report `production-only=[<id>]` against that
+# reader, which is what the DIG-3269 corpus-index and the OCC DIGICHAT_TENANTS_KV
+# binding exposed (#5580).
 
 
 class ComposeLoader(yaml.SafeLoader):
@@ -201,9 +205,6 @@ def wrangler_surface() -> dict[str, dict[str, str]]:
                     name = row.get("binding") or row.get("name")
                 if name:
                     entries[str(name)] = kind
-                inner = NAMESPACED_BINDING_TABLES.get(table)
-                if inner and inner in row:
-                    entries[str(row[inner])] = kind
         surface[rel] = dict(sorted(entries.items()))
     return surface
 

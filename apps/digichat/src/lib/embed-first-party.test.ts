@@ -24,13 +24,13 @@ afterEach(() => {
 });
 
 describe("isFirstPartyEmbedHost", () => {
-  it("allows digithings.ai, www, and OCC virtual host", () => {
+  it("allows digithings.ai and www; OCC is not first-party (DIG-1210 Act B2)", () => {
     expect(FIRST_PARTY_EMBED_HOSTS.has("digithings.ai")).toBe(true);
     expect(FIRST_PARTY_EMBED_HOSTS.has("www.digithings.ai")).toBe(true);
-    expect(FIRST_PARTY_EMBED_HOSTS.has("occ.digithings.ai")).toBe(true);
+    expect(FIRST_PARTY_EMBED_HOSTS.has("occ.digithings.ai")).toBe(false);
     expect(isFirstPartyEmbedHost("https://digithings.ai")).toBe(true);
     expect(isFirstPartyEmbedHost("https://www.digithings.ai/chat")).toBe(true);
-    expect(isFirstPartyEmbedHost("occ.digithings.ai")).toBe(true);
+    expect(isFirstPartyEmbedHost("occ.digithings.ai")).toBe(false);
     expect(isFirstPartyEmbedHost("digithings.ai")).toBe(true);
   });
 

@@ -67,6 +67,13 @@ import {
   SHARED_DIGICHAT_CONTAINER_ID,
   shouldProxyToDigiChat,
 } from "./digichat";
+import {
+  containerIsAwake,
+  isHealthProbe,
+  isScannerPath,
+  scannerResponse,
+  sleepingHealthResponse,
+} from "./wake-hygiene";
 
 /** Wrangler injects vars/secrets; cast until `wrangler types` is generated in CI. */
 const env = workerEnvBinding as unknown as Env;
@@ -107,6 +114,11 @@ export class DigiStackContainer extends Container {
     DIGITRACE_URL: env.DIGITRACE_URL ?? "",
     OPENAI_API_BASE: env.OPENAI_API_BASE ?? "http://127.0.0.1:4000/v1",
     DIGI_LLM_MODE: env.DIGI_LLM_MODE ?? "test",
+    // Session model picker (OCC settings): house-upstream slugs a visitor may
+    // pick per session. digigraph binds only slugs on this list.
+    DIGI_SESSION_MODEL_ALLOWLIST:
+      env.DIGI_SESSION_MODEL_ALLOWLIST ??
+      "deepseek/deepseek-v4.1-flash,z-ai/glm-5.3-flash,qwen/qwen3.8-flash,google/gemma-4-31b-it,xiaomi/mimo-v2.6-flash,z-ai/glm-4.7-flash",
     CHROMA_PATH: env.CHROMA_PATH ?? "/data/chroma",
     // Canonical shared Cloudflare credential pair (#2239 rename) -- one account +
     // token now authorizes both Vectorize and D1. VECTORIZE_*/D1_ACCOUNT_ID/
@@ -131,7 +143,11 @@ export class DigiStackContainer extends Container {
       env.DIGISEARCH_EMBEDDING_PROVIDER ?? "Xenova/paraphrase-multilingual-MiniLM-L12-v2",
     DIGI_TENANT_CORPUS_MAP:
       env.DIGI_TENANT_CORPUS_MAP ??
-      '{"digithings":{"digisearchIndex":"digithings_docs","vaultPathPrefix":"clients/digithings"},"occ":{"digisearchIndex":"occ_help","vaultPathPrefix":"clients/online-compliance-center","researchSystemPrompt":"You are the Online Compliance Center (OCC) help assistant for digithings.ai/chat/occ.\\nAnswer only from what you retrieve. You get several tool rounds per question.\\n\\nGround every answer in retrieved corpus from Help search (digisearch_semantic, index `occ_help`, help docs)\\nand/or Knowledge vault (digivault_search_notes, digivault_search_tag, digivault_backlinks) under `clients/online-compliance-center/`.\\nAlways cite help article URLs or PDF source paths from metadata.\\n\\nSearch results are excerpts, not whole documents. A row marked \\"truncated\\": true\\nmeans you have not seen that note \\u2014 run digivault_search_notes again with a narrower query\\naimed at that note (same path prefix) until you have read the part that answers, before answering. An unmarked row is not a promise of completeness:\\nevery row is a preview. Always do this when the question involves a\\nprocedure, a list of steps, a table, a count, or the words every, all, or which:\\nhelp PDFs are stored one page per note, and an excerpt routinely stops before the\\nstep that answers the question.\\n\\nNever say a policy, step, or exception does not exist unless you searched for it\\nspecifically and looked. If all you saw was a truncated excerpt, say what it showed and that the\\nrest was not loaded.\\n\\nAnswer questions about OCC policies, procedures, FAQ topics, and public help\\nPDFs. Do not invent product features, pricing, or portal capabilities not\\npresent in the retrieved sources. E-learning / YouTube videos are out of\\nscope for this corpus \\u2014 say so if asked.\\n\\nDo not cite digithings or digiquant internal architecture docs. If the\\ncorpus has no grounded answer, say so clearly.\\n\\nTicket content is not part of this corpus. For ticket questions use the read-only zammad tools, and say so clearly if they do not ground the answer.\\n\\nSkills: for any ticket question, first call list_skills, then get_skill for the matching workflow (summarize-tickets-by-topic for summaries or trends, find-precedent-tickets for how a similar issue was solved) and follow it. Always get_skill present-results before writing the final answer and follow its display rules."}}',
+      '{"digithings":{"digisearchIndex":"digithings_docs","vaultPathPrefix":"clients/digithings"},"occ":{"digisearchIndex":"occ_help","vaultPathPrefix":"clients/online-compliance-center","researchSystemPrompt":"You are the Online Compliance Center (OCC) help assistant for digithings.ai/chat/occ.\\nAnswer only from what you retrieve. You get several tool rounds per question.\\n\\nGround every answer in retrieved corpus from Help search (digisearch_occ_help, help-centre docs)\\nand/or Knowledge vault (digivault_search_notes, digivault_search_tag, digivault_backlinks) under `clients/online-compliance-center/`.\\nAlways cite help article URLs or PDF source paths from metadata.\\n\\nSearch results are excerpts, not whole documents. A row marked \\"truncated\\": true\\nmeans you have not seen that note \\u2014 run digivault_search_notes again with a narrower query\\naimed at that note (same path prefix) until you have read the part that answers, before answering. An unmarked row is not a promise of completeness:\\nevery row is a preview. Always do this when the question involves a\\nprocedure, a list of steps, a table, a count, or the words every, all, or which:\\nhelp PDFs are stored one page per note, and an excerpt routinely stops before the\\nstep that answers the question.\\n\\nNever say a policy, step, or exception does not exist unless you searched for it\\nspecifically and looked. If all you saw was a truncated excerpt, say what it showed and that the\\nrest was not loaded.\\n\\nAnswer questions about OCC policies, procedures, FAQ topics, and public help\\nPDFs. Do not invent product features, pricing, or portal capabilities not\\npresent in the retrieved sources. E-learning / YouTube videos are out of\\nscope for this corpus \\u2014 say so if asked.\\n\\nDo not cite digithings or digiquant internal architecture docs. If the\\ncorpus has no grounded answer, say so clearly.\\n\\nChoosing a search tool: you have two separate search tools, each tied to its own index. digisearch_occ_help searches only the help-centre docs: use it for how-to questions, features, settings and manuals. digisearch_zammad_tickets searches only past support tickets (any language: a German query finds English tickets and the reverse): use it when the user asks whether a problem happened before, how a similar case was solved, or describes a customer error or support issue. Pick the tool that matches the question; if the question needs both (for example a reported error that the docs might also explain), call both. Use the read-only zammad tools for live ticket lists, counts and details of a current ticket. Say so clearly if nothing grounds the answer.\\n\\nLanguage of shown terms: the chat language is the language the user writes in (or the response language set for this chat). Whenever your answer, or your description of what you searched, shows any word in a different language from the chat language (search queries you ran, ticket statuses or labels, ticket or article titles, UI terms, error messages, quoted snippets from tickets or docs), give the translation in the chat language every time: translated term first, then the original in parentheses and quotes, for example: in progress (\\"in Bearbeitung\\"), or: I searched for mailbox (\\"Postfach\\"). This applies to every non-chat-language word or phrase you show, including inside lists and tables. Do not add a translation when the source text is already in the chat language.\\n\\nSkills: for any ticket question, first call list_skills, then get_skill for the matching workflow (summarize-tickets-by-topic for themes and grouping, find-precedent-tickets for how a similar issue was solved) and follow it. For a how-to or documentation question, get_skill guide-help-docs and follow its map. Always get_skill present-results before writing the final answer and follow its display rules.\\n\\nCitations: there is no automatic source list. When you use retrieved content, cite it inline in the answer: put a markdown link on the relevant words when the source has an http(s) URL (for example [activation steps](https://help.online-compliance-center.com/...)), otherwise add a short reference in parentheses, such as (Portal manual, 2.2) or (ticket #28394). Only http(s) URLs may be links: never put repo://, vault paths or other non-web paths inside a markdown link. Do not add a separate Sources section or list.\\n\\nIdentity: you are the digichat assistant for Online Compliance Center. Do not claim to be Claude, GPT, DeepSeek or any other named model or vendor; if asked which model you run on, say you are the digichat assistant and that the model is managed by the operator.","lockSessionControls":true,"digisearchTools":{"digisearch_occ_help":{"index":"occ_help","description":"Search the Online Compliance Center help centre: official how-to guides, feature descriptions, portal and user manuals (help-centre articles and PDFs). Use it for questions about how to do something, what a feature or setting does, or what the documentation says. It does NOT contain support tickets. Queries work in any language (German or English)."},"digisearch_zammad_tickets":{"index":"occ-tickets","description":"Search past Zammad support tickets of the Online Compliance Center (personal data masked): similar customer problems and how support resolved them, with ticket numbers and links. Use it when the user asks whether a problem has happened before, how a similar case was solved, or describes an error or support issue a customer reported. It does NOT contain the help-centre documentation, and it is not for live ticket lists, counts or the status of a specific current ticket (use the zammad tools for those). Queries work in any language: a German query finds English tickets and the reverse."}}}}',
+    // bge-m3 indexes written by apps/corpus-index; queried via its /embed (DIG-3269).
+    DIGISEARCH_WORKERS_AI_INDEXES: env.DIGISEARCH_WORKERS_AI_INDEXES ?? "",
+    DIGISEARCH_BGE_M3_EMBED_URL: env.DIGISEARCH_BGE_M3_EMBED_URL ?? "",
+    DIGISEARCH_BGE_M3_EMBED_TOKEN: env.DIGISEARCH_BGE_M3_EMBED_TOKEN ?? "",
     GROQ_API_KEY: env.GROQ_API_KEY ?? "",
     OPENROUTER_API_KEY: env.OPENROUTER_API_KEY ?? "",
     OPENAI_API_KEY: env.OPENAI_API_KEY ?? "",
@@ -174,6 +190,10 @@ export class DigiStackContainer extends Container {
           DIGIGRAPH_PORT,
           DIGIKEY_PORT,
           ...(targetPort === DIGISEARCH_PORT ? [DIGISEARCH_PORT] : []),
+          // /_stack/mcp/{zammad,digivault} edge routes: wait for their own MCP
+          // port too, so a cold wake answers 503 container_booting instead of
+          // a 500 "container is not listening" (DIG-1210).
+          ...(EDGE_MCP_WAIT_PORTS.includes(targetPort) ? [targetPort] : []),
         ],
         cancellationOptions: {
           portReadyTimeoutMS: 180_000,
@@ -433,6 +453,7 @@ export interface Env {
   DIGITRACE_URL?: string;
   OPENAI_API_BASE?: string;
   DIGI_LLM_MODE?: string;
+  DIGI_SESSION_MODEL_ALLOWLIST?: string;
   CHROMA_PATH?: string;
   CLOUDFLARE_ACCOUNT_ID?: string;
   CLOUDFLARE_API_TOKEN?: string;
@@ -445,6 +466,9 @@ export interface Env {
   DIGISEARCH_INDEX?: string;
   DIGISEARCH_EMBEDDING_PROVIDER?: string;
   DIGI_TENANT_CORPUS_MAP?: string;
+  DIGISEARCH_WORKERS_AI_INDEXES?: string;
+  DIGISEARCH_BGE_M3_EMBED_URL?: string;
+  DIGISEARCH_BGE_M3_EMBED_TOKEN?: string;
   GROQ_API_KEY?: string;
   OPENROUTER_API_KEY?: string;
   OPENAI_API_KEY?: string;
@@ -509,6 +533,7 @@ export interface Env {
 
 /** Secret-gated MCP edge paths (`/_stack/mcp/<id>/…`) → in-container ports. */
 const MCP_EDGE_PREFIX = "/_stack/mcp";
+const EDGE_MCP_WAIT_PORTS: readonly number[] = [8770, 8769];
 const MCP_EDGE_SERVERS: Record<string, number> = {
   zammad: 8770,
   digisearch: 8765,
@@ -597,10 +622,9 @@ export default {
         // degrades only these paths (503); the fail-closed 401 above stays
         // synchronous and untouched.
         return runIsolated("mcp-edge", () => import("./ports"), async ({ SHARED_STACK_CONTAINER_ID }) => {
-          let stripped = slash === -1 ? "/" : rest.slice(slash);
-          if (!stripped.endsWith("/")) {
-            stripped += "/";
-          }
+          // mcp>=1.26 serves streamable HTTP at exactly `/mcp` and 307s `/mcp/`
+          // to an absolute in-container URL, so forward the path unchanged.
+          const stripped = slash === -1 ? "/" : rest.slice(slash);
           const target = new URL(url.toString());
           target.pathname = stripped;
           const forwarded = new Request(target.toString(), request);
@@ -688,7 +712,22 @@ export default {
           { status: 404 },
         );
       }
+      // Wake hygiene: scanners and liveness probes never boot the Container.
+      if (isScannerPath(url.pathname)) {
+        return scannerResponse();
+      }
       const container = getContainer(workerEnv.STACK, SHARED_STACK_CONTAINER_ID);
+      if (isHealthProbe(request, url.pathname)) {
+        let status: string | undefined;
+        try {
+          status = (await container.getState()).status;
+        } catch {
+          status = undefined;
+        }
+        if (!containerIsAwake(status)) {
+          return sleepingHealthResponse(request);
+        }
+      }
       return container.fetch(switchPort(request, port));
     });
   },

@@ -60,11 +60,11 @@ describe("MCP edge paths", () => {
     expect(source).toContain("status: 401");
   });
 
-  it("strips the prefix, keeps the trailing slash, and forwards to the mapped port", () => {
+  it("strips the prefix, forwards the path unchanged (no trailing slash; mcp>=1.26 307s /mcp/), and forwards to the mapped port", () => {
     expect(source).toContain("url.pathname.slice(MCP_EDGE_PREFIX.length + 1)");
     expect(source).toContain("const port = MCP_EDGE_SERVERS[serverId];");
     expect(source).toContain('typeof port === "number"');
-    expect(source).toContain('if (!stripped.endsWith("/"))');
+    expect(source).not.toContain('if (!stripped.endsWith("/"))');
     expect(source).toContain("switchPort(forwarded, port)");
     expect(source).toContain("getContainer(workerEnv.STACK, SHARED_STACK_CONTAINER_ID)");
   });

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { BootLabOverlay } from "@digithings/ui/chat/boot-lab";
 import { readAndClearHandoff } from "@/lib/chatHandoff";
-import { readInviteToken, stripInviteTokenFromUrl } from "@/lib/inviteToken";
+import { readInviteToken, rememberInviteToken, stripInviteTokenFromUrl } from "@/lib/inviteToken";
 
 const READY = "digichat:ready";
 const SEED = "digichat:seed";
@@ -206,11 +206,11 @@ export function ChatEmbedShell({
       // than during render: the SSR pass cannot see the query, and the exported
       // HTML must not carry one visitor's key to the next.
       const token = acceptsInviteToken
-        ? readInviteToken(window.location.search)
+        ? rememberInviteToken(readInviteToken(window.location.search))
         : undefined;
-      // The key has been read and now lives only in this effect's local state
-      // for the session, so it has no further reason to sit in the address bar
-      // (DIG-1437). Never a store, a cookie or sessionStorage.
+      // The key has been read; it is kept for this tab only (sessionStorage)
+      // so a reload still works once it is gone from the address bar
+      // (DIG-1437). The Worker gate accepts the matching session cookie.
       const stripped = token ? stripInviteTokenFromUrl(window.location.href) : null;
       if (stripped) window.history.replaceState(null, "", stripped);
       // The inline script above already rewrote the theme param when the

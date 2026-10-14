@@ -54,7 +54,12 @@ def _allowed_host_patterns(raw: str) -> list[str]:
         host = item.strip()
         if not host or ("*" in host and not host.endswith(":*")):
             continue
-        patterns.append(host if ":" in host else f"{host}:*")
+        if ":" in host:
+            patterns.append(host)
+        else:
+            # Edge requests arrive with a bare Host (no port), e.g.
+            # graph.digithings.ai; ``:*`` alone does not match that.
+            patterns.extend([host, f"{host}:*"])
     return patterns
 
 

@@ -61,7 +61,19 @@ def expand_disabled_tool_tokens(tokens: list[str] | tuple[str, ...] | None) -> f
         mapped = _DISABLE_TOOL_ALIASES.get(key)
         if mapped:
             out |= mapped
+        elif _is_registered_tool_name(key):
+            # Per-tool session toggle: an exact registered tool name disables
+            # just that tool (disabling only ever narrows the allowlist).
+            out.add(key)
     return frozenset(out)
+
+
+def _is_registered_tool_name(name: str) -> bool:
+    try:
+        from digigraph.orchestration.registry import list_tool_names
+    except ImportError:  # pragma: no cover - registry always present in-app
+        return False
+    return name in set(list_tool_names())
 
 
 def apply_disabled_tools(

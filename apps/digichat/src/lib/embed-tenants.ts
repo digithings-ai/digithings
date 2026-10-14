@@ -167,6 +167,12 @@ export type EmbedTenantConfig = {
    */
   webSearch?: boolean;
   /**
+   * When true (DIG-1210), visitors cannot change the model, MCP servers or
+   * tool toggles: the X-Digi-Model header is ignored (house default model)
+   * and digigraph hides session_set_model / session_*_mcp / session_toggle_tool.
+   */
+  lockSessionControls?: boolean;
+  /**
    * Chain-of-thought view mode for this tenant's embeds (digichat skin):
    * hidden / compact / balanced / detailed. `balanced` (default) opens
    * reasoning + tool groups while they stream and collapses them when done.
@@ -198,6 +204,9 @@ export type EmbedTenantConfig = {
        */
       setup?: Record<string, string>;
       authHeader?: string;
+      /** Operator allowlist of remote tool names (DIG-284). */
+      allowedTools?: string[];
+      mutatingTools?: string[];
     }>;
     allowUserServers?: boolean;
     allowAddForm?: boolean;
@@ -222,7 +231,13 @@ export type EmbedTenantConfig = {
   pageContext?: PageContextMode;
   tools?: {
     allowUserToggle?: boolean;
-    catalog: Array<{ id: string; default?: boolean; label?: string }>;
+    catalog: Array<{
+      id: string;
+      default?: boolean;
+      label?: string;
+      /** Individual tools under this catalog entry (per-tool session toggles). */
+      tools?: Array<{ id: string; label?: string }>;
+    }>;
   };
   models?: { default?: string; available?: string[]; allowPicker?: boolean };
   /**
@@ -548,6 +563,9 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
   if (v.showLanguageSelector !== undefined && typeof v.showLanguageSelector !== "boolean") {
     throw new Error(`${ctx}: showLanguageSelector must be a boolean`);
   }
+  if (v.lockSessionControls !== undefined && typeof v.lockSessionControls !== "boolean") {
+    throw new Error(`${ctx}: lockSessionControls must be a boolean`);
+  }
   if (v.webSearch !== undefined && typeof v.webSearch !== "boolean") {
     throw new Error(`${ctx}: webSearch must be a boolean`);
   }
@@ -682,6 +700,8 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
         ...(typeof server.tokenEnv === "string" ? { tokenEnv: server.tokenEnv } : {}),
         ...(setup ? { setup } : {}),
         ...(typeof server.authHeader === "string" ? { authHeader: server.authHeader } : {}),
+        ...(Array.isArray(server.allowedTools) ? { allowedTools: server.allowedTools as string[] } : {}),
+        ...(Array.isArray(server.mutatingTools) ? { mutatingTools: server.mutatingTools as string[] } : {}),
       };
     });
     const rawMcpRecord = rawMcp as Record<string, unknown>;
@@ -728,6 +748,7 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
     showLanguageSelector:
       typeof v.showLanguageSelector === "boolean" ? v.showLanguageSelector : undefined,
     webSearch: typeof v.webSearch === "boolean" ? v.webSearch : undefined,
+    ...(v.lockSessionControls === true ? { lockSessionControls: true } : {}),
     view: VIEW_MODES.includes(v.view as ViewMode) ? (v.view as ViewMode) : undefined,
     thinking: THINKING_MODES.includes(v.thinking as ThinkingMode)
       ? (v.thinking as ThinkingMode)
@@ -749,9 +770,71 @@ function validateEntry(hostKey: string, value: unknown): EmbedTenantConfig {
       ? (v.llmAccess as EmbedLlmAccess)
       : undefined,
     gate,
+    ...parseTenantTools(v.tools, hostKey),
+    ...parseTenantModels(v.models, hostKey),
     ...(REQUIRED_PLAN_TIERS.includes(v.requiredPlanTier as "desk" | "studio" | "enterprise")
       ? { requiredPlanTier: v.requiredPlanTier as "desk" | "studio" | "enterprise" }
       : {}),
+  };
+}
+
+const TOOL_ID_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
+
+/** Optional `tools.catalog` (ids/labels and per-tool sub-ids only — never URLs). */
+function parseTenantTools(
+  raw: unknown,
+  hostKey: string,
+): Pick<EmbedTenantConfig, "tools"> {
+  if (raw === undefined) return {};
+  if (!raw || typeof raw !== "object") throw new Error(`embed tenant "${hostKey}": tools must be an object`);
+  const r = raw as Record<string, unknown>;
+  if (!Array.isArray(r.catalog)) throw new Error(`embed tenant "${hostKey}": tools.catalog must be an array`);
+  const catalog = r.catalog.map((e, i) => {
+    const entry = e as Record<string, unknown>;
+    if (typeof entry?.id !== "string" || !TOOL_ID_RE.test(entry.id)) {
+      throw new Error(`embed tenant "${hostKey}": tools.catalog[${i}].id invalid`);
+    }
+    const subs = Array.isArray(entry.tools)
+      ? entry.tools.map((t, j) => {
+          const st = t as Record<string, unknown>;
+          if (typeof st?.id !== "string" || !TOOL_ID_RE.test(st.id)) {
+            throw new Error(`embed tenant "${hostKey}": tools.catalog[${i}].tools[${j}].id invalid`);
+          }
+          return { id: st.id, ...(typeof st.label === "string" ? { label: st.label } : {}) };
+        })
+      : undefined;
+    return {
+      id: entry.id,
+      ...(typeof entry.default === "boolean" ? { default: entry.default } : {}),
+      ...(typeof entry.label === "string" ? { label: entry.label } : {}),
+      ...(subs?.length ? { tools: subs } : {}),
+    };
+  });
+  return {
+    tools: {
+      ...(typeof r.allowUserToggle === "boolean" ? { allowUserToggle: r.allowUserToggle } : {}),
+      catalog,
+    },
+  };
+}
+
+/** Optional `models` session picker list (model slugs only). */
+function parseTenantModels(
+  raw: unknown,
+  hostKey: string,
+): Pick<EmbedTenantConfig, "models"> {
+  if (raw === undefined) return {};
+  if (!raw || typeof raw !== "object") throw new Error(`embed tenant "${hostKey}": models must be an object`);
+  const r = raw as Record<string, unknown>;
+  const available = Array.isArray(r.available)
+    ? r.available.filter((m): m is string => typeof m === "string" && m.trim().length > 0).map((m) => m.trim())
+    : [];
+  return {
+    models: {
+      ...(typeof r.default === "string" && r.default.trim() ? { default: r.default.trim() } : {}),
+      available,
+      ...(typeof r.allowPicker === "boolean" ? { allowPicker: r.allowPicker } : {}),
+    },
   };
 }
 

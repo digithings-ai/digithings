@@ -9,6 +9,7 @@ import {
   useIsMarkdownCodeBlock,
 } from "@assistant-ui/react-markdown";
 import remarkGfm from "remark-gfm";
+import { isFollowableHref } from "../followable-href";
 import { type FC, memo, useMemo, useRef } from "react";
 import type { TextMessagePartProps } from "@assistant-ui/react";
 import { CheckIcon, CopyIcon } from "lucide-react";
@@ -40,7 +41,7 @@ const useShallowStable = <T extends Record<string, unknown> | undefined>(
 
 const MarkdownTextImpl: FC<MarkdownTextProps> = ({ components }) => {
   const stableComponents = useShallowStable(components);
-  const markdownComponents = useMemo(() => {
+    const markdownComponents = useMemo(() => {
     if (!stableComponents) return defaultComponents;
     return {
       ...defaultComponents,
@@ -154,8 +155,13 @@ export const defaultComponents = memoizeMarkdownComponents({
   // A session artifact link is the one href that cannot be followed plainly:
   // a dead token answers 410 session_expired, which would dump a raw JSON
   // error at the reader. Every other href takes the anchor below unchanged.
+  // A citation to a non-web source (repo://, vault paths) arrives with its href
+  // emptied by the sanitizer; an <a href=""> would reload the embed itself
+  // (carrying its query string). Show the label as plain text instead.
   a: ({ className, href, children, ...props }) =>
-    isArtifactBlobHref(href) ? (
+    !isFollowableHref(href) ? (
+      <span className="aui-md-a-plain">{children}</span>
+    ) : isArtifactBlobHref(href) ? (
       <ArtifactLink href={href as string} className={className}>
         {children}
       </ArtifactLink>

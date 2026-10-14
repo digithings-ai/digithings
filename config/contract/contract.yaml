@@ -1002,6 +1002,17 @@ env:
     - DIGIQUANT_URL
   wrangler_values:
     digithings-stack: ''
+- name: DIGISEARCH_BGE_M3_EMBED_URL
+  description: bge-m3 ticket-index Worker /embed endpoint the stack calls (DIG-3269).
+  secret: false
+  sources:
+    wrangler_workers:
+    - digithings-stack
+    compose_files: []
+    env_example_files: []
+    compose_literal: []
+  wrangler_values:
+    digithings-stack: https://corpus-index.chris-stefan.workers.dev/embed
 - name: DIGISEARCH_EMBEDDING_PROVIDER
   description: Embedding model id. All three call sites must agree exactly (384 dims) or retrieval silently
     misses.
@@ -1058,6 +1069,17 @@ env:
     - DIGISEARCH_URL
   wrangler_values:
     digithings-stack: http://127.0.0.1:8002
+- name: DIGISEARCH_WORKERS_AI_INDEXES
+  description: Workers AI vector indexes digisearch may query (occ-tickets, DIG-3269).
+  secret: false
+  sources:
+    wrangler_workers:
+    - digithings-stack
+    compose_files: []
+    env_example_files: []
+    compose_literal: []
+  wrangler_values:
+    digithings-stack: occ-tickets
 - name: DIGITRACE_INTERNAL_URL
   description: digitrace base URL as called by digichat.
   secret: false
@@ -1935,6 +1957,10 @@ bindings:
   name: DIGICHAT
   class_name: DigiChatContainer
   source: apps/digichat-cloudflare/wrangler.toml
+- worker: digithings-digichat
+  type: kv_namespace
+  name: DIGICHAT_TENANTS_KV
+  source: apps/digichat-cloudflare/wrangler.toml
 - worker: digithings-stack
   type: container
   class_name: DigiStackContainer
@@ -2005,6 +2031,10 @@ bindings:
   name: LANGFUSE_EVENTS
   bucket_name: digitrace-langfuse-events
   source: apps/digitrace-langfuse/wrangler.toml
+- worker: corpus-index
+  type: kv_namespace
+  name: CORPUS_INDEX_KV
+  source: apps/corpus-index/wrangler.toml
 # DIG-2895 data API. The D1 database is a LOCAL placeholder id (no deploy, no
 # routes, no remote database); the binding exists so the parity contract can see
 # the name. A remote database_id is a cutover step and needs Chris's approval.

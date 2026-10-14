@@ -1,0 +1,36 @@
+# Daily corpus index. Client URLs, site URLs, index names and tenant
+# mapping live in KV under corpus-index:jobs. This file has none of them.
+# The helpdesk token is the Worker secret ZAMMAD_API_TOKEN. Never print it.
+# Vectorize index names are read from that KV record and written through
+# CLOUDFLARE_API_TOKEN. Closed tickets are kept until retention is revisited.
+# The clock is on this worker, not digithings-cron, so the helpdesk token
+# is not bound beside GH_DISPATCH_TOKEN. One clock: 03:00 UTC.
+name = "corpus-index"
+account_id = "ae2ea3eb4ce5f7cc9bec1478f6e60e15"
+main = "src/index.ts"
+compatibility_date = "2026-09-04"
+workers_dev = true
+
+[observability]
+enabled = true
+
+[ai]
+binding = "AI"
+
+[vars]
+DRY_RUN = "0"
+CLOUDFLARE_ACCOUNT_ID = "ae2ea3eb4ce5f7cc9bec1478f6e60e15"
+
+# Replace the id before the first deploy (`wrangler kv namespace create corpus-index`).
+# The id identifies an account namespace, not a client.
+[[kv_namespaces]]
+binding = "CORPUS_INDEX_KV"
+id = "16160cf4676d4175a2ec4044f0aead1b"
+
+[[workflows]]
+name = "corpus-index-daily"
+binding = "CORPUS_INDEX_WORKFLOW"
+class_name = "CorpusIndexWorkflow"
+
+[triggers]
+crons = ["0 3 * * *"]

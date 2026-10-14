@@ -367,3 +367,22 @@ def test_digisearch_rows_are_marked_truncated_too() -> None:
     assert payload["excerpts_truncated"] is True
     assert "metadata.vault_path" in payload["next_step"], "hint must name THIS sink's key"
     assert "doc_id" not in payload["next_step"], "digisearch doc_id is a repo path, not loadable"
+
+
+def test_handle_digisearch_retries_without_rejected_raw_filter() -> None:
+    """OCC prod (DIG-1210): the model sent filter="sourceType eq 'help'" and
+    occ_help (no allow_raw_filter) refused it, failing every digisearch call.
+    The handler retries once without the raw filter."""
+    from digigraph.orchestration.builtin import _handle_digisearch
+
+    ctx = _ctx(index_name="occ_help")
+    ok = {"ok": True, "data": {"results": [{"id": "a", "content": "reset"}], "total": 1}}
+    with patch(
+        "digigraph.orchestration.builtin.invoke_digisearch_tool",
+        side_effect=[{"ok": False, "error": "raw filter not allowed"}, ok],
+    ) as mock_invoke:
+        out = _handle_digisearch({"query": "password reset", "filter": "sourceType eq 'help'"}, ctx)
+
+    assert mock_invoke.call_count == 2
+    assert "filter" not in mock_invoke.call_args_list[1].args[2]
+    assert isinstance(out, dict) and out["results"]

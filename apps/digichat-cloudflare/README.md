@@ -184,3 +184,21 @@ npm test
 - [`infra/digichat-digithings/README.md`](../../infra/digichat-digithings/README.md)
 - [`docs/adr/0018-digichat-path-routing.md`](../../docs/adr/0018-digichat-path-routing.md)
 - OCC: [`docs/projects/online-compliance-center/README.md`](../../docs/projects/online-compliance-center/README.md)
+
+## Tenant config in KV (DIG-1210)
+
+Tenant config is deployment data and is not committed. It lives in the KV
+namespace bound as `DIGICHAT_TENANTS_KV`, key `embed-tenants`, same JSON shape
+as `DIGICHAT_EMBED_TENANTS` (see `config/embed-tenants.example.json`). It must
+not contain secret values: use `tokenEnv` on a tenant (invite key, e.g.
+`OCC_INVITE_KEY`, rotatable by digikey) and on MCP server rows (e.g.
+`MCP_EDGE_KEY`); the Worker resolves them from its secrets before the
+container boots (`src/tenants-kv.ts`). KV hosts override the legacy
+`DIGICHAT_EMBED_TENANTS` secret host by host; hosts only in the secret stay;
+a KV host with a missing secret keeps its legacy entry (or is not served).
+
+```bash
+npx wrangler kv namespace create DIGICHAT_TENANTS_KV   # once; add id to wrangler.toml
+npx wrangler kv key put --binding DIGICHAT_TENANTS_KV embed-tenants --path tenants.json --remote
+npx wrangler secret put OCC_INVITE_KEY
+```

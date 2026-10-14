@@ -28,6 +28,7 @@
     "./styles/digichat-app-theme.css": "./src/styles/digichat-app-theme.css",
     "./chat/thread": "./src/components/chat/DigichatThread.tsx",
     "./chat/boot-signal": "./src/components/chat/boot-signal.ts",
+    "./chat/use-warmup-phase": "./src/components/chat/use-warmup-phase.ts",
     "./chat/boot-loader": "./src/components/chat/DigichatBootLoader.tsx",
     "./chat/boot-lab": "./src/components/chat/boot-lab.tsx",
     "./chat/thread-list": "./src/components/chat/DigichatThreadList.tsx",

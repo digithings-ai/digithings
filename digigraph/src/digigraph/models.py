@@ -201,6 +201,20 @@ class WorkflowRequest(BaseModel):
             "set it. digivault also enforces tenant→prefix server-side."
         ),
     )
+    digisearch_tools: dict[str, dict[str, str]] | None = Field(
+        None,
+        description=(
+            "Tenant map digisearchTools (DIG-3269): dedicated per-index search tools. "
+            "Overwritten server-side from the tenant map, never trusted from the client."
+        ),
+    )
+    lock_session_controls: bool = Field(
+        False,
+        description=(
+            "Tenant map lockSessionControls (DIG-1210). Overwritten server-side by "
+            "_with_digi_request_context, never trusted from the client."
+        ),
+    )
     research_system_prompt_override: str | None = Field(
         None,
         description=(

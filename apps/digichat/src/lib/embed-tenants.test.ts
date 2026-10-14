@@ -82,6 +82,8 @@ describe("parseEmbedTenants", () => {
                 default: true,
                 token: "edge-test-token",
                 authHeader: "x-digi-mcp-key",
+                allowedTools: ["search_tickets", "get_ticket"],
+                mutatingTools: [],
               },
               {
                 id: "digivault",
@@ -106,6 +108,8 @@ describe("parseEmbedTenants", () => {
           default: true,
           token: "edge-test-token",
           authHeader: "x-digi-mcp-key",
+          allowedTools: ["search_tickets", "get_ticket"],
+          mutatingTools: [],
         },
         {
           id: "digivault",
@@ -1003,5 +1007,18 @@ describe("isPlanTierSatisfied", () => {
   it("denies unknown/spoofed tier strings", () => {
     expect(isPlanTierSatisfied(deskCfg, "premium")).toBe(false);
     expect(isPlanTierSatisfied(deskCfg, "")).toBe(false);
+  });
+});
+
+describe("lockSessionControls (DIG-1210)", () => {
+  const withLock = (lock: unknown) => {
+    const base = JSON.parse(VALID);
+    base["datatapstream.com"].lockSessionControls = lock;
+    return JSON.stringify(base);
+  };
+  it("parses true and rejects non-boolean", () => {
+    expect(parseEmbedTenants(withLock(true)).get("datatapstream.com")?.lockSessionControls).toBe(true);
+    expect(parseEmbedTenants(VALID).get("datatapstream.com")?.lockSessionControls).toBeUndefined();
+    expect(() => parseEmbedTenants(withLock("yes"))).toThrow(/lockSessionControls/);
   });
 });

@@ -57,3 +57,30 @@ export function stripInviteTokenFromUrl(href: string): string | null {
   url.searchParams.delete(INVITE_TOKEN_PARAM);
   return url.toString();
 }
+
+/** sessionStorage key holding the invite key for this tab (DIG-1437). */
+export const INVITE_TOKEN_STORAGE_KEY = "digichat.occ.invite";
+
+/**
+ * Keep the invite key for this tab so a reload works after the key is
+ * stripped from the address bar. A key read from the URL wins and is stored;
+ * without one, the tab's stored key (if any) is returned. Tab-scoped only:
+ * sessionStorage dies with the tab and is never shared across tabs.
+ */
+export function rememberInviteToken(
+  fromUrl: string | undefined,
+  storage: Pick<Storage, "getItem" | "setItem"> | undefined = typeof window !== "undefined"
+    ? window.sessionStorage
+    : undefined,
+): string | undefined {
+  try {
+    if (fromUrl) {
+      storage?.setItem(INVITE_TOKEN_STORAGE_KEY, fromUrl);
+      return fromUrl;
+    }
+    const stored = storage?.getItem(INVITE_TOKEN_STORAGE_KEY)?.trim();
+    return stored ? stored : undefined;
+  } catch {
+    return fromUrl;
+  }
+}

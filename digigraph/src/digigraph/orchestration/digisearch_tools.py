@@ -114,6 +114,22 @@ def _handle_digisearch(args: dict[str, Any], context: ToolContext) -> str | dict
         )
     except _ORCHESTRATOR_CLIENT_ERRORS as e:
         return f"digisearch orchestrator invoke failed: {e}"
+    if not inv.get("ok") and args_eff.get("filter"):
+        # A model-written raw OData ``filter`` is refused by indexes without
+        # allow_raw_filter (e.g. occ_help), which failed the whole call. Retry
+        # once without it; the tenant index and merged filters still apply.
+        args_eff.pop("filter", None)
+        try:
+            inv = _invoke_ds(
+                _digisearch_service_base(),
+                "digisearch",
+                args_eff,
+                default_index_name=context.index_name,
+                bearer_token=_digi_bearer_from_context(context),
+                request_id=context.request_id,
+            )
+        except _ORCHESTRATOR_CLIENT_ERRORS as e:
+            return f"digisearch orchestrator invoke failed: {e}"
     if not inv.get("ok"):
         return json.dumps(inv)
     data = inv.get("data")

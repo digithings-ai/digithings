@@ -403,7 +403,7 @@ def test_format_ticket_report_aggregates():
 def test_allowed_host_patterns_append_port_wildcard():
     from scripts.zammad_mcp import server
 
-    assert server._allowed_host_patterns("zammad-mcp") == ["zammad-mcp:*"]
+    assert server._allowed_host_patterns("zammad-mcp") == ["zammad-mcp", "zammad-mcp:*"]
     assert server._allowed_host_patterns("zammad-mcp:8770, localhost:*") == [
         "zammad-mcp:8770",
         "localhost:*",

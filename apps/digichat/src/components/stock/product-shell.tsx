@@ -12,6 +12,7 @@
  * choreography that waits for it.
  */
 
+import { startWarmup } from "@/lib/warmup-gate";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AuiConfig,
@@ -210,9 +211,18 @@ export function ProductStockShell({
   // (react-hooks/set-state-in-effect).
   const bootRevealed = bootDone;
 
+  // Boot completes only once the minimum choreography time has passed AND
+  // every chat service reports ready via /api/embed/warmup (bounded; on
+  // timeout the loader shows an error line and the chat is revealed anyway).
   useEffect(() => {
-    const timer = setTimeout(() => setBootReady(true), BOOT_MIN_MS);
-    return () => clearTimeout(timer);
+    let cancelled = false;
+    const minElapsed = new Promise<void>((res) => setTimeout(res, BOOT_MIN_MS));
+    void Promise.all([minElapsed, startWarmup()]).then(() => {
+      if (!cancelled) setBootReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Ready that lands almost immediately (warm container) means the chat was

@@ -1,0 +1,26 @@
+{
+  "chat.example.com": {
+    "slug": "example",
+    "tokenEnv": "EXAMPLE_INVITE_KEY",
+    "gateMode": "ungated",
+    "llmAccess": "operator",
+    "activityDetail": "labels",
+    "showByok": false,
+    "webSearch": false,
+    "backend": { "type": "digigraph", "digisearchIndex": "example_help", "vaultPathPrefix": "clients/example" },
+    "mcp": {
+      "servers": [
+        {
+          "id": "tickets",
+          "url": "https://graph.example.com/_stack/mcp/zammad/mcp",
+          "label": "Tickets",
+          "default": true,
+          "tokenEnv": "MCP_EDGE_KEY",
+          "authHeader": "x-digi-mcp-key",
+          "allowedTools": ["search_tickets", "list_tickets", "get_ticket", "ticket_report", "aggregate_tickets"],
+          "mutatingTools": []
+        }
+      ]
+    }
+  }
+}

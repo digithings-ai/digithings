@@ -340,7 +340,7 @@ printf '%s' "$NEW_JSON" | wrangler secret put "$SECRET_NAME" >&2 \
 
 # --------------------------------------------------------------- container id bump --
 say "5/7 bump SHARED_DIGICHAT_CONTAINER_ID so a warm instance is recycled"
-CURRENT_ID="$(sed -n 's/^export const SHARED_DIGICHAT_CONTAINER_ID = "\(shared-v[0-9]\+\)";.*/\1/p' "$PATHS_TS")"
+CURRENT_ID="$(sed -n 's/^export const SHARED_DIGICHAT_CONTAINER_ID = "\(shared-v[0-9][0-9]*\)";.*/\1/p' "$PATHS_TS")"
 [ -n "$CURRENT_ID" ] || fail "could not read SHARED_DIGICHAT_CONTAINER_ID from $PATHS_TS. Nothing was deployed."
 CURRENT_N="${CURRENT_ID##*v}"
 NEXT_ID="shared-v$((CURRENT_N + 1))"

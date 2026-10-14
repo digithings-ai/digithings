@@ -58,6 +58,10 @@ class WorkflowState(TypedDict, total=False):
     digisearch_index: str | None
     vault_path_prefix: str | None
     research_system_prompt_override: str | None
+    # Tenant map lockSessionControls: hide model/MCP/tool session controls.
+    lock_session_controls: bool
+    # Tenant map digisearchTools: tool name -> {index, description} (DIG-3269).
+    digisearch_tools: dict[str, dict[str, str]] | None
     # Per-request response language (X-Digi-Language). Must be declared here — see the
     # digisearch_index/vault_path_prefix comment above; same LangGraph pitfall (#2097).
     response_language: str | None

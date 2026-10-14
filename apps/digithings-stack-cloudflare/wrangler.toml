@@ -78,32 +78,10 @@ custom_domain = true
 # zone_name = "digithings.ai"
 # custom_domain = true
 
-# DigiChat cutover (cost epic): zone routes moved here from digithings-digichat so the
-# folded DigiChatContainer serves them and the duplicate container goes idle.
-# DEPLOY ORDER: deploy digithings-digichat (routes removed) first, then this worker.
-# Precondition: the digichat secrets listed in apps/digichat-cloudflare/wrangler.toml
-# exist on this worker (wrangler secret list) before deploy.
-[[routes]]
-pattern = "digithings.ai/embed*"
-zone_name = "digithings.ai"
-[[routes]]
-pattern = "digithings.ai/api/chat*"
-zone_name = "digithings.ai"
-[[routes]]
-pattern = "digithings.ai/api/embed*"
-zone_name = "digithings.ai"
-[[routes]]
-pattern = "digithings.ai/api/byok*"
-zone_name = "digithings.ai"
-[[routes]]
-pattern = "digithings.ai/api/plan-proof*"
-zone_name = "digithings.ai"
-[[routes]]
-pattern = "digithings.ai/api/health"
-zone_name = "digithings.ai"
-[[routes]]
-pattern = "digithings.ai/_dtchat*"
-zone_name = "digithings.ai"
+# LIVE (2026-10-14): the digithings.ai zone routes stay on the standalone
+# digithings-digichat worker, not here. The cost-epic cutover (#5411) moves them
+# here only when its deploy order runs; this merge keeps the routes where
+# production serves them.
 
 [[containers]]
 class_name = "DigiStackContainer"
@@ -114,11 +92,9 @@ class_name = "DigiStackContainer"
 # context (#4046).
 image = "../../Dockerfile.digithings-stack-cloudflare"
 image_build_context = "../.."
-# Cost minimum (Cloudflare cost epic): one replica; traffic is ~2k req/day.
 max_instances = 1
 # Multi-process Profile A needs real RAM/disk (lite = 256MiB is far too small).
-# standard-1 = 4 GiB (was standard-2, 6 GiB). Memory is billed per GiB-s.
-# Verify container RSS stays under ~3 GiB after deploy; revert to standard-2 if OOM.
+# Cost (2026-10-13): observed peak 2.1 GiB RAM / 1.6 GB disk -> standard-1 (4 GiB).
 instance_type = "standard-1"
 
 # Dedicated digiquant-mcp market-data container (#3780, Task 8). Separate image
@@ -145,9 +121,8 @@ class_name = "DigiQuantMcpContainer"
 image = "../../digiquant/Dockerfile.mcp"
 image_build_context = "../.."
 max_instances = 1
-# FastMCP read path over R2; standard-1 (4 GiB) for cost. p50/p99 budget was set
-# on standard-2 — re-check latency after deploy.
-instance_type = "standard-1"
+# p50 <50ms / p99 <200ms per 500-bar indicator window was budgeted on standard-2.
+instance_type = "standard-2"
 
 # Folded digichat (#4689). Same image as the standalone digichat worker
 # (Next standalone on :3000, one shared instance for digithings + OCC + future
@@ -163,9 +138,10 @@ class_name = "DigiChatContainer"
 # file: ../.. is the repo root.
 image = "../../Dockerfile.digichat-cloudflare"
 image_build_context = "../.."
-max_instances = 2
-# Next standalone: basic = 1 GiB (lite = 256MiB is far too small). Typical Next
-# standalone RSS is 200-500 MiB; revert to standard-1 if OOM.
+max_instances = 1
+# Next standalone needs real RAM/disk (lite = 256MiB is far too small);
+# explicit instance_type required — matches the two entries above.
+# Cost (2026-10-13): observed peak ~250 MiB RAM / 0.3 GB disk -> basic (1 GiB).
 instance_type = "basic"
 
 # Ops SSH debug key removed (cost/hygiene epic). Re-add [[containers.authorized_keys]]
@@ -296,6 +272,8 @@ OPENAI_API_BASE = "http://127.0.0.1:4000/v1"
 # not include them, so container/entrypoint.sh's defaults are the live values. Setting them
 # here would be inert (and the old DIGI_ALLOWED_TOOLS value here was stale vs that default).
 DIGI_LLM_MODE = "test"
+DIGISEARCH_WORKERS_AI_INDEXES = "occ-tickets"
+DIGISEARCH_BGE_M3_EMBED_URL = "https://corpus-index.chris-stefan.workers.dev/embed"
 CHROMA_PATH = "/data/chroma"
 DIGIVAULT_ROOT = "/data/vault"
 # DIGIKEY_DATABASE_URL is deliberately NOT a var: a connection URL carries a
@@ -318,7 +296,8 @@ DIGICHAT_EMBED_HOSTS = "digithings.ai,www.digithings.ai,occ.digithings.ai,digiqu
 # digichat only talks to digigraph (+ digikey for bff_session).
 DIGICHAT_ENABLED_SERVICES = "digigraph"
 # Defense-in-depth corpus map (headers from digichat still win).
-DIGI_TENANT_CORPUS_MAP = "{\"digithings\": {\"digisearchIndex\": \"digithings_docs\", \"vaultPathPrefix\": \"clients/digithings\"}, \"occ\": {\"digisearchIndex\": \"occ_help\", \"vaultPathPrefix\": \"clients/online-compliance-center\", \"researchSystemPrompt\": \"You are the Online Compliance Center (OCC) help assistant for digithings.ai/chat/occ.\\nAnswer only from what you retrieve. You get several tool rounds per question.\\n\\nGround every answer in retrieved corpus from Help search (digisearch_semantic, index `occ_help`, help docs)\\nand/or Knowledge vault (digivault_search_notes, digivault_search_tag, digivault_backlinks) under `clients/online-compliance-center/`.\\nAlways cite help article URLs or PDF source paths from metadata.\\n\\nSearch results are excerpts, not whole documents. A row marked \\\"truncated\\\": true\\nmeans you have not seen that note \\u2014 run digivault_search_notes again with a narrower query\\naimed at that note (same path prefix) until you have read the part that answers, before answering. An unmarked row is not a promise of completeness:\\nevery row is a preview. Always do this when the question involves a\\nprocedure, a list of steps, a table, a count, or the words every, all, or which:\\nhelp PDFs are stored one page per note, and an excerpt routinely stops before the\\nstep that answers the question.\\n\\nNever say a policy, step, or exception does not exist unless you searched for it\\nspecifically and looked. If all you saw was a truncated excerpt, say what it showed and that the\\nrest was not loaded.\\n\\nAnswer questions about OCC policies, procedures, FAQ topics, and public help\\nPDFs. Do not invent product features, pricing, or portal capabilities not\\npresent in the retrieved sources. E-learning / YouTube videos are out of\\nscope for this corpus \\u2014 say so if asked.\\n\\nDo not cite digithings or digiquant internal architecture docs. If the\\ncorpus has no grounded answer, say so clearly.\\n\\nTicket content is not part of this corpus. For ticket questions use the read-only zammad tools, and say so clearly if they do not ground the answer.\\n\\nSkills: for any ticket question, first call list_skills, then get_skill for the matching workflow (summarize-tickets-by-topic for summaries or trends, find-precedent-tickets for how a similar issue was solved) and follow it. Always get_skill present-results before writing the final answer and follow its display rules.\"}}"
+# DIGI_TENANT_CORPUS_MAP is not set here: with the OCC prompt it exceeds Cloudflare's
+# 5.1 kB text-binding limit. src/index.ts carries the full map as its fallback default.
 
 # Market-data base for GET /v1/market/closes and /v1/market/tickers (declared in
 # config/contract/contract.yaml). The standalone dashboard-api worker already

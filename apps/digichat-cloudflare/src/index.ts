@@ -13,6 +13,8 @@ import {
   shouldProxyToDigiChat,
 } from "./paths";
 import { legacyEmbedEnabledValue } from "./embed-flag";
+import { resolveEmbedTenants } from "./tenants-kv";
+import { isOccShellPath, occGate } from "./occ-gate";
 
 /**
  * `env` from `cloudflare:workers` is untyped until `wrangler types` generates
@@ -55,10 +57,38 @@ export class DigiChatContainer extends Container {
     DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY:
       workerVars.DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY ?? "",
   };
+
+  private tenantsResolved = false;
+
+  /**
+   * Before the container boots, build DIGICHAT_EMBED_TENANTS from the KV
+   * tenant config (secret refs resolved from Worker secrets), falling back to
+   * the legacy secret. See ./tenants-kv.ts. Config edits apply on next boot.
+   */
+  override async fetch(request: Request): Promise<Response> {
+    if (!this.tenantsResolved) {
+      const { json, source } = await resolveEmbedTenants(
+        workerVars.DIGICHAT_TENANTS_KV,
+        workerVars.DIGICHAT_EMBED_TENANTS,
+        workerVars as unknown as Record<string, unknown>,
+      );
+      this.envVars = { ...this.envVars, DIGICHAT_EMBED_TENANTS: json };
+      this.tenantsResolved = true;
+      console.log(`[tenants-kv] embed tenants source=${source}`);
+    }
+    return super.fetch(request);
+  }
+
+  /** Re-read KV tenant config on the next boot (the DO outlives container sleeps). */
+  override onStop(): void {
+    this.tenantsResolved = false;
+  }
 }
 
 export interface Env {
   DIGICHAT: DurableObjectNamespace<DigiChatContainer>;
+  /** DIG-1210 invite key gating the /chat/occ Pages shell. */
+  OCC_INVITE_KEY?: string;
   /** Documented opt-in for the legacy generic anonymous embed. */
   DIGICHAT_LEGACY_EMBED_ENABLED?: string;
   /** @deprecated Use DIGICHAT_LEGACY_EMBED_ENABLED. */
@@ -70,6 +100,8 @@ export interface Env {
   DIGICHAT_ENABLED_SERVICES?: string;
   AUTH_SECRET?: string;
   DIGICHAT_EMBED_TENANTS?: string;
+  /** KV with key `embed-tenants` (non-secret tenant config; refs via *Env). */
+  DIGICHAT_TENANTS_KV?: KVNamespace;
   DIGIGRAPH_INTERNAL_URL?: string;
   DIGIKEY_URL?: string;
   DIGIKEY_BFF_TOKEN?: string;
@@ -82,6 +114,9 @@ export interface Env {
 export default {
   async fetch(request: Request, workerEnv: Env): Promise<Response> {
     const url = new URL(request.url);
+    if (isOccShellPath(url.pathname)) {
+      return occGate(request, workerEnv.OCC_INVITE_KEY);
+    }
     if (!shouldProxyToDigiChat(url.pathname)) {
       return new Response(
         "digichat Worker: path not routed. Marketing /chat shells are on Pages.",

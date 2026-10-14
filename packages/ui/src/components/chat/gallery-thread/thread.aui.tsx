@@ -1,5 +1,6 @@
 "use client";
 
+import { useDigichatWarmupPhase } from "../use-warmup-phase";
 import {
   ComposerAddAttachment,
   ComposerAttachments,
@@ -49,15 +50,17 @@ import {
   type FileMessagePartComponent,
   type ImageMessagePartComponent,
   type SourceMessagePartComponent,
+  type SourceMessagePartProps,
   type ToolCallMessagePartComponent,
   useAui,
   useAuiState,
-  useThreadViewport,
 } from "@assistant-ui/react";
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ComponentPropsWithoutRef,
@@ -229,6 +232,87 @@ const DEFAULT_CHROME: ThreadChrome = {
 
 const ThreadChromeContext = createContext<ThreadChrome>(DEFAULT_CHROME);
 
+/** The scroll viewport element, for footer widgets that live outside it. */
+const ThreadViewportElContext = createContext<HTMLElement | null>(null);
+
+/**
+ * Edit-in-composer: clicking edit on a user message loads its text into the
+ * main composer (the only place messages are typed or changed). Resubmitting
+ * replaces that message and regenerates from it; unchanged text is a no-op
+ * (treated as a misclick). Escape, the exit control, or a click outside the
+ * composer cancels and restores whatever draft was there before.
+ */
+type ComposerEditState = {
+  messageId: string;
+  original: string;
+  savedDraft: string;
+};
+type ComposerEditApi = {
+  editing: ComposerEditState | null;
+  begin: (messageId: string, text: string) => void;
+  cancel: () => void;
+  commit: (text: string) => void;
+};
+const ComposerEditContext = createContext<ComposerEditApi>({
+  editing: null,
+  begin: () => {},
+  cancel: () => {},
+  commit: () => {},
+});
+
+export function isUnchangedEdit(original: string, next: string): boolean {
+  return original.trim() === next.trim();
+}
+
+const ComposerEditProvider: FC<PropsWithChildren> = ({ children }) => {
+  const aui = useAui();
+  const [editing, setEditing] = useState<ComposerEditState | null>(null);
+  const editingRef = useRef<ComposerEditState | null>(null);
+  editingRef.current = editing;
+
+  const begin = useCallback(
+    (messageId: string, text: string) => {
+      const prev = editingRef.current;
+      const savedDraft = prev ? prev.savedDraft : aui.composer().getState().text;
+      aui.composer().setText(text);
+      setEditing({ messageId, original: text, savedDraft });
+    },
+    [aui],
+  );
+  const cancel = useCallback(() => {
+    const cur = editingRef.current;
+    if (!cur) return;
+    aui.composer().setText(cur.savedDraft);
+    setEditing(null);
+  }, [aui]);
+  const commit = useCallback(
+    (text: string) => {
+      const cur = editingRef.current;
+      if (!cur) return;
+      if (!text.trim() || isUnchangedEdit(cur.original, text)) {
+        cancel();
+        return;
+      }
+      const mc = aui.thread().message({ id: cur.messageId }).composer();
+      mc.beginEdit();
+      mc.setText(text);
+      mc.send();
+      aui.composer().setText(cur.savedDraft);
+      setEditing(null);
+    },
+    [aui, cancel],
+  );
+  const value = useMemo(
+    () => ({ editing, begin, cancel, commit }),
+    [editing, begin, cancel, commit],
+  );
+  return (
+    <ComposerEditContext.Provider value={value}>
+      {children}
+    </ComposerEditContext.Provider>
+  );
+};
+
 // Startup exposes a loading placeholder thread; treat it as a new chat so
 // Welcome docks in the footer above the composer. Loads after startup keep
 // the docked layout.
@@ -304,11 +388,13 @@ export const Thread: FC<ThreadProps> = ({
             <ThreadGroupDisclosureContext.Provider
               value={{ reasoning: reasoningMode, toolCalls: toolCallsMode }}
             >
-              <ThreadRoot
-                autoFocus={autoFocus}
-                placeholder={placeholder}
-                composerLayout={composerLayout}
-              />
+              <ComposerEditProvider>
+                <ThreadRoot
+                  autoFocus={autoFocus}
+                  placeholder={placeholder}
+                  composerLayout={composerLayout}
+                />
+              </ComposerEditProvider>
             </ThreadGroupDisclosureContext.Provider>
           </ThreadComponentsContext.Provider>
         </ThreadActionsContext.Provider>
@@ -335,6 +421,7 @@ const ThreadRoot: FC<{
   const { Welcome = ThreadWelcome, Footer = ThreadFooter } =
     useContext(ThreadComponentsContext);
   const { className } = useContext(ThreadChromeContext);
+  const [viewportEl, setViewportEl] = useState<HTMLElement | null>(null);
 
   return (
     <ThreadPrimitive.Root
@@ -360,7 +447,14 @@ const ThreadRoot: FC<{
         ["--composer-padding" as string]: "8px",
       }}
     >
+      {/* The footer (composer + credit) sits OUTSIDE the scroll viewport so
+          messages end above it and never scroll behind the text box. The
+          shared ViewportProvider lets the out-of-viewport scroll-to-bottom
+          button and footer still talk to the viewport store. */}
+      <ThreadPrimitive.ViewportProvider>
+      <ThreadViewportElContext.Provider value={viewportEl}>
       <ThreadPrimitive.Viewport
+        ref={setViewportEl}
         turnAnchor="top"
         // The top-anchored message carries `padding-top: 1.5rem` (chat-aui.css)
         // so it does not sit flush against the viewport top. `tallerThan` scores
@@ -369,7 +463,7 @@ const ThreadRoot: FC<{
         // unchanged from before the padding was added.
         topAnchorMessageClamp={{ tallerThan: "11.5em", visibleHeight: "6em" }}
         data-slot="aui_thread-viewport"
-        className="relative flex flex-1 flex-col overflow-x-hidden overflow-y-scroll scroll-smooth digichat-thread__viewport"
+        className="relative flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-scroll scroll-smooth digichat-thread__viewport"
       >
         <div className="mx-auto flex w-full max-w-(--thread-max-width) flex-1 flex-col px-4 pt-4">
           <AuiIf condition={isHistoryLoadingView}>
@@ -378,14 +472,17 @@ const ThreadRoot: FC<{
 
           <div
             data-slot="aui_message-group"
-            className="mb-14 flex flex-col gap-y-6 empty:hidden"
+            className="mb-4 flex flex-col gap-y-6 empty:hidden"
           >
             <ThreadPrimitive.Messages>
               {() => <ThreadMessage />}
             </ThreadPrimitive.Messages>
           </div>
 
-          <ThreadPrimitive.ViewportFooter className="aui-thread-viewport-footer digichat-thread__footer bg-background sticky bottom-0 mt-auto flex flex-col gap-4 overflow-visible pb-2 md:pb-3">
+        </div>
+      </ThreadPrimitive.Viewport>
+        <div className="mx-auto flex w-full max-w-(--thread-max-width) shrink-0 flex-col px-4">
+          <div className="aui-thread-viewport-footer digichat-thread__footer bg-background relative flex flex-col gap-4 overflow-visible pt-2 pb-2 md:pb-3">
             <ThreadScrollToBottom />
             <ThreadFollowupSuggestions />
             <AuiIf condition={isNewChatView}>
@@ -403,9 +500,10 @@ const ThreadRoot: FC<{
               layout={composerLayout}
             />
             {Footer ? <Footer /> : null}
-          </ThreadPrimitive.ViewportFooter>
+          </div>
         </div>
-      </ThreadPrimitive.Viewport>
+      </ThreadViewportElContext.Provider>
+      </ThreadPrimitive.ViewportProvider>
     </ThreadPrimitive.Root>
   );
 };
@@ -414,15 +512,14 @@ const ThreadMessage: FC = () => {
   const { AssistantMessage: AssistantMessageComponent = AssistantMessage } =
     useContext(ThreadComponentsContext);
   const role = useAuiState((s) => s.message.role);
-  const isEditing = useAuiState((s) => s.message.composer.isEditing);
-
-  if (isEditing) return <EditComposer />;
+  // Edits happen in the main composer (ComposerEditProvider); a message's own
+  // edit composer is only opened transiently to submit, so never render it.
   if (role === "user") return <UserMessage />;
   return <AssistantMessageComponent />;
 };
 
 const ThreadScrollToBottom: FC = () => {
-  const viewportEl = useThreadViewport((s) => s.element.viewport);
+  const viewportEl = useContext(ThreadViewportElContext);
   const [revealSettled, setRevealSettled] = useState(false);
   const [scrolledAway, setScrolledAway] = useState(false);
 
@@ -466,9 +563,10 @@ const ThreadScrollToBottom: FC = () => {
       const group = viewportEl.querySelector<HTMLElement>(
         '[data-slot="aui_message-group"]',
       );
-      const composer = viewportEl.querySelector<HTMLElement>(
-        '[data-slot="aui_composer-shell"]',
-      );
+      // The composer now sits below (outside) the scroll viewport.
+      const composer = (
+        viewportEl.closest(".aui-thread-root") ?? viewportEl
+      ).querySelector<HTMLElement>('[data-slot="aui_composer-shell"]');
       if (!group || !composer) {
         setScrolledAway(false);
         return;
@@ -609,7 +707,45 @@ const Composer: FC<{
 }> = ({ autoFocus, placeholder = "Send a message...", layout }) => {
   const compact = layout === "compact";
   const { onComposerSubmit, slash, mention } = useContext(ThreadChromeContext);
+  const edit = useContext(ComposerEditContext);
+  const aui = useAui();
   const inputWrapRef = useRef<HTMLDivElement | null>(null);
+  const composerRootRef = useRef<HTMLFormElement | null>(null);
+  const isEditingMessage = edit.editing !== null;
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    if (edit.editing) {
+      event.preventDefault();
+      edit.commit(aui.composer().getState().text);
+      return;
+    }
+    onComposerSubmit?.(event);
+  };
+
+  // Click outside the composer cancels an in-progress edit. The edit button
+  // itself is excluded so re-clicking edit on another message switches target.
+  useEffect(() => {
+    if (!isEditingMessage) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Element | null;
+      if (!target) return;
+      if (composerRootRef.current?.contains(target)) return;
+      if (target.closest(".aui-user-action-edit, [data-radix-popper-content-wrapper]")) return;
+      edit.cancel();
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onPointerDown, true);
+  }, [isEditingMessage, edit]);
+
+  // Focus the composer when an edit starts.
+  useEffect(() => {
+    if (!isEditingMessage) return;
+    const area = inputWrapRef.current?.querySelector<HTMLTextAreaElement>("textarea");
+    if (!area) return;
+    area.focus({ preventScroll: true });
+    const end = area.value.length;
+    area.setSelectionRange(end, end);
+  }, [isEditingMessage, edit.editing?.messageId]);
   const focusComposerInput = () => {
     inputWrapRef.current
       ?.querySelector<HTMLTextAreaElement>("textarea")
@@ -657,16 +793,42 @@ const Composer: FC<{
   };
   const bar = (
     <ComposerPrimitive.Root
+      ref={composerRootRef}
       className="aui-composer-root relative flex w-full flex-col"
-      onSubmit={onComposerSubmit}
+      data-editing={isEditingMessage ? "true" : undefined}
+      onSubmit={handleSubmit}
+      onKeyDownCapture={(event) => {
+        if (isEditingMessage && event.key === "Escape") {
+          event.preventDefault();
+          event.stopPropagation();
+          edit.cancel();
+        }
+      }}
     >
       <ComposerPrimitive.AttachmentDropzone asChild>
         <div
           data-slot="aui_composer-shell"
           data-layout={layout}
+          data-editing={isEditingMessage ? "true" : undefined}
           onMouseDown={handleShellMouseDown}
-          className="border-border/60 data-[dragging=true]:border-ring dark:border-muted-foreground/15 flex w-full cursor-text flex-col gap-2 rounded-(--composer-radius) border bg-(--composer-bg) p-(--composer-padding) data-[dragging=true]:border-dashed data-[dragging=true]:bg-[color-mix(in_oklab,var(--color-accent)_50%,var(--color-background))]"
+          className="data-[editing=true]:border-primary/50 border-border/60 data-[dragging=true]:border-ring dark:border-muted-foreground/15 flex w-full cursor-text flex-col gap-2 rounded-(--composer-radius) border bg-(--composer-bg) p-(--composer-padding) data-[dragging=true]:border-dashed data-[dragging=true]:bg-[color-mix(in_oklab,var(--color-accent)_50%,var(--color-background))]"
         >
+          {isEditingMessage ? (
+            <div
+              data-slot="aui_composer-editing"
+              className="aui-composer-editing text-muted-foreground flex items-center justify-between gap-2 px-2.5 text-xs"
+            >
+              <span>Editing message · Enter to resend · Esc to cancel</span>
+              <button
+                type="button"
+                aria-label="Cancel edit"
+                className="hover:text-foreground rounded px-1 leading-none"
+                onClick={() => edit.cancel()}
+              >
+                ×
+              </button>
+            </div>
+          ) : null}
           <ComposerAttachments />
           <div
             className={cn(
@@ -872,6 +1034,7 @@ const AssistantWorkingIndicator: FC = () => {
     }
     return state;
   });
+  const wakePhase = useDigichatWarmupPhase();
   if (toolRunning) return null;
   return (
     <span
@@ -883,12 +1046,79 @@ const AssistantWorkingIndicator: FC = () => {
         label="Assistant is working"
         className="size-3.5"
       />
-      {connectionState === "warming_up" ? (
+      {wakePhase === "waking" ? (
+        <span className="text-sm text-muted-foreground">Waking up services…</span>
+      ) : connectionState === "warming_up" ? (
         <span className="text-sm text-muted-foreground">Warming up…</span>
       ) : connectionState === "connecting" ? (
         <span className="text-sm text-muted-foreground">Connecting…</span>
       ) : null}
     </span>
+  );
+};
+
+type SourcePart = SourceMessagePartProps;
+
+/** Key a citation by url (web) or filename/title (document). */
+function sourceKey(p: SourcePart): string {
+  const url = p.sourceType === "url" ? (p.url ?? "") : "";
+  const doc = p.sourceType === "url" ? "" : (p.filename ?? "");
+  return (url || doc || p.title || p.id || "").trim().toLowerCase();
+}
+
+/**
+ * Dedupe a message's source parts by url / filename / title. A url-bearing
+ * copy of a hit replaces an earlier url-less copy with the same title.
+ * Pure + exported for tests.
+ */
+export function dedupeSourceParts(
+  parts: readonly { type: string }[],
+): SourcePart[] {
+  const out: SourcePart[] = [];
+  const byKey = new Map<string, number>();
+  const byTitle = new Map<string, number>();
+  for (const raw of parts) {
+    if (raw.type !== "source") continue;
+    const p = raw as SourcePart;
+    const title = (p.title ?? "").trim().toLowerCase();
+    const key = sourceKey(p);
+    const hit = byKey.get(key) ?? (title ? byTitle.get(title) : undefined);
+    if (hit !== undefined) {
+      const prev = out[hit]!;
+      if (prev.sourceType !== "url" && p.sourceType === "url") {
+        out[hit] = p;
+        byKey.set(key, hit);
+      }
+      continue;
+    }
+    byKey.set(key, out.length);
+    if (title) byTitle.set(title, out.length);
+    out.push(p);
+  }
+  return out;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const MessageSources: FC<{ Source: SourceMessagePartComponent }> = ({
+  Source,
+}) => {
+  // Select the parts array itself (stable store reference) and derive in a
+  // memo: a selector returning a fresh array re-renders forever (#185).
+  const parts = useAuiState((s) => s.message.parts);
+  // Sources are a footer for the finished answer: while the turn is still
+  // running they would land between tool groups and the streaming text.
+  const running = useAuiState((s) => s.message.status?.type === "running");
+  const sources = useMemo(() => dedupeSourceParts(parts), [parts]);
+  if (running || !sources.length) return null;
+  return (
+    <div
+      data-slot="aui_message-sources"
+      className="aui-message-sources mt-2 flex flex-col gap-0.5"
+    >
+      {sources.map((p) => (
+        <Source key={sourceKey(p) || p.id} {...p} />
+      ))}
+    </div>
   );
 };
 
@@ -1004,12 +1234,16 @@ const AssistantMessage: FC = () => {
               case "indicator":
                 return <AssistantWorkingIndicator />;
               case "source":
-                return <SourceComponent {...part} />;
+                // Rendered once, deduped, in MessageSources below — inline
+                // rows split tool groups and repeated per retrieve span.
+                return null;
               default:
                 return null;
             }
           }}
         </MessagePrimitive.GroupedParts>
+        {/* No auto-rendered source list (DIG-1210): the model cites inline
+            with markdown links in its answer instead. */}
         <MessageError />
       </div>
 
@@ -1155,50 +1389,29 @@ const UserMessage: FC = () => {
 };
 
 const UserActionBar: FC = () => {
+  const aui = useAui();
+  const edit = useContext(ComposerEditContext);
+  const onEdit = () => {
+    const msg = aui.message().getState();
+    const text = msg.parts
+      .map((p) => (p.type === "text" ? p.text : ""))
+      .join("");
+    edit.begin(msg.id, text);
+  };
   return (
     <ActionBarPrimitive.Root
       hideWhenRunning
       autohide="not-last"
       className="aui-user-action-bar-root flex flex-row items-center"
     >
-      <ActionBarPrimitive.Edit asChild>
-        <TooltipIconButton tooltip="Edit" className="aui-user-action-edit">
-          <DotMatrix state="edit" label="Edit" className="size-3.5" />
-        </TooltipIconButton>
-      </ActionBarPrimitive.Edit>
+      <TooltipIconButton
+        tooltip="Edit"
+        className="aui-user-action-edit"
+        onClick={onEdit}
+      >
+        <DotMatrix state="edit" label="Edit" className="size-3.5" />
+      </TooltipIconButton>
     </ActionBarPrimitive.Root>
-  );
-};
-
-const EditComposer: FC = () => {
-  return (
-    <MessagePrimitive.Root
-      data-slot="aui_edit-composer-wrapper"
-      className="flex flex-col px-2 [contain-intrinsic-size:auto_200px] [content-visibility:auto]"
-    >
-      <ComposerPrimitive.Root className="aui-edit-composer-root border-border/60 dark:border-muted-foreground/15 flex w-full cursor-text flex-col rounded-(--composer-radius) border bg-(--composer-bg)">
-        <ComposerPrimitive.Input
-          className="aui-edit-composer-input text-foreground min-h-14 w-full resize-none bg-transparent px-4 pt-3 pb-1 text-base outline-none"
-          autoFocus
-        />
-        <div className="aui-edit-composer-footer mx-2.5 mb-2.5 flex items-center gap-1.5 self-end">
-          <ComposerPrimitive.Cancel asChild>
-            <Button dress="chat"
-              variant="ghost"
-              size="sm"
-              className="h-8 rounded-full px-3.5"
-            >
-              Cancel
-            </Button>
-          </ComposerPrimitive.Cancel>
-          <ComposerPrimitive.Send asChild>
-            <Button dress="chat" size="sm" className="h-8 rounded-full px-3.5">
-              Update
-            </Button>
-          </ComposerPrimitive.Send>
-        </div>
-      </ComposerPrimitive.Root>
-    </MessagePrimitive.Root>
   );
 };
 

@@ -199,6 +199,37 @@ def get_tools(
     return out_summary if mode is ToolExposureMode.SUMMARY else out_detailed
 
 
+def _skill_called_as_tool(
+    name: str, args: dict[str, Any], context: ToolContext
+) -> dict[str, Any] | None:
+    """A model that calls a skill id (e.g. ``summarize-tickets-by-topic``) as if
+    it were a tool gets that skill's document, exactly as ``get_skill`` would
+    return it, instead of an unknown-tool error that ended the run (DIG-1210).
+    Only when get_skill itself is available to this session."""
+    from digigraph.skill_library.tools import GET_SKILL, _handle_get_skill
+
+    if not has_tool(GET_SKILL):
+        return None
+    if context.allowed_tool_names is not None and GET_SKILL not in context.allowed_tool_names:
+        return None
+    try:
+        from digigraph.skill_library.loader import list_skill_documents
+
+        known = {doc.name for doc in list_skill_documents()}
+    except Exception:  # a broken library must not mask the unknown-tool path
+        return None
+    if name not in known:
+        return None
+    out = _handle_get_skill({"name": name}, context)
+    if isinstance(out, dict) and out.get("ok"):
+        out = {
+            **out,
+            "note": f"{name} is a skill document, not a tool; its instructions follow. "
+            "Use get_skill to load skills, then call the real tools it names.",
+        }
+    return out
+
+
 # --- 284.4: a mutating MCP call stops and asks ---------------------------------
 #
 # 284.3 refuses to OFFER a tool the operator did not allow. That stops a
@@ -506,6 +537,9 @@ def execute(name: str, args: dict[str, Any], context: ToolContext) -> str | dict
         )
     )
     if not has_tool(name) and not is_extra:
+        skill = _skill_called_as_tool(name, args, context)
+        if skill is not None:
+            return skill
         return f"Unknown tool: {name}"
     # Execute-level opt-out gate (#4246 review). The concrete allowlist that
     # strips proxied web-search tools is discovery-dependent — an MCP list
