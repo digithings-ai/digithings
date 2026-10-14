@@ -13,11 +13,26 @@
  * So the session check runs here, before the store is consulted, and it is a
  * distinct state: `410 Gone` with `error: "session_expired"`.
  *
- * Authentication runs FIRST, ahead of the session check, for two reasons. The
- * gate is the same `requireDigiChatAuth` every DigiChat route uses, so an OCC
- * embed's invite key is honoured here exactly as it is on the list endpoint;
- * and answering `session_expired` to a caller who never passed the gate would
- * report link lifetime to a request that is not entitled to ask about it.
+ * Authentication runs FIRST, ahead of the session check, so answering
+ * `session_expired` never reports link lifetime to a request that is not
+ * entitled to ask about it. That ordering is what this route exists for, and
+ * it is preserved: a dead link still answers 401, never 410, for a caller
+ * that never passed the gate.
+ *
+ * **Which callers the gate admits.** `requireDigiChatAuth` reads the
+ * `authorization` header (a `digi_live_…` machine key) and the OIDC session
+ * cookie, and never reads `x-embed-token`. A tenant configured
+ * `auth: anonymous` - the OCC embed in `occ-embed.yaml` is one - gets 401
+ * here, and that is the intended answer rather than a gap: it holds no
+ * credential for this surface. The invite key is honoured on `/api/chat` and
+ * `/api/embed/tenant-config`, which resolve the tenant through
+ * `resolveVerifiedEmbedTenant`, not here. An earlier version of this comment
+ * claimed the OCC invite key was honoured "exactly as it is on the list
+ * endpoint"; that was false (DIG-3241), and the comparison was also
+ * self-referential, since the list endpoint runs this same gate and reads
+ * these same two credentials. See the sibling route's comment for why
+ * admitting an embed caller is not a one-line change.
+ *
  * `serveArtifact` re-checks the gate after the handoff; the second call is
  * idempotent and keeps that function honest for its other caller.
  *
