@@ -72,17 +72,17 @@
     },
     {
       "id": "claim_9cfc1a123a794880b1d512170b7ccaaa",
-      "statement": "route_add_chunks routes ingest writes in fixed order — Vectorize when Cloudflare credentials are set, Chroma HTTP (CHROMA_HOST), Chroma disk (CHROMA_PATH), in-memory stub (DIGISEARCH_ALLOW_STUB=1 only), then RuntimeError — and returns the backend id; every backend construction passes an explicit embedding_provider from resolve_backend_embedding_provider.",
+      "statement": "route_add_chunks routes ingest writes in fixed order \u2014 Vectorize when Cloudflare credentials are set, Chroma HTTP (CHROMA_HOST), Chroma disk (CHROMA_PATH), in-memory stub (DIGISEARCH_ALLOW_STUB=1 only), then RuntimeError \u2014 and returns the backend id; every backend construction passes an explicit embedding_provider from resolve_backend_embedding_provider.",
       "evidence": [
         {
-          "resource": "repo://digisearch/src/digisearch/search/_stub.py#L308-L391",
+          "resource": "repo://digisearch/src/digisearch/search/_stub.py#L538-L621",
           "version": "repo-lines-v1:sha256:ad716ac90e16ecdb117b7fdf362c67c251fe37344545c2fa09674630f0ebe3c7:eyJzZWxlY3RlZExpbmVDb3VudCI6ODQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImMxNDVjNzg0MGFjMGM5NWY4NGRkZWJkOTZlZmUzODZhYjVkMjk1MmM4ZjAwODQ4NzY0YjMwZTVmMzI3NjgyYTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZkOGI5Yjk5OTA3NTI3NjgzNTY1NzhjZmRmODU2ZjljNjk5YjM4ZThhNDdkMGFlODJjMWE4NDg5MDUzZjIyODAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjExMDFjNzBlZjk0ZGY1NmIzM2ViMmI5ZGI2MTUxZGRkNzlmN2M0NGIxZGRjNzEyYTZmMGZjNzkzNGRkN2JkMGQifQ"
         }
       ]
     },
     {
       "id": "claim_5751a08091124a9691af7258991b009a",
-      "statement": "The embedding pipeline resolves DIGISEARCH_EMBEDDING_PROVIDER → config embedding: block → default minilm, builds a raw EmbeddingProvider, then wraps it as EmbeddingCache (SQLite, model-namespaced SHA-256 hash with batched SELECT) inside BatchEmbedder (sub-batches of configurable size, retries with backoff); DIGISEARCH_EMBED=0 disables pipeline-level embedding and misconfigured providers raise EmbeddingConfigError.",
+      "statement": "The embedding pipeline resolves DIGISEARCH_EMBEDDING_PROVIDER \u2192 config embedding: block \u2192 default minilm, builds a raw EmbeddingProvider, then wraps it as EmbeddingCache (SQLite, model-namespaced SHA-256 hash with batched SELECT) inside BatchEmbedder (sub-batches of configurable size, retries with backoff); DIGISEARCH_EMBED=0 disables pipeline-level embedding and misconfigured providers raise EmbeddingConfigError.",
       "evidence": [
         {
           "resource": "repo://digisearch/src/digisearch/embedding/batch.py#L49-L97",
