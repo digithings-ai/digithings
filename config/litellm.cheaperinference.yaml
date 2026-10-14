@@ -180,3 +180,19 @@ model_list:
         - api_base: "^https://api\\.cheaperinference\\.com/v1/?$"
   - model_name: openrouter/z-ai/glm-5.3-flash
     litellm_params: *ci_glm_53_flash
+  - model_name: z-ai/glm-4.7-flash
+    litellm_params: &ci_glm_47_flash
+      model: openai/glm-4.7-flash
+      api_base: os.environ/CHEAPERINFERENCE_API_BASE
+      api_key: os.environ/CHEAPERINFERENCE_API_KEY
+      configurable_clientside_auth_params:
+        - api_key
+        - api_base: "^https://api\\.cheaperinference\\.com/v1/?$"
+  - model_name: google/gemma-4-31b-it
+    litellm_params: &ci_gemma4_31b
+      model: openai/gemma-4-31b-it
+      api_base: os.environ/CHEAPERINFERENCE_API_BASE
+      api_key: os.environ/CHEAPERINFERENCE_API_KEY
+      configurable_clientside_auth_params:
+        - api_key
+        - api_base: "^https://api\\.cheaperinference\\.com/v1/?$"
