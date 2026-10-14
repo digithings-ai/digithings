@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 from datetime import date
 from typing import Any  # score:allow untyped any — used for fake-completion dict shape
@@ -71,11 +72,13 @@ def _dispatch(_model: str, messages: list[dict[str, Any]], **_: Any) -> str:
         # Pull the sector slug out of PHASE_INPUTS → sector_config → slug.
         slug = "sector-unknown"
         if inputs_part is not None:
-            try:
+            # A malformed PHASE_INPUTS payload keeps the "sector-unknown"
+            # default: the per-sector assertions below catch any real
+            # breakage, so a quiet skip cannot mask a regression.
+            # (json.JSONDecodeError subclasses ValueError.)
+            with contextlib.suppress(ValueError):
                 body = json.loads(inputs_part["text"].split(":", 1)[1].strip())
                 slug = body.get("sector_config", {}).get("slug", slug)
-            except (ValueError, json.JSONDecodeError):
-                pass
         return _sector_payload(slug)
     raise AssertionError("unrecognized output schema in dispatch")
 
@@ -174,13 +177,15 @@ class TestPhase5Topology:
                 None,
             )
             if inputs_part is not None:
-                try:
+                # A malformed PHASE_INPUTS payload contributes no slug: the
+                # full-sector-set assertion below catches any real breakage,
+                # so a quiet skip cannot mask a regression.
+                # (json.JSONDecodeError subclasses ValueError.)
+                with contextlib.suppress(ValueError):
                     body = json.loads(inputs_part["text"].split(":", 1)[1].strip())
                     slug = body.get("sector_config", {}).get("slug")
                     if slug:
                         received_slugs.append(slug)
-                except (ValueError, json.JSONDecodeError):
-                    pass
             return _dispatch(_model, messages)
 
         compiled = build_pipeline(ResearchState, phase5_equities.build_phase5())
