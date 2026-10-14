@@ -1,7 +1,7 @@
 # Bloomberg — terms record
 
 **Vendor:** Bloomberg L.P. ("BLP")
-**Classification:** **Prohibited absent a written Bloomberg agreement; entitlement carve-out Unclear → Counsel (Security, 2026-10-14)** — see [Classification status](#classification-status)
+**Classification:** **Prohibited absent prior written consent (Counsel DIG-3600 confirms Q1b); entitlement carve-out Unclear pending the unread agreement (Counsel DIG-3600 Q1a)** — see [Classification status](#classification-status)
 **Record opened:** 2026-10-06 · **CTO**
 **Related:** DIG-1318 · DIG-503 (publication freeze, PrimeMarket) · DIG-461 (Counsel memo)
 
@@ -172,6 +172,21 @@ acceptance criterion 3.
   the shape classified here and is not cleared by this section either; whether
   provider retrieval against a named third party is attributable to us is a
   separate open Security call.
+
+**Counsel recorded position (DIG-3600, 2026-10-14, no outreach, no new primary
+retrieval; positions rest on the quoted clauses above):**
+- **Q1a — entitlement carve-out: UNCLEAR.** CONFIRMED that the public ToS alone
+  cannot answer it: §3 is broad enough to reach a programmatic pull, §4 grants
+  no API entitlement, and the operative Data Terms
+  (`https://data.bloomberg.com/tos`, JS-gated, unread by anyone here) plus any
+  signed entitlement agreement are the governing documents. No implementation
+  may assume a carve-out. Changes only when the signed entitlement / Data Terms
+  text is read.
+- **Q1b — embed-and-showcase without consent: PROHIBITED absent Bloomberg's
+  prior written consent.** Counsel adopts the record's engineering read on the
+  public ToS text (redistribution + competing-use + no-mirroring + no-licence-
+  by-implication). Do not build this shape without a signed agreement containing
+  express redistribution consent.
 
 **No outreach.** Reading public terms is not contacting Bloomberg. Sounding them
 out about a partnership, a licence or an entitlement is Chris's decision.

@@ -111,8 +111,8 @@ and it stays his.
 
 | Vendor | Access method | Classification | Retrieved |
 |---|---|---|---|
-| [Bloomberg](bloomberg/INDEX.md) | no integration, no credential, no contact; one scoped news-retrieval domain | **Prohibited absent written agreement; entitlement carve-out Unclear → Counsel (Security, 2026-10-14)** | 2026-10-06 |
-| [LuxAlgo](luxalgo/INDEX.md) | documented hosted MCP, 14 wrapped tools, live on `develop` | **data licence CONFIRMED CC0-1.0 per family · hosted-MCP access Permitted, redistribution Unclear → Counsel (Security, 2026-10-14)** | 2026-10-06 |
+| [Bloomberg](bloomberg/INDEX.md) | no integration, no credential, no contact; one scoped news-retrieval domain | **Prohibited absent prior written consent (Counsel DIG-3600 Q1b confirms); carve-out Unclear (Q1a)** | 2026-10-06 |
+| [LuxAlgo](luxalgo/INDEX.md) | documented hosted MCP, 14 wrapped tools, live on `develop` | **data licence CONFIRMED CC0-1.0 per family · access Permitted; rendered values Prohibited absent permission, tier Unclear (Counsel DIG-3600)** | 2026-10-06 |
 | [FINRA](finra/INDEX.md) | none — **title record only**; we hold a normalised extract served inside a paid product | **PROHIBITED** (Counsel, 2026-10-06) | 2026-10-06 |
 
 "Pending Security" meant the clauses were recorded and quoted but nobody had
