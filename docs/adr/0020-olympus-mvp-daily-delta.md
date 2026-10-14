@@ -49,7 +49,7 @@ This boundary preserves [ADR-0015](0015-atlas-vs-hermes.md): Atlas stays researc
 ## Links
 
 - Epic: [#930](https://github.com/digithings-ai/digithings/issues/930) (absorbs #924); child issues #925, #927–#929, #932, #934–#937; benchmark #926; **abandoned:** #931 lite graph.
-- **Canonical spec:** [`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../superpowers/specs/2026-06-20-olympus-daily-thesis-design.md); **plan:** [`docs/superpowers/plans/2026-06-20-olympus-daily-thesis.md`](../superpowers/plans/2026-06-20-olympus-daily-thesis.md).
-- **Historical (forensics only):** [`docs/superpowers/specs/2026-06-19-olympus-mvp-delta-design.md`](../superpowers/specs/2026-06-19-olympus-mvp-delta-design.md); [`docs/superpowers/plans/2026-06-19-olympus-mvp-delta.md`](../superpowers/plans/2026-06-19-olympus-mvp-delta.md).
+- **Canonical spec:** [`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../superpowers/specs/2026-06-20-olympus-daily-thesis-design.md); **plan:** `2026-06-20-olympus-daily-thesis.md` (removed DIG-3399; git history keeps it).
+- **Historical (forensics only):** [`docs/superpowers/specs/2026-06-19-olympus-mvp-delta-design.md`](../superpowers/specs/2026-06-19-olympus-mvp-delta-design.md); `2026-06-19-olympus-mvp-delta.md` (removed DIG-3399; git history keeps it).
 - Supersedes (in part): [ADR-0019](0019-unified-atlas-workflow.md) — its "Hermes always re-runs, it's cheap" delta premise.
 - Related: [ADR-0015](0015-atlas-vs-hermes.md) (Atlas/Hermes boundary), [ADR-0010](0010-atlas-first-class-thesis-deliberation.md).

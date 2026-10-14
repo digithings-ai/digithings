@@ -8,7 +8,7 @@
 
 **Tech Stack:** GHCR (`ghcr.io/digithings-ai/{digikey,digigraph,digivault}`), Docker Compose overlays, Makefile targets, digichat release docs under `infra/digichat-release/` + `docs/digichat/INSTALL.md`.
 
-**Related:** Parent self-host plan [`2026-08-09-digichat-self-hosted-release.md`](2026-08-09-digichat-self-hosted-release.md) Follow-up #3. Architecture gaps: [`docs/architecture/digichat-self-hosted-release.md`](../../architecture/digichat-self-hosted-release.md) §5. Partial precursor [#2023](https://github.com/digithings-ai/digithings/pull/2023) (**merged** to **develop** 2026-08-09; **not** on `main` yet — packages unpublished until promote + workflow run).
+**Related:** Parent self-host plan `2026-08-09-digichat-self-hosted-release.md` (removed DIG-3399; git history keeps it) Follow-up #3. Architecture gaps: [`docs/architecture/digichat-self-hosted-release.md`](../../architecture/digichat-self-hosted-release.md) §5. Partial precursor [#2023](https://github.com/digithings-ai/digithings/pull/2023) (**merged** to **develop** 2026-08-09; **not** on `main` yet — packages unpublished until promote + workflow run).
 
 ## Global Constraints
 

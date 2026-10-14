@@ -15,7 +15,7 @@ This is Security's reading of the terms, not a legal opinion. Counsel owns the o
 We take the session cookie from a logged-in Gloomberb browser session, copy it out of browser
 storage, and replay it from our code as the credential for `https://api.gloom.sh`. That is the
 pattern published at `docs/ops/gloomberb-session-cookie.md`, described end to end in
-`docs/superpowers/plans/2026-09-16-gloomberb-session-cookie-runbook.md`, and implemented in
+`2026-09-16-gloomberb-session-cookie-runbook.md` (removed DIG-3399; git history keeps it), and implemented in
 `digiquant/src/digiquant/data/gloomberb/client.py` (cookie names pinned at `client.py:405-406`).
 
 Do Gloom's terms permit it?
