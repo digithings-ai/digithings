@@ -1,6 +1,6 @@
 # ADR 0020: Olympus daily thesis — edit-mode continuity, deterministic sizer, commit_run
 
-**Status:** accepted (amended 2026-06-20)
+**Status:** accepted (amended 2026-06-20; product names historical — see [ADR-0026](0026-retire-olympus-atlas-hermes-kairos.md))
 **Date:** 2026-06-19 · **Amendment:** 2026-06-20
 
 ## Context
