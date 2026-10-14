@@ -6,8 +6,9 @@ Companion to [review.md](review.md) (verdict: MODIFY). Target topology is the pr
 
 **Revised 2026-10-14 after Chris's gate answers:** org stays on GitHub **Free** (D-G1 = no); mono
 stays **public until cutover** (D-G2 = no); R0 is a **fresh repo** (D-12′); R0 releases by **tags**
-(D-R3); private repos use **self-hosted runners** (D-G4). Open follow-ups: D-G5 (deploy runner host)
-and D-G6 (signed-tag deploy gate).
+(D-R3); private repos use **self-hosted runners** (D-G4). Answered 2026-10-14 17:40 CEST:
+deploys + CI run on Chris's Mac under his normal user with a Cloudflare Worker fallback
+(D-G5); signed release tags are optional/recommended, not mandatory (D-G6).
 
 **Revised again 2026-10-14 (Chris's direction):** R1–R7 move to **Cursor Origin**, not to GitHub.
 See [Source control on Cursor Origin](#source-control-on-cursor-origin). D-O1 … D-O5 answered 2026-10-14.
@@ -29,7 +30,8 @@ P4 Extract private repos: R6 → R1 → R2 → R5 → R3 → R4 → R7 ─► P5
 ```
 
 Each phase ends with an exit check. No phase deploys anything that is not already deployed, except
-the per-repo cut-over deploys in P4, which run only from a release tag signed by Chris (D-G6).
+the per-repo cut-over deploys in P4, which run only from a release tag cut by Chris (D-G6:
+signing the tag is optional/recommended, not mandatory).
 
 ## Constraints from GitHub Free
 
@@ -39,9 +41,11 @@ the per-repo cut-over deploys in P4, which run only from a release tag signed by
 | Private (R1–R7, mono after P3) | **no** | **no** (no environment secrets either) | Self-hosted (D-G4); 2,000 hosted min/month as overflow. |
 
 Consequences:
-- The human release gate for private repos cannot live on GitHub. It moves to the **deploy runner**:
-  deploy jobs run `runs-on: [self-hosted, deploy]`, the deploy credentials exist only on that runner,
-  and a job-started hook refuses any job that is not on a release tag signed by Chris (P2 step 6).
+- The human release gate for private repos cannot live on GitHub. It moves to the **deploy
+  agent on Chris's Mac** (D-G5): Buildkite `deploy` queue runs there under his normal user,
+  deploy credentials exist only there (plus the Worker fallback), and the gate hook refuses
+  any job that is not on a release tag cut by Chris — with an optional `git verify-tag`
+  signature check (D-G6, only when the tag carries a signature).
 - On private repos `develop`/`main` cannot be protected. Mitigations: merge-queue-only merges by
   convention, CODEOWNERS (advisory), a nightly audit job that flags any direct push to `main`/`develop`.
   Rulesets are kept as code (`scripts/split/rulesets/`) so a later GitHub Team upgrade is one `apply`.
@@ -99,25 +103,26 @@ R7 already exists as a private GitHub repo, and P4.7 adds the twelve-x paths fro
 - GitHub Actions does **not** run on Origin pushes. Private repos use **Buildkite** with Origin
   connected as the repository provider (D-O3). Buildkite posts check runs to Origin PRs, so
   `require_status_checks` rulesets can use them.
-- Agents are **self-hosted** (D-G4 stands): queue `ci` on the Mac or the deploy host, no credentials;
-  queue `deploy` on the deploy host only (D-G5).
+- Agents are **self-hosted** (D-G4 stands): queue `ci` on Chris's Mac, no credentials;
+  queue `deploy` on the Mac `deploy` agent only (D-G5), with the Cloudflare Worker fallback.
 - Checkout uses `origin repo clone-fast` in a Buildkite `checkout` hook; Buildkite mints the short-lived Origin token.
 - Workflows in `.github/workflows/` of R1–R7 are rewritten as `.buildkite/pipeline.yml`. The P1.9
   deploy workflows are written as plain scripts (`scripts/deploy/<target>.sh`) so the same script runs
   from GitHub Actions (mono) and from Buildkite (R2–R7).
 - Scheduled jobs that `digithings-cron` dispatches through the GitHub API move to the Buildkite
-  builds API (token on the deploy host, scoped to the pipelines it triggers).
+  builds API (token on Chris's Mac, scoped to the pipelines it triggers).
 - Public CI (R0) stays on GitHub-hosted runners (D-O1).
 
 ### 5. Cloudflare deploys after the move
 
 - **Do not install the Cloudflare app in Cursor** and do not connect any Worker or Pages project to an
   Origin repo through Workers Builds: that integration auto-deploys on every push.
-- Deploys run only on the `deploy` queue, from a release tag signed by Chris (D-G6), with
-  `wrangler deploy` / Pages direct upload. The gate hook is the same script as before with a Buildkite
-  adapter: it checks `BUILDKITE_REPO` against the allowlist, `BUILDKITE_TAG` matches `<component>-v*`,
-  `BUILDKITE_COMMIT` equals the tag's commit, and `git verify-tag` passes against `allowed_signers`.
-  The pipeline step that deploys is read from the tagged commit, not from a later upload.
+- Deploys run only on the `deploy` queue (Chris's Mac, Worker fallback), from a release tag
+  cut by Chris (D-G5; signing optional per D-G6), with `wrangler deploy` / Pages direct upload.
+  The gate hook is the same script as before with a Buildkite adapter: it checks `BUILDKITE_REPO`
+  against the allowlist, `BUILDKITE_TAG` matches `<component>-v*`, `BUILDKITE_COMMIT` equals the
+  tag's commit, and — only when the tag carries a signature — `git verify-tag` passes against
+  `allowed_signers`. The pipeline step that deploys is read from the tagged commit, not from a later upload.
 - Origin `repository pushed` webhooks are **not** wired to any deploy.
 - Existing Git-connected Pages projects (on mono) are handled as before (P4.5, P4.6, P5): new
   direct-upload projects, then the domain moves.
@@ -128,9 +133,9 @@ R7 already exists as a private GitHub repo, and P4.7 adds the twelve-x paths fro
   credential helper. **Chris** does every login (`origin auth login` or `origin ssh-key add`);
   agents never log in and never handle a token.
 - Identity (D-O4, answered): agents **keep using Chris's account** through his existing credential
-  helper. There is no separate agent account, so Origin rulesets do not bind agents. The hard control
-  is the signed-tag deploy gate (D-G6): an agent can push a tag, but the `deploy` queue refuses any
-  tag that Chris did not sign with his hardware key.
+  helper. There is no separate agent account, so Origin rulesets do not bind agents. D-G6 is
+  optional, so the tag gate is procedural, not hard: agents must never cut release tags, and the
+  audit log is the control. The hard control is Chris cutting the tag.
 - Worktrees: no change in how they work (`git worktree add` from an Origin clone). Remote convention:
   `origin` = Origin, `github` = GitHub (R0 only). `dt-dev` bootstrap clones R1–R7 from Origin.
 - Tooling that calls `gh` must be ported before the first private repo moves (P2): merge queue
@@ -151,7 +156,7 @@ Rulesets live as code in `scripts/split/rulesets/origin/` and are applied by Chr
 
 - Per-package release branches `release/<component>` (R2–R6) are now protected for real.
 - Not available on Origin today: dismiss stale reviews, last-push approval, required thread
-  resolution, signed tags. The signed-tag gate (D-G6) covers the last one.
+  resolution, signed tags. The optional signed-tag step (D-G6) covers the last one only when used.
 - Agents use Chris's account (D-O4), and Chris is the bypass actor, so these rulesets are
   **advisory** for agents: they document intent and stop accidents, nothing more. Seat instructions
   still forbid agents from pushing to `main`/`release/*` and from creating release tags.
@@ -163,7 +168,7 @@ Rulesets live as code in `scripts/split/rulesets/origin/` and are applied by Chr
 
 ## P0 — Prepare (day 0–2)
 
-Goal: know everything that deploys from mono, and get the runner host and signing key ready.
+Goal: know everything that deploys from mono, and get the Mac runner and the optional signing key ready.
 Mono stays public (D-G2); its `production` environment and required reviewers keep working.
 
 1. Inventory (read-only):
@@ -172,13 +177,19 @@ Mono stays public (D-G2); its `production` environment and required reviewers ke
    - `gitleaks detect --log-opts="--all"` on a mirror clone → list of secrets ever committed (rotate any hits in P1).
    - Fetch each existing fork; `git log --all -- <private paths>` on each → record what it holds (result on the issue only).
 2. Remove `push` triggers from `deploy-digiquant-runner` / `deploy-digithings-cron` (dispatch only), in a PR into `develop`.
-3. Runner host (D-G5): Chris provisions the deploy host. DevOps installs the runner software but does **not** register it yet (registration happens per private repo in P2/P4).
-4. Signing key (D-G6): Chris creates an `ed25519-sk` SSH signing key on a FIDO2 key. Only the **public** key goes into `allowed_signers` (committed in each private repo and installed on the runner host).
+3. Runner host (D-G5, answered): no separate host. Chris runs the Buildkite `ci` and `deploy`
+   agents on his Mac under his normal user. DevOps installs the agent software but does **not**
+   register the `deploy` queue yet (registration happens per private repo in P2/P4). The full
+   local-runner design (isolation, cache, concurrency, keep-awake, Worker fallback) is DIG-3561's
+   deliverable; this step tracks only install + registration readiness.
+4. Signing key (D-G6, optional): only if Chris adopts it. Chris creates an `ed25519-sk` SSH signing
+   key on a FIDO2 key. Only the **public** key goes into `allowed_signers` (committed in each private
+   repo and installed on the Mac). Unsigned release tags still deploy; signed ones verify when present.
 5. Origin (D-O1 … D-O5, answered): Chris confirms the namespace and the repo names (permanent during beta),
    and creates the Buildkite organization and connects Origin (D-O3). No agent account (D-O4). Agents do no logins. Nobody installs the Cloudflare app in Cursor.
 
-Exit check: inventory posted; deploy workflows show `workflow_dispatch` only; runner host reachable
-by Chris; `git tag -s` + `git verify-tag` round-trip works with the new key on a scratch repo.
+Exit check: inventory posted; deploy workflows show `workflow_dispatch` only; Mac agent reachable
+by Chris; if the signing key is adopted, `git tag -s` + `git verify-tag` round-trip works with the new key on a scratch repo.
 
 Rollback: nothing irreversible in this phase.
 
@@ -199,7 +210,7 @@ each PR is independently shippable. Lane in brackets (operating rules).
 | 1.6 | npm packages: tsup builds, `exports` maps, `private: false`, `license: MIT`; PixelWordmark → `@digithings/ui`; `@digithings/catalog` (byok-providers + openapi); apps import only via package exports (lint rule bans `../../packages/*/src`). | R3, R4 | M |
 | 1.7 | Tenant data out of code: `TENANT_CONFIG` KV read path with `digithings`-only fallback; seeds fetched from R2 at container boot; suggestion pools/looks from KV; production model list from KV/env. Prove on staging tenant first. | R5, R6 | M |
 | 1.8 | Dockerfiles consume packages/images, not sibling paths (runner, stack, digichat). | R2, R5 | M |
-| 1.9 | Deploy workflows for every Worker (stack, digichat, langfuse, cron, runner, dashboard-api, corpus-index, digidata-api) — tag/dispatch-triggered, clean checkout, written so the same file runs either on GitHub-hosted with `environment: production` (mono while public) or on `[self-hosted, deploy]` without an environment (private repos). Retire manual `wrangler deploy`; `occ_invite_key_rollout.sh` split into "write secret/KV" (R6) and "deploy" (R5). | R5, R6 | M |
+| 1.9 | Deploy workflows for every Worker (stack, digichat, langfuse, cron, runner, dashboard-api, corpus-index, digidata-api) — tag/dispatch-triggered, clean checkout, written so the same file runs either on GitHub-hosted with `environment: production` (mono while public) or on the Mac `deploy` queue without an environment (private repos). Retire manual `wrangler deploy`; `occ_invite_key_rollout.sh` split into "write secret/KV" (R6) and "deploy" (R5). | R5, R6 | M |
 | 1.10 | Rotate any secret found by P0 gitleaks; move deploy tokens to per-target scoped Cloudflare tokens. | all | S |
 | 1.11 | Guard workflow `moved-paths-guard`: fails a PR touching a path whose manifest destination is already extracted (populated in P4). | P4 | S |
 
@@ -224,16 +235,25 @@ Rollback: each PR reverts on its own.
    R2's Docker build reads it with a GitHub App installation token passed as a BuildKit secret (D-Q7).
 4. **Private npm (`@digiquant/contract`):** GitHub Packages npm from R2; R3's Actions reads it with `GITHUB_TOKEN` after granting R3 access on the package.
 5. **GitHub App `digithings-release-bot`:** opens bump PRs, dispatches cron workflows. Installed per repo. It does **not** create deploy tags (it cannot sign them).
-6. **Deploy gate on the self-hosted runner (D-G6)** — replaces protected `release/*` + environment reviewers:
-   - Deploy credentials (scoped Cloudflare tokens, Supabase access token) live only on the deploy host, in a root-owned file read by the runner service user. Not in GitHub secrets.
-   - `ACTIONS_RUNNER_HOOK_JOB_STARTED` script `scripts/split/runner/deploy-gate.sh` (versioned in R5, installed on the host by Chris) exits non-zero unless:
-     1. `GITHUB_REPOSITORY` is in the host's repo allowlist (private repos only);
-     2. `GITHUB_REF` is `refs/tags/<component>-v*` and `GITHUB_EVENT_NAME` is `push` or `workflow_dispatch` on that tag;
-     3. `git verify-tag` of that tag passes against the host's `allowed_signers` (Chris's `ed25519-sk` key only);
-     4. `GITHUB_WORKFLOW_REF` points to a workflow file at the same tagged commit.
-   - Tags are created only by Chris (`git tag -s <component>-vX.Y.Z` on a `release/*` or `main` commit). Agents may prepare the release PR and changelog, not the tag.
-   - CI runners (no credentials) can be separate runners labelled `[self-hosted, ci]`, on the Mac or the deploy host; the hook on the deploy runner rejects every job not labelled for deploy.
-   - Prove the gate on R7 (already private) with a no-op deploy job: unsigned tag → job refused; agent-signed tag → refused; Chris-signed tag → runs.
+6. **Deploy gate on the Mac agent (D-G5 + D-G6)** — replaces protected `release/*` + environment reviewers:
+   - Deploy credentials (scoped Cloudflare tokens, Supabase access token) live only on Chris's
+     Mac, in a root-owned file read by the agent service, plus the Worker fallback. Not in GitHub secrets.
+   - Gate script `scripts/split/runner/deploy-gate.sh` (versioned in R5, installed on the Mac by Chris)
+     exits non-zero unless:
+     1. the repo is in the host's repo allowlist (private repos only);
+     2. the ref is `refs/tags/<component>-v*` (push or dispatch on that tag);
+     3. the tag's commit matches the built commit;
+     4. the workflow file is read from the same tagged commit.
+     Optional 5th check (D-G6, only when adopted and the tag carries a signature): `git verify-tag`
+     passes against the host's `allowed_signers` (Chris's `ed25519-sk` key only).
+   - Tags are cut only by Chris (on a `release/*` or `main` commit; signing optional/recommended).
+     Agents may prepare the release PR and changelog, never the tag.
+   - CI agents (no credentials) run queue `ci` on the same Mac; the `deploy` queue refuses every job
+     that is not a release-tag deploy. Local-runner tuning (concurrency, cache, keep-awake) is DIG-3561's.
+   - Prove the gate on R7 (already private) with a no-op deploy job: foreign repo → refused; non-tag
+     ref → refused; Chris-cut tag → runs; and, if signing is adopted, unsigned/agent-signed tag → refused.
+     Without signing, the control is procedural: only Chris cuts release tags (seat instructions forbid
+     agents; audit log records every tag).
 7. **Repository settings as code:** `scripts/split/rulesets/` holds the full ruleset template
    (`develop` PR + checks + DCO; `main`/`release/*` code-owner review; tag creation limits). Applied
    now to R0 (public). Kept unapplied for private repos until a Team upgrade.
@@ -246,14 +266,16 @@ Rollback: each PR reverts on its own.
    Docker builds read both with a short-lived Origin token passed as a BuildKit secret.
 
 Exit check: a dry-run release of one module (TestPyPI) and one npm package (`--dry-run`) green from mono;
-R7 gate test above passes all three cases; the same three cases pass on the Origin scratch repo via
-Buildkite (D-O4: agents use Chris's account, so this gate, not the rulesets, is what stops an agent-made tag).
+R7 gate test above passes; the same cases pass on the Origin scratch repo via
+Buildkite. Note (D-O4 + D-G6 optional): with agents on Chris's account and signing optional,
+neither the rulesets nor the tag gate is a hard control — the control is procedural (only Chris
+cuts release tags).
 
 ---
 
 ## P3 — Cutover: R0 public, mono private (1 day + 2 days watch)
 
-Gate: **D-12′** (fresh repo — answered), **D-G3** (public allowlist), **D-G6** (gate proven in P2), P1 exit check passed.
+Gate: **D-12′** (fresh repo — answered), **D-G3** (public allowlist), **D-G5/D-G6** (answered; gate proven in P2), P1 exit check passed.
 Mono is public until this day (D-G2), so P3 runs as soon as P1 and P2 are done; the private-repo
 extraction (P4) comes after, not before, to keep the exposure window short.
 
@@ -270,8 +292,8 @@ Staging (days before cutover):
 
 Cutover day (Chris does the renames and visibility changes; agents prepare):
 5. Freeze merges into mono. Re-run steps 1–3 from the final `main` SHA if it moved; force-push `digithings-next`.
-6. Mono deploys switch to the gate: merge the prepared PR that sets mono's deploy jobs to `runs-on: [self-hosted, deploy]` and drops `environment: production`.
-7. Rename `digithings` → `digithings-mono`; make it **private**. Register the deploy runner on it (now allowed: private). Disable the runner hook allowlist entry for any public repo.
+6. Mono deploys switch to the gate: merge the prepared PR that points mono's deploy jobs at the Mac `deploy` queue and drops `environment: production`.
+7. Rename `digithings` → `digithings-mono`; make it **private**. Register the Mac agent on it (now allowed: private). Disable the gate allowlist entry for any public repo.
 8. Rename `digithings-next` → `digithings`; make it **public**. Apply rulesets from P2 step 7; install DCO; add CODEOWNERS, LICENSE (MIT), TRADEMARKS, SECURITY; `production`-style environment `pypi` with Chris as required reviewer.
 8b. Origin for R0 (D-O1): Chris runs `origin repo create-mirrored` for the public R0 (inbound mirror).
 9. Publish v0.x of PyPI modules and `@digithings/*` npm, and GHCR `digichat` / `digillm` images, from R0.
@@ -281,7 +303,7 @@ Cutover day (Chris does the renames and visibility changes; agents prepare):
 Exit checks:
 - anonymous `curl -s -o /dev/null -w '%{http_code}' https://github.com/digithings-ai/digithings-mono` → 404;
 - anonymous clone of `digithings-ai/digithings` gives R0 history only (first commit is the export, not mono's);
-- one Chris-signed deploy from mono via the runner succeeds; an unsigned tag is refused;
+- one Chris-cut deploy from mono via the Mac agent succeeds; a non-tag ref is refused (and, if signing is adopted, an unsigned tag is refused);
 - packages install from PyPI/npm in a clean container; denylist grep on the *pushed* repo = 0.
 
 Rollback before step 8: rename back and make mono public again (nothing lost).
@@ -295,8 +317,8 @@ After step 8: delete or re-private R0 and yank packages. Point of no return: the
 Common recipe for every target Rn:
 1. `git clone --mirror` mono → `git filter-repo --paths-from-file rN.paths --path-rename …`.
 2. `gitleaks` + boundary check on the new repo; Chris creates `<ns>/Rn` on Origin (private); push `main`, `develop`, release tags; commit `allowed_signers`, CODEOWNERS, LICENSE (proprietary); Chris applies the Origin rulesets (§7).
-3. Switch imports to published R0 packages (pins); add `.buildkite/pipeline.yml` (queue `ci`); install the Origin App (replaces the GitHub App for bump PRs); add Rn to the deploy hook allowlist. Non-deploy CI values are Buildkite secrets set by Chris or DevOps (never pasted into issues). Deploy credentials stay on the deploy host. (R7: see Origin §3 for the history move.)
-4. **Cut-over deploy** from a Chris-signed release tag — one deploy per target, verified (below).
+3. Switch imports to published R0 packages (pins); add `.buildkite/pipeline.yml` (queue `ci`); install the Origin App (replaces the GitHub App for bump PRs); add Rn to the gate allowlist. Non-deploy CI values are Buildkite secrets set by Chris or DevOps (never pasted into issues). Deploy credentials stay on Chris's Mac (plus Worker fallback). (R7: see Origin §3 for the history move.)
+4. **Cut-over deploy** from a Chris-cut release tag — one deploy per target, verified (below).
 5. Add Rn's paths to mono's `moved-paths-guard`; delete them from mono in one PR.
 6. Update Paperclip project binding, merge queue, run-watch, CODEOWNERS, seat instructions for Rn.
 
@@ -307,8 +329,8 @@ Validation and rollback per target:
 | 4.1 | R6 digichat-tenants | `kv-sync` writes `TENANT_CONFIG` + seeds to staging namespace, then prod; tenant chat answers from KV (answer-check workflow green for each tenant); stack fallback serves only `digithings`. | Re-run `kv-sync` from previous tag (KV values are versioned by tag). |
 | 4.2 | R1 digiquant-strategies | Tag `v0.1.0`; `pip install` from git tag in a clean container; plugin discovered by R0 `digiquant` (entry points list); backtest suite green; conformance test green. | R2 keeps pinning mono-built runner image until 4.3. |
 | 4.3 | R2 digiquant-stack | Runner image built from pins (R0 PyPI + R1 git tag) deployed; one full pipeline run produces its outputs (compare row counts / artifacts with the previous mono run); dashboard-api deployed as own Worker; desk reads through it; `supabase db push` dry-run shows no diff. | `wrangler rollback` to previous Worker version; previous runner image tag. |
-| 4.4 | R5 digithings-stack | stack, digichat, langfuse, cron, corpus-index each deployed once from a signed `stack-v*` tag; health checks on all routes listed in the proposal; cron dispatches R2/R7 workflows with the App token; tenant chat smoke per tenant. | `wrangler rollback` per Worker; cron rollback restores old dispatch targets. |
-| 4.5 | R3 digiquant-web | New Pages project `digiquant-io-r3` direct-uploaded by the deploy runner from a signed `web-v*` tag; preview checked against R2; move custom domain `digiquant.io`. Old project's Git builds disabled (production branch set to an unused name). | Move domain back to old project (minutes). |
+| 4.4 | R5 digithings-stack | stack, digichat, langfuse, cron, corpus-index each deployed once from a Chris-cut `stack-v*` tag; health checks on all routes listed in the proposal; cron dispatches R2/R7 workflows with the App token; tenant chat smoke per tenant. | `wrangler rollback` per Worker; cron rollback restores old dispatch targets. |
+| 4.5 | R3 digiquant-web | New Pages project `digiquant-io-r3` direct-uploaded by the Mac agent from a Chris-cut `web-v*` tag; preview checked against R2; move custom domain `digiquant.io`. Old project's Git builds disabled (production branch set to an unused name). | Move domain back to old project (minutes). |
 | 4.6 | R4 digithings-web | Same as R3 for `digithings.ai`; routes to R5 (`/api/*`, `/embed*`) checked. | Move domain back. |
 | 4.7 | R7 twelve-x | twelve-x desk surface + `digidata-api` moved; desk gate/palette in R3 made pluggable first (D-X1). No client-contract gate (D-O5). | Revert PRs in R3/R7; previous digidata-api version. |
 
@@ -327,7 +349,7 @@ held (guard in "warn" mode during extraction, "fail" mode after cut-over).
 1. Confirm `moved-paths-guard` covers every path in mono; manifest shows nothing left.
 2. Close or re-home every open PR and issue (owners per PR-ownership rule).
 3. Disable Pages Git integration on the old projects, then delete them after 30 days.
-4. Remove mono from the runner hook allowlist; unregister its GitHub runner (the deploy host then runs only the Buildkite agents).
+4. Remove mono from the gate allowlist; unregister its Mac agent queues for mono (the Mac then runs only R1–R7 agents).
 5. Archive `digithings-mono` on GitHub (already private since P3; read-only). Keep it: it is the full-history audit trail and the rollback source.
 6. Chris deletes the old Origin mirror of mono in his personal namespace (it holds the full public history).
 
@@ -338,7 +360,7 @@ held (guard in "warn" mode during extraction, "fail" mode after cut-over).
 | Where | What to update |
 |---|---|
 | R0 `README.md`, `CONTRIBUTING.md`, `docs/DEPLOYMENT.md`, `docs/BRANCH_PROTECTION.md`, `docs/MERGE_QUEUE.md`, `docs/LICENSING.md`, `docs/SELF_HOST.md`, `docs/LOCAL_STACK.md` | Remove production deploy content (moves to R5/R2 runbooks); release model (tags + release-please); new repo map (public-safe version). |
-| R5 runbook | Deploy runner: host, hook, `allowed_signers` rotation, how Chris cuts a signed release tag, how to add a repo to the allowlist. |
+| R5 runbook | Deploy gate: Mac agent host, hook, `allowed_signers` rotation (if adopted), how Chris cuts a release tag (signing optional), how to add a repo to the allowlist. |
 | openwiki | Per-module pages: install from PyPI/npm instead of monorepo paths; `openwiki/dashboard` → R3; `INSTRUCTIONS.md` repo map. |
 | digibook (R4 `content/book`) | System-architecture chapter: repo map and release flow; "how the book is built" (now R4 + R0 docs pulled at build). |
 | docs site (digithings.ai docs, openapi catalog) | Source openapi + byok catalog from `@digithings/catalog`; links to R0 instead of mono paths. |
@@ -352,5 +374,6 @@ held (guard in "warn" mode during extraction, "fail" mode after cut-over).
 ## Tracking
 
 One epic under G07 with one leaf per row of P1, one per P4 step, plus P0, P2, P3, P5, P6.
-The gate decisions are answered (2026-10-14), so the CTO can create the leaves. P0 steps 3–4 and
-P2 step 6 wait for D-G5 / D-G6. D-O1 … D-O5 are answered; because of D-O4, no private repo deploys from Origin before D-G6 is proven.
+All gate decisions are answered (2026-10-14, including D-G5/D-G6), so the CTO can create the leaves.
+D-O1 … D-O5 are answered. Note: with D-O4 + D-G6-optional, no private repo has a hard technical deploy
+control — the control is procedural until Chris adopts signing.
