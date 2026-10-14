@@ -259,6 +259,8 @@ Implemented as per-IP sliding window using an in-memory `deque` behind a `thread
 
 The MCP server (`mcp_server.py`) listens on `127.0.0.1:8767` by default with `streamable-http` transport. Stdio transport is available via `--stdio` for Claude Desktop. Pipeline tools delegate to `service.py`; SDCA data/fit tools delegate to `sdca_mcp.py` (same JSON as FastMCP).
 
+Gloomberb tools are registered under `gloomberb_*` only (programmatic extensions of the Gloomberb platform). The `digifetch_*` names in the table below are the internal dispatch keys, not a second MCP registration. `gloomberb_quote` is the live price read.
+
 | Tool Name | Description |
 |---|---|
 | `digiquant_list_strategies` | Returns JSON array of registered strategies |
