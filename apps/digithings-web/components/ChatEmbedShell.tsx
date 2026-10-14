@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { BootLabOverlay } from "@digithings/ui/chat/boot-lab";
+import { signalDigichatBootStep } from "@digithings/ui/chat/boot-signal";
 import { readAndClearHandoff } from "@/lib/chatHandoff";
 import { readInviteToken, rememberInviteToken, stripInviteTokenFromUrl } from "@/lib/inviteToken";
 
@@ -27,6 +28,63 @@ export const WARMUP_DELAY_MS = 700;
 
 /** Must cover the overlay's opacity transition below. */
 export const WARMUP_FADE_MS = 360;
+
+/**
+ * Service warm-up (sleep-on-idle backends: auth, assistant, search). digichat
+ * serves `/api/embed/warmup` on the embed origin; it reports `ready` only once
+ * every service the tenant needs answers. The boot animation shows a
+ * "wake up services" step that completes on that edge, and the chat is not
+ * revealed before it, so nothing can be sent into a sleeping stack (digichat's
+ * own warm-up gate also holds any send until ready). A cold stack boot takes
+ * ~3 min, hence the budget; past it the chat is revealed anyway.
+ */
+export const WARMUP_PATH = "/api/embed/warmup";
+export const SERVICES_BUDGET_MS = 240_000;
+const SERVICES_POLL_MS = 3_000;
+const SERVICES_PROBE_TIMEOUT_MS = 60_000;
+/** Shown on the step before the first probe answers. */
+const DEFAULT_SERVICES = ["auth", "assistant"] as const;
+
+export type WarmupProbe = { ready?: boolean; services?: Record<string, string> };
+
+/** Poll warm-up until every service is ready or the budget is spent. */
+export async function waitForServices(
+  origin: string,
+  opts: {
+    isCancelled: () => boolean;
+    onServices?: (names: string[]) => void;
+    budgetMs?: number;
+    fetchImpl?: typeof fetch;
+    sleep?: (ms: number) => Promise<void>;
+    now?: () => number;
+  },
+): Promise<boolean> {
+  const doFetch = opts.fetchImpl ?? fetch;
+  const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  const now = opts.now ?? Date.now;
+  const t0 = now();
+  const budget = opts.budgetMs ?? SERVICES_BUDGET_MS;
+  while (!opts.isCancelled() && now() - t0 < budget) {
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), SERVICES_PROBE_TIMEOUT_MS);
+      const res = await doFetch(`${origin.replace(/\/$/, "")}${WARMUP_PATH}`, {
+        cache: "no-store",
+        credentials: "same-origin",
+        signal: ctrl.signal,
+      });
+      clearTimeout(timer);
+      const body = (await res.json()) as WarmupProbe;
+      if (body.services) opts.onServices?.(Object.keys(body.services));
+      if (body.ready === true) return true;
+    } catch {
+      /* still waking (or the probe timed out) */
+    }
+    if (opts.isCancelled()) break;
+    await sleep(SERVICES_POLL_MS);
+  }
+  return false;
+}
 
 /** Default embed host for digithings.ai/chat (client #0). */
 export const DEFAULT_CHAT_EMBED_HOST = "digithings.ai";
@@ -184,6 +242,13 @@ export function ChatEmbedShell({
   /** Only when iframe never loads — cannot deliver parent-error postMessage. */
   const [shellLoadError, setShellLoadError] = useState<string | null>(null);
   const [embedReady, setEmbedReady] = useState(false);
+  // Every sleep-on-idle service answered warm-up (or the budget was spent).
+  const [servicesReady, setServicesReady] = useState(false);
+  const [serviceNames, setServiceNames] = useState<string[]>([...DEFAULT_SERVICES]);
+  // Ready-timeout / load-error paths reveal the frame regardless of warm-up,
+  // so the in-chat error line is visible.
+  const [forceReveal, setForceReveal] = useState(false);
+  const revealed = (embedReady && servicesReady) || forceReveal;
   // Warmup overlay lifecycle: mounts only when ready is late (cold Container),
   // unmounts after the crossfade once ready lands.
   const [warmupMounted, setWarmupMounted] = useState(false);
@@ -315,6 +380,7 @@ export function ChatEmbedShell({
         win.postMessage(buildEmbedParentErrorMessage("ready_timeout"), targetOrigin);
         // Reveal the iframe so the in-chat error line is visible.
         setEmbedReady(true);
+        setForceReveal(true);
         return;
       }
       // No browsing context to post into — terminal line in the iframe slot.
@@ -326,21 +392,46 @@ export function ChatEmbedShell({
     };
   }, [targetOrigin]);
 
+  // Wake every service before the chat is revealed (boot step "services").
+  // Same-origin only: the probe is a plain GET on the embed origin, and a
+  // cross-origin embed (local dev) skips the step rather than wait on CORS.
+  useEffect(() => {
+    if (!targetOrigin) return;
+    let cancelled = false;
+    const sameOrigin = targetOrigin === window.location.origin;
+    (async () => {
+      if (sameOrigin) {
+        await waitForServices(targetOrigin, {
+          isCancelled: () => cancelled,
+          onServices: (names) => {
+            if (!cancelled && names.length) setServiceNames(names);
+          },
+        });
+      }
+      if (cancelled) return;
+      signalDigichatBootStep("services");
+      setServicesReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [targetOrigin]);
+
   // Cold-start cover: only after a warm load has had its chance
   // (WARMUP_DELAY_MS), so ordinary navigation never flashes a loader. setState
   // lives in the timer callback (react-hooks/set-state-in-effect).
   useEffect(() => {
-    if (embedReady || shellLoadError) return;
+    if (revealed || shellLoadError) return;
     const t = window.setTimeout(() => setWarmupMounted(true), WARMUP_DELAY_MS);
     return () => window.clearTimeout(t);
-  }, [embedReady, shellLoadError]);
+  }, [revealed, shellLoadError]);
 
   // Unmount after the crossfade has run (the overlay is opacity-0 by then).
   useEffect(() => {
-    if (!warmupMounted || !embedReady) return;
+    if (!warmupMounted || !revealed) return;
     const t = window.setTimeout(() => setWarmupMounted(false), WARMUP_FADE_MS);
     return () => window.clearTimeout(t);
-  }, [warmupMounted, embedReady]);
+  }, [warmupMounted, revealed]);
 
   if (configError) {
     return (
@@ -404,9 +495,9 @@ export function ChatEmbedShell({
 
       {warmupMounted && !shellLoadError ? (
         <div
-          aria-busy={!embedReady}
+          aria-busy={!revealed}
           aria-live="polite"
-          aria-hidden={embedReady}
+          aria-hidden={revealed}
           style={{
             position: "absolute",
             inset: 0,
@@ -414,9 +505,9 @@ export function ChatEmbedShell({
             // Crossfade to the real frame on ready; transparent so the page's
             // .grain/.glow layers keep showing through (same reasoning as the
             // shell div above).
-            opacity: embedReady ? 0 : 1,
+            opacity: revealed ? 0 : 1,
             transition: "opacity 320ms ease",
-            pointerEvents: embedReady ? "none" : "auto",
+            pointerEvents: revealed ? "none" : "auto",
             background: "transparent",
           }}
         >
@@ -428,12 +519,15 @@ export function ChatEmbedShell({
             // Facts are the deployment's real values (never invented counts):
             // both live tenants run the digigraph backend.
             variant="tooltask"
-            ready={embedReady}
-            readyEdge={embedReady}
+            // The last rows wait on real edges: "wake up services" on the
+            // warm-up probe, "wire in the backend" on digichat:ready.
+            ready={revealed}
+            readyEdge={revealed}
             onSettled={() => {}}
             facts={{
               starters: EMBED_SHELL_COPY[embedHost]?.suggestions.length,
               backend: "digigraph",
+              services: serviceNames,
             }}
           />
         </div>
@@ -458,7 +552,7 @@ export function ChatEmbedShell({
             // and colour scheme live in globals.css (.dc-chat-frame, keyed on
             // the root [data-theme]) - component state must never disagree
             // with the page theme (dark page + light chat rectangle).
-            opacity: embedReady ? 1 : 0,
+            opacity: revealed ? 1 : 0,
             transition: "opacity 320ms ease",
             position: "relative",
             zIndex: 0,

@@ -51,7 +51,11 @@ export function hasDigichatRevealed(): boolean {
 export const DIGI_CHAT_BOOT_STEP_EVENT = "digichat:boot-step";
 
 /** Real boot milestones the app reports. */
-export type DigichatBootStep = "config" | "runtime";
+/**
+ * `services` is reported by an iframe host (digithings.ai/chat) once every
+ * sleep-on-idle backend the chat needs answers its warm-up probe.
+ */
+export type DigichatBootStep = "config" | "runtime" | "services";
 
 /** Report a real boot milestone for this document (idempotent per step). */
 export function signalDigichatBootStep(step: DigichatBootStep): void {

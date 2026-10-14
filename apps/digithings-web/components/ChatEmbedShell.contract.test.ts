@@ -76,11 +76,14 @@ describe("ChatEmbedShell contracts", () => {
     const src = readFileSync(path, "utf8");
     expect(src).toContain("BootLabOverlay");
     expect(src).toContain('variant="tooltask"');
-    expect(src).toContain("readyEdge={embedReady}");
+    expect(src).toContain("readyEdge={revealed}");
+    // The chat is revealed only once digichat is ready AND every service is awake.
+    expect(src).toContain("const revealed = (embedReady && servicesReady) || forceReveal");
+    expect(src).toContain(`signalDigichatBootStep("services")`);
     expect(src).toContain("WARMUP_DELAY_MS");
     expect(src).toContain("dc-chat-frame");
     expect(src).toContain("digichat:ready");
-    expect(src).toContain("opacity: embedReady ? 1 : 0");
+    expect(src).toContain("opacity: revealed ? 1 : 0");
     // Curated per-host copy rides into the iframe URL.
     expect(src).toContain("Ask about digithings");
     expect(src).toContain("Ask about Online Compliance Center");
