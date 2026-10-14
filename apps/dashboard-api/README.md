@@ -36,13 +36,14 @@ npm run typecheck --workspace dashboard-api
 npm run dev --workspace dashboard-api
 ```
 
-### Live data for the digiquant-app
+### Live data for the served desk (`apps/digiquant-web`, served at `/app`)
 
 ```bash
 cp .dev.vars.example .dev.vars      # then paste SUPABASE_SERVICE_ROLE_KEY
 npx wrangler dev --port 8788
-# in apps/digiquant-app (defaults to http://127.0.0.1:8788):
-npx next dev -p 3930
+# in apps/digiquant-web: set NEXT_PUBLIC_DASHBOARD_API_URL=http://127.0.0.1:8788
+# (see its .env.local.example), then:
+npm run dev:local --workspace digiquant-web
 ```
 
 Only the contracted routes (§6.1–6.9) exist on the worker; blocks bound to
