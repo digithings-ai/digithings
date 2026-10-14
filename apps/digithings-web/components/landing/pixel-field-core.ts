@@ -1,16 +1,12 @@
 /**
- * Shared engine for the DIG-3319 hero concept previews.
+ * Cube-field engine for the welcome hero: the DPR-aware grid, the square-cell
+ * renderer, the resize/intersection/reduced-motion/theme-change lifecycle, and
+ * the mouse trail. It knows nothing about what is drawn; a `Subject` decides
+ * which cells light up and why (see `embedding-map.ts`).
  *
- * Lifted straight out of `../pixel-field.ts` (the live production hero): the
- * DPR-aware grid, the square-cell renderer, the resize/intersection/reduced-
- * motion/theme-change lifecycle, and the mouse-trail mechanic. None of that
- * is concept-specific, so it lives here once and each concept only supplies
- * a `Subject` — the thing that decides which cells light up and why.
- *
- * The one deliberate behavior change from the production file: the trail is
- * monochrome ink, not a hue that cycles through the full wheel. digithings.ai
- * collapses its accent to monochrome ink/white by design (see globals.css,
- * "Neutral platform palette") — a rainbow trail was never on-brand here.
+ * The trail is monochrome ink, not a cycling hue. digithings.ai collapses its
+ * accent to monochrome ink/white by design (see globals.css, "Neutral platform
+ * palette").
  */
 
 export type Grid = {
@@ -99,7 +95,6 @@ export function mountField(canvas: HTMLCanvasElement, makeSubject: (grid: Grid) 
   let kind = new Uint8Array();
   let trail = new Float32Array();
   let reveal = new Float32Array();
-  let lastPointer: { x: number; y: number } | null = null;
   let subject: Subject = makeSubject({ cols: 1, rows: 1, pitch: 12, width: 1, height: 1, offsetX: 0, offsetY: 0, small: false });
   let born = 0;
   let raf = 0;
@@ -184,7 +179,6 @@ export function mountField(canvas: HTMLCanvasElement, makeSubject: (grid: Grid) 
 
   function onPointer(event: PointerEvent) {
     if (event.pointerType !== "mouse") return;
-    lastPointer = { x: event.clientX, y: event.clientY };
     const rect = canvas.getBoundingClientRect();
     const col = Math.floor((event.clientX - rect.left - ox) / pitch);
     const row = Math.floor((event.clientY - rect.top - oy) / pitch);
@@ -198,15 +192,10 @@ export function mountField(canvas: HTMLCanvasElement, makeSubject: (grid: Grid) 
     }
   }
 
-  function onLeave() {
-    lastPointer = null;
-  }
-
   layout(true);
   if (reduced) draw();
   else raf = requestAnimationFrame(tick);
   parent.addEventListener("pointermove", onPointer);
-  parent.addEventListener("pointerleave", onLeave);
 
   let sizeKey = `${canvas.clientWidth}x${canvas.clientHeight}`;
   const resize = new ResizeObserver(() => {
@@ -236,7 +225,6 @@ export function mountField(canvas: HTMLCanvasElement, makeSubject: (grid: Grid) 
   return () => {
     if (raf) cancelAnimationFrame(raf);
     parent.removeEventListener("pointermove", onPointer);
-    parent.removeEventListener("pointerleave", onLeave);
     resize.disconnect();
     seen.disconnect();
     scheme.removeEventListener("change", refreshColors);
