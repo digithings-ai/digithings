@@ -5,6 +5,7 @@
   "description": "Shared digithings design tokens, CSS primitives, and vanilla-JS modules.",
   "exports": {
     "./tokens.css": "./tokens.css",
+    "./tokens": "./tokens.ts",
     "./components.css": "./components.css",
     "./starfield.js": "./starfield.js",
     "./scroll-trigger.js": "./scroll-trigger.js",
