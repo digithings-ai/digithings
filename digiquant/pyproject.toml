@@ -128,6 +128,17 @@ brokers-ibkr = ["httpx>=0.27"]
 [project.scripts]
 digiquant = "digiquant.cli:main"
 
+# Repo-split 1.2 (DIG-3691): plugin contract between public `digiquant` (R0)
+# and private `digiquant-strategies` (R1). R1 distributions declare these
+# groups; R0 discovers them via `digiquant.plugin`. No built-in plugin ships
+# in R0 (reference strategies stay direct-imported), so the tables are
+# intentionally empty here — they document the group names.
+[project.entry-points."digiquant.strategies"]
+
+[project.entry-points."digiquant.mcp_tools"]
+
+[project.entry-points."digiquant.cli"]
+
 [dependency-groups]
 # Synced by default with plain `uv sync` (unlike [project.optional-dependencies],
 # which needs --extra/--all-extras) -- so pytest is always present in digiquant's

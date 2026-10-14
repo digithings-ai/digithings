@@ -3214,10 +3214,22 @@ def create_mcp_server(
                 incremental_update,
                 load_cached,
             )
-            from digiquant.strategies.sdca.btc_power_law import (
-                fit_btc_power_law,
-                save_coefficients,
-            )
+            # Repo-split 1.2 (DIG-3691): power-law fitter resolves through the
+            # plugin hook first; in-tree implementation is the fallback while
+            # R1 still lives in this repo.
+            try:
+                from digiquant import plugin as _plugin
+
+                _hook = _plugin.get_power_law_hook()
+            except Exception:
+                _hook = None
+            if _hook is not None:
+                fit_btc_power_law, save_coefficients = _hook
+            else:
+                from digiquant.strategies.sdca.btc_power_law import (
+                    fit_btc_power_law,
+                    save_coefficients,
+                )
         except ImportError as exc:
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
 
@@ -3635,6 +3647,15 @@ def create_mcp_server(
         except (LookupError, PolicyReplayExposureError, ValueError) as exc:
             return json.dumps({"ok": False, "error": str(exc)})
         return json.dumps({"ok": True, "data": summary.model_dump(mode="json")}, indent=2)
+
+    # Repo-split 1.2 (DIG-3691): SDCA MCP tools register through the
+    # ``digiquant.mcp_tools`` entry-point group. Fail-closed (warn-and-skip).
+    try:
+        from digiquant import plugin as _plugin
+
+        _plugin.register_plugin_mcp_tools(mcp, _maybe_tool)
+    except Exception:
+        pass
 
     return mcp
 

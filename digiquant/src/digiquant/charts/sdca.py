@@ -370,3 +370,28 @@ __all__ = [
     "plot_valuation_index",
     "render_sdca_diagnostic_charts",
 ]
+
+
+def _register_sdca_charts() -> None:
+    """Self-register SDCA chart builders (repo-split 1.2, DIG-3691).
+
+    After the split this module lives in R1 and registers through the
+    ``digiquant.strategies`` entry point instead; the registry stays the
+    same so callers are unaffected.
+    """
+    try:
+        from digiquant import plugin as _plugin
+
+        for _name, _fn in {
+            "plot_equity_vs_hold": plot_equity_vs_hold,
+            "plot_valuation_index": plot_valuation_index,
+            "plot_indicator_multiples": plot_indicator_multiples,
+            "plot_allocation": plot_allocation,
+            "render_sdca_diagnostic_charts": render_sdca_diagnostic_charts,
+        }.items():
+            _plugin.register_chart(f"sdca.{_name}", _fn)
+    except Exception:
+        pass
+
+
+_register_sdca_charts()

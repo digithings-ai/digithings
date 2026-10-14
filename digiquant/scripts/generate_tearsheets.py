@@ -155,7 +155,28 @@ def materialize_sdca_risk_index(
     the index cannot leak bars beyond the published window. Default
     ``valuation_weight=1`` and no extras matches the catalog model default.
     Published ``btc_sdca`` extras come from ``settings.json``.
+
+    Repo-split 1.2 (DIG-3691): resolves through the plugin hook first; the
+    in-tree build below is the fallback while R1 still lives in this repo.
+    This script ships to R2 and must keep calling the hook after the split.
     """
+    try:
+        import sys
+
+        sys.path.insert(0, str(DIGIQUANT_ROOT / "src"))
+        from digiquant import plugin as _plugin
+
+        _hook = _plugin.get_risk_index_hook()
+    except Exception:
+        _hook = None
+    if _hook is not None:
+        return _hook(
+            ohlcv,
+            output_path,
+            coefficients_path=coefficients_path,
+            extra_indicators=extra_indicators,
+            valuation_weight=valuation_weight,
+        )
     import polars as pl
 
     from digiquant.strategies.sdca.btc_power_law import BtcPowerLawRiskModel, load_coefficients
