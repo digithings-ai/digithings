@@ -2,11 +2,10 @@
 
 The shared visual language for every digithings public surface:
 `digithings.ai`, `digiquant.io`, and `digithings.ai/chat`. A simple,
-utilitarian, dark-first aesthetic with per-module accent colors and a
-cross-brand starfield signature.
+utilitarian, dark-first aesthetic with per-module accent colors.
 
 This document is the authoritative reference. The canonical implementation
-lives in `packages/design/tokens.css` + `packages/design/components.css`,
+lives in `packages/design/tokens.css` and `packages/design/site/site.css`,
 packaged as the `@digithings/design` npm workspace. Consumers
 import the package (or reference the files via relative paths for the
 static sites).
@@ -206,125 +205,14 @@ Or directly in CSS:
 
 ## Component primitives
 
-Primitives live in `packages/design/components.css` and take their visual values
-from tokens.
+The legacy `components.css` sheet (global reset plus `.nav`, `.hero`,
+`.module-card`, `.terminal`, and the `--scroll` direction rules) had no
+importer. It was removed. Live primitives are `site/site.css`, consumed by
+digithings.ai and digiquant.io, and the React kit in `@digithings/ui`.
 
-### `.nav`
-
-```html
-<nav class="nav">
-  <div class="nav-container">
-    <div class="logo">
-      <img src="assets/qrw.svg" class="logo-svg" alt="digithings">
-      <span class="logo-text">digithings</span>
-    </div>
-    <div class="nav-links">
-      <a class="nav-link" href="#">Docs</a>
-    </div>
-  </div>
-</nav>
-```
-
-### `.hero`
-
-```html
-<header class="hero">
-  <div class="hero-content">
-    <div class="hero-text">
-      <h1 class="logo-title">digithings</h1>
-      <p class="hero-subtitle">Tagline</p>
-      <p class="description">Short pitch.</p>
-    </div>
-    <div class="hero-visual"><!-- terminal or chat-embed --></div>
-  </div>
-</header>
-```
-
-### `.module-card`
-
-Scopes `--accent` via a surrounding `.accent-<module>` class. The left
-border + heading pick up the module color automatically.
-
-```html
-<div class="accent-digiquant">
-  <article class="module-card">
-    <h3>digiquant</h3>
-    <p>NautilusTrader-powered quant engine.</p>
-  </article>
-</div>
-```
-
-### `.feature-grid`
-
-Two-column grid, collapses to one column on mobile.
-
-```html
-<section class="feature-grid">
-  <div class="info-block"><h3>Open core</h3><p>…</p></div>
-  <div class="info-block"><h3>Self-hostable</h3><p>…</p></div>
-</section>
-```
-
-### `.terminal`
-
-```html
-<div class="terminal">
-  <div class="terminal-header">
-    <span class="dot red"></span>
-    <span class="dot yellow"></span>
-    <span class="dot green"></span>
-    <span class="terminal-title">agent_init.py</span>
-  </div>
-  <div class="terminal-body">
-    <pre><code id="typewriter-code"></code><span class="cursor">_</span></pre>
-  </div>
-</div>
-```
-
-### `.chat-embed-slot`
-
-Drop-in mount point for the digichat widget. The accent stripe at the top
-picks up the surrounding `--accent`.
-
-```html
-<div class="accent-digichat">
-  <div class="chat-embed-slot">
-    <iframe src="https://digithings.ai/chat/embed?session=demo"
-            title="digichat"></iframe>
-  </div>
-</div>
-```
-
-### `.footer`
-
-```html
-<footer class="footer">
-  <div class="container">
-    <p>&copy; 2026 digithings AI. Open Core.</p>
-  </div>
-</footer>
-```
-
----
-
-## Starfield API
-
-`packages/design/starfield.js`:
-
-```js
-import { initStarfield } from './starfield.js';
-
-const ctl = initStarfield({
-  canvasId: 'network-canvas', // required — id of a <canvas>
-  density: 180,               // optional; defaults: 180 desktop / 80 mobile
-});
-// ctl.stop() cancels the animation and detaches listeners.
-```
-
-Behavior:
-- Pauses when the tab is hidden (`visibilitychange`).
-- Resizes on `window.resize`.
-- On screens ≤ 480px the default density drops to 80.
+The vanilla `starfield.js` and `typewriter.js` modules had no importer either
+(`apps/dashboard` only declared the starfield module). They were removed.
+Do not revive them; the next design reference is `apps/reference`.
 
 ---
 
@@ -344,9 +232,10 @@ initScrollTrigger({
 });
 ```
 
-Each matching element receives `--scroll: 0..1` on every frame. CSS
-consumes it — see the `data-direction="bottom|left|right|zoom"` rules in
-`components.css`.
+Each matching element receives `--scroll: 0..1` on every frame. The
+`data-direction` rules that consumed it left with `components.css`. The
+remaining hook is `activateSelector`, which toggles `.active`; `site/site.css`
+`.reveal-up.active` still honors that, alongside the React `Reveal` driver.
 
 ---
 
@@ -375,22 +264,14 @@ To formally adopt the design system:
    `var(--bg-secondary)`, `var(--accent)`, etc. Scope digichat surfaces
    with the `.accent-digichat` class at the root.
 
-Do not import the full `components.css` into digichat — its React
-components have their own primitives. Tokens alone keep the two surfaces
-visually coherent without forcing layout collisions.
+Tokens alone keep digichat and the marketing sites visually coherent.
+digichat's React primitives own layout; do not vendor a second component sheet.
 
 ### `apps/digiquant-web/`
 
-digiquant.io will be a subdirectory of the main site (or a sibling static
-site sharing the same CSS). It will:
-
-1. `@import './tokens.css'` and `@import './components.css'` directly
-   (no vendoring — same deployment).
-2. Wrap the page root in `<body class="accent-digiquant">` so all
-   `var(--accent)` references resolve to the digiquant color.
-3. Reuse `.hero`, `.module-card`, `.feature-grid`, `.chat-embed-slot`,
-   `.terminal` without overrides.
-4. Load the same `starfield.js` for cross-brand continuity.
+digiquant.io imports `@digithings/design/tokens.css` and
+`@digithings/design/site/site.css`. Scope accent with the digiquant token
+(`--accent: var(--accent-digiquant)`), not a legacy `components.css` sheet.
 
 ---
 

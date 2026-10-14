@@ -5,7 +5,8 @@
  * Markup contract (unchanged from original website/main.js):
  *   <div class="scroll-trigger" data-direction="bottom|left|right|zoom">
  *
- * CSS consumes `--scroll` (see components.css) to translate/scale/blur.
+ * The `data-direction` rules that consumed `--scroll` left with components.css.
+ * `activateSelector` still toggles `.active`, which site.css `.reveal-up` honors.
  *
  * Usage:
  *   import { initScrollTrigger } from './scroll-trigger.js';
