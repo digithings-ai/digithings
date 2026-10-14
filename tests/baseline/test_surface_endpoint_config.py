@@ -88,14 +88,17 @@ _HOST_RE = re.compile(
 # api.digithings.ai literal (1 -> 0). Regenerated
 # with the file's own scanner, in the open, per the design rule above.
 # DIG-3418 (S19) deleted the retired atlas-era plans under docs/plans and
-# docs/backlog: atlas.digiquant.io 3 -> 1, chat.digithings.ai 50 -> 43,
-# www.digiquant.io 17 -> 15. Decreases only.
+# docs/backlog: atlas.digiquant.io 3 -> 1, www.digiquant.io 17 -> 15.
+# The same deletion pass removes more host literals than that first pin
+# recorded. Re-measured on this tree: chat.digithings.ai 50 -> 24,
+# digichat.digithings.ai 15 -> 14, mcp.digithings.ai 59 -> 56,
+# www.digithings.ai 82 -> 68. Decreases only.
 PINNED_CENSUS = {
     "app.digithings.ai": 3,
     "atlas.digiquant.io": 1,
-    "chat.digithings.ai": 43,
+    "chat.digithings.ai": 24,
     "dashboard-api.chris-stefan.workers.dev": 7,
-    "digichat.digithings.ai": 15,
+    "digichat.digithings.ai": 14,
     "digithings-stack.example.workers.dev": 1,
     "docs.digithings.ai": 1,
     "foundry-tenant.digithings.ai": 2,
@@ -104,12 +107,12 @@ PINNED_CENSUS = {
     "hosts.occ.digithings.ai": 1,
     "key.digithings.ai": 72,
     "langfuse.digithings.ai": 3,
-    "mcp.digithings.ai": 59,
+    "mcp.digithings.ai": 56,
     "occ.digithings.ai": 143,
     "search.digithings.ai": 54,
     "trace.digithings.ai": 20,
     "www.digiquant.io": 15,
-    "www.digithings.ai": 82,
+    "www.digithings.ai": 68,
 }
 
 

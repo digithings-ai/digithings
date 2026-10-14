@@ -33,7 +33,6 @@ Module architecture stays next to the module (`digiquant/ARCHITECTURE.md`, `digi
 | [agent-backlog](agent-backlog/) | Historical task breakdowns. Live work is Paperclip |
 | [backlog](backlog/) | Old epic write-ups. Live work is Paperclip |
 | [design](design/) | Design notes |
-| [dig-2041](dig-2041/) | One incident probe. Not a product manual |
 | [digichat](digichat/) | digichat reference |
 | [free-providers](free-providers/) | Free-model provider notes |
 | [legal](legal/) | Legal text that ships with the product |
