@@ -31,7 +31,7 @@ I read these six Workers from the live Cloudflare account. The "modified" time i
 | `digithings-cron` | `apps/digithings-cron/wrangler.toml` | R5 `digithings-stack` | `release/stack` | `npx wrangler deploy -c apps/digithings-cron/wrangler.toml` |
 | `digithings-stack` | `apps/digithings-stack-cloudflare/wrangler.toml` | R5 `digithings-stack` | `release/stack` | `npx wrangler deploy -c apps/digithings-stack-cloudflare/wrangler.toml` |
 | `digithings-digichat` | `apps/digichat-cloudflare/wrangler.toml` | R5 `digithings-stack` | `release/stack` | `npx wrangler deploy -c apps/digichat-cloudflare/wrangler.toml` |
-| `corpus-index` | **none** | **unresolved** | none | none |
+| `corpus-index` | `apps/corpus-index/wrangler.toml`, on 2 unmerged branches, **not on develop** | **D-1, still open** | see D-1 | `npx wrangler deploy -c apps/corpus-index/wrangler.toml` |
 
 Modified times for the six Workers:
 
@@ -54,22 +54,65 @@ Modified times for the six Workers:
 
 `digitrace-langfuse` goes to R5. `digidata-api` goes to R7 `twelve-x`. Neither needs a migration step for Cloudflare. It needs a decision about whether to deploy it or to delete it.
 
-### 2.3 The corpus-index finding
+### 2.3 The corpus-index finding: corrected, and the source is in the repository
 
-`corpus-index` is live. The public repository contains no file for it. I searched all 5,962 tracked files on develop.
+**Correction.** This section first said "The public repository contains no file for it." That was wrong. The search behind that sentence was scoped to `develop`. The source is in this repository, on two unmerged branches.
 
-The search looked for the environment variables that the Worker reads.
+`corpus-index` is live, and its source is `apps/corpus-index/`: 26 files, with its own `wrangler.toml`. It is not on `develop`. `git ls-tree -r github/develop` matches 0 paths for `corpus-index`. A control confirms the matcher fires: 8 `wrangler.toml` files are on develop.
 
-- `CORPUS_INDEX_KV` = 0 hits
-- `EMBED_SECRET` = 0 hits
-- `digisearchIndex` = 49 hits (control fired)
-- `CRON_KICK_SECRET` = 15 hits (control fired)
+**How I found it.** The deployed script gave me a symbol that cannot occur by accident. A search restricted to develop would never have seen it.
 
-The 5 hits for the string `corpus-index` are an HTTP response header. They are in `digigraph/src/digigraph/corpus_routing.py:39` and `tests/dg/test_api.py:564`. They are not a Worker.
+```
+git log --all --oneline -S'FORBIDDEN_KEY'
+  cfd3811a3  feat(corpus-index): add the daily multilingual index worker
+  60ea0c773  fix(corpus-index): Zammad range query for the ticket cursor; mask names, mail headers and organisations
+```
 
-The Worker reads these values: `env.AI`, `CORPUS_INDEX_KV`, `CORPUS_INDEX_WORKFLOW`, `CRON_KICK_SECRET`, `EMBED_SECRET`, `ZAMMAD_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, and `DRY_RUN`. It calls `https://api.cloudflare.com/client/v4/accounts/...`.
+**Where it lives.**
 
-So the source for this Worker is outside this repository. It was created on 2026-10-13 at 17:33 UTC. This is 11 days after the R0–R7 split plan was written. I cannot say which repo owns it. Section 7 asks Chris for the answer.
+| Branch | Pull request | State |
+|---|---|---|
+| `DIG-3269-occ-daily-index` | #5545 `feat(digisearch): add the bge-m3 daily corpus index` | OPEN, not merged |
+| `DIG-2203-census-deploy` | #5580 `feat(digichat): OCC cold-start warm-up, model picker tier and mobile polish` | OPEN, not merged |
+
+Neither commit is an ancestor of `github/develop`. `merge-base --is-ancestor` returns false for both.
+
+**The deployed script matches the branch source.** I read the deployed script with a second read-only tool, `workers-get-worker-code`. It returns a 28,599 character esbuild bundle whose module comments name 11 source files: `model.ts`, `http.ts`, `workflow.ts`, `clients.ts`, `config.ts`, `pii.ts`, `chunk.ts`, `vectors.ts`, `sync.ts`, `run.ts`, `index.ts`. That is the `apps/corpus-index/src` layout.
+
+Six distinctive strings are present in both the deployed bundle and the branch source: `FORBIDDEN_KEY`, `isWeeklyReconcile`, `overlapCursor`, `EMBED_MODEL_ID`, `bge-m3`, `CorpusIndexWorkflow`. A negative control, `ZZZ_NOT_PRESENT`, is 0 in both.
+
+**The deployed build carries the privacy fix.** Commit dates are +0200, so the add commit is 16:12 UTC and the fix commit is 17:57 UTC. The Worker was created at 17:33 UTC and modified at 18:38 UTC. The fix landed after the first deploy and was deployed 41 minutes later. The live Worker masks names, mail headers and organisations.
+
+**What this changes.**
+
+1. It is not source-less. Table A is complete on the source side.
+2. It is the one Worker whose source is on no trunk branch. It sits in two open pull requests. If both close without merging, the source is lost. That makes it the highest-priority Worker to land before any branch cleanup in the migration.
+3. It is not a plain cron Worker. Its `wrangler.toml` declares an AI binding, a KV namespace and a Cloudflare Workflow.
+
+```toml
+name = "corpus-index"
+main = "src/index.ts"
+workers_dev = true
+
+[ai]
+binding = "AI"
+
+[[kv_namespaces]]
+binding = "CORPUS_INDEX_KV"
+id = "16160cf4676d4175a2ec4044f0aead1b"
+
+[[workflows]]
+name = "corpus-index-daily"
+binding = "CORPUS_INDEX_WORKFLOW"
+class_name = "CorpusIndexWorkflow"
+
+[triggers]
+crons = ["0 3 * * *"]
+```
+
+The file states that the clock is on this Worker, at 03:00 UTC, and not on `digithings-cron`. Under the migration the AI binding, the KV namespace and the Workflow stay on the Cloudflare side. Only the trigger moves to the Mac. Section 6 does not need to change for it.
+
+**One small defect.** `apps/corpus-index/.wrangler/tmp/deploy-roabtC/index.js` is committed on `DIG-2203-census-deploy`. That is a build output. `develop` has 0 such paths. It should not merge.
 
 ## 3. Table B. The two Pages projects
 
@@ -216,16 +259,16 @@ This proposal does not change the cron triggers in `digithings-cron`. See sectio
 
 ## 7. Decisions for Chris
 
-### D-1. Who owns the corpus-index Worker?
+### D-1. Which repo owns the corpus-index Worker?
 
-This is the only unresolved item in Table A. The Worker is live. The repository has no source for it. I measured this in section 2.3.
+This is the only unresolved item in Table A. The source exists and is in this repository. Section 2.3 has the evidence. The question is only which R repo the directory joins.
 
-- **A.** It belongs to R5 `digithings-stack`. Move it there with the other Workers.
-- **B.** It belongs to R2 `digiquant-stack`. It reads `CORPUS_INDEX_WORKFLOW`, which points at a pipeline.
-- **C.** It has no repository. Keep it in Cloudflare only, and record it as a Cloudflare-managed Worker with no source of record.
-- **D.** It belongs to R6 `digichat-tenants`. It binds a KV namespace for a corpus.
+- **A.** R5 `digithings-stack`, with the other Workers. Its `wrangler.toml` names the same Cloudflare account.
+- **B.** R2 `digiquant-stack`. Pull request #5545 titles the branch feature `digisearch`, so the owning seat may read it as a digisearch component.
+- **C.** No repository. Keep it in Cloudflare only.
+- **D.** R6 `digichat-tenants`. It binds a KV namespace for a corpus and reads the helpdesk token.
 
-**My recommendation is A.** It is the most recent Worker, it is the only one with no source, and a Worker with no source cannot be rebuilt. A source of record matters most for that case.
+**My recommendation stays A, for one reason that is now sharper.** The two open pull requests disagree about who owns it. #5545 calls it `feat(digisearch)`. #5580 carries it inside a `feat(digichat)` branch. That disagreement is the reason to settle the owner in writing before the migration rather than during it.
 
 ### D-2. What are the two production Pages project names?
 
@@ -249,10 +292,18 @@ I read the live Cloudflare account with one read-only tool: `workers-list`. The 
 
 I read the repository at `github/develop` = `d227b6ed5`. The 74 workflow files and the 8 wrangler.toml files are the whole input for section 4 and Table A. A control proved the search instrument works: 10 workflow files contain the word `wrangler`.
 
+I also read the deployed script of `corpus-index` with a second read-only tool, `workers-get-worker-code`. Section 2.3 uses it. The first version of section 2.3 was wrong because the search covered one ref. A pickaxe over all refs, `git log --all -S<symbol>`, found the source in one call. An absence measured on one ref is an absence on that ref, not on the repository.
+
 I could not read the Cloudflare Pages settings. No read-only Pages tool exists in the tool gateway. The Pages rows in Table B come from the two workflow headers and the two build scripts. **The Pages production branch and the Pages project names are not verified.** Section 3.1 and D-2 name this gap.
+
+**How to run the local gate.** `scripts/check_doc_links.py` sets `REPO_ROOT` from its own location on line 12, not from the current directory. Run the copy inside the tree you are testing. Run the copy in another checkout and it scans that checkout instead, and the scanned file count differs: 398 files in this branch's worktree against 554 in the shared checkout. Both answers can be green at once.
+
+I hit exactly that while proving this revision. A break planted in this file left the gate at exit code 0 and it never named the file. The plant only failed the gate when the gate ran from this worktree. **A green gate is a statement about the tree the script was loaded from.**
+
+The pass recorded for this revision: exit code 0 with 398 markdown files scanned. Non-vacuity: a broken link planted inside this file makes the gate exit code 1 and name `docs/repo-split/cloudflare-deploy-map.md`. The file was restored byte-for-byte and the gate returned to exit code 0.
 
 I did not run any deploy, and I did not run any dry run. Section 5 is a design, not a measurement. The Docker warning in section 5.2 and the `--define` fault in section 5.4 come from earlier measurements on this host. Check both again before you build the gate on them.
 
 ## 9. One-line summary
 
-Six Workers map cleanly to R2 and R5, one Worker has no source in the repository, both sites build from `main` on Cloudflare's side with no GitHub Actions workflow involved, and the only deploy lane that works today is one that pushes `main`. Moving both sites to a release branch is two dashboard changes and stops the auto-deploy.
+Six Workers map cleanly to R2 and R5, The sixth, `corpus-index`, has its source in this repository on two unmerged branches and on no trunk branch at all, both sites build from `main` on Cloudflare's side with no GitHub Actions workflow involved, and the only deploy lane that works today is one that pushes `main`. Moving both sites to a release branch is two dashboard changes and stops the auto-deploy.
