@@ -3,7 +3,7 @@ flowchart TB
   subgraph PUB["PUBLIC on GitHub (primary; Origin inbound mirror)"]
     R0["<b>R0 digithings</b> (new public repo, scrubbed history)<br/>PyPI: digibase digikey digifetch digigraph digillm<br/>digisearch digivault digitrace digiclaw digivoice digiskills digiquant<br/>digiquant core + digiquant.plugin API + engine schema<br/>npm @digithings/: design, ui, digichat-ui, hero-banner, surface-config, catalog<br/>apps/digichat engine + GHCR images, MCP tooling, clients/*, docs, openwiki<br/>releases: tags + release-please on main"]
   end
-  subgraph PRIV["PRIVATE on Cursor Origin (Buildkite Mac agents · deploys only from Chris-cut tags)"]
+  subgraph PRIV["PRIVATE on Cursor Origin (local-ci Mac jobs · deploys only from Chris-cut signed tags)"]
     R1["<b>R1 digiquant-strategies</b><br/>proprietary strategies, optimiser, SDCA MCP/CLI<br/>plugin via entry points · git-tag releases"]
     R2["<b>R2 digiquant-stack</b><br/>digiquant-runner, dashboard-api (own Worker + zone route)<br/>prod Supabase migrations, prod config, pipeline workflows<br/>@digiquant/contract via git tag"]
     R3["<b>R3 digiquant-web</b><br/>Brief desk /app + digiquant.io<br/>Pages direct upload on Chris-cut web tag"]
@@ -25,8 +25,8 @@ flowchart TB
   R3 -.->|HTTP via @digiquant/contract| R2
   R4 -.->|/api, /embed routes| R5
   R5 -.->|service binding RUNNER| R2
-  R5 -.->|build trigger via Buildkite API| R7
-  R5 -.->|build trigger via Buildkite API| R2
+  R5 -.->|build trigger via local-ci| R7
+  R5 -.->|build trigger via local-ci| R2
   R6 ==>|writes| KV
   KV ==>|read at runtime| R5
   MONO -.->|filter-repo: scrubbed R0 + one export per Origin repo| R0

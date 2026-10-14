@@ -99,14 +99,13 @@ What this means for the plan:
 - **O2 — Private repos gain real protection.** Rulesets work on Origin-hosted private repos, which
   GitHub Free could not give us (F1). This only helps if agents push with an identity that is **not**
   a bypass actor (**D-O4**). Today agents act as Chris, so a ruleset that lets Chris bypass lets every agent bypass.
-  **Answered: agents keep using Chris's account**, so the rulesets are advisory. D-G6 is optional,
-  so it is not a hard control either — the deploy control is procedural (only Chris cuts release tags).
-- **O3 — The tag deploy gate stays, without the mandatory signature.** Origin has no signed-tag rule,
-  so a mandatory gate would still need the runner hook — Chris deferred that. The gate moves from a
-  GitHub runner hook to a CI-agent hook on Chris's Mac, checking tag shape and provenance, verifying
-  signatures only when present.
-- **O4 — New CI vendor.** GitHub Actions does not run on Origin pushes. Private repos need Buildkite
-  (recommended: native Origin provider, self-hosted agents keep D-G4) or Depot (**D-O3**). **Answered: Buildkite, self-hosted agents.**
+  **Answered: agents keep using Chris's account** (23:36 revision: binding rulesets are `active` with no agent bypass; D-G6 mandatory — see decisions.md).
+- **O3 — The tag deploy gate stays, with the mandatory signature (23:36).** Origin has no signed-tag rule,
+  so the gate lives in local-ci on Chris's Mac, checking tag shape and provenance and verifying
+  every signature — unsigned tags refused.
+- **O4 — New CI vendor.** GitHub Actions does not run on Origin pushes. ~~Private repos need Buildkite
+  (recommended: native Origin provider, self-hosted agents keep D-G4) or Depot (**D-O3**). **Answered: Buildkite, self-hosted agents.**~~
+  **STRUCK 23:36 — runner is local-ci on Chris's Mac** (D-O3 struck; Depot not taken).
 - **O5 — A new silent auto-deploy path.** The Cloudflare app for Cursor would auto-deploy Workers on
   push. The plan forbids installing it (P0) and keeps deploys on the signed-tag gate.
 - **O6 — Beta risk.** Names are permanent during beta, the API had a breaking change two weeks ago,

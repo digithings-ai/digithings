@@ -39,7 +39,7 @@ Answered by Chris on 2026-10-14.
 
 Unchanged by the move: D-G6 stays optional (Origin has no signed-tag rule, so a mandatory
 gate would still need the runner hook — Chris deferred that), and D-G5 now runs the
-Buildkite `deploy` agent on Chris's Mac instead of a dedicated host.
+local-ci `deploy` job on Chris's Mac instead of a dedicated host (Buildkite struck 23:36).
 
 ## Top-priority direction — answered by Chris 2026-10-14 22:09 (released)
 

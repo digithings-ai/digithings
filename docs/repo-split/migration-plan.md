@@ -58,9 +58,9 @@ signing the tag is optional/recommended, not mandatory).
 
 Consequences:
 - The human release gate for private repos cannot live on GitHub. It moves to the **deploy
-  agent on Chris's Mac** (D-G5): Buildkite `deploy` queue runs there under his normal user,
+  agent on Chris's Mac** (D-G5): local-ci `deploy` job runs there under his normal user,
   deploy credentials exist only there (plus the Worker fallback), and the gate hook refuses
-  any job that is not on a release tag cut by Chris — with an optional `git verify-tag`
+  any job that is not on a release tag cut by Chris — with a mandatory `git verify-tag` (D-G6)
   signature check (D-G6, only when the tag carries a signature).
 - On private repos `develop`/`main` cannot be protected. Mitigations: merge-queue-only merges by
   convention, CODEOWNERS (advisory), a nightly audit job that flags any direct push to `main`/`develop`.
@@ -134,10 +134,10 @@ detach. twelve-x stays as-is (GitHub private + existing inbound mirror). The R7 
   Origin repo through Workers Builds: that integration auto-deploys on every push.
 - Deploys run only on the `deploy` queue (Chris's Mac, Worker fallback), from a release tag
   cut by Chris (D-G5; signing optional per D-G6), with `wrangler deploy` / Pages direct upload.
-  The gate hook is the same script as before with a Buildkite adapter: it checks `BUILDKITE_REPO`
-  against the allowlist, `BUILDKITE_TAG` matches `<component>-v*`, `BUILDKITE_COMMIT` equals the
-  tag's commit, and — only when the tag carries a signature — `git verify-tag` passes against
-  `allowed_signers`. The pipeline step that deploys is read from the tagged commit, not from a later upload.
+  The gate hook is the same script as before with a local-ci adapter: it checks the repo
+  against the allowlist, the tag matches `<component>-v*`, the tag's commit equals the
+  built commit, and `git verify-tag` passes against `allowed_signers` on every release tag
+  (D-G6 mandatory — an unsigned tag is refused). The pipeline step that deploys is read from the tagged commit, not from a later upload.
 - Origin `repository pushed` webhooks are **not** wired to any deploy.
 - Existing Git-connected Pages projects (on mono) are handled as before (P4.5, P4.6, P5): new
   direct-upload projects, then the domain moves.
@@ -154,7 +154,7 @@ detach. twelve-x stays as-is (GitHub private + existing inbound mirror). The R7 
 - Worktrees: no change in how they work (`git worktree add` from an Origin clone). Remote convention:
   `origin` = Origin, `github` = GitHub (R0 only). `dt-dev` bootstrap clones R1–R7 from Origin.
 - Tooling that calls `gh` must be ported before the first private repo moves (P2): merge queue
-  (`origin pr` / Origin API, `merge_when_ready`), run-watch (Buildkite API), worktree sweep, PR-ownership
+  (`origin pr` / Origin API, `merge_when_ready`), run-watch (local-ci trigger API), worktree sweep, PR-ownership
   checks. Paperclip project ↔ repo bindings use the Origin URL. Whether Paperclip's repository
   binding accepts a non-GitHub remote is UNSURE; checked in P2 on a scratch repo.
 
@@ -193,16 +193,16 @@ Mono stays public (D-G2); its `production` environment and required reviewers ke
    - `gitleaks detect --log-opts="--all"` on a mirror clone → list of secrets ever committed (rotate any hits in P1).
    - Fetch each existing fork; `git log --all -- <private paths>` on each → record what it holds (result on the issue only).
 2. Remove `push` triggers from `deploy-digiquant-runner` / `deploy-digithings-cron` (dispatch only), in a PR into `develop`.
-3. Runner host (D-G5, answered): no separate host. Chris runs the Buildkite `ci` and `deploy`
-   agents on his Mac under his normal user. DevOps installs the agent software but does **not**
-   register the `deploy` queue yet (registration happens per private repo in P2/P4). The full
+3. Runner host (D-G5, answered): no separate host. Chris runs the local-ci dispatcher
+   (`com.digithings.ci-dispatch`, `ci` + `deploy` jobs) on his Mac under his normal user.
+   The `deploy` job stays disarmed until P2/P4 arm it per private repo. The full
    local-runner design (isolation, cache, concurrency, keep-awake, Worker fallback) is DIG-3561's
-   deliverable; this step tracks only install + registration readiness.
-4. Signing key (D-G6, optional): only if Chris adopts it. Chris creates an `ed25519-sk` SSH signing
+   deliverable; this step tracks only install + readiness.
+4. Signing key (D-G6, MANDATORY since 23:36): Chris creates an `ed25519-sk` SSH signing
    key on a FIDO2 key. Only the **public** key goes into `allowed_signers` (committed in each private
-   repo and installed on the Mac). Unsigned release tags still deploy; signed ones verify when present.
-5. Origin (D-O1 … D-O5, answered): Chris confirms the namespace and the repo names (permanent during beta),
-   and creates the Buildkite organization and connects Origin (D-O3). No agent account (D-O4). Agents do no logins. Nobody installs the Cloudflare app in Cursor.
+   repo and installed on the Mac). Unsigned release tags are refused by the local-ci gate.
+5. Origin (D-O1, D-O2, D-O4, D-O5 answered; D-O3 STRUCK 23:36): Chris confirms the namespace and the repo names (permanent during beta).
+   ~~Creates the Buildkite organization and connects Origin (D-O3)~~ — STRUCK, no Buildkite org; local-ci needs no Origin connect. No agent account (D-O4). Agents do no logins. Nobody installs the Cloudflare app in Cursor.
 
 Exit check: inventory posted; deploy workflows show `workflow_dispatch` only; Mac agent reachable
 by Chris; if the signing key is adopted, `git tag -s` + `git verify-tag` round-trip works with the new key on a scratch repo.
@@ -284,18 +284,17 @@ Rollback: each PR reverts on its own.
    (`develop` PR + checks + DCO; `main`/`release/*` code-owner review; tag creation limits). Applied
    now to R0 (public). Kept unapplied for private repos until a Team upgrade.
 
-8. **Origin plumbing (scratch repo `<ns>/split-gate-test`):** Buildkite pipeline with `ci` and
-   `deploy` queues; the gate hook with the Buildkite adapter (§5 of the Origin section); the three
-   rulesets of §7 applied and tested; merge queue and run-watch ported off `gh`; a Paperclip project
+8. **Origin plumbing (scratch repo `<ns>/split-gate-test`):** local-ci `ci` + `deploy` jobs;
+   the gate hook with the local-ci adapter (§5 of the Origin section); the three
+   rulesets of §7 applied as `active` and tested; merge queue and run-watch ported off `gh`; a Paperclip project
    bound to the Origin URL. R1's git pin becomes `git+https://origin.cursor.com/<ns>/digiquant-strategies.git@v0.1.0`;
    `@digiquant/contract` becomes a git dependency on an R2 tag (no GitHub Packages from Origin, D-Q7′);
    Docker builds read both with a short-lived Origin token passed as a BuildKit secret.
 
 Exit check: a dry-run release of one module (TestPyPI) and one npm package (`--dry-run`) green from mono;
 R7 gate test above passes; the same cases pass on the Origin scratch repo via
-Buildkite. Note (D-O4 + D-G6 optional): with agents on Chris's account and signing optional,
-neither the rulesets nor the tag gate is a hard control — the control is procedural (only Chris
-cuts release tags).
+local-ci. Note (23:36): binding rulesets are `active` with no agent bypass, and the tag gate is
+mandatory — both are hard controls; only-Chris-cuts-tags remains as defence in depth.
 
 ---
 
@@ -345,7 +344,7 @@ After step 8: delete or re-private R0 and yank packages. Point of no return: the
 Common recipe for every target Rn:
 1. `git clone --mirror` mono → `git filter-repo --paths-from-file rN.paths --path-rename …`.
 2. `gitleaks` + boundary check on the new repo; Chris creates `<ns>/Rn` on Origin (private); push `main`, `develop`, release tags; commit `allowed_signers`, CODEOWNERS, LICENSE (proprietary); Chris applies the Origin rulesets (§7).
-3. Switch imports to published R0 packages (pins); add `.buildkite/pipeline.yml` (queue `ci`); install the Origin App (replaces the GitHub App for bump PRs); add Rn to the gate allowlist. Non-deploy CI values are Buildkite secrets set by Chris or DevOps (never pasted into issues). Deploy credentials stay on Chris's Mac (plus Worker fallback). (R7: see Origin §3 for the history move.)
+3. Switch imports to published R0 packages (pins); add the repo to the local-ci job matrix (no `.buildkite/` tree); install the Origin App (replaces the GitHub App for bump PRs); add Rn to the gate allowlist. Non-deploy CI values are local-ci secrets set by Chris or DevOps (never pasted into issues). Deploy credentials stay on Chris's Mac (plus Worker fallback). (R7: see Origin §3 for the history move.)
 4. **Cut-over deploy** from a Chris-cut release tag — one deploy per target, verified (below).
 5. Add Rn's paths to mono's `moved-paths-guard`; delete them from mono in one PR.
 6. Update Paperclip project binding, merge queue, run-watch, CODEOWNERS, seat instructions for Rn.
@@ -430,7 +429,7 @@ Slice B fixes exact names: Origin namespace = Chris's existing personal namespac
 `release/web`, R6 none, R7 as today; tag shape `^[a-z0-9-]+-v[0-9]+\.[0-9]+\.[0-9]+$`;
 rulesets as code in `scripts/split/rulesets/origin/` (Chris applies; agents audit only);
 token names only (P §7: `CURSOR_AUTH_TOKEN`, Origin App token, short-lived Origin token,
-`GITHUB_TOKEN`, `GH_DISPATCH_TOKEN`, `BUILDKITE_AGENT_TOKEN`, `CLOUDFLARE_API_TOKEN`,
+`GITHUB_TOKEN`, `GH_DISPATCH_TOKEN`, `CLOUDFLARE_API_TOKEN`,
 `CLOUDFLARE_ACCOUNT_ID`, Supabase access token, Pages direct-upload token). Slice C confirms
 §2 above (GitHub-primary R0, inbound mirror, no custom code) and adds: divergence policy
 (GitHub wins; never force-push the mirror; never detach R0), R0 Actions = publish + CI only,
@@ -493,7 +492,7 @@ revert by moving the domain back (minutes); KV rollback re-runs `kv-sync` from t
 ### 6. Chris-approval gates (each: doer + verify)
 
 1. Namespace + eight repo names (permanent in beta) — Chris confirms; verify `origin repo list`.
-2. Buildkite org + Origin connect (D-O3) — Chris; verify org provider + queues `ci`, `deploy`.
+2. ~~Buildkite org + Origin connect (D-O3)~~ STRUCK 23:36 — local-ci readiness instead: dispatcher installed, `ci` + disarmed `deploy` jobs present. — Chris; verify on the Mac.
 3. Mac dispatcher caps + `~/Code/ci-runs/` home (D-CI2) — Chris; verify agent reachable + week-one re-measure.
 4. Non-GitHub registries (PyPI/npm/images) — Chris; verify first publishes resolve off-GitHub.
 5. D-R5-1 image direction; `byok-providers.json` owner; `config/contract` home — Chris; verify plan edit.
