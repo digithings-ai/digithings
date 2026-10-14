@@ -418,7 +418,9 @@ def _upload_interrupted_best_effort(run_id: str, run_date: str) -> None:
     def _target() -> None:
         try:
             upload_interrupted(run_id, run_date)
-        except BaseException as exc:  # noqa: BLE001 — best-effort; still exit 143
+        except BaseException as exc:  # noqa: BLE001 — intentional: the worker thread
+            # must record cancellation as well as errors so the diagnostic below
+            # still names it; nothing is swallowed and the run still exits 143.
             errors.append(exc)
 
     thread = threading.Thread(target=_target, name="interrupted-upload", daemon=True)
@@ -696,7 +698,9 @@ def _publish_bounded(command: str, run_id: str, paths: list[str]) -> None:
     def _target() -> None:
         try:
             _publish(command, run_id, paths)
-        except BaseException as exc:  # noqa: BLE001 — re-raised below
+        except BaseException as exc:  # noqa: BLE001 — intentional: whatever the
+            # publish thread hit (including cancellation) is re-raised below;
+            # narrowing to Exception would turn a cancelled publish into a silent success.
             errors.append(exc)
 
     thread = threading.Thread(target=_target, name=f"publish-{run_id}", daemon=True)
@@ -832,6 +836,9 @@ def _on_sigterm(signum: int, _frame: object) -> None:
         try:
             os.killpg(pgid, signal.SIGTERM)
         except ProcessLookupError:
+            # The process group already exited (or was never spawned) between
+            # the status write and the kill — an expected shutdown race, so
+            # there is nothing to report.
             pass
     raise SystemExit(143)
 
