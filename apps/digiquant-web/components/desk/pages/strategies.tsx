@@ -8,14 +8,14 @@
  */
 import { useEffect, useState } from "react";
 import { useRefreshGeneration } from "../app-settings-store";
-import { BLOCKS, layoutFor } from "../../../../../clients/digiquant-tui/src/catalog";
-import { DASH, EMPTY_READ, STUB_READ, type ReadResult } from "../../../../../clients/digiquant-tui/src/read";
-import { strategiesBody } from "../../../../../clients/digiquant-tui/src/pages/strategies-format";
-import { strategySheetBody } from "../../../../../clients/digiquant-tui/src/pages/strategy-sheet";
-import { shapeLines, strategyBlocks, type PaneBody } from "../../../../../clients/digiquant-tui/src/pages/shape";
+import { BLOCKS, layoutFor } from "digiquant-tui/catalog";
+import { DASH, EMPTY_READ, STUB_READ, type ReadResult } from "digiquant-tui/read";
+import { strategiesBody } from "digiquant-tui/pages/strategies-format";
+import { strategySheetBody } from "digiquant-tui/pages/strategy-sheet";
+import { shapeLines, strategyBlocks, type PaneBody } from "digiquant-tui/pages/shape";
 import { readOfficial, type OfficialRead } from "../read-block";
 import { DESK_TILE, DeskPane, PANE_MOSAIC, useDeskMosaic } from "./pane";
-import { cell } from "../../../../../clients/digiquant-tui/src/format";
+import { cell } from "digiquant-tui/format";
 
 const STRATEGY_PATHS = new Set(["/strategies", "/strategies/detail", "/strategies/deploy"]);
 const INDEX_PATH = "/strategies";

@@ -1,11 +1,11 @@
 "use client";
 
-import { BLOCKS, PAGES, layoutFor } from "../../../../clients/digiquant-tui/src/catalog";
-import type { ReadResult } from "../../../../clients/digiquant-tui/src/read";
+import { BLOCKS, PAGES, layoutFor } from "digiquant-tui/catalog";
+import type { ReadResult } from "digiquant-tui/read";
 import { DeskFrame } from "./desk-frame";
 import { PanelView } from "./panel-view";
 import { PANE_GRID } from "./pages/pane";
-import { asOfStatus } from "../../../../clients/digiquant-tui/src/format";
+import { asOfStatus } from "digiquant-tui/format";
 import { staleBanner } from "./app-settings";
 import { useAppSettings } from "./app-settings-store";
 
