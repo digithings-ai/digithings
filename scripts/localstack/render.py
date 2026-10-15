@@ -8,10 +8,8 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterable, Mapping, Sequence
-from typing import Any
-
 from .contracts import Check, resolve
-from .health import GateReport, Result
+from .health import GateReport
 from .orchestrate import StepReport, step_rows
 from .preflight import PreflightReport
 
@@ -67,11 +65,6 @@ def render_preflight_table(report: PreflightReport) -> str:
 
 def preflight_json(report: PreflightReport) -> str:
     return json.dumps(report.to_dict(), indent=2, sort_keys=True)
-
-
-def results_json(results: Sequence[Result]) -> str:
-    payload: list[dict[str, Any]] = [r.to_dict() for r in results]
-    return json.dumps(payload, indent=2, sort_keys=True)
 
 
 def render_url_table(checks: Sequence[Check], config: Mapping[str, str], profile: str) -> str:
