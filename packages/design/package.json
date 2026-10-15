@@ -5,8 +5,6 @@
   "description": "Shared digithings design tokens and the CSS and vanilla-JS modules live surfaces still import.",
   "exports": {
     "./tokens.css": "./tokens.css",
-    "./starfield.js": "./starfield.js",
-    "./assets/*": "./assets/*",
     "./quant-native": "./quant-native/ticker.js",
     "./quant-native/styles.css": "./quant-native/styles.css",
     "./app-shell-terminal": "./app-shell-terminal/index.js",
@@ -20,9 +18,7 @@
   "files": [
     "tokens.css",
     "motion.json",
-    "starfield.js",
     "html-escape.js",
-    "assets",
     "quant-native",
     "app-shell-terminal",
     "site",
