@@ -2,21 +2,18 @@
 
 The shared visual language for every digithings public surface:
 `digithings.ai`, `digiquant.io`, and `digithings.ai/chat`. A simple,
-utilitarian, dark-first aesthetic with per-module accent colors and a
-cross-brand starfield signature.
+utilitarian, dark-first aesthetic with per-module accent colors.
 
 This document is the authoritative reference. The canonical implementation
-lives in `packages/design/tokens.css`,
+lives in `packages/design/tokens.css` and `packages/design/site/site.css`,
 packaged as the `@digithings/design` npm workspace. Consumers
 import the package (or reference the files via relative paths for the
 static sites).
 
-**Strategy & external references:** [`EVOLUTION.md`](EVOLUTION.md) synthesizes
-our direction with deep scans of [Graphite](references/graphite.com.md),
-[Cursor](references/cursor.com.md), and [x.ai](references/x.ai.md) — use it
-before major landing or dashboard work. **Inspiration / tools dictionary:**
-[Designeer](references/designeer.xyz.md) (`designeer.xyz`) for galleries and craft sources. **Copy & IA:** [`COPY_GUIDE.md`](COPY_GUIDE.md).
-**Deep audits:** [`references/scans/`](references/scans/INDEX.md). Index: [`references/README.md`](references/README.md).
+**Strategy:** [`EVOLUTION.md`](EVOLUTION.md) is the historical ledger. The competitor
+scans, design mine, landing demos, and the static spec/smoke pages were removed
+so the next design reference can be built in digiweb (`apps/reference`) instead
+of extended here. **Copy & IA:** [`COPY_GUIDE.md`](COPY_GUIDE.md).
 
 See [ADR-0009 — Frontend umbrella](../../docs/adr/0009-frontend-umbrella.md)
 for the layout rationale.
@@ -39,7 +36,7 @@ All tokens are declared as CSS custom properties on `:root` in
 
 | Token                | Value       | Role                                  |
 | -------------------- | ----------- | ------------------------------------- |
-| `--bg-primary`       | `#121212`   | Page background (on top of starfield) |
+| `--bg-primary`       | `#121212`   | Page background |
 | `--bg-secondary`     | `#0a0a0a`   | Panels, cards, nav                    |
 | `--text-primary`     | `#e6e6e6`   | Default body text                     |
 | `--text-secondary`   | `#a3a3a3`   | Muted text, captions                  |
@@ -152,7 +149,8 @@ clamp(2.5rem, 5vw, 4rem)` (section vertical rhythm).
 
 ### Radius
 
-`--radius-sm: 6px`, `--radius-md: 8px`, `--radius-lg: 12px`.
+`--radius-sm`, `--radius-md`, and `--radius-lg` are `0` (`tokens.css`). True circles
+may still use `999px` locally. That is geometry, not chrome.
 
 ### Motion
 
@@ -204,29 +202,23 @@ Or directly in CSS:
 
 ---
 
-## Starfield API
+## Component primitives
 
-`packages/design/starfield.js`:
+The legacy `components.css` sheet (global reset plus `.nav`, `.hero`,
+`.module-card`, `.terminal`, and the `--scroll` direction rules) had no
+importer. It was removed. Live primitives are `site/site.css`, consumed by
+digithings.ai and digiquant.io, and the React kit in `@digithings/ui`.
 
-```js
-import { initStarfield } from './starfield.js';
-
-const ctl = initStarfield({
-  canvasId: 'network-canvas', // required — id of a <canvas>
-  density: 180,               // optional; defaults: 180 desktop / 80 mobile
-});
-// ctl.stop() cancels the animation and detaches listeners.
-```
-
-Behavior:
-- Pauses when the tab is hidden (`visibilitychange`).
-- Resizes on `window.resize`.
-- On screens ≤ 480px the default density drops to 80.
+The vanilla `starfield.js` and `typewriter.js` modules had no importer either
+(`apps/dashboard` only declared the starfield module). They were removed.
+`scroll-trigger.js` left in #5692. Do not revive them; the next design
+reference is `apps/reference`.
 
 ---
-
 ## Non-goals
 
+- Light and dark both ship under `[data-theme]` in `tokens.css`. The legacy
+  `:root` block above that layer stays dark-first for pages that have not migrated.
 - No component JS framework here. React components live in `@digithings/ui`;
   this package keeps tokens and the few vanilla-JS modules documented below.
 - Confidential internal projects are out of scope. This design system
@@ -236,8 +228,10 @@ Behavior:
 
 ## Extended primitives
 
-Two primitives that live surfaces still import sit alongside the tokens and
-starfield. Each ships a CSS file and an ESM JS module.
+Two primitives that live surfaces still import sit alongside the tokens.
+Each ships a CSS file and an ESM JS module. The static smoke page
+and the HTML spec were removed with the old design reference. Live specimens
+belong in `apps/reference`.
 
 ### `quant-native/` — blueprint grid, ticker, metric + chart utilities
 
