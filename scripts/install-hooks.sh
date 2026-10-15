@@ -42,6 +42,15 @@ if ! hooks_path="$(git rev-parse --git-path hooks 2>/dev/null)" || [ -z "$hooks_
   exit 1
 fi
 
+# Fail closed on a repo-local push.default other than simple (DIG-3774).
+push_default="$(git config --local push.default 2>/dev/null || true)"
+if [ -n "$push_default" ] && [ "$push_default" != "simple" ]; then
+  echo "install-hooks: refusing — repo-local push.default is '$push_default', expected 'simple' or unset." >&2
+  echo "  remedy: git config --unset push.default" >&2
+  exit 1
+fi
+[ -z "$push_default" ] && echo "install-hooks: warning — push.default unset (ok, defaults to simple)." || echo "install-hooks: ok — push.default is 'simple'."
+
 # Resolve the source *before* creating anything, so the run that correctly
 # refuses does not leave a stray hooks/ directory behind for `git add .` to find.
 if [ "$ref" = "WORKTREE" ]; then

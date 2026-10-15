@@ -430,6 +430,9 @@ three separate PRs.
   after the PR merges. Never leave detached temp worktrees under
   `/tmp/opencode/wt-*` behind; remove them once their branch is merged
   or abandoned.
+- Hand-run worktrees stay untracked: add `--no-track` to any hand-run `git worktree add -b <branch> <remote-ref>` (`make task` / `scripts/worktree_task.sh` pass it for you).
+- Push with an explicit refspec: `git push github <branch>:<branch>`.
+- Confirm each such push with `git ls-remote`.
 - Screenshots are throwaway verification artifacts: save ad-hoc captures
   to `/tmp/` or the session temp dir, never to the repo root, and delete
   them when done. The only committed PNGs are the tracked fixtures under
