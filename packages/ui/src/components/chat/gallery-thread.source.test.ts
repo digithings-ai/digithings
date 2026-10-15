@@ -10,6 +10,11 @@ function read(rel: string): string {
 }
 
 describe("gallery Thread is the product digichat skin", () => {
+  it("keeps a single tool-fallback source (DIG-3449)", () => {
+    expect(existsSync(join(here, "gallery-thread/tool-fallback.aui.tsx"))).toBe(
+      false,
+    );
+  });
   it("does not compose a parallel ChatMarkdown tree", () => {
     const adapter = read("DigichatThread.tsx");
     expect(adapter).toMatch(/gallery-thread\/thread\.aui/);
@@ -40,9 +45,11 @@ describe("gallery Thread is the product digichat skin", () => {
   });
 
   it("tools stay collapsed unless they require action", () => {
-    const fallback = read("gallery-thread/tool-fallback.aui.tsx");
+    // Single source: gallery Thread renders the stock ToolFallback, so the
+    // collapse, duration and naming pins live on that file (DIG-3449).
+    const fallback = read("stock/tool-fallback.aui.tsx");
     expect(fallback).toMatch(/useState\(isRequiresAction\)/);
-    expect(fallback).toMatch(/formatToolDuration\(ms\)/);
+    expect(fallback).toMatch(/formatToolDuration\(/);
     expect(fallback).not.toMatch(/isSettled/);
     expect(fallback).not.toMatch(/wantOpen/);
     expect(fallback).toMatch(/toolName/);

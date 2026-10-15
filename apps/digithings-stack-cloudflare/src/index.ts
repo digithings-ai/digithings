@@ -41,6 +41,7 @@
  */
 import { Container, getContainer, switchPort } from "@cloudflare/containers";
 import { env as workerEnvBinding } from "cloudflare:workers";
+import { containerEvictedResponse, isContainerEvictedError } from "./container-errors";
 import { getStackStatus, runIsolated } from "./route-modules";
 // ports.ts stays a static import: the two Container subclasses below need
 // their ports synchronously at instantiation (class fields cannot await), and
@@ -181,9 +182,26 @@ export class DigiStackContainer extends Container {
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      // DIG-3226: a confirmed eviction is not a cold start — return the
+      // non-retryable 410 so callers stop retrying a container that is gone
+      // (same distinction as digiquant-runner RunLostError, runner.ts).
+      if (isContainerEvictedError(message)) {
+        return containerEvictedResponse("stack", message);
+      }
       return containerBootingResponse("stack", message);
     }
-    return this.containerFetch(request, targetPort);
+    // An eviction can also land between start and fetch: map only the
+    // confirmed-evicted signal to 410, rethrow everything else so the
+    // existing failure behavior is unchanged.
+    try {
+      return await this.containerFetch(request, targetPort);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (isContainerEvictedError(message)) {
+        return containerEvictedResponse("stack", message);
+      }
+      throw err;
+    }
   }
 }
 
@@ -236,9 +254,21 @@ export class DigiQuantMcpContainer extends Container {
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      // DIG-3226: confirmed eviction -> non-retryable 410, not boot 503.
+      if (isContainerEvictedError(message)) {
+        return containerEvictedResponse("mcp", message);
+      }
       return containerBootingResponse("mcp", message);
     }
-    return this.containerFetch(request, DIGIQUANT_MCP_PORT);
+    try {
+      return await this.containerFetch(request, DIGIQUANT_MCP_PORT);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (isContainerEvictedError(message)) {
+        return containerEvictedResponse("mcp", message);
+      }
+      throw err;
+    }
   }
 }
 
@@ -321,9 +351,21 @@ export class DigiChatContainer extends Container {
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      // DIG-3226: confirmed eviction -> non-retryable 410, not boot 503.
+      if (isContainerEvictedError(message)) {
+        return containerEvictedResponse("digichat", message);
+      }
       return containerBootingResponse("digichat", message);
     }
-    return this.containerFetch(request, targetPort);
+    try {
+      return await this.containerFetch(request, targetPort);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (isContainerEvictedError(message)) {
+        return containerEvictedResponse("digichat", message);
+      }
+      throw err;
+    }
   }
 }
 
@@ -352,6 +394,10 @@ export const CONTAINER_BOOTING_CODE = "container_booting";
  * Poll hint (seconds) for a booting container. Small enough that a ready
  * container is picked up promptly, large enough that a full ~240s boot costs
  * ~50 upstream polls. The BFF clamps this into its own [1s, 30s] window.
+ *
+ * DIG-3226: a confirmed container eviction (see ./container-errors.ts) never
+ * uses this code — it answers 410 `container_evicted` with no `Retry-After`
+ * so callers stop retrying an instance that is gone.
  */
 const CONTAINER_BOOT_RETRY_AFTER_SECONDS = 5;
 

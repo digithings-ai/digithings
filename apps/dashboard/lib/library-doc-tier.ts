@@ -1,4 +1,4 @@
-import type { Doc, ResearchChangelogMeta } from './types';
+import type { Doc } from './types';
 
 /** Library filter tabs: default Research hides portfolio machine artifacts and evolution. */
 export type LibraryScope = 'research' | 'portfolio' | 'evolution' | 'all';
@@ -15,11 +15,6 @@ const PORTFOLIO_KEYS = new Set(
     'opportunity-screener',
   ].map((k) => k.toLowerCase())
 );
-
-/** Legacy artifact; excluded from PM artifact lists. */
-export function isPortfolioRecommendationPath(path: string): boolean {
-  return (path || '').toLowerCase().includes('portfolio-recommendation');
-}
 
 function pathKey(path: string): string {
   return (path || '').toLowerCase().split('/').pop() || '';
@@ -79,10 +74,7 @@ export function docMatchesLibraryScope(
   if (scope === 'portfolio') {
     return tier === 'portfolio';
   }
-  if (scope === 'evolution') {
-    return tier === 'evolution';
-  }
-  return true;
+  return tier === 'evolution';
 }
 
 /** True if evolution_sources payload has no meaningful content (draft outline). */
@@ -97,64 +89,4 @@ export function isEvolutionSourcesEmpty(payload: unknown): boolean {
   const ratings = b.source_ratings;
   const hasRatings = Array.isArray(ratings) && ratings.some((r) => r && typeof r === 'object');
   return !notes && !hasRatings;
-}
-
-/** Whether a changed_paths entry likely relates to a document_key (for delta touched badge). */
-export function docAffectedByDeltaPaths(docPath: string, changedPaths: string[]): boolean {
-  if (!changedPaths.length) return false;
-  const key = (docPath || '').toLowerCase();
-  const file = pathKey(key);
-
-  const digestPrefixes = (p: string) =>
-    p.startsWith('/regime') ||
-    p.startsWith('/market_data') ||
-    p.startsWith('/actionable') ||
-    p.startsWith('/risks') ||
-    p.startsWith('/segments') ||
-    p.startsWith('/portfolio') ||
-    p.startsWith('/digest') ||
-    p === '/';
-
-  if (file === 'digest' || key === 'digest') {
-    return changedPaths.some(digestPrefixes);
-  }
-
-  const stem = file.replace(/\.json$/i, '').replace(/\.md$/i, '');
-  if (!stem || stem === 'delta-request') return false;
-
-  return changedPaths.some((p) => {
-    const low = p.toLowerCase();
-    return low.includes(stem.replace(/-/g, '')) || low.includes(stem.replace(/-/g, '_')) || low.includes(`/${stem}`) || low.includes(`/${stem.replace(/-/g, '_')}`);
-  });
-}
-
-/** Count distinct delta paths (changed_paths ∪ op_paths) that map to this library row. */
-export function countDeltaTouchesForDoc(
-  docPath: string,
-  changedPaths: string[],
-  opPaths: string[]
-): number {
-  const unique = [...new Set([...changedPaths, ...opPaths].filter(Boolean))];
-  let n = 0;
-  for (const p of unique) {
-    if (docAffectedByDeltaPaths(docPath, [p])) n += 1;
-  }
-  return n;
-}
-
-function normPathKey(p: string): string {
-  return (p || '').toLowerCase().trim();
-}
-
-/** Badge count from research_changelog items (per-document delta pipeline). */
-export function countResearchChangelogTouchesForDoc(docPath: string, meta: ResearchChangelogMeta | null): number {
-  if (!meta?.items?.length) return 0;
-  const key = normPathKey(docPath);
-  let n = 0;
-  for (const it of meta.items) {
-    const tk = normPathKey(it.target_document_key);
-    if (!tk) continue;
-    if (key === tk || key.endsWith(tk) || tk.endsWith(key)) n += 1;
-  }
-  return n;
 }

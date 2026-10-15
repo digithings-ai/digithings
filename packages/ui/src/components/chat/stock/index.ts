@@ -1,7 +1,7 @@
 /**
- * Skin-support primitives (WS4). Pure moves first; the NEEDS-INTERFACE modules
- * (skin-chrome, message-error, embed-chat-prefs, prefs-host) get their cuts in
- * Step 3. Skins + the rest of stock/ move here in Step 4.
+ * Skin-support primitives (WS4): catalog primitives, prefs shell, skin
+ * chrome, Thread and tool UI. Hosts import ThreadSkinView from
+ * `@digithings/ui/chat/skins` and the prefs host from here.
  */
 
 export {

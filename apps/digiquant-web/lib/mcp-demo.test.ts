@@ -15,7 +15,13 @@ describe("mcp tool manifest", () => {
   // The band lists the audited subset (gen_mcp_manifest.py), never a name the server does not register.
   it("lists only tools the server registers", () => {
     const src = readFileSync(resolve(__dirname, "../../../digiquant/src/digiquant/mcp_server.py"), "utf8");
-    const registered = new Set([...src.matchAll(/@_maybe_tool\("([a-z0-9_]+)"\)/g)].map((m) => m[1]));
+    // Decorators keep the internal digifetch_ key. The server registers that
+    // family under gloomberb_ only (DIG-3313).
+    const registered = new Set(
+      [...src.matchAll(/@_maybe_tool\("([a-z0-9_]+)"\)/g)].map((m) =>
+        m[1].startsWith("digifetch_") ? `gloomberb_${m[1].slice("digifetch_".length)}` : m[1],
+      ),
+    );
     expect(TOOLS.length).toBeGreaterThan(0);
     for (const t of TOOLS) expect(registered.has(t.name), t.name).toBe(true);
   });

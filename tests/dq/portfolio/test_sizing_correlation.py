@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import math
 
+import pytest
 from digiquant.portfolio.sizing import (
     SizingCaps,
     TickerRisk,
@@ -21,6 +22,8 @@ from digiquant.portfolio.sizing import (
     _portfolio_vol,
     size_portfolio,
 )
+
+pytestmark = pytest.mark.unit
 
 
 def test_bucket_corr_equity_bond_is_diversifying() -> None:

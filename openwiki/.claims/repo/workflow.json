@@ -54,7 +54,7 @@
     },
     {
       "id": "claim_73ea7f7aab944f0ba03e845fe52bbf2e",
-      "statement": "Default review is in-session on a fresh-context subagent with findings posted as in-session-review plus reviewed:agent, and the authoring agent merges when CI is green and threads are triaged unless a human-gate exception applies.",
+      "statement": "Default review is in-session on a fresh-context subagent with findings posted as in-session-review plus reviewed:agent. The merge queue, not the author, merges a develop PR once CI is green and the review gate is met, unless a human-gate exception applies.",
       "evidence": [
         {
           "resource": "repo://docs/agents/CODE_REVIEW_POLICY.md#L48-L50",

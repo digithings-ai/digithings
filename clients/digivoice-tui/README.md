@@ -8,10 +8,12 @@ read is one `digivoice` run through `Bun.spawn` — `setup --json`, `doctor`,
 settings set <key> <value>`. A refused or unreachable CLI stays an empty state.
 The app does not invent a value. Speech stays local.
 
+The digivoice CLI launches this package on a TTY (`opentui.py` `tui_root`). A checkout without the console script still works: the CLI sets `DIGIVOICE_BIN` to the current interpreter and `-m digivoice`.
+
 ```bash
 bun install
 bun src/index.tsx                       # uses the `digivoice` console script
-DIGIVOICE_BIN="python3 -m digivoice" PYTHONPATH=../digivoice/src bun src/index.tsx
+DIGIVOICE_BIN="python3 -m digivoice" PYTHONPATH=../../digivoice/src bun src/index.tsx
 ```
 
 The menu is focused on launch. `↑` `↓` moves. Enter selects a menu item, edits a

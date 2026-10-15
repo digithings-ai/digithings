@@ -11,7 +11,7 @@ from typing import Any  # score:allow untyped any — fake client mirrors the dy
 
 import pytest
 from digivault.models import NoteRow
-from digivault.supabase_store import SupabaseStore, SupabaseStoreError
+from digivault.supabase_store import SupabaseStore, SupabaseStoreError, _escape_like
 from digivault.vault import VaultError
 
 pytestmark = pytest.mark.unit
@@ -378,3 +378,8 @@ def test_list_notes_tolerates_extra_columns_and_null_frontmatter() -> None:
     assert note.title == "Note One"
     assert note.frontmatter == {}
     assert note.body_markdown == ""
+
+
+def test_escape_like_escapes_sql_wildcards() -> None:
+    assert _escape_like("plain/path") == "plain/path"
+    assert _escape_like("a%b_c\\d") == "a\\%b\\_c\\\\d"

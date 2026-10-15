@@ -4,5 +4,6 @@
  * security-headers.test.ts — typecheck without converting the module that
  * scripts import as plain ESM.
  */
+export declare const DASHBOARD_DIGICHAT_FRAME_SRC: string;
 export declare const DASHBOARD_CSP: string;
 export declare const DASHBOARD_SECURITY_HEADERS: ReadonlyArray<{ key: string; value: string }>;

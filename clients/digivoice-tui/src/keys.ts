@@ -46,6 +46,19 @@ export const MENU_SCREENS: readonly (Screen | "quit")[] = [
   "quit",
 ];
 
+/** CLI `DIGIVOICE_TUI_START`. History and doctor open those screens. The rest open home. */
+export function uiFromStart(start: string | undefined): UiState {
+  const path = (start ?? "").trim() || "/";
+  if (path === "/history" || path.startsWith("/history/")) {
+    return { screen: "history", menuIndex: 0, rowIndex: 0, note: "" };
+  }
+  if (path === "/doctor" || path.startsWith("/doctor/")) {
+    const menuIndex = MENU_SCREENS.indexOf("doctor");
+    return { screen: "doctor", menuIndex: menuIndex < 0 ? 0 : menuIndex, rowIndex: 0, note: "" };
+  }
+  return { ...INITIAL_UI };
+}
+
 export function nextIndex(index: number, delta: number, length: number): number {
   if (length <= 0) return 0;
   return ((index + delta) % length + length) % length;

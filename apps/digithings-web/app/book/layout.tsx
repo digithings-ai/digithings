@@ -3,15 +3,14 @@ import type { Metadata } from "next";
 
 import { DtFooter } from "@/components/DtFooter";
 import { DtNav } from "@/components/DtNav";
-import { GeistMono } from "geist/font/mono";
 
 import { PRINT_CSS } from "@/lib/book/printCss";
 
 export const metadata: Metadata = {
-  title: "book — digithings, in reading order",
+  title: "digibook — a book about self-hosted AI infrastructure",
   description:
-    "The digithings book: why the stack is built the way it is, in the order that makes the answer " +
-    "readable. Read on screen or print it.",
+    "digibook: a short, philosophical book on why self-hosted AI infrastructure matters, how it " +
+    "scales, and what it costs. Read on screen or print it.",
 };
 
 /**
@@ -27,7 +26,7 @@ export default function BookLayout({ children }: { children: ReactNode }) {
     <>
       <DtNav />
       <style dangerouslySetInnerHTML={{ __html: PRINT_CSS }} />
-      <main id="main" tabIndex={-1} className={`${GeistMono.variable} book-root pt-[var(--dq-nav-h)] pb-[clamp(2rem,5vw,4rem)]`}>
+      <main id="main" tabIndex={-1} className="book-root pt-[var(--dq-nav-h)] pb-[clamp(2rem,5vw,4rem)]">
         <div className="mx-auto w-full max-w-[var(--wrap)] px-[var(--gutter)]">{children}</div>
       </main>
       <DtFooter />

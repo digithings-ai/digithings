@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
 from digivoice.history import append_entry, dict_entry
-from digivoice.opentui import opentui_argv
+from digivoice.opentui import opentui_argv, opentui_child_env
 from digivoice.paths import resolve_paths
 from digivoice.settings import VoiceSettings, load_settings, save_settings
 from digivoice.status import system_log_path
@@ -24,8 +25,29 @@ def _env(tmp_path: Path) -> dict[str, str]:
 def test_opentui_argv_points_at_the_node_app() -> None:
     argv = opentui_argv({"DIGIVOICE_NODE": "node"})
     assert argv[0] == "node"
-    assert argv[1].endswith("digivoice/tui/src/main.js")
+    assert argv[1].endswith("clients/digivoice-tui/src/index.tsx")
     assert Path(argv[1]).is_file()
+
+
+def test_opentui_child_env_calls_this_interpreter(tmp_path: Path) -> None:
+    child = opentui_child_env(
+        "linux",
+        tmp_path,
+        {"PATH": "", "DIGIVOICE_DATA_DIR": str(tmp_path)},
+        start="/history",
+        node="/usr/bin/bun",
+    )
+    assert child["DIGIVOICE_TUI_START"] == "/history"
+    assert child["DIGIVOICE_BIN"] == f"{sys.executable} -m digivoice"
+    assert child["PYTHONPATH"].split(":")[0].endswith("digivoice/src")
+    kept = opentui_child_env(
+        "linux",
+        tmp_path,
+        {"PATH": "", "DIGIVOICE_BIN": "digivoice", "DIGIVOICE_DATA_DIR": str(tmp_path)},
+        start="/",
+        node="/usr/bin/bun",
+    )
+    assert kept["DIGIVOICE_BIN"] == "digivoice"
 
 
 def test_bridge_boot_lists_home_and_model_language_once(tmp_path: Path) -> None:

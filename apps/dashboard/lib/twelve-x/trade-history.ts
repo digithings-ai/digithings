@@ -55,7 +55,6 @@ export interface TradeHistoryRow {
   gradeBasis?: string | null;
   /** What ended the idea: target | stop | both | drop | successor (migration 032). */
   closedBy?: string | null;
-  /** 0.5σ excursion verdict while live (right | wrong | inconclusive). */
   /** True when a later board on this axis moved this row's stop or target. */
   levelsUpdated?: boolean;
   /** Previous board date when levelsUpdated is set. */
@@ -119,8 +118,8 @@ function lifecycleOf(status: string | undefined): TradeLifecycle {
   // pipeline is responsible for not publishing ideas it cannot grade.
   if (status === 'carried') return 'live';
   if (status === 'missing_rates') return 'no_data';
-  // 'dropped' (bookkeeper verdict) and anything else land here: closed, and
-  // hidden downstream since dropped rows carry no directional verdict.
+  // 'dropped' (bookkeeper verdict) and anything else land here as closed.
+  // tradeResult keeps a dropped row visible when it still has a close reason.
   return 'closed';
 }
 
@@ -256,7 +255,7 @@ export function assembleTradeHistory(
           publishable && tl.targets.length > 0
             ? fmt(tl.targets[0].value, tl.targets[0].provenance)
             : null,
-        // Shape-only, by contract: "levels exist" stays distinct from "may be shown".
+        // A withheld bracket reports no levels: tl is null unless the bracket is publishable.
         hasLevels: hasTradeLevels(tl),
         lifecycle: lifecycleOf(ev?.status),
         entryDate: ev?.entry_date ?? null,

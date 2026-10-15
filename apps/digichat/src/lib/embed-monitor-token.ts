@@ -26,7 +26,7 @@
  * become a reason to stop serving visitors.
  */
 
-import { timingSafeEqual } from "node:crypto";
+import { safeEqualStr } from "@/lib/safe-equal";
 
 /** Header carrying the monitor secret. Distinct from every other embed header. */
 export const EMBED_MONITOR_TOKEN_HEADER = "x-embed-monitor-token";
@@ -37,13 +37,6 @@ export const EMBED_MONITOR_TOKEN_HEADER = "x-embed-monitor-token";
  * behaviour rather than handing out an unscoped budget.
  */
 export const MIN_MONITOR_TOKEN_LENGTH = 32;
-
-function safeEqualStr(a: string, b: string): boolean {
-  const ba = Buffer.from(a, "utf8");
-  const bb = Buffer.from(b, "utf8");
-  if (ba.length !== bb.length) return false;
-  return timingSafeEqual(ba, bb);
-}
 
 /** Parsed, length-checked entries of DIGICHAT_MONITOR_TOKENS. */
 function allowedTokens(): string[] {

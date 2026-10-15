@@ -654,7 +654,10 @@ def build_digifetch_tool_dispatcher(
         return client if client is not None else build_gloomberb_client()
 
     def execute_tool(name: str, args: dict[str, Any]) -> str | dict[str, Any]:
-        spec = DIGIFETCH_DISPATCH.get(name)
+        from digiquant.tool_names import legacy_tool_name
+
+        resolved = name if name in DIGIFETCH_DISPATCH else legacy_tool_name(name)
+        spec = DIGIFETCH_DISPATCH.get(resolved)
         if spec is None:
             return {"content": f"Error: unknown digifetch tool {name!r}", "ok": False}
         try:

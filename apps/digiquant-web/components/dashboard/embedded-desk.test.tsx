@@ -21,22 +21,21 @@ import {
 import { isAccountSurface, publicCatalogPages } from "@/components/desk/public-surface";
 import { screenKind, TerminalScreen } from "./terminal-screen";
 import {
-  REVEAL_REST,
-  REVEAL_RETURN_MS,
-  REVEAL_SWEEP_MS,
+  SCROLL_SETTLE_MS,
   TERMINAL_COPY,
+  TERMINAL_EDGE,
   TERMINAL_TITLE,
   WEB_COPY,
+  WEB_EDGE,
   WEB_TITLE,
+  armStageScroll,
   deskShellLoaded,
+  initialStageScroll,
   nextDeskAnchor,
   nextTerminalPath,
   nextWebPath,
+  onStageScroll,
   prevTerminalPath,
-  revealShare,
-  sentenceFits,
-  splitFromPointer,
-  widerSide,
 } from "./surface-tour";
 
 function docWith(
@@ -205,35 +204,37 @@ describe("desk walk", () => {
 });
 
 describe("surface tour", () => {
-  it("keeps the two stories free of a price", () => {
-    const copy = `${TERMINAL_COPY} ${WEB_COPY}`;
+  it("states near parity and the advantage of each view, with no price", () => {
     expect(TERMINAL_TITLE).toBe("terminal UI");
     expect(WEB_TITLE).toBe("web app");
-    expect(copy).toContain("one-to-one with the web app");
-    expect(copy).toContain("run pipelines and strategies locally");
-    expect(copy).toContain("the same desk, delegated");
-    expect(copy).toContain("do not host the infrastructure");
-    expect(copy).not.toMatch(/self-hosted|hosted desk|\bHosted\b/i);
-    expect(copy).not.toMatch(/\$\d|\bFree\b|Coming soon|per month|99\.909|204\.04/);
-    expect(copy).not.toMatch(/Digi[A-Z]/);
+    expect(TERMINAL_COPY).toContain("nearly one to one");
+    expect(WEB_COPY).toContain("nearly one to one");
+    expect(TERMINAL_COPY).toContain("self-host");
+    expect(TERMINAL_COPY).toContain("local models");
+    expect(TERMINAL_EDGE).toContain("your machine");
+    expect(WEB_COPY).toContain("free tier");
+    expect(WEB_COPY).toContain("base subscription");
+    expect(WEB_COPY).toContain("baseline pipeline");
+    expect(WEB_EDGE).toContain("pay to host");
+    expect(`${TERMINAL_COPY} ${WEB_COPY}`).not.toMatch(/\$\d|per month|99\.909|204\.04/);
+    expect(`${TERMINAL_COPY} ${WEB_COPY}`).not.toMatch(/Digi[A-Z]/);
   });
 
-  it("lets the handle reach either edge and shows a sentence only when it fits", () => {
-    expect(splitFromPointer(0, 0, 1000)).toBe(0);
-    expect(splitFromPointer(500, 0, 1000)).toBeCloseTo(0.5, 5);
-    expect(splitFromPointer(1000, 0, 1000)).toBe(1);
-    expect(splitFromPointer(10, 0, 0)).toBe(REVEAL_REST);
-    expect(widerSide(0.5)).toBe("even");
-    expect(widerSide(0.62)).toBe("terminal");
-    expect(widerSide(0.4)).toBe("web");
-    expect(sentenceFits(200, 199)).toBe(false);
-    expect(sentenceFits(200, 200)).toBe(true);
-    expect(sentenceFits(200, 0)).toBe(false);
-    expect(sentenceFits(Number.NaN, 40)).toBe(false);
-    expect(revealShare(0, false)).toBe(0);
-    expect(revealShare(REVEAL_SWEEP_MS, false)).toBe(1);
-    expect(revealShare(REVEAL_SWEEP_MS + REVEAL_RETURN_MS, false)).toBe(REVEAL_REST);
-    expect(revealShare(10, true)).toBe(REVEAL_REST);
+  it("starts on the terminal and switches to the web app on the first armed scroll only", () => {
+    const start = initialStageScroll();
+    expect(start).toEqual({ surface: "terminal", slid: false, armed: false });
+    const arriving = onStageScroll(start, true);
+    expect(arriving.surface).toBe("terminal");
+    expect(arriving.slid).toBe(false);
+    const armed = armStageScroll(arriving, true);
+    expect(armed.armed).toBe(true);
+    const switched = onStageScroll(armed, true);
+    expect(switched).toEqual({ surface: "web", slid: true, armed: true });
+    const held = onStageScroll({ ...switched, surface: "terminal" }, true);
+    expect(held.surface).toBe("terminal");
+    expect(held.slid).toBe(true);
+    expect(onStageScroll(start, false).armed).toBe(false);
+    expect(SCROLL_SETTLE_MS).toBeGreaterThan(0);
   });
 
   it("treats a page rail with no links as a loaded desk", () => {
@@ -306,20 +307,22 @@ describe("DashboardBand", () => {
     expect(html).toContain('aria-label="Terminal pages"');
     expect(html).toContain('data-pane="terminal"');
     expect(html).toContain('data-pane="web"');
+    expect(html).toContain('data-surface="terminal"');
     expect(html).toContain('data-page="/brief"');
     expect(html).toContain('data-frame="full"');
-    expect(html).toContain("100cqi");
-    expect(html).toContain('role="slider"');
-    expect(html).toContain("Drag to reveal the terminal UI or the web app");
-    expect(html).toContain("The terminal UI and the web app are the same desk.");
+    expect(html).toContain("translateX(0)");
+    expect(html).not.toContain('role="slider"');
+    expect(html).not.toContain("Drag to reveal");
+    expect(html).toContain('aria-label="Show the terminal UI or the web app"');
+    expect(html).toContain("nearly one to one");
+    expect(html).toContain(TERMINAL_COPY);
+    expect(html).toContain(TERMINAL_EDGE);
+    expect(html).not.toContain(WEB_COPY);
     expect(html).toContain(TERMINAL_TITLE);
     expect(html).toContain(WEB_TITLE);
     expect(html).not.toContain('data-slot="segmented"');
     expect(html).not.toContain('data-showing=');
-    expect(html).not.toContain("aria-pressed");
     expect(html).not.toContain("status=");
-    expect(html).not.toContain("Self-hosted");
-    expect(html).not.toContain("Hosted");
     expect(html).not.toContain("dq-desk");
     expect(html).not.toContain('data-fit="shown"');
     expect(html).not.toContain("The pages tour until");
@@ -344,7 +347,8 @@ describe("DashboardBand", () => {
     expect(stage).not.toContain("dq-desk-in");
     expect(stage).not.toContain("PAGE_FADE");
     expect(stage).not.toMatch(/opacity:\s*0/);
-    expect(stage).toContain("100cqi");
+    expect(stage).not.toContain("100cqi");
+    expect(stage).not.toContain('role="slider"');
     expect(stage).toContain("desk-page-settle");
     expect(css).toContain("@keyframes desk-page-settle");
     expect(css.slice(css.indexOf("@keyframes desk-page-settle"), css.indexOf(".nav-title"))).not.toMatch(/opacity/);

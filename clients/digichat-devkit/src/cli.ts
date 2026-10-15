@@ -2,7 +2,7 @@
 // digichat-devkit CLI — configure a digichat look from the terminal or an agent.
 //
 // It drives the same config the web devkit and the TUI read: the devkit config
-// service (default http://127.0.0.1:3006, override with DIGICHAT_DEVKIT_URL).
+// service (default http://127.0.0.1:3000, override with DIGICHAT_DEVKIT_URL).
 // Reads go through GET /api/devkit/configs; writes go through POST /api/devkit/save,
 // which validates, backs up to <file>.bak and restores the preserved secrets.
 //
@@ -11,7 +11,7 @@
 import { dump, load } from "js-yaml";
 import { DASH } from "./read";
 
-export const DEFAULT_URL = process.env.DIGICHAT_DEVKIT_URL ?? "http://127.0.0.1:3006";
+export const DEFAULT_URL = process.env.DIGICHAT_DEVKIT_URL ?? "http://127.0.0.1:3000";
 
 export const HELP = [
   "digichat-devkit — configure a digichat look",

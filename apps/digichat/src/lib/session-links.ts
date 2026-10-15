@@ -17,7 +17,8 @@
  * survives in a durable store is exactly the "fixed TTL" behaviour that was
  * reversed.
  */
-import { randomBytes, timingSafeEqual } from "node:crypto";
+import { randomBytes } from "node:crypto";
+import { safeEqualStr } from "@/lib/safe-equal";
 
 interface SessionRecord {
   token: string;
@@ -104,7 +105,7 @@ export function isLiveSessionLink(sessionId: string, link: string): boolean {
   const record = sessions.get(sessionId);
   if (!record) return false;
   for (const bound of record.links) {
-    if (constantTimeEquals(bound, link)) return true;
+    if (safeEqualStr(bound, link)) return true;
   }
   return false;
 }
@@ -119,9 +120,3 @@ export function resetSessionLinks(): void {
   liveSessionByClient.clear();
 }
 
-function constantTimeEquals(a: string, b: string): boolean {
-  const left = Buffer.from(a);
-  const right = Buffer.from(b);
-  if (left.length !== right.length) return false;
-  return timingSafeEqual(left, right);
-}

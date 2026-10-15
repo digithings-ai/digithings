@@ -17,11 +17,13 @@ export function ScrollBanner({
   def,
   live = true,
   inView = true,
+  replayLoading = false,
   className,
 }: {
   def: BannerDefinition;
   live?: boolean;
   inView?: boolean;
+  replayLoading?: boolean;
   className?: string;
 }) {
   const ref = useRef<HTMLSpanElement | null>(null);
@@ -50,7 +52,7 @@ export function ScrollBanner({
 
   return (
     <span ref={ref} className={className} style={{ display: "block" }}>
-      <HeroBanner def={def} live={live} armed={armed} />
+      <HeroBanner def={def} live={live} armed={armed} replayLoading={replayLoading} />
     </span>
   );
 }

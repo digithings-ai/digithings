@@ -399,6 +399,39 @@
   height: 10px;
 }
 
+/* Left-to-right build, same grain as the hero banner: each column of cubes
+   and its month name arrives together. Unarmed stays blank so the first paint
+   does not flash the finished grid. Reduced motion shows the finished grid. */
+.ra-heat--build:not(.is-armed) .ra-heat-grid .ra-heat-cell,
+.ra-heat--build:not(.is-armed) .ra-heat-month {
+  opacity: 0;
+}
+.ra-heat--build.is-armed .ra-heat-grid .ra-heat-cell,
+.ra-heat--build.is-armed .ra-heat-month {
+  animation: ra-heat-build 280ms linear both;
+}
+@keyframes ra-heat-build {
+  0% {
+    opacity: 0;
+  }
+  40% {
+    opacity: 0.35;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ra-heat--build:not(.is-armed) .ra-heat-grid .ra-heat-cell,
+  .ra-heat--build:not(.is-armed) .ra-heat-month {
+    opacity: 1;
+  }
+  .ra-heat--build.is-armed .ra-heat-grid .ra-heat-cell,
+  .ra-heat--build.is-armed .ra-heat-month {
+    animation: none;
+  }
+}
+
 @media (forced-colors: active) {
   .ra-heat-cell {
     forced-color-adjust: none;

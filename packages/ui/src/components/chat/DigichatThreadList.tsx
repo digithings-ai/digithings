@@ -16,12 +16,20 @@ import { DotMatrix } from "./DotMatrix";
 
 export type DigichatThreadListProps = {
   className?: string;
+  /**
+   * Landmark the list renders as. The standalone sidebar is page-level
+   * complementary content (`aside`); embedded in a page section (e.g. the
+   * digiquant landing chat band) it is a thread navigator inside `<main>`,
+   * where a complementary landmark is a violation — pass `"nav"`.
+   */
+  landmark?: "aside" | "nav";
 };
 
-export function DigichatThreadList({ className }: DigichatThreadListProps) {
+export function DigichatThreadList({ className, landmark = "aside" }: DigichatThreadListProps) {
   const cls = [digichatSurfaces.list, className ?? ""].filter(Boolean).join(" ");
+  const Tag = landmark;
   return (
-    <aside className={cls} data-memory-thread-list aria-label="Conversations">
+    <Tag className={cls} data-memory-thread-list aria-label="Conversations">
       <div className="flex h-8 shrink-0 items-center justify-between gap-2 border-b border-term-hair px-[0.7rem]">
         <span className="min-w-0 flex-1">
           <DigichatWordmark />
@@ -41,6 +49,6 @@ export function DigichatThreadList({ className }: DigichatThreadListProps) {
           )}
         </ThreadListPrimitive.Items>
       </ThreadListPrimitive.Root>
-    </aside>
+    </Tag>
   );
 }

@@ -183,6 +183,7 @@ export function asOfStatus(
   asOf: string | null | undefined,
   dataAsOf: string | null | undefined,
   now: string = todayYmd(),
+  staleAfter: number = SESSION_STALE,
 ): AsOf {
   const asked = calendarDay(asOf);
   const tip = calendarDay(dataAsOf);
@@ -193,7 +194,9 @@ export function asOfStatus(
   const sessions = tradingSessionsSince(shown, now);
   // A date ahead of the clock is skew, not freshness: name no age for it.
   if (sessions === null || (today !== null && shown > today)) return { label: dates, age: null, state: null };
-  const state = sessions >= SESSION_STALE ? "stale" : sessions >= SESSION_WARN ? "warn" : "fresh";
+  const staleAt = Number.isFinite(staleAfter) && staleAfter >= 1 ? Math.floor(staleAfter) : SESSION_STALE;
+  const warnAt = Math.min(SESSION_WARN, Math.max(1, staleAt - 1));
+  const state = sessions >= staleAt ? "stale" : sessions >= warnAt ? "warn" : "fresh";
   const age = ageText(sessions);
   return { label: `${dates} · ${age}${state === "fresh" ? "" : ` · ${state}`}`, age, state };
 }

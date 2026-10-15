@@ -16,7 +16,17 @@ NAV_FOOTER = "↑↓ move · enter select · esc back · click"
 
 
 def tui_root() -> Path:
-    return Path(__file__).resolve().parents[2] / "tui"
+    """The launched shell: ``clients/digivoice-tui``.
+
+    Walks parents so an editable install whose ``__file__`` still sits in the
+    checkout finds the monorepo client. ``digivoice/tui`` is not this path.
+    """
+    here = Path(__file__).resolve()
+    for parent in here.parents:
+        candidate = parent / "clients" / "digivoice-tui"
+        if (candidate / "package.json").is_file():
+            return candidate
+    return here.parents[3] / "clients" / "digivoice-tui"
 
 
 def _tui_runtime(env: Mapping[str, str]) -> str:
@@ -37,11 +47,37 @@ def _tui_runtime(env: Mapping[str, str]) -> str:
 
 
 def opentui_argv(env: Mapping[str, str] | None = None) -> list[str]:
-    """The OpenTUI app. ``main.js`` calls ``createCliRenderer``."""
+    """The OpenTUI app. ``index.tsx`` is the ``@opentui/react`` shell."""
     table = env or os.environ
     runtime = _tui_runtime(table)
-    script = tui_root() / "src" / "main.js"
+    script = tui_root() / "src" / "index.tsx"
     return [runtime, str(script)]
+
+
+def opentui_child_env(
+    platform: str,
+    home: Path,
+    env: Mapping[str, str],
+    *,
+    start: str,
+    node: str,
+) -> dict[str, str]:
+    """Env for the shell. ``DIGIVOICE_BIN`` calls this interpreter from a checkout."""
+    paths = resolve_paths(platform, home, env)
+    child = dict(env)
+    src = str(Path(__file__).resolve().parents[1])
+    prior = child.get("PYTHONPATH", "")
+    child["PYTHONPATH"] = src if not prior else src + os.pathsep + prior
+    child["DIGIVOICE_DATA_DIR"] = paths.data_dir
+    # `python -m` puts the cwd first on sys.path; launch must not depend on it.
+    child["PYTHONSAFEPATH"] = "1"
+    child["DIGIVOICE_TUI_START"] = start
+    child["DIGIVOICE_PYTHON"] = sys.executable
+    child.setdefault("DIGIVOICE_BIN", f"{sys.executable} -m digivoice")
+    child["DIGIVOICE_ARGV"] = json.dumps(list(sys.argv))
+    child["DIGIVOICE_NODE"] = node
+    child["PATH"] = str(Path(node).parent) + os.pathsep + child.get("PATH", "")
+    return child
 
 
 def launch_opentui(
@@ -56,22 +92,13 @@ def launch_opentui(
     script = Path(argv[1])
     node = argv[0]
     if not script.is_file() or (not Path(node).is_file() and shutil.which(node) is None):
-        sys.stderr.write("digivoice: OpenTUI is not available (node or digivoice/tui missing)\n")
+        sys.stderr.write(
+            "digivoice: OpenTUI is not available (node or clients/digivoice-tui missing)\n"
+        )
         return 1
     paths = resolve_paths(platform, home, env)
     mark_tui_open(paths.data_dir)
-    child = dict(env)
-    src = str(Path(__file__).resolve().parents[1])
-    prior = child.get("PYTHONPATH", "")
-    child["PYTHONPATH"] = src if not prior else src + os.pathsep + prior
-    child["DIGIVOICE_DATA_DIR"] = paths.data_dir
-    # `python -m` puts the cwd first on sys.path; launch must not depend on it.
-    child["PYTHONSAFEPATH"] = "1"
-    child["DIGIVOICE_TUI_START"] = start
-    child["DIGIVOICE_PYTHON"] = sys.executable
-    child["DIGIVOICE_ARGV"] = json.dumps(list(sys.argv))
-    child["DIGIVOICE_NODE"] = node
-    child["PATH"] = str(Path(node).parent) + os.pathsep + child.get("PATH", "")
+    child = opentui_child_env(platform, home, env, start=start, node=node)
     try:
         os.execve(node, argv, child)
     except OSError as exc:
@@ -81,4 +108,4 @@ def launch_opentui(
     return 0
 
 
-__all__ = ["NAV_FOOTER", "launch_opentui", "opentui_argv", "tui_root"]
+__all__ = ["NAV_FOOTER", "launch_opentui", "opentui_argv", "opentui_child_env", "tui_root"]

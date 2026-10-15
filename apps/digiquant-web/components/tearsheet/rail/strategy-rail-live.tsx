@@ -26,6 +26,7 @@ export function StrategyRailLive() {
         role="tabpanel"
         id={tabPanelId(TAB_LABEL, strategy.id)}
         aria-labelledby={tabId(TAB_LABEL, strategy.id)}
+        className="min-w-0"
       >
         <TearsheetView slug={strategy.id} embedded />
       </div>

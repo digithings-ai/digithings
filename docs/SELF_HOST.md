@@ -448,14 +448,14 @@ The inventory in `docs/LICENSING.md` is npm-client-only (verified against `packa
 | `postgres:16-alpine` (the `digichat` profile database) | Compose file | no |
 | `ollama/ollama:latest` | Compose file | no |
 | `ghcr.io/digithings-ai/digillm:0.1.0` (digillm, LiteLLM from PyPI) | Compose file | no |
-| `searxng/searxng:latest` | Compose file | no |
+| `searxng/searxng:2026.9.3-a1144dda3` (tag re-pinned 2026-10-13, #3239) | Compose file | no |
 | `diegosouzapw/omniroute:3.8.50` (optional profile) | Compose file | no — this one is the only image pinned by digest |
 | `prom/prometheus:latest`, `grafana/grafana:latest`, `otel/opentelemetry-collector-contrib:0.109.0` | Compose file | no |
 | `busybox:1.36` (OmniRoute auth guard) | Compose file | no |
 | `digi-*` images | built from this repository | yes — MIT, via the repository `LICENSE` |
 | EDGAR-CORPUS development sample | HuggingFace dataset, not committed | no — dataset terms are not recorded either |
 
-**Reproducibility note, same measurement:** every image above except OmniRoute is referenced by a **tag**, and most by `:latest`. The content behind those tags can change between two runs on the same machine. Only the OmniRoute image is digest-pinned. Pinning the rest, or recording the digests a stack actually ran, is open work and belongs with the self-host slices; this document does not claim bit-reproducible bring-up.
+**Reproducibility note, same measurement:** every image above except OmniRoute is referenced by a **tag**, and most by `:latest`. One row has been re-pinned since the 2026-09-13 census: searxng now carries `2026.9.3-a1144dda3`, the release tag for the searxng commit the production container bundle builds from, so the local sidecar and production run the same search engine (#3239). The content behind the remaining `:latest` tags can still change between two runs on the same machine. Only the OmniRoute image is digest-pinned. Pinning the rest, or recording the digests a stack actually ran, is open work and belongs with the self-host slices; this document does not claim bit-reproducible bring-up.
 
 **Trademarks are separate from copyright.** The digithings name and logo are trademarks; see [TRADEMARKS.md](../TRADEMARKS.md). The MIT licence grants no trademark rights.
 

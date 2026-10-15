@@ -9,7 +9,7 @@ _build_engine          — configure BacktestEngine with venue/instrument/data/s
 _account_balance_path  — whole account report -> (balance series, timestamps)
 _balance_path_metrics  — Sharpe + max drawdown from that balance series
 _extract_pnl           — parse account report -> (total_pnl, total_return_pct)
-_extract_perf_stats    — balance-path Sharpe/drawdown + verified returns series
+_extract_perf_stats    — balance-path Sharpe/drawdown + balance-path returns series
 _build_result          — assemble BacktestResult from raw engine outputs
 _run_backtest_ohlcv    — orchestrates the above; writes tearsheet if requested
 
@@ -20,10 +20,14 @@ and -76% drawdown next to a -3.1% total return. The balance path already in hand
 is the equity curve, and deriving all three metrics from it makes them mutually
 consistent by construction.
 
-The returns *series* the tearsheet charts are read from that same alias, so it is
-verified rather than trusted: ``_verified_returns_series`` only publishes it when it
-matches ``analyzer.portfolio_returns()``, and withholds it otherwise. See that
-function for why the alias cannot be believed on its own.
+The returns *series* the tearsheet charts are read from came off that same alias,
+where it is silently repointed at the per-position returns whenever Nautilus'
+portfolio series is empty. So the series is *derived* here instead, off the same
+balance path: the percent change between consecutive balance rows, one observation
+per row, timestamps read the way ``_account_timestamps`` already reads them.
+Compounding that from the account's own start balance reproduces the account
+exactly, so a trace labelled ``Daily Equity`` can no longer disagree with the
+balance the run finished on.
 """
 
 from __future__ import annotations
@@ -31,6 +35,7 @@ from __future__ import annotations
 import logging
 import math
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -76,20 +81,15 @@ _ACCOUNT_TIMESTAMP_COLUMNS = ("ts_event", "timestamp", "index")
 # 365.25 days in seconds — the year length used to annualise the balance path.
 _YEAR_SECONDS = 365.25 * 86400.0
 
-# Marker appended to ``missing`` when ``analyzer.returns()`` cannot be confirmed to be
-# the portfolio return series. Tracked separately from the metric markers because a
-# missing *chart* series must not cost a symbol its place in a multi-symbol aggregate
-# (see _degraded_symbol_reason): the aggregates use no series at all.
+# Marker appended to ``missing`` when the balance path yields no return series worth
+# plotting. Tracked separately from the metric markers because a missing *chart* series
+# must not cost a symbol its place in a multi-symbol aggregate (see
+# _degraded_symbol_reason): the aggregates use no series at all.
 RETURNS_SERIES_MISSING = "returns_series"
 
 # Marker prefix for the per-symbol accounting inside a multi-symbol aggregate, matching
 # the existing "sharpe_ratio (k/n symbols)" wording already emitted by that function.
 RETURNS_SERIES_MISSING_SYMBOLS = f"{RETURNS_SERIES_MISSING} ("
-
-# Elementwise tolerance for the alias-vs-portfolio comparison. The two series are the
-# same objects when the alias is in sync, so the only differences seen in practice are
-# float round-trips; anything larger than this is a genuinely different series.
-_SERIES_MATCH_TOLERANCE = 1e-12
 
 # Default position size, as a fraction of starting balance, expressed in notional.
 # trade_size (units) = floor(STARTING_BALANCE_USD * fraction / first_price), min 1.
@@ -522,73 +522,58 @@ def _extract_pnl(account_report: Any, errors: list[str] | None = None) -> tuple[
         return _fail(f"PnL extraction failed: {e}")
 
 
-def _series_is_portfolio_returns(alias: Any, portfolio: Any) -> bool:
-    """True only when ``alias`` *is* the portfolio series, value for value.
+@dataclass(frozen=True)
+class _BalancePathReturns:
+    """Per-period returns off the account balance path, in the chart layer's shape.
 
-    Length alone proves nothing: a per-position series can match the portfolio one
-    in length by coincidence. Index and dtype are ignored on purpose — only the
-    ordered values decide what the charts would draw.
+    ``.values`` + ``.index`` is the duck-type ``digiquant.stats.normalize_series`` reads
+    first — the pandas shape, read without importing pandas. The index holds one
+    ``datetime`` per value, so ``str(d)[:10]`` yields a real date for the monthly and
+    yearly bucket charts; positional labels would collapse every observation into one
+    bucket, which is the class of wrong-but-plausible curve this series exists to remove.
     """
-    if alias is None or portfolio is None:
-        return False
-    try:
-        if len(alias) == 0 or len(alias) != len(portfolio):
-            return False
-        left = [float(v) for v in alias]
-        right = [float(v) for v in portfolio]
-    except (TypeError, ValueError):
-        return False
-    for a, b in zip(left, right):
-        if math.isnan(a) and math.isnan(b):
-            continue
-        if abs(a - b) > _SERIES_MATCH_TOLERANCE:
-            return False
-    return True
+
+    values: tuple[float, ...]
+    index: tuple[datetime, ...]
 
 
-def _verified_returns_series(analyzer: Any) -> tuple[Any, str | None]:
-    """The analyzer returns series worth publishing, and why it was withheld.
+def _returns_series_from_balance_path(account_report: Any) -> tuple[Any, str | None]:
+    """The tear-sheet return series, derived from the account balance path.
 
-    ``analyzer.returns()`` is an *alias*, not the portfolio series. Where Nautilus
-    exposes ``_sync_returns_alias``, it repoints ``_returns`` at the portfolio
-    returns when those are non-empty and otherwise at the per-position returns —
-    silently, with no warning. DigiQuant never calls ``analyze_statistics``, so the
-    portfolio series is populated only by Nautilus' own post-run venue loop, and it
-    is empty whenever ``_calculate_portfolio_returns`` sees fewer than two account
-    state events, more than one balance currency on any event, a currency change
-    between events, or fewer than two distinct calendar days of balance data.
+    One observation per *balance row*: the percent change between consecutive rows,
+    stamped at the row that closed the period. That is the same per-period return
+    ``_sharpe_from_balance_path`` already annualises, so the charts and the reported
+    Sharpe describe one series.
 
-    Publishing the fallback is how ``charts/equity.py`` came to compound a
-    per-position series as ``(1 + r).cum_prod() * initial_balance`` under a
-    ``Daily Equity`` label: roughly -78% compounded next to a real final balance of
-    968,989.60 on 1,000,000. So the alias is compared against
-    ``portfolio_returns()`` and anything that cannot be confirmed is withheld.
+    ``analyzer.returns()`` is deliberately never read. It is an alias, not the portfolio
+    series: Nautilus' ``_sync_returns_alias`` repoints it at the per-position returns
+    whenever ``_calculate_portfolio_returns`` comes back empty — fewer than two account
+    state events, more than one balance currency on an event, a currency change between
+    events, or fewer than two distinct calendar days of balance data — silently, with no
+    warning. DigiQuant never calls ``calculate_statistics``, so that is the normal case,
+    not the rare one. Compounding those per-position returns as
+    ``(1 + r).cum_prod() * initial_balance`` under a ``Daily Equity`` label is how a run
+    that finished at 968,989.60 on 1,000,000 drew roughly -78%. Off the balance path the
+    same compounding reproduces the account exactly: the product of consecutive percent
+    changes telescopes to ``final / first``.
 
-    Three separate ways to fail, all refused, because all three leave the alias
-    indistinguishable from a per-position series: no ``portfolio_returns`` to
-    compare against (nautilus_trader below the release that added it — including
-    the 1.223.0 pin), an empty portfolio series (the silent fallback), or values
-    that differ. Building a correct daily series instead is DIG-1834's job; here a
-    blank chart is honest and a wrong curve is not.
+    ``(None, reason)`` is returned — never a fabricated flat line — whenever the balance
+    path cannot carry a series: fewer than two rows (nothing to compare against), no
+    usable timestamps (a date-keyed chart would have nothing to bucket by), or a zero
+    prior balance (the percent change is undefined and the identity above would break).
     """
-    if not hasattr(analyzer, "portfolio_returns"):
-        return None, (
-            f"analyzer has no portfolio_returns() to confirm the alias against "
-            f"(nautilus_trader {getattr(analyzer, '__class__', type(analyzer)).__module__})"
-        )
-    try:
-        portfolio = analyzer.portfolio_returns()
-    except _ANALYZER_ERRORS as e:
-        return None, f"portfolio_returns() failed: {e}"
-    if portfolio is None or len(portfolio) == 0:
-        return None, "portfolio_returns() is empty, so returns() is the per-position fallback"
-    alias = analyzer.returns()
-    if not _series_is_portfolio_returns(alias, portfolio):
-        return None, (
-            f"returns() has {0 if alias is None else len(alias)} values against "
-            f"{len(portfolio)} in portfolio_returns() and does not match them"
-        )
-    return alias, None
+    balances, seconds = _account_balance_path(account_report)
+    if len(balances) < 2:
+        return None, f"balance path has {len(balances)} row(s); a return series needs 2"
+    if seconds is None:
+        return None, "account report carries no usable timestamps, so the series would be undated"
+    values: list[float] = []
+    for previous, current in zip(balances, balances[1:]):
+        if previous == 0:
+            return None, "balance path has a zero balance, so its percent change is undefined"
+        values.append((current - previous) / previous)
+    stamps = tuple(datetime.fromtimestamp(second, tz=timezone.utc) for second in seconds[1:])
+    return _BalancePathReturns(values=tuple(values), index=stamps), None
 
 
 def _extract_perf_stats(
@@ -596,18 +581,21 @@ def _extract_perf_stats(
     USD: Any,
     account_report: Any = None,
 ) -> dict[str, Any]:
-    """Sharpe and max drawdown from the balance path, series only when verified.
+    """Sharpe, max drawdown and the charted return series — all off the balance path.
 
     ``sharpe`` and ``max_dd`` are derived from ``account_report``'s balance path by
-    ``_balance_path_metrics``. The analyzer is read for the series the tearsheet
-    renders, but never for a metric: its returns are per closed position, not an
-    equity curve.
+    ``_balance_path_metrics``. The analyzer is read for the stats tables and the
+    realized PnLs, never for a metric and never for the returns series: its returns
+    are per closed position, not an equity curve.
 
-    ``returns_series`` is published only when ``_verified_returns_series`` can
-    confirm it against ``analyzer.portfolio_returns()``. An alias that cannot be
-    confirmed is withheld rather than drawn, and ``RETURNS_SERIES_MISSING`` is
-    appended to ``missing`` so the result lands ``partial`` instead of advertising a
-    chart it cannot stand behind.
+    ``returns_series`` comes from ``_returns_series_from_balance_path`` — the same
+    balance path, one percent change per row. When that path cannot carry a series it
+    is withheld rather than drawn, and ``RETURNS_SERIES_MISSING`` is appended to
+    ``missing`` so the result lands ``partial`` instead of advertising a chart it
+    cannot stand behind.
+
+    That derivation reads ``account_report``, not the analyzer, so it sits outside the
+    ``try`` below on purpose: an analyzer that raises must not take the series with it.
 
     ``errors`` records analyzer/parse failures and ``missing`` names metrics that
     remained ``None``, so callers can mark a result ``partial`` instead of
@@ -631,19 +619,19 @@ def _extract_perf_stats(
         result["stats_pnls"] = analyzer.get_performance_stats_pnls()
         if hasattr(analyzer, "get_performance_stats_general"):
             result["stats_general"] = analyzer.get_performance_stats_general()
-        if hasattr(analyzer, "returns"):
-            series, refusal = _verified_returns_series(analyzer)
-            if series is None:
-                logger.warning("Withholding returns series: %s", refusal)
-                result["missing"].append(RETURNS_SERIES_MISSING)
-            else:
-                result["returns_series"] = series
         if hasattr(analyzer, "realized_pnls"):
             rp = analyzer.realized_pnls(USD)
             result["realized_pnls_series"] = rp if rp is not None and len(rp) > 0 else None
     except _ANALYZER_ERRORS as e:
         logger.warning("Failed to extract performance stats from Nautilus analyzer: %s", e)
         result["errors"].append(f"performance stats unavailable: {e}")
+
+    series, refusal = _returns_series_from_balance_path(account_report)
+    if series is None:
+        logger.warning("Withholding returns series: %s", refusal)
+        result["missing"].append(RETURNS_SERIES_MISSING)
+    else:
+        result["returns_series"] = series
 
     if result["sharpe"] is None:
         result["missing"].append("sharpe_ratio")
@@ -835,6 +823,9 @@ def _run_backtest_ohlcv(
             from digiquant.tearsheet import create_tearsheet as create_digi_tearsheet
 
             out = _resolve_tearsheet_output(tearsheet_path)
+            # The equity chart compounds (1 + r); anchoring it on the account's own
+            # first balance row is what makes it reproduce the account.
+            balances, _ = _account_balance_path(account_report)
             create_digi_tearsheet(
                 result=bt_result,
                 output_path=out,
@@ -847,6 +838,7 @@ def _run_backtest_ohlcv(
                 stats_pnls=perf["stats_pnls"],
                 stats_general=perf["stats_general"],
                 returns_series=perf["returns_series"],
+                initial_balance=balances[0] if balances else None,
                 realized_pnls_series=perf["realized_pnls_series"],
                 full=full_tearsheet,
             )

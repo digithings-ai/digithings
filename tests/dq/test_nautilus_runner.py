@@ -10,6 +10,7 @@ from unittest.mock import patch
 import pandas as pd
 import polars as pl
 import pytest
+from digiquant.charts.equity import _build_rolling_equity_chart
 from digiquant.models import BacktestResult
 from digiquant.nautilus_runner import (
     RETURNS_SERIES_MISSING,
@@ -18,10 +19,9 @@ from digiquant.nautilus_runner import (
     _build_result,
     _extract_pnl,
     _max_drawdown_from_balance_path,
+    _returns_series_from_balance_path,
     _run_multi_symbol_backtest,
-    _series_is_portfolio_returns,
     _sharpe_from_balance_path,
-    _verified_returns_series,
     run_nautilus_backtest,
 )
 from digiquant.stats import HonestRateBlock
@@ -47,8 +47,6 @@ def _stub_bars() -> list[SimpleNamespace]:
     ]
 
 
-_UNSET = object()
-
 # A plausible daily portfolio series: four days of small alternating returns.
 _DEFAULT_RETURNS = [0.002, -0.001, 0.0015, 0.0005]
 
@@ -58,13 +56,13 @@ def _series(values: list[float]) -> pd.Series:
 
 
 class _StubAnalyzer:
-    """An analyzer whose ``returns()`` alias *is* the portfolio series.
+    """An analyzer whose ``returns()`` alias carries values no balance path reproduces.
 
-    Agreement is the only shape in which a series may be published, so it is the
-    default here and tests about anything else do not have to think about the series.
-    ``portfolio_series`` stages a disagreement: ``None`` is the empty portfolio series
-    that triggers Nautilus' silent per-position fallback, and a list of a different
-    length or different values is a mismatch.
+    Under the old contract agreement was the only shape in which a series could be
+    published, so a disagreeing alias had to be staged per test. Now the alias is never
+    read, so the default is a *disagreement*: four days of small alternating
+    per-position returns. A test that finds ``_DEFAULT_RETURNS`` in the published series
+    has located a regression.
     """
 
     def __init__(
@@ -74,16 +72,12 @@ class _StubAnalyzer:
         pnls_stats: dict | None = None,
         raise_on_returns: bool = False,
         returns_series: list[float] | None = None,
-        portfolio_series: list[float] | None | object = _UNSET,
     ) -> None:
         self._returns_stats = returns_stats
         self._pnls_stats = pnls_stats
         self._raise_on_returns = raise_on_returns
         self._returns_series = _series(
             _DEFAULT_RETURNS if returns_series is None else returns_series
-        )
-        self._portfolio_series = (
-            self._returns_series if portfolio_series is _UNSET else portfolio_series
         )
 
     def get_performance_stats_returns(self):
@@ -97,11 +91,6 @@ class _StubAnalyzer:
     def get_performance_stats_general(self):
         return {}
 
-    def portfolio_returns(self):
-        if self._portfolio_series is None:
-            return None
-        return _series(self._portfolio_series)
-
     def returns(self):
         return self._returns_series
 
@@ -110,12 +99,13 @@ class _StubAnalyzer:
 
 
 class _PinnedStubAnalyzer:
-    """The analyzer nautilus_trader 1.223.0 ships — and the version we pin.
+    """The analyzer shape nautilus_trader 1.230.0 ships — and the version we pin.
 
-    It has no ``portfolio_returns()``, so ``returns()`` can never be shown to be the
-    portfolio series: it is the per-position fallback, always. It is a standalone class
-    rather than a ``_StubAnalyzer`` subclass precisely because the attribute must be
-    absent for ``hasattr`` to see the real world.
+    It has no ``portfolio_returns()``, so under the old contract its ``returns()`` could
+    never be shown to be the portfolio series and every run it backed landed
+    ``partial``. It stays as the fixture for that real shape: the point of
+    :meth:`TestBalancePathReturns.test_the_pinned_analyzer_shape_no_longer_decides` is
+    that it now publishes the account's series anyway.
     """
 
     def __init__(self, *, returns_series: list[float] | None = None) -> None:
@@ -691,126 +681,209 @@ class TestHonestStatusOnExtractionFailure:
 
 
 # ---------------------------------------------------------------------------
-# The returns series is verified, never trusted
+# The charted series is derived from the balance path, never taken from an alias
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
-class TestVerifiedReturnsSeries:
-    """``analyzer.returns()`` is an alias, and an alias can point at the wrong series.
+class TestBalancePathReturns:
+    """The tear-sheet series comes from ``account_report``'s balance path.
 
-    Where Nautilus keeps ``_returns`` and ``_portfolio_returns`` in sync it does so
-    silently: when the portfolio series comes back empty the alias is repointed at the
-    per-position returns and nothing says so. Those per-position returns are what
-    ``charts/equity.py`` then compounds as ``(1 + r).cum_prod() * initial_balance``
-    under a ``Daily Equity`` label, which is how a -3% run once drew -78%.
+    ``analyzer.returns()`` is a silent alias: Nautilus repoints it at the per-position
+    returns whenever the portfolio series comes back empty, and DigiQuant never calls
+    ``calculate_statistics`` to fill it — so the per-position series was the normal case,
+    not the rare one. Those are the values ``charts/equity.py`` compounds as
+    ``(1 + r).cum_prod() * initial_balance`` under a ``Daily Equity`` label, which is how
+    a run that finished at 968,989.60 on 1,000,000 drew roughly -78%.
+
+    Off the balance path the same compounding reproduces the account exactly, because a
+    product of consecutive percent changes telescopes to ``final / first``. That identity
+    is the load-bearing assertion in
+    :meth:`test_the_equity_curve_ends_on_the_account_balance`.
     """
 
-    def _run(self, analyzer) -> BacktestResult:
+    def _report(self, balances: list[float], *, day_gap: float = 1.0) -> pd.DataFrame:
+        return _account_report([{"total": b} for b in balances], day_gap=day_gap)
+
+    def _run(
+        self,
+        balances: list[float],
+        *,
+        analyzer=None,
+        tearsheet: str | None = None,
+    ) -> BacktestResult:
         engine = _StubEngine(
-            analyzer,
-            _account_report(
-                [{"total": 1_000_000.0}, {"total": 1_100_000.0}, {"total": 1_050_000.0}],
-            ),
+            _StubAnalyzer() if analyzer is None else analyzer,
+            self._report(balances),
         )
         with _patched_single_run(engine):
             result = run_nautilus_backtest(
                 strategy_name="s",
                 symbols=["BTC"],
                 data_path="BTC.csv",
+                tearsheet_path=tearsheet,
             )
         assert result is not None
         return result
 
-    def test_matching_alias_is_published(self) -> None:
-        series, refusal = _verified_returns_series(_StubAnalyzer())
+    # -- the derivation itself -----------------------------------------
+
+    def test_one_observation_per_balance_row_after_the_first(self) -> None:
+        series, refusal = _returns_series_from_balance_path(
+            self._report([1_000_000.0, 1_100_000.0, 1_050_000.0]),
+        )
         assert refusal is None
-        assert list(series) == _DEFAULT_RETURNS
+        assert series is not None
+        assert list(series.values) == pytest.approx([0.1, 1_050_000.0 / 1_100_000.0 - 1])
 
-    def test_no_portfolio_returns_to_confirm_against_is_refused(self) -> None:
-        """The pinned 1.223.0 analyzer offers nothing to compare the alias to."""
-        series, refusal = _verified_returns_series(_PinnedStubAnalyzer())
-        assert series is None
-        assert "portfolio_returns" in refusal
+    def test_each_value_is_the_percent_change_of_its_own_pair(self) -> None:
+        """A wrong formula can pass a length check; only the numbers reject it."""
+        series, _ = _returns_series_from_balance_path(self._report([100.0, 110.0, 121.0]))
+        assert list(series.values) == pytest.approx([0.1, 0.1])
 
-    def test_empty_portfolio_series_means_the_alias_fell_back(self) -> None:
-        series, refusal = _verified_returns_series(_StubAnalyzer(portfolio_series=None))
-        assert series is None
-        assert "per-position fallback" in refusal
-
-    def test_values_that_differ_are_refused(self) -> None:
-        """Same length, same shape, one number off — still not the portfolio series."""
-        series, refusal = _verified_returns_series(
-            _StubAnalyzer(portfolio_series=[0.002, -0.001, 0.0015, -0.0005]),
+    def test_timestamps_come_from_the_pandas_index(self) -> None:
+        """The account index is unnamed, so the stamps must be real dates not positions."""
+        series, _ = _returns_series_from_balance_path(
+            self._report([100.0, 101.0, 102.0], day_gap=2.0),
         )
-        assert series is None
-        assert "does not match" in refusal
+        stamps = [str(stamp)[:10] for stamp in series.index]
+        assert stamps == ["2024-01-04", "2024-01-06"], stamps
+        assert len(set(stamps)) == 2, "a positional label would collapse both into one bucket"
 
-    def test_a_different_length_is_refused(self) -> None:
-        series, refusal = _verified_returns_series(
-            _StubAnalyzer(portfolio_series=[0.002, -0.001, 0.0015]),
+    # -- the load-bearing identity: the chart and the account agree ----
+
+    def test_the_equity_curve_ends_on_the_account_balance(self) -> None:
+        """The Rolling Equity chart's last point IS the final balance, not a cousin of it.
+
+        Anchored on the account's first balance row the compounding telescopes to
+        ``final / first``; a series carrying anything else cannot land here.
+        """
+        balances = [1_000_000.0, 1_100_000.0, 968_989.60]
+        with patch("digiquant.tearsheet.create_tearsheet") as create_tearsheet:
+            self._run(balances, tearsheet="account-equity.html")
+        kwargs = create_tearsheet.call_args.kwargs
+        figure = _build_rolling_equity_chart(
+            kwargs["returns_series"],
+            initial_balance=kwargs["initial_balance"],
         )
-        assert series is None
-        assert "4 values against 3" in refusal
+        assert figure is not None
+        trace = figure.data[0]
+        assert trace.name == "Daily Equity"
+        assert trace.y[-1] == pytest.approx(balances[-1], rel=1e-6)
 
-    def test_nan_in_both_series_still_counts_as_a_match(self) -> None:
-        assert _series_is_portfolio_returns(
-            _series([0.001, float("nan")]), _series([0.001, float("nan")])
+    def test_the_start_balance_is_the_account_first_row_not_the_venue_constant(self) -> None:
+        with patch("digiquant.tearsheet.create_tearsheet") as create_tearsheet:
+            self._run([968_989.60, 1_000_000.0], tearsheet="start-balance.html")
+        assert create_tearsheet.call_args.kwargs["initial_balance"] == pytest.approx(968_989.60)
+
+    def test_the_derived_series_reaches_the_tearsheet_and_the_run_stays_ok(self) -> None:
+        with patch("digiquant.tearsheet.create_tearsheet") as create_tearsheet:
+            result = self._run([1_000_000.0, 1_100_000.0, 1_050_000.0], tearsheet="derived.html")
+        kwargs = create_tearsheet.call_args.kwargs
+        assert list(kwargs["returns_series"].values) == pytest.approx(
+            [0.1, 1_050_000.0 / 1_100_000.0 - 1],
         )
+        assert result.status == "ok", result.missing
+        assert result.missing == []
 
-    def test_unparseable_values_are_refused_rather_than_guessed(self) -> None:
-        assert _series_is_portfolio_returns(_series([0.001]), ["not-a-number"]) is False
+    # -- the alias is never read ---------------------------------------
 
-    def test_unverifiable_series_is_withheld_and_the_result_goes_partial(self) -> None:
-        """The alias fell back, so the tearsheet draws nothing: a blank chart, not a wrong curve."""
-        engine = _StubEngine(
-            _PinnedStubAnalyzer(),
-            _account_report(
-                [{"total": 1_000_000.0}, {"total": 1_100_000.0}, {"total": 1_050_000.0}],
-            ),
-        )
-        with (
-            _patched_single_run(engine),
-            patch("digiquant.tearsheet.create_tearsheet") as create_tearsheet,
-        ):
-            result = run_nautilus_backtest(
-                strategy_name="s",
-                symbols=["BTC"],
-                data_path="BTC.csv",
-                tearsheet_path="withheld-series.html",
+    def test_the_alias_is_never_read(self) -> None:
+        """An analyzer whose ``returns()`` explodes cannot affect the series.
+
+        The runtime proof behind the ``grep`` pasted in the PR body: under the old
+        contract every single run touched this attribute.
+        """
+
+        class _ExplodingAlias(_StubAnalyzer):
+            def returns(self):
+                raise AssertionError("the tearsheet series must not read analyzer.returns()")
+
+        with patch("digiquant.tearsheet.create_tearsheet") as create_tearsheet:
+            result = self._run(
+                [1_000_000.0, 1_100_000.0, 1_050_000.0],
+                analyzer=_ExplodingAlias(),
+                tearsheet="exploding-alias.html",
             )
-        assert result is not None
+        assert list(create_tearsheet.call_args.kwargs["returns_series"].values) == pytest.approx(
+            [0.1, 1_050_000.0 / 1_100_000.0 - 1],
+        )
+        assert result.status == "ok", result.missing
+
+    def test_a_disagreeing_alias_does_not_change_the_series(self) -> None:
+        """A per-position alias compounds to about -78% here; the account path cannot."""
+        alias = [-0.5, 0.4, -0.3]
+        with patch("digiquant.tearsheet.create_tearsheet") as create_tearsheet:
+            self._run(
+                [1_000_000.0, 1_100_000.0, 1_050_000.0],
+                analyzer=_StubAnalyzer(returns_series=alias),
+                tearsheet="alias-disagrees.html",
+            )
+        published = list(create_tearsheet.call_args.kwargs["returns_series"].values)
+        assert published == pytest.approx([0.1, 1_050_000.0 / 1_100_000.0 - 1])
+        assert published != pytest.approx(alias)
+
+    def test_the_pinned_analyzer_shape_no_longer_decides(self) -> None:
+        """The fixture that used to force every run to ``partial`` now publishes the account."""
+        with patch("digiquant.tearsheet.create_tearsheet") as create_tearsheet:
+            result = self._run(
+                [1_000_000.0, 1_100_000.0, 1_050_000.0],
+                analyzer=_PinnedStubAnalyzer(),
+                tearsheet="pinned-shape.html",
+            )
+        assert list(create_tearsheet.call_args.kwargs["returns_series"].values) == pytest.approx(
+            [0.1, 1_050_000.0 / 1_100_000.0 - 1],
+        )
+        assert result.status == "ok", result.missing
+
+    # -- nothing to chart: withhold, never fabricate -------------------
+
+    def test_no_balance_rows_withholds_the_series(self) -> None:
+        series, refusal = _returns_series_from_balance_path(pd.DataFrame())
+        assert series is None
+        assert "needs 2" in refusal
+
+    def test_one_balance_row_withholds_the_series(self) -> None:
+        series, refusal = _returns_series_from_balance_path(self._report([1_000_000.0]))
+        assert series is None
+        assert "needs 2" in refusal
+
+    def test_an_undated_account_report_withholds_the_series(self) -> None:
+        """A numeric index carries no elapsed time, so a date-keyed chart has no x."""
+        series, refusal = _returns_series_from_balance_path(
+            pd.DataFrame([{"total": 1.0}, {"total": 2.0}]),
+        )
+        assert series is None
+        assert "no usable timestamps" in refusal
+
+    def test_a_zero_prior_balance_withholds_the_series(self) -> None:
+        series, refusal = _returns_series_from_balance_path(self._report([0.0, 1_000_000.0]))
+        assert series is None
+        assert "zero balance" in refusal
+
+    def test_a_withheld_series_draws_no_chart(self) -> None:
+        """The other half of the DoD: no series means no chart, not a flat line at 1e6."""
+        assert _build_rolling_equity_chart(None) is None
+        series, _ = _returns_series_from_balance_path(self._report([1_000_000.0]))
+        assert series is None
+        assert _build_rolling_equity_chart(series) is None
+
+    def test_a_one_row_run_names_every_metric_it_could_not_produce(self) -> None:
+        """A withheld series always co-occurs with a withheld Sharpe — same balance path.
+
+        ``max_drawdown_pct`` is deliberately absent from that list: a single-row path
+        draws down 0.0, which is a measured value rather than a refusal, so naming it
+        missing would be wrong.
+        """
+        with patch("digiquant.tearsheet.create_tearsheet") as create_tearsheet:
+            result = self._run([1_000_000.0], tearsheet="one-row.html")
         assert create_tearsheet.call_args.kwargs["returns_series"] is None
         assert result.status == "partial"
-        assert result.missing == [RETURNS_SERIES_MISSING]
+        assert result.missing == [RETURNS_SERIES_MISSING, "sharpe_ratio"]
+        assert result.max_drawdown_pct == pytest.approx(0.0)
         assert RETURNS_SERIES_MISSING in result.message
-        # The metrics are untouched by the refusal — they come from the balance path.
-        assert result.total_pnl == pytest.approx(50_000.0)
-        assert result.sharpe_ratio is not None
-        assert result.max_drawdown_pct == pytest.approx(-4.545454545454546)
-
-    def test_confirmed_series_reaches_the_tearsheet_and_stays_ok(self) -> None:
-        analyzer = _StubAnalyzer()
-        engine = _StubEngine(
-            analyzer,
-            _account_report(
-                [{"total": 1_000_000.0}, {"total": 1_100_000.0}, {"total": 1_050_000.0}],
-            ),
-        )
-        with (
-            _patched_single_run(engine),
-            patch("digiquant.tearsheet.create_tearsheet") as create_tearsheet,
-        ):
-            result = run_nautilus_backtest(
-                strategy_name="s",
-                symbols=["BTC"],
-                data_path="BTC.csv",
-                tearsheet_path="verified-series.html",
-            )
-        assert result is not None
-        assert list(create_tearsheet.call_args.kwargs["returns_series"]) == _DEFAULT_RETURNS
-        assert result.status == "ok"
-        assert result.missing == []
+        assert result.total_pnl == pytest.approx(0.0)
+        assert result.total_return_pct == pytest.approx(0.0)
 
 
 # ---------------------------------------------------------------------------

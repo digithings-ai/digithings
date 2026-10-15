@@ -174,11 +174,19 @@ class TestBalancePathMetricsRealRun:
         final_balance = float(account_report["total"].tolist()[-1])
         assert result.total_pnl == pytest.approx(final_balance - 1_000_000.0)
         assert result.total_return_pct == pytest.approx((final_balance - 1_000_000.0) / 10_000.0)
-        # Partial, and only over the chart series: under the pinned nautilus_trader the
-        # analyzer's returns() alias cannot be confirmed against portfolio_returns(),
-        # so it is withheld. Every metric above is present.
-        assert result.status == "partial"
-        assert result.missing == [RETURNS_SERIES_MISSING]
+        # The chart series is derived from this account's own balance path now, so it
+        # is no longer one of the things a run can fail to produce. (Under the previous
+        # design the analyzer's returns() alias could not be confirmed against
+        # portfolio_returns() and was withheld; that alias is never read any more.)
+        # Only the Sharpe can legitimately be absent, and status is derived from
+        # ``missing``, so the guard below carries what the status line used to say.
+        # NOTE: this class needs a real Nautilus engine, which aborts the process on a
+        # developer host and is skipped in CI, so the expectation below is a premise
+        # correction that no lane on this branch can execute.
+        assert RETURNS_SERIES_MISSING not in result.missing
+        assert set(result.missing) <= {"sharpe_ratio"}, (
+            f"run lost something it should not have: {result.missing}"
+        )
 
 
 @SKIP_NATIVE_CRASH

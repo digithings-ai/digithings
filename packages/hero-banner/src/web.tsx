@@ -17,12 +17,16 @@ export function HeroBanner({
   def,
   live,
   armed = true,
+  replayLoading = false,
   gap,
   className,
 }: {
   def: BannerDefinition;
   live?: boolean;
   armed?: boolean;
+  /** Play LOADING on every mount. The landing top bar builds with the hero
+   *  each visit; the session flag would otherwise skip straight to the settled mark. */
+  replayLoading?: boolean;
   gap?: number;
   className?: string;
 }) {
@@ -43,7 +47,8 @@ export function HeroBanner({
     } catch {
       store = null;
     }
-    const skipLoading = motion === "full" ? !claimLoading(def, store) : true;
+    const skipLoading =
+      motion === "full" ? (replayLoading ? false : !claimLoading(def, store)) : true;
     const liveOn = resolveLive(def, { config: live });
     const origin = performance.now();
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -68,7 +73,7 @@ export function HeroBanner({
       if (timer) clearTimeout(timer);
       cancelAnimationFrame(raf);
     };
-  }, [def, live, armed, usedGap, width, layout.height]);
+  }, [def, live, armed, replayLoading, usedGap, width, layout.height]);
 
   return (
     <canvas

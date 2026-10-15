@@ -37,7 +37,7 @@ export interface LiveBandRead {
   /** True when this build has a backend: dashboard-api or the public Supabase env. */
   configured: boolean;
   loading: boolean;
-  /** A non-fatal read failure; the band falls back to its example series. */
+  /** A non-fatal read failure. A configured band shows an empty rail, not example numbers. */
   error: string | null;
   nav: NavPoint[];
   benchmark: PricePoint[];
@@ -54,9 +54,9 @@ const EMPTY: LiveBandRead = {
 };
 
 /**
- * @param slugs the strategy membership and card order to read, in band order
+ * @param slugs optional card order. Omit it to show every published tearsheet.
  */
-export function useLiveBand(slugs: readonly string[]): LiveBandRead {
+export function useLiveBand(slugs: readonly string[] = []): LiveBandRead {
   const configured = Boolean(supabase) || Boolean(dashboardApiBase());
   const [read, setRead] = useState<Omit<LiveBandRead, "configured">>({
     loading: configured,
@@ -80,7 +80,7 @@ export function useLiveBand(slugs: readonly string[]): LiveBandRead {
       try {
         const [nav, strategies] = await Promise.all([
           fetchNav(),
-          fetchStrategies(key.split(",")),
+          fetchStrategies(key.length > 0 ? key.split(",") : undefined),
         ]);
         if (cancelled) return;
         const benchmark = nav.length > 0 ? await fetchBenchmark(nav[0].date) : [];

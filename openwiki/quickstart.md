@@ -50,7 +50,7 @@ service, verify with health/status curls, run the unit gates — per its
 | Run the hub, call a workflow, stream chat | [digigraph Quickstart](/openwiki/digigraph/quickstart.md) |
 | Backtest / optimize a strategy | [digiquant Quickstart](/openwiki/digiquant/quickstart.md) |
 | Ingest docs, run RAG queries, web search, monitors | [digisearch Quickstart](/openwiki/digisearch/quickstart.md) |
-| Add LangSmith tracing, check trace status | [digitrace quickstart](#digitrace-tracing) (below) |
+| Add LangSmith or OTLP tracing, check trace status | [digitrace quickstart](#digitrace-tracing) (below) |
 | Work with the markdown vault | [digivault Quickstart](/openwiki/digivault/quickstart.md) |
 | Issue keys, exchange JWTs | [digikey Quickstart](/openwiki/digikey/quickstart.md) |
 | Run the chat UI (assistant-ui skins, multi-backend, deploy-config) | [digichat Quickstart](/openwiki/digichat/quickstart.md) |
@@ -74,10 +74,10 @@ pytest tests/ -m unit -k "digigraph or digiquant or digisearch or digitrace or d
 
 ## digitrace tracing
 
-digitrace gives you optional LangSmith tracing through one decorator, plus
-a tiny HTTP service (port 8003) that reports whether tracing is configured.
-Nothing here requires a key to try: without configuration everything is a
-safe no-op.
+digitrace gives you optional LangSmith tracing plus an OTel fan-out
+through one decorator, and a tiny HTTP service (port 8003) that reports
+whether tracing is configured. Nothing here requires a key to try:
+with neither leg configured, the decorator is a safe no-op.
 
 ### 1. Add tracing to a function
 
@@ -92,8 +92,10 @@ def chat_completion(...): ...
 
 - With `LANGSMITH_API_KEY` set and the `langsmith` package installed, calls
 emit LangSmith spans scrubbed by the built-in PII redactor.
-- Without either, the decorator returns your function unchanged — no
-wrapper, no overhead, tests stay green.
+- With an OTLP endpoint set (`OTEL_EXPORTER_OTLP_ENDPOINT`,
+`DIGI_OTEL_ENDPOINT`, or a Langfuse OTLP env), each call also opens an
+OTel span that carries only the run name and short correlation ids.
+- With neither leg active, the decorator returns your function unchanged.
 
 Gate optional behavior at runtime with `tracing_enabled()`, which re-reads
 the environment on every call:
@@ -120,9 +122,9 @@ Or directly (from `digitrace/`):
 uvicorn digitrace.server:app --host 0.0.0.0 --port 8003
 ```
 
-The image installs `digitrace[langsmith]` and serves
-`digitrace.server:app` on port 8003, published on the host as
-`127.0.0.1:8003`.
+The image installs `digitrace[tracing]` (the `langsmith` extra is an
+alias of the same SDK) and serves `digitrace.server:app` on port 8003,
+published on the host as `127.0.0.1:8003`.
 
 ### 3. Verify it
 
@@ -132,11 +134,14 @@ curl -s http://localhost:8003/v1/status # tracing diagnostic
 ```
 
 `GET /healthz` answers "is the process up". `GET /v1/status` answers "is
-tracing configured", returning `tracing_configured`,
-`langsmith_sdk_installed`, the sanitized `langsmith_host`, and an echoed
-`request_id` — never any secret. To enable tracing, set `LANGSMITH_API_KEY`
-(and optionally `LANGSMITH_ENDPOINT`) in `.env` and restart; `/v1/status`
-will flip `tracing_configured` to true.
+tracing configured", returning `TraceStatus`: `tracing_configured`,
+`langsmith_sdk_installed`, the sanitized `langsmith_host`, an echoed
+`request_id`, and the dual-export fields `langfuse_configured`,
+`otel_export_configured`, `dual_export`, `export_backend`, and
+`langfuse_host`. None of those fields carry a secret. To enable the
+LangSmith leg, set `LANGSMITH_API_KEY` (and optionally
+`LANGSMITH_ENDPOINT`) in `.env` and restart; `/v1/status` will flip
+`tracing_configured` to true.
 
 ### 4. Run the tests and lint
 

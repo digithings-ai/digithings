@@ -18,8 +18,8 @@ shown beside it.
 |---|---|---|---|
 | Brief desk | `apps/digiquant-web/app` | yes | `apps/digiquant-web/app` (7 routes) |
 | digiquant TUI | `clients/digiquant-tui` | **no** | no `clients/` directory at repo root (0 tracked files). The nearest surface is `digiquant/src/digiquant/cli/` — 6 Python modules (`__init__ gloomberb onchain prices strategy web_search`), an argparse CLI, not a TUI |
-| DigiChat web | (unnamed) | yes | `apps/digichat` (Worker + `apps/digichat/src/app`, 3 pages) |
-| DigiChat TUI | (unnamed) | yes | `apps/digichat/cli/src` — Ink/React, 8 files (`app bin tools transport scripted-adapter chat-request` + `components/thread`) |
+| digichat web | (unnamed) | yes | `apps/digichat` (Worker + `apps/digichat/src/app`, 3 pages) |
+| digichat TUI | (unnamed) | yes | `apps/digichat/cli/src` — Ink/React, 8 files (`app bin tools transport scripted-adapter chat-request` + `components/thread`) |
 | devkit TUI/CLI | `devkit` | **no** | no `devkit` path anywhere in the tree (0 tracked files) |
 
 Control that makes the two "no" rows real: the same `git ls-files` enumeration

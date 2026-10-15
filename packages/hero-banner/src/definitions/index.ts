@@ -18,9 +18,11 @@ import { PIXEL_7X10 } from "../font";
 import type { BannerDefinition, Tone } from "../types";
 
 /**
- * The four ported banners. Each one is the single source for its TUI and web
- * marks. Timings and seeds are the legacy marks' own, so the port draws the
- * same cells (see test/parity.test.ts).
+ * Module banners. Each definition is the single source for its TUI and web
+ * marks. The four originally ported marks (digithings, digiquant, digichat,
+ * and the digivoice equalizer baseline) keep the legacy timings and seeds so
+ * the port draws the same cells (see test/parity.test.ts). DIGIVOICE_BASELINE
+ * stays out of BANNERS; the shipped digivoice mark is speakAnimation.
  */
 
 const INK: Tone = { hex: "#ECEEF0", cube: 255, cssVar: "--ink" };

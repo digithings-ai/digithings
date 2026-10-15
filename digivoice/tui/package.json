@@ -1,9 +1,9 @@
 {
-  "name": "digivoice-tui",
+  "name": "digivoice-tui-legacy",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "digivoice terminal UI on OpenTUI",
+  "description": "Retired plain-JS screen. The digivoice CLI launches clients/digivoice-tui.",
   "scripts": {
     "start": "bun src/main.js",
     "test": "bun test"

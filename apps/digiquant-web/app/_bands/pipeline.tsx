@@ -1,6 +1,6 @@
 import { DeckCard, DeckStack } from "@digithings/ui";
 import { Badge } from "@digithings/ui/ui";
-import { WorkflowGraph, type GraphStep } from "@/components/pipeline/workflow-graph";
+import { PipelineFlow, type FlowStep } from "@/components/pipeline/pipeline-flow";
 import { Band } from "../_chrome/Band";
 
 type Workflow = {
@@ -9,10 +9,8 @@ type Workflow = {
   status?: "in development";
   body: string;
   later?: string;
-  graph: readonly GraphStep[];
+  graph: readonly FlowStep[];
   loop: string;
-  notes: readonly string[];
-  receipt: readonly string[];
 };
 
 /** Four workflows on one infrastructure. The last two are not finished.
@@ -32,17 +30,6 @@ const WORKFLOWS: readonly Workflow[] = [
       },
       { nodes: [{ label: "digigraph", tone: "model" }] },
     ],
-    notes: [
-      "The theme sets the question",
-      "Web search and the knowledge base run together",
-      "digigraph orchestrates the pass on digithings",
-    ],
-    receipt: [
-      "theme · question",
-      "web search · in parallel",
-      "knowledge base · in parallel",
-      "digigraph · orchestrate",
-    ],
   },
   {
     name: "Investment portfolio",
@@ -59,19 +46,6 @@ const WORKFLOWS: readonly Workflow[] = [
       },
       { nodes: [{ label: "Deliberation", tone: "model" }] },
     ],
-    notes: [
-      "Thesis generation opens the pass",
-      "Stock analysis reads the names",
-      "Portfolio management and the investment preferences sit together",
-      "Deliberation closes the pass",
-    ],
-    receipt: [
-      "thesis · open",
-      "stock analysis · read",
-      "portfolio management · in parallel",
-      "investment preferences · in parallel",
-      "deliberation · close",
-    ],
   },
   {
     name: "Strategy building",
@@ -83,17 +57,6 @@ const WORKFLOWS: readonly Workflow[] = [
       { nodes: [{ label: "Algorithmic strategy", tone: "model" }] },
       { nodes: [{ label: "Backtest", tone: "side" }] },
       { nodes: [{ label: "Ship the backtested strategy", pending: true }] },
-    ],
-    notes: [
-      "An idea becomes an algorithmic strategy",
-      "The backtest is the check",
-      "Shipping the backtested strategy is not finished",
-    ],
-    receipt: [
-      "idea · open",
-      "algorithmic strategy · draft",
-      "backtest · check",
-      "ship · pending",
     ],
   },
   {
@@ -116,18 +79,6 @@ const WORKFLOWS: readonly Workflow[] = [
       { nodes: [{ label: "Agent selects a level", pending: true }] },
       { nodes: [{ label: "Entry, stop, and target", pending: true }] },
       { nodes: [{ label: "Monitoring", pending: true }] },
-    ],
-    notes: [
-      "Research, prices, and charts arrive together",
-      "The picture is long or short on a pair",
-      "Levels, the selection, and monitoring are not finished",
-    ],
-    receipt: [
-      "research · prices · charts",
-      "pair · long or short",
-      "levels · pending",
-      "selection · pending",
-      "monitoring · pending",
     ],
   },
 ];
@@ -165,12 +116,10 @@ export function PipelineBand() {
               {workflow.status ? <Badge variant="neutral">{workflow.status}</Badge> : null}
             </div>
             <p className="m-0 max-w-[62ch] text-[0.9375rem] leading-[1.6] text-ink-soft">{workflow.body}</p>
-            <WorkflowGraph
+            <PipelineFlow
               label={`${workflow.name} orchestration`}
               steps={workflow.graph}
               loop={workflow.loop}
-              notes={workflow.notes}
-              receipt={workflow.receipt}
             />
             {workflow.later ? (
               <p className="m-0 max-w-[62ch] border-t border-hair pt-3 text-[0.9375rem] leading-[1.6] text-ink-soft">

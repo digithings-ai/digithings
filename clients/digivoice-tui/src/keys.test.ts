@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { INITIAL_UI, type KeyCtx, MENU_SCREENS, nextIndex, reduceKey } from "./keys";
+import { INITIAL_UI, type KeyCtx, MENU_SCREENS, nextIndex, reduceKey, uiFromStart } from "./keys";
 
 const MENU = ["a", "b", "c", "d", "e", "f", "Quit"];
 const ctx: KeyCtx = {
@@ -11,6 +11,17 @@ const ctx: KeyCtx = {
     { id: "back", kind: "back" },
   ],
 };
+
+test("uiFromStart opens history and doctor and leaves the rest on home", () => {
+  expect(uiFromStart("/history").screen).toBe("history");
+  expect(uiFromStart("/history/last").screen).toBe("history");
+  expect(uiFromStart("/doctor").screen).toBe("doctor");
+  expect(uiFromStart("/doctor").menuIndex).toBe(MENU_SCREENS.indexOf("doctor"));
+  expect(uiFromStart("/settings").screen).toBe("home");
+  expect(uiFromStart("/system").screen).toBe("home");
+  expect(uiFromStart("/system/logs").screen).toBe("home");
+  expect(uiFromStart(undefined)).toEqual(INITIAL_UI);
+});
 
 test("nextIndex wraps both ways", () => {
   expect(nextIndex(0, -1, 5)).toBe(4);

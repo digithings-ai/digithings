@@ -827,9 +827,8 @@ def simulate_chat_completion(
         return DEFAULT_RESPONSES[schema]
 
     def chat_completion(*args: Any, **kwargs: Any) -> str:
-        # Signature: chat_completion(model, messages, **kwargs). Tolerate
-        # both positional and keyword forms; the agent calls this many
-        # different ways across phases.
+        # Tolerate both positional and keyword forms: the agent calls this
+        # stub many different ways across phases.
         messages = kwargs.get("messages")
         if messages is None and len(args) >= 2:
             messages = args[1]

@@ -16,6 +16,8 @@ import pytest
 from digigraph.rate_limit import RateLimiter
 from starlette.requests import Request
 
+pytestmark = pytest.mark.unit
+
 
 def _make_request(client_host: str = "203.0.113.9") -> Request:
     """A minimal real Starlette Request -- not FastAPI's TestClient -- so its

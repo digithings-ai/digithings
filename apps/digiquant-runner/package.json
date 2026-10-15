@@ -1,5 +1,13 @@
 {
   "name": "digiquant-runner",
+  "description": "Cloudflare worker that runs the digiquant container.",
+  "license": "MIT",
+  "homepage": "https://digithings.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/digithings-ai/digithings.git",
+    "directory": "apps/digiquant-runner"
+  },
   "private": true,
   "type": "module",
   "scripts": {

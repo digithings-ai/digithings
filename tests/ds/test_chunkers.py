@@ -354,13 +354,22 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     RecursiveChunker unchanged.
     framing plus DIG-1464's CC0-1.0 precision and per-family limits — fixture
     prose only; RecursiveChunker unchanged.
+    Re-recorded at count 133 for DIG-3239 (searxng tag-pin record: the
+    "floats on latest" sentences corrected in the web_search sidecar section of
+    ARCHITECTURE.md) — chunks 0-111 byte-identical, 112-115 re-chunked by the
+    added prose, the 17-chunk tail after them preserved verbatim and in
+    order, net +1, max chunk 1994 of the 2000 budget — fixture prose only;
+    RecursiveChunker unchanged.
+    Hashes only (count still 133) re-recorded for the http_client tree line
+    in ARCHITECTURE.md (query helpers removed; format_results_table stays) —
+    fixture prose only; RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 132
+    assert len(chunks) == 133
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
@@ -431,7 +440,7 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "4741cf750a9a20e6",
         "80578aa2dbbb641d",
         "1f9fe54a7f6c6f25",
-        "ca5bf28f89d9e616",
+        "5f32459eb46e4976",
         "f7ef2f68779a303e",
         "ed9fd383de98c694",
         "cd4e7192b6baa3d3",
@@ -476,9 +485,10 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "4bbb6da734e96059",
         "70c3d41e152ffa11",
         "81d310410772fb3e",
-        "7b96f76f75a29985",
-        "e8874754e8823dbd",
-        "472ca1370eb9ef1a",
+        "e46749bf5ec8f72a",
+        "33c23cc6de00eece",
+        "4bc7547f9b3e2e61",
+        "e7f2ed9b67f28f30",
         "a3987db99f2b72c5",
         "e35a024e63e94d4d",
         "e9faecf827139411",

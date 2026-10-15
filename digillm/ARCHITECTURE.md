@@ -38,7 +38,7 @@ to it later (their current in-tree LLM modules are superseded by this package).
 from digillm import (
   ArtifactRef, CacheStatus, CallPurpose, NodeRunRecord,
   ProviderCallRecord, ProviderAttemptRecord, TelemetryObserver, emit_telemetry,
-    chat_completion, chat_completion_with_tools, structured_completion,
+    completion, run_tools, structured_completion,
     get_client_for_model, get_client, register_provider, resolve_model,
     set_proxy_key, reset_proxy_key, get_proxy_key, proxy_key,   # proxy override
     set_byok, reset_byok, get_byok, byok, clear_byok,           # BYOK override
@@ -178,10 +178,10 @@ digiquant migration `067_olympus_provider_telemetry.sql` owns the private normal
 times remain producer facts; the database adds `recorded_at` as its write clock. That schema is not
 part of `digillm` and does not create a persistence dependency for other consumers.
 
-### `chat_completion`
+### `completion`
 
 ```python
-chat_completion(
+completion(
     model: str,
     messages: list[ChatCompletionMessage],
     *,
@@ -234,10 +234,10 @@ chat_completion(
   failures instead of feeding another identical error back to the model. Any
   successful tool call resets the streak.
 
-### `chat_completion_with_tools`
+### `run_tools`
 
 ```python
-chat_completion_with_tools(
+run_tools(
     model, messages, tools,
     execute_tool: Callable[[str, dict], str | dict],
     *,
@@ -292,7 +292,7 @@ structured_completion(
 ```
 
 Builds a json_schema `response_format` from `output_type`, calls
-`chat_completion`, strips markdown fences, narrows to the outermost `{...}`,
+`completion`, strips markdown fences, narrows to the outermost `{...}`,
 and `model_validate`s. (digigraph's structured path returned a `str`; this
 wrapper provides the validated-model contract twelve-x expects.)
 
@@ -315,7 +315,7 @@ Opt-in test/medium/best resolution. **Deployment-agnostic**: takes an explicit
 `{mode: model}` mapping or a caller-supplied YAML `path` (flat mapping or a
 `defaults:` sub-mapping, matching digithings' `model_modes.yaml`). It hardcodes
 **no** config-directory location. Callers may also just pass a concrete model
-string to `chat_completion` and skip this entirely.
+string to `completion` and skip this entirely.
 
 ## Provider routing
 
@@ -623,7 +623,7 @@ finally:
   host (`config/byok-providers.json`).
 - **Response-cache + BYOK.** The SHA-256 in-process response-cache key
   intentionally omits the API key. To prevent a per-user BYOK response from
-  being read from or written to the shared in-process cache, `chat_completion`
+  being read from or written to the shared in-process cache, `completion`
   **skips that cache entirely while a BYOK override is active**. LiteLLM's
   proxy cache also omits `api_key` / `api_base` from its key, so BYOK requests
   additionally send `extra_body.cache = {no-cache: true, no-store: true}` —
@@ -648,7 +648,7 @@ finally:
 
 ## Tracing
 
-`@traceable("chat_completion")` is imported from `digitrace.trace` inside a
+`@traceable("completion")` is imported from `digitrace.trace` inside a
 `try/except ImportError` that falls back to a no-op decorator. digillm therefore
 has **no hard dependency** on digitrace; install `digillm[trace]` (or have
 digitrace on the path) plus `LANGSMITH_API_KEY` to enable spans.

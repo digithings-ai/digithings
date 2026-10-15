@@ -6,11 +6,15 @@ import { MCP_TOOLS } from "@/app/_mcp";
 describe("McpBand", () => {
   const html = renderToStaticMarkup(<McpBand />);
 
-  it("lists the registry and keeps execute as a demo until a gateway probe exists", () => {
+  it("lists the registry as one list and executes through the local gateway", () => {
     expect(MCP_TOOLS.length).toBeGreaterThan(0);
     expect(html).toContain(MCP_TOOLS[0].name);
-    expect(html).toContain("demo · not executed");
+    expect(html).toContain("live · local gateway");
+    expect(html).toContain("POST /v1/tools/call");
     expect(html).toContain("Execute");
+    expect(html).toContain("one list");
+    expect(html).not.toContain("demo · not executed");
+    expect(html).not.toContain('aria-label="Server scope"');
     expect(html).toContain("05 / mcp");
     expect(html).toContain("The tools are MCP tools");
     expect(html).not.toContain("digiquant · mcp");

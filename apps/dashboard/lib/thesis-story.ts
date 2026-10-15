@@ -23,14 +23,6 @@ import { normalizeThesisId, thesisIdEquals } from './thesis-id';
 import { sortByConfidenceDesc } from './theses-ledger';
 import { decisionNodeFor, type DecisionLogRow, type ProposedDecision } from './holdings-decisions';
 
-/**
- * Demo anchor date. On this date the `theses` table is dense (19 market views)
- * and `thesis_vehicles` wires a full hierarchy, so a reviewer sees the story
- * fully populated. Gated behind `selectThesisAsOf` / `buildThesisStory`'s
- * `anchorDate` option so PRODUCTION stays on latest-available-per-entity.
- */
-export const DEMO_THESIS_ANCHOR_DATE = '2026-07-12';
-
 /** A ticker → MARKET-thesis mapping row from `thesis_vehicles` (the reliable join). */
 export interface ThesisVehicleRow {
   date: string;
@@ -105,49 +97,12 @@ export function selectThesisAsOf(
 }
 
 /**
- * Attribute each held ticker's book weight to its PRIMARY market thesis only —
- * the mapping with the lowest `candidate_rank` (ties → lexical `thesis_id`).
- * A ticker is NEVER summed into more than one thesis, so a many-to-many ticker
- * (e.g. CPER under two views) does not double-count the book. Keyed by
- * normalized thesis id.
- */
-export function attributeWeightToPrimaryThesis(
-  positions: Position[],
-  thesisVehicleRows: ThesisVehicleRow[]
-): Map<string, number> {
-  const heldWeight = new Map<string, number>();
-  for (const p of positions) heldWeight.set(p.ticker.toUpperCase(), p.weight_actual ?? 0);
-
-  const byTicker = new Map<string, ThesisVehicleRow[]>();
-  for (const r of thesisVehicleRows) {
-    const t = r.ticker.toUpperCase();
-    if (!heldWeight.has(t)) continue;
-    const list = byTicker.get(t);
-    if (list) list.push(r);
-    else byTicker.set(t, [r]);
-  }
-
-  const out = new Map<string, number>();
-  for (const [ticker, group] of byTicker) {
-    const primary = [...group].sort(
-      (a, b) =>
-        (a.candidateRank ?? Number.MAX_SAFE_INTEGER) - (b.candidateRank ?? Number.MAX_SAFE_INTEGER) ||
-        a.thesisId.localeCompare(b.thesisId)
-    )[0];
-    if (!primary) continue;
-    const key = normalizeThesisId(primary.thesisId);
-    out.set(key, (out.get(key) ?? 0) + (heldWeight.get(ticker) ?? 0));
-  }
-  return out;
-}
-
-/**
  * Assemble the story tree from market theses + the vehicle map + held positions +
- * latest decisions. Replaces the broken `groupVehicleTheses` (which keyed on the
- * dead `linked_market_thesis_id`).
+ * latest decisions. The spine keys off `thesis_vehicles`, which is the reliable
+ * ticker → market-thesis join (`linked_market_thesis_id` is self-referential).
  *
- * @param opts.anchorDate  Date ceiling for vehicle-row selection (pass
- *   `DEMO_THESIS_ANCHOR_DATE` for the dense demo; omit / null for latest-available).
+ * @param opts.anchorDate  Date ceiling for vehicle-row selection. Omit / null
+ *   for latest-available.
  * @param opts.vehicleTheses  Vehicle-kind theses, used only as a rationale fallback.
  */
 export function buildThesisStory(

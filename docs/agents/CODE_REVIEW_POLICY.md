@@ -12,7 +12,32 @@ Prefer **in-session** review on a **fresh-context subagent** (author session mus
 | digithings / Cursor | Same `/review` path (or equivalent fresh-context subagent). Optional: Bugbot / security-review when they fit. **Not** the CodeRabbit Cursor plugin `code-review` / `code-reviewer` skills. |
 | twelve-x / other org repos | Same idea: fresh subagent + findings posted on the PR |
 
-Post findings on the record (PR comment). digithings requires `<!-- in-session-review -->` + `reviewed:agent` for the coverage gate.
+Post findings on the record (PR comment). digithings requires `<!-- in-session-review -->` + `reviewed:agent` for the coverage gate. The merge queue is a second, separate gate on the comment — see [Posted verdicts](#posted-verdicts-merge-queue-gate).
+
+## Posted verdicts (merge-queue gate)
+
+A verdict can be delivered as a **PR comment**. The merge queue reads one field, and only inside an HTML marker comment — never the prose ([`scripts/merge_queue.py`](../../scripts/merge_queue.py), DIG-2253):
+
+```html
+<!-- opencode-power-pack:code-review verdict=approved scope=@<full-40-char-sha> -->
+```
+
+Post that marker in a comment of its own. Do not paste this block into a comment to show someone the syntax — the parser reads the raw comment, so a quoted example is a live verdict.
+
+| Field | Effect |
+|-------|--------|
+| `verdict=` **inside the marker** | `changes_requested` and `changes_needed` **block** the merge. `approved` and `approve` do not block. |
+| `scope=` inside the marker | Carries the reviewed commit as `@<full-40-char-lowercase-sha>`. |
+| Everything outside the marker | Ignored. |
+
+- **Only fields inside the marker count.** `## Verdict: changes requested` in the body is prose, and so is the marker with its `<!--` `-->` stripped or escaped. The queue reads both as *no verdict*, not as a block.
+- **A fence does not hide the marker.** The `<!--` `-->` are read from the raw comment, so a marker inside a code fence, an indented block, or inline backticks still posts a live verdict — and a fenced example of an *approval* clears a live block.
+- **Spelling.** `_normalise_verdict()` lowercases and turns `-` into `_`, so `changes-requested` is the same as `changes_requested`. It does not collapse spaces, so `verdict=changes requested` is not readable. Any other spelling is ignored.
+- **A missing or misspelled `verdict=` neither blocks nor clears.** The comment is skipped, so an earlier blocking verdict still stands.
+- **`scope=` must carry a full 40-character lowercase sha.** `_on_pr_history()` applies a blocking verdict only while that sha is the PR head or still in the PR's commits, and it compares the whole string, so a 7-character prefix is read and then never matches. A blocking verdict with no sha, with an uppercase sha, or with a sha that a force-push or rebase removed silently stops applying. Post a new verdict after the fix.
+- **The newest readable verdict wins.** A later `verdict=approved` clears an earlier block. The parser filters on no author and no association, so anyone who can comment on the PR can clear it — an approved marker is not evidence that a review happened. Check the comment thread before you merge.
+
+`verdict=` is not emitted by the marker producer yet (DIG-2281). Until it is, the gate only fires on a marker posted by hand — post it in a comment of its own.
 
 ## Blocking verdicts
 
@@ -20,11 +45,13 @@ Posting the findings is **not** the same as delivering the verdict. A verdict th
 blocks approval **must also be submitted as a GitHub review with state
 `CHANGES_REQUESTED`**, not only as a comment.
 
-The merge queue reads review state, not comment prose. `scripts/merge_queue.py`
-`_gate_review` checks exactly two things: `pr.reviewDecision ==
-"CHANGES_REQUESTED"`, and an `APPROVED` review from someone other than the
-author. It never reads comment text. **A comment that says "changes requested"
-does not block a merge; only a `CHANGES_REQUESTED` review does.**
+The merge queue reads review state and one marker field, never comment prose.
+`scripts/merge_queue.py` `_gate_review` takes an `APPROVED` review from someone
+other than the author as a pass, but blocks on `pr.reviewDecision ==
+"CHANGES_REQUESTED"` and on a posted `verdict=` marker (see
+[Posted verdicts](#posted-verdicts-merge-queue-gate)). **A comment that says
+"changes requested" in prose does not block a merge; a `CHANGES_REQUESTED`
+review or a `verdict=changes_requested` marker does.**
 
 The comment is where the evidence lives. The review state is what the gate can
 see. **A blocking verdict needs both:**
@@ -82,12 +109,14 @@ plugin / npm `@waybarrios/opencode-power-pack`. It matches the **exact** marker
 plus the authenticated author to decide whether to `PATCH` an existing summary
 or `POST` a new one.
 
-Do **not** hand-author this marker, and do not add fields to it. A hand-written
-marker with an extra field would not match, and the tool would `POST` a
-duplicate summary comment. Any new marker field has to be added upstream in that
-`SKILL.md`, not here. The skill also never submits a review, which is why the
-`CHANGES_REQUESTED` rule above is the only thing standing between a tool review
-and an invisible verdict.
+Do **not** hand-author the summary marker, and do not add fields to it. A
+hand-written marker with an extra field would not match, and the tool would
+`POST` a duplicate summary comment. A new field — `verdict=` included — has to be
+added upstream in that `SKILL.md`, not here (DIG-2281). The skill also never
+submits a review, so a tool review on its own leaves no verdict the gate can see:
+either post a `verdict=` marker in a comment of its own (see
+[Posted verdicts](#posted-verdicts-merge-queue-gate)) or submit a
+`CHANGES_REQUESTED` review.
 
 ## Metered third parties (quota)
 
@@ -136,7 +165,7 @@ The inverse also holds: a finding labelled Low whose failure mode is fatal on a 
 - Do not re-review the same commit with a paid bot after trivial push-ups.
 - Do not treat `risk:low` as “someone read it.”
 - Do not skip review when Bugbot/CodeRabbit are unavailable — run in-session instead.
-- Do not skip review coverage just to merge faster. Use **`/review` / in-session / `review-and-ship`** when a hatch is required; skip a full pass on a typo-only one-liner if another hatch already applies. After CI is green and threads are triaged, **merge** the task PR into its base ([AGENTS.md § Merge-when-ready](../../AGENTS.md#merge-when-ready)) — a `develop` base via [the merge queue](../MERGE_QUEUE.md), a stacked base directly. `reviewed:agent` still requires the `<!-- in-session-review -->` comment.
+- Do not skip review coverage just to merge faster. Use **`/review` / in-session / `review-and-ship`** when a hatch is required; skip a full pass on a typo-only one-liner if another hatch already applies. After CI is green and threads are triaged, **merge** the task PR into its base ([AGENTS.md § Merge-when-ready](../../AGENTS.md#merge-when-ready)) — a `develop` base via [the merge queue](../MERGE_QUEUE.md), a stacked base directly. `reviewed:agent` still requires the `<!-- in-session-review -->` comment. A posted `verdict=` blocks the merge until a newer readable verdict clears it — see [Posted verdicts](#posted-verdicts-merge-queue-gate).
 
 ## After review: merge
 

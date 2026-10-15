@@ -48,10 +48,15 @@ LUXALGO_ENTITLEMENTS = (
 OUT = ROOT / "apps" / "digiquant-web" / "app" / "_mcp-tools.json"
 
 PREFIX_FAMILIES = {
+    "gloomberb_": "gloomberb",
     "digifetch_": "digifetch",
     "luxalgo_": "luxalgo",
     "dashboard_": "policy",
 }
+
+#: Leading sentence on every public Gloomberb tool in this list. Matches
+#: ``digiquant.tool_names.GLOOMBERB_PLATFORM_NOTE``.
+GLOOMBERB_PLATFORM_NOTE = "Programmatic extension of the Gloomberb platform."
 KEYWORD_FAMILIES = (
     ("list_strategies", "run_", "export"),
     ("fetch_", "coinmetrics"),
@@ -72,7 +77,8 @@ SESSION_ENTITLEMENTS_ENV = "MCP_MANIFEST_ADVERTISE_GLOOMBERB_SESSION"
 #: Everything else registered is dropped; see ``AUDIT_EXCLUDED`` for the reasons
 #: and the reproduction notes.
 AUDITED_KEEP = frozenset(
-    {            "digiquant_build_sdca_risk_index",
+    {
+        "digiquant_build_sdca_risk_index",
         "digiquant_export",
         "digiquant_fetch_bgeometrics_series",
         "digiquant_fetch_bitview_series",
@@ -209,9 +215,7 @@ def server_facts() -> tuple[dict[str, dict[str, Any]], frozenset[str], frozenset
                     "summary": first_paragraph(ast.get_docstring(node) or ""),
                     "params": params(node),
                 }
-    read_scope = frozenset(
-        literal(find_assignment(tree, "READ_SCOPE_TOOLS")) or frozenset()
-    )
+    read_scope = frozenset(literal(find_assignment(tree, "READ_SCOPE_TOOLS")) or frozenset())
     session_node = find_assignment(tree, "_GLOOMBERB_SESSION_ENTITLEMENTS")
     session_entitlements = string_set(session_node) if session_node is not None else frozenset()
     return tools, read_scope, session_entitlements
@@ -314,9 +318,7 @@ def build() -> tuple[list[dict[str, Any]], dict[str, str], list[str]]:
     entitlement_by_tool = entitlements()
     advertise_session = os.environ.get(SESSION_ENTITLEMENTS_ENV) == "1"
 
-    stale = sorted(
-        (AUDITED_KEEP | set(AUDIT_EXCLUDED)) - set(tools)
-    )
+    stale = sorted((AUDITED_KEEP | set(AUDIT_EXCLUDED)) - set(tools))
 
     kept: list[dict[str, Any]] = []
     dropped: dict[str, str] = {}
@@ -330,9 +332,7 @@ def build() -> tuple[list[dict[str, Any]], dict[str, str], list[str]]:
             and entitlement is not None
             and entitlement in session_entitlements
         ):
-            dropped[name] = (
-                f"entitlement '{entitlement}' needs the deployer's Gloomberb cookie"
-            )
+            dropped[name] = f"entitlement '{entitlement}' needs the deployer's Gloomberb cookie"
             continue
         if name in AUDITED_KEEP:
             kept.append(
@@ -348,7 +348,27 @@ def build() -> tuple[list[dict[str, Any]], dict[str, str], list[str]]:
         if name in AUDIT_EXCLUDED:
             dropped[name] = AUDIT_EXCLUDED[name]
         elif name.startswith("digifetch_"):
-            dropped[name] = digifetch_reason()
+            # Public name is gloomberb_*. Free tools are listed: DIG-3314 reads
+            # live prices from this family, and the landing MCP list is the
+            # one place they appear. Session-gated names never reach here
+            # (dropped above). digifetch_options_scenario stays in
+            # AUDIT_EXCLUDED. The legacy digifetch_ name is not listed twice.
+            if entitlement == "free":
+                public = "gloomberb_" + name[len("digifetch_") :]
+                summary = tool["summary"]
+                if not summary.startswith(GLOOMBERB_PLATFORM_NOTE):
+                    summary = f"{GLOOMBERB_PLATFORM_NOTE} {summary}".strip()
+                kept.append(
+                    {
+                        "name": public,
+                        "family": "gloomberb",
+                        "scope": "read" if name in read_scope else "full",
+                        "summary": summary,
+                        "params": tool["params"],
+                    }
+                )
+            else:
+                dropped[name] = digifetch_reason()
         else:
             dropped[name] = "not audited as answering on the local stack (2026-10-11)"
     kept.sort(key=lambda t: (t["family"], t["name"]))

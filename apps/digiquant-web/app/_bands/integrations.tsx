@@ -17,7 +17,7 @@ const DRIVERS: { id: IntegrationId; name: string; role: string; line: string; fa
     name: "Gloomberg",
     role: "market data",
     line: "Quotes, filings, macro and options for the research stages. Enrichment, never the record the backtests run on.",
-    fact: `${toolCount("digifetch_")} MCP tools`,
+    fact: `${toolCount("gloomberb_")} MCP tools`,
   },
   {
     id: "luxalgo",

@@ -34,6 +34,7 @@ from digiquant.data.gloomberb import (  # noqa: E402  # noqa: E402
 from digiquant.data.gloomberb.session_gate import SessionGateStatus  # noqa: E402
 from digiquant.mcp_server import create_mcp_server  # noqa: E402
 from digiquant.orchestrator_tools import build_orchestrator_tool_manifest  # noqa: E402
+from digiquant.tool_names import canonical_tool_name  # noqa: E402
 from digiquant.tool_refusals import REFUSED_TOOLS  # noqa: E402
 
 from digifetch import HttpFetcher, RateLimiter, RetryPolicy  # noqa: E402
@@ -223,7 +224,9 @@ def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _mcp(name: str):
-    return create_mcp_server()._tool_manager.get_tool(name).fn
+    tool = create_mcp_server()._tool_manager.get_tool(canonical_tool_name(name))
+    assert tool is not None, name
+    return tool.fn
 
 
 def _names(scope: str = "full") -> set[str]:
@@ -1142,8 +1145,10 @@ def test_all_88_live_tools_registered_in_full_and_read_scope() -> None:
     assert REFUSED_DIGIFETCH == {"digifetch_congress_trades"}
     assert len(DIGIFETCH_TOOLS) == 88
     assert LIVE_DIGIFETCH_TOOLS == DIGIFETCH_TOOLS
-    assert LIVE_DIGIFETCH_TOOLS <= _names()
-    assert LIVE_DIGIFETCH_TOOLS <= _names(scope="read")
+    public = {canonical_tool_name(name) for name in LIVE_DIGIFETCH_TOOLS}
+    assert public <= _names()
+    assert public <= _names(scope="read")
+    assert not any(name.startswith("digifetch_") for name in _names())
 
 
 def test_refused_tools_are_registered_on_no_scope_and_never_advertised() -> None:
@@ -2536,7 +2541,8 @@ def test_entitlement_note_is_surfaced_in_mcp_and_manifest() -> None:
         expected = TOOL_ENTITLEMENTS[name]
         note = entitlement_note(name)
         assert note is not None
-        tool = server._tool_manager.get_tool(name)
+        tool = server._tool_manager.get_tool(canonical_tool_name(name))
+        assert tool is not None, name
         assert getattr(tool.fn, "entitlement", None) == expected, name
         assert note in tool.description, name
         assert rows[name].get("entitlement") == expected, name

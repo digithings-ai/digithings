@@ -482,10 +482,17 @@ export function TearsheetView({ slug, embedded = false }: { slug: string; embedd
       <header className="ts-header">
         <div className="ts-header-main">
           {embedded ? null : <Link href="/strategies" className="ts-back">← Strategies</Link>}
-          <h1 className="ts-h1 ts-h1-with-logo">
-            <AssetLogoFor strategy={slug} symbol={data.symbol} size={36} className="ts-header-logo" />
-            <span>{title}</span>
-          </h1>
+          {embedded ? (
+            <h2 className="ts-h1 ts-h1-with-logo">
+              <AssetLogoFor strategy={slug} symbol={data.symbol} size={36} className="ts-header-logo" />
+              <span>{title}</span>
+            </h2>
+          ) : (
+            <h1 className="ts-h1 ts-h1-with-logo">
+              <AssetLogoFor strategy={slug} symbol={data.symbol} size={36} className="ts-header-logo" />
+              <span>{title}</span>
+            </h1>
+          )}
           <div className="ts-meta">
             <LiveMetricsBadge generatedAt={data.generated_at} />
             <Badge variant="outline" className="border-accent-weak bg-accent-weak">

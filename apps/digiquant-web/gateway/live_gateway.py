@@ -1,8 +1,10 @@
-"""Local read-only gateway: static digiquant.io -> digiquant MCP server (stdio).
+"""Local gateway: static digiquant.io -> digiquant MCP server (stdio).
 
 Local only. No secret ever reaches the browser: the MCP server runs as a child
 process with a scrubbed environment (anonymous free tier), over stdio (no port).
-There is NO generic tool passthrough; every route maps to an entry in PROBES.
+Probe routes stay a fixed table. `POST /v1/tools/call` runs one tool whose name
+is in the audited landing-page manifest, with a payload cap. It is not an open
+passthrough.
 
 Run:  python apps/digiquant-web/gateway/live_gateway.py   (see README.md)
 """
@@ -19,6 +21,7 @@ import time
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
+from pathlib import Path
 from typing import Any, Callable, Protocol
 from urllib.parse import urlsplit
 
@@ -32,13 +35,21 @@ from starlette.routing import Route
 
 HOST = "127.0.0.1"
 DEFAULT_PORT = 8792
-DEFAULT_ORIGINS = ("http://localhost:3910", "http://127.0.0.1:3910")
+DEFAULT_ORIGINS = (
+    "http://localhost:3910",
+    "http://127.0.0.1:3910",
+    "http://localhost:4020",
+    "http://127.0.0.1:4020",
+)
 MARKET_UPSTREAM = "https://graph.digithings.ai/v1/market"
 MARKET_TTL = 300.0
 MAX_PAYLOAD_BYTES = 200_000
 RATE_LIMIT = 30  # requests per IP per window
 RATE_WINDOW = 60.0
 MAX_CONCURRENT_TOOLS = 4
+CALL_TIMEOUT = 25.0
+MAX_ARG_BYTES = 8_000
+TOOL_NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,79}$")
 SYMBOL_RE = re.compile(r"^[A-Za-z0-9.^=-]{1,12}$")
 QUARTER_RE = re.compile(r"^\d{4}Q[1-4]$")
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
@@ -74,6 +85,32 @@ def scrubbed_env() -> dict[str, str]:
     return env
 
 
+def mcp_child_env() -> dict[str, str]:
+    """Scrubbed env plus the anonymous Gloomberb switch.
+
+    ``GLOOMBERB_ENABLED=1`` is not a secret. The session cookie is never
+    copied, so cookie-gated tools stay unauthenticated on this surface.
+    """
+    env = scrubbed_env()
+    env["GLOOMBERB_ENABLED"] = "1"
+    return env
+
+
+def load_manifest_tools(path: Path | None = None) -> frozenset[str]:
+    """Tool names the landing page is allowed to execute. The same JSON the page lists."""
+    src = path or Path(__file__).resolve().parent.parent / "app" / "_mcp-tools.json"
+    try:
+        rows = json.loads(src.read_text())
+    except (OSError, json.JSONDecodeError):
+        return frozenset()
+    names: set[str] = set()
+    if isinstance(rows, list):
+        for row in rows:
+            if isinstance(row, dict) and isinstance(row.get("name"), str):
+                names.add(row["name"])
+    return frozenset(names)
+
+
 class StdioBridge:
     def __init__(self) -> None:
         self._session: Any = None
@@ -90,8 +127,8 @@ class StdioBridge:
 
         params = StdioServerParameters(
             command=sys.executable,
-            args=["-m", "digiquant.mcp_server", "--stdio", "--scope", "read"],
-            env=scrubbed_env(),
+            args=["-m", "digiquant.mcp_server", "--stdio", "--scope", "full"],
+            env=mcp_child_env(),
         )
         try:
             async with stdio_client(params) as (read, write):
@@ -576,7 +613,7 @@ PROBES: dict[str, Probe] = {
     for p in [
         Probe(
             "quote",
-            "digifetch_quote",
+            "gloomberb_quote",
             "Delayed quote for one symbol",
             {"symbol": SYM},
             lambda a: {"symbol": a["symbol"]},
@@ -585,7 +622,7 @@ PROBES: dict[str, Probe] = {
         ),
         Probe(
             "history",
-            "digifetch_price_history",
+            "gloomberb_price_history",
             "Daily bars for one symbol",
             {
                 "symbol": SYM,
@@ -597,7 +634,7 @@ PROBES: dict[str, Probe] = {
         ),
         Probe(
             "financials",
-            "digifetch_ticker_financials",
+            "gloomberb_ticker_financials",
             "Profile + key fundamentals (trimmed)",
             {"symbol": SYM},
             lambda a: {"symbol": a["symbol"]},
@@ -606,7 +643,7 @@ PROBES: dict[str, Probe] = {
         ),
         Probe(
             "congress",
-            "digifetch_congress_trades",
+            "gloomberb_congress_trades",
             "Latest US House disclosure trades (market-wide tape)",
             {
                 "limit": Param("int", default=10, lo=1, hi=25),
@@ -622,7 +659,7 @@ PROBES: dict[str, Probe] = {
         ),
         Probe(
             "predictions",
-            "digifetch_prediction_markets",
+            "gloomberb_prediction_markets",
             "Polymarket markets, open, by 24h volume",
             {"limit": Param("int", default=8, lo=1, hi=20)},
             lambda a: {"venue": "polymarket", "limit": 100},
@@ -635,7 +672,7 @@ PROBES: dict[str, Probe] = {
         ),
         Probe(
             "funds13f",
-            "digifetch_13f_funds",
+            "gloomberb_13f_funds",
             "Top 13F funds for a quarter",
             {
                 "quarter": Param("quarter", default=_prev_quarter()),
@@ -647,7 +684,7 @@ PROBES: dict[str, Probe] = {
         ),
         Probe(
             "yieldcurve",
-            "digifetch_yield_curve",
+            "gloomberb_yield_curve",
             "US Treasury yield curve",
             {},
             lambda a: {},
@@ -656,7 +693,7 @@ PROBES: dict[str, Probe] = {
         ),
         Probe(
             "econ",
-            "digifetch_econ_series",
+            "gloomberb_econ_series",
             "FRED-style macro series (latest observations)",
             {
                 "series_id": Param("symbol", required=True, doc="FRED id e.g. CPIAUCSL"),
@@ -668,7 +705,7 @@ PROBES: dict[str, Probe] = {
         ),
         Probe(
             "news",
-            "digifetch_news",
+            "gloomberb_news",
             "Market news headlines, optionally per ticker",
             {"symbol": Param("symbol"), "limit": Param("int", default=8, lo=1, hi=20)},
             lambda a: (
@@ -681,7 +718,7 @@ PROBES: dict[str, Probe] = {
         ),
         Probe(
             "search",
-            "digifetch_search",
+            "gloomberb_search",
             "Symbol search across venues",
             {"query": Param("query", required=True), "limit": Param("int", default=8, lo=1, hi=10)},
             lambda a: {"query": a["query"], "limit": a["limit"]},
@@ -690,7 +727,7 @@ PROBES: dict[str, Probe] = {
         ),
         Probe(
             "filings",
-            "digifetch_sec_filings",
+            "gloomberb_sec_filings",
             "Recent SEC filings for a symbol",
             {"symbol": SYM, "limit": Param("int", default=8, lo=1, hi=15)},
             lambda a: {"ticker": a["symbol"], "what": "filings", "count": a["limit"]},
@@ -805,6 +842,7 @@ class Gateway:
     hits: dict[str, deque[float]] = field(default_factory=dict)
     locks: dict[Any, asyncio.Lock] = field(default_factory=dict)
     clock: Callable[[], float] = time.monotonic
+    tool_names: frozenset[str] = field(default_factory=frozenset)
 
     # -- helpers
     def rate_ok(self, ip: str) -> bool:
@@ -904,6 +942,37 @@ class Gateway:
         self._cput(key, probe.ttl, env)
         return 200, env
 
+    async def run_tool(self, name: str, args: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+        """Run one manifest tool. Unknown names never reach the bridge."""
+        t0 = time.monotonic()
+        if name not in self.tool_names:
+            return 404, error_env("call", name, {}, "not_found", "unknown tool")
+        try:
+            raw = await self.bridge.call(name, args, CALL_TIMEOUT)
+        except ToolError as e:
+            return 502, error_env(
+                "call", name, args, e.code, e.message, int((time.monotonic() - t0) * 1000)
+            )
+        ms = int((time.monotonic() - t0) * 1000)
+        err = upstream_error(raw) if isinstance(raw, dict) else None
+        if err:
+            return 200, error_env("call", name, args, err[0], err[1], ms)
+        fetched_at = raw.get("fetched_at") if isinstance(raw, dict) else None
+        env = make_envelope(
+            "call",
+            name,
+            args,
+            ok=True,
+            latencyMs=ms,
+            data=raw,
+            fetchedAt=fetched_at if isinstance(fetched_at, str) else now_iso(),
+        )
+        if len(json.dumps(env, default=str)) > MAX_PAYLOAD_BYTES:
+            return 502, error_env(
+                "call", name, args, "payload_too_large", "tool payload exceeds cap", ms
+            )
+        return 200, env
+
     # -- market proxy
     async def market(self, path: str, params: dict[str, str]) -> Response:
         key = ("market", path, tuple(sorted(params.items())))
@@ -994,6 +1063,42 @@ def build_app(gw: Gateway, lifespan: Any = None) -> Starlette:
         status, env = await gw.run_probe(p, dict(request.query_params))
         return JSONResponse(env, status, headers={"Cache-Control": "no-store"})
 
+    async def tools_call(request: Request) -> Response:
+        if (r := guard(request)) is not None:
+            return r
+        try:
+            body = await request.json()
+        except Exception:
+            return JSONResponse(
+                error_env("call", None, {}, "invalid_input", "body is not JSON"), 400
+            )
+        if not isinstance(body, dict):
+            return JSONResponse(
+                error_env("call", None, {}, "invalid_input", "body must be an object"), 400
+            )
+        name = body.get("name")
+        args = body.get("arguments", {})
+        if not isinstance(name, str) or not TOOL_NAME_RE.match(name):
+            return JSONResponse(
+                error_env("call", None, {}, "invalid_input", "name is not a tool name"), 400
+            )
+        if not isinstance(args, dict) or any(not isinstance(k, str) for k in args):
+            return JSONResponse(
+                error_env("call", name, {}, "invalid_input", "arguments must be an object"), 400
+            )
+        try:
+            encoded = json.dumps(args)
+        except (TypeError, ValueError):
+            return JSONResponse(
+                error_env("call", name, {}, "invalid_input", "arguments are not JSON"), 400
+            )
+        if len(encoded) > MAX_ARG_BYTES:
+            return JSONResponse(
+                error_env("call", name, {}, "invalid_input", "arguments are too large"), 400
+            )
+        status, env = await gw.run_tool(name, args)
+        return JSONResponse(env, status, headers={"Cache-Control": "no-store"})
+
     async def market_closes(request: Request) -> Response:
         if (r := guard(request)) is not None:
             return r
@@ -1036,6 +1141,7 @@ def build_app(gw: Gateway, lifespan: Any = None) -> Starlette:
         Route("/healthz", healthz),
         Route("/v1/catalog", catalog),
         Route("/v1/probe/{pid}", probe),
+        Route("/v1/tools/call", tools_call, methods=["POST"]),
         Route("/v1/market/closes", market_closes),
         Route("/v1/market/tickers", market_tickers),
     ]
@@ -1046,8 +1152,8 @@ def build_app(gw: Gateway, lifespan: Any = None) -> Starlette:
             Middleware(
                 CORSMiddleware,
                 allow_origins=list(gw.origins),
-                allow_methods=["GET"],
-                allow_headers=[],
+                allow_methods=["GET", "POST"],
+                allow_headers=["content-type"],
                 allow_credentials=False,
                 max_age=600,
             )
@@ -1101,7 +1207,13 @@ def make_default_app() -> Starlette:
             await http.aclose()
 
     return build_app(
-        Gateway(bridge=bridge, http=http, origins=origins_from_env()), lifespan=lifespan
+        Gateway(
+            bridge=bridge,
+            http=http,
+            origins=origins_from_env(),
+            tool_names=load_manifest_tools(),
+        ),
+        lifespan=lifespan,
     )
 
 

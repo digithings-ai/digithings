@@ -14,6 +14,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+pytestmark = pytest.mark.unit
+
 REPO = Path(__file__).resolve().parent.parent.parent
 SPEC = importlib.util.spec_from_file_location(
     "render_config_contract", REPO / "scripts" / "render_config_contract.py"

@@ -10,9 +10,10 @@ export default function BookIndexPage() {
   const chapters = chapterRefs(loadChapters(process.cwd()));
   return (
     <article className="pt-[clamp(3rem,7vw,5rem)]">
-      <PageHead kicker="// book" title="The digithings book">
-        Nine modules and the reasoning behind them, in the order that makes the answer readable. Every
-        chapter is one file; the diagrams are the same files the printed book uses.
+      <PageHead kicker="// digibook" title="digibook">
+        A short, philosophical book about self-hosted AI infrastructure: why it matters, how it
+        scales, and what it costs. It is not a technical manual for digithings — the docs cover
+        that — this is the thinking behind choosing to own your own stack at all.
       </PageHead>
       <div className="mt-[clamp(2rem,4vw,3rem)] max-w-[64ch]">
         <BookToc chapters={chapters} />

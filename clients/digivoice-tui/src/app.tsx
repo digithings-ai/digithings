@@ -26,13 +26,13 @@ import {
   statusRow,
 } from "./chrome";
 import {
-  INITIAL_UI,
   type KeyCtx,
   type KeyEffect,
   type Row,
   type Screen,
   type UiState,
   reduceKey,
+  uiFromStart,
 } from "./keys";
 import {
   DASH,
@@ -116,7 +116,7 @@ export function App() {
   const renderer = useRenderer();
   const { width, height } = useTerminalDimensions();
 
-  const [ui, setUi] = useState<UiState>(INITIAL_UI);
+  const [ui, setUi] = useState<UiState>(() => uiFromStart(process.env.DIGIVOICE_TUI_START));
   const [setup, setSetup] = useState<SetupPayload | null>(null);
   const [doctor, setDoctor] = useState<DoctorReport | null>(null);
   const [history, setHistory] = useState<History | null>(null);
@@ -194,6 +194,13 @@ export function App() {
     },
     [reload],
   );
+
+  const started = useRef(false);
+  useEffect(() => {
+    if (started.current) return;
+    started.current = true;
+    if (ui.screen === "doctor" || ui.screen === "history") void openScreen(ui.screen);
+  }, [openScreen, ui.screen]);
 
   const runEffect = useCallback(
     (effect: KeyEffect | null) => {

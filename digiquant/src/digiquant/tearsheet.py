@@ -70,6 +70,7 @@ def create_tearsheet(
     stats_general: dict | None = None,
     returns_series: Any = None,
     realized_pnls_series: Any = None,
+    initial_balance: float | None = None,
     full: bool = True,
 ) -> Path:
     try:
@@ -121,7 +122,11 @@ def create_tearsheet(
             return fallback
         return fig.to_html(full_html=False, include_plotlyjs=include_plotlyjs, div_id=div_id)
 
-    initial_balance = 1_000_000.0
+    # The equity chart compounds the return series as (1 + r). Anchored on the
+    # account's own start balance — the first row of the balance path — that
+    # reproduces the account exactly; the venue constant is the fallback for a report
+    # with no readable balance path at all.
+    initial_balance = 1_000_000.0 if initial_balance is None else initial_balance
 
     # Build core figures (always)
     equity_fig = _build_equity_chart(timestamps, balances) if timestamps else None

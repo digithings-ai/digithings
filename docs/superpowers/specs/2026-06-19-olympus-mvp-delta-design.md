@@ -1,6 +1,6 @@
 # Olympus MVP Daily Delta — collapse graph, fix continuity
 
-> **⚠️ SUPERSEDED for implementation** by [`2026-06-20-olympus-daily-thesis-design.md`](./2026-06-20-olympus-daily-thesis-design.md) + [`2026-06-20-olympus-daily-thesis.md`](../plans/2026-06-20-olympus-daily-thesis.md).  
+> **⚠️ SUPERSEDED for implementation** by [`2026-06-20-olympus-daily-thesis-design.md`](./2026-06-20-olympus-daily-thesis-design.md) + `2026-06-20-olympus-daily-thesis.md` (removed DIG-3399; git history keeps it).  
 > **Keep this file** for Jun-19 forensics, wave-1–4 task history, and ADR-0020 context. Do **not** implement abandoned items (#931 lite graph, baseline/delta forks).
 
 **Epic:** [#930](https://github.com/digithings-ai/digithings/issues/930) (now absorbs #924) · **Branch:** `task/930-olympus-mvp-delta` (off `module/digiquant`) · **PR target:** `module/digiquant`

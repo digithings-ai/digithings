@@ -51,11 +51,11 @@ QUOTE = {
 
 
 def test_quote_envelope_and_cache() -> None:
-    c, bridge, _ = _client({"digifetch_quote": QUOTE})
+    c, bridge, _ = _client({"gloomberb_quote": QUOTE})
     r = c.get("/v1/probe/quote?symbol=aapl")
     body = r.json()
     assert r.status_code == 200 and body["ok"] and not body["cached"]
-    assert body["args"] == {"symbol": "AAPL"} and body["tool"] == "digifetch_quote"
+    assert body["args"] == {"symbol": "AAPL"} and body["tool"] == "gloomberb_quote"
     assert body["attribution"] == ["Sourced from Gloomberg"]
     assert body["delayNote"] == "Data delayed up to 15 minutes"
     assert body["data"]["price"] == 333.0 and body["data"]["changePct"] == 1.1
@@ -82,13 +82,13 @@ def test_invalid_params_never_reach_tool(url: str) -> None:
 
 def test_unknown_probe_and_no_passthrough() -> None:
     c, bridge, _ = _client({})
-    assert c.get("/v1/probe/digifetch_holders").status_code == 404
+    assert c.get("/v1/probe/gloomberb_holders").status_code == 404
     assert bridge.calls == []
     assert not any("holders" in p.tool or "backtest" in p.tool for p in lg.PROBES.values())
 
 
 def test_limit_clamped() -> None:
-    c, bridge, _ = _client({"digifetch_news": {"data": {"items": []}, "attribution": "x"}})
+    c, bridge, _ = _client({"gloomberb_news": {"data": {"items": []}, "attribution": "x"}})
     c.get("/v1/probe/news?limit=9999")
     assert bridge.calls[0][1]["limit"] == 20
 
@@ -96,7 +96,7 @@ def test_limit_clamped() -> None:
 def test_data_code_error_is_not_ok() -> None:
     c, _, _ = _client(
         {
-            "digifetch_quote": {
+            "gloomberb_quote": {
                 "data": {"code": "auth_required", "message": "sign in", "retryable": False}
             }
         }
@@ -106,7 +106,7 @@ def test_data_code_error_is_not_ok() -> None:
 
 
 def test_transport_error_502() -> None:
-    c, _, _ = _client({"digifetch_quote": lg.ToolError("timeout", "slow")})
+    c, _, _ = _client({"gloomberb_quote": lg.ToolError("timeout", "slow")})
     r = c.get("/v1/probe/quote?symbol=AAPL")
     assert r.status_code == 502 and r.json()["error"]["code"] == "timeout"
 
@@ -118,14 +118,14 @@ def test_predictions_filter_and_honest_attribution() -> None:
         {"title": "small", "yes_prob": 0.4, "volume_24h": 1, "ends_at": "2099-01-01T00:00:00Z"},
         {"title": "big", "yes_prob": 0.6, "volume_24h": 50, "ends_at": "2099-01-01T00:00:00Z"},
     ]
-    c, _, _ = _client({"digifetch_prediction_markets": {"data": {"markets": markets}}})
+    c, _, _ = _client({"gloomberb_prediction_markets": {"data": {"markets": markets}}})
     body = c.get("/v1/probe/predictions").json()
     assert [m["title"] for m in body["data"]["markets"]] == ["big", "small"]
     assert "Polymarket" in body["attribution"][0] and body["delayNote"]
 
 
 def test_empty_is_honest() -> None:
-    c, _, _ = _client({"digifetch_congress_trades": {"data": {"trades": []}, "attribution": "a"}})
+    c, _, _ = _client({"gloomberb_congress_trades": {"data": {"trades": []}, "attribution": "a"}})
     body = c.get("/v1/probe/congress").json()
     assert body["ok"] and body["empty"] and body["data"] == {"trades": []}
 
@@ -153,7 +153,7 @@ def test_luxalgo_keeps_license_note_and_drops_nothing_sensitive() -> None:
 
 
 def test_cors_allowlist_and_forbidden_origin() -> None:
-    c, _, _ = _client({"digifetch_quote": QUOTE})
+    c, _, _ = _client({"gloomberb_quote": QUOTE})
     ok = c.get("/v1/probe/quote?symbol=AAPL", headers={"Origin": ORIGIN})
     assert ok.headers["access-control-allow-origin"] == ORIGIN
     bad = c.get("/v1/probe/quote?symbol=AAPL", headers={"Origin": "http://localhost:3005"})
@@ -161,7 +161,7 @@ def test_cors_allowlist_and_forbidden_origin() -> None:
 
 
 def test_rate_limit() -> None:
-    c, _, _ = _client({"digifetch_quote": QUOTE})
+    c, _, _ = _client({"gloomberb_quote": QUOTE})
     codes = [c.get("/v1/probe/quote?symbol=AAPL").status_code for _ in range(lg.RATE_LIMIT + 2)]
     assert codes.count(429) == 2
 
@@ -201,6 +201,16 @@ def test_scrubbed_env_has_no_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
     assert set(lg.scrubbed_env()) <= {"PATH", "HOME", "LANG", "PYTHONPATH"}
 
 
+def test_mcp_child_enables_anonymous_gloomberb_and_drops_the_cookie(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GLOOMBERB_SESSION_COOKIE", "do-not-copy")
+    env = lg.mcp_child_env()
+    assert env["GLOOMBERB_ENABLED"] == "1"
+    assert "GLOOMBERB_SESSION_COOKIE" not in env
+    assert "do-not-copy" not in env.values()
+
+
 def test_origins_from_env_accepts_loopback_only(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(
         "DQ_GATEWAY_ORIGINS",
@@ -237,6 +247,31 @@ def test_port_from_env_rejects_invalid_values(monkeypatch: pytest.MonkeyPatch, r
     monkeypatch.setenv("DQ_GATEWAY_PORT", raw)
     with pytest.raises(ValueError, match="DQ_GATEWAY_PORT"):
         lg.port_from_env()
+
+
+def test_tool_call_rejects_names_outside_the_manifest() -> None:
+    c, bridge, _ = _client({"digifetch_quote": QUOTE})
+    r = c.post("/v1/tools/call", json={"name": "digifetch_quote", "arguments": {"symbol": "AAPL"}})
+    assert r.status_code == 404
+    assert r.json()["error"]["code"] == "not_found"
+    assert bridge.calls == []
+    bad = c.post("/v1/tools/call", json={"name": "Not A Tool", "arguments": {}})
+    assert bad.status_code == 400
+    assert bridge.calls == []
+
+
+def test_tool_call_runs_an_allowlisted_tool() -> None:
+    c, bridge, gw = _client({"digifetch_quote": QUOTE})
+    gw.tool_names = frozenset({"digifetch_quote"})
+    r = c.post(
+        "/v1/tools/call",
+        json={"name": "digifetch_quote", "arguments": {"symbol": "AAPL"}},
+        headers={"Origin": ORIGIN},
+    )
+    assert r.status_code == 200 and r.json()["ok"] is True
+    assert r.json()["tool"] == "digifetch_quote"
+    assert r.json()["data"]["data"]["quote"]["price"] == 333.0
+    assert bridge.calls == [("digifetch_quote", {"symbol": "AAPL"})]
 
 
 def test_catalog_lists_probes() -> None:
