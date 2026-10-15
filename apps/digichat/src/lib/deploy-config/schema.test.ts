@@ -288,9 +288,7 @@ describe("DigichatConfigSchema", () => {
     expect(dt?.tools?.catalog.map((t) => t.id)).toEqual([
       "digisearch",
       "digivault",
-      "web_search",
     ]);
-    expect(dt?.tools?.catalog.find((t) => t.id === "web_search")?.default).toBe(true);
     expect(dt?.tools?.catalog.find((t) => t.id === "digisearch")?.default).toBe(true);
     expect(dt?.tools?.catalog.find((t) => t.id === "digivault")?.default).toBe(true);
     expect(dt?.models.allowPicker).toBe(true);
