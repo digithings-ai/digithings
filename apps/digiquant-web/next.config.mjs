@@ -23,9 +23,11 @@ const nextConfig = {
   // Dev-only same-origin proxy. Static export ignores rewrites.
   // /official-api → the dashboard API. Production calls NEXT_PUBLIC_DASHBOARD_API_URL.
   // DIGIQUANT_WEB_OFFICIAL_API_ORIGIN overrides the rewrite host. Unset stays
-  // http://127.0.0.1:8788. /app is this site's terminal (the OpenTUI desk pages).
-  // It is not a proxy. /dashboard is not proxied. redirects() sends it to the desk.
-  // Static export ignores that function; public/_redirects carries the same map on Pages.
+  // http://127.0.0.1:8788. /app is this site's terminal (the brief desk).
+  // It is not a proxy. /dashboard is not proxied. redirects() sends retired
+  // non-FX dashboard paths to the desk. FX Hub and /dashboard?invite= stay
+  // on apps/dashboard (ROUTE_DASHBOARD_FX_HUB_TO_APP). Static export ignores
+  // redirects(); public/_redirects carries the same map on Pages.
   async rewrites() {
     return [
       { source: "/official-api/:path*", destination: `${officialApiRewriteOrigin()}/:path*` },

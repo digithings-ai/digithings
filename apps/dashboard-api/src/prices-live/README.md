@@ -61,20 +61,38 @@ all skip without fetching. `market.test.ts` pins the burn-rate invariant
 claim runs after the market-hours gate and before the ticker query, and that
 a loser reads nothing.
 
-## Settings: assessed, not yet ported
+## Settings: measured, not yet ported
 
-The sibling `settings` edge function (`handleSettingsRequest`, ~1800 lines
-plus the vault/access/invite/profile-schemas helpers) was assessed against
-the same pattern and deliberately left out of this slice:
+The sibling `settings` edge function was measured rather than eyeballed. The
+`Deno.serve` wrapper is 98 lines; the handler it wraps,
+`_shared/settings-handlers.ts`, is 1817; `_shared` is 5777 lines across 21
+files behind it. Two things decide the shape of the remaining work.
 
-- its data layer is the full `supabase-js` query-builder surface (chained
-  `.from().select().eq().order().limit().maybeSingle().single()`, plus
-  `auth.admin` claim sync), not the three narrow calls prices-live needs —
-  a faithful `AdminDb` for it is a second leaf on its own;
-- its crypto path (`vault.ts` AES-GCM seal, `DIGIQUANT_VAULT_MASTER_KEY`)
-  needs a WebCrypto-audit slice with its own vectors, not a drive-by copy.
+**1. The data layer is the whole supabase-js client, not a narrow one.**
+`_shared/supabase-admin.ts:11` is `export type AdminClient = SupabaseClient`,
+so the handler chains straight onto the client and there is no seam to port
+against. Counted in the handler: 150 chained calls across 12 tables --
+`broker_connections`, `broker_executions`, `client_product_grants`,
+`entitlement_grants`, `job_runs`, `notification_log`, `notification_prefs`,
+`olympus_profile_config`, `product_invite_attempts`, `product_invite_codes`,
+`product_invite_redemptions`, `workspace_provider_credentials` -- over 39
+`.eq`, 34 `.from`, 27 `.select`, 13 `.maybeSingle`, 9 `.insert`, 7 `.order`,
+6 `.single`, 5 `.update`, 5 `.limit`, 2 `.upsert`, 2 `.neq`, 1 `.gte`.
 
-Both lanes stay live on Supabase; nothing here changes what they do.
+That is why prices-live's narrow `PricesLiveDb` cannot absorb it. It is not
+"three narrow calls vs a big handler"; it is *the builder surface itself*.
+`../data/postgrest.ts` is that prerequisite, scoped to exactly this census
+and shipped with its own emission tests (24) and an 8-mutant kill run.
+Absent methods (`rpc`, count, storage, auth, realtime) throw rather than
+guess, because the census found none.
+
+**2. The crypto path is its own slice.** `vault.ts` is 350 lines of AES-GCM
+seal against `DIGIQUANT_VAULT_MASTER_KEY`, plus a vector file. It needs a
+WebCrypto audit with its own vectors, not a drive-by copy.
+
+So the port decomposes into at least three leaves -- builder (landed),
+crypto, then the handler -- rather than one slice. Both lanes stay live on
+Supabase; nothing here changes what they do.
 
 ## Tests
 
