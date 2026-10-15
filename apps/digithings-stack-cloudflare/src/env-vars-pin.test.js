@@ -110,6 +110,9 @@ const WORKER_SCOPED_VARS = new Set([
   // it stays Worker-scoped. (The deprecated DIGICHAT_EMBED_ENABLED alias IS a
   // forwarded key, like on the standalone worker.)
   "DIGICHAT_LEGACY_EMBED_ENABLED",
+  // DIG-3585: /chat/occ invite gate. The container authorizes via the tenant
+  // token, never this Worker secret.
+  "OCC_INVITE_KEY",
 ]);
 
 // Deliberately throws rather than returning an empty match -- a re-indented
