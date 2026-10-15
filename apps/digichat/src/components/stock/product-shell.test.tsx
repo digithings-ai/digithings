@@ -2,6 +2,16 @@
 "use client";
 
 import { describe, expect, it, vi } from "vitest";
+
+vi.mock("@/lib/warmup-gate", () => ({
+  startWarmup: () => {
+    if (typeof document !== "undefined") {
+      document.documentElement.dataset.digichatWarmup = "ready";
+    }
+    return Promise.resolve(true);
+  },
+  getWarmupServiceNames: () => ["auth", "assistant"],
+}));
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { AssistantRuntime } from "@assistant-ui/react";

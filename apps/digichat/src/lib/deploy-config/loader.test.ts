@@ -578,7 +578,6 @@ describe("matchHostDeployment", () => {
     expect(dt?.tools?.catalog.map((t) => t.id)).toEqual([
       "digisearch",
       "digivault",
-      "web_search",
     ]);
     expect(matchHostDeployment("www.digithings.ai", cfg)?.slug).toBe("digithings-ai");
     expect(matchHostDeployment("https://unknown.example", cfg)).toBeNull();
@@ -595,7 +594,7 @@ describe("matchHostDeployment", () => {
     expect(client.chrome.skin).toBe("digichat");
     expect(client.backendType).toBe("digigraph");
     expect(client.tools.catalog.map((t) => t.id)).toEqual(
-      expect.arrayContaining(["digisearch", "digivault", "web_search"]),
+      expect.arrayContaining(["digisearch", "digivault"]),
     );
     expect(client.features.attachments).toBe(false);
     expect(client.features.pageContext).toBe("visible");
