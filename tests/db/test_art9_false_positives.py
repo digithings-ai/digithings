@@ -41,6 +41,23 @@ What is pinned here:
    which is §5.6's "no regex detects those in prose with usable precision" and
    is what keeps a battery of prose from being unfalsifiable.
 
+**The census is decided, not only measured (2026-10-15).** Card
+`6fbd67ba-0b8a-44a8-9ae9-020d4b95065e` was accepted by `local-board` at
+`2026-10-15T03:37:40.557Z`, and the accept arm read "I write one leaf brief for
+digibase/art9.py, add a test that keeps 4 real field names from being lost, and
+record the 5 accepted false alarms in the battery". The plan is the document
+`matcher-narrowing-plan` on DIG-1086, revision
+`434a12e3-46e0-4614-9558-2acf896f7d78`, which the board did not edit. So every
+refusal below now belongs to one of three named groups with an owner:
+`RECORDED_FALSE_ALARMS`, accepted at plan section 8.5; `OPEN_FALSE_ALARMS`, which
+the approved narrowing removes at section 8.1; and `MIS_SPECIFIED_VALUES`, which
+are not false positives at all, section 8.4. Each group is pinned by a test, so a
+later change to the matcher cannot make a recorded decision quietly wrong.
+
+**Nothing was hidden to get here.** No sample was deleted, no assertion was
+removed, no `xfail` and no `skip` was added. The headline test is still red,
+because it is acceptance test 11 and it is not met until the narrowing lands.
+
 Attribution in (1) uses the **public API only**: a key is blamed when
 `screen_request({key: None})` refuses on its own, which isolates the field-name
 rule from the identifier patterns. Where no key is at fault the refusal came
@@ -85,7 +102,7 @@ CORPUS: tuple[tuple[str, Any], ...] = (
             "lines": [
                 {
                     "line_number": 1,
-                    "description": "Hereditary breast/ovarian panel (BRCA1/BRCA2)",
+                    "description": "Hereditary breast/ovarian panel, single site",
                     "medical_billing_code": "81201",
                     "quantity": 12,
                     "unit_price": "318.00",
@@ -336,7 +353,7 @@ CORPUS: tuple[tuple[str, Any], ...] = (
             "2. Draining: wait for in-flight requests to finish; the grace "
             "period is 30 seconds. 3. If the error rate exceeds 1% for two "
             "minutes, roll back to the previous image. 4. Record the artifact "
-            "fingerprint descriptor and the commit sha in the change log. "
+            "checksum and the commit sha in the change log. "
             "5. Announce in #platform-ops."
         ),
     ),
@@ -364,6 +381,61 @@ REQUIRED_KEYS: tuple[str, ...] = (
     "trace_id",
     "grace_period_days",
     "biometric_auth_enabled",
+)
+
+
+# ── decisions recorded on this census ───────────────────────────────────────
+#
+# Recorded 2026-10-15 when card
+# 6fbd67ba-0b8a-44a8-9ae9-020d4b95065e was accepted by `local-board`. The plan
+# is the document `matcher-narrowing-plan` on DIG-1086, revision
+# 434a12e3-46e0-4614-9558-2acf896f7d78. The section numbers below are that
+# plan's.
+#
+# A decision is not a finding, so every group is pinned by a test. If a later
+# change to the matcher makes a recorded decision wrong, the pin fails and names
+# the registry that is now stale.
+
+# Section 8.5, accepted. These five refuse, and refusing them is the agreed
+# behaviour. The reason is that a refused billing-code field is a visible and
+# cheap false alarm, while a missed genotype field is not, so the cost falls on
+# the visible side. The alternative is a list of business words, and such a list
+# has no end. Section 5.5 names every one of these needles and develop pins that
+# list verbatim, so removing them needs a spec change and not a technique.
+RECORDED_FALSE_ALARMS: tuple[tuple[str, str], ...] = (
+    ("medical_billing_code", "art9:health:field_name"),
+    ("dna_sequence_length", "art9:genetic:field_name"),
+    ("political_alerts", "art9:political_opinions:field_name"),
+    (
+        "trade_union_consultation_required",
+        "art9:trade_union_membership:field_name",
+    ),
+    ("biometric_auth_enabled", "art9:biometric:field_name"),
+)
+
+# Section 8.1, open, and owned by the leaf briefed from the same plan. Four
+# field names and one needle. The category is `racial_or_ethnic_origin` while
+# section 5.5 spells every other category in long form (`union_membership`,
+# `sexual_orientation`, `party_affiliation`), so the bare word `race` reads
+# inside `grace_period_days` and inside `trace_id`. Section 8.1 narrows the rule
+# to a whole word inside the name, which removes these four and keeps all twenty
+# pinned field names. Until that leaf lands the battery is red on exactly these,
+# and that red is the acceptance test.
+OPEN_FALSE_ALARMS: tuple[tuple[str, str], ...] = (
+    ("grace_period_days", "art9:racial_or_ethnic_origin:field_name"),
+    ("grace_period_applied", "art9:racial_or_ethnic_origin:field_name"),
+    ("grace_period_seconds", "art9:racial_or_ethnic_origin:field_name"),
+    ("trace_id", "art9:racial_or_ethnic_origin:field_name"),
+)
+
+# Section 8.4, not false positives. These two strings left the corpus and are
+# pinned below as true positives instead. Under develop's own pinned tests they
+# are genuine Art. 9 values, so a corpus that demands they pass was asking for
+# the wrong thing. The two samples themselves stay in the corpus, so the field
+# names inside them are still measured.
+MIS_SPECIFIED_VALUES: tuple[tuple[str, str], ...] = (
+    ("BRCA1/BRCA2", "art9:genetic:brca_marker"),
+    ("fingerprint descriptor", "art9:biometric:biometric_template"),
 )
 
 
@@ -539,10 +611,16 @@ def test_corpus_values_trip_no_identifier_pattern() -> None:
     one screens every string in the corpus on its own, which is what `screen_text`
     does for a real caller.
 
-    The false positives it finds are ordinary text: the name of a test panel on a
-    lab invoice, and two runbook sentences about voice and face templates — the
-    vocabulary a speech product uses for its own UI. Same STOP as the headline:
-    the pattern belongs to L1 and changing it is a second plan.
+    Two values that are **not** false positives left this corpus on 2026-10-15
+    and are pinned in `test_the_mis_specified_values_are_true_positives`
+    instead: the `BRCA1/BRCA2` panel name on a lab invoice, and the "fingerprint
+    descriptor" in a deploy runbook. Both are genuine Art. 9 values under
+    develop's own pinned tests, so a corpus that demanded they pass was asking
+    for the wrong thing. What is left here is the one genuine false positive,
+    which is a speech product's own UI vocabulary for voice and face templates.
+    Section 8.2 of the approved plan removes it by dropping `face` and `voice`
+    from the label alternation. Same STOP as the headline: the pattern belongs
+    to L1.
     """
     hits = _value_pattern_hits()
 
@@ -646,3 +724,64 @@ def test_prose_naming_a_category_without_carrying_its_value_is_not_detected() ->
         result = art9.screen_text(prose)
         assert result.decision == "allow", result.reason
         assert result.categories == (), prose
+
+
+def test_the_recorded_false_alarms_refuse_with_the_reason_recorded() -> None:
+    """A recorded decision is falsifiable, not a note in a review comment.
+
+    Each of the five names accepted on 2026-10-15 must still refuse, and must
+    refuse with the reason written beside it. A later change that lets one
+    through is the direction section 8.5 wanted, so it is progress and not a
+    defect, but it does invalidate this registry. The test therefore fails and
+    names the registry to update. Never relax it into a skip.
+    """
+    for key, expected_reason in RECORDED_FALSE_ALARMS:
+        result = art9.screen_request({key: None})
+
+        assert result.decision == "refuse", (
+            f"{key} now allows. That is the direction section 8.5 wanted, so "
+            "section 5.5 changed: update RECORDED_FALSE_ALARMS and cite the "
+            "amendment."
+        )
+        assert result.reason == expected_reason, f"{key}: {result.reason}"
+
+
+def test_the_open_false_alarms_are_exactly_the_race_family() -> None:
+    """The red that is left is named, and every other false alarm is accounted for.
+
+    Four open field names, one needle, one owner. The second half is the one
+    that matters: a blamed field name outside the two registries is a false
+    alarm nobody has decided yet, and this fails on it.
+    """
+    for key, expected_reason in OPEN_FALSE_ALARMS:
+        result = art9.screen_request({key: None})
+
+        assert result.decision == "refuse", f"{key} now allows; close the ledger"
+        assert result.reason == expected_reason, f"{key}: {result.reason}"
+
+    decided = {key for key, _ in RECORDED_FALSE_ALARMS}
+    open_keys = {key for key, _ in OPEN_FALSE_ALARMS}
+    assert not decided & open_keys, "a key is recorded as both accepted and open"
+
+    blamed = {key for finding in _census() for key in finding.blames}
+    undecided = blamed - decided - open_keys
+
+    assert not undecided, (
+        f"undecided false alarms: {sorted(undecided)}. Decide them and add each "
+        "to RECORDED_FALSE_ALARMS or to OPEN_FALSE_ALARMS."
+    )
+
+
+def test_the_mis_specified_values_are_true_positives() -> None:
+    """The two values taken out of the corpus must still refuse.
+
+    Section 8.4 reclassified them instead of weakening a pattern to let them
+    through. Taking a value out of a negative corpus is honest only while
+    something still pins it as a positive, so this is that pin: each string
+    refuses on its own, with the reason recorded beside it.
+    """
+    for needle, expected_reason in MIS_SPECIFIED_VALUES:
+        result = art9.screen_text(needle)
+
+        assert result.decision == "refuse", f"{needle!r} now allows"
+        assert result.reason == expected_reason, f"{needle!r}: {result.reason}"
