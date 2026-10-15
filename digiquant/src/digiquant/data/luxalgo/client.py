@@ -307,8 +307,8 @@ class LuxAlgoClient:
     #
     # Freshness/ad-hoc lookups only: the CC0-1.0 dumps stay the source of
     # record (per-family limits classified in DIG-1464 ride on every payload:
-    # congress-trades is restricted by 5 U.S.C. 13107 and short-volume carries
-    # unresolved FINRA redistribution terms)
+    # congress-trades is restricted by 5 U.S.C. 13107 and short-volume
+    # redistribution is PROHIBITED on FINRA's own terms, DIG-1521)
     # (trackers_query is deliberately NOT wrapped). An upstream ``stale`` flag
     # on the payload folds into the envelope ``stale`` bit.
 

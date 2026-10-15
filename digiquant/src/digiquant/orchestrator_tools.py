@@ -1169,8 +1169,9 @@ def build_digifetch_ibkr_execute_order_tool() -> dict[str, Any]:
 # NOT wrapped (CC BY-NC-SA license boundary), and neither is trackers_query
 # (the CC0-1.0 dumps stay the source of record; the per-family limits
 # classified in DIG-1464 — congress-trades restricted by 5 U.S.C. 13107,
-# short-volume carrying unresolved FINRA terms — ride on every trackers
-# description and payload).
+# short-volume redistribution PROHIBITED by DIG-1521 on FINRA's own terms, in
+# service by dated business decision — ride on every trackers description and
+# payload).
 
 
 def build_luxalgo_library_search_tool() -> dict[str, Any]:
@@ -1449,8 +1450,10 @@ def build_luxalgo_trackers_datasets_tool() -> dict[str, Any]:
                 "other dataset is refused. The dumps are the source of record. "
                 "The CC0-1.0 grant does not clear two of them: congress-trades "
                 "rows are 13107(c) reports whose commercial use 5 U.S.C. "
-                "13107(c)(1)(B) restricts, and short-volume carries unresolved "
-                "upstream FINRA terms (DIG-1464, DIG-1472)."
+                "13107(c)(1)(B) restricts, and short-volume redistribution is "
+                "PROHIBITED under FINRA's Equity Data Specific Terms (DIG-1521, "
+                "in service by dated business decision against that advice and "
+                "not a clearance; classification DIG-1464, DIG-1472)."
             ),
             "parameters": {
                 "type": "object",

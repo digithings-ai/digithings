@@ -17,9 +17,11 @@ governs what a trackers row is: the vendor publishes those dumps under a
 CC0 1.0 Universal LICENSE (classified 2026-10-06, DIG-1464 — see
 :data:`LUXALGO_TRACKERS_DATA_LICENSE`), but two of the six families need a limit
 the copyright waiver cannot supply — congress-trades is restricted by 5 U.S.C.
-13107 and short-volume carries unresolved FINRA redistribution terms — so every
-trackers licence note carries :func:`trackers_data_caveat`. A payload that says
-only "CC0" is not telling the truth about those two.
+13107 and short-volume is PROHIBITED by Counsel's ruling on FINRA's own
+redistribution terms (DIG-1521, in service by dated business decision against
+that advice) — so every trackers licence note carries
+:func:`trackers_data_caveat`. A payload that says only "CC0" is not telling the
+truth about those two.
 
 License boundary (scope §P0, guard #4845): the Library search/concept/
 indicator-metadata reads are research references. Indicator *source code*
@@ -89,8 +91,9 @@ LUXALGO_EDGE_LICENSE_NOTE = (
 #: clause is scoped to quote and price data (Vela, luxalgo.com market pages), so
 #: its redistribution prohibition does not reach these public-record extracts.
 #: The verdict is per-family: congress-trades is restricted by 5 U.S.C. 13107
-#: and short-volume carries unresolved FINRA redistribution terms — see
-#: :data:`LUXALGO_TRACKERS_DATA_CAVEATS`.
+#: and short-volume is PROHIBITED under FINRA's own redistribution terms,
+#: ruled in DIG-1521 and in service by dated business decision against that
+#: advice — see :data:`LUXALGO_TRACKERS_DATA_CAVEATS`.
 LUXALGO_TRACKERS_DATA_LICENSE = "CC0-1.0"
 
 #: The artefacts the classification rests on, named so the claim stays
@@ -129,11 +132,15 @@ LUXALGO_TRACKERS_DATA_CAVEATS: dict[str, str] = {
     ),
     "short-volume": (
         "Short-volume rows originate with FINRA, a private self-regulatory "
-        "organisation rather than a federal records custodian, so its own "
-        "upstream terms are unresolved — CC0 §4(b)-(c) means the vendor cannot "
-        "clear rights it does not hold. Do not present as cleared. Open with "
-        "Counsel (raised DIG-1464; the durable question is the upstream FINRA "
-        "redistribution terms, which no vendor licence answers)."
+        "organisation rather than a federal records custodian, and FINRA's own "
+        "terms permit no commercial redistribution of this compilation on any "
+        "published route: its Equity Data Specific Terms §2.3 cap End User use at "
+        "'non-commercial personal or professional use only' and 'No Charge'. The "
+        "vendor's CC0 grant cannot cure it — under CC0 §4(b)-(c) the affirmer "
+        "gives no warranty of title and disclaims any duty to clear other people's "
+        "rights or obtain their consents. Do not present as cleared. Counsel ruled "
+        "PROHIBITED (DIG-1521); the dataset is in service by business decision "
+        "dated 2026-10-07 against that advice, which is not a clearance."
     ),
 }
 
@@ -233,8 +240,8 @@ def trackers_data_caveat(dataset: str | None = None) -> str:
 
     A bare "CC0 public-record dumps" string reads as permission for every family,
     and two of the six need a limit that a copyright waiver cannot supply —
-    congress-trades under 5 U.S.C. 13107 and short-volume under the unresolved
-    FINRA terms. With
+    congress-trades under 5 U.S.C. 13107 and short-volume under the FINRA
+    redistribution terms Counsel ruled PROHIBITED in DIG-1521. With
     *dataset* given, only that family's caveats render; with ``None`` (the
     default, and the only thing a tool-level attribution block can know) every
     caveat renders, so a payload mixing families is never quietly clean.
@@ -252,8 +259,9 @@ def trackers_data_caveat(dataset: str | None = None) -> str:
     )
     return (
         " Two families need a limit the CC0 grant cannot supply: congress-trades "
-        "is restricted by 5 U.S.C. 13107, and short-volume carries unresolved "
-        f"FINRA redistribution terms. {caveats}"
+        "is restricted by 5 U.S.C. 13107, and short-volume redistribution is "
+        "PROHIBITED under FINRA's own terms (DIG-1521, not a clearance). "
+        f"{caveats}"
     )
 
 
