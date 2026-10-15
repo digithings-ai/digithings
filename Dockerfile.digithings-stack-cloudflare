@@ -1,5 +1,10 @@
 # Profile A stack image for digithings Cloudflare Containers.
 # Build context: monorepo root.
+# DIG-3701: the nine Python modules install from wheels built by
+# scripts/package_r5_image_inputs.py (`uv export --frozen` of the root lock).
+# SearXNG bake, multilingual weight bake, and the litellm pin are unchanged.
+# Push target default is the Cloudflare container registry (D-R5-1).
+# This file does not log in and does not push.
 # Runs digikey + digigraph + digisearch + digivault + LiteLLM (+ redis) under supervisord.
 # Edge ports: digigraph :8000, digikey :8005, digisearch :8002. Other services
 # are loopback-only.
@@ -49,39 +54,23 @@ RUN mkdir -p /usr/local/searxng \
          'GIT_BRANCH = "master"' \
          > /usr/local/searxng/searx/version_frozen.py
 
-# Shared libs
-COPY digibase/pyproject.toml digibase/README.md ./digibase/
-COPY digibase/src ./digibase/src
-RUN uv pip install --system -e "./digibase"
-
-COPY digikey/pyproject.toml digikey/README.md ./digikey/
-COPY digikey/src ./digikey/src
-RUN uv pip install --system -e "./digikey"
-
-COPY digitrace/pyproject.toml digitrace/ARCHITECTURE.md ./digitrace/
-COPY digitrace/src ./digitrace/src
-RUN uv pip install --system -e "./digitrace[tracing]"
-
-COPY digillm/pyproject.toml digillm/ARCHITECTURE.md ./digillm/
-COPY digillm/src ./digillm/src
-RUN uv pip install --system -e "./digillm"
-
-COPY digigraph/pyproject.toml ./digigraph/
-COPY digigraph/src ./digigraph/src
-RUN uv pip install --system -e "./digigraph[mcp]"
-
-COPY digifetch/pyproject.toml digifetch/ARCHITECTURE.md ./digifetch/
-COPY digifetch/src ./digifetch/src
-RUN uv pip install --system -e "./digifetch"
-
-COPY digiclaw/pyproject.toml digiclaw/ARCHITECTURE.md ./digiclaw/
-COPY digiclaw/src ./digiclaw/src
-RUN uv pip install --system -e "./digiclaw"
-
-COPY digisearch/pyproject.toml digisearch/ARCHITECTURE.md ./digisearch/
-COPY digisearch/src ./digisearch/src
-COPY digisearch/seeds ./digisearch/seeds
-RUN uv pip install --system -e "./digisearch[server,ingestion,chroma,web-search,embedding-multilingual]"
+# Shared libs, installed from packaged wheels. Third-party pins are the
+# frozen export. Workspace wheels install with --no-deps so an extra marker
+# cannot float a dependency the lock already pinned.
+COPY image-packages/stack/requirements.txt /tmp/stack-requirements.txt
+COPY image-packages/stack/wheels /wheels
+RUN uv pip install --system -r /tmp/stack-requirements.txt \
+ && uv pip install --system --no-deps --no-index --find-links /wheels "digisearch[server,ingestion,chroma,web-search,embedding-multilingual]==0.1.0" \
+ && uv pip install --system --no-deps --no-index --find-links /wheels \
+      "digibase==0.1.0" \
+      "digikey==0.1.0" \
+      "digitrace[tracing]==0.1.0" \
+      "digillm==0.1.0" \
+      "digigraph[mcp]==0.1.0" \
+      "digifetch==0.1.0" \
+      "digiclaw==0.1.0" \
+      "digivault[service]==0.1.0"
+COPY image-packages/stack/digisearch-seeds /app/digisearch/seeds
 # ^ embedding-multilingual (onnxruntime + tokenizers + numpy, CPU-only) powers
 # the multilingual ticket/docs indexes for the OCC chat (#4756). Its weights
 # (~120 MB Xenova quantized ONNX) are baked below at build time — v14
@@ -114,18 +103,22 @@ print(f'multilingual weights ready in {out} ({MULTILINGUAL_MODEL_ID})')"
 ENV DIGISEARCH_MULTILINGUAL_MODEL_DIR=/models/multilingual \
     HF_HUB_OFFLINE=1
 
-COPY digivault/pyproject.toml digivault/ARCHITECTURE.md ./digivault/
-COPY digivault/src ./digivault/src
-RUN uv pip install --system -e "./digivault[service]"
-
 # LiteLLM proxy from the pinned PyPI wheel (DIG-1780). Same version as
 # Dockerfile.digillm (enforced by tests/scripts/test_compose_litellm_pinned.py).
 # 1.83.x no longer imports fastapi's removed get_flat_dependant, so the old
 # "fastapi<0.116" cap is gone; litellm pins its own compatible fastapi.
 RUN uv pip install --system "litellm[proxy]==1.83.14"
 
-# Profile A LiteLLM + digigraph config
+# D-R5-1. Account id is supplied by the operator at push time (H3).
+ARG IMAGE_PUSH_REGISTRY=registry.cloudflare.com
+ARG IMAGE_PUSH_REPOSITORY=digithings/digithings-stack
+LABEL org.digithings.image.registry="${IMAGE_PUSH_REGISTRY}" \
+      org.digithings.image.repository="${IMAGE_PUSH_REPOSITORY}"
+
+# Profile A LiteLLM + digigraph config. Wheel installs do not resolve
+# config via __file__ parents, so point the loaders at this directory.
 COPY infra/digichat-release/config /app/config
+ENV DIGI_CONFIG_PATH=/app/config
 # House Cheaper Inference overlay + merge script (boot-time merge when key set)
 COPY config/litellm.cheaperinference.yaml /app/config/litellm.cheaperinference.yaml
 COPY scripts/merge_litellm_cheaperinference.py /app/scripts/merge_litellm_cheaperinference.py
