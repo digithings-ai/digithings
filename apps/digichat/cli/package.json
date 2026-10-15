@@ -1,5 +1,13 @@
 {
   "name": "@digithings/digichat-cli",
+  "description": "Command-line client for digichat.",
+  "license": "MIT",
+  "homepage": "https://digithings.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/digithings-ai/digithings.git",
+    "directory": "apps/digichat/cli"
+  },
   "version": "1.4.0",
   "private": true,
   "type": "module",

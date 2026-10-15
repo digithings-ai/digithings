@@ -16,6 +16,11 @@ dependencies = [
     "prometheus-client>=0.20",
 ]
 
+
+[project.urls]
+Homepage = "https://digithings.ai"
+Repository = "https://github.com/digithings-ai/digithings"
+
 [project.optional-dependencies]
 supabase = [
     "supabase>=2",

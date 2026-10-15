@@ -44,6 +44,14 @@ scripts
 # is on `main` only — it does not exist on develop, so do not cite it as the
 # gate here.)
 !scripts/index_occ_tickets.py
+# DIG-3701: `scripts` and `.github` match those basenames anywhere. The runner
+# payload lives under image-packages/ and must stay in the build context.
+!image-packages/runner/payload/scripts
+!image-packages/runner/payload/scripts/**
+!image-packages/runner/payload/.github
+!image-packages/runner/payload/.github/**
+!image-packages/runner/payload/digiquant/scripts
+!image-packages/runner/payload/digiquant/scripts/**
 agents
 apps/digithings-web
 apps/digiquant-web

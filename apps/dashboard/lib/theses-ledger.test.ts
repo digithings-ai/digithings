@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { splitTheses, sortByConfidenceDesc, groupVehicleTheses, findThesisById } from './theses-ledger';
+import { splitTheses, sortByConfidenceDesc, findThesisById } from './theses-ledger';
 import { aggregateWeightByThesis, bookWeightForThesis } from './portfolio-aggregates';
 import type { Thesis } from './types';
 
@@ -50,34 +50,6 @@ describe('sortByConfidenceDesc', () => {
       mk({ id: 'd', name: 'Delta', confidence: null }),
     ]);
     expect(out.map((t) => t.id)).toEqual(['c', 'a', 'b', 'd']);
-  });
-});
-
-describe('groupVehicleTheses', () => {
-  const market = [
-    mk({ id: 'MT1', name: 'AI capex', confidence: 0.9 }),
-    mk({ id: 'MT2', name: 'EM rotation', confidence: 0.5 }),
-  ];
-  it('groups vehicles under their linked market thesis, parents sorted by confidence desc', () => {
-    const vehicle = [
-      mk({ id: 'vehicle-ewt', thesis_kind: 'vehicle', linked_market_thesis_id: 'MT2' }),
-      mk({ id: 'vehicle-nvda', thesis_kind: 'vehicle', linked_market_thesis_id: 'MT1' }),
-    ];
-    const groups = groupVehicleTheses(vehicle, market);
-    expect(groups.map((g) => g.marketId)).toEqual(['MT1', 'MT2']);
-    expect(groups[0].marketName).toBe('AI capex');
-    expect(groups[0].theses.map((t) => t.id)).toEqual(['vehicle-nvda']);
-  });
-  it('places unmatched and null-link vehicles in a trailing unlinked group', () => {
-    const vehicle = [
-      mk({ id: 'vehicle-ijr', thesis_kind: 'vehicle', linked_market_thesis_id: null }),
-      mk({ id: 'vehicle-gone', thesis_kind: 'vehicle', linked_market_thesis_id: 'MISSING' }),
-      mk({ id: 'vehicle-nvda', thesis_kind: 'vehicle', linked_market_thesis_id: 'MT1' }),
-    ];
-    const groups = groupVehicleTheses(vehicle, market);
-    const last = groups[groups.length - 1];
-    expect(last.marketId).toBeNull();
-    expect(last.theses.map((t) => t.id).sort()).toEqual(['vehicle-gone', 'vehicle-ijr']);
   });
 });
 

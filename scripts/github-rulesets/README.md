@@ -1,10 +1,11 @@
 # GitHub rulesets (source of truth)
 
 Branch-protection rulesets for `digithings-ai/digithings`. Apply these to
-`origin` to enforce the branch taxonomy defined in `BRANCHING.md`.
+the GitHub repo to enforce the branch taxonomy defined in `BRANCHING.md`
+(`origin` is the cursor mirror, not GitHub — see DIG-3425).
 
 **Desired state, not live state.** `"enforcement": "active"` in a file says
-nothing about `origin`. None of these four is applied there: the only *ruleset*
+nothing about the live repo. None of these four is applied there: the only *ruleset*
 on the repo is `module-branch-protection`, and the name taxonomy is enforced
 client-side by `scripts/hooks/pre-push.sh`.
 
