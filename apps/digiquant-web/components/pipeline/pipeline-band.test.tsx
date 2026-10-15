@@ -63,14 +63,14 @@ describe("PipelineBand", () => {
     expect(html).not.toContain("--deck-top:calc(var(--nav-shell-h,62px)+0.75rem)");
   });
 
-  it("pins the eyebrow and the title but not the takeaway", () => {
+  /* DIG-3311: title and takeaway must pin as one block, not separately —
+     a takeaway left outside the pinned head slides in behind it on scroll
+     instead of staying put beside the title. */
+  it("pins the eyebrow, the title, and the takeaway together", () => {
     const headerAt = html.indexOf("band-pin\"");
     expect(headerAt).toBeGreaterThanOrEqual(0);
     const headerEnd = html.indexOf("</header>", headerAt);
     expect(html.slice(headerAt, headerEnd)).toContain("Agent orchestration");
-    expect(html.slice(headerAt, headerEnd)).not.toContain("not a live run");
-    // It is still in the band, below the pinned head, where the reader meets
-    // it once before the deck starts stacking.
-    expect(html.indexOf("not a live run")).toBeGreaterThan(headerEnd);
+    expect(html.slice(headerAt, headerEnd)).toContain("not a live run");
   });
 });

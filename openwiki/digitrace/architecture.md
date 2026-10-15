@@ -1,7 +1,7 @@
 ---
 type: service-architecture
 title: digitrace Architecture
-description: Module map and design of digitrace — conditional LangSmith tracing library plus a stateless status HTTP service.
+description: Module map and design of digitrace — conditional LangSmith plus OTLP tracing library plus a stateless status HTTP service.
 tags: [digitrace, observability, langsmith, architecture]
 sources:
   - id: openwiki-source-3b0f3d164015c293da5dd7f8
@@ -28,31 +28,33 @@ verified:
 
 digitrace is the observability helper of the digithings stack. It has two
 faces that are deliberately decoupled: a Python library that adds optional
-LangSmith tracing to any function via one decorator, and a stateless HTTP
-microservice (port 8003) that reports whether tracing is configured — without
-ever handling a trace itself.
+LangSmith tracing and an OTel fan-out to any function via one decorator, and
+a stateless HTTP microservice (port 8003) that reports whether tracing is
+configured — without ever handling a trace itself.
 
 ## The two faces
 
 **Library** (`digitrace.trace`, `digitrace.config`, `digitrace.redaction`):
-a thin conditional wrapper around the LangSmith SDK. When `LANGSMITH_API_KEY`
-is set and the `langsmith` package is importable, `traceable(name)` wraps the
-target with `langsmith.traceable`; otherwise it returns the original function
-unmodified, so unconfigured environments pay zero per-call overhead.
+a thin conditional wrapper around the LangSmith SDK plus an OTel leg. When
+`LANGSMITH_API_KEY` is set and the `langsmith` package is importable,
+`traceable(name)` wraps the target with `langsmith.traceable`. When an OTLP
+endpoint is set, it also opens one OTel span per call (run name and short
+correlation ids only). When neither leg is active it returns the original
+function unmodified, so unconfigured environments pay zero per-call overhead.
 
 **HTTP service** (`digitrace.server`, FastAPI app `digitrace.server:app`):
 exposes liveness probes (`/health`, `/healthz`) and a secret-free operator
 diagnostic (`GET /v1/status`), plus a Prometheus `/metrics` endpoint. The
-service never receives, stores, or forwards spans — traces flow directly from
-each instrumented process's embedded LangSmith SDK to the LangSmith API.
+service never receives, stores, or forwards spans — spans leave the
+instrumented process on the LangSmith leg, the OTLP leg, or both.
 
 ## Module map
 
 | File | Role |
 |------|------|
 | `__init__.py` | Package identity only (`__version__ = "0.1.0"`) |
-| `config.py` | Env introspection (`tracing_enabled`, `langsmith_sdk_importable`, `langsmith_host_sanitized`) + `TraceStatus` response model |
-| `trace.py` | `traceable(name)` conditional decorator with PII-redaction hookup |
+| `config.py` | Env introspection (`tracing_enabled`, `langsmith_sdk_importable`, `langsmith_host_sanitized`, `otel_export_configured`, `export_backend`) + `TraceStatus` response model |
+| `trace.py` | `traceable(name)` dual-export decorator with PII-redaction hookup |
 | `redaction.py` | `PiiRedactor` — value-pattern redaction for span payloads |
 | `server.py` | FastAPI app: `/health`, `/healthz`, `/v1/status`, `/metrics`, CORS, request-ID, OTel wiring |
 
@@ -65,14 +67,16 @@ out of scope for the current implementation.
 `trace.py` guards the SDK import at module level and checks configuration at
 decoration time (import time), not at call time:
 
-- SDK missing or `LANGSMITH_API_KEY` unset → the decorator returns the
-  original function object unchanged (identity, `__name__`, no wrapper).
+- LangSmith SDK missing or `LANGSMITH_API_KEY` unset → that leg is skipped.
 - Both present → the function is wrapped with `langsmith.traceable(name=…,
   process_inputs=…, process_outputs=…)`, where the process hooks are the
   `PiiRedactor` methods that scrub span payloads before submission.
-- If the installed SDK version rejects the `process_*` kwargs, setup falls
-  back to returning the original function with a debug log — tracing is
-  skipped rather than crashing the host process.
+- An OTLP endpoint set → `_maybe_wrap_otel` adds a span that does not carry
+  prompts. Neither leg active → the original function object is returned
+  unchanged.
+- If the installed SDK version rejects the `process_*` kwargs, setup logs
+  at debug and skips the LangSmith leg rather than crashing the host. The
+  OTel leg still applies when it is configured.
 
 One consequence: a key added after import does not activate tracing for
 already-decorated functions in that process lifetime. Conversely,
@@ -92,9 +96,10 @@ orchestrators and dashboards polling `/v1/status`.
 
 Hard dependencies are `pydantic>=2`, `fastapi`, `uvicorn`, and `digibase`
 (shared CORS, metrics, request-ID, and OTel helpers). The LangSmith SDK is a
-soft optional (`digitrace[langsmith]`), and OTel support rides on
-`digibase[otel]` — both absent-safe. The Docker image installs
-`.[langsmith]` and serves `digitrace.server:app` on port 8003 via uvicorn.
+soft optional (`digitrace[tracing]`, alias `digitrace[langsmith]`), and OTel
+support rides on `digibase[otel]` via `digitrace[otel]` — both absent-safe.
+The Docker image installs `.[tracing]` and serves `digitrace.server:app` on
+port 8003 via uvicorn.
 The library modules perform no I/O at import time (no threads, sockets, or
 file writes); OTel provider setup happens in `server.py` at app construction
 and is itself a no-op unless `OTEL_EXPORTER_OTLP_ENDPOINT` is set.

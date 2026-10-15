@@ -4,10 +4,10 @@
   "claims": [
     {
       "id": "claim_5f8e9d8198004cde85830b8b3d8d07fd",
-      "statement": "traceable(name) activates only when the langsmith SDK is importable and LANGSMITH_API_KEY is set, checked at decoration time; otherwise it returns the original function object unchanged with zero per-call overhead.",
+      "statement": "The LangSmith leg of traceable(name) activates only when the langsmith SDK is importable and LANGSMITH_API_KEY is set, checked at decoration time. The function object is returned unchanged, with zero per-call overhead, only when that leg and the OTel leg are both inactive.",
       "evidence": [
         {
-          "resource": "repo://digitrace/src/digitrace/trace.py#L35-L59",
+          "resource": "repo://digitrace/src/digitrace/trace.py#L111-L136",
           "version": "repo-lines-v1:sha256:1bbdf1a3beae0a5669d481bf8b2d8910f074a1f36cfe80b6c75a06532d8a23a2:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZmZWVlMTJiMTAxY2IzNTI2NWNhM2FlMmY4ZmM1YjRmODNkNWRlYjM5MGE0MmQ1MTRkMzI2OGYwMTlhMDgwZjkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc1MDFiYzg4ZmNkMjgzNTU4NjBiZWI3ODYzM2I3ZjBjNzQyZTE1NDU4MDZjMmIzM2Y4MTg2MGZiZWJlYjY0YjkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQ3Y2IzYjlhNjQxMmQyYTM2MzU2YzM4Y2RhZmZjNjgyMDI1YjJmZDY5M2NlNGM1ODE1OGEyNzY1NjU4NWUxMDgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
         },
         {
@@ -21,7 +21,7 @@
       "statement": "When active, traceable() wraps with langsmith.traceable(name=...) and attaches the PiiRedactor via the SDK's native process_inputs/process_outputs hooks, with an optional redactor= override built from the current environment by default.",
       "evidence": [
         {
-          "resource": "repo://digitrace/src/digitrace/trace.py#L35-L59",
+          "resource": "repo://digitrace/src/digitrace/trace.py#L111-L136",
           "version": "repo-lines-v1:sha256:1bbdf1a3beae0a5669d481bf8b2d8910f074a1f36cfe80b6c75a06532d8a23a2:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZmZWVlMTJiMTAxY2IzNTI2NWNhM2FlMmY4ZmM1YjRmODNkNWRlYjM5MGE0MmQ1MTRkMzI2OGYwMTlhMDgwZjkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc1MDFiYzg4ZmNkMjgzNTU4NjBiZWI3ODYzM2I3ZjBjNzQyZTE1NDU4MDZjMmIzM2Y4MTg2MGZiZWJlYjY0YjkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQ3Y2IzYjlhNjQxMmQyYTM2MzU2YzM4Y2RhZmZjNjgyMDI1YjJmZDY5M2NlNGM1ODE1OGEyNzY1NjU4NWUxMDgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
         },
         {
@@ -35,7 +35,7 @@
       "statement": "If the installed langsmith SDK rejects the process_* kwargs (TypeError/ValueError/RuntimeError/OSError), setup logs at debug and returns the undecorated function so the host never crashes.",
       "evidence": [
         {
-          "resource": "repo://digitrace/src/digitrace/trace.py#L54-L57",
+          "resource": "repo://digitrace/src/digitrace/trace.py#L131-L134",
           "version": "repo-lines-v1:sha256:0f23208137bb9ecc33799a3ff26c848aa722d53fc296de4263d8c283731f6caf:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMTBjNDhjODEyMzkxOWVmN2VkZWRkMWVkMWI2ZGJjNmRjOWM3OTVkNzEyMjFiOGU5YjJlY2FiNjU1MTU0MzA0YyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMTYyNzAxZjcxYTg1NjAwNzU3OGE5MGM5YWI1MzY3Mjk3ZGJmY2VmY2YxNjEwNjllZjRkNDc4NjQ2NTYyMWRmMiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYWYwNWYzNWRmMmEzYzQxZTI2OTZjNzg3ODFlMjcyNDRhM2M2ZmNlMDVjZTM3NjNmMjIzYzU2NzA1ZmFkNDBlMCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjIsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZDFhYWFhMDAxNjBjNjE5Yzc3MmQ4OWVmNDM1Y2MwNTNjNTM3MzUwZmIxMmFkNTNlMDRkM2U2YmUxMGQ1OGY1OCJ9"
         },
         {

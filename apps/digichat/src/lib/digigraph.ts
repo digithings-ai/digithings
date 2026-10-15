@@ -62,15 +62,3 @@ export function digigraphChatCompletionsUrl(baseUrlOverride?: string | null) {
   return `${base}/v1/chat/completions`;
 }
 
-/** @throws if unset (callers should use resolveDigigraphUpstreamBearer for JWT path). */
-export function digigraphUpstreamApiKey() {
-  const k = process.env.DIGIGRAPH_UPSTREAM_API_KEY?.trim();
-  if (!k) {
-    throw new Error("DIGIGRAPH_UPSTREAM_API_KEY is not set");
-  }
-  return k;
-}
-
-export function digigraphOpenWebUIFormat() {
-  return process.env.DIGICHAT_OPENWEBUI_FORMAT === "1";
-}

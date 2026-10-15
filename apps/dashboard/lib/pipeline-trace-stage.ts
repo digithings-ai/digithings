@@ -147,10 +147,6 @@ export function nextTracePageLimit(currentLimit: number, total: number): number 
   return Math.min(total, currentLimit + TRACE_UI_PAGE_SIZE);
 }
 
-export function isPipelineStageFilter(value: string): value is TraceStageFilter {
-  return value === 'all' || (PIPELINE_STAGES as readonly string[]).includes(value);
-}
-
 export function pipelineStageFilters(): readonly TraceStageFilter[] {
   return ['all', ...PIPELINE_STAGES];
 }
