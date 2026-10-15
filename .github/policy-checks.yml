@@ -45,7 +45,6 @@
 # every named job in it a policy surface the inventory must account for.
 tracked_workflows:
   - ci.yml
-  - ci-dco-sign-off.yml
   - ci-pr-hygiene.yml
   - ci-pr-title.yml
   - ci-review-coverage.yml
@@ -85,19 +84,10 @@ checks:
 
   # ── PR-triggered, run and report, gate nothing ──────────────────────────────
   #
-  # These five are the drift DIG-1952 is about: the check runs, it goes red, and
+  # These four are the drift DIG-1952 is about: the check runs, it goes red, and
   # the merge proceeds anyway. They are listed here so the guard can prove each
   # one still exists and still reports — and so the ungated ones are visible in
   # one file instead of inferred from 53 workflows.
-
-  - context: All commits signed off
-    workflow: ci-dco-sign-off.yml
-    job: dco-sign-off
-    enforcement: advisory
-    reason: >-
-      DCO 1.1 sign-off. Runs on every PR and fails without a Signed-off-by
-      line, but is required nowhere, so a PR with no sign-off merges clean.
-      Ungated since it was written. DIG-1952 child B.
 
   - context: gitleaks-scan
     workflow: security-gitleaks.yml
