@@ -101,6 +101,8 @@ CI check enforces this. The full text is at <https://developercertificate.org/>.
 
 This applies from 2026-10-04 forward. Commits before that date are not retro-signed.
 
+Sixty commits authored from 2026-10-04 through 2026-10-10 stay unsigned. Their full ids are listed in [`.github/dco-waived-commits.txt`](.github/dco-waived-commits.txt) (DIG-3218). The check skips those ids only. It does not move the cutoff, and a commit that is not on the list is still checked.
+
 Pull requests are squash-merged. A GitHub squash keeps the full message body of
 each squashed commit, separated by `---------`, so the `Signed-off-by` trailers
 of a pull request's commits land on the squash commit itself, on `develop`.

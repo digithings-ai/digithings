@@ -1,0 +1,126 @@
+# Closed DCO waiver (DIG-3218).
+# Chris chose this list on 2026-10-15. These commits stay unsigned.
+# The check skips a commit only when its full id is a line in this file.
+# Measured on origin/develop 3528cf9f7204 against origin/main 7de39ec9a0ed.
+# Do not add a line without a new decision. A new commit is not on this list.
+#
+# 2026-10-04T02:40:30+02:00 Chris Stefan — DIG-16: refuse to start when DIGICHAT_DEV_AUTH=1 in production
+474d91ec61da6cf34c499268c93a45cc51263ade
+# 2026-10-04T02:43:45+02:00 Chris — fix(root): make check_doc_links.py skip gitignored paths (#5021)
+ff4c695c43a353aeacb09d726e0570b9ff552bb2
+# 2026-10-04T03:16:25+02:00 Chris Stefan — docs(digiquant): record the twelve-x Gloomberb source-of-record exception (DIG-20)
+ab30ce8de4d5ee8170ea9f744b3c68f1032f6d28
+# 2026-10-04T04:51:00+02:00 Chris Stefan — DIG-31: remove committed credential values from tracked .example files and add CI guard
+a38508bc8d423e941a9e04a6834adcd50f8678ad
+# 2026-10-04T05:19:31+02:00 Chris Stefan — DIG-41: replace committed credential values with placeholders in tracked .example files
+b9f44696e9d032997c44dc65f7ed4b1dc60ffb0f
+# 2026-10-04T07:12:45+02:00 Chris Stefan — test(digithings-cron): pin the expectedCount acceptance cases (A.7)
+f5a50b810797f05ae6586787a3b8d47f351ce000
+# 2026-10-04T07:20:50+02:00 Chris Stefan — feat(digithings-cron): count the starts a cron owes on a UTC day (A.7)
+023af9be95bedd055641869f1ece0f7296174997
+# 2026-10-04T07:33:06+02:00 Chris Stefan — test(digithings-cron): correct the A.7 Sunday to a real Sunday (2026-09-27)
+c0d46a236d8f3d8057e70e59a74568755d7f2bca
+# 2026-10-04T07:40:07+02:00 Chris Stefan — chore(workflows): declare the start_key dispatch input on all 11 cron targets
+be8f61762c135980a7560f40af77931032df722d
+# 2026-10-04T08:45:25+02:00 Chris Stefan — test(cron): pin the StartCounter contract (planner)
+0387299c200f503fd15f720008c9298a7f368801
+# 2026-10-04T08:57:56+02:00 Chris Stefan — feat(cron): count cron starts atomically in a Durable Object
+f6499bfe236bbe8f164a2fce563236813ab9e56d
+# 2026-10-04T11:54:50+02:00 Chris Stefan — DIG-109: make a missing app node_modules self-explaining instead of TS2688
+7778c68f5c6e437e8595e2b786cffc1b410652eb
+# 2026-10-04T13:53:21+02:00 Chris Stefan — DIG-109: accept GHSA-vfj7-8cjw-p6xm in npm-audit-ignore.txt
+dd18ef5e0373986bc0f149555a0d5b2ee274265a
+# 2026-10-04T14:11:40+02:00 Chris Stefan — DIG-109: correct the guard's explanation of why the install matters
+a2f2b0a3d4bec7ad1f8bb97a4b4ebd20615a1d69
+# 2026-10-04T18:21:43+02:00 Chris — refactor(root): move provider model names out of code and into config (#5029) (#5046)
+cb63f73e1272c93595a21f04b1f09bc099372dc6
+# 2026-10-04T18:54:18+02:00 Chris — fix(digisearch): production /chat/occ returns zero hits on every index — seed silently succeeded on an empty corpus (#5048)
+22f08b717fba4482eccec3a3af7ca0239f279e60
+# 2026-10-04T18:58:22+02:00 Chris Stefan — docs(secrets): record Issues read/write on GH_DISPATCH_TOKEN
+78b69c90dacb778f44ba12c36640e461f27d87db
+# 2026-10-04T20:03:40+02:00 Chris Stefan — ci(root): scope CI-read secrets to the cron environment (#248)
+af7a4f71d216f6d2fa122b2f9728a5fcf26fe794
+# 2026-10-04T20:12:59+02:00 Chris Stefan — test(secrets): read the staleness date column as a calendar date (#248)
+056f759a2f4239f135cd2b86d5b85d0926d25aa1
+# 2026-10-04T20:45:59+02:00 Chris Stefan — ci(root): guard the cron environment gate against drift (#248)
+c821d53a1a95dda1a7a2a4f942f666fb3ad7dc17
+# 2026-10-04T21:06:06+02:00 Chris Stefan — ci(root): populate the environment-gate pin that made #2541 invisible
+b644d3b75a5df0845e639d6bc97c1b2fde949a1f
+# 2026-10-04T22:14:54+02:00 Chris Stefan — fix(root): stop the secret staleness check reporting green while reading nothing
+354e8cf460452e765fe3e245f943b1d8fe724e28
+# 2026-10-04T22:39:29+02:00 Chris — docs(ops): add credential ownership register for GLOOMBERB_SESSION_COOKIE (DIG-377)
+c9a1be01f96b9e74cc1976c405fc3102f35fd7d5
+# 2026-10-04T22:41:22+02:00 Chris — chore(env): clarify GLOOMBERB_SESSION_COOKIE canonical store is GitHub cron secret (DIG-377)
+617f962822abfa0ca1d3c4b32519f16775a9de29
+# 2026-10-04T22:42:54+02:00 Chris — docs(ops): cross-reference credential-ownership.md in gloomberb runbook (DIG-377)
+55c0ca3ccfe7c7d7e63a88a535f2675a5156232b
+# 2026-10-04T23:12:27+02:00 Chris Stefan — 306b: failing tests for the hourly answer-check clock
+a7041608dafc4211705f545d69a902496b6125ea
+# 2026-10-04T23:50:53+02:00 Chris Stefan — ci(root): enforce dashboard-api vitest suite and typecheck in the web lane
+bffce04d986684b26f334ddd08dfc5f3ccb42a66
+# 2026-10-05T00:17:36+02:00 Chris Stefan — fix(digisearch): regenerate committed OpenAPI artifact after #5048
+3ef09597949e51111b1135c48e56588ceebcd712
+# 2026-10-05T00:53:34+02:00 Chris — ci(root): correct four false statements in the dashboard-api lane comments (#5067)
+589dcf7070cd8a541d604c28cb4c5523efaa78d8
+# 2026-10-05T01:48:21+02:00 Chris Stefan — docs(ops): record GH_DISPATCH_TOKEN clocks+alarm coupling as accepted risk R14
+e135d76009e6311c332a65e9b553a53094c16f82
+# 2026-10-05T01:52:25+02:00 Chris Stefan — fix(docs): R14 must not use /DIG/issues/ links, which are not repo paths
+ddbdef200056ca43fb5f966e36219a3ae5432077
+# 2026-10-05T02:33:33+02:00 Chris Stefan — docs(secrets): give the twelve-x laptop .env an owner per key (DIG-526)
+d0a69714a2e0e6b8c0b6f01db6c46fbd7adfb9da
+# 2026-10-05T02:42:21+02:00 Chris — fix(root): retract the actions:read claim, and stop leaving unmeasurable trackers open
+8d7c5edbf6e0cb11edad66239c41334bf8806174
+# 2026-10-05T02:46:43+02:00 Chris Stefan — docs(secrets): correct five errors the DIG-526 review found in the twelve-x .env section
+b6f7d75d7ae081b8e1d22098dafea304417e5f8e
+# 2026-10-05T03:09:45+02:00 Chris — test(scripts): pin the exit-2 wording and the main() crash guard (#5083)
+66aa58ceda54d126d2b32ebe33d12d80a8d4a7b0
+# 2026-10-05T03:42:20+02:00 Chris — fix(root): stop the staleness stdout from counting zero of zero
+ef01505003744ec53597bb4203111a410a854e15
+# 2026-10-05T03:59:13+02:00 Chris Stefan — DIG-448: register the hourly DataTap answer-check clock on the cron Worker
+7c04306b902bd459fb25f0f1b4503b0fd244fabf
+# 2026-10-05T05:17:14+02:00 PrimeMark EM — test(dashboard): pin the DIG-260 half-ladder contract (L5)
+d2c094f613a2d8aef483fdc5f95414ae89044009
+# 2026-10-05T05:18:24+02:00 PrimeMark EM — Revert "test(dashboard): pin the DIG-260 half-ladder contract (L5)"
+ba3638ff97c9886daaca0f50f8c4ce843b1ef33d
+# 2026-10-05T19:52:38+02:00 Chris — fix(digiquant): fail loud when every macro series is slow-cadence and silent (#5138)
+134a408f8741cb76dd64b024cd468ec935af77ec
+# 2026-10-05T20:11:38+02:00 Chris — fix(scripts): review findings on the DataTap answer integrity check (#5086)
+7aebebdfb0ef211f2ca3c15cb31ce63af11aadd1
+# 2026-10-05T20:31:40+02:00 Chris Stefan — fix(cron): trust make over the report line when they disagree (DIG-448)
+c9e355b63ecfd06183c81974aa380b85ddd7704d
+# 2026-10-05T20:50:39+02:00 Chris — test(digiquant): cover the macro staleness guard end-to-end and state its real scope (#5143)
+713e58b8fd51695ea98182145164aca1b2d5758e
+# 2026-10-06T01:42:57+02:00 Chris — fix(digiquant): drop live_search on alt-politician-signals (DIG-1252) (#5165)
+22fbb394c4199475b4b95cd220b36a408ffad881
+# 2026-10-06T03:18:51+02:00 Chris Stefan — feat(root): observe whether a Paperclip routine on a schedule trigger fired
+dac3f431a7e4a59dd781b2bbbb69203c71c92914
+# 2026-10-06T04:02:29+02:00 Chris Stefan — fix(digiquant): refuse digifetch_congress_trades on every surface (DIG-1057)
+8f0aaf42d25a176f4f3f6761ee0613573fb69324
+# 2026-10-06T04:08:12+02:00 Chris Stefan — fix(digiquant): make the tool refusal deny-only via an additive env denylist
+9eaabaaef8ade2dc54bf21284a003f445ab66f13
+# 2026-10-06T04:09:42+02:00 Chris Stefan — docs(digiquant): document the deny-only refusal env denylist (DIG-1251)
+47f02626b4525f596efdc648db10b1607f3c6295
+# 2026-10-06T07:34:29+02:00 Chris — fix(root): drop the projects/*/vault path mute from gitleaks (#5168)
+8de942f4f82824d906b4ae9ede7cd51c6394a640
+# 2026-10-06T11:44:33+02:00 Chris Stefan — docs(vendor-terms): record FINRA short-volume as PROHIBITED (DIG-1521)
+953c47a9b6b04ae8a3e84b3d6ba8ce6c88873efa
+# 2026-10-06T23:17:33+02:00 Chris — feat(web): accept an invite key on /chat/occ and pin it to one host (DIG-1210) (#5172)
+f0dd82a6dc90214c2b5d94e232d0490b8b47adce
+# 2026-10-07T00:03:33+02:00 Chris — fix(web): rename Sections.tsx so the landing page resolves its own data (#5231)
+2c891b5e5b9cda9fd09028bab9662c064d4ef155
+# 2026-10-07T18:44:00+02:00 Chris — fix(root): name the real copyright holder in LICENSE, disclose trademark status (#5146)
+1984964603c89f6d4db07c7759347c863b3cbee5
+# 2026-10-07T21:38:03+02:00 Chris Stefan — docs(vendor-terms): state the caveat wording the FINRA ruling requires (DIG-1521)
+4e6e22987ed310fe94c59180fdd6330b8a710743
+# 2026-10-07T21:50:30+02:00 Chris Stefan — docs(vendor-terms): record the 2026-10-07 short-volume service decision (DIG-1521)
+442837af2549e5624fed88dddbe5df02c7ee2e9d
+# 2026-10-07T21:50:58+02:00 Chris Stefan — docs(vendor-terms): give the literal short-volume caveat text (DIG-1521)
+c3f36b1ed459d052db0e17990d310a76aaef8ba8
+# 2026-10-08T01:37:54+02:00 Chris — docs(root): DIG-1497 customer-data removal pack for the two forks and GitHub (#5206)
+e45b12e70888f4b42ea934dd23f78170beba5316
+# 2026-10-08T13:48:06+02:00 Chris — fix(digikey): stop a narrow scope from minting a wildcard scope (#5010)
+d56651bf9129cec022012eda359d40e5e677da15
+# 2026-10-08T14:06:58+02:00 Chris — docs(digichat): match claims to the current code (#5019)
+06a1ad1684b4209df630438c32e8a3c9963bc9c9
+# 2026-10-10T00:57:33+02:00 Chris — feat(digivoice): center the home shell and launch the banner (#4959)
+2636f1165435cb999c95cab38af1568a5f1307bf

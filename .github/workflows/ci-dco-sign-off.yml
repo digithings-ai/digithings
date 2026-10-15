@@ -77,18 +77,34 @@ jobs:
           # follow when the work was written, not when it was re-signed.
           DCO_SIGNOFF_CUTOFF_EPOCH=1791072000
           DCO_CUTOFF_UTC="2026-10-04T00:00:00Z"
+          # Closed waiver of full commit ids (DIG-3218). Chris chose this list
+          # on 2026-10-15. Rewriting those commits would force-push develop,
+          # which he did not allow. A line matches only when it is the full
+          # id. A missing file waives nothing. A commit that is not listed is
+          # still checked. The waiver commit itself is not on the list.
+          WAIVER_FILE=".github/dco-waived-commits.txt"
 
           MISSING=0
           CHECKED=0
           EXEMPT=0
+          WAIVED=0
           for SHA in $COMMITS; do
             AUTHORED_AT=$(git log -1 --format='%at' "$SHA")
             if [ "$AUTHORED_AT" -lt "$DCO_SIGNOFF_CUTOFF_EPOCH" ]; then
               EXEMPT=$((EXEMPT + 1))
               continue
             fi
+            if [ -f "$WAIVER_FILE" ] && grep -E -q "^${SHA}$" "$WAIVER_FILE"; then
+              WAIVED=$((WAIVED + 1))
+              continue
+            fi
             CHECKED=$((CHECKED + 1))
-            if ! git log -1 --format='%B' "$SHA" | grep -q '^Signed-off-by: '; then
+            # Do not pipe git log into grep -q. grep -q exits at the first
+            # match. On a long message git is still writing, the pipe closes,
+            # and pipefail reports a miss for a commit that is signed.
+            # Read the body, then scan every line.
+            body=$(git log -1 --format='%B' "$SHA")
+            if ! printf '%s\n' "$body" | grep '^Signed-off-by: ' >/dev/null; then
               echo "ERROR: Commit $SHA is missing a Signed-off-by line."
               echo "  Commit message:"
               git log -1 --format='    %s' "$SHA"
@@ -100,12 +116,16 @@ jobs:
           # Verdict lines, one per fact, so a reader can grep any of them:
           #   checked=N              commits the rule was applied to
           #   skipped_pre_cutoff=N   commits exempt as authored before the cutoff
+          #   skipped_waived=N       commits exempt because their full id is listed
           # Printed before the failure report so a red run states what it
           # actually looked at; a count only printed on the pass path is a
           # count you cannot read on the run you most want it.
-          echo "checked=$CHECKED skipped_pre_cutoff=$EXEMPT"
+          echo "checked=$CHECKED skipped_pre_cutoff=$EXEMPT skipped_waived=$WAIVED"
           if [ "$EXEMPT" -gt 0 ]; then
             echo "  ($EXEMPT commit(s) authored before $DCO_CUTOFF_UTC are exempt and were not checked.)"
+          fi
+          if [ "$WAIVED" -gt 0 ]; then
+            echo "  ($WAIVED commit(s) are on the closed waiver list and were not checked.)"
           fi
 
           if [ "$MISSING" -gt 0 ]; then
@@ -120,7 +140,11 @@ jobs:
           # below would claim a pass having examined nothing, so the summary is
           # conditioned on there being something to have checked.
           if [ "$CHECKED" -eq 0 ]; then
-            echo "No in-scope commits to check; all $EXEMPT commit(s) predate $DCO_CUTOFF_UTC."
+            if [ "$WAIVED" -gt 0 ]; then
+              echo "No in-scope commits to check; $WAIVED commit(s) are on the closed waiver list and $EXEMPT predate $DCO_CUTOFF_UTC."
+            else
+              echo "No in-scope commits to check; all $EXEMPT commit(s) predate $DCO_CUTOFF_UTC."
+            fi
             exit 0
           fi
 

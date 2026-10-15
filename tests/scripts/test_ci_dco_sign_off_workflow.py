@@ -25,9 +25,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-WORKFLOW = (
-    Path(__file__).resolve().parents[2] / ".github/workflows/ci-dco-sign-off.yml"
-)
+WORKFLOW = Path(__file__).resolve().parents[2] / ".github/workflows/ci-dco-sign-off.yml"
+WAIVER = Path(__file__).resolve().parents[2] / ".github/dco-waived-commits.txt"
 STEP_NAME = "Check every commit for Signed-off-by"
 CUTOFF_UTC = datetime(2026, 10, 4, tzinfo=timezone.utc)
 CUTOFF_EPOCH = int(CUTOFF_UTC.timestamp())
@@ -104,6 +103,13 @@ def _check(repo: Path, base: str, head: str) -> subprocess.CompletedProcess:
         capture_output=True,
         text=True,
     )
+
+
+def _write_waiver(repo: Path, *shas: str) -> None:
+    folder = repo / ".github"
+    folder.mkdir(exist_ok=True)
+    body = "\n".join(["# test waiver", *shas, ""])
+    (folder / "dco-waived-commits.txt").write_text(body)
 
 
 def _count(output: str, key: str) -> int:
@@ -215,6 +221,101 @@ def test_a_signed_in_scope_commit_still_passes(repo: Path):
     """Control: the carve-out did not disable the check."""
     base = _commit(repo, "base", CUTOFF_EPOCH - DAY)
     head = _commit(repo, "new signed", CUTOFF_EPOCH + DAY, signoff=True)
+
+    result = _check(repo, base, head)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _count(result.stdout, "checked") == 1
+    assert "All commits are signed off." in result.stdout
+
+
+@pytest.mark.unit
+def test_closed_waiver_file_lists_sixty_full_ids():
+    """The shipped list is closed: 60 unique full ids, nothing else."""
+    ids = []
+    for raw in WAIVER.read_text().splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        ids.append(line)
+    assert len(ids) == 60
+    assert len(set(ids)) == 60
+    assert all(re.fullmatch(r"[0-9a-f]{40}", item) for item in ids)
+
+
+@pytest.mark.unit
+def test_a_listed_commit_is_waived_and_a_later_unsigned_commit_still_fails(repo: Path):
+    """The list skips one id. It does not skip the next unsigned commit."""
+    base = _commit(repo, "base", CUTOFF_EPOCH - DAY)
+    waived = _commit(repo, "waived unsigned", CUTOFF_EPOCH + DAY)
+    head = _commit(repo, "later unsigned", CUTOFF_EPOCH + 2 * DAY)
+    _write_waiver(repo, waived)
+
+    result = _check(repo, base, head)
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert _count(result.stdout, "skipped_waived") == 1
+    assert _count(result.stdout, "checked") == 1
+    assert f"Commit {waived} is missing" not in result.stdout
+    assert f"Commit {head} is missing" in result.stdout
+
+
+@pytest.mark.unit
+def test_a_range_of_only_waived_commits_does_not_claim_they_were_signed(repo: Path):
+    """A waiver is not a sign-off. Say so when nothing else was checked."""
+    base = _commit(repo, "base", CUTOFF_EPOCH - DAY)
+    head = _commit(repo, "waived unsigned", CUTOFF_EPOCH + DAY)
+    _write_waiver(repo, head)
+
+    result = _check(repo, base, head)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert _count(result.stdout, "checked") == 0
+    assert _count(result.stdout, "skipped_waived") == 1
+    assert "closed waiver list" in result.stdout
+    assert "All commits are signed off." not in result.stdout
+
+
+@pytest.mark.unit
+def test_a_short_id_on_the_list_does_not_waive_the_full_commit(repo: Path):
+    """A prefix is not an id. The match is the whole line."""
+    base = _commit(repo, "base", CUTOFF_EPOCH - DAY)
+    head = _commit(repo, "unsigned", CUTOFF_EPOCH + DAY)
+    _write_waiver(repo, head[:12])
+
+    result = _check(repo, base, head)
+
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert _count(result.stdout, "skipped_waived") == 0
+    assert _count(result.stdout, "checked") == 1
+
+
+@pytest.mark.unit
+def test_a_long_message_with_an_early_signoff_still_passes(repo: Path):
+    """A long body must not become a false miss under pipefail.
+
+    grep -q exits at the first match. If that match is early, git is still
+    writing, and pipefail used to count the commit as unsigned.
+    """
+    base = _commit(repo, "base", CUTOFF_EPOCH - DAY)
+    (repo / "file.txt").write_text("long")
+    _git(repo, "add", "file.txt")
+    stamp = _iso(CUTOFF_EPOCH + DAY)
+    env = dict(os.environ)
+    env["GIT_AUTHOR_DATE"] = stamp
+    env["GIT_COMMITTER_DATE"] = stamp
+    message = "commit long\n\nSigned-off-by: DCO Test <test@example.invalid>\n" + (
+        "padding\n" * 20000
+    )
+    subprocess.run(
+        ["git", "commit", "-q", "-F", "-"],
+        cwd=repo,
+        env=env,
+        input=message,
+        text=True,
+        check=True,
+    )
+    head = _git(repo, "rev-parse", "HEAD")
 
     result = _check(repo, base, head)
 
