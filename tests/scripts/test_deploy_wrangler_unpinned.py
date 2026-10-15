@@ -65,6 +65,7 @@ def test_no_deploy_workflow_pins_wrangler_version() -> None:
     Every Worker deploy must resolve wrangler from `npm ci` + package-lock.json
     (the version the PR-time gate builds with). Re-adding a pin fails here.
     """
+    assert len(_deploy_workflows()) >= 3, "deploy workflow sweep is empty"
     pinned = _pinned_workflows()
     assert not pinned, (
         f"{pinned} set with.wranglerVersion — drop the pin so the deploy "
