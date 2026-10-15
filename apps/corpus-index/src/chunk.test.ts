@@ -45,5 +45,9 @@ describe("prepareBody", () => {
     expect(htmlToText("before<script>alert(1)</script foo>after")).toBe("before after");
     expect(htmlToText("before<style>x</style foo>after")).toBe("before after");
     expect(htmlToText("before<script>alert(1)</script\t\n bar>after")).toBe("before after");
+    expect(htmlToText("before<script>alert(1)</script/>after")).toBe("before after");
+    expect(htmlToText("before<script>alert(1)</script/foo>after")).toBe("before after");
+    expect(htmlToText("before<style>x</style/>after")).toBe("before after");
+    expect(htmlToText("before<style>x</style/foo>after")).toBe("before after");
   });
 });
