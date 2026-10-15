@@ -112,7 +112,6 @@ CLASS_NAME_KINDS = frozenset({"container"})
 # Container and DO namespacing tables: key is a table name, value is a per-entry key.
 NAMESPACED_BINDING_TABLES = {
     "durable_objects": "bindings",
-    "kv_namespaces": "id",
 }
 
 
