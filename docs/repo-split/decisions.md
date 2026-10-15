@@ -64,5 +64,5 @@ D-7 (hero-banner public) · D-8 (digiquant-tui open) · D-9 (digibot stays out) 
 
 - **D-L1** R0 licence stays **MIT**. Alternative: source-available (FSL/BSL) for modules whose value is the license gate (`digikey`).
 - **D-P1** Publish all 12 Python modules on PyPI under their current names (check availability first).
-- **D-P2** Confirm Chris controls the `digithings` npm org.
+- **D-P2** Confirm Chris controls the `digithings-ai` npm org. — **satisfied** (Chris owns the org, answered 02:18).
 - **L1** Code already published under MIT stays MIT-licensed to anyone who copied it; the scrub cannot revoke that.

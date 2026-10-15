@@ -107,6 +107,8 @@ R7 already exists as a private GitHub repo, and P4.7 adds the twelve-x paths fro
   from GitHub Actions (mono) and from Buildkite (R2–R7).
 - Scheduled jobs that `digithings-cron` dispatches through the GitHub API move to the Buildkite
   builds API (token on the deploy host, scoped to the pipelines it triggers).
+- Anything that must run while the Mac is off goes to a Cloudflare cron/Workflow; Mac-only
+  triggers fail visibly.
 - Public CI (R0) stays on GitHub-hosted runners (D-O1).
 
 ### 5. Cloudflare deploys after the move
