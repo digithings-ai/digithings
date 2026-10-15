@@ -2,11 +2,10 @@
 
 The shared visual language for every digithings public surface:
 `digithings.ai`, `digiquant.io`, and `digithings.ai/chat`. A simple,
-utilitarian, dark-first aesthetic with per-module accent colors and a
-cross-brand starfield signature.
+utilitarian, dark-first aesthetic with per-module accent colors.
 
 This document is the authoritative reference. The canonical implementation
-lives in `packages/design/tokens.css`,
+lives in `packages/design/tokens.css` and `packages/design/site/site.css`,
 packaged as the `@digithings/design` npm workspace. Consumers
 import the package (or reference the files via relative paths for the
 static sites).
@@ -39,7 +38,7 @@ All tokens are declared as CSS custom properties on `:root` in
 
 | Token                | Value       | Role                                  |
 | -------------------- | ----------- | ------------------------------------- |
-| `--bg-primary`       | `#121212`   | Page background (on top of starfield) |
+| `--bg-primary`       | `#121212`   | Page background |
 | `--bg-secondary`     | `#0a0a0a`   | Panels, cards, nav                    |
 | `--text-primary`     | `#e6e6e6`   | Default body text                     |
 | `--text-secondary`   | `#a3a3a3`   | Muted text, captions                  |
@@ -204,27 +203,19 @@ Or directly in CSS:
 
 ---
 
-## Starfield API
+## Component primitives
 
-`packages/design/starfield.js`:
+The legacy `components.css` sheet (global reset plus `.nav`, `.hero`,
+`.module-card`, `.terminal`, and the `--scroll` direction rules) had no
+importer. It was removed. Live primitives are `site/site.css`, consumed by
+digithings.ai and digiquant.io, and the React kit in `@digithings/ui`.
 
-```js
-import { initStarfield } from './starfield.js';
-
-const ctl = initStarfield({
-  canvasId: 'network-canvas', // required — id of a <canvas>
-  density: 180,               // optional; defaults: 180 desktop / 80 mobile
-});
-// ctl.stop() cancels the animation and detaches listeners.
-```
-
-Behavior:
-- Pauses when the tab is hidden (`visibilitychange`).
-- Resizes on `window.resize`.
-- On screens ≤ 480px the default density drops to 80.
+The vanilla `starfield.js` and `typewriter.js` modules had no importer either
+(`apps/dashboard` only declared the starfield module). They were removed.
+`scroll-trigger.js` left in #5692. Do not revive them; the next design
+reference is `apps/reference`.
 
 ---
-
 ## Non-goals
 
 - No component JS framework here. React components live in `@digithings/ui`;
@@ -236,8 +227,8 @@ Behavior:
 
 ## Extended primitives
 
-Two primitives that live surfaces still import sit alongside the tokens and
-starfield. Each ships a CSS file and an ESM JS module.
+Two primitives that live surfaces still import sit alongside the tokens.
+Each ships a CSS file and an ESM JS module.
 
 ### `quant-native/` — blueprint grid, ticker, metric + chart utilities
 
