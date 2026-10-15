@@ -18,6 +18,7 @@ export function OpenSourceLive({ contributor }: { contributor: RepoContributor }
       cloneCommand={REPO_CLONE}
       contributingUrl={CONTRIBUTING_URL}
       contributor={contributor}
+      heatBuild
       className="min-w-0"
     />
   );

@@ -1,0 +1,30 @@
+{
+  "name": "@digiquant/contract",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Shared types and pure functions for the digiquant desk and dashboard-api.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./accounting-views": "./src/accounting-views.ts",
+    "./benchmark-tickers": "./src/benchmark-tickers.ts",
+    "./book-reconciliation": "./src/book-reconciliation.ts",
+    "./brief-book-event": "./src/brief-book-event.ts",
+    "./dashboard-ssot": "./src/dashboard-ssot.ts",
+    "./performance-ssot": "./src/performance-ssot.ts",
+    "./position-event-economics": "./src/position-event-economics.ts",
+    "./types": "./src/types.ts"
+  },
+  "dependencies": {
+    "@digithings/ui": "*"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.0"
+  }
+}

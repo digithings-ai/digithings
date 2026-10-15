@@ -196,7 +196,7 @@ node --version
 API keys are stored securely via VS Code's `inputs` prompt mechanism — never hardcoded. On first
 use of a key-required server, VS Code will prompt once and cache the value for the session.
 
-Full server details and prerequisites: `config/data-sources.md` → "MCP Servers" section.
+Full server details and prerequisites: `docs/ops/data-sources.md` → "MCP Servers" section.
 
 ---
 

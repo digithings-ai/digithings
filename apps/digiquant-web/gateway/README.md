@@ -13,9 +13,12 @@ calls to the digiquant MCP server without any secret reaching the browser.
   carry the upstream attribution and delay notice verbatim; keep them visible.
 - **The session cookie is intentionally never passed.** The MCP server runs as a
   stdio child (no network port) with a scrubbed env (`PATH`, `HOME`, `PYTHONPATH`,
-  `LANG` only), so only anonymous free-tier tools work. Cookie-gated tools are not
-  exposed; backtest/optimize/export/pipeline are not in `--scope read`.
-- **No generic passthrough.** Only the fixed `PROBES` table in `live_gateway.py`.
+  `LANG` only), so only anonymous free-tier tools succeed. The child is started
+  with `--scope full` so the landing page can execute every audited tool. Tools
+  that need a key fail closed.
+- **Probes stay a fixed table.** `POST /v1/tools/call` accepts only names listed
+  in `app/_mcp-tools.json`, caps the argument body and the response, and still
+  refuses any other origin.
 - LuxAlgo probes return metadata only (never Pine/indicator source), with the
   upstream `attribution` and `license_note` in the envelope's `attribution[]`.
 
@@ -53,11 +56,12 @@ set accidentally, its client still refuses to connect from a non-loopback page
 or to a non-loopback URL.
 
 Env: `DQ_GATEWAY_PORT` (8792), `DQ_GATEWAY_ORIGINS` (comma list, exact match;
-default `http://localhost:3910,http://127.0.0.1:3910`). Port 3005 is not used.
+default `http://localhost:3910,http://127.0.0.1:3910,http://localhost:4020,http://127.0.0.1:4020`). Port 3005 is not used.
 
 ## Routes
 
 - `GET /healthz`, `GET /v1/catalog`, `GET /v1/probe/{id}?params`
+- `POST /v1/tools/call` with `{"name","arguments"}` for a name in `app/_mcp-tools.json`
 - `GET /v1/market/closes?tickers=A,B&from=YYYY-MM-DD&to=YYYY-MM-DD` and
   `GET /v1/market/tickers`: read-only proxy of `https://graph.digithings.ai/v1/market/`
   (fixed host, 5 min cache, body unchanged, upstream failure gives 502). Point

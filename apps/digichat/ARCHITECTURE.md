@@ -34,7 +34,7 @@ selected per **deployment config** (`digichat.yaml` / env overlay;
 [`docs/architecture/digichat-renderer-contract.md`](../../docs/architecture/digichat-renderer-contract.md),
 and [ADR-0018](../../docs/adr/0018-digichat-path-routing.md).
 
-**Turn / thread markdown export (#3465).** Shared serializer lives in `@digithings/digichat-ui` (`serializeAssistantMarkdown` / `serializeThreadMarkdown` / `copyMarkdownWithFallback`). `ChatPanel` and embed session both use it — clipboard first, embed falls back to `.md` download (never a silent no-op). Citations prefer `source-*` parts (`messageSourceCitations`).
+**Turn / thread markdown export (#3465).** Shared serializer lives in `@digithings/digichat-ui` (`serializeAssistantMarkdown` / `serializeThreadMarkdown` / `copyMarkdownWithFallback`). `ChatPanel` and embed session both use it — clipboard first, embed falls back to `.md` download (never a silent no-op). Citations prefer `source-*` parts (`citationHits` from `@digithings/digichat-ui`).
 
 **Last-turn regen + edit (#3466 / #3475).** Digigraph and Foundry surfaces expose **regen** on the last settled assistant and **edit** on the last user turn. Clients send `X-Digi-Turn-Mode: send | regenerate | edit_last_user` and optional `X-Digi-Run-Id` on `POST /api/chat`. Digigraph replays the **full workflow** on the same session from the truncated client transcript (tools re-run; digistore may accumulate — not “as if it never happened”). Foundry mutates conversation items (delete trailing assistant / user+assistant, then `responses.create` with no new input) via `@azure/ai-projects` OpenAI client; without an item API the BFF returns **501 `not_supported`**. Concurrent runs on the same session → **409 `run_in_progress`**; duplicate run ids → **409 `run_id_replay`**. Edit that shortens a persisted thread must set `allowTruncate: true` on the next PUT. `X-Digi-Force-Tool` is send-only.
 
@@ -218,7 +218,6 @@ browser-QA deltas: [`CONTROLS.md`](CONTROLS.md).
 | File | Purpose |
 |---|---|
 | `src/app/(digichat)/page.tsx` | Server component: bare `/` renders the mode menu (no chat). `?mode=product` follows deployment `chrome.mode`, `auth`, and `persistence`: `chrome.mode: embed` (unless a layout skin owns the page) redirects to `/embed`; an anonymous app renders `HomeStockClient`; `ChatShell` only for a session, `persistence: server`, and a non-framed mode. `?mode=embed` renders `EmbedRouteShell`. `?mode=catalog` renders `BaselineClient` (production → `notFound`). `/baseline` is a separate route with the same client; it does not redirect |
-| `src/lib/root-auth.ts` | `isRootAuthRequired()` — only its unit test calls it. `DIGICHAT_REQUIRE_ROOT_AUTH` does not gate `/` or `ChatShell` |
 | `src/app/(digichat)/layout.tsx` | Root layout with `Providers` (session, tooltips) |
 | `src/app/api/chat/route.ts` | Primary BFF chat endpoint |
 | `src/app/api/v1/chat/route.ts` | Machine-client alias — re-exports the chat route |
@@ -241,7 +240,6 @@ browser-QA deltas: [`CONTROLS.md`](CONTROLS.md).
 | `src/lib/adapters/digithings/activity/` | digivault / digisearch activity mappers (digigraph tools) |
 | `src/lib/adapters/foundry/stream.ts` | Azure Foundry → AI SDK UI message stream |
 | `src/lib/adapters/shared/messages.ts` | Shared helpers (e.g. `lastUserMessageText`) |
-| `src/lib/digigraph-activity-map.ts` | Re-export of digithings activity mappers |
 | `src/lib/embed-gate-provider.ts` | Consume per-tenant embed chat access tokens |
 | `src/lib/chat-activity.ts` | Activity allowlist, detail gate, projector |
 | `src/lib/page-context-sanitize.ts` | Structural DOM allowlist for embed page-context HTML (#3602) |
@@ -414,8 +412,8 @@ follows deployment `chrome.mode`, `auth`, and `persistence`. `chrome.mode: embed
 redirects to `/embed` unless a layout skin owns the page. An anonymous app renders
 `HomeStockClient`. A session with `persistence: server` and a non-framed mode renders
 `ChatShell`; any other session branch renders `HomeStockClient`. `DIGICHAT_REQUIRE_ROOT_AUTH`
-does not choose either branch — `isRootAuthRequired()` is only used by
-`src/lib/root-auth.test.ts`. There is no standalone `/login` page; a session must
+is forwarded by the workers but has no reader in the app — it does not choose
+either branch. There is no standalone `/login` page; a session must
 come from an OIDC callback, a machine key, or the dev-only local-bootstrap credentials
 provider. `?mode=embed` replays the tenant iframe surface (same `EmbedRouteShell` as
 `/embed`, which keeps serving directly: production splits `/` (Pages) from `/embed*`
@@ -1123,7 +1121,7 @@ click opens a portaled sandboxed iframe / `<pre>` viewer). `expandPageContextFil
 folds that file part back into prompt text so digigraph still sees the context.
 The dashboard popup posts the payload once per open. Screenshot data URLs are
 optional and acknowledged in the prompt only — vision multimodal / LiteLLM image
-parts are deferred. Config/URL helpers: `src/lib/embed-popup-config.ts`.
+parts are deferred. Config/URL helpers live in the shipped widget script (`public/widget.js`).
 
 Injection is deployment-configured via `features.pageContext` (`off` | `silent` |
 `visible`, default `visible`). `off` mounts no `digichat:page-context` listener at
@@ -1731,7 +1729,7 @@ Healthcheck: `curl -sf http://127.0.0.1:3000/api/health`.
 | `DIGICHAT_CONFIG_PATH` | Path to digichat deployment YAML (default `/app/config/digichat.yaml`). Zod-validated at startup; fail closed on invalid content. | Optional |
 | `DIGICHAT_EMBED_TOKEN` | Env overlay for `deployment.token` when omitted from the YAML file | Optional |
 | `DIGICHAT_CHROME_SKIN` | Overlay `chrome.skin` (11 catalog ids or first-party `digichat`) for a client container without editing YAML | Optional |
-| `DIGICHAT_REQUIRE_ROOT_AUTH` | Read only by `isRootAuthRequired()`, which nothing but `src/lib/root-auth.test.ts` calls. It does not gate `ChatShell` or `/`. Prefer `chrome.mode` + `auth` + `persistence` in deploy config. | Unused by the app |
+| `DIGICHAT_REQUIRE_ROOT_AUTH` | Forwarded by the workers but not read by the app — it gates neither `/` nor `ChatShell`. Prefer `chrome.mode` + `auth` + `persistence` in deploy config | Unused by the app |
 | `DIGIGRAPH_INTERNAL_URL` | digigraph base URL (default: `http://127.0.0.1:8000`) | Yes |
 | `DIGIGRAPH_UPSTREAM_API_KEY` | Static Bearer to digigraph (fallback auth) | If not using digikey |
 | `DIGIKEY_URL` | digikey base URL | If using digikey |
@@ -1763,16 +1761,16 @@ Healthcheck: `curl -sf http://127.0.0.1:3000/api/health`.
 | `DIGICHAT_EMBED_IP_RATE_LIMIT_MAX` / `_WINDOW_MS` | Per-IP chat rate limit for anonymous `/embed` requests, in front of the shared bucket above (default 10/60000ms — must stay below `DIGICHAT_CHAT_RATE_LIMIT_MAX`) | Optional |
 | `DIGICHAT_TRUSTED_PROXIES` | Comma-separated IP addresses/CIDRs whose socket peers may supply `cf-connecting-ip` or `X-Forwarded-For` for anonymous-embed rate limiting. Unset preserves historical header behavior. The bundled production entrypoint captures the direct socket peer and isolates Next on loopback; do not set this unless that entrypoint remains in the request path. In a Cloudflare Container, trust the container ingress/overlay peer, not Cloudflare's published edge ranges. | Optional |
 | `DIGICHAT_POSTGRES_PASSWORD` | Postgres password (Compose default: `digichat`) | Change in production |
-| `DIGICHAT_VERSION` | Version string returned in health response | Optional override. Unset/blank → `package.json` version. Cloudflare Container (`Dockerfile.digichat-cloudflare`) and GHCR (`apps/digichat/Dockerfile`) bake it from `package.json` at image build (`ARG`/`ENV` + `/etc/digichat-version`). Not a dashboard secret. |
+| `DIGICHAT_VERSION` | Version string returned in health response | Optional override. Unset/blank → `package.json` version. Cloudflare Container (`Dockerfile.digichat-cloudflare`) and the app image (`apps/digichat/Dockerfile`) bake it from `package.json` at image build (`ARG`/`ENV` + `/etc/digichat-version`). Not a dashboard secret. |
 | `NEXTAUTH_SECRET` | Legacy Auth.js secret alias (same value as `AUTH_SECRET`) | If using legacy env |
 | `NEXTAUTH_URL` | Legacy Auth.js URL alias (same value as `AUTH_URL`) | If using legacy env |
 
 ### Dockerfile stages
 
 Three-stage build:
-1. `deps` (node:22-alpine): `npm ci` to populate `node_modules`.
-2. `builder` (node:22-alpine): copies deps, copies source, runs `next build`. `NEXT_TELEMETRY_DISABLED=1`. The product `chrome.skin: digichat` sheet lives in the package (`packages/ui/src/styles/chat-digichat.css`), so no gallery COPY is needed — the old `apps/reference/…/chatbot.css` COPY closed with WS1 (#3717).
-3. `runner` (node:22-alpine): copies only `public/`, `.next/standalone/`, `.next/static/`. Adds `curl` for the Compose healthcheck. Runs as non-root `nextjs` user (uid 1001). `next.config.ts` sets `output: "standalone"` to enable this. Both this Dockerfile and `Dockerfile.digichat-cloudflare` write `/etc/digichat-version` from `package.json` (or `ARG DIGICHAT_VERSION`) and set `ENV DIGICHAT_VERSION`.
+1. `deps` (node:22-alpine): `npm ci` from the root lockfile. `@digithings/design`, `@digithings/ui` and `@digithings/digichat-ui` are unpacked from tarballs (`scripts/package_r5_image_inputs.py`), not copied as sibling trees.
+2. `builder` (node:22-alpine): copies deps, unpacks those tarballs, copies `apps/digichat` and `config/byok-providers.json`, runs `next build`. `NEXT_TELEMETRY_DISABLED=1`. The product `chrome.skin: digichat` sheet lives in the package (`packages/ui/src/styles/chat-digichat.css`), so no gallery COPY is needed — the old `apps/reference/…/chatbot.css` COPY closed with WS1 (#3717).
+3. `runner` (node:22-alpine): copies only `public/`, `.next/standalone/`, `.next/static/`. Adds `curl` for the Compose healthcheck. Runs as non-root `nextjs` user (uid 1001). `next.config.ts` sets `output: "standalone"` to enable this. Both this Dockerfile and `Dockerfile.digichat-cloudflare` write `/etc/digichat-version` from `package.json` (or `ARG DIGICHAT_VERSION`) and set `ENV DIGICHAT_VERSION`. The default push host is `registry.cloudflare.com`.
 
 The standalone output is a self-contained Node.js server (`server.js`) with only production
 dependencies. Image size is significantly smaller than a non-standalone build.

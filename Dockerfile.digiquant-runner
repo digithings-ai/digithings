@@ -21,6 +21,15 @@
 # GIT_SHA defaults to unknown. wrangler does not pass build args here;
 # a non-wrangler build can set --build-arg GIT_SHA=<sha>. /healthz reports
 # the sha from the latest job status, which reads DIGIQUANT_RUNNER_GIT_SHA.
+#
+# DIG-3701: do not COPY sibling module trees. scripts/package_r5_image_inputs.py
+# exports the root lock with `uv export --frozen` for
+# digiquant[prices,research,nautilus] and digigraph[checkpoint-postgres]
+# (the second sync stays inexact by union, not by a second sync that would
+# remove psycopg), builds the workspace wheels, and packs the runner payload.
+# `uv sync --frozen` installs that generated project. Push target default is
+# the Cloudflare container registry (D-R5-1). Not GHCR. Not a client registry.
+# This file does not log in and does not push.
 FROM python:3.12-slim
 
 WORKDIR /app
@@ -35,43 +44,30 @@ ENV PYTHONUNBUFFERED=1 \
 
 RUN pip install --upgrade pip && pip install uv
 
-COPY pyproject.toml uv.lock ./
-COPY digibase ./digibase
-COPY digikey ./digikey
-COPY digifetch ./digifetch
-COPY digiquant ./digiquant
-COPY digigraph ./digigraph
-COPY digillm ./digillm
-COPY digitrace ./digitrace
-COPY config/byok-providers.json ./config/byok-providers.json
-# Second fail-loud-at-import config file: model_config._load_model_policy. The house
-# chain steps run digigraph in-process, so this image needs it for the same reason it
-# needs byok-providers.json. See digigraph/Dockerfile.
-COPY config/model-policy.json ./config/model-policy.json
-# Third config file, and the only one this image loads *softly*. digiquant's
-# research.pricing resolves the repo root to /app, and this image ships a
-# /app/config/ directory that already holds the two files above -- so an
-# omitted prices file is not a missing-directory warning, it is a silently
-# empty price table, and diagnostics.est_cost_usd would report $0 for every
-# model while the telemetry spend alert could never fire. Copy it.
-COPY config/digiquant-model-prices.json ./config/digiquant-model-prices.json
+# D-R5-1. Account id is supplied by the operator at push time (H3). The
+# default host is the Cloudflare container registry.
+ARG IMAGE_PUSH_REGISTRY=registry.cloudflare.com
+ARG IMAGE_PUSH_REPOSITORY=digithings/digiquant-runner
+LABEL org.digithings.image.registry="${IMAGE_PUSH_REGISTRY}" \
+      org.digithings.image.repository="${IMAGE_PUSH_REPOSITORY}"
 
-RUN uv sync --frozen --package digiquant --extra prices --extra research --extra nautilus \
-    && uv sync --frozen --inexact --package digigraph --extra checkpoint-postgres
+COPY image-packages/runner/project/pyproject.toml image-packages/runner/project/uv.lock ./
+COPY image-packages/runner/project/wheels ./wheels
+# Frozen pins: the lock is `uv export --frozen` of the workspace lock for
+# digiquant[prices,research,nautilus] plus digigraph[checkpoint-postgres],
+# then `uv lock` with those exact pins. --no-install-project skips the
+# synthetic project; the wheels install from ./wheels.
+RUN uv sync --frozen --no-install-project --no-dev
 
-COPY scripts/refresh_market_data_r2.py ./scripts/refresh_market_data_r2.py
-COPY scripts/backfill_market_data_r2.py ./scripts/backfill_market_data_r2.py
-COPY scripts/execution_cron_check.py ./scripts/execution_cron_check.py
-COPY scripts/digiquant_archive_checkpoints.py ./scripts/digiquant_archive_checkpoints.py
-COPY scripts/digiquant_checkpoint_size_gate.py ./scripts/digiquant_checkpoint_size_gate.py
-COPY .github/digiquant-pipeline.yml ./.github/digiquant-pipeline.yml
-COPY .github/workflows/pipeline-digiquant-allocation-shadow.yml \
-    ./.github/workflows/pipeline-digiquant-allocation-shadow.yml
-COPY apps/digiquant-runner/container/exec_job.py /opt/runner/exec_job.py
-COPY apps/digiquant-runner/container/house_chain_step.py /opt/runner/house_chain_step.py
-COPY apps/digiquant-runner/container/wake_stack.py /opt/runner/wake_stack.py
-COPY apps/digiquant-runner/container/web_search_preflight.py /opt/runner/web_search_preflight.py
-COPY apps/digiquant-runner/commands.json /opt/runner/commands.json
+# Payload paths match commands.json and DIGI_CONFIG_PATH. The prices file is
+# required: research.pricing treats a present /app/config without it as an
+# empty table, and diagnostics.est_cost_usd would report $0.
+COPY image-packages/runner/payload/scripts ./scripts
+COPY image-packages/runner/payload/config ./config
+COPY image-packages/runner/payload/digiquant ./digiquant
+COPY image-packages/runner/payload/.github ./.github
+COPY image-packages/runner/payload/opt/runner/ /opt/runner/
+ENV DIGI_CONFIG_PATH=/app/config
 
 ARG GIT_SHA=unknown
 ENV DIGIQUANT_RUNNER_GIT_SHA=${GIT_SHA}

@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "claims": [
+    {
+      "id": "claim_digivoice_noport",
+      "statement": "digivoice has no network service and no port. The package is a Python 3.12 CLI.",
+      "evidence": [
+        {
+          "resource": "repo://digivoice/ARCHITECTURE.md#L1-L4",
+          "version": "repo-lines-v1:sha256:fe1d8a9efb7a794be5b6565c44db72b9b8304ce1fda6525d02658b0fcbac162e:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNTViYWQ4NDcwMGEyY2E3MTVkYTZkYmRjZTk1OWMyZDI2OWYzNDY3YTZhYzllZTAzYzc1MjFkZTNkNWM0MWRhYyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMzg5OTU5N2FiNWZlYWVkMTY5MmU3YmZlMDUyYzEyMmM0ZjQ1YWY1MDYwYjM0ODE0NzZlYTVkNmFlZTJkZWRmMSJ9"
+        },
+        {
+          "resource": "repo://digivoice/pyproject.toml#L5-L10",
+          "version": "repo-lines-v1:sha256:d1cac19db689377bab915803fcbdbcf5a020c8cc644faddf83db4b25b0df0f16:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNzAyYTgxYzM4MzZlZGVmMmQwYmExMWQyMzUzZmI2ZGFiYzc3NzE1MGE3Y2E4M2VhMGQ5ZTlhNzAzMTNmZWFiYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMThhMzc3ODVlNzI2ZmY1NjBlNzAwMGFhNzAwYTRlOTJmYjk1OGRmOTNhM2RlNDQ1YzUxMTRhMmQ5NTc3MzBlMSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMmY0NTMwZjI3MDNmMmFkYTdiZGJlMmY0MTUwNDFjZmMwYWUyMTA2MTFhMTk4NThiODE4NjAyODBjODI5MmQ2ZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNjhiMjhlODYyMWQ2MzAzZDI2OGRhNTFlN2UxOTY1ZWFlZGNkMzI5ZjExMjU4YzljYTFkOTJlODliYTIyZDc5MyJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_digivoice_paths",
+      "statement": "On macOS the data directory is ~/Library/Application Support/digivoice and the default dictation model is ggml-base.en.",
+      "evidence": [
+        {
+          "resource": "repo://digivoice/src/digivoice/paths.py#L10-L18",
+          "version": "repo-lines-v1:sha256:55be24eee80d29dcb4a0b6606daecd2cd89b32342f34a87ea6d423f2ba1434f8:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNmQ1MmZmZWNlODdhOGM3MzAwZjlkODY4ZTJkZjJmMjBmOTcxNTBmM2UwZDlmNjg3YTI4NmFlMTJhMTlkZmI4MCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMTE4NjRiZTg1YzQ0ZGRlZTQyNTU2NGQ0YjdhMjBmMTk3Zjk5NThiZWJjMTdiM2ZjYjhkNGI1ZDVjMTRhMmI4ZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMGIyYjY3ODc4NWEzZmQ2NzVjMzRmMDNlYTAzZDhjZmJhNWMwZTk4ZjBlYjhhNTQzMWJlN2I0ODkyMDJmYzEzZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiM2E1OGQ5OTFhMTYzOGU2NjMzZWQ1ZTQ4OWUxYjkwMTBiMzYxNTVhNDc3ODc5MmRiZGRjMTZjZWJiNDAwZTFiYSJ9"
+        }
+      ]
+    }
+  ]
+}
