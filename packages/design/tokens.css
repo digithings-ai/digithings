@@ -2,7 +2,7 @@
    digithings Design System — Tokens
    --------------------------------------------------------------------------
    Single source of truth for colors, type, spacing, radii, timing.
-   Component CSS (components.css) must reference tokens only — no raw hex.
+   Component CSS must reference tokens only — no raw hex.
    Base palette mirrors digichat/src/app/globals.css (dark mode).
 
    Per-module accents are declared as --accent-<module>. A section, card,
@@ -386,7 +386,7 @@
   /* Utilitarian v0.1: mono is the default voice for claim, body, and chrome.
      Serif/sans escape hatches set --font-display / --font-sans locally.
      Legacy --font-family follows --font-sans so themed consumers of
-     components.css / app-shell-terminal do not fall through to Inter. */
+     app-shell-terminal does not fall through to Inter. */
   --font-sans: var(--font-stack-mono);
   --font-mono: var(--font-stack-mono);
   --font-display: var(--font-stack-display);

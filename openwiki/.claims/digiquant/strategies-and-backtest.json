@@ -45,7 +45,7 @@
       "statement": "run_backtest requires an explicit data_path or data_dir, rejects unknown strategies and empty symbols, and caches by strategy/symbols/params/data hash unless a tearsheet path is set or caching is disabled.",
       "evidence": [
         {
-          "resource": "repo://digiquant/src/digiquant/backtest.py#L107-L140",
+          "resource": "repo://digiquant/src/digiquant/backtest.py#L116-L149",
           "version": "repo-lines-v1:sha256:8b23f1747085158ca3c98756159171b65ab4cf7ca0a3d43882af188c12bcb3dc:eyJzZWxlY3RlZExpbmVDb3VudCI6MzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZiZTIyYmQxYWU5NjcxZmI4ZmExMGIyY2RmOGYxYTkzNmVhM2M0Mzk1YWM2NTI3ZWExNDlhNWIwYTkwOGE2NTMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIwZDZkMzBhN2ExYjI2MzdiODAyNDg2YTE4YzIzNTkyMDk0ODYyZDY5ZGFiNGYzYzUyMDM3NDQwZTVlOTExMDEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImMwMDViZDc3NjdmMjg0MjkyMjBkOGJiYzkzMGNkMTI2OWY0MmM0MGEzNTJmNjMyMDJkMDdkYjBiZDdjZmY5ZGUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjViNTlhMzNhNjdhYTc3MDJhODE2NjQzMmE2NjA4MzRiNGM5OTJjMzRlMzIwZWUzODU5OTNjZDZhMmU2ZGQ0MGEifQ"
         }
       ]
@@ -55,11 +55,11 @@
       "statement": "BacktestResult carries run identity, window, PnL, return, Sharpe, drawdown, and trade counts with ok/partial/error status (a computed success property is True unless status is error), OptimizeResult adds best_params with the best trial's backtest, and OptimizationConstraints declares the hard limits candidates must satisfy.",
       "evidence": [
         {
-          "resource": "repo://digiquant/src/digiquant/models.py#L38-L49",
+          "resource": "repo://digiquant/src/digiquant/models.py#L60-L71",
           "version": "repo-lines-v1:sha256:bceb463ba4807ac40f2d8822ed2782a9159b524abead5c239e3b49b11c41a803:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgzZDg2NTg4YTdiZTJlNTg2YzM2YWVkZTQ2YTdlNTMyMDhhMmJmMWM0ZWIxMWI4MTQ4M2VhMjNiMTlhNzdmZmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk4ZmFmNjBkOTdmYjczNzQ1MWU1ZDA4NjIwMWNhNWVmZDcxMzc2YzYyMmVkZGI2NmI0Njc4Yzc3YjZlZTYwZGUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjliYTQwNThhYjA0Y2E2ZGJiZTA0ZmYyZmJiYmM2MzA2YTk5OWRkYTI0YmMwNGRhOWM1ZWIzY2VjZTUxMjllODciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFiNTYwODAzYjEyMjEyZTc5YjVmZGUwYzkwZDMxYzkzNDU0OTBkYzI1MWMyNDJiNGQ5ZDUwNTBhNDA1MmM1MjUifQ"
         },
         {
-          "resource": "repo://digiquant/src/digiquant/models.py#L52-L67",
+          "resource": "repo://digiquant/src/digiquant/models.py#L74-L89",
           "version": "repo-lines-v1:sha256:afb0f03d0c356fa6fc876e136adc4daf3147d85c2001a0222d6427ce33b0cef8:eyJzZWxlY3RlZExpbmVDb3VudCI6MTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgzZTVhOGRmMjZmYWJhZWI5ZGNlZGYxYzZiNzg5ZDRhZmVhZjI1ZmNjNWY4ODhlZDlkNGU1MGU1OWRmMjE0NWQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImFiNDY2Njk1OWJmYzNiMDBmNzFhMmVlZDkxODk3YzljYmUzMzVjMjQ1Zjc5MzJkMjgzN2ZlOGQ0YTAwNWY5NDciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjYwZGZkNmUxZDBkMjg0NWQ2NDgyZWFiMDI5MzA5NTIzMTQyNmVmYTdlYWM4Mzk2NjU4ODA3OTcyODMyYzkyNjIifQ"
         },
         {
@@ -77,7 +77,7 @@
           "version": "repo-lines-v1:sha256:7cccef8d698be2d409c5713b2082f75c0958a249eb7de7cec48b61b8f1eb1295:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNDlmM2NlMjBiOTJiZjQxNGQyNWYxMDg5NmEwODlkNjdmOGIyM2I3NWQwY2Y0ZjBkZGI4ZTM1YTYyYTQzYjg5OCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZmE3NWEyZTc2YTg0YWM3NWRhZTM0NjE0MjYzZDJiNDVlYWI2ZTJmYjIzZGRhMGI2NTYxNDI0YzhiMjA1NDBkMCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNmFlMWExYTU4NmYxNzRmYmZjNTNkZmZkZDM0ZTg5ZDEzZDMwOGJmM2E2YzBlZjkxYmEyNjk1OGU0MGQ3ZDhmMiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMmYxZTY0Nzk4OTk1YjU0ZmUzODhkNWFjZGIyYjhjNTM4YzUwOTgzM2FhNDBiZGI4ZjYyN2ZhNTBlZGIwZjM5OSJ9"
         },
         {
-          "resource": "repo://digiquant/src/digiquant/server.py#L281-L282",
+          "resource": "repo://digiquant/src/digiquant/server.py#L427-L428",
           "version": "repo-lines-v1:sha256:96d8d880a5014e809b3454310cbad07a30cec374d6fb13fdfa4653b2dd4b2e9d:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYzNmMzg4Y2MzNjkzZjc2MTgxMjM2Yjc3MDQ1ODQ1OGZhYTM2ZWFiZTRjMDM5NGRkMDdiNDkxMmNkMzMyMzNhYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYjdkNTliMTg1MGNkMTZmNGIwYjcyMGY0MjQ5ZmM0YzVlNzcxYjA4MTY0NjBhZDMxMWMwYzUxNzZiNzFmZTAwZiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNmU3ZGNmYWUwMDIwMGMwOTQ1YzZmNDIyYjdiMGU5ZDkwNTAzYzUwNjg2YWMyNDQzMWVjN2JmYzg0OThjMzEyZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZDcyMjMxMDZmZDg3NDJiNzBlYTIzM2Y5ZGMzNTlmNGIwMmJiYjA2OWI3MjgzZWVmNzYyNDk5NTE2YmQ3YjljOCJ9"
         }
       ]

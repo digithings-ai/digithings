@@ -35,7 +35,7 @@
       "statement": "Tool dispatch is canonical in tool_dispatch with dispatch names equal to vault-local plus runtime-only handlers by assertion, shared by MCP registration and orchestrator_invoke.",
       "evidence": [
         {
-          "resource": "repo://digivault/src/digivault/tool_dispatch.py#L35-L66",
+          "resource": "repo://digivault/src/digivault/tool_dispatch.py#L51-L82",
           "version": "repo-lines-v1:sha256:4a4dfb1ec1b841ab189b515e9e35f2e185d4b9193dca617a58cf12799e0747f1:eyJzZWxlY3RlZExpbmVDb3VudCI6MzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkxNDY2YWZhYmM0Y2I2N2U3NGVhNWU4MDNlNjVlMGNhNzQ3ZGFhZmQ4ZmMxZGI2MjQzM2U0ZWRlODYyNjBkYzUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE4OGFiODU5OTQyMTJhMzA3NGZlNDY0ZDQ2YzlmYWRmOGZlMzJhYmE5NzdlYjBiMzY0ZmE4NzlhYzFmMDUzYTgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE1Y2IwN2Q2NDEwYmJjNGY0NjI5NDkwZDA0YWY4YzQyMTRmNDEzN2JjYjVjN2RlNGZjZmUyYWIzY2Y0MWU5MWYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjAwM2UzMGRmM2Y0NjUzYjcwOTUyZTU2YmU4NjFkNTM1MjM2MWEyZWViZTMwMmNmYTk1Njc3MjY4ZjZkYWZlNTkifQ"
         }
       ]
@@ -45,7 +45,7 @@
       "statement": "The service exposes exempt /healthz and /v1/status plus note CRUD, by-path fetch, and orchestrator endpoints on port 8004 under the dedicated digivault Compose profile.",
       "evidence": [
         {
-          "resource": "repo://digivault/src/digivault/server.py#L476-L502",
+          "resource": "repo://digivault/src/digivault/server.py#L534-L560",
           "version": "repo-lines-v1:sha256:f031424e7012b708ddefe2eba6d9eccf51db44bf73c9ce5e98aca38ffae0b382:eyJzZWxlY3RlZExpbmVDb3VudCI6MjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQzMGVkYWFiZThlZTI2NDExMGVjYzE3MjQ1ZjVmMDgyZTkxZWNlMjFmNDY5N2U4ZTFlM2I1ZjM5YTQwZDk1NjYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFmMmJiMzc1OWZkOGVmZmJhZjBjNjkyMDdjNWEzNGZhNTg2YjJkNjQ5NDVlYzAxZmYwYzJlMmEwZGViYjI2NGYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE3OTkzYjc2NjA0MzVlNTVjNWEzNjNkNWY1NDE3NzliYmQyNjE1NGJkYzE4YWVkNzc0NGFhZTU3ZjEzNTQ4MzMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImFjZDU3OTYxNTI4MDI1YTNjNGE5OGEyYTM3YTdiZjM4M2NjM2JjZmYxNzExMjQxYjA2MTRkMjI2YWRkNDZjMzkifQ"
         }
       ]
