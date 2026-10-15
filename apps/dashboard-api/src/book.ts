@@ -2,7 +2,7 @@
  * Committed-book reconciliation for the dashboard-api worker (slice 0003).
  *
  * Server-side port of the client derivation in
- * `apps/dashboard/lib/book-reconciliation.ts` (`reconcileBook`). Behavior must
+ * `@digiquant/contract/book-reconciliation` (`reconcileBook`). Behavior must
  * stay identical: dedupe overlapping rows, exclude CASH from the held set,
  * scale held weights into the clamped-100 invested envelope. Parity tests in
  * `book.test.ts` mirror the client cases (including the #1553 CASH shape).
