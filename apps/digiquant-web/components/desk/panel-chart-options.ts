@@ -7,7 +7,7 @@ import {
   type PanelPoint,
   type PanelShape,
   type PanelUnit,
-} from "../../../../clients/digiquant-tui/src/pages/panel-shape";
+} from "digiquant-tui/pages/panel-shape";
 
 /** Which library draws a panel. Vela draws price views: an index level over dates, as a line or an area.
  *  ECharts draws the rest: bars, donut, treemap, heatmap, and any series that is not a price. */

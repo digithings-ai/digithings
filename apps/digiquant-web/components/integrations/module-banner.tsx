@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { BANNERS } from "../../../../packages/hero-banner/src/definitions";
-import type { BannerDefinition } from "../../../../packages/hero-banner/src/types";
-import { preparedBanner } from "../../../../packages/hero-banner/src/engine";
-import { HeroBanner } from "../../../../packages/hero-banner/src/web";
+import { BANNERS } from "@digithings/hero-banner/definitions";
+import type { BannerDefinition } from "@digithings/hero-banner";
+import { preparedBanner } from "@digithings/hero-banner";
+import { HeroBanner } from "@digithings/hero-banner/web";
 
 /** One banner pixel, so every word draws at the same cap height. */
 const CELL_REM = 0.15;

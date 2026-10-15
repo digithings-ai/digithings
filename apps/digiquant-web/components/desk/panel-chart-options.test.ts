@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CHART_TYPES, type ChartType, type PanelUnit } from "../../../../clients/digiquant-tui/src/pages/panel-shape";
+import { CHART_TYPES, type ChartType, type PanelUnit } from "digiquant-tui/pages/panel-shape";
 import { FALLBACK_INK, chartEngine, echartsOption, velaBars, velaConfig, velaOptions, withAlpha } from "./panel-chart-options";
 
 const nav = [
