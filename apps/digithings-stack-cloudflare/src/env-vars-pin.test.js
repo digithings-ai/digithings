@@ -110,6 +110,10 @@ const WORKER_SCOPED_VARS = new Set([
   // it stays Worker-scoped. (The deprecated DIGICHAT_EMBED_ENABLED alias IS a
   // forwarded key, like on the standalone worker.)
   "DIGICHAT_LEGACY_EMBED_ENABLED",
+  // DIG-3814: the deploying commit's short sha. The Worker uses it to derive the
+  // folded digichat Container name (sharedDigichatContainerId, re-exported from
+  // the standalone worker's own paths.ts), so the container process never sees it.
+  "DIGICHAT_CONTAINER_REV",
 ]);
 
 // Deliberately throws rather than returning an empty match -- a re-indented
