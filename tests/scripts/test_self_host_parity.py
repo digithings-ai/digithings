@@ -347,9 +347,7 @@ def test_contract_arm_accepts_a_binding_declared_only_by_class_name(tmp_path, mo
     # mode_contract() reads durable_objects bindings off disk for container
     # kinds; the stubbed surface above is the whole fixture, so stub that read
     # too rather than letting the test touch the real tree.
-    monkeypatch.setattr(
-        parity, "durable_object_classes", lambda p: {"DigiStackContainer"}
-    )
+    monkeypatch.setattr(parity, "durable_object_classes", lambda p: {"DigiStackContainer"})
     assert parity.mode_contract() == 0
 
 
@@ -374,9 +372,7 @@ def test_contract_arm_still_fails_when_the_declared_class_name_differs(
             "envExample": {},
         },
     )
-    monkeypatch.setattr(
-        parity, "durable_object_classes", lambda p: set()
-    )
+    monkeypatch.setattr(parity, "durable_object_classes", lambda p: set())
     assert parity.mode_contract() == 1
     assert "DigiStackContainer" in capsys.readouterr().out
 
@@ -633,3 +629,35 @@ def test_contract_still_fails_an_unmapped_durable_object_binding_name(tmp_path, 
     )
     assert rc == 1
     assert "NOT_IN_CONTRACT" in out
+
+
+def test_contract_records_a_kv_binding_by_name_only_and_never_the_id(tmp_path, monkeypatch):
+    """DIG-3759: one `[[kv_namespaces]]` row passes both arms by binding name.
+
+    The namespace id is a Cloudflare account resource, not a surface name:
+    it must appear neither in the recorded surface nor in the contract output.
+    """
+    worker = tmp_path / "apps" / "w"
+    worker.mkdir(parents=True)
+    (worker / "wrangler.toml").write_text(
+        'name = "w"\n[[kv_namespaces]]\nbinding = "TENANT_CONFIG"\n'
+        'id = "361b710bee56466097053275404535ba"\n'
+    )
+    contract = tmp_path / "config" / "contract"
+    contract.mkdir(parents=True)
+    (contract / "contract.yaml").write_text("bindings:\n- name: TENANT_CONFIG\n")
+    monkeypatch.setattr(parity, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(parity, "CONTRACT_DIR", contract)
+    monkeypatch.setattr(parity, "COMPOSE_FILES", [])
+    monkeypatch.setattr(parity, "ENV_EXAMPLE_FILES", [])
+    surface = parity.wrangler_surface()
+    assert surface == {"apps/w/wrangler.toml": {"TENANT_CONFIG": "kv_namespace"}}, surface
+    import contextlib
+    import io
+
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = parity.mode_contract()
+    out = buf.getvalue()
+    assert rc == 0, out
+    assert "361b710bee56466097053275404535ba" not in out
