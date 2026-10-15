@@ -7,10 +7,11 @@ from __future__ import annotations
 
 import json
 import os
-import urllib.error
 import urllib.parse
-import urllib.request
 from pathlib import Path
+
+import httpx
+from digibase.http_client import sync_client
 
 from digiclaw.audit import audit_log
 from digiclaw.digikey_auth import digikey_bearer_token
@@ -33,7 +34,9 @@ def _heartbeat_checklist_path() -> Path | None:
     return None
 
 
-def _request(url: str, *, method: str = "GET", data: bytes | None = None, auth: bool = False) -> tuple[bool, str]:
+def _request(
+    url: str, *, method: str = "GET", data: bytes | None = None, auth: bool = False
+) -> tuple[bool, str]:
     headers: dict[str, str] = {}
     if auth:
         token = digikey_bearer_token()
@@ -43,11 +46,11 @@ def _request(url: str, *, method: str = "GET", data: bytes | None = None, auth: 
     if data is not None:
         headers["Content-Type"] = "application/json"
     try:
-        req = urllib.request.Request(url, data=data, method=method, headers=headers)
-        with urllib.request.urlopen(req, timeout=60 if method == "POST" else 5) as r:
-            return r.status == 200, str(r.status)
-    except urllib.error.URLError as e:
-        return False, str(e.reason) if hasattr(e, "reason") else str(e)
+        with sync_client(timeout=60 if method == "POST" else 5) as client:
+            response = client.request(method, url, content=data, headers=headers)
+            return response.status_code == 200, str(response.status_code)
+    except httpx.HTTPError as e:
+        return False, str(e)
 
 
 def _ping(url: str, path: str = "/health") -> tuple[bool, str]:
@@ -98,14 +101,12 @@ def _check_drift_and_reoptimize() -> None:
         )
         return
     try:
-        req = urllib.request.Request(
-            drift_url,
-            method="GET",
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        with urllib.request.urlopen(req, timeout=5) as r:
-            data = json.loads(r.read().decode())
-    except (urllib.error.URLError, json.JSONDecodeError, ValueError, KeyError, OSError) as e:
+        with sync_client(timeout=5) as client:
+            data = client.get(
+                drift_url,
+                headers={"Authorization": f"Bearer {token}"},
+            ).json()
+    except (httpx.HTTPError, json.JSONDecodeError, ValueError, KeyError, OSError) as e:
         audit_log(
             "drift_check_failed",
             agent_id="heartbeat_runner",
@@ -135,20 +136,18 @@ def _check_drift_and_reoptimize() -> None:
                 "data_dir": data_dir,
             }
         ).encode()
-        req = urllib.request.Request(
-            f"{DIGIQUANT_URL.rstrip('/')}/run_optimize",
-            data=body,
-            method="POST",
-            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-        )
-        with urllib.request.urlopen(req, timeout=60) as r:
-            result = json.loads(r.read().decode())
+        with sync_client(timeout=60) as client:
+            result = client.post(
+                f"{DIGIQUANT_URL.rstrip('/')}/run_optimize",
+                content=body,
+                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            ).json()
         audit_log(
             "reoptimize_completed",
             agent_id="heartbeat_runner",
             payload={"run_id": result.get("run_id", "")},
         )
-    except (urllib.error.URLError, json.JSONDecodeError, ValueError, KeyError, OSError) as e:
+    except (httpx.HTTPError, json.JSONDecodeError, ValueError, KeyError, OSError) as e:
         audit_log("reoptimize_failed", agent_id="heartbeat_runner", payload={"error": str(e)})
 
 
