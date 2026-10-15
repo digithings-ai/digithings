@@ -1615,8 +1615,8 @@ derives the research system prompt server-side (operator
 embed stays grounded without a client-controlled prompt surface. YAML that omits
 `skin` still parses as catalog `base`. Product hosts (`digithings-ai-embed.yaml`,
 `occ-embed.yaml`) keep `chrome.skin: digichat` with the digisearch / digivault
-catalog (web_search tenant-allowed on digithings.ai; embed/popup session
-defaults those tools ON). YAML `hosts` resolve for `/embed` first paint
+catalog (web_search is not on the digithings.ai catalog: the license has
+no hosted-web-search scope; embed/popup session defaults the remaining tools ON). YAML `hosts` resolve for `/embed` first paint
 (first-party / token rules unchanged). `ProductStockShell` mounts
 `ToolCatalogBar` only for `chrome.mode: app`. Embed / modal / sidebar use
 assistant-ui `ComposerTriggerPopover` (`unstable_useSlashCommandAdapter`)
