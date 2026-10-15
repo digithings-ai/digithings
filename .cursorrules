@@ -1,28 +1,13 @@
-# digithings — Cursor Legacy Rules
-#
-# Cursor Agent uses .cursor/rules/digithings.mdc (alwaysApply: true).
-# Regenerate with: make agents-init
-#
-# Quick reference — full rules in AGENTS.md and per-component AGENTS.md files:
-#
-# Non-negotiables:
-#   - Polars only (never pandas)
-#   - Pydantic v2 models everywhere
-#   - MCP-first tool design
-#   - LangGraph supervisor+subgraph orchestration only
-#   - LiteLLM routing (caching mandatory)
-#   - NautilusTrader for all backtest/optimize
-#   - Never touch live-trading paths without explicit human approval
-#   - Digi product/module names always lowercase (digithings, digichat, …) — never DigiThings/DigiChat
-#
-# Before editing any component:
-#   1. Read {component}/AGENTS.md  (pre-flight checklist + rules)
-#   2. Read {component}/ARCHITECTURE.md  (technical reference)
-#
-# Backlog: docs/agent-backlog/INDEX.md + GitHub Issues labeled agent-task
-# Workflow: docs/agents/AGENT_WORKFLOW.md
-# Quality bar: review skills / CODE_REVIEW_POLICY hatches — not make score.
-# Skills, not a ritual: pick spec / TDD / triage / fix-ci / deslop / review-and-ship as they fit.
-# Autopilot: CI green, comments triaged, review+deslop skills when the diff warrants it, then merge.
-# Merge-when-ready (AGENTS.md): merge task PRs into their base when CI+review are done.
-# Still stop: digikey/, live-trading, PRs into main, user said not to merge.
+# digithings — Cursor legacy rules
+
+Canonical rules for this repo live in AGENTS.md. Read that file and follow it.
+This file is a pointer, not a second copy. Do not add stack-wide rules here.
+
+Cursor Agent loads .cursor/rules/digithings.mdc (alwaysApply: true).
+Regenerate that adapter with: make agents-init
+
+CLAUDE.md is the Claude Code loader. It points at AGENTS.md too.
+opencode.json and .mcp.json are tool configuration (model provider and MCP servers).
+They are not rule copies. Do not paste AGENTS.md into them.
+
+Workflow: docs/agents/AGENT_WORKFLOW.md

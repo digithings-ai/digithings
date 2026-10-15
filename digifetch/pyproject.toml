@@ -19,6 +19,11 @@ dependencies = [
     "httpx>=0.27",
 ]
 
+
+[project.urls]
+Homepage = "https://digithings.ai"
+Repository = "https://github.com/digithings-ai/digithings"
+
 [project.optional-dependencies]
 # Headless-browser engine. Playwright is heavy (downloads a browser) and is only
 # needed by the browser-session path; the HTTP fetch/download path works without

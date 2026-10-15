@@ -16,6 +16,11 @@ dependencies = [
     "pyyaml>=6",
 ]
 
+
+[project.urls]
+Homepage = "https://digithings.ai"
+Repository = "https://github.com/digithings-ai/digithings"
+
 [project.scripts]
 digiclaw = "digiclaw.cli:main"
 digiclaw-heartbeat = "digiclaw.__main__:main"
