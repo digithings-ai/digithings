@@ -84,6 +84,60 @@ export function halfBlocks(frame: Frame, palette: Palette, mode: ColorMode): Ter
   return lines;
 }
 
+/** Source rows kept when the frame is packed into compact cells: four samples
+ *  per cell, rows 2 and 7 dropped. The same thinning the digiquant desk header
+ *  used, so the stroke weight of the 10-row family font survives packing. */
+export const COMPACT_SAMPLE_Y = [0, 1, 3, 4, 5, 6, 8, 9] as const;
+
+/** Braille dots, left column then right column, top to bottom. */
+const BRAILLE_DOTS = [
+  [0x01, 0x08],
+  [0x02, 0x10],
+  [0x04, 0x20],
+  [0x40, 0x80],
+] as const;
+
+/** Below this alpha a pixel is ground, not a lit dot. */
+const COMPACT_LIT = 0.35;
+
+/**
+ * The same frame in compact cells, for a header that must stay small: one
+ * terminal cell holds two pixel columns and four sampled rows. A braille cell
+ * carries one colour, so each lit cell paints its brightest pixel and the
+ * definition's tones (and so its LIVE flash) still read.
+ */
+export function compactBlocks(frame: Frame, palette: Palette, mode: ColorMode): TermCell[][] {
+  const lines: TermCell[][] = [];
+  for (let row = 0; row < COMPACT_SAMPLE_Y.length; row += 4) {
+    const line: TermCell[] = [];
+    for (let col = 0; col < Math.ceil(frame.width / 2); col += 1) {
+      const x = col * 2;
+      let bits = 0;
+      let best: Pixel | null = null;
+      for (let i = 0; i < BRAILLE_DOTS.length; i += 1) {
+        const y = COMPACT_SAMPLE_Y[row + i] ?? -1;
+        for (let dx = 0; dx < 2; dx += 1) {
+          const pixel = y < 0 ? null : pixelAt(frame, x + dx, y);
+          if (!pixel || pixel.alpha < COMPACT_LIT) continue;
+          if (best === null || pixel.alpha > best.alpha) best = pixel;
+          bits |= (BRAILLE_DOTS[i] as readonly [number, number])[dx];
+        }
+      }
+      if (bits === 0) {
+        line.push({ ch: " ", fg: null, bg: null });
+        continue;
+      }
+      line.push({
+        ch: String.fromCharCode(0x2800 + bits),
+        fg: pixelColor(best ?? { tone: "ink", alpha: 1 }, palette, mode),
+        bg: null,
+      });
+    }
+    lines.push(line);
+  }
+  return lines;
+}
+
 export type BannerLines = {
   lines: TermCell[][];
   /** Columns the mark uses (before any centring). */
@@ -94,6 +148,29 @@ export type BannerLines = {
   /** The terminal is too small for the pixel mark: one text line instead. */
   compact: boolean;
 };
+
+export type CompactLines = {
+  lines: TermCell[][];
+  /** Cells across: two pixel columns to a cell. */
+  width: number;
+  phase: Phase;
+  /** Always true: this encoding never falls back to text. */
+  compact: true;
+};
+
+/**
+ * The banner in compact cells. Same definition, same font, same LOADING and
+ * LIVE animation as `bannerLines` — only the cell encoding differs, so a small
+ * header mark is not a second wordmark to keep in step with the hero.
+ */
+export function compactLines(
+  def: BannerDefinition,
+  options: Omit<SampleOptions, "gap" | "scale"> & { mode: ColorMode },
+): CompactLines {
+  const sample = sampleBanner(def, { ...options, scale: 1 });
+  const lines = compactBlocks(sample.frame, def.palette, options.mode);
+  return { lines, width: lines[0]?.length ?? 0, phase: sample.phase, compact: true };
+}
 
 /**
  * The banner for a terminal of `cols` x `rows`, at one moment. Picks gap and
