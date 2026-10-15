@@ -1,6 +1,6 @@
 /**
  * Parity tests vs `resolveInvestedPct` in
- * `apps/dashboard/lib/performance-ssot.ts` (client) and CONTRACT.md §6.1:
+ * `@digiquant/contract/performance-ssot` (client) and CONTRACT.md §6.1:
  * NAV tip → book weights → portfolio_metrics → null, with the raw-KPI /
  * clamped-envelope split.
  */
