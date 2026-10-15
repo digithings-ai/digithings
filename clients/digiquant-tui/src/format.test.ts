@@ -73,6 +73,9 @@ test("the footer shows both dates when they differ and ages the data date", () =
     "as of 2026-10-09 · data 2026-10-06 · 3 trading days old · stale",
   );
   expect(asOfStatus("/brief", null, "2026-10-07", "2026-10-09").state).toBe("warn");
+  // One trading day is fresh at the default threshold and stale when the caller sets it to 1.
+  expect(asOfStatus("/brief", null, "2026-10-08", "2026-10-09").state).toBe("fresh");
+  expect(asOfStatus("/brief", null, "2026-10-08", "2026-10-09", 1).state).toBe("stale");
   // Friday's data read on Sunday has not missed a session.
   expect(asOfStatus("/brief", null, "2026-10-09", "2026-10-11").age).toBe("current session");
   // Ahead of the clock is skew, not freshness.

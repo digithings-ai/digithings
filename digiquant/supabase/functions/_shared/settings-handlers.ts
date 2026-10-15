@@ -18,6 +18,7 @@
  *   GET    /app-urls           — pinned Alpaca redirect_uri + billing return URL
  *                                + public Alpaca OAuth client id (never the secret)
  *   POST   /access/redeem-invite — hashed FX Hub invite → client_product_grants
+ *   GET    /access/twelvex-session — twelve-x-native session mint, gated on fx_hub grant
  *
  * Deploy preconditions: module/digiquant migrations 096–098 (workspaces +
  * olympus_profile_config.workspace_id), K3 vault + broker_connections, and

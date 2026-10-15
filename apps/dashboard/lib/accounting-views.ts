@@ -14,9 +14,6 @@ export const LEGACY_PUBLIC_NAV_VIEW = 'public_nav_history' as const;
 /** Public realized daily contribution (final tips only). */
 export const PUBLIC_REALIZED_ATTRIBUTION_VIEW = 'public_daily_realized_attribution' as const;
 
-/** Tip period status including incomplete/estimated/failed. */
-export const PUBLIC_PERIOD_STATUS_VIEW = 'public_accounting_period_status' as const;
-
 export type AccountingNavSource = 'finalized_accounting' | 'legacy_nav_history';
 export type AccountingNavContract = 'finalized_accounting' | 'legacy_estimate';
 

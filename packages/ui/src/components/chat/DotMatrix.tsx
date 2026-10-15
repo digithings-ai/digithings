@@ -543,6 +543,7 @@ function DotMatrix({
       data-slot="dot-matrix"
       data-state={state}
       role="img"
+      aria-label={label ?? state}
       className={cx("inline-block size-4 shrink-0", className)}
     >
       <span className="sr-only">{label ?? state}</span>
