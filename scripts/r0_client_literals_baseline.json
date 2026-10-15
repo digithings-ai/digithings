@@ -1,5 +1,5 @@
 {
-  "_comment": "Explicit grandfather list for the R0 client-literals guard (DIG-3689). Every entry is an R0 path that still carries client/tenant literals at develop d227b6ed5; each is owned by DIG-3689 until its cleanup PR lands. Do not add entries without the owning ticket; delete entries in the same diff that removes the literals.",
+  "_comment": "Explicit grandfather list for the R0 client-literals guard (DIG-3689). Every entry is an R0 path that still carries client/tenant literals at develop d227b6ed5; each is owned by DIG-3689 until its cleanup PR lands. Do not add entries without the owning ticket; delete entries in the same diff that removes the literals. DIG-3895 entries are the repo-split files this fold added; their counts are the measured hits on this head.",
   "entries": {
     ".dockerignore": {
       "count": 2,
@@ -466,7 +466,7 @@
       "ticket": "DIG-3689"
     },
     "docs/adr/0018-digichat-path-routing.md": {
-      "count": 3,
+      "count": 2,
       "ticket": "DIG-3689"
     },
     "docs/adr/0025-multilingual-embedding-blue-green-cutover.md": {
@@ -487,10 +487,6 @@
     },
     "docs/architecture/digichat-self-hosted-release.md": {
       "count": 7,
-      "ticket": "DIG-3689"
-    },
-    "docs/digichat/CLIENT-DOCS-ONBOARD.md": {
-      "count": 1,
       "ticket": "DIG-3689"
     },
     "docs/digichat/INSTALL.md": {
@@ -515,10 +511,6 @@
     },
     "docs/ops/2026-10-06-stranded-work-and-backup-report.md": {
       "count": 2,
-      "ticket": "DIG-3689"
-    },
-    "docs/ops/CLIENT_PIPELINES.md": {
-      "count": 1,
       "ticket": "DIG-3689"
     },
     "docs/ops/OCC_INVITE_KEY.md": {
@@ -564,6 +556,26 @@
     "docs/ops/vectorize-cutover.md": {
       "count": 12,
       "ticket": "DIG-3689"
+    },
+    "docs/repo-split/cloudflare-deploy-map.md": {
+      "count": 1,
+      "ticket": "DIG-3895"
+    },
+    "docs/repo-split/decisions.md": {
+      "count": 2,
+      "ticket": "DIG-3895"
+    },
+    "docs/repo-split/migration-plan.md": {
+      "count": 2,
+      "ticket": "DIG-3895"
+    },
+    "docs/repo-split/r2-digiquant-stack-inventory.md": {
+      "count": 2,
+      "ticket": "DIG-3895"
+    },
+    "docs/repo-split/secrets-access-inventory.md": {
+      "count": 5,
+      "ticket": "DIG-3895"
     },
     "infra/local-proxy/Caddyfile": {
       "count": 2,
@@ -673,6 +685,22 @@
       "count": 19,
       "ticket": "DIG-3689"
     },
+    "scripts/repo-split/README.md": {
+      "count": 2,
+      "ticket": "DIG-3895"
+    },
+    "scripts/repo-split/move-lists/r5.drop": {
+      "count": 2,
+      "ticket": "DIG-3895"
+    },
+    "scripts/repo-split/move-lists/r5.paths": {
+      "count": 10,
+      "ticket": "DIG-3895"
+    },
+    "scripts/repo-split/move-lists/r6.paths": {
+      "count": 6,
+      "ticket": "DIG-3895"
+    },
     "scripts/repo_split_workflow_map.py": {
       "count": 2,
       "ticket": "DIG-3689"
@@ -684,6 +712,10 @@
     "scripts/selfhost_target.py": {
       "count": 1,
       "ticket": "DIG-3689"
+    },
+    "scripts/split/manifest.py": {
+      "count": 2,
+      "ticket": "DIG-3895"
     },
     "scripts/test_occ_rollout_scope_guard.sh": {
       "count": 12,
@@ -910,7 +942,7 @@
       "ticket": "DIG-3689"
     },
     "tests/scripts/test_stack_seed_config_parity.py": {
-      "count": 22,
+      "count": 19,
       "ticket": "DIG-3689"
     },
     "tests/scripts/test_vectorize_sync.py": {

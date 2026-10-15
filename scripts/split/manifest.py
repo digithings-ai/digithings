@@ -264,6 +264,7 @@ RULES: list[tuple[str, str, str]] = [
     ("packages/digichat-ui/", "R0", "digichat UI (open)"),
     ("packages/hero-banner/", "R0", "hero banner (open)"),
     ("packages/surface-config/", "R0", "surface config (open)"),
+    ("packages/contract/", "R0", "shared contract (open)"),
     ("clients/", "R0", "TUI clients (open)"),
     ("digibase/", "R0", "OSS module"),
     ("digikey/", "R0", "OSS module"),
