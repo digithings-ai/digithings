@@ -455,6 +455,58 @@ def test_gate_drift_fails_the_run_even_though_no_secret_is_overdue(
     monkeypatch.setattr(
         checker, "environment_gate_status", lambda root, repo, manifest_path=None: ([], {})
     )
+    # DIG-682: a missing manifest verifies nothing, so it fails closed too.
+    assert checker.main([]) == 1
+
+
+@pytest.mark.unit
+def test_an_unreadable_gate_fails_closed_even_with_no_drift(
+    checker: object, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """DIG-682: `any()` over zero rows is False, so an unread gate exited 0.
+
+    Every arm below has no drift; the exit code must still reflect the
+    incomplete read. Driven through `main` because the property under test is
+    the exit code.
+    """
+    monkeypatch.setattr(checker, "repo_slug", lambda root: ("o", "r"))
+    monkeypatch.setattr(checker, "collect", lambda root, repo, org, environment: checker.Report())
+
+    ok_gate = {
+        "name": "cron",
+        "expected": {},
+        "actual": {},
+        "can_wait": False,
+        "drift": [],
+    }
+    # Partial read: one environment verified, one unreadable.
+    monkeypatch.setattr(
+        checker,
+        "environment_gate_status",
+        lambda root, repo, manifest_path=None: (
+            [dict(ok_gate)],
+            {"production": "environment 'production' could not be read"},
+        ),
+    )
+    assert checker.main([]) == 1
+
+    # Total read failure: manifest present, nothing could be read.
+    monkeypatch.setattr(
+        checker,
+        "environment_gate_status",
+        lambda root, repo, manifest_path=None: (
+            [],
+            {"cron": "environment 'cron' could not be read"},
+        ),
+    )
+    assert checker.main([]) == 1
+
+    # Clean read stays green: one checked row, nothing unread, no drift.
+    monkeypatch.setattr(
+        checker,
+        "environment_gate_status",
+        lambda root, repo, manifest_path=None: ([dict(ok_gate)], {}),
+    )
     assert checker.main([]) == 0
 
 

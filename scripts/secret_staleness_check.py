@@ -48,9 +48,11 @@ has no required reviewer and no wait timer. Both are armed from the GitHub UI,
 where no test runs, and the failure mode is #2541 again — pipelines stop, with
 every assertion still green. So this also reads
 `.github/environments.json` (written by #248) and compares it to the live
-protection rules, and **exits 1 on drift**. Drift is worth failing on where an
+protection rules, and **exits 1 on drift or when the gate could not be verified**.
+Drift is worth failing on where an
 overdue secret is not: a stale credential is a human's decision, a stalled
-automation is not.
+automation is not. An unreadable gate fails for the same reason: exiting 0
+after checking nothing would report a control that never ran (DIG-682).
 """
 
 from __future__ import annotations
@@ -821,10 +823,23 @@ def main(argv: list[str] | None = None) -> int:
                 return 2
             print(file_or_update_issue(root, f"{slug[0]}/{slug[1]}", body))
 
-    if gates is not None and any(row["drift"] for row in gates[0]):
-        # Deliberately unconditional, unlike `--fail-overdue`. A drifted gate does not
-        # fail a build, it silently stops every pipeline gated on it.
-        return 1
+    if gates is not None:
+        rows, unavailable = gates
+        if unavailable:
+            # Fail closed (DIG-682): exiting 0 after checking nothing would
+            # report a control that never ran. A partial read means the manifest
+            # describes environments the token cannot see; a total read failure
+            # means a lost `contents: read` grant, a `gh` outage, or a renamed
+            # manifest — all indistinguishable here, and all worth a red run
+            # that says "I could not check".
+            return 1
+        if not rows:
+            # No manifest, or an empty one: nothing was verified (DIG-682).
+            return 1
+        if any(row["drift"] for row in rows):
+            # Deliberately unconditional, unlike `--fail-overdue`. A drifted gate does not
+            # fail a build, it silently stops every pipeline gated on it.
+            return 1
     if args.fail_overdue and report.overdue(args.max_age_days):
         return 1
     if args.strict_offline and report.unavailable:
