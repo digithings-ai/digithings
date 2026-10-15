@@ -2,7 +2,7 @@
  * Committed-book date gate for the dashboard-api worker (slice 0003).
  *
  * Server-side port of `committedBookDate` / `previousBookDate` in
- * `apps/dashboard/lib/dashboard-ssot.ts`. Contract §6.1: `book_as_of` is the
+ * `@digiquant/contract/dashboard-ssot`. Contract §6.1: `book_as_of` is the
  * latest positions date on or before the committed `daily_snapshots` date —
  * null (with `not_found`) when the snapshot is missing. Never silently
  * substitute the latest position date as "committed".
