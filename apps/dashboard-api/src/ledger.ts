@@ -3,7 +3,7 @@
  *
  * Contract: apps/dashboard-api/CONTRACT.md §6.8 — paginated house-book
  * `position_events` stream. Fills/weight changes only, never derived from
- * weight diffs. Economics mirror `apps/dashboard/lib/position-event-economics.ts`
+ * weight diffs. Economics mirror `@digiquant/contract/position-event-economics`
  * (parity port, not a fork — keep both in sync).
  *
  * Self-contained: no worker runtime imports, no secrets, no network.
@@ -246,7 +246,7 @@ export function parseLedgerQuery(
 }
 
 // ---------------------------------------------------------------------------
-// economics (parity with apps/dashboard/lib/position-event-economics.ts)
+// economics (parity with @digiquant/contract/position-event-economics)
 // ---------------------------------------------------------------------------
 
 /**
