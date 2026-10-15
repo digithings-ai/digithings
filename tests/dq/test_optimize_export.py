@@ -48,8 +48,9 @@ class TestRunExport:
             r = run_export("my_strategy", target="nautilus", output_dir=d)
             assert r.run_id.startswith("export-")
             assert r.target == "nautilus"
-            assert r.artifact_path is not None
-            assert Path(r.artifact_path).exists()
+            written = Path(r.artifact_path)
+            assert written == Path(d).resolve() / f"{r.run_id}.json"
+            assert written.exists()
             assert r.status == "ok"
 
     def test_unsupported_target_raises(self) -> None:

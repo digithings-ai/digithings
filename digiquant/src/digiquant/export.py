@@ -54,9 +54,16 @@ def _export_filename_stem(strategy_name: str) -> str:
     return stem
 
 
-def _artifact_path(out_dir: Path, stem: str, suffix: str) -> Path:
-    path = (out_dir / f"{stem}{suffix}").resolve()
-    path.relative_to(out_dir)
+def _export_file(out_dir: Path, run_id: str, suffix: str) -> Path:
+    """A file under ``out_dir`` named only from the generated run id.
+
+    The strategy name is not a path segment. CodeQL does not treat the
+    character check as a barrier, and ``out_dir / name`` follows ``../``.
+    """
+    name = f"{run_id}{suffix}"
+    path = (out_dir / name).resolve()
+    if path.parent != out_dir:
+        raise ValueError("export path left the output directory")
     return path
 
 
@@ -73,9 +80,8 @@ def _write_nautilus_bundle_zip(
             f"nautilus_bundle export supports {sorted(_BUNDLE_SUPPORTED_CANONICAL)} only; "
             f"got {strategy_name!r} (canonical {canonical!r})."
         )
-    artifact_path = _artifact_path(
-        out_dir, _export_filename_stem(strategy_name), f"_nautilus_bundle_{run_id[:8]}.zip"
-    )
+    _export_filename_stem(strategy_name)
+    artifact_path = _export_file(out_dir, run_id, ".zip")
     readme = (
         "digiquant Nautilus bundle (digiclone)\n"
         "====================================\n\n"
@@ -134,9 +140,8 @@ def run_export(
             status="ok",
             message="Nautilus-oriented bundle (zip) written; review manifest and params before deploy.",
         )
-    artifact_path = _artifact_path(
-        out_dir, _export_filename_stem(strategy_name), f"_{target}_{run_id[:8]}.json"
-    )
+    _export_filename_stem(strategy_name)
+    artifact_path = _export_file(out_dir, run_id, ".json")
     payload = {"strategy_name": strategy_name, "target": target, "params": params}
     artifact_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     return ExportResult(
