@@ -56,6 +56,16 @@ class TestRunExport:
         with pytest.raises(ValueError, match="Unsupported target"):
             run_export("x", target="unknown")
 
+    def test_strategy_name_cannot_leave_export_dir(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        with tempfile.TemporaryDirectory() as d:
+            monkeypatch.setenv("EXPORT_OUTPUT_DIR", d)
+            outside = Path(d).parent
+            for name in ("../outside", "/tmp/pwn", "a/b", "..", "a..b"):
+                with pytest.raises(ValueError, match="invalid strategy name"):
+                    run_export(name, target="nautilus", output_dir=d)
+            assert not any(p.is_file() for p in outside.glob("outside*"))
+            assert not any(p.is_file() for p in Path(d).rglob("*"))
+
 
 @pytest.mark.unit
 class TestTradingViewExport:

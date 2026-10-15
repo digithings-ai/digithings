@@ -40,6 +40,26 @@ def _canonical_strategy_name(strategy_name: str) -> str:
     return resolve_strategy_name(str(strategy_name).strip())
 
 
+def _export_filename_stem(strategy_name: str) -> str:
+    """One path segment. ``out_dir / f"{name}_..."`` follows ``../`` and an
+    absolute name replaces ``out_dir``. The directory check does not cover that.
+    """
+    stem = str(strategy_name).strip()
+    if not stem or len(stem) > 128 or stem[0] == "." or ".." in stem:
+        raise ValueError("invalid strategy name")
+    for ch in stem:
+        if ("A" <= ch <= "Z") or ("a" <= ch <= "z") or ("0" <= ch <= "9") or ch in "._-":
+            continue
+        raise ValueError("invalid strategy name")
+    return stem
+
+
+def _artifact_path(out_dir: Path, stem: str, suffix: str) -> Path:
+    path = (out_dir / f"{stem}{suffix}").resolve()
+    path.relative_to(out_dir)
+    return path
+
+
 def _write_nautilus_bundle_zip(
     *,
     strategy_name: str,
@@ -53,7 +73,9 @@ def _write_nautilus_bundle_zip(
             f"nautilus_bundle export supports {sorted(_BUNDLE_SUPPORTED_CANONICAL)} only; "
             f"got {strategy_name!r} (canonical {canonical!r})."
         )
-    artifact_path = out_dir / f"{strategy_name}_nautilus_bundle_{run_id[:8]}.zip"
+    artifact_path = _artifact_path(
+        out_dir, _export_filename_stem(strategy_name), f"_nautilus_bundle_{run_id[:8]}.zip"
+    )
     readme = (
         "digiquant Nautilus bundle (digiclone)\n"
         "====================================\n\n"
@@ -112,7 +134,9 @@ def run_export(
             status="ok",
             message="Nautilus-oriented bundle (zip) written; review manifest and params before deploy.",
         )
-    artifact_path = out_dir / f"{strategy_name}_{target}_{run_id[:8]}.json"
+    artifact_path = _artifact_path(
+        out_dir, _export_filename_stem(strategy_name), f"_{target}_{run_id[:8]}.json"
+    )
     payload = {"strategy_name": strategy_name, "target": target, "params": params}
     artifact_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     return ExportResult(
