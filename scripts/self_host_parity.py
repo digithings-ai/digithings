@@ -46,7 +46,7 @@ CONTRACT_DIR = REPO_ROOT / "config" / "contract"
 # Discovered by census on 2026-10-10 (`git ls-files`). tests/scripts/
 # test_self_host_parity.py pins these three counts, so a new compose or
 # .env.example file cannot slip in uncovered without turning the test red.
-EXPECTED_WRANGLER_FILES = 8
+EXPECTED_WRANGLER_FILES = 9
 COMPOSE_FILES = (
     "docker-compose.yml",
     "apps/digitrace-langfuse/docker-compose.local.yml",
@@ -110,9 +110,11 @@ BINDING_KINDS = {
 # still records these, so a new or removed container class is still surfaced.
 CLASS_NAME_KINDS = frozenset({"container"})
 # Container and DO namespacing tables: key is a table name, value is a per-entry key.
+# `id` on a KV row is the namespace id, a value. Recording it would put that
+# value in the baseline, which this census does not do. The binding name is
+# the surface.
 NAMESPACED_BINDING_TABLES = {
     "durable_objects": "bindings",
-    "kv_namespaces": "id",
 }
 
 

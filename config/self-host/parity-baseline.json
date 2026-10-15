@@ -381,6 +381,11 @@
       "digiquant/src/digiquant/research/config/mcp.secrets.env.example": "tests/scripts/test_retired_provider_keys.py (DIG-337) owns the retired provider-key placeholders in this file and keeps the vendor names out of the tree"
     },
     "wrangler": {
+      "apps/corpus-index/wrangler.toml": {
+        "CLOUDFLARE_ACCOUNT_ID": "var",
+        "CORPUS_INDEX_KV": "kv_namespace",
+        "DRY_RUN": "var"
+      },
       "apps/dashboard-api/wrangler.toml": {
         "DT_BASE_URL": "var",
         "DT_TARGET": "var",

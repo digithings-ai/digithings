@@ -212,6 +212,11 @@ web:
   # devDependencies. Without it, apps/digidata-api/package.json was an orphan
   # install input and no lane ran its suite (#5404 review).
   - apps/digidata-api/**
+  # corpus-index Worker. Same lane, same reason, as digidata-api above: its
+  # vitest and tsc live in that package, and this lane already pays the root
+  # npm ci. Without this entry apps/corpus-index/package.json is an orphan
+  # install input and no lane runs the suite.
+  - apps/corpus-index/**
   - package.json
   - package-lock.json
   - .github/workflows/test-web.yml
@@ -313,6 +318,10 @@ ruff_and_scripts:
   # the cron entry above: the root npm install resolves this workspace's
   # manifest, so an edit here must redden a lane that runs.
   - apps/dashboard-api/**
+  # corpus-index Worker. The web lane runs its vitest; this entry reddens the
+  # script guards (registry, parity baseline, worker build matrix) when the
+  # worker or its wrangler config changes.
+  - apps/corpus-index/**
   # This job's "Validate model routing (config only)" step runs
   # scripts/validate_model_routing.py --routing against the REAL
   # config/model_modes.yaml -- the only CI check that does; tests/dg/test_model_config.py

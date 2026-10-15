@@ -1983,3 +1983,9 @@ bindings:
   name: TWELVEX_DB
   database_name: twelvex
   source: apps/digidata-api/wrangler.toml
+# Daily corpus index. The KV id in wrangler.toml is a placeholder. The live
+# namespace id stays out of this repo. No production deploy workflow.
+- worker: corpus-index
+  type: kv_namespace
+  name: CORPUS_INDEX_KV
+  source: apps/corpus-index/wrangler.toml
