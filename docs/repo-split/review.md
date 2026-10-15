@@ -38,14 +38,12 @@ Chris answered the gate cards: **stay on GitHub Free** (D-G1 no), **keep the rep
 end** (D-G2 no, so M1's day-0 flip is dropped), **fresh public repo** (D-12′, M1's second half kept),
 **tags in R0** (D-R3), **self-hosted runners** for private repos (D-G4).
 Answered 2026-10-14 17:40 CEST: deploys + CI on **Chris's Mac under his normal user** with a
-Cloudflare Worker fallback (D-G5); signed release tags **optional/recommended, not mandatory** (D-G6).
+Cloudflare Worker fallback (D-G5); signed release tags **mandatory** (D-G6, since 23:18).
 
 What changes:
 - F1 is not solved by an upgrade. The replacement gate is the **deploy agent on Chris's Mac** (D-G5):
   deploy credentials live only there (plus the Worker fallback), and the gate hook refuses any job
-  that is not on a release tag cut by Chris. Signed tags are optional (D-G6): when a tag carries a
-  signature it verifies; when it does not, the control is procedural — seat instructions forbid agents
-  from cutting release tags, and the audit log records every tag. Rulesets stay in code, ready for a
+  that is not on a release tag cut by Chris. Signed tags are mandatory (D-G6, since 23:18): the gate verifies every tag with `git verify-tag` against `allowed_signers`, and unsigned tags are refused. Rulesets stay in code, ready for a
   later Team upgrade. Details: migration plan P2 step 6.
 - F3 is accepted risk until cutover. To keep the window short the cutover (R0 public, mono private)
   moves before the private-repo extractions; mono's deploys switch to the runner gate on cutover day.
@@ -55,8 +53,7 @@ Residual risks Chris accepts with these answers:
 1. The paths named on the tracking issue stay publicly fetchable until cutover (P1 + P2, about two weeks).
 2. Private repos have no enforced branch protection. A direct push to `main`/`develop` is possible;
    it is caught by a nightly audit, not blocked. It cannot deploy through the gate (only a Chris-cut
-   release tag deploys) — but with signing optional, an agent-cut tag is stopped by procedure, not by
-   cryptography. Said plainly: this is weaker than the signed gate.
+   release tag deploys) — an agent-cut or unsigned tag is refused by the gate, not by procedure.
 3. The deploy gate depends on Chris's Mac. If it is down (or asleep — keep-awake is DIG-3561's),
    nothing deploys until it is back (fail-closed); the Worker fallback covers orchestration.
 4. Self-hosted runners must never be attached to a public repo (fork-PR code execution). Mono gets a
@@ -68,7 +65,7 @@ keep-awake, Worker fallback, cost comparison) is DIG-3561's deliverable, not thi
 ## Cursor Origin as the source-control home (direction of 2026-10-14)
 
 Chris's direction: the seven private repos live on **Cursor Origin** as primary. The public
-`digithings` also lives on Origin as primary and is mirrored to GitHub for public visibility.
+`digithings` (R0) stays **GitHub-primary** with an Origin inbound mirror (D-O1, answered (a) below).
 I checked Origin against Cursor's own docs and OpenAPI spec (fetched 2026-10-14; Origin is
 **early beta**, launched 2026-08-17). I did not assume GitHub parity. Sources:
 [Origin overview](https://cursor.com/docs/origin.md), [Origin API + OpenAPI](https://cursor.com/docs/api/origin.md),
@@ -167,4 +164,4 @@ The rule holds in the proposal: nothing public depends on private; the only priv
 - Paperclip: one project per repo (or project-repository bindings), `dt-create-issue --project` mapping, `com.digithings.merge-queue` (today drains only `digithings` and `twelve-x`) extended to all repos, worktree sweep and run-watch pointed at the new repos, DCO app installed on each.
 - Seat instructions and skills that hard-code monorepo paths (`apps/...`, `digiquant/...`) must be updated in the same phase as the move; otherwise agents open PRs against dead paths.
 - CI cost: keep heavy test matrices in public R0 (free minutes). Private repos run only their own tests plus a nightly "latest R0" compatibility job, on the Mac `ci` agents (D-G4/D-G5).
-- Agents never cut release tags; they prepare the release PR and changelog, and Chris cuts the tag (signing it is optional/recommended, D-G6).
+- Agents never cut release tags; they prepare the release PR and changelog, and Chris cuts the tag (signing it is mandatory, D-G6).

@@ -198,14 +198,14 @@ Mono stays public (D-G2); its `production` environment and required reviewers ke
    The `deploy` job stays disarmed until P2/P4 arm it per private repo. The full
    local-runner design (isolation, cache, concurrency, keep-awake, Worker fallback) is DIG-3561's
    deliverable; this step tracks only install + readiness.
-4. Signing key (D-G6, MANDATORY since 23:36): Chris creates an `ed25519-sk` SSH signing
+4. Signing key (D-G6, MANDATORY since 23:18): Chris creates an `ed25519-sk` SSH signing
    key on a FIDO2 key. Only the **public** key goes into `allowed_signers` (committed in each private
    repo and installed on the Mac). Unsigned release tags are refused by the local-ci gate.
 5. Origin (D-O1, D-O2, D-O4, D-O5 answered; D-O3 STRUCK 23:36): Chris confirms the namespace and the repo names (permanent during beta).
 Local-ci needs no Origin connect and no Buildkite org exists. No agent account (D-O4). Agents do no logins. Nobody installs the Cloudflare app in Cursor.
 
 Exit check: inventory posted; deploy workflows show `workflow_dispatch` only; Mac agent reachable
-by Chris; if the signing key is adopted, `git tag -s` + `git verify-tag` round-trip works with the new key on a scratch repo.
+by Chris; once the signing key is in place, `git tag -s` + `git verify-tag` round-trip works with the new key on a scratch repo.
 
 2026-10-14 22:09 ordering note: the Mac CI dispatcher design (DIG-3561), the Origin checks-API
 verification (DIG-3558, slice A) and the R0 mirror-lag watch (DIG-3560, slice C) are P0 work and
@@ -277,9 +277,9 @@ Rollback: each PR reverts on its own.
    - CI agents (no credentials) run queue `ci` on the same Mac; the `deploy` queue refuses every job
      that is not a release-tag deploy. Local-runner tuning (concurrency, cache, keep-awake) is DIG-3561's.
    - Prove the gate on R7 (already private) with a no-op deploy job: foreign repo → refused; non-tag
-     ref → refused; Chris-cut tag → runs; and, if signing is adopted, unsigned/agent-signed tag → refused.
-     Without signing, the control is procedural: only Chris cuts release tags (seat instructions forbid
-     agents; audit log records every tag).
+     ref → refused; Chris-cut tag → runs; unsigned/agent-signed tag → refused by the gate.
+     Only Chris cuts release tags (seat instructions forbid
+     agents; audit log records every tag) — defence in depth behind the gate.
 7. **Repository settings as code:** `scripts/split/rulesets/` holds the full ruleset template
    (`develop` PR + checks + DCO; `main`/`release/*` code-owner review; tag creation limits). Applied
    now to R0 (public). Kept unapplied for private repos until a Team upgrade.
@@ -582,4 +582,4 @@ The `develop`→`main` promotion and repo cleanup (PR pile closed or retargeted,
 
 One epic under G07 with one leaf per row of P1, one per P4 step, plus P0, P2, P3, P5, P6.
 All gate decisions are answered (2026-10-14, including D-G5/D-G6), so the CTO can create the leaves.
-D-O1 … D-O5 are answered. Note: with `active` rulesets (no agent bypass) + mandatory D-G6, every private repo has hard technical deploy controls.
+D-O1 … D-O5 are answered. Note: with `active` rulesets (no agent bypass) + mandatory D-G6, every private repo will have hard technical deploy controls, once the P2 gate is proven.
