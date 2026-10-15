@@ -18,5 +18,6 @@ okf_version: "0.2"
 - [digisearch](digisearch/)
 - [digitrace](digitrace/)
 - [digivault](digivault/)
+- [digivoice](digivoice/)
 - [libraries](libraries/)
 - [repo](repo/)
