@@ -13,10 +13,11 @@ const tokens = at("packages/design/tokens.css");
 const digichatTheme = at("packages/ui/src/styles/digichat-app-theme.css");
 
 /**
- * One font config per surface (DIG-2375). `config` is the single file allowed
- * to call `next/font` for that surface: swap the face by editing the loader it
- * names, and nothing else in the repo changes.
+ * One font loader for every surface (DIG-3000). `packages/design/fonts.ts` is
+ * the only file allowed to call `next/font`. Each surface config re-exports it.
  */
+const LOADER = "packages/design/fonts.ts";
+
 const SURFACES = [
   { surface: "dashboard", config: "apps/dashboard/app/fonts.ts" },
   { surface: "digiquant.io", config: "apps/digiquant-web/app/fonts.ts" },
@@ -90,26 +91,32 @@ function themedRoot(): string {
 const FALLBACK_CHAIN = ["ui-monospace", "SF Mono", "Menlo", "DejaVu Sans Mono", "Segoe UI Symbol"];
 
 describe("font tokens contract", () => {
-  it("gives every surface one config file that loads Geist Mono as the mono face", () => {
+  it("loads Geist Mono once, in the shared design loader", () => {
+    const source = at(LOADER);
+    expect(source).toMatch(/from ["']next\/font/);
+    expect(source).toMatch(/Geist_Mono\(\{/);
+    expect(source).toMatch(/Geist_Mono\(\{[^}]*variable:\s*["']--font-mono-face["']/);
+    expect(source).toMatch(/export const fontVariables/);
+  });
+
+  it("points every surface config at that loader", () => {
     for (const { surface, config } of SURFACES) {
       expect(existsSync(path.join(repoRoot, config)), `${surface} has ${config}`).toBe(true);
       const source = at(config);
-      expect(source, `${config} calls next/font`).toMatch(/from ["']next\/font/);
-      expect(source, `${config} loads Geist Mono`).toMatch(/Geist_Mono\(\{/);
-      expect(source, `${config} sets the generic mono face var`).toMatch(
-        /Geist_Mono\(\{[^}]*variable:\s*["']--font-mono-face["']/,
+      expect(source, `${surface} re-exports the shared loader`).toMatch(
+        /export\s*\{[^}]*fontVariables[^}]*\}\s*from\s*["']@digithings\/design\/fonts["']/,
       );
-      expect(source, `${config} exports fontVariables`).toMatch(/export const fontVariables/);
+      expect(source, `${surface} does not call next/font`).not.toMatch(/from ["']next\/font/);
     }
   });
 
-  it("keeps next/font out of every file but the surface configs", () => {
-    const allowed = new Set<string>(SURFACES.map((s) => s.config));
+  it("keeps next/font out of every file but the shared loader", () => {
     const callers = CODE.filter((file) => /from ["']next\/font/.test(at(file)));
-    expect(callers.filter((file) => !allowed.has(file))).toEqual([]);
+    expect(callers).toEqual([LOADER]);
   });
 
-  it("loads no Inter face in any surface config (DIG-2695: one mono voice)", () => {
+  it("loads no Inter face in the shared loader or a surface config", () => {
+    expect(at(LOADER)).not.toMatch(/Inter\(\{/);
     for (const { surface, config } of SURFACES) {
       expect(at(config), `${surface} ${config} has no Inter loader`).not.toMatch(/Inter\(\{/);
     }
