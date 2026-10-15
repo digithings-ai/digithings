@@ -37,12 +37,28 @@ const CYCLE = [
   { type: "supertrend", label: "SuperTrend" },
 ] as const;
 
+/**
+ * Fallback when the host has no computed mono stack (e.g. outside the app
+ * shell): the same generic stack the hero used before it read the live face.
+ */
+export const HERO_FONT_FALLBACK = "ui-monospace, SFMono-Regular, Menlo, monospace";
+
+/**
+ * Canvas font for the hero chart: the host's computed family (the loaded
+ * Geist Mono stack via `font-mono` on the host), never a hardcoded generic
+ * stack. Vela draws axes on canvas, so it cannot inherit CSS by itself.
+ */
+export function heroChartFontFamily(computedFontFamily: string | null | undefined): string {
+  const live = (computedFontFamily ?? "").trim();
+  return live ? live : HERO_FONT_FALLBACK;
+}
+
 const THEME = {
   background: "#000000",
   textColor: "#d7dde4", // canon-allow: hero axis text
   gridColor: "#1a1f24", // canon-allow: hero grid
   borderColor: "#2a3138", // canon-allow: hero frame
-  fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+  fontFamily: HERO_FONT_FALLBACK,
 };
 
 const WHEEL_IDLE_MS = 140;
@@ -120,7 +136,12 @@ export function QuantField() {
     if (!host || !frame) return;
 
     const scale = readDigiquantChartScale(host);
-    const theme = { ...THEME, upColor: scale.candleUp, downColor: scale.candleDown };
+    const theme = {
+      ...THEME,
+      fontFamily: heroChartFontFamily(getComputedStyle(host).fontFamily),
+      upColor: scale.candleUp,
+      downColor: scale.candleDown,
+    };
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const picked = CYCLE[Math.floor(Math.random() * CYCLE.length)] ?? CYCLE[0];
     const overlayKind = picked.type as HeroOverlay;
@@ -362,7 +383,7 @@ export function QuantField() {
           ref={ref}
           role="img"
           aria-label={watermark || "price chart"}
-          className="hero-chart absolute inset-0 h-full w-full [transform:translateZ(0)]"
+          className="hero-chart absolute inset-0 h-full w-full font-mono [transform:translateZ(0)]"
         />
         {watermark ? (
           <p

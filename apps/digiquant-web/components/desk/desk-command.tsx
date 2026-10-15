@@ -93,10 +93,13 @@ export function DeskCommand({ pathname }: { pathname: string }) {
       {editing && hits.length > 0 ? (
         <ul id="cmd-list" role="listbox" className="cmd-list">
           {hits.map((hit, i) => (
-            <li key={hit.path} id={`cmd-opt-${i}`} role="option" aria-selected={i === sel} className={i === sel ? "on" : undefined}>
+            <li key={hit.path} role="presentation" className={i === sel ? "on" : undefined}>
               <Button
                 type="button"
                 variant="ghost"
+                id={`cmd-opt-${i}`}
+                role="option"
+                aria-selected={i === sel}
                 className="cmd-hit"
                 onMouseDown={(e) => {
                   e.preventDefault();
