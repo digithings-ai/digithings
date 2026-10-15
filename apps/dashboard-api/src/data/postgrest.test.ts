@@ -108,6 +108,59 @@ describe("query builder emission", () => {
   });
 });
 
+/**
+ * Two shapes the settings handler actually calls and that the builder did not
+ * accept at all. Both are pinned to their real call sites so the requirement is
+ * a fact about the port rather than a guess:
+ *
+ *   settings-handlers.ts:1663  .is("revoked_at", null)
+ *   settings-handlers.ts:414   .eq("is_house_default", false)
+ *   settings-handlers.ts:528   .eq("is_house_default", false)
+ */
+describe("SQL NULL and boolean filters", () => {
+  it("is() emits the `is` operator, which is what the revoked_at query needs", () => {
+    const p = params(client().from("t").select("*").is("revoked_at", null).buildRequest().url);
+    expect(p.revoked_at).toBe("is.null");
+  });
+
+  // The discrimination arm. `= NULL` is never true in SQL, so `eq(col, null)`
+  // matches ZERO rows — which a caller reads as "no such setting" when the row
+  // is in fact there. If `is()` were an alias for `eq()` these two would be the
+  // same string and this test would fail; that is the whole point of it.
+  it("is() and eq() on the same null are NOT the same query", () => {
+    const viaIs = params(client().from("t").select("*").is("revoked_at", null).buildRequest().url);
+    const viaEq = params(client().from("t").select("*").eq("revoked_at", null).buildRequest().url);
+    expect(viaIs.revoked_at).toBe("is.null");
+    expect(viaEq.revoked_at).toBe("eq.null");
+    expect(viaIs.revoked_at).not.toBe(viaEq.revoked_at);
+  });
+
+  it("eq() accepts a boolean and puts the lowercase literal on the wire", () => {
+    const p = params(
+      client().from("t").select("*").eq("is_house_default", false).buildRequest().url,
+    );
+    // PostgREST compares against the literal string, so `False` or `FALSE`
+    // would silently match nothing. Lowercase is the only correct spelling.
+    expect(p.is_house_default).toBe("eq.false");
+    expect(p.is_house_default).not.toMatch(/False|FALSE/);
+  });
+
+  it("eq() accepts a true boolean too, so the house-default lookup has both arms", () => {
+    const p = params(client().from("t").select("*").eq("is_house_default", true).buildRequest().url);
+    expect(p.is_house_default).toBe("eq.true");
+  });
+
+  it("is() accepts a boolean for the IS TRUE / IS FALSE comparison", () => {
+    const p = params(client().from("t").select("*").is("enabled", true).buildRequest().url);
+    expect(p.enabled).toBe("is.true");
+  });
+
+  it("leaves string and number filtering untouched", () => {
+    const p = params(client().from("t").select("*").eq("a", "x").gt("b", 1).buildRequest().url);
+    expect(p).toMatchObject({ a: "eq.x", b: "gt.1" });
+  });
+});
+
 describe("cardinality: single vs maybeSingle", () => {
   it("single() asks PostgREST for an object", () => {
     const req = client().from("t").select("*").eq("id", 1).single().buildRequest();

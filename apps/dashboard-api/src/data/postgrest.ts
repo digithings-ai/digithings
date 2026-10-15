@@ -53,12 +53,20 @@ export interface PostgrestRequest {
   body: unknown;
 }
 
-type FilterOp = "eq" | "neq" | "gt" | "gte" | "lt" | "lte";
+type FilterOp = "eq" | "neq" | "gt" | "gte" | "lt" | "lte" | "is";
+
+/**
+ * A filter value. `boolean` and `null` are here because the settings handler
+ * filters on real booleans (`.eq("is_house_default", false)`) and on SQL NULL
+ * (`.is("revoked_at", null)`); both serialise to PostgREST's lowercase
+ * `true`/`false`/`null`. Without them the ported handler does not typecheck.
+ */
+type FilterValue = string | number | boolean | null;
 
 interface Filter {
   op: FilterOp | "in";
   column: string;
-  value: string | number | ReadonlyArray<string | number>;
+  value: FilterValue | ReadonlyArray<string | number>;
 }
 
 interface Order {
@@ -69,9 +77,10 @@ interface Order {
 /** `single()` asks PostgREST for an object; `maybeSingle()` filters locally. */
 type Cardinality = "many" | "one" | "atMostOne";
 
-function encodeValue(value: string | number): string {
+function encodeValue(value: FilterValue): string {
   // PostgREST filters are `col=eq.<value>`; commas and parentheses inside the
-  // value would otherwise close the list early.
+  // value would otherwise close the list early. Booleans and null must reach
+  // the wire as lowercase literals, which is what `String()` already yields.
   return encodeURIComponent(String(value))
     .replace(/%2C/g, ",")
     .replace(/%28/g, "(")
@@ -114,33 +123,45 @@ export class PostgrestBuilder<T = unknown> implements PromiseLike<T> {
     return this;
   }
 
-  private filter(op: FilterOp, column: string, value: string | number): this {
+  private filter(op: FilterOp, column: string, value: FilterValue): this {
     this.filters.push({ op, column, value });
     return this;
   }
 
-  eq(column: string, value: string | number): this {
+  eq(column: string, value: FilterValue): this {
     return this.filter("eq", column, value);
   }
 
-  neq(column: string, value: string | number): this {
+  neq(column: string, value: FilterValue): this {
     return this.filter("neq", column, value);
   }
 
-  gt(column: string, value: string | number): this {
+  gt(column: string, value: FilterValue): this {
     return this.filter("gt", column, value);
   }
 
-  gte(column: string, value: string | number): this {
+  gte(column: string, value: FilterValue): this {
     return this.filter("gte", column, value);
   }
 
-  lt(column: string, value: string | number): this {
+  lt(column: string, value: FilterValue): this {
     return this.filter("lt", column, value);
   }
 
-  lte(column: string, value: string | number): this {
+  lte(column: string, value: FilterValue): this {
     return this.filter("lte", column, value);
+  }
+
+  /**
+   * `col=is.<value>` — SQL `IS` comparison.
+   *
+   * `.is("col", null)` is NOT `.eq("col", null)`: `= NULL` is never true in
+   * SQL, so the `eq` spelling silently matches ZERO rows, which reads as "the
+   * setting is unset" when the row is in fact there. supabase-js spells NULL
+   * through `is`, and so must this.
+   */
+  is(column: string, value: null | boolean): this {
+    return this.filter("is", column, value);
   }
 
   /** `col=in.(a,b,c)`. */
@@ -250,7 +271,7 @@ export class PostgrestBuilder<T = unknown> implements PromiseLike<T> {
           .join(",");
         query.push(`${f.column}=in.(${list})`);
       } else {
-        query.push(`${f.column}=${f.op}.${encodeValue(f.value as string | number)}`);
+        query.push(`${f.column}=${f.op}.${encodeValue(f.value as FilterValue)}`);
       }
     }
     for (const o of this.orders) {
