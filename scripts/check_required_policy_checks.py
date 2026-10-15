@@ -30,9 +30,11 @@ list disagree:
     hang. ``docs/BRANCH_PROTECTION.md`` warns about this in prose; here it is a
     test.
   * **ungated policy check** — a check that reports on PRs and is required
-    nowhere. It runs, it goes red, and merges continue. Five of these exist
-    right now (DCO sign-off, gitleaks, PR hygiene, PR title, and, on main,
-    review coverage); they are declared in the inventory so they are visible in
+    nowhere. It runs, it goes red, and merges continue. Four of these exist
+    right now (gitleaks, PR hygiene, PR title, and, on main,
+    review coverage); DCO sign-off was the fifth until DIG-3683 retired its
+    GHA workflow — it is now enforced by `local-ci`, so it is declared
+    nowhere here. They are declared in the inventory so they are visible in
     one place instead of inferred from 53 workflow files.
 
 WHY A DECLARED INVENTORY AND NOT A NAME PATTERN

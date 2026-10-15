@@ -97,7 +97,10 @@ or add the line automatically for this repo:
     git config --local format.signoff true
 
 A pull request whose commits are missing the sign-off cannot be merged — the
-CI check enforces this. The full text is at <https://developercertificate.org/>.
+`local-ci` required check enforces this. It runs the DCO sign-off on every
+develop PR, with the 2026-10-04 cutoff below. The retired GitHub Actions
+workflow `ci-dco-sign-off.yml` no longer runs; do not re-add it.
+The full text is at <https://developercertificate.org/>.
 
 This applies from 2026-10-04 forward. Commits before that date are not retro-signed.
 
