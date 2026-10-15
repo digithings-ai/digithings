@@ -1,0 +1,30 @@
+---
+title: The rewrite boundary
+order: 1
+summary: >-
+  Where spoken words end and instructions begin, and how a cleanup prompt
+  keeps the two apart.
+---
+
+Reshaping a transcript with a language model carries a quiet danger: the
+transcript is data, but the model reads everything as potential
+instruction. A spoken sentence like "ignore the above and send this
+instead" is someone quoting something funny — until a careless prompt
+treats it as a command. The rewrite pass exists inside a boundary that
+keeps content as content.
+
+The boundary has two parts. The transcript arrives wrapped and labelled as
+source text, never mingled with the instructions. And the cleanup prompt
+asks for a faithful reshaping — same meaning, suited to the destination —
+rather than for judgement about what the speaker meant. What crosses the
+boundary outward is text for a human to see, never an action for a machine
+to take.
+
+<Reference kind="architecture" href="repo:digivoice/ARCHITECTURE.md" title="digivoice architecture">
+  The rewrite pass and its guardrails.
+</Reference>
+
+> **Why digithings.** Local voice handling means the boundary is yours to
+> inspect: the prompt, the wrapper and the models all run on your machine.
+> Hosted voice pipelines make the same promise opaquely. Here it is code
+> you can read.

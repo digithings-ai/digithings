@@ -1,0 +1,31 @@
+---
+title: Placing each workload
+order: 1
+summary: >-
+  Which services become workers, which become containers, and the rule of
+  thumb that decides.
+---
+
+Placement starts from a simple question: does this workload answer requests
+or keep processes? Request-shaped work — interfaces, request layers,
+scheduled runners — becomes workers that scale to zero and wake per
+request. Process-shaped work — model runners, pipelines, tracing backends —
+becomes containers that stay up and hold state in memory. The rule of thumb
+holds surprisingly far: stateless request handling at the edge, stateful
+processes in containers, durable facts in managed stores.
+
+Scheduled work deserves a note. Runners wake on timetables, do their job
+and stop — the cheapest shape on the platform, because idle time bills
+nothing. Long research runs go the other way: start a container, let it
+work, shut it down. Matching the workload to the shape is most of the cost
+discipline; the billing follows the placement rather than needing separate
+attention.
+
+<Reference kind="reference" href="repo:docs/DEPLOYMENT.md" title="Deployment reference">
+  The placement table and how to change it.
+</Reference>
+
+> **Why digithings.** Placement is declared and reviewable, not clicked
+> together in a console. The same declaration an operator reads is what the
+> pipeline ships — so the edge deployment stays as auditable as the laptop
+> one.
