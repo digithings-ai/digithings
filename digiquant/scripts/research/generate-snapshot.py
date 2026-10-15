@@ -196,8 +196,13 @@ def parse_market_data(content):
             val = m.group(1).replace(",", "")
             try:
                 data[key] = float(val)
-            except ValueError:
-                pass
+            except ValueError as exc:
+                # A capture the regex allows but float() rejects (e.g. a bare
+                # "," run, or ",.1" where the digits sit after the point).
+                # Legacy DIGEST.md only - drop the key, as before, but say so
+                # rather than leaving a silently missing series.
+                print(f"   ⚠️  Unparseable {key} capture {val!r} in digest text "
+                      f"({exc})", file=sys.stderr)
     return data
 
 
