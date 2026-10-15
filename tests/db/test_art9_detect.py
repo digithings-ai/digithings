@@ -562,8 +562,8 @@ def test_a_key_whose_section_5_5_name_sits_inside_a_word_now_allows() -> None:
     substring of it.
 
     Pinned in both directions: the needle still refuses on its own (`race` is a
-    whole segment of itself), and the four open keys leaf L13 names in
-    `OPEN_FALSE_ALARMS` all allow for the same reason. If a future change puts
+    whole segment of itself), and the race-family keys in the battery's
+    `SECTION_8_1_CLOSED` allow for the same reason. If a future change puts
     `race` back into substrings, this test fails and so does the battery.
     """
     assert art9.screen_request({"grace_period": "value"}).categories == ()

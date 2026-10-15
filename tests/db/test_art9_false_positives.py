@@ -49,14 +49,17 @@ record the 5 accepted false alarms in the battery". The plan is the document
 `matcher-narrowing-plan` on DIG-1086, revision
 `434a12e3-46e0-4614-9558-2acf896f7d78`, which the board did not edit. So every
 refusal below now belongs to one of three named groups with an owner:
-`RECORDED_FALSE_ALARMS`, accepted at plan section 8.5; `OPEN_FALSE_ALARMS`, which
-the approved narrowing removes at section 8.1; and `MIS_SPECIFIED_VALUES`, which
-are not false positives at all, section 8.4. Each group is pinned by a test, so a
-later change to the matcher cannot make a recorded decision quietly wrong.
+`RECORDED_FALSE_ALARMS`, accepted at plan section 8.5; `SECTION_8_1_CLOSED`,
+the race-family keys the whole-segment rule now allows; and
+`MIS_SPECIFIED_VALUES`, which are not false positives at all, section 8.4.
+`OPEN_FALSE_ALARMS` is empty: section 8.1 has landed. Each group is pinned by a
+test, so a later change to the matcher cannot make a recorded decision quietly
+wrong.
 
 **Nothing was hidden to get here.** No sample was deleted, no assertion was
-removed, no `xfail` and no `skip` was added. The headline test is still red,
-because it is acceptance test 11 and it is not met until the narrowing lands.
+removed, no `xfail` and no `skip` was added. The headline test is still red on
+the five recorded false alarms (section 8.5). That red is accepted. The
+race-family red (section 8.1) is closed.
 
 Attribution in (1) uses the **public API only**: a key is blamed when
 `screen_request({key: None})` refuses on its own, which isolates the field-name
@@ -413,20 +416,18 @@ RECORDED_FALSE_ALARMS: tuple[tuple[str, str], ...] = (
     ("biometric_auth_enabled", "art9:biometric:field_name"),
 )
 
-# Section 8.1, open, and owned by the leaf briefed from the same plan. Four
-# field names and one needle. The category is `racial_or_ethnic_origin` while
-# section 5.5 spells every other category in long form (`union_membership`,
-# `sexual_orientation`, `party_affiliation`), so the bare word `race` reads
-# inside `grace_period_days` and inside `trace_id`. Section 8.1 narrows the rule
-# to a whole word inside the name, which removes these four and keeps all twenty
-# pinned field names. Until that leaf lands the battery is red on exactly these,
-# and that red is the acceptance test.
-OPEN_FALSE_ALARMS: tuple[tuple[str, str], ...] = (
-    ("grace_period_days", "art9:racial_or_ethnic_origin:field_name"),
-    ("grace_period_applied", "art9:racial_or_ethnic_origin:field_name"),
-    ("grace_period_seconds", "art9:racial_or_ethnic_origin:field_name"),
-    ("trace_id", "art9:racial_or_ethnic_origin:field_name"),
+# Section 8.1, closed by the whole-segment rule (DIG-3755). The bare word
+# `race` used to match inside `grace` and `trace`. Those four keys allow now.
+# The list stays so a substring regression fails here and names the closure.
+SECTION_8_1_CLOSED: tuple[str, ...] = (
+    "grace_period_days",
+    "grace_period_applied",
+    "grace_period_seconds",
+    "trace_id",
 )
+# Empty on purpose. A blamed key that is not in RECORDED_FALSE_ALARMS and not
+# in this tuple is an alarm nobody has decided.
+OPEN_FALSE_ALARMS: tuple[tuple[str, str], ...] = ()
 
 # Section 8.4, not false positives. These two strings left the corpus and are
 # pinned below as true positives instead. Under develop's own pinned tests they
@@ -746,18 +747,23 @@ def test_the_recorded_false_alarms_refuse_with_the_reason_recorded() -> None:
         assert result.reason == expected_reason, f"{key}: {result.reason}"
 
 
-def test_the_open_false_alarms_are_exactly_the_race_family() -> None:
-    """The red that is left is named, and every other false alarm is accounted for.
+def test_section_8_1_race_family_allows_and_nothing_else_is_undecided() -> None:
+    """Section 8.1 is closed. The race family allows. Nothing else is undecided.
 
-    Four open field names, one needle, one owner. The second half is the one
-    that matters: a blamed field name outside the two registries is a false
-    alarm nobody has decided yet, and this fails on it.
+    `grace_period_days`, `grace_period_applied`, `grace_period_seconds` and
+    `trace_id` refused only because `race` sat inside the word. The
+    whole-segment rule allows them. A blamed field name outside the recorded
+    registry is still a false alarm nobody has decided, and this fails on it.
     """
-    for key, expected_reason in OPEN_FALSE_ALARMS:
+    assert OPEN_FALSE_ALARMS == (), "section 8.1 reopened an alarm"
+
+    for key in SECTION_8_1_CLOSED:
         result = art9.screen_request({key: None})
 
-        assert result.decision == "refuse", f"{key} now allows; close the ledger"
-        assert result.reason == expected_reason, f"{key}: {result.reason}"
+        assert result.decision == "allow", (
+            f"{key} refuses again as {result.reason}. Section 8.1 closed this."
+        )
+        assert result.categories == (), key
 
     decided = {key for key, _ in RECORDED_FALSE_ALARMS}
     open_keys = {key for key, _ in OPEN_FALSE_ALARMS}
