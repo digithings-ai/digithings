@@ -13,6 +13,11 @@ dependencies = [
     "pydantic>=2",
 ]
 
+
+[project.urls]
+Homepage = "https://digithings.ai"
+Repository = "https://github.com/digithings-ai/digithings"
+
 [project.scripts]
 digivoice = "digivoice.cli:main"
 

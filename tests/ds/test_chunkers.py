@@ -360,6 +360,9 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     added prose, the 17-chunk tail after them preserved verbatim and in
     order, net +1, max chunk 1994 of the 2000 budget — fixture prose only;
     RecursiveChunker unchanged.
+    Hashes only (count still 133) re-recorded for the http_client tree line
+    in ARCHITECTURE.md (query helpers removed; format_results_table stays) —
+    fixture prose only; RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
@@ -437,7 +440,7 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "4741cf750a9a20e6",
         "80578aa2dbbb641d",
         "1f9fe54a7f6c6f25",
-        "ca5bf28f89d9e616",
+        "5f32459eb46e4976",
         "f7ef2f68779a303e",
         "ed9fd383de98c694",
         "cd4e7192b6baa3d3",

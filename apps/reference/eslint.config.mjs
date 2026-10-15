@@ -1,20 +1,9 @@
-import { defineConfig, globalIgnores } from "eslint/config";
-import nextVitals from "eslint-config-next/core-web-vitals";
-import nextTs from "eslint-config-next/typescript";
+// Thin per-app config: shared preset + vendor-copy ignores (DIG-3396).
+import { nextApp } from "../../eslint.base.mjs";
 
-const eslintConfig = defineConfig([
-  ...nextVitals,
-  ...nextTs,
-  globalIgnores([
-    ".next/**",
-    "out/**",
-    "build/**",
-    "next-env.d.ts",
-    // Vendor assistant-ui / catalog copies — not product lint surface.
-    "components/ui/dot-matrix.tsx",
-    "app/(chatbot)/**",
-    "components/chatbot/**",
-  ]),
+export default nextApp([
+  // Vendor assistant-ui / catalog copies — not product lint surface.
+  "components/ui/dot-matrix.tsx",
+  "app/(chatbot)/**",
+  "components/chatbot/**",
 ]);
-
-export default eslintConfig;
