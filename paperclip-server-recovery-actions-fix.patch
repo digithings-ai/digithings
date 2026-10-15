@@ -1,0 +1,26 @@
+--- a/server/src/routes/issues.ts
++++ b/server/src/routes/issues.ts
+@@ -6272,6 +6272,16 @@ export function issuesRouter(db: Db, access: Access, ...): Router {
+         if (req.actor.type === "agent") {
+           const boundaryDecision = await decideIssueAccess(req, existing, "issue:mutate");
+           if (!boundaryDecision.allowed) {
+             await denyIssueWrite(req, res, existing, issueWriteDenialCodeForDecision(boundaryDecision));
+             return;
+           }
+           if (!requireAgentRunId(req, res))
+             return;
++          // Checkout/execution run ID exemption (mirrors assertAgentIssueMutationAllowed)
++          // If the actor's run owns this issue's checkout or execution, skip the
++          // cross-issue influence cap — the agent is operating within its own
++          // work context, not crossing issue boundaries.
++          const actorRunId = req.actor.runId?.trim();
++          if (actorRunId &&
++              (actorRunId === existing.checkoutRunId ||
++               actorRunId === existing.executionRunId)) {
++            // Exempt: agent is resolving a recovery action on its own checked-out issue
++          } else {
++            if (!(await assertCrossIssueInfluenceWithinRunCap(req, res, existing, "update")))
++              return;
++          }
+         }
+         const { actionId, outcome, sourceIssueStatus, resolutionNote, executionReconciliation, } = req.body;
