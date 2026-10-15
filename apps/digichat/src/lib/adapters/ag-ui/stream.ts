@@ -25,6 +25,7 @@ import {
   iterateSse,
   parseSseJson,
   parseToolInput,
+  protocolJsonHeaders,
   stringField,
   writeFailureStatus,
   writeGatedSpan,
@@ -139,11 +140,10 @@ export async function createAgUiStreamResponse(opts: {
   apiKey: string | null;
   signal?: AbortSignal;
 }): Promise<Response> {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    Accept: "text/event-stream",
-  };
-  if (opts.apiKey) headers.Authorization = `Bearer ${opts.apiKey}`;
+  const headers = protocolJsonHeaders({
+    apiKey: opts.apiKey,
+    accept: "text/event-stream",
+  });
   const runId = crypto.randomUUID();
   const body = JSON.stringify({
     threadId: runId,

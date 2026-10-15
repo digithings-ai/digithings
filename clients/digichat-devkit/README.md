@@ -46,7 +46,7 @@ bun src/cli.ts validate look.yaml
 `mode` maps the spoken names onto the `chrome.mode` enum (`fullscreen` → `app`,
 `popup` → `modal`, `embedded` → `embed`, `sidebar` → `sidebar`). `<look>` matches
 an id, a path, a file name, or a label. `--url` overrides `DIGICHAT_DEVKIT_URL`
-(default `http://127.0.0.1:3006`), `--json` prints machine output, and `--string`
+(default `http://127.0.0.1:3000`), `--json` prints machine output, and `--string`
 keeps a `set` value as a string.
 
 A `set` edits the YAML surgically: it replaces the one value line and keeps every

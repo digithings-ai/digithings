@@ -579,16 +579,23 @@ describe("dispatch", () => {
     // usesGithub must not divert a watch row to GitHub: on a clean tick the
     // only GitHub calls allowed are none at all.
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(runnerFetch).toHaveBeenCalledOnce();
-    const [url, init] = runnerFetch.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe("https://digiquant-runner/healthz");
+    // Two reads: /healthz for open runs (DIG-3065), then house-status for the
+    // Monday landing (DIG-3456). Both are GETs; the read-only property below
+    // covers every call, not just the first.
+    expect(runnerFetch).toHaveBeenCalledTimes(2);
+    const [healthUrl, healthInit] = runnerFetch.mock.calls[0] as unknown as [string, RequestInit];
+    expect(healthUrl).toBe("https://digiquant-runner/healthz");
+    const [statusUrl, statusInit] = runnerFetch.mock.calls[1] as unknown as [string, RequestInit];
+    expect(statusUrl).toBe("https://digiquant-runner/v1/jobs/house-status?run_date=2026-10-12");
     // Read-only, proven from the wire: no request body was ever sent.
-    expect(init.method).toBe("GET");
-    expect(init.body).toBeUndefined();
+    for (const init of [healthInit, statusInit]) {
+      expect(init.method).toBe("GET");
+      expect(init.body).toBeUndefined();
+    }
     expect(result.ok).toBe(true);
     // The deadline came from house-run-09's own timeoutSeconds plus the grace.
     expect(result.watch?.deadline_seconds).toBe(14400 + 120);
-    expect(result.watch).toMatchObject({ ok: true, open: 0, lost: [], unreadable: [] });
+    expect(result.watch).toMatchObject({ ok: true, open: 0, lost: [], unreadable: [], neverDispatched: [] });
   });
 
   it("forwards opts.args into the workflow_dispatch body", async () => {
