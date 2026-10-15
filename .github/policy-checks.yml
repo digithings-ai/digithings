@@ -122,7 +122,7 @@ checks:
 
   # ── PR-triggered, run and report, gate nothing ──────────────────────────────
   #
-  # These three are the drift DIG-1952 is about: the check runs, it goes red, and
+  # These four are the drift DIG-1952 is about: the check runs, it goes red, and
   # the merge proceeds anyway. They are listed here so the guard can prove each
   # one still exists and still reports — and so the ungated ones are visible in
   # one file instead of inferred from 53 workflows.
@@ -133,6 +133,7 @@ checks:
     enforcement: advisory
     owner: Security
     issue: DIG-1952
+    review_by: 2027-04-13
     reason: >-
       Secret scanning, and the highest-value check in this file. The old
       workflow-level `paths-ignore` of `**.md` and `docs/**` is gone (removed
@@ -146,6 +147,8 @@ checks:
     enforcement: advisory
     owner: DevOps
     issue: DIG-1952
+    review_by: 2027-04-13
+    review_by: 2027-04-13
     reason: >-
       Agent-task TSV coverage. Deliberately ungated: the issue-linkage check
       that used to live in this file was removed in docs/adr/0024 precisely
@@ -158,6 +161,8 @@ checks:
     enforcement: advisory
     owner: DevOps
     issue: DIG-1952
+    review_by: 2027-04-13
+    review_by: 2027-04-13
     reason: >-
       Conventional-commit title lint for PRs into develop. Squash merges use the
       PR title as the commit subject, so this protects release-please, but it is
