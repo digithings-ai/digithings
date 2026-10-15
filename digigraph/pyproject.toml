@@ -30,12 +30,25 @@ dependencies = [
     "digillm>=0.1.0",
 ]
 
+
+[project.urls]
+Homepage = "https://digithings.ai"
+Repository = "https://github.com/digithings-ai/digithings"
+
 [project.optional-dependencies]
 tracing = ["langsmith>=0.1"]
 dev = ["langgraph-checkpoint-sqlite>=2.0"]
 otel = ["digibase[otel]"]
-# Upper-bounded: mcp 2.0 removed `mcp.server.fastmcp`, which both MCP servers
-# import (see #1705). Lift the bound only together with a migration to the 2.x API.
+# Upper-bounded: mcp 2.0 removed `mcp.server.fastmcp` (see #1705). The single
+# MCP server here (src/digigraph/mcp_server.py:198) imports it inside a
+# try/except ImportError, which defers the failure rather than hiding it:
+# create_mcp_server() calls _require_mcp(), which raises ImportError. An
+# unbounded 2.x therefore does not cost this service its tools quietly — it
+# costs it the MCP server, with a clearer message. Repo-wide the bound is pinned
+# by five packages and six modules import the removed path; the three unguarded
+# ones (digisearch, digivault, scripts/zammad_mcp) fail at import time instead.
+# Lift the bound only together with a migration to the 2.x API
+# (mcp.server.fastmcp -> mcp.server.mcpserver, FastMCP -> MCPServer).
 mcp = ["mcp>=1.2,<2"]
 checkpoint-sqlite = ["langgraph-checkpoint-sqlite>=2.0"]
 checkpoint-postgres = ["langgraph-checkpoint-postgres>=2.0"]
@@ -54,7 +67,10 @@ dev = ["pytest>=8,<10", "pytest-cov>=4,<8", "ruff>=0.16,<0.17"]
 where = ["src"]
 
 [tool.setuptools.package-data]
-digigraph = ["schemas/*.json"]
+# SKILL.md folders ship with the package, the same way digiquant ships its
+# skills/**/*.md (see issue #486 there): a pip-install must be self-contained
+# or an installed digigraph silently has no skills to serve.
+digigraph = ["schemas/*.json", "skill_library/*/*.md"]
 
 [tool.ruff]
 line-length = 100

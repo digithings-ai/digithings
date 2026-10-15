@@ -561,13 +561,22 @@ CORE_POSTGRES_URI=postgresql://...
 
 A `threading.Lock` (`_checkpointer_lock`) guards lazy initialization. Context managers for SQLite and Postgres are stored in `_cm_holders` to prevent garbage collection — this is a manual resource management pattern that will leak if the process forks.
 
-#### 5.5.2 Postgres retention — the checkpointer does not prune itself (#1758)
+#### 5.5.2 Retention — the checkpointer does not prune itself (#1758, #2896)
 
-`PostgresSaver` never deletes thread state. Nothing in `langgraph-checkpoint-postgres` expires a `thread_id`, so **any deployment using `DIGI_CHECKPOINTER=postgres` with non-reusable thread ids grows without bound** and the operator owns retention.
+No backend shipped by LangGraph expires a `thread_id`, so **any deployment with non-reusable thread ids grows without bound**. Where that growth is cleaned up depends on the backend, because the backend decides where the bytes live.
+
+**File backend (`sqlite`) — digigraph owns retention.** `digigraph/graph/checkpoint_retention.py` ports `public.prune_langgraph_checkpoints` from `digiquant/supabase/migrations/061_checkpointer_retention.sql` onto the two tables `SqliteSaver` actually creates, and `get_checkpointer()` runs it once each time the saver is opened. The original rule that "retention is enforced in the database, not in digigraph" applied to Postgres and no longer applies to a file that lives on the process's own disk; the file has no cron, so the process that writes it is the only thing that can reclaim it. It is also the honest place, because the file is not shared across pods. `DIGI_CHECKPOINTER_SQLITE_RETAIN_DAYS` sets the window (default 14, the migration's value). The pass never blocks startup: it is best-effort, logs every failure, and an unusable value falls back to the default with a warning.
+
+Two differences from the Postgres original are forced by the backend, not chosen:
+
+- **Deleting by `thread_id` reaches every byte.** `SqliteSaver` has no `checkpoint_blobs` table — blobs are stored inline in `checkpoints.checkpoint` and `writes.value` — so the warning below about stranded blobs is a Postgres-only hazard. A thread-scoped delete is complete here.
+- **`VACUUM` is plain, never `VACUUM FULL`,** and runs only when the prune actually deleted something, because it rewrites the whole file.
+
+**Shared backend (`postgres`) — the database owns retention.** `PostgresSaver` never deletes thread state. Nothing in `langgraph-checkpoint-postgres` expires a `thread_id`, so **any deployment using `DIGI_CHECKPOINTER=postgres` with non-reusable thread ids grows without bound** and the operator owns retention.
 
 dashboard is the load-bearing case: `portfolio/chain.py:125` derives `thread_id` as `"<GITHUB_RUN_ID>::research"` / `"::portfolio"`, which is never reused, so no row ever became collectable. By 2026-08-01 the four checkpointer tables held 952 MB of a 1263 MB database (75%) and were growing ~50-58 MB/day.
 
-Retention is enforced **in the database, not in digigraph** — the pruner must not depend on a Python process being alive, and digigraph has no scheduler. `digiquant/supabase/migrations/061_checkpointer_retention.sql` installs `public.prune_langgraph_checkpoints(retain_days integer DEFAULT 14)` plus two daily pg_cron jobs (prune at 05:20 UTC, plain `VACUUM (ANALYZE)` at 05:50 UTC). See [`digiquant/supabase/SCHEMA.md`](../digiquant/supabase/SCHEMA.md) for the operator view (pause, verify, ownership requirement).
+Retention is enforced **in the database, not in digigraph** — the pruner must not depend on a Python process being alive, and digigraph has no scheduler. `digiquant/supabase/migrations/061_checkpointer_retention.sql` installs `public.prune_langgraph_checkpoints(retain_days integer DEFAULT 14)` plus two daily pg_cron jobs (prune at 05:20 UTC, plain `VACUUM (ANALYZE)` at 05:50 UTC). See [`digiquant/supabase/SCHEMA.md`](../digiquant/supabase/SCHEMA.md) for the operator view (pause, verify, ownership requirement). **The file backend above is the exception, and it is what lets those two jobs disappear rather than move when the last Postgres consumer goes away.**
 
 Three properties that any other Postgres-checkpointer deployment should copy:
 
@@ -665,6 +674,8 @@ Nodes emit streaming events via LangGraph's native `get_stream_writer()` (`langg
 `DigiAuthMiddleware` validates JWTs via `DIGIKEY_JWKS_URL` (JWKS endpoint) or `DIGIKEY_PUBLIC_KEY_PEM` (static PEM). Path-scope mappings control which scopes are required per route. When neither is configured, the middleware passes through unauthenticated requests — this is the default for local dev but must not be used in production.
 
 The JWT subject (`sub`) is not bound to checkpoint state. Any authenticated caller with a valid JWT can read or resume any `thread_id` via the thread API. This is a known gap — see Section 11 (Redesign Recommendations).
+
+The human decision for a mutating MCP call does not travel on that resume route. `POST /threads/{thread_id}/resume` hands its body to `graph.invoke(Command(resume=...), ...)`; on a graph compiled with `interrupt_after=[...]` that value is silently dropped, which `tests/dg/test_graph.py::test_static_interrupt_after_pauses_but_resume_value_is_silently_dropped` pins. The decision is consumed instead by `orchestration.registry.decide_mcp_call`, which looks the pending id up under `(session_id, pending_id)` in process memory. No digigraph HTTP route exposes it yet: `apps/digichat/src/app/api/chat/approve/route.ts` is the agreed client contract and forwards `{pending_id, approve}` with `X-Session-Id`, and answers `decision_upstream_unavailable` until that route exists. Scope that pending id per session and not per thread: the gap above means a `thread_id` is not a capability here, so a pending id must not be one either. `tests/dg/test_graph.py::test_mcp_human_decision_is_not_consumed_through_the_interrupt_resume_path` pins both halves of this paragraph against the code.
 
 ### 6.2 Tool Allowlists
 
@@ -1107,6 +1118,7 @@ digigraph:
 | `DIGI_PROJECT_CONFIG` | (empty) | Path to project YAML (optional) |
 | `DIGI_CHECKPOINTER` | `sqlite` when project active, else `memory` | Checkpointer backend: `memory` / `sqlite` / `postgres` / `none` |
 | `DIGI_CHECKPOINTER_SQLITE_URI` | `~/.digigraph/checkpoints.sqlite` | SQLite file path |
+| `DIGI_CHECKPOINTER_SQLITE_RETAIN_DAYS` | `14` | Days a `sqlite` thread is kept before the prune deletes it; must be >= 1, an unusable value falls back to the default with a warning |
 | `CORE_POSTGRES_URI` | (empty) | Postgres connection string |
 | `DIGIQUANT_URL` | `http://127.0.0.1:8001` when unset | digiquant base URL. Explicit empty string disables backtest routing (Profile A). |
 | `DIGIQUANT_DATA_DIR` | `/app/data` | Path to CSV files for backtests (required only when digiquant is enabled) |

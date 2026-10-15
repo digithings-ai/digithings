@@ -16,6 +16,30 @@ risk ids R1–R15). No value is ever printed here; every literal below is masked
   verification script and the **Act B2 rollback**: [OCC_INVITE_KEY.md](OCC_INVITE_KEY.md). Read it
   before acting on §1 for the `occ` entry.
 
+## When a rotation fails: report the branch, never the value
+
+A rotation that fails is the moment the value is most likely to get pasted into an issue,
+a comment, or a chat — because someone is stuck and trying to help. **Do not.** The rule
+is in [`credential-ownership.md`](credential-ownership.md#never-paste-a-credential-value):
+a credential value is never pasted into a ticket, an issue, a comment, an interaction
+reason, or any chat surface, including by the credential owner, including to help an agent
+diagnose.
+
+What is safe to report, and sufficient:
+
+- **which check failed** — shape, live vendor verify, or the secret write;
+- **the status the vendor returned** — e.g. `401`;
+- **the script's exit code**;
+- **which procedure number above you were on**.
+
+An interaction reason is worse than a comment: Paperclip exposes delete and edit routes
+for comments and **no route at all** for an interaction record, so a value pasted there is
+permanent. This happened on DIG-1226 (2026-10-05) and is the reason the rule names that
+channel.
+
+If a script fails without telling you which branch it took, fix the script. Do not ask
+anyone for the value.
+
 ## The container boot-env trap
 
 **A running Container is not replaced when a new Worker version deploys.** It keeps the environment it
@@ -27,9 +51,9 @@ booted with until the instance is recycled. Evidence: `apps/digithings-stack-clo
 **The lever that works today: bump the container id.** Change `SHARED_DIGICHAT_CONTAINER_ID`
 (`apps/digichat-cloudflare/src/paths.ts:23`) from `shared-v9` to `shared-v10` and deploy. Incident #4289 / PR #4290
 did the same bump on an earlier suffix (`shared-v6`→`shared-v7`): a new instance boots with the current image + env while the old one goes
-inactive. The stack equivalent is `SHARED_STACK_CONTAINER_ID` (`apps/digithings-stack-cloudflare/src/ports.ts:37`,
-`shared-v16`); its comment names the exact case — "to pick up the rotated `DIGIKEY_ADMIN_TOKEN`, since the container
-reads worker env only when the instance starts" (`ports.ts:33-35`). The MCP container id is `MCP_CONTAINER_ID` (`ports.ts:29`).
+inactive. The stack equivalent is `SHARED_STACK_CONTAINER_ID` (`apps/digithings-stack-cloudflare/src/ports.ts:48`,
+`shared-v17`); its comment names the exact case — "to pick up the rotated `DIGIKEY_ADMIN_TOKEN`, since the container
+reads worker env only when the instance starts" (`ports.ts:34-35`). The MCP container id is `MCP_CONTAINER_ID` (`ports.ts:29`).
 
 **Conflicting instruction to ignore.** `apps/digithings-stack-cloudflare/README.md:30-31` and the rebuild-marker
 comments (`Dockerfile.digichat-cloudflare:65-69`, `Dockerfile.digithings-stack-cloudflare:77-95`) say to bump the
@@ -51,7 +75,7 @@ at `:277-305`). Known silent drops: on digichat,
 ```bash
 # stack: the live instance id is served by the Worker itself (src/index.ts:507).
 curl -sf https://graph.digithings.ai/_stack/meta \
-  | python3 -c 'import sys,json;print(json.load(sys.stdin)["containerId"])'   # → shared-v16 (or the bumped value)
+  | python3 -c 'import sys,json;print(json.load(sys.stdin)["containerId"])'   # → shared-v17 (or the bumped value)
 # digichat has no id probe. Prove the recycle behaviourally: rotate AUTH_SECRET, then a
 # pre-rotation browser session must fail and a fresh login must succeed (see §13).
 sleep 180   # sleepAfter == 3m on digichat, stack, and MCP; the old instance drains within this window (paths.ts:23, index.ts:26)
@@ -88,7 +112,7 @@ two together. Procedure, verification script and revocation: [OCC_INVITE_KEY.md]
 1. Generate the new value once.
 2. `printf '%s' "$NEW" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put DIGIKEY_BFF_TOKEN` in `apps/digithings-stack-cloudflare`.
 3. Same command in `apps/digichat-cloudflare`.
-4. Bump `SHARED_STACK_CONTAINER_ID` (`ports.ts:37`) and `SHARED_DIGICHAT_CONTAINER_ID` (`paths.ts:23`).
+4. Bump `SHARED_STACK_CONTAINER_ID` (`ports.ts:48`) and `SHARED_DIGICHAT_CONTAINER_ID` (`paths.ts:23`).
 5. Deploy both Workers.
 **Verify** — `curl -s -o /dev/null -w '%{http_code}\n' -X POST https://key.digithings.ai/v1/oauth/token -H "Authorization: Bearer $NEW" -H 'Content-Type: application/json' -d '{"grant_type":"bff_session","tenant_slug":"digithings","subject":"bff-rotation-probe"}'` → `200`; with the previous value → `401`.
 **Rollback** — re-put the previous value on both Workers and bump both ids again.
@@ -135,11 +159,11 @@ two together. Procedure, verification script and revocation: [OCC_INVITE_KEY.md]
 **Steps**
 1. Generate.
 2. `printf '%s' "$NEW" | env -u CLOUDFLARE_API_TOKEN npx --yes wrangler@4.133.0 secret put DIGIKEY_ADMIN_TOKEN` in `apps/digithings-stack-cloudflare`.
-3. Bump `SHARED_STACK_CONTAINER_ID` (`ports.ts:37` — its comment names this exact token as the reason).
+3. Bump `SHARED_STACK_CONTAINER_ID` (`ports.ts:48` — its comment names this exact token as the reason).
 4. Deploy.
 **Verify** — `curl -s -o /dev/null -w '%{http_code}\n' -X POST https://key.digithings.ai/v1/admin/keys -H "Authorization: Bearer $NEW" -H 'Content-Type: application/json' -d '{}'` → anything except `503` / `401` (a 4xx validation error still proves the bearer was accepted); with the old token → `401`.
 **Rollback** — re-put the previous token and bump the id.
-**Gotchas** — optional; the container only reads it at boot, hence the id bump (`ports.ts:33`). Empty means a startup warning, not a failure (`server.py:58-60`).
+**Gotchas** — optional; the container only reads it at boot, hence the id bump (`ports.ts:34`). Empty means a startup warning, not a failure (`server.py:58-60`).
 
 ### 6. `DIGIKEY_PRIVATE_KEY_PEM`
 

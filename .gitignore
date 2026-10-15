@@ -3,13 +3,10 @@
 # Claude Code agent worktrees (ephemeral copies; do not commit)
 .claude/worktrees/
 /.worktrees/
-
 # Local Claude Code overrides (tokens, paths — never commit)
 .claude/settings.local.json
-
 # Claude Code runtime state (scheduler lock, transient)
 .claude/scheduled_tasks.lock
-
 # npm output at any depth. Deliberately NOT anchored: `npm ci` at the repo root
 # materializes nested node_modules in any workspace whose dep version cannot be hoisted
 # — package-lock.json carries such `apps/*/node_modules/...` entries today — and an
@@ -17,7 +14,6 @@
 # shipping its own .gitignore; packages/design ships none, so this rule is its
 # only cover.
 node_modules/
-
 # Next.js build output at any depth. Deliberately NOT anchored, for the same
 # reason as node_modules/ above: coverage otherwise falls to each app shipping
 # its own .gitignore, and a new app that does not (apps/digiquant-app on
@@ -31,7 +27,6 @@ node_modules/
 # not always literally `.next`.
 .next/
 .next-*/
-
 # Agent session state (opencode session/storage/db files) — regenerated per
 # machine, never shared. Unanchored for the same reason as the rules above: a
 # worktree-local or nested checkout carries its own .opencode/.
@@ -45,13 +40,11 @@ node_modules/
 # that is not in every clone is not a control. Anchored to the root repo, so a
 # nested app's .opencode/plugins/ stays ignored.
 !/.opencode/plugins/
-
 # Cloudflare Pages Functions for digithings.ai are authored under
 # apps/digithings-web/functions/ and mirrored to a repo-root functions/ by
 # scripts/build-digithings.sh at build time (CF requires functions/ at the project
 # root). The generated copy is a build artifact — never commit it.
 /functions/
-
 .venv/
 .venv-ci/
 venv/
@@ -62,7 +55,6 @@ projects/*/.env
 .local/
 config/dogfood-digiproject.local.yaml
 docker-compose.override.yml
-
 # Confidential: project configs and deployments (never share)
 # Anchored to repo root so docs/projects/ (public dogfooding projects) is not captured.
 # Allowlist projects/README.md only (private-repo pointer index).
@@ -86,23 +78,17 @@ __pycache__/
 dist/
 build/
 .cache/
-
 # Runtime results (exports, audit logs) – recreated on run
 digiquant/results/
-
 # Repo-root runtime caches (research price-history, agent-cache paths) — JAN-004
 /data/
-
 # Local agent memory archives (Cursor/agent tooling) — JAN-005
 .remember/
-
 # Local digikey dev SQLite (run_stack_local.sh) — JAN-006
 .local_digikey.sqlite
 /*.sqlite
-
 # Dashboard static portfolio fallback — stop tracking after REM-037 (JAN-007)
 apps/dashboard/public/dashboard-data.json
-
 # digithings-web OpenAPI explorer assets (copied at prebuild / predev from
 # docs/openapi/ + swagger-ui-dist — never commit the vendored copies).
 apps/digithings-web/public/openapi/
@@ -110,21 +96,30 @@ apps/digithings-web/public/swagger-ui/
 # openwiki visualizer export (scripts/build-digithings.sh writes dist/openwiki
 # on deploy; local preview generates the same tree under public/ so /openwiki works).
 apps/digithings-web/public/openwiki/
-
-
 # Secrets and credentials
-.env*
 projects/*/.env*
+# Wrangler dev vars. Rendered by `dt secrets render`; never committed.
+.dev.vars*
+!.dev.vars.example
 secrets.yaml
+# Exception: the config-contract secrets MANIFEST carries names only (no values)
+# and MUST be tracked: both variants read it (`dt secrets render` input),
+# and parity CI compares live config against it.
+!/config/contract/secrets.yaml
 digikey/examples/vault.yaml
-
 # Local stack (scripts/run_stack_local.sh)
 .local_stack_pids
 .litellm-local.log
-
+# Self-host local dev session (DIG-2771). All generated or local-only.
+# Cloudflare requires the wrangler persistence folder to be ignored:
+# https://developers.cloudflare.com/workers/wrangler/configuration/#persist-to
+.wrangler/
+apps/*/wrangler.selfhost.toml
+apps/*/.selfhost-dev/
+.dev.vars
+.dev.vars.*
 # Log files
 *.log
-
 # Large data files and caches (CSV, Parquet, pickles)
 # note: sample data in repo may be checked in intentionally, but user-owned
 # datasets should not be
@@ -136,41 +131,33 @@ digikey/examples/vault.yaml
 **/data/*/*.parquet
 **/data/*/*.pkl
 **/data/*/*.pickle
-
 # Packaging output
 digi-bundle-*.tar.gz
 .DS_Store
-
 # digigraph ECharts (installed in Docker / local npm ci; do not vendor node_modules)
 digigraph/src/digigraph/tools/analytics/visualization/echarts/node_modules/
-
 # digisearch EDGAR dev exports (generated; keep devdata/edgar_sample/.gitkeep)
 digisearch/devdata/edgar_sample/edgar_*.md
 digisearch/devdata/edgar_sample/edgar_*.yaml
-
 # Local SQLite databases
 *.sqlite
-
 # Coverage artifacts
 htmlcov/
 .coverage
 .coverage.*
 coverage.xml
-
 # macOS
-.DS_Store
 **/.DS_Store
-
 # Editor / tooling
 .vscode/
+# Cursor local hook state (machine-absolute paths, regenerated)
+.cursor/hooks/state/
 .idea/
 *.bak
-
 # DesignSync local tooling output (node_modules, bundles, screenshots, canvases — generated)
 .ds-sync/
 ds-bundle/
 canvases/
-
 # Strategy calibrations — proprietary tuning values
 **/calibrations.json
 # SDCA BTC power-law coefficients: the real fit
@@ -183,18 +170,14 @@ canvases/
 # The indicator library (pinescript/indicators/*.pine) is calibration-free and is
 # committed as reusable fallback code.
 **/pinescript/*.pine
-
 # Private client projects live under root /projects/* (anchored above) — never
 # add an unanchored `projects/` rule here, it would also capture docs/projects/,
 # which ADR-0006 reserves for public, committed dogfood projects.
-
 # playwright-mcp scratch output (page snapshots, console logs)
 .playwright-mcp/
-
 # digiclaw scheduler durable state (local)
 .digiclaw/
 .deno/
-
 # digivoice runtime data — model weights, recorded wavs, and the session
 # history JSONL. The data directory lives outside the repo by default
 # (~/Library/Application Support/digivoice on macOS, $XDG_DATA_HOME on Linux);
@@ -202,3 +185,51 @@ canvases/
 **/ggml-*.bin
 **/history.jsonl
 **/recordings/*.wav
+# Customer data artifacts (DIG-1498 R5, DIG-2607).
+#
+# `scripts/index_occ_tickets.py` writes full non-anonymized Zammad ticket
+# bodies into the digisearch `occ_tickets` index — customer names, customer
+# emails and internal-only staff notes, unmasked by design in demo mode. The
+# retired `seed_occ_tickets` supervisor program wrote the same shape and was
+# removed for it (see apps/digithings-stack-cloudflare/container/supervisor/
+# supervisord.conf). Anything it produces is customer data, never source.
+# Anchored on the file name so the real source scripts stay committable:
+# `scripts/index_occ_tickets.py` does not begin with `occ_tickets`, and
+# tests/scripts/test_gitignore_build_artifacts.py pins that.
+occ_tickets/
+occ_tickets*.json
+occ_tickets*.jsonl
+occ_tickets*.ndjson
+seed_occ_tickets*
+*_occ_tickets_snapshot*.json
+# Agent review/report/scratch files live on the Paperclip ticket, never in this repo (see AGENTS.md)
+docs/reviews/pr/
+docs/reviews/review-*.md
+docs/superpowers/plans/review-*
+docs/superpowers/specs/review-*
+/review-*.md
+/report-*.md
+/handoff-*.md
+/findings-*.md
+/plan-*.md
+/scratch*
+/.scratch/
+/*-prompt.md
+/*-opencode.log
+# DIG-2774 local-stack seed output (regenerated by make seed-local)
+.digithings-local-seed/
+
+# Stray merge/editor/agent artifacts (overnight junk audit, 2026-10-14)
+*.orig
+*.rej
+*.swp
+*.swo
+*~
+/*.patch
+/*.diff
+/*.zip
+/*.tgz
+/*.tar.gz
+/*-prompt.txt
+/notes*.md
+/scratch*

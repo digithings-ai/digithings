@@ -12,7 +12,7 @@
 ## Implementation plan
 
 Bite-sized tasks (release packaging → Profile A/B → install guide → gap fixes):  
-[`docs/superpowers/plans/2026-08-09-digichat-self-hosted-release.md`](../superpowers/plans/2026-08-09-digichat-self-hosted-release.md)
+`2026-08-09-digichat-self-hosted-release.md` (removed DIG-3399; git history keeps it)
 
 ---
 
@@ -38,11 +38,11 @@ Bite-sized tasks (release packaging → Profile A/B → install guide → gap fi
 | Artifact | Status | Notes |
 |---|---|---|
 | **Git tag** `digichat-vX.Y.Z` | Exists | cut on `develop`; see [RELEASES.md](../../RELEASES.md) for the current tagging process (the `release-please-digichat.yml` workflow was removed in the strict-essentials cut). Changelog in `apps/digichat/CHANGELOG.md`. Current app version: `2.4.0` (`private: true` in package.json). A tag resolves to exactly one commit — `digichat-v2.3.2` → `14639ac0c`. |
-| **GHCR image** `ghcr.io/digithings-ai/digichat:vX.Y.Z` (+ `:latest`) | **Does not exist** | the former `publish-digichat-image.yml` workflow was removed in the strict-essentials cut and has not been replaced; the package is absent from GHCR (verified 2026-10-06 — anonymous pull `401`, org package list empty). No image is published from this repo today. Restore path and image→commit binding: [docs/ops/digichat-datatap-aca.md](../ops/digichat-datatap-aca.md). `/embed` CSP `frame-ancestors` is set at **runtime** from `DIGICHAT_EMBED_HOSTS` / `DIGICHAT_EMBED_TENANTS` (not baked at publish). |
+| **GHCR image** `ghcr.io/digithings-ai/digichat:vX.Y.Z` (+ `:latest`) | **Lane restored, nothing published yet** | `publish-digichat-image.yml` is back (DIG-1294, lane A of [docs/ops/digichat-datatap-aca.md](../ops/digichat-datatap-aca.md)) and publishes on a `digichat-vX.Y.Z` tag — the trigger glob is `digichat-v*`, but a tag that is not exactly `digichat-v<major>.<minor>.<patch>` is refused, so this lane publishes nothing else. The package itself is still absent from GHCR (verified 2026-10-06 — anonymous pull `401`, org package list empty): restoring a workflow does not create a package, and the tag ladder stops at `digichat-v2.3.2`. The first push creates the package and it inherits the org's default visibility, so check it is public if the anonymous pull is to work. `/embed` CSP `frame-ancestors` is set at **runtime** from `DIGICHAT_EMBED_HOSTS` / `DIGICHAT_EMBED_TENANTS` (not baked at publish). |
 | **npm package for digichat Node** | Does **not** exist | App is `private: true`; clients do not `npm install digichat`. |
 | **`@digithings/digichat-ui`** | Workspace / site embed | Shared React UI for marketing shells and digichat itself — **not** the self-host install unit. |
 | **Compose local image** `digi-digichat:latest` | Dev / operator | Root `docker-compose.yml` **builds** from repo context; does not pull GHCR by default. |
-| **DataTap path** | Client-side (out of repo) | Runs in the client's Azure Container App, fed by `datatapchatregistry.azurecr.io`. The GHCR→ACR mirror step, if it still runs, lives in **DataTap's** repo (`datatap-web`'s `deploy-digichat-container.yml`, named in the deleted workflow's own header — recover with `git show f54af7052^:.github/workflows/publish-digichat-image.yml`), never in digithings. It cannot be verified from here and cannot run today anyway, because the GHCR package it consumes no longer exists. What *is* verified is that the images now in that registry were hand-built and hand-pushed: half its tags are ad-hoc debug names (`-error1`…`-error3`, `-counter1`…`-counter9`, `-boot1`, `-welcome1/2`, `-textleak-…`) that no workflow produced, and none carries an OCI annotation naming its build commit. Current state, the promotion runbook and the image→commit binding check: [docs/ops/digichat-datatap-aca.md](../ops/digichat-datatap-aca.md). |
+| **DataTap path** | Client-side (out of repo) | Runs in the client's Azure Container App, fed by `datatapchatregistry.azurecr.io`. Nothing in this repo copies from GHCR into that registry: a `git grep` for `datatapchatregistry` / `azurecr.io` in any workflow returns **0 hits**. So the hop from a published image to a promotable one is a human `az acr import` ([docs/ops/digichat-datatap-aca.md](../ops/digichat-datatap-aca.md) §4 Step 1), which is an Azure write and therefore an owned-principal action. What *is* verified is that the images now in that registry were hand-built and hand-pushed: half its tags are ad-hoc debug names (`-error1`…`-error3`, `-counter1`…`-counter9`, `-boot1`, `-welcome1/2`, `-textleak-…`) that no workflow produced, and none carries an OCI annotation naming its build commit. |
 
 ### Target (what we want operators / clients to use)
 
@@ -53,12 +53,12 @@ Bite-sized tasks (release packaging → Profile A/B → install guide → gap fi
 5. **Not an install path:** publishing digichat Node to npm.
 
 ```text
-release-please (develop) → digichat-vX.Y.Z tag + CHANGELOG → publish-digichat-image → ghcr.io/.../digichat:vX.Y.Z
+hand bump (develop) → digichat-vX.Y.Z tag + CHANGELOG → publish-digichat-image → ghcr.io/.../digichat:vX.Y.Z
 promote develop → main   → cut release/vX.Y.Z from main (that version's patch line)
 client / digithings ops  → pull image + set env + choose profile A or B
 ```
 
-The middle arrow is **aspirational** — `publish-digichat-image` no longer exists, so no image is published today. Restoring it is the first decision in [docs/ops/digichat-datatap-aca.md](../ops/digichat-datatap-aca.md) §1.
+The middle arrow now works, with one gap between it and the third: nothing in **this** repo copies from GHCR into `datatapchatregistry`, so promoting to DataTap's Container App needs a human `az acr import` ([docs/ops/digichat-datatap-aca.md](../ops/digichat-datatap-aca.md) §4 Step 1). No arrow is aspirational today; the third line cannot run until the next `digichat-v*` tag is cut.
 
 ---
 
@@ -202,7 +202,7 @@ First-party digithings hosts (`digithings.ai` / `www.digithings.ai`) may skip em
 | ~~**No client-facing install guide**~~ | **Addressed:** [`docs/digichat/INSTALL.md`](../digichat/INSTALL.md) — pull GHCR + Profile A/B + env checklist + smoke. Linked from modular-frontend §5 and OPERATIONS.md. |
 | ~~**Compose builds, does not pull**~~ | **Addressed:** [`infra/digichat-release/compose.digichat-release.yml`](../../infra/digichat-release/compose.digichat-release.yml) overlays root Compose to `image: ghcr.io/digithings-ai/digichat:v…`. |
 | ~~**Makefile is local-dev shaped**~~ | **Addressed:** `make digichat-release-up VERSION=…` / `digichat-release-down` (see Makefile digichat help block + [`infra/digichat-release/README.md`](../../infra/digichat-release/README.md) command matrix). |
-| ~~**`DIGICHAT_EMBED_HOSTS` baked into published image**~~ | **Addressed:** runtime CSP via `src/proxy.ts` + INSTALL.md § Custom embed parent hosts. Plan: [`docs/superpowers/plans/2026-08-09-digichat-runtime-frame-ancestors.md`](../superpowers/plans/2026-08-09-digichat-runtime-frame-ancestors.md). |
+| ~~**`DIGICHAT_EMBED_HOSTS` baked into published image**~~ | **Addressed:** runtime CSP via `src/proxy.ts` + INSTALL.md § Custom embed parent hosts. Plan: `2026-08-09-digichat-runtime-frame-ancestors.md` (removed DIG-3399; git history keeps it). |
 | ~~**Docs drift**~~ | **Addressed:** [`docs/DEPLOYMENT.md`](../DEPLOYMENT.md) aligns digithings.ai/chat with digigraph + Tunnel (no live Pages Function chat path). |
 | ~~**No Foundry-only Compose snippet**~~ | **Addressed:** [`compose.profile-b.yml`](../../infra/digichat-release/compose.profile-b.yml) + `.env.profile-b.example` (digithings stays Azure-free). |
 | ~~**Profile A “minimal” not named**~~ | **Addressed:** [`compose.profile-a.yml`](../../infra/digichat-release/compose.profile-a.yml) + GHCR pull via `DIGI_IMAGE_TAG` (see INSTALL). **Ops remaining:** first `publish-service-images.yml` run on `main` so packages exist. |
@@ -214,7 +214,7 @@ First-party digithings hosts (`digithings.ai` / `www.digithings.ai`) may skip em
 - ~~GHCR for digikey / digigraph / digivault~~ — **Addressed** in compose/INSTALL (`DIGI_IMAGE_TAG`); packages land after promote to `main` + publish workflow
 - ~~Corpus / crawl / OCR / vault ingest pipelines~~ **MVP landed:** offline
   `scripts/docs_onboard/` — plan
-  [`2026-08-09-digichat-corpus-ingest.md`](../superpowers/plans/2026-08-09-digichat-corpus-ingest.md),
+  `2026-08-09-digichat-corpus-ingest.md` (removed DIG-3399; git history keeps it),
   runbook [`CLIENT-DOCS-ONBOARD.md`](../digichat/CLIENT-DOCS-ONBOARD.md),
   ops index [`CLIENT_PIPELINES.md`](../ops/CLIENT_PIPELINES.md).
   Remaining: Profile A Compose attach, richer crawl, digiquant entry (Pick 3 later).

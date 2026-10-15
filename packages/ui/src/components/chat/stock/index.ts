@@ -1,7 +1,7 @@
 /**
- * Skin-support primitives (WS4). Pure moves first; the NEEDS-INTERFACE modules
- * (skin-chrome, message-error, embed-chat-prefs, prefs-host) get their cuts in
- * Step 3. Skins + the rest of stock/ move here in Step 4.
+ * Skin-support primitives (WS4): catalog primitives, prefs shell, skin
+ * chrome, Thread and tool UI. Hosts import ThreadSkinView from
+ * `@digithings/ui/chat/skins` and the prefs host from here.
  */
 
 export {
@@ -61,6 +61,18 @@ export {
   type StockChatPrefsConfig,
   type StockChatPrefsDeps,
 } from "./stock-chat-prefs-host";
+// DIG-2882: the session artifact panel and the artifact `a:` override.
+export {
+  ArtifactsPanel,
+  ArtifactLink,
+  artifactListPath,
+  artifactBlobPath,
+  isArtifactBlobHref,
+  formatArtifactSize,
+  formatArtifactDate,
+  type ArtifactRow,
+  type ArtifactIo,
+} from "./artifacts-panel";
 export { SkinCredit, SKIN_CREDIT_TEXT } from "./skin-credit";
 export { Thread } from "./thread.aui";
 export {

@@ -1,5 +1,13 @@
 {
   "name": "design-reference",
+  "description": "Local design reference app for digithings.",
+  "license": "MIT",
+  "homepage": "https://digithings.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/digithings-ai/digithings.git",
+    "directory": "apps/reference"
+  },
   "version": "1.0.0",
   "private": true,
   "scripts": {
@@ -21,7 +29,7 @@
     "lightweight-charts": "^5.2.0",
     "lucide-react": "^1.42.0",
     "motion": "^12.23.12",
-    "next": "16.2.4",
+    "next": "16.4.0",
     "radix-ui": "^1.6.7",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",

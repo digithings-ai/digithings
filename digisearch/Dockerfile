@@ -30,6 +30,13 @@ COPY digiclaw/pyproject.toml digiclaw/ARCHITECTURE.md ./digiclaw/
 COPY digiclaw/src ./digiclaw/src
 RUN uv pip install --system -e "./digiclaw"
 
+# digillm is deliberately NOT a sibling here (DIG-1407): the board ruled that the
+# deployed image does not need the remote embedding path, and digillm's hard deps would
+# drag openai in and make that path importable for the first time. The web-research /
+# websets call sites into digillm.client (web/answer.py, web/structured.py,
+# websets/verify.py, websets/enrich.py) stay behind their lazy import guards, exactly as
+# before. digillm is declared in the [embedding] extra, which this image does not install.
+
 COPY digisearch/pyproject.toml digisearch/ARCHITECTURE.md ./digisearch/
 COPY digisearch/src ./digisearch/src
 COPY digisearch/seeds ./digisearch/seeds

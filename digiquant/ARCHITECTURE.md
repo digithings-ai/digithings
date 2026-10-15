@@ -46,7 +46,18 @@ NautilusTrader is the sole backtest and live-trade execution engine. Its key pro
 
 The Polars-to-pandas boundary in `nautilus_runner.py` is a deliberate, documented exception to the "Polars only" rule. Nautilus's `BarDataWrangler.process()` requires a pandas DataFrame with a `timestamp` UTC index. All other data handling in digiquant (CSV loading, account report parsing, result assembly) uses Polars.
 
-**Version pinning:** `nautilus_trader` is pinned to `>=1.190,<2` in `pyproject.toml`. The 2.x series introduced an async-first API surface with breaking changes to `BacktestEngine.run()` and the Actor registration model.
+**Version pinning and lockfile authority ([ADR-0033](../docs/adr/0033-nautilus-trader-exact-pin.md)):**
+
+`nautilus_trader` is pinned **exactly** to `==1.230.0` in `pyproject.toml`. This is the build we ship. Do not widen it back to a range.
+
+- **Why exact.** A *minor* bump inside the old `>=1.190,<2` range moved the Python-visible return type of `PortfolioAnalyzer.realized_pnls()` between 1.228.0 and 1.230.0. Our honesty envelope reads that value, so a ranged pin meant "silently moves" rather than "compatible". This is a deliberate, recorded exception to the root `AGENTS.md` rule that runtime deps stay unbounded — the root rule's own escape hatch applies (a known incompatibility, with the reason commented next to the pin).
+- **One lock: the repo-root `uv.lock`.** It is the single authoritative lock for the whole uv workspace; `digiquant` is a `[tool.uv.workspace]` member. **No module ships its own `uv.lock`.** `digiquant/uv.lock` was deleted under ADR-0033 — it was inert (68 packages against the root lock's 297), referenced by nothing, and last touched at the April 2026 baseline; uv resolves the workspace root and never opened it. If you find a module-level `uv.lock`, it is dead weight that reads as a pin but pins nothing — delete it and say so in an ADR.
+- **Why the pin, not the lock, is the shipping control.** `digiquant/Dockerfile` copies only `digiquant/pyproject.toml` and runs `uv pip install --system -e ".[nautilus]"`. No lockfile is copied and `uv pip install` does not read `uv.lock`. So the `==1.230.0` in `pyproject.toml` is the **only** thing that pins `nautilus_trader` in that image — the one `docker-compose.yml` builds. Before ADR-0033 it resolved whatever was newest on PyPI at build time. **Scope of that claim:** the image is *not* reproducible. `polars`, `optuna`, `cryptography`, `fastapi`, `uvicorn`, `langgraph`, `httpx`, `requests`, `statsmodels` and every transitive dependency of `nautilus_trader` itself still float, so a rebuild of an unchanged commit produces different bytes. **The pin reaches one build surface, not the whole service:** the Cloudflare Workers stack builds `digiquant/Dockerfile.mcp`, which installs `[research,mcp]` with no `nautilus` extra, and `Dockerfile.digiquant-runner` already installs `--frozen` from the root lock. Nothing in the repository publishes this image — `publish-service-images.yml` was removed in `f54af7052` — so there is no `:latest` or `:v0.1.0` tag being overwritten; the live consequence of that removal is that `infra/self-host/compose.ghcr.yml:34-36` pulls a tag nobody publishes. ADR-0033 names reproducibility as open work, not as fixed.
+- **CI is frozen to the root lock.** 35 of the 40 `uv sync` invocations across 29 workflow files use `--frozen`. `test-digiquant.yml` syncs without the nautilus extra on purpose (Linux SIGABRT, #42); `test-nautilus.yml` is the mirror lane that does include it. Both run from the repo root. Editing a manifest without re-locking desyncs the lock and breaks every `--frozen` lane.
+- **Known gap.** A local venv that was not re-synced still runs whatever it installed. Local == CI only after `uv sync --frozen --package digiquant --extra nautilus`.
+- **Bumping is deliberate, with a checklist** — change the pin, `uv lock` at the repo root, read the diff (more than the `nautilus-trader` specifier line means stop), verify `uv lock --check` from the root and from inside `digiquant/`, update the version named here and in `AGENTS.md`, run the DIG-937 analyzer-shape matrix, and amend or supersede ADR-0033.
+
+The 2.x series introduced an async-first API surface with breaking changes to `BacktestEngine.run()` and the Actor registration model; the exact pin is also what keeps us off it.
 
 **Linux CI crash (SIGABRT / exit 134) — tracked in #42:**
 `BacktestEngine.run()` registers C++-level SIGTERM/SIGINT handlers in its Rust runtime. On Linux, `uvicorn[standard]` installs `uvloop` and sets it as the global asyncio event loop policy, which also claims those POSIX signal handlers via libuv. When both runtimes attempt to own signal handling, a C-level assertion fires → SIGABRT. Mitigation: `tests/dq/conftest.py` resets the asyncio policy to `DefaultEventLoopPolicy` before the dq suite runs, preventing uvloop from conflicting with Nautilus's signal registration. The three integration tests that run a real `BacktestEngine` are skipped on Linux CI (`CI=true`) until the per-component test suite (#43) re-enables pytest and the fix is confirmed green on Ubuntu.
@@ -248,6 +259,8 @@ Implemented as per-IP sliding window using an in-memory `deque` behind a `thread
 
 The MCP server (`mcp_server.py`) listens on `127.0.0.1:8767` by default with `streamable-http` transport. Stdio transport is available via `--stdio` for Claude Desktop. Pipeline tools delegate to `service.py`; SDCA data/fit tools delegate to `sdca_mcp.py` (same JSON as FastMCP).
 
+Gloomberb tools are registered under `gloomberb_*` only (programmatic extensions of the Gloomberb platform). The `digifetch_*` names in the table below are the internal dispatch keys, not a second MCP registration. `gloomberb_quote` is the live price read.
+
 | Tool Name | Description |
 |---|---|
 | `digiquant_list_strategies` | Returns JSON array of registered strategies |
@@ -256,7 +269,7 @@ The MCP server (`mcp_server.py`) listens on `127.0.0.1:8767` by default with `st
 | `digiquant_export` | Exports strategy config to a target artifact |
 | `digiquant_run_pipeline` | Runs the full LangGraph pipeline |
 | `digiquant_fetch_coinbase_ohlcv` | Fetches OHLCV from Coinbase (CCXT) into the price-history cache. Default `start` is Coinbase BTC listing `2015-07-20` (ETH/SOL return from the first available Coinbase daily bar). Do not prefix-clip to 900 days. `timeframe`/`end`/`through_yesterday` widen beyond the daily-only default (a vendor `ccxt-mcp` server already covers full CCXT generality; prefer it for anything beyond this). Intraday timeframes write under `price-history/{timeframe}/` so ISO timestamps never overwrite the daily `{ticker}.csv` cache (#3944). |
-| `digifetch_quote` | Latest quote for one listing via Gloomberb Cloud (`api.gloom.sh`, anonymous; **enrichment only** — free-tier data is delayed up to 15 minutes and is never a pipeline primary). Default-ON behind `GLOOMBERB_ENABLED`; payload carries "Sourced from Gloomberb" attribution + `term.gloom.sh/?ticker=` deep link (#4069) |
+| `digifetch_quote` | Latest quote for one listing via Gloomberb Cloud (`api.gloom.sh`, anonymous; **enrichment only** — free-tier data is delayed up to 15 minutes and is never a pipeline primary). Default-OFF behind `GLOOMBERB_ENABLED` (explicit opt-in re-enables); payload carries "Sourced from Gloomberb" attribution + `term.gloom.sh/?ticker=` deep link (#4069) |
 | `digifetch_quotes_batch` | Batch quotes for 1–20 listings (Gloomberb Cloud, anonymous). Per-item `status`/stale preserved: a stale listing is a null quote + reason code, not a failed batch |
 | `digifetch_price_history` | OHLCV bars for one listing. Resolution × range caps (spec §5.2): 5m→1wk, 15m→1mo, 1h→3mo, 1d→5y (default), 1wk→5y, 1mo→all-time; out-of-contract requests return typed `invalid_input` — rejected, never silently clamped. An explicit `start_date`/`end_date` window (ISO `YYYY-MM-DD`, mutually exclusive with `range`) bypasses the caps for long history — sent as `rangeKey=ALL` + `startDate`/`endDate` (live: 610 weekly bars back to 2015; #4100) |
 | `digifetch_ticker_financials` | Quote, profile, fundamentals, statements, and daily price history for one listing. `extended_statements=true` requests the SEC-sourced extended history; statement rows type the common fields and preserve the rest |
@@ -301,7 +314,7 @@ The MCP server (`mcp_server.py`) listens on `127.0.0.1:8767` by default with `st
 | `luxalgo_edge_symbols` | Hosted Edge Stats coverage (anonymous, #4844): symbols, session calendars, coverage windows, session counts, nightly build time. No parameters. Precomputed statistics only — no raw vendor bars |
 | `luxalgo_edge_presets` | Hosted Edge Stats preset catalog (anonymous, #4844): gap fills, opening-range breakouts, day-of-week effects, and more. `category` narrows to one category; ids feed `luxalgo_edge_report` |
 | `luxalgo_edge_report` | One precomputed Edge Stats result (anonymous, #4844): P(outcome \| conditions) with N, Wilson 95% CI, sample guards, first/second-half stability split, per-year counts. Every result carries the honesty disclaimer in `data.disclaimer` and envelope `warnings` |
-| `luxalgo_trackers_datasets` | Market Trackers CC0 catalog (anonymous, #4844): row counts, freshness, years with data, ticker-searchability. `dataset` selects one dataset's field roster — read before composing filters |
+| `luxalgo_trackers_datasets` | Market Trackers CC0-1.0 catalog (anonymous, #4844; two families limited — DIG-1464): row counts, freshness, years with data, ticker-searchability. `dataset` selects one dataset's field roster — read before composing filters |
 | `luxalgo_trackers_latest` | Newest ingestion day's rows for one Trackers dataset (anonymous, #4844): `dataset` required, `ticker`/`text`/`where` narrow, `sort` newest\|oldest, `limit` 1–100, `offset` pages. Freshness/ad-hoc lookups only — never a pipeline primary |
 | `luxalgo_trackers_ticker` | One ticker across every ticker-bearing Trackers dataset for one year (anonymous, #4844): `ticker` required, `year` 1900–2100, `limit` 1–25 per dataset. Ad-hoc lookups only — never a pipeline primary |
 
@@ -322,6 +335,20 @@ repo-wide code-reference scan. Guard halves: `tests/dq/test_luxalgo_license_guar
 `luxalgo_*` names (including a future source-code name) answer HTTP 400 at
 `/v1/orchestrator_invoke` until a dispatch row exists. No Pine vendoring, no
 procurement (owner-side).
+
+**digiquant-web local gateway.** `apps/digiquant-web/gateway/live_gateway.py`
+is a development-only, read-scope adapter from the static browser app to one
+scrubbed stdio MCP child. It binds only `127.0.0.1`, accepts only exact loopback
+HTTP origins, exposes a fixed probe table (no tool passthrough), and never passes
+cookies or service keys to the child. The browser opts in with
+`NEXT_PUBLIC_DIGIQUANT_GATEWAY_URL`; `lib/gateway/gateway-client.ts` independently
+requires both the page and configured gateway to be loopback before it fetches.
+The LuxAlgo surface there is Library metadata search plus attribution only.
+The marketing hero chart is LuxAlgo Vela (`@luxalgo/vela`) on the public
+Coinbase feed: candles, volume, moving averages, and a cycling native overlay.
+Any non-local binding, edge auth, or deployment remains a human-gated
+network-exposure change.
+
 | `digiquant_fit_btc_power_law` | Fits the SDCA BTC power-law (RAQQR) valuation rails from cached daily price history (`data/prices/history_cache.py`, not a bespoke fetch) and persists the coefficients to `strategies/sdca/btc_power_law_coefficients.json` (#1082) |
 | `digiquant_build_sdca_risk_index` | Builds the SDCA `date`/`risk` parquet from a `RiskModel` + cached daily prices (`history_cache.py`, never a bespoke fetch) and writes it for `SdcaStrategy.risk_path` (#3168). `risk_model` selector: `btc_power_law` / `generic_valuation` / `rolling_z` (`sdca/providers.py`). Oscillators are computed from **that ticker's** OHLCV. `indicator_weights` JSON `{valuation, m2, rs_eth, dxy, weekly_rsi, weekly_macd, sma_band}` defaults to valuation=1 / extras=0 (published BTC charts unchanged). Macro extras need on-disk `m2_path` / `dxy_path` and/or cached `eth_ticker`. Returns `{path, row_count, date_start, date_end, null_risk_days}` or `{"error": ...}` |
 | `digiquant_fetch_bitview_series` | Fetch Bitview/BRK on-chain `day1` series (`mvrv`, `asopr_24h`, `puell_multiple`, `rhodl_ratio`) into `data/onchain/bitview/` parquet. JSON API only (no HTML scrape). `nupl` is refused by default (monotone of MVRV); `allow_derived=True` opts a caller who understands the caveat back in. Upstream base URL is **fixed** (no caller `base_url`, SSRF guard #3944); the code-only seam is an injected HTTP session / allowlisted host. Fail-soft + timeout. Hosted bitview.space is optional / no SLA — a vendor `mcp.bitview.space` MCP server already exists; prefer it for general Bitview access. Coin Metrics community CC BY-NC is **not** fetched and must not be republished commercially. Refs #1086 |
@@ -378,7 +405,7 @@ flag for the equity/sector (`EQUITY_TOOLS`) and macro (`MACRO_TOOLS`) phases, an
 #2908; its evidence path is the bundle + amendment flow) and the legacy Phase 7D
 path is unwired.
 
-Gating: the family is default-ON behind `GLOOMBERB_ENABLED`;
+Gating: the family is default-OFF behind `GLOOMBERB_ENABLED`; an explicit opt-in (``1``/``true``/``yes``/``on``) re-enables it;
 `available_digifetch_tools` applies that kill switch **and** the session-cookie
 gate to the advertised list, so a pipeline LLM is never handed a digifetch tool
 whose only answer is a typed disabled/`auth_required`/`pro_required` error. The
@@ -564,7 +591,8 @@ the window came back empty, `_fetch_macro` raised `empty live window`, and every
 scheduled refresh was marked stale. Each entry in
 `research/config/macro_series.yaml` may now declare a `cadence`
 (`daily`/`weekly`/`monthly`/`quarterly`), which selects the window
-(`_CADENCE_WINDOW_DAYS`: 45/60/120/240 days; absent = daily). The widened window
+(`_CADENCE_WINDOW_DAYS`: 45/45/120/240 days — weekly shares the daily constant;
+there is no 60, and absent = daily is also the narrowest of the four). The widened window
 then *contains* the series' seal row, so the live fetch is non-empty and the
 existing benign `up-to-date` path covers it. Note what does **not** change: an
 empty live window still returns `history-only` — `_fetch_macro` raises on empty
@@ -596,29 +624,185 @@ publication window, or a per-series vendor refusal — and `_fetch_macro` builds
 client per series, so a rate-limit blip silences an arbitrary subset. A partial leg is
 indistinguishable from that blip, and firing the gate on a healthy panel is how operators
 learn to ignore it. `main` emits exactly one outcome per macro spec, so the exempt ids and
-their outcomes always line up. Suspending the exemption only ever *adds* names to `failed`
-— it never turns a stale run fresh. A daily or `error` outcome is never exempt at any
-cadence. Staleness flag only — no money, rate or weight arithmetic. Contract tests:
+their outcomes always line up. Two known limits follow from the floor and the unanimity,
+both accepted rather than half-solved by a magic constant: a manifest with a single exempt
+series cannot trip the guard, and a partial leg stays exempt exactly as it did before this
+guard existed. Suspending the exemption only ever *adds* names to `failed` — it never turns
+a stale run fresh. A daily or `error` outcome is never exempt at any cadence. Staleness
+flag only — no money, rate or weight arithmetic. Contract tests:
 `tests/scripts/test_macro_death_is_not_silent.py`.
 
-**What the guard does not cover.** It closes the `history-only` shape only, and only over
-series the manifest actually declared. Four whole-leg freezes still exit 0:
+**What this guard alone does not cover.** It closes the unanimous `history-only` shape only,
+and only over series the manifest actually declared. Read alongside the `_macro_as_of_stale`
+age guard, which covers the other two:
 
 | Shape | Why the guard cannot see it | Status |
 |---|---|---|
-| Partial leg (2 or 3 of 4 slow series dead) | indistinguishable from a rate-limit blip; a subset is not evidence | accepted, by design |
-| Single **slow-cadence** series in the manifest | the `> 1` floor counts exempt ids, not manifest size — an 8-series panel with one monthly series has a frozen slow leg and cannot trip it | accepted, by design |
-| Panel serving stale rows in-window | outcome is `up-to-date`, not a soft fail, so it never enters the reduction | **open, pre-dates this guard** |
+| Partial leg (2 or 3 of 4 slow series dead) | indistinguishable from a rate-limit blip *while the silent series' seals are still inside their own windows*; a subset is not evidence of a mode, but each of them is evidence of its own age | accepted, by design **only while those seals are fresh**; DIG-2405 then names each one individually on its own age |
+| Panel serving stale rows in-window | outcome is `up-to-date`, not a soft fail, so it never enters the reduction | closed by DIG-1137 |
+| Single **slow-cadence** series in the manifest | the `> 1` floor counts exempt ids, not manifest size — an 8-series panel with one monthly series has a frozen slow leg and cannot trip it | closed by DIG-1137 + DIG-2405 (`_macro_as_of_stale`; the `> 1` floor stands) |
+| Unreadable manifest | `_resolve_macro_specs` swallowed the exception and returned `[]`, so `exempt` was empty and the guard had no ids to reason about | **closed (DIG-1371)** — the resolver now returns a list carrying `manifest_error`; `main` reports it as a `macro-manifest-unreadable` `error` outcome *after* the equity leg has run (never a raise, which would abort before `refresh_universe`), so the run exits 1 with the cause in `failed` and `core_macro_mirror.skipped` names the manifest problem |
+
+The `> 1` floor stands. A single-series manifest still has no leg to judge, and a single
+silent series among several is not a mode-based death the leg test can see — the DIG-2405
+decision below is that it *is* worth naming, but it is named by measuring the seal's age,
+not by relaxing unanimity. Relaxing it would fire on every rate-limit blip.
+
+DIG-1137 / DIG-2405 close the two sibling routes by measuring rather than trusting
+`mode`. `_macro_as_of_stale(outcomes, macro_specs, run, already)` compares each macro
+outcome's `as_of` against the run date, in calendar days, against the same
+`_CADENCE_WINDOW_DAYS` bound the live fetch already used. It reads
+`_MACRO_JUDGED_MODES` = the success modes (a vendor that keeps *answering* while it stops
+*publishing* lands on `up-to-date`) plus `MODE_HISTORY_ONLY`, and skips `MODE_ERROR`
+because that mode is never cadence-exempt and is therefore already loud. The
+`history-only` inclusion is the DIG-2405 half: a retired slow series arrives in that mode
+with an abandoned seal, the #4621 exemption forgives it on cadence alone, and
+`_macro_leg_dead` needs unanimity over the whole exempt set, so one retired series among
+live ones was named by nothing. Age separates the two cases that mode cannot, because an
+empty window and a fresh seal are a quiet release cycle while an empty window on a
+*stale* seal is a retirement. `already` keeps a series both guards reached named once. The
+bound is each series' own window, not a widened threshold: a monthly series sealed 34 days
+old is still quiet.
+
+The unreadable manifest is still open. It needs its own fix — a loud outcome rather than an
+empty spec list — because with no specs there are no ids for any of these guards to reason
+about, whichever mode they read.
+
+**Design record for the frozen-but-serving panel (DIG-1142).** Recorded here because the
+summary above does not carry the reasoning. **Shipped** as `_macro_as_of_stale`; the shape
+below is what it shipped as.
+
+The gap is that `refresh_macro_series` returns `MODE_UP_TO_DATE` with `as_of=seal` whenever
+the live window is non-empty but carries nothing newer than the seal. `up-to-date` is not in
+`_SOFT_FAIL_MODES` and is not `history-only`, so the outcome never enters the reduction and
+the run exits 0 claiming fresh. Two healthy paths reach that same shape: a same-day FRED
+restatement (`MODE_FULL_REPULL`, `as_of=top2 == seal`) and an unchanged overlap that then
+finds nothing new.
+
+`_macro_as_of_stale(outcomes, macro_specs, run) -> set[str]`, defined next to
+`_live_window_days` and called in `main` between the `failed` list and `stale = ...`:
+
+- **Predicate.** For each macro series, take the declared cadence from `macro_specs`
+  (ticker key is `f"{source}__{series}"`, matching `_slow_macro_exempt_ids`), resolve the
+  window with the existing `_live_window_days`, and report the series when
+  `(run_date - as_of).days > window`. Age against the series' own window, **never**
+  `as_of == seal` and never `mode` — the two restatement paths above are healthy, so keying
+  on either would fail a healthy panel.
+- **Mode filter.** Success modes only (`MODE_UP_TO_DATE`, `MODE_INCREMENTAL`,
+  `MODE_FULL_REPULL`). `history-only` and `error` are already `_SOFT_FAIL_MODES` and stay
+  with `_macro_leg_dead`; an empty `as_of` is skipped rather than guessed.
+- **No declared cadence** defaults to the 45-day daily window via `_live_window_days`,
+  matching the live-fetch default rather than inventing a second one.
+- **Calendar days, not trading days.** `_CADENCE_WINDOW_DAYS` is calendar days (45/120/240).
+  `staleness_gate` (`digiquant/src/digiquant/data/prices/refresh_gate.py:49`) counts *open
+  trading days* against `bound_trading_days=5`; reusing it per series would call a 120-day
+  monthly series fresh after ~5 trading days. The file already has `_shift_days` for
+  calendar arithmetic.
+- **Per-outcome, composing with `_macro_leg_dead`.** `_macro_leg_dead` judges the leg
+  (`history-only` on every exempt series at once); this judges one series' age. They are
+  orthogonal, and the new names only ever *add* to `failed` — the guard never turns a stale
+  run fresh. **The DIG-981 "a subset is not evidence" reasoning does not carry over to age.**
+  That reasoning was about `history-only`, which has two causes (exhausted publication
+  window vs. per-series vendor refusal) where a rate-limit blip silences an arbitrary subset,
+  so a subset proves nothing. Age has one cause — the series is old — and it is measured, not
+  inferred from a mode. A single frozen monthly series past its window is evidence by
+  itself; the #4621 fuse already draws the line, fresh inside the window and loud outside it.
+  At 34 days the seal is still inside the 120-day window and the run **should** exit 0.
+- Staleness flag only. No money, rate or weight arithmetic, matching the other guards here.
+
+**Known limits accepted for this guard.** Both are recorded rather than fixed, in the same
+spirit as the two above:
+
+| Limit | Why it stays |
+|---|---|
+| Undeclared cadence is judged at the 45-day daily window | the manifest is the source of truth; omitting `cadence` opts into the daily default, so a genuinely monthly series missing it goes loud at 45 days |
+| The window is calendar days, not open trading days | deliberate, and consistent with `_CADENCE_WINDOW_DAYS`; reusing `staleness_gate` would fire ~5 trading days into a 120-day window |
+
+**What this guard alone does not cover.** It closes the unanimous `history-only` shape only,
+and only over series the manifest actually declared. Read alongside the `_macro_as_of_stale`
+age guard, which covers the other two:
+
+| Shape | Why the guard cannot see it | Status |
+|---|---|---|
+| Partial leg (2 or 3 of 4 slow series dead) | indistinguishable from a rate-limit blip *while the silent series' seals are still inside their own windows*; a subset is not evidence of a mode, but each of them is evidence of its own age | accepted, by design **only while those seals are fresh**; DIG-2405 then names each one individually on its own age |
+| Panel serving stale rows in-window | outcome is `up-to-date`, not a soft fail, so it never enters the reduction | **closed (DIG-1142) — built as `_macro_as_of_stale`** |
+| Single **slow-cadence** series in the manifest | the `> 1` floor counts exempt ids, not manifest size — an 8-series panel with one monthly series has a frozen slow leg and cannot trip it | closed by DIG-1137 + DIG-2405 (`_macro_as_of_stale`; the `> 1` floor stands) |
 | Unreadable manifest | `_resolve_macro_specs` swallows the exception and returns `[]`, so `exempt` is empty and the guard has no ids to reason about | **open, pre-dates this guard** |
 
-The last two are the same class of defect this guard closed — a macro panel frozen while
-the run reports fresh — reached by a sibling route. They need their own fixes: the
-frozen-but-serving panel by comparing each macro outcome's `as_of` against the run date
-rather than trusting `mode`, the unreadable manifest by making it a loud outcome instead of
-an empty spec list. A monthly series only reaches `up-to-date` once its 120-day
-`_CADENCE_WINDOW_DAYS["monthly"]` window is exhausted while rows still land inside it, so
-that shape carries a ~120-day fuse before a healthy panel trips it — which is why it has
-not surfaced.
+The `> 1` floor stands. A single-series manifest still has no leg to judge, and a single
+silent series among several is not a mode-based death the leg test can see — the DIG-2405
+decision below is that it *is* worth naming, but it is named by measuring the seal's age,
+not by relaxing unanimity. Relaxing it would fire on every rate-limit blip.
+
+DIG-1137 / DIG-2405 close the two sibling routes by measuring rather than trusting
+`mode`. `_macro_as_of_stale(outcomes, macro_specs, run, already)` compares each macro
+outcome's `as_of` against the run date, in calendar days, against the same
+`_CADENCE_WINDOW_DAYS` bound the live fetch already used. It reads
+`_MACRO_JUDGED_MODES` = the success modes (a vendor that keeps *answering* while it stops
+*publishing* lands on `up-to-date`) plus `MODE_HISTORY_ONLY`, and skips `MODE_ERROR`
+because that mode is never cadence-exempt and is therefore already loud. The
+`history-only` inclusion is the DIG-2405 half: a retired slow series arrives in that mode
+with an abandoned seal, the #4621 exemption forgives it on cadence alone, and
+`_macro_leg_dead` needs unanimity over the whole exempt set, so one retired series among
+live ones was named by nothing. Age separates the two cases that mode cannot, because an
+empty window and a fresh seal are a quiet release cycle while an empty window on a
+*stale* seal is a retirement. `already` keeps a series both guards reached named once. The
+bound is each series' own window, not a widened threshold: a monthly series sealed 34 days
+old is still quiet.
+
+The unreadable manifest is still open. It needs its own fix — a loud outcome rather than an
+empty spec list — because with no specs there are no ids for any of these guards to reason
+about, whichever mode they read.
+
+**Design record for the frozen-but-serving panel (DIG-1142).** Recorded here because the
+summary above does not carry the reasoning. **Shipped** as `_macro_as_of_stale`; the shape
+below is what it shipped as.
+
+The gap is that `refresh_macro_series` returns `MODE_UP_TO_DATE` with `as_of=seal` whenever
+the live window is non-empty but carries nothing newer than the seal. `up-to-date` is not in
+`_SOFT_FAIL_MODES` and is not `history-only`, so the outcome never enters the reduction and
+the run exits 0 claiming fresh. Two healthy paths reach that same shape: a same-day FRED
+restatement (`MODE_FULL_REPULL`, `as_of=top2 == seal`) and an unchanged overlap that then
+finds nothing new.
+
+`_macro_as_of_stale(outcomes, macro_specs, run) -> set[str]`, defined next to
+`_live_window_days` and called in `main` between the `failed` list and `stale = ...`:
+
+- **Predicate.** For each macro series, take the declared cadence from `macro_specs`
+  (ticker key is `f"{source}__{series}"`, matching `_slow_macro_exempt_ids`), resolve the
+  window with the existing `_live_window_days`, and report the series when
+  `(run_date - as_of).days > window`. Age against the series' own window, **never**
+  `as_of == seal` and never `mode` — the two restatement paths above are healthy, so keying
+  on either would fail a healthy panel.
+- **Mode filter.** Success modes only (`MODE_UP_TO_DATE`, `MODE_INCREMENTAL`,
+  `MODE_FULL_REPULL`). `history-only` and `error` are already `_SOFT_FAIL_MODES` and stay
+  with `_macro_leg_dead`; an empty `as_of` is skipped rather than guessed.
+- **No declared cadence** defaults to the 45-day daily window via `_live_window_days`,
+  matching the live-fetch default rather than inventing a second one.
+- **Calendar days, not trading days.** `_CADENCE_WINDOW_DAYS` is calendar days (45/120/240).
+  `staleness_gate` (`digiquant/src/digiquant/data/prices/refresh_gate.py:49`) counts *open
+  trading days* against `bound_trading_days=5`; reusing it per series would call a 120-day
+  monthly series fresh after ~5 trading days. The file already has `_shift_days` for
+  calendar arithmetic.
+- **Per-outcome, composing with `_macro_leg_dead`.** `_macro_leg_dead` judges the leg
+  (`history-only` on every exempt series at once); this judges one series' age. They are
+  orthogonal, and the new names only ever *add* to `failed` — the guard never turns a stale
+  run fresh. **The DIG-981 "a subset is not evidence" reasoning does not carry over to age.**
+  That reasoning was about `history-only`, which has two causes (exhausted publication
+  window vs. per-series vendor refusal) where a rate-limit blip silences an arbitrary subset,
+  so a subset proves nothing. Age has one cause — the series is old — and it is measured, not
+  inferred from a mode. A single frozen monthly series past its window is evidence by
+  itself; the #4621 fuse already draws the line, fresh inside the window and loud outside it.
+  At 34 days the seal is still inside the 120-day window and the run **should** exit 0.
+- Staleness flag only. No money, rate or weight arithmetic, matching the other guards here.
+
+**Known limits accepted for this guard.** Both are recorded rather than fixed, in the same
+spirit as the two above:
+
+| Limit | Why it stays |
+|---|---|
+| Undeclared cadence is judged at the 45-day daily window | the manifest is the source of truth; omitting `cadence` opts into the daily default, so a genuinely monthly series missing it goes loud at 45 days |
+| The window is calendar days, not open trading days | deliberate, and consistent with `_CADENCE_WINDOW_DAYS`; reusing `staleness_gate` would fire ~5 trading days into a 120-day window |
 
 #### Market-data R2 read path (#3780 Task 10)
 
@@ -784,10 +968,32 @@ validate. Ported from LuxAlgo edge-stats `stats.ts` (MIT — code only, no
 disclaimer (`DISCLAIMER`). Every HTML tearsheet win-rate surface renders N +
 95% CI via `format_honest_rate` — categorized/full/risk stats tables, the KPI
 strip (thresholds act on the CI lower bound, not the point estimate), and the
-win/loss donut (caller-counted `(k, n)` from realized fills, never
-`round(rate * n)`). `BacktestResult` is untouched, so no model versioning was
-needed. Tests: `tests/dq/test_honesty.py` (upstream golden vectors),
+win/loss donut, whose `k` is caller-counted from realized **round trips**
+(`count_winning_trades(realized_pnls_series)`, counting `PnL > 0`) while its `n`
+is the **fill** count `num_trades` — so the pair is not a like-for-like sample,
+and the donut must never fall back to `round(rate * n)` as an observed count).
+Tests: `tests/dq/test_honesty.py` (upstream golden vectors),
 `tests/dq/test_tearsheet_honesty.py` (per-surface N + CI assertions).
+
+**Model versioning for `BacktestResult` (DIG-845 / L3).** The clause that stood
+here — "`BacktestResult` is untouched, so no model versioning was needed" —
+was true of the tearsheet 1.4 work and stopped being true once the honesty
+envelope reached the result model, so it is reworded here rather than dropped.
+Per `AGENTS.md` § Pre-Flight ("Confirm `BacktestResult` Pydantic model is
+unchanged or versioned if modified"), the decision is recorded: **additive,
+back-compatible, no version bump.** L3 adds exactly two fields to
+`models.BacktestResult`, both defaulting to an empty state —
+`honest_rate: HonestRateBlock | None` (default `None`) and
+`honest_rate_by_symbol: dict[str, HonestRateBlock]` (default `{}`) — so every
+payload that validated before still validates, and a consumer that has never
+heard of the envelope reads exactly what it read before. `num_trades` also
+gained a sharper description on the same leaf (a **fill** count, and explicitly
+*not* a win-rate denominator — `honest_rate.n` is the denominator), which is a
+description change and not a type or semantic change. No published surface
+depends on the old wording, so no migration, no `SCHEMA_VERSION` bump and no
+consumer notification are required. Consumers that want the envelope read
+`honest_rate`; they must never synthesize one from `num_trades` or from
+`round(rate * n)`.
 
 Existing published fixtures stay at older schema versions (no `ohlc_bars`, blank `entry_label`, no `signal_delay_days`) until regenerated, so consumers must tolerate all versions.
 
@@ -855,12 +1061,91 @@ Defined in `models.py`. Returned by `run_backtest()`, the pipeline's backtest no
 | `end_time` | `str` | ISO 8601 UTC, derived from last bar `ts_init` |
 | `total_pnl` | `float` | `final_balance - 1_000_000.0` (hardcoded starting capital) |
 | `total_return_pct` | `float` | `total_pnl / 1_000_000.0 * 100` |
-| `sharpe_ratio` | `float | None` | Annualised (252 days) from Nautilus portfolio analyzer |
-| `max_drawdown_pct` | `float | None` | Negative percent (e.g. `-15` is −15%), from `get_performance_stats_pnls()` or returns series fallback |
+| `sharpe_ratio` | `float | None` | Annualised from the account-report **balance path**, never from the analyzer (DIG-462) |
+| `max_drawdown_pct` | `float | None` | Negative percent (e.g. `-15` is −15%), from the same balance path |
 | `num_trades` | `int` | Row count of `generate_order_fills_report()` |
 | `per_symbol_pnl` | `dict[str, float]` | Populated for multi-symbol runs; empty for single-symbol |
+| `missing` | `list[str]` | Names that could not be produced — the machine-readable form of the "missing metrics" clause in `message`. Empty when `status` is `ok` |
+| `honest_rate` | `HonestRateBlock \| None` | Win rate with its denominator and interval. `None` when no realized-PnL series was extracted — never a fabricated zero and never `num_trades` |
+| `honest_rate_by_symbol` | `dict[str, HonestRateBlock]` | Per-symbol `honest_rate` blocks for multi-symbol backtests. Declared on the model by DIG-845 (L3); populated by DIG-847 (#5298), so it is `{}` until that leaf lands |
 | `status` | `str` | `ok` | `partial` | `error` |
 | `message` | `str` | Optional detail |
+
+`sharpe_ratio`, `max_drawdown_pct` and `total_return_pct` all derive from one
+source: the balance column of `generate_account_report(Venue("SIM"))`, one row
+per fill. Returns are the percent change between consecutive balance rows,
+`years = (last_ts - first_ts) / 365.25 days`, and the annualisation factor is
+`sqrt(n_returns / years)` — **not** `sqrt(252)`. The fill path is irregular in
+time, so the observation count is the only correct scaler; `sqrt(252)` on a
+per-position series produced `sharpe_ratio = -76.34` against a true `-3.10%`
+return. `sharpe_ratio` stays `None` rather than a fabricated `0.0` when there
+are fewer than two returns, when dispersion is zero, or when no usable
+timestamps exist; such results are `partial`.
+
+Two of those `missing` names are worth knowing: `returns_series` (the chart
+return series could not be confirmed against `analyzer.portfolio_returns()`
+and was withheld rather than published unverified — see
+`_verified_returns_series`) and `returns_series (k/n symbols)` (same, counted
+for a multi-symbol run). **Never take a metric from a Nautilus stats dict
+without confirming the key exists**: `get_performance_stats_pnls()` has no
+`Max Drawdown %` key, and the missing key used to fall through to a wrong
+fallback silently.
+
+### Result provenance (DIG-945, decision)
+
+Every published `models.BacktestResult` (the Nautilus path above) carries its
+own build inside the artifact — a resolved engine stamp plus the lock it was
+resolved from — rather than asserting the build in CI. Decided 2026-10-14;
+DIG-427 (balance-path Sharpe/drawdown fix) is merged and verified, so the
+sequencing hold that delayed this stamp is lifted.
+
+Contract (`EngineProvenance`, owned next to the model in `models.py`):
+
+| Field | Type | Source (never hand-written) |
+|---|---|---|
+| `engine` | literal `"nautilus_trader"` | constant |
+| `resolved_version` | `str \| None` | `importlib.metadata.version("nautilus-trader")` in the producing process; `None` when the extra is absent |
+| `pin` | `str` | specifier text from the `nautilus` extra in `digiquant/pyproject.toml` (currently `nautilus_trader==1.230.0`, ADR-0033) — read off the manifest, not retyped |
+| `lock` | `{file, sha256_12}` | `uv.lock` at the repo root (the one lock, ADR-0033) + first 12 hex of its bytes at generation time |
+| `arithmetic` | literal `"balance_path"` | the `_balance_path_metrics` source (DIG-462/DIG-427): Sharpe, drawdown and total return derive from one balance path |
+| `returns_series_verified` | `bool` | the `_verified_returns_series` outcome for this run |
+
+Rules:
+
+- Populated once, in `run_backtest`, from the live process. Never copied from
+  another run, never asserted in CI. The research-venv drift that motivated
+  this leaf (1.228.0 / 1.223.0 installed against a 1.230.0 lock) is detected
+  exactly this way: `resolved_version != pin` is visible on the artifact.
+- `resolved_version=None` (e.g. the Workers MCP image, which ships no
+  `nautilus` extra) is fail-closed: `status` is `partial`,
+  `engine_provenance` joins `missing`, and the tearsheet renders the block as
+  "engine unresolved — not citable". Same shape as the DIG-427 missing-list
+  guard: withhold, never fabricate.
+- One builder owns all rendering — `engine_provenance_note(provenance)` next
+  to the model. `generate_tearsheets.py` appends its output to
+  `provenance_notes` (the line-762 / line-1024 insertion point) and formats no
+  version string of its own. A second hand-formatted version line is a second
+  answer to the same question and will drift; there is exactly one.
+- Scope is the Nautilus path only. The `research/backtest.py` dataclass of
+  the same name is a decision-sequence result (no Nautilus engine inside), so
+  it carries no engine field — stamping a Nautilus version there would be
+  false attribution.
+- DIG-428's envelope is the same object: `honest_rate` is the stats half,
+  `provenance` is the build half. One block, one owner, built once — never a
+  one-off field in `generate_tearsheets.py` alongside a separate field on the
+  model.
+- The rejected alternative was a CI step failing when installed != locked.
+  It passes by construction wherever `uv sync --frozen` runs (CI, runner
+  image: installed == locked) and says nothing about which build produced
+  last month's number. Only the in-artifact stamp attributes past numbers.
+
+Why the delay-then-lift sequencing was right: stamping a precise build onto
+the known-wrong Sharpe (-76.34, double-annualised) would have laundered it
+into something citable. The counter-argument (stamp + caveat is more
+informative than no stamp) is adopted structurally instead of temporally:
+the stamp carries `arithmetic: balance_path` with it, so any future
+arithmetic regression names the arithmetic it claims and cannot hide behind
+a bare version string.
 
 ### OptimizationConstraints
 
@@ -1130,24 +1415,25 @@ upstream for cached price history.
 | `sdca/rolling_z.py` | Short-series fallback / basic valuation tier (#1086): causal rolling log-price mean ± z·std as rails. |
 | `sdca/asset_profile.py` | `SdcaAssetProfile` — per-asset `symbol`, `risk_model`, `SdcaOscillatorSpec`, `cycle_windows`, extra-indicator allowlist, `signal_delay_days` (default 0; publish delay stays in `generate_tearsheets`). Factories: `btc_v1()`, `eth_research_v1()` (research-only, not in `settings.json`). `daily_closes_from_cache` / `technicals_from_ohlcv` are the shared OHLCV path (full cache, no 900-day cap). `union_date_range` is the overlay x-axis helper — union of spans, not an inner join that would clip BTC to ETH. |
 | `sdca/btc_power_law.py` | `BtcPowerLawRiskModel` — the first concrete `RiskModel` (#1082): fits 7 quantile rails (`q01`…`q99`) as `price_q(t) = 10 ** (c + a*x + b*x**2)`, `x = ln(days_since_genesis(t)) - mu`, one quantile regression (`statsmodels.QuantReg`, lazily imported) per rail. `rails()`/`rails_full()` sort each row's fitted quantiles ascending (rearrangement method) so independently-fit curves never cross. `fit_btc_power_law()`/`save_coefficients()`/`load_coefficients()` handle fitting and JSON persistence; `load_coefficients()` prefers the real fit (`btc_power_law_coefficients.json`, committed as of #3173) and falls back to the checked-in synthetic placeholder (`btc_power_law_coefficients.example.json`) with a warning. The `digiquant_fit_btc_power_law` MCP tool is the orchestration layer — this module has no data-fetching or MCP dependency of its own. `low_quantile`/`high_quantile` (default `q10`/`q95`) pick which fitted rails map to the protocol's `low`/`high`; this default and the model itself are unvalidated against the reference artifact — network access to it was blocked in the environment #1082 was built in. |
-| `sdca/composite_risk.py` | `IndicatorWeight` (strict Pydantic v2 model: `name`, `z: pl.Series`, `weight`, `enabled`) and `compute_composite_risk()` — weight-normalized blend of enabled indicators' z-scores into `composite_z` (`[-3, 3]`) and `risk` (`[0, 100]`, 0 = max buy, 100 = max sell). Formula: `composite_z = clip(Σ(zᵢ·wᵢ)/Σ(wᵢ), -3, 3)`, `risk = 50 − composite_z×50/3`. Zero-weight extras are omitted (`enabled`/weight 0), so they cannot null a day. Rejects duplicate enabled names and a non-finite/zero total weight. |
-| `sdca/indicator_catalog.py` | Named extras: **generic technicals** `weekly_rsi` (MTF weekly+monthly dead-zone) / `weekly_macd` (weekly log-MACD) / `sma_band` plus **BTC-plugin** **m2** / **rs_eth** / **dxy**. `SdcaCompositeWeights` defaults `valuation=1`, extras `0`. Published `btc_sdca` weights live in `settings.json` (sidecar `btc_richer_composite.json`). `allowlist=` from `SdcaAssetProfile.extra_indicators` blocks BTC plugins on a second asset. Omitted: Mayer/200w, alpha residual, on-chain MVRV/SOPR (#1086), equity CAPE (#3176), put/call, RS rotation pool (#1084), pi-cycle (wrong-signed in 2025). |
+| `sdca/composite_risk.py` | `IndicatorWeight` (strict Pydantic v2 model: `name`, `z: pl.Series`, `weight`, `enabled`) and `compute_composite_risk()` — weight-normalized blend of enabled indicators' z-scores into `composite_z` (`[-3, 3]`) and `risk` (`[0, 100]`, 0 = max buy, 100 = max sell). Formula: `composite_z = clip(Σ(zᵢ·wᵢ)/Σ(wᵢ), -3, 3)`, `risk = 50 − composite_z×50/3`. Weight-0 members are omitted (`enabled`/weight 0), so `0 × null` cannot wipe a solo extra. Rejects duplicate enabled names and a non-finite/zero total weight. |
+| `sdca/indicator_catalog.py` | Named extras: **generic technicals** `weekly_rsi` (MTF weekly+monthly dead-zone) / `weekly_macd` (weekly log-MACD) / `sma_band` plus **BTC-plugin** **m2** / **rs_eth** / **dxy**. `SdcaCompositeWeights` defaults `valuation=1`, extras `0`. Published `btc_sdca` weights live in `settings.json` (sidecar `btc_richer_composite.json`). M2 YoY and DXY rolling-z run on the **full** FRED/DXY calendar, then align onto BTC dates — do not `shift(365)` after joining onto Coinbase days (that amputates leading years). `rs_eth` still needs overlapping BTC/ETH so its warmup is ETH-list-date bound. `allowlist=` from `SdcaAssetProfile.extra_indicators` blocks BTC plugins on a second asset. Omitted: Mayer/200w, alpha residual, on-chain MVRV/SOPR (#1086), equity CAPE (#3176), put/call, RS rotation pool (#1084), pi-cycle (wrong-signed in 2025). |
 | `sdca/price_oscillators.py` | `SdcaOscillatorSpec` + weekly/monthly resample + SMA-band z. Completed ISO weeks / calendar months only; `join_asof(..., strategy="backward")`. Weekly RSI uses a **dead zone + cap** (mid-cycle 30–80 is near 0; RSI 85 is max-sell). Weekly MACD is **log-MACD** with a sloped top cap, not 52-week histogram z. `mtf_rsi_z` blends weekly+monthly into the `weekly_rsi` extra. |
 | `sdca/cycle_windows.py` | Per-asset pin sets. `btc_v1()` (2017/2021/2025 highs, 2018/2022 lows, ±45d). `eth_research_v1()` (2018-01-13 / 2018-12-14 / 2021-11-10 / 2022-06-18 — ETH's June 2022 trough, not BTC's November). Stage A must not invent ad-hoc date lists. |
 | `sdca/stage_a.py` | Weight search that maximizes cycle overlap: mean risk in peak windows minus mean risk in trough windows, plus accumulate/distribute band fractions. Equal objective prefers fewer extras then higher `valuation` (parsimony). Default `search_names` is the full extra catalog; missing `extra_z` series skip those combos. |
-| `sdca/weight_search.py` | Stage A keep/drop by **in-sample** walk-forward `vs_flat_dca_pct` with a frozen curve. Searches every extra that has data (`search_names_with_data`). OOS is reported, not used to pick. Rails are fit once per fold. Published BTC uses this, not cycle overlap, to decide which extras stay. |
+| `sdca/weight_search.py` | Stage A keep/drop by **in-sample** walk-forward `vs_flat_dca_pct` with a frozen curve (legacy joint 0/0.5/1 grid). `optimize_stage_1_survivor_weights` searches survivors only on a `(0, 1]` grid (no 0 — turning an extra off cannot cheaply beat power law) and ranks by **OOS** vs-flat plus Stage B capital/drawdown feasibility. Searches every extra that has data (`search_names_with_data`). Rails are fit once per fold. |
 | `sdca/fit_weights.py` | Platform helper for Stage A: `resolve_sdca_profile` + `fit_sdca_weights_from_cache` (cached OHLCV → valuation-z → `optimize_stage_a_weights` → `regularize_weights`). MCP tool `digiquant_fit_sdca_weights`. |
 | `data/onchain/bitview.py` | Fail-soft Bitview/BRK `day1` client (`mvrv` / `asopr_24h` / `puell_multiple` / `rhodl_ratio`). HTTP-free `series_data_to_frame`. MCP tool `digiquant_fetch_bitview_series`. Library auto-fetch kill-switch `DIGIQUANT_BITVIEW_FETCH=0` (not a secret; MCP invoke is already opt-in). Hosted bitview.space is optional / no SLA. BRK MIT; Coin Metrics community CC BY-NC is research-only (not fetched). |
 | `data/onchain/ingest.py` | Scheduled/CLI path (#1086): `ingest_bitview` → parquet under `data/onchain/bitview/` + optional `macro_series_observations` upsert (`source=bitview`). `frame_to_macro_rows` is HTTP-free. Workflow: `pipeline-digiquant-onchain.yml` (daily 22:40 UTC, persistent failure tracker). |
+| `sdca/stage_0.py` | Solo-indicator remaining-book books. Each catalog extra and power law (`valuation` code id; user-facing **power law**) gets a one-hot index (unused members omitted). Curve search via `run_stage_b_frozen` / `curve_simulator`. Keep extras that beat named baseline `power_law_solo` on the same walk-forward OOS folds (plus Stage B capital/drawdown feasibility); drop never-sell dumps. IS is diagnostic. `beats_flat_dca_oos` stays false on this sidecar. Operator: `python -m digiquant.strategies.sdca.stage_0` or `digiquant sdca-stage0`. |
 | `sdca/curve_sim.py` | Injected Stage B evaluator via `run_backtest` when Nautilus SIGABRTs (#42). Provenance records `evaluator=curve_simulator`. Not a published backtest. |
 | `sdca/regularize.py` | Round Stage A weights to tenths (or 0.05) and renormalize; shrink curve max rates and round them to one decimal. |
-| `sdca/two_stage.py` | Freeze Stage A weights, run existing walk-forward curve search, persist `btc_composite_aggressive.json` + `btc_composite_regularized.json`. |
+| `sdca/two_stage.py` | Freeze Stage A weights, run existing walk-forward curve search, persist `{stem}_aggressive.json` + `{stem}_regularized.json` (default stem `btc_composite`; a stem with path separators raises). Stage 0 uses stem `btc_solo_then_combine` so the package dir is a safe `--out-dir`. |
 | `sdca/curve.py` | `AccumDistCurve` — 21-node (risk 0, 5, …, 100) piecewise-linear map from risk to a daily trade rate (% of remaining cash on buys, % of remaining holdings on sells). `value_at_risk()` interpolates and clamps risk to `[0, 100]`, rejecting non-finite risk. Nodes are fully configurable and must be finite: all-positive = long-only accumulation, signed = accumulation + distribution. The no-arg default (`DEFAULT_BTC_NODES`) is the issue's documented BTC-reference curve shape, not a hardcoded valuation constant — callers targeting another asset pass their own `nodes`. This is the **runtime** representation; it is unchanged by #3169. |
 | `sdca/curve_shape.py` | `SdcaCurveShape` (frozen Pydantic v2, #3169) — the **authoring and optimization** surface. Six parameters (`buy_max_rate`, `buy_knee_risk`, `sell_knee_risk`, `sell_max_rate`, `buy_curvature`, `sell_curvature`) generate the 21 nodes via `to_nodes()`. Enforces a non-empty dead zone, sign/monotonicity, and `*_max_rate <= 100` (the generated-path answer to #2552). The raw `AccumDistCurve` constructor stays unbounded. |
 | `sdca/backtest.py` | `run_backtest(dates, price, risk, curve, initial_cash) -> (SdcaBacktestReport, pl.DataFrame)` — the daily state loop and its strict Pydantic v2 summary report. `size_trade()` is the remaining-book sizer (`buy_usd = cash * rate/100`, `sell_units = holdings * |rate|/100`). Validates non-empty, equal-length inputs; a non-null, strictly-increasing `dates` series (#2539, #2544); and a finite, positive, non-null price series and `initial_cash` before running. Export frame includes `flat_dca_value` (#3171); the report's `vs_flat_dca_pct` is ×100, same as `vs_lump_pct`. CI-only — never the published number. |
 | `sdca/dca_metrics.py` | Schema 1.3 DCA block from Nautilus fills + daily MTM (`breakdown_from_daily`, `fills_from_nautilus_report`). Publish path uses this; tests assert parity with `SdcaBacktestReport`. Overlays include `allocated_pct_curve` (MTM % in the asset, never `capital_deployed`) and `fill_markers` (`|trade_usd|/portfolio`). |
 | `sdca/chart_series.py` | Allocation %, fill-dot sizing, power-law display names, knee lookup, reconstruction from 1.3 payloads that lack the new overlay keys. Does not emit a cash-% series (inverse of allocated). |
-| `sdca/risk_index.py` | `build_risk_index(dates, price, risk_model, extra_indicators=None, valuation_weight=1.0) -> pl.DataFrame` and `write_risk_index(df, path)` (#3168). Pure wiring: `risk_model.rails()` → `valuation_z_score()` → `IndicatorWeight(name="valuation")` + extras from `indicator_catalog` → `compute_composite_risk()`. Returns `date`/`risk` plus diagnostics (`price`, `low`, `median`, `high`, `valuation_z`, `composite_z`, and `{name}_z` for each extra). Default extras-off matches a single-indicator index. |
+| `sdca/risk_index.py` | `build_risk_index(dates, price, risk_model, extra_indicators=None, valuation_weight=1.0) -> pl.DataFrame` and `write_risk_index(df, path)` (#3168). Pure wiring: `risk_model.rails()` → `valuation_z_score()` → optional `IndicatorWeight(name="valuation")` + extras from `indicator_catalog` → `compute_composite_risk()`. Weight-0 valuation is **omitted** from the blend so a Stage 0 solo extra is not nulled by `0 × null`. Returns `date`/`risk` plus diagnostics (`price`, `low`, `median`, `high`, `valuation_z`, `composite_z`, and `{name}_z` for each extra). Default extras-off matches a single-indicator index. |
 | `sdca/nautilus_strategy.py` | `SdcaStrategyConfig` (frozen `StrategyConfig`: `instrument_id`, `bar_type`, `initial_cash`, `risk_path`, `curve_nodes` default `DEFAULT_BTC_NODES`, `long_only` default `False`) and `SdcaStrategy(Strategy)` — the NautilusTrader wrapper (#1081). Registered as `btc_sdca` (#3170) with `risk_path` omitted from `default_params`. `risk_path` is produced by `sdca/risk_index.py` (#3168), not assembled by hand. Not wired to broker live-trading. |
 | `sdca/presets.py` / `sdca/presets.json` | `SdcaPreset` (frozen Pydantic v2 model: `curve_nodes`, `long_only`, `description`, optional `shape`, validated at load time), `list_presets() -> list[str]`, `load_preset(name) -> SdcaPreset` — named public curve personalities. Since #3169, `presets.json` stores `SdcaCurveShape` parameters; nodes are generated at load. `btc_optimized` (#3174) is the walk-forward slot. |
 | `sdca/walk_forward.py` | Walk-forward folds, held-out tail, DCA-native objective (`vs_flat_dca_pct` s.t. capital floor + drawdown cap). Rails **must** be refit on each fold's IS window (#3173). Extra-z is a full-calendar causal precompute sliced per window (no OOS refit, no leakage). |
@@ -1196,15 +1482,29 @@ that default unless callers pass extras. Walk-forward (`method=random` /
 explicit `param_grid`) searches the extra weights; auto-grid does not, so a
 default optimize run still matches the power-law-only chart.
 
-**Two-stage fit.** Stage A for published BTC (`weight_search.optimize_stage_a_by_backtest`) grids every extra that has a z-series (`m2` / `rs_eth` / `dxy` / `weekly_rsi` / `weekly_macd` / `sma_band`) and keeps weights that raise in-sample `vs_flat_dca_pct` on a frozen distribute curve. Cycle-window overlap (`stage_a.optimize_stage_a_weights` / `digiquant_fit_sdca_weights`) remains a diagnostic, not the keep/drop rule. `stage_a_search_names(btc_v1())` includes BTC plugins; ETH research stays generic technicals only. Stage B
-is `digiquant_run_optimize` with `strategy_name=sdca` (existing walk-forward
-curve optimize, `vs_flat_dca_pct`, floors/caps, IS-only rails). Freeze Stage A
-weights by passing `regularized_weight_params` as `strategy_params` `*_weight`
-keys. After the aggressive fit, `regularize.py` rounds weights to tenths and
-shrinks max rates (rounded to one decimal); both variants are persisted. Equal
-Stage A scores prefer fewer extras. The aggressive fit will overfit — that is
-expected. Do not publish a second asset until that backtest looks comfortable.
-There is no separate SDCA app or second optimizer product.
+**Two-stage fit.** Published BTC extras were originally dropped by Stage A
+(`optimize_stage_a_by_backtest`) on **in-sample** vs-flat with a frozen
+power-law curve. The operator path is now **solo-then-combine**: Stage 0
+(`stage_0.run_stage_0`) fits a remaining-book curve to each extra and to
+power law alone; extras must beat named baseline `power_law_solo` on the
+**same walk-forward OOS folds** (plus Stage B capital floor / drawdown
+feasibility, matching walk-forward ranking) and must sell. IS vs-flat is
+reported, not the keep rule. If no extra beats OOS, power-law-only remains
+published — do not force extras back in. Stage 1
+(`optimize_stage_1_survivor_weights`) then searches survivors on a `(0, 1]`
+grid (no 0) and Stage B (`run_stage_b_frozen`) + `regularize` retunes the
+combined curve. The operator default writes sidecars only
+(`btc_stage0.json`, `btc_stage1_weights.json`,
+`btc_solo_then_combine_{aggressive,regularized}.json`). `settings.json` is
+overwritten only with `--persist-settings` **and** combined OOS not worse
+than the published sidecar — a 2-trial Stage B is not a published-weight
+flip. `beats_flat_dca_oos` is true only when that combined run's mean OOS
+vs-flat is actually positive. Cycle-window overlap
+(`stage_a.optimize_stage_a_weights`) remains a diagnostic.
+`stage_a_search_names(btc_v1())` includes BTC plugins; ETH research stays
+generic technicals only. Charts still plot weight-0 extras; user-facing
+copy says **power law**, not that unused series voted. The aggressive fit
+will overfit — that is expected. Do not `--push-supabase`.
 
 **How to add an asset.** The reusable core is technicals + composite +
 two-stage weight/curve fit + regularize. Extra series per asset is manual
@@ -1223,7 +1523,9 @@ research; do not scrape put/call or paid on-chain here.
    `sma_band`) vs asset-specific plugins (BTC: M2 / rs_eth / DXY; on-chain
    z via `OnChainValuationProvider` — research only until skip-missing;
    equity put/call later). Do not enable BTC plugins on a second asset.
-5. Run Stage A (backtest keep/drop of extras, cycle overlap as diagnostic) → Stage B (walk-forward curve) → regularize.
+5. Run Stage 0 (solo OOS vs power-law) → Stage 1 (survivor weights, no 0
+   on the grid) → Stage B (walk-forward curve) → regularize. Legacy Stage A
+   IS keep/drop and cycle overlap stay diagnostic.
    Trust the composite as a top/bottom indicator only when that historical
    backtest looks comfortable.
 6. Only then consider a `settings.json` entry. `eth_research_v1()` is
@@ -1327,12 +1629,12 @@ for downstream gates (RS rotation #1084, active books, composition #1078).
 | `write_regime_series` / `load_regime_series` / `regime_index_by_date` | Consumer surface (parquet + date map) — no Nautilus dependency |
 | `backtest_regime_gate` | CI-only long-vs-cash harness documenting gated vs always-invested returns — **not** a published `BacktestResult` |
 
-**Default blend** (equal weights): `M2SL` YoY (+), `DTWEXBGS` level (−, strong dollar = contraction), `UNRATE` level (−), `MANEMP` YoY (+) as the manufacturing-activity / PMI proxy — FRED does not carry live ISM PMI. Score map: `regime_score = 50 + composite_z × 50/3` (100 = max expansion). Discrete: `expansion` if score ≥ 60, `contraction` if ≤ 40, else `neutral`. `risk_on` is true only in expansion (gate open); neutral/contraction raise cash in the CI gate harness.
+**Default blend** (equal weights): `M2SL` YoY (+), `UNRATE` level (−). The `DTWEXBGS` (dollar) and `MANEMP` (manufacturing-activity / PMI proxy) votes were removed 2026-09-29: neither is served by the anonymous gloomberb panel, so `MacroSeriesSpec`s for them still work but only for callers supplying their own frames. Score map: `regime_score = 50 + composite_z × 50/3` (100 = max expansion). Discrete: `expansion` if score ≥ 60, `contraction` if ≤ 40, else `neutral`. `risk_on` is true only in expansion (gate open); neutral/contraction raise cash in the CI gate harness.
 
 **Data path.** Series land via the existing macro pipeline
 (`digiquant prices fetch-macro` → `macro_series_observations`). Manifest
-`research/config/macro_series.yaml` lists `M2SL`, `DTWEXBGS`, `UNRATE`, and
-`MANEMP` — no hardcoded secrets. Callers pass already-fetched
+`research/config/macro_series.yaml` lists `M2SL` and `UNRATE` from the panel —
+no hardcoded secrets. Callers pass already-fetched
 `{name: DataFrame[date, value]}` into `compute`; the model never fetches.
 
 **Consumers.** Other strategies read the regime parquet / `regime_index_by_date`
@@ -1393,7 +1695,7 @@ the payload itself (e.g. a quote's `data.stale`, spec §3.2) — maps to
 `"Free-tier data delayed up to 15 minutes"` with `stale=false`. Both signals
 stay distinct.
 
-**Pacing and safety.** The client is default-ON behind `GLOOMBERB_ENABLED`; only
+**Pacing and safety.** The client is default-OFF behind `GLOOMBERB_ENABLED`; an explicit opt-in (``1``/``true``/``yes``/``on``) re-enables it; only
 `1`/`true`/`yes`/`on` enable it, and any other value (a typo included) fails
 closed to disabled (see Environment Variables). A 900s TTL cache matches the R2
 market-data-cache convention; expired entries are evicted on access and the
@@ -2003,7 +2305,7 @@ The sandbox runs as UID `10001` (`sandbox`). It does not install digiquant itsel
 | `DIGIKEY_ISSUER` | `http://digikey:8005` | JWT issuer |
 | `DIGIKEY_AUDIENCE` | `digi-ecosystem` | JWT audience |
 | `DIGIKEY_PUBLIC_KEY_PEM` | `""` | Inline PEM for offline JWT verification |
-| `GLOOMBERB_ENABLED` | unset (ON) | Kill switch for the 89 `digifetch_*` Gloomberb tools. Only `1`/`true`/`yes`/`on` enable the family; any other value (including a typo) disables it, and every call then returns a typed `upstream_error` without a request |
+| `GLOOMBERB_ENABLED` | unset (OFF) | Kill switch for the 89 `digifetch_*` Gloomberb tools. Only `1`/`true`/`yes`/`on` enable the family; any other value (including a typo) disables it, and every call then returns a typed `upstream_error` without a request |
 | `LUXALGO_ENABLED` | unset (ON) | Kill switch for the 14 `luxalgo_*` hosted tools (#4779 P0 Library + #4844 edge/trackers). Only `1`/`true`/`yes`/`on` enable the family; any other explicit value disables it, and every call then returns a typed `upstream_error` without a request |
 | `LUXALGO_COMMERCIAL_LICENSE` | unset (OFF) | Commercial Library license flag for LuxAlgo indicator source code (#4845). Default OFF: unset, blank, or any non-truthy value keeps the 9th tool (`library_get_source_code`, CC BY-NC-SA) out of every surface — the dispatcher refuses it with a typed `invalid_input` envelope and no request. Only `1`/`true`/`yes`/`on` enable it, and even then only the dispatcher may carry the 9th tool (MCP, manifest, entitlements, read scope stay at 14). Procurement is owner-side; nothing is wired yet |
 | `GLOOMBERB_SESSION_COOKIE` | `""` | Optional Gloom session cookie for the 41 cookie-gated tools (37 `session` + 1 `preview` + 3 `pro`, declared once in `data/gloomberb/entitlements.py`): the original nine reads (holders, analyst research, corporate actions, research search, statements, ticker tweets, tweet search, short interest, saved searches) plus equity diagnostic (preview) and transcripts/screener/options-flow (pro), the 15 probe-backed Cloud reads, and the 13 inert workspace/broker tools. The `/public/proxies/*`, `/public/risks/*`, and `/public/events/*` filing reads are open and never send it. Bare token or `name=value`; never logged, never echoed into payloads, forwarded only to same-origin redirect hops — operator runbook: [docs/ops/gloomberb-session-cookie.md](../docs/ops/gloomberb-session-cookie.md) |

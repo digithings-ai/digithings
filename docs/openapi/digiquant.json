@@ -140,6 +140,25 @@
             "title": "End Time",
             "type": "string"
           },
+          "honest_rate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HonestRateBlock"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Win rate with its denominator and interval. None when no realized-PnL series was extracted \u2014 never a fabricated zero and never num_trades."
+          },
+          "honest_rate_by_symbol": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/HonestRateBlock"
+            },
+            "description": "Per-symbol honest_rate blocks for multi-symbol backtests",
+            "title": "Honest Rate By Symbol",
+            "type": "object"
+          },
           "max_drawdown_pct": {
             "anyOf": [
               {
@@ -158,9 +177,17 @@
             "title": "Message",
             "type": "string"
           },
+          "missing": {
+            "description": "Names that could not be produced, the machine-readable form of the 'missing metrics' clause in message. Empty when status is ok.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing",
+            "type": "array"
+          },
           "num_trades": {
             "default": 0,
-            "description": "Number of trades",
+            "description": "Fill count: rows in generate_order_fills_report(). NOT a trade count and NOT a win-rate denominator \u2014 use honest_rate.n.",
             "title": "Num Trades",
             "type": "integer"
           },
@@ -481,6 +508,159 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "HalfStats": {
+        "description": "One half of a stability split.",
+        "properties": {
+          "ci95": {
+            "anyOf": [
+              {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ci95"
+          },
+          "estimate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimate"
+          },
+          "k": {
+            "title": "K",
+            "type": "integer"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "n",
+          "k"
+        ],
+        "title": "HalfStats",
+        "type": "object"
+      },
+      "HonestRateBlock": {
+        "description": "``HonestRate`` plus what a surface needs to label it honestly.\n\n``k`` counts closed round trips with realized PnL > 0; a breakeven close\n(``pnl == 0``) is a loss \u2014 counted in ``n`` but not in ``k``.\n\nConstruction re-derives the guard flags *and* the Wilson interval from\n``k``/``n``, so a block cannot be built unguarded, cannot be built with a\ncaller-pinned estimate beside an interval from different counts, and a\nrefused sample keeps neither number nor interval. Like every model in this\nmodule the fields stay writable afterwards; the guarantee is at\nconstruction.",
+        "properties": {
+          "basis": {
+            "default": "closed round trips (Nautilus realized PnL, one per closed position)",
+            "title": "Basis",
+            "type": "string"
+          },
+          "ci_hi": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ci Hi"
+          },
+          "ci_lo": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ci Lo"
+          },
+          "disclaimer": {
+            "default": "Historical conditional frequencies with sample sizes. Not predictions, not advice.",
+            "title": "Disclaimer",
+            "type": "string"
+          },
+          "estimate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimate"
+          },
+          "k": {
+            "title": "K",
+            "type": "integer"
+          },
+          "low_sample": {
+            "default": false,
+            "title": "Low Sample",
+            "type": "boolean"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "n_unit": {
+            "default": "closed round trips",
+            "title": "N Unit",
+            "type": "string"
+          },
+          "refuse_floor": {
+            "default": 10,
+            "title": "Refuse Floor",
+            "type": "integer"
+          },
+          "refused": {
+            "default": false,
+            "title": "Refused",
+            "type": "boolean"
+          },
+          "schema": {
+            "default": "1.0",
+            "title": "Schema",
+            "type": "string"
+          },
+          "stability": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StabilitySplit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "warn_floor": {
+            "default": 30,
+            "title": "Warn Floor",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "k",
+          "n"
+        ],
+        "title": "HonestRateBlock",
+        "type": "object"
+      },
       "OptimizationConstraints": {
         "description": "Hard limits for optimization; candidates violating these are rejected.",
         "properties": {
@@ -608,6 +788,7 @@
           "n_trials": {
             "default": 50,
             "description": "Trials for bayesian/random",
+            "minimum": 1.0,
             "title": "N Trials",
             "type": "integer"
           },
@@ -975,6 +1156,35 @@
           "pair_content_hash"
         ],
         "title": "PolicyReplayRunRequest",
+        "type": "object"
+      },
+      "StabilitySplit": {
+        "description": "First-half/second-half stability; agree = Wilson CI overlap.",
+        "properties": {
+          "agree": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "CIs overlap \u2192 halves compatible; null when a half is empty",
+            "title": "Agree"
+          },
+          "first_half": {
+            "$ref": "#/components/schemas/HalfStats"
+          },
+          "second_half": {
+            "$ref": "#/components/schemas/HalfStats"
+          }
+        },
+        "required": [
+          "first_half",
+          "second_half"
+        ],
+        "title": "StabilitySplit",
         "type": "object"
       },
       "ValidationError": {

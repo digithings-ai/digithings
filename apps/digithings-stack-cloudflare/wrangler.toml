@@ -78,6 +78,33 @@ custom_domain = true
 # zone_name = "digithings.ai"
 # custom_domain = true
 
+# DigiChat cutover (cost epic): zone routes moved here from digithings-digichat so the
+# folded DigiChatContainer serves them and the duplicate container goes idle.
+# DEPLOY ORDER: deploy digithings-digichat (routes removed) first, then this worker.
+# Precondition: the digichat secrets listed in apps/digichat-cloudflare/wrangler.toml
+# exist on this worker (wrangler secret list) before deploy.
+[[routes]]
+pattern = "digithings.ai/embed*"
+zone_name = "digithings.ai"
+[[routes]]
+pattern = "digithings.ai/api/chat*"
+zone_name = "digithings.ai"
+[[routes]]
+pattern = "digithings.ai/api/embed*"
+zone_name = "digithings.ai"
+[[routes]]
+pattern = "digithings.ai/api/byok*"
+zone_name = "digithings.ai"
+[[routes]]
+pattern = "digithings.ai/api/plan-proof*"
+zone_name = "digithings.ai"
+[[routes]]
+pattern = "digithings.ai/api/health"
+zone_name = "digithings.ai"
+[[routes]]
+pattern = "digithings.ai/_dtchat*"
+zone_name = "digithings.ai"
+
 [[containers]]
 class_name = "DigiStackContainer"
 # `image` and `image_build_context` resolve relative to THIS config file's
@@ -87,9 +114,12 @@ class_name = "DigiStackContainer"
 # context (#4046).
 image = "../../Dockerfile.digithings-stack-cloudflare"
 image_build_context = "../.."
-max_instances = 5
+# Cost minimum (Cloudflare cost epic): one replica; traffic is ~2k req/day.
+max_instances = 1
 # Multi-process Profile A needs real RAM/disk (lite = 256MiB is far too small).
-instance_type = "standard-2"
+# standard-1 = 4 GiB (was standard-2, 6 GiB). Memory is billed per GiB-s.
+# Verify container RSS stays under ~3 GiB after deploy; revert to standard-2 if OOM.
+instance_type = "standard-1"
 
 # Dedicated digiquant-mcp market-data container (#3780, Task 8). Separate image
 # with the [research]+[mcp] extras serving FastMCP streamable-http on :8767 —
@@ -115,8 +145,9 @@ class_name = "DigiQuantMcpContainer"
 image = "../../digiquant/Dockerfile.mcp"
 image_build_context = "../.."
 max_instances = 1
-# p50 <50ms / p99 <200ms per 500-bar indicator window was budgeted on standard-2.
-instance_type = "standard-2"
+# FastMCP read path over R2; standard-1 (4 GiB) for cost. p50/p99 budget was set
+# on standard-2 — re-check latency after deploy.
+instance_type = "standard-1"
 
 # Folded digichat (#4689). Same image as the standalone digichat worker
 # (Next standalone on :3000, one shared instance for digithings + OCC + future
@@ -132,15 +163,13 @@ class_name = "DigiChatContainer"
 # file: ../.. is the repo root.
 image = "../../Dockerfile.digichat-cloudflare"
 image_build_context = "../.."
-max_instances = 5
-# Next standalone needs real RAM/disk (lite = 256MiB is far too small);
-# explicit instance_type required — matches the two entries above.
-instance_type = "standard-2"
+max_instances = 2
+# Next standalone: basic = 1 GiB (lite = 256MiB is far too small). Typical Next
+# standalone RSS is 200-500 MiB; revert to standard-1 if OOM.
+instance_type = "basic"
 
-# Ops SSH (wrangler containers ssh) — ed25519 debug key (private key not in repo).
-[[containers.authorized_keys]]
-name = "stack-debug"
-public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOWKJSXCImobvGW1hFjW5VV4mSM5ZnFoC/sTsW/cdFD9 digithings-stack-debug"
+# Ops SSH debug key removed (cost/hygiene epic). Re-add [[containers.authorized_keys]]
+# temporarily only for a live debugging session.
 
 [[durable_objects.bindings]]
 name = "STACK"
@@ -289,4 +318,19 @@ DIGICHAT_EMBED_HOSTS = "digithings.ai,www.digithings.ai,occ.digithings.ai,digiqu
 # digichat only talks to digigraph (+ digikey for bff_session).
 DIGICHAT_ENABLED_SERVICES = "digigraph"
 # Defense-in-depth corpus map (headers from digichat still win).
-DIGI_TENANT_CORPUS_MAP = "{\"digithings\": {\"digisearchIndex\": \"digithings_docs\", \"vaultPathPrefix\": \"clients/digithings\"}, \"occ\": {\"digisearchIndex\": \"occ_help\", \"vaultPathPrefix\": \"clients/online-compliance-center\", \"researchSystemPrompt\": \"You are the Online Compliance Center (OCC) help assistant for digithings.ai/chat/occ.\\nAnswer only from what you retrieve. You get several tool rounds per question.\\n\\nGround every answer in retrieved corpus from the digisearch index `occ_help` (help docs)\\nand/or digivault_search_notes under `clients/online-compliance-center/`.\\nAlways cite help article URLs or PDF source paths from metadata.\\n\\nSearch results are excerpts, not whole documents. A row marked \\\"truncated\\\": true\\nmeans you have not seen that note \\u2014 call digivault_get_note with its doc_id and read\\nthe whole thing before answering. An unmarked row is not a promise of completeness:\\nevery row is a preview. Always do this when the question involves a\\nprocedure, a list of steps, a table, a count, or the words every, all, or which:\\nhelp PDFs are stored one page per note, and an excerpt routinely stops before the\\nstep that answers the question.\\n\\nNever say a policy, step, or exception does not exist unless you loaded the full note\\nand looked. If all you saw was a truncated excerpt, say what it showed and that the\\nrest was not loaded.\\n\\nAnswer questions about OCC policies, procedures, FAQ topics, and public help\\nPDFs. Do not invent product features, pricing, or portal capabilities not\\npresent in the retrieved sources. E-learning / YouTube videos are out of\\nscope for this corpus \\u2014 say so if asked.\\n\\nDo not cite digithings or digiquant internal architecture docs. If the\\ncorpus has no grounded answer, say so clearly.\\n\\nTicket content is not part of this corpus. For ticket questions use the read-only zammad tools, and say so clearly if they do not ground the answer.\"}}"
+DIGI_TENANT_CORPUS_MAP = "{\"digithings\": {\"digisearchIndex\": \"digithings_docs\", \"vaultPathPrefix\": \"clients/digithings\"}, \"occ\": {\"digisearchIndex\": \"occ_help\", \"vaultPathPrefix\": \"clients/online-compliance-center\", \"researchSystemPrompt\": \"You are the Online Compliance Center (OCC) help assistant for digithings.ai/chat/occ.\\nAnswer only from what you retrieve. You get several tool rounds per question.\\n\\nGround every answer in retrieved corpus from Help search (digisearch_semantic, index `occ_help`, help docs)\\nand/or Knowledge vault (digivault_search_notes, digivault_search_tag, digivault_backlinks) under `clients/online-compliance-center/`.\\nAlways cite help article URLs or PDF source paths from metadata.\\n\\nSearch results are excerpts, not whole documents. A row marked \\\"truncated\\\": true\\nmeans you have not seen that note \\u2014 run digivault_search_notes again with a narrower query\\naimed at that note (same path prefix) until you have read the part that answers, before answering. An unmarked row is not a promise of completeness:\\nevery row is a preview. Always do this when the question involves a\\nprocedure, a list of steps, a table, a count, or the words every, all, or which:\\nhelp PDFs are stored one page per note, and an excerpt routinely stops before the\\nstep that answers the question.\\n\\nNever say a policy, step, or exception does not exist unless you searched for it\\nspecifically and looked. If all you saw was a truncated excerpt, say what it showed and that the\\nrest was not loaded.\\n\\nAnswer questions about OCC policies, procedures, FAQ topics, and public help\\nPDFs. Do not invent product features, pricing, or portal capabilities not\\npresent in the retrieved sources. E-learning / YouTube videos are out of\\nscope for this corpus \\u2014 say so if asked.\\n\\nDo not cite digithings or digiquant internal architecture docs. If the\\ncorpus has no grounded answer, say so clearly.\\n\\nTicket content is not part of this corpus. For ticket questions use the read-only zammad tools, and say so clearly if they do not ground the answer.\\n\\nSkills: for any ticket question, first call list_skills, then get_skill for the matching workflow (summarize-tickets-by-topic for summaries or trends, find-precedent-tickets for how a similar issue was solved) and follow it. Always get_skill present-results before writing the final answer and follow its display rules.\"}}"
+
+# Market-data base for GET /v1/market/closes and /v1/market/tickers (declared in
+# config/contract/contract.yaml). The standalone dashboard-api worker already
+# carries this var; the fold (#4689) forwards the worker env verbatim and this key
+# was missed, so the embedded dashboard-api resolved relative URLs, got no universe,
+# and served /benchmarks with every series empty. Unset means closes resolve to an
+# empty map (CONTRACT §6.7, R2-API-only, no Supabase fallback). Keep it equal to the
+# dashboard client's NEXT_PUBLIC_MARKET_DATA_URL.
+MARKET_DATA_URL = "https://graph.digithings.ai"
+
+# BEGIN config-contract (generated by scripts/render_config_contract.py — do not hand-edit)
+DT_VARIANT = "hosted"
+DT_TARGET = "hosted"
+DT_BASE_URL = "https://digithings.ai"
+# END config-contract

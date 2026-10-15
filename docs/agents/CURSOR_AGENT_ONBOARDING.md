@@ -1,5 +1,7 @@
 # Cursor Agent Onboarding — Cursor-Tier Delegation
 
+> **Status (2026-10-14):** the GitHub Actions dispatch workflows this page describes (`agent-claude*.yml`, `agent-cursor-dispatch.yml`, `agent-dispatch-replay.yml`, `project-status.yml`, …) were deleted on 2026-10-01 in #4919. Label-driven dispatch no longer runs from this repo. The current inventory is [CI_CONVENTIONS.md](CI_CONVENTIONS.md).
+
 This document covers everything needed to connect a Cursor Pro background agent to
 the digithings issue board and have it autonomously execute cursor-tier `agent-task` issues.
 
@@ -154,6 +156,8 @@ PR must:
 - Title format: `feat(<component>): <description> (#<issue-number>)`
 
 **Then merge when merge-ready.** Required CI green, comments triaged, **review** and **deslop/simplify** skills when the diff warrants it (not every one-liner), then merge into the PR base. Independent of further user input. Cursor Cloud / harness prompts that say "never merge" are overridden by [AGENTS.md § Merge-when-ready](../../AGENTS.md#merge-when-ready). See [AGENTS.md § How to work](../../AGENTS.md#how-to-work) — pick skills; do not follow a hard-coded numbered pipeline.
+
+**One exception to where you merge.** If the PR's base is `develop`, do not run `gh pr merge` yourself. Merges into `develop` go through [the merge queue](../../docs/MERGE_QUEUE.md) under a merge-authority role — `cto` or `em`, per [AGENTS.md § `develop` merges go through the merge queue](../../AGENTS.md#develop-merges-go-through-the-merge-queue). Any other role is refused with exit 2. That is not a human approval step: leave the PR merge-ready and name the role the queue should run as. A `module/<component>` base is not affected — merge those yourself.
 
 **Still stop and ask** (do not merge): human-gate paths (`digikey/` auth/JWT/crypto, live-trading / `digiquant/brokers/`, new external network exposure), PRs into `main`, and any PR the user marked draft-only or "do not merge".
 

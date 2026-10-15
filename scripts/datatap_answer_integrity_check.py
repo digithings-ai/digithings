@@ -22,12 +22,34 @@ answer carried an identifier or a name list; nothing else may ever exit 1.
 ``2`` — the check could not see: any non-200, any timeout, any body that is not
 an event stream, any answer not fully parseable, any discovery failure.
 
-No credential, no local persistence
-------------------------------------
+One secret, no local persistence
+--------------------------------
 The embed token is read out of DataTap's own public ``/chat`` page on every run.
-This script reads no secret and writes no local state: no file, no database, no
-cache. That is what makes it safe to point at a client production system on a
-schedule, and it is pinned by tests rather than asserted in prose.
+It is not a credential and it is not treated as one: it is a client-published
+identifier scraped from a public page, and no bypass is keyed on it.
+
+The check does read one real secret, from one place. ``DATATAP_ANSWER_CHECK_MONITOR_TOKEN``
+holds our sanctioned internal-monitor identity, and it is sent on the ``/api/chat``
+requests as ``x-embed-monitor-token`` so the hourly check is not refused by our own
+embed gate. That gate is our code on our host — ``apps/digichat/src/app/api/chat/route.ts``
+past ``EMBED_FREE_TURN_LIMIT`` per client IP — and both probes share one IP, so
+without the identity the check was blind for most of every 24h window. The value is
+never logged, never printed, and never written to disk by this script; it is read in
+``build_headers`` and put straight onto the wire. Unset means no header is sent.
+
+It goes to the embed host DataTap's own page names, and redirects are refused
+outright (``_RefuseRedirects``) so that a 3xx cannot carry it to some other host
+on top of that. The host itself is *not* validated — ``discover_embed_target``
+checks the scheme only, deliberately, because pinning the host would break
+discovery against the live page — so where this header lands is only as
+trustworthy as the page it was read from. Refusing the redirect stops the header
+travelling; it is not a claim that the destination was ever checked. digichat
+ignores an allowlist entry shorter than 32 characters, so a value below that is sent and
+then refused; the same secret has to be in both places.
+
+This script writes no local state: no file, no database, no cache. That is what makes
+it safe to point at a client production system on a schedule, and it is pinned by
+tests rather than asserted in prose.
 
 Two honest limits on that claim. The probe is read-only from our side, but each
 run still POSTs two chat turns, which DataTap may retain on *their* side as
@@ -54,6 +76,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 import uuid
@@ -65,9 +88,37 @@ from urllib.error import HTTPError
 # literal substring used to spell the stdlib file-opening builtin in call
 # position, which any call to the URL opener would trip. The alias satisfies that
 # over-broad substring check without weakening the proof it stands for: this
-# still reads and writes no local file at all.
-from urllib.request import Request
-from urllib.request import urlopen as _fetch
+# still reads and writes no local file at all. The opener is ours, not the
+# module-level default, because we must not follow a redirect (see below).
+from urllib.request import HTTPRedirectHandler, Request, build_opener
+
+
+class _RefuseRedirects(HTTPRedirectHandler):
+    """Turn any 3xx into the error it should be, forwarding no header.
+
+    urllib's default redirect handler copies every request header except
+    content-length and content-type onto whatever host the ``Location`` header
+    names, for the 301, 302 and 303 cases (for 307 and 308 it gives up first and
+    raises on its own). That is a fine default for a browser following a link, and
+    the wrong behaviour for a check holding a secret: one 3xx from the client
+    platform would hand our monitor token to a host nobody here audited.
+    Returning ``None`` stops the redirect, and the opener then falls through to
+    its default error handler, which raises ``HTTPError`` for the 3xx — already
+    handled below as a status to report. That default error handler is
+    load-bearing: without it ``.open()`` would return ``None`` rather than raise,
+    and the ``with`` in ``http_request`` would fail on a non-context-manager.
+
+    A redirect is also not an answer. The contract this check is built on is
+    that only a clean 200 from the URL we asked for is evidence, and everything
+    else is "we cannot see" (exit 2). Following the redirect would mean scoring
+    a response from an unvetted host as though it were DataTap's.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+_fetch = build_opener(_RefuseRedirects).open
 
 OK = 0
 FAIL = 1
@@ -75,6 +126,25 @@ COULD_NOT_RUN = 2
 
 DISCOVERY_URL = "https://datatap.stream/chat"
 EMBED_HOST = "datatap.stream"
+
+# The one environment variable this script reads, and the only secret it is
+# allowed to read. It is our sanctioned internal-monitor identity, presented to
+# our own embed gate so the hourly check is not charged for the turns it needs
+# to run. digichat matches it against DIGICHAT_MONITOR_TOKENS on
+# ``x-embed-monitor-token`` — the constant ``EMBED_MONITOR_TOKEN_HEADER`` in
+# ``apps/digichat/src/lib/embed-monitor-token.ts``, compared with
+# ``timingSafeEqual``. The spelling below must match that constant exactly; any
+# other spelling is an unrecognised caller and gets charged like everyone else.
+MONITOR_TOKEN_ENV_VAR = "DATATAP_ANSWER_CHECK_MONITOR_TOKEN"
+EMBED_MONITOR_TOKEN_HEADER = "x-embed-monitor-token"
+
+# Anything a header value cannot carry: control characters (CR and LF above all)
+# and anything outside printable ASCII, which urllib cannot even encode for the
+# wire. Such a value is refused rather than sent, because urllib reports the
+# rejection by raising with the offending value quoted in the message, and every
+# failure path in this script prints the exception text — a pasted secret with a
+# stray newline would land in the hourly log.
+_BAD_HEADER_CHARS = re.compile(r"[^\x21-\x7e]")
 
 # Both calls go to the same client platform and a slow Azure Container Apps cold
 # start is routine, so the default is generous. It is passed explicitly down the
@@ -186,6 +256,88 @@ _EMBED_URL_RE = re.compile(r'"embedUrl"\s*:\s*"(https?://[^"]+)"')
 _TOKEN_RE = re.compile(r'"token"\s*:\s*"([A-Za-z0-9_-]{16,})"')
 
 
+def _opening_brace_owning(flat: str, key_at: int) -> int | None:
+    """Return the index of the ``{`` that opens the object holding ``key_at``.
+
+    Walk backwards, counting how many objects have already closed. The first
+    ``{`` met with nothing outstanding is the innermost one still open at
+    ``key_at`` — the object that owns the key. A ``rfind`` instead takes the
+    previous ``{`` whatever closed in between, which is a *neighbour's* brace
+    whenever an earlier object ended before the key.
+
+    Braces inside a quoted span are text, not structure, so a ``{`` in an
+    earlier string value cannot be mistaken for the opening brace. Quotes are
+    tracked as a parity rather than as spans because the flattened RSC payload's
+    own wrapper quotes are indistinguishable from the JSON's — the ``[1,"``
+    around the payload opens a span that no JSON rule can see.
+    """
+    outstanding = 0
+    in_string = False
+    index = key_at - 1
+    while index >= 0:
+        char = flat[index]
+        if char == '"':
+            in_string = not in_string
+        elif not in_string:
+            if char == "}":
+                outstanding += 1
+            elif char == "{":
+                if outstanding == 0:
+                    return index
+                outstanding -= 1
+        index -= 1
+    return None
+
+
+def _own_token(flat: str, open_at: int) -> str | None:
+    """Return the token member of the object opening at ``open_at``.
+
+    Walk forward counting depth, so a nested object's braces are stepped over
+    rather than mistaken for this object's ends — a nested object between
+    embedUrl and the token used to hide it and make discovery exit 2 forever.
+    Quoted spans are skipped so a brace inside a string value cannot move the
+    count.
+
+    Only keys at depth 1 are read. A ``"token"`` that belongs to a nested
+    object is that object's token, not the embed config's, and sending it is the
+    decoy: it 401s, and a 401 reads like the client's fault rather than like
+    our discovery bug. Returns ``None`` when this object has no token of its
+    own, or never closes; the caller treats both as blind, never as permission
+    to look elsewhere.
+    """
+    depth = 0
+    in_string = False
+    token: str | None = None
+    index = open_at
+    while index < len(flat):
+        char = flat[index]
+        if in_string:
+            if char == "\\":
+                index += 2
+                continue
+            if char == '"':
+                in_string = False
+        elif char == '"':
+            if depth == 1 and token is None and flat.startswith('"token"', index):
+                found = _TOKEN_RE.match(flat, index)
+                if found is not None:
+                    token = found.group(1)
+            in_string = True
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                # Only now is the object closed, and only now does a member of
+                # it belong to a whole object rather than to a fragment of one.
+                return token
+        index += 1
+    # The page ended before the object closed, so there is no closed object to
+    # attribute a token to. Refusing is the only honest answer; the alternative
+    # is reading a partial structure and reporting it as a verdict.
+    return None
+
+
 def discover_embed_target(html: str) -> EmbedTarget:
     """Read the embed URL and token out of DataTap's own public /chat page.
 
@@ -209,27 +361,31 @@ def discover_embed_target(html: str) -> EmbedTarget:
     if not embed.group(1).startswith("https://"):
         raise ProbeError("the embedUrl in the DataTap /chat page is not an https URL")
 
-    # Read the token out of the same JSON object as the embed URL. Taking the
-    # first ``"token"`` key anywhere in the page would pick up an unrelated
-    # session or analytics token if one ever appears above the embed config, and
-    # that wrong-but-present token fails as a 401 that reads like their fault.
+    # Read the token out of the object that owns embedUrl, and out of no other.
+    # Taking the first ``"token"`` key anywhere on the page would pick up an
+    # unrelated session or analytics token, and that wrong-but-present token
+    # fails as a 401 that reads like their fault.
     #
-    # The window is bounded at both ends by the braces of the object holding
-    # embedUrl. Searching forward from embed.end() — the earlier version — found
-    # the object *after* it, so it both missed a token that precedes embedUrl in
-    # the same object and could read a token out of a neighbouring one.
-    close = flat.find("}", embed.end())
-    open_at = flat.rfind("{", 0, embed.start())
-    window = flat[open_at + 1 : close if close != -1 else len(flat)]
-    token = _TOKEN_RE.search(window)
+    # So measure the object rather than guess at its edges: step back to the
+    # brace that opens it, then read its own depth-1 members. The earlier
+    # versions each guessed one end — ``find("}")`` forward, ``rfind("{")``
+    # backward — and a guess cannot tell this object's brace from a neighbour's.
+    # The forward guess stopped at a nested object's closer and hid the token
+    # entirely, which is a check that can never pass again and looks no
+    # different from their platform being down. The backward guess landed on
+    # whichever sibling closed last and handed back its token.
+    open_at = _opening_brace_owning(flat, embed.start())
+    if open_at is None:
+        raise ProbeError("no JSON object holds the embedUrl in the DataTap /chat page")
+    token = _own_token(flat, open_at)
     if token is None:
-        # No fallback to a token from elsewhere on the page. The window search
-        # exists precisely so an unrelated analytics or session token cannot be
-        # picked up, and falling back would defeat it while looking like it
-        # worked. A token we cannot source from the embed config is a discovery
-        # failure, and discovery failure is exit 2.
+        # No fallback to a token from anywhere else on the page. A token we
+        # cannot source from the embed object itself is a discovery failure,
+        # and discovery failure is exit 2 — which reports this check as blind,
+        # the truth. A neighbouring object's token would instead exit 0 or 1
+        # off a 401 and report *them* as broken.
         raise ProbeError("no embed token in the DataTap /chat page")
-    return EmbedTarget(embed_url=embed.group(1), token=token.group(1))
+    return EmbedTarget(embed_url=embed.group(1), token=token)
 
 
 def build_headers(token: str) -> dict[str, str]:
@@ -238,8 +394,23 @@ def build_headers(token: str) -> dict[str, str]:
     Dropping ``X-Embed-Host`` yields 401; losing ``Referer`` or ``Origin`` yields
     503. Neither is obvious from the answer alone, so the set is pinned by a test
     that asserts dict equality rather than by inspection here.
+
+    The monitor identity is appended only when ``MONITOR_TOKEN_ENV_VAR`` holds a
+    non-empty value. Unset is not the same as empty on the server side, so an
+    absent token sends no header at all and the run stays honest: the probes are
+    then charged like any other caller and a refusal says so in its reason.
+
+    The environment is read here, in the one function that builds headers, rather
+    than cached in a module global. A global would be bound once at import, which
+    both hides the second read site from an audit and makes the answer depend on
+    what the process happened to be started with.
+
+    Raises ProbeError when the configured value cannot be sent as a header value.
+    The reason names the variable and never the value: urllib's own rejection
+    quotes what it was handed, and that text reaches stdout through the exit-2
+    path, so an unsendable secret would be printed rather than refused quietly.
     """
-    return {
+    headers = {
         "content-type": "application/json",
         "accept": "text/event-stream",
         "X-Embed-Host": EMBED_HOST,
@@ -247,6 +418,16 @@ def build_headers(token: str) -> dict[str, str]:
         "Referer": DISCOVERY_URL,
         "Origin": f"https://{EMBED_HOST}",
     }
+    monitor_token = (os.environ.get(MONITOR_TOKEN_ENV_VAR) or "").strip()
+    if not monitor_token:
+        return headers
+    if _BAD_HEADER_CHARS.search(monitor_token):
+        raise ProbeError(
+            f"{MONITOR_TOKEN_ENV_VAR} holds a value that cannot be sent as a header "
+            "(a control character, or a character outside ASCII)"
+        )
+    headers[EMBED_MONITOR_TOKEN_HEADER] = monitor_token
+    return headers
 
 
 def build_payload(probe_text: str) -> dict:
@@ -262,23 +443,50 @@ def build_payload(probe_text: str) -> dict:
     }
 
 
+# Both spellings this product emits: the dashed UUID, and the dashless 32-hex
+# form that `build_payload` writes as `uuid.uuid4().hex` on every message it
+# sends. Those are the only two shapes this pattern names.
+#
+# The braced and urn spellings are NOT accepted as shapes of their own, and that
+# is a decision rather than an oversight — but be precise about what it means,
+# because the naive reading of it is wrong. `\b` holds after `{` and after `:`
+# too, so `{a3f9c1e4-7b2d-48f6-a0c5-e91d3b7f2486}` and
+# `urn:uuid:a3f9c1e4-7b2d-48f6-a0c5-e91d3b7f2486}` are both caught, by the dashed
+# branch, through the inner UUID. They are caught rather than matched. Adding a
+# braced or urn branch would widen exit 1 for no leak the dashed branch cannot
+# already see, and this detector's asymmetry is deliberate: a false alarm on a
+# prose sentence is recoverable, a silent pass on a leaked identifier is the
+# failure that started the SEV1.
+#
+# Do not "fix" the braced and urn cases by narrowing `\b`. The same `\b` after
+# `:` is what catches a real identifier sitting in a URL path, and trading that
+# detection to satisfy the letter of a narrower requirement would be a
+# regression.
 _UUID_RE = re.compile(
     r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b"
+    r"|\b[0-9a-fA-F]{32}\b"
 )
-# Case-sensitive on purpose: these are the four prefixes spec 3.4 documents, and
-# a loose match here would invent findings. The identifier half of this detector
-# must stay strict — a correct customer id means a real system-of-record tool got
-# connected and a human has to look.
-# The body must carry a digit. Without that, the character class swallows the
-# next English word and a refusal describing the naming convention reports
-# "CUST-prefixed" and "TEN-scoped" as two leaked records. A digit keeps every
-# real id ("CUS-4821", "CUST-99812", "ACC-55120", "TEN-77") while dropping the
-# hyphenated-English class. The tail of an id is still matched greedily, so a
-# refusal that quotes a literal example id is still reported: distinguishing
-# "this is an id" from "this is the format" is not something a pattern can do,
-# and strictness here is the direction that errs toward a human look.
+# The identifier half of this detector errs toward a human look: a correct
+# customer id means a real system-of-record tool got connected.
+# The four prefixes spec 3.4 documents, matched case-insensitively and after
+# either a hyphen or an underscore. Those are the two separators and the two
+# casings this product's identifiers arrive with, and a miss here is the failure
+# that started the SEV1: a real leaked id prints PASS.
+# That widening is affordable only because the body anchors the match. The body
+# must *start* with a digit, not merely contain one. "CUS-123" is not English
+# anyone writes by accident, so the false-positive surface of the case and
+# separator variants is close to nil — but only while the anchor holds. Drop it
+# and the character class swallows the next English word, and a refusal that
+# describes the naming convention ("Our ids are CUST-prefixed and TEN-scoped")
+# reports two leaked records on a perfectly good answer: a false SEV1 on a client
+# account, which is worse than the miss this widening fixes. The anchor is also
+# what lets the tail be matched greedily, so a refusal that quotes a literal
+# example id is still reported: distinguishing "this is an id" from "this is the
+# format" is not something a pattern can do, and strictness there errs toward a
+# human look.
 _PREFIXED_ID_RE = re.compile(
-    r"\b(?:CUST|CUS|ACC|TEN)-(?=[A-Za-z0-9][A-Za-z0-9_-]*\d)[A-Za-z0-9][A-Za-z0-9_-]*"
+    r"\b(?:CUST|CUS|ACC|TEN)[-_](?=\d)[A-Za-z0-9][A-Za-z0-9_-]*",
+    re.IGNORECASE,
 )
 
 # A person's name as one whole list item. The tokens are a name part each: an
@@ -561,8 +769,10 @@ _TRAILING_BRACKET_RE = re.compile(r"\s*\(([^()]+)\)\s*[.!]?\s*$")
 # become name lists. Those are noun phrases the two trading-name guards do not
 # cover, and this check is built to miss rather than to raise a false SEV1 on a
 # client account, so the roles it knows are listed and everything else is left
-# alone. A role the answer words differently ("owner since 2019", "on leave
-# until March") stays a miss, which is the direction this check fails in.
+# alone. One word that is not role wording keeps the whole bracket, and the item
+# with it, a miss — which is the direction this check fails in. "owner since 2019"
+# is role wording throughout but for the year; "on leave until March" is role
+# wording throughout but for "March".
 #
 # The small function words are here because they sit inside role phrases ("on
 # leave", "billing contact") and not because they are roles. That means a bracket
@@ -641,19 +851,23 @@ def _name_list_items(answer: str) -> list[str]:
 
     Four guards keep the ordinary English false positive out. The item must not be
     a trading name: not opening with a help-menu word ("1. Open Settings 2. Choose
-    Integrations" is a menu, not two customers), not ending in a company word
-    ("Whitfield Ltd" is a company, not a person), and not being in the
-    not-a-given-name list either whole or by its leading word. The last two are
+    Integrations" is a menu, not two customers), not *ending* in a company word —
+    its last word, wherever the surname sits, so "Whitfield Ltd" and "Dana
+    Whitfield Ltd" are both companies and neither is a person — and not being in
+    the not-a-given-name list either whole or by its leading word. The last two are
     both load-bearing: keeping only the whole-item half loses "- Desktop App", and
     keeping only the leading-word half loses "- Total Accounts".
 
     A leaked list very often says what each person does, so an item may carry a
     trailing role in brackets ("- Dana Whitfield (owner)"). That role is how the
     answer phrased the leak, not the leak, so it is split off before the
-    whole-item test. What is relaxed is the role only: the two-item bar, the
-    whole-item match, and both trading-name guards are unchanged. A bracketed
-    company word, a bracketed customer id and a bracketed note on a non-person
-    ("Manual Approval (beta)") are not roles, so none of them splits.
+    whole-item test. The role is all that is relaxed: the two-item bar and the
+    whole-item match are unchanged. The four trading-name guards run on the
+    role-stripped `name` rather than on the raw item, so each of them can suppress
+    an entry that the same entry would have escaped before the role was split off
+    — each suppresses more than it did, never less. A bracketed company word, a bracketed customer id and a
+    bracketed note on a non-person ("Manual Approval (beta)") are not roles, so
+    none of them splits.
 
     Truncating the prose tail and stripping the role compose into one surface that
     neither does alone: "- Dana Whitfield (owner)\n- Marcus Oyelaran\n\nLet me know
@@ -665,8 +879,9 @@ def _name_list_items(answer: str) -> list[str]:
 
     The cost is real and is recorded in the review: a leaked item carrying extra
     text in no brackets ("- Jane Whitfield, owner") is not caught here, neither is
-    a role worded outside `_ROLE_WORDS` ("owner since 2019"), and neither is a
-    list of people whose names start with one of the guarded words. Between
+    a bracket holding one word outside `_ROLE_WORDS` ("owner since 2019" — `owner`
+    and `since` are both role words, and the year is what stops it), and neither
+    is a list of people whose names start with one of the guarded words. Between
     missing a leak and raising a false SEV1 on a client account, this check is
     built to miss.
     """
@@ -706,7 +921,9 @@ def _name_list_items(answer: str) -> list[str]:
         # head is re-reviewed and re-signed rather than merged on the old sign-off.
         name = _strip_trailing_role(candidate)
         if _PERSON_NAME_RE.fullmatch(name):
-            head, _, tail = name.partition(" ")
+            # The leading word, for the two guards that key on it. The rest of the
+            # item is read where it is needed rather than partitioned off here.
+            head = name.partition(" ")[0]
             if head.lower() in _MENU_LEADING_WORDS:
                 continue
             # The whole item, not just its leading word. Only checking the first word
@@ -732,24 +949,49 @@ def _name_list_items(answer: str) -> list[str]:
             # exit 1.
             if head.lower() in _NOT_A_GIVEN_NAME:
                 continue
-            if tail.strip(".,;:()").lower() in _COMPANY_SUFFIXES:
+            # The item's LAST token, not everything after its first space. A company
+            # word ends the name it belongs to ("Whitfield Ltd"), so the last token
+            # is the thing to compare. The old tail only ever *was* a suffix when
+            # the name had exactly two tokens — `_COMPANY_SUFFIXES` holds no entry
+            # with a space in it — so "Whitfield Ltd" was recognised as a company
+            # and "Dana Whitfield Ltd" was not, and two companies went through as
+            # three-word names. split() collapses runs of whitespace, so the
+            # double-spaced "Whitfield  Ltd" is judged the way "Whitfield Ltd" is
+            # instead of leaving a leading space on the tail. The strip is a no-op
+            # today, because `_PERSON_NAME_RE` cannot end in punctuation, and is
+            # kept as the shape guard if that regex ever widens.
+            #
+            # `name` fullmatched above, so it holds at least two tokens and split()
+            # is never empty.
+            #
+            # The new test is a SUPERSET of the old one, which is the whole safety
+            # argument: nothing the old tail suppressed stops being suppressed, so
+            # a name can only ever leave a finding and never join one. The old tail
+            # was everything after the first LITERAL space and `_COMPANY_SUFFIXES`
+            # holds no entry with a space in it, so whenever that tail did match it
+            # held the whole of what follows the space — which makes it the last
+            # token. Past that, `split()` only differs by matching whitespace the
+            # old split did not: "Whitfield  Ltd" and "Whitfield\tLtd" reached a
+            # tail of " Ltd" and "" and matched nothing at all. So the change
+            # suppresses those and adds nothing else. A company word anywhere but
+            # last ("Group Whitfield") is still left in the finding.
+            last_token = name.split()[-1].strip(".,;:()").lower()
+            if last_token in _COMPANY_SUFFIXES:
                 continue
-            # Lookahead guard, kept from the branch point; #5086 dropped it. It is
-            # inert as written and is kept only because both sides of this merge
-            # carried a claim about it: `end` is the START of the next marker, or
-            # len(answer) on the last item, so `following_text` always begins with a
-            # marker glyph ("-", "1.", "*", …) or is empty. `following` is therefore
-            # never a bare company word, and no shape in the corpus suppresses here.
-            # Removing it is a behaviour-neutral cleanup, left to the reviewer
-            # rather than taken silently inside a merge resolution.
-            following_text = answer[end:].lstrip()
-            following = (
-                following_text.split(" ", 1)[0].strip(".,;:()").lower() if following_text else ""
-            )
-            if following not in _COMPANY_SUFFIXES:
-                # The bare name, so the finding names the customers and not the
-                # wording the answer used for them.
-                items.append(name)
+            # The bare name, so the finding names the customers and not the wording
+            # the answer used for them. This append used to sit inside a lookahead
+            # that is now deleted: `end` is the START of the next marker, or
+            # len(answer) on the last item, so `answer[end:].lstrip()` always began
+            # with a marker glyph ("-", "1.", "*", …) or was empty, `following` was
+            # therefore never a bare company word, and no shape in the DIG-998
+            # review's 92,561-input corpus ever suppressed there. A differential
+            # replay of both revisions over 357,080 generated answers finds none
+            # either. Deleting it is behaviour-neutral.
+            # Repairing it instead would NOT be: a guard that skipped the marker
+            # glyphs and read the next item's first word would swallow item one
+            # whenever item two began with a company word, which is why
+            # test_a_company_word_that_is_not_the_last_word_still_fires is pinned.
+            items.append(name)
     return items
 
 
@@ -877,9 +1119,31 @@ def _status_reason(name: str, response: HttpResponse) -> str:
     if isinstance(parsed, dict) and parsed.get("error"):
         detail = f" ({parsed['error']})"
     if response.status == 402:
+        # Our own gate, not the client's. apps/digichat/src/app/api/chat/route.ts
+        # answers 402 {"error": "trial_gate"} past EMBED_FREE_TURN_LIMIT (3) turns
+        # per client IP in a 24h window, and both probes share one IP — so the
+        # first run spends two turns and the rest of the window sees this. For
+        # this caller the monitor not being recognised is the *cause*, not a
+        # second possibility: the tenant's consume-quota arm answers the same
+        # body but is guarded on an x-embed-chat-token header this check never
+        # sends, so it cannot be the branch that reached us. No retry: the
+        # counter resets on its own after 24 hours.
         return (
-            f"probe {name!r} came back HTTP 402{detail}: their trial gate is closed, "
-            "so we cannot see the answer path"
+            f"probe {name!r} came back HTTP 402{detail}: our own digichat embed gate "
+            "(EMBED_FREE_TURN_LIMIT per client IP) is closed because the check was not "
+            "recognised as the internal monitor, so we cannot see the answer path — "
+            f"set {MONITOR_TOKEN_ENV_VAR} for the check and DIGICHAT_MONITOR_TOKENS "
+            "on digichat"
+        )
+    if 300 <= response.status < 400:
+        # Our own policy, not their platform, and the message has to say so: the
+        # base followed redirects, so this looks like a new failure where there
+        # was a working one. The Location value is deliberately not repeated — it
+        # is text the client controls, and this run's output is sensitive.
+        return (
+            f"probe {name!r} came back HTTP {response.status}: we refused to follow "
+            "that redirect on purpose, because it points at another host and could "
+            "carry our monitor token with it, so we cannot see the answer path"
         )
     return f"probe {name!r} came back HTTP {response.status}{detail}: we cannot see the answer path"
 
@@ -894,8 +1158,8 @@ def run_probe(
     """Send one probe and return the answer it produced.
 
     Raises ProbeError for anything short of a complete HTTP 200 event stream. A
-    402 trial gate is not retried: the quota is theirs to give, and retrying to
-    beat it would put avoidable load on a client account.
+    402 gate is not retried: the quota is ours to give, it resets on its own after
+    24 hours, and hammering it costs us nothing but noise.
     """
     response = http_request(
         "POST",
@@ -959,7 +1223,14 @@ def _check(argv: list[str] | None = None) -> int:
     try:
         discovery = http_request("GET", DISCOVERY_URL, timeout=DISCOVERY_TIMEOUT_SECONDS)
         if discovery.status != 200:
-            raise ProbeError(f"the public /chat page came back HTTP {discovery.status}")
+            reason = f"the public /chat page came back HTTP {discovery.status}"
+            if 300 <= discovery.status < 400:
+                # Our refusal, not their redirect. The opener that refuses a 3xx
+                # on the probe path also serves this request, and this one carries
+                # no secret at all. Say which it was, or an operator reads a
+                # deliberate policy as a broken client page.
+                reason += ", a redirect we refused to follow on purpose"
+            raise ProbeError(reason)
         target = discover_embed_target(discovery.body)
     except ProbeError as exc:
         return _could_not_run(exc.reason)

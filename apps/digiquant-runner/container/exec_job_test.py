@@ -405,8 +405,8 @@ def _check_phase2(commands: dict[str, Any]) -> None:
     if 'binding = "ARCHIVE"' not in wrangler or 'bucket_name = "digithings-archive"' not in wrangler:
         raise SystemExit("house ledger binding ARCHIVE on digithings-archive is required")
     runner_ts = (root / "apps/digiquant-runner/src/runner.ts").read_text(encoding="utf-8")
-    if 'sleepAfter = "2m"' not in runner_ts or '"30m"' not in runner_ts:
-        raise SystemExit("idle sleepAfter stays 2m and busy window stays 30m")
+    if 'sleepAfter = "1m"' not in runner_ts or '"30m"' not in runner_ts:
+        raise SystemExit("idle sleepAfter stays 1m and busy window stays 30m")
     if ignore.count("!scripts/execution_cron_check.py") != 1:
         raise SystemExit("probe wrapper must be re-included in .dockerignore")
     scripts_at = ignore.find("\nscripts\n")

@@ -269,7 +269,7 @@ resp = client.chat.completions.create(
           { name: "total_pnl", type: "number", description: "Total P&L." },
           { name: "sharpe_ratio", type: "number | null", description: "Sharpe ratio." },
           { name: "num_trades", type: "integer", description: "Number of trades executed." },
-          { name: "status", type: "string", description: '"completed" | "failed".' },
+          { name: "status", type: "string", description: '"ok" | "partial" | "error".' },
         ],
         examples: [
           {
@@ -640,7 +640,7 @@ for hit in r.json()["results"]:
     ],
     notes: [
       "Committed OpenAPI: docs/openapi/digichat.json (authored; path existence checked in tests/contracts).",
-      "Self-host: digichat builds from source — there is no published digichat image on GHCR (publish workflow removed in the strict-essentials cut; DIG-1242). See infra/self-host/compose.ghcr.yml.",
+      "Self-host: digichat builds from source — there is no published digichat image on GHCR yet (the publish workflow builds one per digichat-vX.Y.Z tag; none has been cut since digichat-v2.3.2). See infra/self-host/compose.ghcr.yml.",
     ],
   },
 

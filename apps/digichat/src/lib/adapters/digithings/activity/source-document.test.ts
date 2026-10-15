@@ -90,4 +90,9 @@ describe("ragToolDisplayName", () => {
     expect(ragToolDisplayName("digivault_get_note")).toBe("digivault_get_note");
     expect(ragToolDisplayName(undefined)).toBe("digisearch");
   });
+
+  it("keeps tenant per-index digisearch tool names so the result joins its call row", () => {
+    expect(ragToolDisplayName("digisearch_zammad_tickets")).toBe("digisearch_zammad_tickets");
+    expect(ragToolDisplayName("digisearch_occ_help")).toBe("digisearch_occ_help");
+  });
 });

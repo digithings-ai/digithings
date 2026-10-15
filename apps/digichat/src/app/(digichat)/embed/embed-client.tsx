@@ -676,11 +676,6 @@ function EmbedChat({
     consumePageContext,
   ]);
 
-  const openByok = useCallback((seed?: string) => {
-    setProviderSeed(seed);
-    setComposerMenu("provider");
-  }, []);
-
   const onByokSaved = useCallback(
     (key: string, provider: BYOKProvider, model: string) => {
       pendingByokRemediateRef.current = false;
@@ -841,9 +836,8 @@ function EmbedChat({
   // render of its own. `sentHeld` is what makes the release idempotent, since
   // the effect re-runs on every chat identity change while the answer streams.
   //
-  // Call chat.send (not wrappedSend) here: wrappedSend is defined below and
-  // would re-capture this effect. Arm the deferred gate charge ourselves so
-  // the held fourth question counts the same as any other send (charged only
+  // Call chat.send directly. Arm the deferred gate charge ourselves so the
+  // held fourth question counts the same as any other send (charged only
   // once it settles without error — see the settle effect near `chat`).
   useEffect(() => {
     const question = heldQuestionRef.current;
@@ -932,42 +926,7 @@ function EmbedChat({
   const suggestions = useEmbedSuggestions(uiParams.suggestions, tenantCfg);
   const headerTitle = tenantCfg.title;
 
-  const wrappedSend = useCallback(
-    (question: string, opts?: { forceTool?: string }) => {
-      // byok_only: require a key before any send
-      if (llmAccess === "byok_only" && !byokIsSet) {
-        heldQuestionRef.current = question;
-        heldForceToolRef.current = opts?.forceTool;
-        pendingByokRetryRef.current = true;
-        setComposerMenu("provider");
-        return;
-      }
-      // Out of free turns: HOLD the question and raise the form. Dropping it
-      // on the floor (what this did) meant the visitor's fourth question just
-      // vanished — they had typed it, pressed send, and got nothing back.
-      if ((gate.locked || trialLocked) && !ungated) {
-        heldQuestionRef.current = question;
-        heldForceToolRef.current = opts?.forceTool;
-        lastGatedPost.current = null;
-        setGateRequest((prev) => ({ requested: true, nonce: prev.nonce + 1 }));
-        return;
-      }
-      const hadCtx = pageContextRef.current != null;
-      const ctx = consumePageContext();
-      void chat.send(question, { ...opts, pageContext: ctx });
-      emit("embed_turn_submitted", {
-        accent,
-        turn: gate.turns + 1,
-        byok: byokIsSet,
-        page_context: hadCtx,
-      });
-      if (!ungated) armGateCharge();
-    },
-    [chat, gate, trialLocked, ungated, accent, byokIsSet, llmAccess, consumePageContext],
-  );
-
-
-  // Stock Composer no longer calls wrappedSend — reattach hold/charge via sendGate.
+  // Hold and charge go through sendGate. The stock composer calls that, not a local wrapper.
   const sendGate = useMemo(
     () => ({
       shouldHold: (raw: string) => {
@@ -1073,6 +1032,9 @@ function EmbedChat({
       hasDigisearch: catalog.some((e) => e.id === "digisearch"),
       hasVault: catalog.some((e) => e.id === "digivault"),
       hasSessions: false,
+      // The embed surface has no artifact panel. Gating the row off is why
+      // openArtifacts is never reached here.
+      hasArtifacts: false,
       allowUserMcp: stockClient.mcp.allowUserServers === true,
       allowAddMcp: stockClient.mcp.allowAddForm === true,
       catalogTools,
@@ -1111,6 +1073,7 @@ function EmbedChat({
         setComposerMenu("language");
       },
       openSessions: () => {},
+      openArtifacts: () => {},
       newThread: () => {
         setChatPrefs({
           ...DEFAULT_EMBED_CHAT_PREFS,

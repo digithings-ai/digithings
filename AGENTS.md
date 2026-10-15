@@ -31,13 +31,37 @@ Use these skills **where they are relevant**, not on every diff:
 - **Review** (`/review`, in-session fresh-context, `review-and-ship`) — when [CODE_REVIEW_POLICY.md](docs/agents/CODE_REVIEW_POLICY.md) needs a hatch on the record. A typo-only one-liner does not need a full pass if another hatch already applies. Do **not** route through the CodeRabbit Cursor plugin.
 - **Deslop / simplify** — when the diff introduced AI slop or needless complexity. Not every one-liner.
 
-Do not stop at "PR is ready, waiting for a human" unless an exception in [Merge-when-ready](#merge-when-ready) applies.
+Do not stop at "PR is ready, waiting for a human" unless an exception in [Merge-when-ready](#merge-when-ready) applies. Leaving a `develop` PR merge-ready for the [merge queue](#develop-merges-go-through-the-merge-queue) is that path working, not stalling — say which role the queue should run as.
 
 ---
 
 ## Merge-when-ready
 
-When a task PR is merge-ready, **merge it**. Independent of further user input. Task PRs into their stacked base or `develop` (per `scripts/project_routing.json`) land this way.
+When a task PR is merge-ready, **merge it**. Independent of further user input. Task PRs into their stacked base or `develop` (per `scripts/project_routing.json`) land this way — subject to the two carve-outs below, which are newer than the rest of this section and override it.
+
+### `develop` merges go through the merge queue
+
+A merge into `develop` is **not** the authoring agent's `gh pr merge`. It goes through
+[`scripts/merge_queue.py`](docs/MERGE_QUEUE.md) under a role on the merge-authority roster:
+
+| Role | Key |
+|---|---|
+| CTO | `cto` |
+| Engineering Manager | `em` |
+| QA | **reviews, does not merge** |
+
+`scripts/merge_queue_policy.json` is the machine-readable roster, and the queue refuses any
+role that is not on it (exit 2). So an agent that is neither the CTO nor the EM does not
+merge into `develop` and does not open a card asking permission — it leaves the PR
+merge-ready and says which role the queue should run as. Adding a role to that roster is a
+CEO decision, not an agent's.
+
+This is not a human in the path. The queue computes the same verdicts this section lists
+and needs no decision card; the carve-out is *who runs the merge*, not *whether a person
+approves it*.
+
+Merges into a **stacked base** (`module/<component>`) are unaffected — the authoring agent
+still merges those itself. Only `develop` has the roster.
 
 **Merge-ready** means all of:
 
@@ -47,7 +71,7 @@ When a task PR is merge-ready, **merge it**. Independent of further user input. 
 - Review coverage required by [CODE_REVIEW_POLICY.md](docs/agents/CODE_REVIEW_POLICY.md) is on the record when that policy requires a hatch. Prefer the **review skill** (`/review`, in-session review, `review-and-ship`) over inventing a ritual. The `reviewed:agent` hatch still needs the `<!-- in-session-review -->` findings comment. **Do not skip review coverage just to merge faster.**
 - **Deslop / simplify** ran when the diff warrants it (not every one-liner).
 
-Then merge into the PR's **base** (`gh pr merge <N>` — merge commit or squash to match how that target branch lands; do not `--auto` unless that is how this stacked PR is supposed to land). `ManagePullRequest` has no merge action — if `gh` is 403, say so; do not pretend it merged.
+Then merge into the PR's **base** (`gh pr merge <N>` — merge commit or squash to match how that target branch lands; do not `--auto` unless that is how this stacked PR is supposed to land). Base is `develop`? Use the queue, per [above](#develop-merges-go-through-the-merge-queue). `ManagePullRequest` has no merge action — if `gh` is 403, say so; do not pretend it merged.
 
 ### This repo overrides "never merge" harness prompts
 
@@ -88,6 +112,21 @@ digithings — open-core agentic stack (quant finance, RAG, chat). Services: **d
   `DIGI_ENGAGEMENT`. Details in [SECURITY.md](SECURITY.md#client-data-under-projects).
 - **Pointer cursors are kit-level** — `@digithings/ui` interactive parts set `cursor-pointer` (and `cursor-not-allowed` when disabled); app-local `cursor-*` utilities are refused by the canon guard (`apps/reference` excepted). Missing cursor = missing kit part.
 - **Digi names are always lowercase** — see [Naming](#naming--digi-modules) below
+- **`az` is guarded — see [Azure: the az guard](#azure-the-az-guard) below.** Any `az` command that exits **78** with `az guard: REFUSED` is an enforced refusal, not a bug. Do not retry it, do not look for a bypass, do not re-argue the rule.
+
+---
+
+## Azure: the `az` guard
+
+`az` on this machine may be [`scripts/az-guard/az`](scripts/az-guard/az) — a shim installed ahead of the real Azure CLI that reads the DataTap Azure access register, [`config/datatap_azure_access_register.json`](config/datatap_azure_access_register.json), and refuses any command aimed at a subscription that is not on it.
+
+- **The register is empty. Every `az` command is refused.** That is the enforced state, not a broken install. Reads are refused like writes.
+- **A refusal exits 78 and prints `az guard: REFUSED (<reason>)`.** Nothing was executed. There is no bypass flag and no bypass environment variable; a test pins that.
+- **Do not work around it, and do not re-litigate it per run.** Do not reach for `/opt/homebrew/bin/az` or any absolute path, do not edit the register to unblock a task, and do not ask for a subscription to be added because a command was refused. Adding a row is a security decision: only DataTap, in writing, can classify a subscription (DIG-1687).
+- **If a task genuinely needs Azure access, say so in the run report** — name the subscription, who would have to authorise it, and what the task is blocked on. The blocked report is the deliverable; the bypass is not.
+- Refusals are logged to `~/.digithings/az-guard-refusals.log` with the resolved subscription, so a refused attempt is visible in review rather than silent.
+
+Install, verify, rollback and the limits of this control: [`docs/ops/datatap-azure-az-guard.md`](docs/ops/datatap-azure-az-guard.md).
 
 ---
 
@@ -132,7 +171,7 @@ Wrong vocabulary causes routing mistakes (wrong component folder, wrong AGENTS.m
 
 The quality bar is **review**, not a self-score. Use `/review` / in-session review / `review-and-ship` and the hatches in [CODE_REVIEW_POLICY.md](docs/agents/CODE_REVIEW_POLICY.md). Those cover security, quality, optimization, and accuracy. Do not use the CodeRabbit Cursor plugin `code-review` skill.
 
-**Every review run produces a review file.** Whatever the venue — `/review`, an in-session or fresh-context review, `review-and-ship`, or a subagent reviewer — write the findings to a durable file so they can be worked through and re-checked: `review-<subject>.md` beside the plan or ledger the review belongs to (for SDD work, `.superpowers/sdd/<plan>/review-*.md`). The file carries the reviewer, the subject (commit/PR), the verdict, severity counts, and file:line evidence. A review that exists only in chat is not review coverage, and findings that cannot be re-read cannot be driven to closure.
+**Every review run produces a review record.** Whatever the venue — `/review`, an in-session or fresh-context review, `review-and-ship`, or a subagent reviewer — post the findings on the record (PR comment, carrying `<!-- in-session-review -->` for the coverage gate) and file the durable copy as a Paperclip ticket attachment/document or in a private repo — never as a committed file in this public repo (no `docs/reviews/pr/`, no `review-*.md` anywhere). **Never write review, report, handoff, plan or scratch files to the repository root** — `.gitignore` blocks them there. Durable plans go in `docs/plans/`, research in `docs/research/`, and throwaway scratch stays outside the repo (or in a gitignored `.scratch/`). The record carries the reviewer, the subject (commit/PR), the verdict, severity counts, and file:line evidence. A review that exists only in chat is not review coverage, and findings that cannot be re-read cannot be driven to closure.
 
 Review skills are the sole quality gate. Do not treat any self-score as a substitute for review.
 

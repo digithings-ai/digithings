@@ -6,7 +6,7 @@ anywhere** — so "the routine went silent" and "the routine ran and found nothi
 from outside. `nextRunAt` is the scheduler's claim about the future, not an observation of the
 past, and nothing read it.
 
-`scripts/dt-routine-watch` takes that claim and makes it falsifiable. It is a house local clock in
+`dt-routine-watch` takes that claim and makes it falsifiable. It is a house local clock in
 the same family as `dt-it-watch`, `dt-backup` and `dt-merge-queue`, and it is listed in
 [HOUSEKEEPING.md](../agents/HOUSEKEEPING.md) so the gap is visible rather than assumed covered.
 
@@ -86,25 +86,43 @@ fine".
   requests: one routines list, one run history per judged boundary. Boundaries inside grace cost
   nothing.
 
-## Two homes, one suite body
+## One script, two suite homes
 
 | | path | role |
 |---|---|---|
-| running copy | `~/paperclip-workspace/kit/bin/dt-routine-watch` | what launchd executes |
-| repo copy | `scripts/dt-routine-watch` | the review surface, on `module/paperclip-board` |
-| launchd unit | `infra/self-host/routine-watch/com.digithings.routine-watch.plist` | copy of record |
+| the script | `~/paperclip-workspace/kit/bin/dt-routine-watch` | the only copy; what launchd executes |
+| launchd unit | `infra/self-host/routine-watch/com.digithings.routine-watch.plist` | copy of record for the unit |
+| suite, here | `tests/scripts/test_dt_routine_watch.sh` | review surface for the 15 checks |
+| suite, kit | `~/paperclip-workspace/kit/tests/dt-routine-watch-test.sh` | what runs on the host |
 
-`tests/scripts/test_dt_routine_watch.sh` resolves the script from either home and fails loudly if
-neither has it. Only the header comment differs between this repo's copy and the kit's
-(`tests/dt-routine-watch-test.sh`) — the 15 checks are byte-identical. That is deliberate: a forked
-suite would be a second thing to forget to update, which is the failure mode this issue is about.
-**Until someone picks one canonical home, an edit to one copy must be made in the other.** The kit
-has no git remote, so the repo copy is currently the only reviewed one.
+This repo used to carry a second copy of the observer alongside the kit's, described as the review
+surface. It had already drifted from the running copy — the kit's filed pages through
+`dt-create-issue` per DIG-2040 and the repo's still posted directly — which is precisely the failure
+mode DIG-1220 is about. It was removed (DIG-2618). **Do not add a copy of the script back.** The
+suite still has two homes and still one body, because a forked suite would be a second thing to
+forget to update; only the header comment differs and the 15 checks are byte-identical. Both homes
+resolve to the one canonical script — the relative candidate when the suite runs from the kit, the
+`$HOME` candidate when it runs from here — and the shell suite exits non-zero when neither finds it,
+so a missing subject can never read as a passing run.
+
+The pytest wrapper `tests/scripts/test_dt_routine_watch.py` is the one place that narrows this. A
+GitHub runner has no `~/paperclip-workspace`, so it has no script to drive, and failing the
+`ruff-and-scripts` lane over a file the runner could never have had is noise rather than signal. On a
+CI runner the wrapper therefore `pytest.skip`s with the reason printed in the output, which is an
+explicit, visible skip and never a silent pass (board decision on DIG-2618).
+
+That exemption is deliberately narrow. On any host that is not a CI runner the wrapper still **fails
+loudly** when the script is missing, because such a host owns the observer and losing the script there
+silently retires all 15 checks. So:
+
+- host: 15 checks run for real, and a missing script is a failure
+- CI runner: one visible `SKIPPED` line, zero of the 15 checks run
+
+Do not widen the exemption, and do not "fix" it by vendoring the script back into the repo.
 
 ## Install
 
 ```sh
-cp scripts/dt-routine-watch ~/paperclip-workspace/kit/bin/dt-routine-watch   # if changing the running copy
 cp infra/self-host/routine-watch/com.digithings.routine-watch.plist ~/Library/LaunchAgents/
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.digithings.routine-watch.plist
 launchctl kickstart -k gui/$(id -u)/com.digithings.routine-watch   # one real tick, then read the log
@@ -119,8 +137,8 @@ Config is `~/.config/digithings/routine-watch.json` (`api`, `companyId`, `parent
 Dry run against fixture files instead of the API:
 
 ```sh
-bash tests/scripts/test_dt_routine_watch.sh              # the 15 checks, no network
-scripts/dt-routine-watch --dry --config /path/c.json --state /tmp/s.json
+bash tests/scripts/test_dt_routine_watch.sh              # the 22 checks, no network
+~/paperclip-workspace/kit/bin/dt-routine-watch --dry --config /path/c.json --state /tmp/s.json
 ```
 
 ## Rollback
@@ -129,5 +147,30 @@ scripts/dt-routine-watch --dry --config /path/c.json --state /tmp/s.json
 launchctl bootout gui/$(id -u)/com.digithings.routine-watch
 rm ~/Library/LaunchAgents/com.digithings.routine-watch.plist
 rm ~/.config/digithings/routine-watch.json ~/.config/digithings/routine-watch-state.json
-git -C ~/paperclip-workspace/kit revert 8d4eda7
+rm ~/paperclip-workspace/kit/bin/dt-routine-watch
+rm ~/paperclip-workspace/kit/tests/dt-routine-watch-test.sh
 ```
+
+The last two lines remove the two files this change added. Do NOT roll them back by
+reverting named commits. The set of commits that touch `bin/dt-routine-watch` differs per
+ref in the kit, so no list of shas is stable:
+
+- on `main`: `8d4eda7` (the clock) and `98b65307` (the two-sided fix)
+- on `fix/DIG-1959-mirror-resolves-ticket-numbers`: those, plus `2e7da06` (the board-derived
+  watch list) and `52aab28` ("Rescue: the live kit working tree")
+
+So the recipe this replaces, `git revert 2e7da06 8d4eda7`, names a commit that is not
+reachable from `main` at all. The recipe before that named only `8d4eda7`, which would have
+reverted the script to the single-routine version and left the widened board-derived scope
+installed and reading the routines API every five minutes. Both fail the same way: the
+rollback reports success and the observer is still running.
+
+To restore the files instead of removing them, restore them by FILE from the commit that
+predates this work:
+
+```sh
+git -C ~/paperclip-workspace/kit checkout 8d4eda7^ -- bin/dt-routine-watch tests/dt-routine-watch-test.sh
+```
+
+That is a file operation rather than a history operation, and it is the only form that
+survives other commits and other refs touching the same file.

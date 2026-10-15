@@ -16,7 +16,8 @@
 This file synthesizes external north stars — [Graphite](references/graphite.com.md),
 [Cursor](references/cursor.com.md), [x.ai](references/x.ai.md), plus the 2026-08
 utilitarian set [Herdr](references/herdr.dev.md), [AgentMail](references/agentmail.to.md),
-[Omarchy](references/omarchy.org.md) — with our current implementation and sets
+[Omarchy](references/omarchy.org.md), plus [Langfuse](references/langfuse.com.md)
+(2026-10 light-surface marketing-clarity reference for the next polish pass) — with our current implementation and sets
 **evolution paths** per surface. Active blend lock + preference ledger:
 [`BLEND.md`](BLEND.md). Live picker: design-reference `/iterate`.
 
@@ -40,7 +41,9 @@ system instead.
 **Deep audits:** [`references/scans/`](references/scans/INDEX.md) — page-by-page,
 components, mobile nav (Playwright), copy patterns.
 
-**Implementation backlog:** [GitHub epic #1200](https://github.com/digithings-ai/digithings/issues/1200) · [`docs/agent-backlog/design-evolution/INDEX.md`](../../docs/agent-backlog/design-evolution/INDEX.md)
+**Inspiration hub:** [`references/designeer.xyz.md`](references/designeer.xyz.md) — living dictionary of galleries/tools/reading to pull from for digiweb work.
+
+**Implementation backlog:** [GitHub epic #1200](https://github.com/digithings-ai/digithings/issues/1200)
 
 **Copy & IA:** [`COPY_GUIDE.md`](COPY_GUIDE.md) — voice, literal CTAs, per-surface section maps.
 

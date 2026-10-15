@@ -1,0 +1,1865 @@
+[
+  {
+    "name": "digiquant_fetch_bgeometrics_series",
+    "family": "feeds",
+    "scope": "full",
+    "summary": "Fetch one Bitcoin valuation/on-chain metric from bitcoin-data.com (BGeometrics).",
+    "params": [
+      {
+        "name": "metric",
+        "type": "str",
+        "required": false,
+        "default": "mvrv"
+      },
+      {
+        "name": "startday",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "endday",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "last",
+        "type": "bool",
+        "required": false,
+        "default": false
+      },
+      {
+        "name": "cache_dir",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "timeout",
+        "type": "float",
+        "required": false,
+        "default": 30.0
+      },
+      {
+        "name": "token",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digiquant_fetch_bitview_series",
+    "family": "feeds",
+    "scope": "full",
+    "summary": "Fetch Bitview/BRK on-chain ``day1`` series into ``data/onchain/bitview/``.",
+    "params": [
+      {
+        "name": "series_ids_json",
+        "type": "str",
+        "required": false,
+        "default": "[\"mvrv\", \"asopr_24h\", \"puell_multiple\", \"rhodl_ratio\"]"
+      },
+      {
+        "name": "cache_dir",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "timeout",
+        "type": "float",
+        "required": false,
+        "default": 30.0
+      },
+      {
+        "name": "start",
+        "type": "int | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "end",
+        "type": "int | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "allow_derived",
+        "type": "bool",
+        "required": false,
+        "default": false
+      }
+    ]
+  },
+  {
+    "name": "digiquant_fetch_coinbase_ohlcv",
+    "family": "feeds",
+    "scope": "full",
+    "summary": "Fetch OHLCV bars from Coinbase (CCXT) into the price-history cache.",
+    "params": [
+      {
+        "name": "symbols_json",
+        "type": "str",
+        "required": false,
+        "default": "[\"BTC/USD\", \"ETH/USD\", \"SOL/USD\"]"
+      },
+      {
+        "name": "start",
+        "type": "str",
+        "required": false,
+        "default": "2015-07-20"
+      },
+      {
+        "name": "end",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "timeframe",
+        "type": "str",
+        "required": false,
+        "default": "1d"
+      },
+      {
+        "name": "through_yesterday",
+        "type": "bool",
+        "required": false,
+        "default": false
+      },
+      {
+        "name": "cache_dir",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digiquant_fetch_coinmetrics_series",
+    "family": "feeds",
+    "scope": "full",
+    "summary": "Fetch one on-chain metric for one asset from the CoinMetrics Community API.",
+    "params": [
+      {
+        "name": "metric",
+        "type": "str",
+        "required": false,
+        "default": "CapMVRVCur"
+      },
+      {
+        "name": "asset",
+        "type": "str",
+        "required": false,
+        "default": "btc"
+      },
+      {
+        "name": "start_time",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "end_time",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "page_size",
+        "type": "int",
+        "required": false,
+        "default": 10000
+      },
+      {
+        "name": "cache_dir",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "timeout",
+        "type": "float",
+        "required": false,
+        "default": 30.0
+      },
+      {
+        "name": "api_key",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digiquant_list_coinmetrics_catalog",
+    "family": "feeds",
+    "scope": "full",
+    "summary": "List which CoinMetrics community metrics exist for ``asset`` (or all assets).",
+    "params": [
+      {
+        "name": "asset",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "timeout",
+        "type": "float",
+        "required": false,
+        "default": 30.0
+      },
+      {
+        "name": "api_key",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "gloomberb_13f_funds",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. 13F fund lookup: search / top funds / ticker map / CUSIP holders (anonymous).",
+    "params": [
+      {
+        "name": "what",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "query",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "quarter",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "tickers",
+        "type": "list[str] | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "cusip",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "period_of_report",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 25
+      },
+      {
+        "name": "offset",
+        "type": "int",
+        "required": false,
+        "default": 0
+      }
+    ]
+  },
+  {
+    "name": "gloomberb_13f_holdings",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. 13F filings / fund forms / one form's holdings (Gloomberb Cloud; anonymous).",
+    "params": [
+      {
+        "name": "what",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "cik",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "accession_number",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "from_date",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "to_date",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 50
+      },
+      {
+        "name": "offset",
+        "type": "int",
+        "required": false,
+        "default": 0
+      }
+    ]
+  },
+  {
+    "name": "gloomberb_bond_calculator",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. Par-bond analytics over local discounting math (pure local math).",
+    "params": [
+      {
+        "name": "coupon",
+        "type": "float",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "face",
+        "type": "float",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "ytm",
+        "type": "float",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "years",
+        "type": "float",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "freq",
+        "type": "int",
+        "required": true,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "gloomberb_cds",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. DTCC PPD CDS trade tape (Gloomberb Cloud; anonymous).",
+    "params": [
+      {
+        "name": "issuer",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "days",
+        "type": "int",
+        "required": false,
+        "default": 30
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 100
+      }
+    ]
+  },
+  {
+    "name": "gloomberb_compare_performance",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. Rebased multi-ticker performance (composition).",
+    "params": [
+      {
+        "name": "tickers",
+        "type": "list[str]",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "resolution",
+        "type": "str",
+        "required": false,
+        "default": "1d"
+      },
+      {
+        "name": "range",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "gloomberb_correlation_matrix",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. Pearson correlation matrix over aligned daily returns (composition).",
+    "params": [
+      {
+        "name": "tickers",
+        "type": "list[str]",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "resolution",
+        "type": "str",
+        "required": false,
+        "default": "1d"
+      },
+      {
+        "name": "range",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "gloomberb_custom_chart",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. Explicit-series alignment onto one date union (composition).",
+    "params": [
+      {
+        "name": "series_json",
+        "type": "str",
+        "required": true,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "gloomberb_dividend_yield",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. Trailing dividend yield (composition of corporate-actions + quote).",
+    "params": [
+      {
+        "name": "symbol",
+        "type": "str",
+        "required": true,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "gloomberb_earnings_calendar",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. Upcoming earnings dates for 1-20 symbols (Yahoo via yfinance).",
+    "params": [
+      {
+        "name": "symbols",
+        "type": "list[str]",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "horizon_days",
+        "type": "int",
+        "required": false,
+        "default": 90
+      }
+    ]
+  },
+  {
+    "name": "gloomberb_econ_calendar",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. Structured economic calendar (Gloomberb Cloud; anonymous).",
+    "params": []
+  },
+  {
+    "name": "gloomberb_econ_series",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. FRED-style macro series observations + metadata (Gloomberb Cloud; anonymous).",
+    "params": [
+      {
+        "name": "series_id",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 100
+      },
+      {
+        "name": "sort_order",
+        "type": "str",
+        "required": false,
+        "default": "desc"
+      }
+    ]
+  },
+  {
+    "name": "gloomberb_exchange_rate",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. USD exchange rate for an ISO-4217 `from_currency` (Gloomberb Cloud).",
+    "params": [
+      {
+        "name": "from_currency",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "to_currency",
+        "type": "str",
+        "required": false,
+        "default": "USD"
+      }
+    ]
+  },
+  {
+    "name": "gloomberb_fear_greed",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. CNN Fear & Greed gauge + 7 components (venue-direct, anonymous).",
+    "params": []
+  },
+  {
+    "name": "gloomberb_filing_events",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. Classified 8-K filing events for one ticker (Gloomberb Cloud; anonymous).",
+    "params": [
+      {
+        "name": "ticker",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 20
+      }
+    ]
+  },
+  {
+    "name": "gloomberb_fundamental_graph",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. One statement field's per-period series (composition).",
+    "params": [
+      {
+        "name": "symbol",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "field",
+        "type": "str",
+        "required": false,
+        "default": "total_revenue"
+      },
+      {
+        "name": "period",
+        "type": "str",
+        "required": false,
+        "default": "annual"
+      }
+    ]
+  },
+  {
+    "name": "gloomberb_fx_cross_rates",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. USD-pair FX matrix over the exchange-rate read (USD base only).",
+    "params": [
+      {
+        "name": "currencies",
+        "type": "list[str]",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "to_currency",
+        "type": "str",
+        "required": false,
+        "default": "USD"
+      }
+    ]
+  },
+  {
+    "name": "gloomberb_hacker_news",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. Hacker News stories (venue-direct, anonymous).",
+    "params": [
+      {
+        "name": "feed",
+        "type": "str",
+        "required": false,
+        "default": "top"
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 10
+      }
+    ]
+  },
+  {
+    "name": "gloomberb_ipo_calendar",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. Worldwide IPO calendar (Gloomberb Cloud, anonymous).",
+    "params": [
+      {
+        "name": "status",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "region",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "deal_type",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "from_date",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "to_date",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 50
+      }
+    ]
+  },
+  {
+    "name": "gloomberb_kelly_sizer",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. Kelly-criterion position size (pure local math).",
+    "params": [
+      {
+        "name": "win_prob",
+        "type": "float",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "win_loss_ratio",
+        "type": "float",
+        "required": true,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "gloomberb_market_halts",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. US equity trade halts with reason (venue-direct, anonymous).",
+    "params": [
+      {
+        "name": "symbol",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 100
+      }
+    ]
+  },
+  {
+    "name": "gloomberb_market_valuation",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. Shiller CAPE plus optional econ ratios vs history thirds.",
+    "params": [
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 240
+      },
+      {
+        "name": "econ_series_ids",
+        "type": "list[str] | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "gloomberb_money_markets",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. SOFR/EFFR/reserve prints plus the funding spread (composition).",
+    "params": [
+      {
+        "name": "sofr_series",
+        "type": "str",
+        "required": false,
+        "default": "SOFR"
+      },
+      {
+        "name": "effr_series",
+        "type": "str",
+        "required": false,
+        "default": "EFFR"
+      },
+      {
+        "name": "reserves_series",
+        "type": "str",
+        "required": false,
+        "default": "WRESBAL"
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 5
+      }
+    ]
+  },
+  {
+    "name": "gloomberb_news",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. Aggregated market news headlines (Gloomberb Cloud; anonymous).",
+    "params": [
+      {
+        "name": "feed",
+        "type": "str",
+        "required": false,
+        "default": "latest"
+      },
+      {
+        "name": "ticker",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "story_id",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 20
+      }
+    ]
+  },
+  {
+    "name": "gloomberb_options_calculator",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. European Black-Scholes price / IV solve (pure local math).",
+    "params": [
+      {
+        "name": "spot",
+        "type": "float",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "strike",
+        "type": "float",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "rate",
+        "type": "float",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "vol",
+        "type": "float",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "expiry_years",
+        "type": "float",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "kind",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "price",
+        "type": "float | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "gloomberb_options_chain",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. Options chain for one listing (Gloomberb Cloud; JSON envelope).",
+    "params": [
+      {
+        "name": "symbol",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "exchange",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "expiration",
+        "type": "int | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "gloomberb_polls",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. VoteHub political polls (venue-direct, anonymous).",
+    "params": [
+      {
+        "name": "poll_type",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "subject",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 20
+      }
+    ]
+  },
+  {
+    "name": "gloomberb_prediction_markets",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. Prediction-markets catalog across Polymarket + Kalshi (venue-direct).",
+    "params": [
+      {
+        "name": "venue",
+        "type": "str",
+        "required": false,
+        "default": "all"
+      },
+      {
+        "name": "query",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "category",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "tab",
+        "type": "str",
+        "required": false,
+        "default": "top"
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 20
+      }
+    ]
+  },
+  {
+    "name": "gloomberb_price_history",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. OHLCV bars for one listing (Gloomberb Cloud; JSON envelope).",
+    "params": [
+      {
+        "name": "symbol",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "resolution",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "range",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "exchange",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "start_date",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "end_date",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "gloomberb_proxy_statements",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. Executive-compensation proxy statements (Gloomberb Cloud; anonymous).",
+    "params": [
+      {
+        "name": "ticker",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "what",
+        "type": "str",
+        "required": false,
+        "default": "list"
+      },
+      {
+        "name": "year",
+        "type": "int | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "gloomberb_quote",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. Latest quote for one listing via Gloomberb Cloud (anonymous; JSON envelope).",
+    "params": [
+      {
+        "name": "symbol",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "exchange",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "gloomberb_quotes_batch",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. Batch quotes for 1-20 listings via Gloomberb Cloud (anonymous).",
+    "params": [
+      {
+        "name": "symbols",
+        "type": "list[str]",
+        "required": true,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "gloomberb_rate_path",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. US rate path over live Kalshi KXFED markets (venue-direct).",
+    "params": [
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 200
+      }
+    ]
+  },
+  {
+    "name": "gloomberb_relationship_graph",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. Pair relationship: indexed prices, ratio, rolling correlation, beta.",
+    "params": [
+      {
+        "name": "base",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "quote",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "resolution",
+        "type": "str",
+        "required": false,
+        "default": "1d"
+      },
+      {
+        "name": "range",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "window",
+        "type": "int",
+        "required": false,
+        "default": 20
+      }
+    ]
+  },
+  {
+    "name": "gloomberb_relative_valuation",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. Peer trailing-multiples table over financials reads (composition).",
+    "params": [
+      {
+        "name": "tickers",
+        "type": "list[str]",
+        "required": true,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "gloomberb_risk_reports",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. 10-K risk-factor reports, diffed year-over-year (Gloomberb Cloud; anonymous).",
+    "params": [
+      {
+        "name": "ticker",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "what",
+        "type": "str",
+        "required": false,
+        "default": "list"
+      },
+      {
+        "name": "year",
+        "type": "int | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "gloomberb_search",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. Search listings across venues (Gloomberb Cloud; anonymous).",
+    "params": [
+      {
+        "name": "query",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 10
+      }
+    ]
+  },
+  {
+    "name": "gloomberb_sec_filings",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. SEC filings, filing documents, or filing content (Gloomberb Cloud).",
+    "params": [
+      {
+        "name": "ticker",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "what",
+        "type": "str",
+        "required": false,
+        "default": "filings"
+      },
+      {
+        "name": "count",
+        "type": "int",
+        "required": false,
+        "default": 15
+      },
+      {
+        "name": "cik",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "accession",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "form",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "gloomberb_shiller",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. Robert Shiller's monthly valuation series (Gloomberb Cloud; anonymous).",
+    "params": [
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 240
+      }
+    ]
+  },
+  {
+    "name": "gloomberb_ticker_financials",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. Quote, profile, fundamentals, statements, and price history (Gloomberb Cloud).",
+    "params": [
+      {
+        "name": "symbol",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "exchange",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "extended_statements",
+        "type": "bool",
+        "required": false,
+        "default": false
+      }
+    ]
+  },
+  {
+    "name": "gloomberb_treasury_auctions",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. US Treasury auction results, newest first (venue-direct, anonymous).",
+    "params": [
+      {
+        "name": "security_type",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "from_date",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "to_date",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 20
+      }
+    ]
+  },
+  {
+    "name": "gloomberb_trending",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. Yahoo trending symbols with delayed quotes (venue-direct).",
+    "params": [
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 10
+      }
+    ]
+  },
+  {
+    "name": "gloomberb_valuation_graph",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. Per-period valuation rows plus the multiples snapshot (composition).",
+    "params": [
+      {
+        "name": "symbol",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "period",
+        "type": "str",
+        "required": false,
+        "default": "annual"
+      }
+    ]
+  },
+  {
+    "name": "gloomberb_venues",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. Exchange venue metadata (Gloomberb Cloud; anonymous).",
+    "params": []
+  },
+  {
+    "name": "gloomberb_vix_term_structure",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. VIX term snapshot over two econ-series closes (composition).",
+    "params": [
+      {
+        "name": "near_series",
+        "type": "str",
+        "required": false,
+        "default": "VIXCLS"
+      },
+      {
+        "name": "far_series",
+        "type": "str",
+        "required": false,
+        "default": "VIX3M"
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 5
+      }
+    ]
+  },
+  {
+    "name": "gloomberb_yield_curve",
+    "family": "gloomberb",
+    "scope": "full",
+    "summary": "Programmatic extension of the Gloomberb platform. Treasury yield-curve tenors (Gloomberb Cloud; anonymous).",
+    "params": []
+  },
+  {
+    "name": "luxalgo_edge_presets",
+    "family": "luxalgo",
+    "scope": "full",
+    "summary": "Catalog of hosted LuxAlgo Edge Stats preset questions (anonymous).",
+    "params": [
+      {
+        "name": "category",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "luxalgo_edge_report",
+    "family": "luxalgo",
+    "scope": "full",
+    "summary": "One precomputed LuxAlgo Edge Stats result (anonymous).",
+    "params": [
+      {
+        "name": "preset",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "symbol",
+        "type": "str",
+        "required": true,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "luxalgo_edge_symbols",
+    "family": "luxalgo",
+    "scope": "full",
+    "summary": "Coverage of the hosted LuxAlgo Edge Stats store (anonymous).",
+    "params": []
+  },
+  {
+    "name": "luxalgo_library_get_concept",
+    "family": "luxalgo",
+    "scope": "full",
+    "summary": "One LuxAlgo Library concept page by slug (e.g. rsi; anonymous).",
+    "params": [
+      {
+        "name": "slug",
+        "type": "str",
+        "required": true,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "luxalgo_library_get_indicator",
+    "family": "luxalgo",
+    "scope": "full",
+    "summary": "One LuxAlgo Library indicator's metadata by slug (anonymous).",
+    "params": [
+      {
+        "name": "slug",
+        "type": "str",
+        "required": true,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "luxalgo_library_list_concepts",
+    "family": "luxalgo",
+    "scope": "full",
+    "summary": "List LuxAlgo Library concept pages (anonymous).",
+    "params": [
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 50
+      }
+    ]
+  },
+  {
+    "name": "luxalgo_library_list_families",
+    "family": "luxalgo",
+    "scope": "full",
+    "summary": "List LuxAlgo Library indicator families (anonymous).",
+    "params": []
+  },
+  {
+    "name": "luxalgo_library_list_indicators",
+    "family": "luxalgo",
+    "scope": "full",
+    "summary": "List LuxAlgo Library indicator entries (anonymous).",
+    "params": [
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 50
+      }
+    ]
+  },
+  {
+    "name": "luxalgo_library_list_tags",
+    "family": "luxalgo",
+    "scope": "full",
+    "summary": "List LuxAlgo Library tags (anonymous).",
+    "params": []
+  },
+  {
+    "name": "luxalgo_library_search",
+    "family": "luxalgo",
+    "scope": "full",
+    "summary": "Full-text search over the LuxAlgo Library (concepts + indicators; anonymous).",
+    "params": [
+      {
+        "name": "query",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 10
+      }
+    ]
+  },
+  {
+    "name": "luxalgo_trackers_datasets",
+    "family": "luxalgo",
+    "scope": "full",
+    "summary": "Market Trackers catalog of CC0-1.0 public-record datasets (anonymous).",
+    "params": [
+      {
+        "name": "dataset",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "luxalgo_trackers_latest",
+    "family": "luxalgo",
+    "scope": "full",
+    "summary": "Newest ingestion day's rows for one Trackers dataset (anonymous).",
+    "params": [
+      {
+        "name": "dataset",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "ticker",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "text",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "where_json",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "sort",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 25
+      },
+      {
+        "name": "offset",
+        "type": "int",
+        "required": false,
+        "default": 0
+      }
+    ]
+  },
+  {
+    "name": "luxalgo_trackers_ticker",
+    "family": "luxalgo",
+    "scope": "full",
+    "summary": "One ticker across every ticker-bearing Trackers dataset (anonymous).",
+    "params": [
+      {
+        "name": "ticker",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "year",
+        "type": "int | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "default": 5
+      }
+    ]
+  },
+  {
+    "name": "digiquant_build_sdca_risk_index",
+    "family": "models",
+    "scope": "full",
+    "summary": "Build the SDCA ``date``/``risk`` parquet from a ``RiskModel`` + cached prices (#3168).",
+    "params": [
+      {
+        "name": "ticker",
+        "type": "str",
+        "required": false,
+        "default": "BTC-USD"
+      },
+      {
+        "name": "cache_dir",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "refresh",
+        "type": "bool",
+        "required": false,
+        "default": true
+      },
+      {
+        "name": "bulk_period",
+        "type": "str",
+        "required": false,
+        "default": "max"
+      },
+      {
+        "name": "risk_model",
+        "type": "str",
+        "required": false,
+        "default": "btc_power_law"
+      },
+      {
+        "name": "profile",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "profile_json",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "coefficients_path",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "output_path",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "indicator_weights",
+        "type": "str",
+        "required": false,
+        "default": "{}"
+      },
+      {
+        "name": "m2_path",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "dxy_path",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "eth_ticker",
+        "type": "str",
+        "required": false,
+        "default": "ETH-USD"
+      },
+      {
+        "name": "valuation_form",
+        "type": "str",
+        "required": false,
+        "default": "log_quadratic"
+      },
+      {
+        "name": "rolling_window",
+        "type": "int",
+        "required": false,
+        "default": 90
+      }
+    ]
+  },
+  {
+    "name": "digiquant_fit_btc_power_law",
+    "family": "models",
+    "scope": "full",
+    "summary": "Fit the BTC power-law (RAQQR) SDCA valuation rails from cached price history (#1082).",
+    "params": [
+      {
+        "name": "ticker",
+        "type": "str",
+        "required": false,
+        "default": "BTC-USD"
+      },
+      {
+        "name": "cache_dir",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "refresh",
+        "type": "bool",
+        "required": false,
+        "default": true
+      },
+      {
+        "name": "bulk_period",
+        "type": "str",
+        "required": false,
+        "default": "max"
+      },
+      {
+        "name": "output_path",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "notes",
+        "type": "str",
+        "required": false,
+        "default": ""
+      }
+    ]
+  },
+  {
+    "name": "digiquant_fit_sdca_weights",
+    "family": "models",
+    "scope": "full",
+    "summary": "Stage A: fit composite weights so risk overlaps cycle windows.",
+    "params": [
+      {
+        "name": "profile",
+        "type": "str",
+        "required": false,
+        "default": "btc_v1"
+      },
+      {
+        "name": "profile_json",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "cache_dir",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "coefficients_path",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "output_path",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "m2_path",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "dxy_path",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "eth_ticker",
+        "type": "str",
+        "required": false,
+        "default": "ETH-USD"
+      },
+      {
+        "name": "valuation_form",
+        "type": "str",
+        "required": false,
+        "default": "log_quadratic"
+      },
+      {
+        "name": "rolling_window",
+        "type": "int",
+        "required": false,
+        "default": 90
+      }
+    ]
+  },
+  {
+    "name": "digiquant_export",
+    "family": "strategies",
+    "scope": "full",
+    "summary": "Export strategy config (JSON or nautilus_bundle zip). targets: nautilus, nautilus_bundle, \u2026",
+    "params": [
+      {
+        "name": "strategy_name",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "target",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "params_json",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  },
+  {
+    "name": "digiquant_run_optimize",
+    "family": "strategies",
+    "scope": "full",
+    "summary": "Run parameter optimization (grid, bayesian, or random).",
+    "params": [
+      {
+        "name": "strategy_name",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "symbols_json",
+        "type": "str",
+        "required": true,
+        "default": null
+      },
+      {
+        "name": "data_dir",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "data_path",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "method",
+        "type": "str",
+        "required": false,
+        "default": "grid"
+      },
+      {
+        "name": "n_trials",
+        "type": "int",
+        "required": false,
+        "default": 50
+      },
+      {
+        "name": "param_grid_json",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      },
+      {
+        "name": "strategy_params_json",
+        "type": "str | None",
+        "required": false,
+        "default": null
+      }
+    ]
+  }
+]

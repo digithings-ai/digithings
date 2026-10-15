@@ -7,9 +7,13 @@ on:
   pull_request:
     paths:
       - "apps/digiquant-web/**"
+      # Imported from source by the digiquant-web build.
+      - "clients/digiquant-tui/src/**"
+      - "apps/digithings-web/components/**"
       - "packages/ui/**"
       - "apps/dashboard/**"
       - "packages/design/**"
+      - "packages/surface-config/**"
       - "scripts/build-digiquant.sh"
       # The build script's callees. Watching the caller alone leaves the gap this
       # check exists to close, and the two files below fail in different places.

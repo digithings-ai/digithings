@@ -1,9 +1,8 @@
 /**
  * Typed fetchers for the twelve-x FX research tables.
  *
- * Mirrors the `querySupabase` retry/guard pattern in `lib/queries.ts`, but runs
- * against the dedicated twelve-x client (`./supabase`) rather than the main
- * dashboard singleton. All selects are cast to the contract row types in
+ * Each select retries against the dedicated twelve-x client (`./supabase`)
+ * rather than the main dashboard singleton. All selects are cast to the contract row types in
  * `./types.ts`.
  *
  * Empty-state philosophy (per the suite spec): the FX digest relaxes the
@@ -28,7 +27,6 @@ import {
   type PairFixSpec,
 } from './level-vs-fix';
 import type {
-  ConfluenceCatalyst,
   ConsensusDelta,
   ConsensusDeltaSet,
   CurrencyView,
@@ -279,27 +277,6 @@ export async function getLatestDigest(): Promise<
   };
 }
 
-/**
- * Top-N confluence trade ideas for a given run_date, ascending by rank
- * (rank 1 = strongest). Returns `[]` when unconfigured or none exist.
- */
-export async function getTopConfluence(
-  runDate: string,
-  limit = 6
-): Promise<FxConfluenceSnapshotRow[]> {
-  if (!isTwelveXConfigured() || !twelveXSupabase) return [];
-  if (!runDate) return [];
-  const rows = await querySupabase<FxConfluenceSnapshotRow[]>((sb) =>
-    sb
-      .from('fx_confluence_snapshot')
-      .select('run_date, rank, title, currency, direction, score, components, brief_keys, as_of')
-      .eq('run_date', runDate)
-      .order('rank', { ascending: true })
-      .limit(limit)
-  );
-  return rows ?? [];
-}
-
 /** Resolve the latest run_date present in `fx_confluence_snapshot`, or `null`. */
 async function getLatestConfluenceDate(): Promise<string | null> {
   const latest = await querySupabase<{ run_date: string }[]>((sb) =>
@@ -310,6 +287,50 @@ async function getLatestConfluenceDate(): Promise<string | null> {
       .limit(1)
   );
   return latest?.[0]?.run_date ?? null;
+}
+
+/**
+ * The canonical "as-of" run the FX workspace reports, and the candidates it is
+ * derived from.
+ *
+ * The candidates are the latest `run_date` of each table the page reads, ordered
+ * BASE TABLE FIRST — `fx_research_history` is where every run lands its briefs
+ * before any projection is computed, so it is the only one guaranteed to have a
+ * row for a session that actually ran. Each later candidate is a derived
+ * projection that can legitimately be absent:
+ *
+ * - `fx_daily_digest` — written once per run, but a run that dies between storing
+ *   briefs and digesting leaves the digest a day behind.
+ * - `fx_consensus_snapshot` — written whenever any currency view scores.
+ * - `fx_confluence_snapshot` — the WORST clock of the four, and must never lead.
+ *   `build_confluence()` (twelve-x `intelligence.py`) only emits a setup when the
+ *   session has a directional consensus (|score| >= min_tilt 0.35), at least
+ *   `min_brokers=2` distinct desks agreeing, AND a catalyst inside
+ *   `horizon_days=14`. A legitimate flat/split session therefore writes ZERO rows.
+ *   Keying the page on it silently rewinds "Today" to the last day that happened
+ *   to produce a setup — which is exactly the Oct 7 2026 regression: 35 briefs
+ *   stored, 0 confluence setups, and the Today rail rewound to Oct 6.
+ *
+ * PURE — no client, no query. Every call site resolves through this one function
+ * so the briefs rail and the date pager can never disagree about "today" again.
+ */
+export function resolveCanonicalRunDate(candidates: {
+  /** Latest `run_date` in `fx_research_history` (the base table). */
+  research?: string | null;
+  /** Latest `run_date` in `fx_daily_digest`. */
+  digest?: string | null;
+  /** Latest `run_date` in `fx_consensus_snapshot`. */
+  consensus?: string | null;
+  /** Latest `run_date` in `fx_confluence_snapshot` — LAST resort only. */
+  confluence?: string | null;
+}): string | null {
+  return (
+    candidates.research ??
+    candidates.digest ??
+    candidates.consensus ??
+    candidates.confluence ??
+    null
+  );
 }
 
 /**
@@ -1192,53 +1213,6 @@ export async function getIntelligenceWhy(
 /* ------------------------------------------------------------------ *
  * Catalyst resolution + event-time helpers (PURE)
  * ------------------------------------------------------------------ */
-
-/**
- * PURE — resolve the catalyst a confluence idea hangs on against the events
- * feed. Honors an explicit `event_key` in the idea's components; otherwise
- * heuristically matches the earliest upcoming event touching the idea's base
- * currency (in which case `eventKey` stays null so the UI can hedge wording).
- */
-export function resolveCatalyst(
-  idea: FxConfluenceSnapshotRow,
-  events: FxEventSnapshotRow[]
-): ConfluenceCatalyst {
-  const comp = (idea.components ?? {}) as Record<string, unknown>;
-  const dtc = typeof comp.days_to_catalyst === 'number' ? comp.days_to_catalyst : null;
-  const explicitKey = typeof comp.event_key === 'string' ? comp.event_key : null;
-  const ccy = idea.currency.toUpperCase().split('/')[0];
-
-  let match: FxEventSnapshotRow | undefined;
-  if (explicitKey) {
-    match = events.find((e) => e.event_key === explicitKey);
-  } else {
-    const candidates = events
-      .filter((e) => {
-        const currencies = Array.isArray(e.currencies) ? (e.currencies as unknown[]) : [];
-        return currencies.some((c) => String(c).toUpperCase() === ccy);
-      })
-      .sort((a, b) => (a.event_date ?? '').localeCompare(b.event_date ?? ''));
-    match = candidates[0];
-  }
-
-  if (!match) {
-    return {
-      eventKey: null,
-      eventName: null,
-      eventDate: null,
-      calendarExternalId: null,
-      daysToCatalyst: dtc,
-    };
-  }
-
-  return {
-    eventKey: explicitKey ? match.event_key : null,
-    eventName: match.event_name,
-    eventDate: match.event_date,
-    calendarExternalId: match.calendar_external_id,
-    daysToCatalyst: dtc,
-  };
-}
 
 /** PURE — the absolute release instant of an event, or null when unparseable. */
 export function eventInstant(row: { event_datetime_utc: string | null }): Date | null {

@@ -51,14 +51,20 @@ frozen at the last good seal. The exemption is therefore suspended only when
 *every* exempt macro series is ``history-only`` at once
 (:func:`_macro_leg_dead`), and the run then exits 1.
 
-Scope of that guard, precisely: it closes the ``history-only`` shape only, and
-only over series the manifest actually declared. Two neighbouring whole-leg
-freezes are *not* covered and still exit 0 — a panel that keeps serving rows
-inside its live window (``up-to-date``, so not a soft fail at all), and an
-unreadable manifest (``_resolve_macro_specs`` returns ``[]``, leaving the guard
-no exempt id to reason about). Partial legs and single-series manifests are
-also out of reach, by design. All four are recorded in
-``digiquant/ARCHITECTURE.md``; the first two predate this guard.
+Scope of that guard, precisely: it closes the *unanimous* ``history-only`` shape
+only, and only over series the manifest actually declared. Two neighbouring
+freezes are *not* covered by it — a panel that keeps serving rows inside its
+live window (``up-to-date``, so not a soft fail at all), and a single retired
+series among live ones, which the ``> 1`` floor plus the #4621 exemption let
+through. Both are closed instead by measuring the seal rather than the mode:
+``_macro_as_of_stale`` (:func:`_macro_as_of_stale`, DIG-1137/DIG-2405) compares
+each macro outcome's ``as_of`` against its own cadence window, so a panel that
+has stopped advancing is named whether the vendor still answers
+(``up-to-date``) or has stopped publishing (``history-only``). One freeze is
+still open and predates both guards: an unreadable manifest
+(``_resolve_macro_specs`` returns ``[]``, leaving no ids for any of these guards
+to reason about). Partial legs stay out of reach, by design. All of this is
+recorded in ``digiquant/ARCHITECTURE.md``.
 
 No vendor API key is needed on this path: the macro panel is sealed from
 anonymous Gloomberb ``econ_series`` pages (#4794). ``source=="fred"`` fetches
@@ -87,6 +93,7 @@ import io
 import json
 import os
 import sys
+from collections.abc import Iterable
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable  # score:allow untyped any — R2 JSON + callbacks
@@ -133,6 +140,25 @@ MODE_ERROR = "error"
 
 _SOFT_FAIL_MODES = frozenset({MODE_HISTORY_ONLY, MODE_ERROR})
 
+#: Outcomes that claim the fetch *worked*. `_macro_leg_dead` reads the soft-fail
+#: modes, so the modes a vendor can be quiet on are not its business; the
+#: `as_of` age guard reads these instead, because a series the vendor has
+#: retired still comes back `full-repull` (DIG-1137).
+_MACRO_SUCCESS_MODES = frozenset({MODE_UP_TO_DATE, MODE_INCREMENTAL, MODE_FULL_REPULL})
+
+#: Modes the `as_of` age guard measures, as opposed to ``_MACRO_SUCCESS_MODES``'s
+#: "the fetch worked" claim. ``MODE_HISTORY_ONLY`` is added because a *retired*
+#: slow series arrives in that mode: its vendor stops publishing, the live
+#: window comes back empty, and the outcome carries the abandoned seal. The
+#: #4621 exemption forgives that outcome on cadence alone, and
+#: ``_macro_leg_dead`` needs unanimity over the whole exempt set, so one retired
+#: series among live ones was named by nothing (DIG-2405).
+#:
+#: ``MODE_ERROR`` is left to the soft-fail reduction, which never exempts it
+#: whatever its seal says, so it is already loud and judging its age would add
+#: nothing.
+_MACRO_JUDGED_MODES = _MACRO_SUCCESS_MODES | {MODE_HISTORY_ONLY}
+
 LIVE_WINDOW_DAYS = 45
 # The live fetch window must span at least one publication period of the series
 # (#4588). LIVE_WINDOW_DAYS assumes a series that publishes inside 45 days; for a
@@ -173,6 +199,10 @@ SUPABASE_SERVICE_KEY_FALLBACK_ENV = "SUPABASE_SERVICE_ROLE_KEY"
 # deliberately excluded: its core readers moved to R2, so re-writing it would
 # resurrect a path that was retired on purpose.
 CORE_MIRROR_MACRO_SOURCES = frozenset({"yahoo"})
+# Synthetic outcome name for a ``--macro-manifest`` that could not be read
+# (DIG-1371). It is not a dataset, so it never appears in ``exempt`` and the
+# #4621 exemption cannot shield it: the macro leg is not slow, it is undeclared.
+UNREADABLE_MACRO_MANIFEST = "macro-manifest-unreadable"
 
 
 def _sibling(name: str) -> Any:
@@ -875,6 +905,14 @@ def _macro_leg_dead(outcomes: list[dict[str, Any]], exempt: set[str]) -> bool:
     known limits, both recorded in ``digiquant/ARCHITECTURE.md`` -- a
     single-series manifest can never trip this guard, and a partial leg stays
     exempt exactly as it did before.
+
+    What the floor costs, and how it is paid back. It also means a *single*
+    retired series among live ones is not a dead leg by this guard's definition,
+    which used to leave that shape named by nothing: the #4621 exemption
+    forgives its ``history-only`` on cadence alone and the age guard skipped the
+    mode. It is now named by ``_macro_as_of_stale`` instead (DIG-2405) -- a
+    measurement of the seal, not a relaxation of unanimity. The floor stands,
+    because relaxing it would fire on every per-series vendor refusal.
     """
     silent = {
         o["ticker"] for o in outcomes if o["mode"] == MODE_HISTORY_ONLY and o["ticker"] in exempt
@@ -893,6 +931,82 @@ def _live_window_days(cadence: str | None) -> int:
         raise ValueError(
             f"unknown cadence {cadence!r}; expected one of {sorted(_CADENCE_WINDOW_DAYS)}"
         ) from None
+
+
+def _macro_as_of_stale(
+    outcomes: list[dict[str, Any]],
+    macro_specs: list[tuple[str, str, str | None]],
+    run: str,
+    already: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """Macro series sealed older than their own cadence window (DIG-1137).
+
+    ``_macro_leg_dead`` reads ``mode``: it catches the macro leg going
+    ``history-only`` outright. It cannot see the other way a macro panel dies --
+    the vendor stops publishing but keeps *answering*. A live fetch that returns
+    rows the store already has lands on the ``no new observations`` branch and
+    comes back ``up-to-date``, which is not a soft fail, so ``failed`` stays
+    empty and the run reports itself fresh with the panel frozen at its last
+    seal. ``staleness_gate`` cannot catch it either: it takes the newest
+    ``as_of`` across all datasets, and healthy price tickers pin that at the run
+    date no matter how dead the macro leg is.
+
+    So this reads the other field. Every macro outcome whose mode claims the
+    fetch worked is measured on ``as_of`` against the run date, in calendar
+    days, against the same ``_CADENCE_WINDOW_DAYS`` bound the live fetch used.
+    The window is the right threshold rather than the seal itself: a monthly
+    series legitimately holds a 34-day-old seal inside its 120-day window, and
+    flagging that would train operators to ignore the gate.
+
+    Orthogonal to ``_macro_leg_dead``, per outcome rather than per leg. That
+    guard needs unanimity because ``history-only`` has two indistinguishable
+    causes (an emptied window, or one vendor refusing one series) and a subset
+    is not evidence. Age has a single cause and is a measurement, so one frozen
+    series is a finding rather than a coincidence -- and it can only ever *add*
+    to ``failed``, never clear it.
+
+    Two limits, both accepted rather than hidden. ``MODE_ERROR`` is left to the
+    soft-fail reduction, which never exempts it whatever its seal says, so it is
+    already loud and judging its age would add nothing. And the windows are
+    calendar days, not open trading days like ``staleness_gate``'s bound, so a
+    monthly series is judged against months.
+
+    ``MODE_HISTORY_ONLY`` used to be excluded here too, on the argument that a
+    past-window series "has already emptied its live window, so its age adds
+    nothing to the leg test". That argument was wrong and one retired monthly
+    series is its counterexample (DIG-2405). Emptying the live window is not
+    independent of the seal: both are the same measurement of how long the
+    vendor has been silent. A series sitting out its release cycle has an empty
+    window *and a fresh seal*, so age cannot separate that from a one-call
+    vendor refusal -- which is the ambiguity ``_macro_leg_dead`` needs unanimity
+    for, and it is why this guard leaves fresh-sealed ``history-only`` outcomes
+    alone. A series whose seal is itself older than its own window has no such
+    ambiguity left: the store and the vendor agree there is nothing in-window at
+    all, the cause is a single one, and it is retirement rather than silence.
+    That is why the exclusion was dropped rather than the threshold widened --
+    the bound is still the series' own ``_CADENCE_WINDOW_DAYS`` window, and a
+    quiet release cycle at 34 days is still quiet.
+    """
+    cadence_of = {f"{source}__{series}": cadence for source, series, cadence in macro_specs}
+    # Both guards can reach the same ticker now that a retired slow series is
+    # judged here too: an exempt series caught by unanimity *and* by its own age
+    # is one finding, not two. `already` keeps the addition additive and keeps
+    # the operator-facing list free of duplicates.
+    named = {o["ticker"] for o in already or ()}
+    run_date = datetime.fromisoformat(run[:10]).date()
+    aged: list[dict[str, Any]] = []
+    for o in outcomes:
+        if o["ticker"] not in cadence_of or o["mode"] not in _MACRO_JUDGED_MODES:
+            continue
+        as_of = str(o.get("as_of") or "")
+        if not as_of:
+            # A judged outcome with no seal carries no date to measure; the fetch
+            # branches that omit `as_of` all report a soft fail.
+            continue
+        age_days = (run_date - datetime.fromisoformat(as_of[:10]).date()).days
+        if age_days > _live_window_days(cadence_of[o["ticker"]]) and o["ticker"] not in named:
+            aged.append(o)
+    return aged
 
 
 def refresh_macro_series(
@@ -1352,13 +1466,50 @@ def build_store(postgres_uri: str) -> tuple[RefreshStore, dict[str, Any]]:
     return adapter, manifest
 
 
-def _resolve_macro_specs(
-    cli_specs: list[str], manifest_path: str
-) -> list[tuple[str, str, str | None]]:
+class MacroSpecResolution(list):
+    """The resolver's answer: resolved macro specs, plus why there are none.
+
+    A ``list`` subclass on purpose (DIG-1371). Every consumer of
+    :func:`_resolve_macro_specs` iterates the result — ``main``'s refresh loop,
+    :func:`_slow_macro_exempt_ids`, and the digiquant test doubles that replace
+    the resolver wholesale and hand back a plain ``list`` — so the return type
+    has to stay list-compatible. ``manifest_error`` is the one thing an empty
+    list cannot say: it is the only signal separating a manifest this run could
+    not read from a panel that legitimately declared nothing, and without it
+    ``main`` reported fresh while the macro panel stayed frozen at its last seal.
+    """
+
+    manifest_error: str
+
+    def __init__(
+        self,
+        specs: Iterable[tuple[str, str, str | None]] = (),
+        *,
+        manifest_error: str = "",
+    ) -> None:
+        super().__init__(specs)
+        self.manifest_error = manifest_error
+
+
+def _resolve_macro_specs(cli_specs: list[str], manifest_path: str) -> MacroSpecResolution:
     """``--macro-series SOURCE:SERIES`` or the research manifest + Yahoo FX.
 
     The third element is the series' native cadence (``None`` means daily), which
     sets the live fetch window in :func:`refresh_macro_series`.
+
+    ``None`` is a deliberate reading, not a gap (DIG-2406).
+    `_live_window_days` resolves it to `LIVE_WINDOW_DAYS`, the *narrowest*
+    of the four windows in `_CADENCE_WINDOW_DAYS`, so a series nobody wrote a
+    cadence down is judged at 45 days rather than at the slowest: an
+    undeclared cadence buys no patience. Every id the shipped manifest fetches
+    declares one -- see `research/config/macro_series.yaml`. The paths that
+    cannot are the `--macro-series` override below and the Yahoo FX
+    list, both daily by construction.
+    Never raises on an unreadable manifest (DIG-1371): it resolves no specs and
+    carries the cause on ``manifest_error`` instead, so ``main`` can report it
+    loudly *after* the equity leg has run. A raise here would abort the run
+    before :func:`refresh_universe` and turn a broken macro manifest into a
+    total market-data outage.
     """
     if cli_specs:
         out: list[tuple[str, str, str | None]] = []
@@ -1367,7 +1518,7 @@ def _resolve_macro_specs(
             if not source or not series:
                 raise SystemExit(f"--macro-series expects SOURCE:SERIES, got {spec!r}")
             out.append((source.lower(), series, None))
-        return out
+        return MacroSpecResolution(out)
     try:
         from digiquant.data.prices.gloomberb_macro import KEPT_SERIES_IDS
         from digiquant.data.prices.macro_ingest import YAHOO_FX_DEFAULT, MacroManifest
@@ -1379,10 +1530,16 @@ def _resolve_macro_specs(
             if s.get("id") and str(s.get("id")) in KEPT_SERIES_IDS
         ]
         yahoo = [("yahoo", cfg["series_id"], None) for cfg in YAHOO_FX_DEFAULT.values()]
-        return fred + yahoo
+        return MacroSpecResolution(fred + yahoo)
     except Exception as exc:
-        print(f"warn: macro manifest unreadable ({exc}); skipping macro refresh")
-        return []
+        print(f"warn: macro manifest unreadable ({exc}); the macro leg will fail this run")
+        return MacroSpecResolution([], manifest_error=f"{type(exc).__name__}: {exc}")
+
+
+def _report_core_macro_mirror(mirror: dict[str, Any]) -> None:
+    """One line for the core macro mirror (#3780), whether it ran or was skipped."""
+    note = f"; skipped {', '.join(map(str, mirror['skipped']))}" if mirror["skipped"] else ""
+    print(f"core macro mirror: {mirror['rows']} rows / {mirror['series']} series{note}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1430,6 +1587,9 @@ def main(argv: list[str] | None = None) -> int:
     macro_specs = (
         [] if args.skip_macro else _resolve_macro_specs(args.macro_series, args.macro_manifest)
     )
+    # Read with getattr: --skip-macro hands back a plain list, and digiquant's own
+    # test doubles replace the resolver with one that does too (DIG-1371).
+    manifest_error = getattr(macro_specs, "manifest_error", "")
     # No key skip (#4794): the macro panel fetches Gloomberb anonymously,
     # so a missing key is normal. Dropped panel ids never reach this list
     # (see _resolve_macro_specs); their pointers keep serving the last seal.
@@ -1453,6 +1613,20 @@ def main(argv: list[str] | None = None) -> int:
         universe, store, manifest, as_of=run, sealed=args.sealed, progress=print
     )
     macro_outcomes = []
+    # An unreadable manifest used to become an empty spec list, so the whole macro
+    # leg vanished and the run reported fresh with the panel frozen at its last
+    # seal (DIG-1371). Report it as an outcome instead — here, after
+    # refresh_universe, because raising at resolve time would abort the run
+    # before the equity leg. --skip-macro never resolves the manifest and so can
+    # never manufacture this failure.
+    if manifest_error:
+        unreadable = _outcome(
+            UNREADABLE_MACRO_MANIFEST,
+            MODE_ERROR,
+            note=f"macro manifest unreadable: {manifest_error}",
+        )
+        macro_outcomes.append(unreadable)
+        print(f"{unreadable['ticker']}: {unreadable['mode']} ({unreadable['note']})")
     for source, series, cadence in macro_specs:
         try:
             outcome = refresh_macro_series(
@@ -1468,7 +1642,14 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{outcome['ticker']}: {outcome['mode']} ({outcome['note']})")
 
     mirror: dict[str, Any] = {"rows": 0, "series": 0, "skipped": []}
-    if args.core_macro_mirror and macro_specs:
+    if manifest_error:
+        # No specs meant no mirror call, so the artifact would otherwise report
+        # {"rows": 0, "series": 0, "skipped": []} — byte-identical to a healthy
+        # but empty mirror, while twelve-x's Yahoo FX pairs quietly go stale in
+        # core macro_series_observations.
+        mirror["skipped"] = [f"macro manifest unreadable: {manifest_error}"]
+        _report_core_macro_mirror(mirror)
+    elif args.core_macro_mirror and macro_specs:
         try:
             mirror = mirror_macro_to_core(
                 store, macro_specs, run=run, client=build_core_supabase_client()
@@ -1479,8 +1660,7 @@ def main(argv: list[str] | None = None) -> int:
                 "series": 0,
                 "skipped": [f"mirror raised: {type(exc).__name__}"],
             }
-        note = f"; skipped {', '.join(map(str, mirror['skipped']))}" if mirror["skipped"] else ""
-        print(f"core macro mirror: {mirror['rows']} rows / {mirror['series']} series{note}")
+        _report_core_macro_mirror(mirror)
 
     outcomes = ticker_outcomes + macro_outcomes
     datasets = manifest.get("datasets") or {}
@@ -1495,7 +1675,9 @@ def main(argv: list[str] | None = None) -> int:
     # is suspended only when every exempt macro series is history-only at once
     # (#694 follow-up): a partial leg is indistinguishable from per-series
     # vendor refusals and must stay quiet. Suspending it only ever adds names
-    # to `failed`; it never turns a stale run fresh.
+    # to `failed`; it never turns a stale run fresh. An unreadable manifest
+    # (DIG-1371) resolves no specs, so its synthetic outcome is never in `exempt`
+    # and always reaches `failed` — the macro leg is undeclared, not slow.
     exempt = _slow_macro_exempt_ids(macro_specs)
     failed = [
         o
@@ -1507,6 +1689,28 @@ def main(argv: list[str] | None = None) -> int:
             and not _macro_leg_dead(outcomes, exempt)
         )
     ]
+    # Per-series `as_of` age guard (DIG-1137): a macro panel frozen behind a
+    # vendor that keeps answering lands on `up-to-date`, which `_macro_leg_dead`
+    # cannot see. Measured against each series' own cadence window. Additive
+    # only, like the exemption above -- it names series, it never clears them.
+    # Wrapped like the per-series work either side of it (DIG-2406). The guard
+    # reads `macro_specs`, so a divergence here must not ride over the
+    # manifest write below; a raising guard is recorded as a macro error, which
+    # fails the run loud instead of letting a possibly-frozen panel report
+    # itself fresh.
+    # Since DIG-2405 it also judges the cadence-exempt `history-only` outcomes,
+    # which is how a *single* retired slow series gets named at all; `failed` is
+    # passed in so a series both guards reached is named once, not twice.
+    try:
+        failed += _macro_as_of_stale(outcomes, macro_specs, run, failed)
+    except Exception as exc:
+        failed.append(
+            _outcome(
+                "macro__as_of_guard",
+                MODE_ERROR,
+                note=f"as_of age guard raised: {type(exc).__name__}: {exc}",
+            )
+        )
     stale = (not gate["ok"]) or bool(failed)
     manifest.update(build_manifest(new_as_of, datasets, stale=stale))
     digest = store.write_manifest(manifest)

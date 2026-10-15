@@ -23,7 +23,7 @@ const CREATED = new Date().toISOString().slice(0, 10);
 
 /** One-line summaries for the guide notes (the curated tagline becomes FTS weight B). */
 const GUIDE_SUMMARY: Record<string, string> = {
-  "getting-started": "Run the digithings stack locally — prerequisites, compose, environment, and make targets.",
+  "getting-started": "Run the core digithings services locally — prerequisites, compose, profiles, environment, and make targets.",
   "self-host": "Pull GHCR images and run digithings without a local compose build — tags, profiles, loopback defaults.",
   "digichat-install": "Install digichat from a pinned GHCR release — Profile A (digigraph) vs Profile B (Foundry).",
   architecture: "Service topology and chat path — digigraph orchestrates, digikey authenticates, LiteLLM routes.",

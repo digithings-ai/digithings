@@ -79,6 +79,8 @@ export type RepoActivityProps = {
   weeks?: number;
   /** Activity variant: the maintainer credited under the ledger. */
   contributor?: RepoContributor;
+  /** Build the contribution grid left to right when it scrolls into view. */
+  heatBuild?: boolean;
   className?: string;
 };
 
@@ -91,6 +93,7 @@ export function RepoActivity({
   contributingUrl,
   weeks = 53,
   contributor,
+  heatBuild = false,
   className,
 }: RepoActivityProps) {
   const [data, setData] = useState(snapshot);
@@ -182,6 +185,7 @@ export function RepoActivity({
           heatRef={heatRef}
           heatWeeks={heatWeeks}
           heatData={heatData}
+          heatBuild={heatBuild}
           contributor={contributor}
         />
       ) : (
@@ -194,6 +198,7 @@ export function RepoActivity({
           heatRef={heatRef}
           heatWeeks={heatWeeks}
           heatData={heatData}
+          heatBuild={heatBuild}
         />
       )}
     </article>
@@ -305,6 +310,7 @@ function Activity({
   heatRef,
   heatWeeks,
   heatData,
+  heatBuild,
   contributor,
 }: {
   data: RepoActivitySnapshot;
@@ -312,6 +318,7 @@ function Activity({
   heatRef: RefObject<HTMLDivElement | null>;
   heatWeeks: number;
   heatData: RepoActivitySnapshot["dailyContributions"];
+  heatBuild?: boolean;
   contributor?: RepoContributor;
 }) {
   return (
@@ -338,7 +345,13 @@ function Activity({
           <p className="ra-kicker">{`// contributions — ${
             heatWeeks >= 50 ? "last year" : `last ${heatWeeks} weeks`
           }`}</p>
-          <RepoHeatmap pulls={data.mergedPulls} data={heatData} weeks={heatWeeks} fit />
+          <RepoHeatmap
+            pulls={data.mergedPulls}
+            data={heatData}
+            weeks={heatWeeks}
+            fit
+            build={heatBuild}
+          />
         </div>
       </div>
 
@@ -377,8 +390,7 @@ function ContributorAvatar({ contributor }: { contributor: RepoContributor }) {
   if (contributor.avatarUrl) {
     return (
       // Plain <img>: the kit ships no next/image dependency and the avatar is a
-      // single fixed-size square.
-      // eslint-disable-next-line @next/next/no-img-element
+      // single fixed-size square (no next lint plugin runs on packages).
       <img
         className="ra-avatar"
         src={contributor.avatarUrl}
@@ -406,6 +418,7 @@ function Detailed({
   heatRef,
   heatWeeks,
   heatData,
+  heatBuild,
 }: {
   data: RepoActivitySnapshot;
   repoUrl: string;
@@ -415,6 +428,7 @@ function Detailed({
   heatRef: RefObject<HTMLDivElement | null>;
   heatWeeks: number;
   heatData: RepoActivitySnapshot["dailyContributions"];
+  heatBuild?: boolean;
 }) {
   const pulls = (data.mergedPulls ?? []).slice(0, 6);
   const issues = (data.openIssues ?? []).slice(0, 6);
@@ -441,7 +455,12 @@ function Detailed({
         <p className="ra-kicker">{`// contributions — ${
           heatWeeks >= 50 ? "last year" : `last ${heatWeeks} weeks`
         }`}</p>
-        <RepoHeatmap pulls={data.mergedPulls} data={heatData} weeks={heatWeeks} />
+        <RepoHeatmap
+          pulls={data.mergedPulls}
+          data={heatData}
+          weeks={heatWeeks}
+          build={heatBuild}
+        />
       </div>
       <div className="ra-meta">
         <ReleaseLink release={data.latestRelease} />

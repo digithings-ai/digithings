@@ -6,6 +6,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./chart-scale": "./src/components/finance-charts/chart-scale.ts",
+    "./cn": "./src/lib/utils.ts",
     "./styles/web-theme.css": "./src/styles/web-theme.css",
     "./styles/docs.css": "./src/styles/docs.css",
     "./styles/diagrams.css": "./src/styles/diagrams.css",
@@ -56,7 +58,8 @@
   },
   "scripts": {
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint ."
   },
   "peerDependencies": {
     "@assistant-ui/react": "^0.15.18",
