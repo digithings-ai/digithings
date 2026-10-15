@@ -1,38 +1,16 @@
-"""digisearch HTTP client: query the digisearch API and format results for display.
+"""digisearch result formatting: render query results as a markdown table.
 
-Used by digigraph and other callers. All display logic (table, columns, truncation) lives here;
-callers only pass base_url and query parameters.
+Display logic (table, columns, truncation) lives here; the HTTP query path
+uses :mod:`digibase.http_client` directly. The ``query_digisearch`` /
+``search_documents`` helpers and the module-level pooled client were removed
+in DIG-3398: they had no callers (the only consumer of this module is
+``server.py``'s ``format=table`` branch, via :func:`format_results_table`).
 """
 
 from __future__ import annotations
 
-import atexit
 import re
 from typing import Any
-
-import httpx
-from digibase.http_client import sync_client
-
-# Persistent shared client for connection pooling. httpx.Client is thread-safe.
-# Created lazily; closed on process exit via atexit.
-_shared_client: httpx.Client | None = None
-
-
-def _get_client() -> httpx.Client:
-    global _shared_client
-    if _shared_client is None or _shared_client.is_closed:
-        _shared_client = sync_client(timeout=15.0)
-    return _shared_client
-
-
-def _close_client() -> None:
-    global _shared_client
-    if _shared_client is not None and not _shared_client.is_closed:
-        _shared_client.close()
-    _shared_client = None
-
-
-atexit.register(_close_client)
 
 # Default column order when present in results (generic document/email search).
 # Pass preferred_columns to override per project.
@@ -57,42 +35,6 @@ DEFAULT_PREFERRED_COLUMNS = (
 
 DEFAULT_MAX_META_CELL = 60
 DEFAULT_MAX_CONTENT_CELL = 300
-
-
-def query_digisearch(
-    base_url: str,
-    text: str,
-    index_name: str = "default",
-    top_k: int = 10,
-    mode: str = "hybrid",
-    filter: str | None = None,
-    filters: list[dict[str, Any]] | None = None,
-    columns: list[str] | None = None,
-    response_mode: str = "full",
-    summarize_if_over: int | None = None,
-) -> dict[str, Any] | None:
-    """Call digisearch POST /query. Returns full response (results, query, index_name, total, summary?) or None."""
-    if not (base_url and base_url.strip()):
-        return None
-    url = f"{base_url.rstrip('/')}/query"
-    payload: dict[str, Any] = {"text": text, "index_name": index_name, "top_k": top_k, "mode": mode}
-    if filter is not None and filter.strip():
-        payload["filter"] = filter.strip()
-    if filters:
-        payload["filters"] = filters
-    if columns:
-        payload["columns"] = columns
-    if response_mode and response_mode.strip().lower() != "full":
-        payload["response_mode"] = response_mode.strip().lower()
-    if summarize_if_over is not None:
-        payload["summarize_if_over"] = summarize_if_over
-    try:
-        client = _get_client()
-        r = client.post(url, json=payload)
-        r.raise_for_status()
-        return r.json()
-    except Exception:
-        return None
 
 
 def _strip_html(text: str, max_len: int = 400) -> str:
@@ -171,44 +113,3 @@ def format_results_table(
 
     table = "\n".join([header_line, sep_line] + rows)
     return f"digisearch results for: {query_text!r}\n\n{table}"
-
-
-def search_documents(
-    base_url: str,
-    text: str,
-    index_name: str = "default",
-    top_k: int = 10,
-    mode: str = "hybrid",
-    filter: str | None = None,
-    filters: list[dict[str, Any]] | None = None,
-    columns: list[str] | None = None,
-    response_mode: str = "full",
-    summarize_if_over: int | None = None,
-    preferred_columns: tuple[str, ...] | list[str] | None = None,
-) -> str | None:
-    """Query digisearch via HTTP and return results as a formatted markdown table string. Appends text_summary when present."""
-    data = query_digisearch(
-        base_url,
-        text,
-        index_name=index_name,
-        top_k=top_k,
-        mode=mode,
-        filter=filter,
-        filters=filters,
-        columns=columns,
-        response_mode=response_mode,
-        summarize_if_over=summarize_if_over,
-    )
-    if data is None:
-        return None
-    results = data.get("results", [])
-    table = format_results_table(
-        results,
-        text,
-        preferred_columns=preferred_columns,
-        top_k=top_k,
-    )
-    summary = data.get("summary") or {}
-    if isinstance(summary, dict) and summary.get("text_summary"):
-        table = table + "\n\n**Summary:** " + summary["text_summary"]
-    return table

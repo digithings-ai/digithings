@@ -14,6 +14,11 @@ dependencies = [
     "pydantic>=2",
 ]
 
+
+[project.urls]
+Homepage = "https://digithings.ai"
+Repository = "https://github.com/digithings-ai/digithings"
+
 [project.optional-dependencies]
 # YAML-backed mode resolution (resolve_model with a file path). The dict-based
 # resolver path needs no extra dependency; only the path branch lazy-imports yaml.

@@ -1,5 +1,5 @@
 /**
- * Parity tests vs `apps/dashboard/lib/book-reconciliation.test.ts` (client).
+ * Parity tests vs `@digiquant/contract` book reconciliation (client).
  * Same fixtures, same expectations, adapted to the worker input shape
  * (`weightActual` for `weight_actual`).
  */

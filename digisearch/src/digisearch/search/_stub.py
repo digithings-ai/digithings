@@ -20,6 +20,7 @@ import time
 from dataclasses import replace
 from typing import TYPE_CHECKING, Callable
 
+from digisearch.backend_require import _env_truthy, _first_env, _warn_legacy_env
 from digisearch.core.models import Chunk, Query, Result, SearchResponse
 from digisearch.core.standard_hits import BACKEND_CHROMA, BACKEND_STUB, BACKEND_VECTORIZE
 from digisearch.indexes.backends.backend_errors import CorpusNotSeededError, SearchBackendError
@@ -60,39 +61,6 @@ def guard_unseeded(index_names: list[str]) -> None:
     missing = sorted(set(index_names) & unseeded_indexes())
     if missing:
         raise CorpusNotSeededError(missing)
-
-
-def _first_env(*names: str) -> str:
-    """Return the first non-empty, stripped env var among ``names``.
-
-    Canonical-first, legacy-fallback precedence (#2239 credential rename): Vectorize
-    and D1 now share one Cloudflare account + token, so every credential read here
-    tries ``CLOUDFLARE_ACCOUNT_ID``/``CLOUDFLARE_API_TOKEN`` (wrangler's own
-    conventional names) first, then the legacy ``VECTORIZE_*``/``D1_*`` names — kept
-    working so the deployed Worker's live secrets need no coordinated rotation before
-    this ships (zero-downtime rename). Same shape as
-    ``digivault.supabase_store._first_env``; duplicated locally rather than imported
-    across the digisearch/digivault package boundary.
-    """
-    for name in names:
-        value = os.environ.get(name, "").strip()
-        if value:
-            return value
-    return ""
-
-
-_LEGACY_WARNED: set[str] = set()
-
-
-def _warn_legacy_env(canonical: str, *legacy: str) -> None:
-    if os.environ.get(canonical, "").strip():
-        return
-    for name in legacy:
-        if os.environ.get(name, "").strip():
-            if name not in _LEGACY_WARNED:
-                _LEGACY_WARNED.add(name)
-                logger.warning("Using deprecated env var %s; set %s instead", name, canonical)
-            return
 
 
 def register_backend(fn: _BackendFn) -> _BackendFn:
@@ -206,10 +174,6 @@ _stub_index: dict[str, list[Chunk]] = {"default": []}
 
 # Process-scoped Reranker instances so BGE CrossEncoder is not reloaded per query.
 _reranker_by_provider: dict[str, Reranker] = {}
-
-
-def _env_truthy(name: str) -> bool:
-    return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "on")
 
 
 def _get_reranker(provider: str) -> Reranker:
