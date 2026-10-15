@@ -180,7 +180,7 @@ def _publish(
 
 
 def _human_doc_type_label(payload: Dict[str, Any]) -> str:
-    """Labels must match documents.chk_documents_doc_type (see supabase/migrations/019)."""
+    """Labels must match documents.chk_documents_doc_type (see supabase/migrations/engine/019)."""
     dt = str(payload.get("doc_type") or "")
     mapping = {
         "sector_report": "Sector Report",

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Apply the digiquant Supabase migration chain to a CLEAN, DISPOSABLE PostgreSQL
-# database, in filename order, and prove every file applies.
+# database, in layered order (engine/ then prod/, each in filename order), and
+# prove every file applies. Layering is D-Q6′ (DIG-3694).
 #
 # This is parity arm (b) of the self-host reference stack plan
 # (DIG-2758 plan section 8): "supabase db reset on clean PG17 applies all
@@ -88,26 +89,33 @@ if [ -d "$migrations_dir/cutover" ]; then
 fi
 
 # --- the ordered chain ---------------------------------------------------------
+# D-Q6′ layering (DIG-3694): engine/ applies first in filename order, then
+# prod/ in filename order. Entries carry the dir prefix (engine/001_...sql)
+# so the apply loop below needs no change beyond `-f "$migrations_dir/$m"`.
 # shellcheck disable=SC2012
-chain="$(ls -1 "$migrations_dir"/*.sql 2>/dev/null | sed "s|^$migrations_dir/||" | LC_ALL=C sort)"
-[ -n "$chain" ] || fail "no .sql files in $migrations_dir"
+chain="$( { ls -1 "$migrations_dir"/engine/*.sql 2>/dev/null; ls -1 "$migrations_dir"/prod/*.sql 2>/dev/null; } | sed "s|^$migrations_dir/||" | LC_ALL=C sort -t/ -k1,1 -k2,2)"
+[ -n "$chain" ] || fail "no .sql files in $migrations_dir/engine or $migrations_dir/prod"
 count="$(printf '%s\n' "$chain" | wc -l | tr -d ' ')"
+names="$(printf '%s\n' "$chain" | sed 's|^[^/]*/||')"
 
-bad_name="$(printf '%s\n' "$chain" | grep -vE '^[0-9]{3}_[a-z0-9_]+\.sql$' || true)"
+bad_name="$(printf '%s\n' "$names" | grep -vE '^[0-9]{3}_[a-z0-9_]+\.sql$' || true)"
 if [ -n "$bad_name" ]; then
   printf 'migration filenames must be NNN_lower_snake.sql:\n%s\n' "$bad_name" >&2
   fail "naming guard"
 fi
 
-dupes="$(printf '%s\n' "$chain" | sed 's/_.*//' | LC_ALL=C sort | uniq -d || true)"
+dupes="$(printf '%s\n' "$names" | sed 's/_.*//' | LC_ALL=C sort | uniq -d || true)"
 [ -z "$dupes" ] || { printf 'duplicate numeric prefixes: %s\n' "$dupes" >&2; fail "ordering guard"; }
 
-# Lexical order must equal numeric order, or "sort by name" is not "apply in
-# order" and the whole check would be a fiction.
-if ! diff <(printf '%s\n' "$chain") \
-          <(printf '%s\n' "$chain" | LC_ALL=C sort -t_ -k1,1n) >/dev/null; then
-  fail "lexical and numeric order differ; apply order is not filename order"
-fi
+# Lexical order must equal numeric order within each layer, or "sort by name"
+# is not "apply in order" and the whole check would be a fiction.
+for layer in engine prod; do
+  layer_names="$(printf '%s\n' "$chain" | grep "^$layer/" | sed "s|^$layer/||")"
+  if ! diff <(printf '%s\n' "$layer_names") \
+            <(printf '%s\n' "$layer_names" | LC_ALL=C sort -t_ -k1,1n) >/dev/null; then
+    fail "lexical and numeric order differ in $layer/; apply order is not filename order"
+  fi
+done
 
 first="$(printf '%s\n' "$chain" | head -1)"
 last="$(printf '%s\n' "$chain" | tail -1)"
@@ -190,6 +198,7 @@ applied=0
 failed_json=""
 : >"$log_dir/failures.txt"
 while IFS= read -r m; do
+  mkdir -p "$log_dir/$(dirname "$m")"
   if ! "$psql_bin" -X -q -v ON_ERROR_STOP=1 --single-transaction \
         -f "$migrations_dir/$m" >"$log_dir/$m.log" 2>&1; then
     # Quotes and backslashes are folded to apostrophes so the JSON report stays

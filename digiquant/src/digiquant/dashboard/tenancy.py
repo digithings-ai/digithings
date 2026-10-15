@@ -8,7 +8,7 @@ digithings operator's own current book lives under the **house** workspace, a re
 backfill to.
 
 This module is deliberately schema-adjacent, not schema-owning: the DDL lives in
-``digiquant/supabase/migrations/096_workspaces_tenancy_tables.sql`` and friends. What
+``digiquant/supabase/migrations/prod/096_workspaces_tenancy_tables.sql`` and friends. What
 lives here is the typed contract the schema is expected to satisfy, and the
 deterministic ids that let the migration's seed rows and every Python writer agree on
 "the system workspace" / "the house workspace" without a round trip.
