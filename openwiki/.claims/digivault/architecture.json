@@ -43,7 +43,7 @@
           "version": "repo-lines-v1:sha256:9630f4f35f01639f8e7edf4ca7f56e5b562086ed6dfa9f33389550a70ae0b048:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMTg4NDM1MTQzNjJjZThhODMxNzdjZDllOWYxNGFmMmFhMTcwZjkwZTc5OTcxZDFmZWRmOWFkZDUwNWNhMjQ4OSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDBiZWI3OGE5YmY0MGI2NzRlMjc3ZjU4YzJkNDk2MmMyNDZlYTM3M2E4MmYxNjg1Mjc0YTQwZTA3ZDE3ODlkNyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiODdhZjUxNjg0YjQzOTdlNmNhM2M1ZmI2YWQ5YTk0ZTJlN2IyOTNkODI5NDZiYmY5MmRhMDk4MjAxMzExZDlhNyJ9"
         },
         {
-          "resource": "repo://digivault/src/digivault/tool_dispatch.py#L191-L197",
+          "resource": "repo://digivault/src/digivault/tool_dispatch.py#L196-L202",
           "version": "repo-lines-v1:sha256:aa4540abaf79aafde537265bec78b290ff21f52ca784d5b6066007f2584ef377:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMjAzNWFiYTI5NTFhYjUxZTRmNjE2ZDMwMDAwMzkwZTM2ZTk1MjYwOWU0MzJkYzAxZTQ4Yjc5MzVhMDc4ZjA0ZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDEyY2EzNDVjY2Y3NWJmOWMwODA2YmNlNjk1YmU4ZGU4MDhiNzk5ODQyNTFhN2E1NGQyMDJjZjYxMDFkZDQ1MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMjA2YzczN2RjOTZjMWMxNDVlMTNkNDc5MmM2YzYyNTMyMjhkOWRiY2UyMmNkNDhjMWEyYzZjZmM5ZWQxMGFhNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYmRiNjVjNDU1MWUyM2Y2ODg1NWI3MDEzMzVkOTNmODZjOWVmODc4MWI2NGIyNjlhMTM0NTgwM2U1OWQzY2NkMSJ9"
         },
         {
@@ -58,22 +58,22 @@
     },
     {
       "id": "claim_6665f197bcf34006906bdd7166ce5b75",
-      "statement": "digivault_search_notes prefers D1 (Cloudflare FTS5) when CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN + D1_DATABASE_MAP are all set — D1 wins even when DIGIVAULT_ROOT is also set — then falls back to local filesystem keyword search, then Supabase FTS. digivault_get_note (and POST /v1/notes/by-path) is D1-only with no filesystem or Supabase fallback.",
+      "statement": "digivault_search_notes prefers D1 (Cloudflare FTS5) when CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN + D1_DATABASE_MAP are all set \u2014 D1 wins even when DIGIVAULT_ROOT is also set \u2014 then falls back to local filesystem keyword search, then Supabase FTS. digivault_get_note (and POST /v1/notes/by-path) is D1-only with no filesystem or Supabase fallback.",
       "evidence": [
         {
           "resource": "repo://digivault/ARCHITECTURE.md#L159-L196",
           "version": "repo-lines-v1:sha256:fc6b627c99eadcdf244558136a1056c2c6940b97dd2392971883ff085dd49474:eyJzZWxlY3RlZExpbmVDb3VudCI6MzgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNkY2RlNDY3MzE3MjFmMjgyMmUyYTUxZDcyMjdkZmI3NmQzOTJiYzM5MDBlMmI3ZTQyYjkzZWY2ZWRhYjY2ZGQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM4OGVkY2E5MGRiMGY0NGY2OGFkYzczOGE4NGMyNmVkYjAxNjIyOWYzOGI3MGUzNjgwMmQyNGUxNDBjY2JiMmYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjUxYzk3ZWFkOTBhZmUxZjk2YzI2MzlkY2RjNjY3YTMwZDRjY2NhNjZkMDk2MmE0Zjk2NzRiMzQ0ZThjMzAxNzUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkyYzU2MGUyN2ZkZjY1NWMyOTRiMmU0NmJjNDY2YjIzZDE5NWMzODlkOWI0OThiMDIwNGQwY2EwNGFiNmEyYzcifQ"
         },
         {
-          "resource": "repo://digivault/src/digivault/server.py#L192-L234",
+          "resource": "repo://digivault/src/digivault/server.py#L194-L236",
           "version": "repo-lines-v1:sha256:a0d50dd79edeb42c7a4ab74c99966482412f1ce00a6f2440b6de65a682f2d3fc:eyJzZWxlY3RlZExpbmVDb3VudCI6NDMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhiYjY0NTlkODRlYWIxYTg5NjJmMWRiNTA5NzZlMzdhM2QwYzY4YTA0ZTg4NjcxN2IwMTJkOTQ1YWZlOWFlODMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFmNTYzZWJjMjA0MTM4NmU1OGJiYTUzODNkZmVkZWNjMDZlMTE0MzQ5NWRhZDBjZDhiMGFhMTQ5MDkxMzE3OWEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjcwMzg0NmQ1NzliOTlkMGVmZDk0MDc0ODU4ZjNjNzQ3MzMwMzZhZDlmZDg3ZDE2MGM3ZjlhZWE1MmVmNDNlY2UiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjdlZjg1ZjVhNWVhYWEwZjI0ZTg4MGJiODk2ZDc2ZTljYjYyNDEzNDhjNjZmMjEwNzU0NzY5OTYwOTFkMGJkODUifQ"
         },
         {
-          "resource": "repo://digivault/src/digivault/server.py#L792-L858",
+          "resource": "repo://digivault/src/digivault/server.py#L805-L871",
           "version": "repo-lines-v1:sha256:f8cfdc9c32e114faac635fa06c464c7dee46c1cca64f4ffe00407c970f75862c:eyJzZWxlY3RlZExpbmVDb3VudCI6NjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkxNDM1NGM5ZmViZjRmNTQ4OGY1NGI4ZTk4OTNlN2Q0OGM3Zjc0ZDgwODg2ZTMzY2JjNTRhZTE1ODg4ZDVkZTEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI2YjU4YjVkMzViYzI5OGZiNGQ0ZjgwMjJlM2E3MWY3OTU5YTc5NWQ5MWRjNTUyNTUzMjIxMmU5MmQ5ZmIwY2YiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjdjNmJmZjc1OWZjOWZmNTRmNzkwNzhiYTMwNzU2ZGQzYzdhZTk0YTExOTVlODk3YWNkZjdlMGFlNmE5MjM5MmQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ4OGIzMjUyMzRlMjljYzk0N2Y4MzZiY2UyN2YxNTI0M2Y1YjU1ZjdjMjYwNjUyM2MxZWIwZjhiYWU5NWRmZGYifQ"
         },
         {
-          "resource": "repo://digivault/src/digivault/server.py#L861-L864",
+          "resource": "repo://digivault/src/digivault/server.py#L874-L877",
           "version": "repo-lines-v1:sha256:96cd83131cde06f59db01247e509c48a0fdf02ec293e2743174e0d26768ca143:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNWFmZTYzMjhlZjVkNmYwMzlhZDBjOTFiNTlkZGJmMTVlYTM1OTQxNmM0YThiMTIwNWExYjEwZWY4NzVhOWE0MSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDczMWQ3YTZjOTU3ZjI0ZGUyZDY3ZTc5OTRlOTY5ODdlMDQzZjM0N2Q3MDIxNjE5ZDA5YjU2OTEzYzE2OTZhMSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYTVjOTZmNGNjZDQ2NmU1OTExZWZmYTVkYzhjZmNiN2RmMjE4YTQ4MWQyNjllYTc2NTM5NjBkNGE0YzczMjIwMCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiY2E3NmNmN2IzYjk2YjgyYjIwMzFkYTYyMjM0ZDZiODM0ZTUyMmFhOGY1ZmQzNWIwM2MzNzU5Nzk1MjIwOTliMiJ9"
         }
       ]
