@@ -13,9 +13,9 @@ Gallery CSS is `uv-`-prefixed and does **not** ship to product apps until we pro
 | Source | Role in the blend |
 |--------|-------------------|
 | digiweb Instrument Panel | Spine — tokens, three colour domains, hairline elevation, money fencing |
-| [herdr.dev](references/herdr.dev.md) | Zero radius, claim+install hero, sharp fields, diegetic terminal |
-| [agentmail.to](references/agentmail.to.md) | White rect CTA, sparse nav/density, bracket docs control |
-| [omarchy.org](references/omarchy.org.md) | Mono-everything voice |
+| herdr.dev | Zero radius, claim+install hero, sharp fields, diegetic terminal |
+| agentmail.to | White rect CTA, sparse nav/density, bracket docs control |
+| omarchy.org | Mono-everything voice |
 | Cursor / Graphite / xAI | Section discipline / optional motion / `//` kickers |
 
 ## Round 1 — raw picks (your preference)
