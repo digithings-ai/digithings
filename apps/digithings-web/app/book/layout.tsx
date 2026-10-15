@@ -7,10 +7,10 @@ import { DtNav } from "@/components/DtNav";
 import { PRINT_CSS } from "@/lib/book/printCss";
 
 export const metadata: Metadata = {
-  title: "book — digithings, in reading order",
+  title: "digibook — a book about self-hosted AI infrastructure",
   description:
-    "The digithings book: why the stack is built the way it is, in the order that makes the answer " +
-    "readable. Read on screen or print it.",
+    "digibook: a short, philosophical book on why self-hosted AI infrastructure matters, how it " +
+    "scales, and what it costs. Read on screen or print it.",
 };
 
 /**

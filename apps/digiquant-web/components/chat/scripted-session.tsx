@@ -153,7 +153,7 @@ export function ScriptedDigichatSession() {
         className={`${digichatFont.variable} ${digichatFont.className} ${DIGICHAT_TEXT} scripted-digichat grid h-[min(40rem,calc(100svh-10rem))] min-h-[24rem] grid-rows-[auto_minmax(0,1fr)] overflow-hidden border border-hair md:grid-cols-[15rem_minmax(0,1fr)] md:grid-rows-1 lg:h-auto lg:min-h-[28rem] lg:flex-[1_1_0px]`}
       >
         <div className="max-h-40 min-h-0 overflow-hidden md:flex md:max-h-none">
-          <DigichatThreadList className="h-full w-full" />
+          <DigichatThreadList className="h-full w-full" landmark="nav" />
         </div>
         <DigichatThread
           welcome=""

@@ -37,8 +37,7 @@ list, block list, or scalar).
 `![[embed]]` forms into `LinkRef` records. `rewrite_target` and
 `map_targets` rewrite link targets while masking code spans and blocks
 first — examples inside fenced code never rewrite. Standard inline
-<!-- openwiki: broken internal link [target] file "target" does not exist. Fix the href or restore the target, then delete this comment. -->
-`[label](target)` links are out of scope (owned by the doc-link checker).
+links (a label plus a URL) are out of scope (owned by the doc-link checker).
 
 ## Reads
 

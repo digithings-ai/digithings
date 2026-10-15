@@ -53,6 +53,44 @@ def _rows(response: Any) -> list[dict[str, Any]]:
     return list(getattr(response, "data", None) or [])
 
 
+def _escape_like(value: str) -> str:
+    """Escape SQL ``LIKE`` metacharacters so a path prefix matches literally."""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _normalize_prefix(path_prefix: str | None) -> str:
+    """Strip whitespace/slashes; empty means unscoped (no server-side filter)."""
+    return (path_prefix or "").strip().strip("/")
+
+
+def _iter_pages(
+    client: Any,
+    table: str,
+    select: str,
+    prefix: str,
+    page_size: int,
+) -> Any:
+    """Yield raw row dicts page by page (stops on the first short page)."""
+    if page_size <= 0:
+        raise ValueError(f"page_size must be positive, got {page_size}")
+    start = 0
+    while True:
+        query = client.table(table).select(select)
+        if prefix:
+            query = query.like("vault_path", f"{_escape_like(prefix)}%")
+        page = query.order("vault_path").range(start, start + page_size - 1).execute()
+        rows = _rows(page)
+        yield rows
+        if len(rows) < page_size:
+            return
+        start += page_size
+
+
+def _in_scope(vault_path: str, prefix: str) -> bool:
+    """Client-side re-check: exact match or a full path segment below ``prefix``."""
+    return vault_path == prefix or vault_path.startswith(prefix + "/")
+
+
 class SupabaseStore:
     """Read a digivault vault out of a Supabase table.
 
@@ -128,28 +166,18 @@ class SupabaseStore:
         server-side row cap. This pages explicitly with ``.range()`` and stops on
         the first short page.
         """
-        if page_size <= 0:
-            raise ValueError(f"page_size must be positive, got {page_size}")
-        prefix = (path_prefix or "").strip().strip("/")
+        prefix = _normalize_prefix(path_prefix)
         out: list[NoteRow] = []
-        start = 0
-        while True:
-            query = self._client.table(self._table).select(_SELECT)
-            if prefix:
-                query = query.like("vault_path", f"{prefix}%")
-            page = query.order("vault_path").range(start, start + page_size - 1).execute()
-            rows = list(getattr(page, "data", None) or [])
+        for rows in _iter_pages(self._client, self._table, _SELECT, prefix, page_size):
             for row in rows:
                 note = NoteRow.model_validate(row)
                 vault_path = note.vault_path.strip()
                 if not vault_path:
                     continue
-                if prefix and vault_path != prefix and not vault_path.startswith(prefix + "/"):
+                if prefix and not _in_scope(vault_path, prefix):
                     continue
                 out.append(note)
-            if len(rows) < page_size:
-                return out
-            start += page_size
+        return out
 
     def list_raw(
         self,
@@ -174,27 +202,17 @@ class SupabaseStore:
         the columns it asked for. Does not read or change ``_SELECT``/``NoteRow``/
         ``list_notes`` at all -- existing callers of those are unaffected.
         """
-        if page_size <= 0:
-            raise ValueError(f"page_size must be positive, got {page_size}")
-        prefix = (path_prefix or "").strip().strip("/")
+        prefix = _normalize_prefix(path_prefix)
         out: list[dict[str, Any]] = []
-        start = 0
-        while True:
-            query = self._client.table(self._table).select(select)
-            if prefix:
-                query = query.like("vault_path", f"{prefix}%")
-            page = query.order("vault_path").range(start, start + page_size - 1).execute()
-            rows = list(getattr(page, "data", None) or [])
+        for rows in _iter_pages(self._client, self._table, select, prefix, page_size):
             for row in rows:
                 vault_path = str(row.get("vault_path") or "").strip()
                 if not vault_path:
                     continue
-                if prefix and vault_path != prefix and not vault_path.startswith(prefix + "/"):
+                if prefix and not _in_scope(vault_path, prefix):
                     continue
                 out.append(row)
-            if len(rows) < page_size:
-                return out
-            start += page_size
+        return out
 
     def load_vault(self, *, config: VaultConfig | None = None) -> Vault:
         """Materialize a read-only :class:`Vault` from the table."""

@@ -228,7 +228,7 @@ admit new parents without rebuild.
 
 ## Health endpoint
 
-`GET /api/health` is the only public route. It probes:
+`GET /api/health` is the public health probe. It probes:
 
 - **digigraph** — `GET {digigraphUrl}/health` (4 s timeout), gated by `DIGICHAT_ENABLED_SERVICES`
 - **digiquant** — same pattern
@@ -243,16 +243,9 @@ or the database errors. The `version` field reads `DIGICHAT_VERSION` env, then
 
 ## Release artifacts
 
-Releases install from GHCR (`ghcr.io/digithings-ai/digichat:vX.Y.Z`), not npm.
-Tags are cut by release-please on `develop`; a human-pushed `digichat-vX.Y.Z`
-tag publishes the image via `publish-digichat-image.yml`.
+Install digichat from a built image, not npm. `.github/workflows/publish-digichat-image.yml` publishes on a `digichat-vX.Y.Z` tag. The runbook records that no `ghcr.io/digithings-ai/digichat` image was published as of 2026-10-06, so until the next tag, build locally with `docker build -f apps/digichat/Dockerfile .`.
 
-Local Compose builds from the monorepo (`make up-digichat`). To pull a pinned
-GHCR release:
-
-```bash
-make digichat-release-up VERSION=2.3.2
-```
+Local Compose builds from the monorepo (`make up-digichat`).
 
 ## Troubleshooting
 
