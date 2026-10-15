@@ -20,7 +20,7 @@ Playwright→HTTP cookie hand-off. Hard deps are `pydantic>=2` +
 
 ```mermaid
 flowchart TD
-    Consumer["Consumer (e.g. twelve-x)"] --> BS["browser_session()"]
+    Consumer["Consumer"] --> BS["browser_session()"]
     Consumer --> HF["HttpFetcher"]
     Consumer --> WR["with_retry()"]
     Consumer --> RL["RateLimiter"]
@@ -139,9 +139,9 @@ teardown — `browser.close()` runs even if the caller's body raises. The
 caller drives the page (navigation, selectors, clicks, `content()`) because
 that logic is site-specific.
 
-`BrowserConfig` carries the knobs both twelve-x scrapers vary: `headless`
-(default `True`), `user_agent`, `default_timeout_ms` (TE uses 45 000),
-`browser` (both use `chromium`), `viewport`, and `launch_args`.
+`BrowserConfig` carries the knobs callers vary: `headless`
+(default `True`), `user_agent`, `default_timeout_ms`, `browser`,
+`viewport`, and `launch_args`.
 
 `Page` and `BrowserContext` are `@runtime_checkable` structural Protocols
 (not Playwright imports), so consumers get real type hints even when
@@ -157,6 +157,6 @@ message.
 
 ## Provisional status
 
-Built ahead of the YAGNI trigger for twelve-x, the single consumer as of
-0.1.0 — treat the interface as provisional until a second consumer arrives.
+Built ahead of a second consumer — treat the 0.1.0 interface as provisional
+until another caller arrives.
 No `import fastapi`, no `Request` objects, no service coupling.
