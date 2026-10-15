@@ -74,7 +74,7 @@ EOF
 run_sql_file "supabase-compat shim" "$PROOF_DIR/00_supabase_shim.sql"
 
 log ""
-log "=== Migration source: origin/develop top-level digiquant/supabase/migrations/*.sql ==="
+log "=== Migration source: develop top-level digiquant/supabase/migrations/*.sql ==="
 mapfile -t DEVELOP_MIGS < <(find "$MIG_DIR" -maxdepth 1 -name '*.sql' | sort)
 log "count: ${#DEVELOP_MIGS[@]}"
 for f in "${DEVELOP_MIGS[@]}"; do
