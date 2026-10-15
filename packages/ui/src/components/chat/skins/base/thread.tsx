@@ -446,25 +446,29 @@ const slashCommands: readonly Unstable_SlashCommand[] = [
     id: "summarize",
     description: "Summarize the conversation",
     icon: "FileText",
-    execute: () => console.log("[base example] /summarize invoked"),
+    // Example only — no-op.
+    execute: () => undefined,
   },
   {
     id: "translate",
     description: "Translate text to another language",
     icon: "Languages",
-    execute: () => console.log("[base example] /translate invoked"),
+    // Example only — no-op.
+    execute: () => undefined,
   },
   {
     id: "search",
     description: "Search the web for information",
     icon: "Globe",
-    execute: () => console.log("[base example] /search invoked"),
+    // Example only — no-op.
+    execute: () => undefined,
   },
   {
     id: "help",
     description: "List available commands",
     icon: "HelpCircle",
-    execute: () => console.log("[base example] /help invoked"),
+    // Example only — no-op.
+    execute: () => undefined,
   },
 ];
 

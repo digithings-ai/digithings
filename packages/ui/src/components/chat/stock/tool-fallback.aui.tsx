@@ -1,13 +1,8 @@
 "use client";
 
 import { memo, useCallback, useRef, useState } from "react";
-import {
-  AlertCircleIcon,
-  CheckIcon,
-  ChevronDownIcon,
-  LoaderIcon,
-  XCircleIcon,
-} from "lucide-react";
+import { ChevronDownIcon } from "lucide-react";
+import { DotMatrix, type DotMatrixState } from "../DotMatrix";
 import {
   toolApprovalAcceptsText,
   useScrollLock,
@@ -140,11 +135,11 @@ function ToolFallbackRoot({
 
 type ToolStatus = ToolCallMessagePartStatus["type"];
 
-const statusIconMap: Record<ToolStatus, React.ElementType> = {
-  running: LoaderIcon,
-  complete: CheckIcon,
-  incomplete: XCircleIcon,
-  "requires-action": AlertCircleIcon,
+const statusMatrix: Record<ToolStatus, DotMatrixState> = {
+  running: "tool",
+  complete: "success",
+  incomplete: "error",
+  "requires-action": "warning",
 };
 
 function ToolFallbackDuration({
@@ -186,12 +181,14 @@ function ToolFallbackTrigger({
   const isErrorStatus =
     status?.type === "incomplete" && status.reason === "error";
 
-  const Icon = statusIconMap[statusType];
   const label = isCancelled
     ? "Cancelled tool"
     : isErrorStatus
       ? "Failed tool"
       : "Used tool";
+  const matrixState: DotMatrixState = isCancelled
+    ? "idle"
+    : statusMatrix[statusType];
 
   return (
     <CollapsibleTrigger
@@ -202,18 +199,15 @@ function ToolFallbackTrigger({
       )}
       {...props}
     >
-      <Icon
-        data-slot="tool-fallback-trigger-icon"
-        className={cn(
-          "aui-tool-fallback-trigger-icon size-4 shrink-0",
-          isCancelled && "text-muted-foreground",
-          isRunning && "animate-spin [animation-duration:0.6s]",
-        )}
+      <DotMatrix
+        state={matrixState}
+        label={label}
+        className="aui-tool-fallback-trigger-icon size-4 shrink-0"
       />
       <span
         data-slot="tool-fallback-trigger-label"
         className={cn(
-          "aui-tool-fallback-trigger-label-wrapper inline-block text-start leading-none",
+          "aui-tool-fallback-trigger-label-wrapper inline-block text-start leading-none text-foreground",
           isCancelled && "text-muted-foreground line-through",
           isRunning && "shimmer motion-reduce:animate-none",
         )}

@@ -82,12 +82,17 @@ export function useInviteLink(): InviteLinkState {
     let cancelled = false;
     setRedeemInFlight(true);
     // Bounded wait: a stalled redeem must not pin AuthGate forever.
+    let timer = 0;
     const timeout = new Promise<never>((_, reject) => {
-      window.setTimeout(
+      timer = window.setTimeout(
         () => reject(new Error('invite redeem timed out')),
         REDEEM_TIMEOUT_MS,
       );
     });
+    const finish = () => {
+      window.clearTimeout(timer);
+      if (!cancelled) setRedeemInFlight(false);
+    };
     void Promise.race([
       redeemStashedInvite({
         accessToken,
@@ -95,11 +100,10 @@ export function useInviteLink(): InviteLinkState {
         refresh: requestAccessRefresh,
       }),
       timeout,
-    ]).then(() => {
-      if (!cancelled) setRedeemInFlight(false);
-    });
+    ]).then(finish, finish);
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
     };
   }, [authEnabled, loading, accessToken, email]);
 

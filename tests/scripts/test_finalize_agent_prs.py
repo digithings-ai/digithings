@@ -34,6 +34,8 @@ from typing import Any  # score:allow untyped any — dynamically loaded module
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts" / "finalize_agent_prs.py"
 

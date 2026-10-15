@@ -68,7 +68,7 @@ The dashboard has no TUI. Its parity question is real data (DIG-2697) and previe
 |---|---|---|---|---|---|---|---|
 | D1 | Brief (`/`), portfolio + attribution, ledger, performance, period, theses, tickers | n/a (the digiquant TUI covers the desk) | yes | Supabase + `desk` (`dashboard-api`) | `mcp` (`dashboard-api` `POST /mcp`, local only) | real data, no mocks | DIG-2697 |
 | D2 | Pipeline, strategy, research (+ `/research/vela-spike`), library | n/a | yes | Supabase + `desk` | `mcp` | real data; Vela spike follows ADR D8 | DIG-2697, DIG-2704 |
-| D3 | System, observability, architecture, house | n/a | yes | Supabase, Langfuse | — | real data | DIG-2697 |
+| D3 | System, observability, architecture, house | n/a | yes | Supabase, digitrace | — | real data | DIG-2697 |
 | D4 | twelve-x FX hub (`/twelve-x`) | n/a | yes (access-gated) | `desk` | `mcp` | real data; same lock as Q5 | DIG-2697 |
 | D5 | Settings, broker callback | n/a | yes | Supabase | — | real data | DIG-2697 |
 | D6 | Auth (login, signup, callback, invite) | n/a | yes | Supabase auth | — | — | DIG-2697 |

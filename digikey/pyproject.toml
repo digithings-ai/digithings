@@ -23,6 +23,11 @@ dependencies = [
     "digibase>=0.1.0",
 ]
 
+
+[project.urls]
+Homepage = "https://digithings.ai"
+Repository = "https://github.com/digithings-ai/digithings"
+
 [project.optional-dependencies]
 dev = ["fakeredis>=2.20"]
 

@@ -177,15 +177,3 @@ export async function resolveEffectivePlanTierFromDashboardAccessToken(
     return null;
   }
 }
-
-/**
- * Best-effort tier from query param or header. NEVER used for authorization —
- * only for non-security UI hints. The chat route uses verifyPlanProof() instead.
- */
-export function rawTierFromRequest(req: Request): PlanTier | null {
-  const raw =
-    req.headers.get("x-embed-plan-tier")?.trim().toLowerCase() ||
-    new URL(req.url).searchParams.get("plan_tier")?.trim().toLowerCase() ||
-    null;
-  return raw && isValidPlanTier(raw) ? raw : null;
-}

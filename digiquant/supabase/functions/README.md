@@ -106,6 +106,7 @@ deno test --allow-env --allow-read --allow-net=127.0.0.1,localhost \
   _shared/cors.test.ts \
   _shared/profile-schemas.test.ts \
   _shared/billing-auth.test.ts \
+  _shared/invite.test.ts \
   _shared/tiers.test.ts \
   _shared/vault.test.ts \
   _shared/stripe.test.ts \

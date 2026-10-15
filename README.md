@@ -8,6 +8,7 @@
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT" /></a>
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.12+-green.svg" alt="Python 3.12+" /></a>
+  <a href="https://github.com/digithings-ai/digithings/actions/workflows/ci.yml"><img src="https://github.com/digithings-ai/digithings/actions/workflows/ci.yml/badge.svg?branch=develop" alt="CI" /></a>
 </p>
 
 ---
@@ -57,6 +58,36 @@ Flagship vertical: **quantitative finance** — a "hedge-fund in a box" where on
 | **digifetch** | Shared web-scraping / headless-fetch engine library | [digifetch/ARCHITECTURE.md](digifetch/ARCHITECTURE.md) |
 | **digidev** | Drop-in agentic-coding workflow kit | [digidev/README.md](digidev/README.md) |
 | **config** | LiteLLM + model modes (test/medium/best) | [config/MODELS.md](config/MODELS.md) |
+
+## Packages
+
+Python members live in their own directories. The import name is the directory name.
+
+| Package | Path |
+|---------|------|
+| digibase | [digibase/](digibase/) |
+| digiclaw | [digiclaw/](digiclaw/) |
+| digifetch | [digifetch/](digifetch/) |
+| digigraph | [digigraph/](digigraph/) |
+| digikey | [digikey/](digikey/) |
+| digillm | [digillm/](digillm/) |
+| digiquant | [digiquant/](digiquant/) |
+| digisearch | [digisearch/](digisearch/) |
+| digiskills | [digiskills/](digiskills/) |
+| digitrace | [digitrace/](digitrace/) |
+| digivault | [digivault/](digivault/) |
+| digivoice | [digivoice/](digivoice/) |
+
+JavaScript workspace packages:
+
+| Package | Path |
+|---------|------|
+| `@digithings/design` | [packages/design/](packages/design/) |
+| `@digithings/digichat-cli` | [apps/digichat/cli/](apps/digichat/cli/) |
+| `@digithings/digichat-ui` | [packages/digichat-ui/](packages/digichat-ui/) |
+| `@digithings/hero-banner` | [packages/hero-banner/](packages/hero-banner/) |
+| `@digithings/surface-config` | [packages/surface-config/](packages/surface-config/) |
+| `@digithings/ui` | [packages/ui/](packages/ui/) |
 
 ## Quick start
 

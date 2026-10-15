@@ -4,7 +4,7 @@
 **Status:** Draft for review  
 **Parent epic:** [#1200](https://github.com/digithings-ai/digithings/issues/1200)  
 **Strategy:** [`packages/design/EVOLUTION.md`](../../../packages/design/EVOLUTION.md)  
-**References:** [`packages/design/references/scans/`](../../../packages/design/references/scans/INDEX.md)
+**References:** `packages/design/references/scans/` (retired)
 
 This document extends epic #1200 with patterns from Graphite, Cursor, and x.ai that were identified in brainstorming but not yet filed as issues. It covers four layers: marketing landings (A), product surfaces (B), shared primitives & motion (C), copy & IA (D).
 
@@ -418,6 +418,5 @@ ProductFrame, BentoGrid, TrustStrip, reveal-up, ScrollyFeatures, StatCounter, Ch
 
 ## Related
 
-- [`docs/agent-backlog/design-evolution/INDEX.md`](../../agent-backlog/design-evolution/INDEX.md)
 - Epic [#1200](https://github.com/digithings-ai/digithings/issues/1200)
 - Parent design epic [#235](https://github.com/digithings-ai/digithings/issues/235)

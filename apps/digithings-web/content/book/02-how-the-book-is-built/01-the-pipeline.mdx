@@ -7,7 +7,7 @@ summary: >-
 
 ```mermaid
 graph LR
-  A[chapter.mdx] --> B[parse header]
+  A[chapter directory] --> B[parse header]
   B --> C[extract headings]
   B --> D[find mermaid fences]
   D --> E[render SVG at build]

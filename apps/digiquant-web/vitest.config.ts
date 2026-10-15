@@ -28,6 +28,7 @@ export default defineConfig({
         __dirname,
         "../../packages/ui/src/components/finance-charts/chart-scale.ts",
       ),
+      "@digithings/ui/cn": path.resolve(__dirname, "../../packages/ui/src/lib/utils.ts"),
       "@digithings/ui/ui": path.resolve(__dirname, "../../packages/ui/src/ui/index.ts"),
       "@digithings/ui": path.resolve(__dirname, "../../packages/ui/src/index.ts"),
     },

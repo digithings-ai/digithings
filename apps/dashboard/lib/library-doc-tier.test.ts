@@ -1,14 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
-  countDeltaTouchesForDoc,
-  countResearchChangelogTouchesForDoc,
-  docAffectedByDeltaPaths,
   docMatchesLibraryScope,
   getDocLibraryTier,
   isEvolutionSourcesEmpty,
-  isPortfolioRecommendationPath,
 } from './library-doc-tier';
-import type { Doc, ResearchChangelogMeta } from './types';
+import type { Doc } from './types';
 
 function doc(partial: Partial<Pick<Doc, 'path' | 'segment' | 'type'>>): Pick<
   Doc,
@@ -87,14 +83,6 @@ describe('docMatchesLibraryScope', () => {
   });
 });
 
-describe('isPortfolioRecommendationPath', () => {
-  it('detects legacy portfolio-recommendation paths case-insensitively', () => {
-    expect(isPortfolioRecommendationPath('portfolio-recommendation.json')).toBe(true);
-    expect(isPortfolioRecommendationPath('Archive/Portfolio-Recommendation/v1')).toBe(true);
-    expect(isPortfolioRecommendationPath('opportunity-screener')).toBe(false);
-  });
-});
-
 describe('isEvolutionSourcesEmpty', () => {
   it('treats non-objects and wrong doc_type as empty / not-empty correctly', () => {
     expect(isEvolutionSourcesEmpty(null)).toBe(true);
@@ -121,48 +109,5 @@ describe('isEvolutionSourcesEmpty', () => {
         body: { notes: '', source_ratings: [{ source: 'fed' }] },
       }),
     ).toBe(false);
-  });
-});
-
-describe('docAffectedByDeltaPaths / countDeltaTouchesForDoc', () => {
-  it('maps digest to regime/market/actionable/risks/segments/portfolio/digest roots', () => {
-    expect(docAffectedByDeltaPaths('digest', ['/regime/bias'])).toBe(true);
-    expect(docAffectedByDeltaPaths('digest', ['/market_data/spy'])).toBe(true);
-    expect(docAffectedByDeltaPaths('digest', ['/unrelated'])).toBe(false);
-    expect(docAffectedByDeltaPaths('digest', [])).toBe(false);
-  });
-
-  it('matches stem with hyphen/underscore variants', () => {
-    expect(docAffectedByDeltaPaths('us-equities.json', ['/us_equities/note'])).toBe(true);
-    expect(docAffectedByDeltaPaths('us-equities.json', ['/us-equities/note'])).toBe(true);
-    expect(docAffectedByDeltaPaths('us-equities.json', ['/usequities'])).toBe(true);
-    expect(docAffectedByDeltaPaths('macro.json', ['/bonds/duration'])).toBe(false);
-    expect(docAffectedByDeltaPaths('delta-request.json', ['/anything'])).toBe(false);
-  });
-
-  it('counts unique changed ∪ op paths that touch the doc', () => {
-    expect(
-      countDeltaTouchesForDoc(
-        'digest',
-        ['/regime/a', '/regime/a', '/unrelated'],
-        ['/market_data/b'],
-      ),
-    ).toBe(2);
-  });
-});
-
-describe('countResearchChangelogTouchesForDoc', () => {
-  it('returns 0 for missing meta and matches path suffixes', () => {
-    expect(countResearchChangelogTouchesForDoc('deltas/macro.delta.md', null)).toBe(0);
-    const meta: ResearchChangelogMeta = {
-      baseline_date: '2026-08-31',
-      items: [
-        { target_document_key: 'deltas/macro.delta.md', status: 'edited' },
-        { target_document_key: 'macro.delta.md', status: 'edited' },
-        { target_document_key: 'other.md', status: 'edited' },
-      ],
-    };
-    // Exact + suffix match on the same doc path → two touches
-    expect(countResearchChangelogTouchesForDoc('deltas/macro.delta.md', meta)).toBe(2);
   });
 });

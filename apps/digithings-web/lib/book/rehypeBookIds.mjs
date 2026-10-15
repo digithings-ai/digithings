@@ -46,11 +46,10 @@ export default function rehypeBookIds() {
 
 function walk(node, seen) {
   if (!node || typeof node !== "object") return;
-  if (node.type === "element" && node.tagName === "h1") {
-    // The chapter title is the page's <h1>; it keeps its own id so the rail's
-    // chapter link and the page agree.
-    applyId(node, seen, 1);
-  }
+  // One branch for every heading level, h1 included: the chapter title keeps
+  // its own id through the same path as every other heading, so the rail's
+  // chapter link and the page agree. (A former h1-specific branch above this
+  // one applied the id twice, yielding `chapter-title-2`.)
   if (node.type === "element" && /^h[1-6]$/.test(node.tagName ?? "")) {
     applyId(node, seen, Number(node.tagName.slice(1)));
   }

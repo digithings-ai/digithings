@@ -93,8 +93,11 @@ python3 packages/brand/build-og.py           # rebuild both
 python3 packages/brand/build-og.py --check    # verify, write nothing
 ```
 
-The rendered PNGs are copied into each app's `public/og.png` and wired through
-`openGraph.images` with explicit width, height and alt.
+The rendered PNGs are the bytes each app serves as `public/og.png`.
+`build-header.py --check` verifies both live copies
+(`apps/digithings-web/public/og.png` and `apps/digiquant-web/public/og.png`)
+stay identical to `og/`. They are wired through `openGraph.images` with
+explicit width, height and alt.
 
 **The wordmark is outlined to paths, not set as SVG `<text>`.** There is no Geist
 installed for librsvg, so a `<text>` element would rasterise in whatever fallback

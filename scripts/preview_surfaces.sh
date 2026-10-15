@@ -26,14 +26,12 @@ start dashboard-api "$ROOT/apps/dashboard-api" npx wrangler dev --config wrangle
 start digiquant-web  "$ROOT/apps/digiquant-web"  npx next dev --hostname 127.0.0.1 -p 4020
 start digichat       "$ROOT/apps/digichat"       npx next dev --hostname 127.0.0.1 -p 3000
 start digithings-web "$ROOT/apps/digithings-web" npx next dev --hostname 127.0.0.1 -p 4040
-start design         "$ROOT/packages/design"     python3 -m http.server 4030 --bind 127.0.0.1
 
 cat <<LINKS
 digithings site      http://localhost:4040/
 digiquant site       http://localhost:4020/
 digiquant app (Brief desk)  http://localhost:4020/app   (press ? for shortcuts)
 digichat             http://localhost:3000/
-design kit           http://localhost:4030/
 data API (local)     http://localhost:8788/healthz
 logs: $LOG
 LINKS

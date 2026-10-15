@@ -28,9 +28,9 @@
 
 | Pick | Plan | Branch (plan) | Implementation branch pattern | Primary deliverable |
 |---|---|---|---|---|
-| **1** | [`2026-08-09-digichat-runtime-frame-ancestors.md`](./2026-08-09-digichat-runtime-frame-ancestors.md) | `docs/plan-runtime-frame-ancestors` | `task/<N>-digichat-runtime-csp` (or `feat/…` + `Fixes #N`) | Stock digichat GHCR: runtime `DIGICHAT_EMBED_HOSTS` / tenant host keys → `/embed` CSP |
+| **1** | `2026-08-09-digichat-runtime-frame-ancestors.md` (removed DIG-3399; git history keeps it) | `docs/plan-runtime-frame-ancestors` | `task/<N>-digichat-runtime-csp` (or `feat/…` + `Fixes #N`) | Stock digichat GHCR: runtime `DIGICHAT_EMBED_HOSTS` / tenant host keys → `/embed` CSP |
 | **2** | [`2026-08-09-digichat-stack-ghcr.md`](./2026-08-09-digichat-stack-ghcr.md) | `docs/plan-stack-ghcr` | Ops: promote `#2023` → `main` + publish; code: `task/<N>-profile-a-ghcr` | Profile A pulls digikey / digigraph / digivault; INSTALL honesty |
-| **3** | [`2026-08-09-digichat-corpus-ingest.md`](./2026-08-09-digichat-corpus-ingest.md) | `docs/plan-corpus-ingest` | `task/<N>-docs-onboard` (+ digivault local-search issue if split) | `scripts/docs_onboard/` + digivault local search when `DIGIVAULT_ROOT` set |
+| **3** | `2026-08-09-digichat-corpus-ingest.md` (removed DIG-3399; git history keeps it) | `docs/plan-corpus-ingest` | `task/<N>-docs-onboard` (+ digivault local-search issue if split) | `scripts/docs_onboard/` + digivault local search when `DIGIVAULT_ROOT` set |
 
 Parent sketch gaps: [`digichat-self-hosted-release.md`](../../architecture/digichat-self-hosted-release.md) §5.
 

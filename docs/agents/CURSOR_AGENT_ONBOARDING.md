@@ -1,5 +1,7 @@
 # Cursor Agent Onboarding — Cursor-Tier Delegation
 
+> **Status (2026-10-14):** the GitHub Actions dispatch workflows this page describes (`agent-claude*.yml`, `agent-cursor-dispatch.yml`, `agent-dispatch-replay.yml`, `project-status.yml`, …) were deleted on 2026-10-01 in #4919. Label-driven dispatch no longer runs from this repo. The current inventory is [CI_CONVENTIONS.md](CI_CONVENTIONS.md).
+
 This document covers everything needed to connect a Cursor Pro background agent to
 the digithings issue board and have it autonomously execute cursor-tier `agent-task` issues.
 

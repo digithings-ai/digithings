@@ -1,5 +1,7 @@
 # Execution Tiers — Agent Delegation Framework
 
+> **Status (2026-10-14):** the GitHub Actions dispatch workflows this page describes (`agent-claude*.yml`, `agent-cursor-dispatch.yml`, `agent-dispatch-replay.yml`, `project-status.yml`, …) were deleted on 2026-10-01 in #4919. Label-driven dispatch no longer runs from this repo. The current inventory is [CI_CONVENTIONS.md](CI_CONVENTIONS.md).
+
 Every digithings backlog task carries the `agent-task` label. Applying it (or
 opening an issue with it) fires dispatch. **Which** dispatcher picks it up is a
 property of the *component*, not the issue: `tiers` in

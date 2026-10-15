@@ -311,12 +311,6 @@ export function informationRatioFromDaily(
 }
 
 /**
- * Day-return anchor: when price marks are on a calendar day after the latest
- * accounting NAV row, the day baseline is that latest close. When marks share
- * the book date (post-EOD), baseline is the prior NAV row so the printed day
- * return still reflects the last completed session.
- */
-/**
  * Build the NAV series used for overlapping daily returns when a live tip
  * may sit on a later calendar day than the last accounting row.
  *
@@ -340,6 +334,12 @@ export function navHistoryForLiveOverlap(
   return [...sortedNav];
 }
 
+/**
+ * Day-return anchor: when price marks are on a calendar day after the latest
+ * accounting NAV row, the day baseline is that latest close. When marks share
+ * the book date (post-EOD), baseline is the prior NAV row so the printed day
+ * return still reflects the last completed session.
+ */
 export function dayReturnAnchorNav(
   sortedNav: readonly LiveKpiNavPoint[],
   priceAsOfDate: string | null

@@ -69,8 +69,7 @@ export default function ThesisDetailPageInner({ thesisId }: { thesisId: string }
   const { vehicle: vehicleTheses } = useMemo(() => splitTheses(theses), [theses]);
 
   // Vehicle-selection map (thesis_vehicles) — the reliable ticker→market-thesis
-  // join this page's Level-2/3 story renders from (#1562 PR4), replacing the
-  // `joinPositionsToThesis` holdings list this page used to show exclusively.
+  // join this page's Level-2/3 story renders from (#1562 PR4).
   const [thesisVehicleRows, setThesisVehicleRows] = useState<ThesisVehicleRow[]>([]);
   useEffect(() => {
     let alive = true;

@@ -2,8 +2,8 @@
 
 > **Date:** 2026-08-29  
 > **Status:** Implementation spec — authorizes filing the epic + task issues; runtime changes still land through per-task PRs with normal gates  
-> **Supersedes ambiguity in:** [2026-08-29 milestone brief](../plans/2026-08-29-olympus-kairos-tenancy-milestone-brief.md) (D1–D7 are **locked** here)  
-> **Binds to:** [2026-08-25 vision realignment brief](../plans/2026-08-25-olympus-vision-realignment-brief.md), [metaplan](../plans/2026-08-06-olympus-pipeline-metaplan.md), [Wave 3 migration roadmap](../../../digiquant/src/digiquant/research/docs/ops/MIGRATION-ROADMAP-DIGITHINGS.md), [ADR-0004 (Stripe billing)](../../adr/0004-atlas-pricing.md)  
+> **Supersedes ambiguity in:** `2026-08-29-olympus-kairos-tenancy-milestone-brief.md` (removed DIG-3399; git history keeps it) (D1–D7 are **locked** here)  
+> **Binds to:** `2026-08-25-olympus-vision-realignment-brief.md` (removed DIG-3399; git history keeps it), `2026-08-06-olympus-pipeline-metaplan.md` (removed DIG-3399; git history keeps it), [Wave 3 migration roadmap](../../../digiquant/src/digiquant/research/docs/ops/MIGRATION-ROADMAP-DIGITHINGS.md), [ADR-0004 (Stripe billing)](../../adr/0004-atlas-pricing.md)  
 > **Outcome:** Olympus becomes a client-ready product — users sign up, subscribe, hold private books, connect Alpaca/IBKR (paper first), run overlay pipelines with their own LLM keys, and receive email digests.
 
 ---
