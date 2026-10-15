@@ -21,7 +21,7 @@
       "statement": "Verification is core install plus pytest tests/dv -m unit, a FastAPI-free import-cost guard, and ruff check plus format --check on src and tests.",
       "evidence": [
         {
-          "resource": "repo://digivault/AGENTS.md#L60-L77",
+          "resource": "repo://digivault/AGENTS.md#L63-L80",
           "version": "repo-lines-v1:sha256:2a245be61ba0a064cfef28892227479380ccb374ac9ca7588517019ca678e4e4:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIzOWQyODYyZWVjYjE3ZDg4NWM3NDY4ODI1MTI4NjIzMzdkY2FiOWViYjlkZDJmMThjOWI5MTdmZWU2YjI0OTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ3YzA2YzU2MWQ1YzMyNzM0MzY4NTI2OGE0NmIzMzkxZjM5OThlZWU4OTBkMmJlNTFmMGQyMWNjNGE1M2FlNmQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI1YjdhYjEyNWZjYTEyOGUyNjdkZDljMmM0ODljZTdmZDY5Mjg5Zjk5MzRjMjEyMWFhNzM1Y2M2NTBkNTljNDEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
         }
       ]

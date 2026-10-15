@@ -99,6 +99,7 @@ class Policy:
     required_checks: tuple[str, ...]
     ignored_checks: frozenset[str] = frozenset()
     required_checks_by_repo: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    status_context_checks: frozenset[str] = frozenset()
 
     def authority(self, role: str) -> Authority | None:
         return next((a for a in self.merge_authorities if a.role == role), None)
@@ -180,6 +181,7 @@ def load_policy(path: Path = POLICY_PATH) -> Policy:
         merge_method=defaults.get("merge_method", "squash"),
         delete_branch=bool(defaults.get("delete_branch", True)),
         required_checks=tuple(defaults.get("required_checks", ())),
+        status_context_checks=frozenset(str(name) for name in (raw.get("status_context_checks") or [])),
         ignored_checks=frozenset(defaults.get("ignored_checks", ())),
         # Reject a non-string entry rather than coercing it: a typo'd check name is
         # the exact failure DIG-690 was, and `str(42)` would turn that into a gate
@@ -328,7 +330,13 @@ def _gate_checks(pr: dict[str, Any], policy: Policy) -> list[str]:
             reasons.append(f"required check '{required}' is {', '.join(states)}")
             continue
         # All green, but a green that anyone with write access could have typed is
-        # not a passing build. Require the evidence to come from a workflow run.
+        # not a passing build. Require the evidence to come from a workflow run -
+        # except for the checks named in `status_context_checks`, which branch
+        # protection requires as commit statuses and no workflow ever reports
+        # (digithings `local-ci`, DIG-3707): for those, a SUCCESS status is the
+        # strongest evidence that exists.
+        if required in policy.status_context_checks:
+            continue
         if not any(_is_check_run(e) for e in entries):
             reasons.append(
                 f"required check '{required}' only reported as a commit status, which any "
