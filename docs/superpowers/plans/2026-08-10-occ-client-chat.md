@@ -4,7 +4,7 @@
 >
 > **Status:** Draft (2026-08-10) — awaiting dogfood prerequisite ([#2037](https://github.com/digithings-ai/digithings/pull/2037) / [#2036](https://github.com/digithings-ai/digithings/issues/2036)).
 > **Parent program:** [`2026-08-10-digithings-dogfood-cutover.md`](./2026-08-10-digithings-dogfood-cutover.md)
-> **Client scope:** [`docs/projects/online-compliance-center/SCOPE.md`](../../projects/online-compliance-center/SCOPE.md)
+> **Client scope:** `docs/projects/online-compliance-center/SCOPE.md`
 
 ---
 
@@ -51,7 +51,7 @@ Assume merged on `develop` before OCC implementation starts:
 
 ### 2. Pipeline dry-run OK (OCC manifest)
 
-Per [`SCOPE.md`](../../projects/online-compliance-center/SCOPE.md) dry-run plan:
+Per `SCOPE.md` dry-run plan:
 
 - [ ] `scrape_site` on `help.online-compliance-center.com` only (~10 HTML paths, ~24 PDFs).
 - [ ] `classify_pages` + `fetch_docs` — accordion HTML and PDF text extraction reviewed.
@@ -178,8 +178,8 @@ Already on `develop` (draft):
 
 | File | Role |
 |------|------|
-| [`SCOPE.md`](../../projects/online-compliance-center/SCOPE.md) | Go-with-gaps verdict, volume, gaps, open questions |
-| [`onboard.yaml`](../../projects/online-compliance-center/onboard.yaml) | Crawl manifest — **ingest hold** until approvals |
+| `SCOPE.md` | Go-with-gaps verdict, volume, gaps, open questions |
+| `onboard.yaml` | Crawl manifest — **ingest hold** until approvals |
 
 Proposed additions during implementation:
 
@@ -329,8 +329,8 @@ From SCOPE gaps — not blocking first deploy:
 
 | Doc | Role |
 |-----|------|
-| [`docs/projects/online-compliance-center/SCOPE.md`](../../projects/online-compliance-center/SCOPE.md) | Client reconnaissance + gaps |
-| [`docs/projects/online-compliance-center/onboard.yaml`](../../projects/online-compliance-center/onboard.yaml) | Crawl manifest |
+| `docs/projects/online-compliance-center/SCOPE.md` | Client reconnaissance + gaps |
+| `docs/projects/online-compliance-center/onboard.yaml` | Crawl manifest |
 | [`docs/superpowers/plans/2026-08-10-digithings-dogfood-cutover.md`](./2026-08-10-digithings-dogfood-cutover.md) | Prerequisite program |
 | [`docs/digichat/CLIENT-DOCS-ONBOARD.md`](../../digichat/CLIENT-DOCS-ONBOARD.md) | Operator runbook |
 | [`infra/digichat-digithings/README.md`](../../../infra/digichat-digithings/README.md) | Tunnel + embed env |
