@@ -27,8 +27,8 @@ exists instead of another cleanup run.
 
 ## 2. The measure: unmerged patches, not commit count
 
-**`git rev-list --count origin/develop..origin/<branch>` is the wrong measure and
-must not be used to classify a branch.** It counts every commit reachable from the
+**`git rev-list --count <base>..<branch>` is the wrong measure and must not be used
+to classify a branch.** It counts every commit reachable from the
 branch tip but not from `develop`, including commits whose *patch is already in
 `develop`* by another route. Squash merges guarantee such commits exist: a squash
 commit has one sha on `develop`, while the branch keeps the original per-commit
@@ -38,23 +38,83 @@ squash still reports every commit as "not in develop".
 The measure is the **unmerged patch**, i.e. the `+` lines of `git cherry`:
 
 ```bash
-# patches on origin/<branch> that are NOT already applied on origin/develop
-git cherry origin/develop origin/<branch> | grep -c '^+'
+# patches on <remote>/<branch> that are NOT already applied on <remote>/develop
+git cherry github/develop github/<branch> | grep -c '^+'
 ```
 
-This is patch-id based, so it is invariant to squash, rebase and reordering. All
-thresholds in this policy are in unmerged patches.
+Two corrections to how this was previously stated, both measured on
+2026-10-15 (DIG-1600).
+
+**`git cherry` is not a landing test, and this is not a squash problem.** It is
+patch-*id* based, so a rebase or a reorder does not change its answer — that
+part is right. But a squash merge rewrites the patch it lands (new parent
+context, new message) while keeping the diff, and patch identity is a function
+of the patch. So a branch whose work shipped by squash can still report a `+`
+for every commit it carried. Measured: `claude/digithings-web-ui-refactor`
+(PR #4791) merged into `develop` and still reads **144 unmerged patches**.
+Across the 71 measurable branches of the 2026-10-06 census, **284 patches sit
+on branches whose PR had already merged** — 34% of everything the measure
+reports.
+
+Counting them is therefore necessary and not sufficient. `git cherry` answers
+*"is this patch new?"*, which is the right question for deciding whether a branch
+holds work. It does not answer *"did this branch's work already land?"*, and
+nothing downstream may treat it as though it did.
+
+The landed signal is **per PR** and squash-aware. All counts below are over the
+**42 census PRs with a resolved branch** (35 `merged=true`, 7 `merged=false`).
+
+1. `merged` — the boolean from `gh api repos/O/R/pulls/<n> --jq .merged`. **Not**
+   `merge_commit_sha != null`: GitHub publishes the *test* merge commit it
+   computed for a PR whether or not the merge happened, and **4 of the 42** read
+   `merged=false` with a non-NULL `merge_commit_sha` (#4560, #4908, #4949,
+   #4975). Gating on the sha marks shipped work that never shipped, and marks
+   work that DID ship as stranded.
+2. `merge-base --is-ancestor <merge_commit_sha> <pr.base.ref>` — against the
+   PR's **own** base, not `develop`. **8 of the 35** merged PRs targeted a base
+   other than `develop` (3 `main`, 4 `module/digiquant`, 1 `module/digichat`). All
+   8 are *also* reachable from `develop` today, so on this census the two tests
+   agree — but a `main`-targeted or module-targeted PR is not required to reach
+   `develop`, and a `develop` ancestry test answers a question nobody asked. Own
+   base is the rule; `on_own_base` was `YES` for all 35 merged PRs, which is the
+   control that the check fires.
+3. The **merge commit**, not the branch head. A squash merge has no second
+   parent, so head-ancestry is the wrong question for exactly the case this
+   section is about.
+
+Both signals are implemented in `scripts/branch_census.py`, which is the
+executable form of this section and of the tier counts in section 3:
+
+```bash
+python3 scripts/branch_census.py                  # JSON summary
+python3 scripts/branch_census.py --markdown       # table + bounds
+python3 scripts/branch_census.py --no-gh          # git only, no landed column
+```
+
+A branch whose ref is gone from the remote is reported **unresolvable**, never
+as zero patches: `T0` means *measured, nothing unmerged*, and a branch that
+cannot be measured has not earned a free-tier deletion licence.
+
+The remote in these commands is `github`, not `origin`. `origin` on
+`digithings-ai/digithings` is a cursor mirror: `github/develop` exists and
+`origin/develop` does not, so the commands as previously written — against
+`origin/develop` — had no base to compare against.
 
 The companion census command, which reproduces the table in section 1:
 
 ```bash
-git fetch origin --prune
+git fetch github '+refs/heads/*:refs/remotes/github/*' \
+                '+refs/archive/*:refs/remotes/github/archive/*'
 gh pr list --state open --limit 500 --json headRefName -q '.[].headRefName' \
-  | sed 's|^|origin/|' > open-pr-heads.txt        # branches that are NOT stranded
-git for-each-ref --format='%(refname:short)' refs/remotes/origin \
-  | grep -v '^origin/\(main\|develop\)$' > branches.txt
+  | sed 's|^|github/|' > open-pr-heads.txt        # branches that are NOT stranded
+git for-each-ref --format='%(refname:short)' refs/remotes/github \
+  | grep -v '^github/\(main\|develop\)$' > branches.txt
 # old = last-commit older than 3 days; then require a non-zero patch count above
 ```
+
+The archive refspec matters: a branch archived per section 4 clause 5 still
+resolves, so its patches stay measurable. Without it those branches fall out of
+the census entirely.
 
 ## 3. Tiers
 
@@ -68,9 +128,84 @@ it and what evidence is required.
 | **T2 — decide** | 3–10 | Explicit PR-or-discard decision per branch. | EM (product owner per branch's originating issue) | The decision is written on the issue: ship it as a PR, or discard it |
 | **T3 — escalate** | >10 | CTO decision per branch. | CTO | A diff summary showing what the branch carries and whether an equivalent survives elsewhere |
 
-The 2026-10-06 census populates these as **T0 114, T1 111, T2 47, T3 23** (295
-branches, including the 17 `module/*` and `chore/sync-module-*` refs excluded from
-the 288). Total recoverable patches: **1391** — T1 172, T2 184, T3 1035.
+### The 2026-10-06 census, re-measured
+
+The tier populations recorded on 2026-10-06 were **T0 114, T1 111, T2 47, T3 23**
+(295 rows) and are unchanged: those counts describe the census rows, and
+`docs/ops/2026-10-06-stranded-branch-triage.tsv` still holds 295. What was
+inflated is the patch total, because it was measured with the wrong assumption
+about which branches exist and about what a `+` means.
+
+Re-measured 2026-10-15 with `scripts/branch_census.py` against `develop` at
+`3528cf9f`, after fetching all live **and** archived refs. Every cell except the
+last column is generated by that command; the last column is transcribed from
+the 2026-10-06 write-up and is **not** re-derivable from the TSV, whose own
+`commits_not_in_develop` column sums to 1764 — a third number, and one this
+policy rejects as a measure in the first place.
+
+| Recorded tier | Census rows | Measurable | Measured `+` | Landed (br / p) | No PR (br / p) | PR never landed (br / p) | Previously published `+` |
+|---|---|---|---|---|---|---|---|
+| T0 | 114 | 6 | 0 | 6 / 0 | 0 / 0 | 0 / 0 | — |
+| T1 | 111 | 11 | 10 | 6 / 7 | 2 / 2 | 3 / 1 | 172 |
+| T2 | 47 | 43 | **162** | 35 / 133 | 1 / 3 | 7 / 26 | 184 |
+| T3 | 23 | 11 | 654 | 1 / 144 | 7 / 425 | 3 / 85 | 1035 |
+| **Total** | **295** | **71** | **826** | **48 / 284** | **10 / 430** | **13 / 112** | **1391** |
+
+The *No PR* and *PR never landed* columns sum to **542**, not 112: a no-PR
+branch is not landed either, so the tool's one-line summary reports the two
+together while this table separates them — and they are different problems with
+different owners (corrections 2 and 3 below).
+
+Three corrections, in order of how much they move the number.
+
+**1. "Total recoverable patches: 1391" is not measurable and was not
+recoverable.** 224 of the 295 census rows — 76% — no longer resolve to any ref,
+live or archived. A vanished ref has no patch count to read, so the population
+those 224 rows described cannot be re-derived by any tool. Of what *is*
+measurable the honest figure is **826 patches across 71 branches**, and that is
+a **lower bound**, not a total. The published per-tier figures were also higher
+than what the surviving refs yield in every tier (T1 172 vs 10, T2 184 vs 162,
+T3 1035 vs 654), because the unresolvable rows were scored as though they
+still had content.
+
+**2. Of the 826 measurable patches, 284 are already landed.** `git cherry`
+reports them as unmerged because their PRs shipped by squash (§ 2). They are
+not recoverable work; they are shipped work wearing a `+`. The number that
+disposal can act on is **112 patches across 13 branches** whose PR closed
+without merging — those are the T2/T3 candidates, and 26 of the 112 are in T2.
+
+**3. 430 patches across 10 branches have no PR of their own.** Seven are T3.
+These are stack bases and unfiled branches: real, substantial, un-landed diffs
+with no PR to be landed or discarded through, so they cannot be classified by
+the per-PR signal at all. They are the largest single unclassified mass in the
+census and § 4 clause 5 does not cover them — there is no decision on the issue
+to record, because no issue was ever opened. **This is the largest open
+question in the census** and it is not answerable by re-measuring.
+
+Two smaller notes, both measured on the same pass:
+
+- **11 of the 826 measurable patches sit on refs section 5 already excludes**
+  (`module/**` ×10, `release/v*` ×1), which are never counted as stranded.
+  Including them in a recoverable total contradicts section 5.
+- **3 of the 71 measurable branches have dropped a tier** since 2026-10-06 and
+  none rose: `fix/4991-fanout-leg-isolation` T2→T1 (2 patches),
+  `cursor/langfuse-design-reference-3c6b` T1→T0 and
+  `docs/designeer-xyz-reference` T1→T0 (0 patches each). The census
+  re-derives the tier from the measured patch count and prints this drift
+  against the recorded one, rather than trusting a column written nine days
+  ago. Only measurable branches can drift; the 224 unresolvable rows have no
+  tier to re-derive and are reported as unmeasured, not as tier 0.
+
+The tier definitions above are unchanged and remain keyed on the **measured**
+unmerged patch count. The table above is reproducible:
+
+```bash
+python3 scripts/branch_census.py --markdown
+```
+
+It prints this table keyed on the recorded tier, a second table keyed on the
+measured tier (which is what disposal acts on, and which differs by exactly the
+drift listed above), and the drift list.
 
 ## 4. Deletion preconditions
 
@@ -155,9 +290,12 @@ Disposal is the tail end. The front end is where branches stop being created.
 
 ## 7. Cadence
 
-- **Weekly.** The cron worker runs the census from section 2 and writes a triage
-  manifest. Any T0 or T1 branch older than 14 days is deleted in that run, after
-  the snapshot check.
+- **Weekly.** The cron worker runs the census from section 2 —
+  `python3 scripts/branch_census.py --markdown` is the reference implementation —
+  and writes a triage manifest. Any T0 or T1 branch older than 14 days is deleted
+  in that run, after the snapshot check. **A branch the census reports as
+  unresolvable is never deleted on a T0 verdict**: T0 means *measured, nothing
+  unmerged*, and an unmeasurable branch has not been measured.
 - **Monthly.** T2 branches older than 30 days are escalated to the EM with the
   decision request; unanswered after 14 more days they are archived per section 4
   clause 5.
