@@ -7,11 +7,11 @@
       "statement": "POST /query is the retrieval entry point while POST /v1/orchestrator_tools and /v1/orchestrator_invoke expose digigraph's federated surface with schemas and dispatch owned by digisearch.",
       "evidence": [
         {
-          "resource": "repo://digisearch/src/digisearch/server.py#L370-L370",
+          "resource": "repo://digisearch/src/digisearch/server.py#L692-L692",
           "version": "repo-lines-v1:sha256:cc0ab10106bb2db9d37c646cc3f6c293e438603f6ff25fdacd55723d6312fb6c:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiY2MwYWIxMDEwNmJiMmRiOWQzN2M2NDZjYzNmNmMyOTNlNDM4NjAzZjZmZjI1ZmRhY2Q1NTcyM2Q2MzEyZmI2YyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiY2MwYWIxMDEwNmJiMmRiOWQzN2M2NDZjYzNmNmMyOTNlNDM4NjAzZjZmZjI1ZmRhY2Q1NTcyM2Q2MzEyZmI2YyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZmQ1ZDMyM2ZkMGZjYTU1OGI5OGVjYmNmZDA4MmY5ZjgzOWJmYTFiN2Q3YzM0MDYwNjhkNmQzYTg1MTNlNzllZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNmU4ZWJkMzY1ZmNhNzYyZmQ4MTU3N2RiYjQ5MGJkNTVjZWM4NDk3NzliMzFiMDU4YzdlYjljZjAyZGM1Yzk3YyJ9"
         },
         {
-          "resource": "repo://digisearch/src/digisearch/server.py#L441-L441",
+          "resource": "repo://digisearch/src/digisearch/server.py#L770-L770",
           "version": "repo-lines-v1:sha256:e1742134504a9994e68818a10e3f2a7618baf6618342dced96ade38eb8fc90c2:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZTE3NDIxMzQ1MDRhOTk5NGU2ODgxOGExMGUzZjJhNzYxOGJhZjY2MTgzNDJkY2VkOTZhZGUzOGViOGZjOTBjMiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZTE3NDIxMzQ1MDRhOTk5NGU2ODgxOGExMGUzZjJhNzYxOGJhZjY2MTgzNDJkY2VkOTZhZGUzOGViOGZjOTBjMiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOGNjNGE3ZDFjYzc5NmFiYTNlNDY3MjMzMjdmNTE3ZTlmODExOTgyZDI1MGYwNzAyOTg2ZTRiNTc2NGFkOTU4OSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZDE2YTQ3NDhjZDU3NDljNzUwNjk4OTY1NDYzNmU4N2QxN2I2MTIzMDQ0NzQzNDU1MmYxMWYzYjYyZjA5YzQ3MCJ9"
         },
         {
@@ -25,7 +25,7 @@
       "statement": "GET /azure_status reports backend configuration and reachability and stays behind the digisearch:query scope rather than public.",
       "evidence": [
         {
-          "resource": "repo://digisearch/src/digisearch/server.py#L296-L310",
+          "resource": "repo://digisearch/src/digisearch/server.py#L591-L605",
           "version": "repo-lines-v1:sha256:2f86f8dc658a1b7b4aa7fd58fb309e61230a1cfedd12c79c46540e635dea6ded:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNkYzYxMWM2Mjk4MDExN2QwOGNjNTVmN2MzZWVlNDY0YmU0MDFkODI5Yjg2YmE0NWYwYTc1NzhkMDQ0ZmFkNTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM3MWE5MjNmN2Q3MWY4Yzg0NWRhNzQyMTcxMzk5NWY3ZGZlODdlMTgwNTQ1NjYxZGJiODc2MWVjMjhmMjE0NTAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjkyNzgwMjkxYTlmMjYyNWJhZjQwNGZiMGFiMWQxMTJmYmJkNDJkN2QzYjcwYjFmNzc1NmRmODllZDMwZDQxY2UiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjVjOWM2NzJlNzJmMTkzMDE5Y2NkNWI1YTVmMDUyMjAwMmE2Y2RmOGMzMDQ0MDVlMmU3MGI2NzBlNGYzZjM5YjgifQ"
         }
       ]
@@ -39,7 +39,7 @@
           "version": "repo-lines-v1:sha256:31d895b1e604437ecc779dd19f8305bb8b16d3660a7b130b1bb9d8b528432200:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM2M2I1Mjk3MjA0NTllMGZhMDE4YWNlNGU1MjgzNTZhYjM3OTY4ZDdlZmIxM2JiODM4YmQ0NGRlNmYzYTc3MmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFiZmIyOTE1NDI4NTJkN2FjODFlYzY0NzU0Yzg4YTJiMWJiOTc5ZDMzZDlhNjU0MzAwNDU5ODNhN2I3Njk5OGMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYyMDA5N2U0YWE1MDA2OGJhMTU3ZjlhMjczOWZhZDg2OTk1ZTFlMGNkY2NkYWRjNTg5N2MyMDM0Yzc0ZDNlZmEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFkYjE5YWUyMDg5ZTEzZmU1ZDU2YTM0Yzk5YWY1NDM5Y2NmNzFiMGJhYzYwODdkNWIyYTQzZGI0ZTkxYWE5ZWEifQ"
         },
         {
-          "resource": "repo://digisearch/src/digisearch/search/reranker.py#L11-L37",
+          "resource": "repo://digisearch/src/digisearch/search/reranker.py#L11-L42",
           "version": "repo-lines-v1:sha256:5065bcf78b7be818610f6109facb1abcbe24bdeddb2765c2167c5d004d93ba79:eyJzZWxlY3RlZExpbmVDb3VudCI6MzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZhNDE5MjhiNjNlYTE2MGUxYjZlNmI2YWZjODk2ZjUyN2MzYjFiNWE5ZGU3NWY5ODlkMDNhNzg2NDc2NTlkYzciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc3NmRiNWVjMTRjZmMxMjY3OTRlNmE0OGU1ZTJmNTk1MTY3ZTY4OTIyZjAxZmUxZDI1ODMwZmQ1ZDJmMmY1ZmUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImU1YzFjNDYyZTJhMzlkNzQ3NTlmNWUxYjEyNmY3NjgzYTJiNzMwMTE4ZTE4ZjUxMjJiMDhjZWRlZWI2NTBlMjMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZhMWUzNmQ5OWJiNDcxMzVlMmFjYTU4NjY0NTU5MmRlNzk1MWMzNTNmMWRkYTdhMmYzMjE5ZjJkZDUwMTkyZWMifQ"
         }
       ]

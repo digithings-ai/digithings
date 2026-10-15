@@ -2,10 +2,11 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 // Slice 0007 validation imports the REAL client derivations from
-// apps/dashboard/lib/*. The only non-relative import in that closure is
-// `@digithings/ui` (performance-ssot.ts uses computeLivePerformanceKpis +
-// sinceInceptionPctFromNav). Alias it to the dependency-free source module
-// those two functions live in — not the package index (which pulls React).
+// `@digiquant/contract`. The only non-relative import in that closure besides
+// the contract package is `@digithings/ui` (performance-ssot uses
+// computeLivePerformanceKpis + sinceInceptionPctFromNav). Alias it to the
+// dependency-free source module those two functions live in — not the package
+// index (which pulls React).
 const uiKpis = fileURLToPath(
   new URL(
     "../../packages/ui/src/components/finance-tearsheet/live-performance-kpis.ts",
