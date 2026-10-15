@@ -207,8 +207,9 @@ describe("adapter source pins", () => {
   const source = readFileSync(join(here, "dashboard-api.ts"), "utf-8");
 
   it("forwards to the standalone worker entry instead of reimplementing routes", () => {
-    expect(source).toContain('from "../../dashboard-api/src/index"');
-    expect(source).toContain('from "../../dashboard-api/src/mcp"');
+    expect(source).toContain('from "dashboard-api"');
+    expect(source).toContain('from "dashboard-api/mcp"');
+    expect(source).not.toContain("../../dashboard-api/src");
     expect(source).not.toContain("mountEnvelopeRoutes");
     expect(source).not.toContain("registerBriefRoutes");
     expect(source).not.toContain("tryHandleLedger");
