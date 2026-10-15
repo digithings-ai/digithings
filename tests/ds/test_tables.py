@@ -1,3 +1,5 @@
+"""Unit tests for digisearch portable table helpers (filter/order/group/enrich)."""
+
 import pytest
 from digisearch.core.tables import (
     FilterClause,

@@ -78,7 +78,7 @@ gate refused both. A PR without review evidence needs the evidence, not an attes
 | Gate | Rule |
 |---|---|
 | Base branch | `develop` only. `main`, `master` and `release/*` are refused (exit 3), and a PR whose `baseRefName` is anything else is refused too. |
-| Required check | The names in `required_checks_by_repo` for this repo must each have **reported** from a workflow run, and concluded `SUCCESS`. For `twelve-x` that is `test`. For `digithings` it is `Required checks passed`, `doc-links + agents-init` and `mypy — digibase + digikey`. |
+| Required check | The names in `required_checks_by_repo` for this repo must each have **reported** and concluded `SUCCESS`. For `twelve-x` that is `test` (from a workflow run). For `digithings` it is `local-ci` — which arrives as a commit StatusContext, never as a workflow run, so the names in `status_context_checks` are exempt from the workflow-run evidence rule (DIG-3707). |
 | Other checks | Any other check in a failing conclusion blocks the merge. |
 | Mergeable | `mergeable == MERGEABLE`. Drafts and `CONFLICTING` do not queue. |
 | Up to date | `mergeStateStatus` must be `CLEAN`. `BEHIND`, `DIRTY`, `UNKNOWN` and `BLOCKED` do not queue. |
@@ -138,6 +138,18 @@ computed before a merge is stale the moment that merge lands.
 **Order is FIFO, not greenest-first.** Sorting by check status turns a queue into a race
 that the loudest PR wins. Oldest-eligible-first is the only ordering that is fair and only
 one that is easy to explain to whoever has been waiting.
+
+**A vendor-content gate failure is not an emergency, and it is not overridable.** The
+`Vendor-content gate` job runs on every PR — `push` to `develop` and `main`, and every
+`pull_request` base — and it fails closed. A red gate means the change publishes something
+the vendor-content boundary forbids: a method-shaped step (naming the browser route to a
+credential, or the act of reading it out), or a vendor identifier that is new since the
+merge base with `main`. Do not add the finding to the allowlist to get a merge through, do
+not mark it flaky and retry, and do not merge past it. Fix the change, or raise it on the
+issue. If the gate reports that it cannot find the merge base, that is the workflow's
+`actions/checkout` `fetch-depth: 0`, not a content verdict — it still fails closed, and it
+still blocks. The rules and the approved allowlist are in
+[`VENDOR_CONTENT_BOUNDARY.md`](VENDOR_CONTENT_BOUNDARY.md).
 
 ## Running it
 
@@ -331,6 +343,9 @@ python3 scripts/enable_branch_protection.py status --repo OWNER/NAME --branch BR
 
 - [BRANCH_PROTECTION.md](BRANCH_PROTECTION.md) — required checks per branch, why a
   path-filtered required check is a trap, the emergency bypass.
+- [VENDOR_CONTENT_BOUNDARY.md](VENDOR_CONTENT_BOUNDARY.md) — the vendor-content boundary:
+  the rules the `Vendor-content gate` enforces, and the one reviewed allowlist. A gate
+  failure is not to be overridden.
 - `scripts/merge_queue_policy.json` — the roster.
 - `scripts/merge_queue.py` — the queue.
 - `scripts/enable_branch_protection.py` — status and apply.

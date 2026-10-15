@@ -81,6 +81,13 @@ describe("mounted desk pages", () => {
     expect(detail).toContain("Runs");
     expect(detail).toContain('data-route="/strategies/default/runs"');
 
+    const settings = renderToStaticMarkup(<DeskPage path="/settings" />);
+    expect(settings).toContain("data-settings-page");
+    expect(settings).toContain("Default desk");
+    expect(settings).toContain("deepseek/deepseek-v4-flash");
+    expect(settings).not.toContain("Provider key");
+    expect(settings).not.toContain("settings edge function is not configured");
+
     const fx = renderToStaticMarkup(<DeskPage path="/fx" />);
     expect(fx).toContain("This page is not on the public desk.");
     expect(fx).not.toMatch(/fx hub|12x/i);
