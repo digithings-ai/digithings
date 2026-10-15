@@ -103,6 +103,7 @@ jobs:
               - 'tests/dg/**'
               - 'tests/contracts/**'
               - '.github/workflows/test-digigraph.yml'
+              - 'docs/openapi/**'
               - 'config/**'
               - 'infra/digichat-release/config/**'
             digillm:
