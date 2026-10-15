@@ -157,6 +157,7 @@ jobs:
           ref: main
       - uses: astral-sh/setup-uv@v5
         with:
+          version: "0.12.24"
           enable-cache: true
       - name: Install from lockfile
         run: uv sync --frozen --package digiquant --extra prices
@@ -192,6 +193,7 @@ jobs:
           ref: main
       - uses: astral-sh/setup-uv@v5
         with:
+          version: "0.12.24"
           enable-cache: true
       - name: Install from lockfile
         run: uv sync --frozen --package digiquant --extra prices
@@ -278,6 +280,7 @@ jobs:
           ref: main   # scheduled triggers fire from default branch; code pinned to main (#1626)
       - uses: astral-sh/setup-uv@v5
         with:
+          version: "0.12.24"
           enable-cache: true
       # execute_at_open.py imports supabase and dotenv lazily inside functions;
       # both are already in digiquant's locked closure. Since #4013 the open
@@ -319,6 +322,7 @@ jobs:
           ref: main   # scheduled triggers fire from default branch; code pinned to main (#1626)
       - uses: astral-sh/setup-uv@v5
         with:
+          version: "0.12.24"
           enable-cache: true
       # Installs from the uv.lock in the CHECKED-OUT tree (`main`), which only
       # became possible with the develop→main release (#1721) — see #1717.

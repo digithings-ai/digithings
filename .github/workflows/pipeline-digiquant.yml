@@ -168,6 +168,7 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
         with:
+          version: "0.12.24"
           enable-cache: true
 
       # From the lockfile in the checked-out tree (`main`) — see #1717/#1721.
