@@ -515,6 +515,7 @@ describe("POST /kick", () => {
       DRY_RUN: "0",
       CRON_KICK_SECRET: "kick-secret",
       GH_DISPATCH_TOKEN: "token",
+      GITHUB_OVERRIDE_JOBS: "twelve-x-market-context-daily",
     };
 
     const res = await worker.fetch(
@@ -546,11 +547,12 @@ describe("POST /kick", () => {
       DRY_RUN: "0",
       CRON_KICK_SECRET: "kick-secret",
       GH_DISPATCH_TOKEN: "github-token",
+      GITHUB_OVERRIDE_JOBS: "twelve-x-market-context-daily",
     };
 
-    // twelve-x-market-context-daily is the only row on this cron. It is a
-    // workflow_dispatch with inputs { bucket: "daily" }, so GitHub refusing
-    // "bucket" is a real shape for this route.
+    // twelve-x-market-context-daily is the only row on this cron. It is kind
+    // twelvex, and GITHUB_OVERRIDE_JOBS sends it back to workflow_dispatch.
+    // GitHub refusing "bucket" is still the shape of that fallback.
     const res = await worker.fetch(kick({ cron: "30 5 * * *" }), env, executionContext([]));
 
     expect(res.status).toBe(400);
