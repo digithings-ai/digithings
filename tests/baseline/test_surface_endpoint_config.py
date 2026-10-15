@@ -92,7 +92,9 @@ _HOST_RE = re.compile(
 # The same deletion pass removes more host literals than that first pin
 # recorded. Re-measured on this tree: chat.digithings.ai 50 -> 24,
 # digichat.digithings.ai 15 -> 14, mcp.digithings.ai 59 -> 56,
-# www.digithings.ai 82 -> 68. Decreases only.
+# www.digithings.ai 82 -> 68. Deleting the root copy of
+# review-5061-digichat-mcp-tool-allowlist.md drops one more
+# mcp.digithings.ai literal, 56 -> 55. Decreases only.
 PINNED_CENSUS = {
     "app.digithings.ai": 3,
     "atlas.digiquant.io": 1,
@@ -107,7 +109,7 @@ PINNED_CENSUS = {
     "hosts.occ.digithings.ai": 1,
     "key.digithings.ai": 72,
     "langfuse.digithings.ai": 3,
-    "mcp.digithings.ai": 56,
+    "mcp.digithings.ai": 55,
     "occ.digithings.ai": 143,
     "search.digithings.ai": 54,
     "trace.digithings.ai": 20,

@@ -3,12 +3,9 @@
     // Hover to view descriptions of existing attributes.
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
+    // NOTE: the previous chrome config pointed at an absolute personal path
+    // (/Users/chrisstefan/Code/digi/...) outside this repo and was removed
+    // (DIG-3400). Add per-app debug configs here as needed.
     "configurations": [
-        {
-            "type": "chrome",
-            "request": "launch",
-            "name": "Open backtest_with_entries_exits.html",
-            "file": "/Users/chrisstefan/Code/digi/backtest_with_entries_exits.html"
-        }
     ]
 }
