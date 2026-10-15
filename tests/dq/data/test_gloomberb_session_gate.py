@@ -109,7 +109,13 @@ def test_blank_cookie_counts_as_no_secret(monkeypatch: pytest.MonkeyPatch) -> No
 def test_kill_switch_off_is_reported_before_the_cookie(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A cookie alone does not enable anything: GLOOMBERB_ENABLED still overrides."""
+    """A cookie alone still does not enable anything: an explicit stop overrides it.
+
+    Since the DIG-2752 rescope the family is ON when the flag is *absent*, so
+    the stop is now asserted with an explicit ``=0``. The property that matters
+    is unchanged and still zero-HTTP: the cookie is never probed.
+    """
+    monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, "0")
     monkeypatch.setenv(GLOOMBERB_SESSION_COOKIE_ENV, _FAKE_COOKIE)
 
     status = session_gate.session_gate_status()
@@ -117,6 +123,24 @@ def test_kill_switch_off_is_reported_before_the_cookie(
     assert status.authenticated is False
     assert status.code == "disabled"
     assert _FakeClient.builds == [], "the kill switch short-circuits before any request"
+
+
+def test_default_on_with_no_cookie_is_no_secret_and_makes_no_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """DIG-2752 rescope: enabled-by-default, no cookie configured.
+
+    This is the shape every keyless deployment actually runs in, and it must
+    answer without touching the network: ``no_secret``, zero builds.
+    """
+    monkeypatch.delenv(GLOOMBERB_ENABLED_ENV, raising=False)
+    monkeypatch.delenv(GLOOMBERB_SESSION_COOKIE_ENV, raising=False)
+
+    status = session_gate.session_gate_status()
+
+    assert status.authenticated is False
+    assert status.code == "no_secret"
+    assert _FakeClient.builds == [], "no credential means no probe"
 
 
 # -- acceptance: an invalid or expired secret is hidden, plus a warning ---------

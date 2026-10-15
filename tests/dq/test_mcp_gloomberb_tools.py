@@ -1440,22 +1440,28 @@ def test_news_with_ticker_carries_deep_link(monkeypatch: pytest.MonkeyPatch) -> 
     assert payload["attribution"] == GLOOMBERB_ATTRIBUTION
 
 
-def test_env_seam_builder_caches_per_env_pair_and_defaults_off(
+def test_env_seam_builder_caches_per_env_pair_and_defaults_on(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Caching is per (flag, cookie) pair; the default is ON since DIG-2752.
+
+    The cache-key behaviour is unchanged. The first arm used to assert
+    ``enabled is False`` for an unset flag - that is the superseded default.
+    An explicit ``=0`` must still build a disabled client, which is the
+    property that survives.
+    """
     first = mcp_server._build_gloomberb_client()
-    assert first.enabled is False
+    assert first.enabled is True
     assert mcp_server._build_gloomberb_client() is first
 
     monkeypatch.setenv("GLOOMBERB_SESSION_COOKIE", "token-value")
     second = mcp_server._build_gloomberb_client()
     assert second is not first
-    assert second.enabled is False
 
-    monkeypatch.setenv("GLOOMBERB_ENABLED", "1")
+    monkeypatch.setenv("GLOOMBERB_ENABLED", "0")
     third = mcp_server._build_gloomberb_client()
     assert third is not second
-    assert third.enabled is True
+    assert third.enabled is False
 
 
 TOOL_CALLS: dict[str, tuple[Any, ...]] = {

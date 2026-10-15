@@ -383,8 +383,9 @@ def available_digifetch_tools(subset: tuple[str, ...] | None = None) -> list[dic
     a tool that can only error:
 
     * the whole family is dropped when ``GLOOMBERB_ENABLED`` disables it
-      (default OFF; a typo fails closed), because every call would return the
-      typed "disabled by kill switch" ``upstream_error``; and
+      (``GLOOMBERB_ENABLED=0``, or a value the flag parser does not
+      recognise), because every call would then return the typed "disabled by
+      kill switch" ``upstream_error``; and
     * ``session`` / ``preview`` / ``pro`` tools are dropped when
       ``GLOOMBERB_SESSION_COOKIE`` is unset, because they would return the
       typed ``auth_required`` / ``pro_required`` error with no request (#4099);

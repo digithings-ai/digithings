@@ -288,20 +288,71 @@ def test_available_digifetch_tools_rejects_an_unknown_name(
         available_digifetch_tools(("digifetch_not_a_tool",))
 
 
-def test_available_digifetch_tools_respects_the_family_kill_switch(
+def test_keyless_tools_are_advertised_by_default_without_any_credential(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Default OFF (env unset) → no schemas; explicit opt-in → schemas.
+    """DIG-2752 rescope (Chris, decision d4922299): the keyless surface is ON by default.
+
+    Supersedes the DIG-1233 opt-in: a deployment with no ``GLOOMBERB_ENABLED``
+    and no cookie must be handed exactly the ``free`` tools, and nothing that
+    needs a credential. The gated tools stay hidden because the session gate
+    answers ``no_secret`` before it makes any request.
+    """
+    monkeypatch.delenv(GLOOMBERB_ENABLED_ENV, raising=False)
+    monkeypatch.delenv(GLOOMBERB_SESSION_COOKIE_ENV, raising=False)
+    monkeypatch.delenv(SUBSTACK_SESSION_COOKIE_ENV, raising=False)
+
+    # Anchor on the ADVERTISABLE set (the schemas), not on every entitlement:
+    # the entitlement table carries at least one name with no schema, so an
+    # entitlement-wide expectation would be unsatisfiable by construction.
+    schema_names = {t["function"]["name"] for t in DIGIFETCH_TOOLS}
+    expected = {n for n in schema_names if TOOL_ENTITLEMENTS[n] == "free"}
+    gated = {n for n in schema_names if TOOL_ENTITLEMENTS[n] != "free"}
+    # Non-vacuity: both halves must be non-empty or the equality below is vacuous.
+    # Non-vacuity: both halves must be non-empty or the equality proves nothing.
+    assert expected, "no free tools: the equality below would hold vacuously"
+    assert gated, "no gated tools: the exclusion below would hold vacuously"
+
+    advertised = {t["function"]["name"] for t in available_digifetch_tools()}
+    assert advertised == expected
+    assert advertised.isdisjoint(gated)
+
+
+def test_explicit_disable_withholds_the_keyless_subset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``GLOOMBERB_ENABLED=0`` stays a full-family stop, and a typo still fails closed.
+
+    The default flipped ON, so the opt-OUT is the property that now carries the
+    safety burden; it must be pinned in both its explicit and its typo form.
+    """
+    monkeypatch.delenv(GLOOMBERB_SESSION_COOKIE_ENV, raising=False)
+
+    monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, "0")
     assert available_digifetch_tools() == []
+
+    monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, "ture")
+    assert available_digifetch_tools() == []
+
+
+def test_available_digifetch_tools_honours_an_explicit_opt_in_and_opt_out(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The default moved (DIG-2752 rescope), so these two arms are what is left.
+
+    An explicit ``GLOOMBERB_ENABLED=1`` must still enable the family for a
+    deployment that sets it, and ``=0`` must still stop it for *every* subset.
+    The unset-by-default behaviour is pinned by
+    ``test_keyless_tools_are_advertised_by_default_without_any_credential`` and
+    the ``=0``/typo stop by ``test_explicit_disable_withholds_the_keyless_subset``.
+    """
     monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, "1")
     assert available_digifetch_tools()
     assert available_digifetch_tools(EQUITY_TOOLS)
+
     monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, "0")
     assert available_digifetch_tools() == []
     assert available_digifetch_tools(EQUITY_TOOLS) == []
-    # A typo fails closed, same as the client's kill switch.
-    monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, "ture")
-    assert available_digifetch_tools() == []
 
 
 # ── dispatcher routing + envelope ─────────────────────────────────────────────

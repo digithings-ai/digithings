@@ -64,9 +64,10 @@ def _sweep_handler(request: httpx.Request) -> httpx.Response:
 def _clean_env(monkeypatch: pytest.MonkeyPatch):
     """Opt the Gloomberb family back in and keep the tool-list filter offline.
 
-    GLOOMBERB_ENABLED defaults OFF (DIG-1233), so without the explicit opt-in
-    no digifetch schema is ever advertised and every grounding assertion below
-    fails on the bare tip. The session-gate verdict is stubbed to follow the
+    GLOOMBERB_ENABLED now defaults ON (DIG-2752 rescope, decision
+    d4922299, superseding the DIG-1233 opt-in), so the explicit opt-in below
+    is belt-and-braces rather than load-bearing. The session-gate verdict is
+    stubbed to follow the
     cookie's presence — the same seam tests/dq/data/test_gloomberb_agent_tools.py
     uses — because answering it for real costs one live request to api.gloom.sh
     (DIG-2752); the real presence-is-not-enough contract is pinned in
