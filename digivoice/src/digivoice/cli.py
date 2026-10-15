@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import NoReturn, TextIO
 
+from digivoice import __version__
 from digivoice import history as history_log
 from digivoice.capture import default_stop_file, discard_wav, record
 from digivoice.doctor import doctor_checks, render_doctor
@@ -988,6 +989,8 @@ def run(argv: Sequence[str], runtime: Runtime) -> CliResult:
     parser = build_parser()
     if argv and argv[0] in {"help", "-h", "--help"}:
         return CliResult(code=0, stdout=parser.format_help(), stderr="")
+    if argv and argv[0] in {"--version", "-V"}:
+        return CliResult(code=0, stdout=f"digivoice {__version__}\n", stderr="")
     if not argv:
         return _home(runtime)
     if argv[0].startswith("/"):

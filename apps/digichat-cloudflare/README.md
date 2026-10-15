@@ -48,7 +48,12 @@ Mac Compose remains **dev-only** — see
 
 ## Deploy
 
-Canonical deploy is the digithings-stack worker ([`deploy-digithings-stack-cloudflare.yml`](../../.github/workflows/deploy-digithings-stack-cloudflare.yml)) — the standalone below stays until cutover.
+> **There is no CI deploy lane for this Worker** (DIG-2843). The
+> `deploy-digithings-stack-cloudflare.yml` referenced here was deleted on 2026-10-01 by
+> `f54af7052` (#4919, Human Gate), so the recipe below is the whole deploy path. The build
+> half is still gated: `build-cloudflare-workers.yml` runs `wrangler deploy --dry-run` for
+> this app on every PR. See
+> [docs/DEPLOYMENT.md § Cloudflare Workers and Containers](../../docs/DEPLOYMENT.md#cloudflare-workers-and-containers).
 
 From **repo root** (Dockerfile context is monorepo root):
 

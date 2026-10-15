@@ -96,7 +96,7 @@ export function useLiveBriefKpis(
       positions: kpiPositions,
       // #3767 / #3935: rebase on the current source run so the live-overlay
       // inception and the β/IR estimator never cross a legacy→finalized seam.
-      navHistory: currentNavRun(navHistory).map((p) => ({ date: p.date, nav: p.nav })),
+      navHistory: currentNavRun(navHistory),
       benchmarkHistory,
       benchmarkTicker: benchTicker,
     });

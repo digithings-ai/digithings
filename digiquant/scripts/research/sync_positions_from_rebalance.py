@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from digiquant.dashboard.tenancy import house_workspace_id
+from digiquant.portfolio.ledger_replay import fetch_ledger_state, reconcile_book
 
 try:
     from supabase import create_client  # type: ignore
@@ -200,6 +201,28 @@ def sync_positions_for_date(sb: Any, d: str, *, dry_run: bool = False) -> int:
         return len(pos_rows)
 
     CHUNK = 500
+    # DIG-2816, STRICT: this script's whole job is to persist the book the rebalance
+    # proposed, so the ledger must never silently overwrite those weights — a rewrite
+    # here would defeat the script. Instead the book is CHECKED against
+    # ``position_events`` and the run stops if the two disagree beyond tolerance, or if
+    # the book holds a ticker the ledger EXITed. Anchoring belongs in the writers that
+    # compute a book (``commit_io``, ``portfolio_materialize``); here the ledger is the
+    # check, not the source.
+    ledger_report = reconcile_book(
+        pos_rows,
+        fetch_ledger_state(sb, _house_id(), d),
+        writer="sync_positions_from_rebalance",
+        mode="strict",
+    )
+    print(f"🔎 {ledger_report.summary()}")
+    if ledger_report.covered and ledger_report.drifted():
+        print(
+            f"❌ refusing to sync {d}: the proposed book disagrees with position_events on "
+            f"{ledger_report.drifted()} ticker(s) (drift_pp={ledger_report.drift_pp}). "
+            f"Either the rebalance or the ledger needs correcting first."
+        )
+        return 1
+
     for i in range(0, len(pos_rows), CHUNK):
         sb.table("positions").upsert(
             pos_rows[i : i + CHUNK], on_conflict="workspace_id,date,ticker"

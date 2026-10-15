@@ -242,6 +242,25 @@ def test_browse_esc_at_the_root_changes_nothing(tmp_path: Path) -> None:
     assert "density" not in [row.name for row in _walk(load_settings(paths))]
 
 
+def _drain_master(master: int) -> None:
+    """Read and discard everything painted to the pty master side.
+
+    choose() paints a full frame before its first read. With nobody reading
+    the master side, that write blocks forever once the pty output buffer
+    fills (macOS default) — the test then hangs before consuming any input,
+    while CI Linux's bigger buffer never notices.
+    """
+
+    def _run() -> None:
+        try:
+            while os.read(master, 65536):
+                pass
+        except OSError:
+            pass
+
+    threading.Thread(target=_run, daemon=True).start()
+
+
 def test_pressed_chord_is_ctrl_shift_space() -> None:
     assert chord_from_code(6, 32) == "ctrl+shift+space"
     assert chord_from_code(1, ord("R")) == "R"
@@ -431,6 +450,7 @@ def test_click_on_the_voice_row_selects_it(monkeypatch: pytest.MonkeyPatch) -> N
     voice_row = next(index for index, hit in enumerate(row_hits()) if hit == voice_index)
     sequence = f"\x1b[<0;2;{voice_row + 1}M".encode()
     master, slave = pty.openpty()
+    _drain_master(master)
 
     def feed() -> None:
         time.sleep(0.15)
@@ -489,6 +509,7 @@ def test_click_selects_a_row_and_back_leaves(monkeypatch: pytest.MonkeyPatch) ->
 
     def run(sequence: bytes) -> int | str | None:
         master, slave = pty.openpty()
+        _drain_master(master)
 
         def feed() -> None:
             time.sleep(0.2)

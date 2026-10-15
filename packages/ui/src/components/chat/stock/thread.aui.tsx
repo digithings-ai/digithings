@@ -410,7 +410,7 @@ const AssistantMessage: FC = () => {
     <MessagePrimitive.Root
       data-slot="aui_assistant-message-root"
       data-role="assistant"
-      className="fade-in slide-in-from-bottom-1 animate-in relative -mb-7.5 pb-7.5 duration-150 [contain-intrinsic-size:auto_200px] [content-visibility:auto]"
+      className="fade-in slide-in-from-bottom-1 animate-in relative -mb-7.5 pb-7.5 duration-150"
     >
       <div
         data-slot="aui_assistant-message-content"
@@ -590,7 +590,7 @@ const UserMessage: FC = () => {
       data-slot="aui_user-message-root"
       data-user-align={userAlign}
       className={cn(
-        "fade-in slide-in-from-bottom-1 animate-in grid auto-rows-auto content-start gap-y-2 px-2 duration-150 [contain-intrinsic-size:auto_200px] [content-visibility:auto]",
+        "fade-in slide-in-from-bottom-1 animate-in grid auto-rows-auto content-start gap-y-2 px-2 duration-150",
         alignEnd
           ? "grid-cols-[minmax(72px,1fr)_auto] [&:where(>*)]:col-start-2"
           : "grid-cols-[auto_minmax(72px,1fr)] [&:where(>*)]:col-start-1",

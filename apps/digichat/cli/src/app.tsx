@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { homedir } from "node:os";
 import { Box, Text } from "ink";
 import {
@@ -10,6 +10,7 @@ import {
 } from "@assistant-ui/react-ink";
 import { useChatRuntime } from "@assistant-ui/ai-sdk";
 import { Thread } from "./components/thread.js";
+import { ArtifactsPanel } from "./components/artifacts-panel.js";
 import { createScriptedAdapter, MODEL_NAME } from "./scripted-adapter.js";
 import toolkit from "./tools.js";
 import { createDigichatTransport } from "./transport.js";
@@ -70,10 +71,16 @@ const LiveEmptyState = () => (
 export const LiveInkApp = ({
   request,
   modelName,
+  startInArtifacts,
 }: {
   request: DigichatCliRequestOptions;
   modelName: string;
+  /** --artifacts opens the session's file list straight away. */
+  startInArtifacts?: boolean;
 }) => {
+  const [showArtifacts, setShowArtifacts] = useState(
+    startInArtifacts === true,
+  );
   const transport = useMemo(
     () => createDigichatTransport(request),
     [
@@ -82,6 +89,7 @@ export const LiveInkApp = ({
       request.language,
       request.model,
       request.sessionId,
+      request.conversationId,
     ],
   );
   const runtime = useChatRuntime({ transport });
@@ -97,7 +105,14 @@ export const LiveInkApp = ({
         </Box>
         <StatusBar modelName={modelName} />
         <Box marginTop={1}>
-          <Thread emptyState={<LiveEmptyState />} />
+          {showArtifacts ? (
+            <ArtifactsPanel
+              request={request}
+              onClose={() => setShowArtifacts(false)}
+            />
+          ) : (
+            <Thread emptyState={<LiveEmptyState />} />
+          )}
         </Box>
       </Box>
     </AssistantRuntimeProvider>
@@ -107,8 +122,19 @@ export const LiveInkApp = ({
 export function DigichatCliApp(
   props:
     | { mode: "demo" }
-    | { mode: "live"; request: DigichatCliRequestOptions; modelName: string },
+    | {
+        mode: "live";
+        request: DigichatCliRequestOptions;
+        modelName: string;
+        startInArtifacts?: boolean;
+      },
 ) {
   if (props.mode === "demo") return <DemoInkApp />;
-  return <LiveInkApp request={props.request} modelName={props.modelName} />;
+  return (
+    <LiveInkApp
+      request={props.request}
+      modelName={props.modelName}
+      startInArtifacts={props.startInArtifacts}
+    />
+  );
 }

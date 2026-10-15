@@ -54,10 +54,12 @@ export const FRESHNESS_URLS: readonly string[] = [
   "https://digithings.ai/build-info.json",
 ];
 
+// Worker-only status (cost epic): /_stack/status is answered by the stack Worker
+// without waking the 6 GiB container. Container health is checked from the Mac.
 export const STACK_HEALTH_URLS: readonly string[] = [
-  "https://graph.digithings.ai/healthz",
-  "https://key.digithings.ai/healthz",
-  "https://search.digithings.ai/healthz",
+  "https://graph.digithings.ai/_stack/status",
+  "https://key.digithings.ai/_stack/status",
+  "https://search.digithings.ai/_stack/status",
 ];
 
 export function probeUrls(kind: ProbeKind): string[] {

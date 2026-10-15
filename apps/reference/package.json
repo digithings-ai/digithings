@@ -1,5 +1,13 @@
 {
   "name": "design-reference",
+  "description": "Local design reference app for digithings.",
+  "license": "MIT",
+  "homepage": "https://digithings.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/digithings-ai/digithings.git",
+    "directory": "apps/reference"
+  },
   "version": "1.0.0",
   "private": true,
   "scripts": {

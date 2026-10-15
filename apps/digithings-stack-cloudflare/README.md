@@ -111,12 +111,18 @@ npx wrangler secret put GROQ_API_KEY
 npx wrangler deploy
 ```
 
-Manual deploys also run through
-[`deploy-digithings-stack-cloudflare.yml`](../../.github/workflows/deploy-digithings-stack-cloudflare.yml)
-(`workflow_dispatch` only, behind the `production` environment gate — stays
-human-approved; PRs touching the stack run the `check` job only). The digiquant-mcp
-container reads its market-data secrets from the Worker environment — set each value via
-stdin (`$VALUE`-only, never commit values):
+> **There is no CI deploy lane for this Worker** (DIG-2843). The
+> `deploy-digithings-stack-cloudflare.yml` that used to sit here — `workflow_dispatch` only,
+> behind the `production` environment gate — was deleted on 2026-10-01 by `f54af7052`
+> (#4919, Human Gate), so the `npx wrangler deploy` above is the whole deploy path. It is
+> recoverable at `git show 'f54af7052^:.github/workflows/deploy-digithings-stack-cloudflare.yml'`;
+> restoring it is a decision recorded on DIG-2843. The build half is still gated:
+> `build-cloudflare-workers.yml` runs `wrangler deploy --dry-run` for this app on every PR,
+> and the stack's `tsc --noEmit` + `vitest run` now run in `test-web.yml`. See
+> [docs/DEPLOYMENT.md § Cloudflare Workers and Containers](../../docs/DEPLOYMENT.md#cloudflare-workers-and-containers).
+
+The digiquant-mcp container reads its market-data secrets from the Worker environment — set
+each value via stdin (`$VALUE`-only, never commit values):
 
 ```bash
 printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put R2_ACCOUNT_ID

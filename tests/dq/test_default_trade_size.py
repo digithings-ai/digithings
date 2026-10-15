@@ -66,8 +66,8 @@ class TestDefaultTradeSizeBacktest:
             data_path=str(DATA),
         )
         assert result is not None
-        # Partial over the withheld chart series only — see nautilus_runner.
-        # _verified_returns_series. Every metric came from the balance path.
+        # Nothing may be lost here: every metric and the chart series come off the
+        # account's own balance path, so the analyzer alias is never consulted.
         assert result.status in {"ok", "partial"}, (
             f"backtest did not complete: status={result.status}"
         )

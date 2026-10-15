@@ -6,22 +6,31 @@
  * portal sheet, body scroll lock, Escape/scrim dismissal and focus return are
  * owned by NavShell; everything digithings-specific arrives here as props — the
  * brand mark, the wayfinding links, the skip-link target, the GitHub icon in
- * the tail, and the "Ask digichat" CTA (sheet, plus a compact tail link on wide
- * viewports). The CTA treatments are the kit's CtaLink/IconLink, so the button
- * dress lives once in buttonVariants — no `.dc-nav-cta` stays here.
+ * the tail, and the digichat hero banner (sheet, plus the wide-bar tail). The
+ * banner is the chat entry: it builds on load and stays live.
  *
  * The bar is pinned: it settles after 8px but never yields on scroll-down
  * (owner: the top bar should stay fixed to the top). Pass
  * `autoHide="hover"` explicitly for the non-scrolling chat shells.
  */
 import { usePathname } from "next/navigation";
-import { NavShell, GitHubGlyph, IconLink, CtaLink } from "@digithings/ui";
+import { NavShell, GitHubGlyph, IconLink } from "@digithings/ui";
+import { DIGICHAT } from "@digithings/hero-banner/definitions";
 import { Brand, DT_NAV_PRIMARY } from "@/app/_nav";
-import { DigiChatMark } from "@digithings/digichat-ui";
+import { ScrollBanner } from "@/components/landing/ScrollBanner";
 
 const NAV_HREFS = DT_NAV_PRIMARY.flatMap((item) =>
   "items" in item ? item.items.map((i) => i.href) : [item.href],
 ).filter((href) => href.startsWith("/"));
+
+/** digichat hero banner. It replaces the old ask button in the bar and the sheet. */
+function DigichatNavMark({ className }: { className?: string }) {
+  return (
+    <a href="/chat" aria-label="digichat" className={className}>
+      <ScrollBanner def={DIGICHAT} inView={false} replayLoading className="w-[7.2rem]" />
+    </a>
+  );
+}
 
 /** The nav entry whose section holds `pathname`: the longest nav href that is
  *  the path or one of its parents, so /docs/api/digiquant/ lights "API" and
@@ -57,28 +66,10 @@ export function DtNav({ autoHide = "pinned" }: { autoHide?: "scroll" | "hover" |
           >
             <GitHubGlyph />
           </IconLink>
-          {/* Desktop twin of the sheet CTA below — the quiet `outline` dress
-              (the same buttonVariants vocabulary as every other CTA) rather
-              than a filled pill, so it recedes next to the GitHub glyph.
-              Hides at the same 880px breakpoint where the inline links yield to
-              the hamburger, so narrow viewports keep the sheet button as the
-              only digichat entry. */}
-          <CtaLink
-            href="/chat"
-            variant="outline"
-            className="max-[880px]:hidden!"
-            aria-label="Ask digichat"
-            icon={<DigiChatMark size={16} />}
-          >
-            ask digichat
-          </CtaLink>
+          <DigichatNavMark className="inline-flex items-center max-[880px]:hidden!" />
         </>
       }
-      cta={
-        <CtaLink href="/chat" aria-label="Ask digichat" icon={<DigiChatMark size={18} />}>
-          Ask digichat
-        </CtaLink>
-      }
+      cta={<DigichatNavMark className="inline-flex items-center" />}
     />
   );
 }

@@ -6,4 +6,4 @@ Use the template: [0000-template.md](0000-template.md).
 
 Link ADRs from [docs/agent-backlog/INDEX.md](../agent-backlog/INDEX.md) when they govern ongoing work.
 
-Current high-water mark: **0032** ([0032-polars-2-bound-and-date-contract.md](0032-polars-2-bound-and-date-contract.md), Accepted) — the polars 2.0 major is bound below 2, and the date-normalisation contract.
+Current high-water mark: **0033** ([0033-nautilus-trader-exact-pin.md](0033-nautilus-trader-exact-pin.md), Accepted) — `nautilus_trader` is pinned exactly at 1.230.0 and the root `uv.lock` is the only lock.

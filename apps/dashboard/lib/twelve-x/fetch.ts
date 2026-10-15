@@ -1,9 +1,8 @@
 /**
  * Typed fetchers for the twelve-x FX research tables.
  *
- * Mirrors the `querySupabase` retry/guard pattern in `lib/queries.ts`, but runs
- * against the dedicated twelve-x client (`./supabase`) rather than the main
- * dashboard singleton. All selects are cast to the contract row types in
+ * Each select retries against the dedicated twelve-x client (`./supabase`)
+ * rather than the main dashboard singleton. All selects are cast to the contract row types in
  * `./types.ts`.
  *
  * Empty-state philosophy (per the suite spec): the FX digest relaxes the
@@ -28,7 +27,6 @@ import {
   type PairFixSpec,
 } from './level-vs-fix';
 import type {
-  ConfluenceCatalyst,
   ConsensusDelta,
   ConsensusDeltaSet,
   CurrencyView,
@@ -277,27 +275,6 @@ export async function getLatestDigest(): Promise<
     doc_count: Number(row.doc_count ?? 0),
     broker_count: Number(row.broker_count ?? 0),
   };
-}
-
-/**
- * Top-N confluence trade ideas for a given run_date, ascending by rank
- * (rank 1 = strongest). Returns `[]` when unconfigured or none exist.
- */
-export async function getTopConfluence(
-  runDate: string,
-  limit = 6
-): Promise<FxConfluenceSnapshotRow[]> {
-  if (!isTwelveXConfigured() || !twelveXSupabase) return [];
-  if (!runDate) return [];
-  const rows = await querySupabase<FxConfluenceSnapshotRow[]>((sb) =>
-    sb
-      .from('fx_confluence_snapshot')
-      .select('run_date, rank, title, currency, direction, score, components, brief_keys, as_of')
-      .eq('run_date', runDate)
-      .order('rank', { ascending: true })
-      .limit(limit)
-  );
-  return rows ?? [];
 }
 
 /** Resolve the latest run_date present in `fx_confluence_snapshot`, or `null`. */
@@ -1236,53 +1213,6 @@ export async function getIntelligenceWhy(
 /* ------------------------------------------------------------------ *
  * Catalyst resolution + event-time helpers (PURE)
  * ------------------------------------------------------------------ */
-
-/**
- * PURE — resolve the catalyst a confluence idea hangs on against the events
- * feed. Honors an explicit `event_key` in the idea's components; otherwise
- * heuristically matches the earliest upcoming event touching the idea's base
- * currency (in which case `eventKey` stays null so the UI can hedge wording).
- */
-export function resolveCatalyst(
-  idea: FxConfluenceSnapshotRow,
-  events: FxEventSnapshotRow[]
-): ConfluenceCatalyst {
-  const comp = (idea.components ?? {}) as Record<string, unknown>;
-  const dtc = typeof comp.days_to_catalyst === 'number' ? comp.days_to_catalyst : null;
-  const explicitKey = typeof comp.event_key === 'string' ? comp.event_key : null;
-  const ccy = idea.currency.toUpperCase().split('/')[0];
-
-  let match: FxEventSnapshotRow | undefined;
-  if (explicitKey) {
-    match = events.find((e) => e.event_key === explicitKey);
-  } else {
-    const candidates = events
-      .filter((e) => {
-        const currencies = Array.isArray(e.currencies) ? (e.currencies as unknown[]) : [];
-        return currencies.some((c) => String(c).toUpperCase() === ccy);
-      })
-      .sort((a, b) => (a.event_date ?? '').localeCompare(b.event_date ?? ''));
-    match = candidates[0];
-  }
-
-  if (!match) {
-    return {
-      eventKey: null,
-      eventName: null,
-      eventDate: null,
-      calendarExternalId: null,
-      daysToCatalyst: dtc,
-    };
-  }
-
-  return {
-    eventKey: explicitKey ? match.event_key : null,
-    eventName: match.event_name,
-    eventDate: match.event_date,
-    calendarExternalId: match.calendar_external_id,
-    daysToCatalyst: dtc,
-  };
-}
 
 /** PURE — the absolute release instant of an event, or null when unparseable. */
 export function eventInstant(row: { event_datetime_utc: string | null }): Date | null {

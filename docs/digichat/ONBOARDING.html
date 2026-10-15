@@ -11,7 +11,7 @@
     --hair-2:rgba(255,255,255,.16);
     --ink:#eceef0; --soft:#9aa0a6; --mute:#6b7177;
     --accent:#3dd6c4; --pink:#e2708a; --warn:#e0b341; --danger:#e5533e;
-    --mono:"Geist Mono","JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --mono:"Geist Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,"DejaVu Sans Mono","Segoe UI Symbol",monospace;
   }
   *{box-sizing:border-box}
   html{scroll-behavior:smooth}
@@ -423,7 +423,7 @@
   <div class="grid g2">
     <div class="card tight">
       <ul style="margin:0">
-        <li><strong>Mono everything.</strong> Geist Mono for text and UI (<code>--font-geist-mono</code>, loaded per layout).</li>
+        <li><strong>Mono everything.</strong> Geist Mono for text and UI (loaded once per app, in <code>src/app/fonts.ts</code>).</li>
         <li><strong>Zero radius.</strong> <code>--radius: 0</code> — the terminal look. The theme flattens any rounded utility inside the skin scope.</li>
         <li><strong>Block caret.</strong> Native <code>caret-shape: block</code> where supported; a painted overlay where it isn't.</li>
       </ul>

@@ -21,6 +21,11 @@
 # Fixes #2018 / Refs #2016
 
 services:
+  digillm:
+    image: ghcr.io/digithings-ai/digillm:0.1.0
+    build: !reset null
+    pull_policy: always
+
   digikey:
     image: ghcr.io/digithings-ai/digikey:${DIGI_IMAGE_TAG:-latest}
     build: !reset null

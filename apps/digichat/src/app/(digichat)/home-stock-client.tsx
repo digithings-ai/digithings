@@ -6,7 +6,7 @@
  * and ThreadListPrimitive sidebar (inside the runtime provider).
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import type { UIMessage } from "ai";
 import { AssistantChatTransport, useAISDKRuntime } from "@assistant-ui/ai-sdk";
@@ -21,6 +21,7 @@ import {
 } from "@/components/stock/product-shell";
 import { MemoryThreadListSidebar } from "@/components/stock/memory-thread-list-sidebar";
 import {
+  ArtifactsPanel,
   StockChatPrefsHost,
   useStockChatPrefs,
 } from "@digithings/ui/chat/stock";
@@ -200,11 +201,16 @@ function HomeStockClientSingle({
 }) {
   const sessionKey = userId ? `app:${userId}` : "app:anon";
   const redoRef = useRef<() => void>(() => {});
+  // DIG-2882 DoD 4: this shell has no session store, so the panel opens in its
+  // "no session" state rather than silently listing nothing.
+  const [artifactsOpen, setArtifactsOpen] = useState(false);
+  const openArtifacts = useCallback(() => setArtifactsOpen(true), []);
   const prefs = useStockChatPrefs({
     config: toStockChatPrefsConfig(clientConfig),
-    deps: PREFS_DEPS,
+    deps: { ...PREFS_DEPS, onOpenArtifacts: openArtifacts },
     sessionKey,
     hasSessions: false,
+    hasArtifacts: true,
     newThread: () => {},
     redo: () => {
       redoRef.current();
@@ -245,6 +251,11 @@ function HomeStockClientSingle({
             onWebSearchChange={prefs.setWebSearch}
           />
         </PresentationFrame>
+        <ArtifactsPanel
+          conversationId={null}
+          open={artifactsOpen}
+          onClose={() => setArtifactsOpen(false)}
+        />
       </div>
     </StockChatPrefsHost>
   );
@@ -260,11 +271,19 @@ function HomeStockClientMemory({
   const sessionKey = userId ? `app:${userId}` : "app:anon";
   const redoByThread = useRef(new Map<string, () => void>());
   const runtimeRef = useRef<AssistantRuntime | null>(null);
+  // DIG-2882 DoD 1/4: the panel is scoped to one conversation, and the main
+  // thread id is read at open time rather than subscribed per render - the
+  // same ref `redo` already reads. null means "closed".
+  const [artifactsConversation, setArtifactsConversation] = useState<string | null>(null);
+  const openArtifacts = useCallback(() => {
+    setArtifactsConversation(runtimeRef.current?.threads.getState().mainThreadId ?? null);
+  }, []);
   const prefs = useStockChatPrefs({
     config: toStockChatPrefsConfig(clientConfig),
-    deps: PREFS_DEPS,
+    deps: { ...PREFS_DEPS, onOpenArtifacts: openArtifacts },
     sessionKey,
     hasSessions: true,
+    hasArtifacts: true,
     newThread: () => {},
     redo: () => {
       const mainId = runtimeRef.current?.threads.getState().mainThreadId;
@@ -351,6 +370,11 @@ function HomeStockClientMemory({
             onWebSearchChange={prefs.setWebSearch}
           />
         </PresentationFrame>
+        <ArtifactsPanel
+          conversationId={artifactsConversation}
+          open={artifactsConversation !== null}
+          onClose={() => setArtifactsConversation(null)}
+        />
       </div>
     </StockChatPrefsHost>
   );

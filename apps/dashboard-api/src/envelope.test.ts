@@ -209,6 +209,23 @@ describe('mountEnvelopeRoutes', () => {
     expect(body.data.points[0].day_return_pct).toBeNull();
   });
 
+  it('GET /nav-series names the plottable series and marks the stub accounting NAV unplottable', async () => {
+    const routes = harness(stubSource());
+    const res = await routes.get('/nav-series')!(get('/nav-series'));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      data: {
+        plot: {
+          series: string;
+          accounting_nav: { contract: string; plottable: boolean; reason: string };
+        };
+      };
+    };
+    expect(body.data.plot.series).toBe('index');
+    expect(body.data.plot.accounting_nav.plottable).toBe(false);
+    expect(body.data.plot.accounting_nav.contract).toBe('legacy_estimate');
+  });
+
   it('GET /nav-series honors from/to and rejects malformed dates', async () => {
     const routes = harness(stubSource());
     const empty = (await (

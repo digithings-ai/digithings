@@ -4,38 +4,38 @@
   "claims": [
     {
       "id": "claim_c30fda274d3f4487a822bb42cedbce30",
-      "statement": "Decorating with @traceable emits redacted LangSmith spans when LANGSMITH_API_KEY is set and the SDK is installed, is a zero-overhead no-op otherwise, and tracing_enabled() re-reads the environment on each call.",
+      "statement": "Decorating with @traceable emits redacted LangSmith spans when LANGSMITH_API_KEY is set and the SDK is installed, also opens an OTel span when an OTLP endpoint is set, is a zero-overhead no-op when neither leg is active, and tracing_enabled() re-reads the environment on each call.",
       "evidence": [
         {
-          "resource": "repo://digismith/src/digismith/config.py#L25-L28",
+          "resource": "repo://digitrace/src/digitrace/config.py#L25-L28",
           "version": "repo-lines-v1:sha256:e5ff48f97d81425339d8a2f89153588bae1b3248527efc30899fc13d3500042b:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZWJhY2FlOWZmNmQ5OGU4YjRiOTI0ZjlkYjhmODgyYWQxNTE2YWY4MDQyMGM3MGY3NDM0NDQ3NGI1MTY1ZTAwOSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMTM1YjlkNzM0NGNkOGVkN2E1M2E2ODg1YWFlYzI2MTM1N2YwNTUzMGU5ZDQ0MDFkMjZlMmQ3NzY5MDc5YmI5YSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZjk5ZWZlZGZkMmQ5NzA2ZDg5MWM3YmE5ODNlN2Y4NGUwNWFkMGUwMTkxYzEzMjc5OGJlNWUzYzFjYzUzMDQyNiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTdhZTMxMTdlZDk2Njk5MmU1NjlhZjliNzc3YzU4ZDE4NTliYmFjZDhkM2JjY2FlYzJiYzJmZDllYjdlYmM0NyJ9"
         },
         {
-          "resource": "repo://digismith/src/digismith/trace.py#L35-L59",
+          "resource": "repo://digitrace/src/digitrace/trace.py#L111-L136",
           "version": "repo-lines-v1:sha256:1bbdf1a3beae0a5669d481bf8b2d8910f074a1f36cfe80b6c75a06532d8a23a2:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZmZWVlMTJiMTAxY2IzNTI2NWNhM2FlMmY4ZmM1YjRmODNkNWRlYjM5MGE0MmQ1MTRkMzI2OGYwMTlhMDgwZjkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc1MDFiYzg4ZmNkMjgzNTU4NjBiZWI3ODYzM2I3ZjBjNzQyZTE1NDU4MDZjMmIzM2Y4MTg2MGZiZWJlYjY0YjkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQ3Y2IzYjlhNjQxMmQyYTM2MzU2YzM4Y2RhZmZjNjgyMDI1YjJmZDY5M2NlNGM1ODE1OGEyNzY1NjU4NWUxMDgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
         }
       ]
     },
     {
       "id": "claim_1e1bff896faa4a9882d3b15bb5b33170",
-      "statement": "The service runs digismith.server:app on port 8003 (host-published as 127.0.0.1:8003), where GET /healthz returns {\"ok\": true} for liveness and GET /v1/status returns the secret-free tracing diagnostic.",
+      "statement": "The service runs digitrace.server:app on port 8003 (host-published as 127.0.0.1:8003), where GET /healthz returns {\"ok\": true} for liveness and GET /v1/status returns the secret-free tracing diagnostic.",
       "evidence": [
         {
-          "resource": "repo://digismith/Dockerfile#L22-L28",
+          "resource": "repo://digitrace/Dockerfile#L25-L28",
           "version": "repo-lines-v1:sha256:a1d855268c028fb4024d26c4ad591c29385e20621132fd63fc793160a24a1346:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZjg0NjI4MmUzYzFkMWIzZTMxYzU4OTVjMDYxZDZkNTkzYWViNzczN2JiNTdjMzQ1YmY0NDdmNzQwNzg0ODFiZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYjU3NzVhZjhkMzEwYWZlNDg0ZDI0M2IzZDJiMmI1MWQ5ZTRlYTBlNzNjOThmOWEzMjFhZTMyOGJmOGI3NDZkOSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNmI5NGFjOWZlZTA5ZmExNjM0NWMyNDllMzliYzVjZTQ5N2Y5NGY5ZmUzNDA0MWQzZTgyZTQwMjhiOTgyMTY1NyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjAsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSJ9"
         },
         {
-          "resource": "repo://digismith/src/digismith/server.py#L39-L63",
+          "resource": "repo://digitrace/src/digitrace/server.py#L59-L82",
           "version": "repo-lines-v1:sha256:5ea5d4d3772065e190d1c58168559c97012f8e258a8bad17f0e032305f63c63e:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhMTllYmE5M2JjYWVmNWE1MmVmYjQwYmE1YTg5MTRkNjljNjA4M2MzNWRkZDUxODJiY2M4NTM0NDExYzExYTkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjMwYzFmMTg4ZjE0MmVkN2E4MjQ2ODBiMjA3MTcyYzU1MTliYzYxNGE0OGZkYTdjZjE2N2VkYjhkZGY3OTk1NmMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImNhNjhiZTk0NWMxZmNkMzk0ODI5Y2YyNDZlMGQ1ZTY5NTA0ZTlhNzE1ZmQwMzI1MzhhZGQ5M2E1NmY0ZjY5MTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImRlOGQ3NmIxNDlmNzc2MjQ3YzdiNjc4ODAwYmE0OTZjYjM5YjllYjUzMGE4NzU1MDQxNTEwNGM4ZDZjNWE5YWYifQ"
         }
       ]
     },
     {
       "id": "claim_927ffd1b5ce44c5a86bc870a9cc964ee",
-      "statement": "digismith changes are verified with pytest tests/ -m unit -k \"digismith\" and ruff check plus format --check on digismith/.",
+      "statement": "digitrace changes are verified with pytest tests/ -m unit -k \"digitrace\" and ruff check plus format --check on digitrace/.",
       "evidence": [
         {
-          "resource": "repo://digismith/AGENTS.md#L48-L66",
+          "resource": "repo://digitrace/AGENTS.md#L50-L67",
           "version": "repo-lines-v1:sha256:ddcaa3c345e14c5cb1c7c110e3b1be1f813eb6887e5602df57a85b5d3fe3bd50:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQyY2I0YWZmZDcyMzI0MTI1NWNhN2FiMGEzZmUzN2MyZTQ3YjZmZWExYWE0ZmZkNWM3NTcxZmQ4MjU3NmY3M2YiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ3YzA2YzU2MWQ1YzMyNzM0MzY4NTI2OGE0NmIzMzkxZjM5OThlZWU4OTBkMmJlNTFmMGQyMWNjNGE1M2FlNmQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjAwMWYyZWMxNzU5M2MxMDU0ZWI0NjM2N2Q4NDUzZWYyNGExNzNjZTk2YjcxMTdkOTFmOWE2OGQ0NGZlZjhiMDEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjAwMWYyZWMxNzU5M2MxMDU0ZWI0NjM2N2Q4NDUzZWYyNGExNzNjZTk2YjcxMTdkOTFmOWE2OGQ0NGZlZjhiMDEifQ"
         }
       ]

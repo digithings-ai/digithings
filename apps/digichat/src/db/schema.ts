@@ -110,8 +110,38 @@ export const conversationMessages = pgTable(
   (t) => [uniqueIndex("conversation_messages_conv_seq").on(t.conversationId, t.sequence)]
 );
 
+export const artifacts = pgTable(
+  "artifacts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    conversationId: uuid("conversation_id")
+      .references(() => conversations.id, { onDelete: "cascade" })
+      .notNull(),
+    /** Opaque, session-scoped link token. Not the row id: never exposed as a bare id. */
+    token: text("token").notNull(),
+    name: text("name").notNull(),
+    mediaType: text("media_type").notNull(),
+    byteSize: integer("byte_size").notNull(),
+    /** Opaque blob location (backend-specific); never contains a session or ticket value. */
+    storageKey: text("storage_key").notNull(),
+    /** "file" | "table" | "text" | "image" - drives how the client opens it. */
+    kind: text("kind").default("file").notNull(),
+    /** Short model-visible description. Never contains artifact payload rows. */
+    summary: text("summary"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    uniqueIndex("artifacts_token").on(t.token),
+    uniqueIndex("artifacts_storage_key").on(t.storageKey),
+    index("artifacts_conversation_created").on(t.conversationId, t.createdAt),
+  ]
+);
+
 export type Tenant = typeof tenants.$inferSelect;
 export type ApiKeyRow = typeof apiKeys.$inferSelect;
 export type ConversationRow = typeof conversations.$inferSelect;
 export type ConversationMessageRow = typeof conversationMessages.$inferSelect;
 export type QuantRunRow = typeof quantRuns.$inferSelect;
+export type ArtifactRow = typeof artifacts.$inferSelect;

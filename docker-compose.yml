@@ -1,6 +1,21 @@
 # Digi Ecosystem – Docker Compose (Phase 0+)
 # See ARCHITECTURE.md, SECURITY.md. For hardened deploy: docker compose --profile hardened up
 # Usage: docker compose up --build
+#
+# Service groups (S4 / DIG-2772). Compose profiles select what starts:
+#   core   digivault, litellm-cache, omniroute(+guard), digisearch-mcp, digivault-mcp, zammad-mcp
+#   quant  (digiquant + ollama) -- always-on, see note
+#   chat   digichat, digichat-db
+#   trace  digitrace (always-on) + otel-collector
+#   edge   the *.digithings.localhost reverse proxy (infra/local-proxy/Caddyfile)
+#   all    everything above, including heartbeat + observability
+#   e.g. docker compose --profile core --profile edge up -d
+#
+# ADR-0001 constraint: the root file and `make up` stay the ZERO-CONFIG path, so the
+# always-on backends (digikey, digigraph, digisearch, searxng, valkey, litellm, ollama,
+# digitrace, digiquant) deliberately carry NO `profiles:`. The named groups above tag the
+# OPT-IN services; they never gate the core. Do not add `profiles:` to an always-on
+# service -- it would make `make up` and `make build` start/build nothing.
 # For testing without OpenAI: set OLLAMA_MODEL=ollama/deepseek-r1:14b in .env; Ollama runs in Docker below.
 
 services:
@@ -147,7 +162,7 @@ services:
         condition: service_healthy
       digisearch:
         condition: service_healthy
-      litellm:
+      digillm:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/healthz"]
@@ -234,7 +249,12 @@ services:
   # Loopback-only on the host; digisearch reaches searxng as http://searxng:8080
   # via DIGISEARCH_SEARXNG_URL. ddgs remains the zero-infra fallback.
   searxng:
-    image: searxng/searxng:latest
+    # Tag pinned to the commit the production bundle builds from
+    # (Dockerfile.digithings-stack-cloudflare SEARXNG_COMMIT a1144dda…, #3239),
+    # so local search behaviour matches the container bundle. Upstream ships no
+    # bare `YYYY.M.D` tag, only `YYYY.M.D-<hash>`. The digest is still not
+    # enforced: see digisearch/ARCHITECTURE.md, owner decision #3871.
+    image: searxng/searxng:2026.9.3-a1144dda3
     container_name: digi-searxng
     ports:
       - "127.0.0.1:8080:8080"
@@ -268,8 +288,17 @@ services:
       dockerfile: digivault/Dockerfile
     image: digi-digivault:latest
     container_name: digi-digivault
+    # `core` and `quant` mirror scripts/localstack/contracts.py, which probes this
+    # service's 8004 /healthz in exactly those profiles; `all` is what
+    # `dt up --profile all` resolves to. `digivault` is kept so the old
+    # `--profile digivault` spelling still works. Adding a profile to a service
+    # that already had one does not change a bare `docker compose up`.
     profiles:
       - digivault
+      # core group (S4): what graph.digithings.localhost proxies
+      - core
+      - quant
+      - all
     ports:
       - "127.0.0.1:8004:8004"
     env_file:
@@ -295,26 +324,46 @@ services:
       retries: 3
       start_period: 10s
 
-  # ─── LiteLLM router (Phase 1: digigraph uses this for all LLM calls) ───
-  # Image: see DOCKER.md § LiteLLM upgrades (pin digest in production).
-  litellm:
-    image: docker.litellm.ai/berriai/litellm:main-stable
-    container_name: digi-litellm
+  # ─── digillm: digithings' LiteLLM proxy (DIG-1780) ───
+  # LiteLLM from the pinned PyPI wheel inside a digithings image (Dockerfile.digillm),
+  # never the vendor image. The `litellm` network alias and port 4000 keep every
+  # existing OPENAI_API_BASE=http://litellm:4000/v1 caller working unchanged.
+  digillm:
+    image: ghcr.io/digithings-ai/digillm:0.1.0
+    build:
+      context: .
+      dockerfile: Dockerfile.digillm
+    container_name: digi-digillm
+    networks:
+      default:
+        aliases:
+          - litellm
     ports:
       - "127.0.0.1:4000:4000"
     env_file:
       - .env
     # Do not inject REDIS_URL with an empty default: an empty string makes
-    # LiteLLM main-stable treat Redis as configured and exit 3
+    # LiteLLM treat Redis as configured and exit 3
     # (ValueError: Redis URL must specify one of the following schemes).
     # Leave the var unset for the default local cache. When using
     # --profile litellm-cache, set REDIS_URL=redis://redis:6379 in .env so
     # env_file passes a real URL through.
-    command: ["--config", "/app/config/litellm.yaml", "--port", "4000"]
+    # Cheap inference is the house default route (same overlay the Cloudflare
+    # stack bakes in): with CHEAPERINFERENCE_API_KEY set, merge
+    # config/litellm.cheaperinference.yaml over litellm.yaml at start, so no
+    # OpenRouter/xAI key is needed locally.
+    environment:
+      - CHEAPERINFERENCE_API_BASE=${CHEAPERINFERENCE_API_BASE:-https://api.cheaperinference.com/v1}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        if [ -n "$$CHEAPERINFERENCE_API_KEY" ] && python3 /app/scripts/merge_litellm_cheaperinference.py > /tmp/litellm.yaml; then CFG=/tmp/litellm.yaml; else CFG=/app/config/litellm.yaml; fi;
+        exec litellm --config "$$CFG" --host 0.0.0.0 --port 4000
     volumes:
       - ./config:/app/config:ro
-    # LiteLLM can start without Ollama; Ollama models fail until ollama is healthy
-    # main-stable image has no curl/wget — probe with the bundled Python.
+      - ./scripts:/app/scripts:ro
+    # LiteLLM can start without Ollama; Ollama models fail until ollama is healthy.
+    # The slim image has no curl/wget — probe with the bundled Python.
     healthcheck:
       test:
         [
@@ -332,6 +381,8 @@ services:
     container_name: digi-litellm-redis
     profiles:
       - litellm-cache
+      - core
+      - all
     # Internal only; no host port. Use REDIS_URL=redis://redis:6379 in .env when this profile is active.
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -356,6 +407,8 @@ services:
     container_name: digi-omniroute-auth-guard
     profiles:
       - omniroute
+      - core
+      - all
     environment:
       - OMNIROUTE_AUTH_PASSWORD=${OMNIROUTE_AUTH_PASSWORD:-}
     command:
@@ -376,6 +429,8 @@ services:
     container_name: digi-omniroute
     profiles:
       - omniroute
+      - core
+      - all
     depends_on:
       omniroute-auth-guard:
         condition: service_completed_successfully
@@ -397,6 +452,8 @@ services:
     container_name: digi-digisearch-mcp
     profiles:
       - digisearch-mcp
+      - core
+      - all
     ports:
       - "127.0.0.1:8765:8765"
     env_file:
@@ -424,6 +481,8 @@ services:
     container_name: digi-digivault-mcp
     profiles:
       - digivault-mcp
+      - core
+      - all
     ports:
       - "127.0.0.1:8769:8769"
     env_file:
@@ -434,6 +493,85 @@ services:
       # Loopback by default; set DIGIVAULT_MCP_HOST in .env for published-port access.
     volumes:
       - digivault_data:/data/vault
+
+  # ─── digiquant runner (optional: run with docker compose --profile quant up) ───
+  # Backs the DigiQuantRunnerContainer class in scripts/selfhost/container_shim.ts,
+  # which answers 503 for that class until a compose service exists for it. The
+  # image is real today (Dockerfile.digiquant-runner: EXPOSE 8080, CMD
+  # `python /opt/runner/exec_job.py serve`) and serves HTTP on 8080
+  # (exec_job.py `serve()` -> ThreadingHTTPServer).
+  #
+  # NO published host port, on purpose: 8080 is already published by searxng
+  # (`127.0.0.1:8080:8080`), so publishing it here would make `docker compose up`
+  # fail with a port conflict for every developer and in CI (smoke-stack.yml runs
+  # a bare `up`). The shim routes over the compose network
+  # (http://digiquant-runner:8080), which needs no published port at all.
+  #
+  # Healthcheck: exec_job.py `_Handler.do_GET` serves `/healthz`. The probe uses
+  # python rather than curl because python is what the image's own CMD runs, so
+  # it is the only interpreter its presence is guaranteed by.
+  # No credentials are set here: R2_* and RUNNER_* come from env_file .env,
+  # rendered by `dt secrets render` (slice S5). Never inline a secret.
+  digiquant-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.digiquant-runner
+    image: digi-digiquant-runner:latest
+    container_name: digi-digiquant-runner
+    profiles: [quant, core, all]
+    env_file: .env
+    environment:
+      PYTHONUNBUFFERED: "1"
+    depends_on:
+      digikey:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz').read()"
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ─── digiquant MCP server (optional: run with docker compose --profile quant up) ───
+  # Backs the DigiQuantMcpContainer class in scripts/selfhost/container_shim.ts,
+  # which answers 503 for that class until a compose service publishes 8767.
+  # FastMCP over streamable-http; the entrypoint defaults to DIGIQUANT_MCP_PORT
+  # 8767, the port the shim routes to. The host must be 0.0.0.0 inside the
+  # container, or the shim cannot reach it (same reason as zammad-mcp below).
+  # No healthcheck: streamable-http has no plain GET probe. MCP reachability is
+  # checked by the tools/list probe in the self-host health gate (slice S7).
+  digiquant-mcp:
+    build:
+      context: .
+      dockerfile: digiquant/Dockerfile
+    image: digi-digiquant-mcp:latest
+    container_name: digi-digiquant-mcp
+    # `core` added because scripts/localstack/contracts.py runs the
+    # mcp-tools-list probe in `core`, `quant` and `all`.
+    profiles:
+      - quant
+      - core
+      - all
+    ports:
+      - "127.0.0.1:8767:8767"
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DIGIQUANT_MCP_HOST=0.0.0.0
+      - DIGIQUANT_MCP_PORT=8767
+      - DIGIQUANT_DATA_DIR=/app/data
+      - DIGIKEY_JWKS_URL=${DIGIKEY_JWKS_URL:-http://digikey:8005/.well-known/jwks.json}
+    volumes:
+      - ./digiquant/data:/app/data:ro
+    depends_on:
+      digikey:
+        condition: service_healthy
+    command: ["python", "-m", "digiquant.mcp_server", "--host", "0.0.0.0", "--port", "8767"]
 
   # ─── zammad-mcp: read-only Zammad helpdesk MCP for the OCC embed (profile: zammad-mcp) ───
   # Operator MCP server for the occ tenant (config/examples/occ-embed.yaml,
@@ -449,6 +587,8 @@ services:
     container_name: digi-zammad-mcp
     profiles:
       - zammad-mcp
+      - core
+      - all
     ports:
       - "127.0.0.1:8770:8770"
     env_file:
@@ -462,6 +602,17 @@ services:
       # digigraph dials `http://zammad-mcp:8770/mcp`; FastMCP's DNS-rebinding
       # guard rejects the non-localhost Host header unless it is allowlisted.
       - ZAMMAD_MCP_ALLOWED_HOSTS=zammad-mcp
+      # Oversized retrievals go to the DigiChat artifact store instead of a
+      # spool inside this container (DIG-2785). The ingest URL is the house
+      # in-network idiom: service name + the digichat CONTAINER port 3000
+      # (3005 is only the host publish port), same shape as DIGIGRAPH_INTERNAL_URL.
+      - DIGICHAT_ARTIFACT_INGEST_URL=${DIGICHAT_ARTIFACT_INGEST_URL:-http://digichat:3000/api/artifact-ingest}
+      # Empty by default, and honestly so: the conversation is per-session and
+      # the grant is issued per conversation, so no static default can name a
+      # live one. With any of the three below unset this container writes
+      # nothing, and the tools fall back to rendering the rows in full.
+      - DIGICHAT_ARTIFACT_CONVERSATION=${DIGICHAT_ARTIFACT_CONVERSATION:-}
+      - DIGICHAT_ARTIFACT_GRANT=${DIGICHAT_ARTIFACT_GRANT:-}
 
   # ─── Phase 3: Heartbeat (run with: docker compose --profile heartbeat up) ───
   heartbeat:
@@ -472,6 +623,7 @@ services:
     container_name: digi-heartbeat
     profiles:
       - heartbeat
+      - all
     env_file:
       - .env
     environment:
@@ -509,8 +661,14 @@ services:
   digichat-db:
     image: postgres:16-alpine
     container_name: digi-digichat-db
+    # Paired with `digichat`; both follow scripts/localstack/contracts.py, which
+    # probes digichat's 3000 /api/health in the `core` and `chat` profiles.
     profiles:
       - digichat
+      # chat group (S4)
+      - core
+      - chat
+      - all
     environment:
       POSTGRES_USER: digichat
       POSTGRES_PASSWORD: ${DIGICHAT_POSTGRES_PASSWORD:-digichat}
@@ -534,8 +692,13 @@ services:
       dockerfile: apps/digichat/Dockerfile
     image: digi-digichat:latest
     container_name: digi-digichat
+    # `core` and `chat` mirror scripts/localstack/contracts.py (3000 /api/health
+    # is probed in those profiles). `digichat` is kept for the old spelling.
     profiles:
       - digichat
+      - core
+      - chat
+      - all
     # Bind host: default loopback; set DIGICHAT_PUBLISH_HOST=0.0.0.0 in .env for LAN (see SECURITY.md).
     ports:
       - "${DIGICHAT_PUBLISH_HOST:-127.0.0.1}:${DIGICHAT_PUBLISH_PORT:-3005}:3000"
@@ -590,6 +753,7 @@ services:
     container_name: digi-prometheus
     profiles:
       - observability
+      - all
     ports:
       - "127.0.0.1:9090:9090"
     volumes:
@@ -613,6 +777,7 @@ services:
     container_name: digi-grafana
     profiles:
       - observability
+      - all
     ports:
       - "127.0.0.1:3001:3000"
     environment:
@@ -640,11 +805,38 @@ services:
   # Off by default. Start with: docker compose --profile otel up otel-collector
   # Then set DIGI_OTEL_ENDPOINT=http://otel-collector:4318 in .env so services
   # export spans via digibase.otel.setup_otel_fastapi (no-op when unset).
+  # ─── Reverse proxy: *.digithings.localhost -> the compose services, mirroring prod path routing (S4 / DIG-2772) ───
+  # Route table: infra/local-proxy/Caddyfile. Host port is configurable so it never
+  # collides with the 3000-3005 / 8000-8005 service ports on the dev Mac.
+  proxy:
+    image: caddy:2.8-alpine
+    container_name: digi-proxy
+    profiles:
+      - edge
+      - all
+    ports:
+      - "127.0.0.1:${DT_PROXY_PORT:-8088}:80"
+    volumes:
+      - ./infra/local-proxy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    # Deliberately NO depends_on: every upstream is optional, and Caddy dials lazily.
+    # A missing profile must 502 on that one route, not stop the proxy from booting.
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:2019/config/"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.109.0
     container_name: digi-otel-collector
     profiles:
       - otel
+      # trace group (S4)
+      - trace
+      - all
     command: ["--config=/etc/otelcol/config.yaml"]
     ports:
       - "127.0.0.1:4317:4317"   # OTLP gRPC
@@ -664,3 +856,5 @@ volumes:
   digiclaw_state:
   prometheus_data:
   grafana_data:
+  caddy_data:
+  caddy_config:

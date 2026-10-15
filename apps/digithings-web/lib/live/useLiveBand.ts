@@ -18,6 +18,7 @@
 import { useEffect, useState } from "react";
 import {
   BENCHMARK_TICKER,
+  dashboardApiBase,
   cagrPct,
   fetchBenchmark,
   fetchNav,
@@ -33,10 +34,10 @@ export type { NavPoint, PricePoint, StrategyRead };
 export { BENCHMARK_TICKER, cagrPct, isDcaStrategy };
 
 export interface LiveBandRead {
-  /** True when the public Supabase env is present on this build. */
+  /** True when this build has a backend: dashboard-api or the public Supabase env. */
   configured: boolean;
   loading: boolean;
-  /** A non-fatal read failure; the band falls back to its example series. */
+  /** A non-fatal read failure. A configured band shows an empty rail, not example numbers. */
   error: string | null;
   nav: NavPoint[];
   benchmark: PricePoint[];
@@ -53,10 +54,10 @@ const EMPTY: LiveBandRead = {
 };
 
 /**
- * @param slugs the strategy membership and card order to read, in band order
+ * @param slugs optional card order. Omit it to show every published tearsheet.
  */
-export function useLiveBand(slugs: readonly string[]): LiveBandRead {
-  const configured = Boolean(supabase);
+export function useLiveBand(slugs: readonly string[] = []): LiveBandRead {
+  const configured = Boolean(supabase) || Boolean(dashboardApiBase());
   const [read, setRead] = useState<Omit<LiveBandRead, "configured">>({
     loading: configured,
     error: null,
@@ -70,7 +71,7 @@ export function useLiveBand(slugs: readonly string[]): LiveBandRead {
   const key = slugs.join(",");
 
   useEffect(() => {
-    if (!supabase) {
+    if (!supabase && !dashboardApiBase()) {
       setRead({ loading: false, error: null, nav: [], benchmark: [], strategies: [] });
       return;
     }
@@ -79,7 +80,7 @@ export function useLiveBand(slugs: readonly string[]): LiveBandRead {
       try {
         const [nav, strategies] = await Promise.all([
           fetchNav(),
-          fetchStrategies(key.split(",")),
+          fetchStrategies(key.length > 0 ? key.split(",") : undefined),
         ]);
         if (cancelled) return;
         const benchmark = nav.length > 0 ? await fetchBenchmark(nav[0].date) : [];

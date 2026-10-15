@@ -9,6 +9,7 @@ import {
   uiMessagesForUpstream,
   writeStandardActivity,
 } from "./ui-stream-parts";
+import { mapDigigraphTraceToSpans } from "@/lib/adapters/digithings/activity";
 
 function collect(span: ActivitySpan | ActivitySpan[], finish = true): Record<string, unknown>[] {
   const chunks: Record<string, unknown>[] = [];
@@ -448,6 +449,41 @@ describe("writeStandardActivity", () => {
     expect(
       chunks.filter((c) => c.type === "tool-input-start").map((c) => c.title),
     ).toEqual(["digisearch", "digivault_get_note"]);
+  });
+
+  it("joins a tenant digisearch tool's rag_sources result onto its call row (DIG-3269)", () => {
+    for (const tool of ["digisearch_zammad_tickets", "digisearch_occ_help"]) {
+      const spans = [
+        ...mapDigigraphTraceToSpans(
+          {
+            type: "tool_call",
+            payload: { tool, status: "started", query: "Postfach", arguments: { query: "Postfach" } },
+          },
+          "full",
+        ),
+        ...mapDigigraphTraceToSpans(
+          {
+            type: "rag_sources",
+            payload: {
+              tool,
+              query: "Postfach",
+              arguments: { query: "Postfach" },
+              hit_count: 1,
+              sources: [{ doc_id: "t1", snippet: "mailbox", metadata: { url: "https://example.com/t/1", title: "Ticket 1" } }],
+            },
+          },
+          "full",
+        ),
+      ];
+      const chunks = collect(spans);
+      const starts = chunks.filter((c) => c.type === "tool-input-start");
+      expect(starts).toHaveLength(1);
+      expect(starts[0]).toMatchObject({ toolName: tool });
+      expect(String(starts[0].title)).toMatch(/^DigiSearch /);
+      const outs = chunks.filter((c) => c.type === "tool-output-available");
+      expect(outs).toHaveLength(1);
+      expect(outs[0].toolCallId).toBe(starts[0].toolCallId);
+    }
   });
 
   it("titles digisearch_fetch_all with the exact backend id", () => {

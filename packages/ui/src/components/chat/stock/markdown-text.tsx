@@ -15,6 +15,7 @@ import { CheckIcon, CopyIcon } from "lucide-react";
 
 import { TooltipIconButton } from "./tooltip-icon-button";
 import { useCopyToClipboard } from "./use-copy-to-clipboard";
+import { ArtifactLink, isArtifactBlobHref } from "./artifacts-panel";
 import { cn } from "@/lib/utils";
 
 type MarkdownTextProps = Partial<TextMessagePartProps> & {
@@ -83,7 +84,10 @@ const CodeHeader: FC<CodeHeaderProps> = ({ language, code }) => {
   );
 };
 
-const defaultComponents = memoizeMarkdownComponents({
+// Exported so the `a:` override's routing is testable: without a pin, a
+// revert to the plain anchor would pass every suite that only exercises
+// ArtifactLink directly.
+export const defaultComponents = memoizeMarkdownComponents({
   h1: ({ className, ...props }) => (
     <h1
       className={cn(
@@ -147,15 +151,26 @@ const defaultComponents = memoizeMarkdownComponents({
       {...props}
     />
   ),
-  a: ({ className, ...props }) => (
-    <a
-      className={cn(
-        "aui-md-a text-primary hover:text-primary/80 underline underline-offset-2",
-        className,
-      )}
-      {...props}
-    />
-  ),
+  // A session artifact link is the one href that cannot be followed plainly:
+  // a dead token answers 410 session_expired, which would dump a raw JSON
+  // error at the reader. Every other href takes the anchor below unchanged.
+  a: ({ className, href, children, ...props }) =>
+    isArtifactBlobHref(href) ? (
+      <ArtifactLink href={href as string} className={className}>
+        {children}
+      </ArtifactLink>
+    ) : (
+      <a
+        className={cn(
+          "aui-md-a text-primary hover:text-primary/80 underline underline-offset-2",
+          className,
+        )}
+        href={href}
+        {...props}
+      >
+        {children}
+      </a>
+    ),
   blockquote: ({ className, ...props }) => (
     <blockquote
       className={cn(

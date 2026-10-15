@@ -3,7 +3,7 @@ title: digichat
 type: module
 status: reviewed
 created: 2026-04-19
-updated: 2026-10-01
+updated: 2026-10-11
 tags:
   - core
   - chat
@@ -62,7 +62,18 @@ Examples:
 **Two live deployments:**
 
 digithings.ai — platform demo (the flagship public digichat):
-digithings' own architecture docs are published into a [[digivault]] vault hosted in the core Supabase (the `architecture_notes` table, synced from `docs/vision/`), and digichat retrieves from it with full-text search on every turn — answers are grounded in the real docs, never web search. It runs on OpenRouter's free model pool, so visitors can use it with no sign-up; a lightweight per-IP throttle only deters bot floods (the free pool's own account-wide daily quota still applies — a one-time small credit purchase lifts it ~20x). Served at the edge by a Cloudflare Pages Function (`/api/chat`) using the anon, RLS-gated read key, so no secrets ever reach the browser. The bot introduces itself and can explain its own architecture. Bring-your-own-key — paste a provider key for stronger models, forwarded per-request and never stored — is the planned next step. Sample questions guide exploration ("What does digigraph orchestrate?"). Goal: let any visitor experience the digithings stack directly.
+digithings' own architecture docs are published into a [[digivault]] vault hosted in the core Supabase (the `architecture_notes` table, synced from `docs/vision/`), and answers are grounded in the real docs, never web search. Grounding runs through digigraph to the vault hub, not through a digichat-owned query. The model path is digichat → digigraph → digillm (LiteLLM) in the stack Container; the digichat Container declares no OpenRouter credential and enables digigraph only (`DIGICHAT_ENABLED_SERVICES = "digigraph"`), so it is not an OpenRouter free-pool path. The BFF applies a per-IP throttle (`checkEmbedIpRateLimit`, `checkBffRateLimit`). The bot introduces itself and can explain its own architecture. Bring-your-own-key — paste a provider key for stronger models, forwarded per-request and never stored — is live, not planned. Sample questions guide exploration ("What does digigraph orchestrate?"). Goal: let any visitor experience the digithings stack directly.
+
+**Route map (verified 2026-10-11 against `digithings.ai`):**
+
+| Path | Serves |
+| --- | --- |
+| `/chat`, `/chat/*` | Cloudflare Pages marketing shell; embeds `/embed?host=…` in an iframe (`digichat-frame`) |
+| `/embed*`, `/_dtchat*` | digichat Container, via the digichat Worker's zone routes |
+| `/api/chat*`, `/api/byok*`, `/api/plan-proof*`, `/api/embed*` | digichat BFF in the same Container |
+| `/api/health` | digichat health: reports `version` equal to `apps/digichat/package.json` and `digraph: ok` |
+
+`POST /api/chat` without a credential answers `401` from digichat's own `requireDigiChatAuth`, which names the digichat machine-key prefix — not the retired Pages Function, which answers `410`. The Worker's own unrouted-path reply is `digichat Worker: path not routed. Marketing /chat shells are on Pages.`
 
 digiquant.io — investment profiling:
 Entry flow powered by a proprietary investment profiling sub-graph. User inputs investment preferences → digichat builds and saves an investment profile to digistore (user acquisition + personalization). Shows what strategies and allocations could be constructed for their profile. Paywall trigger: "Ready to build your first strategy? Start with execution." Free taste → paid conversion.
@@ -71,7 +82,7 @@ Entry flow powered by a proprietary investment profiling sub-graph. User inputs 
 A client organization deploys digichat pointed at their own digisearch index. Users log in via their corporate SSO (Microsoft, Google) — digikey identifies them, maps them to their organization's project, and issues a JWT with the appropriate index and tool scopes. The UI adapts: only their organization's indexes and approved tools appear. Index results are filtered by user access level.
 
 **Current state (shipped):**
-Next.js BFF + React UI, Auth.js sessions, Drizzle ORM, AI SDK, Postgres for conversation history, BYOK UI flow live — `apps/digichat` itself is not deployed publicly today. The digithings.ai instance described above still runs a separate bespoke widget (direct OpenRouter calls, its own Supabase vault search) rather than this app; cutting it over to run as the real digichat gateway at `digithings.ai/chat` per [ADR-0018](../adr/0018-digichat-path-routing.md) is tracked in epic [#1248](https://github.com/digithings-ai/digithings/issues/1248).
+Next.js BFF + React UI, Auth.js sessions, Drizzle ORM, AI SDK, Postgres for conversation history, BYOK UI flow live — and `apps/digichat` is deployed publicly. The digichat Worker owns the `digithings.ai` zone routes listed above and proxies them to the digichat Cloudflare Container (`DigiChatContainer`); the Pages site serves the `/chat` shell per [ADR-0018](../adr/0018-digichat-path-routing.md). The bespoke widget this section used to describe is retired: `apps/digithings-web/functions/api/chat.ts` is now a `410` stub. Epic [#1248](https://github.com/digithings-ai/digithings/issues/1248) is closed (2026-07-06) and ADR-0018 was amended 2026-08-10 for the Container move.
 
 **12-month roadmap:**
 Does not override the locked product or the sequencing constraints above.
@@ -80,7 +91,7 @@ Does not override the locked product or the sequencing constraints above.
 - Investment profiling sub-graph (digiquant.io entry flow)
 - Microsoft SSO and Google OIDC login via digikey
 - Adaptive UI: scope-driven connection visibility
-- digithings.ai demo instance (docs indexed, 3-question free tier)
+- ~~digithings.ai demo instance (docs indexed, 3-question free tier)~~ — shipped; see Current state
 - User conversation history and session management
 - Strategy exploration interface
 

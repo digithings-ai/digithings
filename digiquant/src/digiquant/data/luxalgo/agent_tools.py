@@ -31,7 +31,9 @@ payload states the flag state it was produced under.
 
 The Edge Stats preset reads (#4844) carry the edge-stats attribution plus the
 honesty disclaimer on every ``edge_report`` result. The Trackers companions
-(#4844) carry the CC0-dumps attribution: dumps stay the source of record, so
+(#4844) carry the CC0-1.0-dumps attribution with the two per-family limits
+classified in DIG-1464 (congress-trades, short-volume): dumps stay the
+source of record, so
 neither family joins :data:`RESEARCH_TOOLS` and neither is wired into a
 pipeline phase — they are freshness checks and ad-hoc lookups only.
 """

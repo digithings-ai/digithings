@@ -71,7 +71,7 @@ digichat needs `AUTH_SECRET`, `AUTH_URL`, and `DIGIKEY_BFF_TOKEN` in `.env`. Aut
 
 ## LiteLLM
 
-LiteLLM is the only LLM router. Compose uses `docker.litellm.ai/berriai/litellm:main-stable` with explicit `--config` and a `/health/liveliness` healthcheck.
+LiteLLM is the only LLM router. Compose runs the `digillm` service (`ghcr.io/digithings-ai/digillm:0.1.0`, built from `Dockerfile.digillm`: `litellm[proxy]==1.83.14` from PyPI, never the vendor image — DIG-1780; network alias `litellm`, port 4000) with explicit `--config` and a `/health/liveliness` healthcheck.
 
 **Auth modes:**
 
@@ -149,13 +149,24 @@ Do **not** use `chat.digithings.ai` as the marketing host. Customer digichat `/e
 (DataTap etc.) is separate from digithings’ own marketing chat. Path routing:
 [ADR-0018](adr/0018-digichat-path-routing.md).
 
-The digithings Containers scaffold (`apps/digichat-cloudflare/` +
-`Dockerfile.digichat-cloudflare`) was **removed on 2026-08-06** — it had no deploy path in
-the repo (Containers need Workers Paid, digithings is on Free; routes stayed commented out
-and no workflow built the image) and its `wrangler` devDependency was pulling five `workerd`
-platform binaries into the root lockfile. Recover it from git history if digithings ever
-adopts Workers Paid. digichat Node for digithings runs on operator Compose + Cloudflare Tunnel
-instead.
+**Correction (2026-10-10, DIG-2843):** an earlier revision of this file said the digithings
+Containers scaffold was removed on 2026-08-06 and never had a deploy path. It was true when
+written — the Cloudflare account was on Workers Free then, and Containers need Workers Paid
+(`docs/superpowers/specs/2026-08-05-digichat-phase3-unification-design.md` records the gate) —
+and it stopped being true when the account moved. It was not kept with a caveat: the claim was
+simply removed. `apps/digichat-cloudflare/` (Worker `digithings-digichat` + Container) is live in
+the tree, requires Workers Paid, declares seven `digithings.ai` route patterns in its
+`wrangler.toml`, and is covered by the CI build matrix. What is missing is not the app but its
+**deploy lane** — see [Cloudflare Workers and Containers](#cloudflare-workers-and-containers).
+
+digichat Node for digithings still runs on operator Compose + Cloudflare Tunnel; that is a
+different surface from the `digichat-cloudflare` Worker.
+
+The Worker fronts the `DigiChatContainer` Container (`apps/digichat-cloudflare/wrangler.toml`,
+`Dockerfile.digichat-cloudflare`); deploying it by hand is `npx wrangler deploy` from
+`apps/digichat-cloudflare/` with the build context at the monorepo root, per
+[`apps/digichat-cloudflare/README.md`](../apps/digichat-cloudflare/README.md). No workflow
+deploys it — the section below measures exactly that.
 
 ### digithings.ai — static landing page
 
@@ -259,6 +270,117 @@ Format is `<from> <to> <status>`, one rule per line, first match wins (`#` start
 3. Verify: `curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' https://digithings.ai/<from>` prints the `301`/`302` and the target `Location`.
 
 See also [docs/adr/0002-domain-unification.md](adr/0002-domain-unification.md) for the domain strategy behind the path inventory.
+
+## Cloudflare Workers and Containers
+
+**"Deploy" means three different things in this repo, and only one of them is an actual deploy.**
+This section is the authority on which is which. Measured at `develop` `c326332bd`
+(DIG-2843, 2026-10-10); the machine check is a single grep:
+
+```bash
+grep -rn "wrangler deploy" .github/workflows/
+```
+
+It returns exactly two files.
+
+### 1. A real deploy (`deploy-digiquant-runner.yml`)
+
+`npx wrangler deploy -c apps/digiquant-runner/wrangler.toml`, behind
+`environment: production`, with `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID`.
+`deploy-digithings-cron.yml` is the second one, and uses
+`cloudflare/wrangler-action@v3` rather than the CLI. Both push to `main` behind
+`environment: production` (DIG-3129 moved the cron lane off a push on `develop`
+and off the ungated `cron` environment).
+
+### 2. A build check that deploys nothing (`build-cloudflare-workers.yml`)
+
+`wrangler deploy --dry-run --containers-rollout=none`, `pull_request` only, **no `push`
+trigger**, `permissions: contents: read`, and a test asserting no `secrets.` string is in
+the file. It proves the Worker **builds** — a `tsc`-invisible Durable Object export failure
+is the failure it was added for. It proves nothing about what is live.
+
+Its matrix is every app that pins `wrangler` and ships a `wrangler.toml`, and
+`tests/scripts/test_worker_build_matrix.py` derives that set from the tree and fails when a
+Worker is added without landing in the matrix. The matrix covers
+`digichat-cloudflare` and `digithings-stack-cloudflare`.
+
+### 3. A build check for a site Cloudflare deploys itself (`deploy-digithings-cloudflare.yml`)
+
+`bash scripts/build-digithings.sh` plus `dist/` assertions. It never deploys: the real
+digithings.ai deploy is **Cloudflare Pages watching `main`**, configured in the Cloudflare
+dashboard, not in this repo. `deploy-digiquant-cloudflare.yml` is the same shape for
+digiquant.io. Nothing in the repo can make a Pages deployment fail before it happens, only
+fail a PR before it merges.
+
+### The two stacks have no deploy lane
+
+| App | Worker name | Declared routes | Deploy lane |
+|---|---|---|---|
+| `apps/digithings-stack-cloudflare` | `digithings-stack` | `graph.digithings.ai`, `key.digithings.ai`, `search.digithings.ai` (all `custom_domain = true`) | **none — manual** |
+| `apps/digichat-cloudflare` | `digithings-digichat` | `digithings.ai` `/embed*`, `/api/chat*`, `/api/embed*`, `/api/byok*`, `/api/plan-proof*`, `/api/health`, `/_dtchat*` | **none — manual** |
+
+Read the routes column as "what `wrangler.toml` declares", not as a claim about what is
+currently serving. Both are Workers **Containers**: both need **Workers Paid**, and both need
+a Docker CLI locally for `wrangler deploy` to build the image.
+
+Both `Dockerfile.digichat-cloudflare` and `Dockerfile.digithings-stack-cloudflare` are live at
+the repo root. It is the workflow YAML that is missing, not the build.
+
+#### Why the lane is missing — it was deleted, not never written
+
+`deploy-digithings-stack-cloudflare.yml` and `deploy-digichat-cloudflare-container.yml` both
+existed and both were deleted on **2026-10-01** by `f54af7052` (*"strict-essentials cut +
+pause CF→disabled traps",* #4919), a commit whose own message records a **Human Gate**:
+*"Path A (Human Gate 2026-10-01): delete non-essential workflow YAML."* Thirty workflow files
+went with it.
+
+Before that cut the stack lane was `workflow_dispatch`-only behind an
+`environment: production` gate, running `npx wrangler deploy -c apps/digithings-stack-cloudflare/wrangler.toml`
+from the repo root; the digichat lane pushed to `main` and gated its deploy on a version-change
+step. **Both are recoverable:**
+
+```bash
+git show 'f54af7052^:.github/workflows/deploy-digithings-stack-cloudflare.yml'
+git show 'f54af7052^:.github/workflows/deploy-digichat-cloudflare-container.yml'
+```
+
+The caveats those files carried are now stale: both said `CLOUDFLARE_API_TOKEN` and
+`CLOUDFLARE_ACCOUNT_ID` were "not yet present", and both are repo secrets today
+([ops/SECRETS_INVENTORY.md](ops/SECRETS_INVENTORY.md)).
+
+Restoring either lane is a **production deploy path**, so it was not done unilaterally in a
+documentation change. The restore decision is recorded on DIG-2843 in the company board; if it
+is taken, follow the precedent set by
+[ops/digichat-datatap-aca.md](ops/digichat-datatap-aca.md): **re-derive the lane, do not
+`git revert` it**, because the deleted digichat lane pinned no `wranglerVersion` for a
+documented reason (4.28.0 rejects `deploy --message`) and re-deriving it keeps that.
+
+#### Deploying by hand today
+
+Prerequisites: Workers Paid; a Docker CLI; `npx wrangler login` into the digithings Cloudflare
+account (same zone as `digithings.ai`); the app's Worker secrets already set — they are
+write-only, so `wrangler secret list` shows names and types but never values, and a deploy
+does not create them.
+
+```bash
+# digithings-stack — from the REPO ROOT, because the image_build_context values
+# are "../.." and the -c path assumes root (#4046)
+npx wrangler deploy -c apps/digithings-stack-cloudflare/wrangler.toml
+
+# digichat-cloudflare
+cd apps/digichat-cloudflare && npx wrangler deploy
+```
+
+The full secret-by-secret bring-up for the standalone digichat Worker is
+[`apps/digichat-cloudflare/README.md`](../apps/digichat-cloudflare/README.md) § Deploy;
+the stack's operator notes are
+[`apps/digithings-stack-cloudflare/README.md`](../apps/digithings-stack-cloudflare/README.md) § Deploy.
+
+**What no CI check covers:** that the live deployment is the built one. The dry-run matrix
+builds both; nothing records a version of the live Worker and compares it. If you deploy by
+hand, the only verification available is
+[`ops/SECRETS_INVENTORY.md`](ops/SECRETS_INVENTORY.md) for what the Worker should hold and a
+direct probe of the route.
 
 ## See also
 

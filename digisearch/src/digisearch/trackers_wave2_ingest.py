@@ -1,4 +1,12 @@
-"""luxalgo market-trackers-data wave-2 CC0 dumps → digisearch index (#4849).
+"""luxalgo market-trackers-data wave-2 CC0-1.0 dumps → digisearch index (#4849).
+
+The CC0-1.0 grant (classified DIG-1464 against the upstream LICENSE,
+sha256 a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499)
+does **not** clear two of the families ingested here:
+``short-volume`` carries unresolved upstream FINRA redistribution terms,
+and ``congress-trades`` rows are 5 U.S.C. 13107(c) disclosure reports whose
+commercial use is restricted by 13107(c)(1)(B) — a copyright waiver cannot
+waive that. ``attribution.trackers_data_caveat`` says so on every payload.
 
 Ticker-bearing follow-up to the congress-trades spike
 (:mod:`digisearch.trackers_ingest`, #4826): ``insider-transactions`` (~17.5k

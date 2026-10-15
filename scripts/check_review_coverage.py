@@ -81,6 +81,11 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
+# 2026-10-12: moved from e03c7095 to b17877ac (develop tip covered by
+# promotion #5506) per Chris 12 Oct 22:44: risky commits (workflows, deploy,
+# secrets, auth) were retro-reviewed under DIG-3144; the rest is accepted as
+# unreviewed. Original note follows.
+#
 # The gate starts here. e03c7095 is develop at the time this script landed;
 # everything up to and including it predates the rule.
 #
@@ -95,7 +100,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # today and needs no change. Orphaned pre-gate commits like these need their own
 # hatch label (reviewed:owner) applied directly -- there is no
 # baseline value that retroactively covers a severed-ancestry commit.
-BASELINE_SHA = "e03c7095"
+BASELINE_SHA = "b17877ac"
 
 # Squash merges land as "subject (#1234)"; GitHub merge commits as
 # "Merge pull request #1234 from ...". Child commits preserved by a merge commit

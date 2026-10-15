@@ -24,6 +24,7 @@ PORT_SEARCH="${PORT_SEARCH:-8002}"
 PORT_SMITH="${PORT_SMITH:-8003}"
 PORT_GRAPH="${PORT_GRAPH:-8000}"
 PORT_DK="${PORT_DK:-8005}"
+PORT_D1API="${PORT_D1API:-8787}"
 
 if [ -f "$ROOT/.env" ]; then
   set -a
@@ -59,7 +60,7 @@ for s in ['AAPL','MSFT','GOOGL','NVDA','META']:
 " || { echo "Failed: install digiquant in .venv first."; exit 1; }
 fi
 
-for p in "$PORT_DK" "$PORT_QUANT" "$PORT_SEARCH" "$PORT_SMITH" "$PORT_GRAPH"; do
+for p in "$PORT_DK" "$PORT_QUANT" "$PORT_SEARCH" "$PORT_SMITH" "$PORT_GRAPH" "$PORT_D1API"; do
   if lsof -i ":$p" -t >/dev/null 2>&1; then
     echo "Port $p is already in use. Stop that process or set PORT_* overrides."
     lsof -i ":$p" 2>/dev/null | head -3
@@ -175,11 +176,62 @@ env PYTHONPATH="$PYTHONPATH" \
 append_pid $!
 sleep 2
 
+# DIG-2901 (supabase exit 13): local dashboard-api on persisted local D1.
+# Schema-only until ticket 0 (DIG-2888 snapshot) exists; seeded after.
+# Local-only config (no prod bindings, no Supabase vars, never deployed).
+D1_STARTED=0
+D1_PERSIST_DIR="${D1_PERSIST_DIR:-$ROOT/.local_d1}"
+SNAPSHOT_DIR="${SUPABASE_EXIT_SNAPSHOT_DIR:-$HOME/Backups/supabase-exit}"
+if ! command -v wrangler >/dev/null 2>&1 && [ ! -x "$ROOT/apps/dashboard-api/node_modules/.bin/wrangler" ]; then
+  echo "Note: wrangler not found — skipping local D1 dashboard-api (schema-only parity unavailable)."
+  echo "  Install with: npm install --workspace dashboard-api (or npm i -g wrangler)"
+else
+  if [ -x "$ROOT/apps/dashboard-api/node_modules/.bin/wrangler" ]; then
+    WRANGLER="$ROOT/apps/dashboard-api/node_modules/.bin/wrangler"
+  else
+    WRANGLER="wrangler"
+  fi
+  mkdir -p "$D1_PERSIST_DIR"
+  echo "Starting dashboard-api (local D1, persist-to $D1_PERSIST_DIR) on http://127.0.0.1:${PORT_D1API} ..."
+  (
+    cd "$ROOT/apps/dashboard-api"
+    "$WRANGLER" dev --config wrangler.local.toml --persist-to "$D1_PERSIST_DIR" \
+      --port "$PORT_D1API" >>"$ROOT/.dashboard-api-local.log" 2>&1
+  ) &
+  append_pid $!
+  D1_STARTED=1
+  ok_d1=0
+  for _ in $(seq 1 30); do
+    sleep 1
+    if curl -sf "http://127.0.0.1:${PORT_D1API}/healthz" >/dev/null; then
+      ok_d1=1
+      break
+    fi
+  done
+  if [ "$ok_d1" != 1 ]; then
+    echo "dashboard-api local did not become healthy (see .dashboard-api-local.log). Continuing without D1 parity."
+    D1_STARTED=0
+  elif ls "$SNAPSHOT_DIR"/*/d1-seed.sql >/dev/null 2>&1; then
+    # Ticket 0 snapshot exists and ticket 5 (DIG-2893) produced a seed file:
+    # apply it to the LOCAL db only. Never any other target.
+    SEED_FILE="$(ls "$SNAPSHOT_DIR"/*/d1-seed.sql 2>/dev/null | head -1)"
+    echo "Snapshot seed found ($SEED_FILE) — applying to LOCAL D1 only ..."
+    (cd "$ROOT/apps/dashboard-api" && "$WRANGLER" d1 execute dashboard-local \
+      --local --file "$SEED_FILE" >>"$ROOT/.dashboard-api-local.log" 2>&1) \
+      || echo "Seed apply failed (see .dashboard-api-local.log). Local D1 stays schema-only."
+  else
+    echo "No snapshot seed in $SNAPSHOT_DIR — local D1 stays schema-only (ticket 0 pending)."
+  fi
+fi
+
 ok=1
 curl -sf "http://127.0.0.1:${PORT_QUANT}/health" >/dev/null || ok=0
 curl -sf "http://127.0.0.1:${PORT_SEARCH}/health" >/dev/null || ok=0
 curl -sf "http://127.0.0.1:${PORT_SMITH}/health" >/dev/null || ok=0
 curl -sf "http://127.0.0.1:${PORT_GRAPH}/health" >/dev/null || ok=0
+if [ "$D1_STARTED" = 1 ]; then
+  curl -sf "http://127.0.0.1:${PORT_D1API}/healthz" >/dev/null || ok=0
+fi
 
 if [ "$ok" != 1 ]; then
   echo "Health check failed for one or more services. PIDs in $PIDFILE — run ./scripts/stop_stack_local.sh"
@@ -194,6 +246,7 @@ echo "  digiquant:  http://127.0.0.1:${PORT_QUANT}/health"
 echo "  digisearch: http://127.0.0.1:${PORT_SEARCH}/health"
 echo "  digitrace:  http://127.0.0.1:${PORT_SMITH}/health"
 echo "  digigraph:  http://127.0.0.1:${PORT_GRAPH}/health"
+echo "  dashboard-api (local D1, schema-only until ticket 0): http://127.0.0.1:${PORT_D1API}/healthz"
 echo ""
 echo "digichat (Next.js, hot reload):"
 echo "  make digichat-dev"

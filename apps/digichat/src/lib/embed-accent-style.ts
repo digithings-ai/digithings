@@ -9,7 +9,7 @@
 
 import type { CSSProperties } from "react";
 
-const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
+import { HEX_COLOR } from "@/lib/hex-color";
 
 export function isEmbedHexColor(raw: string | null | undefined): raw is string {
   return typeof raw === "string" && HEX_COLOR.test(raw);

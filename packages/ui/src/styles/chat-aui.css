@@ -28,11 +28,22 @@
   --color-warn: var(--warn);
 }
 
+/* `--font-geist-mono` is the retired name for the host surface's one mono face
+   (DIG-2375). It is declared HERE, beside the rules that read it, because every
+   surface that mounts this sheet sets only the generic `--font-mono-face` from
+   its own `fonts.ts` and none of them loads `digichat-app-theme.css`. Without it
+   `font-family: var(--font-geist-mono), …` below is invalid and the skin falls
+   back to the page font. Swap the face in the surface's config; never here. */
+:root {
+  --font-geist-mono: var(--font-mono-face, "Geist Mono");
+}
+
 [data-thread-skin="digichat"] {
   --radius: 0;
   --radius-thread: 0;
   --composer-radius: 0;
-  /* Gallery chatbot.css uses var(--font-mono). Catalog :root keeps IBM Plex. */
+  /* Gallery chatbot.css uses var(--font-mono). --font-geist-mono is the
+     retired-name alias declared below for the app's one mono face. */
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
   --font-sans: var(--font-geist-mono), ui-monospace, monospace;
   font-family: var(--font-geist-mono), ui-monospace, monospace;
@@ -206,11 +217,24 @@
   line-height: 1.375rem;
   field-sizing: content;
   box-sizing: border-box;
+  /* 3-5 rows then scroll (padding-block 0.2rem each side). */
+  max-height: calc(5 * 1.375rem + 0.4rem);
+  overflow-y: auto;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
 }
 
 .digichat-thread .aui-composer-input:placeholder-shown {
   overflow: hidden;
   white-space: nowrap;
+}
+
+/* Composer shell is a border only. The input is already transparent; the
+   wrapper must not paint --composer-bg / --surface behind it. */
+.digichat-thread [data-slot="aui_composer-shell"],
+.digichat-launcher [data-slot="aui_composer-shell"] {
+  --composer-bg: transparent;
+  background: transparent;
 }
 
 /* Popup / embed compact Thread: one row until a newline. Empty and one-line
@@ -233,8 +257,12 @@
   min-height: 1lh;
   padding-block: 0;
   line-height: 1.375rem;
+  /* Grow to 5 rows, then scroll; long input wraps instead of running right. */
+  max-height: calc(5 * 1.375rem);
   overflow-x: hidden;
-  overflow-y: hidden;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
 }
 
 .digichat-launcher [data-slot="aui_composer-shell"][data-layout="compact"] .aui-composer-input:placeholder-shown {
@@ -330,10 +358,27 @@
   --hair: rgba(12, 12, 10, 0.12);
 }
 
+/* assistant-ui puts `data-active` / `aria-current` on the item Root, not on the
+   Trigger that carries `__item`, so match the parent too. The open chat gets a
+   ▸ marker and an accent wash that reads on a transparent sidebar. */
+.digichat-thread-list__item::before {
+  content: "▸";
+  display: inline-block;
+  width: 1.1em;
+  color: transparent;
+}
 .digichat-thread-list__item[data-active],
-.digichat-thread-list__item[aria-current="true"] {
-  background: var(--term-fill);
+.digichat-thread-list__item[aria-current="true"],
+.digichat-thread-list [data-active] > .digichat-thread-list__item,
+.digichat-thread-list [aria-current="true"] > .digichat-thread-list__item {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
   color: var(--term-ink);
+}
+.digichat-thread-list__item[data-active]::before,
+.digichat-thread-list__item[aria-current="true"]::before,
+.digichat-thread-list [data-active] > .digichat-thread-list__item::before,
+.digichat-thread-list [aria-current="true"] > .digichat-thread-list__item::before {
+  color: var(--accent);
 }
 
 .digichat-gate,

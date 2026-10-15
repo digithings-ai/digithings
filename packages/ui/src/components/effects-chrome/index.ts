@@ -25,4 +25,11 @@ export {
   type TabStripProps,
   type TabItem,
 } from "./TabStrip";
+export {
+  HorizontalScrollTrack,
+  HorizontalTrackStepper,
+  useHorizontalTrack,
+  type HorizontalScrollTrackProps,
+  type HorizontalTrackState,
+} from "./HorizontalScrollTrack";
 export { ToastStack, type ToastStackProps, type ToastItem, type ToastTone } from "./ToastStack";

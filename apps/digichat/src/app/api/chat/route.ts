@@ -64,6 +64,7 @@ import {
 } from "@/lib/chat-run-lock";
 import { isMutatingTurnMode, parseDigiTurnMode } from "@/lib/turn-mode";
 import { uiMessagesForUpstream } from "@/lib/ui-stream-parts";
+import { registerSession } from "@/lib/session-links";
 
 // #4753: the boot-retry budget in adapters/digithings/stream.ts runs up to
 // ~250s (stack portReady 180s + instanceGet 60s + margin). The route must
@@ -349,6 +350,16 @@ export async function POST(req: Request) {
   }
 
   const externalConversation = req.headers.get("x-external-conversation")?.trim() || null;
+
+  // The artifact blob route keys link lifetime on the conversation id, because
+  // that is what the path carries. Register the conversation here so a token
+  // bound by the artifacts POST can validate. Re-registering the same id is
+  // idempotent, so a render or poll does not kill a link the user is holding;
+  // a reload mints a new conversation id, the old one is never re-registered,
+  // and its links stop resolving with no TTL anywhere.
+  if (externalConversation) {
+    registerSession(externalConversation, ownerUserSub);
+  }
   const runLockKey = externalConversation
     ? `chat-run:${tenantSlug}:${sessionId}:${externalConversation}`
     : `chat-run:${tenantSlug}:${sessionId}`;

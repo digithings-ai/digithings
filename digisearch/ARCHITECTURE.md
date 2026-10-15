@@ -230,6 +230,14 @@ Key request fields:
 
 Response includes `backend` field: `vectorize` | `azure_ai_search` | `chroma` | `stub`.
 
+Multi-index fan-out (`index_name: "a,b"`) passes the caller's `skip`/`top_k`
+to each leg. Only stub legs are full-read then sliced; Vectorize/Chroma/Azure
+pages are fused as returned (Vectorize `skip > 0` raises, Chroma is capped at
+100, Azure at most 1000 per page). The fused `total_count` is set only when
+every leg is complete. `POST /query` returns `total: null` when
+`include_total_count: true` and the fused total is unknown; with
+`include_total_count: false` `total` stays the page length.
+
 Cross-namespace twin dedupe (#4823): before normalization, `run_query`
 collapses hits whose full chunk bodies are byte-identical and whose
 metadata paths are suffix-related at a `/` boundary (live path plus
@@ -1265,14 +1273,15 @@ digisearch/src/digisearch/
 │   ├── ingest.py              # Canonical filesystem ingest (HTTP + CLI + tests)
 │   └── url_ingest.py          # Sole URL-fetch site: ingest_url (HTML→markdown)
 │                              # + fetch_json_feed (JSON feeds, e.g. trackers)
-├── trackers_ingest.py         # luxalgo market-trackers-data CC0 ingest (#4826):
-│                              # congress-trades fetch → normalize → index_chunks
-│                              # (fetch delegates to pipeline.url_ingest)
+├── trackers_ingest.py         # luxalgo market-trackers-data CC0-1.0 ingest (#4826):
+│                              # per-dataset adapter pattern, per-family limits
+│                              # classified DIG-1464; refused at its entry points
+│                              # since DIG-1307 (no fetch, no write)
 ├── trackers_wave2_ingest.py   # wave-2 ticker datasets (#4849): insider →
 │                              # 13F → short-volume → lobbying → gov-contracts
 │                              # (same pattern via a TRACKER_DATASETS table)
 ├── ingest_worker.py           # Bulk ingest placeholder (not implemented)
-├── http_client.py             # HTTP client helpers for callers (query_digisearch, format_results_table)
+├── http_client.py             # result-table formatting (format_results_table; query path uses digibase.http_client)
 ├── client.py                  # digisearch Python client
 │
 ├── core/
@@ -1445,9 +1454,16 @@ container reports `/health` degraded, which is accurate.
 
 ### luxalgo market-trackers ingest (#4826)
 
-CC0 public-records layer **beside Gloomberg** (never replacing the terminal
-digest). `trackers_ingest.py` proves the per-dataset adapter pattern on the
-smallest dataset (congress-trades) for the remaining 17 to copy:
+CC0-1.0 public-records layer **beside Gloomberg** (never replacing the terminal
+digest). `trackers_ingest.py` is where the per-dataset adapter pattern was
+proven — on the one dataset now **refused** (DIG-1307, closing counsel item
+(i) of DIG-1291). Its entry points raise `RefusedDatasetError` before any
+fetch and before any index write, so nothing parsed from it reaches the
+`trackers` index. The mechanics below are still live — the live wave-2
+adapters implement every one of them:
+The grant does not clear two families — congress-trades
+(5 U.S.C. 13107(c)(1)(B)) and short-volume (unresolved upstream FINRA
+terms); see `digiquant/src/digiquant/data/luxalgo/attribution.py`.
 
 - Fetch goes only through `pipeline.url_ingest.fetch_json_feed` — the single
   URL-fetch site (digifetch `HttpFetcher` + `validate_fetch_url`;
@@ -1461,22 +1477,17 @@ smallest dataset (congress-trades) for the remaining 17 to copy:
   Fetch/validation/shape failures raise `TrackersFetchError` (never confused
   with a stale flag); a served-vs-manifest row-count mismatch warns and
   proceeds.
-- `normalize_congress_trade` maps one live-schema row to
-  `{doc_id, text, metadata}` with `doc_id = {chamber}:{docId}:{rowIndex}` and
-  `provenance.sourceUrl → Document.source / metadata[source_url]` (every chunk
-  carries `source_url`; `needsReview → needs_review`). Null-ticker rows are
-  ingested, never dropped silently (`ticker` key simply absent post-Chroma
-  normalization).
+- The row mapper turns one live-schema row into `{doc_id, text, metadata}`,
+  carries `provenance.sourceUrl → Document.source / metadata[source_url]`
+  (every chunk carries `source_url`; `needsReview → needs_review`), and never
+  drops a null-ticker row silently (`ticker` key absent post-Chroma).
 - Idempotency: `Document.id` reuses research_ingest's `_stable_doc_id`
-  (seeded by the natural key); chunk ids are
-  `luxalgo-trackers::congress-trades::<key>::<idx>`, so all backends upsert.
+  (seeded by the natural key); chunk ids are namespaced per dataset
+  (`luxalgo-trackers::<dataset>::<key>::<idx>`), so all backends upsert.
   The `ingested`/`skipped` counts probe the stub index (exact in tests); on
   production backends a rewritten row reports as ingested while storage still
   dedupes. Same-key content updates are skip-not-replace (refresh = follow-up).
-- Default index `trackers` (`DIGISEARCH_TRACKERS_INDEX` override), separate
-  from the research `atlas` index. digigraph needs no new code (existing
-  digisearch tools).
-- Dataset expansion order: congress-trades (#4826 spike) → wave 2 (#4849):
+- Dataset expansion order: wave 2 (#4849) first —
   insider-transactions → thirteenf-holdings → short-volume →
   lobbying-filings → gov-contracts. Remaining non-ticker datasets (bills,
   hearings, fed-communications, patents, trials, FEC, wiki-pageviews) and
@@ -1485,7 +1496,7 @@ smallest dataset (congress-trades) for the remaining 17 to copy:
 
 ### luxalgo market-trackers wave-2 expansion (#4849)
 
-`trackers_wave2_ingest.py` copies the congress-trades adapter pattern once
+`trackers_wave2_ingest.py` copies the per-dataset adapter pattern once
 per dataset behind a `TRACKER_DATASETS` spec table (manifest key, feed URL,
 `Document.doc_type`, ticker location). All five share the `trackers` index,
 the `fetch_json_feed` transport, the manifest stale-gate (per-dataset entry),
@@ -2155,7 +2166,7 @@ docker compose --profile digisearch-mcp up
 
 The `searxng` service (`searxng/searxng`) is loopback-only on the host (`127.0.0.1:8080`) with config at `config/searxng/settings.yml` (`search.formats: [html, json]`, engine allowlist). `valkey` backs its limiter. digisearch reaches it in-container via `DIGISEARCH_SEARXNG_URL=http://searxng:8080`. No new digisearch port: `POST /v1/web_search`, MCP `web_search`, and orchestrator `web_search` all ride the existing apps.
 
-Rollout ops: single flag `DIGISEARCH_WEB_SEARCH_BACKEND=auto|searxng|ddgs` (default `auto`); under `auto` a down sidecar or a ddgs 403/CAPTCHA fails over to the next backend, while an explicit `searxng`/`ddgs` fails closed instead of falling through (#4297), and the digigraph `web` skill stays corpus-only unless the session opts in (#3420) — fail-closed to corpus-only at every layer. Engine allowlist is `wikipedia, duckduckgo, bing, mojeek`; `search.formats` must keep `json` (the provider calls `/search?format=json`). `server.secret_key` ships as a dev-only placeholder — rotate before exposing beyond loopback. Upstream scrapers break without notice: `compose pull searxng` weekly, and watch per-engine 403/CAPTCHA rates as the early signal; grounding stays tool-only for the default corpus path (#3859), with the Phase B exception that an explicitly requested `source=web|auto` research turn runs OSS synthesis (see §3 `POST /v1/research_turn` web branch, #4064). Eval: `digisearch/tests/test_web_search_eval.py` (20 queries across news/macro/docs/earnings, mocked offline; live sampling behind `DIGISEARCH_WEB_SEARCH_LIVE=1` with p50 fetch+extract < 5s) plus `tests/ds/test_web_eval_live.py` (Phase B research-turn cases, mocked offline; same live gate). Known limitation: digiquant→hub calls carry the Task-1 service JWT (bearer threads via `ToolContext.state["digi_bearer"]`); legs without a token fail closed with `DashboardWebSearchError`, never silently ungrounded.
+Rollout ops: single flag `DIGISEARCH_WEB_SEARCH_BACKEND=auto|searxng|ddgs` (default `auto`); under `auto` a down sidecar or a ddgs 403/CAPTCHA fails over to the next backend, while an explicit `searxng`/`ddgs` fails closed instead of falling through (#4297), and the digigraph `web` skill stays corpus-only unless the session opts in (#3420) — fail-closed to corpus-only at every layer. Engine allowlist is `wikipedia, duckduckgo, bing, mojeek`; `search.formats` must keep `json` (the provider calls `/search?format=json`). `server.secret_key` ships as a dev-only placeholder — rotate before exposing beyond loopback. Upstream scrapers break without notice: the image is tag-pinned (see the pin record below), so `compose pull searxng` only re-pulls that one tag — watch per-engine 403/CAPTCHA rates as the early signal and re-pin when upstream fixes land; grounding stays tool-only for the default corpus path (#3859), with the Phase B exception that an explicitly requested `source=web|auto` research turn runs OSS synthesis (see §3 `POST /v1/research_turn` web branch, #4064). Eval: `digisearch/tests/test_web_search_eval.py` (20 queries across news/macro/docs/earnings, mocked offline; live sampling behind `DIGISEARCH_WEB_SEARCH_LIVE=1` with p50 fetch+extract < 5s) plus `tests/ds/test_web_eval_live.py` (Phase B research-turn cases, mocked offline; same live gate). Known limitation: digiquant→hub calls carry the Task-1 service JWT (bearer threads via `ToolContext.state["digi_bearer"]`); legs without a token fail closed with `DashboardWebSearchError`, never silently ungrounded.
 
 Live verification record (2026-09-11, #3859 Task 10 — honest not-measured + what remains):
 
@@ -2180,6 +2191,15 @@ Live verification record (2026-09-11, #3859 Task 10 — honest not-measured + wh
   Owner decision (#3871): searxng floats on latest — the digest above is a
   recorded observation, not an enforced pin; enforcing a digest pin is a
   networked ops follow-up (owner-side).
+  Pin update (#3239, 2026-10-13): compose no longer floats. It pins the tag
+  `searxng/searxng:2026.9.3-a1144dda3`, derived from the `SEARXNG_COMMIT`
+  this same bundle builds from, so the local sidecar runs the searxng
+  production runs. #3871 stands unamended for the **digest**: no image
+  digest is enforced and that stays a networked ops follow-up (owner-side).
+  The 2026-09-11 observation above therefore describes what `latest` carried
+  then, not the tag in use now. Pinned by
+  `tests/scripts/test_localstack_prod_bundle_parity.py` and
+  `tests/scripts/test_compose_searxng_sidecar.py`.
 - Eval live leg: skipped-with-reason (gate: sidecar must return rows; it
   returns 429, so no p50/quality measured). Supplementary offline evidence on
   this branch: `pytest digisearch/tests/test_web_search_eval.py -v` → 3

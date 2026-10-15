@@ -25,19 +25,19 @@
           "version": "repo-lines-v1:sha256:10796fcb39d784f1bc46f17ff1f8e557777bae3e61475070f94b0a2a73d11a09:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMTA3OTZmY2IzOWQ3ODRmMWJjNDZmMTdmZjFmOGU1NTc3NzdiYWUzZTYxNDc1MDcwZjk0YjBhMmE3M2QxMWEwOSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMTA3OTZmY2IzOWQ3ODRmMWJjNDZmMTdmZjFmOGU1NTc3NzdiYWUzZTYxNDc1MDcwZjk0YjBhMmE3M2QxMWEwOSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMjBlZWMwMjJhM2U5ZTdjZjJjYTc0NWFiZWM5NGRlNmE4ZDI5OGRiMjdjNjQwZThkNmRkODdkZGMwY2M4ZGVhYiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiY2UyMjQ5ZTlhNzc1NjI5MTNiMGJmNTFlOTk2MWQ2NmFiZWY3N2JmODA1ZTk4NTE2OTgzNTQzYTFjYTM4NjE1ZiJ9"
         },
         {
-          "resource": "repo://digigraph/src/digigraph/orchestration/registry.py#L225-L248",
+          "resource": "repo://digigraph/src/digigraph/orchestration/registry.py#L520-L543",
           "version": "repo-lines-v1:sha256:84350f9e013dce8cd7459fcac3be77fd54b1232b45955437f40aafc65de11ea8:eyJzZWxlY3RlZExpbmVDb3VudCI6MjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhiZTJmYjY4MjE2MjIyNmQyYzlhYjk5N2ExMTAxMGY4NDVmYjk5N2Q5YTBmNGM0YTZhZDBjMTU2NDU4NmI5OGEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU2YjA0NDkxNDY5NzIyZTgzNjNhOTRlNDA0NDUzOGUwMTNhMmEyMTdlMzZiMWU1NjhiYTYwYWNiN2I0YzhmMmUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk2ZjYzYWRiZDlkYjllZDI5Zjc2YWQxOTczNzkwNzYzMzBiZmE3YzFjNDQ1Zjc3OTIyNWUxYmIxMDQzMTVjOTkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImE2Mjg5MmFmYWFiOThhY2RjY2Y5YzgzZTIxZWZkYmRmMTNjNmNkNGQ1NThkZDI2YjQ2MTVlOWJiODZlOGRlNTkifQ"
         },
         {
-          "resource": "repo://digigraph/src/digigraph/orchestration/registry.py#L71-L112",
+          "resource": "repo://digigraph/src/digigraph/orchestration/registry.py#L73-L114",
           "version": "repo-lines-v1:sha256:7d76f04a27ab9b112e485d291d45a3965c5d289bc4d3c9336d5f9e0ea48cfb11:eyJzZWxlY3RlZExpbmVDb3VudCI6NDIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRkZjk4YzAzZDAzNWVjNzIyYzAyNGIyYjVlNDA1YzMwYzg5NmJhZjEwZTMxMTdlOGNmZTcxMjkxNzY3Mjg4NmQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZjMWYwMmZkN2VjMWQ0NjJjMGNiODE4Yjk0OGZmZTRmNzE1YjJjMmM0MzI2MzBjMjMyZGZlMzRkNDI3NDNmYTkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc2M2MxNGMxZTU1M2QwNzhiNDAzYTM3MjhiOWUwM2RiMWJjNmY4M2ViNjYxZTRiMmMwOGEyODhhNTM3MzBjYTEifQ"
         },
         {
-          "resource": "repo://digigraph/src/digigraph/tool_policy.py#L145-L185",
+          "resource": "repo://digigraph/src/digigraph/tool_policy.py#L168-L208",
           "version": "repo-lines-v1:sha256:7551d6874000a55e9b2760b505036688c4aeda58d0660dc58b3a2fe69c1d987f:eyJzZWxlY3RlZExpbmVDb3VudCI6NDEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNiOGM1MDZhMWE3NGJhYzBmM2FlNjhmYjY2ODAzYzdhNmVkY2ZiMWVmY2U1MjRhODUwOTk5MGJmNjk3MjY5ZTMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZhMTFjMDU2N2QwYTVmOWU5YjEzNWY2NWNkMjUzNzJkZmQ2Mjg3NzVmN2MxZWQyNTNmOGJhZDQyZGQyZDY2NjkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ3MDE0OWUwNjlhZDY3ZWNjZjQ3MzY0NmZmMWM3NTAwNTBkMzI5ZDExMDAxOGRjNTc2Njg3OGVhZmExZDYwN2QiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFlYjliNGI4NTQ4YWZiODFkNTkyMmE2NzA0YzRiMWMyMTkwYmIzZjhhNTE0ZDljNTVjNGE1NWU3M2NiZGIzOWYifQ"
         },
         {
-          "resource": "repo://digigraph/src/digigraph/workflow.py#L349-L352",
+          "resource": "repo://digigraph/src/digigraph/workflow.py#L350-L353",
           "version": "repo-lines-v1:sha256:571dbac34a2ab3c13f42a9e74f03731129f4c21cee2f7a48bd7623256c51a05a:eyJzZWxlY3RlZExpbmVDb3VudCI6NCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiODQ1N2ZkZmQ4M2EyZjMyMWY2NWRiMzFlYjZhYWViOThmMDZhNmYyYmY5OTM1YmNmZGZkOTY5ZjNiZWVkOWFjYiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMmMyNTZiZmI1YjVjY2QzY2QyZjlhYzUxZGNjMTI1YTdkN2Q2NjcxZTZkNWVlMzFiNjEyZjA4ZGIwZjNiOWZhZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiY2QwYmI1MTQ3MThkMDk3MDRjM2ZiODg1ZGVhMjRmY2NjYjc0YzQ4ODUzODU3M2ZmODEyYTQwZGVhMGIzYTZkMCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzY5ODg1NzM4N2UyNDI1OTc3OTkxNTMzZDRlNDRlNjFkZDc4ODcyOTBlM2RkMjFiZGY3YTU0OTU1ZmU4MTI2NiJ9"
         }
       ]
@@ -81,7 +81,7 @@
       "statement": "apply_mcp_extra_tools is the single policy point for the MCP-extra allowlist union in research_node; it materializes a concrete allowlist for an otherwise-unrestricted session when a proxied {id}_web_search is discovered with no opt-in, because the MCP proxy has no handler-side availability check.",
       "evidence": [
         {
-          "resource": "repo://digigraph/src/digigraph/graph/research.py#L408-L413",
+          "resource": "repo://digigraph/src/digigraph/graph/research.py#L416-L421",
           "version": "repo-lines-v1:sha256:e748a8b38f29006cf95bb18eaa66a9d641b1fd310892b98cd15599d265e7cb1e:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMWRiNDQ3YmVhNzBhNWVhMzUwZGNmYzUzNGM4OGVkYjgxYWUxNTk5MjY1ZWQyNjRlODdlNTg3ODgyYjhlN2YwZiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNTkwOWE1M2E2MThkMDI4ZTFkMzAwMGMwYTdhYmNlZWNiZTVmYjM3ZjRlNTExZWZlNDY2NDNmYWQ2ZTY2ODcyZiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiN2RhOGFhZjA0OWM4NzE3M2U2MjUyM2QzNWU4MzdhYWZlMDJiOTM3M2Q5YTI1YWQ4NDA3Y2M1MzFlYzI1ZjdhOCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMjI1ZDFlZTU3MmZlMjVkOTU4MjJhYzExOGQyMjY4YmY2ZjRiZWE2YjUwYmRlODJkZmFmMGZjNjQ3NGNmMTM0MCJ9"
         },
         {
@@ -95,7 +95,7 @@
       "statement": "require_tool_calls_for_workflow resolves tool_choice='required' as a floor, not an override: project agents.require_tool_calls and env DIGI_REQUIRE_TOOL_CALLS can only add the requirement, never be lowered by a request-level False.",
       "evidence": [
         {
-          "resource": "repo://digigraph/src/digigraph/tool_policy.py#L188-L215",
+          "resource": "repo://digigraph/src/digigraph/tool_policy.py#L211-L238",
           "version": "repo-lines-v1:sha256:2b4ad3fab60fe3fc563361239500b695cb22c876e281a95130acf31ea0a43289:eyJzZWxlY3RlZExpbmVDb3VudCI6MjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYzMjI2M2YxYzVmMmRjZjgxMGQ1ZTU1MmViMWMzMjAwOWNlOGQzZjNmOGNmYmExM2NlZDE4YWQxMzBjNjhiNTkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVjMDQ0ZTNjNzJjM2YxYjM4ODAxYjg0NmJhOGE0NmU0YzZkMzk4YjBmY2QyYzVkZTY1OTg5ZDcxZDgzY2QwMzYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ3MjIzMTA2ZmQ4NzQyYjcwZWEyMzNmOWRjMzU5ZjRiMDJiYmIwNjliNzI4M2VlZjc2MjQ5OTUxNmJkN2I5YzgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImFlZjAyMTVhOTQzNWY4OTdmZWQ2ZmNiMTdmNTU1MjA5ZmQ1OGMxMDFkNWM4ZGUwMjEwYmQ1N2Y4NmQ1NWVmZDAifQ"
         }
       ]
@@ -105,7 +105,7 @@
       "statement": "backtest_node prefers digiquant POST /v1/jobs/backtest with status polling, falls back to SSE /backtest/start then synchronous POST /run_backtest, and catches transient client errors internally (returning an error dict rather than raising), so node-level LangGraph RetryPolicy on backtest/optimize is dead code.",
       "evidence": [
         {
-          "resource": "repo://digigraph/src/digigraph/graph/graph.py#L60-L72",
+          "resource": "repo://digigraph/src/digigraph/graph/graph.py#L61-L73",
           "version": "repo-lines-v1:sha256:bec6b8e6078502cd92da67afa743051317d07becd57a1cebb68f6dbf0dad9856:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjEyOGRmN2UzOWUwNGQwMzQwNDU1Y2Q4ZjFjZDc5ZGQ5YWQ2M2Y0NGFlODBjOTU4OTBjMWFjYmI3YzgyYWQ1MDciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU2NjUzOGM4N2QxOWFjYzBiYjZhY2IxOTY0MGEwYTljYmM3NmFmN2MyMDdkZDVhM2I2YTNmNTE2YmZhMTJiMDkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImEyMjU3MzFjYjc0ZTlhN2NiNDljNGE5YzU3OTA5Y2Q3OWQ4ZGI0NmMzZTNhOWZmMWMyNGNmMDQ4NWY3N2E0ZDQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjRiNjU1ZmRkNWQ0MjIzMTE0YTI2ZDcwNDljNzg2ZjFhOThjYTUwOTgwNDAzOGNhM2FlNzVhOWZhMzViMDEwZjMifQ"
         },
         {

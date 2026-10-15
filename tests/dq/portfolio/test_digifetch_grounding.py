@@ -3,18 +3,22 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import date
 from typing import Any
 
 import httpx
 import pytest
 from digiquant.data.gloomberb import (
+    GLOOMBERB_ENABLED_ENV,
     GLOOMBERB_SESSION_COOKIE_ENV,
     PM_TOOLS,
     TOOL_ENTITLEMENTS,
     GloomberbClient,
     agent_tools,
+    session_gate,
 )
+from digiquant.data.gloomberb.session_gate import SessionGateStatus
 from digiquant.portfolio.phases import direction, portfolio_common
 from digiquant.portfolio.phases.deliberation import _deliberation_grounding
 from digiquant.portfolio.phases.portfolio_common import _portfolio_grounding
@@ -95,14 +99,35 @@ def _sweep_handler(request: httpx.Request) -> httpx.Response:
 
 
 @pytest.fixture(autouse=True)
-def _grounding_env(monkeypatch: pytest.MonkeyPatch) -> None:
+def _grounding_env(monkeypatch: pytest.MonkeyPatch):
+    """Opt the Gloomberb family back in and keep the tool-list filter offline.
+
+    GLOOMBERB_ENABLED defaults OFF (DIG-1233), so without the explicit opt-in
+    the PM subset never arms and the free-PM assertions fail on the bare tip.
+    The session-gate verdict is stubbed to follow the cookie's presence — the
+    same seam tests/dq/data/test_gloomberb_agent_tools.py uses — because
+    answering it for real costs one live request to api.gloom.sh (DIG-2752).
+    """
     monkeypatch.setenv("DIGIQUANT_RESEARCH_DATA_TOOLS", "1")
+    monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, "1")
     monkeypatch.delenv(GLOOMBERB_SESSION_COOKIE_ENV, raising=False)
     monkeypatch.setattr(_node_factory, "_research_data_client", lambda: object())
     monkeypatch.setattr(
         "digiquant.research.data.web_grounding.fetch_web_grounding",
         lambda **_kwargs: {"summary": "canned", "sources": [], "as_of": "2026-09-15"},
     )
+    session_gate.reset_session_gate_cache()
+    monkeypatch.setattr(
+        agent_tools,
+        "session_gate_status",
+        lambda *a, **k: SessionGateStatus(
+            bool((os.environ.get(GLOOMBERB_SESSION_COOKIE_ENV) or "").strip()),
+            "presence_stub",
+            "presence stands in for validation in the grounding tests",
+        ),
+    )
+    yield
+    session_gate.reset_session_gate_cache()
 
 
 @pytest.mark.unit

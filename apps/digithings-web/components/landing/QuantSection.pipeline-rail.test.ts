@@ -29,8 +29,9 @@ const src = readFileSync(fileURLToPath(new URL("./QuantSection.tsx", import.meta
 function pipelineRailBody(): string {
   const start = src.indexOf("function PipelineRail()");
   if (start === -1) throw new Error("PipelineRail not found");
-  // `PipelineRail` is the last function in the module, so its declaration runs
-  // to the end of the file.
+  // Slice from the declaration to the end of the file. Helpers follow
+  // `PipelineRail` in the module, so this is a superset of the rail body;
+  // the assertions below target the rail block itself.
   return src.slice(start);
 }
 

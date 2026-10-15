@@ -163,13 +163,13 @@ export const modules: ModuleNode[] = [
     tagline: "Talk to your stack with your keys, models and audit log.",
     summary: [
       "A Next.js and React BFF streaming digigraph through the Vercel AI SDK, your key forwarded per request — never stored, never logged.",
-      "NextAuth handles identity; Postgres and Drizzle persist sessions for humans and agents alike.",
+      "Auth.js handles identity; Postgres and Drizzle persist sessions for humans and agents alike.",
     ],
     stack: [
       { name: "Next.js", icon: "nextdotjs" },
       { name: "React", icon: "react" },
       { name: "Vercel AI SDK", icon: "vercel" },
-      { name: "NextAuth", icon: null, mono: "Auth" },
+      { name: "Auth.js", icon: null, mono: "Auth" },
       { name: "Postgres", icon: "postgresql" },
       { name: "Drizzle", icon: "drizzle" },
     ],

@@ -115,7 +115,7 @@ result: ok
 $ digivoice update
 digivoice update
 bun  present  ~/.local/bin/bun
-opentui  present  digivoice/tui/node_modules/@opentui/core
+opentui  present  clients/digivoice-tui/node_modules/@opentui/core
 whisper-cli  present  ~/.local/bin/whisper-cli
 piper  present  ~/.local/bin/piper
 sox  present  /usr/bin/sox

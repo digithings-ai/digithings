@@ -1,7 +1,7 @@
 ---
 type: behavior-guide
 title: Tracing and Redaction
-description: How digitrace traceable() activates, what tracing_enabled() reports, and how PiiRedactor scrubs span payloads before LangSmith submission.
+description: How digitrace traceable() activates, what tracing_enabled() reports, and how PiiRedactor scrubs span payloads before LangSmith submission. The OTel leg carries no prompts.
 tags: [digitrace, tracing, langsmith, pii-redaction]
 verified:
   - by: openwiki/0.5.0
@@ -25,9 +25,10 @@ generated: { by: "opencode", at: "2026-09-07T22:31:53.755Z" }
 # Tracing and Redaction
 
 Tracing in digitrace is a conditional decorator plus a value-pattern
-redactor attached to the LangSmith SDK's native input/output hooks. The
-rule of thumb: **no key or no SDK means the decorator does not exist at
-runtime** — the function object passes through untouched.
+redactor attached to the LangSmith SDK's native input/output hooks, and
+an OTel fan-out that never carries prompts. The rule of thumb: **neither
+leg configured means the decorator does not exist at runtime** — the
+function object passes through untouched.
 
 ## `traceable(name)` activation semantics
 
@@ -47,8 +48,10 @@ The returned decorator checks two conditions at decoration (import) time:
 Both present → the function is wrapped with
 `langsmith.traceable(name=name, process_inputs=…, process_outputs=…)`,
 where the process hooks are the active redactor's methods. Either absent →
-the original function is returned unchanged: same identity, same
-`__name__`, zero per-call overhead (no closure, no wrapper, no branch).
+the LangSmith leg is skipped. A separate OTel leg
+(`_maybe_wrap_otel`) still wraps the call when an OTLP endpoint is set.
+Only when both legs are inactive is the original function returned
+unchanged.
 
 An optional `redactor=` argument overrides the default redactor built from
 the current environment. When tracing is inactive, the override is never

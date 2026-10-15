@@ -93,6 +93,7 @@ def make_client(handler: Any, calls: list[int], **kwargs: Any) -> GloomberbClien
     )
     kwargs.setdefault("rate_limiter", RateLimiter(0))
     kwargs.setdefault("retry_policy", RetryPolicy(attempts=1))
+    kwargs.setdefault("enabled", True)
     return GloomberbClient(fetcher=fetcher, **kwargs)
 
 
@@ -101,7 +102,11 @@ def _unexpected(request: httpx.Request) -> httpx.Response:
 
 
 def _mcp(name: str):
-    return create_mcp_server()._tool_manager.get_tool(name).fn
+    from digiquant.tool_names import canonical_tool_name
+
+    tool = create_mcp_server()._tool_manager.get_tool(canonical_tool_name(name))
+    assert tool is not None, name
+    return tool.fn
 
 
 # ── approvals ticket lifecycle ──────────────────────────────────────────────
@@ -230,10 +235,24 @@ def test_new_tools_declare_session_entitlement(name: str) -> None:
 
 
 @pytest.mark.parametrize("name", sorted(NEW_SESSION_TOOLS))
-def test_new_tools_registered_in_full_and_read_scope(name: str) -> None:
+def test_new_tools_registered_in_full_and_read_scope(
+    name: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from digiquant.data.gloomberb import session_gate
+    from digiquant.data.gloomberb.session_gate import SessionGateStatus
+    from digiquant.tool_names import canonical_tool_name
+
+    session_gate.reset_session_gate_cache()
+    monkeypatch.setattr(
+        session_gate,
+        "session_gate_status",
+        lambda *args, **kwargs: SessionGateStatus(True, "ok", "authenticated for registration"),
+    )
+    public = canonical_tool_name(name)
     full = {t.name for t in create_mcp_server(scope="full")._tool_manager.list_tools()}
     read = {t.name for t in create_mcp_server(scope="read")._tool_manager.list_tools()}
-    assert name in full and name in read
+    assert public in full and public in read
+    assert name not in full and name not in read
 
 
 @pytest.mark.parametrize(("name", "call"), sorted(_CLIENT_METHODS.items()))

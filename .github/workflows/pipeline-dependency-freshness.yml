@@ -1,15 +1,18 @@
 # Pipeline: dependency freshness radar
 #
-# Monthly comparison of uv.lock against PyPI latest versions.
+# Weekly comparison of uv.lock against PyPI latest versions (monthly under
+# DIG-1515; weekly from DIG-2277, matching the Monday cadence of the pip and npm
+# security audits that read the same lock).
 # Posts a tracking issue with a version gap table (major/minor/patch).
-# Deduplicates by title so only one open radar issue exists at a time.
+# Deduplicates by title so only one open radar issue exists at a time, which is
+# what makes the weekly cadence cost 0 extra issues.
 #
 # Visibility only. This never changes a bound and never bumps anything.
 #
 # No `on: schedule` here on purpose. develop carries no GitHub cron for this
 # repo — every clock lives on the digithings-cron Worker, because a GitHub cron
 # on the default branch double-fires with it
-# (tests/scripts/test_no_gha_schedules.py). The monthly clock is the
+# (tests/scripts/test_no_gha_schedules.py). The clock is the
 # `dependency-freshness` wd() row in apps/digithings-cron/src/jobs.ts, plus its
 # `[triggers] crons` entry in wrangler.toml. Same precedent as
 # secret-staleness-check.yml and datatap-answer-check.yml.
@@ -77,7 +80,7 @@ jobs:
       # The report step is the fragile one (a 2.4 GB `uv sync` and 284 PyPI
       # reads sit behind it), and the step below edits the standing report issue
       # in place. Without this guard, any upstream failure left `table` empty
-      # and the edit overwrote a good monthly report with a blank table while
+      # and the edit overwrote a good report with a blank table while
       # reporting success — the radar would destroy its own record once, and
       # never be able to explain why. Fail loudly instead; `always()` so the
       # error surfaces even when the failure was further upstream.
@@ -103,7 +106,7 @@ jobs:
 
           BODY="## Dependency Freshness Radar
 
-          Monthly comparison of \`uv.lock\` against PyPI latest versions.
+          Weekly comparison of \`uv.lock\` against PyPI latest versions.
 
           ${SUMMARY}
 
@@ -132,8 +135,8 @@ jobs:
             echo "Updated existing radar issue #$EXISTING"
           else
             # `gh issue create --label` is fatal on a label that does not exist,
-            # and a monthly job that dies on a deleted label reports nothing for
-            # a month. The other pipelines never create labels because every
+            # and a job that dies on a deleted label reports nothing until someone
+            # looks. The other pipelines never create labels because every
             # label they pass already exists; `radar` is the first novel one, so
             # the radar creates its own. Idempotent, and never fails the step.
             gh label create radar --repo "$REPO" --color 1D76DB \

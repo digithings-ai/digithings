@@ -4,7 +4,6 @@ import {
   DIGICHAT_APP_SECURITY_HEADERS,
   DIGICHAT_EMBED_BAKED_SECURITY_HEADERS,
   DIGICHAT_EMBED_FAIL_CLOSED_CSP,
-  DIGICHAT_EMBED_SECURITY_HEADERS,
   embedFrameAncestors,
   embedFrameAncestorsCsp,
   frameAncestorOriginsForHost,
@@ -44,10 +43,6 @@ describe("security-headers", () => {
     );
     expect(
       DIGICHAT_EMBED_BAKED_SECURITY_HEADERS.find((h) => h.key === "Content-Security-Policy")
-        ?.value,
-    ).toBe(DIGICHAT_EMBED_FAIL_CLOSED_CSP);
-    expect(
-      DIGICHAT_EMBED_SECURITY_HEADERS.find((h) => h.key === "Content-Security-Policy")
         ?.value,
     ).toBe(DIGICHAT_EMBED_FAIL_CLOSED_CSP);
     // Runtime helper still builds the allowlist (used by proxy).

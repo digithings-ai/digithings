@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -75,6 +76,9 @@ def _pr(
     merge_state: str = "CLEAN",
     extra_checks: list[dict[str, Any]] | None = None,
     title: str = "",
+    comments: list[dict[str, Any]] | None = None,
+    commits: list[dict[str, Any]] | None = None,
+    approved: bool = False,
 ) -> dict[str, Any]:
     rollup: list[dict[str, Any]] = list(extra_checks or [])
     if test_conclusion is not None:
@@ -86,7 +90,13 @@ def _pr(
                 "conclusion": test_conclusion,
             }
         )
-    return {
+    # Review evidence for tests whose subject is NOT the review gate: the queue
+    # enforces the promotion gate's evidence (DIG-3154), so a fixture that must
+    # merge carries a non-author approval. Refusal tests keep the default.
+    resolved_reviews = list(reviews) if reviews is not None else []
+    if approved:
+        resolved_reviews.append({"author": {"login": "reviewer"}, "state": "APPROVED"})
+    pr = {
         "number": number,
         "title": title or f"work for #{number}",
         "headRefName": f"DIG-{number}-work",
@@ -99,7 +109,45 @@ def _pr(
         "reviewDecision": "",
         "author": {"login": author},
         "createdAt": created,
-        "reviews": reviews if reviews is not None else [],
+        "reviews": resolved_reviews,
+    }
+    # `comments` and `commits` are fetched from GitHub but are absent from every
+    # hand-built PR that does not ask for them, so the gates stay exercised on the
+    # shape they will really meet when a key is missing.
+    if comments is not None:
+        pr["comments"] = comments
+    if commits is not None:
+        pr["commits"] = commits
+    return pr
+
+
+def _review_comment(
+    *,
+    verdict: str | None = "changes_requested",
+    head_sha: str = "a" * 40,
+    created: str = "2026-10-07T22:07:11Z",
+    login: str = "chrizefan",
+    number: int = 347,
+    prose: bool = True,
+) -> dict[str, Any]:
+    """A PR comment in the shape a posted code-review verdict arrives in.
+
+    The marker is an HTML comment whose `key=value` fields are the machine-readable
+    part; the prose below it is what a human reads. Only the fields are parsed, so
+    the prose here is free to say anything.
+    """
+    fields = [f"scope=digithings-ai/twelve-x#{number}@{head_sha}"]
+    if verdict is not None:
+        fields.append(f"verdict={verdict}")
+    body = f"<!-- opencode-power-pack:code-review {' '.join(fields)} -->\n"
+    if prose:
+        body += "## Verdict: changes requested (narrow)\n\n**One finding blocks approval.**\n"
+    return {
+        "id": f"IC_kwDO{login}_{number}",
+        "author": {"login": login},
+        "authorAssociation": "MEMBER",
+        "body": body,
+        "createdAt": created,
     }
 
 
@@ -206,6 +254,7 @@ def test_a_failing_non_required_check_also_blocks() -> None:
 def test_an_ignored_check_cannot_fail_the_queue() -> None:
     pr = _pr(
         1,
+        approved=True,
         extra_checks=[
             {
                 "__typename": "CheckRun",
@@ -245,10 +294,7 @@ def test_required_checks_are_resolved_per_repo() -> None:
     policy = mq.load_policy()
     assert policy.required_for("digithings-ai/twelve-x") == ("test",)
     digithings = policy.required_for("digithings-ai/digithings")
-    assert "test" not in digithings, "a bare `test` never reports on digithings"
-    assert "Required checks passed" in digithings
-    assert "doc-links + agents-init" in digithings
-    assert "mypy — digibase + digikey" in digithings
+    assert digithings == ("local-ci",), digithings
     # An unlisted repo still gets a gate rather than none: the failure that matters
     # here is a silent pass, not a refusal.
     assert policy.required_for("digithings-ai/digithings-ops")
@@ -344,11 +390,13 @@ def test_a_misconfigured_gate_is_announced_once_and_still_blocks(gh_stub: Any) -
     err = done.stderr
     assert "misconfigured required check" in err
     assert "not a red build" in err
-    # Names the gate that cannot match...
-    for name in ("Required checks passed", "doc-links + agents-init", "mypy — digibase + digikey"):
-        assert f"'{name}'" in err, name
-    # ...and what CI is really producing, so the reader stops hunting for a failure.
-    assert "digibase / test" in err
+    # Names the gate that cannot match (digithings requires exactly `local-ci`,
+    # DIG-3707)...
+    assert "'local-ci'" in err
+    # ...and how many checks CI is really producing, so the reader stops hunting
+    # for a failure (`local-ci` shares a word with nothing reported, so no near
+    # miss is offered here — the next test pins that path).
+    assert "1 distinct checks did report" in err
     assert "required_checks_by_repo" in err
     # Every PR is still blocked. The announcement is additive: a gate that names
     # nothing must not become a gate that names nothing and merges.
@@ -366,8 +414,8 @@ def test_the_misconfiguration_announcement_names_what_it_meant_instead_of_a_wall
     the announcement exists to save. So it names the near misses — the reported checks
     sharing a word with the gate — and counts the rest.
     """
-    # Deliberately none of digithings' three required contexts — that is the DIG-690
-    # shape. The decoys are what the reader has to choose from instead.
+    # Deliberately not digithings' required `local-ci` context — that is the
+    # DIG-690 shape. The decoys are what the reader has to choose from instead.
     reported = [
         {"__typename": "CheckRun", "name": name, "status": "COMPLETED", "conclusion": "SUCCESS"}
         for name in (
@@ -385,9 +433,9 @@ def test_the_misconfiguration_announcement_names_what_it_meant_instead_of_a_wall
     done = _run("list", "--repo", "digithings-ai/digithings", "--acting-role", "cto")
     err = done.stderr
     assert "6 distinct checks did report" in err
-    # `mypy` is required, unmatchable, and shares a word with nothing reported —
+    # `local-ci` is required, unmatchable, and shares a word with nothing reported —
     # so no near miss is offered for it and the message must not imply one exists.
-    assert "'mypy — digibase + digikey'" in err
+    assert "'local-ci'" in err
     assert "nearest:" not in err
     assert "gh pr checks" in err
 
@@ -420,7 +468,7 @@ def test_the_warning_cannot_repeat_because_nothing_can_merge_while_it_fires(
     says why. If someone ever makes a misconfigured gate stop blocking, this fails
     and the flag becomes necessary again.
     """
-    # No PR reports `mypy — digibase + digikey`, so the gate cannot be satisfied.
+    # No PR reports `local-ci`, so the gate cannot be satisfied.
     # Everything else is green and approved, so these PRs are blocked on the gate
     # alone — remove the misnaming and both would merge.
     reported = [
@@ -448,7 +496,7 @@ def test_the_warning_cannot_repeat_because_nothing_can_merge_while_it_fires(
     assert not stub.matching("pr merge")
     assert done.stderr.count("misconfigured required check") == 1
     # And the reason is named, not just the count, so the reader knows what to edit.
-    assert "'mypy — digibase + digikey'" in done.stderr
+    assert "'local-ci'" in done.stderr
 
 
 def test_a_matching_gate_announces_nothing(gh_stub: Any) -> None:
@@ -477,25 +525,14 @@ def test_the_audit_comment_records_the_checks_actually_required(gh_stub: Any) ->
     `test` check that did not exist, which is the one claim the queue's whole
     comment exists to make reliable.
     """
-    prs = [_pr(42, head_sha="c" * 40, test_conclusion=None)]
+    prs = [_pr(42, head_sha="c" * 40, test_conclusion=None, approved=True)]
+    # `local-ci` arrives as a commit StatusContext, never as a CheckRun run —
+    # that is the whole point of `status_context_checks` (DIG-3707).
     prs[0]["statusCheckRollup"] = [
         {
-            "__typename": "CheckRun",
-            "name": "Required checks passed",
-            "status": "COMPLETED",
-            "conclusion": "SUCCESS",
-        },
-        {
-            "__typename": "CheckRun",
-            "name": "doc-links + agents-init",
-            "status": "COMPLETED",
-            "conclusion": "SUCCESS",
-        },
-        {
-            "__typename": "CheckRun",
-            "name": "mypy — digibase + digikey",
-            "status": "COMPLETED",
-            "conclusion": "SUCCESS",
+            "__typename": "StatusContext",
+            "context": "local-ci",
+            "state": "SUCCESS",
         },
     ]
     stub = _queue_stub(
@@ -512,9 +549,7 @@ def test_the_audit_comment_records_the_checks_actually_required(gh_stub: Any) ->
     comments = stub.matching("pr comment 42")
     assert len(comments) == 1
     body = comments[0][comments[0].index("--body") + 1]
-    assert "Required checks passed" in body
-    assert "doc-links + agents-init" in body
-    assert "mypy — digibase + digikey" in body
+    assert "local-ci" in body
 
 
 # --- review: who is allowed to say the code was read --------------------------
@@ -591,16 +626,270 @@ def test_the_merging_role_cannot_attest_its_own_review() -> None:
     assert any("also the merging role" in reason for reason in verdict.reasons)
 
 
-def test_a_different_role_attesting_passes() -> None:
-    assert mq.evaluate(
+def test_attestation_alone_no_longer_suffices() -> None:
+    """Attestation without review evidence is refused (DIG-3154 reopen).
+
+    PRs #5489 and #5277 merged attested by `qa` with zero reviews and zero
+    comments, and the promotion gate refused both. An attestation asserts a
+    review happened; with no artifact the promotion gate cannot see it, so the
+    queue cannot accept it either. The attestation mechanism itself is
+    unchanged — it still satisfies `_gate_review` — but it does not satisfy
+    review coverage.
+    """
+    verdict = mq.evaluate(
         _pr(1), mq.load_policy(), acting_role="cto", base="develop", attest_role="qa"
+    )
+    assert not verdict.eligible
+    assert any("review coverage" in reason for reason in verdict.reasons)
+
+
+def test_attestation_with_review_evidence_still_passes() -> None:
+    """The mechanism is not removed: attestation plus an approval still merges."""
+    pr = _pr(1, approved=True)
+    assert mq.evaluate(
+        pr, mq.load_policy(), acting_role="cto", base="develop", attest_role="qa"
     ).eligible
 
 
 def test_an_em_merge_attested_by_the_cto_passes() -> None:
     assert mq.evaluate(
-        _pr(1), mq.load_policy(), acting_role="em", base="develop", attest_role="cto"
+        _pr(1, approved=True),
+        mq.load_policy(),
+        acting_role="em",
+        base="develop",
+        attest_role="cto",
     ).eligible
+
+
+# --- a verdict posted as a PR comment has to reach the gate --------------------
+#
+# twelve-x PR #347 merged 6m37s after a review saying "changes requested — one
+# finding blocks approval" was posted on it. GitHub never saw a blocking
+# `CHANGES_REQUESTED` review, so `reviewDecision` was empty, and the queue only
+# fetched `reviews` — a comment was invisible to it. `--attest-review qa` then
+# satisfied the gate and pointed straight past the verdict.
+
+
+def test_a_posted_verdict_of_changes_requested_blocks_even_with_an_attestation() -> None:
+    """The exact #347 shape: no blocking review, a distinct attestation, one verdict.
+
+    Every other input here is the one that merged. Only the posted verdict is new,
+    and it has to be enough on its own.
+    """
+    pr = _pr(
+        347,
+        reviews=[],
+        approved=True,
+        comments=[_review_comment(verdict="changes_requested")],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop", attest_role="qa")
+    assert not verdict.eligible
+    # The refusal has to name the comment. A queue that refuses without saying
+    # where the block came from is a queue nobody can clear.
+    assert any("changes_requested" in r and "chrizefan" in r for r in verdict.reasons)
+
+
+def test_a_posted_verdict_of_approved_does_not_block() -> None:
+    """An approving verdict is a signal, not a gate. It must not turn into one."""
+    pr = _pr(347, reviews=[], approved=True, comments=[_review_comment(verdict="approved")])
+    assert mq.evaluate(
+        pr, mq.load_policy(), acting_role="em", base="develop", attest_role="qa"
+    ).eligible
+
+
+def test_a_comment_without_the_marker_is_ignored() -> None:
+    """Prose is not a contract.
+
+    The #347 comment reads `## Verdict: changes requested (narrow)` in its prose.
+    Matching on that text would mean matching a heading a reviewer is free to
+    reword, so the gate reads the marker's `verdict=` field and nothing else. This
+    comment says the same words with no marker and must not block.
+    """
+    pr = _pr(
+        347,
+        reviews=[],
+        approved=True,
+        comments=[
+            {
+                "id": "IC_kwDOprose_347",
+                "author": {"login": "chrizefan"},
+                "body": "## Verdict: changes requested (narrow)\n\n**One finding blocks approval.**",
+                "createdAt": "2026-10-07T22:07:11Z",
+            }
+        ],
+    )
+    assert mq.evaluate(
+        pr, mq.load_policy(), acting_role="em", base="develop", attest_role="qa"
+    ).eligible
+
+
+def test_a_pr_without_a_comments_key_does_not_crash_the_gate() -> None:
+    """A missing key is a missing signal. It must not be an exception.
+
+    `comments` is fetched conditionally and the gates run on whatever the fetch
+    returned, so the shape with the key absent is one the gate will really meet.
+    """
+    pr = _pr(347, approved=True)
+    assert "comments" not in pr
+    assert mq.evaluate(
+        pr, mq.load_policy(), acting_role="em", base="develop", attest_role="qa"
+    ).eligible
+
+
+def test_a_verdict_against_an_older_commit_on_the_branch_still_blocks() -> None:
+    """A reviewer who blocked commit A still blocks A+B.
+
+    Forgetting to re-review after pushing a fix is the common case, and the
+    finding is normally still there. Clearing this silently is how the gate
+    becomes decoration.
+    """
+    older = "b" * 40
+    head = "c" * 40
+    pr = _pr(
+        347,
+        head_sha=head,
+        reviews=[],
+        approved=True,
+        comments=[_review_comment(verdict="changes_requested", head_sha=older)],
+        commits=[{"oid": older}, {"oid": head}],
+    )
+    assert not mq.evaluate(
+        pr, mq.load_policy(), acting_role="em", base="develop", attest_role="qa"
+    ).eligible
+
+
+def test_a_verdict_against_a_head_this_pr_does_not_carry_does_not_block() -> None:
+    """A force-push or rebase rewrites history, and the old sha is gone.
+
+    The verdict was about code that no longer exists, so holding the PR on it
+    would strand it: the finding cannot be re-applied to the new commits, and the
+    only way to clear it would be to close and reopen the PR. A reviewer who
+    disagrees posts a fresh verdict against the new head.
+    """
+    head = "c" * 40
+    pr = _pr(
+        347,
+        head_sha=head,
+        reviews=[],
+        approved=True,
+        comments=[_review_comment(verdict="changes_requested", head_sha="f" * 40)],
+        commits=[{"oid": head}],
+    )
+    assert mq.evaluate(
+        pr, mq.load_policy(), acting_role="em", base="develop", attest_role="qa"
+    ).eligible
+
+
+def test_the_latest_posted_verdict_wins() -> None:
+    """A reviewer who came back and approved clears their own earlier block."""
+    pr = _pr(
+        347,
+        reviews=[],
+        approved=True,
+        comments=[
+            _review_comment(verdict="changes_requested", created="2026-10-07T22:07:11Z"),
+            _review_comment(verdict="approved", created="2026-10-07T22:20:00Z"),
+        ],
+    )
+    assert mq.evaluate(
+        pr, mq.load_policy(), acting_role="em", base="develop", attest_role="qa"
+    ).eligible
+
+
+def test_an_older_block_still_blocks_when_a_later_marker_has_no_verdict() -> None:
+    """A typo is a missing signal, not a clearance.
+
+    The gate refuses to read a verdict it cannot parse, and refusing to read is
+    not the same as reading "approved". Letting an unreadable marker clear a
+    block would hand anyone who can comment a way to unlock the queue.
+    """
+    pr = _pr(
+        347,
+        reviews=[],
+        approved=True,
+        comments=[
+            _review_comment(verdict="changes_requested", created="2026-10-07T22:07:11Z"),
+            _review_comment(verdict="looks-fine", created="2026-10-07T22:20:00Z"),
+        ],
+    )
+    assert not mq.evaluate(
+        pr, mq.load_policy(), acting_role="em", base="develop", attest_role="qa"
+    ).eligible
+
+
+def test_the_fetch_asks_github_for_the_fields_the_posted_verdict_needs() -> None:
+    """The structural fix, pinned: a gate cannot read a field the fetch dropped.
+
+    This is the whole root cause of #347 — `comments` was never requested, so no
+    amount of parsing could have reached it. Pinning the field list keeps the
+    fetch and the gate from drifting apart again.
+    """
+    source = SCRIPT.read_text()
+    # The field list is written as implicitly-concatenated string literals, so take
+    # every literal that follows `--json` rather than only the first.
+    tail = source.split('"--json",', 1)
+    assert len(tail) == 2, "the fetch no longer passes --json"
+    literals = re.findall(r'"([^"]*)"', tail[1])
+    fields = "".join(literals)
+    assert "comments" in fields
+    assert "commits" in fields
+
+
+def test_the_default_limit_stays_under_github_node_cap() -> None:
+    """DIG-3240: the default fetch must stay under GitHub's 500,000-node cap.
+
+    The --json field list costs ~10,502 possible nodes per PR, so limit 50
+    (~525k) is rejected and `run` at the default exits 1 with an unreadable
+    queue. The default must stay at or below 47, with headroom preferred.
+    """
+    # Read the real default out of the script, not a copy of it.
+    source = SCRIPT.read_text()
+    match = re.search(r'add_argument\("--limit", type=int, default=(\d+)', source)
+    assert match is not None, "the --limit default is gone from merge_queue.py"
+    default = int(match.group(1))
+    assert default * 10502 < 500000, (
+        f"default --limit {default} costs ~{default * 10502} nodes, "
+        "over GitHub's 500,000 cap"
+    )
+
+
+def test_a_pr_with_no_evidence_at_all_is_refused_despite_attestation() -> None:
+    """The #5489/#5277 shape: no labels, no reviews, no Bot runs — refused even attested."""
+    pr = _pr(1)
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop", attest_role="qa")
+    assert not verdict.eligible
+    assert any("no completed agent review" in reason for reason in verdict.reasons)
+
+
+def test_a_bugbot_success_clears_review_coverage() -> None:
+    """The strongest hatch: attestation carries `_gate_review`, Bugbot carries coverage."""
+    pr = _pr(
+        1,
+        extra_checks=[
+            {
+                "__typename": "CheckRun",
+                "name": "Cursor Bugbot",
+                "status": "COMPLETED",
+                "conclusion": "SUCCESS",
+            }
+        ],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop", attest_role="qa")
+    assert verdict.eligible
+    assert not any("review coverage" in reason for reason in verdict.reasons)
+
+
+def test_a_reviewed_owner_label_clears_review_coverage() -> None:
+    """The accountability hatch: label read, actor recorded by the main gate.
+
+    Attestation still carries the `_gate_review` half here — the point is that
+    the *coverage* half is satisfied by the label alone.
+    """
+    pr = _pr(1)
+    pr["labels"] = [{"name": "reviewed:owner"}]
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop", attest_role="qa")
+    assert verdict.eligible
+    assert not any("review coverage" in reason for reason in verdict.reasons)
 
 
 # --- ordering: a queue, not a race --------------------------------------------
@@ -790,7 +1079,7 @@ def test_run_merges_the_head_and_pins_the_evaluated_sha(gh_stub: Any) -> None:
     Without `--match-head-commit`, a push landing between evaluation and merge
     ships code whose checks nobody looked at. With it, the merge aborts instead.
     """
-    prs = [_pr(42, head_sha="b" * 40)]
+    prs = [_pr(42, head_sha="b" * 40, approved=True)]
     stub = _queue_stub(
         gh_stub(
             gh_rule(r"^pr list", stdout=prs),
@@ -823,7 +1112,7 @@ def test_run_never_escalates_with_admin(gh_stub: Any) -> None:
     An operator can always escalate by hand and say so; a queue that escalates on
     its own is indistinguishable from one that ignores its own gates.
     """
-    prs = [_pr(42)]
+    prs = [_pr(42, approved=True)]
     stub = _queue_stub(
         gh_stub(
             gh_rule(r"^pr list", stdout=prs),
@@ -848,8 +1137,8 @@ def test_run_re_reads_the_queue_after_every_merge(gh_stub: Any) -> None:
         gh_rule(r"^pr merge", stdout=""),
         gh_rule(r"^pr comment", stdout=""),
     )
-    stub.wrote("q1.json", json.dumps([_pr(1), _pr(2)]))
-    stub.wrote("q2.json", json.dumps([_pr(2)]))
+    stub.wrote("q1.json", json.dumps([_pr(1, approved=True), _pr(2, approved=True)]))
+    stub.wrote("q2.json", json.dumps([_pr(2, approved=True)]))
     stub.wrote("q3.json", json.dumps([]))
     done = _run(
         "run",
@@ -881,7 +1170,7 @@ def test_run_stops_when_a_merge_makes_the_next_pr_ineligible(gh_stub: Any) -> No
         gh_rule(r"^pr merge", stdout=""),
         gh_rule(r"^pr comment", stdout=""),
     )
-    stub.wrote("q1.json", json.dumps([_pr(1), _pr(2)]))
+    stub.wrote("q1.json", json.dumps([_pr(1, approved=True), _pr(2, approved=True)]))
     # After #1 lands, #2 has gone conflicted against the new develop tip.
     stub.wrote("q2.json", json.dumps([_pr(2, mergeable="CONFLICTING")]))
     done = _run(
@@ -902,7 +1191,7 @@ def test_run_stops_when_a_merge_makes_the_next_pr_ineligible(gh_stub: Any) -> No
 
 
 def test_dry_run_changes_nothing(gh_stub: Any) -> None:
-    prs = [_pr(42)]
+    prs = [_pr(42, approved=True)]
     stub = _queue_stub(gh_stub(gh_rule(r"^pr list", stdout=prs)), prs)
     done = _run(
         "run",
@@ -926,7 +1215,7 @@ def test_the_audit_comment_names_the_role_and_the_verdicts(gh_stub: Any) -> None
     It has to say which role merged and what the merge relied on, or a later
     reader cannot tell a routine queue merge from someone bypassing policy.
     """
-    prs = [_pr(42, head_sha="c" * 40)]
+    prs = [_pr(42, head_sha="c" * 40, approved=True)]
     stub = _queue_stub(
         gh_stub(
             gh_rule(r"^pr list", stdout=prs),
@@ -947,7 +1236,10 @@ def test_the_audit_comment_names_the_role_and_the_verdicts(gh_stub: Any) -> None
 
 def test_max_merges_defaults_to_one(gh_stub: Any) -> None:
     """One merge per invocation, re-read between invocations."""
-    prs = [_pr(1, created="2026-10-01T00:00:00Z"), _pr(2, created="2026-10-02T00:00:00Z")]
+    prs = [
+        _pr(1, created="2026-10-01T00:00:00Z", approved=True),
+        _pr(2, created="2026-10-02T00:00:00Z", approved=True),
+    ]
     stub = _queue_stub(
         gh_stub(
             gh_rule(r"^pr list", stdout=prs),
@@ -975,3 +1267,171 @@ def test_the_policy_file_is_validated_not_assumed(tmp_path: Path) -> None:
     bad.write_text(json.dumps({"schema": 2}), encoding="utf-8")
     with pytest.raises(mq.QueueError, match="unsupported schema"):
         mq.load_policy(bad)
+
+
+# ── AGENTS.md vs this roster (DIG-690) ────────────────────────────────────────
+#
+# AGENTS.md is the file every adapter loads as canonical rules, and its
+# Merge-when-ready section said "when a task PR is merge-ready, merge it" while
+# this queue refuses every role that is not cto or em. That is a contradiction an
+# agent resolves by picking the sentence it read most recently, and both wrong
+# answers fail silently: one merges behind a control, the other stalls on a green
+# PR. The prose now names the roster. These tests pin it to *this* policy file, so
+# a later roster edit that forgets to update AGENTS.md fails CI instead of shipping
+# the same contradiction under a new name.
+
+AGENTS_MD = REPO_ROOT / "AGENTS.md"
+MERGE_QUEUE_DOC = REPO_ROOT / "docs" / "MERGE_QUEUE.md"
+AGENTS_YML = REPO_ROOT / "agents.yml"
+
+
+def _agents_merge_when_ready() -> str:
+    """The Merge-when-ready section of AGENTS.md, up to the next H2."""
+    text = AGENTS_MD.read_text(encoding="utf-8")
+    start = text.index("## Merge-when-ready")
+    rest = text[start + 1 :]
+    end = rest.find("\n## ")
+    return rest if end == -1 else rest[:end]
+
+
+def test_agents_md_names_every_role_that_can_merge() -> None:
+    section = _agents_merge_when_ready()
+    for authority in mq.load_policy().merge_authorities:
+        assert f"`{authority.role}`" in section, (
+            f"AGENTS.md § Merge-when-ready does not name merge authority "
+            f"{authority.role!r}; an agent reading only AGENTS.md would not know "
+            f"the roster"
+        )
+
+
+def test_agents_md_sends_develop_merges_through_the_queue() -> None:
+    section = _agents_merge_when_ready()
+    assert "scripts/merge_queue.py" in section
+    assert "scripts/merge_queue_policy.json" in section
+    # The carve-out has to be scoped to develop and say the stacked path is
+    # unaffected, or it reads as "agents no longer merge anything".
+    assert "develop" in section and "module/" in section
+
+
+def test_the_roster_is_stated_once_and_the_two_docs_link_each_other() -> None:
+    agents = _agents_merge_when_ready()
+    queue = MERGE_QUEUE_DOC.read_text(encoding="utf-8")
+    anchor = "develop-merges-go-through-the-merge-queue"
+    assert f"../AGENTS.md#{anchor}" in queue
+    assert "MERGE_QUEUE.md" in agents
+
+
+def test_the_generated_rule_adapters_carry_the_roster() -> None:
+    """agents.yml feeds .cursor/rules and .github/copilot-instructions.md.
+
+    Those two are what Cursor and Copilot actually read, so a rule that lives only
+    in AGENTS.md does not reach half the fleet.
+    """
+    import yaml  # local: agents_init.py requires it too, so CI has it
+
+    rules = yaml.safe_load(AGENTS_YML.read_text(encoding="utf-8"))["rules"]
+    merge_rules = [r for r in rules if "Merge-when-ready" in r]
+    assert len(merge_rules) == 1, "expected exactly one merge rule in agents.yml"
+    rule = merge_rules[0]
+    assert "scripts/merge_queue.py" in rule
+    for authority in mq.load_policy().merge_authorities:
+        assert f"`{authority.role}`" in rule
+
+
+# --- review claims: a claimed review must have its artifact (DIG-3154) --------
+# PR #5526 merged with the `reviewed:agent` label, zero reviews and no findings
+# comment; the promotion gate (`scripts/check_review_coverage.py`) refused it and
+# the promotion turned red. The queue refuses that shape here, where the fix is
+# a comment instead of another promotion. Deliberately narrower than the full
+# promotion gate: a PR with no claim at all still merges.
+
+_MARKER = "<!-- in-session-review -->"
+
+
+def _labeled_pr(number: int, comments: list[dict[str, Any]] | None) -> dict[str, Any]:
+    pr = _pr(number)
+    pr["labels"] = [{"name": "reviewed:agent"}]
+    if comments is not None:
+        pr["comments"] = comments
+    return pr
+
+
+def _finding_comment() -> dict[str, Any]:
+    return {
+        "author": {"login": "chrizefan"},
+        "body": f"findings for this PR\n\n{_MARKER}\nsha 71bae0e9",
+        "createdAt": "2026-10-12T23:08:43Z",
+        "url": "https://github.com/digithings-ai/digithings/pull/5526#issuecomment-1",
+    }
+
+
+def test_a_claimed_review_with_its_findings_comment_merges() -> None:
+    """Label plus marker comment is the satisfied hatch — the queue must not add friction."""
+    verdict = mq.evaluate(
+        _labeled_pr(5526, [_finding_comment()]),
+        mq.load_policy(),
+        acting_role="cto",
+        base="develop",
+        attest_role="qa",
+    )
+    assert verdict.eligible
+    assert not any("reviewed:agent" in reason for reason in verdict.reasons)
+
+
+def test_a_claimed_review_without_its_findings_comment_is_refused() -> None:
+    """The #5526 shape: label, zero reviews, prose but no marker. Must not merge."""
+    pr = _labeled_pr(
+        5526,
+        [
+            {
+                "author": {"login": "chrizefan"},
+                "body": "looks good",
+                "createdAt": "2026-10-12T22:00:00Z",
+            }
+        ],
+    )
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop", attest_role="qa")
+    assert not verdict.eligible
+    assert any(
+        "reviewed:agent" in reason and "in-session-review" in reason for reason in verdict.reasons
+    )
+
+
+def test_a_claimed_review_whose_comments_cannot_be_read_is_refused() -> None:
+    """Fail closed: without a repo to read comments from, the claim is unverifiable."""
+    pr = _labeled_pr(5526, None)
+    assert "comments" not in pr
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop", attest_role="qa")
+    assert not verdict.eligible
+    assert any("cannot be verified" in reason for reason in verdict.reasons)
+
+
+def test_a_claimed_review_fetches_comments_lazily(gh_stub: Any) -> None:
+    """`gh pr list` carries labels but no comments; the queue fetches them only for a claim."""
+    gh_stub(gh_rule(r"^pr view", stdout={"comments": [_finding_comment()]}))
+    pr = _labeled_pr(5526, None)
+    verdict = mq.evaluate(
+        pr,
+        mq.load_policy(),
+        acting_role="cto",
+        base="develop",
+        attest_role="qa",
+        repo="digithings-ai/digithings",
+    )
+    assert verdict.eligible
+
+
+def test_an_unreadable_comments_fetch_is_refused(gh_stub: Any) -> None:
+    """A failing comments read is a refused merge, not a skipped gate."""
+    gh_stub(gh_rule(r"^pr view", stdout="", stderr="boom", exit_code=1))
+    pr = _labeled_pr(5526, None)
+    verdict = mq.evaluate(
+        pr,
+        mq.load_policy(),
+        acting_role="cto",
+        base="develop",
+        attest_role="qa",
+        repo="digithings-ai/digithings",
+    )
+    assert not verdict.eligible
+    assert any("could not be read" in reason for reason in verdict.reasons)

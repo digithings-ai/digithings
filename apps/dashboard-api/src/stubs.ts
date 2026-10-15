@@ -180,7 +180,7 @@ export function stubLiveDeps(): LiveDeps {
         livePriceDate: null,
       },
     ],
-    navHistory: STUB_NAV_ROWS.map((r) => ({ date: r.date, nav: r.nav })),
+    navHistory: STUB_NAV_ROWS,
     benchmarkHistory: STUB_SPY6,
     benchmarkTicker: 'SPY',
   };

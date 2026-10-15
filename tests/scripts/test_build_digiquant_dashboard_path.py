@@ -40,10 +40,12 @@ def test_pages_build_check_asserts_dist_dashboard() -> None:
 
 
 
-def test_pages_redirects_olympus_to_dashboard_permanently() -> None:
+def test_pages_redirects_olympus_straight_to_app_one_hop() -> None:
+    """/olympus/* used to bounce through /dashboard/:splat (2-3 hops); now one hop to /app/."""
     text = REDIRECTS.read_text(encoding="utf-8")
     assert "/olympus/*" in text
-    assert "/dashboard/:splat" in text
+    assert "/olympus/* /app/ 308" in text
+    assert "/dashboard/:splat" not in text
     assert "308" in text
 
 

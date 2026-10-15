@@ -87,6 +87,16 @@ def test_help_lists_commands() -> None:
     assert "settings" in result.stdout
 
 
+def test_version_prints_package_version() -> None:
+    from digivoice import __version__
+
+    for flag in ("--version", "-V"):
+        result = run([flag], RUNTIME)
+        assert result.code == 0
+        assert result.stdout == f"digivoice {__version__}\n"
+        assert result.stderr == ""
+
+
 def test_rejects_bad_args() -> None:
     assert run(["dict", "--hold", "--toggle"], RUNTIME).code == 2
     assert "speak needs text" in run(["speak"], RUNTIME).stderr

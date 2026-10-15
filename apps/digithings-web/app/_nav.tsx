@@ -5,23 +5,22 @@
  *  Cross-domain: the header links out to digiquant.io (the quant product);
  *  digiquant.io intentionally does not link back in its header.
  */
-import { TerminalMark, type NavItem, type NavLink } from "@digithings/ui";
+import { type NavItem, type NavLink } from "@digithings/ui";
+import { DIGITHINGS } from "@digithings/hero-banner/definitions";
+import { ScrollBanner } from "@/components/landing/ScrollBanner";
 
 export const DT_CONTACT_EMAIL = "contact@digithings.ai";
 
-// The terminal lockup: `d` + block cursor, then the wordmark. One inline SVG in
-// currentColor, so it follows ink through [data-theme] — this replaces the two
-// theme-swapped QR <img>s (a single recolorable mark was unreliable there because
-// Lightning CSS drops mask-image; currentColor has no such problem).
-//
-// `variant="compact"` deliberately: the full `digi` lockup is five character
-// cells wide and closes up below ~64px, well above nav height. NavShell already
-// wraps this in <a aria-label="digithings home">, so the mark stays decorative.
+// The DIGITHINGS hero banner, armed at mount and kept live. It is on screen at
+// scroll 0, and it replays LOADING with the landing hero on every visit instead
+// of skipping to the settled mark after the first play in the tab.
 export const Brand = () => (
-  <>
-    <TerminalMark size={26} variant="compact" className="hidden max-[880px]:block" />
-    <span className="brand-word max-[880px]:hidden">digithings</span>
-  </>
+  <ScrollBanner
+    def={DIGITHINGS}
+    inView={false}
+    replayLoading
+    className="w-[8.5rem] max-[880px]:w-[7rem]"
+  />
 );
 
 /** v7 nav shape (used by <DtNav />): wayfinding links on the left of the tail,
@@ -39,6 +38,7 @@ export const DT_NAV_PRIMARY: NavItem[] = [
   { label: "Docs", href: "/docs" },
   { label: "API", href: "/docs/api" },
   { label: "Wiki", href: "/openwiki" },
+  { label: "Book", href: "/book" },
   { label: "Services", href: "/services" },
   {
     label: "Company",
@@ -78,6 +78,7 @@ export const DT_SITEMAP: { label: string; links: NavLink[] }[] = [
       { label: "Docs", href: "/docs" },
       { label: "API", href: "/docs/api" },
       { label: "Wiki", href: "/openwiki" },
+      { label: "Book", href: "/book" },
       { label: "Services", href: "/services" },
     ],
   },

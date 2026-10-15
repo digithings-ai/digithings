@@ -61,6 +61,10 @@ def _mock_client(monkeypatch: pytest.MonkeyPatch, handler: Any) -> dict[str, Any
         rate_limiter=RateLimiter(0),
         retry_policy=RetryPolicy(attempts=1),
         sleep=lambda _s: None,
+        # Explicit opt-in: GLOOMBERB_ENABLED defaults OFF (DIG-1233), so a
+        # client built without this returns the typed disabled envelope and
+        # never reaches the MockTransport handler.
+        enabled=True,
     )
     monkeypatch.setattr(bars_mod, "_build_gloomberb_client", lambda: client)
     return seen

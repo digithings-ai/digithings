@@ -11,19 +11,28 @@ import {
 } from "@assistant-ui/react";
 
 import { digichatSurfaces } from "./chat-surfaces";
+import { DigichatWordmark } from "./DigichatWordmark";
 import { DotMatrix } from "./DotMatrix";
 
 export type DigichatThreadListProps = {
   className?: string;
+  /**
+   * Landmark the list renders as. The standalone sidebar is page-level
+   * complementary content (`aside`); embedded in a page section (e.g. the
+   * digiquant landing chat band) it is a thread navigator inside `<main>`,
+   * where a complementary landmark is a violation — pass `"nav"`.
+   */
+  landmark?: "aside" | "nav";
 };
 
-export function DigichatThreadList({ className }: DigichatThreadListProps) {
+export function DigichatThreadList({ className, landmark = "aside" }: DigichatThreadListProps) {
   const cls = [digichatSurfaces.list, className ?? ""].filter(Boolean).join(" ");
+  const Tag = landmark;
   return (
-    <aside className={cls} data-memory-thread-list aria-label="Conversations">
-      <div className="flex items-center justify-between gap-2 border-b border-term-hair px-[0.7rem] py-[0.55rem]">
-        <span className="font-mono text-[0.62rem] tracking-[0.06em] text-term-mute">
-          {"digichat"}
+    <Tag className={cls} data-memory-thread-list aria-label="Conversations">
+      <div className="flex h-8 shrink-0 items-center justify-between gap-2 border-b border-term-hair px-[0.7rem]">
+        <span className="min-w-0 flex-1">
+          <DigichatWordmark />
         </span>
         <ThreadListPrimitive.New className={digichatSurfaces.action} aria-label="New chat">
           <DotMatrix state="newChat" label="New chat" className="size-3.5" />
@@ -40,6 +49,6 @@ export function DigichatThreadList({ className }: DigichatThreadListProps) {
           )}
         </ThreadListPrimitive.Items>
       </ThreadListPrimitive.Root>
-    </aside>
+    </Tag>
   );
 }

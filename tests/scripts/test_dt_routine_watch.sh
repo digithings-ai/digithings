@@ -3,22 +3,32 @@
 # and a manual probe must never be mistaken for a firing (DIG-1220).
 # No network: --fixtures feeds the script JSON files standing in for the routines API, and --dry
 # prints the page it would file instead of filing it.
-# CI: pytest wrapper tests/scripts/test_dt_routine_watch.py under the ruff-and-scripts lane.
+# pytest wrapper: tests/scripts/test_dt_routine_watch.py, which runs this suite under the
+# ruff-and-scripts lane. On a CI runner the wrapper skips, because a runner has no kit; on any other
+# host it runs these checks for real. See docs/ops/paperclip-routine-watch.md.
 #
-# This suite is deliberately the same body in two homes. The script under test is the one launchd
-# runs, from ~/paperclip-workspace/kit/bin/dt-routine-watch (Paperclip is loopback-only, so the
-# observer must be host-resident); the repo copy at scripts/dt-routine-watch is the review surface.
-# One suite body, not two: a forked suite would be a second thing to forget to update, which is the
-# failure mode DIG-1220 is about. Only this header differs between the two files. Resolve the script
-# from either home, and fail loudly if neither has it.
+# The script under test has one home: ~/paperclip-workspace/kit/bin/dt-routine-watch. Paperclip is
+# loopback-only, so the observer must be host-resident, and the kit is already where every other
+# operational script lives (dt-books, dt-cron, dt-merge-queue, dt-gate, dt-snapshot, dt-keys,
+# dt-backup). This repo once carried a second copy of the observer; it had already drifted away from
+# the running one, which is the exact failure mode DIG-1220 exists to catch, so it was removed
+# (DIG-2618). Do not add it back.
+#
+# The suite still has two homes -- the kit (tests/dt-routine-watch-test.sh) and this repo
+# (tests/scripts/test_dt_routine_watch.sh) -- and still one body, because a forked suite would be a
+# second thing to forget to update. Only this header differs. Both candidates below resolve to that
+# one canonical script: the relative one when the suite runs from the kit, the $HOME one when it
+# runs from here. Neither of them is a copy in this repo. If the script is missing this suite must
+# fail, so a missing subject can never read as a passing run; the pytest wrapper above is the one
+# place that narrows that, and only for a CI runner.
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 WATCH=""
-for candidate in "$HERE/../../scripts/dt-routine-watch" "$HERE/../bin/dt-routine-watch"; do
+for candidate in "$HERE/../bin/dt-routine-watch" "${HOME:-/nonexistent}/paperclip-workspace/kit/bin/dt-routine-watch"; do
   if [ -x "$candidate" ]; then WATCH="$candidate"; break; fi
 done
 if [ -z "$WATCH" ]; then
-  printf 'FAIL cannot find dt-routine-watch (looked in scripts/ and the kit bin/)\n'
+  printf 'FAIL cannot find dt-routine-watch (looked in the kit home and $HOME/paperclip-workspace/kit)\n'
   printf '\n1 check(s) failed\n'
   exit 1
 fi

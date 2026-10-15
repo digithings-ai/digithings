@@ -11,9 +11,10 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@digiquant/contract": "*",
     "@digithings/design": "*",
     "@digithings/ui": "*",
-    "@luxalgo/vela": "0.8.0",
+    "@luxalgo/vela": "0.8.2",
     "@supabase/supabase-js": "^2.101.1",
     "diff": "^8.0.4",
     "lightweight-charts": "^5.2.0",

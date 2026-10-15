@@ -3,6 +3,9 @@
 Wrappers are exercised through FastMCP's tool manager with a
 MockTransport-backed GloomberbClient patched over the env-seam builder. No
 network, no session cookie required (gated tools are exercised both ways).
+Since #2752 the secret gate is forced open by an autouse fixture here, because
+this module tests what each tool does once it is advertised; whether it is
+advertised at all is pinned in tests/dq/data/test_gloomberb_session_gate.py.
 """
 
 from __future__ import annotations
@@ -19,15 +22,19 @@ pytest.importorskip("mcp.server.fastmcp")
 
 pytestmark = pytest.mark.unit
 
-from digiquant.data.gloomberb import (  # noqa: E402
+from digiquant.data.gloomberb import (  # noqa: E402  # noqa: E402
     GLOOMBERB_ATTRIBUTION,
     GLOOMBERB_DELAY_NOTICE,
     PREVIEW_ACCESS_WARNING,
     EarningsEvent,
     GloomberbClient,
+    agent_tools,
+    session_gate,
 )
+from digiquant.data.gloomberb.session_gate import SessionGateStatus  # noqa: E402
 from digiquant.mcp_server import create_mcp_server  # noqa: E402
 from digiquant.orchestrator_tools import build_orchestrator_tool_manifest  # noqa: E402
+from digiquant.tool_names import canonical_tool_name  # noqa: E402
 from digiquant.tool_refusals import REFUSED_TOOLS  # noqa: E402
 
 from digifetch import HttpFetcher, RateLimiter, RetryPolicy  # noqa: E402
@@ -189,12 +196,37 @@ AAPL_QUOTE = {
 
 @pytest.fixture(autouse=True)
 def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No inherited Gloomberb env, and an authenticated secret gate (#2752).
+
+    Since #2752 a session/preview/pro tool is advertised only when the
+    configured cookie is *validated* against api.gloom.sh, not merely present.
+    This module exercises tool behaviour (envelopes, entitlement notes, wire
+    access), so it asks for a server that is authenticated and then drives every
+    tool with a mocked transport -- no request leaves the process either way.
+
+    The advertisement contract itself is pinned in
+    `tests/dq/data/test_gloomberb_session_gate.py`; the absent/invalid cases are
+    not asserted here because this module deliberately opens the gate.
+    """
     monkeypatch.delenv("GLOOMBERB_ENABLED", raising=False)
     monkeypatch.delenv("GLOOMBERB_SESSION_COOKIE", raising=False)
+    session_gate.reset_session_gate_cache()
+    monkeypatch.setattr(
+        session_gate,
+        "session_gate_status",
+        lambda *a, **k: SessionGateStatus(True, "ok", "authenticated for this test"),
+    )
+    monkeypatch.setattr(
+        agent_tools, "session_gate_status", session_gate.session_gate_status, raising=False
+    )
+    yield
+    session_gate.reset_session_gate_cache()
 
 
 def _mcp(name: str):
-    return create_mcp_server()._tool_manager.get_tool(name).fn
+    tool = create_mcp_server()._tool_manager.get_tool(canonical_tool_name(name))
+    assert tool is not None, name
+    return tool.fn
 
 
 def _names(scope: str = "full") -> set[str]:
@@ -227,6 +259,7 @@ def _patch_client(monkeypatch: pytest.MonkeyPatch, handler: Any, **kwargs: Any) 
     )
     kwargs.setdefault("rate_limiter", RateLimiter(0))
     kwargs.setdefault("retry_policy", RetryPolicy(attempts=1))
+    kwargs.setdefault("enabled", True)
     client = GloomberbClient(fetcher=fetcher, **kwargs)
     monkeypatch.setattr(mcp_server, "_build_gloomberb_client", lambda: client)
     return client
@@ -1112,8 +1145,10 @@ def test_all_88_live_tools_registered_in_full_and_read_scope() -> None:
     assert REFUSED_DIGIFETCH == {"digifetch_congress_trades"}
     assert len(DIGIFETCH_TOOLS) == 88
     assert LIVE_DIGIFETCH_TOOLS == DIGIFETCH_TOOLS
-    assert LIVE_DIGIFETCH_TOOLS <= _names()
-    assert LIVE_DIGIFETCH_TOOLS <= _names(scope="read")
+    public = {canonical_tool_name(name) for name in LIVE_DIGIFETCH_TOOLS}
+    assert public <= _names()
+    assert public <= _names(scope="read")
+    assert not any(name.startswith("digifetch_") for name in _names())
 
 
 def test_refused_tools_are_registered_on_no_scope_and_never_advertised() -> None:
@@ -1405,17 +1440,22 @@ def test_news_with_ticker_carries_deep_link(monkeypatch: pytest.MonkeyPatch) -> 
     assert payload["attribution"] == GLOOMBERB_ATTRIBUTION
 
 
-def test_env_seam_builder_caches_per_env_pair_and_defaults_on(
+def test_env_seam_builder_caches_per_env_pair_and_defaults_off(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     first = mcp_server._build_gloomberb_client()
-    assert first.enabled is True
+    assert first.enabled is False
     assert mcp_server._build_gloomberb_client() is first
 
     monkeypatch.setenv("GLOOMBERB_SESSION_COOKIE", "token-value")
     second = mcp_server._build_gloomberb_client()
     assert second is not first
-    assert second.enabled is True
+    assert second.enabled is False
+
+    monkeypatch.setenv("GLOOMBERB_ENABLED", "1")
+    third = mcp_server._build_gloomberb_client()
+    assert third is not second
+    assert third.enabled is True
 
 
 TOOL_CALLS: dict[str, tuple[Any, ...]] = {
@@ -2501,7 +2541,8 @@ def test_entitlement_note_is_surfaced_in_mcp_and_manifest() -> None:
         expected = TOOL_ENTITLEMENTS[name]
         note = entitlement_note(name)
         assert note is not None
-        tool = server._tool_manager.get_tool(name)
+        tool = server._tool_manager.get_tool(canonical_tool_name(name))
+        assert tool is not None, name
         assert getattr(tool.fn, "entitlement", None) == expected, name
         assert note in tool.description, name
         assert rows[name].get("entitlement") == expected, name

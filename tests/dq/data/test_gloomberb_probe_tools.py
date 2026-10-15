@@ -48,6 +48,7 @@ def make_client(handler: Any, **kwargs: Any) -> GloomberbClient:
     kwargs.setdefault("rate_limiter", RateLimiter(0))
     kwargs.setdefault("retry_policy", RetryPolicy(attempts=1))
     kwargs.setdefault("session_cookie", "gloomberb.session_token=test")
+    kwargs.setdefault("enabled", True)
     return GloomberbClient(fetcher=fetcher, **kwargs)
 
 

@@ -2,6 +2,7 @@ import "./finance.css";
 import { DrawdownPlotReference } from "@/components/drawdown-plot-reference";
 import { EquityCurveReference } from "@/components/equity-curve-reference";
 import { MonthlyReturnsReference } from "@/components/monthly-returns-reference";
+import { MarketBarReference } from "@/components/market-bar-reference";
 import { OrderbookReference } from "@/components/orderbook-reference";
 import { PageToc } from "@/components/page-toc";
 import { PerfMetricsReference } from "@/components/perf-metrics-reference";
@@ -18,6 +19,7 @@ import { TearsheetTradeLogReference } from "@/components/tearsheet-trade-log-ref
 
 const TOC_ITEMS = [
   { id: "ticker-tape", label: "Ticker" },
+  { id: "market-bar", label: "Market bar" },
   { id: "price-chart", label: "Price chart" },
   { id: "equity-curve", label: "Equity curve" },
   { id: "drawdown", label: "Drawdown" },
@@ -71,6 +73,8 @@ export default function FinancePage() {
       </header>
 
       <StockTickerReference />
+
+      <MarketBarReference />
 
       <section className="section-block" id="price-chart">
         <p className="kicker">{"// price chart"}</p>

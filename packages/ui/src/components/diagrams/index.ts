@@ -19,4 +19,12 @@ export {
   type TourVariant,
 } from "./ArchitectureTour";
 export { camTransform, fitCamera, type CamFrame } from "./tour-camera";
+export {
+  TerminalSchematic,
+  type SchematicLegend,
+  type SchematicNode,
+  type SchematicRow,
+  type SchematicTone,
+  type TerminalSchematicProps,
+} from "./TerminalSchematic";
 export { THEME_TOKENS, tokenThemeVariables } from "./mermaid-theme";

@@ -309,3 +309,55 @@ def test_static_interrupt_after_pauses_but_resume_value_is_silently_dropped() ->
         "does today -- if this assertion fails, someone added a real interrupt() call "
         "and this test must be updated to assert the NEW, fixed behavior instead"
     )
+
+
+@pytest.mark.unit
+def test_mcp_human_decision_is_not_consumed_through_the_interrupt_resume_path() -> None:
+    """DIG-284 leaf 284.6 / D2: the MCP human decision must not travel on the
+    static `interrupt_after` resume path.
+
+    `server.py`'s `/threads/{id}/resume` route hands its body to
+    `graph.invoke(Command(resume=...), ...)` against a graph compiled with
+    `interrupt_after=[...]`. The tripwire above
+    (`test_static_interrupt_after_pauses_but_resume_value_is_silently_dropped`)
+    proves that resume VALUE is silently dropped on that path, so a decision
+    cannot be delivered there. The decision is consumed instead by
+    `orchestration.registry.decide_mcp_call`, which reads the recorded payload
+    out of process memory.
+
+    Half A pins the code: the resume route never calls the decision consumer.
+    Half B pins the doc: `digigraph/ARCHITECTURE.md` must SAY so, and must cite
+    the tripwire that pins it -- otherwise a reader can reasonably believe the
+    resume route carries the decision.
+    """
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parents[2]
+    server_src = (repo_root / "digigraph" / "src" / "digigraph" / "server.py").read_text()
+    doc = (repo_root / "digigraph" / "ARCHITECTURE.md").read_text()
+
+    # Half A -- the resume route is not a decision consumer.
+    resume_route = server_src.split('@app.post("/threads/{thread_id}/resume")', 1)
+    assert len(resume_route) == 2, "the /threads/{id}/resume route moved; re-read it"
+    assert "decide_mcp_call" not in resume_route[1], (
+        "the /threads/{id}/resume route now calls the MCP decision consumer -- "
+        "Command(resume=...) drops its value on the interrupt_after path, so a "
+        "decision delivered there is lost; deliver it through decide_mcp_call"
+    )
+
+    # Half B -- the doc states the decision path and cites its tripwire.
+    tripwire = "test_static_interrupt_after_pauses_but_resume_value_is_silently_dropped"
+    doc_lines = [ln for ln in doc.splitlines() if "Command(resume=" in ln]
+    assert doc_lines, (
+        "digigraph/ARCHITECTURE.md never mentions Command(resume=...). Add the MCP "
+        "decision-path note so a reader cannot assume the resume route carries a "
+        "human decision."
+    )
+    paragraph = "\n".join(ln for ln in doc.splitlines() if "Command(resume=" in ln or "MCP" in ln)
+    assert "Command(resume=" in paragraph and "MCP" in paragraph, (
+        "the Command(resume=...) note is not tied to the MCP decision path"
+    )
+    assert tripwire in doc, (
+        f"digigraph/ARCHITECTURE.md must cite `{tripwire}`, the test that pins why "
+        "the resume value is dropped"
+    )

@@ -114,7 +114,7 @@ _CRYPTO_TICKERS: Final[tuple[str, ...]] = (
     "ATOM-USD",
     "XMR-USD",
     "SUI20947-USD",
-    # ETFs (futures-based + spot)
+    # Exchange-traded funds, futures-based and spot
     "BITO",
     "IBIT",
     "FBTC",

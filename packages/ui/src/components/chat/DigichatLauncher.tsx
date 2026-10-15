@@ -28,6 +28,7 @@ import {
 import { createPortal } from "react-dom";
 
 import { TerminalMark } from "../symbols/terminal-marks";
+import { DigichatWordmark } from "./DigichatWordmark";
 import { DotMatrix } from "./DotMatrix";
 
 const WORDMARK = "digichat";
@@ -297,7 +298,7 @@ export function DigichatLauncher({
           aria-label={ariaLabel}
         >
           <header className="digichat-launcher__header">
-            <span>{title}</span>
+            <span>{title === "digichat" ? <DigichatWordmark /> : title}</span>
             <div className="digichat-launcher__header-actions">
               {onNewChat ? (
                 <button

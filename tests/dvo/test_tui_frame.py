@@ -196,10 +196,12 @@ def test_home_header_is_the_pixel_lockup_only() -> None:
     assert "38;2;" not in frame
 
 
-def test_hero_wordmark_builds_in_over_the_first_second() -> None:
-    bare = _frame(t_ms=0)
+def test_hero_wordmark_paints_settled_on_the_first_frame() -> None:
+    """No landing build: the lockup is fully painted at t=0, same as later."""
+    first = _frame(t_ms=0)
     done = _frame(t_ms=1600)
-    assert done.count("█") > bare.count("█")
+    assert first.count("█") > 0
+    assert first.count("█") == done.count("█")
 
 
 def test_wordmark_builds_in() -> None:

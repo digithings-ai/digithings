@@ -18,7 +18,28 @@ export function isDevAuthEnabled(
 }
 
 /**
- * Throw when `NODE_ENV=production` and `DIGICHAT_DEV_AUTH=1`.
+ * NODE_ENV spellings that mean a production build. Next.js itself
+ * always sets the exact string `production`, but operators,
+ * orchestrators and container templates routinely pass `prod` or a
+ * case variant — the dev password provider is just as dangerous
+ * under any of those, so the guard must not read a different
+ * spelling as "not production".
+ */
+const PRODUCTION_NODE_ENV_SPELLINGS = ["production", "prod"];
+
+/**
+ * True when NODE_ENV names a production build: `production`,
+ * `prod`, or a case/whitespace variant of either (for example
+ * `PRODUCTION`, `Production`, `" prod "`). Anything else —
+ * `development`, `test`, `dev`, unset — is not production.
+ */
+export function isProductionLike(nodeEnv: string | undefined): boolean {
+  if (nodeEnv === undefined) return false;
+  return PRODUCTION_NODE_ENV_SPELLINGS.includes(nodeEnv.trim().toLowerCase());
+}
+
+/**
+ * Throw when NODE_ENV is production-like and `DIGICHAT_DEV_AUTH=1`.
  *
  * The dev password provider compares against `DIGICHAT_DEV_PASSWORD` and falls
  * back to the literal string `dev` when that variable is empty or unset, then
@@ -35,10 +56,11 @@ export function isDevAuthEnabled(
 export function assertDevAuthDisabledInProduction(
   env: NodeJS.ProcessEnv | Record<string, string | undefined> = process.env,
 ): void {
-  if (env.NODE_ENV !== "production") return;
+  if (!isProductionLike(env.NODE_ENV)) return;
   if (!isDevAuthEnabled(env)) return;
   throw new Error(
-    "digichat refused to start: NODE_ENV is production and DIGICHAT_DEV_AUTH is 1. " +
+    "digichat refused to start: NODE_ENV is production-like (" +
+      `${JSON.stringify(env.NODE_ENV)}) and DIGICHAT_DEV_AUTH is 1. ` +
       "The dev password provider is for local development only: it accepts " +
       "DIGICHAT_DEV_PASSWORD, falls back to the literal password \"dev\" when that " +
       "variable is unset, and issues a real session for it. " +

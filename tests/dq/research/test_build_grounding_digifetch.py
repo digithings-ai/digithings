@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import date
 from typing import Any
 
@@ -11,10 +12,13 @@ import pytest
 from digiquant.data.gloomberb import (
     EQUITY_TOOLS,
     GLOOMBERB_ATTRIBUTION,
+    GLOOMBERB_ENABLED_ENV,
     GLOOMBERB_SESSION_COOKIE_ENV,
     GloomberbClient,
     agent_tools,
+    session_gate,
 )
+from digiquant.data.gloomberb.session_gate import SessionGateStatus
 from digiquant.research.phases import _node_factory
 
 from digifetch import HttpFetcher, RateLimiter, RetryPolicy
@@ -57,10 +61,33 @@ def _sweep_handler(request: httpx.Request) -> httpx.Response:
 
 
 @pytest.fixture(autouse=True)
-def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
+def _clean_env(monkeypatch: pytest.MonkeyPatch):
+    """Opt the Gloomberb family back in and keep the tool-list filter offline.
+
+    GLOOMBERB_ENABLED defaults OFF (DIG-1233), so without the explicit opt-in
+    no digifetch schema is ever advertised and every grounding assertion below
+    fails on the bare tip. The session-gate verdict is stubbed to follow the
+    cookie's presence — the same seam tests/dq/data/test_gloomberb_agent_tools.py
+    uses — because answering it for real costs one live request to api.gloom.sh
+    (DIG-2752); the real presence-is-not-enough contract is pinned in
+    tests/dq/data/test_gloomberb_session_gate.py.
+    """
     monkeypatch.setenv("DIGIQUANT_RESEARCH_DATA_TOOLS", "1")
+    monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, "1")
     monkeypatch.delenv(GLOOMBERB_SESSION_COOKIE_ENV, raising=False)
     monkeypatch.setattr(_node_factory, "_research_data_client", lambda: object())
+    session_gate.reset_session_gate_cache()
+    monkeypatch.setattr(
+        agent_tools,
+        "session_gate_status",
+        lambda *a, **k: SessionGateStatus(
+            bool((os.environ.get(GLOOMBERB_SESSION_COOKIE_ENV) or "").strip()),
+            "presence_stub",
+            "presence stands in for validation in the grounding tests",
+        ),
+    )
+    yield
+    session_gate.reset_session_gate_cache()
 
 
 @pytest.mark.unit

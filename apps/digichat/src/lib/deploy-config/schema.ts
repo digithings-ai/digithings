@@ -18,9 +18,9 @@ import {
   THINKING_MODES,
   VIEW_MODES,
 } from "@/lib/view-modes";
+import { HEX_COLOR } from "@/lib/hex-color";
 
 const SLUG = /^[a-z0-9][a-z0-9-]*$/;
-const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 const LANGUAGE_CODES = new Set(LANGUAGES.map((l) => l.code));
 
 export const ChromeModeSchema = z.enum(["app", "embed", "modal", "sidebar"]);

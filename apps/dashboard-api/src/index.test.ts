@@ -3,12 +3,8 @@
  * (book_as_of gate folded in per CONTRACT.md section 0).
  */
 import { describe, expect, it } from "vitest";
-import app, {
-  buildProvenance,
-  errorResponse,
-  parseCommonParams,
-  type Env,
-} from "./index";
+import app, { type Env } from "./index";
+import { buildProvenance, errorResponse, parseCommonParams } from "./responses";
 import { STUB_NULL_AS_OF } from "./stubs";
 
 const NO_ENV: Env = {};

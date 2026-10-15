@@ -1,13 +1,20 @@
 # Dependency freshness radar — design note
 
-- **Issue:** DIG-1515
+- **Issue:** DIG-1515, cadence changed by DIG-2277
 - **Status:** Shipped. Merged to `develop` as PR #5242 and dispatched by hand
-  once on 2026-10-07 — the first and only `workflow_dispatch` it will ever
-  need until the Worker's `23 6 1 * *` row takes over on 2026-11-01.
-- **Date:** 2026-10-06, revised 2026-10-07
+  once on 2026-10-07 — the only `workflow_dispatch` it has needed, because the
+  Worker's clock row took over from the start.
+- **Date:** 2026-10-06, revised 2026-10-07, cadence amendment 2026-10-08
 - **Author:** Architect
 - **Supersedes:** the first draft of this note, which shipped a workflow that
   could not work. See "Correction" below — it had six defects, not three.
+- **Amendment (DIG-2277, 2026-10-08):** the clock moved from `23 6 1 * *`
+  (monthly) to `23 6 * * MON` (weekly). The radar edits one standing issue in
+  place, so weekly adds no issues; and `security-pip-audit` / `security-npm-audit`
+  already read the same `uv.lock` every Monday, so monthly reported new versions
+  at a lower rate than it reported known vulnerabilities in them. Everything
+  below that describes the *monthly* clock is a record of what DIG-1515 shipped,
+  not of the current schedule.
 
 ## Problem
 

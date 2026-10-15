@@ -13,6 +13,25 @@
 #                                Actions: write grant it is provisioned for; a
 #                                fine-grained PAT may not authenticate /user, so
 #                                probing that would false-alarm).
+#   * GH_DISPATCH_TOKEN        — the same token's *Issues: write* grant, proven
+#     (issues:write)          separately by DIG-362. The Actions probe cannot see
+#                                it: a token stripped or downgraded to
+#                                Actions-only still reports green, and DIG-71's
+#                                digest alarm then fails *without throwing*, so a
+#                                quiet alarm is indistinguishable from a healthy
+#                                day. Once a week the script POSTs a marker
+#                                comment to a dedicated pinned issue and DELETEs
+#                                it. A read probe cannot substitute: GitHub
+#                                offers only no-access / read / read+write for
+#                                Issues, so a downgraded token satisfies
+#                                `issues: read`. Paired with GET /issues/{n} so
+#                                "grant removed" and "grant downgraded" are
+#                                distinguishable in the output.
+#                                Cost: one comment posted and deleted per week,
+#                                no spend, no artifact on success. Set
+#                                TOKEN_CANARY_PROBE_ISSUE (repo variable) to a
+#                                dedicated pinned issue number to arm it; until
+#                                then the probe reports skipped-by-design.
 #   * CLAUDE_CODE_OAUTH_TOKEN / CURSOR_API_KEY — no quota-free introspection
 #     endpoint exists; proving either valid needs an agent run, which #3522
 #     forbids. These are presence-checked only and reported as
@@ -58,6 +77,12 @@ jobs:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
           REPO: ${{ github.repository }}
+          # DIG-362: the pinned issue the Issues-grant write probe targets.
+          # Unset => the probe reports skipped-by-design and never files a
+          # tracker (an unarmed probe is a known gap, not a regression).
+          TOKEN_CANARY_PROBE_ISSUE: ${{ vars.TOKEN_CANARY_PROBE_ISSUE }}
+          # ISO weekday (UTC) the write probe runs on. Default 7 = Sunday.
+          TOKEN_CANARY_PROBE_WEEKDAY: ${{ vars.TOKEN_CANARY_PROBE_WEEKDAY }}
         run: |
           set +e
           OUTPUT=$(python3 scripts/check_workflow_tokens.py 2>&1)

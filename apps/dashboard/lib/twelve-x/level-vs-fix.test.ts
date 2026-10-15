@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
   buildLevelFixSeries,
   composeFixSeries,
@@ -7,7 +8,7 @@ import {
   pairFixSpec,
   type FxFixPoint,
 } from './level-vs-fix';
-import type { FxIdeaEvalRow, FxTradeIdeaRow } from './types';
+import type { FxIdeaEvalRow, FxTradeIdeaRow, FxTradeLevels } from './types';
 import { buildIdeaDetailModel } from './trade-levels';
 
 describe('normalizeFixPair', () => {
@@ -192,12 +193,82 @@ describe('buildLevelFixSeries', () => {
     ]);
   });
 
+  it('withholds the whole ladder until the bracket is publishable', () => {
+    // A non-publishable bracket can still carry a surviving target — the ladder
+    // is all-or-nothing, so no single leg may reach the chart on its own. The
+    // fix history is not part of the ladder and must survive either way.
+    const bracket: FxTradeLevels = {
+      entry_low: { value: '1.0800', provenance: 'broker_quoted', source_ref: 'desk' },
+      entry_high: { value: '1.0850', provenance: 'broker_quoted', source_ref: 'desk' },
+      stop: { value: '1.0700', provenance: 'broker_quoted', source_ref: 'desk' },
+      targets: [{ value: '1.1000', provenance: 'broker_quoted', source_ref: 'desk' }],
+      risk_reward: 2,
+      status: 'partial',
+    };
+    const fixes = pts(['2026-06-13', '2026-06-14'], [1.082, 1.086]);
+
+    const withheld = buildLevelFixSeries(idea({ trade_levels: bracket }), evalRow(), fixes);
+    expect(withheld.entryLow).toBeNull();
+    expect(withheld.entryHigh).toBeNull();
+    expect(withheld.stop).toBeNull();
+    expect(withheld.targets).toEqual([]);
+    expect(withheld.points).toHaveLength(2);
+
+    const published = buildLevelFixSeries(
+      idea({ trade_levels: { ...bracket, status: 'complete' } }),
+      evalRow(),
+      fixes,
+    );
+    expect(published.entryLow).toBeCloseTo(1.08, 10);
+    expect(published.entryHigh).toBeCloseTo(1.085, 10);
+    expect(published.stop).toBeCloseTo(1.07, 10);
+    expect(published.targets).toEqual([1.1]);
+  });
+
   it('handles missing levels and missing eval gracefully', () => {
     const s = buildLevelFixSeries(idea({ trade_levels: null }), null, []);
     expect(s.entryLow).toBeNull();
     expect(s.targets).toEqual([]);
     expect(s.points).toEqual([]);
     expect(s.anchorsOnly).toBe(false);
+    // No bracket at all is not "pending" — there is nothing to wait for.
+    expect(s.levelsPending).toBe(false);
+  });
+
+  it('withholds the level series when the bracket is not complete', () => {
+    const s = buildLevelFixSeries(
+      idea({
+        trade_levels: {
+          targets: [{ value: '1.1000', provenance: 'broker_quoted', source_ref: 'desk' }],
+          status: 'partial',
+        },
+      }),
+      evalRow(),
+      pts(['2026-06-13', '2026-06-14'], [1.082, 1.086]),
+    );
+    // A target with no entry band and no stop is a half ladder: publish none of it.
+    expect(s.entryLow).toBeNull();
+    expect(s.entryHigh).toBeNull();
+    expect(s.stop).toBeNull();
+    expect(s.targets).toEqual([]);
+    expect(s.levelsPending).toBe(true);
+    // The fix line itself is real data and still renders.
+    expect(s.points).toHaveLength(2);
+  });
+
+  it('flags an incomplete (statusless) bracket as pending, not published', () => {
+    // No `status` coerces to 'incomplete' — populated, but not publishable.
+    const { status: _status, ...populated } = idea().trade_levels!;
+    const s = buildLevelFixSeries(idea({ trade_levels: populated }), evalRow(), []);
+    expect(s.entryLow).toBeNull();
+    expect(s.targets).toEqual([]);
+    expect(s.levelsPending).toBe(true);
+  });
+
+  it('keeps levelsPending false for a complete bracket', () => {
+    const s = buildLevelFixSeries(idea(), evalRow(), []);
+    expect(s.entryLow).toBeCloseTo(1.08, 10);
+    expect(s.levelsPending).toBe(false);
   });
 
   // ---- publishability gate (DIG-260 L5, widened leaf) ----
@@ -250,11 +321,18 @@ describe('buildLevelFixSeries', () => {
     expect(s.targets).toEqual([]);
   });
 
-  // The two gates are deliberately not one shared function — `isPublishableBracket`
-  // is private to the frozen `trade-levels` module, so this file cannot import it.
-  // This test is what stops that duplication from drifting: for a bracket with every
-  // slot populated, the chart must withhold levels on exactly the fixtures the IdeaDetail
-  // model marks pending. If either predicate is widened, one side stops matching here.
+  // This file used to carry a byte-identical copy of the publishability
+  // predicate, and the guard for that was a cross-check of the two gates
+  // against each other. Now that both import one exported predicate the
+  // cross-check compares a function with itself, so it would pass no matter
+  // how the predicate changed. What is left to guard is the duplication
+  // itself: a future re-copy would reintroduce exactly the drift.
+  it('imports the publishability predicate instead of redeclaring it', () => {
+    const src = readFileSync(new URL('./level-vs-fix.ts', import.meta.url), 'utf8');
+    expect(src).toMatch(/import\s*\{[^}]*\bisPublishableBracket\b[^}]*\}\s*from '\.\/trade-levels'/);
+    expect(src).not.toMatch(/^\s*(export\s+)?function isPublishableBracket\b/m);
+  });
+
   it.each(['complete', 'partial', 'incomplete', 'draft'])(
     'agrees with the IdeaDetail model gate on a %s bracket',
     (status) => {

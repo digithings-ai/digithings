@@ -75,6 +75,12 @@ from digigraph.orchestration.web_search_tools import (
     _web_search_available,
 )
 from digigraph.policy import code_execution_allowed, federated_hub_enabled
+from digigraph.skill_library.tools import (
+    SKILL_LIBRARY_SKILL_ID,
+    SKILL_LIBRARY_TOOL_NAMES,
+    SKILL_LIBRARY_TOOL_SCHEMAS,
+    skill_library_tool_handler,
+)
 
 # Re-export hub invoke helpers so existing tests can patch
 # ``digigraph.orchestration.builtin.invoke_*`` — handlers themselves call through
@@ -181,6 +187,8 @@ def _register_tools() -> None:
     )
     for name, schema in SESSION_TOOL_SCHEMAS:
         register_tool(name, schema, session_tool_handler(name))
+    for name, schema in SKILL_LIBRARY_TOOL_SCHEMAS:
+        register_tool(name, schema, skill_library_tool_handler(name))
     if federated_hub_enabled():
         register_tool(
             "digisearch_research_delegate",
@@ -240,6 +248,10 @@ def _register_skills() -> None:
     register_skill(
         "session",
         sorted(SESSION_TOOL_NAMES),
+    )
+    register_skill(
+        SKILL_LIBRARY_SKILL_ID,
+        sorted(SKILL_LIBRARY_TOOL_NAMES),
     )
 
 

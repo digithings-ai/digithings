@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import worker from "./index";
 import { dataPlaneEnv, type Env, type HouseLedger } from "./env";
 import {
@@ -11,6 +11,8 @@ import {
   type ContainerStatus,
   type RunJobRequest,
 } from "./runner-session";
+import { LOST_CONFIRMATIONS, RUN_LOST_ERROR, RunLostError } from "./runner-session";
+import { rearmHeartbeatAfterReset } from "./runner";
 
 const T0 = Date.parse("2026-09-29T13:00:00.000Z");
 
@@ -425,8 +427,9 @@ describe("watchdog and poll resilience", () => {
         timeout_seconds: timeoutSeconds,
       }),
     );
-    // Unreachable container: ledger may clear a zombie lock. A still-running
-    // remote must NOT be timed out here (see next test).
+    // Unreachable container: ledger clears the zombie lock at the deadline.
+    // A reachable container reporting running is timed out the same way now
+    // (see next test, DIG-3372).
     statuses.delete(starts[0]);
     alarms.length = 0;
     clock.ms = T0 + (timeoutSeconds + WATCHDOG_GRACE_SECONDS + 1) * 1000;
@@ -446,7 +449,7 @@ describe("watchdog and poll resilience", () => {
     expect(alarms).toEqual([]);
   });
 
-  it("keeps the lock while the container still reports running past deadline", async () => {
+  it("releases the lock at timeout + grace even while the container reports running", async () => {
     const timeoutSeconds = 10;
     const { session, clock, alarms, starts, statuses } = harness();
     await session.accept(
@@ -463,13 +466,19 @@ describe("watchdog and poll resilience", () => {
     clock.ms = T0 + (timeoutSeconds + WATCHDOG_GRACE_SECONDS + 1) * 1000;
     await session.alarm();
     expect((await session.health()).running).toEqual([starts[0]]);
-    expect(alarms).toEqual([HEARTBEAT_MS]);
     // After aligning to remote.started_at, the budget still has room.
     clock.ms =
       Date.parse(remote.started_at) + (timeoutSeconds + WATCHDOG_GRACE_SECONDS + 1) * 1000;
-    // Still running remotely — keep the lock even past the aligned deadline.
+    // A stale build that reports a non-terminal status forever must not pin the
+    // lock: past the aligned deadline the lock is released and the run times out
+    // so hasActiveWork() can clear and the container can sleep (DIG-3372).
     await session.alarm();
-    expect((await session.health()).running).toEqual([starts[0]]);
+    const body = (await (
+      await session.fetch(new Request(`https://digiquant-runner/v1/jobs/${starts[0]}`))
+    ).json()) as { status: string; exit_code: number | null };
+    expect(body.status).toBe("timed_out");
+    expect(body.exit_code).toBe(124);
+    expect((await session.health()).running).toEqual([]);
   });
 
   it("keeps the lock when readStatus throws during poll", async () => {
@@ -597,6 +606,75 @@ describe("watchdog and poll resilience", () => {
     expect((await session.health()).running).toEqual([shadow?.run_id]);
   });
 
+  // A successful house run with no marker is invisible to the next kick: the
+  // skip-gate reads success.json and finds nothing, so the run repeats. Assert
+  // the trace, not just the absent marker -- an absent marker alone is also
+  // true before the fix, so it cannot tell the two trees apart.
+  it("traces a succeeded house run that wrote no marker because the binding is absent", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      const { session, starts, statuses, bodies } = harness();
+      const accepted = await session.accept(
+        job({
+          command: "house-run",
+          concurrency: "digiquant-pipeline",
+          idempotency_key: "house-run-no-archive",
+          args: { refresh_scope: "none", run_date: "2026-09-30" },
+        }),
+      );
+      const remote = statuses.get(starts[0]);
+      if (!remote) throw new Error("missing status");
+      remote.status = "succeeded";
+      remote.exit_code = 0;
+      remote.finished_at = "2026-09-30T17:00:00.000Z";
+      await session.alarm();
+
+      const traced = errors.mock.calls.map((call) => String(call[0]));
+      expect(traced).toContain(
+        `house_ledger_not_written run=${accepted.run_id} reason=archive_unbound`,
+      );
+      // Tracing must not cost the shadow booking.
+      const shadow = bodies.find((body) => body.command === "allocation-shadow");
+      expect(shadow?.args.source_branch).toBe("main");
+      expect((await session.health()).running).toEqual([shadow?.run_id]);
+    } finally {
+      errors.mockRestore();
+    }
+  });
+
+  it("traces a succeeded house run that wrote no marker because run_date was absent", async () => {
+    const archive = memoryArchive();
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      const { session, starts, statuses, bodies } = harness({ archive });
+      const accepted = await session.accept(
+        job({
+          command: "house-run",
+          concurrency: "digiquant-pipeline",
+          idempotency_key: "house-run-no-date",
+          args: { refresh_scope: "none" },
+        }),
+      );
+      const remote = statuses.get(starts[0]);
+      if (!remote) throw new Error("missing status");
+      remote.status = "succeeded";
+      remote.exit_code = 0;
+      remote.finished_at = "2026-09-30T17:00:00.000Z";
+      await session.alarm();
+
+      const traced = errors.mock.calls.map((call) => String(call[0]));
+      expect(traced).toContain(
+        `house_ledger_not_written run=${accepted.run_id} reason=missing_run_date`,
+      );
+      // No marker under any key, and the shadow still books.
+      expect([...archive.data.keys()].filter((k) => k.includes("success.json"))).toEqual([]);
+      const shadow = bodies.find((body) => body.command === "allocation-shadow");
+      expect(shadow?.args.source_branch).toBe("main");
+    } finally {
+      errors.mockRestore();
+    }
+  });
+
   it("starts a queued price tick only after the house-run lock clears", async () => {
     const { session, starts, statuses, bodies } = harness();
     const house = await session.accept(
@@ -646,5 +724,246 @@ describe("watchdog and poll resilience", () => {
     );
     expect(house.status).toBe("accepted");
     expect(starts).toEqual([prices.run_id]);
+  });
+});
+
+describe("run lost to a container or DO restart (DIG-3061)", () => {
+  /**
+   * readStatus with three modes. Only "lost" is evidence the run is gone; a
+   * transport error must never count towards LOST_CONFIRMATIONS.
+   */
+  function lostHarness(archive?: HouseLedger) {
+    const inner = {} as { statuses?: Map<string, ContainerStatus> };
+    let mode: "ok" | "transport" | "lost" = "ok";
+    const harnessResult = harness({
+      readStatus: async (runId) => {
+        if (mode === "transport") throw new Error("container unreachable");
+        if (mode === "lost") throw new RunLostError(runId);
+        return inner.statuses?.get(runId) ?? null;
+      },
+      archive,
+    });
+    inner.statuses = harnessResult.statuses;
+    return { ...harnessResult, setMode: (next: typeof mode) => { mode = next; } };
+  }
+
+  it("keeps the lock after a single lost poll and fails it on the second", async () => {
+    const archive = memoryArchive();
+    const { session, starts, alarms, setMode } = lostHarness(archive);
+    const accepted = await session.accept(
+      job({ command: "house-run", concurrency: "house-run", idempotency_key: "house-run:1" }),
+    );
+    const runId = accepted.run_id;
+    expect(starts).toEqual([runId]);
+
+    // First 404: the container may just be cold-booting.
+    setMode("lost");
+    alarms.length = 0;
+    await session.alarm();
+    expect((await session.health()).running).toEqual([runId]);
+    expect(alarms).toEqual([HEARTBEAT_MS]);
+
+    // Second consecutive 404, one heartbeat later: the run is gone for good.
+    await session.alarm();
+    expect((await session.health()).running).toEqual([]);
+    const res = await session.fetch(new Request(`https://digiquant-runner/v1/jobs/${runId}`));
+    const body = (await res.json()) as { status: string; exit_code: number | null; error: string | null };
+    expect(body.status).toBe("failed");
+    expect(body.error).toBe(RUN_LOST_ERROR);
+    expect(body.exit_code).toBeNull();
+    // A lost run never books anything: no success marker is written.
+    expect([...archive.data.keys()].filter((k) => k.includes("success.json"))).toEqual([]);
+  });
+
+  it("does not count a transport error towards the lost confirmations", async () => {
+    const { session, setMode } = lostHarness();
+    const accepted = await session.accept(
+      job({ idempotency_key: "market-data-refresh-morning:transport-then-lost" }),
+    );
+    const runId = accepted.run_id;
+
+    // Unreachable is not lost, and it does not count either way: after a
+    // transport error and one 404 the streak is still 1, so the run survives.
+    setMode("transport");
+    await session.alarm();
+    setMode("lost");
+    await session.alarm();
+    expect((await session.health()).running).toEqual([runId]);
+
+    // A second 404 does finish it - the streak reached LOST_CONFIRMATIONS.
+    await session.alarm();
+    expect((await session.health()).running).toEqual([]);
+  });
+
+  it("resets the lost streak when the container answers again", async () => {
+    const { session, setMode } = lostHarness();
+    const accepted = await session.accept(
+      job({ idempotency_key: "market-data-refresh-morning:streak-reset" }),
+    );
+    const runId = accepted.run_id;
+
+    setMode("lost");
+    await session.alarm();
+    setMode("ok");
+    await session.alarm();
+    setMode("lost");
+    await session.alarm();
+    // Second 404 overall, first in a row: the run survives.
+    expect((await session.health()).running).toEqual([runId]);
+    await session.alarm();
+    expect((await session.health()).running).toEqual([]);
+  });
+
+  it("needs LOST_CONFIRMATIONS polls, not one, before failing", async () => {
+    expect(LOST_CONFIRMATIONS).toBe(2);
+  });
+});
+
+describe("heartbeat re-armed after a Durable Object reset (DIG-3061)", () => {
+  function edges(opts: { alarm: number | null; locks: number; queued?: number }) {
+    const scheduled: number[] = [];
+    return {
+      scheduled,
+      deps: {
+        getAlarm: async () => opts.alarm,
+        hasActiveWork: async () => opts.locks > 0 || (opts.queued ?? 0) > 0,
+        scheduleHeartbeat: async () => {
+          scheduled.push(HEARTBEAT_MS / 1000);
+        },
+      },
+    };
+  }
+
+  it("arms one heartbeat when a reset dropped the alarm and work is held", async () => {
+    const { deps, scheduled } = edges({ alarm: null, locks: 1 });
+    expect(await rearmHeartbeatAfterReset(deps)).toBe(true);
+    expect(scheduled).toEqual([HEARTBEAT_MS / 1000]);
+  });
+
+  it("also arms when the work is queued rather than locked", async () => {
+    const { deps, scheduled } = edges({ alarm: null, locks: 0, queued: 2 });
+    expect(await rearmHeartbeatAfterReset(deps)).toBe(true);
+    expect(scheduled).toEqual([HEARTBEAT_MS / 1000]);
+  });
+
+  it("does not duplicate the schedule while an alarm is already armed", async () => {
+    // An armed alarm means an ordinary instantiation (a request, or the alarm's
+    // own wake). Container.schedule INSERTs a row per call, so a second one here
+    // would double the poll rate for the life of the instance.
+    const { deps, scheduled } = edges({ alarm: 1_700_000_000_000, locks: 1 });
+    expect(await rearmHeartbeatAfterReset(deps)).toBe(false);
+    expect(scheduled).toEqual([]);
+  });
+
+  it("does not arm anything when the runner holds no work", async () => {
+    const { deps, scheduled } = edges({ alarm: null, locks: 0 });
+    expect(await rearmHeartbeatAfterReset(deps)).toBe(false);
+    expect(scheduled).toEqual([]);
+  });
+
+  it("checks the alarm before the work, so an armed alarm wins", async () => {
+    const seen: string[] = [];
+    const armed = await rearmHeartbeatAfterReset({
+      getAlarm: async () => {
+        seen.push("getAlarm");
+        return 1;
+      },
+      hasActiveWork: async () => {
+        seen.push("hasActiveWork");
+        return true;
+      },
+      scheduleHeartbeat: async () => {
+        seen.push("scheduleHeartbeat");
+      },
+    });
+    expect(armed).toBe(false);
+    expect(seen).toEqual(["getAlarm"]);
+  });
+});
+
+describe("GET /v1/jobs/house-status landing check (DIG-3456)", () => {
+  const get = (session: RunnerSession, runDate: string) =>
+    session.fetch(new Request(`https://digiquant-runner/v1/jobs/house-status?run_date=${runDate}`));
+
+  it("reports landed when the skip-gate marker exists", async () => {
+    const archive = memoryArchive({
+      "pipeline-runs/house-run/2026-10-12/success.json": '{"run_id":"old"}',
+    });
+    const { session } = harness({ archive });
+    const res = await get(session, "2026-10-12");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      run_date: "2026-10-12",
+      landed: true,
+      open_house_runs: [],
+      verifiable: true,
+    });
+  });
+
+  it("reports not landed with no open run when nothing started", async () => {
+    const { session } = harness({ archive: memoryArchive() });
+    const res = await get(session, "2026-10-12");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      run_date: "2026-10-12",
+      landed: false,
+      open_house_runs: [],
+      verifiable: true,
+    });
+  });
+
+  it("lists the open house run instead of reporting never-dispatched", async () => {
+    const { session } = harness({ archive: memoryArchive() });
+    const accepted = await session.accept(
+      job({
+        command: "house-run",
+        job_id: "house-run-09",
+        concurrency: "digiquant-pipeline",
+        timeout_seconds: 14400,
+        idempotency_key: "house-run-09:open",
+        args: { refresh_scope: "none", run_date: "2026-10-12" },
+      }),
+    );
+    const res = await get(session, "2026-10-12");
+    expect(await res.json()).toEqual({
+      run_date: "2026-10-12",
+      landed: false,
+      open_house_runs: [accepted.run_id],
+      verifiable: true,
+    });
+  });
+
+  it("answers unverifiable, never landed, when the archive binding is absent", async () => {
+    const { session } = harness();
+    const res = await get(session, "2026-10-12");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      run_date: "2026-10-12",
+      landed: false,
+      open_house_runs: [],
+      verifiable: false,
+    });
+  });
+
+  it("refuses a run_date it cannot parse, so a typo never reads as missing", async () => {
+    const { session } = harness({ archive: memoryArchive() });
+    for (const bad of ["today", "2026-10-12T09:17:00Z", ""]) {
+      const res = await session.fetch(
+        new Request(`https://digiquant-runner/v1/jobs/house-status?run_date=${encodeURIComponent(bad)}`),
+      );
+      expect(res.status, bad).toBe(400);
+      expect(await res.json()).toEqual({ error: "invalid_run_date" });
+    }
+  });
+
+  it("is not shadowed by the run-id branch: the exact path wins", async () => {
+    const { session } = harness({ archive: memoryArchive() });
+    const res = await get(session, "2026-10-12");
+    // A run-id lookup for an unknown id answers 404 not_found; the exact
+    // house-status path must answer 200 with the landing shape instead.
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.run_date).toBe("2026-10-12");
+    expect("error" in body).toBe(false);
   });
 });

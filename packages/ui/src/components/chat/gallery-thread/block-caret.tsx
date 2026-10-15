@@ -19,8 +19,8 @@ import { useEffect, useState, type CSSProperties, type RefObject } from "react";
  * `col * 1ch` math drifted because the overlay's font-size (0.88rem) never
  * matched the input's (`text-sm`/`text-base`), so the error grew per
  * keystroke — behind on some skins, ahead on others. Soft-wrapped visual
- * lines are NOT unwrapped — the block tracks logical lines, which is exact
- * for the single-row embed norm.
+ * lines are followed with a hidden mirror div (see mirrorCaretPx); the
+ * logical-line canvas math is only the no-layout fallback.
  *
  * The textarea can mount after this overlay (the composer renders it from its
  * own lifecycle), so listeners live on the document and the textarea is
@@ -107,6 +107,80 @@ export function expandTabs(line: string, tabSize: number): string {
   return out;
 }
 
+const MIRROR_PROPS = [
+  "boxSizing",
+  "width",
+  "borderTopWidth",
+  "borderRightWidth",
+  "borderBottomWidth",
+  "borderLeftWidth",
+  "paddingTop",
+  "paddingRight",
+  "paddingBottom",
+  "paddingLeft",
+  "fontStyle",
+  "fontVariant",
+  "fontWeight",
+  "fontStretch",
+  "fontSize",
+  "fontFamily",
+  "lineHeight",
+  "letterSpacing",
+  "wordSpacing",
+  "textTransform",
+  "textIndent",
+  "tabSize",
+] as const;
+
+let mirrorDiv: HTMLDivElement | null = null;
+
+/**
+ * Wrapped caret position via a hidden mirror of the textarea (same width,
+ * padding and font, `pre-wrap`), so soft-wrapped lines are followed: the old
+ * logical-line math kept growing `left` past the right edge on a long single
+ * line instead of dropping to the next visual row. Returns null when the
+ * textarea has no layout (jsdom, display:none) so the canvas path still runs.
+ */
+function mirrorCaretPx(
+  area: HTMLTextAreaElement,
+  cs: CSSStyleDeclaration | null,
+): { left: number; top: number; lineHeight: number } | null {
+  if (!cs || typeof document === "undefined" || !area.clientWidth) return null;
+  try {
+    if (!mirrorDiv) {
+      mirrorDiv = document.createElement("div");
+      mirrorDiv.setAttribute("aria-hidden", "true");
+      document.body.appendChild(mirrorDiv);
+    }
+    const style = mirrorDiv.style;
+    for (const prop of MIRROR_PROPS) {
+      (style as unknown as Record<string, string>)[prop] = cs[prop] as string;
+    }
+    style.position = "absolute";
+    style.visibility = "hidden";
+    style.top = "0";
+    style.left = "-9999px";
+    style.whiteSpace = "pre-wrap";
+    style.overflowWrap = "break-word";
+    style.wordBreak = cs.wordBreak || "normal";
+    style.overflow = "hidden";
+    style.height = "auto";
+    // The textarea's width includes a vertical scrollbar once it scrolls.
+    style.width = `${area.offsetWidth}px`;
+    const offset = area.selectionStart ?? area.value.length;
+    mirrorDiv.textContent = area.value.slice(0, offset);
+    const marker = document.createElement("span");
+    // A zero-width glyph keeps the marker on the line the next char would use.
+    marker.textContent = area.value.slice(offset) ? area.value.slice(offset, offset + 1) : "\u200b";
+    mirrorDiv.appendChild(marker);
+    const fontSize = px(cs.fontSize, 14);
+    const lh = cs.lineHeight === "normal" || !cs.lineHeight ? fontSize * 1.5 : px(cs.lineHeight, fontSize * 1.5);
+    return { left: marker.offsetLeft, top: marker.offsetTop, lineHeight: lh };
+  } catch {
+    return null;
+  }
+}
+
 /** Pixel position of the caret relative to the container. Falls back to null when unmeasurable. */
 export function caretPx(
   area: HTMLTextAreaElement,
@@ -150,6 +224,16 @@ export function caretPx(
   const baseLeft = (area.offsetLeft || 0) + borderLeft + paddingLeft;
   const baseTop = (area.offsetTop || 0) + borderTop + paddingTop;
   void container;
+
+  const mirrored = mirrorCaretPx(area, cs);
+  if (mirrored) {
+    return {
+      left: (area.offsetLeft || 0) + mirrored.left - (area.scrollLeft || 0),
+      top: (area.offsetTop || 0) + mirrored.top - (area.scrollTop || 0),
+      height: mirrored.lineHeight,
+      width: Math.max(1, chWidth),
+    };
+  }
 
   return {
     left: baseLeft + textWidth - (area.scrollLeft || 0),

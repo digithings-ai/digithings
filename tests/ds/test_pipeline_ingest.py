@@ -113,6 +113,145 @@ def test_ingest_source_enforces_ingest_root(
 
 
 @pytest.mark.unit
+def test_ingest_rejects_sidecar_symlink_outside_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An in-jail ``doc.yaml`` symlink must not be read when it points outside the jail.
+
+    The source path is already resolved before read. ``Path.is_file`` / ``read_text``
+    follow a sibling symlink, so the old path loaded that outside file into metadata.
+    """
+    jail = tmp_path / "jail"
+    jail.mkdir()
+    doc = jail / "note.md"
+    doc.write_text("# Title\n\nbody text for ingest.\n", encoding="utf-8")
+    secret = tmp_path / "secret.yaml"
+    secret.write_text("title: leaked\n", encoding="utf-8")
+    (jail / "note.yaml").symlink_to(secret)
+    monkeypatch.setenv("DIGISEARCH_INGEST_ROOT", str(jail))
+
+    with pytest.raises(IngestError) as exc_info:
+        ingest_source(doc, index_name="sidecar-escape", enforce_ingest_root=True)
+    assert exc_info.value.http_status == 400
+    assert exc_info.value.code == "ingest_source_rejected"
+    assert not get_stub_index().get("sidecar-escape")
+
+
+@pytest.mark.unit
+def test_ingest_rejects_sidecar_hardlink_outside_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A hard link named note.yaml is the outside inode. resolve() stays in jail."""
+    jail = tmp_path / "jail"
+    jail.mkdir()
+    doc = jail / "note.md"
+    doc.write_text("# Title\n\nbody text for ingest.\n", encoding="utf-8")
+    secret = tmp_path / "secret.yaml"
+    secret.write_text("title: leaked-hardlink\n", encoding="utf-8")
+    (jail / "note.yaml").hardlink_to(secret)
+    monkeypatch.setenv("DIGISEARCH_INGEST_ROOT", str(jail))
+
+    with pytest.raises(IngestError) as exc_info:
+        ingest_source(doc, index_name="hardlink-escape", enforce_ingest_root=True)
+    assert exc_info.value.http_status == 400
+    assert exc_info.value.code == "ingest_source_rejected"
+    assert not get_stub_index().get("hardlink-escape")
+
+
+@pytest.mark.unit
+def test_ingest_rejects_source_hardlink_outside_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The source file itself is an in-jail name for an outside inode."""
+    jail = tmp_path / "jail"
+    jail.mkdir()
+    secret = tmp_path / "secret.md"
+    secret.write_text("# Title\n\nbody text for ingest.\n", encoding="utf-8")
+    (jail / "note.md").hardlink_to(secret)
+    monkeypatch.setenv("DIGISEARCH_INGEST_ROOT", str(jail))
+
+    with pytest.raises(IngestError) as exc_info:
+        ingest_source(
+            jail / "note.md", index_name="source-hardlink-escape", enforce_ingest_root=True
+        )
+    assert exc_info.value.http_status == 400
+    assert exc_info.value.code == "ingest_source_rejected"
+    assert not get_stub_index().get("source-hardlink-escape")
+
+
+@pytest.mark.unit
+def test_ingest_allows_source_hardlink_inside_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A source with a second name that is also inside the jail stays legal."""
+    jail = tmp_path / "jail"
+    jail.mkdir()
+    doc = jail / "note.md"
+    doc.write_text("# Title\n\nbody text for ingest.\n", encoding="utf-8")
+    (jail / "alias.md").hardlink_to(doc)
+    monkeypatch.setenv("DIGISEARCH_INGEST_ROOT", str(jail))
+
+    result = ingest_source(doc, index_name="source-hardlink-inside", enforce_ingest_root=True)
+    assert result.chunks_created >= 1
+    assert get_stub_index().get("source-hardlink-inside")
+
+
+@pytest.mark.unit
+def test_ingest_allows_sidecar_hardlink_inside_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    jail = tmp_path / "jail"
+    jail.mkdir()
+    doc = jail / "note.md"
+    doc.write_text("# Title\n\nbody text for ingest.\n", encoding="utf-8")
+    real = jail / "real.yaml"
+    real.write_text("title: kept-hardlink\n", encoding="utf-8")
+    (jail / "note.yaml").hardlink_to(real)
+    monkeypatch.setenv("DIGISEARCH_INGEST_ROOT", str(jail))
+
+    result = ingest_source(doc, index_name="hardlink-inside", enforce_ingest_root=True)
+    assert result.chunks_created >= 1
+    indexed = get_stub_index()["hardlink-inside"]
+    assert all(c.metadata.get("title") == "kept-hardlink" for c in indexed)
+
+
+@pytest.mark.unit
+def test_ingest_allows_sidecar_symlink_inside_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    jail = tmp_path / "jail"
+    jail.mkdir()
+    doc = jail / "note.md"
+    doc.write_text("# Title\n\nbody text for ingest.\n", encoding="utf-8")
+    real = jail / "real.yaml"
+    real.write_text("title: kept\n", encoding="utf-8")
+    (jail / "note.yaml").symlink_to(real)
+    monkeypatch.setenv("DIGISEARCH_INGEST_ROOT", str(jail))
+
+    result = ingest_source(doc, index_name="sidecar-inside", enforce_ingest_root=True)
+    assert result.chunks_created >= 1
+    indexed = get_stub_index()["sidecar-inside"]
+    assert all(c.metadata.get("title") == "kept" for c in indexed)
+
+
+@pytest.mark.unit
+def test_cli_ingest_still_reads_sidecar_outside_root(tmp_path: Path) -> None:
+    """CLI leaves ``enforce_ingest_root`` false, so an outside sidecar stays readable."""
+    doc = tmp_path / "note.md"
+    doc.write_text("# Title\n\nbody text for ingest.\n", encoding="utf-8")
+    outside = tmp_path / "other"
+    outside.mkdir()
+    secret = outside / "secret.yaml"
+    secret.write_text("title: operator\n", encoding="utf-8")
+    (tmp_path / "note.yaml").symlink_to(secret)
+
+    result = ingest_source(doc, index_name="sidecar-cli", enforce_ingest_root=False)
+    assert result.chunks_created >= 1
+    indexed = get_stub_index()["sidecar-cli"]
+    assert all(c.metadata.get("title") == "operator" for c in indexed)
+
+
+@pytest.mark.unit
 def test_http_ingest_delegates_to_pipeline(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DIGISEARCH_INGEST_ROOT", str(tmp_path))
     doc = tmp_path / "http.md"

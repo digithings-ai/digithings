@@ -36,9 +36,35 @@ export function resolvePointer(manifest: Manifest, ticker: string): { object: st
   return { object, sha256: String(entry.sha256) };
 }
 
+function finiteField(value: unknown): number | undefined {
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+/** Close rows, plus OHLC when the sealed generation actually stored it.
+ *  A missing open/high/low is omitted — callers must not invent a candle from close alone. */
 export function shapeCloses(rows: Array<Record<string, unknown>>) {
   return rows
-    .map((r) => ({ date: isoDate(r.date), ticker: String(r.ticker), close: Number(r.close) }))
+    .map((r) => {
+      const row: {
+        date: string;
+        ticker: string;
+        close: number;
+        open?: number;
+        high?: number;
+        low?: number;
+        volume?: number;
+      } = { date: isoDate(r.date), ticker: String(r.ticker), close: Number(r.close) };
+      const open = finiteField(r.open);
+      const high = finiteField(r.high);
+      const low = finiteField(r.low);
+      const volume = finiteField(r.volume);
+      if (open !== undefined) row.open = open;
+      if (high !== undefined) row.high = high;
+      if (low !== undefined) row.low = low;
+      if (volume !== undefined) row.volume = volume;
+      return row;
+    })
     .filter((r) => Number.isFinite(r.close))
     .sort((a, b) => (a.date === b.date ? a.ticker.localeCompare(b.ticker) : a.date.localeCompare(b.date)));
 }
@@ -51,6 +77,23 @@ export function corsHeaders(origin: string | null, allowlist: string[]): Record<
     headers["Access-Control-Max-Age"] = "86400";
   }
   return headers;
+}
+
+const PRICE_COLUMNS = ["date", "ticker", "open", "high", "low", "close", "volume"] as const;
+
+/** Wider read when the generation has OHLC. A close-only file falls back so a missing column is not a 502. */
+async function readPriceRows(bytes: ArrayBuffer): Promise<Array<Record<string, unknown>>> {
+  try {
+    return (await parquetReadObjects({
+      file: bytes,
+      columns: [...PRICE_COLUMNS],
+    })) as Array<Record<string, unknown>>;
+  } catch {
+    return (await parquetReadObjects({
+      file: bytes,
+      columns: ["date", "ticker", "close"],
+    })) as Array<Record<string, unknown>>;
+  }
 }
 
 async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
@@ -101,7 +144,7 @@ export async function handleMarketData(
     if ((await sha256Hex(bytes)) !== pointer.sha256) {
       return Response.json({ error: `sha mismatch for ${ticker}` }, { status: 502, headers: cors });
     }
-    const parsed = await parquetReadObjects({ file: bytes, columns: ["date", "ticker", "close"] });
+    const parsed = await readPriceRows(bytes);
     rows.push(...(parsed as Array<Record<string, unknown>>).filter((r) => {
       const d = isoDate(r.date);
       return d >= from && d <= to;

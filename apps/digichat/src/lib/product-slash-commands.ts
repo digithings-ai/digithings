@@ -91,6 +91,7 @@ export function visibilityFromPrefs(api: EmbedChatPrefsApi): SlashVisibility {
     models: api.showModels,
     mcp: hasMcp,
     tools: hasTools,
+    artifacts: api.hasArtifacts,
   };
 }
 
@@ -113,14 +114,6 @@ export function featuredLanguageCommands(
   });
 }
 
-export function slashCategoryOf(id: string): string {
-  if (FEATURED_LANGUAGE_CODES.some((c) => languageLabel(c).toLowerCase() === id)) {
-    return "setup";
-  }
-  const def = SLASH_COMMANDS.find((c) => c.id === id || c.id === (id === "language" ? "lang" : id));
-  return def?.category ?? "tools";
-}
-
 export function buildProductSlashCommands(api: EmbedChatPrefsApi): Unstable_SlashCommand[] {
   const vis = visibilityFromPrefs(api);
   const { prefs } = api;
@@ -134,6 +127,7 @@ export function buildProductSlashCommands(api: EmbedChatPrefsApi): Unstable_Slas
     if (def.id === "digisearch" && vis.digisearch === false) continue;
     if (def.id === "digivault" && vis.digivault === false) continue;
     if (def.id === "sessions" && vis.sessions !== true) continue;
+    if (def.id === "artifacts" && vis.artifacts !== true) continue;
     if ((def.id === "models" || def.id === "effort") && vis.models === false) continue;
     if (def.id === "mcp" && vis.mcp === false) continue;
     if (def.id === "tools" && vis.tools === false) continue;
@@ -251,6 +245,9 @@ export function executeSlashDef(def: SlashDef, arg: string, api: EmbedChatPrefsA
     case "sessions":
       api.openSessions();
       return;
+    case "artifacts":
+      api.openArtifacts();
+      return;
     case "help":
       // Placeholder — the slash list is the help. Do not dump into the composer.
       return;
@@ -346,8 +343,5 @@ export function prefixSlashAdapter<T extends SlashAdapterLike>(inner: T): T {
     },
   } as T;
 }
-
-/** @deprecated Use prefixSlashAdapter — categories were dropped from the product palette. */
-export const categorizedSlashAdapter = prefixSlashAdapter;
 
 export { SLASH_CATEGORIES };

@@ -173,7 +173,7 @@ export function useLivePortfolio(options: UseLivePortfolioOptions = {}): LivePor
       positions: kpiPositions,
       // #3767 / #3935: rebase on the current source run so the live-overlay
       // inception and the β/IR estimator never cross a legacy→finalized seam.
-      navHistory: currentNavRun(nav).map((n) => ({ date: n.date, nav: n.nav })),
+      navHistory: currentNavRun(nav),
       benchmarkHistory,
       benchmarkTicker: benchmarkHistory.length ? LANDING_BENCHMARK_TICKER : null,
     });

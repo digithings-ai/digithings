@@ -230,8 +230,8 @@
   .ts-panel-hint { margin-inline-start: auto; }
 }
 
-.ts-candle-up .ts-candle-wick { stroke: var(--accent); }
-.ts-candle-up .ts-candle-body { fill: var(--accent); }
+.ts-candle-up .ts-candle-wick { stroke: var(--up); }
+.ts-candle-up .ts-candle-body { fill: var(--up); }
 .ts-candle-down .ts-candle-wick { stroke: var(--down); }
 .ts-candle-down .ts-candle-body { fill: var(--down); }
 .ts-marker-wrap-buy .ts-marker { stroke: color-mix(in srgb, var(--accent) 55%, var(--surface)); }

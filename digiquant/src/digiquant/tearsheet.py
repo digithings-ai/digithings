@@ -50,6 +50,7 @@ from digiquant.tearsheet_stats import (
     _build_categorized_stats,
     _build_full_stats_table,
     _build_risk_metrics_table,
+    resolve_win_rate,
 )
 
 logger = logging.getLogger(__name__)
@@ -69,6 +70,7 @@ def create_tearsheet(
     stats_general: dict | None = None,
     returns_series: Any = None,
     realized_pnls_series: Any = None,
+    initial_balance: float | None = None,
     full: bool = True,
 ) -> Path:
     try:
@@ -120,7 +122,11 @@ def create_tearsheet(
             return fallback
         return fig.to_html(full_html=False, include_plotlyjs=include_plotlyjs, div_id=div_id)
 
-    initial_balance = 1_000_000.0
+    # The equity chart compounds the return series as (1 + r). Anchored on the
+    # account's own start balance — the first row of the balance path — that
+    # reproduces the account exactly; the venue constant is the fallback for a report
+    # with no readable balance path at all.
+    initial_balance = 1_000_000.0 if initial_balance is None else initial_balance
 
     # Build core figures (always)
     equity_fig = _build_equity_chart(timestamps, balances) if timestamps else None
@@ -128,9 +134,11 @@ def create_tearsheet(
     price_fig = _build_price_chart_inline(
         ohlcv_df, symbol, period, std_dev, fill_ts, fill_px, fill_sides
     )
-    # Caller-counted (k, n): prefer actual winning fills over rate × n.
-    num_wins = count_winning_trades(realized_pnls_series)
-    win_rate_donut_fig = _build_win_rate_donut(win_rate, result.num_trades, num_wins=num_wins)
+    # k and n come from one place: the honest block when present, else a
+    # caller-counted k over the fill count. Never rate × n on this surface.
+    counts = resolve_win_rate(result, win_rate, wins=count_winning_trades(realized_pnls_series))
+    num_wins = counts.k if counts.counted else None
+    win_rate_donut_fig = _build_win_rate_donut(win_rate, counts.n, num_wins=num_wins)
     realized_pnl_fig = _build_realized_pnl_chart(realized_pnls_series)
     per_trade_pnl_fig = _build_per_trade_pnl_bars(realized_pnls_series)
     cum_trade_pnl_fig = _build_cumulative_trade_pnl(realized_pnls_series)

@@ -90,14 +90,12 @@ INTERNAL_MARKER_ALLOWLIST = (
     "docs/adr/0031-occ-tickets-corpus-retrieval.md",
     # Digits' operating note naming the marker as the exposure.
     "docs/ops/OCC_INVITE_KEY.md",
-    # Review notes quoting the behaviour under review.
-    "review-4945.md",
-    "review-4963.md",
     # Source of the convention: the backfill script and the formatter tag.
     "scripts/index_occ_tickets.py",
     "scripts/zammad_mcp/README.md",
     "scripts/zammad_mcp/formatting.py",
     # Assertions that the tagging happens.
+    "tests/dg/test_occ_ticket_payload_retired.py",
     "tests/ds/test_multilingual_embedder.py",
     "tests/scripts/test_zammad_mcp.py",
     # This detector and its suite: a scanner that cannot name the marker cannot

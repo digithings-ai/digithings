@@ -20,7 +20,9 @@ concurrency:
   # gate; a shared group with cancel-in-progress: false queues every later
   # deploy behind that wait (#2541). A newer image is not always a superset
   # of an in-flight workflow_dispatch ref, so this does not cancel it.
-  # Same pattern as deploy-digithings-stack-cloudflare.yml.
+  # Same pattern as deploy-digithings-stack-cloudflare.yml, which is why the
+  # group is per-run: that workflow is deleted (f54af7052, #4919) and its
+  # reasoning survives in docs/DEPLOYMENT.md.
   group: deploy-digiquant-runner-${{ github.run_id }}
   cancel-in-progress: false
 

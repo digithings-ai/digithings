@@ -64,8 +64,14 @@ jobs:
       - name: Test @digithings/ui
         run: npm run test --workspace @digithings/ui
 
+      - name: Lint @digithings/ui
+        run: npm run lint --workspace @digithings/ui
+
       - name: Test @digithings/digichat-ui
         run: npm run test --workspace @digithings/digichat-ui
+
+      - name: Lint @digithings/digichat-ui
+        run: npm run lint --workspace @digithings/digichat-ui
 
       # digithings-cron owns production clocks formerly declared in workflow
       # `schedule:` blocks. Its source and wrangler trigger map must stay typed
@@ -225,3 +231,14 @@ jobs:
 
       - name: Test dashboard-api
         run: npm run test --workspace dashboard-api
+
+      # digidata-api (DIG-2895) is the Worker data API with the D1/Supabase
+      # backend switch. Same reasoning as dashboard-api above, and it was the
+      # same gap: the package declares `test`/`typecheck` and no lane invoked
+      # either, so its suite only ever ran on the author's machine. The root
+      # `npm ci` above installs the workspace from the lockfile.
+      - name: Typecheck digidata-api
+        run: npm run typecheck --workspace digidata-api
+
+      - name: Test digidata-api
+        run: npm run test --workspace digidata-api

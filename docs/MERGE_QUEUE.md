@@ -11,6 +11,24 @@ This document is the merge path for `develop`. It answers three questions:
 If you are here because you need a merge and you do not want to open a card asking for
 permission: you do not need one. Run the queue.
 
+## Scope: `develop` merges, and how this meets AGENTS.md
+
+This document governs **merges whose base is `develop`**, in every repo of this org. It
+does not govern merges into a stacked `module/<component>` base, and it does not govern
+promotions into `main` — for those, [AGENTS.md § Merge-when-ready](../AGENTS.md#merge-when-ready)
+still tells the authoring agent to merge its own task PR, and still applies its
+"still stop and ask" list.
+
+`AGENTS.md` is the file every adapter loads as canonical rules, and its
+[Merge-when-ready](../AGENTS.md#merge-when-ready) section predates this queue. It has
+carried the same rule in prose ever since: **when a task PR is merge-ready, merge it.**
+Left alone that sentence and the roster below are a direct contradiction — one tells
+DevOps to run `gh pr merge` on a `develop` PR, the other refuses that same agent with
+exit 2 — and an agent picking the wrong one fails silently either way. So
+`AGENTS.md` § Merge-when-ready now carries this roster and points at `merge_queue.py`
+for `develop` bases, and this document is the authority on what that queue requires.
+Both files agree; neither needs to be read with the other in mind.
+
 ---
 
 ## The problem this solves
@@ -35,7 +53,9 @@ an answer that can be computed, so it does not need a human.
 
 `scripts/merge_queue_policy.json` is the machine-readable roster. QA reviews. QA does not
 merge — a reviewer cannot be the one who signs off on their own pass, and the CEO's
-instruction was that the EM and the CTO are the merge path.
+instruction was that the EM and the CTO are the merge path. The same table is in
+[AGENTS.md § `develop` merges go through the merge queue](../AGENTS.md#develop-merges-go-through-the-merge-queue),
+so an agent that only ever loads `AGENTS.md` still learns who merges.
 
 **One GitHub login, two roles.** Both authorities merge with the same org credential, so
 GitHub records the same committer for either. The role is an *assertion*, not something
@@ -46,7 +66,10 @@ change and needs the CEO — it is not something an agent does on its own initia
 An approval is likewise asserted when the reviewer is not a distinct GitHub account:
 `--attest-review <role>` records which role reviewed. The merging role may **not** attest
 its own review, which is what stops a single-credential setup from silently collapsing
-into "I reviewed it and merged it".
+into "I reviewed it and merged it". Attestation satisfies the approval gate only —
+it is an assertion, and since DIG-3154 it does **not** satisfy review coverage: PRs
+#5489 and #5277 merged attested with zero reviews and zero comments, and the promotion
+gate refused both. A PR without review evidence needs the evidence, not an attestation.
 
 ## What may be merged
 
@@ -55,11 +78,12 @@ into "I reviewed it and merged it".
 | Gate | Rule |
 |---|---|
 | Base branch | `develop` only. `main`, `master` and `release/*` are refused (exit 3), and a PR whose `baseRefName` is anything else is refused too. |
-| Required check | The names in `required_checks_by_repo` for this repo must each have **reported** from a workflow run, and concluded `SUCCESS`. For `twelve-x` that is `test`. For `digithings` it is `Required checks passed`, `doc-links + agents-init` and `mypy — digibase + digikey`. |
+| Required check | The names in `required_checks_by_repo` for this repo must each have **reported** and concluded `SUCCESS`. For `twelve-x` that is `test` (from a workflow run). For `digithings` it is `local-ci` — which arrives as a commit StatusContext, never as a workflow run, so the names in `status_context_checks` are exempt from the workflow-run evidence rule (DIG-3707). |
 | Other checks | Any other check in a failing conclusion blocks the merge. |
 | Mergeable | `mergeable == MERGEABLE`. Drafts and `CONFLICTING` do not queue. |
 | Up to date | `mergeStateStatus` must be `CLEAN`. `BEHIND`, `DIRTY`, `UNKNOWN` and `BLOCKED` do not queue. |
-| Review | An `APPROVED` review from a person who is neither the author nor a bot, or `--attest-review` from a role on the review path that is not the merging role. |
+| Review | An `APPROVED` review from a person who is neither the author nor a bot, or `--attest-review` from a role on the review path that is not the merging role. Attestation covers this gate only, never review coverage below. |
+| Review coverage | The same evidence `scripts/check_review_coverage.py` enforces at promotion: a completed Bot run, an approval, a Bot review, an in-session review with its findings comment, or `reviewed:owner`. `--attest-review` does not count — it asserts a review happened but leaves no artifact the promotion gate can see. |
 | Change requests | Any `CHANGES_REQUESTED` review blocks. |
 
 Two of these are deliberate choices worth stating plainly.
@@ -68,7 +92,7 @@ Two of these are deliberate choices worth stating plainly.
 is indistinguishable from a check that was never asked to run — which is exactly the hole
 being closed. This has a real cost: Bugbot reports `neutral` when it is out of quota, so a
 required Bugbot check would block merges indefinitely. Do not put a metered third-party
-service on the required list. See `CODE_REVIEW_BASELINE.md`.
+service on the required list. See `reviews/archive/CODE_REVIEW_BASELINE.md`.
 
 **A green commit status is not a passing build.** GitHub's commit status docs are explicit
 that "any person or integration with write permissions can set the state of any status
@@ -114,6 +138,18 @@ computed before a merge is stale the moment that merge lands.
 **Order is FIFO, not greenest-first.** Sorting by check status turns a queue into a race
 that the loudest PR wins. Oldest-eligible-first is the only ordering that is fair and only
 one that is easy to explain to whoever has been waiting.
+
+**A vendor-content gate failure is not an emergency, and it is not overridable.** The
+`Vendor-content gate` job runs on every PR — `push` to `develop` and `main`, and every
+`pull_request` base — and it fails closed. A red gate means the change publishes something
+the vendor-content boundary forbids: a method-shaped step (naming the browser route to a
+credential, or the act of reading it out), or a vendor identifier that is new since the
+merge base with `main`. Do not add the finding to the allowlist to get a merge through, do
+not mark it flaky and retry, and do not merge past it. Fix the change, or raise it on the
+issue. If the gate reports that it cannot find the merge base, that is the workflow's
+`actions/checkout` `fetch-depth: 0`, not a content verdict — it still fails closed, and it
+still blocks. The rules and the approved allowlist are in
+[`VENDOR_CONTENT_BOUNDARY.md`](VENDOR_CONTENT_BOUNDARY.md).
 
 ## Running it
 
@@ -307,6 +343,9 @@ python3 scripts/enable_branch_protection.py status --repo OWNER/NAME --branch BR
 
 - [BRANCH_PROTECTION.md](BRANCH_PROTECTION.md) — required checks per branch, why a
   path-filtered required check is a trap, the emergency bypass.
+- [VENDOR_CONTENT_BOUNDARY.md](VENDOR_CONTENT_BOUNDARY.md) — the vendor-content boundary:
+  the rules the `Vendor-content gate` enforces, and the one reviewed allowlist. A gate
+  failure is not to be overridden.
 - `scripts/merge_queue_policy.json` — the roster.
 - `scripts/merge_queue.py` — the queue.
 - `scripts/enable_branch_protection.py` — status and apply.

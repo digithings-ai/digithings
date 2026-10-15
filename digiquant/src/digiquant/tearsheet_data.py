@@ -759,7 +759,12 @@ def from_nautilus(
         for i, t in enumerate(trades or [], 1)
     ]
 
+    dd_curve = _drawdown_from_equity(eq, initial_capital) if eq else []
     max_dd = getattr(result, "max_drawdown_pct", None)
+    if max_dd is None and dd_curve:
+        # A missing Nautilus drawdown is not a flat curve. The equity path
+        # already has the peak-to-trough; reporting 0% would hide it.
+        max_dd = min(point.v for point in dd_curve)
 
     return TearsheetData(
         strategy=str(getattr(result, "strategy_name", "")),
@@ -778,7 +783,7 @@ def from_nautilus(
         sharpe_ratio=_opt_float(getattr(result, "sharpe_ratio", None)),
         total_trades=int(getattr(result, "num_trades", 0) or 0),
         equity_curve=[SeriesPoint(t=ts, v=v) for ts, v in eq],
-        drawdown_curve=_drawdown_from_equity(eq, initial_capital) if eq else [],
+        drawdown_curve=dd_curve,
         trades=trade_records,
         notes=list(notes or []),
     )

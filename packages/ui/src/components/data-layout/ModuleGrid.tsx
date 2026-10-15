@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 import type { ModuleNode } from "../../data/modules";
 import { Reveal } from "../../motion/primitives";
@@ -51,6 +51,8 @@ export interface ModuleGridItem {
   version: string | null;
   /** Extra facts after the line count, e.g. "12 endpoints · 9 MCP tools". */
   counts?: string;
+  /** Replaces the text name in the tile head, e.g. the module's hero banner. */
+  mark?: ReactNode;
 }
 
 export interface ModuleGridProps {
@@ -444,10 +446,14 @@ export function ModuleGrid({
         />
         <div className="dg-cell-body">
           <span className="dg-mosaic-head">
-            <span className="dg-mosaic-name">
-              <span className="text-ink-mute">digi</span>
-              {m.id.replace(/^digi/, "")}
-            </span>
+            {item.mark ? (
+              <span className="dg-mosaic-name dg-mosaic-mark">{item.mark}</span>
+            ) : (
+              <span className="dg-mosaic-name">
+                <span className="text-ink-mute">digi</span>
+                {m.id.replace(/^digi/, "")}
+              </span>
+            )}
             <span className="dg-loc dg-mosaic-version">
               {item.version === null ? "roadmap" : `v${item.version}`}
             </span>

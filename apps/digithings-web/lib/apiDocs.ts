@@ -269,7 +269,7 @@ resp = client.chat.completions.create(
           { name: "total_pnl", type: "number", description: "Total P&L." },
           { name: "sharpe_ratio", type: "number | null", description: "Sharpe ratio." },
           { name: "num_trades", type: "integer", description: "Number of trades executed." },
-          { name: "status", type: "string", description: '"completed" | "failed".' },
+          { name: "status", type: "string", description: '"ok" | "partial" | "error".' },
         ],
         examples: [
           {

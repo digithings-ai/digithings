@@ -69,6 +69,10 @@ DEFAULT_CACHE_TTL_SECONDS = 900.0
 DEFAULT_CACHE_MAX_ENTRIES = 256
 DEFAULT_TIMEOUT_SECONDS = 30.0
 
+# Streamable HTTP requires both media types in Accept; without it the hosted
+# MCP answers HTTP 406.
+_REQUEST_HEADERS = {"Accept": "application/json, text/event-stream"}
+
 _TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
 
 logger = logging.getLogger(__name__)
@@ -201,7 +205,7 @@ class LuxAlgoClient:
             "params": {"name": upstream_tool, "arguments": payload},
         }
         try:
-            response = self._http.post(LUXALGO_MCP_URL, json=body)
+            response = self._http.post(LUXALGO_MCP_URL, json=body, headers=_REQUEST_HEADERS)
         except (httpx.TimeoutException, httpx.ConnectError) as exc:
             return envelope_error(
                 "upstream_error", f"LuxAlgo MCP unreachable: {exc}", retryable=True
@@ -301,7 +305,10 @@ class LuxAlgoClient:
 
     # -- Market Trackers live-query companions (#4844; keyless, read-only) --
     #
-    # Freshness/ad-hoc lookups only: the CC0 dumps stay the source of record
+    # Freshness/ad-hoc lookups only: the CC0-1.0 dumps stay the source of
+    # record (per-family limits classified in DIG-1464 ride on every payload:
+    # congress-trades is restricted by 5 U.S.C. 13107 and short-volume carries
+    # unresolved FINRA redistribution terms)
     # (trackers_query is deliberately NOT wrapped). An upstream ``stale`` flag
     # on the payload folds into the envelope ``stale`` bit.
 

@@ -1,0 +1,49 @@
+# Config contract — variant model (epic DIG-2758 §7).
+#
+# Source of truth for variant identity. NOTHING else in the repo may define
+# DT_VARIANT / DT_TARGET / DT_BASE_URL defaults: generators emit them into
+# wrangler [vars] (hosted values, inert until read), .env.example, and
+# config/generated/compose-contract.env (selfhost values).
+#
+# Rules:
+# - Cloudflare is production only; it ALWAYS runs the hosted variant.
+# - The local compose stack (S4/S7) ALWAYS runs the selfhost variant.
+# - Code branches on DT_VARIANT (e.g. the S3 container shim); UIs take
+#   --target selfhost|hosted / DT_TARGET and derive URLs from DT_BASE_URL.
+# - hosted public hostnames below list ONLY routes verified in wrangler.toml
+#   files at base develop@404b816c. Unlisted subdomains are NOT claimed.
+
+variants:
+  selfhost:
+    DT_VARIANT: selfhost
+    DT_TARGET: selfhost
+    DT_BASE_URL: http://digithings.localhost
+    # Definitional (plan §2.4: *.digithings.localhost via the S7 reverse
+    # proxy). UIs derive these from DT_BASE_URL; do not hardcode them.
+    public_url_convention:
+      api: http://api.digithings.localhost
+      graph: http://graph.digithings.localhost
+      key: http://key.digithings.localhost
+      search: http://search.digithings.localhost
+      mcp: http://mcp.digithings.localhost
+      chat: http://chat.digithings.localhost
+  hosted:
+    DT_VARIANT: hosted
+    DT_TARGET: hosted
+    DT_BASE_URL: https://digithings.ai
+    # Verified prod routes (do NOT extend without a wrangler.toml source):
+    # - digithings.ai/embed*, /api/chat*, /api/embed*, /api/byok*,
+    #   /api/plan-proof*, /api/health, /_dtchat* (apps/digichat-cloudflare)
+    # - graph.digithings.ai, key.digithings.ai, search.digithings.ai
+    #   (apps/digithings-stack-cloudflare [[routes]])
+    verified_routes:
+      - digithings.ai/embed*
+      - digithings.ai/api/chat*
+      - digithings.ai/api/embed*
+      - digithings.ai/api/byok*
+      - digithings.ai/api/plan-proof*
+      - digithings.ai/api/health
+      - digithings.ai/_dtchat*
+      - graph.digithings.ai
+      - key.digithings.ai
+      - search.digithings.ai

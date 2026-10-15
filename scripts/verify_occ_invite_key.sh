@@ -185,6 +185,42 @@ case "$body" in
     ;;
 esac
 
+# Check 7 - the retrieval corpus is not discoverable from the client projection.
+#
+# WHAT THIS DOES AND DOES NOT PROVE. It does NOT read the live corpus: the
+# tenant registry is a write-only Worker secret and toEmbedClientConfig copies
+# declared fields only, with no backend.digisearchIndex branch
+# (apps/digichat/src/lib/embed-client-config.ts). No HTTP surface can answer
+# "which corpus is the OCC tenant scoped to?" - by design. So the narrowing
+# itself is enforced fail-closed in scripts/occ_invite_key_rollout.sh step 2,
+# which holds the pre-put JSON and proves backend.digisearchIndex == occ_help.
+#
+# What IS observable, and what this checks, is the consequence: a client that
+# could read the corpus could enumerate it. If the projection ever starts
+# serialising the index (or the customer-ticket corpus rides along in any
+# other field), the browser becomes a corpus oracle and this fails.
+echo "  corpus: expected behind the backend, never in the projection"
+checks=$((checks + 1))
+corpus_body="$(probe match first-party)"
+corpus_leak=""
+case "$corpus_body" in
+  *digisearchIndex*) corpus_leak="digisearchIndex" ;;
+esac
+case "$corpus_body" in
+  *occ_tickets*) corpus_leak="${corpus_leak:+$corpus_leak,}occ_tickets" ;;
+esac
+if [ -n "$corpus_leak" ]; then
+  failures=$((failures + 1))
+  echo "FAIL  $(printf '%-52s' 'retrieval corpus not exposed to the client')"
+  echo "      The tenant-config response carried: $corpus_leak"
+  echo "      The OCC tenant is scoped to the occ_help corpus only. A client-visible"
+  echo "      corpus is both an enumeration oracle and a reminder that occ_tickets"
+  echo "      (customer ticket text, docs/adr/0031) must never be reachable from the embed."
+else
+  echo "PASS  $(printf '%-52s' 'retrieval corpus not exposed to the client')"
+  echo "      (the live corpus is not readable over HTTP; rollout step 2 pins it)"
+fi
+
 echo
 if [ "$failures" -eq 0 ]; then
   echo "All $checks checks passed."

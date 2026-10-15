@@ -337,21 +337,39 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Hashes only (count still 127) re-recorded for #4973 (grokipedia MCP tool
     rows + module-map / digiclaw-attach notes in ARCHITECTURE.md) — fixture
     prose only; RecursiveChunker unchanged.
-    Re-recorded at count 131 for #5045 (the Unseeded corpora section, the
-    /health degraded contract, the ingest exit-code block, and the fan-out
-    provenance note in ARCHITECTURE.md) — fixture prose only; RecursiveChunker
-    unchanged.
-    Re-recorded at count 132 for the #5088 review fix (the POST /query row of
-    the unseeded-corpus per-caller table now documents the real `http_503`
-    error envelope in ARCHITECTURE.md) — fixture prose only; RecursiveChunker
-    unchanged.
+    Hashes only (count still 127) re-recorded for DIG-1464 (LuxAlgo trackers
+    data-licence classification: the module-map row and the CC0 public-records
+    layer note now read CC0-1.0, the licence Security classified against the
+    upstream LICENSE file) — fixture prose only; RecursiveChunker unchanged.
+    Re-recorded at count 128 for the DIG-1464 review follow-up (the
+    ARCHITECTURE.md trackers section now carries the per-family
+    congress-trades/short-volume limits, and the module-map row says
+    so). The added prose pushed one chunk over the split boundary, so
+    this is a count change as well as a hash re-record; the size
+    invariant (max chunk 1997 <= 2000) and RecursiveChunker are unchanged.
+    Re-recorded at count 132 for the batch/digiquant fold (DIG-3137): the
+    ARCHITECTURE.md trackers section now carries HEAD's DIG-1307 refusal
+    Re-recorded for the develop merge (DIG-3137 follow-up): chunk 9 covers
+    the /query route docs after #5183/#5045 prose moves — fixture prose only;
+    RecursiveChunker unchanged.
+    framing plus DIG-1464's CC0-1.0 precision and per-family limits — fixture
+    prose only; RecursiveChunker unchanged.
+    Re-recorded at count 133 for DIG-3239 (searxng tag-pin record: the
+    "floats on latest" sentences corrected in the web_search sidecar section of
+    ARCHITECTURE.md) — chunks 0-111 byte-identical, 112-115 re-chunked by the
+    added prose, the 17-chunk tail after them preserved verbatim and in
+    order, net +1, max chunk 1994 of the 2000 budget — fixture prose only;
+    RecursiveChunker unchanged.
+    Hashes only (count still 133) re-recorded for the http_client tree line
+    in ARCHITECTURE.md (query helpers removed; format_results_table stays) —
+    fixture prose only; RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 132
+    assert len(chunks) == 133
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
@@ -364,8 +382,8 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "2d89279e6be2ef3c",
         "7b18269636061f8e",
         "5eaa545f6fd87479",
-        "ac22aad7e50a19a8",
-        "d85a3755cd5e8708",
+        "c1b340d871d4f198",
+        "35bae5b21ed48559",
         "6bb725ee96409565",
         "2496b0331a6908ca",
         "d79c9e4802601817",
@@ -422,17 +440,17 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "4741cf750a9a20e6",
         "80578aa2dbbb641d",
         "1f9fe54a7f6c6f25",
-        "9fdf82f0c003a7a4",
-        "9ebbe22f37b1ac89",
-        "75aa00c56fa87d4c",
-        "acc08c97a5620aaf",
-        "2da9a534085afc86",
+        "5f32459eb46e4976",
+        "f7ef2f68779a303e",
+        "ed9fd383de98c694",
+        "cd4e7192b6baa3d3",
+        "a03c67e88e3c2999",
+        "8bb70d874a5aceb3",
         "354bda51b13bec14",
         "81a3302403f3eb85",
-        "ce69650ecfb49d00",
-        "3021ca751898fc7b",
-        "ef1849e4569e10b8",
-        "8e7e26ccae99b4a2",
+        "0a50c275d11604aa",
+        "ef6a144c2e1e109e",
+        "f27dfd53b2cda272",
         "d90f1ea6b18577c2",
         "6603c2da6eeb5309",
         "e351b4963a561cd6",
@@ -467,9 +485,10 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "4bbb6da734e96059",
         "70c3d41e152ffa11",
         "81d310410772fb3e",
-        "7b96f76f75a29985",
-        "e8874754e8823dbd",
-        "472ca1370eb9ef1a",
+        "e46749bf5ec8f72a",
+        "33c23cc6de00eece",
+        "4bc7547f9b3e2e61",
+        "e7f2ed9b67f28f30",
         "a3987db99f2b72c5",
         "e35a024e63e94d4d",
         "e9faecf827139411",

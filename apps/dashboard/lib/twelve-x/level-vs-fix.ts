@@ -8,8 +8,8 @@
  * pair, callers fall back to the anchors-only series built from the eval row's
  * `entry_fix`/`exit_fix` — the chart still renders levels + markers.
  */
-import { parseTradeLevels } from './trade-levels';
-import type { FxIdeaEvalRow, FxTradeIdeaRow, FxTradeLevels } from './types';
+import { isPublishableBracket, parseTradeLevels } from './trade-levels';
+import type { FxIdeaEvalRow, FxTradeIdeaRow } from './types';
 
 export interface FxFixPoint {
   /** Observation date (YYYY-MM-DD). */
@@ -209,6 +209,12 @@ export interface LevelFixSeries {
   points: FxFixPoint[];
   /** True when `points` is just the eval anchors (no table history). */
   anchorsOnly: boolean;
+  /**
+   * The idea carries a bracket that is not publishable, so the levels above are
+   * withheld and the caller should show a pending state instead of an empty
+   * chart. False when the idea has no bracket at all (nothing to wait for).
+   */
+  levelsPending: boolean;
 }
 
 /**
@@ -216,16 +222,11 @@ export interface LevelFixSeries {
  * `incomplete`, and any status `parseTradeLevels` did not recognise (it
  * coerces those to `incomplete`) all mean the ladder is not publishable.
  *
- * This mirrors `isPublishableBracket` in `./trade-levels` rather than
- * importing it: that predicate is module-private and that file is a frozen
- * contract. The two must be kept in step — `level-vs-fix.test.ts` asserts
- * this gate and `trade-levels.pending-levels.test.ts` asserts the model gate,
- * and neither alone pins the pair. That is why the test file cross-checks the
- * two gates against each other.
+ * The predicate is imported from `./trade-levels` rather than restated: this
+ * file used to carry a byte-identical copy, and `level-vs-fix.test.ts` needed a
+ * cross-check test purely to stop the two from drifting. One exported
+ * predicate makes that class of bug unrepresentable.
  */
-function isPublishableBracket(tradeLevels: FxTradeLevels | null): tradeLevels is FxTradeLevels {
-  return tradeLevels !== null && tradeLevels.status === 'complete';
-}
 
 /**
  * PURE — flat published levels + moving fix for one idea. `fixes` is the
@@ -245,7 +246,9 @@ export function buildLevelFixSeries(
   fixes: FxFixPoint[],
 ): LevelFixSeries {
   const tl = parseTradeLevels(idea.trade_levels);
-  const published = isPublishableBracket(tl) ? tl : null;
+  // Levels are withheld unless the bracket is complete; the fix line below is
+  // independent of the bracket and still publishes.
+  const publishable = isPublishableBracket(tl);
   const entryFix = evalRow?.entry_fix ?? null;
   const exitFix = evalRow?.exit_fix ?? null;
   const entryDate = evalRow?.entry_date ?? null;
@@ -264,13 +267,12 @@ export function buildLevelFixSeries(
 
   return {
     pair: idea.pair,
-    entryLow: published ? numOrNull(published.entry_low?.value) : null,
-    entryHigh: published ? numOrNull(published.entry_high?.value) : null,
-    stop: published ? numOrNull(published.stop?.value) : null,
-    targets: published
-      ? published.targets
-          .map((t) => numOrNull(t.value))
-          .filter((n): n is number => n !== null)
+    // A bracket publishes complete or not at all (DIG-260 L5 follow-up).
+    entryLow: publishable ? numOrNull(tl.entry_low?.value) : null,
+    entryHigh: publishable ? numOrNull(tl.entry_high?.value) : null,
+    stop: publishable ? numOrNull(tl.stop?.value) : null,
+    targets: publishable
+      ? tl.targets.map((t) => numOrNull(t.value)).filter((n): n is number => n !== null)
       : [],
     entryDate,
     exitDate,
@@ -278,5 +280,6 @@ export function buildLevelFixSeries(
     exitFix,
     points,
     anchorsOnly,
+    levelsPending: tl !== null && !publishable,
   };
 }

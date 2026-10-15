@@ -8,9 +8,19 @@
 # procedure changed — it is the same steps in the same order.
 #
 #   WHAT IT WRITES TO PRODUCTION
-#     1. digichat Worker secret DIGICHAT_EMBED_TENANTS  (the OCC `token` field only)
+#     1. digichat Worker secret DIGICHAT_EMBED_TENANTS  (exactly two fields on
+#        the OCC entry: `token`, and `backend.digisearchIndex`)
 #     2. a local git commit bumping SHARED_DIGICHAT_CONTAINER_ID  (NOT pushed)
 #     3. a production deploy of the digithings-digichat Worker
+#
+#   THE SECOND FIELD IS A CORPUS NARROWING, NOT A SIDE EFFECT (DIG-2779)
+#     The same put also rewrites occ.digithings.ai.backend.digisearchIndex to
+#     the help corpus only. The live tenant reads "occ_help,occ_tickets"; the
+#     tickets corpus is the customer-PII one, so a token-only rotation would
+#     rotate the credential and leave the retrieval grant exactly as wide as it
+#     was. Counsel's condition for this rollout is that the two land together,
+#     so the allowed-diff guard is exactly {token, backend.digisearchIndex} and
+#     BOTH are required to change — not merely "at most these".
 #
 #   WHAT IT DOES NOT DO
 #     - It does not mint the key. There is nowhere safe for this script to put a
@@ -50,6 +60,16 @@
 # Usage, from the repo root:
 #   bash scripts/occ_invite_key_rollout.sh
 #
+#   Non-interactive (CI). Two env vars supply the secrets and one opts in to
+#   token auth, because the default deliberately refuses a shell token:
+#     OCC_ROLLOUT_AUTH=api-token \
+#     OCC_EMBED_TENANTS_CURRENT=<current registry JSON from the secrets manager> \
+#     OCC_INVITE_KEY=<new key> \
+#     bash scripts/occ_invite_key_rollout.sh
+#   The confirmation prompt is still read from stdin, so feed it ROLLOUT:
+#     printf 'ROLLOUT\n' | bash scripts/occ_invite_key_rollout.sh
+#   .github/workflows/occ-invite-key-rollout.yml is the one-click wrapper.
+#
 set -euo pipefail
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -60,9 +80,41 @@ OCC_HOST="occ.digithings.ai"
 WRANGLER_VERSION="4.133.0"
 DRAIN_SECONDS=180
 
-# A bare `wrangler login` must win over a shell token; a shell CLOUDFLARE_API_TOKEN
-# shadows it and fails with auth error 10000 (docs/ops/SECRETS_ROTATION.md preamble).
-wrangler() { env -u CLOUDFLARE_API_TOKEN npx --yes "wrangler@$WRANGLER_VERSION" "$@"; }
+# The one retrieval corpus Counsel allows the OCC embed to reach (DIG-2779).
+#
+# Deliberately NOT `${OCC_HELP_INDEX:-occ_help}`. The value is a security
+# decision, so the environment must not be able to move it: an operator who
+# exports OCC_HELP_INDEX=occ_help,occ_tickets would otherwise widen the grant
+# through the very guard that is supposed to stop it. The live OCC tenant reads
+# "occ_help,occ_tickets" — occ_tickets is the customer-PII corpus built by
+# scripts/index_occ_tickets.py (docs/adr/0031) — and the narrowing this run
+# ships is "occ_help,occ_tickets" -> "occ_help".
+#
+# The field is backend.digisearchIndex, not a top-level key: embed-tenants.ts:43
+# declares it inside the digigraph backend type and validateEntry (embed-tenants.ts:309-325)
+# reads it from there. The allowed-diff paths below are written to match.
+OCC_HELP_INDEX="occ_help"
+OCC_FORBIDDEN_INDEX="occ_tickets"
+
+# Two load-bearing deviations from a plain `npx wrangler` call.
+#
+#   1. Every call runs inside $WORKER_DIR. The digichat Worker is configured by
+#      apps/digichat-cloudflare/wrangler.toml and there is no wrangler.toml at the
+#      repo root, so from the root `wrangler secret put` and `wrangler deploy`
+#      resolve no Worker at all — the put would not land on digithings-digichat.
+#      One wrapper covers all four call sites (secret list, secret put, deploy,
+#      versions list).
+#
+#   2. CLOUDFLARE_API_TOKEN is dropped so a bare `wrangler login` wins over a
+#      shell token; a shell token shadows it and fails with auth error 10000
+#      (docs/ops/SECRETS_ROTATION.md preamble). CI has no interactive terminal,
+#      so a caller that has deliberately provisioned a token opts in with
+#      OCC_ROLLOUT_AUTH=api-token. The default is unchanged: login only.
+if [ "${OCC_ROLLOUT_AUTH:-login}" = "api-token" ]; then
+  wrangler() { (cd -- "$WORKER_DIR" && npx --yes "wrangler@$WRANGLER_VERSION" "$@"); }
+else
+  wrangler() { (cd -- "$WORKER_DIR" && env -u CLOUDFLARE_API_TOKEN npx --yes "wrangler@$WRANGLER_VERSION" "$@"); }
+fi
 
 say()  { printf '\n=== %s\n' "$*" >&2; }
 fail() { printf '\nFATAL: %s\n' "$*" >&2; exit 1; }
@@ -73,6 +125,20 @@ say "0/7 preflight"
 for tool in git jq npx curl node; do
   command -v "$tool" >/dev/null 2>&1 || fail "$tool is required and was not found on PATH."
 done
+
+# Refuse an auth mode this script does not implement instead of silently falling
+# back to `login`. In CI `login` cannot succeed (no terminal, no browser) and the
+# failure surfaces later as a confusing whoami error.
+case "${OCC_ROLLOUT_AUTH:-login}" in
+  login) ;;
+  api-token)
+    [ -n "${CLOUDFLARE_API_TOKEN:-}" ] \
+      || fail "OCC_ROLLOUT_AUTH=api-token but CLOUDFLARE_API_TOKEN is empty. Nothing was written. Unset OCC_ROLLOUT_AUTH to authenticate with an interactive 'wrangler login' instead."
+    [ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ] \
+      || fail "OCC_ROLLOUT_AUTH=api-token but CLOUDFLARE_ACCOUNT_ID is empty, so wrangler cannot tell which account a deploy would land on. Nothing was written."
+    ;;
+  *) fail "OCC_ROLLOUT_AUTH must be 'login' (the default) or 'api-token'; got '${OCC_ROLLOUT_AUTH}'. Nothing was written." ;;
+esac
 
 [ -d "$WORKER_DIR" ] || fail "expected the digichat Worker at $WORKER_DIR"
 [ -f "$PATHS_TS" ]    || fail "expected $PATHS_TS"
@@ -125,7 +191,7 @@ printf '%s\n' "$WHOAMI_OUT" >&2
 case "$WHOAMI_OUT" in
   *"not authenticated"*|*"Not logged in"*|*"auth token has expired"*|\
   *"Provide a valid API token"*|*"Missing an account ID"*)
-    fail "wrangler is not authenticated (expired token, or not logged in). Run 'wrangler login' in an interactive terminal first; this script will not fall back to a CLOUDFLARE_API_TOKEN from the shell, on purpose. Nothing was written." ;;
+    fail "wrangler is not authenticated (expired token, or not logged in). Run 'wrangler login' in an interactive terminal first, or set OCC_ROLLOUT_AUTH=api-token with CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID for a non-interactive caller. By default this script will not fall back to a CLOUDFLARE_API_TOKEN from the shell, on purpose. Nothing was written." ;;
 esac
 case "$WHOAMI_OUT" in
   *"OAuth token"*|*"API Token"*|*"logged in"*) : ;;
@@ -182,12 +248,13 @@ printf '%s' "$CURRENT_JSON" | jq -e --arg h "$OCC_HOST" 'has($h)' >/dev/null 2>&
   || fail "the registry has no \"$OCC_HOST\" entry, so this is not the OCC registry you think it is. Nothing was written."
 
 # ------------------------------------------------------------- build the JSON --
-say "2/7 build the new registry value (exactly one field changes: the OCC token)"
-# Everything except the OCC token is carried across verbatim, including the
+say "2/7 build the new registry value (exactly two fields change: the OCC token, and the OCC retrieval corpus)"
+# Everything except those two is carried across verbatim, including the
 # mcp.servers entry whose literal is MCP_EDGE_KEY.
 NEW_JSON="$(
   printf '%s' "$CURRENT_JSON" \
-    | jq --arg h "$OCC_HOST" --arg k "$NEW_KEY" '.[$h].token = $k'
+    | jq --arg h "$OCC_HOST" --arg k "$NEW_KEY" --arg i "$OCC_HELP_INDEX" \
+          '.[$h].token = $k | .[$h].backend.digisearchIndex = $i'
 )"
 
 say "2/7 validate the shape before it goes near the account"
@@ -197,16 +264,49 @@ printf '%s' "$NEW_JSON" | jq -e --arg h "$OCC_HOST" '.[$h].mcp.servers | length 
   || fail "the OCC entry has no mcp.servers after the edit. The zammad route would break (R10). Nothing was written."
 printf '%s' "$NEW_JSON" | jq -e 'to_entries | all(.value | has("token"))' >/dev/null \
   || fail "at least one tenant entry has no token field. The registry validator requires one per entry (apps/digichat/src/lib/embed-tenants.ts:511). Nothing was written."
-# Prove the ONLY difference is the OCC token. Anything else means the paste was
+# The corpus gate, proved with jq rather than trusted from the paste: the whole
+# point of the second allowed field is that the grant gets NARROWER, so a value
+# that is merely plausible is exactly the failure Counsel's condition prevents.
+#
+# The named-corpus check comes FIRST so a regression is refused with the reason
+# a human needs ("the tickets corpus is still reachable") instead of a shape
+# mismatch. Scoped to the OCC entry: another tenant may legitimately use it.
+if printf '%s' "$NEW_JSON" | jq -e --arg h "$OCC_HOST" --arg i "$OCC_FORBIDDEN_INDEX" \
+     '.[$h].backend.digisearchIndex | test("(^|,)" + $i + "(,|$)")' >/dev/null 2>&1; then
+  fail "\"$OCC_FORBIDDEN_INDEX\" is still reachable by the OCC tenant. That corpus carries customer ticket text (docs/adr/0031). Nothing was written."
+fi
+printf '%s' "$NEW_JSON" | jq -e --arg h "$OCC_HOST" --arg i "$OCC_HELP_INDEX" '.[$h].backend.digisearchIndex == $i' >/dev/null \
+  || fail "the OCC retrieval corpus is not exactly \"$OCC_HELP_INDEX\" after the edit. Nothing was written."
+# Prove the ONLY differences are those two. Anything else means the paste was
 # wrong and a `put` would silently change routing, gate mode or the MCP edge key.
-CHANGED_KEYS="$(printf '%s' "$CURRENT_JSON" | jq -r --slurpfile new <(printf '%s' "$NEW_JSON" | jq -S .) 'paths(scalars) as $p | select(getpath($p) != ($new[0] | getpath($p))) | $p | join(".")' 2>/dev/null || true)"
-UNEXPECTED="$(printf '%s' "$CHANGED_KEYS" | grep -v "^$OCC_HOST\.token$" || true)"
+#
+# The path set is the UNION of both documents. Walking only the current file's
+# paths would make an ADDED key invisible: `paths(scalars)` is evaluated against
+# the CURRENT registry, so a backend.digisearchIndex appearing where none existed
+# would contribute nothing to CHANGED_KEYS, and the "both required" assert below
+# would then be unreachable rather than satisfied.
+CHANGED_KEYS="$(printf '%s' "$CURRENT_JSON" | jq -r --slurpfile new <(printf '%s' "$NEW_JSON" | jq -S .) '
+  . as $cur
+  | (($cur | [paths(scalars)]) + ($new[0] | [paths(scalars)]) | unique_by(.)) as $all
+  | $all[] as $p
+  | select(($cur | getpath($p)) != ($new[0] | getpath($p)))
+  | $p | join(".")' 2>/dev/null || true)"
+TOKEN_PATH="$OCC_HOST.token"
+INDEX_PATH="$OCC_HOST.backend.digisearchIndex"
+UNEXPECTED="$(printf '%s\n' "$CHANGED_KEYS" | grep -v -e "^${TOKEN_PATH}\$" -e "^${INDEX_PATH}\$" || true)"
 [ -z "$UNEXPECTED" ] \
-  || fail "the edit would change more than the OCC token:
+  || fail "the edit would change more than the OCC token and the OCC retrieval corpus:
 $(printf '%s' "$UNEXPECTED" | sed 's/^/    /')
 Refusing to put. Nothing was written."
+# "At most these two" is not the requirement. Counsel's condition is that the put
+# NARROWS the corpus, so both must actually move: a run that rotates the key and
+# leaves occ_tickets reachable must not report a compliant rollout.
+grep -qx "$TOKEN_PATH" <<<"$CHANGED_KEYS" \
+  || fail "$TOKEN_PATH did not change. This rollout rotates the key, so the pasted registry already held the new one. Nothing was written."
+grep -qx "$INDEX_PATH" <<<"$CHANGED_KEYS" \
+  || fail "$INDEX_PATH did not change. The live OCC tenant reads \"occ_help,occ_tickets\", so the narrowing this run exists to apply should have moved it to \"$OCC_HELP_INDEX\". Nothing was written."
 
-printf 'exactly one field will change: %s.token\n' "$OCC_HOST"
+printf 'exactly two fields will change: %s and %s -> %s\n' "$TOKEN_PATH" "$INDEX_PATH" "$OCC_HELP_INDEX"
 printf 'tenant hosts in the new value: %s\n' "$(printf '%s' "$NEW_JSON" | jq -r 'keys | join(", ")')"
 
 # ------------------------------------------------------------------ fingerprint --

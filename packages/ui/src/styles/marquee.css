@@ -56,7 +56,8 @@
   animation: mq-right var(--mq-speed, 34s) linear infinite;
 }
 
-.mq-row:hover .mq-track {
+.mq-row:hover .mq-track,
+.mq-row[data-paused="true"] .mq-track {
   animation-play-state: paused;
 }
 
@@ -78,6 +79,74 @@
 @media (prefers-reduced-motion: reduce) {
   .mq-track--left,
   .mq-track--right {
+    animation: none;
+  }
+}
+
+/* MarketBar (components/finance-composites/MarketBar).
+   The live mark is a square in the money green. Each cell owns its padding
+   and the group gap is zero, so the duplicated copy meets the first with the
+   same gap as every other pair — the seam is not a hole. A percent pulse is
+   opacity on the number only; the slot widths stay put. */
+.mb-tape.mq-row .mq-group {
+  flex: 0 0 auto;
+  gap: 0;
+  padding-inline-end: 0;
+}
+
+.mb-cell {
+  flex: 0 0 auto;
+}
+
+.mb-price {
+  display: inline-block;
+  min-width: 10ch;
+  text-align: end;
+}
+
+.mb-pct {
+  min-width: 8.5ch;
+}
+
+.mb-live-mark {
+  display: inline-block;
+  width: 0.45rem;
+  height: 0.45rem;
+  flex-shrink: 0;
+  border-radius: 0;
+  background: var(--up);
+  animation: mb-live-pulse 2.4s ease-out infinite;
+}
+
+/* Missing prices. Same square as the feed mark, in --down, with no pulse. */
+.mb-status-miss {
+  display: inline-block;
+  width: 0.45rem;
+  height: 0.45rem;
+  flex-shrink: 0;
+  border-radius: 0;
+  background: var(--down);
+}
+
+@keyframes mb-live-pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.35; }
+  100% { opacity: 1; }
+}
+
+.mb-pct-pulse {
+  animation: mb-pct-pulse 0.7s ease-out;
+}
+
+@keyframes mb-pct-pulse {
+  0% { opacity: 1; }
+  35% { opacity: 0.2; }
+  100% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mb-live-mark,
+  .mb-pct-pulse {
     animation: none;
   }
 }
