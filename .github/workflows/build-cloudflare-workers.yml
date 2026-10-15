@@ -31,6 +31,7 @@ on:
       - 'apps/digichat-cloudflare/**'
       - 'apps/digidata-api/**'
       - 'apps/digithings-stack-cloudflare/**'
+      - 'apps/corpus-index/**'
       - 'apps/**/wrangler.toml'
       - 'package.json'
       - 'package-lock.json'
@@ -65,6 +66,7 @@ jobs:
           - digitrace-langfuse
           - digichat-cloudflare
           - digithings-stack-cloudflare
+          - corpus-index
     steps:
       - uses: actions/checkout@v4
 
