@@ -4,7 +4,7 @@
  * the digithings-stack worker.
  *
  * Same handlers, one dispatch: requests are prefix-stripped and forwarded to
- * the dashboard-api worker entry (`../../dashboard-api/src/index.ts`), whose
+ * the dashboard-api worker entry (`dashboard-api`), whose
  * own fetch applies its exact-match CORS allowlist and serves `POST /mcp`
  * (the 8 dashboard MCP tools) through its shared route dispatch. Nothing is
  * reimplemented here, so HTTP and MCP responses stay byte-identical to the
@@ -27,8 +27,8 @@
 
 import dashboardApi, {
   type Env as DashboardApiEnv,
-} from "../../dashboard-api/src/index";
-import { STANDALONE_MCP_TOOLS } from "../../dashboard-api/src/mcp";
+} from "dashboard-api";
+import { STANDALONE_MCP_TOOLS } from "dashboard-api/mcp";
 
 /** Canonical module path for the folded dashboard-api routes. */
 export const DASHBOARD_API_PREFIX = "/dashboard-api";
