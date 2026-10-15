@@ -7,7 +7,7 @@
       "statement": "Local dev runs host backends via make stack-local plus make digichat-dev on port 3000, requiring matching AUTH_URL origin and an identical DIGIKEY_BFF_TOKEN, without which chat returns upstream_auth.",
       "evidence": [
         {
-          "resource": "repo://apps/digichat/OPERATIONS.md#L102-L108",
+          "resource": "repo://apps/digichat/OPERATIONS.md#L103-L109",
           "version": "repo-lines-v1:sha256:204bb122562c41321ec51eb6f63feac7fa8a4e0856bc97be57c0b5fdc6568ec9:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMmM1M2RlOGYxNzg3MzYwNDk5OTQ0OTg0ODdkN2I2NzlhYTFmNzkwNDRkYmMwODU3ZWQ0YjJjNGQ2MWI2NGM1MCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYjY4MjhjZGQ3ZmY5ZGI3MDA1YjFlYzljNmIxNzZiZDgyMWVmZDUzYTBkZWY0MmFjZTRkOTJkZGI2ODg3ZjgyZiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNThhMmI5MWI1NDkyNzVhYzc0ZGQyNDQ0MmE3ZjMzYTMyN2Y4MWNmYzAzMTk5NjA4NmNmZmJmYzE1MmYwMDMxMCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzY1MWI4OWJiMGM5NDE0ZTA0MTU3NWZmZTNjZDMwZDUwOTVhMDZiOTQxZjcwOTA1NWE5OWEzOTYwMTllMWRiOSJ9"
         },
         {
@@ -21,7 +21,7 @@
       "statement": "Postgres is optional (health reports database: skipped without it); migrations in drizzle/ are additive and auto-applied at boot when DIGICHAT_AUTO_MIGRATE=1, which is why the image ships the drizzle folder.",
       "evidence": [
         {
-          "resource": "repo://apps/digichat/Dockerfile#L47-L51",
+          "resource": "repo://apps/digichat/Dockerfile#L49-L53",
           "version": "repo-lines-v1:sha256:75e7b95fdc81c5a5643ab9c17eb4153bcaab2f7b0a33a77955be23c84ea09747:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMGM2MjBlNGEzY2Y0MDc4MDQ4YTU3NjQ5YjUzMGI3M2MxMTQxNDg2ZjRhMDZlNmM5YzY4ZjY5NzNmZGQ5NWY2ZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMGMyMjA1YWIzODljNWFmMjEwMTRiYjA3Yjg0YzcyZDQ5MmYyNDAzZThhMGU0ODM4ZTRiMjJmZWZhNWNkZmE1YSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiM2VkNGFhOTBiNmFiY2JhYTEzNWIwMDk1ZDNmNmI3YjQ3ZWIwMDEzZjA3MGIyMTQ1NzA3NDBhMzQ1Y2RkNGRkMyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMTYzODZjZGUwMzJhY2M4NzYzNWQ2MTkxMzE5YTcyN2JjZThjMDMxM2YxZDljNTg5MzMyY2NkMDFiMmJiMTFjOCJ9"
         },
         {
@@ -54,23 +54,23 @@
     },
     {
       "id": "claim_ad1f3ac11d6746d6b1c55f3228672f8b",
-      "statement": "Machine digi_live keys are bcrypt-hashed in Postgres under machine:<tenantSlug>, distinct from digikey dgk_live keys used for upstream JWT exchange; releases install from GHCR, not npm.",
+      "statement": "Machine digi_live keys are bcrypt-hashed (cost 12) in Postgres, distinct from digikey dgk_live keys used for upstream JWT exchange. After auth, conversations are owned under machine:<tenantSlug>.",
       "evidence": [
         {
-          "resource": "repo://apps/digichat/OPERATIONS.md#L8-L10",
-          "version": "repo-lines-v1:sha256:b0c8d346d3e07d245bb71c9571544fd7f9017bd1fa2fbfd26af63a7d46a7c9c2:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZDdiMjcwY2VlZTE4NzEyOTVkOTNjMzUyM2NmYmNlOWM5ODgxOTBmNTk1NDkzNDZmMDZiNDk5NzI1NTg1YmY4MiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZmNmMDQxY2RjNGVmNzA0Y2Y1NDc1MzY0ZjM2NTc0NjQzZGVmMTYyZDkyMThmZjU4YmI4MTZjNWNhMDAxYmE0NyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNzI3ZmYxYzgyODhhZmI3NjIxMWJmNTA1OTAzOWU3YmViZjIyMjRmOGJmMWJjYzJkMDI4NmVmNTMwMGQzMDU3ZiJ9"
+          "resource": "repo://apps/digichat/scripts/create-api-key.ts#L34-L34",
+          "version": "repo-lines-v1:sha256:e5441a0675b3f65444c52e2d812a9c31219bfcbe234a313d6c4f7e95d212b27b:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZTU0NDFhMDY3NWIzZjY1NDQ0YzUyZTJkODEyYTljMzEyMTliZmNiZTIzNGEzMTNkNmM0ZjdlOTVkMjEyYjI3YiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZTU0NDFhMDY3NWIzZjY1NDQ0YzUyZTJkODEyYTljMzEyMTliZmNiZTIzNGEzMTNkNmM0ZjdlOTVkMjEyYjI3YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYzExM2I3OTZiY2FmNjk1NTQ4NGU3N2MzNmIzZTUxNWQwODExNjExNDQzODU4OGUyMjk0ODc0NmFhNDZiOGJkOCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMjdhMmJkN2ZhZDllYzRlOGI5Y2ZkYWQ4MjUxZDQ0NTgyZTRmYmNmNDhhZTA3ODg2ZThkNmJmY2E5N2ExODc0NCJ9"
         },
         {
-          "resource": "repo://apps/digichat/scripts/create-api-key.ts#L1-L53",
-          "version": "repo-lines-v1:sha256:cddca1d0622945f46f776a609c0efaaec25f48f85e96b8ec6f20ea86c8f9f082:eyJzZWxlY3RlZExpbmVDb3VudCI6NTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIyMmFiYzkyMWU2N2E5ODJkZWExZDVjZTg0OWE4Zjk2YWMyYzYxZjc0ODM5NTc4N2Y4MzEyYTMxZGY4NGU1ZjgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+          "resource": "repo://apps/digichat/src/lib/api-key.ts#L1-L8",
+          "version": "repo-lines-v1:sha256:8da7bb40b124a1aa2b23bbfa1221623c09f60ab03b13b8e738f45d5b7efe5d06:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMWRlMjRlM2E3MTJkODE2YjY5NzQyNzZmNjhhZTZhMGFlNGEyYTNhYzM3NWY3ODE2MGZkODY5NjE0YzVkZDVhYSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMzEwNGU0ODhkOGJhYjg2N2FjNDBlNWY0ZWMyYzczOGNiOWM2YmRkMGI4N2QyOWI2N2E4YjRkNDNlMGEyMjhiNiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOTgxNjdmYjM4OWRjMzFiYTM3M2MxYmFmMTY5MDFiMTZlNDljZjcwN2EwYjM4NDY1NDAyNTZmY2NlYmNkOGFlYSJ9"
         },
         {
-          "resource": "repo://apps/digichat/src/lib/api-key.ts#L1-L52",
-          "version": "repo-lines-v1:sha256:17ed5999dd3b46f3894d95b31ed96d947b6ac33d416ab39529be7e7884f71d38:eyJzZWxlY3RlZExpbmVDb3VudCI6NTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFkZTI0ZTNhNzEyZDgxNmI2OTc0Mjc2ZjY4YWU2YTBhZTRhMmEzYWMzNzVmNzgxNjBmZDg2OTYxNGM1ZGQ1YWEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+          "resource": "repo://apps/digichat/src/lib/request-auth.ts#L43-L47",
+          "version": "repo-lines-v1:sha256:329b28ef46f837b5780b1604e10960fbad548d53c6c48249225ac4243bacdcfe:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMjdlNTc4OGQ1ZDlkNzNkMjRhODFkYmMwYTVhNzRiZmE4MmM5YzNiM2FmOTllNTJhZjc5NmU5MGI0NjhhOGEzZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiM2ZlODE0ZTA0ZjQzYTA5MmQzMDUxM2UzMmM2NWU0MDhjMDhhMDg0ZGE5Y2YxZjg4NzgxMDg1MjVhYmQwNDllZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjIsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMWFkNmRiYmMzY2QyNTJlMGMyZTIyZDBkMzIzMzliOTQwMWVkNjRkZGM1YTA0NTY3ZDRjZDYwM2M1M2RkMjhiYiJ9"
         },
         {
-          "resource": "repo://apps/digichat/src/lib/request-auth.ts#L43-L44",
-          "version": "repo-lines-v1:sha256:1c3935683d3b3711c7f0e215608f445f6b256f8c93726ec5b73c9afbd5537b6b:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiN2NlOTM0N2JjNDg4MjI3YmJhNmJhMzU3MzEzNjIwMDRiZWY4NDAzNGUwMjgwYWM5YmU1OTNlZDJjMGQ4ODVmOCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZDc0MmRjMTA0ZjhiN2FkM2IyNDk1Zjg3MjE1OTJmYTgyMTkyMWIyZWIxOGRlYjA5YjBmMjM4MGEzMGY2MDliZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiN2UyYzk0YTAyNDFmZTQ5ZGI5NDAxNjdjN2QyMzlkODg5MWE3MmEyYzRhZjM0YjkxNDJlMjA0MzVhODQ1YjVjMSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNTRiNDgxMjcwY2M5ODhkZDJlMTRiYWUyZTM4MWNjM2I1NjY2NWNmNDQ2M2IxY2QwODAzMWI2MzYyMGQ2MWFjYiJ9"
+          "resource": "repo://apps/digichat/OPERATIONS.md#L74-L74",
+          "version": "repo-lines-v1:sha256:725ece71273e068aa50f825718b87bc454ddee6d38a4ce36950f8119cad6b797:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNzI1ZWNlNzEyNzNlMDY4YWE1MGY4MjU3MThiODdiYzQ1NGRkZWU2ZDM4YTRjZTM2OTUwZjgxMTljYWQ2Yjc5NyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNzI1ZWNlNzEyNzNlMDY4YWE1MGY4MjU3MThiODdiYzQ1NGRkZWU2ZDM4YTRjZTM2OTUwZjgxMTljYWQ2Yjc5NyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzdiNDBlNTQ3ZGFmNzc5MTcxODhlYWJjZTk3OTdkYmFjNDgxMTBmOGYwNmQ0MGFjMzZlODFkNmRlOTdiMjUwYiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYmVmMTQ3NmQ0ZTIzYTQwMjUxMWM2ZWY2MzEwYTU4ZDk2MTQzYjUxYWJkYjBjNWJhMmU2MDkyMDk1YjcyNDM5OSJ9"
         }
       ]
     }
