@@ -4,7 +4,7 @@
   "claims": [
     {
       "id": "claim_c0361c1934ea42079e1d0d28ac2d0b2e",
-      "statement": "digiclaw ships heartbeat runner, JSONL audit, agent scheduler, and Phase C monitors_tick (web-watch-tick → digisearch /v1/monitors/tick) as a CLI with no HTTP server; channel adapters, session/queue managers, WebSocket plane, and skill execution are deferred.",
+      "statement": "digiclaw ships heartbeat runner, JSONL audit, agent scheduler, and Phase C monitors_tick (web-watch-tick \u2192 digisearch /v1/monitors/tick) as a CLI with no HTTP server; channel adapters, session/queue managers, WebSocket plane, and skill execution are deferred.",
       "evidence": [
         {
           "resource": "repo://digiclaw/ARCHITECTURE.md#L9-L22",
@@ -25,7 +25,7 @@
       "statement": "One heartbeat cycle pings digigraph and digiquant health with a 5s timeout, checks drift via digiquant /check_drift with a digikey bearer, triggers re-optimization on drift, and exits 0; the Docker sleep loop is external.",
       "evidence": [
         {
-          "resource": "repo://digiclaw/ARCHITECTURE.md#L50-L60",
+          "resource": "repo://digiclaw/ARCHITECTURE.md#L55-L65",
           "version": "repo-lines-v1:sha256:8da4099069ebba82716ba503cc77681a94aec1dfb592d001a1e38cd1aa161251:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFhODM4N2MwZjUxOGI2Zjc0Y2M4YjUwMGY2NWMzNDFhNzk4Nzk5YTY3MmMxYTI5MTNhMzE5MTRjYTA1NjkzZTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg3YTg2OGYzODk2NDVkMmI5ODQ2Y2RhYTFhM2VlYmFkMjg4ZTU5ZDczZGI2ZDZhMTdhYzAzMzdlNGJlODQ5ZmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjUyMWUwNjNhOWViODNlZTRhOTdiMjA0YWY0NzM5Y2U1NGE0MjI1ZGJmNTllZjNiNDJmYmE4MmYyZDg2NzJhYmMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjczMTM1MDFkYzViZjA0MDI3ZmNkMjZlOTY4OWUzNjZhMDdlZTAwYWNhMGI2NGZmYmJiNDQ0MmRjZjc5NGUwNDgifQ"
         }
       ]
