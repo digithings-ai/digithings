@@ -295,6 +295,9 @@ test("cycling each enum updates the draft and the strip row", () => {
   expect(cycleChoice(blankDraft(), theme.key, [], "dark", 1)).toEqual(blankDraft());
   // A value the schema does not offer falls forward to the first option, never to itself.
   expect(cycleChoice(blankDraft(), fieldKey("appearance", "theme"), ["dark", "light"], "neon", 1).values[fieldKey("appearance", "theme")]).toBe("dark");
+  // A held value the schema does not offer is ignored: the step starts from the shown value.
+  const stale = { ...blankDraft(), values: { [theme.key]: "neon" } };
+  expect(cycleChoice(stale, theme.key, ["dark", "light"], "dark", 1).values[theme.key]).toBe("light");
   // The headline carries the cycled skin and theme.
   expect(liveFrom(acme, draft).headline).toBe("acme · base · light");
 });
@@ -400,6 +403,8 @@ test("a draft change reaches the preview for every field kind, and a secret stay
   expect(base.get("models:picker")?.on).toBeNull();
   expect(base.get("features:attachments")?.on).toBe(false);
   expect(base.get("tools:allow user toggle")?.on).toBe(true);
+  // An mcp server the deployment enables reads on before the toggle turns it off.
+  expect(base.get("mcp:docs")?.on).toBe(true);
   const changed = toggleMcp(
     toggleTool(
       toggleFlag(typeInto(blankDraft(), launcher, DASH, false, "A"), dictation, DASH),

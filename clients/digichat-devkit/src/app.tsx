@@ -586,7 +586,7 @@ function StripLine({ row, hot, caret }: { row: StripRow; hot: boolean; caret: bo
     row.kind === "model"
       ? `model  ${row.value}`
       : row.kind === "choice"
-        ? `${row.label}  ${row.value}`
+        ? `${row.key}  ${row.value}`
         : row.kind === "tool"
           ? `tool  ${row.label}  ${row.on ? "on" : "off"}`
           : row.kind === "mcp"
