@@ -46,7 +46,6 @@ __all__ = [
     "CONTROL_PLANE_ROUTES",
     "INGEST_PREFIXES",
     "INGEST_ROUTES",
-    "mask_token",
     "ROUTE_KIND_INGEST",
     "ROUTE_KIND_READ",
     "ROUTE_UNREGISTERED",

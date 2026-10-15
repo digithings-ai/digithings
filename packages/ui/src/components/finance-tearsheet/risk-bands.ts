@@ -27,11 +27,9 @@ export const RISK_BANDS: readonly RiskBand[] = [
 /** Band copy for a composite risk in [0, 100]. Null/NaN → null. */
 export function riskBandLabel(risk: number | null | undefined): string | null {
   if (risk === null || risk === undefined || Number.isNaN(risk)) return null;
-  if (risk < 10) return "Fire sale";
-  if (risk < 25) return "Accumulate";
-  if (risk < 50) return "Value";
-  if (risk < 75) return "Above mid";
-  if (risk < 95) return "Hot";
+  for (const band of RISK_BANDS) {
+    if (risk < band.hi) return band.label;
+  }
   return "Bubble";
 }
 

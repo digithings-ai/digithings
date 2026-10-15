@@ -1,18 +1,11 @@
 import { eq } from "drizzle-orm";
-import { timingSafeEqual } from "node:crypto";
+import { safeEqualStr } from "@/lib/safe-equal";
 import bcrypt from "bcryptjs";
 import { getDb } from "@/db";
 import { apiKeys, tenants } from "@/db/schema";
 
 /** digichat-local machine keys (Postgres bcrypt). Distinct from digikey `dgk_live_` keys. */
 export const MACHINE_KEY_PREFIX = "digi_live_";
-
-function safeEqualStr(a: string, b: string): boolean {
-  const ba = Buffer.from(a, "utf8");
-  const bb = Buffer.from(b, "utf8");
-  if (ba.length !== bb.length) return false;
-  return timingSafeEqual(ba, bb);
-}
 
 /**
  * Validate machine credential: env bootstrap key, or hashed key in Postgres.

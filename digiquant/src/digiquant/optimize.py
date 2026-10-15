@@ -133,7 +133,7 @@ def generate_param_grid(
             and len(spec) == 3
             and all(isinstance(x, (int, float)) for x in spec)
         ):
-            # (min, max, step)
+            # Tuple holds minimum, maximum and step.
             lo, hi, step = spec[0], spec[1], spec[2]
             vals = []
             v = lo
@@ -235,7 +235,7 @@ def run_optimize(
     elif method == "random":
         trials = sample_random_params(strategy_name, n_trials, base_params=base_params)
     else:
-        # grid: auto-infer
+        # For grid search, infer the parameter grid automatically.
         trials = infer_param_grid(strategy_name, base_params=base_params, num_points_per_param=3)
 
     logger.info(

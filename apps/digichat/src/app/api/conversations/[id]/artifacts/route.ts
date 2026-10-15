@@ -2,9 +2,35 @@
  * `/api/conversations/[id]/artifacts` - session-scoped artifact metadata.
  *
  * The route holds no artifact policy of its own. Authentication is
- * `requireDigiChatAuth` (the same gate every DigiChat route uses, so an
- * OCC embed's invite key is honoured here too), ownership is the guard inside
- * `artifacts-repo.ts`, and the link lifetime is `session-links.ts`.
+ * `requireDigiChatAuth`, ownership is the guard inside `artifacts-repo.ts`,
+ * and the link lifetime is `session-links.ts`.
+ *
+ * **Which callers the gate admits.** `requireDigiChatAuth` reads exactly two
+ * credentials: the `authorization` header (a `digi_live_…` machine key) and the
+ * OIDC session cookie. It never reads `x-embed-token`. A tenant configured
+ * `auth: anonymous` - the OCC embed in `occ-embed.yaml` is one - is therefore
+ * refused 401 here. The embed invite key is honoured on `/api/chat` and
+ * `/api/embed/tenant-config`, which resolve the tenant through
+ * `resolveVerifiedEmbedTenant`; it is not honoured on this route. An earlier
+ * version of this comment asserted it was (DIG-3241).
+ *
+ * Admitting an embed caller here is deliberately more than a one-line change,
+ * so the boundary is a decision and not an oversight:
+ *
+ *  - **Minting is closed too.** `POST` below and `POST /api/artifact-ingest`
+ *    sit behind the same gate, so an embed visitor cannot create an artifact
+ *    row either. Opening only the read side could never produce a link that
+ *    resolves.
+ *  - **Ownership is a row match, not a caller claim.** `artifacts-repo.ts`
+ *    requires a `conversations` row whose `tenantId` and `ownerUserSub` both
+ *    equal the caller's, and `POST /api/conversations` is the only writer of
+ *    that row - behind this same gate. An embed conversation registers a
+ *    session link (`registerSession`) but has no row.
+ *
+ * Together those mean opening the gate alone would move OCC from 401 to 404
+ * `not_found`, which is the same "the file never existed" answer the blob
+ * route's `410` exists to avoid. Widening this surface for an anonymous
+ * client-PII tenant is an open decision (DIG-3241), not this file's to make.
  *
  * `getDb()` returning null is a real state, not an error to hide: the
  * Cloudflare deployment is DB-less (audit D5, issue #4314) and answers

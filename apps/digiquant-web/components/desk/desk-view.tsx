@@ -1,9 +1,13 @@
+"use client";
+
 import { BLOCKS, PAGES, layoutFor } from "../../../../clients/digiquant-tui/src/catalog";
 import type { ReadResult } from "../../../../clients/digiquant-tui/src/read";
 import { DeskFrame } from "./desk-frame";
 import { PanelView } from "./panel-view";
 import { PANE_GRID } from "./pages/pane";
 import { asOfStatus } from "../../../../clients/digiquant-tui/src/format";
+import { staleBanner } from "./app-settings";
+import { useAppSettings } from "./app-settings-store";
 
 const tone: Record<ReadResult["status"] | "loading", string> = {
   ok: "text-ink",
@@ -30,6 +34,7 @@ export function DeskReadout({
 }) {
   const page = pageFor(path);
   const layout = layoutFor(page.path);
+  const settings = useAppSettings();
   return (
     <div className={PANE_GRID}>
       {layout.map((placement) => {
@@ -37,6 +42,8 @@ export function DeskReadout({
         const read = reads[placement.id];
         const status = read?.status ?? "loading";
         const lines = read?.lines ?? ["loading…"];
+        const age = asOfStatus(def.route, read?.asOf, read?.dataAsOf, undefined, settings.staleSessions);
+        const banner = staleBanner(age.state, settings.notify);
         return (
           <section
             key={placement.id}
@@ -57,7 +64,10 @@ export function DeskReadout({
               </p>
             )}
             <p className="m-0 flex h-7 shrink-0 items-center truncate border-t border-hair px-2.5 font-mono text-[0.6875rem] tracking-[0.04em] text-ink-mute tabular-nums">
-              {asOfStatus(def.route, read?.asOf, read?.dataAsOf).label}
+              {age.label}
+              {banner ? (
+                <span role="status" data-stale-banner=""> · {banner}</span>
+              ) : null}
             </p>
           </section>
         );

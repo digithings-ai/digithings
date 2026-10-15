@@ -427,8 +427,9 @@ describe("watchdog and poll resilience", () => {
         timeout_seconds: timeoutSeconds,
       }),
     );
-    // Unreachable container: ledger may clear a zombie lock. A still-running
-    // remote must NOT be timed out here (see next test).
+    // Unreachable container: ledger clears the zombie lock at the deadline.
+    // A reachable container reporting running is timed out the same way now
+    // (see next test, DIG-3372).
     statuses.delete(starts[0]);
     alarms.length = 0;
     clock.ms = T0 + (timeoutSeconds + WATCHDOG_GRACE_SECONDS + 1) * 1000;
@@ -448,7 +449,7 @@ describe("watchdog and poll resilience", () => {
     expect(alarms).toEqual([]);
   });
 
-  it("keeps the lock while the container still reports running past deadline", async () => {
+  it("releases the lock at timeout + grace even while the container reports running", async () => {
     const timeoutSeconds = 10;
     const { session, clock, alarms, starts, statuses } = harness();
     await session.accept(
@@ -465,13 +466,19 @@ describe("watchdog and poll resilience", () => {
     clock.ms = T0 + (timeoutSeconds + WATCHDOG_GRACE_SECONDS + 1) * 1000;
     await session.alarm();
     expect((await session.health()).running).toEqual([starts[0]]);
-    expect(alarms).toEqual([HEARTBEAT_MS]);
     // After aligning to remote.started_at, the budget still has room.
     clock.ms =
       Date.parse(remote.started_at) + (timeoutSeconds + WATCHDOG_GRACE_SECONDS + 1) * 1000;
-    // Still running remotely — keep the lock even past the aligned deadline.
+    // A stale build that reports a non-terminal status forever must not pin the
+    // lock: past the aligned deadline the lock is released and the run times out
+    // so hasActiveWork() can clear and the container can sleep (DIG-3372).
     await session.alarm();
-    expect((await session.health()).running).toEqual([starts[0]]);
+    const body = (await (
+      await session.fetch(new Request(`https://digiquant-runner/v1/jobs/${starts[0]}`))
+    ).json()) as { status: string; exit_code: number | null };
+    expect(body.status).toBe("timed_out");
+    expect(body.exit_code).toBe(124);
+    expect((await session.health()).running).toEqual([]);
   });
 
   it("keeps the lock when readStatus throws during poll", async () => {
@@ -871,5 +878,92 @@ describe("heartbeat re-armed after a Durable Object reset (DIG-3061)", () => {
     });
     expect(armed).toBe(false);
     expect(seen).toEqual(["getAlarm"]);
+  });
+});
+
+describe("GET /v1/jobs/house-status landing check (DIG-3456)", () => {
+  const get = (session: RunnerSession, runDate: string) =>
+    session.fetch(new Request(`https://digiquant-runner/v1/jobs/house-status?run_date=${runDate}`));
+
+  it("reports landed when the skip-gate marker exists", async () => {
+    const archive = memoryArchive({
+      "pipeline-runs/house-run/2026-10-12/success.json": '{"run_id":"old"}',
+    });
+    const { session } = harness({ archive });
+    const res = await get(session, "2026-10-12");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      run_date: "2026-10-12",
+      landed: true,
+      open_house_runs: [],
+      verifiable: true,
+    });
+  });
+
+  it("reports not landed with no open run when nothing started", async () => {
+    const { session } = harness({ archive: memoryArchive() });
+    const res = await get(session, "2026-10-12");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      run_date: "2026-10-12",
+      landed: false,
+      open_house_runs: [],
+      verifiable: true,
+    });
+  });
+
+  it("lists the open house run instead of reporting never-dispatched", async () => {
+    const { session } = harness({ archive: memoryArchive() });
+    const accepted = await session.accept(
+      job({
+        command: "house-run",
+        job_id: "house-run-09",
+        concurrency: "digiquant-pipeline",
+        timeout_seconds: 14400,
+        idempotency_key: "house-run-09:open",
+        args: { refresh_scope: "none", run_date: "2026-10-12" },
+      }),
+    );
+    const res = await get(session, "2026-10-12");
+    expect(await res.json()).toEqual({
+      run_date: "2026-10-12",
+      landed: false,
+      open_house_runs: [accepted.run_id],
+      verifiable: true,
+    });
+  });
+
+  it("answers unverifiable, never landed, when the archive binding is absent", async () => {
+    const { session } = harness();
+    const res = await get(session, "2026-10-12");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      run_date: "2026-10-12",
+      landed: false,
+      open_house_runs: [],
+      verifiable: false,
+    });
+  });
+
+  it("refuses a run_date it cannot parse, so a typo never reads as missing", async () => {
+    const { session } = harness({ archive: memoryArchive() });
+    for (const bad of ["today", "2026-10-12T09:17:00Z", ""]) {
+      const res = await session.fetch(
+        new Request(`https://digiquant-runner/v1/jobs/house-status?run_date=${encodeURIComponent(bad)}`),
+      );
+      expect(res.status, bad).toBe(400);
+      expect(await res.json()).toEqual({ error: "invalid_run_date" });
+    }
+  });
+
+  it("is not shadowed by the run-id branch: the exact path wins", async () => {
+    const { session } = harness({ archive: memoryArchive() });
+    const res = await get(session, "2026-10-12");
+    // A run-id lookup for an unknown id answers 404 not_found; the exact
+    // house-status path must answer 200 with the landing shape instead.
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.run_date).toBe("2026-10-12");
+    expect("error" in body).toBe(false);
   });
 });

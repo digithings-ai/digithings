@@ -114,14 +114,6 @@ export function featuredLanguageCommands(
   });
 }
 
-export function slashCategoryOf(id: string): string {
-  if (FEATURED_LANGUAGE_CODES.some((c) => languageLabel(c).toLowerCase() === id)) {
-    return "setup";
-  }
-  const def = SLASH_COMMANDS.find((c) => c.id === id || c.id === (id === "language" ? "lang" : id));
-  return def?.category ?? "tools";
-}
-
 export function buildProductSlashCommands(api: EmbedChatPrefsApi): Unstable_SlashCommand[] {
   const vis = visibilityFromPrefs(api);
   const { prefs } = api;
@@ -351,8 +343,5 @@ export function prefixSlashAdapter<T extends SlashAdapterLike>(inner: T): T {
     },
   } as T;
 }
-
-/** @deprecated Use prefixSlashAdapter — categories were dropped from the product palette. */
-export const categorizedSlashAdapter = prefixSlashAdapter;
 
 export { SLASH_CATEGORIES };

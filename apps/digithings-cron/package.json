@@ -1,5 +1,13 @@
 {
   "name": "digithings-cron",
+  "description": "Cloudflare worker that dispatches scheduled digithings jobs.",
+  "license": "MIT",
+  "homepage": "https://digithings.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/digithings-ai/digithings.git",
+    "directory": "apps/digithings-cron"
+  },
   "private": true,
   "type": "module",
   "scripts": {
