@@ -294,10 +294,7 @@ def test_required_checks_are_resolved_per_repo() -> None:
     policy = mq.load_policy()
     assert policy.required_for("digithings-ai/twelve-x") == ("test",)
     digithings = policy.required_for("digithings-ai/digithings")
-    assert "test" not in digithings, "a bare `test` never reports on digithings"
-    assert "Required checks passed" in digithings
-    assert "doc-links + agents-init" in digithings
-    assert "mypy — digibase + digikey" in digithings
+    assert digithings == ("local-ci",), digithings
     # An unlisted repo still gets a gate rather than none: the failure that matters
     # here is a silent pass, not a refusal.
     assert policy.required_for("digithings-ai/digithings-ops")
@@ -393,11 +390,13 @@ def test_a_misconfigured_gate_is_announced_once_and_still_blocks(gh_stub: Any) -
     err = done.stderr
     assert "misconfigured required check" in err
     assert "not a red build" in err
-    # Names the gate that cannot match...
-    for name in ("Required checks passed", "doc-links + agents-init", "mypy — digibase + digikey"):
-        assert f"'{name}'" in err, name
-    # ...and what CI is really producing, so the reader stops hunting for a failure.
-    assert "digibase / test" in err
+    # Names the gate that cannot match (digithings requires exactly `local-ci`,
+    # DIG-3707)...
+    assert "'local-ci'" in err
+    # ...and how many checks CI is really producing, so the reader stops hunting
+    # for a failure (`local-ci` shares a word with nothing reported, so no near
+    # miss is offered here — the next test pins that path).
+    assert "1 distinct checks did report" in err
     assert "required_checks_by_repo" in err
     # Every PR is still blocked. The announcement is additive: a gate that names
     # nothing must not become a gate that names nothing and merges.
@@ -415,8 +414,8 @@ def test_the_misconfiguration_announcement_names_what_it_meant_instead_of_a_wall
     the announcement exists to save. So it names the near misses — the reported checks
     sharing a word with the gate — and counts the rest.
     """
-    # Deliberately none of digithings' three required contexts — that is the DIG-690
-    # shape. The decoys are what the reader has to choose from instead.
+    # Deliberately not digithings' required `local-ci` context — that is the
+    # DIG-690 shape. The decoys are what the reader has to choose from instead.
     reported = [
         {"__typename": "CheckRun", "name": name, "status": "COMPLETED", "conclusion": "SUCCESS"}
         for name in (
@@ -434,9 +433,9 @@ def test_the_misconfiguration_announcement_names_what_it_meant_instead_of_a_wall
     done = _run("list", "--repo", "digithings-ai/digithings", "--acting-role", "cto")
     err = done.stderr
     assert "6 distinct checks did report" in err
-    # `mypy` is required, unmatchable, and shares a word with nothing reported —
+    # `local-ci` is required, unmatchable, and shares a word with nothing reported —
     # so no near miss is offered for it and the message must not imply one exists.
-    assert "'mypy — digibase + digikey'" in err
+    assert "'local-ci'" in err
     assert "nearest:" not in err
     assert "gh pr checks" in err
 
@@ -469,7 +468,7 @@ def test_the_warning_cannot_repeat_because_nothing_can_merge_while_it_fires(
     says why. If someone ever makes a misconfigured gate stop blocking, this fails
     and the flag becomes necessary again.
     """
-    # No PR reports `mypy — digibase + digikey`, so the gate cannot be satisfied.
+    # No PR reports `local-ci`, so the gate cannot be satisfied.
     # Everything else is green and approved, so these PRs are blocked on the gate
     # alone — remove the misnaming and both would merge.
     reported = [
@@ -497,7 +496,7 @@ def test_the_warning_cannot_repeat_because_nothing_can_merge_while_it_fires(
     assert not stub.matching("pr merge")
     assert done.stderr.count("misconfigured required check") == 1
     # And the reason is named, not just the count, so the reader knows what to edit.
-    assert "'mypy — digibase + digikey'" in done.stderr
+    assert "'local-ci'" in done.stderr
 
 
 def test_a_matching_gate_announces_nothing(gh_stub: Any) -> None:
@@ -527,24 +526,13 @@ def test_the_audit_comment_records_the_checks_actually_required(gh_stub: Any) ->
     comment exists to make reliable.
     """
     prs = [_pr(42, head_sha="c" * 40, test_conclusion=None, approved=True)]
+    # `local-ci` arrives as a commit StatusContext, never as a CheckRun run —
+    # that is the whole point of `status_context_checks` (DIG-3707).
     prs[0]["statusCheckRollup"] = [
         {
-            "__typename": "CheckRun",
-            "name": "Required checks passed",
-            "status": "COMPLETED",
-            "conclusion": "SUCCESS",
-        },
-        {
-            "__typename": "CheckRun",
-            "name": "doc-links + agents-init",
-            "status": "COMPLETED",
-            "conclusion": "SUCCESS",
-        },
-        {
-            "__typename": "CheckRun",
-            "name": "mypy — digibase + digikey",
-            "status": "COMPLETED",
-            "conclusion": "SUCCESS",
+            "__typename": "StatusContext",
+            "context": "local-ci",
+            "state": "SUCCESS",
         },
     ]
     stub = _queue_stub(
@@ -561,9 +549,7 @@ def test_the_audit_comment_records_the_checks_actually_required(gh_stub: Any) ->
     comments = stub.matching("pr comment 42")
     assert len(comments) == 1
     body = comments[0][comments[0].index("--body") + 1]
-    assert "Required checks passed" in body
-    assert "doc-links + agents-init" in body
-    assert "mypy — digibase + digikey" in body
+    assert "local-ci" in body
 
 
 # --- review: who is allowed to say the code was read --------------------------
