@@ -1,0 +1,16 @@
+# Formatter ignore list (DIG-3396). Mirrors the eslint build ignores plus
+# generated/vendored trees prettier must never rewrite. Format-only changes
+# ship in their own PR — never mix a reformat with a behaviour change.
+.next/
+.next-*/
+out/
+build/
+dist/
+node_modules/
+next-env.d.ts
+package-lock.json
+public/swagger-ui/
+public/openapi/
+apps/digichat/reference/
+apps/digichat/cli/
+apps/reference/components/ui/dot-matrix.tsx

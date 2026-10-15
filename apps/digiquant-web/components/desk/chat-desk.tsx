@@ -13,6 +13,8 @@ import {
   type DeskThread,
 } from "./chat-model";
 import { postOfficial, readOfficial, type OfficialRead } from "./read-block";
+import { chatRequestBody } from "./app-settings";
+import { readSettings } from "./app-settings-store";
 
 type ChatDeskValue = {
   threads: DeskThread[];
@@ -111,7 +113,7 @@ export function ChatDesk({ children, active = true }: { children: ReactNode; act
         const sessionRead = await readOfficial(CHAT_ROUTES.sessions, "fields");
         if (usable(sessionRead)) setThreads(sessionRows(sessionRead.data));
       }
-      const sent = await postOfficial(messageRoute(id), { text: trimmed });
+      const sent = await postOfficial(messageRoute(id), chatRequestBody(trimmed, readSettings()));
       if (!usable(sent)) {
         setNotice(chatFailureSentence(sent.result.lines));
         return;

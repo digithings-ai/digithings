@@ -137,7 +137,7 @@ Config is `~/.config/digithings/routine-watch.json` (`api`, `companyId`, `parent
 Dry run against fixture files instead of the API:
 
 ```sh
-bash tests/scripts/test_dt_routine_watch.sh              # the 15 checks, no network
+bash tests/scripts/test_dt_routine_watch.sh              # the 22 checks, no network
 ~/paperclip-workspace/kit/bin/dt-routine-watch --dry --config /path/c.json --state /tmp/s.json
 ```
 
@@ -147,7 +147,30 @@ bash tests/scripts/test_dt_routine_watch.sh              # the 15 checks, no net
 launchctl bootout gui/$(id -u)/com.digithings.routine-watch
 rm ~/Library/LaunchAgents/com.digithings.routine-watch.plist
 rm ~/.config/digithings/routine-watch.json ~/.config/digithings/routine-watch-state.json
-git -C ~/paperclip-workspace/kit revert 2e7da06 8d4eda7   # newest first
+rm ~/paperclip-workspace/kit/bin/dt-routine-watch
+rm ~/paperclip-workspace/kit/tests/dt-routine-watch-test.sh
 ```
 
-The two kit commits are the whole footprint there: `8d4eda7` is the clock itself, `2e7da06` is the board-derived watch list and the shared suite resolution. Nothing else in the kit belongs to this change. A recipe naming only `8d4eda7` leaves the widened scope installed.
+The last two lines remove the two files this change added. Do NOT roll them back by
+reverting named commits. The set of commits that touch `bin/dt-routine-watch` differs per
+ref in the kit, so no list of shas is stable:
+
+- on `main`: `8d4eda7` (the clock) and `98b65307` (the two-sided fix)
+- on `fix/DIG-1959-mirror-resolves-ticket-numbers`: those, plus `2e7da06` (the board-derived
+  watch list) and `52aab28` ("Rescue: the live kit working tree")
+
+So the recipe this replaces, `git revert 2e7da06 8d4eda7`, names a commit that is not
+reachable from `main` at all. The recipe before that named only `8d4eda7`, which would have
+reverted the script to the single-routine version and left the widened board-derived scope
+installed and reading the routines API every five minutes. Both fail the same way: the
+rollback reports success and the observer is still running.
+
+To restore the files instead of removing them, restore them by FILE from the commit that
+predates this work:
+
+```sh
+git -C ~/paperclip-workspace/kit checkout 8d4eda7^ -- bin/dt-routine-watch tests/dt-routine-watch-test.sh
+```
+
+That is a file operation rather than a history operation, and it is the only form that
+survives other commits and other refs touching the same file.

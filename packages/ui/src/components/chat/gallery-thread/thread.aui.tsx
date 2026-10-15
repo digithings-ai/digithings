@@ -19,7 +19,7 @@ import {
   ReasoningTrigger,
 } from "./reasoning.aui";
 import { MessageTiming } from "./message-timing.aui";
-import { ToolFallback } from "./tool-fallback.aui";
+import { ToolFallback } from "../stock/tool-fallback.aui";
 import {
   ToolGroupContent,
   ToolGroupRoot,
