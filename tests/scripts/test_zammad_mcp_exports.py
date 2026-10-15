@@ -46,6 +46,8 @@ from scripts.zammad_mcp.exports import (
     summarize,
 )
 
+pytestmark = pytest.mark.unit
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SERVER = REPO_ROOT / "scripts" / "zammad_mcp" / "server.py"
 EXPORTS_PY = REPO_ROOT / "scripts" / "zammad_mcp" / "exports.py"

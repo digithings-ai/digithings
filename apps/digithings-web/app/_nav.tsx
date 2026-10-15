@@ -38,6 +38,7 @@ export const DT_NAV_PRIMARY: NavItem[] = [
   { label: "Docs", href: "/docs" },
   { label: "API", href: "/docs/api" },
   { label: "Wiki", href: "/openwiki" },
+  { label: "Book", href: "/book" },
   { label: "Services", href: "/services" },
   {
     label: "Company",
@@ -77,6 +78,7 @@ export const DT_SITEMAP: { label: string; links: NavLink[] }[] = [
       { label: "Docs", href: "/docs" },
       { label: "API", href: "/docs/api" },
       { label: "Wiki", href: "/openwiki" },
+      { label: "Book", href: "/book" },
       { label: "Services", href: "/services" },
     ],
   },

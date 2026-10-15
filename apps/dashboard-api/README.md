@@ -36,12 +36,12 @@ npm run typecheck --workspace dashboard-api
 npm run dev --workspace dashboard-api
 ```
 
-### Live data for the digiquant-app
+### Live data for local dashboard development
 
 ```bash
 cp .dev.vars.example .dev.vars      # then paste SUPABASE_SERVICE_ROLE_KEY
 npx wrangler dev --port 8788
-# in apps/digiquant-app (defaults to http://127.0.0.1:8788):
+# in a second shell, a local dashboard dev server on a port in DASHBOARD_API_ALLOWED_ORIGINS:
 npx next dev -p 3930
 ```
 

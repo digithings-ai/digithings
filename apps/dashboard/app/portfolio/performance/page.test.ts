@@ -53,7 +53,6 @@ vi.mock('@/lib/observability-queries', async () => {
     getPerformanceBundle: vi.fn(() =>
       Promise.resolve({ tearsheet: sample, ssot: sampleSsot })
     ),
-    fetchPerformanceTearsheet: vi.fn(() => Promise.resolve(sample)),
   };
 });
 

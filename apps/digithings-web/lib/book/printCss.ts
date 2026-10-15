@@ -42,9 +42,8 @@ export const PRINT_CSS = `
 .book-chapter th, .book-chapter td { border-bottom: 1px solid var(--hair); padding: 0.45rem 0.6rem; text-align: left; vertical-align: top; color: var(--ink-soft); }
 .book-chapter th { font-family: var(--font-mono); font-size: 0.78rem; letter-spacing: 0.02em; color: var(--ink); }
 
-/* The book's mono voice is Geist Mono (owner rule for digibook), scoped here
-   so the rest of digithings.ai keeps its JetBrains Mono chrome. */
-.book-root { --font-mono: var(--font-geist-mono), ui-monospace, monospace; }
+/* The book uses the same mono voice as the rest of digithings.ai. */
+.book-root { --font-mono: var(--font-stack-mono); }
 
 
 @media print {
