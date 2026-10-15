@@ -202,7 +202,11 @@ Measure it with:
     git grep -l -E 'digiquant\.execution|house_pipeline|gloomberb|luxalgo|vendor_secret' \
       <sha> -- ':!digiquant/' ':!docs/'
 
-Control: the same search scoped to `digiquant/` returns 45 files, so the matcher fires.
+Control: the same search scoped to `digiquant/` returns 60 files (both `digiquant/` and
+`:(top)digiquant/` give 60; `digiquant/src/` gives 54), so the matcher fires. Revision 2
+wrote 45 here; that number is not reproducible by any pathspec form of this search and is
+corrected. The 160 above reproduces exactly, and the exclusion form is
+`:(exclude)digiquant/` `:(exclude)docs/`, which returns the same 160.
 
 **The coupling is two-way and it is unresolved.** R0 keeps code that calls the pipeline; R2 keeps
 the pipeline. Every entry above needs a published interface, a released package pin, or a deletion
@@ -312,7 +316,10 @@ vendor secrets into the runner — is what `execution/vendor_secret_apply.py` an
 | `.github/digiquant-pipeline.yml` | n/a (tunable set) | job config, section 2.1 |
 
 **Correction to revision 1.** It wrote that the R2 workflows carry a `schedule:` trigger, or
-`workflow_dispatch`. Measured: **`schedule:` is 0 of 12.** `pipeline-digiquant.yml` carries a
+`workflow_dispatch`. Measured: **no workflow has a `schedule:` trigger key** — a parse of each
+file's `on:` block returns 0 of 12. A raw substring grep for `schedule:` returns 2 of 12, both
+inside a header comment, so quote the trigger count and not the substring count.
+`pipeline-digiquant.yml` carries a
 header instruction instead — *"Do not add `schedule:` ... `repository_dispatch` type
 `digiquant-baseline` is still the production house clock from digithings-cron until the container
 flip. Schedule removed #3579."* So the digiquant research pipeline is **already** on a Cloudflare
@@ -498,19 +505,21 @@ copies `config/searxng/settings.yml`.
 Send-back item 4 is applied: R3 and R5 consumers of `apps/dashboard-api` are gated on refactor 1.4,
 tracked as **DIG-3693**. They are not a path a sibling leaf can absorb.
 
-46 files outside `apps/dashboard-api/` reference it. Grouped by destination:
+44 files outside `apps/dashboard-api/` reference it (83 total under the three blocks minus
+the 39 inside `apps/dashboard-api/`). Grouped by destination:
 
 | block | files | destination | gate |
 |---|---|---|---|
 | `apps/dashboard/` | 10 | R3 | DIG-3693 |
 | `apps/digithings-web/` | 6 | R4 | DIG-3693 |
 | `apps/digithings-stack-cloudflare/` | 9 | R5 | DIG-3693 |
-| `apps/digiquant-web/` | 5 | R3 | DIG-3693 |
+| `apps/digiquant-web/` | 6 | R3 | DIG-3693 |
 | `packages/` | 4 | R0 | DIG-3693 |
-| `scripts/` | 12 | R0 | DIG-3693 |
+| `scripts/` | 9 | R0 | DIG-3693 |
 
 Measure with `git grep -l -E 'dashboard-api' <sha> -- apps/ packages/ scripts/`, then exclude
-`apps/dashboard-api/`. Control: the same search scoped to `apps/dashboard-api/` returns 7 files.
+`apps/dashboard-api/`. Control: the same search scoped to `apps/dashboard-api/` returns 39
+files (revision 2 wrote 7; not reproducible). The six table rows sum to 44.
 
 The R2/R5 edge is already machine-checked: `apps/digithings-stack-cloudflare/src/dashboard-api-mount.test.js`
 lines 209-210 pin both imports, so the move fails loudly if the path breaks. That test is the
