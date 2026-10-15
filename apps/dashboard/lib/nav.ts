@@ -10,7 +10,7 @@ export interface NavItem {
 }
 
 /**
- * The portfolio-owner spine: glance → why → full, plus FX Hub.
+ * The portfolio-owner spine: Brief, Portfolio, Pipeline, and FX Hub.
  * Single source of truth consumed by both the desktop sidebar and the mobile
  * app bar so they can never drift.
  *
@@ -31,8 +31,8 @@ export const NAV: NavItem[] = [
 /**
  * Pathname prefixes that stay LIVE when the live data backend is down (the
  * DB-unavailable gate). Two kinds of routes are exempt:
- *   - operator surfaces that must stay reachable to diagnose / reconfigure:
- *     '/pipeline' (run health panel) and '/settings';
+ *   - `/settings`, which must stay reachable to diagnose / reconfigure.
+ *     Pipeline stays behind the DB gate (`isDbExempt('/pipeline')` is false).
  *   - static legacy redirect routes that never touch Supabase, so gating them
  *     would only swallow a redirect.
  * Pathnames are app-relative (basePath '/dashboard' is stripped by usePathname).

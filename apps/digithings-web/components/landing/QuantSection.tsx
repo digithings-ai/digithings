@@ -85,26 +85,15 @@ import { PIPELINE_ENGINES } from "@/lib/digiquantPipeline";
  * Brand (#4900, digiquant.io's solid-black craft). The band wears no livery of
  * its own: no teal accent scope, no tinted gradient, no animated dashboard-mark
  * watermark. It sits on the page's own canvas between hairline rails like every
- * other band, in the page's Inter + JetBrains Mono, with ink as the only accent
+ * other band, in the page's Geist Mono, with ink as the only accent
  * (the chart's "accent" tone resolves to ink here). The one brand element is the
  * digiquant pixel wordmark from digiquant.io, which is also the link to it.
  *
- * HONESTY (binding). With the market tape gone, EVERY figure on this band is
- * synthetic and badged as such — the performance pair, the three window reads
- * and the strategy cards. No figure here is a digiquant result, and the two
- * series are a deterministic example, not a reported return.
- *
- * LIVE WIRING (approved, in progress). The owner authorised wiring these to the
- * dashboard's own backend: "we need to do the same architecture as we have for
- * the DigiQuant website. We'll just duplicate it from there, so copy it over. We
- * will copy all the secrets and all the permissions. And they should share the
- * same canonical backend for getting all that data." The real series live in
- * digiquant's Supabase tables (`public_accounting_nav_history`,
- * `public_portfolio_positions`, `strategy_tearsheets`) — there is no public
- * no-auth endpoint — so this means a Supabase client here plus
- * `NEXT_PUBLIC_SUPABASE_URL`/`ANON_KEY` at build and a CSP `connect-src` entry.
- * That is a new external service dependency: flagged for the owner, not merged
- * autonomously. Until the env is set the band keeps the badged example series.
+ * LIVE BOOK. The band reads the public house book (NAV via `/nav-series`,
+ * strategy cards via `/v1/tables/strategy_tearsheets`). The example series
+ * below is only the offline fallback, used when that read is off (the
+ * unit-test runtime). A withheld tearsheet read leaves the strategy rail
+ * empty rather than painting example cards as results.
  */
 
 const DIGIQUANT_URL = "https://digiquant.io";
@@ -117,13 +106,7 @@ const SERIES_WEEKS = 156;
  * at the start.
  *
  * Synthetic and deterministic — two drifting walks with fixed periodic terms and
- * no random source, so the drawn chart is identical on every build and nobody can
- * read a change into a redeploy. This is the one figure on the page whose absence
- * of a real source is worth stating plainly: the real portfolio series lives in
- * digiquant's own tearsheet store, and reading it from here would mean giving
- * this static-export site a second service dependency. When that trade is worth
- * making, this function is the seam: it returns the shape the chart already
- * takes.
+ * no random source. Drawn only when the live house-book read is off.
  */
 function performance(): { portfolio: TearsheetSeriesPoint[]; benchmark: TearsheetSeriesPoint[] } {
   const start = Date.UTC(2023, 0, 6);
@@ -297,12 +280,6 @@ const STRATEGIES: {
     ],
   },
 ];
-
-/**
- * The four cards the band shows, in order — also the live read's membership, so
- * an unexpected row in the table can never add a card here.
- */
-const STRATEGY_SLUGS = STRATEGIES.map((strategy) => strategy.slug);
 
 /** The card shape, whether the reads are the live index or the example set. */
 type StrategyCardData = (typeof STRATEGIES)[number];
@@ -537,7 +514,7 @@ function Book({
 
   return (
     <div className="flex min-w-0 flex-col gap-[0.8rem]">
-      <span className={GROUPED_LABEL}>{live ? "the book · live" : "the book · example"}</span>
+      <span className={GROUPED_LABEL}>{live ? "the book" : "the book · example"}</span>
       {/* Single column at the base for the same reason as the block above: an
           SVG chart measures its own pane, so an implicit `auto` track would size
           from that min-content and push the page wider than the viewport. */}
@@ -589,16 +566,15 @@ function Book({
 }
 
 export function QuantSection({ className }: { className?: string }) {
-  /* The dashboard's own backend, when this build has the public env. Without it
-     every read returns empty and the band keeps its badged example series. */
-  const live = useLiveBand(STRATEGY_SLUGS);
+  /* Public house book by default (graph.digithings.ai). The synthetic series
+     only remains when that read is off, which is the unit-test runtime. */
+  const live = useLiveBand();
+  const usingLive = live.configured;
   const liveIndex = live.nav.length > 1 ? indexLive(live.nav, live.benchmark) : null;
-  const book = liveIndex ?? { series: PERFORMANCE_SERIES, fullSpan: FULL_SPAN };
-  const cards: StrategyCardData[] =
-    live.strategies.length > 0 ? live.strategies.map(liveStrategyCard) : STRATEGIES;
-  /* Honesty: the fallback cards are deterministic examples, not live reads —
-     badge them as such and never show a live mark over them. */
-  const showExampleBadge = live.strategies.length === 0;
+  const book = usingLive ? liveIndex : { series: PERFORMANCE_SERIES, fullSpan: FULL_SPAN };
+  const cards: StrategyCardData[] = usingLive
+    ? live.strategies.map(liveStrategyCard)
+    : STRATEGIES;
 
   return (
     <div className={`relative ${className ?? ""}`}>
@@ -641,9 +617,7 @@ export function QuantSection({ className }: { className?: string }) {
             {/* Right: the library, in the kit's horizontal rail — the element
                 promoted from the design reference's changelog rail. */}
             <div className="flex min-w-0 flex-col justify-center gap-[0.5rem]">
-              <span className={GROUPED_LABEL}>
-                {showExampleBadge ? "flagship strategies · example" : "flagship strategies"}
-              </span>
+              <span className={GROUPED_LABEL}>strategies</span>
               <CardRail ariaLabel="Flagship digiquant strategies">
                 {cards.map((strategy) => (
                   <div key={strategy.slug} role="listitem" className="flex-[0_0_17rem] snap-start">
@@ -654,7 +628,6 @@ export function QuantSection({ className }: { className?: string }) {
                             <span className="ts-card-name">{strategy.name}</span>
                             <span className="ts-card-period">
                               {strategy.symbol} · {strategy.kind}
-                              {showExampleBadge ? " · example" : ""}
                             </span>
                           </div>
                         </div>
@@ -676,7 +649,13 @@ export function QuantSection({ className }: { className?: string }) {
             <PipelineRail />
           </div>
 
-          <Book series={book.series} fullSpan={book.fullSpan} live={Boolean(liveIndex)} />
+          {book ? (
+            <Book
+              series={book.series}
+              fullSpan={book.fullSpan}
+              live={usingLive && Boolean(liveIndex)}
+            />
+          ) : null}
         </div>
       </div>
     </div>

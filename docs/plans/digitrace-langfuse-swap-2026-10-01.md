@@ -1,5 +1,7 @@
 # digitrace / Langfuse swap memo (2026-10-01)
 
+> **Superseded (2026-10-09).** The tracing decision is now "Cloudflare hybrid with MLflow"; self-hosted Langfuse with ClickHouse/Redis is dropped. The design review is [`docs/reviews/digitrace-tracing-architecture-review.md`](../reviews/digitrace-tracing-architecture-review.md). Retiring `apps/digitrace-langfuse/` and the Langfuse runbook is tracked in DIG-2655. Do not deploy from this memo.
+
 > **Phase 1 implement:** [`docs/ops/digitrace-langfuse.md`](../ops/digitrace-langfuse.md) + [`apps/digitrace-langfuse/`](../../apps/digitrace-langfuse/) (#4930).
 
 

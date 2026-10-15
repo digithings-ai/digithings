@@ -15,7 +15,15 @@ export function SiteChrome({ children }: { children: ReactNode }) {
   if (isDeskPath(path)) return children;
   return (
     <>
-      <NavShell brand={<Brand />} links={DQ_NAV_PRIMARY} homeLabel="digiquant home" skipTo="#main" showThemeToggle={false} />
+      <NavShell
+        brand={<Brand />}
+        links={DQ_NAV_PRIMARY}
+        homeLabel="digiquant home"
+        skipTo="#main"
+        showThemeToggle={false}
+        scrollRevealDelta={120}
+        hoverRevealZone={24}
+      />
       <LayoutRails />
       <SectionRail />
       <div className="pt-[var(--nav-shell-h,62px)]">{children}</div>

@@ -1,9 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildThesisStory,
-  attributeWeightToPrimaryThesis,
   selectThesisAsOf,
-  DEMO_THESIS_ANCHOR_DATE,
   type ThesisVehicleRow,
 } from './thesis-story';
 import { latestDecisionByTicker, type DecisionLogRow } from './holdings-decisions';
@@ -69,38 +67,6 @@ describe('selectThesisAsOf', () => {
   });
 });
 
-describe('attributeWeightToPrimaryThesis', () => {
-  it('attributes a many-to-many ticker to its lowest-rank thesis only (no double-count)', () => {
-    const positions = [position({ ticker: 'CPER', weight_actual: 10 })];
-    const rows = [
-      tv({ thesisId: 'inflation', ticker: 'CPER', candidateRank: 1 }),
-      tv({ thesisId: 'growth', ticker: 'CPER', candidateRank: 2 }),
-    ];
-    const w = attributeWeightToPrimaryThesis(positions, rows);
-    expect(w.get('INFLATION')).toBeCloseTo(10, 5);
-    expect(w.has('GROWTH')).toBe(false);
-    // The whole book (10) is attributed exactly once.
-    expect([...w.values()].reduce((s, x) => s + x, 0)).toBeCloseTo(10, 5);
-  });
-
-  it('breaks candidate_rank ties by lexical thesis_id', () => {
-    const positions = [position({ ticker: 'XLB', weight_actual: 8 })];
-    const rows = [
-      tv({ thesisId: 'zeta', ticker: 'XLB', candidateRank: 1 }),
-      tv({ thesisId: 'alpha', ticker: 'XLB', candidateRank: 1 }),
-    ];
-    const w = attributeWeightToPrimaryThesis(positions, rows);
-    expect(w.get('ALPHA')).toBeCloseTo(8, 5);
-    expect(w.has('ZETA')).toBe(false);
-  });
-
-  it('ignores mappings for tickers the book does not hold', () => {
-    const positions = [position({ ticker: 'AAA', weight_actual: 5 })];
-    const rows = [tv({ thesisId: 'MT1', ticker: 'BBB', candidateRank: 1 })];
-    expect(attributeWeightToPrimaryThesis(positions, rows).size).toBe(0);
-  });
-});
-
 describe('buildThesisStory', () => {
   const market = [
     thesis({ id: 'MT1', name: 'AI capex', confidence: 0.9 }),
@@ -153,11 +119,5 @@ describe('buildThesisStory', () => {
 
   it('puts shown-but-unheld vehicles in proposedUnheld', () => {
     expect(result.unassigned.proposedUnheld.map((d) => d.ticker)).toEqual(['BBB']);
-  });
-});
-
-describe('DEMO_THESIS_ANCHOR_DATE', () => {
-  it('is the dense demo date', () => {
-    expect(DEMO_THESIS_ANCHOR_DATE).toBe('2026-07-12');
   });
 });

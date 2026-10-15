@@ -37,10 +37,16 @@ export function runTearsheetPrint(opts: {
   document.title = opts.documentTitle;
 
   flushSync(() => opts.setPrinting(true));
-  window.print();
-
-  html.classList.remove("ts-printing");
-  html.setAttribute("data-theme", prevTheme ?? "dark");
-  document.title = prevTitle;
-  flushSync(() => opts.setPrinting(false));
+  try {
+    window.print();
+  } finally {
+    html.classList.remove("ts-printing");
+    if (prevTheme === null) {
+      html.removeAttribute("data-theme");
+    } else {
+      html.setAttribute("data-theme", prevTheme);
+    }
+    document.title = prevTitle;
+    flushSync(() => opts.setPrinting(false));
+  }
 }

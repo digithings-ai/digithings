@@ -154,7 +154,7 @@ export function displayArgs(
 
 /** Strip markdown chrome so a snippet reads as a sentence, not a wall. */
 export function readableSnippet(raw: string, max = 220): string {
-  let s = raw
+  const s = raw
     .replace(/```[\s\S]*?```/g, " ")
     .replace(/!\[[^\]]*]\([^)]*\)/g, " ")
     .replace(/\[([^\]]*)]\([^)]*\)/g, "$1")

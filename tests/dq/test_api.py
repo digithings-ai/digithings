@@ -31,19 +31,21 @@ def _api_error_message(data: dict) -> str:
     return str(data.get("detail", ""))
 
 
-def _assert_only_chart_series_withheld(missing: list[str]) -> None:
-    """Every name on ``missing`` is the withheld chart series, and there is one.
+def _assert_chart_series_is_chartable(missing: list[str]) -> None:
+    """The chart series is not withheld for want of a verifiable analyzer alias.
 
-    A single-symbol run names it bare, a multi-symbol run counts it
-    (``returns_series (3/3 symbols)``); no other metric may appear. See
-    ``nautilus_runner._verified_returns_series`` for why the series is withheld under
-    the pinned nautilus_trader at all.
+    It is derived from the account report's own balance path, so a run whose report
+    carries rows can chart it. ``RETURNS_SERIES_MISSING_SYMBOLS`` is the per-symbol
+    spelling of the same name and is likewise absent; whatever remains on ``missing`` is
+    a metric that was genuinely absent, pinned by the balance-path suites.
     """
-    assert len(missing) == 1, f"lost something besides the chart series: {missing}"
-    name = missing[0]
-    assert name == RETURNS_SERIES_MISSING or name.startswith(RETURNS_SERIES_MISSING_SYMBOLS), (
-        f"lost a metric: {missing}"
+    assert RETURNS_SERIES_MISSING not in missing, (
+        f"chart series withheld although the report carries a balance path: {missing}"
     )
+    for name in missing:
+        assert not name.startswith(RETURNS_SERIES_MISSING_SYMBOLS), (
+            f"a symbol's chart series was withheld: {missing}"
+        )
 
 
 @pytest.fixture
@@ -120,11 +122,12 @@ class TestRunBacktest:
         data = r.json()
         for field in SAMPLE_BACKTEST_RESULT_FIELDS:
             assert field in data, f"Missing field: {field}"
-        # A real run is partial under the pinned nautilus_trader: its analyzer's
-        # returns() alias cannot be confirmed against portfolio_returns(), so the
-        # chart series is withheld. Every other metric is present.
-        assert data["status"] == "partial"
-        _assert_only_chart_series_withheld(data["missing"])
+        # A real run charts: the series comes off the account's own balance path, so
+        # the pinned nautilus_trader's unverifiable alias is no longer consulted.
+        assert data["status"] in {"ok", "partial"}, (
+            f"run did not complete: status={data['status']}"
+        )
+        _assert_chart_series_is_chartable(data["missing"])
         assert data["symbols"] == SAMPLE_BACKTEST_PAYLOAD["symbols"]
         # Multi-symbol runs use "multi-" prefix; single-symbol uses "nautilus-".
         assert data["run_id"].startswith(("nautilus-", "multi-"))
@@ -309,9 +312,9 @@ class TestRunPipeline:
         assert r.status_code == 200
         data = r.json()
         assert "backtest" in data and "optimize" in data and "export" in data
-        # partial, for the withheld chart series only — see _verified_returns_series.
+        # not withheld for the chart series — it comes off the balance path.
         assert data["backtest"]["status"] == "partial"
-        _assert_only_chart_series_withheld(data["backtest"]["missing"])
+        _assert_chart_series_is_chartable(data["backtest"]["missing"])
         assert data["optimize"]["status"] == "ok"
         assert data["export"]["status"] == "ok"
 
