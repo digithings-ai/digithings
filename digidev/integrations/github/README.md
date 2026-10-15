@@ -52,7 +52,7 @@ gh auth login          # authenticate the GitHub CLI (used by digidev scripts)
 For the MCP server, set `GITHUB_PERSONAL_ACCESS_TOKEN` in your environment:
 
 ```bash
-export GITHUB_PERSONAL_ACCESS_TOKEN=ghp_...
+export GITHUB_PERSONAL_ACCESS_TOKEN="<your-token>"
 # or add to ~/.claude/.env
 ```
 
