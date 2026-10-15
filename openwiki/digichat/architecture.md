@@ -39,7 +39,11 @@ multi-adapter backend registry.
 No digigraph URL, digikey token, or upstream credential may ever reach the browser.
 Route handlers under `src/app/api/` (`auth`, `byok`, `chat`, `conversations`,
 `ecosystem`, `embed`, `health`, `v1`, `plan-proof`, `deploy`, `mcp`) do the upstream
-work; every handler except `GET /api/health` requires `requireDigiChatAuth()`.
+work. Every handler calls `requireDigiChatAuth()` except the public routes
+`GET /api/health`, `GET /api/deploy/chrome`, `GET /api/embed/tenant-config`,
+and dev-only `POST /api/baseline-chat`, and the self-authenticating routes
+`POST /api/plan-proof`, `/api/ecosystem/config`, and
+`GET /api/mcp/oauth/callback`.
 User-supplied service URLs pass `isAllowedServiceUrl()` (SSRF guard) before any fetch.
 The `X-Digichat-Session` header carries only an opaque UUID, never the session token.
 
@@ -314,7 +318,7 @@ Anonymous `/embed` requests never call conversation persistence — `/api/conver
 ## Security invariants
 
 - **BFF pattern:** no upstream credential reaches the browser
-- **Auth on every route:** every API route except `GET /api/health` requires `requireDigiChatAuth()`
+- **Auth on every route:** every API route calls `requireDigiChatAuth()` except the public routes `GET /api/health`, `GET /api/deploy/chrome`, `GET /api/embed/tenant-config`, and dev-only `POST /api/baseline-chat`, and the self-authenticating routes `POST /api/plan-proof`, `/api/ecosystem/config`, and `GET /api/mcp/oauth/callback`
 - **SSRF guard:** `isAllowedServiceUrl()` on ecosystem endpoints; `isAllowedMcpServerUrl()` (inverse polarity) on MCP URLs; `fetchGuarded()` (`redirect: "manual"`) on credential-bearing fetches
 - **Machine key hashing:** `digi_live_…` keys are bcrypt-hashed in Postgres; `timingSafeEqual` for env bootstrap key
 - **Session token isolation:** `X-Digichat-Session` carries only an opaque UUID
