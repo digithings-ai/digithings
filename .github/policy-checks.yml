@@ -139,24 +139,12 @@ checks:
     enforcement: advisory
     owner: Security
     issue: DIG-1952
-    known_gap: >-
-      Accepted while ungated: `security-gitleaks.yml` carries a workflow-level
-      `paths-ignore` of `**.md` and `docs/**`, so docs-only PRs never start the
-      workflow and this check cannot report on them. That is fine only because
-      nothing waits on the name. The guard stops accepting it the moment
-      `gitleaks-scan` enters develop's required set — at which point the same
-      filter becomes a `policy.stall`, not a known gap.
     reason: >-
-      Secret scanning, and the highest-value check in this file. It cannot be
-      made required as it stands: `security-gitleaks.yml` carries a
-      workflow-level `paths-ignore` of `**.md` and `docs/**`, so a docs-only PR
-      never starts the workflow, its check never reports, and requiring the name
-      would hang those PRs on "Waiting for status to be reported" forever. This
-      is exactly failure mode 1 and exactly what docs/BRANCH_PROTECTION.md's
-      pre-apply note warns about. To require it, first move the skip to a
-      job-level `if:` (a skipped job reports Success; a skipped workflow does
-      not) or drop the PR trigger filter. The guard refuses the required
-      transition while that filter is still there.
+      Secret scanning, and the highest-value check in this file. The old
+      workflow-level `paths-ignore` of `**.md` and `docs/**` is gone (removed
+      so the check reports on every PR), so requiring it would no longer stall
+      docs-only PRs — but it is still required nowhere, so it stays advisory
+      until DIG-1952 child B sequences the branch-protection write.
 
   - context: All agent-task issues in TSV with real phase and valid model
     workflow: ci-pr-hygiene.yml
@@ -219,3 +207,25 @@ checks:
     owner: DevOps
     gated_by: Required checks passed
     reason: Path-gated lane, folded into `Required checks passed`.
+
+  - context: GLOOMBERB deployed-config guard
+    workflow: ci.yml
+    job: gloomberb-ci-guard
+    enforcement: advisory
+    owner: DevOps
+    gated_by: Required checks passed
+    reason: >-
+      Unconditional lane, folded into `Required checks passed` (in its
+      `needs:`). Deliberately ungated directly: it reports on every PR and
+      goes red, and merges continue. Required nowhere.
+
+  - context: Vendor-content gate
+    workflow: ci.yml
+    job: vendor-content-gate
+    enforcement: advisory
+    owner: DevOps
+    gated_by: Required checks passed
+    reason: >-
+      Unconditional lane, folded into `Required checks passed` (in its
+      `needs:`). Deliberately ungated directly: it reports on every PR and
+      goes red, and merges continue. Required nowhere.

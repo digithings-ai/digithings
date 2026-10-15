@@ -214,22 +214,21 @@ def test_gitleaks_is_flagged_as_the_highest_value_ungated_check() -> None:
 # ── failure mode 1: a required context no PR-triggered workflow produces ─────
 
 
-def test_requiring_gitleaks_while_it_is_path_filtered_fails() -> None:
-    """The stall, end to end.
+def test_requiring_gitleaks_no_longer_stalls_now_the_paths_filter_is_gone() -> None:
+    """The stall this test used to pin is fixed upstream, not in this leaf.
 
-    `security-gitleaks.yml` carries a workflow-level `paths-ignore` of `**.md`
-    and `docs/**`. Make `gitleaks-scan` required anyway — exactly what
-    DIG-1952 child B would do — and docs-only PRs never start the workflow, so
-    the check never reports and GitHub blocks them on "Waiting for status to be
-    reported" forever. This is why the entry cannot simply be flipped to
-    `required`.
+    `security-gitleaks.yml` used to carry a workflow-level `paths-ignore` of
+    `**.md` and `docs/**`, so making `gitleaks-scan` required hung docs-only
+    PRs on "Waiting for status to be reported" forever. That filter was
+    removed upstream (the workflow header comment documents the measurement),
+    so promoting the entry no longer stalls — what remains is the sequencing
+    decision (DIG-1952 child B), which this guard does not gate.
     """
     contexts = [*LIVE_CONTEXTS, "gitleaks-scan"]
 
     findings = _run(*guard.load_inventory(INVENTORY), contexts)
 
-    assert "policy.stall" in _codes(findings)
-    assert "gitleaks-scan" in _subjects(findings, "policy.stall")
+    assert "gitleaks-scan" not in _subjects(findings, "policy.stall")
 
 
 def test_a_required_context_from_a_non_pr_workflow_fails() -> None:
@@ -381,6 +380,17 @@ def test_a_types_filter_without_synchronize_is_not_reachable(tmp_path: Path) -> 
     # why it matters, and what the PR looks like while it is missing.
     assert "synchronize" in reason
     assert "head SHA" in reason
+    assert "Waiting for status to be reported" in reason
+
+
+def test_a_types_filter_missing_reopened_is_not_reachable(tmp_path: Path) -> None:
+    """A-1 widening: the old gate only demanded `synchronize`, so
+    `types: [opened, synchronize]` used to pass. Missing `reopened` must now
+    fail, naming the missing type."""
+    path = _synthetic_workflow(tmp_path, "t.yml", "    types: [opened, synchronize]\n")
+    reachable, reason = guard.read_workflow_facts(path, "develop").reports_on_develop_pr("develop")
+    assert not reachable
+    assert "`reopened`" in reason
     assert "Waiting for status to be reported" in reason
 
 
@@ -631,13 +641,35 @@ def test_reachability_is_checked_for_advisory_entries_not_just_live_ones(tmp_pat
     assert "All commits signed off" in _subjects(findings, "policy.stall")
 
 
-def test_a_known_gap_suppresses_reachability_only_while_the_entry_is_ungated() -> None:
-    """gitleaks is the one entry with a genuine accepted gap, so it needs a
-    documented one — and the documentation must expire at promotion."""
+def test_a_known_gap_suppresses_reachability_only_while_the_entry_is_ungated(tmp_path: Path) -> None:
+    """The `known_gap:` mechanism, pinned synthetically now that the repo's one
+    real gap is gone: gitleaks' workflow-level `paths-ignore` was removed
+    upstream, so no live entry carries a gap anymore. Reintroduce the filter in
+    a scratch workflows copy and show the entry suppresses the stall only
+    while advisory — promotion re-fires it."""
+    root = _workflows_copy(tmp_path)
+    path = root / "security-gitleaks.yml"
+    text = path.read_text(encoding="utf-8")
+    trigger = yaml.safe_load(text)[True]["pull_request"]  # YAML 1.1 reads `on:` as bool True
+    assert "paths-ignore" not in (trigger or {}), "the gap is really gone upstream"
+    path.write_text(
+        text.replace(
+            "  pull_request:\n",
+            "  pull_request:\n    paths-ignore: [\"**.md\"]\n",
+            1,
+        ),
+        encoding="utf-8",
+    )
     inventory, tracked = guard.load_inventory(INVENTORY)
-    assert _run(inventory, tracked, LIVE_CONTEXTS) == []
+    gapped = [
+        dataclasses.replace(c, known_gap="accepted: docs-only PRs never start this workflow")
+        if c.context == "gitleaks-scan"
+        else c
+        for c in inventory
+    ]
+    assert _run(gapped, tracked, LIVE_CONTEXTS, workflows_dir=root) == []
 
-    promoted = _run(inventory, tracked, [*LIVE_CONTEXTS, "gitleaks-scan"])
+    promoted = _run(gapped, tracked, [*LIVE_CONTEXTS, "gitleaks-scan"], workflows_dir=root)
     stalls = [f for f in promoted if f.code == "policy.stall" and f.subject == "gitleaks-scan"]
     assert len(stalls) == 1, [str(f) for f in promoted]
 
@@ -688,7 +720,10 @@ def test_the_snapshot_is_reverified_by_a_scheduled_live_read() -> None:
 def test_the_context_set_and_enforcement_values_are_unchanged_from_dig_1982() -> None:
     """DoD "exits 0 with the inventory unchanged" means the policy decisions are
     unchanged: same contexts, same workflows, same enforcement. Only the metadata
-    this leaf adds (owner, issue, gated_by, known_gap) is new."""
+    this leaf adds (owner, issue, gated_by, known_gap) is new — plus the two
+    advisory entries the rebased base's ci.yml produces (`gloomberb-ci-guard`,
+    `vendor-content-gate`): the completeness rule fails `policy.ungated`
+    without them, so declaring them is reconciliation, not a policy change."""
     inventory, tracked = guard.load_inventory(INVENTORY)
     assert [(c.context, c.workflow, c.job, c.enforcement) for c in inventory] == [
         ("Required checks passed", "ci.yml", "required-checks", "required"),
@@ -711,6 +746,8 @@ def test_the_context_set_and_enforcement_values_are_unchanged_from_dig_1982() ->
         ),
         ("Frontend canon guard", "ci.yml", "frontend-canon", "advisory"),
         ("actionlint", "ci.yml", "actionlint", "advisory"),
+        ("GLOOMBERB deployed-config guard", "ci.yml", "gloomberb-ci-guard", "advisory"),
+        ("Vendor-content gate", "ci.yml", "vendor-content-gate", "advisory"),
     ]
     assert sorted(tracked) == [
         "ci-dco-sign-off.yml",

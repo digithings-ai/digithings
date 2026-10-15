@@ -117,11 +117,11 @@ ENFORCEMENTS = frozenset({"required", "advisory", "other-branch"})
 #: *declared* list, and an absent list means "GitHub's default", not "nothing".
 DEFAULT_PR_TYPES = ("opened", "synchronize", "reopened")
 
-#: The activity type a required status check must survive. Required contexts are
-#: evaluated against the PR head SHA, so the only event that re-reports on a new
-#: push is ``synchronize``. A workflow without it goes silent after the opening
-#: push and the merge button hangs.
-REQUIRED_PR_TYPE = "synchronize"
+#: The activity types a required status check must survive. Required contexts are
+#: evaluated against the PR head SHA, so a workflow whose declared ``types:``
+#: filter misses any of ``DEFAULT_PR_TYPES`` reports for the opening SHA and
+#: never again: after the first push the PR waits on "Waiting for status to be
+#: reported" forever, with no failing check to explain why.
 
 #: Suffixes GitHub reads as workflow definitions. ``.yaml`` is rare here but the
 #: completeness scan must not be narrower than the directory.
@@ -185,8 +185,8 @@ class WorkflowFacts:
     #: stated branches rather than restricting it to them.
     branch_ignore: list[str] | None = None
     #: ``pull_request.types``. ``None`` means the key is absent, which GitHub
-    #: reads as DEFAULT_PR_TYPES — that *does* include ``synchronize``, so an
-    #: absent key is reachable. A declared list without ``synchronize`` is not.
+    #: reads as DEFAULT_PR_TYPES, so an absent key is reachable. A declared
+    #: list missing any of ``DEFAULT_PR_TYPES`` is not.
     pr_types: list[str] | None = None
 
     def reports_on_develop_pr(self, branch: str) -> tuple[bool, str]:
@@ -214,16 +214,16 @@ class WorkflowFacts:
                 f"({self.branch_ignore}) excludes `{branch}`, so this check never "
                 f"reports on a PR into `{branch}`"
             )
-        if self.pr_types is not None and REQUIRED_PR_TYPE not in self.pr_types:
+        if self.pr_types is not None and not set(DEFAULT_PR_TYPES) <= set(self.pr_types):
+            missing = [t for t in DEFAULT_PR_TYPES if t not in self.pr_types]
             return False, (
                 f"the workflow-level `pull_request:` types filter "
-                f"({self.pr_types or 'empty or unreadable'}) has no "
-                f"`{REQUIRED_PR_TYPE}`. Required status checks are evaluated against "
-                "the PR's head SHA, and `synchronize` is the only event that "
-                "re-reports on a new push, so this workflow reports for the opening "
+                f"({self.pr_types or 'empty or unreadable'}) is missing "
+                f"{', '.join('`' + t + '`' for t in missing)}. Required status checks are evaluated against "
+                "the PR's head SHA, so this workflow reports for the opening "
                 "SHA and never again: after the first push the PR waits on "
                 '"Waiting for status to be reported" forever, with no failing check '
-                "to explain why. Add `synchronize` to types, or drop the filter so "
+                "to explain why. Add the missing types, or drop the filter so "
                 f"GitHub applies its default ({', '.join(DEFAULT_PR_TYPES)})"
             )
         return True, ""
