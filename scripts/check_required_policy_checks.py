@@ -98,6 +98,7 @@ import argparse
 import fnmatch
 import sys
 from dataclasses import dataclass, field
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -428,7 +429,7 @@ def load_inventory(path: Path = INVENTORY_PATH) -> tuple[list[PolicyCheck], list
                 enforcement=enforcement,
                 reason=" ".join(reason.split()),
                 owner=owner or None,
-                review_by=_clean_optional(entry.get("review_by")),
+                review_by=_checked_review_by(entry.get("review_by"), where, context),
                 issue=_clean_optional(entry.get("issue")),
                 gated_by=_clean_optional(entry.get("gated_by")),
                 known_gap=_clean_optional(entry.get("known_gap")),
@@ -741,7 +742,55 @@ def reconcile(
     return findings
 
 
-def report(findings: list[Finding], inventory: list[PolicyCheck], live: list[str]) -> str:
+def _checked_review_by(value: Any, where: str, context: str) -> str | None:
+    """Normalise ``review_by:`` and fail closed on a malformed horizon.
+
+    A horizon nobody can parse is a horizon that never fires, which reads
+    exactly like "not yet due" forever. Reject it at load instead.
+    """
+    text = _clean_optional(value)
+    if text is None:
+        return None
+    try:
+        date.fromisoformat(text)
+    except ValueError:
+        raise GuardError(
+            f"{where} ({context}): 'review_by' must be a YYYY-MM-DD date, got {text!r}"
+        ) from None
+    return text
+
+
+def stale_advisories(inventory: list[PolicyCheck], today: date | None = None) -> list[Finding]:
+    """Advisory entries whose ``review_by`` horizon has passed.
+
+    Staged rollout (DIG-2237 C-1): this is a warning, not a finding.
+    ``reconcile()`` never emits it, so a stale horizon cannot turn the guard
+    red — the exit-1 promotion lands separately, after one clean cycle.
+    """
+    now = today or datetime.now(timezone.utc).date()
+    stale: list[Finding] = []
+    for check in inventory:
+        if check.enforcement != "advisory" or not check.review_by:
+            continue
+        if check.review_by < now.isoformat():
+            stale.append(
+                Finding(
+                    "policy.stale-advisory",
+                    check.context,
+                    f"review_by {check.review_by} has passed: re-read the reason "
+                    "above and either close the gap, renew the horizon, or "
+                    "promote the check",
+                )
+            )
+    return stale
+
+
+def report(
+    findings: list[Finding],
+    inventory: list[PolicyCheck],
+    live: list[str],
+    today: date | None = None,
+) -> str:
     """Human-readable summary: what is gated, what is not, and what broke."""
     lines: list[str] = []
     gated = [c.context for c in inventory if c.is_required]
@@ -757,6 +806,11 @@ def report(findings: list[Finding], inventory: list[PolicyCheck], live: list[str
     for context, enforcement, owner, follow_up in ungated:
         hook = f" [{follow_up}]" if follow_up else ""
         lines.append(f"  ungated ({enforcement}, owner {owner}{hook}): {context}")
+    stale = stale_advisories(inventory, today)
+    if stale:
+        lines.append("")
+        lines.append(f"{len(stale)} stale advisory review horizon(s) (warning only):")
+        lines.extend(f"  ::warning::{finding}" for finding in stale)
     if findings:
         lines.append("")
         lines.append(f"{len(findings)} policy-gate disagreement(s):")

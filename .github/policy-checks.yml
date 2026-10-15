@@ -128,6 +128,7 @@ checks:
     enforcement: advisory
     owner: DevOps
     issue: DIG-1952
+    review_by: 2027-04-13
     reason: >-
       DCO 1.1 sign-off. Runs on every PR and fails without a Signed-off-by
       line, but is required nowhere, so a PR with no sign-off merges clean.
@@ -164,6 +165,7 @@ checks:
     enforcement: advisory
     owner: DevOps
     issue: DIG-1952
+    review_by: 2027-04-13
     reason: >-
       Agent-task TSV coverage. Deliberately ungated: the issue-linkage check
       that used to live in this file was removed in docs/adr/0024 precisely
@@ -176,6 +178,7 @@ checks:
     enforcement: advisory
     owner: DevOps
     issue: DIG-1952
+    review_by: 2027-04-13
     reason: >-
       Conventional-commit title lint for PRs into develop. Squash merges use the
       PR title as the commit subject, so this protects release-please, but it is
