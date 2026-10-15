@@ -122,6 +122,7 @@ describe("desk chrome", () => {
     const head = css.slice(css.indexOf(".desk-head {"), css.indexOf("}", css.indexOf(".desk-head {")));
     expect(head).toContain("overflow-x: auto");
     expect(head).toContain("white-space: nowrap");
+    expect(css).toMatch(/html\s*\{[^}]*overflow-x:\s*clip/);
     expect(css).toContain(".desk-head > * { flex-shrink: 0; }");
     const narrow = css.slice(css.indexOf("@media (max-width: 759px)"), css.indexOf("@keyframes desk-page-settle"));
     expect(narrow).not.toMatch(/max-width:\s*3\.5rem|text-overflow:\s*ellipsis/);
