@@ -33,4 +33,14 @@ describe("prepareBody", () => {
     expect(htmlToText("<p>   </p>")).toBe("");
     expect(stripQuotesAndSignature("> only quoted")).toBe("");
   });
+
+  it("decodes an entity once", () => {
+    expect(htmlToText("&amp;lt;")).toBe("&lt;");
+    expect(htmlToText("&lt;")).toBe("<");
+  });
+
+  it("drops a script whose end tag has a space", () => {
+    expect(htmlToText("before<script>alert(1)</script >after")).toBe("before after");
+    expect(htmlToText("before<style>x</style >after")).toBe("before after");
+  });
 });
