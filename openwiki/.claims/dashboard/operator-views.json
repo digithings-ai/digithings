@@ -36,7 +36,7 @@
     },
     {
       "id": "claim_dc7f3e2ee1de498db5a2f4c9ce474c5f",
-      "statement": "Open-book Unrealized prefers stored unrealized_pnl_pct/since_entry_return_pct, derives from entry vs current price otherwise, fills missing marks from the market API (GET /v1/market/closes, R2-API-only, no Supabase fallback — #4053), and fails closed to em-dash without basis or mark.",
+      "statement": "Open-book Unrealized prefers stored unrealized_pnl_pct/since_entry_return_pct, derives from entry vs current price otherwise, fills missing marks from the market API (GET /v1/market/closes, R2-API-only, no Supabase fallback \u2014 #4053), and fails closed to em-dash without basis or mark.",
       "evidence": [
         {
           "resource": "repo://apps/dashboard/README.md#L29-L33",
@@ -81,7 +81,7 @@
       "statement": "The Desk+ digichat popup uses HMAC plan-proof (POST /api/plan-proof) after verifying the dashboard Supabase access token and reading app_metadata.plan_tier; it never trusts client-asserted X-Embed-Plan-Tier or ?plan_tier= query params.",
       "evidence": [
         {
-          "resource": "repo://apps/dashboard/README.md#L300-L307",
+          "resource": "repo://apps/dashboard/README.md#L303-L310",
           "version": "repo-lines-v1:sha256:f9384d207ee3ee8e44a3d6d006bc1d5bdcf4776dc2f6d71ea4b1a18b39ecc0db:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiM2I1ZTU2ZGI3MjE3MzI0NjhkYmQ4ZDkyZGU4MGNiZDU0ZDA4Y2FjMzk1N2E0NDdiNmExZjU5ZDllNTQ2MTdjOSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDJlMmI0NmJjZWI0NTAzYTc1OWQzNDFiYjc3Y2Y5MzkzNjBlZTNlNDkxYzI3ZDU4Y2VmMzg1YzgwNzM1ZDIxYyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZGU1ZDE4N2MzZTU4MmZkYmQwMTkyOGZlODRiMjViODkzY2YxNzNkOWY5ZTE0YTQzNTc3ZmI3YjFhNWJkNjczYyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMzlhZDY0ZjU2NmJlN2RiMDY3MzYyZDc5NWFkNjEwZWUxOWI3YjI2NjZiMTEwYmJhNzY0ZDJkY2I5ZmYxNzZkMiJ9"
         },
         {
@@ -95,14 +95,14 @@
       "statement": "Thesis detail routes (/portfolio/theses?thesis=<id>) and ticker dossiers (/portfolio/tickers?ticker=<id>) use query-string routing rather than dynamic segments because under static export only build-time enumerated ids get an HTML file; pipeline-created theses and tickers after the last deploy would hard-404.",
       "evidence": [
         {
-          "resource": "repo://apps/dashboard/README.md#L402-L415",
+          "resource": "repo://apps/dashboard/README.md#L407-L420",
           "version": "repo-lines-v1:sha256:c5b2229eae24581ea642df438cd0d3fcb9c718e618b5956eb28517ef0818406d:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZiZTM1Njk5YjYyNmYzMDk5ODAzODJkZDgwZDk5NjYyYWZiZDZhZDJmMjk5ZDFmZTNmMmFiYjc1NWMxNDQ2ZmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZjMWExOWMzNzFmNTI3ZjQ0MDlkZTNhMzRiMDljN2JkODUwOGVmNjYxODc4NTlkZTcxNmUyODI2YTc4ZTg4YTUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZmNTEwY2M5OGI5YWEyMmEzZTA4YTFmZjdkYzMwY2NkZWJmYThhZTMxYmI1NzgyNDdjZmUxZjM1Yjk5YWM4M2MiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImM4OWJiYTk5NzYyMzZiYTY2MmE1MGFmNmI5MWE2NDY3MTA1NjdmOWNlZmU5YTViYTMwYTViYWZhNDBhNjBhMGYifQ"
         }
       ]
     },
     {
       "id": "claim_23d264faae3243bf94671a8f7b666632",
-      "statement": "getPerformanceBundle() fails closed on public_accounting_nav_history query error — swallowing into an empty series would look like a healthy empty book (#3029); it is the shared NAV adapter for Brief KPIs and the Tearsheet (#3580).",
+      "statement": "getPerformanceBundle() fails closed on public_accounting_nav_history query error \u2014 swallowing into an empty series would look like a healthy empty book (#3029); it is the shared NAV adapter for Brief KPIs and the Tearsheet (#3580).",
       "evidence": [
         {
           "resource": "repo://apps/dashboard/lib/TABLES.md#L114-L117",
