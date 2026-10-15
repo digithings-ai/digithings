@@ -41,16 +41,22 @@ describe("ChatBand", () => {
     expect(html).not.toContain("house book");
   });
 
-  it("loads one Geist Mono face, via the app font config, for the digichat skin", () => {
+  it("loads one Geist Mono face, via the shared loader, for the digichat skin", () => {
     const font = readFileSync(new URL("./digichat-font.ts", import.meta.url), "utf8");
-    const config = readFileSync(new URL("../../app/fonts.ts", import.meta.url), "utf8");
+    const appFonts = readFileSync(new URL("../../app/fonts.ts", import.meta.url), "utf8");
+    const loader = readFileSync(
+      new URL("../../../../packages/design/fonts.ts", import.meta.url),
+      "utf8",
+    );
     const session = readFileSync(new URL("./scripted-session.tsx", import.meta.url), "utf8");
-    // The chat frame re-exports the app's loader rather than calling next/font:
-    // one Geist Mono woff2 per page, and a face swap stays one line in fonts.ts.
+    // The chat frame re-exports the app config, and the app config re-exports
+    // the one loader. A face swap stays one edit in packages/design/fonts.ts.
     expect(font).not.toContain("next/font");
     expect(font).toContain('from "@/app/fonts"');
-    expect(config).toMatch(/Geist_Mono\(\{[^}]*variable:\s*"--font-mono-face"/);
-    expect(config).toContain("export const fontVariables");
+    expect(appFonts).toContain('from "@digithings/design/fonts"');
+    expect(appFonts).not.toContain("next/font");
+    expect(loader).toMatch(/Geist_Mono\(\{[^}]*variable:\s*"--font-mono-face"/);
+    expect(appFonts).toContain("fontVariables");
     expect(session).toContain("digichatFont.variable");
     expect(session).toContain('data-thread-skin="digichat"');
   });
