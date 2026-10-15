@@ -482,6 +482,17 @@ def test_all_targets_are_dumped_into_one_timestamped_directory(
     assert (run / "core.dump.list").exists()
     assert (run / "twelve-x.dump.list").exists()
 
+    # SHA256SUMS is one sidecar for the run. Writing it with `>` inside the
+    # target loop used to keep only whichever target ran last.
+    sums = (run / "SHA256SUMS").read_text()
+    names = [line.split("  ", 1)[1].strip() for line in sums.strip().splitlines()]
+    assert names == [
+        "core.dump",
+        "core.dump.list",
+        "twelve-x.dump",
+        "twelve-x.dump.list",
+    ]
+
 
 def test_the_local_sha256_check_can_actually_fail(tmp_path, stub_bin, stub_home, fake_boto_dir):
     """A local archive that does not match its own SHA256SUMS must stop the run."""
