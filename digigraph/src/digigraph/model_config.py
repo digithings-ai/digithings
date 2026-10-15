@@ -736,7 +736,6 @@ def effective_llm_settings() -> dict[str, object]:
     """
     mode = _get_llm_mode()
     provider, model, api_key_env = _explicit_llm_config()
-    source = "default"
     resolved = _resolve_explicit_model(provider, model)
     if resolved is not None:
         source = "agents.llm" if os.environ.get("DIGI_PROJECT_CONFIG") else "env"

@@ -1675,11 +1675,9 @@ def _create_with_retry(
         # that did not happen.
         outbound_payload = kwargs.get("messages")
         destination = _egress_destination(client)
-        # Set by the client's egress screen during the attempt below. Bound before
-        # the loop so every record this function writes carries the verdict that
-        # actually applied to that attempt, rather than whatever a later attempt
-        # left behind on the client.
-        screen_decision, screen_categories = EgressDecision.UNSCREENED, ()
+        # The screen verdict is read fresh at each record site below via
+        # client_screen_fields(client) (CodeQL #2947/#2948: no pre-loop
+        # binding is needed — every read is dominated by one of those calls).
         for attempt in range(max_attempts):
             attempt_number, retry_reason, started_at = scope.start()
             try:
