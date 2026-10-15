@@ -215,7 +215,7 @@ same division of responsibility as TrustStrip.
 [`../changelog-example.json`](../changelog-example.json) for a worked
 example and [`../releases.json`](../releases.json) for the live tagged
 digichat / digiskills feed the marketing `/changelog` pages consume.
-`packages/design/smoke/index.html` has a vanilla-JS renderer.
+The vanilla smoke page that used to render this band was removed.
 This primitive doesn't fetch or own data, only the markup/CSS contract.
 
 ```html
@@ -353,7 +353,7 @@ Graphite/Cursor **pre-footer conversion band** — a full-width centered section
 placed directly above the footer: one literal headline, one primary kit
 `Button` (React), and an optional mono secondary link. Compose with `.reveal-up` (above) for a
 scroll-in enter; reduced motion is already honored by the shared block. Copy
-tone follows [`../references/scans/copy-patterns.md`](../references/scans/copy-patterns.md)
+tone follows [`COPY_GUIDE.md`](../COPY_GUIDE.md)
 (literal verbs, no hype). Landing-page wiring is [#1227](https://github.com/digithings-ai/digithings/issues/1227) — this primitive owns only the markup/CSS contract.
 
 ```html
@@ -378,7 +378,7 @@ tone follows [`../references/scans/copy-patterns.md`](../references/scans/copy-p
 | `.closing-cta__actions` → kit `Button variant="default"` | Primary label + `href` | The single, literal action (e.g. "Start building", "Open dashboard"). |
 | `.closing-cta__secondary` | Optional secondary label + `href` | Mono, arrow-suffix; the `span[aria-hidden]` translates on hover, matching the kit Button/`.bento__cta`. |
 
-**Copy variants** (shown in `packages/design/smoke/index.html`):
+**Copy variants:**
 
 | Surface | Title | Primary | Secondary |
 |---------|-------|---------|-----------|
