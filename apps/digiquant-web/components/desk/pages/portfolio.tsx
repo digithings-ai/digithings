@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRefreshGeneration } from "../app-settings-store";
 import { BLOCKS, layoutFor, type BlockKind } from "../../../../../clients/digiquant-tui/src/catalog";
 import { EMPTY_READ, STUB_READ, isStubEnvelope, type ReadResult } from "../../../../../clients/digiquant-tui/src/read";
 import { attributionBody } from "../../../../../clients/digiquant-tui/src/pages/attribution-format";
@@ -167,6 +168,7 @@ function PortfolioHome() {
   const [reads, setReads] = useState<Record<string, OfficialRead>>({});
   const layout = layoutFor(path);
   const { mount, style, pane } = useDeskMosaic(layout);
+  const refresh = useRefreshGeneration();
 
   useEffect(() => {
     const placements = layoutFor(path);
@@ -184,7 +186,7 @@ function PortfolioHome() {
       cancel = true;
       ac.abort();
     };
-  }, []);
+  }, [refresh]);
 
   return (
     <div ref={mount} className={PANE_MOSAIC}>
@@ -229,6 +231,7 @@ function HoldingsHome() {
   const [reads, setReads] = useState<Record<string, OfficialRead>>({});
   const layout = layoutFor(path);
   const { mount, style, pane } = useDeskMosaic(layout);
+  const refresh = useRefreshGeneration();
 
   useEffect(() => {
     const placements = layoutFor(path);
@@ -246,7 +249,7 @@ function HoldingsHome() {
       cancel = true;
       ac.abort();
     };
-  }, []);
+  }, [refresh]);
 
   return (
     <div ref={mount} className={PANE_MOSAIC}>
@@ -298,6 +301,7 @@ function AttributionHome() {
   const [reads, setReads] = useState<Record<string, OfficialRead>>({});
   const layout = layoutFor(path);
   const { mount, style, pane } = useDeskMosaic(layout);
+  const refresh = useRefreshGeneration();
 
   useEffect(() => {
     const placements = layoutFor(path);
@@ -315,7 +319,7 @@ function AttributionHome() {
       cancel = true;
       ac.abort();
     };
-  }, []);
+  }, [refresh]);
 
   return (
     <div ref={mount} className={PANE_MOSAIC}>
@@ -367,6 +371,7 @@ function LedgerHome() {
   const [reads, setReads] = useState<Record<string, OfficialRead>>({});
   const layout = layoutFor(path);
   const { mount, style, pane } = useDeskMosaic(layout);
+  const refresh = useRefreshGeneration();
 
   useEffect(() => {
     const placements = layoutFor(path);
@@ -384,7 +389,7 @@ function LedgerHome() {
       cancel = true;
       ac.abort();
     };
-  }, []);
+  }, [refresh]);
 
   return (
     <div ref={mount} className={PANE_MOSAIC}>
@@ -435,6 +440,7 @@ function TearsheetHome() {
   const [reads, setReads] = useState<Record<string, OfficialRead>>({});
   const layout = layoutFor(path);
   const { mount, style, pane } = useDeskMosaic(layout);
+  const refresh = useRefreshGeneration();
 
   useEffect(() => {
     const placements = layoutFor(path);
@@ -452,7 +458,7 @@ function TearsheetHome() {
       cancel = true;
       ac.abort();
     };
-  }, []);
+  }, [refresh]);
 
   return (
     <div ref={mount} className={PANE_MOSAIC}>
@@ -500,6 +506,7 @@ function ThesesHome() {
   const [reads, setReads] = useState<Record<string, OfficialRead>>({});
   const layout = layoutFor(path);
   const { mount, style, pane } = useDeskMosaic(layout);
+  const refresh = useRefreshGeneration();
 
   useEffect(() => {
     const placements = layoutFor(path);
@@ -517,7 +524,7 @@ function ThesesHome() {
       cancel = true;
       ac.abort();
     };
-  }, []);
+  }, [refresh]);
 
   return (
     <div ref={mount} className={PANE_MOSAIC}>

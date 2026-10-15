@@ -100,9 +100,21 @@ html[data-dq-hero="played"] :not([data-dq-live]) > [data-dq-stray] {
   --term-bg: #000;
 }
 
+/* Compact density is a settings choice. Regular keeps the desk type as written. */
+:root[data-density="compact"] .desk-pane-body {
+  font-size: 0.6875rem;
+  line-height: 1.3;
+}
+
 html,
 body {
   background: var(--bg);
+}
+
+/* The desk header scrolls inside .desk-head. That track is wider than a phone,
+   and overflow on the track still widens the document unless the page clips it. */
+html {
+  overflow-x: clip;
 }
 
 /* The thread group slot is `aui_message-group`. An arbitrary Tailwind variant

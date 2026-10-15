@@ -5,6 +5,7 @@ import { DigichatThread } from "@digithings/ui/chat/thread";
 import { DeskFrame } from "./desk-frame";
 import { ChatDesk, useChatDesk } from "./chat-desk";
 import { DIGICHAT_TEXT } from "../chat/digichat-font";
+import { useAppSettings } from "./app-settings-store";
 import styles from "./desk-chat.module.css";
 
 const SENTENCE = "m-0 px-3 py-6 font-mono text-[0.75rem] leading-[1.45] text-ink-mute";
@@ -37,12 +38,33 @@ export function ChatPane() {
     },
   });
 
-  if (!chat?.ready) return <p className={SENTENCE}>loading…</p>;
-  if (chat.notice) return <p className={SENTENCE}>{chat.notice}</p>;
+  const settings = useAppSettings();
+  const modelLine = (
+    <p data-chat-model={settings.chatModel} className="m-0 px-3 pt-3 font-mono text-[0.6875rem] tracking-[0.04em] text-ink-mute">
+      model {settings.chatModel}
+    </p>
+  );
+  if (!chat?.ready) {
+    return (
+      <div>
+        {modelLine}
+        <p className={SENTENCE}>loading…</p>
+      </div>
+    );
+  }
+  if (chat.notice) {
+    return (
+      <div>
+        {modelLine}
+        <p className={SENTENCE}>{chat.notice}</p>
+      </div>
+    );
+  }
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
       <div className={`${styles.ground} ${DIGICHAT_TEXT}`}>
+        {modelLine}
         <DigichatThread welcome="What should we inspect?" placeholder="Ask digichat…" className="min-h-0 flex-1" />
       </div>
     </AssistantRuntimeProvider>
