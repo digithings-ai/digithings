@@ -10,17 +10,19 @@ Status: **approved, in execution** · re-baselined 2026-09-20 against `origin/de
 
 Original draft: 2026-09-18, branch `feat/rebuild-sites-from-reference`, cut from `origin/develop` @ `44ff6d109`.
 
-## Isolation (2026-09-22) — THIS BRANCH MUST NOT REACH `develop` UNTIL SIGNED OFF
+## Isolation (2026-09-22) — historical, do not follow
 
 The first wave of this work was promoted to production before it was finished, and had to be
 pulled back out (`revert(web)` #4489 → #4492 for digithings.ai + digiquant.io, and
-`revert(dashboard)` #4502 → #4504 for the operator UI). The redesign now lives **only** on
-`claude/home-variants` and is deliberately kept off `develop`.
+`revert(dashboard)` #4502 → #4504 for the operator UI). On 2026-09-22 the redesign lived only
+on `claude/home-variants` and was kept off `develop`.
 
-**The rule:** no PR from this branch into `develop` (or `main`, or any `module/*` branch) until
-the owner has signed the redesign off as ready to deploy. Work continues here until then.
+**That branch lock is over.** Later slices landed on `develop`, including #4791. Do not refuse
+a current PR into `develop` because of this section. digiquant execution follows
+[`2026-09-30-digiquant-gloomberg-ui.md`](2026-09-30-digiquant-gloomberg-ui.md). The paragraphs
+below are the 2026-09-22 record of why that old branch could not be merged as-is.
 
-Two things make this concrete:
+Historical record (2026-09-22), not a current merge rule:
 
 1. **This branch is a pre-revert lineage.** It descends from the rebuild commits that the revert
    undid — `2c6427436` (D1, digithings.ai), `080d3bd1e` (Q1, digiquant.io), `b32513d28` (Q2,
@@ -32,9 +34,8 @@ Two things make this concrete:
    redesign as a diff — i.e. "re-apply the rebuild plus everything since" — not a merge of this
    lineage. Plan for that at sign-off rather than discovering it in the promotion PR.
 
-Branch state: `822429280` (v15 home page) on top of the v13 variant exploration; local only, no
-PR. The v15 plan (`landing-page-v15-refining-lean-2026-09-22-approved.md`) covered `/` only —
-the remaining routes are still at their D1/Q1 level and are the next workstream.
+Branch state on 2026-09-22: `822429280` (v15 home page) on top of the v13 variant exploration;
+local only, no PR. That snapshot is not the current `develop` tree.
 
 ## 0. Owner direction (2026-09-20) — READ THIS BEFORE §6
 

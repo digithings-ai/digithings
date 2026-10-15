@@ -1,4 +1,4 @@
-/** Homepage desk: the shared page, and how the reveal handle sits. */
+/** Homepage desk: one embedded app. Terminal first, then the web app. */
 
 import { deskPathFromPathname } from "@/components/desk/paths";
 import { isAccountSurface, publicCatalogPages } from "@/components/desk/public-surface";
@@ -7,30 +7,51 @@ const PAGES = publicCatalogPages().filter((page) => !isAccountSurface(page.path)
 
 export const TERMINAL_TITLE = "terminal UI";
 export const TERMINAL_COPY =
-  "the terminal UI, one-to-one with the web app. You run pipelines and strategies locally, host it yourself, and configure your own API tokens and local models.";
+  "The terminal UI and the web app are nearly one to one. Here you self-host: run your own pipelines on this machine, connect local models, and serve digiquant yourself.";
+export const TERMINAL_EDGE =
+  "Advantage: your machine, your models, and pipelines that stay on your infrastructure.";
 
 export const WEB_TITLE = "web app";
 export const WEB_COPY =
-  "the same desk, delegated. A subscription so you do not host the infrastructure on your own machine.";
+  "The web app and the terminal UI are nearly one to one. Use the free tier, or the base subscription with the baseline pipeline. Paid hosting runs your own pipelines, and those pipelines appear on this desk too.";
+export const WEB_EDGE =
+  "Advantage: nothing to run yourself. The baseline pipeline is included, and the pipelines you pay to host show up here.";
 
-export const TOUR_DWELL_MS = 4_200;
-export const IDLE_RESUME_MS = 8_000;
-
-/** The handle can close either side. Both frames stay full size under the clip. */
-export const SPLIT_MIN = 0;
-export const SPLIT_MAX = 1;
-
-/** Where the handle rests after the one-time sweep, so both apps are visible. */
-export const REVEAL_REST = 0.5;
-export const REVEAL_SWEEP_MS = 900;
-export const REVEAL_RETURN_MS = 600;
-
-export const WEB_EMPTY_COPY =
-  "The web app did not load. This frame stays empty. No figures are filled in.";
+/** Scrolling must pause this long, with the stage on screen, before the next scroll may switch views. */
+export const SCROLL_SETTLE_MS = 180;
 
 export type Surface = "terminal" | "web";
 
-export type StagePhase = "opening" | "touring" | "yours" | "live" | "empty";
+export type StageScroll = {
+  surface: Surface;
+  /** The automatic terminal-to-web switch has already happened. */
+  slid: boolean;
+  /** The stage is on screen and scrolling has paused, so the next scroll may switch. */
+  armed: boolean;
+};
+
+export function initialStageScroll(): StageScroll {
+  return { surface: "terminal", slid: false, armed: false };
+}
+
+/**
+ * A scroll while the stage is visible. An unarmed scroll does not switch.
+ * The first armed scroll moves the terminal view to the web app, once.
+ * Leaving the screen before that switch disarms it, so arrival scrolling
+ * does not skip the terminal.
+ */
+export function onStageScroll(state: StageScroll, visible: boolean): StageScroll {
+  if (state.slid) return state;
+  if (!visible) return state.armed ? { ...state, armed: false } : state;
+  if (!state.armed) return state;
+  return { surface: "web", slid: true, armed: true };
+}
+
+/** Arm the switch after scrolling has paused with the stage on screen. */
+export function armStageScroll(state: StageScroll, visible: boolean): StageScroll {
+  if (state.slid || !visible || state.armed) return state;
+  return { ...state, armed: true };
+}
 
 export function nextTerminalPath(current: string): string {
   const index = PAGES.findIndex((page) => page.path === current);
@@ -53,42 +74,6 @@ export function prevTerminalPath(current: string): string {
   const index = PAGES.findIndex((page) => page.path === current);
   const start = index < 0 ? 0 : index;
   return PAGES[(start - 1 + PAGES.length) % PAGES.length]?.path ?? PAGES[0].path;
-}
-
-export function clampSplit(share: number): number {
-  if (Number.isNaN(share)) return REVEAL_REST;
-  return Math.min(SPLIT_MAX, Math.max(SPLIT_MIN, share));
-}
-
-/** Terminal-side fraction for a pointer on the stage. The handle may sit on either edge. */
-export function splitFromPointer(clientX: number, left: number, width: number): number {
-  if (width <= 0) return REVEAL_REST;
-  return clampSplit((clientX - left) / width);
-}
-
-/** The sentence is placed only when its full width fits the visible slice. */
-export function sentenceFits(textWidth: number, visibleWidth: number): boolean {
-  if (!Number.isFinite(textWidth) || !Number.isFinite(visibleWidth) || visibleWidth <= 0) return false;
-  return Math.ceil(textWidth) <= Math.floor(visibleWidth);
-}
-
-/** One sweep from the left edge to the right edge, then back to the resting split. */
-export function revealShare(elapsedMs: number, reduced: boolean): number {
-  if (reduced || !Number.isFinite(elapsedMs)) return REVEAL_REST;
-  if (elapsedMs <= 0) return 0;
-  if (elapsedMs < REVEAL_SWEEP_MS) return elapsedMs / REVEAL_SWEEP_MS;
-  const back = elapsedMs - REVEAL_SWEEP_MS;
-  if (back >= REVEAL_RETURN_MS) return REVEAL_REST;
-  return 1 + (REVEAL_REST - 1) * (back / REVEAL_RETURN_MS);
-}
-
-export type WiderSide = Surface | "even";
-
-/** Which story matches the wider pane. A tie lights neither tile. */
-export function widerSide(share: number): WiderSide {
-  if (share > 0.5) return "terminal";
-  if (share < 0.5) return "web";
-  return "even";
 }
 
 function routePath(href: string): string {

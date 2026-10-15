@@ -332,14 +332,21 @@ def _session_gated_names() -> set[str]:
     }
 
 
+def _public_names(names: set[str]) -> set[str]:
+    from digiquant.tool_names import canonical_tool_name
+
+    return {canonical_tool_name(name) for name in names}
+
+
 def test_without_a_secret_no_session_tool_is_advertised(monkeypatch: pytest.MonkeyPatch) -> None:
     advertised = _advertised_tool_names()
     gated = _session_gated_names()
+    hidden = gated | _public_names(gated)
 
     assert gated, "the gate would be vacuous with no session-gated tools to hide"
-    assert not (advertised & gated), (
-        f"{len(advertised & gated)} session tools advertised with no cookie: "
-        f"{sorted(advertised & gated)[:5]}"
+    assert not (advertised & hidden), (
+        f"{len(advertised & hidden)} session tools advertised with no cookie: "
+        f"{sorted(advertised & hidden)[:5]}"
     )
 
 
@@ -347,7 +354,9 @@ def test_an_expired_cookie_hides_the_family_too(monkeypatch: pytest.MonkeyPatch)
     _authenticated(monkeypatch)
     _FakeClient.verdict = SessionCheck(False, "auth_required", "HTTP 401")
 
-    assert not (_advertised_tool_names() & _session_gated_names())
+    advertised = _advertised_tool_names()
+    gated = _session_gated_names()
+    assert not (advertised & (gated | _public_names(gated)))
 
 
 def test_a_valid_cookie_advertises_the_whole_session_family(
@@ -356,9 +365,12 @@ def test_a_valid_cookie_advertises_the_whole_session_family(
     _authenticated(monkeypatch)
     _FakeClient.verdict = SessionCheck(True, "ok", "accepted by api.gloom.sh")
 
-    missing = _session_gated_names() - _advertised_tool_names()
+    advertised = _advertised_tool_names()
+    gated = _session_gated_names()
+    missing = _public_names(gated) - advertised
 
     assert not missing, f"{len(missing)} session tools still hidden with a valid cookie"
+    assert not (advertised & gated), "digifetch names must not be listed beside gloomberb names"
 
 
 def test_the_free_family_is_never_touched_by_the_gate(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -373,7 +385,7 @@ def test_the_free_family_is_never_touched_by_the_gate(monkeypatch: pytest.Monkey
     _FakeClient.verdict = None
     without_cookie = _advertised_tool_names()
 
-    free = {n for n, e in TOOL_ENTITLEMENTS.items() if e == "free"}
+    free = _public_names({n for n, e in TOOL_ENTITLEMENTS.items() if e == "free"})
     assert free & without_cookie == free & with_cookie, (
         "the free family must be advertised identically with and without a cookie"
     )

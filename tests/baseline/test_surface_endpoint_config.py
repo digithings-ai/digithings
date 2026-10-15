@@ -67,8 +67,10 @@ _HOST_RE = re.compile(
 # since the batch pin is five literals from two landings, minus one refresh
 # removal, with the rotation re-confirmed at 54. From main's OCC release:
 # occ.digithings.ai x2 as tenant-map keys in
-# tests/dg/test_occ_ticket_payload_retired.py, mcp.digithings.ai x1 in
-# docs/reviews/pr/review-5061-digichat-mcp-tool-allowlist.md prose. From the
+# tests/dg/test_occ_ticket_payload_retired.py. (DIG-3393 deleted
+# docs/reviews/pr/review-5061-digichat-mcp-tool-allowlist.md, which carried the
+# 60th mcp.digithings.ai literal in prose: 60 -> 59, re-measured with this
+# file's own scanner.) From the
 # L4-L9 union: key.digithings.ai (+1), search.digithings.ai (+1). The refresh
 # then dropped the snapshot's hosted-digisearch-route summary line (-1
 # search). #5542 re-measured search at 54 on develop (rotated repo-activity
@@ -78,15 +80,27 @@ _HOST_RE = re.compile(
 # graph.digithings.ai literals under apps/digithings-web (PUBLIC_DASHBOARD_API
 # constant, dashboardApiBase comment, next.config destination rewrite,
 # portfolio comment), 102 -> 106, sanctioned here as intentional surface
-# wiring. Regenerated
+# wiring. #5690 (chore(digichat): consolidated deep-review cleanups)
+# consolidated occ.digithings.ai literals into one OCC_HOST constant
+# (3 inline literals removed, 1 constant + 1 prose mention added),
+# 144 -> 143, net -1, consolidation not drift. #5640 deletes
+# packages/design/smoke/index.html, which held the last
+# api.digithings.ai literal (1 -> 0). Regenerated
 # with the file's own scanner, in the open, per the design rule above.
+# DIG-3418 (S19) deleted the retired atlas-era plans under docs/plans and
+# docs/backlog: atlas.digiquant.io 3 -> 1, www.digiquant.io 17 -> 15.
+# The same deletion pass removes more host literals than that first pin
+# recorded. Re-measured on this tree: chat.digithings.ai 50 -> 24,
+# digichat.digithings.ai 15 -> 14, mcp.digithings.ai 59 -> 56,
+# www.digithings.ai 82 -> 68. Deleting the root copy of
+# review-5061-digichat-mcp-tool-allowlist.md drops one more
+# mcp.digithings.ai literal, 56 -> 55. Decreases only.
 PINNED_CENSUS = {
-    "api.digithings.ai": 1,
     "app.digithings.ai": 3,
-    "atlas.digiquant.io": 3,
-    "chat.digithings.ai": 50,
+    "atlas.digiquant.io": 1,
+    "chat.digithings.ai": 24,
     "dashboard-api.chris-stefan.workers.dev": 7,
-    "digichat.digithings.ai": 15,
+    "digichat.digithings.ai": 14,
     "digithings-stack.example.workers.dev": 1,
     "docs.digithings.ai": 1,
     "foundry-tenant.digithings.ai": 2,
@@ -95,12 +109,12 @@ PINNED_CENSUS = {
     "hosts.occ.digithings.ai": 1,
     "key.digithings.ai": 72,
     "langfuse.digithings.ai": 3,
-    "mcp.digithings.ai": 60,
-    "occ.digithings.ai": 144,
+    "mcp.digithings.ai": 55,
+    "occ.digithings.ai": 143,
     "search.digithings.ai": 54,
     "trace.digithings.ai": 20,
-    "www.digiquant.io": 17,
-    "www.digithings.ai": 82,
+    "www.digiquant.io": 15,
+    "www.digithings.ai": 68,
 }
 
 

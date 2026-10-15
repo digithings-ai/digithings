@@ -90,9 +90,6 @@ INTERNAL_MARKER_ALLOWLIST = (
     "docs/adr/0031-occ-tickets-corpus-retrieval.md",
     # Digits' operating note naming the marker as the exposure.
     "docs/ops/OCC_INVITE_KEY.md",
-    # Review notes quoting the behaviour under review.
-    "docs/reviews/pr/review-4945.md",
-    "docs/reviews/pr/review-4963.md",
     # Source of the convention: the backfill script and the formatter tag.
     "scripts/index_occ_tickets.py",
     "scripts/zammad_mcp/README.md",

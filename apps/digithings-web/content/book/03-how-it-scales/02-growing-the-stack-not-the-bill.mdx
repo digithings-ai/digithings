@@ -1,0 +1,24 @@
+---
+title: "Growing the stack, not the bill"
+order: 2
+summary: >-
+  A rented service grows your invoice with every extra user. A self-hosted
+  stack only grows the part that actually needs to.
+---
+
+Rented infrastructure scales by multiplication: more seats, more tokens,
+more requests, each multiplied by a price someone else set. The bill tracks
+your growth exactly, which sounds fair until you notice it tracks your
+*success* just as precisely — the better things go, the more it costs to
+keep them going.
+
+A self-hosted stack scales by addition instead. A module that is small and
+replaceable can be given more hardware, or replaced outright, without
+touching the modules around it. Growth is a series of local decisions —
+add a worker here, a faster disk there — rather than one global number that
+rises no matter which part of the system actually needed the help.
+
+The practical effect is that most of the stack can stay exactly as it is
+while only the part under real load changes shape. That is a property of the
+architecture, not a promise about any particular workload, but it is the
+reason "scale" does not have to mean "renegotiate the contract."

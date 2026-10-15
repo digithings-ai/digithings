@@ -36,7 +36,7 @@ from digiskills.models import (
     SourceDocument,
     SourceKind,
 )
-from digiskills.package import write_skill_package
+from digiskills.package import write_skill_package, write_skill_zip
 from digiskills.synthesize import DigiLLMSynthesizer, Synthesizer, TemplateSynthesizer
 
 __version__ = "0.2.1"  # x-release-please-version
@@ -61,4 +61,5 @@ __all__ = [
     "parse_skill_md",
     "render_skill_md",
     "write_skill_package",
+    "write_skill_zip",
 ]

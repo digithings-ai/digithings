@@ -29,15 +29,6 @@
       "port": 8002
     },
     {
-      "name": "Website",
-      "runtimeExecutable": "/bin/bash",
-      "runtimeArgs": [
-        "-c",
-        "cd \"$(git rev-parse --show-toplevel)\" && .venv/bin/python -m http.server 3000 --directory website"
-      ],
-      "port": 3000
-    },
-    {
       "name": "digichat (Next.js)",
       "runtimeExecutable": "npm",
       "runtimeArgs": [
@@ -90,32 +81,11 @@
       "autoPort": true
     },
     {
-      "name": "demos",
-      "runtimeExecutable": "/bin/bash",
-      "runtimeArgs": [
-        "-c",
-        "cd \"$(git rev-parse --show-toplevel)\" && .venv/bin/python -m http.server 4020 --directory packages/design/demos/digiquant-landing"
-      ],
-      "port": 4020
-    },
-    {
-      "name": "design-smoke-local",
-      "runtimeExecutable": "python3",
-      "runtimeArgs": [
-        "-m",
-        "http.server",
-        "4030",
-        "--directory",
-        "packages/design"
-      ],
-      "port": 4030
-    },
-    {
       "name": "dashboard",
       "runtimeExecutable": "npm",
       "runtimeArgs": [
         "--workspace",
-        "apps/digiquant-web",
+        "apps/dashboard",
         "run",
         "dev",
         "--",

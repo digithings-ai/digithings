@@ -47,8 +47,12 @@ import { FX_HUB_INVITE_STORAGE_KEY } from './invite-stash';
 import { SettingsHttpError } from './settings-api';
 
 function Probe() {
-  useInviteLink();
-  return createElement('div', { 'data-testid': 'invite-probe' }, 'ok');
+  const { pending } = useInviteLink();
+  return createElement(
+    'div',
+    { 'data-testid': 'invite-probe', 'data-pending': pending ? 'yes' : 'no' },
+    'ok',
+  );
 }
 
 describe('useInviteLink', () => {
@@ -146,5 +150,27 @@ describe('useInviteLink', () => {
     expect(window.location.search).not.toContain('invite=');
     expect(window.location.search).toContain('tab=brief');
     expect(redeem.fn).not.toHaveBeenCalled();
+  });
+
+  it('clears pending when a stashed redeem times out', async () => {
+    vi.useFakeTimers();
+    try {
+      redeem.fn.mockImplementation(() => new Promise(() => {}));
+      sessionStorage.setItem(FX_HUB_INVITE_STORAGE_KEY, 'fx-hub-desk-token');
+      authState.session = {
+        access_token: 'sess-tok',
+        user: { id: 'u1', email: 'analyst@example.com' },
+      } as Session;
+      await act(async () => {
+        root.render(createElement(Probe));
+      });
+      expect(container.querySelector('[data-pending]')?.getAttribute('data-pending')).toBe('yes');
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+      });
+      expect(container.querySelector('[data-pending]')?.getAttribute('data-pending')).toBe('no');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
