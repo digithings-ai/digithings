@@ -11,6 +11,7 @@ import type { DigiChatActivity, DigiChatController, DigiChatMessage } from "@dig
 import { formatEmbedChatError } from "@/lib/embed-chat-error";
 import { type BYOKProvider } from "@/hooks/use-byok-key";
 import { p } from "@/lib/base-path";
+import { warmFetch } from "@/lib/warmup-gate";
 import { readTrialUnlocked, readChatAccessToken, resolveEmbedHost } from "@/lib/embed-gate";
 import { resolveLanguageCode } from "@/lib/languages";
 import { omitForcedCatalogIds } from "@/lib/deploy-config/force-tool";
@@ -261,6 +262,8 @@ export function useEmbedDigiChat({
     () =>
       new AssistantChatTransport({
         api: p("/api/chat"),
+        // Hold sends made during cold boot until warm-up reports ready.
+        fetch: warmFetch as typeof fetch,
         prepareSendMessagesRequest: ({ messages, body, trigger }) => {
           const urlAuth = readEmbedUrlAuth();
           const effectiveToken = urlAuth.token ?? token;

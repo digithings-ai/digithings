@@ -89,10 +89,21 @@ export type BootFacts = {
   toolLabels?: readonly string[];
   mcpServers?: number;
   backend?: string;
+  /**
+   * Sleep-on-idle services the host wakes before revealing the chat. When
+   * set, a "wake up services" row waits on the real `services` boot step.
+   */
+  services?: readonly string[];
 };
 
 /** Real milestones the app reports while the container comes up. */
-type BootMilestone = "image" | "config" | "runtime" | "loop" | "backend";
+type BootMilestone =
+  | "image"
+  | "config"
+  | "runtime"
+  | "loop"
+  | "services"
+  | "backend";
 
 /**
  * Container/agent commands; one row each, in order. Rows adapt to the facts
@@ -148,6 +159,14 @@ export function toolChainRows(
       milestone: "loop",
       ms: 720,
       detail: `${facts.mcpServers} servers`,
+    });
+  }
+  if (facts?.services) {
+    rows.push({
+      label: "wake up services",
+      milestone: "services",
+      ms: 0,
+      detail: facts.services.length ? facts.services.join(", ") : undefined,
     });
   }
   rows.push({
@@ -561,9 +580,12 @@ function ToolChain({
       const reached =
         row.milestone === "backend"
           ? ready
-          : row.milestone === "config" || row.milestone === "runtime"
-            ? steps.has(row.milestone) || now - previousDone >= row.ms * 2
-            : now - previousDone >= row.ms;
+          : row.milestone === "services"
+            ? // No timed fallback: only the host's real edge completes it.
+              steps.has("services") || ready
+            : row.milestone === "config" || row.milestone === "runtime"
+              ? steps.has(row.milestone) || now - previousDone >= row.ms * 2
+              : now - previousDone >= row.ms;
       if (!reached) return current;
       const next = [...current];
       next[index] = now;
