@@ -18,6 +18,7 @@ import {
   embedOriginHostOf,
   resolveEmbedClientConfigForPaint,
 } from "@/lib/embed-chat-tenant";
+import { resolveEmbedRenderToken } from "@/lib/embed-token-transport";
 import { resolveEmbedSeededTenant } from "@/lib/route-client-config";
 import { headers } from "next/headers";
 import EmbedClient from "./embed/embed-client";
@@ -48,8 +49,16 @@ export default async function EmbedRouteShell({
 }) {
   const hdrs = await headers();
   const referer = hdrs.get("referer") ?? hdrs.get("referrer");
+  // DIG-3523: the token arrives via the proxy-forwarded x-embed-token header
+  // (the proxy strips ?token= from the render URL so the flight payload
+  // cannot echo it into the HTML). The query param stays as fallback for
+  // direct hits that bypassed the proxy.
+  const token = resolveEmbedRenderToken({
+    headerToken: hdrs.get("x-embed-token"),
+    queryToken: params.token,
+  });
   const initialTenantCfg = resolveEmbedClientConfigForPaint(
-    first(params.token),
+    token,
     resolveEmbedHostParamOrReferer(first(params.host), referer),
     embedOriginHostOf(hdrs),
   );
@@ -109,7 +118,7 @@ export default async function EmbedRouteShell({
               ? ':root[data-theme="dark"]{--embed-canvas:#121417}:root[data-theme="light"]{--embed-canvas:#f1f0eb}' // canon-allow: keeps the canvas token correct when the theme flips before hydration
               : ""
           }${
-            first(params.host) || first(params.token)
+            first(params.host) || token
               ? "body.bg-background{background:var(--embed-canvas)}.dc-embed-shell{background:var(--embed-canvas)}"
               : "body.bg-background{background:transparent!important}body *{background:transparent!important}"
           }:root[data-embed-wide="1"] body.bg-background{background:transparent}:root[data-embed-wide="1"] .dc-embed-shell{background:transparent}:root[data-theme="dark"] body{color-scheme:dark}:root[data-theme="light"] body{color-scheme:light}`,
