@@ -7,11 +7,11 @@
       "statement": "digichat dev pairs make stack-local backends with make digichat-dev on port 3000, requiring .env.local with matching AUTH_URL origin and the identical DIGIKEY_BFF_TOKEN.",
       "evidence": [
         {
-          "resource": "repo://Makefile#L142-L143",
+          "resource": "repo://Makefile#L182-L183",
           "version": "repo-lines-v1:sha256:cf3d0f3101d373f7ba1dc6abbfc20b224b71aabe703d9d4b4a23542b7860dcfc:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMWJmNmUyYjFjMzM0MTM0N2FjMjIzMDVjN2E1ZGViNmM4Zjg5NTA5OTljZjRkYmFhM2M3NGMyZDc1Y2M3MzRmOSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiY2NhMjdmNDJlNTc4NWExNmFkMDJkODdlOGZhZmU5ZGUxNDk4MzUyNTJhYjdjOGJhZDExNjI1MTEzZmI1Nzg3YSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiOGU0ZjdiZjQwYjUxODJmMDAwNTc3YWYyMjAzYTkyZmEyMjA3MjcxM2FkZDk3ZDIyYzc5YzE1N2RlZDFhN2Y4YyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiM2NmYTEyNzU5ZDRmY2YzMGRkZmFmNGM3YjIzODcxMzRkMWI5MGNlNDU3ZWJkZjU5YjliOGJlOGMzM2E5MDgyYiJ9"
         },
         {
-          "resource": "repo://Makefile#L161-L162",
+          "resource": "repo://Makefile#L201-L202",
           "version": "repo-lines-v1:sha256:de223572c8252a01caed1fd996976ed1422163d6589d18d5b0ce09b633466c62:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYzgyYTg5YzJlYmI1Y2VlOGVhYTY0MWNkNTlhNzViNTJiNjZmODI0M2MyZTA1ZmYxNTdhMDE4MDkxZjY3YTY0MiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNzI2OWNjMDZhNDNhYTc1ODI4YjEyMmFiMDgyOGI0M2EwMzRkZTVjYTY5MjZhMGE5MzFhNjUzNWJkYzM5YmRjZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMTM2MWRlNzQwYTViZDRiMDllNTJkYzhmNmMyZGQzNDRkMWU5YThiZTI4MmNjMjRjMzUzMDM2MzlkMmMxZTk5NiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTRmMDMxOGVjMmJlOTAzZGRlMTRmMmZmYzE4YzQwNDdiYWMwNjE5OWRlYzBhZDVkZmRmNWJiOGYyN2Q5NDI3NiJ9"
         },
         {
@@ -43,7 +43,7 @@
           "version": "repo-lines-v1:sha256:0a7e8fbc7916acff2b2f096951d86dd722de931bb84574ea9addab2adff0258a:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYzk2NTIwMDIyODg4MjBhYzBiNDRlZTQ3YzhmYzNlMzQ1YmQyMGRiMTUyNGEzMzY2NWYwNmQ0MzQyZWEyNzQwNyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiODJmZjEyMDkyZWI0NzU4ZDZiYjk3Y2RlYzBmNGRiYzlmNTZjNTBkNjc2NDNhY2I0ZTc4NzZlNmZhZWI0MjhhNSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNWIwNzY1YjhlMjkzODllODFkZjNjZmI2OWI0Mjg2YTgwZGE1NjBiMWRiODFkMTA4ZGUwMjM5ZTI0YmQ5ZWQ2NiJ9"
         },
         {
-          "resource": "repo://apps/digichat/ARCHITECTURE.md#L17-L22",
+          "resource": "repo://apps/digichat/ARCHITECTURE.md#L26-L31",
           "version": "repo-lines-v1:sha256:7a9e4dca55dbf4707841e29221cbf0cb061cf9d5128dc6c71b11f3fa98336e9d:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNzY3YWI4YzU1NmIwMDU1MTliYTQxZTBlZjA1YzliMjBiYjRmZTExNzY1NzNlOTQ0ZThmNmI5MTYyYjAyOTg2YyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMWY3OTRjZjVhMzg5YmE0MTIzNzQyNDg0MDY3ZjQ0ZmQzMjlhZmFkZDRlNDJlMjQyMGUwNzA1N2Q5MmI0MTUwOSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYWJiM2UzZWJjMWZkZmY5YjhhZTBiYTkyZDQ1YmY2NjNjMzk3YTZhNmIzYmM4MTI0ZmRlMjllZmQzOTIyY2ZhZSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYTAwNjczNDdkMGJkZWU0YWZiNzZiZDc5OGI1ZTkxZDZmMjFlMDIwYTJjNTgxYzFmNjlhODU4NmZkYmI3MzI3YSJ9"
         }
       ]

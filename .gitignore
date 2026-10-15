@@ -77,6 +77,9 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+# Wheels, npm tarballs and the runner lock for the R5 images.
+# scripts/package_r5_image_inputs.py recreates this before docker build.
+/image-packages/
 .cache/
 # Runtime results (exports, audit logs) – recreated on run
 digiquant/results/

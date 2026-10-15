@@ -24,7 +24,7 @@
     },
     {
       "id": "claim_fe68e8959d4745d98b53f69aa54545cc",
-      "statement": "digigraph coordinates but never implements vertical logic, and never imports digisearch or digiquant Python packages — all vertical calls go over HTTP.",
+      "statement": "digigraph coordinates but never implements vertical logic, and never imports digisearch or digiquant Python packages \u2014 all vertical calls go over HTTP.",
       "evidence": [
         {
           "resource": "repo://digigraph/ARCHITECTURE.md#L12-L20",
@@ -89,7 +89,7 @@
       "statement": "Operator remote MCP servers declared via X-Digi-Mcp-Servers undergo connect-time DNS validation through _SsrfSafeNetworkBackend: the host resolves immediately, every A/AAAA must be globally routable, and validated IPs are pinned without a second lookup, blocking loopback/link-local/metadata/CGNAT addresses.",
       "evidence": [
         {
-          "resource": "repo://digigraph/src/digigraph/orchestration/mcp_client.py#L40-L59",
+          "resource": "repo://digigraph/src/digigraph/orchestration/mcp_client.py#L41-L60",
           "version": "repo-lines-v1:sha256:12f098218ebacaec70d15a9bef7ab114af688c4be92e14484ebc243e8108795f:eyJzZWxlY3RlZExpbmVDb3VudCI6MjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdkZmNjOWUzOTg4ZmYwZTYxZDhiM2QxMTA5NDRmOWNlMWVkMThhZjc4MmFiODY4Y2YyMzUzODYyZmFjNWVlMWIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjIzYjQ1NTM4ZWRkZTMyNzJhNWEwZDYzMWYyZTU2MmE5YTZjZDNlZmQwMzBhYzUwMmEyZTZiOTU5MTVhYTNjOTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImFkYmJjMzZjNTkxNmZiYjUyNDVkNWM0ODU0NzkyZTE4YzFhNDllZGI0ZmY1OGFmODQ4ZjExOWE0NzJiYzM5OGEifQ"
         }
       ]
