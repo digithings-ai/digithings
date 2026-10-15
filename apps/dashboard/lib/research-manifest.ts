@@ -7,8 +7,6 @@
  *   templates/research-manifest.json
  */
 
-import type { Doc } from './types';
-
 export type ResearchManifestEntry = {
   /** Stable document_key / path in the `documents` table. */
   key: string;
@@ -60,67 +58,3 @@ export const RESEARCH_MANIFEST: ResearchManifestEntry[] = [
 export const MANIFEST_BY_KEY = new Map<string, ResearchManifestEntry>(
   RESEARCH_MANIFEST.map((e) => [e.key.toLowerCase(), e])
 );
-
-/** True if a document_key is part of the canonical research manifest. */
-export function isManifestDoc(documentKey: string): boolean {
-  return MANIFEST_BY_KEY.has(documentKey.toLowerCase());
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Carry-forward resolver
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Virtual carry-forward doc — a manifest entry that has no row for the
- * selected date, so we show the most recent prior version.
- */
-export type CarryForwardDoc = Doc & {
-  /** The date from which this document was carried forward (not the selected date). */
-  carriedFromDate: string;
-  /** Whether the doc was actually updated on the selected date. */
-  isUpdatedToday: boolean;
-};
-
-/**
- * For a given selected date, resolve the "full consistent research set":
- * - For each manifest entry, pick the most recent doc with `date <= selectedDate`.
- * - Docs updated ON selectedDate → `isUpdatedToday: true`.
- * - Docs carried from a prior date → `isUpdatedToday: false`, `carriedFromDate` set.
- * - Manifest entries with no history at all → omitted.
- *
- * @param allDocs   All Doc rows already loaded (the dashboard 500-doc cache).
- * @param selectedDate  The date being viewed (YYYY-MM-DD).
- */
-export function resolveCarryForwardDocs(allDocs: Doc[], selectedDate: string): CarryForwardDoc[] {
-  // Group docs by document_key (lower-cased), sorted newest-first
-  const byKey = new Map<string, Doc[]>();
-  for (const d of allDocs) {
-    const k = (d.path || '').toLowerCase();
-    if (!k) continue;
-    const arr = byKey.get(k);
-    if (arr) arr.push(d);
-    else byKey.set(k, [d]);
-  }
-  // Sort each group newest-first
-  for (const arr of byKey.values()) {
-    arr.sort((a, b) => b.date.localeCompare(a.date));
-  }
-
-  const result: CarryForwardDoc[] = [];
-  for (const entry of RESEARCH_MANIFEST) {
-    const k = entry.key.toLowerCase();
-    const candidates = byKey.get(k) ?? [];
-    // Find the most recent row with date <= selectedDate
-    const best = candidates.find((d) => d.date <= selectedDate) ?? null;
-    if (!best) continue; // No history yet — skip rather than show placeholder
-    const isUpdatedToday = best.date === selectedDate;
-    result.push({
-      ...best,
-      // Override the title with the canonical manifest name if needed
-      title: best.title || entry.name,
-      carriedFromDate: best.date,
-      isUpdatedToday,
-    });
-  }
-  return result;
-}

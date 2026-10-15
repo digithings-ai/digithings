@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRefreshGeneration } from "../app-settings-store";
 import { BLOCKS, layoutFor } from "../../../../../clients/digiquant-tui/src/catalog";
 import { EMPTY_READ, STUB_READ, type ReadResult } from "../../../../../clients/digiquant-tui/src/read";
 import { pipelineBody } from "../../../../../clients/digiquant-tui/src/pages/pipeline-format";
@@ -37,6 +38,7 @@ export function PipelinePage() {
   const [reads, setReads] = useState<Record<string, OfficialRead>>({});
   const layout = layoutFor(PATH);
   const { mount, style, pane } = useDeskMosaic(layout);
+  const refresh = useRefreshGeneration();
 
   useEffect(() => {
     const placements = layoutFor(PATH);
@@ -54,7 +56,7 @@ export function PipelinePage() {
       cancel = true;
       ac.abort();
     };
-  }, []);
+  }, [refresh]);
 
   return (
     <div ref={mount} className={PANE_MOSAIC}>

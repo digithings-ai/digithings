@@ -1,6 +1,6 @@
 # ADR 0011: Atlas Persistence — Reuse Existing Supabase Schema
 
-**Status:** accepted
+**Status:** accepted (product names historical — see [ADR-0026](0026-retire-olympus-atlas-hermes-kairos.md))
 **Date:** 2026-04-20
 **Supersedes:** [ADR-0008](0008-atlas-research-schema.md)
 

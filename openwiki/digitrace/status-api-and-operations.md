@@ -32,7 +32,8 @@ The digitrace HTTP service (`digitrace.server:app`) is a thin, read-only
 surface: two liveness probes, one secret-free tracing-status diagnostic, and
 a Prometheus metrics endpoint, fronted by shared digibase middleware. It
 holds no state and is optional — removing the container never breaks
-tracing, which flows directly from instrumented processes to LangSmith.
+tracing, which leaves the instrumented process on the LangSmith leg, the
+OTLP leg, or both.
 
 ## Liveness: `/healthz` and `/health`
 
@@ -54,7 +55,12 @@ Returns a `TraceStatus` object describing the runtime tracing configuration:
   "tracing_configured": true,
   "langsmith_sdk_installed": true,
   "langsmith_host": "api.smith.langchain.com",
-  "request_id": "1f0b9c3e4a7d4f62a9c58d1e3c9b2a10"
+  "request_id": "1f0b9c3e4a7d4f62a9c58d1e3c9b2a10",
+  "langfuse_configured": false,
+  "otel_export_configured": false,
+  "dual_export": false,
+  "export_backend": "langsmith",
+  "langfuse_host": null
 }
 ```
 
@@ -67,6 +73,9 @@ Semantics:
   `api.smith.langchain.com` when the variable is unset.
 - `request_id` echoes the request's `X-Request-ID` (via the shared
   request-ID middleware) so operators can correlate the response with logs.
+- `export_backend` is one of `dual`, `langsmith`, `langfuse-otlp`, `otel`,
+  or `none`. `langfuse_host` is a hostname only. `SmithStatus` remains a
+  compat alias of `TraceStatus`.
 - The response is public metadata by design: it never contains the API key
   or the full endpoint URL. Tests assert the key material appears nowhere
   in the response body.
@@ -102,7 +111,7 @@ CORS allowlist precedence is `DIGITRACE_CORS_ORIGINS` →
 
 | Variable | Required | Effect |
 |----------|----------|--------|
-| `LANGSMITH_API_KEY` | No | Enables trace export; absence makes `traceable` a no-op |
+| `LANGSMITH_API_KEY` | No | Enables the LangSmith leg; absence skips that leg only |
 | `LANGSMITH_ENDPOINT` | No | LangSmith base URL; only its hostname surfaces in `/v1/status` |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | No | When set, enables OTel HTTP/protobuf export of the service's own HTTP spans |
 | `DIGI_ENV` | No | Environment label on metrics (default `"dev"`) |
@@ -116,7 +125,7 @@ the trust boundary.
 ## Container wiring
 
 The Compose service builds from the repo root (`digitrace/Dockerfile`,
-which installs `digibase` then `digitrace[langsmith]`), publishes
+which installs `digibase` then `digitrace[tracing]`), publishes
 `127.0.0.1:8003:8003` on the host, and healthchecks
 `http://127.0.0.1:8003/healthz` every 15s. The image runs uvicorn as
 `digitrace.server:app --host 0.0.0.0 --port 8003`. No other service depends

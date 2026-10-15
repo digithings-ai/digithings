@@ -1,29 +1,9 @@
 "use client";
 
-import { useState } from "react";
-
-export type UseCopyToClipboardOptions = {
-  copiedDuration?: number;
-};
-
-export const useCopyToClipboard = ({
-  copiedDuration = 3000,
-}: UseCopyToClipboardOptions = {}) => {
-  const [isCopied, setIsCopied] = useState<boolean>(false);
-
-  const copyToClipboard = (value: string) => {
-    if (!value || typeof navigator === "undefined" || !navigator.clipboard) {
-      return;
-    }
-
-    navigator.clipboard.writeText(value).then(
-      () => {
-        setIsCopied(true);
-        setTimeout(() => setIsCopied(false), copiedDuration);
-      },
-      () => {},
-    );
-  };
-
-  return { isCopied, copyToClipboard };
-};
+// Single source of truth lives in `../../stock/use-copy-to-clipboard`
+// (byte-identical fork removed, S24 review). This shim preserves the
+// gallery-thread import path.
+export {
+  useCopyToClipboard,
+  type UseCopyToClipboardOptions,
+} from "../../stock/use-copy-to-clipboard";

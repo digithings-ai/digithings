@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRefreshGeneration } from "../app-settings-store";
 import { BLOCKS, layoutFor } from "../../../../../clients/digiquant-tui/src/catalog";
 import { EMPTY_READ, STUB_READ, type ReadResult } from "../../../../../clients/digiquant-tui/src/read";
 import { briefBlocks } from "../../../../../clients/digiquant-tui/src/pages/brief-format";
@@ -36,6 +37,7 @@ export function BriefPage() {
   const [reads, setReads] = useState<Record<string, OfficialRead>>({});
   const layout = layoutFor(PATH);
   const { mount, style, pane } = useDeskMosaic(layout);
+  const refresh = useRefreshGeneration();
 
   useEffect(() => {
     const placements = layoutFor(PATH);
@@ -53,7 +55,7 @@ export function BriefPage() {
       cancel = true;
       ac.abort();
     };
-  }, []);
+  }, [refresh]);
 
   return (
     <div ref={mount} className={PANE_MOSAIC}>

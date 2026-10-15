@@ -38,7 +38,7 @@ only reference to it was an unused `styles.css` import — no `.term-*` class
 was ever consumed, since digichat's real chat UI uses its own `.dc-term-*`
 system instead.
 
-**Implementation backlog:** [GitHub epic #1200](https://github.com/digithings-ai/digithings/issues/1200) · [`docs/agent-backlog/design-evolution/INDEX.md`](../../docs/agent-backlog/design-evolution/INDEX.md)
+**Implementation backlog:** [GitHub epic #1200](https://github.com/digithings-ai/digithings/issues/1200). The competitor scans and the design-evolution backlog index are gone. Live specimens are in `apps/reference`.
 
 **Copy & IA:** [`COPY_GUIDE.md`](COPY_GUIDE.md) — voice, literal CTAs, per-surface section maps.
 

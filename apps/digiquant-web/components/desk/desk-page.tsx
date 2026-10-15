@@ -12,6 +12,8 @@ import { inviteGranted, isInviteSurface } from "./public-surface";
 import { PortfolioPages, isPortfolioPath } from "./pages/portfolio";
 import { StrategiesPages } from "./pages/strategies";
 import { readOfficial } from "./read-block";
+import { useRefreshGeneration } from "./app-settings-store";
+import { SettingsPage } from "./settings-page";
 
 const STRATEGY_PATHS = new Set(["/strategies", "/strategies/detail", "/strategies/deploy"]);
 
@@ -52,6 +54,7 @@ export function DeskBody({ path }: { path: string }): ReactNode {
 export function DeskCatalogLive({ path }: { path: string }) {
   const [reads, setReads] = useState<Record<string, ReadResult>>({});
   const [data, setData] = useState<Record<string, unknown>>({});
+  const refresh = useRefreshGeneration();
 
   useEffect(() => {
     const placements = layoutFor(path);
@@ -69,7 +72,7 @@ export function DeskCatalogLive({ path }: { path: string }) {
       cancel = true;
       ac.abort();
     };
-  }, [path]);
+  }, [path, refresh]);
 
   return <DeskReadout path={path} reads={reads} data={data} />;
 }
@@ -77,7 +80,10 @@ export function DeskCatalogLive({ path }: { path: string }) {
 /** An invite page draws only for a caller the manifest grants. Static HTML never names it. */
 function InviteGate({ path }: { path: string }) {
   const { manifest } = useDeskAccess();
-  if (inviteGranted(manifest?.desks, path)) return <DeskCatalogLive path={path} />;
+  if (inviteGranted(manifest?.desks, path)) {
+    if (path === "/fx/settings") return <SettingsPage path={path} />;
+    return <DeskCatalogLive path={path} />;
+  }
   return (
     <p className="m-0 px-3 py-6 text-[0.75rem] leading-[1.5] text-ink-mute">This page is not on the public desk.</p>
   );
@@ -85,6 +91,7 @@ function InviteGate({ path }: { path: string }) {
 
 /** The page body only. The shell around it stays mounted across navigations. */
 export function DeskRouteBody({ path }: { path: string }): ReactNode {
+  if (path === "/settings") return <SettingsPage path={path} />;
   if (isInviteSurface(path)) return <InviteGate path={path} />;
   if (mountedDeskKind(path)) return <DeskBody path={path} />;
   const known = pageByPath(path);

@@ -29,15 +29,6 @@
       "port": 8002
     },
     {
-      "name": "Website",
-      "runtimeExecutable": "/bin/bash",
-      "runtimeArgs": [
-        "-c",
-        "cd \"$(git rev-parse --show-toplevel)\" && .venv/bin/python -m http.server 3000 --directory website"
-      ],
-      "port": 3000
-    },
-    {
       "name": "digichat (Next.js)",
       "runtimeExecutable": "npm",
       "runtimeArgs": [
@@ -106,7 +97,7 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": [
         "--workspace",
-        "apps/digiquant-web",
+        "apps/dashboard",
         "run",
         "dev",
         "--",

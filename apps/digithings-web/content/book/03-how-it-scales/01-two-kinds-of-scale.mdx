@@ -1,0 +1,24 @@
+---
+title: "Two kinds of scale"
+order: 1
+summary: >-
+  Usage scale and organizational scale are different problems, and a stack
+  that is honest about the difference solves them separately.
+---
+
+"Scale" quietly means two different things, and conflating them is how a
+reasonable design decision turns into an unreasonable constraint.
+
+**Usage scale** is more requests, more data, more concurrent work. It is
+largely a hardware and software-engineering problem: faster storage, more
+compute, better caching, a queue instead of a loop.
+
+**Organizational scale** is more people, more teams, more rules about who
+can see what. It is largely a policy problem: identity, permissions, audit
+trails, and the ability to add a new team without re-architecting the whole
+system around them.
+
+A platform that only solves the first kind of scale still falls over the
+moment a second team wants to use it. A platform that only solves the second
+kind is bureaucracy wearing infrastructure's clothes. The two need separate
+answers, even inside one stack.

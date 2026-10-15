@@ -1,8 +1,12 @@
 /**
- * ETFs used for Performance page comparison charts. Must stay in sync with
- * `BENCHMARKS` in scripts/update_tearsheet.py; closes come from the R2 market
- * API (`fetchMarketCloses`) — the Supabase `price_history` table this list was
- * once populated into was dropped in migration 127 (#4053).
+ * ETFs used for Performance page comparison charts. Closes come from the R2
+ * market API (`fetchMarketCloses`) — the Supabase `price_history` table this
+ * list was once populated into was dropped in migration 127 (#4053).
+ *
+ * The research tearsheet writer
+ * (`digiquant/scripts/research/update_tearsheet.py`, `BENCHMARKS`) keeps a
+ * shorter subset: SPY, QQQ, IWM, EEM, TLT, GLD, IBIT. This dashboard list is
+ * the comparable-picker universe, not that writer list.
  *
  * IBIT: BTC spot ETF proxy. EEM: emerging markets. IWM: small-cap.
  */

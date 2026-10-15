@@ -6,7 +6,7 @@ utilitarian, dark-first aesthetic with per-module accent colors and a
 cross-brand starfield signature.
 
 This document is the authoritative reference. The canonical implementation
-lives in `packages/design/tokens.css` + `packages/design/components.css`,
+lives in `packages/design/tokens.css`,
 packaged as the `@digithings/design` npm workspace. Consumers
 import the package (or reference the files via relative paths for the
 static sites).
@@ -203,109 +203,6 @@ Or directly in CSS:
 
 ---
 
-## Component primitives
-
-Primitives live in `packages/design/components.css` and take their visual values
-from tokens.
-
-### `.nav`
-
-```html
-<nav class="nav">
-  <div class="nav-container">
-    <div class="logo">
-      <img src="assets/qrw.svg" class="logo-svg" alt="digithings">
-      <span class="logo-text">digithings</span>
-    </div>
-    <div class="nav-links">
-      <a class="nav-link" href="#">Docs</a>
-    </div>
-  </div>
-</nav>
-```
-
-### `.hero`
-
-```html
-<header class="hero">
-  <div class="hero-content">
-    <div class="hero-text">
-      <h1 class="logo-title">digithings</h1>
-      <p class="hero-subtitle">Tagline</p>
-      <p class="description">Short pitch.</p>
-    </div>
-    <div class="hero-visual"><!-- terminal or chat-embed --></div>
-  </div>
-</header>
-```
-
-### `.module-card`
-
-Scopes `--accent` via a surrounding `.accent-<module>` class. The left
-border + heading pick up the module color automatically.
-
-```html
-<div class="accent-digiquant">
-  <article class="module-card">
-    <h3>digiquant</h3>
-    <p>NautilusTrader-powered quant engine.</p>
-  </article>
-</div>
-```
-
-### `.feature-grid`
-
-Two-column grid, collapses to one column on mobile.
-
-```html
-<section class="feature-grid">
-  <div class="info-block"><h3>Open core</h3><p>…</p></div>
-  <div class="info-block"><h3>Self-hostable</h3><p>…</p></div>
-</section>
-```
-
-### `.terminal`
-
-```html
-<div class="terminal">
-  <div class="terminal-header">
-    <span class="dot red"></span>
-    <span class="dot yellow"></span>
-    <span class="dot green"></span>
-    <span class="terminal-title">agent_init.py</span>
-  </div>
-  <div class="terminal-body">
-    <pre><code id="typewriter-code"></code><span class="cursor">_</span></pre>
-  </div>
-</div>
-```
-
-### `.chat-embed-slot`
-
-Drop-in mount point for the digichat widget. The accent stripe at the top
-picks up the surrounding `--accent`.
-
-```html
-<div class="accent-digichat">
-  <div class="chat-embed-slot">
-    <iframe src="https://digithings.ai/chat/embed?session=demo"
-            title="digichat"></iframe>
-  </div>
-</div>
-```
-
-### `.footer`
-
-```html
-<footer class="footer">
-  <div class="container">
-    <p>&copy; 2026 digithings AI. Open Core.</p>
-  </div>
-</footer>
-```
-
----
-
 ## Starfield API
 
 `packages/design/starfield.js`:
@@ -327,78 +224,12 @@ Behavior:
 
 ---
 
-## Scroll-trigger API
-
-`packages/design/scroll-trigger.js`:
-
-```js
-import { initScrollTrigger } from './scroll-trigger.js';
-
-initScrollTrigger({
-  selector: '.scroll-trigger',      // elements that want progress
-  revealThreshold: 0.85,            // 0..1; higher = reveals sooner
-  activateSelector: '.timeline-event', // optional — adds .active past line
-  activationLineRatio: 0.7,         // where the active line sits (0=top,1=bottom)
-  onProgress: (el, progress, rect) => { /* optional hook */ },
-});
-```
-
-Each matching element receives `--scroll: 0..1` on every frame. CSS
-consumes it — see the `data-direction="bottom|left|right|zoom"` rules in
-`components.css`.
-
----
-
-## Adoption guide
-
-### `digichat/` (Next.js)
-
-digichat already uses the same base palette in `digichat/src/app/globals.css`.
-To formally adopt the design system:
-
-1. Vendor the tokens. Add a make target that copies `packages/design/tokens.css`
-   into `digichat/src/app/tokens.css`:
-
-   ```make
-   sync-tokens:
-   	cp packages/design/tokens.css apps/digichat/src/app/tokens.css
-   ```
-
-2. Import it from `globals.css`:
-
-   ```css
-   @import './tokens.css';
-   ```
-
-3. Replace any hardcoded hex values in Next.js components with
-   `var(--bg-secondary)`, `var(--accent)`, etc. Scope digichat surfaces
-   with the `.accent-digichat` class at the root.
-
-Do not import the full `components.css` into digichat — its React
-components have their own primitives. Tokens alone keep the two surfaces
-visually coherent without forcing layout collisions.
-
-### `apps/digiquant-web/`
-
-digiquant.io will be a subdirectory of the main site (or a sibling static
-site sharing the same CSS). It will:
-
-1. `@import './tokens.css'` and `@import './components.css'` directly
-   (no vendoring — same deployment).
-2. Wrap the page root in `<body class="accent-digiquant">` so all
-   `var(--accent)` references resolve to the digiquant color.
-3. Reuse `.hero`, `.module-card`, `.feature-grid`, `.chat-embed-slot`,
-   `.terminal` without overrides.
-4. Load the same `starfield.js` for cross-brand continuity.
-
----
-
 ## Non-goals
 
 - Light and dark both ship under `[data-theme]` in `tokens.css`. The legacy
   `:root` block above that layer stays dark-first for pages that have not migrated.
-- No component JS framework. Primitives are class-based CSS; interactivity
-  is limited to the vanilla-JS modules documented above.
+- No component JS framework here. React components live in `@digithings/ui`;
+  this package keeps tokens and the few vanilla-JS modules documented below.
 - Confidential internal projects are out of scope. This design system
   documents only public-facing surfaces.
 
@@ -406,79 +237,10 @@ site sharing the same CSS). It will:
 
 ## Extended primitives
 
-Five additional primitives harvested from the landing-page exploration live
-alongside the base tokens + starfield. Each ships a CSS file, an ESM JS
-module, and (where useful) a `types.d.ts`. The static smoke page that used
-to mount all five was removed with the old design reference; specimens now
-live in `apps/reference`.
-
-### `living-architecture/` — interactive SVG diagram engine
-
-```js
-import { initDiagram } from '@digithings/design/living-architecture';
-import '@digithings/design/living-architecture/styles.css';
-
-const { camera, focus, reset, destroy } = initDiagram({
-  hostId: 'arch-host',
-  svgId: 'arch-svg',
-  nodes: [
-    { id: 'a', label: 'Alpha', x: 300, y: 360, accentVar: '--accent-digigraph', group: 'core' },
-    { id: 'b', label: 'Beta',  x: 600, y: 360, accentVar: '--accent-digiquant', group: 'core' },
-  ],
-  edges: [{ source: 'a', target: 'b' }],
-  onNodeFocus: (id) => { /* consumer side-effect */ },
-});
-```
-
-| API                     | Notes                                                                 |
-| ----------------------- | --------------------------------------------------------------------- |
-| `initDiagram(opts)`     | Builds edges + nodes, returns `{ camera, focus, reset, destroy }`.    |
-| `camera.focus(id)`      | 600ms viewBox tween to a node.                                        |
-| `camera.reset()`        | Tween back to the SVG's initial `viewBox`.                            |
-| `camera.zoomTo(bbox)`   | Tween to an arbitrary `[x, y, w, h]`.                                 |
-| `onNodeFocus(id)`       | Fires on node click / Enter / arrow-nav.                              |
-| Keyboard (host focused) | ←/→ cycle `group === "core"` nodes; ↑ reset; ↓ focus current/first core; Tab/Shift+Tab walks all nodes (a11y); Enter activates; Esc resets. |
-| Zoom-out button         | Auto-injected, top-right of host, calls `camera.reset()`.             |
-
-Static fallback: `fallback-diagram.svg` in the same folder — inline it with
-`<object data="…/fallback-diagram.svg">` or render it inside the host
-SVG before hydrating; JS will clear it on `initDiagram`.
-
-**Reduced motion**: edge flow animation disabled, viewBox snaps instantly
-on `focus` / `reset` / `zoomTo`, bloom transitions removed.
-
-`initTerminal` (`@digithings/design/terminal`) was removed in #1365. Do not
-revive it. digichat uses its own `.dc-term-*` chrome.
-
-### `typography-motion/` — variable-weight + tracking shift
-
-Declarative (preferred for hero headlines):
-
-```html
-<link rel="stylesheet" href="…/typography-motion/styles.css" />
-<h1 class="tws-weight-shift"
-    data-weight-from="200" data-weight-to="700">Settle me on scroll.</h1>
-
-<script type="module">
-  import { initTypographyMotion } from '@digithings/design/typography-motion';
-  initTypographyMotion();
-</script>
-```
-
-Imperative:
-
-```js
-import { attachWeightShift, attachTrackingShift } from '@digithings/design/typography-motion';
-const h = attachWeightShift(el, { from: 200, to: 700, scrollStart: 0, scrollEnd: 400 });
-// h.detach() when the element leaves the tree
-```
-
-`.tws-weight-shift` drives `font-variation-settings: "wght" N` plus a matching
-`font-weight`. `.tws-tracking-shift` drives `letter-spacing` in `em` units.
-Both bind to scroll-Y progress across `[scrollStart, scrollEnd]`.
-
-**Reduced motion**: element snaps to the `to` value immediately; no scroll
-listener attached.
+Two primitives that live surfaces still import sit alongside the tokens and
+starfield. Each ships a CSS file and an ESM JS module. The static smoke page
+and the HTML spec were removed with the old design reference. Live specimens
+belong in `apps/reference`.
 
 ### `quant-native/` — blueprint grid, ticker, metric + chart utilities
 
@@ -543,11 +305,6 @@ const shell = initAppShell({
 
 **Reduced motion**: no sidebar / palette transitions; everything resolves
 instantly.
-
-The static smoke page and the HTML spec were removed with the old design
-reference. Live specimens belong in `apps/reference`.
-
----
 
 ## Documents
 

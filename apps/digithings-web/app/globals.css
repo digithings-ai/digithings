@@ -151,16 +151,14 @@
    controls-core.css), so components/controls needs no line here. */
 @source "../../../packages/ui/src/ui";
 
-/* Point the token font families at the self-hosted next/font variables (layout.tsx).
-   digithings.ai type stack (owner-locked 2026-10-01): Inter for sans/display —
-   nav, headings, prose, form fields — and JetBrains Mono for mono chrome:
-   labels, code, commands, numerals, `.brand-word`. Geist Mono is not used on
-   this surface. The PixelWordmark SVG is the brand mark, not a font, so it is
-   unaffected. Scoped to this app: tokens.css keeps its defaults for the others. */
+/* Point the token font families at the self-hosted next/font variable (app/fonts.ts).
+   One voice (Chris, 14 Oct 2026): Geist Mono for sans, mono and display.
+   The PixelWordmark SVG is the brand mark, not a font, so it is unaffected.
+   Scoped to this app: tokens.css keeps its defaults for the others. */
 :root[data-theme] {
-  --font-sans: var(--font-inter), system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: var(--font-jetbrains-mono), ui-monospace, "SF Mono", Menlo, monospace;
-  --font-display: var(--font-sans);
+  --font-sans: var(--font-stack-mono);
+  --font-mono: var(--font-stack-mono);
+  --font-display: var(--font-stack-display);
 }
 
 /* web-theme.css (shared by digiquant-web and the dashboard) sets the body to
@@ -201,9 +199,10 @@ body {
    docs family (docs.css), the clean layout/type rules moved into their
    TSX as token utilities, and the terminal module manifest rides the shared
    <TerminalManifest> primitive (terminal-manifest.css, #1416). What remains
-   below is what must stay CSS — the mesh-hero entrance art + keyframes.
-   Namespaced `dq*` so nothing collides with shared site.css. Consumes
-   [data-theme] tokens only → light/dark safe.
+   below is what must stay CSS — nav tokens, page offsets, and the hero/pixel
+   keyframes. The historical `dq*` namespace now survives only as the
+   `--dq-nav-h` token alias. Consumes [data-theme] tokens only → light/dark
+   safe.
    ========================================================================== */
 :root {
   /* --nav-shell-h is the shared NavShell/nav-shell.css height knob (its
