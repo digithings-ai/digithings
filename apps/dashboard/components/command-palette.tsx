@@ -30,7 +30,6 @@ import { useDashboard } from '@/lib/dashboard-context';
 import { useAppShell } from '@/components/app-shell-context';
 import { buildPipelineHref, DIGEST_DOCUMENT_KEYS } from '@/lib/pipeline-links';
 import { buildDocumentSearchItems } from '@/lib/document-search';
-import { fetchAllTickers } from '@/lib/queries';
 import { thesisDetailHref } from '@/lib/portfolio-url-state';
 import { useFxHubOnlyInvitee } from '@/lib/fx-hub-only';
 import { getBriefs, getTradeIdeaArchive } from '@/lib/twelve-x/fetch';
@@ -177,6 +176,18 @@ export function buildCommandItems(data: ReturnType<typeof useDashboard>['data'])
 }
 
 /**
+ * Dashboard shell this release: FX Hub and account settings.
+ * Brief, portfolio, pipeline, theses, and run jumps stay on the desk at /app.
+ */
+export function dashboardShellCommands(items: CmdItem[], canFxHub: boolean): CmdItem[] {
+  return items.filter((item) => {
+    if (item.id === 'go-settings') return true;
+    if (item.id === 'go-fx' || item.id === 'go-fx-how') return canFxHub;
+    return false;
+  });
+}
+
+/**
  * "Tickers" group (#1562 PR2) — one row per known ticker → the ticker dossier
  * (`/portfolio/tickers?ticker=`). `tickers` is the live `fetchAllTickers()`
  * union (positions + decision_log + analyst docs + analyst_coverage); pure so
@@ -277,47 +288,14 @@ export default function CommandPalette() {
   const router = useRouter();
   const { data } = useDashboard();
   const { commandPaletteOpen: open, openCommandPalette, closeCommandPalette } = useAppShell();
-  const { canFxHub, fxHubOnlyInvitee } = useFxHubOnlyInvitee();
+  const { canFxHub } = useFxHubOnlyInvitee();
 
-  const items = useMemo<CmdItem[]>(() => {
-    const all = buildCommandItems(data);
-    if (fxHubOnlyInvitee) {
-      // 12x single-view contract: only FX Hub (+ account settings) is reachable.
-      return all.filter(
-        (i) =>
-          i.id === 'go-fx' || i.id === 'go-fx-how' || i.id === 'go-settings',
-      );
-    }
-    if (canFxHub) return all;
-    return all.filter((i) => i.id !== 'go-fx' && i.id !== 'go-fx-how');
-  }, [data, canFxHub, fxHubOnlyInvitee]);
-  const docs = useMemo<Doc[]>(
-    () => (fxHubOnlyInvitee ? [] : data?.docs ?? []),
-    [data, fxHubOnlyInvitee]
+  const items = useMemo<CmdItem[]>(
+    () => dashboardShellCommands(buildCommandItems(data), canFxHub),
+    [data, canFxHub],
   );
-
-  // Live ticker union (#1562 PR2) — fetched once on mount, independent of the
-  // dashboard context (positions alone would miss decision_log/analyst-only
-  // tickers). Fail-soft: an empty list just omits the Tickers group.
-  const [tickers, setTickers] = useState<string[]>([]);
-  useEffect(() => {
-    if (fxHubOnlyInvitee) return;
-    let alive = true;
-    fetchAllTickers()
-      .then((t) => {
-        if (alive) setTickers(t);
-      })
-      .catch(() => {
-        if (alive) setTickers([]);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [fxHubOnlyInvitee]);
-  const tickerItems = useMemo<CmdItem[]>(
-    () => (fxHubOnlyInvitee ? [] : buildTickerCommandItems(tickers)),
-    [fxHubOnlyInvitee, tickers]
-  );
+  // Pipeline documents are desk pages, not this shell.
+  const docs = useMemo<Doc[]>(() => [], []);
 
   // FX-Hub-only search sources (briefs, brokers via briefs, trade ideas). Loaded
   // when the 12x single view mounts so it keeps its own searchable content.
@@ -327,7 +305,7 @@ export default function CommandPalette() {
     ideas: FxTradeIdeaRow[];
   }>({ briefs: [], ideas: [] });
   useEffect(() => {
-    if (!fxHubOnlyInvitee) return;
+    if (!canFxHub) return;
     let alive = true;
     Promise.all([
       getBriefs(30).catch(() => [] as FxBriefRow[]),
@@ -338,7 +316,7 @@ export default function CommandPalette() {
     return () => {
       alive = false;
     };
-  }, [fxHubOnlyInvitee]);
+  }, [canFxHub]);
   const fxItems = useMemo<CmdItem[]>(
     () => buildFxHubSearchItems(fxSources.briefs, fxSources.ideas),
     [fxSources]
@@ -373,32 +351,21 @@ export default function CommandPalette() {
     [router]
   );
 
-  // The base group stays unlabeled (the shell re-invokes this per keystroke with
-  // its internal query; filtering policy stays app-side, in filterCommandItems).
-  // The Tickers group (#1562 PR2) is labeled and appended only when it has
-  // matches — `filterCommandItems(tickerItems, [], query)` reuses the same
-  // substring/starts-with ranking with no document hits mixed in (docs=[]).
-  // The FX Hub group (12x single view) follows the same contract: query-only,
-  // so the empty view never dumps the brief/idea archive.
+  // The base group stays unlabeled. FX Hub search is query-only, so the empty
+  // view never dumps the brief and idea archive.
   const groups = useMemo(
     () =>
       (query: string): CommandPaletteGroup[] => {
-        const tickerMatches = filterCommandItems(tickerItems, [], query);
         const fxMatches =
-          fxHubOnlyInvitee && query.trim()
-            ? filterCommandItems(fxItems, [], query)
-            : [];
+          canFxHub && query.trim() ? filterCommandItems(fxItems, [], query) : [];
         return [
           { items: filterCommandItems(items, docs, query).map(toOption) },
           ...(fxMatches.length > 0
             ? [{ id: 'fx-hub', label: 'FX Hub', items: fxMatches.map(toOption) }]
             : []),
-          ...(tickerMatches.length > 0
-            ? [{ id: 'tickers', label: 'Tickers', items: tickerMatches.map(toOption) }]
-            : []),
         ];
       },
-    [items, docs, fxHubOnlyInvitee, fxItems, tickerItems, toOption]
+    [items, docs, canFxHub, fxItems, toOption]
   );
 
   return (
@@ -408,7 +375,7 @@ export default function CommandPalette() {
       groups={groups}
       dress="glass"
       inputType="search"
-      placeholder="Jump to a page, thesis, or document (ticker / segment)…"
+      placeholder="Jump to FX Hub, a brief, or a trade idea…"
       emptyMessage="No matches"
       inputLeading={<Search size={16} className="text-ink-mute shrink-0" aria-hidden />}
       inputTrailing={

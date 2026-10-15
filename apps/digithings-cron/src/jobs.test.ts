@@ -22,6 +22,10 @@ const RESUMED_PIPELINE_IDS = [
 
 const DISABLED_HOUSE_RETRY_IDS = ["house-run-10", "house-run-11", "house-run-12"] as const;
 
+// Manual-only rows: no Cloudflare clock by design, kick-addressed by cron.
+// DIG-1335: twelve-x-backfill is on-demand (one missed date per kick).
+const MANUAL_ONLY_IDS = ["twelve-x-backfill"] as const;
+
 const PATH_A_TRAP_IDS = [
   "agent-pr-finalizer",
   "agent-backlog-snapshot",
@@ -247,7 +251,7 @@ describe("jobsForCron", () => {
       JOBS.filter((job) => !job.enabled)
         .map((job) => job.id)
         .sort(),
-    ).toEqual([...DISABLED_HOUSE_RETRY_IDS].sort());
+    ).toEqual([...DISABLED_HOUSE_RETRY_IDS, ...MANUAL_ONLY_IDS].sort());
     expect(
       JOBS.filter((job) => job.enabled)
         .map((job) => job.id)
@@ -436,5 +440,35 @@ describe("jobsForCron", () => {
     expect(watchdog?.kind).toBe("twelvex-watch");
     expect(confirm?.command).toBeUndefined();
     expect(watchdog?.command).toBeUndefined();
+  });
+
+  it("owns a dated twelve-x backfill row for daily_run.yml (DIG-1335)", () => {
+    // CTO verdict on DIG-1272: daily_run.yml is the only twelve-x workflow
+    // that declares a run_date input, and the Worker could not supply one.
+    // The row below is the dated path. Manual-only by design (see jobs.ts):
+    // dated backfills are on-demand, one missed date per kick.
+    const job = JOBS.find((row) => row.id === "twelve-x-backfill");
+    expect(job).toMatchObject({
+      id: "twelve-x-backfill",
+      cron: "41 3 * * *",
+      repo: "digithings-ai/twelve-x",
+      kind: "workflow_dispatch",
+      workflow: "daily_run.yml",
+      ref: "develop",
+      enabled: false,
+    });
+    // No static inputs: run_date is derived per dispatch in index.ts
+    // (backfillArgs), so a pinned date here would re-dispatch one date daily.
+    expect(job?.inputs).toBeUndefined();
+    // ref is develop while the reusable checks out main. That split is the
+    // pipeline's shape — the wrapper file lives on develop, the code runs
+    // from main — not a defect, so a future reader must not "fix" it.
+    expect(job?.ref).toBe("develop");
+    // Kick-addressable only: includeDisabled resolves it, the default lookup
+    // (what Cloudflare ticks use) does not, so no clock can fire it.
+    expect(jobsForCron("41 3 * * *")).toEqual([]);
+    expect(jobsForCron("41 3 * * *", { includeDisabled: true }).map((row) => row.id)).toEqual([
+      "twelve-x-backfill",
+    ]);
   });
 });
