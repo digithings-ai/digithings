@@ -81,6 +81,23 @@ export function checkpointArgs(
   return {};
 }
 
+/**
+ * Dated backfill args (DIG-1335). The caller names the date; the tick supplies
+ * it when the caller did not. Unlike houseArgs there is no force distinction:
+ * a caller-supplied run_date is the whole point of the kick — the CTO's Oct-6
+ * measurement was a non-force kick whose run_date was dropped — so it always
+ * wins, and only a missing date falls back to the scheduled day.
+ */
+export function backfillArgs(
+  bodyArgs: Record<string, string>,
+  now: number,
+): Record<string, string> {
+  return {
+    ...bodyArgs,
+    run_date: bodyArgs.run_date ?? new Date(now).toISOString().slice(0, 10),
+  };
+}
+
 function startedRun(job: Job, result: DispatchResult): StartedRun {
   const run: StartedRun = {
     job_id: job.id,
@@ -144,6 +161,8 @@ async function runJobsForCron(
       args = houseArgs(opts.force === true, opts.args ?? {}, scheduledTime);
     } else if (job.command === "checkpoint-archive") {
       args = checkpointArgs(opts.force === true, opts.args ?? {});
+    } else if (job.id === "twelve-x-backfill") {
+      args = backfillArgs(opts.args ?? {}, scheduledTime);
     }
     pending.push(
       dispatch(env, job, cron, scheduledTime, { args, force: opts.force === true }).then((result) =>
