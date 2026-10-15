@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterable, Mapping, Sequence
+
 from .contracts import Check, resolve
 from .health import GateReport
 from .orchestrate import StepReport, step_rows

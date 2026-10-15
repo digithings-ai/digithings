@@ -9,6 +9,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 _SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "package.sh"
 
 
