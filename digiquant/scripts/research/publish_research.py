@@ -55,7 +55,7 @@ try:
     load_dotenv(Path(__file__).parent.parent / "config" / "supabase.env")
     load_dotenv()
 except ImportError:  # python-dotenv is an optional probe; not fatal
-        logger.debug("python-dotenv is not installed; continuing without it")
+    logger.debug("python-dotenv is not installed; continuing without it")
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 

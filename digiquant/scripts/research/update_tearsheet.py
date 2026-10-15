@@ -42,7 +42,7 @@ try:
     load_dotenv(Path(__file__).parent.parent / "config" / "supabase.env")
     load_dotenv()  # also loads .env from cwd (lower priority)
 except ImportError:  # python-dotenv is an optional probe; not fatal
-        logger.debug("python-dotenv is not installed; continuing without it")
+    logger.debug("python-dotenv is not installed; continuing without it")
 
 
 from digiquant.research import dashboard_digest as _digest  # noqa: E402

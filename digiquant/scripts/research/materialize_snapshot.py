@@ -54,10 +54,10 @@ try:
     load_dotenv(Path(__file__).parent.parent / "config" / "supabase.env")
     load_dotenv()
 except ImportError:  # python-dotenv is an optional probe; not fatal
-        logger.debug("python-dotenv is not installed; continuing without it")
+    logger.debug("python-dotenv is not installed; continuing without it")
 
 
-from lib.roots import DIGEST_SNAPSHOT_SCHEMA
+from lib.roots import DIGEST_SNAPSHOT_SCHEMA  # noqa: E402
 
 SCHEMA_PATH = DIGEST_SNAPSHOT_SCHEMA
 _SUPABASE_UPSERT_ERRORS = (OSError, ValueError, TypeError, KeyError, RuntimeError)
