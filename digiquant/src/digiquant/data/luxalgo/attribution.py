@@ -129,11 +129,15 @@ LUXALGO_TRACKERS_DATA_CAVEATS: dict[str, str] = {
     ),
     "short-volume": (
         "Short-volume rows originate with FINRA, a private self-regulatory "
-        "organisation rather than a federal records custodian, so its own "
-        "upstream terms are unresolved — CC0 §4(b)-(c) means the vendor cannot "
-        "clear rights it does not hold. Do not present as cleared. Open with "
-        "Counsel (raised DIG-1464; the durable question is the upstream FINRA "
-        "redistribution terms, which no vendor licence answers)."
+        "organisation rather than a federal records custodian, and FINRA's own "
+        "terms permit no commercial redistribution of this compilation on any "
+        "published route: its Equity Data Specific Terms §2.3 cap End User use at "
+        "'non-commercial personal or professional use only' and 'No Charge'. The "
+        "vendor's CC0 grant cannot cure it — under CC0 §4(b)-(c) the affirmer "
+        "gives no warranty of title and disclaims any duty to clear other people's "
+        "rights or obtain their consents. Do not present as cleared. Counsel ruled "
+        "PROHIBITED (DIG-1521); the dataset is in service by business decision "
+        "dated 2026-10-07 against that advice, which is not a clearance."
     ),
 }
 
