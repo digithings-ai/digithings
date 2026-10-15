@@ -191,8 +191,9 @@ Boot order (critical for Cloudflare Containers port probes):
 program stays `FATAL` (no ports ever bind — CF error 1101).
 
 **Full crawl** of help.online-compliance-center.com remains **HOLD** until
-explicit approval (`docs/projects/online-compliance-center/GAPLOG.md`). After
-approval, run docs_onboard apply against the production stack (ops job that can
+explicit approval. The GAPLOG entry that recorded it was removed with the client
+docs project directory (DIG-3394), so this paragraph is the hold of record.
+After approval, run docs_onboard apply against the production stack (ops job that can
 reach digisearch ingest with a JWT that has `digisearch:ingest`).
 
 ### Manual re-seed (local image / ops)
@@ -352,4 +353,3 @@ npm test
 - Operator runbook: [`infra/digichat-digithings/README.md`](../../infra/digichat-digithings/README.md)
 - Vectorize cutover runbook (create indexes, sync, verify before flipping traffic): [`docs/ops/vectorize-cutover.md`](../../docs/ops/vectorize-cutover.md)
 - ADR-0018: [`docs/adr/0018-digichat-path-routing.md`](../../docs/adr/0018-digichat-path-routing.md)
-- OCC: [`docs/projects/online-compliance-center/README.md`](../../docs/projects/online-compliance-center/README.md)
