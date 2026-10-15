@@ -78,7 +78,7 @@ gate refused both. A PR without review evidence needs the evidence, not an attes
 | Gate | Rule |
 |---|---|
 | Base branch | `develop` only. `main`, `master` and `release/*` are refused (exit 3), and a PR whose `baseRefName` is anything else is refused too. |
-| Required check | The names in `required_checks_by_repo` for this repo must each have **reported** from a workflow run, and concluded `SUCCESS`. For `twelve-x` that is `test`. For `digithings` it is `Required checks passed`, `doc-links + agents-init` and `mypy — digibase + digikey`. |
+| Required check | The names in `required_checks_by_repo` for this repo must each have **reported** and concluded `SUCCESS`. For `twelve-x` that is `test` (from a workflow run). For `digithings` it is `local-ci` — which arrives as a commit StatusContext, never as a workflow run, so the names in `status_context_checks` are exempt from the workflow-run evidence rule (DIG-3707). |
 | Other checks | Any other check in a failing conclusion blocks the merge. |
 | Mergeable | `mergeable == MERGEABLE`. Drafts and `CONFLICTING` do not queue. |
 | Up to date | `mergeStateStatus` must be `CLEAN`. `BEHIND`, `DIRTY`, `UNKNOWN` and `BLOCKED` do not queue. |
