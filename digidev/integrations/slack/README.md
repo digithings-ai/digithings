@@ -49,10 +49,10 @@ Or add to `.mcp.json`:
    - `chat:write.public`
    - `channels:history` (to read channel messages)
 5. Install the app to your workspace
-6. Copy the **Bot User OAuth Token** (`xoxb-...`)
+6. Copy the **Bot User OAuth Token** (`"<your-bot-token>"`)
 
 ```bash
-export SLACK_BOT_TOKEN=xoxb-...
+export SLACK_BOT_TOKEN="<your-bot-token>"
 export SLACK_TEAM_ID=T...      # your workspace ID (from workspace URL)
 ```
 
