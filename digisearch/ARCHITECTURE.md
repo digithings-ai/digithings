@@ -1570,7 +1570,7 @@ core needs. The HTTP/MCP/CLI service stack and the parser deps are extras:
 | `[ingestion]` | `beautifulsoup4`, `python-docx`, `pdfplumber`, `chardet`, `chonkie[semantic]` | functional parsers (html/docx/pdf/plaintext) + Chonkie Semantic/Token chunkers; `polars` for the CSV parser is already in base |
 | `[chroma]` | `chromadb` | Chroma backend |
 | `[azure]` | `azure-search-documents`, `azure-core` | Azure AI Search backend |
-| `[embedding]` | `openai` | OpenAI embedder |
+| `[embedding]` | `openai`, `digillm>=0.1.0` (declared, not base) | OpenAI embedder; digillm client behind lazy-import guards on the web-research/websets path (`web/answer.py`, `web/structured.py`, `websets/verify.py`, `websets/enrich.py`) + `digillm.egress_record` (DIG-1141) |
 | `[rerank]` | `sentence-transformers` | BGE cross-encoder (`Reranker` provider=`bge`); kept separate from `[embedding]` so OpenAI-only installs stay light (#2441) |
 | `[agent]` | `langgraph` | research-turn graph (§11) |
 | `[web-search]` | `digifetch`, `ddgs`, `trafilatura`, `readability-lxml`, `markdownify` | proprietary web search: searxng sidecar (httpx, base only) + ddgs fallback + digifetch fetch → trafilatura/readability extract enrichment (§3 `POST /v1/web_search`; #3853) |
@@ -1581,7 +1581,7 @@ The **running service** installs `digisearch[server,ingestion,azure,chroma,web-s
 relied on before the split (the service additionally now ships pdfplumber for
 PDF ingest, which the old `[azure,chroma]`-only image lacked, plus the
 `[web-search]` stack for `POST /v1/web_search`). The image COPY/installs the
-`digifetch` workspace sibling exactly like `digibase`/`digikey` (its
+`digifetch` and `digiclaw` workspace siblings exactly like `digibase`/`digikey` (their
 `pyproject.toml` + `ARCHITECTURE.md` readme + `src`, then `uv pip install -e`),
 which is what satisfies the `[web-search]` extra's `digifetch>=0.1.0` pin at
 build time. `[web-search]` rides `all` like every other feature extra, but stays
@@ -1590,6 +1590,18 @@ out of `[dev]`: `dev` is `[server]` + `[ingestion]` only (same as
 the extra explicitly. A consumer that
 only wants a parser can `pip install digisearch[ingestion]` without dragging in
 the server stack.
+
+digillm is deliberately absent from the image (DIG-1407): the deployed image
+installs `[server,ingestion,azure,chroma,web-search]` and not `[embedding]`, so
+`digillm` (declared in `[embedding]`) stays out of the container. The board
+ruled the image does not need the remote embedding path, and installing
+`digillm` would drag `openai` in with it and make that path importable for the
+first time. The `web/answer.py`, `web/structured.py`, `websets/verify.py`,
+`websets/enrich.py` call sites stay behind their lazy-import guards, exactly as
+before (a `[web-search]`-only install reaches the guard and gets
+`WebResearchError`, not a working client). Do not "fix" the missing import by
+adding the sibling or the extra to the image. `digisearch/Dockerfile` carries
+the same note.
 
 ### Pluggable backend pattern
 
