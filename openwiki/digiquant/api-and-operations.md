@@ -44,8 +44,10 @@ research/backtest surface only.
 
 ### Rate limiting
 
-Per-IP sliding-window rate limits: pipeline/backtest paths 10 req/min;
-`/v1/orchestrator_tools` 30 req/min; default 30 req/min. `/health` and
+Per-IP sliding-window rate limits use a 60s window. These paths are 10
+req/min: `/run_backtest`, `/run_optimize`, `/run_pipeline`, `/v1/workflow`,
+`/v1/jobs/backtest`, and `/v1/orchestrator_invoke`.
+`/v1/orchestrator_tools` and every other path are 30 req/min. `/health` and
 `/healthz` are exempt. Disable via `DIGI_DISABLE_RATE_LIMIT=1`.
 
 ## Drift (ADDM)
