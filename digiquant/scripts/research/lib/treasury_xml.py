@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from xml.etree import ElementTree
+
+logger = logging.getLogger(__name__)
 
 TREASURY_XML_URL = (
     "https://home.treasury.gov/resource-center/data-chart-center/"
@@ -62,7 +65,7 @@ def parse_treasury_month_xml(xml_text: str) -> list[tuple[str, dict[str, float]]
                 try:
                     yields[label] = round(float(val), 4)
                 except ValueError:
-                    pass
+                    logger.debug("yield curve %s: node %s is not numeric", curve_date, xml_key)
         if yields:
             out.append((curve_date, yields))
     return out

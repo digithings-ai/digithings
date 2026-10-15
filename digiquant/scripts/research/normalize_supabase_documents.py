@@ -18,12 +18,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import re
 import sys
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple  # score:allow untyped any — duck-typed PostgREST rows
+
+logger = logging.getLogger(__name__)
 
 try:
     import jsonschema
@@ -991,7 +994,7 @@ def _render_digest_markdown_optional(snapshot: Dict[str, Any]) -> Optional[str]:
         if callable(fn):
             return str(fn(snapshot))
     except Exception:
-        pass
+        logger.debug("digest markdown render unavailable", exc_info=True)
     return None
 
 
