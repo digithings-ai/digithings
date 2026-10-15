@@ -7,7 +7,7 @@
       "statement": "digigraph starts via make stack-local or make up with an LLM provider key in .env, verifies through /healthz and POST /workflow, and gates on pytest -m unit -k digigraph plus ruff check and format --check.",
       "evidence": [
         {
-          "resource": "repo://digigraph/AGENTS.md#L60-L90",
+          "resource": "repo://digigraph/AGENTS.md#L62-L92",
           "version": "repo-lines-v1:sha256:1fdaccffb97746d682eedc43267aeeeb428d50589b89528d77e1d56d0c163a24:eyJzZWxlY3RlZExpbmVDb3VudCI6MzEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU2YjdmOWI5NDgwY2YwMDI1ZjkyMDlmOTVjN2NmYWNlNDQ2NjYxZjcxMmMyZGE1YjA4NWEyMWVkZDc1YTI0NTAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFkOGJlYzIzNTgxMDA1ZDA3ODhiZjdkNWFhNTVlZGFlZTE0YzViMzY1NDEyZTIwYjQwZmRkNWYyODA3ODczZWQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImNlNzVhN2M0NzE2MzEwZmE2YzlhMTY0NWVlOTI0MDcwNDM0NTIwMDA2MmE0ZmIzNWYzOWM3Mzk1ZjkyNjkxNTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU1YTU1MTIzODVjMjIxYmIwNmU4OGYxOTExNTQ4OTcxZjIxYmFlODRiMDQxZGY0YWE1NTdmYzU5NTY4YWVlNDYifQ"
         }
       ]
