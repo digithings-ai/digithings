@@ -5,8 +5,8 @@ const DEFAULT_OVERLAP = 50;
 
 export function htmlToText(html: string): string {
   return html
-    .replace(/<script[\s\S]*?<\/script\s*>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style\s*>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script(?:\s[^>]*)?>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style(?:\s[^>]*)?>/gi, " ")
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/p>/gi, "\n")
     .replace(/<[^>]+>/g, " ")
