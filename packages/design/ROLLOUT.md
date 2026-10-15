@@ -3,7 +3,7 @@
 **Status:** v0.1 approved for promotion · **2026-08-30**  
 **Goal:** one cohesive utilitarian-terminal language across digiweb → every live product surface.
 
-Canon: [`BLEND.md`](BLEND.md) · [`DESIGN.md`](../DESIGN.md) · reference `/iterate`
+Canon: [`BLEND.md`](BLEND.md) · [`packages/ui/DESIGN.md`](../ui/DESIGN.md) · reference `/iterate`
 
 ## End state
 

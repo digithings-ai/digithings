@@ -100,9 +100,8 @@ off the primary nav. The route/specimen inventory is machine-readable in
 ## Adding a section
 
 1. Create the component in `components/` (`"use client"` only if it needs
-   state/effects). Take content from the reference-mining doc
-   (`packages/design/references/mine/index.html`) or the canon
-   (`packages/design/spec/index.html`).
+   state/effects). Build the specimen here. The old design mine and the
+   static spec HTML were removed.
 2. Put its styles in the owning page's `<family>.css` with a unique class prefix.
 3. Import and place it in the family's `app/(gallery)/(<family>)/<route>/page.tsx` using the section grammar:
    `<section className="section-block"><p className="kicker">// label</p>
