@@ -14,7 +14,8 @@
     "./site/site.css": "./site/site.css",
     "./site/*": "./site/*",
     "./releases.json": "./releases.json",
-    "./motion.json": "./motion.json"
+    "./motion.json": "./motion.json",
+    "./fonts": "./fonts.ts"
   },
   "files": [
     "tokens.css",
@@ -24,6 +25,7 @@
     "quant-native",
     "app-shell-terminal",
     "site",
-    "releases.json"
+    "releases.json",
+    "fonts.ts"
   ]
 }
