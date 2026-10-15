@@ -1,6 +1,6 @@
 # ADR 0008: Atlas Research — State Model and Output Persistence Schema
 
-**Status:** proposed
+**Status:** proposed (product names historical — see [ADR-0026](0026-retire-olympus-atlas-hermes-kairos.md))
 **Date:** 2026-04-19
 
 ## Context

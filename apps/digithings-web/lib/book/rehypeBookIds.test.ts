@@ -75,6 +75,13 @@ describe("the plugin and the extractor agree", () => {
     );
   });
 
+  it("applies the id to an h1 exactly once", () => {
+    // Regression: a former h1-specific branch in walk() ran before the generic
+    // h[1-6] branch, applying the id twice (`chapter-title-2`).
+    const node = run([heading(1, ["Chapter Title"])])[0];
+    expect(node.properties.id).toBe("chapter-title");
+  });
+
   it("leaves a non-heading element alone", () => {
     const p = { type: "element", tagName: "p", properties: {}, children: [{ type: "text", value: "x" }] };
     run([p]);

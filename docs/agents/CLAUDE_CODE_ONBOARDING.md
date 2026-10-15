@@ -1,5 +1,7 @@
 # Claude Code Onboarding — Tier 3 Delegation
 
+> **Status (2026-10-14):** the GitHub Actions dispatch workflows this page describes (`agent-claude*.yml`, `agent-cursor-dispatch.yml`, `agent-dispatch-replay.yml`, `project-status.yml`, …) were deleted on 2026-10-01 in #4919. Label-driven dispatch no longer runs from this repo. The current inventory is [CI_CONVENTIONS.md](CI_CONVENTIONS.md).
+
 This document covers everything needed to dispatch Claude Code (Tier 3) against
 digithings backlog issues — both the local interactive path and the cloud
 GitHub-Action path.

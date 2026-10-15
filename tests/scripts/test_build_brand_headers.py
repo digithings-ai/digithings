@@ -156,6 +156,23 @@ def test_kit_is_not_on_the_marketing_site() -> None:
     assert "/brand" not in redirects
 
 
+def test_brand_scripts_resolve_the_repo_root() -> None:
+    """packages/brand is one level under the repo. parents[2] is the checkout's parent."""
+    for name in ("build-avatar.py", "build-og.py", "build-header.py"):
+        src = (BRAND / name).read_text(encoding="utf-8")
+        assert "REPO_ROOT = BRAND.parents[1]" in src
+        assert "BRAND.parents[2]" not in src
+    avatar = _load("digiweb_brand_build_avatar", BRAND / "build-avatar.py")
+    assert avatar.REPO_ROOT == REPO_ROOT
+    assert avatar.SOURCE_TILE.is_file()
+
+
+def test_header_check_covers_both_live_og_pngs(header_mod) -> None:
+    dests = {dest for _src, dest in header_mod.kit_copies()}
+    assert REPO_ROOT / "apps" / "digithings-web" / "public" / "og.png" in dests
+    assert REPO_ROOT / "apps" / "digiquant-web" / "public" / "og.png" in dests
+
+
 def test_design_reference_ships_the_kit_page() -> None:
     page = (
         REPO_ROOT

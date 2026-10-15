@@ -1,33 +1,11 @@
+// Thin per-app config: shared preset + this app's own additions (DIG-3396).
+// The base-path fetch rule and the vendor/skin ignores below are digichat's
+// own and stay here; everything else comes from the shared preset.
 import { defineConfig, globalIgnores } from "eslint/config";
-import nextVitals from "eslint-config-next/core-web-vitals";
-import nextTs from "eslint-config-next/typescript";
+import { nextApp } from "../../eslint.base.mjs";
 
 const eslintConfig = defineConfig([
-  ...nextVitals,
-  ...nextTs,
-  {
-    files: ["src/**/*.{ts,tsx}"],
-    ignores: ["src/app/api/**"],
-    rules: {
-      "no-restricted-syntax": [
-        "error",
-        {
-          selector:
-            "CallExpression[callee.name='fetch'] > Literal[value=/^\\/api\\//]",
-          message:
-            "Use p('/api/...') from @/lib/base-path for client-side API fetches so base-path deployments resolve correctly (#2408).",
-        },
-      ],
-    },
-  },
-  // Override default ignores of eslint-config-next.
-  globalIgnores([
-    // Default ignores of eslint-config-next:
-    ".next/**",
-    ".next-*/**",
-    "out/**",
-    "build/**",
-    "next-env.d.ts",
+  ...nextApp([
     // Vendor copies / separate packages — not the product lint surface.
     "reference/**",
     "cli/**",
@@ -43,6 +21,20 @@ const eslintConfig = defineConfig([
     "src/components/assistant-ui/skins/expo-react-native.tsx",
     "src/components/assistant-ui/skins/react-ink.tsx",
   ]),
+  {
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: ["src/app/api/**"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "CallExpression[callee.name='fetch'] > Literal[value=/^\\/api\\//]",
+          message:
+            "Use p('/api/...') from @/lib/base-path for client-side API fetches so base-path deployments resolve correctly (#2408).",
+        },
+      ],
+    },
+  },
 ]);
 
 export default eslintConfig;

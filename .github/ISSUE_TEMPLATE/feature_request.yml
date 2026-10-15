@@ -1,0 +1,65 @@
+name: Feature request
+description: A change you want in digithings
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the request. Read [CONTRIBUTING.md](https://github.com/digithings-ai/digithings/blob/develop/CONTRIBUTING.md) and [docs/VISION.md](https://github.com/digithings-ai/digithings/blob/develop/docs/VISION.md).
+        Agent work uses the Agent task form.
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: The module this change belongs to.
+      options:
+        - digibase
+        - digichat
+        - digiclaw
+        - digifetch
+        - digigraph
+        - digikey
+        - digillm
+        - digiquant
+        - digisearch
+        - digiskills
+        - digitrace
+        - digivault
+        - digivoice
+        - website / root docs
+        - other
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Who is blocked, and what they cannot do today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: The change you want, and how you would know it works.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: Other approaches you considered. Optional.
+    validations:
+      required: false
+  - type: textarea
+    id: vendor
+    attributes:
+      label: Third-party data access
+      description: |
+        Fill this in only if the change calls someone else's data, endpoint, or authentication flow.
+        No third-party data access merges without a `docs/vendor-terms/<vendor>/INDEX.md` entry.
+        An open-source license does not cover their data. Contacting a vendor is a separate decision.
+      placeholder: "Vendor: <name>\nEntry: docs/vendor-terms/<name>/INDEX.md (exists | to write)"
+    validations:
+      required: false

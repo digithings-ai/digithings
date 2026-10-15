@@ -1,12 +1,27 @@
 {
   "name": "dashboard-api",
+  "description": "HTTP API for the digithings dashboard.",
+  "license": "MIT",
+  "homepage": "https://digithings.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/digithings-ai/digithings.git",
+    "directory": "apps/dashboard-api"
+  },
   "private": true,
   "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./mcp": "./src/mcp.ts"
+  },
   "scripts": {
     "deploy": "wrangler deploy",
     "dev": "wrangler dev",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@digiquant/contract": "*"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250801.0",

@@ -1,4 +1,7 @@
 # digitrace – keep build context small and fast
+# NOTE: digitrace/Dockerfile builds from the repo root (context: .), so the
+# ROOT .dockerignore governs that build. This file applies only to a
+# per-package context and is currently unused by any compose target.
 .git
 .pytest_cache
 *.egg-info
