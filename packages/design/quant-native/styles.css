@@ -42,9 +42,9 @@
 
 /* --- Chart frame ------------------------------------------------------- */
 .qn-chart-frame {
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--hair);
   border-radius: var(--radius-md);
-  background: var(--bg-primary);
+  background: var(--surface);
   padding: var(--space-3);
 }
 .qn-chart-frame > svg {
@@ -57,12 +57,12 @@
 .qn-ticker {
   position: relative;
   overflow: hidden;
-  border-top: 1px solid var(--border-color);
-  border-bottom: 1px solid var(--border-color);
+  border-top: 1px solid var(--hair);
+  border-bottom: 1px solid var(--hair);
   background: rgba(10, 10, 10, 0.7);
   font-family: var(--font-family-mono);
   font-size: 12px;
-  color: var(--text-primary);
+  color: var(--ink);
   padding: 10px 0;
 }
 .qn-ticker-track {
@@ -75,10 +75,10 @@
   align-items: baseline;
   gap: 6px;
   padding: 0 28px;
-  border-right: 1px dashed var(--border-color);
+  border-right: 1px dashed var(--hair);
 }
 .qn-ticker-sym {
-  color: var(--fg);
+  color: var(--ink);
   letter-spacing: 0.04em;
 }
 .qn-ticker-px { margin-left: 2px; }
