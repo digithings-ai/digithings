@@ -1,0 +1,30 @@
+---
+title: Migrations in order
+order: 1
+summary: >-
+  How schema changes ship with the code that needs them, and why order is
+  the whole discipline.
+---
+
+A database schema is a promise the code relies on, and promises change.
+Migrations are how the system changes them safely: each shape change is a
+small versioned step, applied in order, each one moving the schema from one
+known state to the next. The pipeline applies pending steps automatically
+on deploy, so the schema the code meets is always the schema the code
+expects.
+
+The discipline is in the ordering. Every migration names its predecessor,
+steps never branch, and a step that already ran never runs again. Review
+treats migrations like any other change — readable, reversible where
+possible, and tested against a copy before touching anything real. When a
+deploy and its migrations travel together, schema drift stops being a
+category of incident and becomes a routine: describe the change, review it,
+ship it, move on.
+
+<Reference kind="reference" href="repo:docs/DEPLOYMENT.md" title="Deployment reference">
+  Migration automation per home.
+</Reference>
+
+> **Why digithings.** Schema history in versioned steps, applied by the
+> same pipeline that ships the code, on databases you operate. Data
+> stewardship as ordinary engineering — reviewable, repeatable, and yours.
