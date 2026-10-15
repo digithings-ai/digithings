@@ -1,9 +1,9 @@
 /**
  * Seam-chained NAV series for the dashboard-api worker (slice 0003).
  *
- * Server-side port of the client chain in `apps/dashboard/lib/accounting-views.ts`
+ * Server-side port of the client chain in `@digiquant/contract/accounting-views`
  * (`navContinuityStepPct`, `chainNavContinuity`, seam helpers) plus the
- * day-return guards in `apps/dashboard/lib/performance-ssot.ts`
+ * day-return guards in `@digiquant/contract/performance-ssot`
  * (`crossesNavSeam`, `derivedDayReturnPct`, `MAX_DAY_RETURN_GAP_DAYS`).
  * Serves contract §6.6 (`GET /nav-series`) and the §6.1 `nav_tip`
  * `day_return_pct` rule: null across NAV seams or calendar gaps > 4 days;
