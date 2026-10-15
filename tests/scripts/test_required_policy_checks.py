@@ -856,3 +856,68 @@ def test_script_exits_nonzero_when_the_inventory_is_mutated(tmp_path: Path) -> N
     assert proc.returncode == 1, proc.stdout + proc.stderr
     assert "policy.ungated" in proc.stdout
     assert "All commits signed off" in proc.stdout
+
+
+# ── DIG-2237 C-1: review horizons on the issue-alone advisories ───────────────
+
+#: The three advisory entries whose only support is `issue:` (DIG-2098 rev 8,
+#: correction 1). gitleaks-scan carries `known_gap:` and the ci.yml lanes carry
+#: `gated_by:`, so neither class takes a date.
+REVIEW_BY_CONTEXTS = [
+    "All commits signed off",
+    "All agent-task issues in TSV with real phase and valid model",
+    "Validate PR title",
+]
+
+
+def test_exactly_three_issue_alone_advisories_carry_review_by() -> None:
+    """Correction 1 as a pin: the dates land on exactly these three entries."""
+    inventory, _tracked = guard.load_inventory(INVENTORY)
+    dated = {c.context: c.review_by for c in inventory if c.review_by}
+    assert sorted(dated) == sorted(REVIEW_BY_CONTEXTS), dated
+    assert set(dated.values()) == {"2027-04-13"}, dated
+    by_context = {c.context: c for c in inventory}
+    assert by_context["gitleaks-scan"].review_by is None
+    assert by_context["gitleaks-scan"].issue == "DIG-1952"
+    assert by_context["Frontend canon guard"].review_by is None
+    assert by_context["actionlint"].review_by is None
+
+
+def test_a_past_review_by_is_a_warning_not_a_finding() -> None:
+    """Staged rollout: staleness surfaces as a `::warning::` line while the
+    guard stays green. Removing the warning emission must fail this test."""
+    inventory, tracked = guard.load_inventory(INVENTORY)
+    assert _run(inventory, tracked, LIVE_CONTEXTS) == []
+    aged = [
+        dataclasses.replace(c, review_by="2000-01-01")
+        if c.context == "All commits signed off"
+        else c
+        for c in inventory
+    ]
+    assert guard.stale_advisories(aged) != []
+    assert _run(aged, tracked, LIVE_CONTEXTS) == []
+    text = guard.report([], aged, LIVE_CONTEXTS)
+    assert "::warning::[policy.stale-advisory]" in text, text
+    assert "All commits signed off" in text
+
+
+def test_a_future_review_by_is_silent() -> None:
+    """A horizon that has not passed changes nothing in the output."""
+    inventory, _tracked = guard.load_inventory(INVENTORY)
+    assert guard.stale_advisories(inventory) == []
+    text = guard.report([], inventory, LIVE_CONTEXTS)
+    assert "policy.stale-advisory" not in text, text
+    assert "policy gate agrees" in text
+
+
+def test_a_malformed_review_by_is_rejected_at_load(tmp_path: Path) -> None:
+    """A horizon nobody can parse would read as "not yet due" forever."""
+    path = tmp_path / "policy-checks.yml"
+    path.write_text(
+        "tracked_workflows: [ci.yml]\nchecks:\n  - context: b\n    workflow: ci.yml\n"
+        "    job: required-checks\n    enforcement: advisory\n    reason: r\n"
+        "    owner: DevOps\n    review_by: soon\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(guard.GuardError, match="review_by"):
+        guard.load_inventory(path)
