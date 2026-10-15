@@ -8,7 +8,7 @@ Companion to [review.md](review.md) (verdict: MODIFY). Target topology is the pr
 stays **public until cutover** (D-G2 = no); R0 is a **fresh repo** (D-12′); R0 releases by **tags**
 (D-R3); private repos use **self-hosted runners** (D-G4). Answered 2026-10-14 17:40 CEST:
 deploys + CI run on Chris's Mac under his normal user with a Cloudflare Worker fallback
-(D-G5); signed release tags are optional/recommended, not mandatory (D-G6).
+(D-G5); signed release tags are MANDATORY (D-G6).
 
 **Revised again 2026-10-14 (Chris's direction):** R1–R7 move to **Cursor Origin**, not to GitHub.
 See [Source control on Cursor Origin](#source-control-on-cursor-origin). D-O1 … D-O5 answered 2026-10-14.
@@ -47,7 +47,7 @@ P4 Extract private repos: R6 → R1 → R2 → R5 → R3 → R4 → R7 ─► P5
 
 Each phase ends with an exit check. No phase deploys anything that is not already deployed, except
 the per-repo cut-over deploys in P4, which run only from a release tag cut by Chris (D-G6:
-signing the tag is optional/recommended, not mandatory).
+signing the tag is MANDATORY (D-G6).
 
 ## Constraints from GitHub Free
 
@@ -61,7 +61,7 @@ Consequences:
   agent on Chris's Mac** (D-G5): local-ci `deploy` job runs there under his normal user,
   deploy credentials exist only there (plus the Worker fallback), and the gate hook refuses
   any job that is not on a release tag cut by Chris — with a mandatory `git verify-tag` (D-G6)
-  signature check (D-G6, only when the tag carries a signature).
+  signature check (D-G6: verify-tag always runs; unsigned tags are refused).
 - On private repos `develop`/`main` cannot be protected. Mitigations: merge-queue-only merges by
   convention, CODEOWNERS (advisory), a nightly audit job that flags any direct push to `main`/`develop`.
   Rulesets are kept as code (`scripts/split/rulesets/`) so a later GitHub Team upgrade is one `apply`.
@@ -131,7 +131,7 @@ detach. twelve-x stays as-is (GitHub private + existing inbound mirror). **Call 
 - **Do not install the Cloudflare app in Cursor** and do not connect any Worker or Pages project to an
   Origin repo through Workers Builds: that integration auto-deploys on every push.
 - Deploys run only on the `deploy` queue (Chris's Mac, Worker fallback), from a release tag
-  cut by Chris (D-G5; signing optional per D-G6), with `wrangler deploy` / Pages direct upload.
+  cut by Chris (D-G5; signing MANDATORY per D-G6), with `wrangler deploy` / Pages direct upload.
   The gate hook is the same script as before with a local-ci adapter: it checks the repo
   against the allowlist, the tag matches `<component>-v*`, the tag's commit equals the
   built commit, and `git verify-tag` passes against `allowed_signers` on every release tag
@@ -146,9 +146,9 @@ detach. twelve-x stays as-is (GitHub private + existing inbound mirror). **Call 
   credential helper. **Chris** does every login (`origin auth login` or `origin ssh-key add`);
   agents never log in and never handle a token.
 - Identity (D-O4, answered): agents **keep using Chris's account** through his existing credential
-  helper. There is no separate agent account, so Origin rulesets do not bind agents. D-G6 is
-  optional, so the tag gate is procedural, not hard: agents must never cut release tags, and the
-  audit log is the control. The hard control is Chris cutting the tag.
+  helper. There is no separate agent account. Binding `active` rulesets carry no agent bypass,
+  and D-G6 is MANDATORY: local-ci `verify-tag` refuses unsigned tags. Agents must never cut release
+  tags. The hard controls are `active` rulesets plus mandatory tag verification.
 - Worktrees: no change in how they work (`git worktree add` from an Origin clone). Remote convention:
   `origin` = Origin, `github` = GitHub (R0 only). `dt-dev` bootstrap clones R1–R7 from Origin.
 - Tooling that calls `gh` must be ported before the first private repo moves (P2): merge queue
@@ -169,7 +169,7 @@ Rulesets live as code in `scripts/split/rulesets/origin/` and are applied by Chr
 
 - Per-package release branches `release/<component>` (R2–R6) are now protected for real.
 - Not available on Origin today: dismiss stale reviews, last-push approval, required thread
-  resolution, signed tags. The optional signed-tag step (D-G6) covers the last one only when used.
+  resolution, signed tags. The mandatory signed-tag gate (D-G6) is enforced in local-ci `verify-tag`, since Origin has no signed-tag rule type.
 - 23:18: the "advisory" reading is struck. Rulesets that must hold are **`active`**; the agent
   identity is **not** a bypass actor (no agent seat holds bypass). Seat instructions still forbid
   agents from pushing to `main`/`release/*` and from creating release tags — and now an `active`
@@ -182,7 +182,7 @@ Rulesets live as code in `scripts/split/rulesets/origin/` and are applied by Chr
 
 ## P0 — Prepare (day 0–2)
 
-Goal: know everything that deploys from mono, and get the Mac runner and the optional signing key ready.
+Goal: know everything that deploys from mono, and get the Mac runner and the mandatory signing key ready.
 Mono stays public (D-G2); its `production` environment and required reviewers keep working.
 
 1. Inventory (read-only):
@@ -257,7 +257,7 @@ Rollback: each PR reverts on its own.
    non-GitHub registry (private PyPI index on Chris's Mac, Origin artifacts, or vendored path pin;
    decision outstanding, owned by R2/epic owner), read with a short-lived Origin token as a BuildKit secret.
 4. **Private npm (`@digiquant/contract`):** GitHub Packages npm from R2; R3's Actions reads it with `GITHUB_TOKEN` after granting R3 access on the package.
-   2026-10-14 22:09: same supersede — the contract reaches R3 from a non-GitHub registry (TBD, Chris);
+   the contract reaches R3 from a non-GitHub registry (decision c7256004 Option A);
    no `.github/workflows` additions in R3 (local-ci instead).
 5. **GitHub App `digithings-release-bot`:** opens bump PRs, dispatches cron workflows. Installed per repo. It does **not** create deploy tags (it cannot sign them).
 6. **Deploy gate on the Mac agent (D-G5 + D-G6)** — replaces protected `release/*` + environment reviewers:
@@ -269,9 +269,8 @@ Rollback: each PR reverts on its own.
      2. the ref is `refs/tags/<component>-v*` (push or dispatch on that tag);
      3. the tag's commit matches the built commit;
      4. the workflow file is read from the same tagged commit.
-     Optional 5th check (D-G6, only when adopted and the tag carries a signature): `git verify-tag`
-     passes against the host's `allowed_signers` (Chris's `ed25519-sk` key only).
-   - Tags are cut only by Chris (on a `release/*` or `main` commit; signing optional/recommended).
+     5th check (D-G6 MANDATORY): `git verify-tag` passes against the host's `allowed_signers` (Chris's `ed25519-sk` key only); unsigned tags refused.
+   - Tags are cut only by Chris (on a `release/*` or `main` commit; signing MANDATORY).
      Agents may prepare the release PR and changelog, never the tag.
    - CI agents (no credentials) run queue `ci` on the same Mac; the `deploy` queue refuses every job
      that is not a release-tag deploy. Local-runner tuning (concurrency, cache, keep-awake) is DIG-3561's.
@@ -321,8 +320,8 @@ Cutover day (Chris does the renames and visibility changes; agents prepare):
 8. Rename `digithings-next` → `digithings`; make it **public**. Apply rulesets from P2 step 7; install DCO; add CODEOWNERS, LICENSE (MIT), TRADEMARKS, SECURITY; `production`-style environment `pypi` with Chris as required reviewer.
 8b. Origin for R0 (D-O1): Chris runs `origin repo create-mirrored` for the public R0 (inbound mirror).
 9. Publish v0.x of PyPI modules and `@digithings/*` npm, and `digichat` / `digillm` images, from R0.
-   2026-10-14 22:09: **no GHCR** — images publish to a non-GitHub registry (TBD, Chris); `@digithings/*`
-   likewise to a non-GitHub npm registry (TBD, Chris).
+   images publish to a non-client, non-GitHub registry (decision c7256004 Option A); `@digithings/*`
+   likewise (Option A).
 10. In mono: R0 paths frozen (`moved-paths-guard` lists them). Development on public code moves to R0. Open mono PRs that touch only R0 paths are re-opened against R0 by their owners (list posted on the tracking issue).
 11. Update every remote: `~/Code/digithings*` worktrees, Paperclip project repositories, merge queue config, run-watch, worktree sweep, seat instructions that name the repo.
 
@@ -455,25 +454,25 @@ never the self-hosted runner on R0, never the Cloudflare Cursor app.
   (R3 imports it).
 - R5 (I, rev 2, answers by Chris 2026-10-14T20:14:46Z): blocking Dockerfile findings F1–F4 as
   above; F5 answered **D-R5-1: R5 keeps producing, builds locally on the Mac, pushes to a
-  non-GitHub registry** (default evidenced: `datatapchatregistry.azurecr.io`; trigger becomes the
-  local pipeline on a release tag); **D-R5-2: self-host-parity homes in R5, contract published
+  non-client registry** (R5 send-back rule 02:06 — the client ACR is not the target; registry per
+  decision c7256004 Option A); **D-R5-2: self-host-parity homes in R5, contract published
   from R0** (parity scripts are R5's; R0 inputs become a published artifact; publish precedes the
   gate); **D-R5-3: zammad_mcp private** (closes D-T2; credential at runtime only);
   **D-R5-4: delete both dead `pj()` rows** (`jobs.ts` L336/L376 — follow-up H1, not performed in
   the inventory ticket); **D-R5-5: one shared local-ci pipeline with a repo argument**
-  (no per-repo copy; R2 globs become a second argument value); **new D-R5-6: re-point all 30
-  dispatch rows off the GHA `workflow_dispatch` transport onto the local pipeline** (cron keeps
-  the schedule in R5; credential replaces the GitHub token; 12 twelve-x rows unverified).
+  (no per-repo copy; R2 globs become a second argument value); **new D-R5-6 (R5 send-back rule 02:06): anything that must run while the Mac is off goes to a
+  Cloudflare cron/Workflow — Mac-only triggers fail visibly instead of silently; 12 twelve-x rows unverified).**
   Sequencing: steps 1–2 (local CI + registry; shared-closure artifacts) parallel, everything below
   step 3 waits on both; **step 9 (dispatch re-point) is what keeps the estate running — R5 can cut
-  over before it, but the 30 clocks stop when GHA retires without it.** Follow-ups H1–H6 routed
+  over before it, but the clocks stop when GHA retires without a Mac-off path — that path is a
+  Cloudflare cron/Workflow per the send-back rule, never a Mac-only trigger.** Follow-ups H1–H6 routed
   (dead-row deletion; shared pipeline; registry move; dispatch re-point; parity publish; **F15:
   R0's digillm image lane + `docker-compose.yml` still name `ghcr.io` — must not be missed**).
   F6/F7/F8/F10/F11/F12 and the `docs/ops/` triage stand as inventoried.
 - R6 (J): corpora + seeds + KV-seed config + rollout/answer-check tooling + new `kv-sync`; R0
   residue grep list before the R0 cleanup PR; D-12 scrub **after** KV write proven.
 - No-GitHub-services (E/G/H/P notes, Chris 22:09): no GitHub Packages / GHCR / Actions
-  dependence anywhere; registries TBD by Chris; workflows become local-ci/cron jobs.
+  dependence anywhere; registries per decision c7256004 Option A; workflows become local-ci/cron jobs.
 
 ### 4. Secrets (slice P — names only, no values)
 
@@ -576,5 +575,4 @@ Each file has exactly one owner. No `overlaps-known.txt` whitelist exists or is 
 
 One epic under G07 with one leaf per row of P1, one per P4 step, plus P0, P2, P3, P5, P6.
 All gate decisions are answered (2026-10-14, including D-G5/D-G6), so the CTO can create the leaves.
-D-O1 … D-O5 are answered. Note: with D-O4 + D-G6-optional, no private repo has a hard technical deploy
-control — the control is procedural until Chris adopts signing.
+D-O1 … D-O5 are answered. Note: with `active` rulesets (no agent bypass) + mandatory D-G6, every private repo has hard technical deploy controls.
