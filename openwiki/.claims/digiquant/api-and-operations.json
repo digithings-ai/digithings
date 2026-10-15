@@ -7,11 +7,11 @@
       "statement": "POST /run_backtest requires an explicit data_path or data_dir and records Sharpe into ADDM history, while run_optimize, run_export, and run_pipeline complete the ordered chain with async job variants for long runs.",
       "evidence": [
         {
-          "resource": "repo://digiquant/src/digiquant/server.py#L250-L282",
+          "resource": "repo://digiquant/src/digiquant/server.py#L396-L428",
           "version": "repo-lines-v1:sha256:d34cb35850e4e19d87a9251ef0c68b3529058d277347c8398e24a32f2020e142:eyJzZWxlY3RlZExpbmVDb3VudCI6MzMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFlYmFkNmU4N2JhNjdmYjYxNDhiYzI4YWZjN2Q5OWQyM2MwN2Q2MTlhYjFlZmU3ZWQxOTAwM2ZlMmNlZjBjYzAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI3ZDU5YjE4NTBjZDE2ZjRiMGI3MjBmNDI0OWZjNGM1ZTc3MWIwODE2NDYwYWQzMTFjMGM1MTc2YjcxZmUwMGYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhjYzRhN2QxY2M3OTZhYmEzZTQ2NzIzMzI3ZjUxN2U5ZjgxMTk4MmQyNTBmMDcwMjk4NmU0YjU3NjRhZDk1ODkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ3MjIzMTA2ZmQ4NzQyYjcwZWEyMzNmOWRjMzU5ZjRiMDJiYmIwNjliNzI4M2VlZjc2MjQ5OTUxNmJkN2I5YzgifQ"
         },
         {
-          "resource": "repo://digiquant/src/digiquant/server.py#L899-L946",
+          "resource": "repo://digiquant/src/digiquant/server.py#L1240-L1287",
           "version": "repo-lines-v1:sha256:301b44622ac22ff9ed15efbe097739a7962798d1c0348819a52db269183e222e:eyJzZWxlY3RlZExpbmVDb3VudCI6NDgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjgzZTZmMzRkZjFiNDRkYTgxYmVmZDdlYzIwYjNmYTJiNDNhOWZlYjdmZWUzM2VkZjhlOWJkZTBjNGE1NzZmZDYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI2MzQ1YTlmYjJmZWVkMzYzZmQ3MmY4ZDFhODIzZmU4ZDBkZDE3NDM4ODljODVmMDlmZWMyZTY1YmIxNjc1ZGMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE0MmEyMDBiZjlkYWUyMjhkODE5OTk4YjA0YzgzMmE0YjRlNTYzZmQzMzZiYzc0YWE3NGUzOTRjOTIzZGQwMzgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImM0ZTAzZjM5YzQ5YTAzMjA5MjY4Y2RlY2U4OTQyYWM1MzMyZTY0ZWM0NDgwMzk2ODkwYmQ0ODE1ZDc3MDRiN2IifQ"
         }
       ]
@@ -21,7 +21,7 @@
       "statement": "GET /check_drift takes strategy_id, baseline_run_id, and current_sharpe for heartbeat-polled ADDM drift detection that triggers re-optimization, with history held in-process.",
       "evidence": [
         {
-          "resource": "repo://digiquant/src/digiquant/server.py#L236-L248",
+          "resource": "repo://digiquant/src/digiquant/server.py#L382-L394",
           "version": "repo-lines-v1:sha256:64dd194e72b38a1b4bb87dd8717c5185c3c7938fe19e6a63462c42d87fb781c3:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNiMmU2OWNmNDQ4YjU5ZWQ3MjAzODFlNmJjNTgzYjlhM2MyZjljMWE0NDE3MmE1YTExMzE2YzM4ODE0MDk4NjIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI1NjdlZmYwZjNjNjYyNjNkNmYxM2Y5ZmM0NmRkZWYwOGI2ODUyMTUwOWE4NDMwMzk3ZjIxZDQ0MTg2ZjY0YjUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM4M2JhMWY3NTE5M2E3ZDRiMTdjZWY0MmQ0ZTJhN2VlMmI0ZmU5MzA1OTllYmExMDc1N2RhODNhZTljYTA2MmMifQ"
         }
       ]
@@ -45,7 +45,7 @@
       "statement": "The research sandbox is a separate build-time-baked image with no live-trading paths, while the HTTP service container serves digiquant.server:app loopback-bound on 8001 with a /healthz healthcheck.",
       "evidence": [
         {
-          "resource": "repo://digiquant/Dockerfile#L34-L35",
+          "resource": "repo://digiquant/Dockerfile#L38-L39",
           "version": "repo-lines-v1:sha256:8956edaf8f8b3b42edbb01fd909b2795719f3dc638c0a8bb4f2a1afac6a998bf:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZjM0NWFiYzgwZGI0YTUzMzc0Njg1YTBjMGE0ZmFlYzMwODk1MzA1YWMwNDdhYjExNGNkZWEzNTk5ZmI0YzM0MCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYTcwOTM0NzYzMjI0MTZiYTZjN2Q2MDI0MzYxYjE5ODEyZGMzZDFmOTRjNjYxMzM1OWY4MmYwY2MzMjY0ZjUwOCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNDUwZjA0NTgzZjlmNDI0NDJmNTIzMDNjMzMxMzUyMDFmNzc0MzhhMGM3MGU2MWQ5MjJlY2FhYWY3NWEzMThiNiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjAsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSJ9"
         },
         {
@@ -76,11 +76,11 @@
     },
     {
       "id": "claim_00e677e0a7eb4ce18fddf8c1289bd1a3",
-      "statement": "Per-IP sliding-window rate limiting is enforced on pipeline/backtest paths (10 req/min), /v1/orchestrator_tools (30 req/min), and all other paths (30 req/min), with /health and /healthz exempt; can be disabled via DIGI_DISABLE_RATE_LIMIT=1.",
+      "statement": "Per-IP sliding-window rate limits use a 60s window: /run_backtest, /run_optimize, /run_pipeline, /v1/workflow, /v1/jobs/backtest, and /v1/orchestrator_invoke are 10 req/min; /v1/orchestrator_tools and every other path are 30 req/min; /health and /healthz are exempt; DIGI_DISABLE_RATE_LIMIT=1 disables the limiter.",
       "evidence": [
         {
-          "resource": "repo://digiquant/src/digiquant/server.py#L62-L116",
-          "version": "repo-lines-v1:sha256:793e4b63a00b755e0bb940edb3b48cd990ac7d0541689ae56db4409f489e5fd9:eyJzZWxlY3RlZExpbmVDb3VudCI6NTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIyMTc3ZDJjYTk0Y2MyM2Y1YzVkMTY1M2IzYmEzZjkzZmZiZDBlODgzYjdiYmQxYWI5MzY0MjkwMGM3YWZhNTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFhNzk2NWE0ZDljMzVkNjczNGIzNmQyYTFkMjkzNzk5MWY3MmQ1MWYwZjhmMWI0ZGM1ZWI3NDU5Y2M2MTBkOTkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjU4ZmIwMzZhODlkZjMzYzRhMDY1MTkxZDA5NmI1N2I0YzJhNTBhM2I2M2U5OWYwYmEzZDViODY3MWJkZjgyNjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkzYzM0NmFjMzBiNzVkY2M4MzQyYWNhNmRhZWU3OTk3OGViZTllNmY2ZDhiZDM2NjY5OWI0MjYwOGVkYWU3N2UifQ"
+          "resource": "repo://digiquant/src/digiquant/server.py#L77-L87",
+          "version": "repo-lines-v1:sha256:a29274493d8cee5517c25bd17b21807c1235644cdeebbe7c66f0823e6f333698:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM0MmUzNTI3MzAwOGU1OTUxMmQzZmVlZTYzY2M4MzkxZDk0MmQ5YzFlMDEyYTVkYWNiODEyN2I5NGEzNjMwZDgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY0NWU4N2RkMGE1M2RiNTNiNTI1NWEwNjFkZTRiOWJlMjAyNDg0MTUxMjEwNTg1ZWM5ZmViZjNlOWFhYmVkZmEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ0NDA2Y2I4YzYxNzhiYzk5NmQyMTNjYzgxNGU4NjMyZDFkNjVhNTM2YWQ4OGU4NjQyYzhhZjU5NDFkZDA4M2QiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjIyMDg5NmIyNTdlMjZlNDI1YjA5NzkwMDRlZjQ3ZmEyMmM1NmMxYTI4MjE4YmZmOTQ3MGNjMDhhNzJmMzgyZmMifQ"
         }
       ]
     }
