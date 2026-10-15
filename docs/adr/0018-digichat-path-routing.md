@@ -60,4 +60,3 @@ Full digichat (Next.js standalone, Auth.js, Postgres, `/embed`) needs a Node hos
 ## See also
 
 - Modular frontend + adapters: [`docs/architecture/digichat-modular-frontend.md`](../architecture/digichat-modular-frontend.md)
-- OCC: [`docs/projects/online-compliance-center/README.md`](../projects/online-compliance-center/README.md)
