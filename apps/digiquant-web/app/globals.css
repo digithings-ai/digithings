@@ -111,6 +111,12 @@ body {
   background: var(--bg);
 }
 
+/* The desk header scrolls inside .desk-head. That track is wider than a phone,
+   and overflow on the track still widens the document unless the page clips it. */
+html {
+  overflow-x: clip;
+}
+
 /* The thread group slot is `aui_message-group`. An arbitrary Tailwind variant
    cannot quote that underscore (it becomes a space and the stylesheet fails
    to parse), so the gap lives here. */
