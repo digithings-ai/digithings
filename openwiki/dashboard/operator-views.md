@@ -1,7 +1,7 @@
 ---
 type: frontend-guide
 title: Dashboard Operator Views
-description: Operator-facing views of the digiquant dashboard — brief/today, portfolio (holdings, performance tearsheet, ledger, attribution, theses, tickers), research, pipeline, settings, system, observability, twelve-x, house, library, strategy, architecture, why — each backed by fail-closed contracts and shared SSOT helpers.
+description: Operator-facing views of the digiquant dashboard — brief/today, portfolio (holdings, performance tearsheet, ledger, attribution, theses, tickers), research, pipeline, settings, system, observability, house, library, strategy, architecture, why — each backed by fail-closed contracts and shared SSOT helpers.
 tags: [dashboard, digiquant, portfolio, tearsheet, ledger, attribution, research, pipeline]
 verified:
   - by: openwiki/0.5.0
@@ -53,7 +53,6 @@ The top-level route groups at `app/` define the operator surface:
 | `/library` | Redirects to `/why` |
 | `/strategy` | Redirects to `/why` (analysis) |
 | `/house` | Corpus \| Book \| Profile — read-only house identity panels |
-| `/twelve-x` | FX Hub suite (gated behind `fx_hub` client product grant) |
 | `/settings` | Profile \| Pipeline \| Keys \| Brokers \| Notifications \| Billing \| About |
 | `/system` | Redirects to `/pipeline` (run health moved) |
 | `/observability` | Redirects to `/system` → `/pipeline` |
@@ -230,23 +229,6 @@ banner links to this surface from Brief and Portfolio views.
 
 (`apps/dashboard/app/house/page.tsx#L1-L43`,
 `apps/dashboard/README.md#L98-L101`)
-
-## Twelve-X
-
-The FX Hub suite (`app/twelve-x/page.tsx`) is gated behind
-`ClientProductGate` with product key `fx_hub` (creator +
-`client_product_grants` email allowlist). The client gates itself on its own
-research feed (`isTwelveXConfigured`), making the route DB-exempt. Tabs include
-Today, Briefs, Ideas, Consensus, Events, Matrix, and Trades. The Consensus table
-keeps local code because its frozen visual spec exceeds the promoted
-`<SortableTable/>` string-cell API on six axes (ReactNode cells, per-cell
-conditional color, a presentational score-bar column, derived sort values with
-null-last ordering, optional Trace column, unlayered `.srt-table td`
-typography).
-
-(`apps/dashboard/app/twelve-x/page.tsx#L1-L41`,
-`apps/dashboard/components/twelve-x/TwelveXClient.tsx#L1-L60`,
-`apps/dashboard/lib/TABLES.md#L34-L39`)
 
 ## Settings
 
