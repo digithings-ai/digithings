@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "claims": [
+    {
+      "id": "claim_digivoice_local",
+      "statement": "digivoice is a local CLI. It does not call a cloud STT or TTS service, and install --auto does not open the wizard.",
+      "evidence": [
+        {
+          "resource": "repo://digivoice/README.md#L1-L7",
+          "version": "repo-lines-v1:sha256:61e8b6944f098d9f7d53b594ce75dc7cf5b4fe545f6afaea6aed1ec7c952fd65:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNjEyZDI5OTJhZWIyN2E1NTM3N2UwODBkMGE0MWMwZDM2NGVkNjYyYjM5ZDkyMTkyMDA5NzQ2Zjc0ZTk0ODk2ZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNWE3NDVmNTZiODlhYzgyOTdiOWYxZDVmNTZhNTZhNzg3MGUzYmY5OGYzMzQ3OWQ4NzZlNWQ1ODUyYTc1ZWI5ZSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMzc3ZDcwMmIwYTllYjZmMGY2ZjQyNzQyMWQyZjVkZGZjM2UzZDU1ZDMxZTFmYmI3ZTUzMjZhZDFlZDA5MTdkZiJ9"
+        },
+        {
+          "resource": "repo://digivoice/README.md#L13-L19",
+          "version": "repo-lines-v1:sha256:f697e8688bce72d14e8eba5611dd4390c264b22ca2e0346b1e626b7325dbc392:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiY2JkMzc4MWZkN2YzYTYzMzdiODU5MTQ4OTg1OTMwMDdkZGJiY2Y4ZmYzNWVjNTk1MTdmZDYxMzY5ZjQ1ODhkNSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNDc2ZWNmM2RhYzRlZjZiNTYzZDZmZThjNjhkOGJiOGVhODQ1MWU1ZDc0M2I0N2Q5N2RiNDZjOTk3NWUwZTQ1NyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNWM5ZDFjYTk4NWMzM2JjYTdlMWVhY2Q2NzlhOGVjM2UzNmFmMmJjYjA4MmY0YWUyZmZlZTYzYzJjMmIxOWYyYiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNTMyMzRlODU5YjYwZTE1NGU1Mjg3MGNlNWNhN2E2ZDczNWYxNzE1ZGM1Njk2YjE3M2IxMmNiNDUzYTZkMDY4ZCJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_digivoice_commands",
+      "statement": "The console script is digivoice. doctor checks the local toolchain, dict records and transcribes, and speak plays through Piper.",
+      "evidence": [
+        {
+          "resource": "repo://digivoice/pyproject.toml#L16-L17",
+          "version": "repo-lines-v1:sha256:9984d441e747acb9d385da8a62382afc5c3a942fd31500f052b285bcce6ba3ba:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNGVhYjRlYzYzZGU1MTdkYTRjZDhlNWM4MzA3ZmIyYzc3MzdkMzkxOTBhYjY5ZjMyYTVlOWVmODFlYTQ0MTZkZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOWE2MjA3NTQ5MDgwNjNjYTI3NDQzMGQxMTFlZDg0OTA3MDI5YTc4NzJlZDk0ODFhMmZiODNhMjRlODI4NmJhYSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMzc1OTNkYTJkY2ExNmY5ZDUyZjhmNGMxOWNjNzM5ZWE4NmNjOGM3MGJmN2U2N2Y5Yjc4NTg1YTJmOGY2YWI1OCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZjUzNTkzYjhmNzRmZjU4YTcyZWIzNzcxMzQzMGViZGQ4NTNhMTg3NTI2MTc5ZGVhYzNhY2QxN2UzNmNhZjNjNiJ9"
+        },
+        {
+          "resource": "repo://digivoice/src/digivoice/cli.py#L96-L98",
+          "version": "repo-lines-v1:sha256:9e98570c6306a24052a0288262b41e4eb9b3332c05af700e2982db1082003500:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDY4NzYyMTZiMWE0NzRjY2E0ZWI3ZjFhZWMyNGRkMWM1NWVhNTM4NmIxM2U2NTllOGJjZjc4MTc5MDBhYjczNyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiN2FhZGI1NDY5MmUzNDkwZmExMzg4NDI3YWU1MGEyYmFiNWU3YzMyNmI5Y2VlNjU3M2MwNTE0MGQ5MjZlMDg2YSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMmZlYzM3YmZmMTQ2YjFmNDc4YWIwYmI2ZjNiMzE2ZDU0NDgxZDQ4ODY0ZDA2NmIwZTBlNDk1MDI0ZDVmMDcwMSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYmVmYmQ2OGQ4OTNlNzU0MmY1NjE1MzUxZmJhMDI0MmQxYzFlMGU2YzA2MjBiMDBhODE5NTczMzI2ODM2NTM0MiJ9"
+        }
+      ]
+    }
+  ]
+}
