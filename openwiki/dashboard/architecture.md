@@ -59,8 +59,8 @@ The build runs `next build && npm run check:static-export` (a
 boundaries). Top-level route groups under `app/` include `research`,
 `portfolio` (which absorbs the legacy `performance` route as a tab),
 `library`, `pipeline` (which absorbs `why`, `system`, `observability`, and
-`architecture`), `strategy`, `house`, `auth`/`login`/`signup`, `settings`,
-and `twelve-x`.
+`architecture`), `strategy`, `house`, `auth`/`login`/`signup`, and
+`settings`.
 
 ## Design system
 
@@ -80,9 +80,10 @@ family re-declarations.
 The root layout scopes pages to the blueprint background
 (`qn-blueprint-bg`) and wires `ThemeProvider` → `MotionLayer` →
 `AuthProvider` → `AuthGate` around the page. Fonts are **self-hosted at build
-time** via `next/font` (a single Geist Mono face exposed as
-`--font-geist-mono`) to satisfy the dashboard CSP (`font-src 'self' data:`)
-— no `fonts.googleapis.com`. The version/env label
+time** via `next/font` in `app/fonts.ts` (a single Geist Mono face exposed as
+`--font-mono-face`) to satisfy the dashboard CSP (`font-src 'self' data:`)
+— no `fonts.googleapis.com`. The root layout puts that variable class on
+`<html>`. The version/env label
 (`NEXT_PUBLIC_DASHBOARD_VERSION`, fallback `v0.1 · dev`) is rendered in the
 settings chrome (`sidebar-settings.tsx` / `settings/page.tsx`), not in the
 root layout.

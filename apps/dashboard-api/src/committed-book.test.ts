@@ -1,6 +1,6 @@
 /**
  * Parity tests vs `committedBookDate` / `previousBookDate` in
- * `apps/dashboard/lib/dashboard-ssot.ts` (client) and CONTRACT.md §6.1:
+ * `@digiquant/contract/dashboard-ssot` (client) and CONTRACT.md §6.1:
  * the committed-book gate never substitutes the latest position date.
  */
 import { describe, it, expect } from 'vitest';
