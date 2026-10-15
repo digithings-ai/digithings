@@ -683,18 +683,12 @@ def create_mcp_server(
     from digiquant.data.gloomberb.entitlements import (
         TOOL_ENTITLEMENTS as _GLOOMBERB_ENTITLEMENTS,
     )
-    from digiquant.data.gloomberb.session_gate import (
-        session_gate_status as _gloomberb_session_gate_status,
-    )
 
-    # #2752: a `session` / `preview` / `pro` tool is advertised only when the
-    # deployer's own cookie is configured AND validates against api.gloom.sh.
-    # Resolved ONCE per server build — the gate caches the probe for one TTL
-    # window, and this keeps a 41-tool build from re-asking. `free` and
-    # `venue_session` tools are untouched, and the LuxAlgo family is `free`
-    # only, so the entitlement value alone selects the Gloomberb gated set.
-    _gloomberb_session_tools_advertised = _gloomberb_session_gate_status().authenticated
-    _GLOOMBERB_SESSION_ENTITLEMENTS = frozenset({"session", "preview", "pro"})
+    # DIG-3907: the Gloomberb session-cookie path is retired (keyless access
+    # only). `session` / `preview` / `pro` tools are never advertised; `free`
+    # and `venue_session` tools are untouched, and the LuxAlgo family is `free`
+    # only, so the entitlement value alone selects the retired set.
+    _GLOOMBERB_RETIRED_ENTITLEMENTS = frozenset({"session", "preview", "pro"})
     from digiquant.data.gloomberb.entitlements import (
         with_entitlement_note as _gloomberb_note,
     )
@@ -735,10 +729,7 @@ def create_mcp_server(
                 doc = fn.__doc__ or ""
                 if GLOOMBERB_PLATFORM_NOTE not in doc:
                     fn.__doc__ = f"{GLOOMBERB_PLATFORM_NOTE}\n\n{doc.lstrip()}"
-            if (
-                entitlement in _GLOOMBERB_SESSION_ENTITLEMENTS
-                and not _gloomberb_session_tools_advertised
-            ):
+            if entitlement in _GLOOMBERB_RETIRED_ENTITLEMENTS:
                 return fn
             public = canonical_tool_name(name)
             if enabled is not None and name not in enabled and public not in enabled:

@@ -145,7 +145,6 @@ from .models import (
     WatchlistRemoveInput,
     YieldCurveInput,
 )
-from .session_gate import session_gate_status
 
 logger = logging.getLogger(__name__)
 
@@ -358,18 +357,6 @@ _SCHEMA_BY_NAME: dict[str, dict[str, Any]] = {
 _DEFAULT_TOOL_NAMES: tuple[str, ...] = tuple(t["function"]["name"] for t in DIGIFETCH_TOOLS)
 
 
-def _session_cookie_present() -> bool:
-    """True when a cookie is configured AND it validates against api.gloom.sh.
-
-    Presence-only advertising was the #2752 gap: a stale or mistyped cookie
-    advertised 41 tools that could only answer ``auth_required``. The verdict
-    is cached for one TTL window per cookie, so this stays free at list time
-    after the first probe. Kept as a named helper because the tests and the
-    MCP surface both read better against a verb.
-    """
-    return session_gate_status().authenticated
-
-
 def _substack_cookie_present() -> bool:
     return bool(os.environ.get(SUBSTACK_SESSION_COOKIE_ENV, "").strip())
 
@@ -385,9 +372,10 @@ def available_digifetch_tools(subset: tuple[str, ...] | None = None) -> list[dic
     * the whole family is dropped when ``GLOOMBERB_ENABLED`` disables it
       (default OFF; a typo fails closed), because every call would return the
       typed "disabled by kill switch" ``upstream_error``; and
-    * ``session`` / ``preview`` / ``pro`` tools are dropped when
-      ``GLOOMBERB_SESSION_COOKIE`` is unset, because they would return the
-      typed ``auth_required`` / ``pro_required`` error with no request (#4099);
+    * ``session`` / ``preview`` / ``pro`` tools are never advertised: the
+      Gloomberb session-cookie path is retired (DIG-3907, keyless access
+      only), so they would return the typed ``auth_required`` /
+      ``pro_required`` error with no request;
     * the ``venue_session`` reader (``digifetch_substack``) is dropped when
       ``SUBSTACK_SESSION_COOKIE`` is unset, for the same reason.
 
@@ -396,7 +384,6 @@ def available_digifetch_tools(subset: tuple[str, ...] | None = None) -> list[dic
     if not gloomberb_enabled():
         return []
     names = _DEFAULT_TOOL_NAMES if subset is None else subset
-    has_session = _session_cookie_present()
     has_substack = _substack_cookie_present()
     schemas: list[dict[str, Any]] = []
     for name in names:
@@ -406,7 +393,8 @@ def available_digifetch_tools(subset: tuple[str, ...] | None = None) -> list[dic
         elif entitlement == "venue_session":
             if not has_substack:
                 continue
-        elif not has_session:
+        else:
+            # DIG-3907: session/preview/pro are retired, always dropped.
             continue
         schemas.append(_SCHEMA_BY_NAME[name])
     return schemas

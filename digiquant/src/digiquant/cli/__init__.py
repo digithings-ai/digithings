@@ -39,7 +39,6 @@ def main() -> None:
 
 # Register subcommand groups.
 def _register_subgroups() -> None:
-    from digiquant.cli.gloomberb import gloomberb as _gloomberb_group
     from digiquant.cli.onchain import onchain as _onchain_group
     from digiquant.cli.prices import prices as _prices_group
     from digiquant.cli.strategy import strategy as _strategy_group
@@ -48,7 +47,6 @@ def _register_subgroups() -> None:
 
     main.add_command(_prices_group)
     main.add_command(_onchain_group)
-    main.add_command(_gloomberb_group)
     main.add_command(_strategy_group)
     main.add_command(_web_search_group)
     main.add_command(_policy_replay_group)
