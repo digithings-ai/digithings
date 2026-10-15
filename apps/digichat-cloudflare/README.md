@@ -183,4 +183,3 @@ npm test
 
 - [`infra/digichat-digithings/README.md`](../../infra/digichat-digithings/README.md)
 - [`docs/adr/0018-digichat-path-routing.md`](../../docs/adr/0018-digichat-path-routing.md)
-- OCC: [`docs/projects/online-compliance-center/README.md`](../../docs/projects/online-compliance-center/README.md)
