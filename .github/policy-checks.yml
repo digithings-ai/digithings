@@ -55,10 +55,12 @@
 # `known_gap:` is separate again, and narrower. It records an *accepted*
 # reachability gap for an entry that is not a gate. It suppresses the reachability
 # finding only while the entry is out of develop's required set; promote it and
-# the gap becomes a `policy.stall`. No entry carries one today: `gitleaks-scan`
-# used to, while `security-gitleaks.yml` still filtered `**.md` and `docs/**` at
-# the workflow level. That filter is gone (removed upstream in #5318), so the
-# accepted gap is gone with it.
+# the gap becomes a `policy.stall`. One entry carries one today: `Workflow
+# secret references (PR reporter)`, whose workflow is path-filtered on the
+# workflow tree, the manifest and the script. `gitleaks-scan` used to carry one
+# too, while `security-gitleaks.yml` still filtered `**.md` and `docs/**` at the
+# workflow level; that filter is gone (removed upstream in #5318), so the
+# accepted gap went with it.
 #
 # `scripts/check_required_policy_checks.py` reports `advisory` and
 # `other-branch` entries as ungated policy checks: that is the DIG-1952 class of
@@ -284,6 +286,14 @@ checks:
     enforcement: advisory
     owner: DevOps
     issue: DIG-1952
+    known_gap: >-
+      Accepted while ungated: `security-workflow-secret-refs.yml` carries a
+      workflow-level `paths` filter on the workflow tree, the manifest and the
+      script, so it reports on the PRs that touch those paths and on no others.
+      That is fine only because nothing waits on the name — GitHub would block
+      every other PR on a status that never arrives. The guard stops accepting
+      it the moment this entry enters develop's required set, at which point
+      the same filter becomes a `policy.stall`, not a known gap.
     reason: >-
       The live reporter for the DIG-4717 check: every `secrets.NAME` read under
       `.github/workflows/` is checked against the committed names-only manifest

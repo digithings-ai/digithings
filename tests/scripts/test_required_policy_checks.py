@@ -394,6 +394,17 @@ def test_a_types_filter_without_synchronize_is_not_reachable(tmp_path: Path) -> 
     assert "Waiting for status to be reported" in reason
 
 
+def test_a_types_filter_missing_reopened_is_not_reachable(tmp_path: Path) -> None:
+    """A-1 widening: the old gate only demanded `synchronize`, so
+    `types: [opened, synchronize]` used to pass. Missing `reopened` must now
+    fail, naming the missing type."""
+    path = _synthetic_workflow(tmp_path, "t.yml", "    types: [opened, synchronize]\n")
+    reachable, reason = guard.read_workflow_facts(path, "develop").reports_on_develop_pr("develop")
+    assert not reachable
+    assert "`reopened`" in reason
+    assert "Waiting for status to be reported" in reason
+
+
 @pytest.mark.parametrize(
     "types_line",
     [
@@ -628,27 +639,51 @@ def test_reachability_is_checked_for_advisory_entries_not_just_live_ones(tmp_pat
     """The brief's false green: a workflow-level `paths-ignore` on a tracked
     advisory workflow. Nothing reports it, because nothing was waiting for it."""
     root = _workflows_copy(tmp_path)
-    path = root / "ci-dco-sign-off.yml"
+    path = root / "ci-pr-title.yml"
     path.write_text(
         path.read_text(encoding="utf-8").replace(
-            "    types: [opened, synchronize, reopened]",
-            "    paths-ignore: ['**.md']\n    types: [opened, synchronize, reopened]",
+            "    types: [opened, edited, synchronize, reopened]",
+            "    paths-ignore: ['**.md']\n    types: [opened, edited, synchronize, reopened]",
         ),
         encoding="utf-8",
     )
     inventory, tracked = guard.load_inventory(INVENTORY)
     findings = _run(inventory, tracked, LIVE_CONTEXTS, workflows_dir=root)
-    assert "All commits signed off" in _subjects(findings, "policy.stall")
+    assert "Validate PR title" in _subjects(findings, "policy.stall")
 
 
 def test_a_known_gap_suppresses_reachability_only_while_the_entry_is_ungated() -> None:
-    """gitleaks is the one entry with a genuine accepted gap, so it needs a
-    documented one — and the documentation must expire at promotion."""
+    """The `known_gap:` mechanism, pinned on the one entry that carries a real
+    gap.
+
+    `Workflow secret references (PR reporter)` runs from
+    `security-workflow-secret-refs.yml`, which is path-filtered at the workflow
+    level on the workflow tree, the manifest and the script. So it reports on
+    the PRs that touch those paths and on no others, and it can never be a
+    required context: GitHub would block every other PR on a status that never
+    arrives. That is exactly what `known_gap:` records — an accepted gap while
+    the entry stays advisory. Promote it and the gap becomes a `policy.stall`
+    again, which is the whole point: the acceptance expires at promotion."""
     inventory, tracked = guard.load_inventory(INVENTORY)
+    reporter = next(
+        c for c in inventory if c.context == "Workflow secret references (PR reporter)"
+    )
+    assert reporter.known_gap, "the gap this workflow really has must be recorded"
+    facts = guard.read_workflow_facts(
+        guard.WORKFLOWS_DIR / "security-workflow-secret-refs.yml", "develop"
+    )
+    assert facts.path_filter is not None, "the gap is really there"
+
     assert _run(inventory, tracked, LIVE_CONTEXTS) == []
 
-    promoted = _run(inventory, tracked, [*LIVE_CONTEXTS, "gitleaks-scan"])
-    stalls = [f for f in promoted if f.code == "policy.stall" and f.subject == "gitleaks-scan"]
+    promoted = _run(
+        inventory, tracked, [*LIVE_CONTEXTS, "Workflow secret references (PR reporter)"]
+    )
+    stalls = [
+        f
+        for f in promoted
+        if f.code == "policy.stall" and f.subject == "Workflow secret references (PR reporter)"
+    ]
     assert len(stalls) == 1, [str(f) for f in promoted]
 
 
@@ -698,13 +733,20 @@ def test_the_snapshot_is_reverified_by_a_scheduled_live_read() -> None:
 def test_the_context_set_and_enforcement_values_are_unchanged_from_dig_1982() -> None:
     """DoD "exits 0 with the inventory unchanged" means the policy decisions are
     unchanged: same contexts, same workflows, same enforcement. Only the metadata
-    this leaf adds (owner, issue, gated_by, known_gap) is new."""
+    this leaf adds (owner, issue, gated_by, known_gap) is new.
+
+    The census is develop's current inventory, not the one DIG-1982 first
+    wrote: the base moved on while this leaf sat on the older
+    `feat/dig-1982-policy-drift-guard` tip, and it dropped DCO sign-off
+    entirely (DIG-3845), added the ci.yml lanes below, and added the
+    path-filtered PR reporter. Reconciling the base's evolved files is the
+    rebase-with-resolution this leaf owes the branch — the policy decisions in
+    it are still develop's, and this leaf adds only metadata to them."""
     inventory, tracked = guard.load_inventory(INVENTORY)
     assert [(c.context, c.workflow, c.job, c.enforcement) for c in inventory] == [
         ("Required checks passed", "ci.yml", "required-checks", "required"),
         ("doc-links + agents-init", "ci-docs.yml", "docs-and-agents-init", "required"),
         ("mypy — digibase + digikey", "ci-type-check.yml", "mypy", "required"),
-        ("All commits signed off", "ci-dco-sign-off.yml", "dco-sign-off", "advisory"),
         ("gitleaks-scan", "security-gitleaks.yml", "scan", "advisory"),
         (
             "All agent-task issues in TSV with real phase and valid model",
@@ -721,9 +763,26 @@ def test_the_context_set_and_enforcement_values_are_unchanged_from_dig_1982() ->
         ),
         ("Frontend canon guard", "ci.yml", "frontend-canon", "advisory"),
         ("actionlint", "ci.yml", "actionlint", "advisory"),
+        ("GLOOMBERB deployed-config guard", "ci.yml", "gloomberb-ci-guard", "advisory"),
+        ("Vendor-content gate", "ci.yml", "vendor-content-gate", "advisory"),
+        ("Example-credentials guard", "ci.yml", "example-credentials-guard", "advisory"),
+        ("Plaintext credential guard", "ci.yml", "plaintext-credential-guard", "advisory"),
+        (
+            "R0 client-literal baseline growth guard",
+            "ci.yml",
+            "r0-client-literals-baseline-growth",
+            "advisory",
+        ),
+        ("Workflow secret references", "ci.yml", "workflow-secret-refs", "advisory"),
+        (
+            "Workflow secret references (PR reporter)",
+            "security-workflow-secret-refs.yml",
+            "check",
+            "advisory",
+        ),
+        ("wrangler deploy --dry-run", "ci.yml", "worker-build", "advisory"),
     ]
     assert sorted(tracked) == [
-        "ci-dco-sign-off.yml",
         "ci-docs.yml",
         "ci-pr-hygiene.yml",
         "ci-pr-title.yml",
@@ -731,6 +790,7 @@ def test_the_context_set_and_enforcement_values_are_unchanged_from_dig_1982() ->
         "ci-type-check.yml",
         "ci.yml",
         "security-gitleaks.yml",
+        "security-workflow-secret-refs.yml",
     ]
 
 
