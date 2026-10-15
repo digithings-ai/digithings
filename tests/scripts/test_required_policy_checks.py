@@ -8,7 +8,7 @@ the repository's correct current setup.
 
 DIG-2237 hardened that guard after review found three checks that did not cover
 the properties they were relied on for: ``types:`` and ``branches-ignore:`` were
-never parsed (so a workflow that stops re-reporting on the head SHA looked
+never parsed (so a workflow that stops re-reporting on the merge commit looked
 reachable), ``tracked_workflows`` was a closed allowlist with no completeness
 check, and ``advisory`` entries needed only a free-text reason and no owner. The
 tests in the DIG-2237 sections below are those three, plus the two cheap ones
@@ -375,8 +375,9 @@ def _synthetic_workflow(root: Path, name: str, trigger: str, job: str = "gate") 
     return path
 
 
-# `types` — the GATE. Required contexts are evaluated against the head SHA, so a
-# workflow that never re-reports on `synchronize` stalls the PR forever while
+# `types` — the GATE. For `pull_request`, `GITHUB_SHA` is the last merge commit on
+# the PR merge branch and a required context has to report against that commit, so
+# a workflow that never re-reports on `synchronize` stalls the PR forever while
 # looking, to a trigger-only reader, perfectly reachable.
 
 
@@ -390,7 +391,13 @@ def test_a_types_filter_without_synchronize_is_not_reachable(tmp_path: Path) -> 
     # The message has to teach, or the fix is a guess: which type is missing,
     # why it matters, and what the PR looks like while it is missing.
     assert "synchronize" in reason
-    assert "head SHA" in reason
+    # The rationale the message has to carry: the commit a required context must
+    # report against is the PR merge branch's merge commit, not the per-PR commit
+    # the message used to name. Assert the corrected text and the removed text,
+    # so a future edit cannot quietly put the false claim back.
+    assert "GITHUB_SHA" in reason
+    assert "merge commit" in reason
+    assert "head SHA" not in reason
     assert "Waiting for status to be reported" in reason
 
 

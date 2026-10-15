@@ -131,7 +131,7 @@ filters matter, not two of them:
 | `paths:` / `paths-ignore:` | a skipped **workflow** reports nothing — only a skipped *job* reports Success |
 | `branches:` | the workflow never starts for a PR into another branch |
 | `branches-ignore:` | the same filter spelled as an exclusion; matching globs |
-| `types:` | **required contexts are evaluated against the PR's head SHA**, and `synchronize` is the only event that re-reports on a new push. A workflow on `types: [opened]` reports for the opening SHA and never again, so after the first push the PR waits on "Waiting for status to be reported" forever with no failing check to explain it. |
+| `types:` | for `pull_request`, `GITHUB_SHA` is the **last merge commit on the PR merge branch**, and a required context has to report against that commit for the PR to ever leave "Waiting for status to be reported": `opened` covers the first report, `synchronize` every later push, `reopened` a re-open, so all three or the context is not safe to require. A workflow on `types: [opened]` reports for the opening push and never again, so after the first push the PR waits on "Waiting for status to be reported" forever with no failing check to explain it. |
 
 An **absent** `types:` key is GitHub's default (`opened`, `synchronize`, `reopened`), which
 includes `synchronize` and is therefore reachable. A `types:` key that is present but
