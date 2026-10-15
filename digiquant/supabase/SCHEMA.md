@@ -5,7 +5,9 @@
 -->
 
 Live research Supabase schema. Source of truth: the numbered migrations under
-`digiquant/supabase/migrations/`. This document inventories the high-value tables and
+`digiquant/supabase/migrations/engine/` (applied first) and
+`digiquant/supabase/migrations/prod/` (applied after) — D-Q6′ layering
+(DIG-3694). This document inventories the high-value tables and
 relationships; later sections cover internal operational tables added after the original research
 schema.
 

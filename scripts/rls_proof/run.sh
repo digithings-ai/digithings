@@ -74,8 +74,8 @@ EOF
 run_sql_file "supabase-compat shim" "$PROOF_DIR/00_supabase_shim.sql"
 
 log ""
-log "=== Migration source: origin/develop top-level digiquant/supabase/migrations/*.sql ==="
-mapfile -t DEVELOP_MIGS < <(find "$MIG_DIR" -maxdepth 1 -name '*.sql' | sort)
+log "=== Migration source: origin/develop layered digiquant/supabase/migrations/{engine,prod}/*.sql (engine first, then prod) ==="
+mapfile -t DEVELOP_MIGS < <({ find "$MIG_DIR/engine" -maxdepth 1 -name '*.sql' | LC_ALL=C sort; find "$MIG_DIR/prod" -maxdepth 1 -name '*.sql' | LC_ALL=C sort; }))
 log "count: ${#DEVELOP_MIGS[@]}"
 for f in "${DEVELOP_MIGS[@]}"; do
   base="$(basename "$f")"

@@ -13,8 +13,8 @@ if [[ ! -f "$TYPES_FILE" ]]; then
   echo "❌ Missing: $TYPES_FILE" >&2; exit 1
 fi
 
-# Extract base table names from SQL migrations (skip partition variants like _default, _y2025, etc.)
-sql_tables=$(grep -hE "^CREATE TABLE (IF NOT EXISTS )?[a-z_]+" "$MIGRATIONS_DIR"/*.sql 2>/dev/null \
+# Extract base table names from both layers (D-Q6′: engine/ then prod/).
+sql_tables=$(grep -hE "^CREATE TABLE (IF NOT EXISTS )?[a-z_]+" "$MIGRATIONS_DIR"/engine/*.sql "$MIGRATIONS_DIR"/prod/*.sql 2>/dev/null \
   | sed -E 's/CREATE TABLE (IF NOT EXISTS )?//' \
   | awk '{print $1}' \
   | grep -vE '_(default|partitioned|y[0-9]{4})$' \

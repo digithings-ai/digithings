@@ -13,7 +13,7 @@
     "serverVersion": "16.15 (Homebrew)"
   },
   "migrations": {
-    "appliedFromEmpty": 126,
+    "appliedFromEmpty": 127,
     "excludedStaged": 2,
     "knownFromEmptyFailures": [
       {
