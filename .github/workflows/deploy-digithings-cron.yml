@@ -58,7 +58,6 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: apps/digithings-cron
           command: deploy
-          wranglerVersion: "4.28.0"
           secrets: |
             GH_DISPATCH_TOKEN
         env:
