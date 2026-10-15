@@ -151,7 +151,7 @@ def client(service, **kwargs):
 R2_CREDS = {
     "R2_ACCOUNT_ID": "acc0123456789",
     "R2_BUCKET": "digithings-archive",
-    "R2_ACCESS_KEY_ID": "AKIAEXAMPLEEXAMPLE00",
+    "R2_ACCESS_KEY_ID": "test-r2-access-key",
     "R2_SECRET_ACCESS_KEY": "s3cr3taccesskeyvalue0123456789",
 }
 
