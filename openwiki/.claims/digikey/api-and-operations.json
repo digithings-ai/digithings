@@ -7,7 +7,7 @@
       "statement": "digikey serves public /health, /healthz, and /.well-known/jwks.json alongside admin-gated POST /v1/admin/keys (plaintext key returned once, 503 without admin token) and POST /v1/oauth/token for api_key and bff_session grants.",
       "evidence": [
         {
-          "resource": "repo://digikey/src/digikey/server.py#L160-L222",
+          "resource": "repo://digikey/src/digikey/server.py#L177-L239",
           "version": "repo-lines-v1:sha256:5ffdd12327b6c40d9250e31fa7f06815b852ba67ca021687d645b5bb6d96a510:eyJzZWxlY3RlZExpbmVDb3VudCI6NjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQxNjAzOGZhZjAxNjQ1M2Y4YTRiNTRjYzEzZDQ1MjgwZjlkN2U2Y2QxYWEyZDcwMjEwNTE3NjQzMDRjNWVhYmQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQxNjAzOGZhZjAxNjQ1M2Y4YTRiNTRjYzEzZDQ1MjgwZjlkN2U2Y2QxYWEyZDcwMjEwNTE3NjQzMDRjNWVhYmQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjMyZjVhNzZlYWVlMTM1ODFhNGMzZjM2OTBjZmNiM2IwZTExNWY3NzM2ZWIxOWEzMDA3YWQ5NzNlNzE5ODQ5YjAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjA0ODQxYjk1YjcxYTllY2Q5MjU4MTliOTNjYmM0OTc1NjBmZjgxN2NiOTY1OTg0MmRlODk5M2FiZWZmMmMxMTMifQ"
         },
         {
@@ -25,7 +25,7 @@
           "version": "repo-lines-v1:sha256:0884c3242a51133ea224d172be992caeaf97836c31cf0418e6e9766bac1bd660:eyJzZWxlY3RlZExpbmVDb3VudCI6ODcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjUyNjcxNmQzZjc2MGI3NDNiOGVhMDFhNGFmZjVlMzllOTdiODZmNjlhMmQzNDFiOTk4ZDFhMmI2ZGE2NDY2MTMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcwOTJlMjMwMjU4ZWY1NDlkNDhkYTRlODUyM2QyNGQ5MzNkNjM5MWEwYmQwN2QxNTU2Yzk0OGJmNzAwZTc0MDkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVhZWE0MjNmMTZkNjY0Y2Y2OWQxMjY1NTgyMGI5ZjdlYmQxZTgwMjZhZTFhYjJkZjY4YTMzMGRhOTBmYTU4YmIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU2MmFjNTU3Njc3MTRhYzMyNDRkZTAwOTZkNGQwZDU4ZGE4YmZkZmQ2NDQ2NjAxM2E2MDUwYjQ4N2VmOTkwZjkifQ"
         },
         {
-          "resource": "repo://digikey/src/digikey/server.py#L349-L360",
+          "resource": "repo://digikey/src/digikey/server.py#L383-L394",
           "version": "repo-lines-v1:sha256:e370ee0ea60290ba87c3018028c700c6ba0cf5eaecaa4d6ef5412d373eefa9e1:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQxNjAzOGZhZjAxNjQ1M2Y4YTRiNTRjYzEzZDQ1MjgwZjlkN2U2Y2QxYWEyZDcwMjEwNTE3NjQzMDRjNWVhYmQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjljYTk2YTg4NmQ2ZThlNTRhMGJmODFlOGU5ZGM3OTU3YzJiYTYwNmFhYjhiYzc1ZmY1N2Y3NTBhN2E0NDFkNGIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE1NTRkMDM0NThjMTMxMWZlYjMwZGI4MjcxMWRkZTM3ZGE2NTQ3MjJkMzBmZGQ1NTVjZjY4Mjk2MjU4MjI1ZDMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU5YjY1YjQzMjNhYTlhNDU1YTlkN2I0MWZmOWJmZGUwYTIyNjU2NGE1NWM1MWMxODNiNGE5YTY3OThkNDk0NTUifQ"
         }
       ]
@@ -35,7 +35,7 @@
       "statement": "Startup prefers DIGIKEY_PRIVATE_KEY_PEM, warns on unset admin token, and keeps ephemeral keys and dev-global wildcard keys behind explicit dev-only flags that must never reach production.",
       "evidence": [
         {
-          "resource": "repo://digikey/src/digikey/server.py#L57-L92",
+          "resource": "repo://digikey/src/digikey/server.py#L74-L109",
           "version": "repo-lines-v1:sha256:b8978117b5eb81966c5afc5d0e47198ad912b20e365bb16264639bf161d3736c:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZlNDZhODEyYjBhNzNhMjQyMjBjMjFkOWMzOGEyODhhMGI0YTYzM2FkNzI0NzkzM2MwMmU4M2Q0MDc0ODBlMTIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYyMjdhYWMxYTZmNDBiMTkwNzI4NjQ4YTgwZWI5NDViMGQ1NDRhNGM0NDIxNDdmNTQyY2FjODk3MTI5NmJiZWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkzMTQyYTc2MmQzYjIzYTlkNjU4MzU0MzY1YWQ5MWQxOTFmZjcyZGJhYTg1YmFjYmIyMDUyYmZkZDY0OGQ0YjMifQ"
         },
         {
