@@ -637,6 +637,10 @@
       "count": 4,
       "ticket": "DIG-3689"
     },
+    "scripts/check_r0_no_client_literals.py": {
+      "count": 14,
+      "ticket": "DIG-3689"
+    },
     "scripts/datatap_answer_integrity_check.py": {
       "count": 24,
       "ticket": "DIG-3689"
@@ -655,6 +659,10 @@
     },
     "scripts/occ_invite_key_rollout.sh": {
       "count": 12,
+      "ticket": "DIG-3689"
+    },
+    "scripts/r0_client_literals_baseline.json": {
+      "count": 19,
       "ticket": "DIG-3689"
     },
     "scripts/scan_customer_pii.py": {
@@ -831,6 +839,10 @@
     },
     "tests/scripts/test_check_gloomberb_ci_guard.py": {
       "count": 7,
+      "ticket": "DIG-3689"
+    },
+    "tests/scripts/test_check_r0_no_client_literals.py": {
+      "count": 6,
       "ticket": "DIG-3689"
     },
     "tests/scripts/test_datatap_answer_check_clock.py": {

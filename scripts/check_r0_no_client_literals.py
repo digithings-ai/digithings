@@ -5,7 +5,9 @@ The fresh public repo (R0) must not carry client names or tenant data. This
 gate scans every tracked path that stays public (R0) for the client/tenant
 literals named in DIG-3689 and fails on any hit that is not on the explicit
 grandfather list. Findings carry path + line + pattern name, never the matched
-value: CI logs on this repo are public.
+value: CI logs on this repo are public. The census reads the git index
+(`git ls-files`), so a new file that is not yet `git add`ed is invisible
+to the gate — stage new files before trusting a local green.
 
 Two deliberate design points, both documented so the next reader does not
 re-derive them:
