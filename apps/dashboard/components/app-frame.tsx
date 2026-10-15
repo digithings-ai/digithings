@@ -6,6 +6,7 @@ import Sidebar from '@/components/sidebar';
 import MobileAppBar from '@/components/mobile-app-bar';
 import CommandPalette from '@/components/command-palette';
 import DigichatPopup from '@/components/digichat-popup';
+import DigichatLivePreview from '@/components/digichat-live-preview';
 import FxHubOnlyGuard from '@/components/fx-hub-only-guard';
 import DbUnavailable from '@/components/db-unavailable';
 import { deskShellEnabled } from '@/components/desk/panes/brief';
@@ -48,6 +49,8 @@ export default function AppFrame({ children }: { children: ReactNode }) {
       </main>
       {/* Desk+ research/portfolio digichat popup (#3422); no-ops when env off. */}
       <DigichatPopup />
+      {/* D8 live DigiChat preview (DIG-2698); no-ops when env off. */}
+      <DigichatLivePreview />
     </div>
   );
 }

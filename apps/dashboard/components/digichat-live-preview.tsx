@@ -11,6 +11,7 @@
  */
 
 import { useMemo } from 'react';
+import { usePlanTier } from '@/lib/use-entitlement';
 import {
   buildDigichatEmbedSrc,
   canUseDigichatPopup,
@@ -18,24 +19,34 @@ import {
   DIGICHAT_UPGRADE_CTA_HREF,
   DIGICHAT_UPGRADE_CTA_LABEL,
   DIGICHAT_UPGRADE_TITLE,
+  readDigichatPopupConfig,
   readDocumentTheme,
   type DigichatPopupConfig,
   type PlanTier,
 } from '@/lib/digichat-popup';
 
 type DigichatLivePreviewProps = {
-  tier: PlanTier;
-  config: DigichatPopupConfig;
+  /** Test override — production omits and reads session + env. */
+  tier?: PlanTier;
+  config?: DigichatPopupConfig | null;
 };
 
 export default function DigichatLivePreview({
-  tier,
-  config,
+  tier: tierOverride,
+  config: configOverride,
 }: DigichatLivePreviewProps) {
+  const sessionTier = usePlanTier();
+  const tier = tierOverride ?? sessionTier;
+  const config = useMemo(
+    () =>
+      configOverride !== undefined ? configOverride : readDigichatPopupConfig(),
+    [configOverride],
+  );
   const src = useMemo(() => {
-    if (!canUseDigichatPopup(tier)) return null;
+    if (!config || !canUseDigichatPopup(tier)) return null;
     return buildDigichatEmbedSrc(config, readDocumentTheme());
   }, [tier, config]);
+  if (!config) return null;
 
   if (src === null) {
     return (
