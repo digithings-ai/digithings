@@ -127,9 +127,15 @@ value is `unknown`. Wrangler does not pass a build arg. A non-wrangler build
 can set it:
 
 ```bash
+python3 scripts/package_r5_image_inputs.py
 docker build -f Dockerfile.digiquant-runner \
   --build-arg GIT_SHA="$(git rev-parse --short HEAD)" .
 ```
+
+The first command writes gitignored wheels and a frozen lock under
+`image-packages/`. The Dockerfile installs those. It does not COPY sibling
+module trees. The default push host is `registry.cloudflare.com` (build-arg
+`IMAGE_PUSH_REGISTRY`); this build does not push.
 
 One pinned Durable Object id: `runner-v1`. `max_instances = 1`,
 `instance_type = standard-2`. Idle `sleepAfter` is 1m; a held lock extends

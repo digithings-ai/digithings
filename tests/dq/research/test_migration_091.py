@@ -72,7 +72,15 @@ def test_base_mismatch_function_and_trigger(sql: str) -> None:
 
 
 def test_architecture_conflict_markers_cleared() -> None:
-    arch = (REPO_ROOT / "digiquant" / "ARCHITECTURE.md").read_text(encoding="utf-8")
+    # DIG-3399 moved the research/portfolio monograph next to ARCHITECTURE.md.
+    # The pin follows the text; it does not require one file.
+    root = REPO_ROOT / "digiquant"
+    parts = [(root / "ARCHITECTURE.md").read_text(encoding="utf-8")]
+    parts.extend(
+        path.read_text(encoding="utf-8")
+        for path in sorted((root / "docs" / "architecture").glob("*.md"))
+    )
+    arch = "\n".join(parts)
     assert "<<<<<<<" not in arch
     assert ">>>>>>>" not in arch
     assert "Ticker evidence bundles (#2844 / WP11.1" in arch
