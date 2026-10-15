@@ -1,6 +1,6 @@
 /**
- * Parity tests vs `apps/dashboard/lib/accounting-views.ts` (continuity chain,
- * seam helpers) and `apps/dashboard/lib/performance-ssot.ts` (day-return
+ * Parity tests vs `@digiquant/contract/accounting-views` (continuity chain,
+ * seam helpers) and `@digiquant/contract/performance-ssot` (day-return
  * guards) for CONTRACT.md §6.6: per-row day returns, ≤4-day forward-fill,
  * seam basis flat.
  */
