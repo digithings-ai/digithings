@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   assertDevAuthDisabledInProduction,
   isDevAuthEnabled,
+  isProductionLike,
 } from "./startup-env-guards";
 
 /** Every value a deployed `.env` can plausibly put in DIGICHAT_DEV_AUTH. */
@@ -26,8 +27,22 @@ const NON_PRODUCTION_ENVS = [
   "development",
   "test",
   "dev",
-  "Production",
+];
+
+/**
+ * NODE_ENV spellings that mean production without being the exact
+ * string `production` — the historical silent bypass. Next.js sets
+ * `production` itself, but operators and orchestrators routinely
+ * pass `prod` or a case variant.
+ */
+const PRODUCTION_LIKE_ENVS = [
+  "production",
   "prod",
+  "PRODUCTION",
+  "Production",
+  "PROD",
+  "Prod",
+  " production ",
 ];
 
 describe("isDevAuthEnabled", () => {
@@ -72,6 +87,26 @@ describe("assertDevAuthDisabledInProduction", () => {
     ).toThrow(/digichat refused to start/);
   });
 
+  it("throws for prod-like NODE_ENV spellings, not only the exact string", () => {
+    // Previously silent bypass: NODE_ENV=prod (or a case variant of
+    // production) slipped past the `!== "production"` check.
+    for (const nodeEnv of PRODUCTION_LIKE_ENVS) {
+      expect(() =>
+        assertDevAuthDisabledInProduction({ NODE_ENV: nodeEnv, DIGICHAT_DEV_AUTH: "1" }),
+      ).toThrow(/digichat refused to start/);
+    }
+  });
+
+  it("names the NODE_ENV spelling it refused", () => {
+    let message = "";
+    try {
+      assertDevAuthDisabledInProduction({ NODE_ENV: "prod", DIGICHAT_DEV_AUTH: "1" });
+    } catch (e) {
+      message = e instanceof Error ? e.message : String(e);
+    }
+    expect(message).toContain('"prod"');
+  });
+
   it("throws in production with the flag set through the real process env", () => {
     env.NODE_ENV = "production";
     env.DIGICHAT_DEV_AUTH = "1";
@@ -99,11 +134,13 @@ describe("assertDevAuthDisabledInProduction", () => {
   });
 
   /**
-   * The security invariant behind the guard: in production there must be no
-   * environment where the provider is enabled but the assertion stays quiet.
+   * The security invariant behind the guard: in a production-like
+   * environment there must be no value where the provider is enabled
+   * but the assertion stays quiet — and no non-production environment
+   * where it throws.
    */
-  it("throws in production for exactly the environments that enable the provider", () => {
-    for (const nodeEnv of ["production", "development", "test", undefined]) {
+  it("throws for exactly the production-like environments that enable the provider", () => {
+    for (const nodeEnv of [...PRODUCTION_LIKE_ENVS, ...NON_PRODUCTION_ENVS]) {
       for (const value of DEV_AUTH_VALUES) {
         const env = { NODE_ENV: nodeEnv, DIGICHAT_DEV_AUTH: value };
         let threw = false;
@@ -112,7 +149,7 @@ describe("assertDevAuthDisabledInProduction", () => {
         } catch {
           threw = true;
         }
-        expect(threw).toBe(nodeEnv === "production" && isDevAuthEnabled(env));
+        expect(threw).toBe(isProductionLike(nodeEnv) && isDevAuthEnabled(env));
       }
     }
   });

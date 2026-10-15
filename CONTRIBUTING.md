@@ -11,7 +11,8 @@ All AI coding agents read [AGENTS.md](AGENTS.md) first. Human contributors: the 
 3. [ARCHITECTURE.md](ARCHITECTURE.md) — system diagram and interfaces.
 4. [ROADMAP.md](ROADMAP.md) — phases and current priorities.
 5. [SECURITY.md](SECURITY.md) — non-negotiable security defaults.
-6. The `ARCHITECTURE.md` and `AGENTS.md` in the component you're touching (e.g. `digigraph/`).
+6. [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — Contributor Covenant 2.1.
+7. The `ARCHITECTURE.md` and `AGENTS.md` in the component you're touching (e.g. `digigraph/`).
 
 ## Hard rules (non-negotiable)
 
@@ -80,4 +81,43 @@ Exempt patterns (not blocked):
 - Default to the most conservative, secure, and token-efficient option.
 - If unclear, open an issue on the [GitHub Project](https://github.com/orgs/digithings-ai/projects/1) referencing the relevant `ARCHITECTURE.md` section.
 
-By contributing, you agree to the technical constraints above and the license terms in [LICENSE](LICENSE).
+## Contributor terms — DCO 1.1
+
+digithings is open-core under the MIT license ([LICENSE](LICENSE)). The MIT
+license covers our code; it does not grant us any rights in the code *you*
+contribute. Every contribution therefore carries a Developer Certificate of
+Origin 1.1 sign-off, which is the record that you have the right to submit it.
+
+Sign off every commit:
+
+    git commit -s -m "feat(x): ..."
+
+or add the line automatically for this repo:
+
+    git config --local format.signoff true
+
+A pull request whose commits are missing the sign-off cannot be merged — the
+CI check enforces this. The full text is at <https://developercertificate.org/>.
+
+This applies from 2026-10-04 forward. Commits before that date are not retro-signed.
+
+Pull requests are squash-merged. A GitHub squash keeps the full message body of
+each squashed commit, separated by `---------`, so the `Signed-off-by` trailers
+of a pull request's commits land on the squash commit itself, on `develop`.
+Squash commit `cd54873e4` ("feat(root): land DCO 1.1 sign-off and
+TRADEMARKS.md") is the worked example: it carries four
+`Signed-off-by: Chris Stefan <chris.stefan@proton.me>` trailers.
+
+The trail is not continuous, so read it rather than assume it. A branch whose
+commits were never signed off squashes to a commit with no trailer, and a merge
+commit never carries one because git writes it. Find the commit that introduced
+a file, then read its body:
+
+    git log -1 --format='%H%n%B' -- <path>
+
+If that commit has no `Signed-off-by` line, fall back to the pull request and
+the commit shas — GitHub keeps those after the branch is deleted. So: cite
+`develop` when the trailer is there, and the pull request when it is not.
+
+MIT covers copyright only. See [TRADEMARKS.md](TRADEMARKS.md) for what you may
+not reuse.

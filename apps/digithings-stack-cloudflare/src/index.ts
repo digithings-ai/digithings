@@ -41,6 +41,7 @@
  */
 import { Container, getContainer, switchPort } from "@cloudflare/containers";
 import { env as workerEnvBinding } from "cloudflare:workers";
+import { containerEvictedResponse, isContainerEvictedError } from "./container-errors";
 import { getStackStatus, runIsolated } from "./route-modules";
 // ports.ts stays a static import: the two Container subclasses below need
 // their ports synchronously at instantiation (class fields cannot await), and
@@ -80,7 +81,7 @@ export class DigiStackContainer extends Container {
    */
   requiredPorts = [DIGIGRAPH_PORT];
   /** Cold starts are seamless (#4323); each wake bills the whole tail, so keep it minimal. */
-  sleepAfter = "3m";
+  sleepAfter = "1m";
 
   /**
    * Runtime env for supervisord processes. Secrets from `wrangler secret put`;
@@ -130,7 +131,7 @@ export class DigiStackContainer extends Container {
       env.DIGISEARCH_EMBEDDING_PROVIDER ?? "Xenova/paraphrase-multilingual-MiniLM-L12-v2",
     DIGI_TENANT_CORPUS_MAP:
       env.DIGI_TENANT_CORPUS_MAP ??
-      '{"digithings":{"digisearchIndex":"digithings_docs","vaultPathPrefix":"clients/digithings"},"occ":{"digisearchIndex":"occ_help,occ_tickets","vaultPathPrefix":"clients/online-compliance-center","researchSystemPrompt":"You are the Online Compliance Center (OCC) help assistant for digithings.ai/chat/occ.\\nAnswer only from what you retrieve. You get several tool rounds per question.\\n\\nGround every answer in retrieved corpus from the digisearch indexes `occ_help` (help docs) and `occ_tickets` (support tickets, searched together)\\nand/or digivault_search_notes under `clients/online-compliance-center/`.\\nAlways cite help article URLs or PDF source paths from metadata.\\n\\nSearch results are excerpts, not whole documents. A row marked \\"truncated\\": true\\nmeans you have not seen that note \\u2014 call digivault_get_note with its doc_id and read\\nthe whole thing before answering. An unmarked row is not a promise of completeness:\\nevery row is a preview. Always do this when the question involves a\\nprocedure, a list of steps, a table, a count, or the words every, all, or which:\\nhelp PDFs are stored one page per note, and an excerpt routinely stops before the\\nstep that answers the question.\\n\\nNever say a policy, step, or exception does not exist unless you loaded the full note\\nand looked. If all you saw was a truncated excerpt, say what it showed and that the\\nrest was not loaded.\\n\\nAnswer questions about OCC policies, procedures, FAQ topics, and public help\\nPDFs. Do not invent product features, pricing, or portal capabilities not\\npresent in the retrieved sources. E-learning / YouTube videos are out of\\nscope for this corpus \\u2014 say so if asked.\\n\\nDo not cite digithings or digiquant internal architecture docs. If the\\ncorpus has no grounded answer, say so clearly.\\n\\nTicket content lives in TWO places: the `occ_tickets` digisearch index (semantic, multilingual, full customer names/emails, internal notes tagged [internal]) \\u2014 searched automatically with every question \\u2014 and the read-only zammad tools (per-request MCP union; exposed as zammad_<name> -- always use the full prefixed name) for ranking, counting, and live threads. Classify the question first, then run the recipe:\\n\\n- Ranking / counting (\\"who reports most\\", \\"how many are open\\", \\"who closed most\\"):\\n  zammad_aggregate_tickets with group_by=customer|owner|state|group|priority|title and\\n  metric=count|open_count|closed_count over since_days. Open/closed comes from\\n  state types inside the tool \\u2014 never state.name:open. Owner rankings exclude\\n  automation accounts automatically.\\n- Fix / resolution (\\"how was X fixed\\", \\"is X resolved\\"): resolved-first \\u2014 one\\n  zammad_search_tickets call per question term (title:<term> / article.body:<term> queries) with\\n  state_category=\\"closed\\", rank hits by coverage then recency, read the top 3-5\\n  with zammad_get_ticket, and cross-check the occ_help docs before answering.\\n- History / thread (\\"what did <customer> report\\", \\"what happened in #<n>\\"):\\n  zammad_search_tickets with customer.email:<addr> finds the latest ticket; zammad_get_ticket reads the thread\\n  (owner name and open|closed|pending category included).\\n- Status (\\"what\\u0027s open, what\\u0027s new\\"): zammad_ticket_report, optionally windowed with\\n  since_days and grouped with group_by=state|group|priority.\\n\\nWindows are created_at date ranges (since_days); customer names and emails are shown in full (demo mode);\\ninternal ticket notes are included and tagged [internal]. If neither corpus nor tickets ground\\nthe answer, say so clearly."}}',
+      '{"digithings":{"digisearchIndex":"digithings_docs","vaultPathPrefix":"clients/digithings"},"occ":{"digisearchIndex":"occ_help","vaultPathPrefix":"clients/online-compliance-center","researchSystemPrompt":"You are the Online Compliance Center (OCC) help assistant for digithings.ai/chat/occ.\\nAnswer only from what you retrieve. You get several tool rounds per question.\\n\\nGround every answer in retrieved corpus from Help search (digisearch_semantic, index `occ_help`, help docs)\\nand/or Knowledge vault (digivault_search_notes, digivault_search_tag, digivault_backlinks) under `clients/online-compliance-center/`.\\nAlways cite help article URLs or PDF source paths from metadata.\\n\\nSearch results are excerpts, not whole documents. A row marked \\"truncated\\": true\\nmeans you have not seen that note \\u2014 run digivault_search_notes again with a narrower query\\naimed at that note (same path prefix) until you have read the part that answers, before answering. An unmarked row is not a promise of completeness:\\nevery row is a preview. Always do this when the question involves a\\nprocedure, a list of steps, a table, a count, or the words every, all, or which:\\nhelp PDFs are stored one page per note, and an excerpt routinely stops before the\\nstep that answers the question.\\n\\nNever say a policy, step, or exception does not exist unless you searched for it\\nspecifically and looked. If all you saw was a truncated excerpt, say what it showed and that the\\nrest was not loaded.\\n\\nAnswer questions about OCC policies, procedures, FAQ topics, and public help\\nPDFs. Do not invent product features, pricing, or portal capabilities not\\npresent in the retrieved sources. E-learning / YouTube videos are out of\\nscope for this corpus \\u2014 say so if asked.\\n\\nDo not cite digithings or digiquant internal architecture docs. If the\\ncorpus has no grounded answer, say so clearly.\\n\\nTicket content is not part of this corpus. For ticket questions use the read-only zammad tools, and say so clearly if they do not ground the answer.\\n\\nSkills: for any ticket question, first call list_skills, then get_skill for the matching workflow (summarize-tickets-by-topic for summaries or trends, find-precedent-tickets for how a similar issue was solved) and follow it. Always get_skill present-results before writing the final answer and follow its display rules."}}',
     GROQ_API_KEY: env.GROQ_API_KEY ?? "",
     OPENROUTER_API_KEY: env.OPENROUTER_API_KEY ?? "",
     OPENAI_API_KEY: env.OPENAI_API_KEY ?? "",
@@ -181,9 +182,26 @@ export class DigiStackContainer extends Container {
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      // DIG-3226: a confirmed eviction is not a cold start — return the
+      // non-retryable 410 so callers stop retrying a container that is gone
+      // (same distinction as digiquant-runner RunLostError, runner.ts).
+      if (isContainerEvictedError(message)) {
+        return containerEvictedResponse("stack", message);
+      }
       return containerBootingResponse("stack", message);
     }
-    return this.containerFetch(request, targetPort);
+    // An eviction can also land between start and fetch: map only the
+    // confirmed-evicted signal to 410, rethrow everything else so the
+    // existing failure behavior is unchanged.
+    try {
+      return await this.containerFetch(request, targetPort);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (isContainerEvictedError(message)) {
+        return containerEvictedResponse("stack", message);
+      }
+      throw err;
+    }
   }
 }
 
@@ -202,10 +220,10 @@ export class DigiQuantMcpContainer extends Container {
   requiredPorts = [DIGIQUANT_MCP_PORT];
   /**
    * Cold-start policy: a cold start pays only the FastMCP import, never a data
-   * load (R2 is the cache), so the container may sleep freely; a 3-minute idle
+   * load (R2 is the cache), so the container may sleep freely; a 1-minute idle
    * tail keeps the billed wake window minimal.
    */
-  sleepAfter = "3m";
+  sleepAfter = "1m";
 
   /**
    * Runtime env for the MCP process. Secrets from `wrangler secret put`.
@@ -218,7 +236,6 @@ export class DigiQuantMcpContainer extends Container {
   envVars = {
     DIGIQUANT_MCP_SCOPE: env.DIGIQUANT_MCP_SCOPE ?? "read",
     DIGIQUANT_MARKET_DATA_BACKEND: env.DIGIQUANT_MARKET_DATA_BACKEND ?? "",
-    FRED_API_KEY: env.FRED_API_KEY ?? "",
     GLOOMBERB_SESSION_COOKIE: env.GLOOMBERB_SESSION_COOKIE ?? "",
     R2_ACCOUNT_ID: env.R2_ACCOUNT_ID ?? "",
     R2_BUCKET: env.R2_BUCKET ?? "",
@@ -237,9 +254,21 @@ export class DigiQuantMcpContainer extends Container {
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      // DIG-3226: confirmed eviction -> non-retryable 410, not boot 503.
+      if (isContainerEvictedError(message)) {
+        return containerEvictedResponse("mcp", message);
+      }
       return containerBootingResponse("mcp", message);
     }
-    return this.containerFetch(request, DIGIQUANT_MCP_PORT);
+    try {
+      return await this.containerFetch(request, DIGIQUANT_MCP_PORT);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (isContainerEvictedError(message)) {
+        return containerEvictedResponse("mcp", message);
+      }
+      throw err;
+    }
   }
 }
 
@@ -257,7 +286,7 @@ export class DigiChatContainer extends Container {
   defaultPort = DIGICHAT_PORT;
   requiredPorts = [DIGICHAT_PORT];
   /** Short idle tail: each wake bills for the whole sleepAfter window. */
-  sleepAfter = "3m";
+  sleepAfter = "1m";
 
   /**
    * Runtime env for the digichat Next process. Mirrors the standalone
@@ -295,6 +324,7 @@ export class DigiChatContainer extends Container {
     DIGIKEY_URL: env.DIGIKEY_URL ?? "",
     DIGIKEY_BFF_TOKEN: env.DIGIKEY_BFF_TOKEN ?? "",
     DIGICHAT_PLAN_PROOF_SECRET: env.DIGICHAT_PLAN_PROOF_SECRET ?? "",
+    DIGICHAT_MONITOR_TOKENS: env.DIGICHAT_MONITOR_TOKENS ?? "",
     // Canonical fallbacks (#4700): the DIGICHAT_DASHBOARD names are legacy
     // duplicates of the canonical SUPABASE names. Old names still win when
     // set, so this stays backward compatible across the manual deploy lag.
@@ -321,9 +351,21 @@ export class DigiChatContainer extends Container {
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      // DIG-3226: confirmed eviction -> non-retryable 410, not boot 503.
+      if (isContainerEvictedError(message)) {
+        return containerEvictedResponse("digichat", message);
+      }
       return containerBootingResponse("digichat", message);
     }
-    return this.containerFetch(request, targetPort);
+    try {
+      return await this.containerFetch(request, targetPort);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (isContainerEvictedError(message)) {
+        return containerEvictedResponse("digichat", message);
+      }
+      throw err;
+    }
   }
 }
 
@@ -352,6 +394,10 @@ export const CONTAINER_BOOTING_CODE = "container_booting";
  * Poll hint (seconds) for a booting container. Small enough that a ready
  * container is picked up promptly, large enough that a full ~240s boot costs
  * ~50 upstream polls. The BFF clamps this into its own [1s, 30s] window.
+ *
+ * DIG-3226: a confirmed container eviction (see ./container-errors.ts) never
+ * uses this code — it answers 410 `container_evicted` with no `Retry-After`
+ * so callers stop retrying an instance that is gone.
  */
 const CONTAINER_BOOT_RETRY_AFTER_SECONDS = 5;
 
@@ -413,7 +459,6 @@ export interface Env {
   MCP_EDGE_KEYS?: string;
   DIGIQUANT_MCP_SCOPE?: string;
   DIGIQUANT_MARKET_DATA_BACKEND?: string;
-  FRED_API_KEY?: string;
   GLOOMBERB_SESSION_COOKIE?: string;
   R2_ACCOUNT_ID?: string;
   R2_BUCKET?: string;
@@ -457,6 +502,7 @@ export interface Env {
   DIGIGRAPH_INTERNAL_URL?: string;
   DIGIKEY_URL?: string;
   DIGICHAT_PLAN_PROOF_SECRET?: string;
+  DIGICHAT_MONITOR_TOKENS?: string;
   DIGICHAT_DASHBOARD_SUPABASE_URL?: string;
   DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY?: string;
 }

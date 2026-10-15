@@ -28,7 +28,6 @@ import type {
   DashboardPositionEvent,
   ServerPortfolioMetrics,
   MacroSeriesPoint,
-  ThesisHistoryPoint,
   PositionHistoryRow,
   PipelineObservabilityBundle,
   PipelineTickerDoc,
@@ -59,7 +58,6 @@ import {
   resolveBriefFieldsFromDigest,
 } from './snapshot-context';
 import { MACRO_PREVIEW_SERIES_IDS } from './macro-curated';
-import { getDocLibraryTier } from './library-doc-tier';
 import { buildInstrumentLookup, resolveInstrumentIdentity } from './instrument-metadata';
 import { normalizePositionEvent } from './position-events';
 import { ledgerEventEconomics } from './position-event-economics';
@@ -98,32 +96,6 @@ export function mapThesisRow(t: TableRow<'theses'>): Thesis {
 }
 
 type SB = ApiDb;
-
-async function querySupabase<T>(
-  queryFn: (sb: SB) => PromiseLike<{ data: T | null; error: unknown }>,
-  { retries = 3, delayMs = 500 }: { retries?: number; delayMs?: number } = {}
-): Promise<T> {
-  if (!isApiConfigured()) {
-    throw new Error(
-      'Dashboard API is not configured. Set NEXT_PUBLIC_DASHBOARD_API_URL.'
-    );
-  }
-  let lastError: unknown;
-  for (let attempt = 0; attempt < retries; attempt++) {
-    try {
-      const { data, error } = await queryFn(apiDb);
-      if (error) throw error;
-      if (data === null) throw new Error('No data returned');
-      return data;
-    } catch (err) {
-      lastError = err;
-      if (attempt < retries - 1) {
-        await new Promise((r) => setTimeout(r, delayMs * Math.pow(2, attempt)));
-      }
-    }
-  }
-  throw lastError;
-}
 
 function parseDeltaPayload(payload: unknown): DeltaRequestMeta {
   const empty: DeltaRequestMeta = { changed_paths: [], baseline_date: null, op_paths: [] };
@@ -384,37 +356,6 @@ async function fetchPipelineObservabilityForDate(dashboardDate: string): Promise
     pm_rebalance: get(kPmReb),
     pm_direction_memo: get(kPmDir),
   };
-}
-
-/**
- * Load market thesis exploration + thesis vehicle map payloads for any run date (lazy / historical).
- * Uses the same document_key convention as the dashboard pipeline bundle.
- */
-export async function fetchThesisPipelinePayloadsForDate(runDate: string): Promise<{
-  market_thesis_exploration: Record<string, unknown> | null;
-  thesis_vehicle_map: Record<string, unknown> | null;
-}> {
-  if (!isApiConfigured()) {
-    return { market_thesis_exploration: null, thesis_vehicle_map: null };
-  }
-  const kExpl = `market-thesis-exploration/${runDate}.json`;
-  const kMap = `thesis-vehicle-map/${runDate}.json`;
-  const { data, error } = await apiDb.from('documents')
-    .select('document_key, payload')
-    .eq('date', runDate)
-    .in('document_key', [kExpl, kMap]);
-  if (error) {
-    console.warn('fetchThesisPipelinePayloadsForDate:', error);
-    return { market_thesis_exploration: null, thesis_vehicle_map: null };
-  }
-  let market_thesis_exploration: Record<string, unknown> | null = null;
-  let thesis_vehicle_map: Record<string, unknown> | null = null;
-  for (const row of (data ?? []) as Pick<TableRow<'documents'>, 'document_key' | 'payload'>[]) {
-    const pl = payloadAsRecord(row.payload);
-    if (row.document_key === kExpl) market_thesis_exploration = pl;
-    if (row.document_key === kMap) thesis_vehicle_map = pl;
-  }
-  return { market_thesis_exploration, thesis_vehicle_map };
 }
 
 /** Rows returned per `thesis_vehicles` fetch (bounded window, newest first). */
@@ -1431,32 +1372,6 @@ export async function getFullDashboardData(): Promise<DashboardData> {
   };
 }
 
-/**
- * Historical rows for one thesis_id from the theses table (status / name evolution).
- */
-export async function getThesisHistoryById(thesisId: string): Promise<ThesisHistoryPoint[]> {
-  if (!isApiConfigured()) return [];
-  const id = thesisId.trim();
-  if (!id) return [];
-  const { data, error } = await apiDb.from('theses')
-    .select('date,thesis_id,name,status,notes')
-    .ilike('thesis_id', id)
-    .order('date', { ascending: true });
-  if (error) {
-    console.error('Supabase theses history query:', error);
-    return [];
-  }
-  return ((data ?? []) as Pick<TableRow<'theses'>, 'date' | 'thesis_id' | 'name' | 'status' | 'notes'>[]).map(
-    (r) => ({
-      date: r.date,
-      thesis_id: r.thesis_id,
-      name: r.name,
-      status: r.status ?? null,
-      notes: r.notes ?? null,
-    })
-  );
-}
-
 /** Sum position weights per calendar date for a single thesis (from position_history rows). */
 export function aggregateThesisWeightsByDate(
   positionHistory: PositionHistoryRow[],
@@ -1474,81 +1389,6 @@ export function aggregateThesisWeightsByDate(
   return [...byDate.entries()]
     .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([date, weight_pct]) => ({ date, weight_pct }));
-}
-
-/** Sum position weights per calendar date for rows with no thesis_id (unlinked sleeve). */
-export function aggregateUnlinkedWeightsByDate(
-  positionHistory: PositionHistoryRow[]
-): { date: string; weight_pct: number }[] {
-  const byDate = new Map<string, number>();
-  for (const r of positionHistory) {
-    if (r.thesis_id != null && r.thesis_id !== '') continue;
-    const d = r.date;
-    const w = Number(r.weight_pct ?? 0);
-    byDate.set(d, (byDate.get(d) ?? 0) + w);
-  }
-  return [...byDate.entries()]
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([date, weight_pct]) => ({ date, weight_pct }));
-}
-
-export type ThesisRelatedDocLink = { document_key: string; date: string; label: string };
-
-/**
- * Portfolio `documents` rows that relate to a thesis: global thesis artifacts on recent dates
- * plus per-ticker PM docs whose path contains a ticker linked to this thesis.
- */
-export function collectThesisRelatedDocLinks(
-  docs: Doc[] | undefined,
-  opts: { tickers: Set<string>; recentDates: string[] }
-): ThesisRelatedDocLink[] {
-  const { tickers, recentDates } = opts;
-  const dateSet = new Set(recentDates);
-  if (!docs?.length || dateSet.size === 0) return [];
-  const out: ThesisRelatedDocLink[] = [];
-  const seen = new Set<string>();
-  const tix = [...tickers].map((t) => t.toUpperCase());
-
-  for (const d of docs) {
-    if (getDocLibraryTier(d) !== 'portfolio') continue;
-    if (!d.date || !dateSet.has(d.date)) continue;
-    const p = d.path || '';
-    const low = p.toLowerCase();
-    const key = `${d.date}|${p}`;
-    if (seen.has(key)) continue;
-
-    if (
-      low.startsWith('market-thesis-exploration/') ||
-      low.startsWith('thesis-vehicle-map/') ||
-      low.includes('opportunity-screen') ||
-      low.includes('opportunity-screener')
-    ) {
-      seen.add(key);
-      const label = p.split('/').pop()?.replace(/\.json$/i, '') ?? p;
-      out.push({ document_key: p, date: d.date, label });
-      continue;
-    }
-
-    for (const t of tix) {
-      if (
-        low.includes(`asset-recommendations/${d.date}/${t.toLowerCase()}`) ||
-        low.includes(`deliberation-transcript/${d.date}/${t.toLowerCase()}`) ||
-        // Pipeline flat key: `deliberation/{ticker}` (single slash, no date segment)
-        low === `deliberation/${t.toLowerCase()}` ||
-        low.includes(`/${t.toLowerCase()}.json`)
-      ) {
-        seen.add(key);
-        out.push({
-          document_key: p,
-          date: d.date,
-          label: `${t} — ${low.includes('deliberation') ? 'Deliberation' : low.includes('recommendations') ? 'Rec' : p.split('/').pop() ?? p}`,
-        });
-        break;
-      }
-    }
-  }
-
-  return out.sort((a, b) => b.date.localeCompare(a.date) || a.document_key.localeCompare(b.document_key));
 }
 
 /**
@@ -1669,13 +1509,6 @@ export async function getLibraryDocumentById(id: string): Promise<LibraryDocumen
     markdown,
     payload,
   };
-}
-
-export async function getDocumentContentById(
-  id: string
-): Promise<Pick<TableRow<'documents'>, 'id' | 'content'>> {
-  const r = await getLibraryDocumentById(id);
-  return { id: r.id, content: r.markdown };
 }
 
 /** What to diff the digest against in the library. */
@@ -1862,57 +1695,6 @@ export async function loadDigestLibraryDiff(
       deltaBaselineDate: resolvedDeltaBaseline,
     },
   };
-}
-
-/**
- * Markdown pair only (same as `loadDigestLibraryDiff(...).pair`).
- * @see loadDigestLibraryDiff — prefer that when the UI needs `DigestDiffContext` for toggles.
- */
-export async function getDigestMarkdownDiffPair(
-  targetDate: string,
-  compareKind: DigestCompareKind = 'previous_digest',
-  customCompareDate?: string
-): Promise<DigestMarkdownDiffPair | null> {
-  const { pair } = await loadDigestLibraryDiff(targetDate, compareKind, customCompareDate);
-  return pair;
-}
-
-export async function getDailySnapshots(
-  fromDate?: string
-): Promise<Pick<TableRow<'daily_snapshots'>, 'date' | 'run_type' | 'snapshot'>[]> {
-  type Row = Pick<TableRow<'daily_snapshots'>, 'date' | 'run_type' | 'snapshot'>;
-  return querySupabase<Row[]>((sb) => {
-    let q = sb
-      .from('daily_snapshots')
-      .select('date, run_type, snapshot')
-      .order('date', { ascending: true });
-    if (fromDate) q = q.gte('date', fromDate);
-    return q;
-  });
-}
-
-export async function getPositionHistory(
-  fromDate?: string
-): Promise<Pick<TableRow<'positions'>, 'date' | 'ticker' | 'weight_pct'>[]> {
-  return querySupabase((sb) => {
-    let q = apiHouseBook( 'positions', 'date, ticker, weight_pct').order('date', {
-      ascending: true,
-    });
-    if (fromDate) q = q.gte('date', fromDate);
-    return q;
-  });
-}
-
-export async function getPositionEvents(
-  fromDate?: string,
-  ticker?: string
-): Promise<TableRow<'position_events'>[]> {
-  return querySupabase((sb) => {
-    let q = apiHouseBook( 'position_events').order('date', { ascending: false });
-    if (fromDate) q = q.gte('date', fromDate);
-    if (ticker) q = q.eq('ticker', ticker);
-    return q.limit(200);
-  });
 }
 
 // ─── Generic document diff (used by the library diff view) ───────────────────

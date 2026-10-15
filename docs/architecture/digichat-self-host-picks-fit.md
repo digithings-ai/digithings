@@ -10,9 +10,9 @@
 
 | Pick | Plan | Purpose |
 |---|---|---|
-| **1** | [`2026-08-09-digichat-runtime-frame-ancestors.md`](../superpowers/plans/2026-08-09-digichat-runtime-frame-ancestors.md) | Let operators allow any client embed parent on the **stock** digichat GHCR image via **runtime** env (`DIGICHAT_EMBED_HOSTS` / tenant host keys), without rebuilding for CSP. |
+| **1** | `2026-08-09-digichat-runtime-frame-ancestors.md` (removed DIG-3399; git history keeps it) | Let operators allow any client embed parent on the **stock** digichat GHCR image via **runtime** env (`DIGICHAT_EMBED_HOSTS` / tenant host keys), without rebuilding for CSP. |
 | **2** | [`2026-08-09-digichat-stack-ghcr.md`](../superpowers/plans/2026-08-09-digichat-stack-ghcr.md) | Finish Profile A so clients **pull** digikey / digigraph / digivault from GHCR (no monorepo `docker compose build`), including glue after [#2023](https://github.com/digithings-ai/digithings/pull/2023). |
-| **3** | [`2026-08-09-digichat-corpus-ingest.md`](../superpowers/plans/2026-08-09-digichat-corpus-ingest.md) | Offline **ops** pipeline (`scripts/docs_onboard/`) — URL → docs-focused crawl → PDFs via digifetch/digisearch → **their** digivault and/or digisearch index so Profile A digichat → digigraph tools ground answers on that client's docs. Not a digicorpus peer module. |
+| **3** | `2026-08-09-digichat-corpus-ingest.md` (removed DIG-3399; git history keeps it) | Offline **ops** pipeline (`scripts/docs_onboard/`) — URL → docs-focused crawl → PDFs via digifetch/digisearch → **their** digivault and/or digisearch index so Profile A digichat → digigraph tools ground answers on that client's docs. Not a digicorpus peer module. |
 
 Sketch gaps these close (from [`digichat-self-hosted-release.md`](digichat-self-hosted-release.md) §5 Still open): ~~runtime CSP `frame-ancestors`~~; ~~GHCR for digikey / digigraph / digivault~~; corpus / crawl / OCR / vault+search ingest (Pick 3 MVP).
 
@@ -62,7 +62,7 @@ Keep these stable across all three plans.
 |---|---|---|
 | `ghcr.io/digithings-ai/digichat:vX.Y.Z` | `publish-digichat-image.yml` | Pick 1 changes CSP wiring only; stack publish must **not** absorb digichat. |
 | `ghcr.io/digithings-ai/{digikey,digigraph,digivault}:…` | `publish-service-images.yml` | Pick 2. Also publishes other Python services; Profile A only needs these three. |
-| LiteLLM | Public `docker.litellm.ai/berriai/litellm:main-stable` | digithings does **not** republish. |
+| LiteLLM | `ghcr.io/digithings-ai/digillm:0.1.0` (digillm image: LiteLLM from the pinned PyPI wheel) | digithings builds it from `Dockerfile.digillm` (DIG-1780); never the vendor image. |
 
 ### Volumes / compose overlays
 
@@ -151,9 +151,9 @@ What #2023 **did** deliver (keep): publish workflow, root GHCR overlay + `make p
 - Orchestration meta-plan: [`../superpowers/plans/2026-08-09-digichat-self-host-picks-metaplan.md`](../superpowers/plans/2026-08-09-digichat-self-host-picks-metaplan.md)
 - Self-hosted release sketch (gaps): [`digichat-self-hosted-release.md`](digichat-self-hosted-release.md) §5
 - Product end-state: [`digichat-modular-frontend.md`](digichat-modular-frontend.md) §5
-- Pick 1 plan: [`../superpowers/plans/2026-08-09-digichat-runtime-frame-ancestors.md`](../superpowers/plans/2026-08-09-digichat-runtime-frame-ancestors.md)
+- Pick 1 plan: `2026-08-09-digichat-runtime-frame-ancestors.md` (removed DIG-3399; git history keeps it)
 - Pick 2 plan: [`../superpowers/plans/2026-08-09-digichat-stack-ghcr.md`](../superpowers/plans/2026-08-09-digichat-stack-ghcr.md)
-- Pick 3 plan: [`../superpowers/plans/2026-08-09-digichat-corpus-ingest.md`](../superpowers/plans/2026-08-09-digichat-corpus-ingest.md) (filename historical; content = `scripts/docs_onboard`)
+- Pick 3 plan: `2026-08-09-digichat-corpus-ingest.md` (removed DIG-3399; git history keeps it) (filename historical; content = `scripts/docs_onboard`)
 - Client docs onboard runbook: [`../digichat/CLIENT-DOCS-ONBOARD.md`](../digichat/CLIENT-DOCS-ONBOARD.md)
 - Ops pipelines index: [`../ops/CLIENT_PIPELINES.md`](../ops/CLIENT_PIPELINES.md)
 - Client install: [`../digichat/INSTALL.md`](../digichat/INSTALL.md)

@@ -3,6 +3,11 @@
 # DIGICHAT_ASSET_PREFIX avoids clashing with Pages `/_next` on digithings.ai.
 # Embed CSP hosts come from runtime DIGICHAT_EMBED_HOSTS / DIGICHAT_EMBED_TENANTS
 # (never bake DIGICHAT_EMBED_TENANTS as a build-arg — tokens in layer history).
+#
+# DIG-3701: @digithings/design, @digithings/ui and @digithings/digichat-ui are
+# installed from tarballs produced by scripts/package_r5_image_inputs.py.
+# The root lockfile still pins the rest. The only sibling tree copied is
+# apps/digichat itself, plus config/byok-providers.json.
 ARG DIGICHAT_ASSET_PREFIX="/_dtchat"
 
 FROM node:22-alpine AS deps
@@ -10,10 +15,10 @@ WORKDIR /app
 RUN apk add --no-cache libc6-compat
 COPY package.json package-lock.json ./
 COPY apps/digichat/package.json apps/digichat/
-COPY packages/digichat-ui/package.json packages/digichat-ui/
-COPY packages/design/package.json packages/design/
-COPY packages/ui/package.json packages/ui/
-COPY apps/dashboard/package.json apps/dashboard/
+COPY image-packages/digichat/manifests/design/package.json packages/design/package.json
+COPY image-packages/digichat/manifests/ui/package.json packages/ui/package.json
+COPY image-packages/digichat/manifests/digichat-ui/package.json packages/digichat-ui/package.json
+COPY image-packages/digichat/manifests/dashboard/package.json apps/dashboard/package.json
 RUN npm ci --workspace apps/digichat --include-workspace-root
 
 FROM node:22-alpine AS builder
@@ -23,17 +28,30 @@ ARG DIGICHAT_ASSET_PREFIX
 ENV DIGICHAT_ASSET_PREFIX=$DIGICHAT_ASSET_PREFIX
 ENV NEXT_PUBLIC_DIGICHAT_ASSET_PREFIX=$DIGICHAT_ASSET_PREFIX
 COPY --from=deps /app ./
-COPY packages/design ./packages/design
-COPY packages/ui ./packages/ui
+COPY image-packages/digichat/npm/ /tmp/digi-npm/
+# Unpack the published package trees over the manifests npm ci linked.
 # Grammar moved into the package (WS1): chat-digichat.css ships with
 # packages/ui, so no gallery COPY is needed anymore (#3717 closed).
-COPY packages/digichat-ui ./packages/digichat-ui
+RUN tar -xzf /tmp/digi-npm/digithings-design-*.tgz -C packages/design --strip-components=1 \
+ && tar -xzf /tmp/digi-npm/digithings-ui-*.tgz -C packages/ui --strip-components=1 \
+ && tar -xzf /tmp/digi-npm/digithings-digichat-ui-*.tgz -C packages/digichat-ui --strip-components=1
 COPY apps/digichat ./apps/digichat
-# Alpine musl bindings for lockfile platforms that resolve to glibc on some hosts
-RUN npm install \
-      @rolldown/binding-linux-x64-musl@1.0.0-rc.16 \
-      lightningcss-linux-x64-musl@1.32.0 \
-      @tailwindcss/oxide-linux-x64-musl@4.2.2 \
+COPY tsconfig.base.json ./tsconfig.base.json
+# BYOK provider pins are imported from the repo-root config (#5020).
+COPY config/byok-providers.json ./config/byok-providers.json
+# Alpine musl bindings for lockfile platforms that resolve to glibc on some hosts.
+# linux-x64-musl is the Cloudflare container arch. linux-arm64-musl is the same
+# pins so a local arm64 docker build uses bindings that match the image.
+RUN set -eu; \
+    case "$(uname -m)" in \
+      x86_64) plat=linux-x64-musl ;; \
+      aarch64) plat=linux-arm64-musl ;; \
+      *) echo "unsupported musl arch $(uname -m)" >&2; exit 1 ;; \
+    esac; \
+    npm install \
+      "@rolldown/binding-${plat}@1.0.0-rc.16" \
+      "lightningcss-${plat}@1.32.0" \
+      "@tailwindcss/oxide-${plat}@4.2.2" \
       --no-save --no-audit --no-fund
 # Bake DIGICHAT_VERSION from package.json so GET /api/health matches the package.
 # Optional override: docker --build-arg or wrangler [[containers]] image_vars.
@@ -45,6 +63,11 @@ RUN VERSION="${DIGICHAT_VERSION:-$(node -p "require('./apps/digichat/package.jso
 
 FROM node:22-alpine AS runner
 WORKDIR /app
+# D-R5-1. Account id is supplied by the operator at push time (H3).
+ARG IMAGE_PUSH_REGISTRY=registry.cloudflare.com
+ARG IMAGE_PUSH_REPOSITORY=digithings/digichat
+LABEL org.digithings.image.registry="${IMAGE_PUSH_REGISTRY}" \
+      org.digithings.image.repository="${IMAGE_PUSH_REPOSITORY}"
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN apk add --no-cache curl

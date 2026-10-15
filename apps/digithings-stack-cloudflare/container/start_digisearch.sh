@@ -28,9 +28,6 @@ SEED_TAG="${SEED_VER}_${SEED_PROVIDER}"
 SEED_MARKER="${DATA_CHROMA}/.stack_chroma_seeded_${SEED_TAG}"
 SEED_FAILED="${DATA_CHROMA}/.stack_chroma_seed_failed_${SEED_TAG}"
 UNSEEDED_LIST="${DATA_CHROMA}/.stack_chroma_unseeded_${SEED_TAG}"
-# Same convention, written by seed_occ_tickets.sh for the ticket corpus.
-TICKET_UNSEEDED="${DATA_CHROMA}/.stack_occ_tickets_unseeded_${SEED_TAG}"
-TICKET_MARKER="${DATA_CHROMA}/.stack_occ_tickets_seeded_${SEED_TAG}"
 
 mkdir -p "$DATA_CHROMA"
 
@@ -71,30 +68,6 @@ while [ ! -f "$SEED_MARKER" ]; do
   fi
   sleep 1
 done
-
-if [ -f "$SEED_MARKER" ]; then
-  DIGISEARCH_UNSEEDED_INDEXES=""
-fi
-
-# Now wait for the ticket backfill to settle and fold its verdict in. Either
-# marker means seed_occ_tickets.sh reached a decision (it writes both when it
-# skips for a missing credential), so this cannot hang on an unconfigured
-# deployment. A timeout here means the step never ran or died silently — treat
-# occ_tickets as unpopulated rather than assuming a corpus exists (#5045).
-j=0
-while [ ! -f "$TICKET_MARKER" ] && [ ! -f "$TICKET_UNSEEDED" ]; do
-  j=$((j + 1))
-  if [ "$j" -gt 900 ]; then
-    DIGISEARCH_UNSEEDED_INDEXES="${DIGISEARCH_UNSEEDED_INDEXES:+${DIGISEARCH_UNSEEDED_INDEXES},}occ_tickets"
-    echo "digithings-stack: ERROR occ_tickets backfill never settled; treating occ_tickets as unseeded"
-    break
-  fi
-  sleep 1
-done
-
-if [ -f "$TICKET_UNSEEDED" ]; then
-  DIGISEARCH_UNSEEDED_INDEXES="${DIGISEARCH_UNSEEDED_INDEXES:+${DIGISEARCH_UNSEEDED_INDEXES},}occ_tickets"
-fi
 
 export DIGISEARCH_UNSEEDED_INDEXES
 

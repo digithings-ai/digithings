@@ -2,7 +2,14 @@
 
 Names and locations only. **This file never contains secret values.** Cloudflare Worker secrets are stored as `secret_text`, which is write-only: `wrangler secret list` returns each name and its type but never the value, so no readback path exists even for the operator. Local `.env` files and committed example templates are referenced by path and line; any literal found committed is masked `***` and labelled `plaintext-literal`. Every claim below carries a `file:line` or a named command.
 
-Rebuilt from four read-only sweeps (cloudflare / python / plumbing / docs) plus a live `wrangler secret list` against the three Workers, at `origin/develop` commit `35d91f641`. Two sweep claims were rechecked and corrected here: `.env.example:240` and `.env.example:278` are `replace-with-…` placeholders (not live values). A later recount of `.github/workflows` (49 YAML files) finds **1** job that declares `environment: production` (`deploy-digiquant-runner.yml`); the 2026-09 audit's "four workflows" list named files that are not in the tree.
+Every row below is a **name**, and a name is all that belongs in this file, on a ticket,
+a comment, or a chat. The rule that keeps it that way — including the "report the branch
+the tool took, never the value" wording agents use when a refresh fails — is in
+[`credential-ownership.md`](credential-ownership.md#never-paste-a-credential-value). It is
+stated there rather than here because it binds humans and agents equally, and an inventory
+is the file people read while holding a value.
+
+Rebuilt from four read-only sweeps (cloudflare / python / plumbing / docs) plus a live `wrangler secret list` against the three Workers, at `origin/develop` commit `35d91f641`. Two sweep claims were rechecked and corrected here: `.env.example:240` and `.env.example:278` are `replace-with-…` placeholders (not live values). A later recount of `.github/workflows` (53 workflow files, recounted 2026-10-08) found **1** job declaring `environment: production` (`deploy-digiquant-runner.yml`); the 2026-09 audit's "four workflows" list named files that are not in the tree. That gap is now closed for CI: **DIG-248 (2026-10-04)** added a third environment, `cron` (no reviewers, no wait timer, no branch policy), and declared it on **all 32 jobs that read a non-automatic `secrets.*` name**, so the only two job shapes left without a gate are `deploy-digiquant-runner.yml:deploy` (still `production`, deliberately) and jobs that read nothing but the automatic `GITHUB_TOKEN`. See [R13](#risk-register).
 
 ## How to read this table
 
@@ -20,11 +27,13 @@ Rebuilt from four read-only sweeps (cloudflare / python / plumbing / docs) plus 
 
 - `digithings-digichat` (10): AUTH_SECRET, CHEAPERINFERENCE_API_KEY, DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY, DIGICHAT_DASHBOARD_SUPABASE_URL, DIGICHAT_EMBED_TENANTS, DIGICHAT_PLAN_PROOF_SECRET, DIGIGRAPH_INTERNAL_URL, DIGIKEY_BFF_TOKEN, DIGIKEY_URL, OPENROUTER_API_KEY
 - `digithings-stack` (16 at the 2026-09 audit, **superseded**): CHEAPERINFERENCE_API_KEY, CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN, D1_DATABASE_MAP, DIGIKEY_ADMIN_TOKEN, DIGIKEY_BFF_TOKEN, DIGIKEY_DATABASE_URL, DIGIKEY_PRIVATE_KEY_PEM, GROQ_API_KEY, LITELLM_MASTER_KEY, LITELLM_PROXY_API_KEY, MCP_EDGE_KEY, OPENROUTER_API_KEY, VECTORIZE_ACCOUNT_ID, VECTORIZE_API_TOKEN, ZAMMAD_API_TOKEN
-- `digithings-cron` (1): GH_DISPATCH_TOKEN
+- `digithings-cron` (3): CRON_KICK_SECRET, GH_DISPATCH_TOKEN, RUNNER_AUTH_TOKEN
 
 **Container env (Worker `envVars` whitelist).** A Container only receives what the Worker's `envVars` object forwards. The standalone digichat whitelist is [`apps/digichat-cloudflare/src/index.ts:32-56`](../../apps/digichat-cloudflare/src/index.ts). The stack Worker runs three Container classes, each with its own `envVars`: `DigiStackContainer` ([`apps/digithings-stack-cloudflare/src/index.ts:89-146`](../../apps/digithings-stack-cloudflare/src/index.ts)), `DigiQuantMcpContainer` (`:218-227`), and `DigiChatContainer` (`:256`, `envVars` at `:277-305`). A secret that is `put` on the Worker but missing from `envVars` never reaches the process — silently. Known drops: `DIGICHAT_DATABASE_URL`, `CHEAPERINFERENCE_API_KEY`, `OPENROUTER_API_KEY` on digichat; `DIGI_CONFIG_PATH`, `DIGI_PROJECT_CONFIG`, `DIGI_WORKFLOW_PROFILE`, `DIGI_ALLOWED_TOOLS` on the stack.
 
-**GitHub repo secret / var.** Repo-scoped by default. Only 1 of 49 workflows declares `environment: production` (`deploy-digiquant-runner.yml:33`). The 2026-09 audit named four files that are not in `.github/workflows` (`deploy-digithings-stack-cloudflare.yml`, `db-migrate.yml`, `sync-architecture-vault.yml`, `docs-onboard-digithings.yml`). Every other `secrets.*` / `vars.*` read has no deployment gate. The repo-level sets were read back on 2026-09-18: **15 secrets** — `CHEAPERINFERENCE_API_KEY`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_EMAIL_API_TOKEN`, `CORE_POSTGRES_URI`, `CORE_SUPABASE_SERVICE_KEY`, `CORE_SUPABASE_URL`, `DIGIQUANT_DIGIKEY_API_KEY`, `DIGITHINGS_PROJECT_TOKEN`, `GH_DISPATCH_TOKEN`, `NOTIFY_FROM`, `R2_ACCESS_KEY_ID`, `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_SECRET_ACCESS_KEY` — and **11 variables** (`CHEAPERINFERENCE_API_BASE`, `DIGIKEY_URL`, `DIGI_*_PROJECT_NUMBER`). `CLOUDFLARE_EMAIL_API_TOKEN` — a dedicated Cloudflare API token carrying **Email Sending: Edit**, deliberately not the broad `CLOUDFLARE_API_TOKEN` — and `NOTIFY_FROM` (`DigiQuant <notifications@digiquant.io>`) were stored on 2026-09-18 (#4358); a live send was queued through the sender that day and the daily probe is green. `make secrets-audit` reproduces both directions (reads with no repo secret, and repo secrets nothing reads) and, with `admin:org` on the token since 2026-09-18, classifies every read by level: 11 repo variables, **13 org secrets** (`CEREBRAS_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, `CURSOR_API_KEY`, `DEEPSEEK_API_KEY`, `FRED_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `LANGSMITH_API_KEY`, `MISTRAL_API_KEY`, `NVIDIA_API_KEY`, `OLLAMA_API_KEY`, `OPENROUTER_API_KEY`, `XAI_API_KEY`; all `all` visibility, so every repo inherits them) and the `production` environment's 1 name (`D1_DATABASE_MAP`). Both duplicate-definition cases the tool reported were resolved on 2026-09-18: the repo-level `FRED_API_KEY` and the `production`-environment copies of `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` were deleted, so each name now has exactly one home and `repo-over-org` / `env-over-repo` are both clean. The 68 legacy `||`-alias fallbacks this table used to imply (the real name followed by `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `VECTORIZE_API_TOKEN`, `D1_API_TOKEN`, `VECTORIZE_ACCOUNT_ID` or `D1_ACCOUNT_ID` in 10 workflows) were removed on 2026-09-18: `CORE_*` was always set, so no fallback ever fired (#4338).
+**GitHub repo secret / var.** Repo-scoped by default. As of DIG-248 (2026-10-04) every job that reads a non-automatic `secrets.*` name declares an environment: **32 on `cron`** (no reviewers, no wait timer, no branch policy) and **1 on `production`** (`deploy-digiquant-runner.yml:33`). Before that, only 1 of 53 workflows had any gate. The 2026-09 audit named four files that are not in `.github/workflows` (`deploy-digithings-stack-cloudflare.yml`, `db-migrate.yml`, `sync-architecture-vault.yml`, `docs-onboard-digithings.yml`). The names themselves are still **repo- or org-scoped**; the migration of their values to `cron` scope is the open human step in [R13](#risk-register). The repo-level sets were read back on 2026-09-18 and re-read on **2026-10-08: 20 secrets** — `CHEAPERINFERENCE_API_KEY`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_EMAIL_API_TOKEN`, `CORE_POSTGRES_URI`, `CORE_SUPABASE_SERVICE_KEY`, `CORE_SUPABASE_URL`, `CRON_KICK_SECRET`, `DIGIQUANT_DIGIKEY_API_KEY`, `DIGITHINGS_PROJECT_TOKEN`, `GH_DISPATCH_TOKEN`, `LANGFUSE_BASE_URL`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `NOTIFY_FROM`, `R2_ACCESS_KEY_ID`, `R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_SECRET_ACCESS_KEY`, `SUPABASE_SERVICE_ROLE_KEY` — and **11 variables** (`CHEAPERINFERENCE_API_BASE`, `DIGIKEY_URL`, `DIGI_*_PROJECT_NUMBER`). `CLOUDFLARE_EMAIL_API_TOKEN` — a dedicated Cloudflare API token carrying **Email Sending: Edit**, deliberately not the broad `CLOUDFLARE_API_TOKEN` — and `NOTIFY_FROM` (`DigiQuant <notifications@digiquant.io>`) were stored on 2026-09-18 (#4358); a live send was queued through the sender that day and the daily probe is green. `make secrets-audit` reproduces both directions (reads with no repo secret, and repo secrets nothing reads) and, with `admin:org` on the token since 2026-09-18, classifies every read by level: 11 repo variables, **11 org secrets** (`CEREBRAS_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, `CURSOR_API_KEY`, `DEEPSEEK_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `LANGSMITH_API_KEY`, `MISTRAL_API_KEY`, `NVIDIA_API_KEY`, `OLLAMA_API_KEY`, `OPENROUTER_API_KEY`; all `all` visibility, so every repo inherits them) and the `production` environment's 1 name (`D1_DATABASE_MAP`). Both duplicate-definition cases the tool reported were resolved on 2026-09-18: the repo-level `FRED_API_KEY` and the `production`-environment copies of `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` were deleted, so each name now has exactly one home and `repo-over-org` / `env-over-repo` are both clean. The 68 legacy `||`-alias fallbacks this table used to imply (the real name followed by `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `VECTORIZE_API_TOKEN`, `D1_API_TOKEN`, `VECTORIZE_ACCOUNT_ID` or `D1_ACCOUNT_ID` in 10 workflows) were removed on 2026-09-18: `CORE_*` was always set, so no fallback ever fired (#4338).
+
+**Two related corrections landed with DIG-248 (2026-10-04).** `CHEAPERINFERENCE_API_BASE` is a repo **variable**, and the two workflow reads of it (`pipeline-digiquant.yml:230` and `:295`) wrote `${{ vars.X || secrets.X || 'https://api.cheaperinference.com/v1' }}`. A repo variable is never visible through the `secrets.` context, so the middle term was dead — but it was a dead **fallback**, not a live break: `vars.` is evaluated first and the variable is set. The `secrets.` term was removed rather than promoted to a secret, because the value is a non-secret base URL. `SUPABASE_SERVICE_ROLE_KEY` (repo secret, written 2026-09-25) duplicates `CORE_SUPABASE_SERVICE_KEY` (2026-06-25) — two service-role credentials for the same job, so rotating one leaves the other live with no owner. **Decision: `CORE_SUPABASE_SERVICE_KEY` is canonical**, because every `.github` read and the multi-service row above already use it; `SUPABASE_SERVICE_ROLE_KEY` is deleted rather than rotated. Both are service-role keys, so the deletion needs Chris to confirm no external consumer holds the newer value.
 
 Six repo secrets that no `.github` YAML read were deleted on 2026-09-17/18: `COPILOT_GITHUB_TOKEN` (its requesting job was removed in #1894) and `DIGI_CHECKPOINTER_POSTGRES_URI` (alias collapsed into `CORE_POSTGRES_URI` by #4317), plus four whose live copies are Cloudflare Worker / runtime env values rather than CI inputs — `DIGICHAT_PLAN_PROOF_SECRET`, `DIGICHAT_DASHBOARD_SUPABASE_URL`, `DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY`, `EXA_API_KEY`. Nothing in CI read them, and GitHub secrets are write-only, so no retrievable value was lost.
 
@@ -45,10 +54,12 @@ Six repo secrets that no `.github` YAML read were deleted on 2026-09-17/18: `COP
 | `DIGIKEY_ADMIN_TOKEN` | `apps/digithings-stack-cloudflare/src/index.ts:68`; `digikey/src/digikey/server.py:60` | `apps/digithings-stack-cloudflare/wrangler.toml:138`; `docker-compose.yml:37` | no — write-only | key-issue / revoke admin ops (503 when unset) | stack Worker; compose | static bearer, `compare_digest` |
 | `DIGIKEY_BFF_TOKEN` | `apps/digichat-cloudflare/src/index.ts:51`; `apps/digithings-stack-cloudflare/src/index.ts:66`; `digikey/src/digikey/settings.py:20` | both `wrangler.toml:54` / `:136` | no — write-only | digichat BFF session exchange; chat auth | 2 Workers + compose + profiles | **must match across both Workers** |
 | `DIGICHAT_PLAN_PROOF_SECRET` | `apps/digichat-cloudflare/src/index.ts:52` | `apps/digichat-cloudflare/wrangler.toml:55` | no — write-only | Desk+ plan proofs (`X-Embed-Plan-Proof`) | digichat Worker only | must match digiquant verifier |
+| `DIGICHAT_MONITOR_TOKENS` | `apps/digichat-cloudflare/src/index.ts:53`; `apps/digithings-stack-cloudflare/src/index.ts:297` | `apps/digichat-cloudflare/wrangler.toml:62` (comment); `apps/digichat/.env.example:126` | no — write-only | DataTap answer-integrity monitor spends `EMBED_FREE_TURN_LIMIT` per client IP, then every later run reads 402 `trial_gate` (DIG-613) | digichat Worker only | **not `put` on any Worker yet**; optional, comma-separated, entries `< 32` chars ignored. Unset => allowlist empty and the gate applies to everyone. Must match `DATATAP_ANSWER_CHECK_MONITOR_TOKEN` on the check side |
 | `DIGICHAT_EMBED_TENANTS` | `apps/digichat-cloudflare/src/index.ts:48` | `apps/digichat-cloudflare/wrangler.toml:51` | no — write-only | all tenant routing + per-tenant `token` | digichat Worker; release profiles | carries literal `MCP_EDGE_KEY` copy; profile value `plaintext-literal` |
 | `MCP_EDGE_KEY` · `MCP_EDGE_KEYS` | `apps/digithings-stack-cloudflare/src/index.ts:343` | `apps/digithings-stack-cloudflare/wrangler.toml:35` (comment) | no — write-only | `/_stack/mcp/*` returns 401 | literal inside `DIGICHAT_EMBED_TENANTS` | rotate both places |
-| `CRON_KICK_SECRET` | `apps/digithings-cron/src/index.ts:86` | `apps/digithings-cron/wrangler.toml:19` | no — write-only | `POST /kick` returns 404 | cron Worker only | optional, fail-closed |
-| `GH_DISPATCH_TOKEN` | `apps/digithings-cron/src/dispatch.ts:92` | `apps/digithings-cron/wrangler.toml:18` | no — write-only | all cron→GitHub dispatch | GH repo secret (source) | fine-grained PAT |
+| `CRON_KICK_SECRET` | `apps/digithings-cron/src/index.ts:134` (also guards `:174,197`) | `apps/digithings-cron/wrangler.toml:28` (comment) | no — write-only | `POST /kick` returns 404 | cron Worker only | optional, fail-closed |
+| `GH_DISPATCH_TOKEN` | `apps/digithings-cron/src/dispatch.ts:289` (bearer `:298`) | `apps/digithings-cron/wrangler.toml:24` (comment) | no — write-only | all cron→GitHub dispatch | GH repo secret (source) | fine-grained PAT `digithings-cron-dispatch` (settings id 19179726, expires 2027-09-15). **Shared with the DIG-71 alarm — see R14.** Grants on `digithings-ai/digithings` + `digithings-ai/twelve-x`: **Actions: read and write**, **Issues: read and write** (added 2026-10-04). Editing the permission did **not** re-issue the value, so no Worker secret push was needed. No Contents grant — so the token can only be used over REST, not via `gh issue create` (GraphQL `defaultBranchRef`). **Actions: read and write and Issues: read and write are both proved by the canary** (`scripts/check_workflow_tokens.py`, weekly — see [Fine-grained PAT grants](#gaps-and-unknowns)); no other grant exists, so the canary covers this token completely. Not yet in Bitwarden (DIG-95) |
+| `RUNNER_AUTH_TOKEN` | `apps/digithings-cron/src/index.ts:191` (guard `:184`); `apps/digithings-cron/src/dispatch.ts:139` (guard `:141`) | `apps/digithings-cron/wrangler.toml:29` (comment); `apps/digiquant-runner/wrangler.toml:10` (comment) | no — write-only | `GET /runs/:id` 503 without it; `container` dispatch refused | cron Worker + digiquant-runner — **must be the same value** on both | bearer; `build_child_env` strips it from the job's child env (`apps/digiquant-runner/container/exec_job.py:50`). **Not** in the `deploy-digithings-cron.yml` secrets list (which carries `GH_DISPATCH_TOKEN` only), so rotating it needs a direct `wrangler secret put` on both Workers. Not yet in Bitwarden (DIG-95) |
 | `DIGITHINGS_PROJECT_TOKEN` | 7 workflow files, 22 `secrets.*` refs (`agent-backlog-snapshot.yml:28` … `pipeline-maintenance.yml:910`) | GH repo secret | n/a (GH secret) | GitHub Projects v2 / GraphQL automation | widest CI token | see R13 |
 | `DIGIQUANT_DIGIKEY_API_KEY` · `DIGICLAW_DIGIKEY_API_KEY` · `DIGIKEY_API_KEY` | `digibase/src/digibase/service_auth.py:107`; `digiclaw/src/digiclaw/digikey_auth.py:13` | GH repo secret; `.env` | n/a | service-to-service JWT exchange fails | GH + local `.env` | `dgk_*` key, scopes per service |
 | `AUTH_OIDC_CLIENT_SECRET` | Auth.js OIDC flow | `apps/digichat/.env.example:24` | yes (`.env`) | OIDC login breaks | IdP + digichat env | empty default |
@@ -78,8 +89,9 @@ Six repo secrets that no `.github` YAML read were deleted on 2026-09-17/18: `COP
 | `ZAMMAD_API_TOKEN` | stack `src/index.ts:111` | stack `wrangler.toml:150`; `docker-compose.yml:457-458` | no — write-only | read-only Zammad MCP 401 | stack Worker + `.env` | raw token or `Token token=` |
 | `CLOUDFLARE_EMAIL_API_TOKEN` · `CLOUDFLARE_ACCOUNT_ID` · `NOTIFY_FROM` | `execution-cron-check.yml:45-47`; `digiquant/src/digiquant/notify/cloudflare_email.py`; `digiquant/.../staging_secrets.py` | all three are repo secrets (2026-09-18) | no — write-only | digest email stops; the daily probe fails closed (exit 2) | GH + `.env` | replaced Mailgun in #4358; the token carries **Email Sending: Edit** and is deliberately not the deploy token |
 | `DIGISEARCH_SMTP_USER` · `DIGISEARCH_SMTP_PASS` | `digisearch/src/digisearch/monitors/delivery.py:320` | `.env.example:109` | yes (`.env`) | monitor email delivery fails | local `.env` | |
-| `FRED_API_KEY` · `COINGECKO_API_KEY` · `ALPHA_VANTAGE_API_KEY` · `SEC_EDGAR_USER_AGENT` | `digiquant/.../research ingest` | `digiquant/src/digiquant/research/config/mcp.secrets.env.example:5-12` | n/a | research ingest fails | committed example, gitleaks-allowlisted | `plaintext-literal`; owner-confirmed dead 2026-06-18 |
+| `FRED_API_KEY` · `COINGECKO_API_KEY` · `ALPHA_VANTAGE_API_KEY` · `SEC_EDGAR_USER_AGENT` | `digiquant/.../research ingest` | `digiquant/src/digiquant/research/config/mcp.secrets.env.example:5-12`; history-only `digiquant/src/digiquant/olympus/atlas/config/mcp.secrets.env.example` (absent at HEAD, byte-identical literals, verified 2026-10-04) | n/a | research ingest fails | committed example, gitleaks-allowlisted | `plaintext-literal`; owner-confirmed dead 2026-06-18 |
 | `OMNIROUTE_API_KEY` · `OMNIROUTE_AUTH_PASSWORD` | `docker-compose.yml:358,384-385` | `.env.example:14-15` | yes (`.env`) | omniroute profile breaks | local `.env` | vendor default forbidden |
+| `DIGILLM_EGRESS_DIGEST_KEY` | `digillm/src/digillm/egress_record.py:78` (`DIGEST_KEY_ENV`), read per record at `:235` | `.env.example:244` (commented, no value) | yes (`.env`) / no — write-only (secret store) | no outage: records keep emitting with `digest_algorithm: "absent"` and `payload_digest: null` | none — one value per environment, never shared across them | HMAC pepper over the canonical outbound **messages** for the GDPR egress ledger. Floor 32 chars, no unkeyed fallback by design. **Unset in every environment as of 2026-10-06** — on a production request path this is the one secret in this inventory whose absence is silent, because the ledger still fills and nothing alerts (contrast `LANGSMITH_API_KEY`, `AZURE_SEARCH_API_KEY`, `COHERE_API_KEY`, `EXA_API_KEY`: all optional, all dormant-or-degraded when missing). **Must not be co-located with the ledger it protects** — see [the digillm egress pepper](#the-digillm-egress-pepper--not-a-normal-api-key-dig-1184) |
 
 ### (c) infrastructure tokens (Cloudflare / Supabase / DB)
 
@@ -91,6 +103,7 @@ Six repo secrets that no `.github` YAML read were deleted on 2026-09-17/18: `COP
 | `CORE_SUPABASE_URL` · `SUPABASE_URL` | `digibase/src/digibase/connectors/supabase.py:112`; many pipelines | GH repo secret; `.env` | n/a | Supabase/PostgREST access breaks | GH + `.env` | canonical + legacy alias |
 | `CORE_SUPABASE_SERVICE_KEY` · `SUPABASE_SERVICE_ROLE_KEY` · `CORE_SUPABASE_ANON_KEY` | `digibase/.../supabase.py:113`; `digisearch`, `digivault`, `digiquant` | GH repo secret; `.env` | n/a | full DB read/write | GH + `.env` (multi-service) | service key = full access |
 | `DIGICHAT_DASHBOARD_SUPABASE_URL` · `DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY` | `apps/digichat-cloudflare/src/index.ts:53-55` | `apps/digichat-cloudflare/wrangler.toml:56-57` | no — write-only | dashboard token verify | digichat Worker + dashboard `NEXT_PUBLIC_*` | anon key is publishable |
+| `NEXT_PUBLIC_TWELVEX_SUPABASE_URL` · `NEXT_PUBLIC_TWELVEX_SUPABASE_ANON_KEY` | `apps/dashboard/lib/twelve-x/supabase.ts:20-26` (fallback to `NEXT_PUBLIC_SUPABASE_*` at `:21,:25`); `apps/dashboard/lib/twelve-x/session.ts` | Pages `digiquant-io` **production** (set 2026-10-05, DIG-258); `apps/dashboard/.env.local.example:85-86`; see `apps/dashboard/AUTH.md:222-275` | no — write-only (Pages); the value *is* readable in the deployed bundle, because `NEXT_PUBLIC_*` is inlined | FX Hub session minting / all 20 RLS-locked FX tables (**401 either way** — the anon role has no read grant since the 2026-09-14 cutover) | **falls back to the core `NEXT_PUBLIC_SUPABASE_ANON_KEY` when unset** — the trap: rotating this is scoped, rotating the core key is platform-wide | **Separate Supabase project** `lfghjucjrsabiqwxerxv` (twelve-x), not the core `rwagjbkvxkdwqmouagad`. Was a legacy `anon` JWT; **rotated 2026-10-05 to a publishable key** (`fx_hub_dashboard`). Rotation needs a production build to take effect. **The `preview` env on `digiquant-io` sets neither twelve-x var** (it holds only `NEXT_PUBLIC_DIGICHAT_EMBED_TOKEN`), so preview builds silently fall back to the core key. Do not parse or format-check this value — it is passed straight to `createClient` |
 | `CORE_POSTGRES_URI` | `pipeline-checkpoint-archive.yml:53`; `pipeline-market-data-refresh.yml:33`; `pipeline-digiquant.yml:306`; `digigraph/.../graph.py:180` | GH repo secret | n/a | checkpointer / archive / market-data registry fail | GH only | see [core-postgres-uri secret](core-postgres-uri-secret.md); `db-migrate.yml` is not in `.github/workflows` |
 | `DIGIKEY_DATABASE_URL` | stack `src/index.ts:72`; `digikey/src/digikey/db.py:38` | stack `wrangler.toml:139` | no — write-only | **digikey refuses to start when unset** (#4080) | stack Worker only | carries Postgres password |
 | `DIGICHAT_POSTGRES_PASSWORD` · `DIGICHAT_DATABASE_URL` | `docker-compose.yml:514`; stack `wrangler.toml:58` (inert) | `infra/digichat-release/.env.profile-a.example:21` | yes (profile env) | digichat conversations DB; Auth.js | compose + profiles | `DIGICHAT_DATABASE_URL` not forwarded (R4) |
@@ -106,7 +119,7 @@ Six repo secrets that no `.github` YAML read were deleted on 2026-09-17/18: `COP
 |---|---|---|---|---|---|---|
 | `DIGIQUANT_VAULT_MASTER_KEY` · `DIGIQUANT_VAULT_KEY_ID` | `digiquant/src/digiquant/vault/envelope.py:79,80` | `.env` (no default) | yes (`.env`) | every sealed broker credential unreadable | local secret store | AES-256-GCM, base64 32 bytes; `v1` label |
 | `ALPACA_OAUTH_CLIENT_ID` · `ALPACA_OAUTH_CLIENT_SECRET` | `digiquant/.../staging_secrets.py:28-29` | `.env`; `apps/dashboard/.env.local.example` | yes (`.env`) | broker OAuth connect fails | Supabase EF + `.env` | broker path — human gate |
-| `GLOOMBERB_SESSION_COOKIE` | `digiquant/src/digiquant/data/gloomberb/client.py:1450`; `digiquant/src/digiquant/data/gloomberb/agent_tools.py:194-197` | `.env`; stack Worker (`wrangler.toml:186`); forwarded `index.ts:222` | yes (`.env`) | session-gated digifetch tools off | `.env` + stack Worker | construction-time read, not import-time (`client.py:16-17`); in-process cache keys on the current env so a changed cookie builds a new client; hosted MCP still needs a container recycle (R5) |
+| `GLOOMBERB_SESSION_COOKIE` | `digiquant/src/digiquant/data/gloomberb/client.py:1450`; `digiquant/src/digiquant/data/gloomberb/agent_tools.py:194-197` | `.env`; stack Worker (`wrangler.toml:186`) — **deployment unverified, see R17**; forwarded `index.ts:222` | yes (`.env`) | session-gated digifetch tools off | `.env` + stack Worker | construction-time read, not import-time (`client.py:16-17`); in-process cache keys on the current env so a changed cookie builds a new client; hosted MCP still needs a container recycle (R5) |
 | `DIGIKEY_BLOCKLIST_REDIS_URL` · `DIGIKEY_REQUIRE_BLOCKLIST` | `digikey/src/digikey/blocklist.py:36,41` | `.env`; container env | yes | revoked JTIs stay valid / fail-closed 503 | code default is fail-closed; `DIGIKEY_REQUIRE_BLOCKLIST=0` is the local opt-out (`blocklist.py` `require_blocklist_enabled`). Compose default `1` (`docker-compose.yml:35`); `.env.example:226` | see [ADR-0007](../adr/0007-digikey-revocation.md) |
 | per-watch delivery secret (HMAC) | `digisearch/src/digisearch/server.py:1941`; `monitors/delivery.py:102` | monitor store (not a fixed env) | n/a | webhook signature verify fails | per-watch row | rotates per watch |
 | `DIGIQUANT_EXECUTION_ROUTING` | `digiquant/.../envcompat.py:14` | `.env` | yes (`.env`) | live-routing kill switch | local `.env` | alias `OLYMPUS_KAIROS_ROUTING`; broker path |
@@ -138,6 +151,532 @@ Six repo secrets that no `.github` YAML read were deleted on 2026-09-17/18: `COP
 | `DIGI_CONFIG_PATH` · `DIGI_PROJECT_CONFIG` · `DIGI_WORKFLOW_PROFILE` · `DIGI_ALLOWED_TOOLS` | stack `wrangler.toml:213-221` | wrangler `[vars]` | yes | nothing — container default wins | inert | documented dead config (#2304/#2306) |
 | `DIGIQUANT_MARKET_DATA_BACKEND` · `CHROMA_PATH` · `DIGIVAULT_ROOT` · `DIGISEARCH_INDEX` · `DIGI_TENANT_CORPUS_MAP` · `DIGI_LLM_MODE` | stack `src/index.ts:79-96,179` | stack `wrangler.toml:211,222-233` | yes | RAG index / market-data seam / LLM mode | wrangler + code defaults | plain vars |
 
+## The twelve-x developer laptop `.env` — every key has an owner (DIG-526)
+
+This section is deliberately **not** one row per key in the table above. It is the
+twelve-x repo's local `.env` — a storage surface no row above covers, because the
+inventory above is built from `digithings` readers. **Seventeen names** live there
+with no recorded owner: the two PrimeMarket session keys (one of which has no
+writer at all), the two desk-login keys, and thirteen more.
+Named on 2026-10-05 by reading **key names only** from
+`/Users/chrisstefan/Code/twelve-x/.env` (mode `-rw-------`, gitignored at
+twelve-x `.gitignore:1`); **no value was read, printed, or copied.**
+
+**Why this surface is not inert.** twelve-x `config.py:21` runs
+`load_dotenv(_PROJECT_DIR / ".env", override=False)` at import, so any twelve-x
+process started from that checkout — including a laptop run of the PrimeMarket
+heartbeat itself — reads this file. `override=False` means a shell or CI variable
+wins, which is the right precedence, and is also why a green CI heartbeat says
+nothing at all about this copy. It is a **second live copy**, not a scratch file.
+
+### (g1) the two PrimeMarket session keys — the two copies, one owner
+
+| Name | Where the second copy is | Read by | Readback? | **Owner** | Recorded refresh path |
+|---|---|---|---|---|---|
+| `PRIMEMARKET_SESSION_TOKEN` | GitHub **Actions repo secret** on `digithings-ai/twelve-x`; **and** this `.env` | `nodes/scrape.py:661`; `scripts/primemarket_session_heartbeat.py:59`; CI probes it | no for the secret, yes for `.env` | **Security** (agent `b14d7a18`), with Chris as the only human who can execute it | `twelve-x/scripts/refresh_session_cookie.sh` — verifies live, then `gh secret set PRIMEMARKET_SESSION_TOKEN --repo "$REPO" --body "$VALUE"` (`scripts/refresh_session_cookie.sh:81`). Source of the value is a human operator's own sign-in at `https://desk.prime-terminal.com`. **The acquisition procedure is not published in this repo** — it is held in the private `twelve-x` repo, for the reason given in [Vendor terms and what this file may publish](#vendor-terms-and-what-this-file-may-publish-dig-1194). **Rotate on expiry detection, never on a calendar** — measured: an authenticated call at 2026-09-15T00:08Z did **not** extend the window that 401'd at 06:04Z (`docs/PRIMEMARKET_DESK_API.md:157-165`) |
+| `PRIMEMARKET_SESSION_COOKIE` | **only** here. Not in CI since DIG-249 (`8368932`, 2026-10-05) | `nodes/scrape.py:559,662` — legacy path, verified then used as a fallback | yes (`.env`) | **Security** | **NONE — this is the finding.** `refresh_session_cookie.sh` writes only the token; the cookie-paste branch was deleted by DIG-249 (`8368932`). Last write: **2026-09-14T10:33Z**, recorded at `docs/PRIMEMARKET_DESK_API.md:161` — the only refresh history that exists for it — and the same doc's 2026-09-17 follow-up records that the desk had moved to the Bearer scheme and **the cookie was never the session the pmt endpoints consult** (`:171-172`). So this is a copy nothing refreshes, of a mechanism the desk stopped accepting. Delete it; do not rotate it |
+
+Consequence to state plainly: **a `primemarket-session-expired` alert tells you
+about the Actions secret only.** The `.env` copy has no alert and no probe, and for
+the cookie it has no writer either. As of `github/develop` `4f308ef` the single
+twelve-x alert body
+(`.github/workflows/primemarket_session_heartbeat.yml:62-75`) names neither copy —
+it says only that the interim desk session is no longer valid. Closing that gap is
+the open half of DIG-526 in twelve-x, tracked on twelve-x PR **#258** (open,
+against `develop`; it also adds the "did not run" and "probe blocked" alert classes
+that the 2026-08-01→08-15 checkout failures and the 96-hour no-run window of
+2026-09-28T06:03:54Z→2026-10-02T06:03:23Z went unreported). Until it merges, this
+row and the alert are inconsistent with each other, and the alert is the weaker of
+the two.
+
+### (g2) the desk login pair — a vendor login, not an application credential
+
+| Name | Where | Read by | **Owner** | Status |
+|---|---|---|---|---|
+| `PRIMEMARKET_USERNAME` | this `.env`, **and** the repo secret on `digithings-ai/twelve-x` (passed at `.github/workflows/daily_run_reusable.yml:115` and `market_context_ingest.yml:72`; marked a "dormant credential-login route (DIG-249) … may legitimately be empty") | `config.py:27` `get_primemarket_credentials()` | **Security** | **Vendor login for `https://desk.prime-terminal.com`.** Not an API key, not a service account — a human's desk credentials. Login is captcha-gated since ~2026-07-29, so no code path can authenticate with it |
+| `PRIMEMARKET_PASSWORD` | same — this `.env` and the repo secret (`daily_run_reusable.yml:116`, `market_context_ingest.yml:73`) | `config.py:28` | **Security** | Same |
+
+So this pair lives in **three** places, not one: this `.env`, the repo secret, and
+the code path. The repo-secret copies are the ones CI would use, and whether they
+are populated is unverified — GitHub secrets are write-only, so I cannot read them
+back, only confirm the names exist. That is a gap, not a clean bill of health.
+
+This pair is still **live code**: `config.py:27-32` raises unless both are set, and
+`nodes/scrape.py:609` calls it as the login route taken when **no supplied
+`PRIMEMARKET_SESSION_TOKEN` is set** (`:605-607` returns early when one is). That
+ordering is deliberate and load-bearing — twelve-x
+`docs/PRIMEMARKET_DESK_API.md:193-198` explains that "try the supplied session, else
+fall back to credentials" is *not* implemented as a fallback chain, because a
+rejected session would then fire a real credential attempt against the live vendor
+account on every run. The chain is: the supplied `PRIMEMARKET_SESSION_TOKEN`, and
+only when that name is unset, **this pair** — the `PRIMEMARKET_SESSION_COOKIE` link
+that used to sit between them was removed from the code by **DIG-266** (`ffbf354`,
+2026-10-05, "remove the unreachable cookie route and rename the refresh script"),
+on the same day **DIG-249** (`8368932`) had already taken it out of CI and the docs,
+and the desk cookie is now *derived* from the token rather than pasted separately
+(`nodes/scrape.py:568`).
+So these two values are the only thing standing between a stale session and a failed
+pipeline — and they are also the most damaging pair on this laptop, because they
+authenticate as a person, not as a job.
+
+DIG-249 (`8368932`) was recorded as dropping "the dead desk login pair", and the
+twelve-x `README.md` says the pair is not required. What actually landed is
+narrower: the pair came out of the **required-secrets preflight**
+(`daily_run_reusable.yml:55-58`) and is still *passed* to the steps
+(`:115-116`, `market_context_ingest.yml:72-73`), while the code and this `.env`
+still carry it. Two consequences, both for Security to resolve and neither blocking:
+
+1. If the PrimeMarket path is switched off (the open A/B question on DIG-478, card
+   `295f3d75`), delete the pair in all three places — this `.env`, the
+   `digithings-ai/twelve-x` repo secret, and the two workflow env blocks. It is the
+   highest-value item on the laptop and the only one that is a human's account, and
+   the repo secret is the copy nobody would remember to delete.
+2. While the path is live, this pair is a standing credential with no rotation
+   date and no alert. It is captcha-gated in practice, so treat it as
+   password-manager material rather than an env var: **move it to Bitwarden
+   (DIG-95) or delete it**, and do not leave it as the fallback of last resort.
+
+### (g3) the remaining thirteen names — one owner each
+
+Thirteen names in twelve rows (`TWELVEX_R2_*` shares a row). All thirteen live in
+this `.env`; each row names the CI copy where one exists. Eleven are read by twelve-x
+code — `config.py`, `nodes/llm.py`, or `nodes/scrape.py` — and two, marked
+**no reader** below, are read by nothing on `github/develop`. Every one now has a
+named owner rather than an implied one.
+
+| Name | Read by | CI copy | **Owner** | Note |
+|---|---|---|---|---|
+| `SUPABASE_SERVICE_KEY` | `config.py:38` — **legacy** fallback | `TWELVEX_SUPABASE_SERVICE_KEY` is canonical | **Security** | Renamed to `TWELVEX_SUPABASE_SERVICE_KEY` in `7658a22` (2026-06-25, #57). `config.py:38` is an `or` chain — canonical first, legacy second — so this local copy **does** satisfy `get_supabase_key()`, and the raise at `config.py:42` fires only when both names are empty. What is wrong here is the **error text**: `:42` names only the canonical var, so a run with both empty reports a missing `TWELVEX_SUPABASE_SERVICE_KEY` when the operator did supply a service key under the old name. Working today, misleading when it breaks. Rename here to the canonical name and delete the alias |
+| `CORE_SUPABASE_SERVICE_KEY` | `config.py:67` | repo secret (canonical per the 2026-10-04 decision) | **Security** | Service-role = full DB read/write. See the multi-service row in (c) and `docs/ops/SECRETS_ROTATION.md` |
+| `CORE_SUPABASE_URL` | `config.py:107` (has a hardcoded default) | repo secret | **Security** | Public project-ref, not a secret — belongs in the (f) family |
+| `TWELVEX_R2_ACCESS_KEY_ID` · `TWELVEX_R2_SECRET_ACCESS_KEY` · `TWELVEX_R2_ACCOUNT_ID` | `config.py:386-388` | repo secrets `R2_*` | **Security** | twelve-x archive bucket. Distinct from the digithings `R2_*` pair in (c) — different bucket, same account |
+| `TWELVEX_R2_BUCKET` | `config.py:391` (defaults `twelve-x-archive`) | repo secret `R2_BUCKET` | **Security** | A bucket **name**, not a credential — belongs in the (f) family |
+| `OPENROUTER_API_KEY` | `nodes/llm.py:73` notes the CI/`.env` key mismatch | org secret | **Security** | Same org-level key as the (b) row; this is its local copy. Triplicated per R4 |
+| `CHEAPERINFERENCE_API_KEY` | **no reader** — twelve-x never reads this name; CI maps it *into* `OPENAI_API_KEY` (`daily_run_reusable.yml:61,109`) | repo secret | **Security** | House gateway key, but in twelve-x it is a **CI-side alias only**, not a runtime env name. The runtime name is `OPENAI_API_KEY` (read `nodes/llm.py:102-104`; `validate_llm_credentials` raises `MissingLLMCredentialsError` at `:113-116` if it is empty or a placeholder — the `CHEAPERINFERENCE_API_KEY` mention at `:114` is inside that error *message*). A local copy under this name is dead weight; set `OPENAI_API_KEY` locally |
+| `CHEAPERINFERENCE_API_BASE` | **no reader** — `git grep CHEAPERINFERENCE_API_BASE github/develop` is empty in twelve-x | none **in twelve-x** (it *is* a live digithings repo variable — see [Storage surfaces](#storage-surfaces) and row (f)) | **Security** | **Dead name in twelve-x.** The house base is `OPENAI_API_BASE` (`config.py:193`, read `nodes/llm.py:86`). The repo qualifier matters: grepping this name in `digithings` finds live workflow reads, so "no reader" is true of twelve-x only |
+| `OPENAI_API_KEY` | `nodes/llm.py:102-104` | mapped from `CHEAPERINFERENCE_API_KEY` in CI | **Security** | See the `unresolved` note on the (b) row — this `.env` copy is the only place it exists |
+| `OPENAI_API_BASE` | `nodes/llm.py:86` | none (literal in workflows) | **Security** | Base URL, not a secret |
+| `NOTION_API_TOKEN` | **no reader** — `git grep NOTION github/develop` in twelve-x is empty | none | **Security** | **Dead name.** No Python, shell, or workflow file in twelve-x reads it, so nothing here can tell you whether the value is still live at Notion — only Notion can. Delete here, and revoke at Notion if a twelve-x-integrated page ever existed |
+
+### (g4) the surface-level fix, and why it is not this section
+
+A table row is an accountability record, not a control. Three changes make this
+surface stop being anyone's problem:
+
+1. **Move the laptop's session keys out of `.env`** into Bitwarden Secrets Manager
+   (DIG-95), same as `GH_DISPATCH_TOKEN` per R14. Then there is one copy, it has a
+   writer, and the refresh script's `gh secret set` becomes the only path.
+2. **Delete the three names nothing reads** — `NOTION_API_TOKEN`,
+   `CHEAPERINFERENCE_API_BASE`, and `PRIMEMARKET_SESSION_COOKIE`; and rename
+   `SUPABASE_SERVICE_KEY` → `TWELVEX_SUPABASE_SERVICE_KEY` plus
+   `CHEAPERINFERENCE_API_KEY` → `OPENAI_API_KEY` so the local copies stop shadowing
+   what CI supplies. Verified dead or uncanonical against `github/develop`, not
+   inferred.
+3. **Give the desk login pair a decision** — Bitwarden or delete, in all three
+   places it lives. It is a human's account credential; the `.env` is the wrong home
+   for it, and the repo secret is the copy nobody remembers.
+4. **Check whether the repo-secret copies of the desk login pair are even set.**
+   Unanswerable from here — GitHub secrets are write-only — so it is a human step.
+
+None of these are done here. This section records the owner and the refresh path so
+the next person is not guessing, and every claim above carries a `file:line`, a
+commit, or a named command.
+
+Every name in (g1) to (g3) is a credential **we hold a copy of**. There is one
+PrimeMarket credential where we hold no copy at all, and it is a standing
+prohibition rather than an owner to assign: [the vendor-published browser-bundle
+credential](#the-vendor-published-browser-bundle-credential-dig-1424) (DIG-1424).
+
+## The digillm egress pepper — not a normal API key (DIG-1184)
+
+Not a `(g)` item: that series covers the twelve-x laptop `.env`, and this key is a
+digithings deployment secret with no laptop copy. It gets its own section because it is
+the one secret here whose failure mode is a ledger that silently stops proving anything.
+
+`DIGILLM_EGRESS_DIGEST_KEY` (added by DIG-1139 / PR #5152, documented for
+operators by DIG-1184) is the only secret in this inventory whose **absence is
+silent on a production request path**. Nothing breaks: a missing key is not a 401
+or a failed health check here, because with no pepper set digillm still writes
+every egress record — it just writes `digest_algorithm: "absent"` and
+`payload_digest: null`, because `egress_record.compute_payload_digest` refuses to
+substitute an unkeyed hash for a missing secret. (`LANGSMITH_API_KEY`,
+`AZURE_SEARCH_API_KEY`, `COHERE_API_KEY` and `EXA_API_KEY` are also silent when
+absent, but each is optional: tracing export stops, a backend is disabled, search
+is dormant. This one sits on every LLM call.)
+
+So the failure mode is not an outage, it is a **ledger that looks complete and
+cannot evidence what was sent**. Measured on `task/1139-digillm-egress-record` at
+`1c3346585`: `pytest digillm/tests/test_digillm.py` produced 83 records and the
+full `pytest digillm/tests` produced 156, every one of them `absent`. That is the
+correct code behaviour and the point of DIG-1139; it is also a privacy mechanism
+that is off in every shipped configuration today.
+
+Three rules that differ from every other row here:
+
+1. **Do not co-locate the pepper with the ledger.** By default both land in the
+   same checkout — the key in `.env`, the records in
+   `digiquant/results/egress/records.jsonl`, reachable by the same process under
+   the same operator. That is fine for local development and wrong anywhere a
+   second person can read. **This is not yet enforceable in this stack, and an
+   operator must not record it as done on the strength of a file mode.** No service
+   in `docker-compose.yml` declares a `user:`, and none of the Dockerfiles behind
+   the five digillm-importing compose services (`digiclaw`, `digigraph`,
+   `digiquant`, `digisearch`, `digitrace`) has a `USER` directive, so those
+   services run as uid 0 and root ignores file mode
+   bits: a ledger chmod-ed `0222` on a volume is separated from other operators but
+   not from the process that also holds the pepper in its environment. A GitHub
+   *org secret* is workflow-scoped and does not reach compose either, and Bitwarden
+   Secrets Manager is still an open migration here (DIG-95), so today neither is an
+   available delivery path. Real separation needs a sink the app cannot read back —
+   and `DIGILLM_EGRESS_LOG_PATH` only reaches a regular file (the sink opens the
+   path for append; the module has no syslog/OTLP branch, so a FIFO would block
+   the request path and a socket cannot be written at all). Genuine separation is
+   unavailable until `egress_record` grows a collector transport, or the deployment
+   consumes records through the in-process observer with `DIGILLM_EGRESS_LOG_PATH=off`.
+   Same mount, same backup, or same read grant defeats the mechanism: an HMAC next
+   to its own ledger is a dictionary for any candidate list the reader holds.
+2. **Set both variables on every service that imports digillm.** `digiclaw`,
+   `digigraph`, `digiquant`, `digisearch`, `digiskills` and `digitrace` all declare
+   the dependency (`digiskills` ships no compose service of its own, so its vars
+   ride with whichever service hosts it). A per-service compose `environment:` entry is per-service, so a
+   pepper on one service leaves the rest emitting `absent` into the same ledger —
+   which looks like the exact silent failure this section is about. And leave
+   `DIGILLM_EGRESS_LOG_PATH` set in containers (`off` for the observer route): no image copies `digiquant/` or
+   `.git`, so the default resolves inside the container's writable layer and the
+   GDPR ledger is destroyed on the next recreate while every health check stays
+   green.
+3. **One key per environment, never shared.** A reused pepper makes every
+   deployment's digests comparable, so one leaked ledger becomes a dictionary for
+   all of them. Rotation changes future digests, so a rotated environment can no
+   longer recompute historical records against new ones — keep the old key and
+   old ledger in separately-guarded custody if counsel must verify past entries.
+   `docs/ops/SECRETS_ROTATION.md` has no cadence row for this key yet; add one
+   there before this goes to production, and rotate it whenever the ledger store
+   changes custody.
+
+**Verification, before anyone relies on the ledger for a compliance question:**
+
+```bash
+# 1. the pepper is present AND long enough to produce a digest, without ever
+#    printing it. `-n` is not enough: a truncated paste or a placeholder is
+#    non-empty and still yields digest_algorithm "absent" on every record. Test the
+#    length, not the shape — after stripping, as the code does
+#    (`pepper.strip()` before measuring, so padding does not count). Never list
+#    a secret store here — `bws secret list`
+#    prints values, and this file's rule is that verification means behaviour,
+#    never readback (docs/ops/SECRETS_ROTATION.md:12).
+#    Run this on EVERY service listed above, not one.
+docker compose exec <digillm-service> sh -c \
+  'k=$(printf "%s" "$DIGILLM_EGRESS_DIGEST_KEY" | sed "s/^[[:space:]]*//;s/[[:space:]]*$//"); [ ${#k} -ge 32 ] && echo len-ok || echo TOO-SHORT-OR-MISSING'
+
+# 2. the separation actually holds. This check is necessary, not proof: it shows
+#    the process cannot read that file, not that records are being written.
+#    NO-SINK and LEAK are both failures (an unset or stale path must not read
+#    as "ok").
+docker compose exec <digillm-service> sh -c '[ -e "$DIGILLM_EGRESS_LOG_PATH" ] || { echo NO-SINK; exit 1; }; [ -r "$DIGILLM_EGRESS_LOG_PATH" ] && echo LEAK || echo ok'
+
+# 3. the ledger is not 100% "absent" — a count, no payload content. Two filters,
+#    both necessary: unit-test records (digillm/tests/test_digillm.py does not
+#    redirect DIGILLM_EGRESS_LOG_PATH, so a checkout-local ledger holds records
+#    with destinations like "<MagicMock …>") and cache-hit records, which carry no
+#    payload and are "absent" whether or not a pepper exists.
+jq -r 'select(.destination | startswith("http")) | .digest_algorithm' \
+  digiquant/results/egress/records.jsonl | sort | uniq -c
+```
+
+An `absent`-only distribution over real, non-cache-hit destinations is a finding:
+that environment never had a pepper, so its digests cannot be recomputed. A ledger
+that is *part* `absent` is not a total failure — it means the pepper was installed
+partway through the ledger's life, and only the earlier records are unverifiable.
+Wire the secret, then read the ledger.
+
+## Vendor terms and what this file may publish (DIG-1194)
+
+Raised by the CTO from DIG-503. Counsel's finding on DIG-461/DIG-503 was that this
+file, public under our own name, described how to obtain and replay a session
+against a vendor whose Terms of Use prohibit automated and unauthorized access.
+Security owns the call on what an audit document in a public repo may contain,
+because the file's value is its provenance — it records what was found and when —
+and because it carries live rotation decisions that a docs edit would quietly
+overwrite. Three questions were put to Security. Answered 2026-10-05.
+
+**Q1 — Are the vendor-specific rows generalised, and at what level?**
+**No. The vendor name stays, and so do the `file:line` citations.** They are our own
+configuration identifiers: no secret inside a name, and no actionable step it enables,
+so deleting them would remove exactly zero attack surface. The audit needs them
+regardless — named owner, both storage locations, read-by path, refresh script and
+rotate-on-expiry state. Strip the names and every row becomes an unactionable rumour.
+`https://desk.prime-terminal.com` stays too: a public login page, and load-bearing —
+this credential authenticates **as a person**, which is why its refresh path is a human
+sign-in. What is generalisable here is the **method**, not the **name** — and the
+method is what is being removed.
+
+**Q2 — Is the session-acquisition procedure at the `PRIMEMARKET_SESSION_TOKEN`
+row a recipe that belongs out of a public repo?**
+**Yes, and it has been removed.** A session-acquisition procedure — a human sign-in at
+the vendor's desk, then reading the resulting credential out of a named browser storage
+slot — was the *session-acquisition* half of the prohibited pattern, and it was the most
+operational sentence in the file. The row now reads "a human operator's own sign-in",
+and **the acquisition procedure is not published in this repo**: the canonical copy is
+held in the private `twelve-x` repo, for the reason given in [Vendor terms and what
+this file may publish](#vendor-terms-and-what-this-file-may-publish-dig-1194) — the
+vendor's terms prohibit automated access. It is not restated here either. A removal is
+not an amendment: deleting a step from the operative document does not license
+republishing the step in the document that records the removal. Nothing was lost that
+the audit needs: the row still records the name, both storage locations, the reader,
+the owner, the refresh script, and the rotate-on-expiry rule.
+
+**Q3 — Does the `PRIMEMARKET_SESSION_COOKIE` finding survive in a public file?**
+**Yes, unchanged.** "Delete it; do not rotate it" and "an expiry alert tells you
+about the Actions secret only" are **negative** findings — they exist to stop
+someone doing the wrong thing. Removing a negative finding from a public audit
+removes the warning while leaving the secret in place, which is strictly worse
+than publishing it. The supporting citations (`docs/PRIMEMARKET_DESK_API.md:161`,
+`:171-172`) stay too: a `file:line` pointer into a private repo is not an
+operational recipe, and the citation is the only reason the claim is checkable.
+
+**Changed in this file on 2026-10-05:** the one sentence in Q2, nothing else. The
+vendor name, both storage locations, the three-place spread of the desk login pair,
+"a human's desk credentials", the delete-don't-rotate conclusion, the alert gap,
+and every `file:line` above are all as they were, because Security's judgement is
+that an audit which softens its own findings is worse than one that publishes them.
+
+**Corrected 2026-10-06 (DIG-1413, on Security's ruling at DIG-1418), in Q1 and Q2
+only.** Two of this section's own claims were wrong, and the corrections are to its
+reasoning, not to any finding. The Q2 narrative quoted the removed sentence back
+verbatim; it now describes the mechanism and points at the canonical copy instead.
+And Q1 rested on a claim that a later check disproved — that the `PRIMEMARKET_*` names
+are "already public and unavoidable" in `.env.example`, the twelve-x workflow files and
+the Python config. They are not: on the public `develop` every hit for those names is
+inside this file, and the `.env.example` that does carry them lives in the **private**
+`twelve-x` repo. That premise is withdrawn. The names stay anyway, on the reason that
+does hold — they are our own configuration identifiers, and an audit row without its
+name, owner, storage locations and rotation state is an unactionable rumour. **No row
+was edited, no owner changed, no rotation state changed, and no risk-register entry
+changed by this correction.** The general rule recorded for DIG-1415: *our own
+configuration identifiers and a public login page stay; names that locate a credential
+on someone else's system go.*
+
+**Vendor terms are now recorded separately, with artefacts.** A secret inventory
+cannot answer "are we allowed to use this at all" — that is a different question
+from "where does the value live and who owns it", and answering it here is how the
+2026-08-01 note went wrong. Terms, retrieval date, sha256 and classification live
+under `docs/vendor-terms/<vendor>/`, per `docs/VENDOR_CONTENT_BOUNDARY.md`.
+[`gloomber/INDEX.md`](../vendor-terms/gloomber/INDEX.md) is the first entry. Security
+classified it **Unclear** on 2026-10-05; Counsel's memo the same day concluded
+**Prohibited (confirmed)**. The record is additive — the memo sits beside Security's
+position, not over it.
+
+### Gloomberb: the accepted use, the custody blocker, and what is still unverified
+
+Written 2026-10-06 by Security, after Chris answered the four-question card on
+DIG-1194. Nothing here was previously in this file, and
+nothing above it changed.
+
+**The accepted use, in full.** Counsel classified the Gloomberb session-cookie method
+**PROHIBITED, CONFIRMED** on 2026-10-05. Chris was shown that finding and, on
+2026-10-06, chose to keep the 42 cookie-gated `digifetch_*` tools running, on the
+stated basis that *"our tools don't have clients yet, I'm just experimenting with the
+cookie method. I won't publish yet."* That is a deliberate acceptance of a prohibited
+use by the person who owns that decision, made with the finding in front of him. It
+is recorded here so that the next reader sees an accepted risk with a name on it, not
+a silent practice. **It is an acceptance of use, not of publication, and not of any
+client-facing surface.** It lapses — and this row, and R17, re-open — if any of these
+become true:
+
+| Tripwire | Why it lapses the acceptance |
+|---|---|
+| anything about this access method is published | Chris's own condition; it is also §12 exposure |
+| a hosted or client-facing surface can reach the gated tools | §12 permits apps "for yourself **or for users who have their own access**"; the acceptance covers only our own internal experiment |
+| the account's plan changes, or a team plan is bought | a team plan or written agreement (§21) is the one thing that makes method D permitted, so the analysis changes |
+| the account is closed, or the credential is destroyed | nothing left to accept |
+| Counsel's position changes | the finding is the basis of the acceptance |
+
+**Custody: authorised, and blocked.** Chris authorised moving the cookie into
+Bitwarden. It is **not** there. The `keymaster` machine account token is in the
+macOS Keychain and authenticates, but `bws project list` returns nothing while
+`bws project create` is refused with *"maximum number of projects (3) for this
+plan"* — the organisation is at its quota and the machine account has no grant on any
+of the three existing projects. Granting that is an owner action in Bitwarden, and
+the Bitwarden account itself is outside Security's red lines. Tracked on
+DIG-95; Security runs one command once it is granted.
+**Until then this credential exists in exactly one place — one line of a gitignored
+`.env` — and no inventory, no expiry and no owner sits behind it.** That is the whole
+remaining custody risk, and it is not mitigated by anything else in this file.
+
+**No money is at stake.** Chris confirmed there is **no payment method** on the
+Gloomberb account. That closes the §8/§15/§9 hazard Counsel flagged — no trial can
+have converted, and deletion cancels immediately with no refund owed. Closing the
+account is therefore money-safe whenever he chooses it; it is not money-safe-blocked,
+it is simply not authorised, because "keep it running" keeps the account.
+
+**One claim in this file is now unverified.** The inventory row for this name lists
+the stack Worker (`wrangler.toml:186`) as a second copy. Security could not confirm
+or refute it on 2026-10-06: `wrangler secret list` requires a `CLOUDFLARE_API_TOKEN`
+Security does not hold, and the connected Cloudflare tooling exposes no
+secret-binding listing. Treat the deployed copy as **unknown, not absent**. If it is
+set, then "keeping the tools running" is production traffic against a prohibited
+endpoint, not a local experiment — which is why R17 asks DevOps for one command.
+
+## Review coverage for this section
+
+The digillm egress pepper section was reviewed in-session on 2026-10-06 twice by
+fresh-context reviewers — once on an operational lens, once adversarially on privacy and
+security. The second pass found the load-bearing defect in the whole change: **the
+prescribed separation is unenforceable as written.** The docs told an operator to put
+the ledger where digillm could "append to but not read back", but no service in
+`docker-compose.yml` declares a `user:` and none of the Dockerfiles behind the five
+digillm-importing compose services has a `USER` directive, so those services run as
+uid 0 and root ignores file mode bits — a `0222` ledger on
+a volume separates it from other operators and not from the process holding the pepper. An
+operator following the first draft would have marked that rule done while holding no
+separation at all. All four docs now state the constraint and the honest consequence:
+`DIGILLM_EGRESS_LOG_PATH` only reaches a regular file, so genuine separation is
+unavailable until `egress_record` grows a collector transport (or the deployment
+uses the observer with the path `off`) — and they ship the necessary (not
+sufficient) in-service check that reports `NO-SINK`/`LEAK`/`ok` without hanging
+on a FIFO.
+
+The same pass also forced: `absent` no longer being described as proof a pepper was
+missing (the `completion()` cache-hit record is `absent` with or without one, and a partly
+`absent` ledger means a partway key install, not a total failure); the presence check
+testing the 32-character floor rather than non-emptiness, so a truncated paste can no
+longer pass; the pepper generation command shown only in its piped form, since the bare
+form puts the value in terminal scrollback; the default ledger path documented with its
+`$CWD` fallback and the consequence that inside a container image — where nothing copies
+`digiquant/` or `.git` — the default lands in the writable layer and is destroyed on
+recreate; both variables set on every service that imports digillm rather than one; the
+"were sent" claim softened to "offered to the provider"; and two line citations corrected
+(`SECRETS_ROTATION.md:11` → `:12`; the BYOK key is at `client.py:696-703`, not `:1371`).
+
+The first pass forced eight corrections that had gone into the initial draft: a
+verification step that would have **printed the secret** (`bws secret list --search …` —
+`--search` does not exist on `bws` 2.1.0, and plain `secret list` emits every `"value"`);
+a delivery claim that a GitHub org secret reaches `docker compose`, which it cannot; four
+claims that the digest covers "the outbound payload" when it covers `messages` only; a
+record-count figure that did not reproduce (397 → 83 for the cited command, 156 for the
+full suite); an undisclosed fact that the test suite appends to the real default ledger; a
+table row that broke this file's own column conventions; an unsupported "the only secret
+whose absence is silent"; and an unresolvable "rotate on the usual cadence" with no
+cadence row to point at. It also corrected the digillm docs it accompanied —
+`digillm/ARCHITECTURE.md`, `digillm/AGENTS.md` and `.env.example` — on the `off`/`none`
+disabling values, the `compute_payload_digest(key=)` test seam, the module-map wording
+"per provider attempt" (the code records attempts that fail *before* the wire too), and a
+"duplicated locally" claim about the Art. 9 ids that named a canonical copy which does not
+exist — digibase has no GDPR module, so there is nothing to drift from.
+
+Reviewed in-session on 2026-10-05 by a fresh-context reviewer, which found and
+forced the correction of five substantive errors in the first draft: a claim that
+the `SUPABASE_SERVICE_KEY` copy could not satisfy its reader (it does — `config.py:38`
+is an `or` chain; only the raise *message* is misleading), a claim that both
+twelve-x alert bodies were already copy-aware (there is one, and it names neither
+copy), and three citations whose line numbers did not contain the cited facts
+(`PRIMEMARKET_DESK_API.md:151` → `:161`, `:160-162` → `:171-172`, and
+`PRIMEMARKET_SESSION_TOKEN` is not read by `config.py` at all). It also corrected
+"this `.env` only" for the desk login pair — those two names are in the repo secret
+too and still passed by two workflows — and split "dead" from "uncanonical" for
+the Supabase name. The takeaway for the next writer: **verify a line citation by
+reading the line on `github/develop`, not the working tree, and check the other
+repo before calling a shared name dead.**
+
+## The vendor-published browser-bundle credential (DIG-1424)
+
+Recorded here on 2026-10-06 from the vendor exposure reported to Security on
+DIG-1261 and split out as DIG-1424 (CTO's ruling). **No value was read, printed,
+copied, or transcribed** — not into this file, not into an issue, and not into any
+repository file. This record deliberately did **not** fetch the bundle to confirm
+the literal: a fetch would take the value through this process for no benefit, and
+a probe is a use. What was verified from our side is the absence claim in the table
+below. This section records a location and a prohibition. It carries no value, no
+prefix of one, and no length, and nothing here can be used to reconstruct one.
+
+| Name | Where the value lives | Copies we hold | Read by our code | Rotatable by us | Owner | Status |
+|---|---|---|---|---|---|---|
+| `NEXT_PUBLIC_API_TOKEN` (the value the vendor's bundle hardcodes as this variable's fallback literal) | the vendor's **public desk JS bundle**, served to every visitor's browser. The vendor app is a Next.js app, so the literal is inlined at build time and is present in the shipped `_next/static` chunks — the same property that makes every `NEXT_PUBLIC_*` value public, recorded under [Gaps and unknowns](#gaps-and-unknowns). The bundle presents that literal to a `userLogin` endpoint on the vendor's API host `frontendapi.primemarket-terminal.com` | **none.** Absent from the repo-secret and Worker-secret enumerations recorded above, and from every `.env`, from `digithings`, and from `twelve-x`. Verified by absence **of the name**: `git grep -i "NEXT_PUBLIC_API_TOKEN\|userLogin\|frontendapi"` in `twelve-x` on `github/develop` returns **nothing**. That proves the name is unused, not that the value is absent under some other name — no local command can prove the second half, and a credential we never wrote down could only have reached us by being read out of the bundle, which this record deliberately did not do | **nothing.** No digithings or twelve-x file reads this name. The scrape path is unchanged by this record and uses only the credentials in (g1) and (g2) | **no.** We hold no copy and the vendor is the only party who can change it. There is no `gh secret set`, no `wrangler secret put`, and no `refresh_*.sh` path that ends at this value, because we never store it | **Security** (agent `b14d7a18`), with Chris as the only human who can execute | **DELIBERATELY UNUSED. NEVER TO BE USED.** |
+
+### Why this is a standing prohibition
+
+It is an upstream **service** bearer token, not one of ours, and it reached
+every browser because the vendor shipped it in client-side code. Three facts put
+it out of bounds, and none of them is a preference:
+
+1. **It was leaked by the vendor, not provided to us.** The vendor's terms permit
+   programmatic access only for APIs *officially provided by them* (Section 12 —
+   see [`docs/plans/adr-0030/HOLD-Primarket.md`](../plans/adr-0030/HOLD-Primarket.md)).
+   Copying a token out of a bundle is the opposite of that exception, and using it
+   is the material breach that HOLD already records. Counsel owns the legal half on
+   DIG-1246 and has ruled that automated login is not permitted.
+2. **We cannot rotate it.** Rotation is the control this file exists to protect,
+   and here it does not exist. Any process depending on this value would break
+   silently, at a moment we choose by accident.
+3. **Using it makes the contractual position worse, not better.** A credential we
+   did not pay for and cannot revoke is a liability we would be importing.
+
+The CTO ruled the same on DIG-1261 (Security's half), which DIG-1424 splits out.
+Chris's incident on DIG-1226 — a credential value pasted into a Paperclip
+interaction reject-reason on 2026-10-05, where the record can no longer be edited
+or deleted — is the reason the rules below are written as prohibitions instead of
+as guidance.
+
+### The prohibitions
+
+- **Never use it** for any request, on any path, for any reason.
+- **Never wire it into `twelve-x`** — not into `.env`, not into
+  `config.py`, not into a workflow, and not as a fourth route behind the session keys
+  in (g1). The chain is the supplied session, then the desk login pair in (g2), and it
+  stops there: twelve-x `docs/PRIMEMARKET_DESK_API.md:193-198` records that "try the
+  supplied session, else fall back to credentials" is deliberately **not** implemented,
+  because a rejected session would then fire a real credential attempt against the live
+  vendor account on every run. A fourth route would break that on purpose.
+- **Never paste it** into a ticket, an issue comment, a chat message, a code
+  review, a commit message, a branch name, or any file in any repository. This
+  includes a **prefix** and includes a **length** — a prefix plus a length is
+  enough to confirm a candidate and to search a leak corpus. Report the
+  **location and the variable name** instead. The report-this / never-report-this
+  table is twelve-x `docs/PRIMEMARKET_DESK_API.md:158-162`, added there after the
+  DIG-1226 incident. In this repo,
+  [`docs/ops/credential-ownership.md`](credential-ownership.md) carries the ownership
+  side under **Enforcement → "No secret values in docs"**; its "Never paste a
+  credential value" section is **DIG-1226, not yet merged into `develop`**.
+- **Never write a script that fetches it or tests it.** A liveness probe is a use.
+  That is also why this section has no `file:line` probe command, unlike most rows
+  above.
+- **Never try to rotate it**, and never open a ticket that asks for it to be
+  rotated. Rotating is the reflex when a credential is unrotated and unauthenticated,
+  and here it is both impossible and wrong: we hold no copy, so there is nothing to
+  write back, and the only parties who could act are the vendor and Counsel. The
+  correct report for this finding is DIG-1424 itself, closed as a standing
+  prohibition.
+
+### This is a trap-guard, not a discovery
+
+The exposure is on the **vendor's** side and there is nothing for us to remediate
+on our side: we hold no copy, we cannot rotate it, and no code of ours reads it.
+That is precisely what makes it a trap. An agent that fetches the desk bundle will
+find a token-shaped literal in client-side JavaScript and can reasonably conclude
+"I have found an API token" and open new work — a probe, a rotation, a wiring
+change, or worse, a paste.
+
+**If you found a token in the desk bundle: this is DIG-1424, and there is no new
+work.** It is recorded, it is prohibited, and it needs no action from you. Do not
+test it, do not report its value, do not open an issue about it, and do not treat
+it as a discovery. Close the loop on DIG-1424 instead.
+
+### What this record is not
+
+This is not an access method. It adds no step-by-step recipe, no request example,
+and no reproducible command, and it deliberately stays inside the ADR-0030 hold
+([`docs/plans/adr-0030/HOLD-Primarket.md`](../plans/adr-0030/HOLD-Primarket.md)),
+which bars **PrimeMarket-specific examples in public files** until DIG-478
+(Card `295f3d75`, with Chris) is decided and Counsel confirms. The existing
+PrimeMarket rows above are themselves inside that hold: the session keys in (g1)
+and the login pair in (g2) are inventoried as **credentials we hold with a named
+owner and a recorded refresh path**, not as a way to obtain or use them.
+
+Related: DIG-1424 (this record), DIG-1261 (CTO ruling on the credential),
+DIG-1246 (Counsel, legal half), DIG-1226 (the never-paste rule and its
+precedent), DIG-478 and DIG-503 (the hold and its parent).
+
 ## Risk register
 
 **R1 — `DIGIKEY_PRIVATE_KEY_PEM` has no rollover path.** Severity: critical. Evidence: `digikey/src/digikey/crypto_keys.py:61`, `digikey/src/digikey/jwt_issue.py:88`, [`digikey/ARCHITECTURE.md`](../../digikey/ARCHITECTURE.md):305-335. Why: static `kid=digikey-1`, no JWKS overlap or grace period; rotating invalidates every outstanding JWT until each consumer refetches (300 s cache, `DIGIKEY_JWKS_CACHE_SEC`). Action: run `docs/ops/SECRETS_ROTATION.md`; implement multi-key JWKS overlap per `docs/adr/0029-secrets-management.md`.
@@ -164,11 +703,46 @@ Six repo secrets that no `.github` YAML read were deleted on 2026-09-17/18: `COP
 
 **R12 — `DIGIQUANT_VAULT_MASTER_KEY` is a single key with no rewrap path.** Severity: high. Evidence: `digiquant/src/digiquant/vault/envelope.py:79,80,141,151-175`. Why: AES-256-GCM with no default; rotating it makes every sealed broker credential unreadable, and `DIGIQUANT_VAULT_KEY_ID` has one label (`v1`). Action: KMS/rewrap runbook; seal a second key id before retiring the first.
 
-**R13 — GitHub secret reads are repo-scoped with almost no environment gate.** Severity: high. Evidence: 1 of 49 workflows declares `environment: production` (`deploy-digiquant-runner.yml:33`); `DIGITHINGS_PROJECT_TOKEN` is read by 7 workflow files, 22 `secrets.*` refs (`agent-backlog-snapshot.yml:28` … `pipeline-maintenance.yml:910`). Why: any workflow on any branch can read production credentials, and the project token is the widest-blast-radius CI credential. Action: move production reads behind GitHub Environments; scope the project token to fine-grained permissions.
+**R13 — GitHub secret reads are repo-scoped with almost no environment gate.** Severity: high (mitigation half-landed 2026-10-04). Evidence: `DIGITHINGS_PROJECT_TOKEN` is read by 7 workflow files, 22 `secrets.*` refs (`agent-backlog-snapshot.yml:28` … `pipeline-maintenance.yml:910`); `CORE_SUPABASE_URL` and `CORE_SUPABASE_SERVICE_KEY` 31 each, the four `R2_*` names 9 each, `CLOUDFLARE_ACCOUNT_ID` 5, `CLAUDE_CODE_OAUTH_TOKEN` 5, `CLOUDFLARE_API_TOKEN` 4. Why: any workflow on any branch can read these, and the project token is the widest-blast-radius CI credential. Action: ~~move production reads behind GitHub Environments~~; scope the project token to fine-grained permissions.
+
+**R13 status — the code half landed on 2026-10-04 (DIG-248).** Two separate defects were fixed, and one is still open:
+
+1. **Gate: done.** A third environment, `cron`, was created with **no required reviewers, no wait timer and no branch policy**, so a job pointing at it runs immediately and no scheduled pipeline can stall. Every one of the **32 jobs that read a non-automatic `secrets.*` name** across 18 files now declares `environment: cron`; `deploy-digiquant-runner.yml:deploy` keeps `environment: production`. **Deliberately not `production`**: that environment carries `required_reviewers: [chrizefan]` plus a custom branch policy, so pointing 32 more jobs at it would have made every scheduled pipeline wait for manual approval — the automation would have stopped while looking like flaky crons. The three files that read nothing but the automatic `GITHUB_TOKEN` (`ci-pr-hygiene.yml`, `ci-pr-title.yml`, `refresh-repo-activity.yml`) need no gate.
+2. **Scope: OPEN, blocked on a human.** Environment-scope secrets are invisible to jobs that do not declare that environment, so the gate above is inert until the values actually exist at `cron` scope. GitHub secrets are write-only, so the 18 repo names and 11 org names have to be **re-entered by Chris** in the `cron` environment and only then deleted from repo/org scope — in that order, after this change merges and one scheduled cycle passes green. `deploy-digiquant-runner.yml:deploy` also needs fresh `production`-scope copies of `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN`, whose `production` copies were deleted 2026-09-18; `D1_DATABASE_MAP` is already there. Until that happens, a new `secrets.*` name added to a `cron` job will resolve to empty exactly as it would with no environment at all — the gate is real but currently unpopulated.
+
+**R14 — one personal PAT is the only GitHub credential for every org-wide clock *and* for the alarm that reports on them.** Severity: high (accepted 2026-10-05, DIG-363). Evidence: `GH_DISPATCH_TOKEN` is a fine-grained **personal** access token on a human account (settings id 19179726, `digithings-ai/digithings` + `digithings-ai/twelve-x`, expires 2027-09-15); the `digithings-cron` Worker holds it as its only GitHub credential. It authorizes all **38** distinct cron expressions' `workflow_dispatch` POST (`apps/digithings-cron/wrangler.toml:37-76` `[triggers]`, posted at `apps/digithings-cron/src/dispatch.ts:289,295-298`), and the DIG-71 short-day alarm, which posts to `POST /repos/$ALERT_ISSUE_REPO/issues/$ALERT_ISSUE_NUMBER/comments` with the same token and no other. Why: the credential that reports "the clocks stopped" is the credential that stops the clocks, so **one event on one human account is a correlated outage of the workload and its own alarm in a single move** — 2FA re-enrolment, a lockout, a password change under account-wide PAT revocation, offboarding, or account deletion. Two aggravating properties: fine-grained PAT permissions are **not readable over any GitHub API**, so grant drift on this credential is invisible to tooling; and revocation is an **account-level** action, so rotation cannot be done by an agent or on a schedule — only reactively, by a human. Action: **accepted risk, not mitigated** — Chris chose B (keep the PAT) and the shared token on 2026-10-05, declining a GitHub App because that would add a second long-lived secret with power to mint dispatch and issue tokens. Re-open if any of: the PAT reaches its 2027-09-15 expiry (rotate reactively, [runbook](SECRETS_ROTATION.md#4-gh_dispatch_token)); the alarm lands on a second credential; or the token moves to Bitwarden (DIG-95), which changes custody but **not** this coupling. Adding a second credential for the alarm would reverse the deliberate `GH_ISSUE_TOKEN`-must-not-exist rule (`apps/digiquant-runner/wrangler.toml:14,20`) and would have to be argued on its own merits.
+
+**R15 — the twelve-x legacy `anon` / `service_role` JWTs cannot be revoked without breaking FX Hub session minting.** Severity: low now, **closing 2026** (Supabase deprecates both). Evidence: project `lfghjucjrsabiqwxerxv` (twelve-x, a **separate** Supabase project from the core `rwagjbkvxkdwqmouagad`); the Management API `POST /v1/projects/{ref}/api-keys` accepts only `type: publishable | secret`, so a legacy JWT key has **no in-place rotation**; `PUT /v1/projects/{ref}/api-keys/legacy` takes no body and returns a single `{"enabled": bool}`, i.e. **one flag over both `anon` and `service_role`**; in the **separate `digithings-ai/twelve-x` repo** (not this one) `supabase/functions/fx-hub-session/index.ts:72` reads the auto-injected `SUPABASE_ANON_KEY` and the same function uses the auto-injected `SUPABASE_SERVICE_ROLE_KEY`. Why: after the 2026-10-05 client-key rotation (DIG-258) the old legacy `anon` JWT **remains valid** — it is still accepted by the project and still inlines into any bundle built before that date, so "rotated" does not yet mean "old key rejected". Action: move `fx-hub-session` off the auto-injected `SUPABASE_ANON_KEY` to its supported replacement, `SUPABASE_PUBLISHABLE_KEYS` (the `anon` role's new key), and off `SUPABASE_SERVICE_ROLE_KEY` to `SUPABASE_SECRET_KEYS` — Supabase now lists the old names under *Legacy* keys — then disable legacy project-wide as one reversible step — never per-key, because the flag is not per-key. Not urgent: the anon role has **no read grant** on any of the 20 FX tables since the 2026-09-14 RLS cutover, so the residual exposure is a live-but-blind key, not a data path.
+
+**R15 status — the code half landed 2026-10-05 (DIG-704); the flag is still enabled.** The *Action* above is superseded by this, in two ways.
+
+1. **The scope was wider than one function.** `supabase/functions/fx-hub-grant-sync/index.ts:69-71` also read the auto-injected `SUPABASE_SERVICE_ROLE_KEY`, for its `fx_hub_grants` upsert. It is the invite-redemption mirror core calls when an invite is redeemed, so migrating `fx-hub-session` alone would have broken **invite redemption while sign-in still passed** — invisible from the path anyone would test. Both functions are now off the legacy pair (`digithings-ai/twelve-x` PR #268, **merged into `develop` as `f71eb69` on 2026-10-05**, and `f71eb69` is already an ancestor of `main`, so no promotion is outstanding), on `SUPABASE_SECRET_KEYS[default]` and `SUPABASE_PUBLISHABLE_KEYS[default]` with **no legacy fallback** — a fallback would keep the dependency alive and make the eventual deactivation fail silently instead of loudly, so a missing or unparseable dictionary now returns `500 API_KEYS_UNCONFIGURED` naming the missing **variable** and no key material.
+2. **Two traps that make a literal reading of the *Action* wrong.** (a) The replacement variables are auto-injected **JSON dictionaries keyed by key name**, not plain strings — `JSON.parse(env)['default']`; reading the variable directly yields JSON text, not a key. (b) New-format keys are **not JWTs** and the platform answers `Invalid JWT` when one arrives on `Authorization`, but `supabase-js` only suppresses its Bearer fallback on the **Edge-Functions** fetch path — its PostgREST and Auth paths, which these calls use, still mirror the key into `Authorization`. Hence the `global.fetch` wrapper stripping `Bearer sb_publishable_`/`Bearer sb_secret_`, and hence the import floor `@supabase/supabase-js@^2.111.0` (the `isNewApiKey` check does not exist before 2.111.0; the previous unfloored `@2` specifier could resolve below it and fail every call).
+
+**Still open, and not an agent action.** Confirm a `default` publishable/secret pair exists on `lfghjucjrsabiqwxerxv`, creating one only if it is absent; deploy both functions (`supabase functions deploy fx-hub-session fx-hub-grant-sync` — no workflow deploys them); verify FX Hub sign-in **and** invite redemption end to end; then deactivate the legacy pair as one reversible step. Runbook: `twelve-x:docs/ops/FX_HUB_API_KEY_MIGRATION.md`. Steps 1 and 3 must not be swapped — the code cannot read keys that do not exist yet. **Do not deactivate the flag on core `rwagjbkvxkdwqmouagad`**; that is platform-wide and out of scope here. Two things this checkout cannot answer, both of which gate the deactivation: whether `lfghjucjrsabiqwxerxv` has a `default` pair yet, and whether anything **outside** twelve-x (mobile/desktop builds, CI, webhooks) still reads the legacy keys on that project — Supabase's own guide makes both a manual pre-deactivation check.
+
+**A caller was found in this repo, and it gates the deactivation: a stale bundle.** `apps/dashboard/lib/twelve-x/supabase.ts` builds a GoTrue client from `NEXT_PUBLIC_TWELVEX_SUPABASE_ANON_KEY` (the same var as inventory row 93), and `lib/twelve-x/session.ts` `ensureTwelveXSession` calls `setSession()` → `getUser()` → `/auth/v1/user`, which carries that key on the `apikey` header. Because `NEXT_PUBLIC_*` is inlined at build time, DIG-258's publishable-key rotation only reaches users on the next production **build**, and the rotation log in `SECRETS_ROTATION.md` records the old `anon` JWT as still shipped in the live bundle at 2026-10-05. Deactivating the legacy flag therefore breaks the dashboard's FX Hub page for any browser still on a pre-rotation bundle — and it fails **silently**, because `ensureTwelveXSession` is best-effort and returns `false` rather than throwing. So the Pages rebuild and a live-bundle re-scan (asserting **absence** of the old key hash, not just presence of the new one) must land **before** the deactivation, not merely before the function deploy. Step 1 must also *confirm* a `default` pair rather than assume one: this project already carries a publishable key named `fx_hub_dashboard` (DIG-258), which shows the naming is under our control and a project can have every key custom-named — in which case both functions fail `API_KEYS_UNCONFIGURED`.
+**R16 — two vendors' access methods are published in public docs, and one of them has never had its terms read.** Severity: high. Evidence: the session-acquisition sentence removed from this file on 2026-10-05; the surviving PrimeMarket rows at the `PRIMEMARKET_SESSION_TOKEN`/`PRIMEMARKET_SESSION_COOKIE` table and the desk-login pair; [`gloomber/INDEX.md`](../vendor-terms/gloomber/INDEX.md) (artefact sha256 `6f781a39…`, terms effective 2026-09-26, classified **Unclear** 2026-10-05, Counsel sign-off **not yet given**); `docs/ops/gloomberb-session-cookie.md`; `digiquant/src/digiquant/data/gloomberb/client.py:405-406`. Why: the 2026-08-01 record that "PrimeMarket is fine with us using their data" was written on the belief that the terms "could not be retrieved", when they were served live the whole time — and Gloomber's terms, 3,072 words at a URL that returns 200, had never been read by anyone here. One failure mode, two vendors: **no retrievable, dated artefact to check a claim against.** Action: `docs/vendor-terms/<vendor>/` per `docs/VENDOR_CONTENT_BOUNDARY.md`; Counsel sign-off in writing before any new vendor access merges to a public repo; Gloomber's §14 team-plan licence question and §11 interface carve-out are with Counsel as of 2026-10-05.
+
+**R16 status — closed 2026-10-05/06.** Both halves are done. Gloomber's terms were
+retrieved, archived and read (artefact sha256 `6f781a39…`, effective 2026-09-26);
+Counsel's memo concluded **Prohibited, confirmed**, and Counsel gave written
+boundary sign-off for PR #5157. Security's own position had been **Unclear**, and the
+memo is filed beside it rather than over it — Security's reading that we do not
+*bypass* authentication survived, but the §14 licence gap, which Security had flagged
+as the sharpest point, is what Counsel put at the centre. The PrimeMarket half is
+DIG-461/DIG-478 and stays open there; nothing in this row is a clearance for it.
+
+**R17 — an accepted prohibited use, a credential with no custody, and a deployment state nobody can verify.** Severity: high. Evidence: the accepted-use record and custody blocker in [Vendor terms and what this file may publish](#gloomberb-the-accepted-use-the-custody-blocker-and-what-is-still-unverified); Counsel's memo (2026-10-05); Chris's acceptance and custody authorisation (2026-10-06, DIG-1194); `bws project list` → empty against `project create` → *"maximum number of projects (3) for this plan"*; `git grep GLOOMBERB -- .github/workflows/` → empty, so no scheduled ingest holds the cookie; `wrangler secret list` unrunnable for Security. Why: three separate weaknesses stack. (1) A Counsel-confirmed prohibited access method is in deliberate, documented use by decision — which is a legitimate state, but only while it stays internal, so its safety depends on tripwires nobody is watching. (2) The credential has no inventory entry with an owner or expiry and lives in one untracked `.env` line, because the Bitwarden write path is quota-blocked. (3) The inventory asserts a deployed Worker copy that cannot be confirmed, so the real blast radius of "keep it running" is unknown. Action: DevOps runs `wrangler secret list` on `digithings-stack` and reports whether `GLOOMBERB_SESSION_COOKIE` is set; owner grants the `keymaster` machine account a project so Security can complete the move on DIG-95; Security adds an expiry-bearing inventory row for this name as soon as it has a home; DIG-1233 keeps the deployed default off, which is now the only thing standing between an experiment and production traffic.
+**R18 — the client-pasted `datatap-dev` MCP `X-API-Key` stays in use by decision, and the only thing protecting it is an ignore rule.** Severity: high (accepted 2026-10-07, DIG-1723). Evidence: the key is named in the `datatap` client, not in this repo; it exists as plaintext in the `digithings-books` working tree at `inbox/chat/datatap/2026-10-06.txt` (516 bytes, single line, label `x-api-key` present once, value 385 chars, Shannon entropy 5.93, shape `<36>:<344>` — shape and metrics only, the value is never transcribed, per DIG-1653); containment is `inbox/chat/` in that repo's `.gitignore:125`; detection is `labeled-credential-long-value` and `labeled-credential-delimited-value` in this repo's `.gitleaks.toml` (PR #5235). Why: the client pasted the credential into a chat export in good faith, and the file is untracked, unstaged and ignored — but **ignored is not revoked**. The value is valid at DataTap's endpoint until DataTap issues and retires it, so anyone who reaches this Mac's filesystem, this repo's history before the ignore rule, or any copy of the chat export holds a working client-scoped credential. It is also invisible to the default gitleaks ruleset, which is why it survived from 17:12 on 2026-10-06 until 2026-10-07 untracked: the default `generic-api-key` rule cannot match a value longer than 150 characters (measured: hits at 146–150, misses at 151 and above) nor one containing a character outside `[A-Za-z0-9_\-+/=]` (measured: a single `:` at any offset inside the value is a miss), and this value violates both. Action: **accepted risk, not mitigated** — Chris rejected rotation on 2026-10-07 with the reason *"old one is fine to keep"*. Security's advice on the record is still to rotate, because ignoring the path is containment and the credential is already exposed to the client; the decision is Chris's as principal and this entry is the durable record of it. Security cannot rotate it: it is a client-scoped key (keymaster-ops red line, client systems beyond their scoped keys) and the request to DataTap is a client message Chris sends. Re-open if any of: the credential reaches a commit in any repository (the ignore rule is only a speed bump, `git add -f` and a file already tracked both bypass it); the chat export is shared outside the company; the credential is used anywhere outside the `datatap-dev` MCP endpoint, which widens blast radius; Bitwarden is bootstrapped (DIG-95), which changes custody and makes rotation cheap enough to be worth asking again; or the client asks us to rotate it. When it is rotated, the file at that path must be deleted, not re-ignored, and the inventory entry moves to the rotation log with both names recorded.
+
+**R16 — the vendor publishes an upstream bearer token in its own browser bundle, and we hold no copy of it.** Severity: high as a **trap for our own agents**, nil as a **storage** exposure. Evidence: [the vendor-published browser-bundle credential](#the-vendor-published-browser-bundle-credential-dig-1424) (DIG-1424); the vendor's desk app is a Next.js app, so the fallback literal for `NEXT_PUBLIC_API_TOKEN` is inlined into the shipped `_next/static` chunks and served to every visitor — the same inlining property already recorded for every `NEXT_PUBLIC_*` value under [Gaps and unknowns](#gaps-and-unknowns); absence of the name from our code verified by `git grep -i "NEXT_PUBLIC_API_TOKEN\|userLogin\|frontendapi"` in `twelve-x` on `github/develop`, which returns nothing; vendor terms Section 12 in [`docs/plans/adr-0030/HOLD-Primarket.md`](../plans/adr-0030/HOLD-Primarket.md). Why: this is the only entry in this file with **no stored copy, no reader, and no rotation path**, which makes it the one row a table cannot make safe on its own — the risk is that the next agent to read the desk bundle treats the literal as a credential it found, and acts. Everything else here is answered by owner + refresh path; this one is answered only by a prohibition, and a prohibition nobody reads is not a control. A token-shaped literal in public JavaScript is also the cheapest false positive for "I found a leaked API key", which is exactly the report shape that produced the permanent DIG-1226 record. Action: **no remediation is available or needed** — the exposure is vendor-side, we cannot rotate a credential we do not hold, and no code of ours reads it. DIG-1424 makes it a trap-guard: an agent who reports "I found an API token in the desk bundle" is answered with a link to DIG-1424, not with new work. Do not write a liveness probe for it — a probe is a use — and do not reopen it as "but if it works". Track any future vendor request to *officially provide* an API through DIG-478 (Card `295f3d75`) with Counsel, which is the only path by which the prohibition could ever change.
 
 ## Gaps and unknowns
 
-- **Pages env not enumerable.** `digithings-web` Pages project env vars are not listed by `wrangler secret list`; `apps/digithings-web/wrangler.toml:24` documents a dead `OPENROUTER_API_KEY` (the `/chat` function returns 410), but the live Pages env is unknown.
+- **Pages env: names enumerable, values never — but `pages secret list` is only a partial view.** Corrected twice on 2026-10-05 (DIG-258). `wrangler secret list` does not cover Pages. `wrangler pages secret list --project-name <name>` returns **only the `secret_text` vars, each printed as the fixed string `NAME: Value Encrypted`** — there is no type column, and `plain_text` vars are dropped before printing. `digiquant-io` production therefore *looked* like 4 vars through that command but actually has **6**: 5 `secret_text` (`NEXT_PUBLIC_MARKET_DATA_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_TWELVEX_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_TWELVEX_SUPABASE_URL`) plus `NEXT_PUBLIC_DIGICHAT_EMBED_TOKEN` as `plain_text`. **Use the raw API for a complete, typed view**: `GET /accounts/<account-id>/pages/projects/<name>` → `deployment_configs.<production|preview>.env_vars`. Values stay unreadable on any surface — a Pages secret is write-only exactly like a Worker `secret_text`, and there is no readback for the operator. The old "live Pages env is unknown" claim was about *values*, and it stands for `digithings-web`, whose names are also still unmapped; `apps/digithings-web/wrangler.toml:23` documents a dead `OPENROUTER_API_KEY` (the `/chat` function returns 410).
+- **A `NEXT_PUBLIC_*` value is readable in the deployed bundle.** These are not secret in the storage sense: Next inlines them at build time, so the value is public in `_next/static`. That is why the twelve-x control is **no read grants for the anon role** (all 20 FX tables return 401), not key secrecy — and why the rotation path is create-publishable → repoint → **rebuild**, never put-and-forget.
+- **The `preview` env on `digiquant-io` sets no Supabase var at all.** `deployment_configs.preview.env_vars` holds exactly one entry, `NEXT_PUBLIC_DIGICHAT_EMBED_TOKEN` (`plain_text`) — neither `NEXT_PUBLIC_TWELVEX_SUPABASE_*` nor the core `NEXT_PUBLIC_SUPABASE_*` pair. So a preview build has no twelve-x key, and the fallback at `apps/dashboard/lib/twelve-x/supabase.ts:23-26` hands it the **core** project key instead — silently, and pointing at the wrong Supabase project. (`pages secret list` has no `--preview` flag; it errors with `Unknown argument: preview`. Use `--env preview`, or read the API field above.)
 - **Container app env not enumerable.** The digichat Container's runtime env is only visible as the Worker `envVars` whitelist in source; nothing confirms the actual container process env at runtime.
 - **Every level is enumerable now** (repo secret/variable, org secret, `production` environment) — see [Storage surfaces](#storage-surfaces) and `make secrets-audit`, which reports a read it cannot place at any level as `unresolved`. No **CI** read is unresolved any more: the last two, `CLOUDFLARE_EMAIL_API_TOKEN` and `NOTIFY_FROM`, were stored on 2026-09-18 (#4358); the daily `execution-cron-check` probe then went green (`notify_configured=1`) and a real send was queued through the sender. (`make secrets-audit` only judges `secrets.*` reads under `.github/**`, so a name in this table that no workflow reads — `OPENAI_API_KEY`, for instance — is outside it.) #4357 resolved the other three: `E2E_BEARER_TOKEN` is now minted in-workflow from the compose stack, the OpenWiki step reads the org-level `LANGSMITH_API_KEY`, and the `docs-reindex-guide.yml` apply step that read `DIGISEARCH_URL` was removed (it posts a local filesystem path with no auth). #4358 replaced the Mailgun sender with Cloudflare Email Sending: digiquant.io is onboarded on that account and the sender is live.
 - **Literal liveness.** Whether the committed `mcp.secrets.env.example` keys still work, and the `local-dev-unused-first-party` token, cannot be verified without their values.
@@ -177,6 +751,21 @@ Six repo secrets that no `.github` YAML read were deleted on 2026-09-17/18: `COP
 - **Private key source.** The prod origin of `DIGIKEY_PRIVATE_KEY_PEM` (platform secret store vs `.env`) is not visible in-repo.
 - **Revocation strength.** Whether prod sets `DIGIKEY_BLOCKLIST_REDIS_URL`. The code default is fail-closed; `DIGIKEY_REQUIRE_BLOCKLIST=0` is the local opt-out (`blocklist.py` `require_blocklist_enabled`). Compose default `1` at `docker-compose.yml:35`; `.env.example:226`.
 - **Secret-manager adoption.** Cloudflare Secrets Store, 1Password, Infisical, and Doppler appear only as aspirational mentions; no repo evidence of use.
+- **Fine-grained PAT grants are not machine-readable.** The permissions on a fine-grained PAT (`GH_DISPATCH_TOKEN`) can only be viewed and edited on the GitHub settings page — GitHub exposes no REST or GraphQL endpoint for them, and the token value is shown once at creation and never again. So the grant recorded on the `GH_DISPATCH_TOKEN` row is operator-reported, not agent-verified, and it cannot be swept by `make secrets-audit`. Agent-side confirmation that a grant exists has to come from a real call against the endpoint it gates.
+
+  **The canary now proves two of them, weekly (DIG-362).** `scripts/check_workflow_tokens.py` covers exactly these grants on `GH_DISPATCH_TOKEN`, and nothing else — if a grant is added here, add a probe, or record here that it is unproven:
+
+  | grant | probe | gate | detects removal | detects downgrade to read-only |
+  | --- | --- | --- | --- | --- |
+  | Actions: read and write | `GET /repos/{repo}/actions/runs?per_page=1` | *Actions: read* | yes | n/a (no read-only tier below write) |
+  | Issues: read and write | `POST` + `DELETE` a comment on a pinned issue, weekly | *Issues: write* | yes | **yes** |
+  | Issues: read | `GET /repos/{repo}/issues/{n}`, paired with the write probe | *Issues: read* | yes | no — see below |
+
+  The write probe is the only one that separates *grant removed* from *grant downgraded*. GitHub offers just three levels for Issues — *no access*, *read*, *read and write* — so a token narrowed to "Read only" still satisfies an `issues: read` check, which is precisely the state DIG-93 believed the token was in on 2026-10-04. The paired read probe is what makes the failure output legible: read-pass + write-fail reads as *downgraded*, read-fail + write-fail as *removed*.
++
++  Known limit: the downgrade branch of the Issues write probe has no automated test. The board asked for a lighter test suite on 2026-10-05. The first proof of this branch will be a real failure, not a test run.
+
+  Cost and blast radius: **one comment posted and deleted per week** on a dedicated pinned issue (`TOKEN_CANARY_PROBE_ISSUE` repo variable), **no spend**, and **no artifact on success**. A failed `DELETE` is reported as a failure rather than swallowed, because a marker left behind would break the probe's own promise. Weekly rather than daily keeps watcher notifications near zero; the cost of that choice is that detection latency for this grant is up to 7 days, which is the point of the #3522 ≤24h canary applying to *liveness*, not to grant width. Until `TOKEN_CANARY_PROBE_ISSUE` is set the probe reports `skipped-by-design` and never files a tracker — an unarmed probe is a known gap, not a regression.
 - **`projects/**` and `.local/`** are gitignored and not auditable from this checkout.
 
 ## Folded stack worker — secret maintenance (2026-09-27)
@@ -283,5 +872,29 @@ rg -n "^[A-Z][A-Z0-9_]+=" .env.example apps/digichat/.env.example \
 # 5. Python settings / os.environ reads.
 rg -n "os\.getenv|os\.environ" --glob '*/src/**/*.py' digibase digikey digigraph digillm digiquant digisearch digitrace digivault digiclaw
 ```
+
+Ageing is a **manual** check, not an automated one: `make secrets-staleness` runs `scripts/secret_staleness_check.py --open-issue`, which lists every repo, org and `cron`-environment secret **name** with its last-written date, reports the ones past the 90-day rotation window, and opens or updates one tracking issue titled `Ops: GitHub secrets past the 90-day rotation window`, ordered widest-blast-radius first (org before repo before environment, then oldest first). It reads no value — `gh secret list` returns names and dates only.
+
+A hand run that reads **nothing** — the usual sign that `gh auth` has lost `repo` or `admin:org` — now opens, updates **and closes** nothing, and exits 2. It used to close the tracker, on a note blaming CI for a failure that had nothing to do with CI; this repo is public, so `repo_slug()` still resolves without `repo` and the run walked straight into that branch. Since option D the only caller is a person, so a scope problem and a CI limitation are no longer the same event. Pass `--close-unmeasurable-tracker` to retire a stale tracker on purpose.
+
+It needs a token with the `repo` scope (plus `admin:org` for the org level), and a workflow's `GITHUB_TOKEN` never has that scope: it is a GitHub App installation token, and GitHub's `permissions:` vocabulary has no key for secrets at all. Run 37235973852 (2026-10-04) measured this directly, with `actions: read` visibly granted and all three listings still returning HTTP 403, which disproved the grant #5063 had added for it and is why that permission was removed again. So the automation deliberately does not attempt the ageing at all rather than reporting three levels NOT CHECKED and looking like a working control: Paperclip DIG-477 (option D, Chris, 2026-10-05) took the ageing half **out of CI** and kept the drift half. `.github/workflows/secret-staleness-check.yml` is now `workflow_dispatch` only with no inputs, runs `secret_staleness_check.py --gates-only`, needs `contents: read` and nothing else — in particular not `issues: write`, because it no longer files or closes a tracker. It is still dispatched monthly at `17 6 1 * *` by the `secret-staleness` job on the digithings-cron Worker (no clock lives in `.github/workflows`, by repo policy), and there it does the drift half only. Run it from an operator's shell on the Mac, where `gh auth` already carries `repo` and `admin:org`.
+
+It is **not** the Keymaster weekly key report: that report is built from Bitwarden and never reads the GitHub Actions secrets API, so it cannot age anything.
+
+**What this costs, stated plainly:** nothing will notice a credential going dead except `token-canary.yml`, which probes only `DIGITHINGS_PROJECT_TOKEN` and `GH_DISPATCH_TOKEN`. Of the 16 names below, the other 14 have no automated liveness check of any kind — `FRED_API_KEY` appears in no workflow file at all. That is the deliberate trade of option D, which is that the next rotation is decided by someone remembering to ask. What keeps that from becoming "nobody remembers" is the monthly manual job recorded just below, tracked as Paperclip DIG-668.
+
+Measured by hand on 2026-10-04: **16 of 33 listed names are past 90 days** — `DIGITHINGS_PROJECT_TOKEN` at 163 days, `CORE_SUPABASE_SERVICE_KEY` and `CORE_SUPABASE_URL` at 100, and all 13 org secrets (oldest: `CURSOR_API_KEY` and `FRED_API_KEY`, 165 and 165). Until this half is automated again, those 16 are tracked in this section rather than by a clock. Keeping this section current is a **monthly manual job**: run `make secrets-staleness` from a shell whose `gh auth` carries `repo` and `admin:org`, then update this section with the count and the date measured. Paperclip **DIG-668** holds that job and its steps. Re-measure rather than trusting the numbers above — they carry the date they were taken, and age is not death: `DIGITHINGS_PROJECT_TOKEN` sat at 163 days while `token-canary.yml` validated it daily.
+
+### The gate is a manifest, and the manifest is checked
+
+`.github/environments.json` records the protection rules of every environment a workflow may name: wait timer, required reviewers, allowed branches, and the date a human last read them off the API. Two things depend on it.
+
+**The no-queue rule.** A job gated on an environment with a required reviewer holds its `concurrency` group from the moment the run starts, so one unapproved run silently stops every later run of that workflow. That cost 15 days of migrations once already (#2541). `tests/scripts/test_workflow_environment_concurrency.py` therefore exempts a gated job from that rule only when the manifest says its environment cannot wait, and it fails on any `environment:` a workflow declares that the manifest does not describe. Three older assertions that a workflow must carry no gate at all were rewritten on 2026-10-04 for the same reason: `environment:` is the only mechanism that scopes a secret to one environment, so the 32-job gate is a control, and refusing it in a test protects nothing. The rewritten tests assert the stronger property instead — the job is gated on an environment that cannot wait.
+
+**Drift.** Protection rules can be armed in the GitHub UI, where no test runs and no commit is made. If someone later adds a required reviewer to `cron`, all 32 gated pipelines would queue behind an approval instead of running, and the symptom is "the cron got flaky". `secret_staleness_check.py` therefore compares the manifest against the live protection rules on every run and **exits non-zero on any difference** — deliberately unlike `--fail-overdue`, because a credential nobody rotated is a human decision, while a stalled automation is not. That failure is the only one the staleness job can produce; a secret past the window never fails it, and since DIG-477 it does not even read the window on that job (`--gates-only`), so gate drift is now the *only* code path in CI that can fail at all.
+
+One limit on that, recorded because the sentence above reads stronger than the code is: drift is only detected if the environments **can be read**. When every read fails — a lost `contents: read`, a `gh` outage, a malformed manifest — the gate list comes back empty, `any(...)` over no rows is false, and the job exits 0 having checked nothing. The summary does say `NOT CHECKED` per environment with the reason, so it is not a false green in the sense DIG-477 was about, but it is green. This is pre-existing on develop rather than introduced by DIG-477; it becomes more load-bearing now only because ageing is gone and this is the sole control left. Tracked as Paperclip DIG-682.
+
+Measured on 2026-10-04, all four environments agree with the manifest: `copilot`, `cron` and `github-pages` cannot wait, `production` can (`required_reviewers: [chrizefan]`, branches `main`).
 
 `.worktrees/` is gitignored (`.gitignore:5` — `/.worktrees/`), so a search launched from the main checkout silently skips a task worktree. Pass the worktree root as an explicit path argument, or add `--no-ignore`, when refreshing from inside one.

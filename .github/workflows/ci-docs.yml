@@ -48,6 +48,15 @@ jobs:
         # docs/adr/NNNN-*.md must stay zero-padded, unique and gap-free (#3524).
         run: uv run --frozen --no-sync python scripts/check_adr_numbering.py
 
+      - name: Check agent skills links resolve
+        # Seats load skills through slug -> slug--hash -> source. When the source is
+        # garbage-collected the links survive and the skill silently stops loading
+        # (DIG-2284: 8 dangling aliases on a 59-seat org). Read-only; repairs nothing.
+        # A CI checkout has no .claude/skills until `make agents-init` runs, so an absent
+        # home is reported, not failed — the real teeth are the operator run:
+        #   python scripts/check_agent_skills_links.py --skills-home ~/.claude/skills --strict
+        run: uv run --frozen --no-sync python scripts/check_agent_skills_links.py
+
       - name: Lint the docs/vision digivault vault
         # `uv run make` rather than bare `make`: the Makefile target invokes
         # `python3` directly, and uv run puts the synced venv first on PATH so
@@ -56,4 +65,13 @@ jobs:
 
       - name: Verify generated files are in sync
         run: uv run --frozen --no-sync python scripts/agents_init.py --check
+
+      - name: Check production code for hardcoded model names
+        # #5029 phase 3. The model names this stack routes on belong in config/,
+        # not in code. #5046 moved them and verified it by hand once; this is
+        # what keeps it true. It reads the whole production tree, so it runs
+        # here rather than under a path filter — a filtered check does not post
+        # a status on the PRs that would have broken it, which is the same trap
+        # the pull_request comment above describes.
+        run: uv run --frozen --no-sync python scripts/check_model_name_literals.py
 

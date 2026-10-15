@@ -151,16 +151,14 @@
    controls-core.css), so components/controls needs no line here. */
 @source "../../../packages/ui/src/ui";
 
-/* Point the token font families at the self-hosted next/font variables (layout.tsx).
-   digithings.ai type stack (owner-locked 2026-10-01): Inter for sans/display —
-   nav, headings, prose, form fields — and JetBrains Mono for mono chrome:
-   labels, code, commands, numerals, `.brand-word`. Geist Mono is not used on
-   this surface. The PixelWordmark SVG is the brand mark, not a font, so it is
-   unaffected. Scoped to this app: tokens.css keeps its defaults for the others. */
+/* Point the token font families at the self-hosted next/font variable (app/fonts.ts).
+   One voice (Chris, 14 Oct 2026): Geist Mono for sans, mono and display.
+   The PixelWordmark SVG is the brand mark, not a font, so it is unaffected.
+   Scoped to this app: tokens.css keeps its defaults for the others. */
 :root[data-theme] {
-  --font-sans: var(--font-inter), system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: var(--font-jetbrains-mono), ui-monospace, "SF Mono", Menlo, monospace;
-  --font-display: var(--font-sans);
+  --font-sans: var(--font-stack-mono);
+  --font-mono: var(--font-stack-mono);
+  --font-display: var(--font-stack-display);
 }
 
 /* web-theme.css (shared by digiquant-web and the dashboard) sets the body to
@@ -201,9 +199,10 @@ body {
    docs family (docs.css), the clean layout/type rules moved into their
    TSX as token utilities, and the terminal module manifest rides the shared
    <TerminalManifest> primitive (terminal-manifest.css, #1416). What remains
-   below is what must stay CSS — the mesh-hero entrance art + keyframes.
-   Namespaced `dq*` so nothing collides with shared site.css. Consumes
-   [data-theme] tokens only → light/dark safe.
+   below is what must stay CSS — nav tokens, page offsets, and the hero/pixel
+   keyframes. The historical `dq*` namespace now survives only as the
+   `--dq-nav-h` token alias. Consumes [data-theme] tokens only → light/dark
+   safe.
    ========================================================================== */
 :root {
   /* --nav-shell-h is the shared NavShell/nav-shell.css height knob (its
@@ -936,14 +935,48 @@ html {
   .pixel-word { width: 616px; }
 }
 
+/* The band holds the footer mark at page width. Two rules, both load-bearing:
+   the band carries NO height, so the mark sets it from its own 88x10 aspect
+   (8.8); and `overflow` clips the horizontal axis only, never the vertical one.
+   A fixed band height with `overflow: clip` on both axes shaved the top and
+   bottom glyph rows at every viewport wider than ~1280 — 7.8px at 1440, 26px at
+   1600, 37.8px at 1728 — and the mark read as squashed (DIG-2304).
+
+   These two rules are the pre-PR `develop` state, restored deliberately, and
+   they are what the design seat ruled on (DIG-2353, verdict on DIG-2364):
+   the footer mark stays inside the band, whole. A bleed is not available on
+   this artwork — the end glyphs are 7 cells wide with ink in column 0, so at
+   1440 a bleed of the size PR #5264 asked for (118%) removes 6.71 of 88 cells
+   a side and the mark reads IGITHING with the D and the S gone. Bleed is earned
+   by the artwork, and this artwork has no quiet margin to earn it with.
+   Do not reintroduce a band height, an `overflow` shorthand, or a width above
+   100% without taking the ruling back to the design seat. */
 .pixel-word-band {
-  padding: clamp(3rem, 8vw, 6rem) var(--page-pad) 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  /* Same box as digiquant.io's footer mark: the page frame plus its gutters,
+     centred, so the mark sits inside the vertical grid lines at every width. */
+  width: 100%;
+  max-width: calc(var(--frame-w) + 2 * var(--page-pad));
+  margin-left: auto;
+  margin-right: auto;
+  /* min-height, not height: the mark is an 88:10 SVG and grows with the band;
+     a fixed box would clip its top and bottom glyph rows. */
+  min-height: clamp(4.5rem, 12vw, 9rem);
+  padding-left: var(--page-pad);
+  padding-right: var(--page-pad);
   overflow-x: clip;
 }
 
 .pixel-word.pixel-word-footer {
-  width: min(100%, 1400px);
-  margin: 0 auto;
+  /* Fills the band's content box and no more (was min(118%, 1600px), which
+     bled past the frame and off-page). */
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  margin: 0;
+  flex-shrink: 0;
 }
 
 .pixel-word .c { opacity: var(--f); }

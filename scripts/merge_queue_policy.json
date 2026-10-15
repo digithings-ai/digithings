@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "reason": "The EM and the CTO merge into a develop branch without a merge decision card. This roster exists so that rule is a reviewable artifact instead of a convention buried in a prompt. QA is in the review path, not the merge path: a reviewer cannot also be the merge authority for the same PR, which is why 'attested' and 'approved' are separate verdicts in merge_queue.py.",
+  "merge_authorities": [
+    {
+      "role": "cto",
+      "title": "CTO",
+      "github_login": "chrizefan",
+      "note": "Merge authority for develop. Also the escalation target when the queue itself is wrong."
+    },
+    {
+      "role": "em",
+      "title": "Engineering Manager",
+      "github_login": "chrizefan",
+      "note": "Merge authority for develop. Owns queue order and hands a blocked PR back with a reason."
+    }
+  ],
+  "review_path": ["qa", "em", "cto"],
+  "blocked_bases": ["main", "master", "release"],
+  "blocked_bases_reason": "Mirrors the AGENTS.md 'Still stop and ask' gate: a merge into a release or trunk branch is a human decision. The queue refuses these outright rather than asking a caller to pass a flag.",
+  "defaults": {
+    "merge_method": "squash",
+    "delete_branch": true,
+    "required_checks": ["test"],
+    "required_checks_note": "Fallback for any repo with no entry in required_checks_by_repo. It is correct for digithings-ai/twelve-x, whose CI is one job named `test`. It is wrong for digithings-ai/digithings — see DIG-690."
+  },
+  "required_checks_by_repo": {
+    "digithings-ai/digithings": [
+      "local-ci"
+    ]
+  },
+  "required_checks_by_repo_note": "The digithings entry matches the repo's own branch protection on `develop`, read from GET /repos/digithings-ai/digithings/branches/develop/protection/required_status_checks (strict: true), which requires exactly `local-ci` (DIG-3707, 2026-10-15). The three GitHub Actions names (`Required checks passed`, `doc-links + agents-init`, `mypy \u2014 digibase + digikey`) were retired with them: Actions minutes are exhausted and PR workflows are switched off (DIG-3604), so no new PR head ever reports them. They were chosen to match GitHub rather than ci.yml\u2019s job names, so the queue cannot approve something GitHub would refuse.",
+  "status_context_checks": [
+    "local-ci"
+  ],
+  "status_context_checks_note": "Names accepted as commit statuses instead of workflow runs. `local-ci` is posted as a StatusContext by the local-ci daemon; no workflow ever reports a CheckRun by that name, so the CheckRun-evidence rule in merge_queue._gate_checks would refuse every PR if it applied. The exception is per-name: any other required check still needs a CheckRun. Keep this list to exactly the names branch protection requires as statuses.",
+  "github_identity_note": "Both authorities merge with the same org credential, so GitHub sees one committer. The role is an assertion the runner records in its audit comment, and an identity GitHub cannot enforce. Two things compensate: merge_queue.py refuses any role that is not on this roster, and it refuses an attestation that comes from the same role as the one doing the merge. Note what that does NOT give you: it cannot tell that the attesting role did not also author the PR, because a single login cannot be attributed to two roles. Treat editing this file to add a role as a policy change that needs the CEO, not a routine edit. The launchd wrapper `bin/dt-merge-queue` hardcodes `ACTING_ROLE = \"em\"` and `ATTEST_ROLE = \"qa\"`, so the qa attestation is a string literal in a script run by the same tick that merges: nothing connects `qa` to a QA act, and the attestation is a declared role, not evidence of a QA pass."
+}

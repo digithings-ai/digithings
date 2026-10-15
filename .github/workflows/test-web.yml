@@ -64,8 +64,14 @@ jobs:
       - name: Test @digithings/ui
         run: npm run test --workspace @digithings/ui
 
+      - name: Lint @digithings/ui
+        run: npm run lint --workspace @digithings/ui
+
       - name: Test @digithings/digichat-ui
         run: npm run test --workspace @digithings/digichat-ui
+
+      - name: Lint @digithings/digichat-ui
+        run: npm run lint --workspace @digithings/digichat-ui
 
       # digithings-cron owns production clocks formerly declared in workflow
       # `schedule:` blocks. Its source and wrangler trigger map must stay typed
@@ -205,3 +211,34 @@ jobs:
 
       - name: Test digitrace-langfuse
         run: npm run test --workspace digitrace-langfuse
+
+      # dashboard-api (#4651) is the central read-only dashboard Worker. Until now
+      # its path was in ci.yml's `ruff_and_scripts` filter and nowhere else, so it
+      # declared `test`/`typecheck` with no lane invoking either: its vitest suite
+      # (236 tests in 20 files on develop) and its tsc program could regress green
+      # and no PR would notice (#358). That filter entry's own comment claimed "an
+      # edit here must redden a lane that runs"; none did.
+      #
+      # Typecheck before the suite, matching the sibling workers above. Without
+      # this step `tsc --noEmit` never ran on this package at all, and its tsconfig
+      # pins `types: ["@cloudflare/workers-types"]` — a workspace-local devDependency,
+      # so a reused node_modules missing it fails as TS2688 "cannot find type
+      # definition file", which reads as "the code is broken" when the code is fine
+      # (reported on DIG-193). The root `npm ci` above installs it from the
+      # lockfile, so a failure here means a real type error.
+      - name: Typecheck dashboard-api
+        run: npm run typecheck --workspace dashboard-api
+
+      - name: Test dashboard-api
+        run: npm run test --workspace dashboard-api
+
+      # digidata-api (DIG-2895) is the Worker data API with the D1/Supabase
+      # backend switch. Same reasoning as dashboard-api above, and it was the
+      # same gap: the package declares `test`/`typecheck` and no lane invoked
+      # either, so its suite only ever ran on the author's machine. The root
+      # `npm ci` above installs the workspace from the lockfile.
+      - name: Typecheck digidata-api
+        run: npm run typecheck --workspace digidata-api
+
+      - name: Test digidata-api
+        run: npm run test --workspace digidata-api

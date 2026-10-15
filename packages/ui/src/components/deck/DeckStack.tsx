@@ -103,13 +103,13 @@ const AnimatedDeckCard = memo(function AnimatedDeckCard({
   const scale = useTransform(progress, (p) => 1 - cover(p) * 0.05);
 
   return (
-    <m.article
+    <m.div
       role="listitem"
       className={cardClass(className)}
       style={{ "--stack-index": index, scale, transformOrigin: "top center" } as MotionStyle}
     >
       {children}
-    </m.article>
+    </m.div>
   );
 });
 
@@ -118,13 +118,13 @@ export function DeckCard({ children, className, index, total, animate, progress 
     // Rendered outside a DeckStack: a plain (still sticky-capable) card with
     // no recede transform.
     return (
-      <article
+      <div
         role="listitem"
         className={cardClass(className)}
         style={{ "--stack-index": index ?? 0 } as CSSProperties}
       >
         {children}
-      </article>
+      </div>
     );
   }
   return (

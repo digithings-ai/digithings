@@ -69,6 +69,18 @@ Beyond root `AGENTS.md`:
 - **ADDM drift is wired**: `GET /check_drift` accepts `current_sharpe`; `run_backtest` calls `record_sharpe()`. Heartbeat still needs product wiring to act on `drift_detected`.
 - **Human gate on live trading**: Broker adapter code (`digiquant/brokers/`) must never be called from any automated path without an explicit human gate.
 
+### NautilusTrader version pinning (ADR-0033)
+
+- **The build we ship is `nautilus_trader==1.230.0`.** It is pinned exactly in `pyproject.toml` under the `nautilus` extra. Do not widen it to a range. A minor bump inside the old `>=1.190,<2` moved the Python-visible return type of `PortfolioAnalyzer.realized_pnls()` (1.228.0 → 1.230.0) and silently changed dedup semantics in the honesty envelope.
+- **One lock only: the repo-root `uv.lock`.** `digiquant` is a `[tool.uv.workspace]` member; uv resolves the workspace root. **No module ships its own `uv.lock`.** `digiquant/uv.lock` was deleted under ADR-0033 — it was inert (68 packages vs the root lock's 297) and referenced by nothing, so it *looked* like a pin at 1.223.0 while pinning nothing. If you find a module-level `uv.lock`, it is dead weight: delete it and say so in an ADR.
+- **The pin is the shipping control for the engine, not the lock.** `digiquant/Dockerfile` copies no lockfile and runs `uv pip install --system -e ".[nautilus]"`, so the `==1.230.0` in `pyproject.toml` is the only thing pinning `nautilus_trader` in that image — the one `docker-compose.yml` builds. Before ADR-0033 even that floated to whatever was newest on PyPI. **Do not read this as "the image is reproducible."** Every other dependency in that image — including the transitive closure under `nautilus_trader` — still floats at build time. Same commit, different image bytes.
+- **The pin governs one build surface, not the whole service.** The other two digiquant images are unaffected: `apps/digithings-stack-cloudflare/wrangler.toml:115` builds `digiquant/Dockerfile.mcp`, which installs `[research,mcp]` and **no** `nautilus` extra, so the Workers stack never had an engine to pin; and `Dockerfile.digiquant-runner` (repo root) already runs `uv sync --frozen --package digiquant --extra nautilus`, i.e. it installs from the root lock and was correct before this pin existed.
+- **Nothing in the repo publishes the digiquant image.** `.github/workflows/publish-service-images.yml` was removed in `f54af7052` (strict-essentials cut, #4919); `RELEASES.md` records the removal and points operators at `docker compose build` / `make up`. Do not cite that workflow as a live publisher in a doc — several older pages still do.
+- **Never edit a manifest without re-locking the root.** 35 `uv sync --frozen` invocations across 29 workflow files depend on the root lock; a desynced lock breaks all of them. Use `uv lock` at the repo root, then read the diff — a version bump should touch only the `nautilus-trader` specifier line.
+- **Verify with `uv lock --check`** from the repo root *and* from inside `digiquant/`. Both must pass.
+- **Local venv may lag.** A checkout that was not re-synced still runs whatever it installed. Run `uv sync --frozen --package digiquant --extra nautilus` before trusting a local backtest to match CI.
+- **Bumping is deliberate.** Change the pin → `uv lock` at the root → read the diff → `uv lock --check` both locations → update the version named here and in `ARCHITECTURE.md` → run the DIG-937 analyzer-shape matrix against the new build → amend or supersede ADR-0033. Full rationale: [`../docs/adr/0033-nautilus-trader-exact-pin.md`](../docs/adr/0033-nautilus-trader-exact-pin.md).
+
 ---
 
 ## Test Commands
@@ -97,7 +109,7 @@ ruff check digiquant/ && ruff format --check digiquant/
 
 ## Dashboard (research + portfolio)
 
-Public path is **`/dashboard/`** only (`apps/dashboard`; ADR-0026). `/dashboard/` is retired — no redirect alias.
+Public path is **`/app`** on digiquant.io (`apps/digiquant-web`). `/dashboard/` redirects there. `apps/dashboard` stays in the tree and is no longer the served desk.
 
 When touching `digiquant/src/digiquant/dashboard/` **or** `apps/dashboard/` Group A queries:
 
@@ -202,7 +214,12 @@ the full module map.
   not 90-day rolling z. Preset `btc_optimized` sells (`long_only: false`)
   with a concentrated remaining-book curve (high max daily % of remaining
   cash/coins at the extremes). Walk-forward OOS `beats_flat_dca_oos` is
-  still false — in-sample richness, not a proven OOS beat. Allocation
+  still false — do not claim an OOS win over flat DCA unless a new run
+  actually prints true. Extras are also searched as Stage 0 solos (OOS vs
+  `power_law_solo`); `indicator_weights` only change when an operator
+  passes `--persist-settings` *and* combined OOS is not worse. The Stage 0
+  CLI default is sidecar-only — a 2-trial `curve_simulator` Stage B is not
+  a published-weight flip. Allocation
   charts draw MTM allocated % plus fill dots; do not draw a percent-cash
   line (it is the inverse of allocated).
 - **Public copy.** User-facing name is **BTC-SDCA** (asset then type; never
@@ -257,11 +274,14 @@ on the extra-indicator allowlist.
 4. Allowlist extras: generic (`weekly_rsi`, `weekly_macd`, `sma_band`) vs
    plugins (BTC M2/rs_eth/dxy; on-chain #1086 later). No put/call scrape
    in this WP.
-5. Stage A backtest keep/drop (`optimize_stage_a_by_backtest` over
-   `stage_a_search_names(profile)`) → Stage B → `regularize`. Cycle
+5. Stage 0 solo books (`run_stage_0`, OOS vs `power_law_solo`) then
+   Stage 1 survivor weights (`optimize_stage_1_survivor_weights`, no 0 on
+   the grid) → Stage B → `regularize`. Legacy Stage A IS keep/drop
+   (`optimize_stage_a_by_backtest`) remains for diagnostics. Cycle
    overlap is diagnostic. Platform MCP: `digiquant_fit_sdca_weights` /
    `digiquant_run_optimize` (`strategy_name=sdca`, freeze `*_weight` keys).
-   Do not publish until the backtest looks comfortable.
+   Do not publish until the backtest looks comfortable. Do not claim
+   `beats_flat_dca_oos` unless a new run prints true.
 6. Only then add `settings.json`. `SdcaAssetProfile.eth_research_v1()` is
    research-only — not `eth_sdca` in settings, no `--push-supabase`, no
    live-trading. Do not change publish `signal_delay_days`.
@@ -473,12 +493,19 @@ and [`docs/adr/0021-digiquant-supabase-project-topology.md`](../docs/adr/0021-di
 
 ## Gloomberb market-data client (#4069)
 
+Public MCP names use the **`gloomberb_` prefix** (DIG-3313), the same shape as
+`luxalgo_`. Describe them as programmatic extensions of the Gloomberb platform.
+The MCP server lists `gloomberb_*` only. `digifetch_*` is not a second tool.
+`POST /v1/orchestrator_invoke` and the in-process dispatcher still accept
+`digifetch_*` and call the same handler.
+`gloomberb_congress_trades` stays refused with `digifetch_congress_trades`.
+
 `src/digiquant/data/gloomberb/` is the digifetch x Gloomberb enrichment layer
 (spec: [`../docs/superpowers/specs/2026-09-12-digifetch-scoping-design.md`](../docs/superpowers/specs/2026-09-12-digifetch-scoping-design.md)).
 It is the **only** place the `api.gloom.sh` URL/site logic lives — `digifetch`
 stays a generic transport engine (no URLs, no env reads).
 
-- **89 tools, read scope, default ON (#4069, #4110, #4813, #4837
+- **89 tools, read scope, default OFF (#4069, #4110, #4813, #4837
   130-coverage).** `digifetch_quote`, `digifetch_quotes_batch`,
   `digifetch_price_history`, `digifetch_ticker_financials`, `digifetch_options_chain`,
   `digifetch_sec_filings`, `digifetch_holders`, `digifetch_analyst_research`,
@@ -486,7 +513,7 @@ stays a generic transport engine (no URLs, no env reads).
   `digifetch_exchange_rate`, `digifetch_search`, `digifetch_news`, plus the #4110
   phase-1 cohort `digifetch_econ_calendar`, `digifetch_econ_series`,
   `digifetch_yield_curve`, `digifetch_cds`, `digifetch_research_search`,
-  `digifetch_congress_trades`, `digifetch_transcripts`, the #4110 phase-2
+  `digifetch_congress_trades`†, `digifetch_transcripts`, the #4110 phase-2
   cohort `digifetch_statements`, `digifetch_ticker_tweets`,
   `digifetch_tweet_search`, `digifetch_venues`, `digifetch_screener`,
   `digifetch_13f_funds`, `digifetch_13f_holdings`, and the #4110 phase-3
@@ -501,9 +528,9 @@ stays a generic transport engine (no URLs, no env reads).
   `orchestrator_tools.py`. Keep them read-scope — every digifetch tool is
   read-scope, including the 13 inert write-shaped workspace/broker tools
   (inert by verdict, not by scope: read-scope membership is not a read-only
-  guarantee); the family is default-ON behind
+  guarantee); the family is default-OFF behind
   `GLOOMBERB_ENABLED` — only `1`/`true`/`yes`/`on` enable it, and any other value
-  (a typo included) disables the family, returning a typed `upstream_error`
+  (a typo included) leaves the family off, returning a typed `upstream_error`
   without a request.
   - **Calculators + compositions (local math, no transport).**
     `digifetch_options_calculator`, `digifetch_bond_calculator`,
@@ -596,11 +623,14 @@ stays a generic transport engine (no URLs, no env reads).
   (a bare 402 with no recognizable plan body keeps the generic `auth_required`
   mapping), and the plan-gate path must not trip the circuit breaker. Read transcript rows from the upstream `calls`
   key (`companyName`/`callAt`/`webcastUrl`); `transcripts` is accepted only as a
-  wrapped variant. `digifetch_congress_trades` is exposed but its upstream
-  Mistral OCR dependency currently answers HTTP 500 (`402 Customer monthly
-  spending limit reached`), surfaced as a typed `upstream_error`; its typed
-  fields follow the known live names (`memberName`/`assetName`/`sourceUrl`/
-  `filingDate`/`notificationDate`) and extras carry the rest.
+  wrapped variant. † `digifetch_congress_trades` is **REFUSED on every
+  digiquant surface** — see "Refused tools" below; do not re-add it to
+  `READ_SCOPE_TOOLS`, the orchestrator manifest, or any pipeline subset
+  without Counsel's written clearance. Its upstream is live, not failing
+  (probed 2026-10-05: `GET https://api.gloom.sh/cloud/congress/house?limit=3`
+  → HTTP 200, `source: "house-clerk"`, `filingCount: 407`, `filingsParsed: 20`),
+  so an earlier note here claiming a Mistral OCR spend-cap HTTP 500 was wrong.
+  Client, normalizer and models are retained in-tree for a possible clearance.
   `digifetch_econ_calendar` takes **no parameters** — upstream ignores `limit`
   (fixed ~105-row window), so do not reintroduce a page-size knob.
   `digifetch_cds.days` is bounded 1–90 in the **input model** (the upstream
@@ -613,6 +643,36 @@ stays a generic transport engine (no URLs, no env reads).
   the description rather than promising `data.delay_note`. Do not tighten the
   deliberately permissive wire types (`float | str`, `str | int`) for the
   partly-probed routes without a live probe.
+- **Refused tools (DIG-1057).** `digiquant.tool_refusals` holds a deny-by-default
+  `REFUSED_TOOLS` frozenset — currently `{"digifetch_congress_trades"}` — naming
+  tools Counsel has ruled we must not obtain or serve (currently 5 U.S.C.
+  13107(c)(1)(B)). A refused name is dropped in `mcp_server._maybe_tool` **before**
+  registration, so it is absent from `create_mcp_server(scope="read")` *and*
+  `scope="full"` — dropping it from `READ_SCOPE_TOOLS` alone is not enough.
+  `build_orchestrator_tool_manifest()` filters refused names out of the
+  `POST /v1/orchestrator_tools` manifest, and `server.v1_orchestrator_invoke`
+  answers `{"ok": false, "refused": true, "code": "tool_refused", …}` before any
+  dispatch branch, so the HTTP invoke path cannot reach the upstream even though
+  `DIGIFETCH_DISPATCH` still carries the name. The refusal is
+  registration-level by design: client, normalizer, models and the `free`
+  entitlement entry stay in-tree so a Counsel clearance is a one-line removal
+  from the frozenset.
+- **The refusal env denylist is additive only (DIG-1251 Q5).** The effective rule
+  is `refused = REFUSED_TOOLS | env_denied_tools(DIGIQUANT_REFUSED_TOOLS)`, where
+  `DIGIQUANT_REFUSED_TOOLS` is a separator-delimited list (`,` `;` or whitespace)
+  of extra tool names, read per call. It can only **add** refusals: there is no
+  allow/negate/un-refuse syntax, so `-name`, `!name` and `allow=name` parse as
+  unknown tokens rather than permissions, and no value can lift a
+  `REFUSED_TOOLS` member. Missing, empty or whitespace-only means *no extra
+  names*, which leaves the code constant in force (fail closed); a malformed value
+  yields tokens and never raises past the refusal check. Counsel approved this
+  shape on condition that the code constant stays the carrier of the refusal — an
+  env var is not a legal gate, and the real gate is Counsel's written clearance
+  plus the CTO's merge. Proof is
+  `tests/dq/test_tool_refusals_env_denylist.py`, not a log line: it pins every
+  `REFUSED_TOOLS` member as still refused under every legal value of the variable
+  *and* pins that the variable does add refusals, so a parser that ignored the
+  environment entirely could not pass.
 - **Plan and upstream caveats (#4110 phase 2).** `digifetch_screener` is the
   second Pro-only tool and has **two plan-gate shapes** that must map to the
   same non-retryable `pro_required`: the 402 text body
@@ -730,12 +790,14 @@ stays a generic transport engine (no URLs, no env reads).
   `available_digifetch_tools` returns no digifetch tools at all when
   `GLOOMBERB_ENABLED` disables the family, and drops session/preview/pro names
   when `GLOOMBERB_SESSION_COOKIE` is unset (CI has neither → never advertised);
-  the client still applies both gates per call. `digifetch_congress_trades`,
+  the client still applies both gates per call.
   `digifetch_polls`, `digifetch_hacker_news`,
   `digifetch_compare_performance`, `digifetch_correlation_matrix`, and
   `digifetch_relative_valuation` stay MCP-only (the first three for upstream
   reliability/ToS reasons, the last three until an owner-signed subset
   eviction frees a prompt-budget slot) and are not in any subset.
+  `digifetch_congress_trades` is in no subset either and must stay out: it is
+  refused outright (DIG-1057, 5 U.S.C. 13107(c)(1)(B)), not merely MCP-only.
   deliberation stays off (research-tools-only by #2908) and legacy Phase 7D is unwired.
   Enrichment-only is enforced structurally: the subset attaches **only when a
   primary data/research executor built**. The client factory + envelope
@@ -766,7 +828,10 @@ place the `mcp.luxalgo.com` URL/logic lives — callers never supply a URL.
   companions `luxalgo_edge_symbols`, `luxalgo_edge_presets`,
   `luxalgo_edge_report` (preset reads with the honesty disclaimer) and
   `luxalgo_trackers_datasets`, `luxalgo_trackers_latest`,
-  `luxalgo_trackers_ticker` (freshness/ad-hoc lookups over the CC0 dumps) are
+  `luxalgo_trackers_ticker` (freshness/ad-hoc lookups over the CC0-1.0
+  dumps, per-family limits classified DIG-1464: congress-trades is a 13107
+  disclosure report and short-volume carries FINRA's non-commercial terms)
+  are
   registered in `mcp_server.py` (`_maybe_tool`, `READ_SCOPE_TOOLS`) and listed
   in `orchestrator_tools.py`. Default-ON behind `LUXALGO_ENABLED` — only
   `1`/`true`/`yes`/`on` enable it, any other explicit value fails closed to a
@@ -793,7 +858,9 @@ place the `mcp.luxalgo.com` URL/logic lives — callers never supply a URL.
   the upstream `data.disclaimer` field and the envelope `warnings`. Research
   reference only — never a pipeline primary. `library_get_source_code` is
   deliberately NOT wrapped (CC BY-NC-SA: no indicator source in paid
-  surfaces); `trackers_query` is deliberately NOT wrapped (the CC0 dumps stay
+  surfaces); `trackers_query` is deliberately NOT wrapped (the CC0-1.0 dumps,
+per-family limits classified DIG-1464 — congress-trades restricted by 5 U.S.C.
+13107, short-volume carrying unresolved FINRA terms — stay
   the source of record — live queries are freshness checks only);
   `broker_*` keys are never sent to the hosted MCP; `journal_*`/`propfirms_*`
   are separate packages.
@@ -806,6 +873,18 @@ place the `mcp.luxalgo.com` URL/logic lives — callers never supply a URL.
   repo-wide reference scan. Guard halves: `tests/dq/test_luxalgo_license_guard.py`
   (unit) + `scripts/check_luxalgo_license_boundary.py` (CI-adjacent, exit 1 on
   violations). Hub `/v1/orchestrator_invoke` 400s unknown `luxalgo_*` names.
+  **That guard is the _code_ licence only** (indicator Pine source, CC BY-NC-SA).
+  The _data_ licence that governs every trackers row is CC0-1.0 (classified
+  2026-10-06, DIG-1464, from the upstream `LICENSE` at `main`), and it carries
+  two per-family limits a copyright waiver cannot supply: congress-trades is
+  restricted by 5 U.S.C. 13107(c)(1)(B) and refused as a data class by Counsel
+  (DIG-1472, in service only by business decision), and short-volume carries
+  unresolved upstream FINRA terms (with Counsel). Both live in
+  `attribution.LUXALGO_TRACKERS_DATA_CAVEATS`; every trackers licence note and
+  entitlement note renders them via `attribution.trackers_data_caveat`. A CC0
+  claim without them is a defect, guarded in
+  `tests/dq/test_congress_trades_statute_and_ingest_provenance.py` across all
+  six claim surfaces.
 - **Tests are offline.** `httpx.MockTransport` straight into `LuxAlgoClient`
   (SSE-shaped `data:` bodies), or a patched `_build_luxalgo_client`; never hit
   the live MCP. Run `pytest tests/dq/test_mcp_luxalgo_tools.py

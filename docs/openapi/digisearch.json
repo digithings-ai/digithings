@@ -1254,8 +1254,15 @@
             "title": "Summary"
           },
           "total": {
-            "title": "Total",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total"
           }
         },
         "required": [
@@ -1574,6 +1581,86 @@
           "status"
         ],
         "title": "ResearchTurnTraceStep",
+        "type": "object"
+      },
+      "ScreenRequest": {
+        "description": "The transcript as digichat validated it. Messages stay opaque here.",
+        "properties": {
+          "conversation_id": {
+            "minLength": 1,
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "exception_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exception Ref"
+          },
+          "messages": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "minItems": 1,
+            "title": "Messages",
+            "type": "array"
+          },
+          "surface": {
+            "minLength": 1,
+            "title": "Surface",
+            "type": "string"
+          }
+        },
+        "required": [
+          "surface",
+          "conversation_id",
+          "messages"
+        ],
+        "title": "ScreenRequest",
+        "type": "object"
+      },
+      "ScreenResponse": {
+        "description": "The verdict. Identifiers and a stable code only, never a matched value.",
+        "properties": {
+          "categories": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Categories",
+            "type": "array"
+          },
+          "decision": {
+            "title": "Decision",
+            "type": "string"
+          },
+          "exception_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exception Ref"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision",
+          "categories",
+          "reason"
+        ],
+        "title": "ScreenResponse",
         "type": "object"
       },
       "UrlIngestResult": {
@@ -2896,16 +2983,14 @@
     },
     "/health": {
       "get": {
-        "description": "Legacy health check for Docker and digigraph (kept for back-compat).",
+        "description": "Legacy health check for Docker and digigraph (kept for back-compat).\n\nReports ``degraded`` when a boot marked indexes as unseeded (#5045): their\ncollections are empty, so every query would answer \"no results\" and read as\na confident miss. HTTP stays 200 on purpose \u2014 every consumer gates on the\nstatus code (``scripts/run_stack_local.sh`` uses ``curl -sf``,\n``tests/test_e2e.py::test_digisearch_health`` asserts 200) and none read this\nbody. ``/healthz`` stays the pure liveness probe the CI pipeline calls.",
         "operationId": "health_health_get",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
+                  "additionalProperties": true,
                   "title": "Response Health Health Get",
                   "type": "object"
                 }
@@ -3135,6 +3220,48 @@
           }
         },
         "summary": "Api Ingest Url"
+      }
+    },
+    "/internal/art9/screen": {
+      "post": {
+        "description": "Screen one transcript.\n\n200 allow, 422 on a policy refusal (including mask), 413 when the request is\nover a declared bound, 502 when the screening hop fails.",
+        "operationId": "screen_internal_art9_screen_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScreenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScreenResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Screen",
+        "tags": [
+          "art9"
+        ]
       }
     },
     "/query": {

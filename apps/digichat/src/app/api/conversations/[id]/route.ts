@@ -1,6 +1,7 @@
 import type { UIMessage } from "ai";
 import { getDb } from "@/db";
 import { requireDigiChatAuth } from "@/lib/request-auth";
+import { CODE_REFUSED, screenConversationWrite } from "@/lib/art9-screen";
 import {
   deleteConversation,
   getConversationMessages,
@@ -66,6 +67,34 @@ export async function PUT(req: Request, ctx: RouteContext) {
   const messages = body.messages;
   if (!Array.isArray(messages)) {
     return Response.json({ error: "messages_required" }, { status: 400 });
+  }
+
+  // Art. 9 screening (DIG-1178 leaf 12d): after the body is parsed and
+  // validated, before any database handle exists. A refused transcript is
+  // never written to conversation_messages.payload. Fail-closed.
+  const verdict = await screenConversationWrite({
+    req,
+    tenantSlug: authCtx.tenantSlug,
+    ownerUserSub: authCtx.ownerUserSub,
+    conversationId,
+    messages,
+  });
+  if (!verdict.allowed) {
+    if (verdict.code === CODE_REFUSED) {
+      return Response.json(
+        {
+          error: "art9_refused",
+          code: verdict.code,
+          categories: verdict.categories,
+          reason: verdict.reason,
+        },
+        { status: 422 }
+      );
+    }
+    return Response.json(
+      { error: "art9_screen_unavailable" },
+      { status: 503 }
+    );
   }
 
   const db = getDb();

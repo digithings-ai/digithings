@@ -36,6 +36,7 @@ from digiquant.data.luxalgo.agent_tools import (
 
 logger = logging.getLogger(__name__)
 
+
 # ── Market-data backend: Supabase vs versioned R2 history (#3780, Task 4) ──
 #
 # ``DIGIQUANT_MARKET_DATA_BACKEND=r2`` routes the price/macro tools through the
@@ -44,7 +45,41 @@ logger = logging.getLogger(__name__)
 # the current bodies byte-for-byte (extracted as ``_supabase_*`` below).
 
 _TTL_SECONDS = 900
+_MAX_LOOKBACK = 500
 _ttl: dict[tuple, tuple[float, str]] = {}
+
+
+def _bounded_lookback(lookback: int) -> int:
+    """Clamp a positive window length to ``1..500``.
+
+    Callers must reject a non-positive value before slicing. ``rows[-0:]`` is
+    the whole series, and a negative index slices from the front.
+    """
+    return min(int(lookback), _MAX_LOOKBACK)
+
+
+def _lookback_error(lookback: int) -> str | None:
+    """Error envelope for a non-positive lookback, or None when it is usable.
+
+    An empty ``rows`` array is also what a ticker with no bars looks like, so
+    a bad argument is an ``{"error"}`` instead of a silent empty window. The
+    research reader in ``research/data/queries.py`` does not use this envelope;
+    it slices ``_read_r2_window`` itself.
+    """
+    try:
+        n = int(lookback)
+    except (TypeError, ValueError):
+        return json.dumps({"error": "lookback must be an integer >= 1"})
+    if isinstance(lookback, bool) or n < 1:
+        return json.dumps({"error": "lookback must be an integer >= 1"})
+    return None
+
+
+def _tail(rows: list[Any], n: int) -> list[Any]:
+    if n <= 0:
+        return []
+    return rows[-n:]
+
 
 # Calendar days of live overlap fetched ahead of the R2 manifest seal.
 _R2_LIVE_OVERLAP_DAYS = 30
@@ -123,7 +158,7 @@ def _r2_is_stale(manifest_as_of: str, resolved_as_of: str) -> bool:
 # ``digiquant.data.gloomberb.agent_tools``) and are imported at the top of this
 # module under ``_build_gloomberb_client`` / ``_gloomberb_envelope_json``. The
 # builder remains the patchable seam tests use to inject a MockTransport-backed
-# client. ``GLOOMBERB_ENABLED`` defaults ON (author decision, spec §11/§12.6);
+# client. ``GLOOMBERB_ENABLED`` defaults OFF (Counsel memo DIG-1233);
 # the session cookie is never logged or echoed into tool payloads.
 
 
@@ -349,12 +384,15 @@ def digiquant_get_price_technicals(
     must carry the glossary entry.
     """
     try:
-        lookback = min(int(lookback), 500)
+        rejected = _lookback_error(lookback)
+        if rejected is not None:
+            return rejected
+        lookback = _bounded_lookback(lookback)
         manifest = _read_manifest()
         if manifest["version"] != 1:
             return json.dumps({"error": f"unsupported manifest version {manifest['version']}"})
         resolved = as_of or manifest["as_of"]
-        cache_key = ("technicals", ticker, resolved, manifest["version"])
+        cache_key = ("technicals", ticker, resolved, manifest["version"], lookback)
         cached = _ttl_get(cache_key)
         if cached is not None:
             return cached
@@ -369,7 +407,7 @@ def digiquant_get_price_technicals(
                 live_stale,
             )
         payload = json.dumps(
-            {"as_of": resolved, "rows": rows[-lookback:], "stale": stale}, default=str
+            {"as_of": resolved, "rows": _tail(rows, lookback), "stale": stale}, default=str
         )
         # Task 7 fix round (M1): never cache a stale-flagged payload — a stale
         # serve pinned for the full 900s TTL would keep reporting stale after
@@ -395,7 +433,10 @@ def digiquant_get_macro_series(
     reader-side ``stale``. Task 10 docs must carry the glossary entry.
     """
     try:
-        lookback = min(int(lookback), 500)
+        rejected = _lookback_error(lookback)
+        if rejected is not None:
+            return rejected
+        lookback = _bounded_lookback(lookback)
         from digiquant.research.data.queries import r2_backend_enabled
 
         if not r2_backend_enabled():
@@ -404,7 +445,7 @@ def digiquant_get_macro_series(
         if manifest["version"] != 1:
             return json.dumps({"error": f"unsupported manifest version {manifest['version']}"})
         resolved = as_of or manifest["as_of"]
-        cache_key = ("macro", tuple(series_ids), resolved, manifest["version"])
+        cache_key = ("macro", tuple(series_ids), resolved, manifest["version"], lookback)
         cached = _ttl_get(cache_key)
         if cached is not None:
             return cached
@@ -418,7 +459,7 @@ def digiquant_get_macro_series(
                 manifest["as_of"],
             )
         series = {
-            sid: {"latest": payload["latest"], "window": payload["window"][-lookback:]}
+            sid: {"latest": payload["latest"], "window": _tail(payload["window"], lookback)}
             for sid, payload in per_series.items()
         }
         payload = json.dumps({"as_of": resolved, "series": series, "stale": stale}, default=str)
@@ -526,7 +567,6 @@ READ_SCOPE_TOOLS: frozenset[str] = frozenset(
         "digifetch_yield_curve",
         "digifetch_cds",
         "digifetch_research_search",
-        "digifetch_congress_trades",
         "digifetch_transcripts",
         "digifetch_statements",
         "digifetch_ticker_tweets",
@@ -643,6 +683,18 @@ def create_mcp_server(
     from digiquant.data.gloomberb.entitlements import (
         TOOL_ENTITLEMENTS as _GLOOMBERB_ENTITLEMENTS,
     )
+    from digiquant.data.gloomberb.session_gate import (
+        session_gate_status as _gloomberb_session_gate_status,
+    )
+
+    # #2752: a `session` / `preview` / `pro` tool is advertised only when the
+    # deployer's own cookie is configured AND validates against api.gloom.sh.
+    # Resolved ONCE per server build — the gate caches the probe for one TTL
+    # window, and this keeps a 41-tool build from re-asking. `free` and
+    # `venue_session` tools are untouched, and the LuxAlgo family is `free`
+    # only, so the entitlement value alone selects the Gloomberb gated set.
+    _gloomberb_session_tools_advertised = _gloomberb_session_gate_status().authenticated
+    _GLOOMBERB_SESSION_ENTITLEMENTS = frozenset({"session", "preview", "pro"})
     from digiquant.data.gloomberb.entitlements import (
         with_entitlement_note as _gloomberb_note,
     )
@@ -650,24 +702,50 @@ def create_mcp_server(
     from digiquant.data.luxalgo.entitlements import with_entitlement_note as _luxalgo_note
 
     def _maybe_tool(name: str):
-        """Register the tool unless a read scope excludes it.
+        """Register the tool unless a read scope excludes it or it is refused.
 
         A digifetch/luxalgo tool with a declared entitlement gets
         ``fn.entitlement`` and an entitlement sentence appended to the
         registered description.
+
+        A refused tool (:mod:`digiquant.tool_refusals`) is never registered —
+        on either scope, so ``scope="full"`` cannot reopen it.
         """
+        from digiquant.tool_refusals import is_refused
 
         def _register(fn):
+            from digiquant.tool_names import (
+                GLOOMBERB_PLATFORM_NOTE,
+                canonical_tool_name,
+                gloomberb_family,
+            )
+
+            if is_refused(name):
+                return fn
             entitlement = _GLOOMBERB_ENTITLEMENTS.get(name)
             note_fn = _gloomberb_note
+            note_name = name
             if entitlement is None:
                 entitlement = _LUXALGO_ENTITLEMENTS.get(name)
                 note_fn = _luxalgo_note
             if entitlement is not None:
                 fn.entitlement = entitlement
-                fn.__doc__ = note_fn(name, fn.__doc__ or "")
-            if enabled is None or name in enabled:
-                return mcp.tool(name=name)(fn)
+                fn.__doc__ = note_fn(note_name, fn.__doc__ or "")
+            if gloomberb_family(name):
+                doc = fn.__doc__ or ""
+                if GLOOMBERB_PLATFORM_NOTE not in doc:
+                    fn.__doc__ = f"{GLOOMBERB_PLATFORM_NOTE}\n\n{doc.lstrip()}"
+            if (
+                entitlement in _GLOOMBERB_SESSION_ENTITLEMENTS
+                and not _gloomberb_session_tools_advertised
+            ):
+                return fn
+            public = canonical_tool_name(name)
+            if enabled is not None and name not in enabled and public not in enabled:
+                return fn
+            # One MCP name. ``digifetch_*`` is the internal key and the invoke
+            # redirect; it is not a second tool on this server (DIG-3313).
+            mcp.tool(name=public)(fn)
             return fn
 
         return _register
@@ -774,6 +852,8 @@ def create_mcp_server(
         symbols: list[str] = json.loads(symbols_json)
         params = json.loads(strategy_params_json) if strategy_params_json else None
         constraints = json.loads(constraints_json) if constraints_json else None
+        if isinstance(n_trials, bool) or int(n_trials) < 1:
+            return json.dumps({"error": "n_trials must be an integer >= 1"})
         from digiquant.graph.pipeline import run_quant_workflow
 
         raw = run_quant_workflow(
@@ -1019,7 +1099,8 @@ def create_mcp_server(
 
     # ── digifetch x Gloomberb market-data reads (#4069, #4110) ──────────────
     # 33 enrichment tools over api.gloom.sh (plus a Yahoo-backed earnings
-    # calendar). Default-ON behind GLOOMBERB_ENABLED; anonymous unless
+    # calendar). Default-OFF behind GLOOMBERB_ENABLED (explicit opt-in
+    # re-enables); anonymous unless
     # GLOOMBERB_SESSION_COOKIE is set for holders / analyst / corporate-actions
     # / research-search / transcripts / statements / tweets / short-interest /
     # equity-diagnostic (transcripts and screener additionally need a Pro
@@ -1036,7 +1117,7 @@ def create_mcp_server(
 
         `exchange` is optional. Enrichment only: free-tier data is delayed up
         to 15 minutes and is never a pipeline primary. Disabled by the
-        GLOOMBERB_ENABLED kill switch (default ON). Carries "Sourced from
+        GLOOMBERB_ENABLED kill switch (default OFF; explicit opt-in re-enables). Carries "Sourced from
         Gloomberb" attribution and a term.gloom.sh deep link.
         """
         try:
@@ -1359,10 +1440,13 @@ def create_mcp_server(
     def digifetch_congress_trades(year: int | None = None, limit: int = 50) -> str:
         """US House disclosure trades (Gloomberb Cloud; anonymous).
 
-        The upstream OCR dependency is currently failing (HTTP 500, Mistral
-        monthly spend cap), surfaced as a typed `upstream_error`; the tool is
-        exposed so coverage is complete when upstream recovers. `year`/`limit`
-        filter the tape; unknown row fields are preserved.
+        REFUSED and never registered on any scope (5 U.S.C. 13107(c)(1)(B) — a
+        House/Senate disclosure report is not ours to obtain or use for a
+        commercial purpose; DIG-1057, Counsel's ruling on the inert feed
+        DIG-1029). The upstream is live — `GET /cloud/congress/house` answers
+        200 with parsed house-clerk rows — which is why this is refused rather
+        than left inert. The client call is retained only so the route can be
+        restored if Counsel clears it; see :mod:`digiquant.tool_refusals`.
         """
         try:
             envelope = _build_gloomberb_client().congress_trades({"year": year, "limit": limit})
@@ -3003,10 +3087,12 @@ def create_mcp_server(
 
     @_maybe_tool("luxalgo_trackers_datasets")
     def luxalgo_trackers_datasets(dataset: str | None = None) -> str:
-        """Market Trackers catalog of CC0 public-record datasets (anonymous).
+        """Market Trackers catalog of CC0-1.0 public-record datasets (anonymous).
 
         `dataset` selects one dataset's full field roster. The dumps are the
-        source of record.
+        source of record. Two families carry a limit the CC0 grant cannot
+        supply: congress-trades (5 U.S.C. 13107(c)(1)(B) restricts commercial
+        use) and short-volume (unresolved upstream FINRA terms) — DIG-1464.
         """
         from digiquant.data.luxalgo.models import TrackersDatasetsInput
 

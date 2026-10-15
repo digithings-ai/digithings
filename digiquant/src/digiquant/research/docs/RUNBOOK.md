@@ -138,8 +138,9 @@ psql "$CORE_PG_URI" -c "VACUUM (ANALYZE);"
 ```
 
 Owner actions before unsupervised operation: add `CORE_POSTGRES_URI`
-to GitHub secrets (`FRED_API_KEY` provisioned 2026-09-10; refresh/backfill
-need the URI). Prod gate: Worker-edge digikey JWT enforcement (scope
+to GitHub secrets (refresh/backfill need the URI). No macro provider key is
+needed: macro series come from anonymous Gloomberb `econ_series` pages
+(#4794, DIG-335). Prod gate: Worker-edge digikey JWT enforcement (scope
 `digiquant:backtest`) must land before production MCP use (human decision,
 new external network exposure).
 
@@ -512,9 +513,9 @@ pip install -r requirements.txt
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 
-4. **FRED API key** (free): [`FRED_API_KEY`](https://fred.stlouisfed.org/docs/api/api_key.html) — legacy scripts only (`ingest_fred.py` and ad-hoc research one-offs). The sealed macro panel path (`digiquant prices fetch-macro`, R2 refresh, `export_sdca_macro.py`) reads gloomberb `econ_series` / sealed R2 and needs no key. If unset in Actions, legacy FRED ingest is skipped with a warning; Frankfurter and Fear & Greed still run.
+4. **Macro data needs no API key.** The sealed macro panel path (`digiquant prices fetch-macro`, R2 refresh, `export_sdca_macro.py`) reads Gloomberb `econ_series` / sealed R2 (#4794). `FRED_API_KEY` was retired on 2026-10-04 (DIG-335) so it can be revoked at the provider; do not provision it in Actions or set it locally.
 
-5. **Unified local secrets (optional):** [`config/mcp.secrets.env`](config/mcp.secrets.env) (gitignored; copy from [`config/mcp.secrets.env.example`](config/mcp.secrets.env.example)) can hold **`FRED_API_KEY`**, optional **`COINGECKO_API_KEY`** / **`ALPHA_VANTAGE_API_KEY`**, and **`SEC_EDGAR_USER_AGENT`** (for **`sec-edgar`** MCP / ad-hoc EDGAR lookups only). Ingest scripts load it automatically next to `supabase.env`. For **GitHub Actions**, add repository secret **`FRED_API_KEY`**. **Cursor MCP** uses **`${env:…}`** in [`.cursor/mcp.json`](.cursor/mcp.json) — see [`config/MCP-SETUP.md`](config/MCP-SETUP.md).
+5. **Unified local secrets (optional):** [`config/mcp.secrets.env`](config/mcp.secrets.env) (gitignored; copy from [`config/mcp.secrets.env.example`](config/mcp.secrets.env.example)) can hold **`SEC_EDGAR_USER_AGENT`** (for the **`sec-edgar`** MCP / ad-hoc EDGAR lookups only). Ingest scripts load it automatically next to `supabase.env`. **Cursor MCP** uses **`${env:…}`** in [`.cursor/mcp.json`](.cursor/mcp.json) — see [`config/MCP-SETUP.md`](config/MCP-SETUP.md).
 
 Recommended: keep `SUPABASE_*` in `config/supabase.env`; add API keys to `config/mcp.secrets.env` or export them before launching Cursor.
 

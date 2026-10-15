@@ -21,12 +21,14 @@ from scripts.zammad_mcp.aggregate import (
     is_automation_login,
     state_category,
 )
+from scripts.zammad_mcp.artifact_store import export_if_large
 from scripts.zammad_mcp.client import ZammadClient, ZammadError, keyword_terms
 from scripts.zammad_mcp.formatting import (
     REPORT_GROUP_BYS,
     format_aggregate,
     format_search_results,
     format_ticket_detail,
+    format_ticket_line,
     format_ticket_list,
     format_ticket_report,
 )
@@ -58,6 +60,27 @@ def _allowed_host_patterns(raw: str) -> list[str]:
 
 def _client() -> ZammadClient:
     return ZammadClient()
+
+
+def _export_if_large(
+    tickets: list[dict[str, Any]],
+    *,
+    tool: str,
+    query: str = "",
+    sample: int = 3,
+) -> str | None:
+    """Return a metadata-only summary when the result set is too large to inline.
+
+    Above ``EXPORT_ROW_LIMIT`` the rows stop going back through the MCP
+    response, so they cannot reach the model.  They are written instead as ONE
+    session-scoped artifact in the DigiChat artifact store, and the model is
+    told only the metadata and a short labelled preview (DIG-2638).  Returns
+    None when the set is small enough to render normally, so callers keep their
+    existing path unchanged.  A store failure never loses the rows: the caller
+    falls back to the full render and logs it.
+    """
+    preview = [format_ticket_line(ticket) for ticket in tickets[: max(0, sample)]]
+    return export_if_large(tickets, tool=tool, query=query, preview=preview)
 
 
 @mcp.tool()
@@ -124,6 +147,9 @@ def search_tickets(
                 tickets = client.search_tickets_by_terms(terms, limit=limit)
     except ZammadError as exc:
         return f"zammad error: {exc}"
+    exported = _export_if_large(tickets, tool="search_tickets", query=built or cleaned)
+    if exported is not None:
+        return exported
     return format_search_results(built, tickets, fallback_terms=fallback_terms)
 
 
@@ -143,6 +169,9 @@ def list_tickets(page: int = 1, per_page: int = 50) -> str:
         tickets = _client().list_tickets_page(page=page, per_page=per_page)
     except ZammadError as exc:
         return f"zammad error: {exc}"
+    exported = _export_if_large(tickets, tool="list_tickets", query=f"page {page}")
+    if exported is not None:
+        return exported
     return format_ticket_list(tickets, page=page, per_page=per_page)
 
 
@@ -252,10 +281,12 @@ def _owner_display_names(client: ZammadClient, rows: list[dict[str, Any]]) -> di
 def _display_customer(value: Any, cid: Any) -> str:
     """Full customer display for rankings: ``jane.doe@example.test (id 7)``.
 
-    Demo mode (#4944): real customer names and full emails are shown,
-    with the customer id appended when known so rankings still link to
-    the customer-history drill-down. Missing input falls back to
-    ``(id N)``; known text without a usable id renders as-is.
+    Real customer names and full emails are shown, with the customer id
+    appended when known so rankings still link to the customer-history
+    drill-down. Missing input falls back to ``(id N)``; known text without a
+    usable id renders as-is. No masking layer exists here (card 34a86696,
+    2026-10-06) and the id suffix must not be treated as licence to redact
+    the head — ``tests/scripts/test_zammad_mcp_no_mask.py`` pins the output.
     """
     text = str(value or "").strip() if value is not None else ""
     if not text:
@@ -271,7 +302,7 @@ def _customer_display_names(client: ZammadClient, rows: list[dict[str, Any]]) ->
     Mirrors ``_owner_display_names``: integer-like ids resolve via the cached
     ``resolve_user``; automation logins come back as-is for the caller to
     flag (dropped pre/post-rank, never rendered). Every other value maps to
-    the full display — demo mode (#4944) shows real customer names and full
+    the full display — real customer names and full
     emails with the id appended. Unresolvable ids fall back to the raw
     value with the id so one bad customer never fails the whole ranking.
     """
@@ -320,7 +351,7 @@ def aggregate_tickets(
     state named "open"). Window: created_at within since_days (one call,
     limit=500). Owner logins are UUIDs — names are resolved automatically;
     automation accounts are excluded and footnoted. Customer rankings show
-    full names/emails with ids (demo mode, #4944 — no masking).
+    full names/emails with ids (no masking layer — card 34a86696, 2026-10-06).
     Drill-down: feed a resulting ``customer_id:<N>`` into the
     customer-history tools (latest-ticket search + full-thread get_ticket
     flow) to read that customer's conversation.

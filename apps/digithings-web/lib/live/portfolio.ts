@@ -106,8 +106,98 @@ export function publishedNavPoints(rows: readonly unknown[]): NavPoint[] {
   return points;
 }
 
-/** Finalized NAV points, oldest first. */
+/** Public house-book API. Same origin digiquant.io already reads. No key. */
+export const PUBLIC_DASHBOARD_API = "https://graph.digithings.ai/dashboard-api";
+
+/** Dev preview proxy. The worker allows digithings.ai, not localhost. */
+export const DEV_DASHBOARD_API = "/dashboard-api";
+
+/**
+ * The dashboard's canonical read API. An explicit `NEXT_PUBLIC_DASHBOARD_API_URL`
+ * wins (local stack). Development uses the same-origin rewrite. Production uses
+ * the public house book. Unit tests stay offline and empty.
+ */
+export function dashboardApiBase(
+  env: { NEXT_PUBLIC_DASHBOARD_API_URL?: string; NODE_ENV?: string } = {
+    // Direct member reads so the client bundle inlines NODE_ENV. Passing
+    // `process.env` whole does not.
+    NEXT_PUBLIC_DASHBOARD_API_URL: process.env.NEXT_PUBLIC_DASHBOARD_API_URL,
+    NODE_ENV: process.env.NODE_ENV,
+  },
+): string {
+  const raw = (env.NEXT_PUBLIC_DASHBOARD_API_URL ?? "").trim().replace(/\/+$/, "");
+  if (raw) return raw;
+  if (env.NODE_ENV === "test") return "";
+  if (env.NODE_ENV === "development") return DEV_DASHBOARD_API;
+  return PUBLIC_DASHBOARD_API;
+}
+
+async function getRaw(path: string): Promise<unknown> {
+  const base = dashboardApiBase();
+  if (!base) return null;
+  try {
+    const res = await fetch(`${base}${path}`, { headers: { Accept: "application/json" } });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+/** House-book routes wrap rows in `{ data }`. `/v1/tables/*` returns a bare array. */
+export function rowsFromDashboardBody(body: unknown): unknown[] {
+  if (Array.isArray(body)) return body;
+  if (body && typeof body === "object") {
+    const data = (body as { data?: unknown }).data;
+    if (Array.isArray(data)) return data;
+  }
+  return [];
+}
+
+async function getApi(path: string): Promise<unknown> {
+  const body = await getRaw(path);
+  if (!body || typeof body !== "object" || Array.isArray(body)) return null;
+  return (body as { data?: unknown }).data ?? null;
+}
+
+/**
+ * `GET /nav-series` → points, oldest first. Uses the API's chained `index`
+ * (its since-inception definition, DIG-2801) when present, so a bad raw `nav`
+ * row (e.g. a 15.13 print on a ~102 book) cannot spike the chart; raw `nav` is
+ * the fallback.
+ */
+export function apiNavPoints(data: unknown): NavPoint[] {
+  const points = (data as { points?: unknown })?.points;
+  if (!Array.isArray(points)) return [];
+  const out: NavPoint[] = [];
+  for (const row of points) {
+    const r = row as { date?: unknown; nav?: unknown; index?: unknown };
+    const index = r?.index == null ? NaN : Number(r.index);
+    const nav = Number.isFinite(index) ? index : Number(r?.nav);
+    if (typeof r?.date === "string" && Number.isFinite(nav)) out.push({ date: r.date, nav });
+  }
+  return out.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/** `GET /benchmarks` → the benchmark ticker's closes from `fromDate`, oldest first. */
+export function apiBenchmarkPoints(data: unknown, fromDate: string): PricePoint[] {
+  const series = (data as { series?: Record<string, unknown> })?.series;
+  const rows = series?.[BENCHMARK_TICKER];
+  if (!Array.isArray(rows)) return [];
+  const out: PricePoint[] = [];
+  for (const row of rows) {
+    const r = row as { date?: unknown; close?: unknown };
+    const price = Number(r?.close);
+    if (typeof r?.date === "string" && r.date >= fromDate && Number.isFinite(price)) {
+      out.push({ date: r.date, price });
+    }
+  }
+  return out.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/** Finalized NAV points, oldest first. dashboard-api first, Supabase as before. */
 export async function fetchNav(): Promise<NavPoint[]> {
+  if (dashboardApiBase()) return apiNavPoints(await getApi("/nav-series"));
   if (!supabase) return [];
   const { data, error } = await supabase
     .from(ACCOUNTING_NAV_VIEW)
@@ -125,6 +215,12 @@ export async function fetchNav(): Promise<NavPoint[]> {
  * fallback for prices).
  */
 export async function fetchBenchmark(fromDate: string): Promise<PricePoint[]> {
+  if (dashboardApiBase()) {
+    return apiBenchmarkPoints(
+      await getApi(`/benchmarks?tickers=${encodeURIComponent(BENCHMARK_TICKER)}`),
+      fromDate,
+    );
+  }
   const base = (process.env.NEXT_PUBLIC_MARKET_DATA_URL ?? "").trim().replace(/\/+$/, "");
   if (!base) return [];
   const url = `${base}/v1/market/closes?tickers=${encodeURIComponent(BENCHMARK_TICKER)}&from=${encodeURIComponent(fromDate)}`;
@@ -177,28 +273,43 @@ function toStrategyRead(strategyId: string, metrics: unknown): StrategyRead | nu
   };
 }
 
-/**
- * The library index, newest row per strategy, or `[]` when unavailable.
- *
- * `slugs` pins the membership (and therefore the card order) to the four the
- * band shows, so an unexpected row in the table can never appear on the landing
- * page.
- */
-export async function fetchStrategies(slugs: readonly string[]): Promise<StrategyRead[]> {
-  if (!supabase) return [];
-  const { data, error } = await supabase
-    .from(STRATEGY_TABLE)
-    .select("strategy_id, metrics")
-    .in("strategy_id", slugs as string[]);
-  if (error || !data) return [];
-  const bySlug = new Map<string, StrategyRead>();
-  for (const row of data) {
+/** Tearsheet rows from `strategy_tearsheets`, in table order. Optional `slugs` pins membership. */
+export function strategyReadsFromTable(
+  rows: readonly unknown[],
+  slugs?: readonly string[],
+): StrategyRead[] {
+  const reads: StrategyRead[] = [];
+  for (const row of rows) {
+    if (!row || typeof row !== "object") continue;
     const r = row as { strategy_id?: unknown; metrics?: unknown };
     if (typeof r.strategy_id !== "string") continue;
     const read = toStrategyRead(r.strategy_id, r.metrics);
-    if (read) bySlug.set(read.strategy, read);
+    if (read) reads.push(read);
   }
+  if (!slugs || slugs.length === 0) return reads;
+  const bySlug = new Map(reads.map((read) => [read.strategy, read]));
   return slugs.map((slug) => bySlug.get(slug)).filter((r): r is StrategyRead => Boolean(r));
+}
+
+/**
+ * Every published tearsheet, or the `slugs` subset when the caller pins membership.
+ * dashboard-api first (`/v1/tables/strategy_tearsheets`), then Supabase. Empty when
+ * neither read is available — never a fabricated card.
+ */
+export async function fetchStrategies(slugs?: readonly string[]): Promise<StrategyRead[]> {
+  if (dashboardApiBase()) {
+    const body = await getRaw(
+      "/v1/tables/strategy_tearsheets?select=strategy_id,metrics&order=strategy_id.asc&limit=200",
+    );
+    return strategyReadsFromTable(rowsFromDashboardBody(body), slugs);
+  }
+  if (!supabase) return [];
+  const query = supabase.from(STRATEGY_TABLE).select("strategy_id, metrics");
+  const filtered =
+    slugs && slugs.length > 0 ? query.in("strategy_id", [...slugs]) : query.limit(200);
+  const { data, error } = await filtered;
+  if (error || !data) return [];
+  return strategyReadsFromTable(data, slugs);
 }
 
 /** A growth figure as an annual rate, from a total return over a dated period. */

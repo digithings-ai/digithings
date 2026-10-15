@@ -272,6 +272,13 @@ class VectorizeBackend(DigiIndex):
 
     def query(self, query: Query) -> list[Result]:
         _reject_unsupported_query_filters(query)
+        if int(query.skip or 0) > 0:
+            # The query API has no offset. Returning matches from rank 0 would
+            # look like a successful page and hide that skip was ignored.
+            raise RuntimeError(
+                "VectorizeBackend.query does not support Query.skip; "
+                "the Vectorize query API has no offset"
+            )
         perf_start = time.perf_counter()
         vector = list(query.embedding or [])
         if not vector:
@@ -329,7 +336,7 @@ class VectorizeBackend(DigiIndex):
         # failure, so `result` here is always a dict.
         matches = (body.get("result") or {}).get("matches") or []
         out: list[Result] = []
-        for rank, match in enumerate(matches):
+        for rank, match in enumerate(matches, start=1):
             raw_metadata = match.get("metadata")
             metadata = dict(raw_metadata) if isinstance(raw_metadata, dict) else {}
             content = str(metadata.pop("content", ""))

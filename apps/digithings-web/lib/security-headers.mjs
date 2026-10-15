@@ -70,6 +70,24 @@ export function supabaseOriginForCsp(env = process.env) {
 }
 
 /**
+ * dashboard-api origin (`NEXT_PUBLIC_DASHBOARD_API_URL`) for CSP connect-src,
+ * or null when that env is unset. Production page reads still default to
+ * `https://graph.digithings.ai/dashboard-api` in `dashboardApiBase()`; that
+ * host is already allowed via the market-data origin.
+ * @param {NodeJS.ProcessEnv | Record<string, string | undefined>} [env]
+ * @returns {string | null}
+ */
+export function dashboardApiOriginForCsp(env = process.env) {
+  const raw = env.NEXT_PUBLIC_DASHBOARD_API_URL?.trim();
+  if (!raw) return null;
+  try {
+    return new URL(raw).origin;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * @param {NodeJS.ProcessEnv | Record<string, string | undefined>} [env]
  * @returns {string | null} absolute origin, or null if unset/invalid
  */
@@ -91,11 +109,20 @@ export function frameSrcForCsp(env = process.env) {
   return resolveDigichatEmbedOrigin(env) ?? DEFAULT_DIGICHAT_EMBED_ORIGIN;
 }
 
+/** Local digichat already allows `http://127.0.0.1:*` parents. Production
+ *  digithings.ai does not, so a localhost landing cannot frame it. */
+export const DEV_DIGICHAT_EMBED_ORIGIN = "http://127.0.0.1:3000";
+
 /**
- * Origin for `/chat` and `/chat/occ` iframes — same as CSP `frame-src`.
+ * Origin for `/chat` and the landing embed. Development uses the local
+ * digichat (tenant env is already loaded there). Every other runtime uses
+ * the CSP `frame-src` origin.
  * @param {NodeJS.ProcessEnv | Record<string, string | undefined>} [env]
  */
 export function embedOriginForChat(env = process.env) {
+  const resolved = resolveDigichatEmbedOrigin(env);
+  if (resolved) return resolved;
+  if (env.NODE_ENV === "development") return DEV_DIGICHAT_EMBED_ORIGIN;
   return frameSrcForCsp(env);
 }
 
@@ -108,6 +135,7 @@ export function digithingsCsp(
   frameSrc = frameSrcForCsp(),
   marketOrigin = marketDataOriginForCsp(),
   supabaseOrigin = supabaseOriginForCsp(),
+  dashboardApiOrigin = dashboardApiOriginForCsp(),
 ) {
   const connectSrc = [
     "connect-src",
@@ -115,6 +143,7 @@ export function digithingsCsp(
     "https://api.github.com",
     marketOrigin,
     supabaseOrigin,
+    dashboardApiOrigin,
   ]
     .filter(Boolean)
     .join(" ");
@@ -192,6 +221,8 @@ export function renderCloudflareHeaders(frameSrc = frameSrcForCsp(), supabaseOri
     "# /openwiki/* inherits /* and Cloudflare joins headers, so the browser would",
     "# enforce the INTERSECTION of both CSPs and block jsDelivr. Detach the",
     "# inherited CSP first (documented `!` syntax), then attach the wiki policy.",
+    "# /chat/occ* drops Referrer-Policy to no-referrer: its invite key rides in",
+    "# the query, and a same-origin request would otherwise send the full URL.",
     "/*",
     "  X-Content-Type-Options: nosniff",
     "  X-Frame-Options: DENY",
@@ -206,6 +237,15 @@ export function renderCloudflareHeaders(frameSrc = frameSrcForCsp(), supabaseOri
     "  Referrer-Policy: strict-origin-when-cross-origin",
     "  Permissions-Policy: camera=(), microphone=(), geolocation=()",
     `  Content-Security-Policy: ${wikiCsp}`,
+    "",
+    // /chat/occ carries an invite key in its own query (DIG-1210). The /* policy
+    // already strips path and query on cross-origin navigations, so the key does
+    // not reach third parties, but a same-origin request still sends the full
+    // URL — every first-party asset or analytics call on the page would see it.
+    // Splat so it also covers /chat/occ.html and /chat/occ/ from the export.
+    "/chat/occ*",
+    "  ! Referrer-Policy",
+    "  Referrer-Policy: no-referrer",
     "",
   ].join("\n");
 }

@@ -33,6 +33,22 @@ digivoice:
   - tests/dvo/**
   - .github/workflows/test-digivoice.yml
 
+# Bun suites (DIG-2940). Three packages declare `"test": "bun test"` and none
+# of them ran in CI — no workflow mentioned the bun tool at all, so a break in
+# any of these suites was found by a user, not by CI. One lane
+# (test-bun-suites.yml) covers all three, so this is a single key with three
+# directory globs rather than three keys. A change to the lane itself must fire
+# the lane.
+bun_suites:
+  - digivoice/tui/**
+  - clients/digichat-tui/**
+  - packages/surface-config/**
+  - packages/hero-banner/**
+  # DIG-2864 (2026-10-11): the hero-banner engine's 39 parity tests are the
+  # no-visual-regression proof for every banner ticket, so an unwatched
+  # suite would be the DIG-2940 hole again under a new name.
+  - .github/workflows/test-bun-suites.yml
+
 digiquant:
   - digiquant/**
   - tests/dq/**
@@ -109,6 +125,9 @@ dashboard:
 web:
   - apps/digithings-web/**
   - apps/digiquant-web/**
+  # digiquant-web's desk reads the TUI page catalog and response presenter from
+  # source (components/desk/public-surface.ts, read-block.ts).
+  - clients/digiquant-tui/src/**
   # digiquant-web's pipeline-data pin re-reads this file at test time and asserts the
   # site's portfolio chips match its `phases.append(...)` sequence in order (#4441).
   # Without this entry the pin only runs when the APP changes — a backend-only phase
@@ -168,9 +187,51 @@ web:
   - apps/digitrace-langfuse/**
   - Dockerfile.digitrace-langfuse-web
   - Dockerfile.digitrace-langfuse-worker
+  # Central read-only dashboard API worker (workspace `dashboard-api`, #4651).
+  # Same lane, same reason, as the Cloudflare Workers above: Pages does not build
+  # it, its vitest/wrangler live in that package, and this lane already pays the
+  # root `npm ci` that resolves this workspace's devDependencies (including the
+  # @cloudflare/workers-types its tsconfig pins), so a lane of its own would
+  # duplicate a whole install to run two commands.
+  #
+  # This path was NOT in this lane's filter — it was listed in this file only
+  # under `ruff_and_scripts`, where it merely decides whether that job runs, and
+  # that entry's own comment asserted "an edit here must redden a lane that runs".
+  # No lane did. So this worker's vitest suite (236 tests in 20 files on develop)
+  # and its `tsc --noEmit` were enforced nowhere in CI: a PR touching only
+  # apps/dashboard-api/src ran zero suites, so a Worker route could break and merge
+  # fully green (#358). Do not read the two entries as redundant — the `web` one
+  # below runs the worker's own vitest and tsc, which no other lane does. The
+  # `ruff_and_scripts` entry is kept because that job also runs the generator's
+  # `--check` and the model-routing validation, which an edit under this path
+  # should still redden.
+  - apps/dashboard-api/**
+  # digidata-api Worker data API (DIG-2895, workspace digidata-api). Same lane,
+  # same reason, as dashboard-api above: its vitest and tsc live in that package
+  # and this lane already pays the root `npm ci` that resolves the workspace's
+  # devDependencies. Without it, apps/digidata-api/package.json was an orphan
+  # install input and no lane ran its suite (#5404 review).
+  - apps/digidata-api/**
   - package.json
   - package-lock.json
   - .github/workflows/test-web.yml
+
+# Bun TUI clients. One lane (test-clients-tui.yml) covers all three, so this is a
+# single key with three directory globs rather than three keys (#2072). Before it,
+# `clients/**` matched no filter and no workflow mentioned bun: each client has
+# `"test": "bun test"` in its manifest (147 tests in digiquant-tui, 11 in
+# digichat-tui, 11 in digichat-devkit) and none of them ran in CI, so every green
+# number reported for these clients was developer-local.
+#
+# `clients/**` rather than three per-directory globs: these are private client
+# packages, not repo-root components, so the tree is the unit and a new client/
+# should fire the lane by default. The lane's own matrix-completeness step fails
+# if a client with a bun test script is missing from the matrix, so this cannot
+# silently under-cover a new client — the filter says "something under clients/
+# changed", the matrix guard says "and it is covered".
+clients_tui:
+  - clients/**
+  - .github/workflows/test-clients-tui.yml
 
 e2e_contract:
   - tests/test_e2e.py
@@ -186,8 +247,11 @@ nautilus_smoke:
   - tests/dq/conftest.py
   - tests/dq/test_api.py
   - tests/dq/test_audit.py
+  - tests/dq/test_balance_path_metrics.py
   - tests/dq/test_backtest.py
   - tests/dq/test_calibrations_loader.py
+  - tests/dq/test_charts.py
+  - tests/dq/test_honesty_series.py
   - tests/dq/test_nautilus_runner.py
   - tests/dq/test_pipeline_graph.py
   - tests/dq/test_strategies.py

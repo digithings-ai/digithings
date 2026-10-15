@@ -113,9 +113,74 @@ describe("live portfolio reads", () => {
     ).toEqual([]);
   });
 
+  it("points local preview at the same-origin house-book proxy", async () => {
+    const { dashboardApiBase, DEV_DASHBOARD_API, PUBLIC_DASHBOARD_API } = await import("./portfolio");
+    expect(dashboardApiBase({ NODE_ENV: "development" })).toBe(DEV_DASHBOARD_API);
+    expect(dashboardApiBase({ NODE_ENV: "production" })).toBe(PUBLIC_DASHBOARD_API);
+    expect(
+      dashboardApiBase({
+        NODE_ENV: "development",
+        NEXT_PUBLIC_DASHBOARD_API_URL: "http://127.0.0.1:8788/",
+      }),
+    ).toBe("http://127.0.0.1:8788");
+  });
+
+  it("accepts a bare tearsheet array and a data envelope", async () => {
+    const { rowsFromDashboardBody } = await import("./portfolio");
+    const row = { strategy_id: "btc_slapper", metrics: {} };
+    expect(rowsFromDashboardBody([row])).toEqual([row]);
+    expect(rowsFromDashboardBody({ data: [row] })).toEqual([row]);
+    expect(rowsFromDashboardBody({ data: { points: [] } })).toEqual([]);
+    expect(rowsFromDashboardBody(null)).toEqual([]);
+  });
+
+  it("maps tearsheet rows and keeps a requested slug order", async () => {
+    const { strategyReadsFromTable } = await import("./portfolio");
+    const row = {
+      strategy_id: "btc_slapper",
+      metrics: {
+        symbol: "BTC-USD",
+        label: "BTC slapper",
+        kind: "trend",
+        period_start: "2021-01-01",
+        period_end: "2026-01-01",
+        net_profit_pct: 212.5,
+        max_drawdown_pct: -18.2,
+        profit_factor: 1.4,
+        win_rate_pct: 54,
+        total_trades: 80,
+      },
+    };
+    const reads = strategyReadsFromTable([row, { strategy_id: "skip" }, null], ["missing", "btc_slapper"]);
+    expect(reads.map((read) => read.strategy)).toEqual(["btc_slapper"]);
+    expect(reads[0]?.netProfitPct).toBe(212.5);
+    expect(strategyReadsFromTable([row]).map((read) => read.symbol)).toEqual(["BTC-USD"]);
+  });
+
   it("degrades to empty, without throwing, when the env is absent", async () => {
     await expect(fetchNav()).resolves.toEqual([]);
     await expect(fetchStrategies(["btc_slapper"])).resolves.toEqual([]);
     await expect(fetchBenchmark("2024-01-01")).resolves.toEqual([]);
+  });
+});
+
+describe("dashboard-api reads", () => {
+  it("maps /nav-series points oldest first", async () => {
+    const { apiNavPoints } = await import("./portfolio");
+    expect(
+      apiNavPoints({ points: [{ date: "2026-07-18", nav: 101 }, { date: "2026-07-17", nav: 100 }, { date: 1, nav: 2 }] }),
+    ).toEqual([{ date: "2026-07-17", nav: 100 }, { date: "2026-07-18", nav: 101 }]);
+  });
+  it("prefers the chained index over a bad raw nav", async () => {
+    const { apiNavPoints } = await import("./portfolio");
+    expect(apiNavPoints({ points: [{ date: "2026-08-26", nav: 15.13, index: 101.77 }] })).toEqual([
+      { date: "2026-08-26", nav: 101.77 },
+    ]);
+  });
+  it("maps /benchmarks SPY closes from the start date", async () => {
+    const { apiBenchmarkPoints } = await import("./portfolio");
+    expect(
+      apiBenchmarkPoints({ series: { SPY: [{ date: "2026-07-16", close: 1 }, { date: "2026-07-17", close: 2 }] } }, "2026-07-17"),
+    ).toEqual([{ date: "2026-07-17", price: 2 }]);
   });
 });
