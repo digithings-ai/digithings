@@ -193,7 +193,8 @@ assert_denied "cat > digiquant/src/digiquant/execution/live/engine.py" \
 assert_allowed "cat > /tmp/scratch.txt" \
   "cat > /tmp/scratch.txt"
 
-# live/ outside digiquant is not a trading surface (design screenshots — #1399)
+# live/ outside digiquant is not a trading surface (#1399). The design-mine
+# directory this path named was removed; the string is still the regression.
 assert_allowed "cat > packages/design/references/mine/live/shot.jpg" \
   "cat > packages/design/references/mine/live/shot.jpg"
 
