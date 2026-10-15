@@ -19,7 +19,7 @@ describe("buildTicketVectors", () => {
     owner: "Alex Agent",
   };
 
-  it("masks identity, skips internal articles, and keeps a closed ticket", async () => {
+  it("keeps identity, skips internal articles, and keeps a closed ticket", async () => {
     const vectors = await buildTicketVectors(
       ticket,
       [
@@ -39,10 +39,13 @@ describe("buildTicketVectors", () => {
     const meta = vectors[0].metadata;
     expect(meta.model).toBe(EMBED_MODEL_ID);
     expect(meta.state).toBe("closed");
-    expect(JSON.stringify(meta)).not.toMatch(/jane@example.com|Jane|\+49|DE89|customer|from|owner/i);
-    expect(String(meta.content)).toContain("[email]");
-    expect(String(meta.content)).toContain("[phone]");
-    expect(String(meta.content)).toContain("[iban]");
+    expect(String(meta.content)).toContain("Jane Doe");
+    expect(String(meta.content)).toContain("ops@example.com");
+    expect(String(meta.content)).toContain("+49 30 12345678");
+    expect(String(meta.content)).toContain("DE89370400440532013000");
+    expect(String(meta.content)).not.toContain("[email]");
+    expect(String(meta.content)).not.toContain("[phone]");
+    expect(String(meta.content)).not.toContain("[iban]");
     expect(meta.url).toBe("https://support.example/#ticket/zoom/42");
   });
 

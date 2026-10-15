@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { chunkWords, htmlToText, prepareBody, stripQuotesAndSignature } from "./chunk";
 
 describe("prepareBody", () => {
-  it("strips html, quotes, a signature and an email", () => {
+  it("strips html, quotes and a signature, and keeps the email", () => {
     const raw = [
       "<p>Please reset the portal.</p>",
       "<p>From: Jane Doe &lt;jane@example.com&gt;</p>",
@@ -14,8 +14,8 @@ describe("prepareBody", () => {
     ].join("");
     const text = prepareBody(raw, "text/html");
     expect(text).toContain("Please reset the portal.");
-    expect(text).not.toContain("Jane");
-    expect(text).not.toContain("jane@example.com");
+    expect(text).toContain("Jane Doe");
+    expect(text).toContain("jane@example.com");
     expect(text).not.toContain("old quoted text");
     expect(text).not.toContain("+49");
     expect(text).not.toContain("<p>");

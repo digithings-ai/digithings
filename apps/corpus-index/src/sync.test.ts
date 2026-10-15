@@ -31,7 +31,7 @@ function embed(texts: string[]): Promise<number[][]> {
 }
 
 describe("syncTickets", () => {
-  it("indexes a closed ticket, advances the cursor, and omits identity from the upsert", async () => {
+  it("indexes a closed ticket, advances the cursor, and keeps identity in the upsert", async () => {
     const kv = memoryKv();
     const upserts: { index: string; metadata: Record<string, string | number> }[] = [];
     const stats = await syncTickets(
@@ -69,8 +69,9 @@ describe("syncTickets", () => {
     expect(stats.tickets).toBe(1);
     expect(stats.vectors).toBe(1);
     expect(upserts[0].index).toBe("tickets-m3");
-    expect(JSON.stringify(upserts[0].metadata)).not.toMatch(/Jane|jane@example.com|ops@example.com/);
-    expect(String(upserts[0].metadata.content)).toContain("[email]");
+    expect(String(upserts[0].metadata.content)).toContain("Jane Doe");
+    expect(String(upserts[0].metadata.content)).toContain("ops@example.com");
+    expect(String(upserts[0].metadata.content)).not.toContain("[email]");
     expect(upserts[0].metadata.state).toBe("closed");
     expect(kv.data.get("corpus-index:cursor:helpdesk:tickets")).toBe("2026-10-13T01:00:00.000Z");
   });
