@@ -54,12 +54,15 @@ list disagree:
 
 The stall rule itself was also incomplete. ``read_workflow_facts`` read the
 ``pull_request`` trigger, ``paths``/``paths-ignore`` and ``branches``, and never
-read ``types`` or ``branches-ignore``. Required status checks are evaluated
-against the PR's **head SHA**, so a workflow on ``types: [opened]`` reports once
-for the opening SHA and never again: fix the title, push, and the PR waits on
-"Waiting for status to be reported" forever while this guard called the workflow
-reachable. Both are parsed now, and the rule is spelled out in
-``WorkflowFacts.reports_on_develop_pr``.
+read ``types`` or ``branches-ignore``. For ``pull_request``, ``GITHUB_SHA`` is the
+last merge commit on the PR merge branch, and a required context has to report
+against that commit for the PR to ever leave "Waiting for status to be
+reported": ``opened`` covers the first report, ``synchronize`` every later push,
+``reopened`` a re-open, so all three or the context is not safe to require. A
+workflow on ``types: [opened]`` therefore reports once and never again: fix the
+title, push, and the PR waits on "Waiting for status to be reported" forever
+while this guard called the workflow reachable. Both are parsed now, and the
+rule is spelled out in ``WorkflowFacts.reports_on_develop_pr``.
 
 WHY A DECLARED INVENTORY AND NOT A NAME PATTERN
 DIG-1952 proposed matching job names against a required-check list. Job names
@@ -117,10 +120,13 @@ ENFORCEMENTS = frozenset({"required", "advisory", "other-branch"})
 #: *declared* list, and an absent list means "GitHub's default", not "nothing".
 DEFAULT_PR_TYPES = ("opened", "synchronize", "reopened")
 
-#: The activity type a required status check must survive. Required contexts are
-#: evaluated against the PR head SHA, so the only event that re-reports on a new
-#: push is ``synchronize``. A workflow without it goes silent after the opening
-#: push and the merge button hangs.
+#: The activity type a required status check must survive. For ``pull_request``,
+#: ``GITHUB_SHA`` is the last merge commit on the PR merge branch, so a required
+#: context has to report against that commit for the PR to ever leave "Waiting for
+#: status to be reported": ``opened`` covers the first report, ``synchronize``
+#: every later push, ``reopened`` a re-open. All three or the context is not safe
+#: to require; this constant names the one the rule checks. A workflow without
+#: ``synchronize`` goes silent after the opening push and the merge button hangs.
 REQUIRED_PR_TYPE = "synchronize"
 
 #: Suffixes GitHub reads as workflow definitions. ``.yaml`` is rare here but the
@@ -218,10 +224,14 @@ class WorkflowFacts:
             return False, (
                 f"the workflow-level `pull_request:` types filter "
                 f"({self.pr_types or 'empty or unreadable'}) has no "
-                f"`{REQUIRED_PR_TYPE}`. Required status checks are evaluated against "
-                "the PR's head SHA, and `synchronize` is the only event that "
-                "re-reports on a new push, so this workflow reports for the opening "
-                "SHA and never again: after the first push the PR waits on "
+                f"`{REQUIRED_PR_TYPE}`. For `pull_request`, `GITHUB_SHA` is the last "
+                "merge commit on the PR merge branch, and a required context has to "
+                'report against that commit for the PR to ever leave "Waiting for '
+                'status to be reported": `opened` covers the first report, '
+                f"`{REQUIRED_PR_TYPE}` every later push, `reopened` a re-open, so all "
+                "three or the context is not safe to require. Without "
+                f"`{REQUIRED_PR_TYPE}` this workflow reports for the opening push and "
+                "never again, so the PR waits on "
                 '"Waiting for status to be reported" forever, with no failing check '
                 "to explain why. Add `synchronize` to types, or drop the filter so "
                 f"GitHub applies its default ({', '.join(DEFAULT_PR_TYPES)})"
@@ -294,11 +304,14 @@ def read_workflow_facts(path: Path, branch: str) -> WorkflowFacts:
     ignored = pr.get("branches-ignore")
     if isinstance(ignored, list):
         facts.branch_ignore = [str(b) for b in ignored]
-    # A declared `types:` list is the whole reachability story, because required
-    # contexts are evaluated against the head SHA and only `synchronize` re-reports
-    # on a new push. An absent key is GitHub's default, which includes it. A
-    # present-but-unreadable value becomes the empty list so the rule fails closed
-    # rather than passing on a value nobody could read.
+    # A declared `types:` list is the whole reachability story, because for
+    # `pull_request` `GITHUB_SHA` is the last merge commit on the PR merge branch
+    # and a required context has to report against that commit for the PR to ever
+    # leave "Waiting for status to be reported": `opened` covers the first report,
+    # `synchronize` every later push, `reopened` a re-open, so all three or the
+    # context is not safe to require. An absent key is GitHub's default, which is
+    # all three. A present-but-unreadable value becomes the empty list so the rule
+    # fails closed rather than passing on a value nobody could read.
     if "types" in pr:
         types = pr["types"]
         facts.pr_types = [str(t) for t in types] if isinstance(types, list) else []
