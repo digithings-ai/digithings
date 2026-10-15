@@ -81,6 +81,18 @@
       "autoPort": true
     },
     {
+      "name": "design-smoke-local",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "4030",
+        "--directory",
+        "packages/design"
+      ],
+      "port": 4030
+    },
+    {
       "name": "dashboard",
       "runtimeExecutable": "npm",
       "runtimeArgs": [
