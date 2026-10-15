@@ -11,7 +11,8 @@ All AI coding agents read [AGENTS.md](AGENTS.md) first. Human contributors: the 
 3. [ARCHITECTURE.md](ARCHITECTURE.md) — system diagram and interfaces.
 4. [ROADMAP.md](ROADMAP.md) — phases and current priorities.
 5. [SECURITY.md](SECURITY.md) — non-negotiable security defaults.
-6. The `ARCHITECTURE.md` and `AGENTS.md` in the component you're touching (e.g. `digigraph/`).
+6. [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — Contributor Covenant 2.1.
+7. The `ARCHITECTURE.md` and `AGENTS.md` in the component you're touching (e.g. `digigraph/`).
 
 ## Hard rules (non-negotiable)
 

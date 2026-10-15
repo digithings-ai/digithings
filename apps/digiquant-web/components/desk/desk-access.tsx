@@ -15,6 +15,7 @@ import {
   type NavNode,
 } from "./desk-manifest";
 import { isInviteSurface } from "./public-surface";
+import { readSettings, useAppSettings, writeSettings } from "./app-settings-store";
 
 const DESK_KEY = "dq-desk";
 
@@ -74,7 +75,7 @@ export function DeskAccess({ children, manifest: seed }: { children: ReactNode; 
   const pathname = usePathname() || "/";
   const [loaded, setLoaded] = useState<Manifest | null>(seed ?? null);
   const [err, setErr] = useState<string | null>(null);
-  const [deskId, setDeskId] = useState<string | null>(null);
+  const settings = useAppSettings();
   const manifest = seed ?? loaded;
 
   useEffect(() => {
@@ -96,10 +97,12 @@ export function DeskAccess({ children, manifest: seed }: { children: ReactNode; 
   }, [seed]);
 
   const path = manifestPath(pathname);
+  const deskId = settings.defaultDesk;
   const owner = manifest ? findDeskId(manifest, path, deskId) : null;
   const desk = useMemo(() => selectDesk(manifest, owner ?? deskId), [manifest, owner, deskId]);
   const setDesk = useCallback((id: string) => {
-    setDeskId(id);
+    const saved = readSettings();
+    if (saved.defaultDesk !== id) writeSettings({ ...saved, defaultDesk: id });
     try {
       localStorage.setItem(DESK_KEY, id);
     } catch {

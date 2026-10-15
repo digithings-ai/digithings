@@ -193,7 +193,7 @@ body {
 
 /* ==========================================================================
    v7 LANDING CHROME — originally ported from digiquant-web/app/globals.css
-   (itself from packages/design/demos/digiquant-landing/07-scroll-driven.html),
+   (the HTML prototype that port came from was removed),
    since slimmed by the canon migration (#1400): the scroll-aware nav lives in
    @digithings/ui's NavShell (nav-shell.css), the /docs shell in the shared
    docs family (docs.css), the clean layout/type rules moved into their

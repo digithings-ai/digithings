@@ -139,6 +139,22 @@
     },
     {
       "rule": "V2",
+      "path": "digiquant/docs/architecture/api-surface.md",
+      "match": "https://api.gloom.sh",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-1418",
+      "reason": "same public endpoint as digiquant/ARCHITECTURE.md, moved with the API-surface section (DIG-3399). Still the DIG-1418 undecided identifier."
+    },
+    {
+      "rule": "V2",
+      "path": "digiquant/docs/architecture/internal-architecture.md",
+      "match": "https://api.gloom.sh",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-1418",
+      "reason": "same public endpoint as digiquant/ARCHITECTURE.md, moved with the internal-architecture section (DIG-3399). Still the DIG-1418 undecided identifier."
+    },
+    {
+      "rule": "V2",
       "path": "docs/VENDOR_CONTENT_BOUNDARY.md",
       "match": "https://prime-terminal.com",
       "owner": "Security b14d7a18 + Counsel 0e57e884",
@@ -480,6 +496,22 @@
       "owner": "Security b14d7a18 + Counsel 0e57e884",
       "ticket": "DIG-1418",
       "reason": "vendor cookie/endpoint surface present since the merge base with main. Rule 2 did not name this host, so no approver exists yet."
+    },
+    {
+      "rule": "V5",
+      "path": "digiquant/docs/architecture/api-surface.md",
+      "match": "https://api.gloom.sh",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-1418",
+      "reason": "same endpoint surface as digiquant/ARCHITECTURE.md, moved with the API-surface section (DIG-3399). Still the DIG-1418 undecided identifier."
+    },
+    {
+      "rule": "V5",
+      "path": "digiquant/docs/architecture/internal-architecture.md",
+      "match": "https://api.gloom.sh",
+      "owner": "Security b14d7a18 + Counsel 0e57e884",
+      "ticket": "DIG-1418",
+      "reason": "same endpoint surface as digiquant/ARCHITECTURE.md, moved with the internal-architecture section (DIG-3399). Still the DIG-1418 undecided identifier."
     },
     {
       "rule": "V5",

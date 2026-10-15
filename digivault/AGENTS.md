@@ -18,7 +18,8 @@ FastAPI + MCP + CLI service layer. First consumer: the project documentation
 - [ ] `import digivault` stays FastAPI-free (core depends only on `pydantic` + `pyyaml`).
 - [ ] New result data is a Pydantic v2 model in `models.py`, not a bare dict.
 - [ ] New write path goes through `Vault._safe_path` (no traversal escapes) for
-  filesystem stores; `PostgresStore` scopes by the `vault` namespace column.
+  filesystem stores; `PostgresStore` scopes by the `vault` namespace column;
+  `D1Store`/`SupabaseStore` scope reads by `path_prefix`.
 - [ ] `frontmatter.split(frontmatter.dump(fm, body)) == (fm, body)` still holds.
 - [ ] Wikilink rewrites skip code spans/blocks (use the helpers in `wikilinks.py`).
 - [ ] Service routes carry the right scope in `path_scopes.py` (read vs write).

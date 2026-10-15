@@ -7,6 +7,7 @@
  * not send an order.
  */
 import { useEffect, useState } from "react";
+import { useRefreshGeneration } from "../app-settings-store";
 import { BLOCKS, layoutFor } from "../../../../../clients/digiquant-tui/src/catalog";
 import { DASH, EMPTY_READ, STUB_READ, type ReadResult } from "../../../../../clients/digiquant-tui/src/read";
 import { strategiesBody } from "../../../../../clients/digiquant-tui/src/pages/strategies-format";
@@ -329,6 +330,7 @@ export function strategyBlockBody(id: string, data: unknown, result: ReadResult)
 
 export function StrategiesPages({ path }: { path: string }) {
   const [state, setState] = useState<{ path: string; reads: Record<string, OfficialRead> }>({ path: "", reads: {} });
+  const refresh = useRefreshGeneration();
 
   useEffect(() => {
     if (!STRATEGY_PATHS.has(path)) return;
@@ -349,7 +351,7 @@ export function StrategiesPages({ path }: { path: string }) {
       cancel = true;
       ac.abort();
     };
-  }, [path]);
+  }, [path, refresh]);
 
   if (!STRATEGY_PATHS.has(path)) return null;
   const reads = state.path === path ? state.reads : {};
