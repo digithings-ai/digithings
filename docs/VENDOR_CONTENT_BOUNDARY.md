@@ -266,8 +266,6 @@ document that exists to keep vendor material out of the public tree should not
 instruct authors to put it there. That combination is a rule whose compliance
 defeats its purpose.
 
-`digithings-ai/digithings-ops` is the intended private home for artefacts.
-
 ### What this repository does and does not publish
 
 Publish: the vendor's name, the terms URL, the retrieval timestamp, the sha256,
