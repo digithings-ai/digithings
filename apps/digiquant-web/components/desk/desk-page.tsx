@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { BLOCKS, layoutFor, pageByPath } from "../../../../clients/digiquant-tui/src/catalog";
-import type { ReadResult } from "../../../../clients/digiquant-tui/src/read";
+import { BLOCKS, layoutFor, pageByPath } from "digiquant-tui/catalog";
+import type { ReadResult } from "digiquant-tui/read";
 import { DeskFrame } from "./desk-frame";
 import { DeskReadout } from "./desk-view";
 import { BriefPage } from "./pages/brief";

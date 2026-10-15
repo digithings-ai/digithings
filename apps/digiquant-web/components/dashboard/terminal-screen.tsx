@@ -1,6 +1,6 @@
 "use client";
 
-import { pageByPath } from "../../../../clients/digiquant-tui/src/catalog";
+import { pageByPath } from "digiquant-tui/catalog";
 import { DeskBody, DeskCatalogLive, mountedDeskKind } from "@/components/desk/desk-page";
 import { isInviteSurface } from "@/components/desk/public-surface";
 
