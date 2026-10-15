@@ -1,8 +1,0 @@
-# R7 twelve-x additions — twelve-x desk surface + twelvex-only D1 API (DIG-3568, DIG-3518).
-# Source: DIG-3568 plan doc (delivered, status in_review) + repo-split.md section R7.
-# Verified at github/develop d227b6ed5 (2026-10-14): 109 dashboard paths +
-# 13 digidata-api files. Uses DIG-3568's exact filter-repo selection.
-apps/dashboard/app/twelve-x/page.tsx
-apps/dashboard/components/twelve-x
-apps/dashboard/lib/twelve-x
-apps/digidata-api

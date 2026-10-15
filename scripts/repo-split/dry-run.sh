@@ -8,7 +8,8 @@ REPO="${2:-.}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ML="$HERE/move-lists"
 FAIL=0
-for r in r1 r2 r3 r4 r5 r6 r7; do
+for f in "$ML"/r?.paths; do
+  r=$(basename "$f" .paths)
   n=0; miss=0
   while IFS= read -r p; do
     case "$p" in ''|'#'*) continue;; esac

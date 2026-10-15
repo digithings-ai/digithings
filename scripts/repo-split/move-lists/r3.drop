@@ -1,0 +1,4 @@
+# R7 twelve-x paths on HOLD; excluded from the R3 extraction second pass.
+apps/dashboard/app/twelve-x
+apps/dashboard/components/twelve-x
+apps/dashboard/lib/twelve-x

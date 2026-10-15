@@ -1,4 +1,6 @@
-# R2 digiquant-stack — production backend (DIG-3563, DIG-3518).
+# R2 digiquant-stack — production backend (DIG-3563 rev 2, DIG-3518).
+# Rev 3: +40 core-pipeline files (call (a), 12-block table = 480); -13 .github paths
+# (global rule, mapped in DIG-3605); optimize.py generic shell arrives from R1.
 # Verified present at github/develop d227b6ed5 (2026-10-14). One path per line.
 # NOTE: 4 SDCA scripts overlap R1 (see OVERLAPS below) — R1 wins at migration (plan step 2.3 before 2.4).
 apps/digiquant-runner
@@ -13,19 +15,6 @@ config/model-policy.json
 config/digiquant-model-prices.json
 config/digiquant_models.yaml
 Dockerfile.digiquant-runner
-.github/digiquant-pipeline.yml
-.github/workflows/deploy-digiquant-runner.yml
-.github/workflows/pipeline-digiquant.yml
-.github/workflows/pipeline-checkpoint-archive.yml
-.github/workflows/pipeline-market-data-refresh.yml
-.github/workflows/pipeline-research-metrics.yml
-.github/workflows/pipeline-digiquant-prices.yml
-.github/workflows/pipeline-digiquant-onchain.yml
-.github/workflows/pipeline-digiquant-tearsheets.yml
-.github/workflows/pipeline-digiquant-allocation-shadow.yml
-.github/workflows/sync-digiquant-runner-digikey-secret.yml
-.github/workflows/sync-digiquant-runner-mail-secrets.yml
-.github/workflows/test-digiquant.yml
 scripts/rls_proof
 scripts/supabase_exit
 scripts/backfill_market_data_r2.py
@@ -48,3 +37,15 @@ scripts/build-digiquant.sh
 scripts/export_research_snapshot_schema.py
 scripts/record_market_data_goldens.py
 scripts/bench_market_data.py
+digiquant/src/digiquant/optimize.py
+digiquant/src/digiquant/execution
+digiquant/src/digiquant/data/gloomberb
+digiquant/src/digiquant/data/luxalgo
+digiquant/src/digiquant/brokers/luxalgo_coinbase_mirror.py
+digiquant/src/digiquant/brokers/luxalgo_kraken_mirror.py
+digiquant/src/digiquant/brokers/luxalgo_mirror.py
+digiquant/src/digiquant/brokers/luxalgo_tradier_mirror.py
+digiquant/src/digiquant/cli/gloomberb.py
+digiquant/src/digiquant/data/prices/gloomberb_macro.py
+digiquant/src/digiquant/research/docs/RUNBOOK.md
+config/contract/secrets.yaml

@@ -1,5 +1,5 @@
-# R3 digiquant-web — Brief desk + digiquant.io site (DIG-3564, DIG-3518).
+# R3 digiquant-web — Brief desk + digiquant.io site (DIG-3564 rev 3, DIG-3518).
+# Rev 3: +apps/dashboard net of R7 twelve-x hold (call (a), 507 files); -2 workflows.
 # Verified present at github/develop d227b6ed5 (2026-10-14). One path per line.
 apps/digiquant-web
-.github/workflows/deploy-digiquant-cloudflare.yml
-.github/workflows/test-dashboard.yml
+apps/dashboard

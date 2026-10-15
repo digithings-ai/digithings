@@ -1,4 +1,6 @@
-# R1 digiquant-strategies — proprietary strategies plugin (DIG-3562, DIG-3518).
+# R1 digiquant-strategies — proprietary strategies plugin (DIG-3562 rev 4, DIG-3518).
+# Rev 3: optimize.py generic shell moved to R2 (SDCA parts are an in-file carve-out,
+# noted in README, not a path); test-nautilus.yml dropped (global rule, mapped in DIG-3605).
 # Verified present at github/develop d227b6ed5 (2026-10-14). One path per line.
 # Directories keep the whole subtree; files are exact.
 digiquant/src/digiquant/strategies/sdca
@@ -9,8 +11,6 @@ digiquant/src/digiquant/strategies/pinescript
 digiquant/src/digiquant/strategies/settings.json
 digiquant/src/digiquant/sdca_mcp.py
 digiquant/src/digiquant/charts/sdca.py
-digiquant/src/digiquant/optimize.py
-digiquant/scripts/generate_tearsheets.py
 digiquant/scripts/export_sdca_macro.py
 digiquant/scripts/plot_sdca_tearsheet.py
 docs/research/sdca_weekly_oscillator_corr.py
@@ -23,4 +23,3 @@ tests/dq/test_export_sdca_macro.py
 tests/dq/test_mcp_sdca_platform.py
 tests/dq/test_mcp_sdca_risk_index.py
 tests/dq/test_tearsheet_sdca_publish.py
-.github/workflows/test-nautilus.yml

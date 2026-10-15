@@ -42,6 +42,33 @@ Anything needing those goes to Chris as a decision.
   `scripts/occ_invite_key_fixture_server.mjs` — guard R5+R6 surfaces (DIG-3566 F13);
   ruling owed by DIG-3567 (R6 owner).
 
+## Rev 3 — send-back applied (Chris via One 01:26, R5 rev 5 accepted on DIG-3566)
+
+- Move lists follow the accepted plans: R5 rev 6, R1 rev 4, R2 rev 2, R3 rev 3,
+  R4 rev 3, R6 rev 2. Call (a) applied: `apps/dashboard` net of the R7 hold is
+  R3 (507 files); digiquant core pipeline + `config/contract/secrets.yaml` are
+  R2 (+40 files, 12-block table = 480). R7 is on HOLD: no `r7.paths`, no
+  extraction, report row reads HELD.
+- `overlaps-known.txt` is DELETED; `check-overlaps.sh` is drop-aware (each
+  repo's `.drop` second-pass removals are subtracted before intersecting) and
+  fails on ANY remaining double claim. Resolved per the send-back table; the
+  R5/R6, R1/R2 splits that need it use `<repo>.drop` files. In-file carve-outs
+  (`optimize.py` SDCA parts R1 vs generic shell R2, `DIGI_TENANT_CORPUS_MAP`
+  block) cannot be expressed as paths and are recorded here, not pathed.
+- Global rule: zero `.github/*` paths in any move list (workflows map to
+  cron/local-ci/deletion under DIG-3605). No Buildkite, no GitHub
+  Packages/GHCR; signed release tags mandatory (noted, not executed).
+- Sizes are real: `extract-one.sh` repacks + prunes each extraction, then
+  reports exact referenced content bytes (`git cat-file --batch-check` over the
+  HEAD tree) and `git count-objects -v size-pack`. The rev-2 `du` figures
+  double-counted hardlinked packs and are superseded.
+- `infra/local-proxy/Caddyfile` is contested (H7) and unassigned: excluded from
+  every list, noted here. `devkit-looks.*` stays R0 (unassigned by J rev 2 and
+  the send-back). `test_verify_occ_invite_key.sh` stays R6 (tests R6's verify
+  script; no other claimant).
+- r2 net 515 = doc 480 + rev-1 §1.7 root items (runner Dockerfile, root
+  ops scripts, config jsons) the 12-block table does not enumerate.
+
 ## Delivered inputs (J/K landed 14 Oct)
 
 R6 follows DIG-3567 (done), R7 follows DIG-3568 (in_review); both re-verified

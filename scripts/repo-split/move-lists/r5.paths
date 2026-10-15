@@ -1,4 +1,7 @@
-# R5 digithings-stack — shared production platform (DIG-3566, DIG-3518).
+# R5 digithings-stack — shared production platform (DIG-3566 rev 6, DIG-3518).
+# Rev 3: -7 OCC scripts + OCC_INVITE_KEY.md (all R6, overlap item 1); -5 workflows
+# (global rule); +infra/self-host 2 files (D-R5-2 inferred) + zammad gold.json.
+# infra/local-proxy/Caddyfile contested (H7), unassigned, excluded.
 # Verified present at github/develop d227b6ed5 (2026-10-14). One path per line.
 # NOTE: apps/digithings-stack-cloudflare keeps 47 of 57 files; the 10 OCC seed
 # files move to R6 and are removed by a second filter-repo pass (see r5.drop).
@@ -18,12 +21,6 @@ tests/scripts/test_zammad_mcp_exports.py
 tests/scripts/test_zammad_mcp_no_mask.py
 tests/scripts/test_zammad_mcp_stack.py
 tests/scripts/test_zammad_semantic_eval.py
-scripts/occ_invite_key_rollout.sh
-scripts/check_occ_rollout_auth_guard.py
-scripts/index_occ_tickets.py
-scripts/occ_invite_key_fixture_server.mjs
-scripts/test_occ_rollout_scope_guard.sh
-scripts/verify_occ_invite_key.sh
 config/litellm.cheaperinference.yaml
 config/litellm.omniroute.yaml
 config/dogfood-digiproject.yaml
@@ -32,7 +29,6 @@ docs/ops/2026-10-06-stranded-branch-triage.tsv
 docs/ops/2026-10-06-stranded-work-and-backup-report.md
 docs/ops/2026-10-06-t2-branch-decisions.md
 docs/ops/CLIENT_PIPELINES.md
-docs/ops/OCC_INVITE_KEY.md
 docs/ops/SECRETS_INVENTORY.md
 docs/ops/SECRETS_ROTATION.md
 docs/ops/branch-hygiene-policy.md
@@ -51,8 +47,6 @@ docs/ops/paperclip-routine-watch.md
 docs/ops/policy-check-credential.md
 docs/ops/supabase-exit-twelve-x-cutover-runbook.md
 docs/ops/vectorize-cutover.md
-.github/workflows/deploy-digithings-cron.yml
-.github/workflows/token-canary.yml
-.github/workflows/secret-staleness-check.yml
-.github/workflows/pipeline-provider-review.yml
-.github/workflows/publish-digichat-image.yml
+infra/self-host/compose.ghcr.yml
+infra/self-host/routine-watch/com.digithings.routine-watch.plist
+tests/scripts/data/zammad_semantic_gold.json
