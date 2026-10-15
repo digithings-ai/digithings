@@ -261,6 +261,8 @@ def present_doctor(
                 if key in {None, "esc", "q", "Q"}:
                     break
         except (OSError, ValueError):
+            # Expected: stdin closed (e.g. piped input ended); leave the
+            # doctor frame as-is.
             pass
     return frame
 
