@@ -45,7 +45,7 @@ LOG=/opt/cursor/artifacts/rls_isolation_proof.log ./scripts/rls_proof/run.sh
 | Shim | Production (Supabase `core`) | Notes |
 |------|------------------------------|-------|
 | Roles `anon` / `authenticated` / `service_role` | Platform roles | `service_role` created with `BYPASSRLS` |
-| `authenticator` login role | PostgREST `authenticator` (login) | `NOINHERIT LOGIN`; password `rls_proof_local` is a **local stand-in only** — not production |
+| `authenticator` login role | PostgREST `authenticator` (login) | `NOINHERIT LOGIN` with no password (DIG-379) — harness runs as superuser and uses `SET ROLE`, so no credential is stored |
 | `auth.users(id)` | Full Auth schema | Minimal PK-only stub for membership FKs / proof inserts |
 | `auth.uid()` / `auth.jwt()` | Auth helpers | Read `request.jwt.claims` JSON (`sub`, `app_metadata`, …) |
 | `pgcrypto` / `moddatetime` | Usually pre-enabled | Enabled explicitly here |

@@ -47,9 +47,12 @@ BEGIN
     CREATE ROLE service_role NOLOGIN BYPASSRLS;
     RAISE NOTICE 'SHIM: CREATE ROLE service_role NOLOGIN BYPASSRLS';
   END IF;
-  -- Optional authenticator stand-in (membership so non-superuser runners can SET ROLE)
+  -- Optional authenticator stand-in (membership so non-superuser runners can SET ROLE).
+  -- No PASSWORD clause by design (DIG-379): the harness runs as superuser via
+  -- sudo -u postgres psql and only uses SET ROLE, so no credential is needed
+  -- and none belongs in the repo.
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticator') THEN
-    CREATE ROLE authenticator NOINHERIT LOGIN PASSWORD 'rls_proof_local';
+    CREATE ROLE authenticator NOINHERIT LOGIN;
     RAISE NOTICE 'SHIM: CREATE ROLE authenticator (login stand-in for PostgREST)';
   END IF;
   GRANT anon TO authenticator;
