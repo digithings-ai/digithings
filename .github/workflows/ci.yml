@@ -47,6 +47,9 @@ jobs:
       # Added by hand (DIG-2940): generate_ci_path_filters.py only rewrites the
       # block between the CI_PATH_FILTERS markers, not this outputs map.
       bun_suites: ${{ steps.filter.outputs.bun_suites }}
+      # Added by hand (DIG-3770): generate_ci_path_filters.py only rewrites the
+      # block between the CI_PATH_FILTERS markers, not this outputs map.
+      workers: ${{ steps.filter.outputs.workers }}
       ruff_and_scripts: ${{ steps.filter.outputs.ruff_and_scripts }}
       workflows: ${{ steps.filter.outputs.workflows }}
       compose: ${{ steps.filter.outputs.compose }}
@@ -242,6 +245,17 @@ jobs:
               - 'npm-audit-ignore.txt'
               - 'scripts/classify_npm_audit.py'
               - '.github/workflows/security-npm-audit.yml'
+            workers:
+              - 'apps/digithings-cron/**'
+              - 'apps/dashboard-api/**'
+              - 'apps/digidata-api/**'
+              - 'apps/digiquant-runner/**'
+              - 'apps/digitrace-langfuse/**'
+              - 'apps/digichat-cloudflare/**'
+              - 'apps/digithings-stack-cloudflare/**'
+              - 'apps/**/wrangler.toml'
+              - 'package.json'
+              - 'package-lock.json'
             # CI_PATH_FILTERS_END
 
   # ── Frontend canon guard (#1404, #1434) — UNCONDITIONAL ─────────────────────
@@ -620,6 +634,62 @@ jobs:
       - name: Pandas boundary (REM-132)
         run: bash scripts/check_pandas_boundary.sh
 
+  # ── Worker dry-run build (DIG-3770) ───────────────────────────────────────
+  # Relocated verbatim from build-cloudflare-workers.yml (deleted): `tsc`
+  # cannot see a type-only import, so a Durable Object class that is only
+  # `import type`d compiles, typechecks, tests green — and `wrangler deploy`
+  # then refuses to build the Worker. This job moves that failure to the PR,
+  # inside the required-checks aggregator, so a red build blocks merge.
+  # Path-gated on the `workers` changes output like every other lane: a
+  # skipped job reports Success, so the aggregator never wedges pending.
+  worker-build:
+    name: wrangler deploy --dry-run
+    needs: changes
+    if: needs.changes.outputs.workers == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      # One broken app should still report the others.
+      fail-fast: false
+      matrix:
+        # Directory names, not package names: digichat-cloudflare is the
+        # directory and digithings-digichat-cloudflare is the package, so the
+        # directory is the only stable key for `working-directory:` below.
+        app:
+          - digithings-cron
+          - dashboard-api
+          - digidata-api
+          - digiquant-runner
+          - digitrace-langfuse
+          - digichat-cloudflare
+          - digithings-stack-cloudflare
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # Root install, not a per-app one: the workspaces hoist into the root
+      # node_modules, and the deploy workflows install the same way.
+      - name: Install workspace dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Build the Worker
+        # npm exec resolves the wrangler pinned in that app's devDependencies
+        # (hoisted to the root node_modules) rather than whatever the registry
+        # serves, so this gate cannot drift under a green tree.
+        #
+        # --containers-rollout=none is load-bearing: without it wrangler demands
+        # a Docker CLI to build the image "even in dry-run mode", and the
+        # ubuntu-latest runner's Docker would build a real image per app per PR.
+        #
+        # --outdir keeps the bundle out of the working tree. It is disposable
+        # either way; writing it to $RUNNER_TEMP keeps a failed build's output
+        # readable without polluting the checkout.
+        run: npm exec -- wrangler deploy --dry-run --containers-rollout=none --outdir "$RUNNER_TEMP/wrangler-dry-run"
+        working-directory: apps/${{ matrix.app }}
+
   # ── GitHub Actions workflow lint (repo-wide) ────────────────────────────────
   # Gated on `.github/workflows/**`, so it fires on any workflow edit — including
   # edits to ci.yml itself. The predecessor was a job inside test-research-graph.yml
@@ -815,6 +885,7 @@ jobs:
       - pip-audit
       - npm-audit
       - ruff-and-scripts
+      - worker-build
       - actionlint
       - compose-validate
     runs-on: ubuntu-latest

@@ -402,3 +402,20 @@ npm_audit:
   - npm-audit-ignore.txt
   - scripts/classify_npm_audit.py
   - .github/workflows/security-npm-audit.yml
+
+# Worker dry-run build gate (DIG-3770). One glob per matrix app dir plus the
+# wrangler.toml catch-all and the install inputs: `npm ci` resolves the hoisted
+# wrangler, so a lockfile change is a build input. A per-app wrangler.toml
+# entry would be a dead duplicate of the catch-all, same as the matrix test
+# pins for the standalone trigger it replaces.
+workers:
+  - apps/digithings-cron/**
+  - apps/dashboard-api/**
+  - apps/digidata-api/**
+  - apps/digiquant-runner/**
+  - apps/digitrace-langfuse/**
+  - apps/digichat-cloudflare/**
+  - apps/digithings-stack-cloudflare/**
+  - apps/**/wrangler.toml
+  - package.json
+  - package-lock.json

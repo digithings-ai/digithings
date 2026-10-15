@@ -194,3 +194,12 @@ checks:
       Unconditional lane, folded into `Required checks passed` (in its
       `needs:`). Deliberately ungated directly: it reports on every PR and
       goes red, and merges continue. Required nowhere.
+
+  - context: wrangler deploy --dry-run
+    workflow: ci.yml
+    job: worker-build
+    enforcement: advisory
+    reason: >-
+      Path-gated lane, folded into `Required checks passed` (in its
+      `needs:`). Deliberately ungated directly: it reports only on PRs
+      touching Worker apps, and merges continue. Required nowhere.
