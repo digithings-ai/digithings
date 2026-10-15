@@ -32,13 +32,13 @@ Assumptions [A] (slice A to confirm against live Origin behaviour):
 
 ## 2. Tags / releases
 
-- Release tags are cut **by Chris on GitHub** (D-G6: signing optional/recommended).
+- Release tags are cut **by Chris on GitHub**; **signed tags are mandatory (D-G6, mandatory since 23:18)**, enforced by local-ci `git verify-tag` against `allowed_signers`. Origin has no signed-tag rule type, so the check lives in local-ci; unsigned tags are refused.
   The mirror carries them to Origin automatically (§1 sync set).
 - Nothing deploys from R0 (migration-plan: "Nothing deploys from R0"), so a tag on R0
   is a **publish marker** (release-please / PyPI / npm / GHCR), never a deploy trigger.
 - Per-package release branches (`release/<module>`, D-R3: tags + release-please on
   `main` in R0) sync as ordinary branches. No signed-tag rule exists on Origin,
-  so the tag gate (if adopted) is enforced on the GitHub side / runner hook, not by Origin.
+  so the tag gate is enforced by local-ci, not by Origin.
 
 ## 3. External contributions flow back (GitHub -> Origin)
 
@@ -89,5 +89,5 @@ Assumptions [A] (slice A to confirm against live Origin behaviour):
 
 ## 7. Open items
 
-- D-G6 mandatory-vs-optional deferred; D-G5 Worker-fallback detail is slice D (DIG-3561).
+- D-G6 decided MANDATORY 23:18 (reflected in §2); D-G5 Worker-fallback detail is slice D (DIG-3561).
 - If Origin ever ships outbound mirroring, revisit §1 — until then the decision stands.
