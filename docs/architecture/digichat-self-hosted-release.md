@@ -12,7 +12,7 @@
 ## Implementation plan
 
 Bite-sized tasks (release packaging → Profile A/B → install guide → gap fixes):  
-[`docs/superpowers/plans/2026-08-09-digichat-self-hosted-release.md`](../superpowers/plans/2026-08-09-digichat-self-hosted-release.md)
+`2026-08-09-digichat-self-hosted-release.md` (removed DIG-3399; git history keeps it)
 
 ---
 
@@ -202,7 +202,7 @@ First-party digithings hosts (`digithings.ai` / `www.digithings.ai`) may skip em
 | ~~**No client-facing install guide**~~ | **Addressed:** [`docs/digichat/INSTALL.md`](../digichat/INSTALL.md) — pull GHCR + Profile A/B + env checklist + smoke. Linked from modular-frontend §5 and OPERATIONS.md. |
 | ~~**Compose builds, does not pull**~~ | **Addressed:** [`infra/digichat-release/compose.digichat-release.yml`](../../infra/digichat-release/compose.digichat-release.yml) overlays root Compose to `image: ghcr.io/digithings-ai/digichat:v…`. |
 | ~~**Makefile is local-dev shaped**~~ | **Addressed:** `make digichat-release-up VERSION=…` / `digichat-release-down` (see Makefile digichat help block + [`infra/digichat-release/README.md`](../../infra/digichat-release/README.md) command matrix). |
-| ~~**`DIGICHAT_EMBED_HOSTS` baked into published image**~~ | **Addressed:** runtime CSP via `src/proxy.ts` + INSTALL.md § Custom embed parent hosts. Plan: [`docs/superpowers/plans/2026-08-09-digichat-runtime-frame-ancestors.md`](../superpowers/plans/2026-08-09-digichat-runtime-frame-ancestors.md). |
+| ~~**`DIGICHAT_EMBED_HOSTS` baked into published image**~~ | **Addressed:** runtime CSP via `src/proxy.ts` + INSTALL.md § Custom embed parent hosts. Plan: `2026-08-09-digichat-runtime-frame-ancestors.md` (removed DIG-3399; git history keeps it). |
 | ~~**Docs drift**~~ | **Addressed:** [`docs/DEPLOYMENT.md`](../DEPLOYMENT.md) aligns digithings.ai/chat with digigraph + Tunnel (no live Pages Function chat path). |
 | ~~**No Foundry-only Compose snippet**~~ | **Addressed:** [`compose.profile-b.yml`](../../infra/digichat-release/compose.profile-b.yml) + `.env.profile-b.example` (digithings stays Azure-free). |
 | ~~**Profile A “minimal” not named**~~ | **Addressed:** [`compose.profile-a.yml`](../../infra/digichat-release/compose.profile-a.yml) + GHCR pull via `DIGI_IMAGE_TAG` (see INSTALL). **Ops remaining:** first `publish-service-images.yml` run on `main` so packages exist. |
@@ -214,7 +214,7 @@ First-party digithings hosts (`digithings.ai` / `www.digithings.ai`) may skip em
 - ~~GHCR for digikey / digigraph / digivault~~ — **Addressed** in compose/INSTALL (`DIGI_IMAGE_TAG`); packages land after promote to `main` + publish workflow
 - ~~Corpus / crawl / OCR / vault ingest pipelines~~ **MVP landed:** offline
   `scripts/docs_onboard/` — plan
-  [`2026-08-09-digichat-corpus-ingest.md`](../superpowers/plans/2026-08-09-digichat-corpus-ingest.md),
+  `2026-08-09-digichat-corpus-ingest.md` (removed DIG-3399; git history keeps it),
   runbook [`CLIENT-DOCS-ONBOARD.md`](../digichat/CLIENT-DOCS-ONBOARD.md),
   ops index [`CLIENT_PIPELINES.md`](../ops/CLIENT_PIPELINES.md).
   Remaining: Profile A Compose attach, richer crawl, digiquant entry (Pick 3 later).

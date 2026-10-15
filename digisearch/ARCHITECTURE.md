@@ -1281,7 +1281,7 @@ digisearch/src/digisearch/
 │                              # 13F → short-volume → lobbying → gov-contracts
 │                              # (same pattern via a TRACKER_DATASETS table)
 ├── ingest_worker.py           # Bulk ingest placeholder (not implemented)
-├── http_client.py             # HTTP client helpers for callers (query_digisearch, format_results_table)
+├── http_client.py             # result-table formatting (format_results_table; query path uses digibase.http_client)
 ├── client.py                  # digisearch Python client
 │
 ├── core/

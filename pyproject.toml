@@ -2,6 +2,7 @@
 name = "digithings-workspace"
 version = "0.0.0"
 description = "Workspace root — not published. Hosts the uv workspace and its single lockfile."
+license = { text = "MIT" }
 requires-python = ">=3.12"
 dependencies = []
 
@@ -33,6 +34,11 @@ dependencies = []
 # CI could not catch this: the deploy build-check workflows invoke the build scripts
 # directly and never emulate Cloudflare's dependency-install step. The `Assert the repo root
 # is pip-installable` step in each deploy workflow now closes that gap.
+
+[project.urls]
+Homepage = "https://digithings.ai"
+Repository = "https://github.com/digithings-ai/digithings"
+
 [tool.setuptools]
 py-modules = []
 

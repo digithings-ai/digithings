@@ -38,7 +38,7 @@ All tokens are declared as CSS custom properties on `:root` in
 
 | Token                | Value       | Role                                  |
 | -------------------- | ----------- | ------------------------------------- |
-| `--bg-primary`       | `#121212`   | Page background (on top of starfield) |
+| `--bg-primary`       | `#121212`   | Page background |
 | `--bg-secondary`     | `#0a0a0a`   | Panels, cards, nav                    |
 | `--text-primary`     | `#e6e6e6`   | Default body text                     |
 | `--text-secondary`   | `#a3a3a3`   | Muted text, captions                  |
@@ -212,75 +212,14 @@ digithings.ai and digiquant.io, and the React kit in `@digithings/ui`.
 
 The vanilla `starfield.js` and `typewriter.js` modules had no importer either
 (`apps/dashboard` only declared the starfield module). They were removed.
-Do not revive them; the next design reference is `apps/reference`.
+`scroll-trigger.js` left in #5692. Do not revive them; the next design
+reference is `apps/reference`.
 
 ---
-
-## Scroll-trigger API
-
-`packages/design/scroll-trigger.js`:
-
-```js
-import { initScrollTrigger } from './scroll-trigger.js';
-
-initScrollTrigger({
-  selector: '.scroll-trigger',      // elements that want progress
-  revealThreshold: 0.85,            // 0..1; higher = reveals sooner
-  activateSelector: '.timeline-event', // optional — adds .active past line
-  activationLineRatio: 0.7,         // where the active line sits (0=top,1=bottom)
-  onProgress: (el, progress, rect) => { /* optional hook */ },
-});
-```
-
-Each matching element receives `--scroll: 0..1` on every frame. The
-`data-direction` rules that consumed it left with `components.css`. The
-remaining hook is `activateSelector`, which toggles `.active`; `site/site.css`
-`.reveal-up.active` still honors that, alongside the React `Reveal` driver.
-
----
-
-## Adoption guide
-
-### `digichat/` (Next.js)
-
-digichat already uses the same base palette in `digichat/src/app/globals.css`.
-To formally adopt the design system:
-
-1. Vendor the tokens. Add a make target that copies `packages/design/tokens.css`
-   into `digichat/src/app/tokens.css`:
-
-   ```make
-   sync-tokens:
-   	cp packages/design/tokens.css apps/digichat/src/app/tokens.css
-   ```
-
-2. Import it from `globals.css`:
-
-   ```css
-   @import './tokens.css';
-   ```
-
-3. Replace any hardcoded hex values in Next.js components with
-   `var(--bg-secondary)`, `var(--accent)`, etc. Scope digichat surfaces
-   with the `.accent-digichat` class at the root.
-
-Tokens alone keep digichat and the marketing sites visually coherent.
-digichat's React primitives own layout; do not vendor a second component sheet.
-
-### `apps/digiquant-web/`
-
-digiquant.io imports `@digithings/design/tokens.css` and
-`@digithings/design/site/site.css`. Scope accent with the digiquant token
-(`--accent: var(--accent-digiquant)`), not a legacy `components.css` sheet.
-
----
-
 ## Non-goals
 
-- No light mode yet. The palette is dark-first; a light variant is a
-  future PR with tokens overridden inside `@media (prefers-color-scheme: light)`.
-- No component JS framework. Primitives are class-based CSS; interactivity
-  is limited to the vanilla-JS modules documented above.
+- No component JS framework here. React components live in `@digithings/ui`;
+  this package keeps tokens and the few vanilla-JS modules documented below.
 - Confidential internal projects are out of scope. This design system
   documents only public-facing surfaces.
 
@@ -288,111 +227,8 @@ digiquant.io imports `@digithings/design/tokens.css` and
 
 ## Extended primitives
 
-Five additional primitives harvested from the landing-page exploration live
-alongside the base tokens + starfield. Each ships a CSS file, an ESM JS
-module, and (where useful) a `types.d.ts`. See the smoke-test page at
-[`smoke/index.html`](./smoke/index.html) for a minimal reviewer poke-surface
-for all five at once.
-
-### `living-architecture/` — interactive SVG diagram engine
-
-```js
-import { initDiagram } from '@digithings/design/living-architecture';
-import '@digithings/design/living-architecture/styles.css';
-
-const { camera, focus, reset, destroy } = initDiagram({
-  hostId: 'arch-host',
-  svgId: 'arch-svg',
-  nodes: [
-    { id: 'a', label: 'Alpha', x: 300, y: 360, accentVar: '--accent-digigraph', group: 'core' },
-    { id: 'b', label: 'Beta',  x: 600, y: 360, accentVar: '--accent-digiquant', group: 'core' },
-  ],
-  edges: [{ source: 'a', target: 'b' }],
-  onNodeFocus: (id) => { /* consumer side-effect */ },
-});
-```
-
-| API                     | Notes                                                                 |
-| ----------------------- | --------------------------------------------------------------------- |
-| `initDiagram(opts)`     | Builds edges + nodes, returns `{ camera, focus, reset, destroy }`.    |
-| `camera.focus(id)`      | 600ms viewBox tween to a node.                                        |
-| `camera.reset()`        | Tween back to the SVG's initial `viewBox`.                            |
-| `camera.zoomTo(bbox)`   | Tween to an arbitrary `[x, y, w, h]`.                                 |
-| `onNodeFocus(id)`       | Fires on node click / Enter / arrow-nav.                              |
-| Keyboard (host focused) | ←/→ cycle `group === "core"` nodes; ↑ reset; ↓ focus current/first core; Tab/Shift+Tab walks all nodes (a11y); Enter activates; Esc resets. |
-| Zoom-out button         | Auto-injected, top-right of host, calls `camera.reset()`.             |
-
-Static fallback: `fallback-diagram.svg` in the same folder — inline it with
-`<object data="…/fallback-diagram.svg">` or render it inside the host
-SVG before hydrating; JS will clear it on `initDiagram`.
-
-**Reduced motion**: edge flow animation disabled, viewBox snaps instantly
-on `focus` / `reset` / `zoomTo`, bloom transitions removed.
-
-### `terminal/` — scripted terminal widget
-
-```js
-import { initTerminal } from '@digithings/design/terminal';
-import '@digithings/design/terminal/styles.css';
-
-initTerminal({
-  elementId: 'term',
-  lines: [
-    { kind: 'prompt',    text: 'digithings init' },
-    { kind: 'output',    text: 'ready.' },
-    { kind: 'comment',   text: 'all services ok' },
-    { kind: 'tool-call', text: 'digigraph.route' },
-    { kind: 'output',    text: 'const x = 1;', lang: 'js' },
-  ],
-  speed: 'normal',
-  onReady: () => {},
-});
-```
-
-| Line `kind`   | Rendering                                                   |
-| ------------- | ----------------------------------------------------------- |
-| `prompt`      | Mono `>` marker, neutral body.                              |
-| `output`      | Default body.                                               |
-| `comment`     | `//` marker in a muted accent.                              |
-| `tool-call`   | Body rendered as a chip.                                    |
-
-Compose multiple terminals side-by-side inside `<div class="terminal-group">`
-(no inter-widget coordination needed). `speed` is `"fast" | "normal" | "slow"`
-or a custom per-character base in milliseconds. Optional `lang` hint
-(`js|ts|tsx|py|sh|json`) swaps in naïve highlighted markup after the keystroke
-stream completes — this is decorative, not a real tokenizer.
-
-**Reduced motion**: no typewriter, no cursor blink; text appears instantly.
-
-### `typography-motion/` — variable-weight + tracking shift
-
-Declarative (preferred for hero headlines):
-
-```html
-<link rel="stylesheet" href="…/typography-motion/styles.css" />
-<h1 class="tws-weight-shift"
-    data-weight-from="200" data-weight-to="700">Settle me on scroll.</h1>
-
-<script type="module">
-  import { initTypographyMotion } from '@digithings/design/typography-motion';
-  initTypographyMotion();
-</script>
-```
-
-Imperative:
-
-```js
-import { attachWeightShift, attachTrackingShift } from '@digithings/design/typography-motion';
-const h = attachWeightShift(el, { from: 200, to: 700, scrollStart: 0, scrollEnd: 400 });
-// h.detach() when the element leaves the tree
-```
-
-`.tws-weight-shift` drives `font-variation-settings: "wght" N` plus a matching
-`font-weight`. `.tws-tracking-shift` drives `letter-spacing` in `em` units.
-Both bind to scroll-Y progress across `[scrollStart, scrollEnd]`.
-
-**Reduced motion**: element snaps to the `to` value immediately; no scroll
-listener attached.
+Two primitives that live surfaces still import sit alongside the tokens.
+Each ships a CSS file and an ESM JS module.
 
 ### `quant-native/` — blueprint grid, ticker, metric + chart utilities
 
@@ -457,19 +293,6 @@ const shell = initAppShell({
 
 **Reduced motion**: no sidebar / palette transitions; everything resolves
 instantly.
-
-### Smoke-test page
-
-Run any static server from `packages/design/`:
-
-```bash
-cd frontend && python3 -m http.server 8765
-open http://localhost:8765/design/smoke/
-```
-
-The page renders one minimal instance of each primitive for review.
-
----
 
 ## Documents
 
