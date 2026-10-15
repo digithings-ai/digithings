@@ -60,6 +60,8 @@ from multiprocessing.connection import Connection
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import pandas as pd
+
 if TYPE_CHECKING:
     import polars as pl
 
@@ -487,17 +489,17 @@ def run_nautilus(
 def trades_from_positions(positions) -> list[dict]:
     """Round-trip trades (chronological) from the Nautilus positions report.
 
-    The Nautilus report is read row-wise; missing exits (NaT/NaN) are detected via
-    self-inequality, avoiding non-Polars dataframe helpers in digiquant code.
+    The Nautilus report is read row-wise; missing exits (NaT/NaN/None) are
+    detected with ``pandas.isna``, which answers True for every missing
+    scalar the report carries (float NaN, Decimal NaN, pd.NaT,
+    np.datetime64('NaT'), None) and False for a real close.
     """
 
     def _missing(x) -> bool:
-        # Self-inequality is deliberate and must stay (CodeQL DIG-3629 #2664).
-        # math.isnan() raises TypeError on the timestamps this helper actually
-        # receives (pd.NaT, pd.Timestamp, np.datetime64, None), where `x != x`
-        # returns a bool, so math.isnan would change behaviour. pandas.isna is
-        # correct here but pandas is not a declared digiquant dependency.
-        return x is None or x != x  # NaN/NaT compare unequal to themselves
+        # pandas.isna is used instead of self-inequality because it returns a
+        # plain bool for these scalars and raises nothing on the timestamp and
+        # None inputs this helper receives (CodeQL DIG-3629 #2664).
+        return pd.isna(x)
 
     rows = []
     for _, r in positions.iterrows():
