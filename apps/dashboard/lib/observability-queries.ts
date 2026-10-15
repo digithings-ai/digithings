@@ -16,8 +16,8 @@
  * empty result rather than throwing, so consumers render a clean empty state instead of an
  * error wall.
  *
- * Exception — accounting NAV (#2599 / #3029): `fetchPerformanceTearsheet` /
- * `getPerformanceBundle` FAIL CLOSED when `public_accounting_nav_history` errors.
+ * Exception — accounting NAV (#2599 / #3029): `getPerformanceBundle` FAIL CLOSED
+ * when `public_accounting_nav_history` errors.
  * Swallowing that into an empty series looked like a healthy empty book and hid
  * unapplied migrations 072–074.
  *
@@ -894,8 +894,7 @@ export type PerformanceBundle = {
 
 /**
  * Single performance fetch for Tearsheet and Brief persisted KPIs.
- * Prefer this over calling {@link fetchPerformanceTearsheet} alone — same NAV
- * adapter, contract badge, and metrics-lag chrome.
+ * Same NAV adapter, contract badge, and metrics-lag chrome.
  */
 export async function getPerformanceBundle(
   opts: { snapshotDate?: string | null } = {}
@@ -1053,12 +1052,4 @@ export async function getPerformanceBundle(
   });
 
   return { tearsheet, ssot };
-}
-
-/** @deprecated Prefer {@link getPerformanceBundle} — same NAV adapter (#3580). */
-export async function fetchPerformanceTearsheet(
-  opts: { snapshotDate?: string | null } = {}
-): Promise<PerformanceTearsheet> {
-  const { tearsheet } = await getPerformanceBundle(opts);
-  return tearsheet;
 }

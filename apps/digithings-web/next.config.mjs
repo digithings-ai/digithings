@@ -34,6 +34,12 @@ const nextConfig = {
       // Dev-only: .env.local points the band here so the benchmark leg is the
       // same series production draws. Static export ignores this rewrite.
       { source: "/market-data/:path*", destination: "https://graph.digithings.ai/:path*" },
+      // The house-book API allows digithings.ai, not a local preview.
+      // Dev-only same-origin proxy. Static export ignores this rewrite.
+      {
+        source: "/dashboard-api/:path*",
+        destination: "https://graph.digithings.ai/dashboard-api/:path*",
+      },
     ];
   },
 };

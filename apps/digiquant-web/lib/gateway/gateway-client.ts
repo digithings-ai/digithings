@@ -208,6 +208,33 @@ export async function fetchGatewayProbe(
 }
 
 /**
+ * Calls `POST /v1/tools/call` so the local gateway runs one audited MCP tool.
+ * Returns the envelope even when `envelope.ok` is false. Never throws.
+ */
+export async function fetchGatewayCall(
+  name: string,
+  args: Record<string, unknown>,
+  pageHostname?: string,
+): Promise<{ ok: true; status: number; envelope: ProbeEnvelope } | { ok: false; error: string }> {
+  const state = resolveGatewayState(pageHostname);
+  if (!state.available) return { ok: false, error: state.reason };
+  try {
+    const res = await fetch(`${state.baseUrl}/v1/tools/call`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name, arguments: args }),
+    });
+    const envelope = (await res.json()) as ProbeEnvelope;
+    if (!res.ok && !envelope?.error && envelope?.ok !== false) {
+      return { ok: false, error: `HTTP ${res.status}` };
+    }
+    return { ok: true, status: res.status, envelope };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/**
  * Calls `GET /v1/probe/luxalgoSearch?query=…&limit=…`.
  *
  * Returns the full probe envelope on success so callers can display

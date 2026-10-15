@@ -157,8 +157,7 @@ export function Pricing() {
       />
       <p className="m-0 max-w-[var(--measure-prose)] text-[0.8125rem] leading-[1.65] text-ink-mute">
         <span aria-hidden="true">{"// "}</span>
-        The software costs nothing on any tier. What differs is who does the work. Your keys
-        and your hardware stay yours throughout.
+        Your keys and your hardware stay yours throughout.
       </p>
     </div>
   );
