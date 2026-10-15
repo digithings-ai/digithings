@@ -543,7 +543,7 @@ export function ByokCliFlow({
       aria-label={title ?? "Bring your own API key"}
     >
       <TermLine marker="▸">
-        <span style={{ color: "var(--text-secondary)" }}>
+        <span style={{ color: "var(--ink-soft)" }}>
           <code className="font-mono">{title ?? "byok configure"}</code>
           {" — "}
           key stays in session memory only. Refresh clears it. Sent per-request
@@ -555,7 +555,7 @@ export function ByokCliFlow({
         <TermLine marker="·">
           <span
             className="font-mono text-[12px]"
-            style={{ color: "var(--text-secondary)" }}
+            style={{ color: "var(--ink-soft)" }}
           >
             active: {active?.provider ?? provider}
             {(active?.model ?? model) ? ` · ${active?.model ?? model}` : ""} ·
@@ -568,7 +568,7 @@ export function ByokCliFlow({
         <>
           {step !== "provider" ? (
             <TermLine marker="·">
-              <span className="font-mono text-[12px]" style={{ color: "var(--text-secondary)" }}>
+              <span className="font-mono text-[12px]" style={{ color: "var(--ink-soft)" }}>
                 provider: {provider}
               </span>
             </TermLine>
@@ -576,7 +576,7 @@ export function ByokCliFlow({
 
           {provider === "openrouter" && !liveModels && modelsFetchFailedFor !== provider ? (
             <TermLine marker="·">
-              <span className="font-mono text-[12px]" style={{ color: "var(--text-secondary)" }}>
+              <span className="font-mono text-[12px]" style={{ color: "var(--ink-soft)" }}>
                 fetching live model catalog…
               </span>
             </TermLine>
@@ -584,7 +584,7 @@ export function ByokCliFlow({
 
           {wantsKeyStepPing(provider) && keyPingPending ? (
             <TermLine marker="·">
-              <span className="font-mono text-[12px]" style={{ color: "var(--text-secondary)" }}>
+              <span className="font-mono text-[12px]" style={{ color: "var(--ink-soft)" }}>
                 fetching live model list…
               </span>
             </TermLine>
@@ -644,7 +644,7 @@ export function ByokCliFlow({
 
           {(step === "model" || step === "validating") && inputKey ? (
             <TermLine marker="·">
-              <span className="font-mono text-[12px]" style={{ color: "var(--text-secondary)" }}>
+              <span className="font-mono text-[12px]" style={{ color: "var(--ink-soft)" }}>
                 key: {maskKey(inputKey)}
               </span>
             </TermLine>
