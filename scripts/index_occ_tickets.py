@@ -63,14 +63,12 @@ def build_ticket_chunks(
     customer_name: str | None = None,
     snapshot_date: str = SNAPSHOT_DATE,
 ) -> list[Any]:
-    """Build one Chunk per article with a PII-masked body (DIG-3578).
+    """Build one Chunk per article with the body and metadata unchanged.
 
-    Masking runs here, before embedding and before any index write, so raw
-    direct identifiers never persist. See
-    ``digisearch.pipeline.pii_mask`` for the passes and placeholders.
+    No PII masking: the invite link is the only gate (Chris, 9 Oct,
+    reaffirmed 16 Oct). Names, emails and phone numbers stay in the chunk.
     """
     from digisearch.core.models import Chunk
-    from digisearch.pipeline.pii_mask import mask_metadata, mask_ticket_text
 
     from scripts.zammad_mcp.formatting import _field as _text
     from scripts.zammad_mcp.formatting import html_to_text
@@ -126,17 +124,12 @@ def build_ticket_chunks(
                 "article_created_at": _text(article.get("created_at")),
             }
         )
-        masked = mask_ticket_text(
-            content,
-            known_names=[customer_name or "", _text(ticket.get("owner")), author or ""],
-            known_orgs=[_text(ticket.get("organization"))],
-        )
         chunks.append(
             Chunk(
                 id=f"zammad-{ticket_id if ticket_id is not None else 'n'}-{index}",
-                content=masked.content,
+                content=content,
                 doc_id=doc_id,
-                metadata=mask_metadata(metadata),
+                metadata=metadata,
             )
         )
     return chunks

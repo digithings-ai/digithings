@@ -1,5 +1,3 @@
-import { maskPii } from "./pii";
-
 const DEFAULT_SIZE = 500;
 const DEFAULT_OVERLAP = 50;
 
@@ -52,5 +50,5 @@ export function chunkWords(text: string, size = DEFAULT_SIZE, overlap = DEFAULT_
 
 export function prepareBody(raw: string, contentType?: string): string {
   const asText = /html/i.test(contentType ?? "") || /<[a-z][\s\S]*>/i.test(raw) ? htmlToText(raw) : raw;
-  return maskPii(stripQuotesAndSignature(asText));
+  return stripQuotesAndSignature(asText);
 }

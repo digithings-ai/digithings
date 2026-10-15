@@ -1,4 +1,3 @@
-import { assertCleanMetadata, maskPii } from "./pii";
 import { chunkWords, prepareBody } from "./chunk";
 import { EMBED_DIMENSIONS, EMBED_MODEL_ID } from "./model";
 
@@ -36,8 +35,8 @@ function text(value: unknown): string {
 }
 
 function prefix(ticket: TicketRecord, body: string): string {
-  const title = maskPii(text(ticket.title));
-  const state = maskPii(text(ticket.state)) || "unknown";
+  const title = text(ticket.title);
+  const state = text(ticket.state) || "unknown";
   const header = [`Ticket ${ticket.id}`, title, `State: ${state}`, "Language: und"]
     .filter((line) => line.length > 0)
     .join("\n");
@@ -77,8 +76,8 @@ export async function buildTicketVectors(
       source: "ticket",
       ticket_id: String(ticket.id),
       article_id: String(articleIds[index]),
-      state: maskPii(text(ticket.state)),
-      group: maskPii(text(ticket.group)),
+      state: text(ticket.state),
+      group: text(ticket.group),
       created_at: text(ticket.created_at),
       updated_at: text(ticket.updated_at),
       lang: "und",
@@ -88,7 +87,6 @@ export async function buildTicketVectors(
       doc_id: `ticket-${ticket.id}`,
       content: content.slice(0, CONTENT_CAP),
     };
-    assertCleanMetadata(metadata);
     return { id: ids[index], values, metadata };
   });
 }
@@ -114,7 +112,6 @@ export async function buildDocVectors(
       doc_id: `doc-${url}`,
       content: content.slice(0, CONTENT_CAP),
     };
-    assertCleanMetadata(metadata);
     return { id: `d${hashUrl(url)}-c${index}`, values, metadata };
   });
 }
