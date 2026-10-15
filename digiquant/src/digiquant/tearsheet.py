@@ -135,7 +135,8 @@ def create_tearsheet(
         ohlcv_df, symbol, period, std_dev, fill_ts, fill_px, fill_sides
     )
     # k and n come from one place: the honest block when present, else a
-    # caller-counted k over the fill count. Never rate × n on this surface.
+    # caller-counted k over the closed round-trip count. Never rate × n on
+    # this surface.
     counts = resolve_win_rate(result, win_rate, wins=count_winning_trades(realized_pnls_series))
     num_wins = counts.k if counts.counted else None
     win_rate_donut_fig = _build_win_rate_donut(win_rate, counts.n, num_wins=num_wins)

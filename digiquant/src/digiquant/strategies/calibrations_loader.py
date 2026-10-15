@@ -22,10 +22,6 @@ def entry_is_slapper(entry: dict[str, Any], settings: dict[str, Any]) -> bool:
     return str(entry.get("strategy_type") or default or "slapper") == "slapper"
 
 
-def _entry_is_slapper(entry: dict[str, Any], settings: dict[str, Any]) -> bool:
-    return entry_is_slapper(entry, settings)
-
-
 def load_calibrations_file(path: Path | None = None) -> dict[str, dict[str, Any]]:
     """Read the gitignored ``calibrations.json`` (or an explicit path)."""
     p = path or CALIBRATIONS_FILE
@@ -63,7 +59,7 @@ def load_calibrations_from_supabase(
         ids = [
             str(sid)
             for sid, entry in settings.get("strategies", {}).items()
-            if isinstance(entry, dict) and _entry_is_slapper(entry, settings)
+            if isinstance(entry, dict) and entry_is_slapper(entry, settings)
         ]
 
     out: dict[str, dict[str, Any]] = {}

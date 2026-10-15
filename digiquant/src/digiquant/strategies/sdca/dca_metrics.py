@@ -123,7 +123,7 @@ def breakdown_from_daily(
     buy_days = sell_days = no_trade_days = 0
     risk_sum = rate_sum = 0.0
     non_null = 0
-    for day_risk, day_rate, trade_usd in zip(risk, rate, daily_trade_usd, strict=True):
+    for day_risk, day_rate, _ in zip(risk, rate, daily_trade_usd, strict=True):
         if day_risk is None:
             no_trade_days += 1
             continue

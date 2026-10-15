@@ -3089,8 +3089,6 @@ class HiringResult(_CamelModel):
 class CentralBankRatesInput(_InputModel):
     """The central-bank-rates route takes no parameters."""
 
-    pass
-
 
 class CentralBankRate(_CamelModel):
     """One bank: policy rate or target range, provenance, next meeting."""
@@ -3259,8 +3257,6 @@ CotResult = CotBoardResult | CotContractResult
 
 class CryptoMarketsInput(_InputModel):
     """The crypto-markets route takes no parameters."""
-
-    pass
 
 
 class CryptoCoin(_CamelModel):

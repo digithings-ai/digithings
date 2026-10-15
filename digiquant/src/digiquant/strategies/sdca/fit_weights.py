@@ -94,9 +94,7 @@ def fit_sdca_weights_from_cache(
         rolling_window=rolling_window,
     )
     rails = model.rails(dates)
-    valuation_z = valuation_z_score(
-        close, rails["low"], rails["median"], rails["high"]
-    ).to_list()
+    valuation_z = valuation_z_score(close, rails["low"], rails["median"], rails["high"]).to_list()
     search_names = stage_a_search_names(profile)
     extra_z = technicals_from_ohlcv(dates, close, oscillators=profile.oscillators)
     plugin = profile.plugin_extras()

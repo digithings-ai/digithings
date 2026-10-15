@@ -2,7 +2,6 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Button } from "@digithings/ui/ui";
 import { searchDeskPages } from "./desk-command-search";
 
 /**
@@ -16,8 +15,6 @@ export function DeskCommand({ pathname }: { pathname: string }) {
   const [sel, setSel] = useState(0);
   const editing = q !== null;
   const hits = editing ? searchDeskPages(q).slice(0, 8) : [];
-  // Wide enough for the whole path, so a tight header scrolls instead of cutting it.
-  const fit = `${Math.max((editing ? q : pathname).length, 12) + 1}ch`;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -51,7 +48,6 @@ export function DeskCommand({ pathname }: { pathname: string }) {
       <input
         ref={input}
         className="cmd-in"
-        style={{ minWidth: fit }}
         spellCheck={false}
         aria-label="Go to page"
         aria-expanded={editing && hits.length > 0}
@@ -93,19 +89,21 @@ export function DeskCommand({ pathname }: { pathname: string }) {
       {editing && hits.length > 0 ? (
         <ul id="cmd-list" role="listbox" className="cmd-list">
           {hits.map((hit, i) => (
-            <li key={hit.path} id={`cmd-opt-${i}`} role="option" aria-selected={i === sel} className={i === sel ? "on" : undefined}>
-              <Button
-                type="button"
-                variant="ghost"
-                className="cmd-hit"
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  go(hit.path);
-                }}
-              >
+            <li
+              key={hit.path}
+              id={`cmd-opt-${i}`}
+              role="option"
+              aria-selected={i === sel}
+              className={i === sel ? "on" : undefined}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                go(hit.path);
+              }}
+            >
+              <span className="cmd-hit">
                 <span>{hit.href}</span>
                 <span className="mute">{hit.label}</span>
-              </Button>
+              </span>
             </li>
           ))}
         </ul>

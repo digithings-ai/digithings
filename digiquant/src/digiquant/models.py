@@ -24,8 +24,10 @@ class BacktestResult(BaseModel):
     )
     num_trades: int = Field(
         0,
-        description="Fill count: rows in generate_order_fills_report(). NOT a trade count "
-        "and NOT a win-rate denominator — use honest_rate.n.",
+        description="Closed round trips: one per position that realized a PnL. "
+        "A position still open at the end of the run does not count. NOT a win-rate "
+        "denominator — use honest_rate.n, which carries this same closed-round-trip "
+        "count together with its numerator (DIG-1808).",
     )
     per_symbol_pnl: dict[str, float] = Field(
         default_factory=dict,
