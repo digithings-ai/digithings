@@ -420,6 +420,8 @@ export function mountPixelField(canvas: HTMLCanvasElement): () => void {
   });
   resize.observe(canvas);
 
+  // CodeQL js/superfluous-trailing-arguments false positive: the DOM
+  // IntersectionObserver constructor takes (callback) — the argument is consumed.
   const seen = new IntersectionObserver(([entry]) => {
     visible = entry?.isIntersecting ?? true;
     if (visible && !raf && !reduced) raf = requestAnimationFrame(tick);

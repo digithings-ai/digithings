@@ -29,6 +29,8 @@ export function ModuleBanner({ name, className }: { name: string; className?: st
       const frame = requestAnimationFrame(() => setArmed(true));
       return () => cancelAnimationFrame(frame);
     }
+    // CodeQL js/superfluous-trailing-arguments false positive: the DOM
+    // IntersectionObserver constructor takes (callback, options?) — both args are consumed.
     const observer = new IntersectionObserver(
       (entries) => {
         if (!entries.some((entry) => entry.isIntersecting)) return;
