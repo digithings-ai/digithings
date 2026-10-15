@@ -1,0 +1,29 @@
+---
+title: Passages, not pages
+order: 1
+summary: >-
+  How documents become retrievable passages, and the judgement calls inside
+  splitting text well.
+---
+
+Retrieval is only as good as what it retrieves, and models read passages,
+not documents. Ingestion therefore splits each document into passages sized
+for reasoning: large enough to keep context, small enough to stay on point.
+That splitting — chunking — is the quiet craft inside the search vertical.
+
+Three judgements shape it. Boundaries follow meaning — paragraphs and
+sections rather than fixed character counts — so a passage says one thing.
+Each passage keeps enough surrounding context to stand alone, because the
+model meets it without the document around it. And overlap between
+neighbours is deliberate: a small shared margin means nothing important
+falls exactly on a cut. None of these has a universally right value; each
+corpus tunes them by reading retrieval quality, not by theory.
+
+<Reference kind="architecture" href="repo:digisearch/ARCHITECTURE.md" title="digisearch architecture">
+  Ingestion settings and how to tune them per corpus.
+</Reference>
+
+> **Why digithings.** The chunking, the index and the tuning all run openly
+> on your infrastructure. When retrieval disappoints, you inspect the
+> passages and adjust — rather than filing a ticket about someone else's
+> black box.
