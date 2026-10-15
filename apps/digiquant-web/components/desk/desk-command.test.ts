@@ -61,6 +61,17 @@ describe("desk slash field", () => {
     expect(css).not.toMatch(/\.cmd[^\n]*cursor\s*:/);
   });
 
+  it("puts the listbox option on the row button so a button is not nested in another interactive role", () => {
+    const view = readFileSync(new URL("./desk-command.tsx", import.meta.url), "utf8");
+    const row = view.slice(view.indexOf("<li "), view.indexOf("</li>"));
+    const open = row.slice(0, row.indexOf(">") + 1);
+    expect(open).toContain('role="presentation"');
+    expect(open).not.toContain('role="option"');
+    expect(row.indexOf('role="option"')).toBeGreaterThan(row.indexOf("<Button"));
+    expect(row).toContain("id={`cmd-opt-${i}`}");
+    expect(row.indexOf("id={`cmd-opt-${i}`}")).toBeGreaterThan(row.indexOf("<Button"));
+  });
+
   it("opens the page list over the desk", () => {
     const frame = readFileSync(new URL("./desk-frame.tsx", import.meta.url), "utf8");
     const css = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
