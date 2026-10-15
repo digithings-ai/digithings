@@ -53,7 +53,9 @@ def test_images_do_not_copy_sibling_modules(rel: str) -> None:
         assert needle not in text, f"{rel} still copies sibling path {needle}"
     for registry in FORBIDDEN_REGISTRIES:
         assert registry not in text, f"{rel} names {registry}"
-    assert "registry.cloudflare.com" in text
+    # Exact ARG line. A host substring check is the CodeQL incomplete-URL pattern.
+    default_push = "ARG IMAGE_PUSH_REGISTRY=registry.cloudflare.com"
+    assert any(line.strip() == default_push for line in text.splitlines())
 
 
 def test_dockerignore_keeps_runner_payload() -> None:
