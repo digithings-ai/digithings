@@ -27,6 +27,7 @@ Scope discipline, asserted here rather than only described:
 from __future__ import annotations
 
 import datetime as _dt
+import math
 from collections.abc import Callable
 from datetime import date
 from pathlib import Path
@@ -374,7 +375,7 @@ class TestOnchainNonPositiveValues:
         n = 120
         values = pl.Series("value", [bad] * 10 + [2.0 + 0.01 * i for i in range(n - 10)])
         z = _z_list(onchain_mvrv_z(_dates(n), _dates(n), values, window=_W, min_samples=_M))  # type: ignore[arg-type]
-        assert all(value is None or value == value for value in z)
+        assert all(value is None or not math.isnan(value) for value in z)
         present = [v for v in z if v is not None]
         assert present
         assert all(-3.0 <= v <= 3.0 for v in present)
@@ -423,7 +424,7 @@ class TestOnchainAddrRatio:
         z = _z_list(
             onchain_addr_ratio_z(_dates(n), price, _dates(n), addr, window=_W, min_samples=_M)  # type: ignore[arg-type]
         )
-        assert all(value is None or value == value for value in z)
+        assert all(value is None or not math.isnan(value) for value in z)
         present = [v for v in z if v is not None]
         assert present
         assert all(-3.0 <= v <= 3.0 for v in present)
