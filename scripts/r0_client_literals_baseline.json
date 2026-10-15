@@ -549,7 +549,15 @@
       "count": 28,
       "ticket": "DIG-3689"
     },
+    "docs/ops/gha-clocks-migration-ledger.md": {
+      "count": 1,
+      "ticket": "DIG-3689"
+    },
     "docs/ops/paperclip-routine-watch.md": {
+      "count": 1,
+      "ticket": "DIG-3689"
+    },
+    "docs/ops/repo-split-workflow-map.md": {
       "count": 1,
       "ticket": "DIG-3689"
     },
@@ -663,6 +671,10 @@
     },
     "scripts/r0_client_literals_baseline.json": {
       "count": 19,
+      "ticket": "DIG-3689"
+    },
+    "scripts/repo_split_workflow_map.py": {
+      "count": 2,
       "ticket": "DIG-3689"
     },
     "scripts/scan_customer_pii.py": {
@@ -873,11 +885,19 @@
       "count": 1,
       "ticket": "DIG-3689"
     },
+    "tests/scripts/test_migrated_workflows_still_clocked.py": {
+      "count": 1,
+      "ticket": "DIG-3689"
+    },
     "tests/scripts/test_projects_path_guard.py": {
       "count": 1,
       "ticket": "DIG-3689"
     },
     "tests/scripts/test_publish_digichat_image_workflow.py": {
+      "count": 1,
+      "ticket": "DIG-3689"
+    },
+    "tests/scripts/test_repo_split_workflow_map.py": {
       "count": 1,
       "ticket": "DIG-3689"
     },
