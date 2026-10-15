@@ -270,7 +270,7 @@ a { color: inherit; text-decoration: none; }
    link. Compose
    with .reveal-up (above) for a scroll-in enter — reduced-motion is already
    honored there. Copy slots (see site/README.md for digithings + digiquant
-   variants and references/scans/copy-patterns.md for tone):
+   variants; tone lives in COPY_GUIDE.md):
      .closing-cta__title      headline — literal, ≤ ~20ch reads best
      .closing-cta__sub        optional one-line support — ≤ ~48ch
      .closing-cta__actions    primary:  a kit `Button` (React) or a link

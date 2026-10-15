@@ -104,7 +104,7 @@ digiweb reads as a cockpit, not a brochure. Monochrome is the resting state — 
 
 ### Active blend — utilitarian terminal (v0.1 promoted)
 
-As of 2026-08-30 the Instrument Panel tightens to utilitarian terminal simplicity — inspired by [herdr.dev](design/references/herdr.dev.md), [agentmail.to](design/references/agentmail.to.md), and [omarchy.org](design/references/omarchy.org.md), alongside Cursor / Graphite / xAI. Ledger: [`design/BLEND.md`](design/BLEND.md). Product rollout plan: [`design/ROLLOUT.md`](design/ROLLOUT.md).
+As of 2026-08-30 the Instrument Panel tightens to utilitarian terminal simplicity — inspired by herdr.dev, agentmail.to, and omarchy.org, alongside Cursor / Graphite / xAI. Those site scans were removed with the old design reference. Ledger: [`BLEND.md`](../design/BLEND.md). Product rollout plan: [`ROLLOUT.md`](../design/ROLLOUT.md).
 
 **Shipping in `tokens.css` + design-reference (Phase 0):**
 
