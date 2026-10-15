@@ -1,5 +1,12 @@
 {
   "name": "digigraph-echarts-ssr",
+  "license": "MIT",
+  "homepage": "https://digithings.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/digithings-ai/digithings.git",
+    "directory": "digigraph/src/digigraph/tools/analytics/visualization/echarts"
+  },
   "private": true,
   "type": "module",
   "description": "ECharts SSR for SVG export (optional; run npm install in this directory)",

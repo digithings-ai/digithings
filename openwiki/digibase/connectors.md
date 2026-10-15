@@ -57,8 +57,8 @@ and that `import digibase.connectors` still succeeds.
 
 `digibase.connectors.supabase.SupabaseConnector` (requires the
 `digibase[supabase]` extra) consolidates hand-rolled Supabase access
-scattered across services (twelve-x node stores, history, calendar_db;
-digiquant research, prices). It wraps an injected client behind a
+scattered across services (history, calendar_db, digiquant research,
+prices). It wraps an injected client behind a
 `SupabaseClient` Protocol — callers inject a real `supabase.Client` or a
 test fake without pulling the optional dependency.
 
