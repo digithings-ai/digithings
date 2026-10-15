@@ -88,10 +88,6 @@ checks:
   # the merge proceeds anyway. They are listed here so the guard can prove each
   # one still exists and still reports — and so the ungated ones are visible in
   # one file instead of inferred from 53 workflows.
-  #
-  # DCO 1.1 sign-off was the fifth entry here until DIG-3683 retired the GHA
-  # workflow: it is now enforced by the `local-ci` required status check, not
-  # by any workflow in this file, so no entry here can own it.
 
   - context: gitleaks-scan
     workflow: security-gitleaks.yml

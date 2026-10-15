@@ -32,10 +32,9 @@ list disagree:
   * **ungated policy check** — a check that reports on PRs and is required
     nowhere. It runs, it goes red, and merges continue. Four of these exist
     right now (gitleaks, PR hygiene, PR title, and, on main,
-    review coverage); DCO sign-off was the fifth until DIG-3683 retired its
-    GHA workflow — it is now enforced by `local-ci`, so it is declared
-    nowhere here. They are declared in the inventory so they are visible in
-    one place instead of inferred from 53 workflow files.
+    review coverage); they are declared in the inventory so they are visible in
+    one place instead of inferred from 53 workflow files. (DCO sign-off was a
+    fifth until Chris dropped it entirely on 2026-10-15, DIG-3845.)
 
 WHY A DECLARED INVENTORY AND NOT A NAME PATTERN
 DIG-1952 proposed matching job names against a required-check list. Job names
