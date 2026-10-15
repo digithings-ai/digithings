@@ -154,3 +154,17 @@ def test_dca_current_signal_is_risk_band_rate_not_mr_long() -> None:
     assert sig["risk"] == 12.0
     assert sig["entry_label"] == "Accumulate"
     assert sig["position"] in {"long", "flat"}
+
+
+def test_first_trade_index_returns_first_nonzero_fill() -> None:
+    from digiquant.strategies.sdca.dca_metrics import first_trade_index
+
+    assert first_trade_index([0.0, 0.0, 25.0, 30.0]) == 2
+    assert first_trade_index([5.0, 0.0]) == 0
+
+
+def test_first_trade_index_never_traded_is_zero() -> None:
+    from digiquant.strategies.sdca.dca_metrics import first_trade_index
+
+    assert first_trade_index([0.0, 0.0, 0.0]) == 0
+    assert first_trade_index([]) == 0
