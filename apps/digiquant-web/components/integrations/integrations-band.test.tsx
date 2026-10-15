@@ -5,10 +5,6 @@ import { rowMark, type RowProviderId } from "@/components/integrations/marks";
 
 describe("IntegrationsBand", () => {
   const html = renderToStaticMarkup(<IntegrationsBand />);
-  /** Everything from the rows down. The driver cards above them carry their own
-   *  marks, so a count taken over the whole band would not be about the rows. */
-  const rowsHtml = html.slice(html.indexOf('aria-label="Connected packages"'));
-
   it("names the drivers and links them out", () => {
     expect(html).toContain("Gloomberg");
     expect(html).toContain('href="https://github.com/gloom-sh/gloomberb"');
