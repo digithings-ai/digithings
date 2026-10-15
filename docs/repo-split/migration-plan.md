@@ -226,7 +226,7 @@ each PR is independently shippable. Lane in brackets (operating rules).
 | 1.3 (DIG-3692) | `DIGIQUANT_CONFIG_DIR` + neutral example configs; production config only read via the env var. | R2 | S |
 | 1.4 (DIG-3693) | Unfold `dashboard-api` into its own Worker again; route `/dashboard-api/*` by zone route (D-Q2′); extract `@digiquant/contract` (types + pure functions shared by desk and API). | R2, R3 | M |
 | 1.5 (DIG-3694) | Supabase layering (D-Q6′): split migrations into `engine/` (tables the open pipeline reads/writes) and `prod/` (house-only); CI applies both in order on a scratch DB. | R0/R2 | M |
-| 1.6 (DIG-3695) | npm packages: tsup builds, `exports` maps, `private: false`, `license: MIT`; PixelWordmark → `@digithings/ui`; `@digithings/catalog` (byok-providers + openapi); apps import only via package exports (lint rule bans `../../packages/*/src`). | R3, R4 | M |
+| 1.6 (DIG-3695) | npm packages: tsup builds, `exports` maps, `private: false`, `license: MIT`; PixelWordmark → `@digithings-ai/ui`; `@digithings-ai/catalog` (byok-providers + openapi); apps import only via package exports (lint rule bans `../../packages/*/src`). | R3, R4 | M |
 | 1.7 (DIG-3699) | Tenant data out of code: `TENANT_CONFIG` KV read path with `digithings`-only fallback; seeds fetched from R2 at container boot; suggestion pools/looks from KV; production model list from KV/env. **Call (b) 01:26: tenant configs live in KV ONLY — no repo files synced to KV (no `kv-sync` from repo files).** Prove on staging tenant first. | R5, R6 | M |
 | 1.8 (DIG-3696) | Dockerfiles consume packages/images, not sibling paths (runner, stack, digichat). | R2, R5 | M |
 | 1.9 (DIG-3697) | Deploy workflows for every Worker (stack, digichat, langfuse, cron, runner, dashboard-api, corpus-index, digidata-api) — tag/dispatch-triggered, clean checkout, **local-ci only (call 01:26: no "same file runs on GitHub-hosted" — deploy jobs run on the Mac `deploy` job without an environment).** Retire manual `wrangler deploy`; `occ_invite_key_rollout.sh` split into "write secret/KV" (R6) and "deploy" (R5). | R5, R6 | M |
@@ -249,9 +249,9 @@ Rollback: each PR reverts on its own.
    workflow file and environment `pypi`; the same entry keeps working when R0 takes the name in P3).
    A pending publisher does **not** reserve a name, so check all 12 names are free now (`digiquant`
    returned 404 on 2026-10-14) and publish the first versions as soon as R0 is public (D-P1).
-2. **npm:** confirm Chris controls the `digithings` npm org (the org exists; ownership UNSURE) (D-P2). Publish `@digithings/*` from R0 only, after P3.
+2. **npm:** D-P2 SATISFIED 02:18 — Chris owns the `digithings-ai` npm org. Publish `@digithings-ai/*` from R0 only, after P3; nothing is published until he provides a token.
 3. **Private Python (R1):** no GitHub Packages for Python (review F2). Use a git tag pin:
-   `digiquant-strategies @ git+https://github.com/digithings-ai/digiquant-strategies@v0.1.0` locked by SHA in `uv.lock`;
+   `digiquant-strategies` from an Origin tag (`git+https://origin.cursor.com/<ns>/digiquant-strategies.git@v0.1.0`) locked by SHA in `uv.lock`;
    R2's Docker build reads it with a GitHub App installation token passed as a BuildKit secret (D-Q7).
    2026-10-14 22:09: **no GitHub Packages at all** (slices E/P notes) — R2 consumes R1 from a
    non-GitHub registry (private PyPI index on Chris's Mac, Origin artifacts, or vendored path pin;
@@ -319,9 +319,8 @@ Cutover day (Chris does the renames and visibility changes; agents prepare):
 7. Rename `digithings` → `digithings-mono`; make it **private**. Register the Mac agent on it (now allowed: private). Disable the gate allowlist entry for any public repo.
 8. Rename `digithings-next` → `digithings`; make it **public**. Apply rulesets from P2 step 7; install DCO; add CODEOWNERS, LICENSE (MIT), TRADEMARKS, SECURITY; `production`-style environment `pypi` with Chris as required reviewer.
 8b. Origin for R0 (D-O1): Chris runs `origin repo create-mirrored` for the public R0 (inbound mirror).
-9. Publish v0.x of PyPI modules and `@digithings/*` npm, and `digichat` / `digillm` images, from R0.
-   images publish to a non-client, non-GitHub registry (decision c7256004 Option A); `@digithings/*`
-   likewise (Option A).
+9. Publish v0.x of PyPI modules and `@digithings-ai/*` npm, and `digichat` / `digillm` images, from R0.
+   Images are NOT covered by c7256004 — the image registry is OPEN in R5 (recommendation: Cloudflare registry, not DataTap ACR); `@digithings-ai/*` per decision c7256004 Option A.
 10. In mono: R0 paths frozen (`moved-paths-guard` lists them). Development on public code moves to R0. Open mono PRs that touch only R0 paths are re-opened against R0 by their owners (list posted on the tracking issue).
 11. Update every remote: `~/Code/digithings*` worktrees, Paperclip project repositories, merge queue config, run-watch, worktree sweep, seat instructions that name the repo.
 
@@ -388,7 +387,7 @@ held (guard in "warn" mode during extraction, "fail" mode after cut-over).
 | R5 runbook | Deploy gate: Mac local-ci host, hook, `allowed_signers` rotation, how Chris cuts a release tag (signing MANDATORY, D-G6), how to add a repo to the allowlist. |
 | openwiki | Per-module pages: install from PyPI/npm instead of monorepo paths; `openwiki/dashboard` → R3; `INSTRUCTIONS.md` repo map. |
 | digibook (R4 `content/book`) | System-architecture chapter: repo map and release flow; "how the book is built" (now R4 + R0 docs pulled at build). |
-| docs site (digithings.ai docs, openapi catalog) | Source openapi + byok catalog from `@digithings/catalog`; links to R0 instead of mono paths. |
+| docs site (digithings.ai docs, openapi catalog) | Source openapi + byok catalog from `@digithings-ai/catalog`; links to R0 instead of mono paths. |
 | `docs/repo-split/` (this folder) | Mark phases done; final repo map. |
 | Paperclip | Projects ↔ repos, `dt-create-issue --project` mapping, merge queue repo list, worktree sweep, run-watch job → repo map, decisions/standing.md entry for the split. |
 | Seat instructions and skills | Replace monorepo paths and the single-repo assumption; per-repo branch rules; agents never create release tags. |
@@ -568,6 +567,12 @@ Each file has exactly one owner. No `overlaps-known.txt` whitelist exists or is 
 - **R5:** `apps/digithings-stack-cloudflare/container/seed_chroma.sh` (generic container infra; tenant seeds come from R2/KV at boot).
 
 **Global rule (all repo-split leaves):** no `.github/workflows` file moves into any private repo. Each workflow maps to a Cloudflare cron, a local-ci job on Chris's Mac, or deletion — recorded in DIG-3605 (crons/jobs off GitHub). Move lists drop every `.github/*` path. No Buildkite, no GitHub Packages/GHCR; signed release tags mandatory for private-repo deploys; no merges to main, no deploys, no repo creation.
+
+---
+
+### 12. Order gate: develop→main promotion + repo cleanup before extraction (02:24)
+
+The `develop`→`main` promotion and repo cleanup (PR pile closed or retargeted, stale branches and worktrees pruned) happen before any extraction. No filter-repo push runs while the PR pile is open.
 
 ---
 
