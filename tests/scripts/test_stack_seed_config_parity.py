@@ -325,7 +325,6 @@ def test_dockerfile_has_a_rebuild_marker_for_the_removal() -> None:
         "infra/digichat-release/.env.profile-a-bundle.example",
         "apps/digichat/config/examples/occ-embed.yaml",
         "apps/digichat-cloudflare/README.md",
-        "docs/projects/online-compliance-center/README.md",
         "infra/digichat-digithings/README.md",
     ],
 )
@@ -341,10 +340,11 @@ def test_no_layer_fans_out_to_occ_tickets(rel: str) -> None:
     Pinned on the bare index name rather than on the comma pair, because prose
     drifted too: a summary row that reads "``occ_help`` docs + ``occ_tickets``
     fan-out" carries the same routing with no comma in it, and that is how the
-    row in ``docs/projects/online-compliance-center/README.md`` survived an
-    earlier pass at this file. The one historical mention that must stay — the
-    ``occ_tickets.jsonl`` payload retired in DIG-1380 — is deliberately absent
-    from every layer listed above.
+    summary row in a client docs project directory survived an earlier pass
+    at this file. That directory was removed in DIG-3394, so the lesson is kept
+    without naming a path that no longer exists. The one historical mention
+    that must stay — the ``occ_tickets.jsonl`` payload retired in DIG-1380 —
+    is deliberately absent from every layer listed above.
     """
     path = REPO_ROOT / rel
     offenders = [
@@ -381,7 +381,6 @@ def _prose_lines(path: Path) -> list[tuple[int, str]]:
     "rel",
     [
         "apps/digichat-cloudflare/README.md",
-        "docs/projects/online-compliance-center/README.md",
         "infra/digichat-digithings/README.md",
         "scripts/zammad_mcp/README.md",
     ],
