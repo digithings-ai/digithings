@@ -8,6 +8,16 @@ and ``congress-trades`` rows are 5 U.S.C. 13107(c) disclosure reports whose
 commercial use is restricted by 13107(c)(1)(B) — a copyright waiver cannot
 waive that. ``attribution.trackers_data_caveat`` says so on every payload.
 
+DIG-1175 / DIG-959 leaf 15: all five wave-2 feeds below are **refused in
+code** until the client-side Art. 9 facts justify them. These feeds carry
+named politicians' party affiliations and asset holdings — political-opinion
+adjacent by construction — and v1 has no free-text political-opinion
+detection, so screening field names cannot reduce the risk. Every ingest
+entry point raises :class:`RefusedDatasetError` before any fetch or index
+write, even for payloads carrying no Art. 9 fields: the decision is about
+the feed, not about one payload. There is deliberately no environment
+override — if it can be turned off silently it will be.
+
 Ticker-bearing follow-up to the congress-trades spike
 (:mod:`digisearch.trackers_ingest`, #4826): ``insider-transactions`` (~17.5k
 rows), ``thirteenf-holdings`` (~111k), ``short-volume`` (~122k daily),
@@ -86,6 +96,7 @@ from digisearch.research_ingest import _stable_doc_id
 from digisearch.trackers_ingest import (
     TRACKERS_ALLOWED_HOSTS,
     TRACKERS_INDEX_NAME,
+    RefusedDatasetError,
     TrackersFetchError,
     _fetch_feed_json,
     _manifest_expected_rows,
@@ -160,6 +171,34 @@ TRACKER_DATASET_ORDER: tuple[str, ...] = (
     "gov-contracts",
 )
 
+#: Wave-2 datasets refused unconditionally by code (DIG-1175 / DIG-959 leaf
+#: 15). Listed explicitly — a dataset added to :data:`TRACKER_DATASET_ORDER`
+#: without being refused here fails the refused-set-equals-order test, so a
+#: new feed arrives refused, never open.
+WAVE2_REFUSED_DATASETS: frozenset[str] = frozenset(
+    {
+        "insider-transactions",
+        "thirteenf-holdings",
+        "short-volume",
+        "lobbying-filings",
+        "gov-contracts",
+    }
+)
+
+#: Why the wave-2 feeds are refused. Surfaced verbatim in every refusal
+#: message so an operator reading a log knows this is a policy decision
+#: (Art. 9, no lawful basis), not a bug.
+WAVE2_REFUSAL_BASIS: str = "DIG-959 Art. 9: political-opinion-adjacent feed with no lawful basis"
+
+
+def _assert_wave2_not_refused(dataset_key: str) -> None:
+    """Raise :class:`RefusedDatasetError` when *dataset_key* is refused."""
+    if dataset_key in WAVE2_REFUSED_DATASETS:
+        raise RefusedDatasetError(
+            f"dataset {dataset_key!r} is refused by policy ({WAVE2_REFUSAL_BASIS}) "
+            f"— no fetch, no ingest, no substitute feed"
+        )
+
 
 def _resolve_spec(dataset: str | TrackerDatasetSpec) -> TrackerDatasetSpec:
     if isinstance(dataset, TrackerDatasetSpec):
@@ -202,8 +241,12 @@ def fetch_tracker_rows_latest(
     ``{"rows" / "data" / "transactions" / "holdings" / "filings": [...]}``
     envelopes. Raises :class:`TrackersFetchError` when the body is not a row
     list.
+
+    Always refuses — every wave-2 feed is closed by DIG-1175, so this raises
+    :class:`RefusedDatasetError` as the first statement, before any transport.
     """
     spec = _resolve_spec(dataset)
+    _assert_wave2_not_refused(spec.key)
     payload = _fetch_feed_json(spec.feed_url, fetcher, allowed_hosts)
     if isinstance(payload, list):
         rows: list[Any] = payload
@@ -450,8 +493,14 @@ def ingest_tracker_row(
     skip). Raises :class:`ValueError` for rows without a natural key.
     ``_known_keys`` is the bulk-run memo (see
     :func:`digisearch.trackers_ingest.ingest_congress_trade`).
+
+    Always refuses — raises :class:`RefusedDatasetError` as the first
+    statement, before the row is normalized and before any index write.
+    :func:`normalize_tracker_row` stays callable on its own; this function is
+    the gate.
     """
     spec = _resolve_spec(dataset)
+    _assert_wave2_not_refused(spec.key)
     normalized = normalize_tracker_row(spec, row)
     key = str(normalized["doc_id"])
     target_index = (index_name or TRACKERS_INDEX_NAME).strip() or TRACKERS_INDEX_NAME
@@ -524,8 +573,12 @@ def ingest_tracker_dataset(
     manifest-declared count. Rows without a natural key are counted as
     skipped (logged, never silent); already-indexed rows are skipped
     idempotently. The stub-index key set is built once per run (O(n)).
+
+    Always refuses — raises :class:`RefusedDatasetError` as the first
+    statement, before the manifest read and before any fetch.
     """
     spec = _resolve_spec(dataset)
+    _assert_wave2_not_refused(spec.key)
     manifest = check_manifest_not_stale(fetcher, allowed_hosts=allowed_hosts, dataset=spec.key)
     rows = fetch_tracker_rows_latest(spec, fetcher, allowed_hosts=allowed_hosts)
     expected = _manifest_expected_rows(manifest, spec.key)
@@ -602,7 +655,7 @@ def ingest_insider_transactions(
     chunker: Chunker | None = None,
     allowed_hosts: tuple[str, ...] = TRACKERS_ALLOWED_HOSTS,
 ) -> Wave2Result:
-    """Fetch → normalize → index the insider-transactions snapshot."""
+    """Always refuses — the insider-transactions feed is closed (DIG-1175)."""
     return _dataset_ingest(
         "insider-transactions",
         fetcher,
@@ -619,7 +672,7 @@ def ingest_thirteenf_holdings(
     chunker: Chunker | None = None,
     allowed_hosts: tuple[str, ...] = TRACKERS_ALLOWED_HOSTS,
 ) -> Wave2Result:
-    """Fetch → normalize → index the thirteenf-holdings snapshot."""
+    """Always refuses — the thirteenf-holdings feed is closed (DIG-1175)."""
     return _dataset_ingest(
         "thirteenf-holdings",
         fetcher,
@@ -636,7 +689,7 @@ def ingest_short_volume(
     chunker: Chunker | None = None,
     allowed_hosts: tuple[str, ...] = TRACKERS_ALLOWED_HOSTS,
 ) -> Wave2Result:
-    """Fetch → normalize → index the short-volume daily snapshot."""
+    """Always refuses — the short-volume feed is closed (DIG-1175)."""
     return _dataset_ingest(
         "short-volume",
         fetcher,
@@ -653,7 +706,7 @@ def ingest_lobbying_filings(
     chunker: Chunker | None = None,
     allowed_hosts: tuple[str, ...] = TRACKERS_ALLOWED_HOSTS,
 ) -> Wave2Result:
-    """Fetch → normalize → index the lobbying-filings snapshot."""
+    """Always refuses — the lobbying-filings feed is closed (DIG-1175)."""
     return _dataset_ingest(
         "lobbying-filings",
         fetcher,
@@ -670,7 +723,7 @@ def ingest_gov_contracts(
     chunker: Chunker | None = None,
     allowed_hosts: tuple[str, ...] = TRACKERS_ALLOWED_HOSTS,
 ) -> Wave2Result:
-    """Fetch → normalize → index the gov-contracts snapshot."""
+    """Always refuses — the gov-contracts feed is closed (DIG-1175)."""
     return _dataset_ingest(
         "gov-contracts",
         fetcher,
@@ -684,6 +737,8 @@ __all__ = [
     "TRACKER_DATASETS",
     "TRACKER_DATASET_ORDER",
     "TrackerDatasetSpec",
+    "WAVE2_REFUSAL_BASIS",
+    "WAVE2_REFUSED_DATASETS",
     "Wave2Result",
     "fetch_tracker_rows_latest",
     "ingest_gov_contracts",

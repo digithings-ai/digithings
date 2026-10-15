@@ -22,10 +22,11 @@ What survives the refusal: :func:`normalize_congress_trade` stays a pure
 in-memory row→payload mapper with no I/O, no fetch and no index write, so it is
 not a way back in.
 
-Not refused: the five wave-2 datasets (``insider-transactions``,
+Refused beside it: the five wave-2 datasets (``insider-transactions``,
 ``thirteenf-holdings``, ``short-volume``, ``lobbying-filings``,
-``gov-contracts``) in :mod:`digisearch.trackers_wave2_ingest` — scope item 3
-enumerates congress-trades only. digisearch keeps its own denylist constant and
+``gov-contracts``) in :mod:`digisearch.trackers_wave2_ingest` are closed by
+DIG-1175 / DIG-959 leaf 15 on the same Art. 9 basis — see that module.
+digisearch keeps its own denylist constant and
 does not import digiquant; two independent constants beat one coupled one.
 
 Network: all HTTP still goes through
