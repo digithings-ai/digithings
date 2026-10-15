@@ -90,10 +90,13 @@ import { PIPELINE_ENGINES } from "@/lib/digiquantPipeline";
  * digiquant pixel wordmark from digiquant.io, which is also the link to it.
  *
  * LIVE BOOK. The band reads the public house book (NAV via `/nav-series`,
- * strategy cards via `/v1/tables/strategy_tearsheets`). The example series
- * below is only the offline fallback, used when that read is off (the
- * unit-test runtime). A withheld tearsheet read leaves the strategy rail
- * empty rather than painting example cards as results.
+ * strategy cards via `/v1/tables/strategy_tearsheets`). Gate on DATA, not on
+ * configuration: dashboard-api refuses both reads to anonymous callers (403,
+ * tier policy), so the read is configured yet empty for every public visitor.
+ * The badged example series and cards below remain whenever the read is
+ * withheld or empty — the unit-test runtime (read off) is one such case, not
+ * the only one. An empty rail and a missing chart are never the answer; the
+ * badges are what keep the fallback honest.
  */
 
 const DIGIQUANT_URL = "https://digiquant.io";
@@ -566,15 +569,16 @@ function Book({
 }
 
 export function QuantSection({ className }: { className?: string }) {
-  /* Public house book by default (graph.digithings.ai). The synthetic series
-     only remains when that read is off, which is the unit-test runtime. */
+  /* Public house book first (graph.digithings.ai). Gate on DATA, not on
+     configuration — see LIVE BOOK above. */
   const live = useLiveBand();
-  const usingLive = live.configured;
   const liveIndex = live.nav.length > 1 ? indexLive(live.nav, live.benchmark) : null;
-  const book = usingLive ? liveIndex : { series: PERFORMANCE_SERIES, fullSpan: FULL_SPAN };
-  const cards: StrategyCardData[] = usingLive
-    ? live.strategies.map(liveStrategyCard)
-    : STRATEGIES;
+  const book = liveIndex ?? { series: PERFORMANCE_SERIES, fullSpan: FULL_SPAN };
+  const cards: StrategyCardData[] =
+    live.strategies.length > 0 ? live.strategies.map(liveStrategyCard) : STRATEGIES;
+  /* Honesty: the fallback cards are deterministic examples, not live reads —
+     badge them as such and never show a live mark over them. */
+  const showExampleBadge = live.strategies.length === 0;
 
   return (
     <div className={`relative ${className ?? ""}`}>
@@ -617,7 +621,9 @@ export function QuantSection({ className }: { className?: string }) {
             {/* Right: the library, in the kit's horizontal rail — the element
                 promoted from the design reference's changelog rail. */}
             <div className="flex min-w-0 flex-col justify-center gap-[0.5rem]">
-              <span className={GROUPED_LABEL}>strategies</span>
+              <span className={GROUPED_LABEL}>
+                {showExampleBadge ? "strategies · example" : "strategies"}
+              </span>
               <CardRail ariaLabel="Flagship digiquant strategies">
                 {cards.map((strategy) => (
                   <div key={strategy.slug} role="listitem" className="flex-[0_0_17rem] snap-start">
@@ -628,6 +634,7 @@ export function QuantSection({ className }: { className?: string }) {
                             <span className="ts-card-name">{strategy.name}</span>
                             <span className="ts-card-period">
                               {strategy.symbol} · {strategy.kind}
+                              {showExampleBadge ? " · example" : ""}
                             </span>
                           </div>
                         </div>
@@ -649,13 +656,7 @@ export function QuantSection({ className }: { className?: string }) {
             <PipelineRail />
           </div>
 
-          {book ? (
-            <Book
-              series={book.series}
-              fullSpan={book.fullSpan}
-              live={usingLive && Boolean(liveIndex)}
-            />
-          ) : null}
+          <Book series={book.series} fullSpan={book.fullSpan} live={Boolean(liveIndex)} />
         </div>
       </div>
     </div>
