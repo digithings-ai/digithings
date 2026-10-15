@@ -63,4 +63,56 @@ describe("proxy per-mode security headers", () => {
       expect(res.headers.get("Cache-Control")).toBeNull();
     }
   });
+
+  it("strips ?token= from /embed into an x-embed-token request header (DIG-3523)", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    resetEmbedTenantRegistryForTests();
+    const res = proxy(
+      new NextRequest(
+        "http://127.0.0.1:3000/embed?token=SECRET&host=client.example.com",
+      ),
+    );
+    // Internal rewrite target carries every param except the secret.
+    const target = res.headers.get("x-middleware-rewrite") ?? "";
+    expect(target).toContain("host=client.example.com");
+    expect(target).not.toContain("token=");
+    expect(target).not.toContain("SECRET");
+    // The secret travels to the render as a request header instead.
+    expect(res.headers.get("x-middleware-request-x-embed-token")).toBe(
+      "SECRET",
+    );
+    // Embed framing + no-store still applied on the rewrite response.
+    expect(res.headers.get("Content-Security-Policy")).toContain(
+      "frame-ancestors",
+    );
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+  });
+
+  it("strips ?token= on /?mode=embed and keeps the mode param (DIG-3523)", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    resetEmbedTenantRegistryForTests();
+    const res = proxy(
+      new NextRequest("http://127.0.0.1:3000/?mode=embed&token=SECRET"),
+    );
+    const target = res.headers.get("x-middleware-rewrite") ?? "";
+    expect(target).toContain("mode=embed");
+    expect(target).not.toContain("SECRET");
+    expect(res.headers.get("x-middleware-request-x-embed-token")).toBe(
+      "SECRET",
+    );
+  });
+
+  it("leaves tokenless embed requests as plain next() with framing intact", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    resetEmbedTenantRegistryForTests();
+    const res = proxy(
+      new NextRequest("http://127.0.0.1:3000/embed?host=client.example.com"),
+    );
+    expect(res.headers.get("x-middleware-rewrite")).toBeNull();
+    expect(res.headers.get("x-middleware-request-x-embed-token")).toBeNull();
+    expect(res.headers.get("Content-Security-Policy")).toContain(
+      "frame-ancestors",
+    );
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+  });
 });
