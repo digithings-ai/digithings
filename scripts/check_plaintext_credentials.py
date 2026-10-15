@@ -484,7 +484,9 @@ def tracked_files(root: Path) -> list[Path]:
                 check=True,
             )
             return [root / name for name in result.stdout.split("\0") if name]
-    except Exception:
+    except (subprocess.CalledProcessError, OSError, ValueError):
+        # Not a git checkout (or git failed / undecodable output): fall back
+        # to a full-tree walk. Anything else is a real bug and must surface.
         pass
     return sorted(p for p in root.rglob("*") if p.is_file())
 
