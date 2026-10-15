@@ -7,6 +7,7 @@ import {
 } from "../../stock/attachment.aui";
 import { MarkdownText } from "../../stock/markdown-text";
 import { DotMatrix } from "./ui/dot-matrix";
+import { useDigichatWarmupPhase } from "../../use-warmup-phase";
 import { MessageTiming } from "./elements/message-timing.aui";
 import { ToolFallback } from "../../stock/tool-fallback.aui";
 import { MessageError } from "../../stock/message-error.aui";
@@ -626,6 +627,7 @@ const AssistantWorkingIndicator: FC = () => {
         (part.data as { state?: string } | undefined)?.state === "warming_up",
     ),
   );
+  const wakePhase = useDigichatWarmupPhase();
   if (isEmpty) {
     return (
       <span
@@ -633,7 +635,9 @@ const AssistantWorkingIndicator: FC = () => {
         className="text-muted-foreground inline-flex items-center gap-2 align-middle"
       >
         <DotMatrix state="connecting" aria-hidden />
-        <span className="text-sm">{warmingUp ? "Warming up…" : "Connecting"}</span>
+        <span className="text-sm">
+          {wakePhase === "waking" ? "Waking up services…" : warmingUp ? "Warming up…" : "Connecting"}
+        </span>
       </span>
     );
   }
