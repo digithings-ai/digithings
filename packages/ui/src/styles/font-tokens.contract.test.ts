@@ -34,7 +34,6 @@ const PENDING_PORT = ["apps/digichat/"];
 const OUT_OF_SCOPE = [
   "apps/reference/",
   "apps/digichat/reference/",
-  "packages/design/references/",
 ];
 
 /** Build output and vendored deps are copies of source, not sources. */
