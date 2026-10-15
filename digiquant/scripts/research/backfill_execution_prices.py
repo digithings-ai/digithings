@@ -18,6 +18,7 @@ import argparse
 import math
 import os
 import sys
+import warnings
 from datetime import date as dt_date
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -40,8 +41,15 @@ try:
 
     load_dotenv(Path(__file__).parent.parent / "config" / "supabase.env")
     load_dotenv()
-except ImportError:
-    pass
+except ImportError:  # python-dotenv is optional; env vars may already be exported.
+    # Say so rather than swallow silently: a missing credential reported later
+    # is otherwise indistinguishable from a wrong credential.
+    warnings.warn(
+        "python-dotenv is not installed; config/supabase.env and the ambient "
+        "environment were NOT loaded",
+        RuntimeWarning,
+        stacklevel=2,
+    )
 
 
 def _sb():
