@@ -192,7 +192,7 @@ interchangeable with multilingual ones).
 
 ## Privacy & exposure
 
-**No masking layer exists, and that is a decision, not an omission.** Chris
+**No masking layer exists, and that is a decision, not an omission.** **No PII masking: the invite link is the only gate (Chris, 9 Oct, reaffirmed 16 Oct).** Chris
 rejected masking on 2026-10-06 (card `34a86696`): this is an internal support
 surface, and the OCC demo returns customer data and staff notes in full. Two
 implementations were proposed and both were closed unmerged — #5148

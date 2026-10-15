@@ -35,6 +35,8 @@ Before making any change to `digigraph/`:
 
 Beyond root `AGENTS.md`:
 
+- **No PII masking: the invite link is the only gate (Chris, 9 Oct, reaffirmed 16 Oct).** OCC, digichat and Zammad ticket text stays as written in prompts and tool results. Do not add a masker for that text. digitrace secret and attribute redaction stays.
+
 - **MCP-first**: Every new capability must be a discoverable tool registered in the orchestration registry. Never add logic directly to a LangGraph node.
 - **Tool modules**: Register new tools from `orchestration/builtin.py`; put handlers in the matching `orchestration/*_tools.py` module (or add one). digisearch tool calls must use `vertical_orchestrator.digisearch_hub`, not ad-hoc HTTP shims.
 - **No tight coupling**: digigraph must never import digisearch or digiquant Python packages. All vertical calls go through `POST /v1/orchestrator_invoke`.
