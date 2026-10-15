@@ -21,7 +21,8 @@ from scripts.seed.deterministic import DEFAULT_SEED, demo_email, rng_for, stable
 
 DEMO_TENANT_SLUG = "seed-demo"
 
-#: One of the 21 literals in `chk_documents_doc_type` (migration 023).
+#: One of the 26 literals in `chk_documents_doc_type` (migration 077,
+#: which replaced the migration-023 list).
 BRIEF_DOC_TYPE = "Daily Digest"
 
 #: Demo tenants. ``system`` and ``house`` are already seeded by migration
@@ -69,9 +70,10 @@ def brief_documents(
                 "workspace_id": ws,
                 "date": day.isoformat(),
                 "document_key": f"seed/brief/{topic}/{day.isoformat()}",
-                # NOT "brief": chk_documents_doc_type (migration 023) allows only
-                # these 21 literals, and rejects anything else. "Daily Digest" is
-                # the narrative artifact a local brief actually is.
+                # NOT "brief": chk_documents_doc_type (migration 077, which replaced
+                # the migration-023 list) allows only these 26 literals, and
+                # rejects anything else. "Daily Digest" is the narrative
+                # artifact a local brief actually is.
                 "doc_type": BRIEF_DOC_TYPE,
                 # `title` is a NOT NULL column on its own (migration 001), not
                 # only a key inside the payload. Omitting it here made the
