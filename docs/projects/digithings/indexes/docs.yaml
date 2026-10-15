@@ -29,3 +29,4 @@ sources:
   - digisearch/ARCHITECTURE.md
   - digikey/ARCHITECTURE.md
   - digiquant/ARCHITECTURE.md
+  - digiquant/docs/architecture/*.md

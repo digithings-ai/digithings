@@ -1,13 +1,11 @@
 /**
  * Self-contained tests for the dashboard-api performance kernel (`ssot.ts`).
  *
- * Expected values were verified byte-for-value against the client-side
- * originals (`apps/dashboard/lib/performance-ssot.ts`,
- * `apps/dashboard/lib/accounting-views.ts`, `apps/dashboard/lib/dashboard-ssot.ts`,
- * `apps/dashboard/lib/benchmark-tickers.ts`, `apps/dashboard/lib/brief-book-event.ts`,
- * `packages/ui` live-performance-kpis) with a scratch parity harness before
- * this file was committed — no workspace imports remain here on purpose
- * (the worker ships zero runtime dependencies).
+ * Expected values were verified byte-for-value against `@digiquant/contract`
+ * (`performance-ssot`, `accounting-views`, `dashboard-ssot`, `benchmark-tickers`,
+ * `brief-book-event`) and `@digithings/ui` live-performance-kpis with a scratch
+ * parity harness before this file was committed — no workspace imports remain
+ * here on purpose (the worker ships zero runtime dependencies).
  */
 import { describe, expect, it } from 'vitest';
 
