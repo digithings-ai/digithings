@@ -2,7 +2,7 @@
 
 **Status:** Living document · **Last updated:** 2026-08-31
 
-Authoritative voice, CTA, and section-map reference for all public surfaces. Implements Layer D of the [design evolution spec](../../docs/superpowers/specs/2026-06-30-frontend-design-evolution-layers-design.md) and extends [`references/scans/copy-patterns.md`](references/scans/copy-patterns.md).
+Authoritative voice, CTA, and section-map reference for all public surfaces. Implements Layer D of the [design evolution spec](../../docs/superpowers/specs/2026-06-30-frontend-design-evolution-layers-design.md). Competitor copy scans that used to sit beside this guide were removed with the old design reference.
 
 **Related:** [`EVOLUTION.md`](EVOLUTION.md) (strategy) · [`README.md`](README.md) (tokens) · [Epic #1200](https://github.com/digithings-ai/digithings/issues/1200)
 
@@ -17,7 +17,7 @@ Authoritative voice, CTA, and section-map reference for all public surfaces. Imp
 | Proper nouns | NautilusTrader, LangGraph, LiteLLM, Polars |
 | CTAs | **Literal destinations** — never naked "Get started". On digiquant.io the destination is the **dashboard** (`open dashboard`), not a repeat of the site name. |
 | Proof | Real data only — GitHub stars, backtest counts, release dates |
-| Serif | Marketing hero display only; dashboards use sans + mono |
+| Type | Mono for claim, body, and chrome. Serif is not the marketing hero face. |
 
 ---
 
@@ -30,7 +30,7 @@ Authoritative voice, CTA, and section-map reference for all public surfaces. Imp
 | digichat | (product speaks) | — no marketing h1 above terminal |
 | digiquant dashboard / twelve-x | [page function] | "Pipeline" / "Today's snapshot" |
 
-Reference patterns (Graphite, Cursor, x.ai): see [`copy-patterns.md` §1–2](references/scans/copy-patterns.md).
+Reference patterns (Graphite, Cursor, x.ai) informed this guide. The scan file was removed.
 
 ---
 
@@ -243,4 +243,4 @@ Full list: [`EVOLUTION.md` §10](EVOLUTION.md) · [design spec §6](../../docs/s
 
 - Update this guide when a surface ships new section types or when reference sites redesign
 - Landing copy implementation is tracked in Phase C issues (#1210–#1215); primitives in Phase B/E
-- Re-audit [`copy-patterns.md`](references/scans/copy-patterns.md) when Graphite, Cursor, or x.ai ship major homepage changes
+- Re-read this guide when Graphite, Cursor, or x.ai ship a major homepage change
