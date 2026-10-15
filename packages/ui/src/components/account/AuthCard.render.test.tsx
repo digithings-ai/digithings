@@ -23,7 +23,6 @@ describe("AuthCard", () => {
     expect(html).not.toContain("DigiQuant");
     expect(html).not.toContain("Twitter");
     expect(html).not.toContain("Open the desk");
-    expect(html).not.toContain("Continue with Google</button>");
     expect(html).not.toContain("Continue with Google");
     expect(html).not.toContain("acct-auth-strength");
   });

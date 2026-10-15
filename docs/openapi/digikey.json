@@ -87,27 +87,6 @@
         "title": "AdminIssueResponse",
         "type": "object"
       },
-      "CustomerLicenseCount": {
-        "additionalProperties": false,
-        "properties": {
-          "customer_slug": {
-            "description": "Customer tenant slug the licences belong to",
-            "title": "Customer Slug",
-            "type": "string"
-          },
-          "licences": {
-            "description": "Number of digikey_licenses rows for this slug",
-            "title": "Licences",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "customer_slug",
-          "licences"
-        ],
-        "title": "CustomerLicenseCount",
-        "type": "object"
-      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -119,70 +98,6 @@
           }
         },
         "title": "HTTPValidationError",
-        "type": "object"
-      },
-      "LicenseCensusResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "expired_rows": {
-            "description": "Rows whose expires_at is in the past",
-            "title": "Expired Rows",
-            "type": "integer"
-          },
-          "newest_issued_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Latest issued_at, or null when the table is empty",
-            "title": "Newest Issued At"
-          },
-          "oldest_issued_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Earliest issued_at, or null when the table is empty",
-            "title": "Oldest Issued At"
-          },
-          "per_customer": {
-            "description": "Row count per customer_slug, ordered by slug",
-            "items": {
-              "$ref": "#/components/schemas/CustomerLicenseCount"
-            },
-            "title": "Per Customer",
-            "type": "array"
-          },
-          "revoked_rows": {
-            "description": "Rows with a non-null revoked_at",
-            "title": "Revoked Rows",
-            "type": "integer"
-          },
-          "total_rows": {
-            "description": "Total rows in digikey_licenses",
-            "title": "Total Rows",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "total_rows",
-          "revoked_rows",
-          "expired_rows",
-          "oldest_issued_at",
-          "newest_issued_at",
-          "per_customer"
-        ],
-        "title": "LicenseCensusResponse",
         "type": "object"
       },
       "LicenseRevokeResponse": {
@@ -609,28 +524,6 @@
           }
         },
         "summary": "Revoke API key",
-        "tags": [
-          "admin"
-        ]
-      }
-    },
-    "/v1/admin/licenses/census": {
-      "get": {
-        "description": "Aggregate-only census of ``digikey_licenses`` -- TEMPORARY, see above.\n\nReturns row counts overall and per ``customer_slug``. ``expires_at`` holds an\ninteger unix ``exp`` (``db_schema.LicenseRow``), hence the epoch cast in the\nstatement rather than a timestamp comparison.",
-        "operationId": "admin_license_census_v1_admin_licenses_census_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LicenseCensusResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Temporary read-only licence census (DIG-2203, remove after use)",
         "tags": [
           "admin"
         ]

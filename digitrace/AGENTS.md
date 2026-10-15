@@ -70,8 +70,6 @@ curl -s http://localhost:8003/v1/status
 ---
 
 
----
-
 ## More
 
 Extension patterns, anti-patterns, and integration boundaries live in [`ARCHITECTURE.md`](ARCHITECTURE.md). Update that doc when changing interfaces or behavior.

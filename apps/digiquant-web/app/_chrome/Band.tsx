@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { Reveal } from "@digithings/ui";
 import { BANDS, type BandId } from "../_bands/registry";
 
@@ -24,16 +24,50 @@ export function Band({
   fill?: boolean;
   /** Skip the reveal transform. Sticky children (the workflow deck) cannot pin inside it. */
   plain?: boolean;
-  /** Pin the section head (eyebrow + title + the hairline under it) under the
-   *  nav for the length of the band, so scrolling stops at that rule and the
-   *  band body stacks below it. The takeaway is deliberately NOT part of the
-   *  pinned unit: it is prose read once, and pinning it would cost the deck
-   *  the screen height the cards need. The band body must then stop at the
-   *  rule by adding `--band-pin-h` to its own top offset — see the pinned
+  /** Pin the section head (eyebrow + title + takeaway + the hairline under
+   *  it) under the nav for the length of the band, so scrolling stops at
+   *  that rule and the band body stacks below it as one block — the title
+   *  and takeaway never separate, and nothing in the body can ride up
+   *  behind either of them. The head's real rendered height (which varies
+   *  with takeaway line-wrap, viewport width and font scaling — a fixed
+   *  guess has undershot before and let cards stick in under the head) is
+   *  measured live and written to `--band-pin-h` on the shell; the band
+   *  body reads that same number as its own top offset — see the pinned
    *  band head block in app/globals.css. */
   pin?: boolean;
   children?: ReactNode;
 }) {
+  const shellRef = useRef<HTMLElement>(null);
+  const headRef = useRef<HTMLElement>(null);
+
+  // Keep `--band-pin-h` equal to the head's actual rendered height (not a
+  // fixed guess) so the deck's sticky offset can never undershoot it —
+  // undershooting is exactly what lets a card's top edge stick in behind
+  // the pinned head instead of below it. Width-gated to match deck.css /
+  // globals.css: below 901px neither the head nor the deck is sticky, so
+  // the measurement is irrelevant there and left alone.
+  useLayoutEffect(() => {
+    if (!pin) return;
+    const shell = shellRef.current;
+    const head = headRef.current;
+    if (!shell || !head) return;
+    const mql = window.matchMedia("(min-width: 901px)");
+    const apply = () => {
+      shell.style.setProperty(
+        "--band-pin-h",
+        mql.matches ? `${head.getBoundingClientRect().height}px` : "0px",
+      );
+    };
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(head);
+    mql.addEventListener("change", apply);
+    return () => {
+      ro.disconnect();
+      mql.removeEventListener("change", apply);
+    };
+  }, [pin]);
+
   const index = BANDS.findIndex((b) => b.id === id);
   const label = BANDS[index]?.label ?? id;
   const screen = "lg:min-h-[calc(100svh-var(--nav-shell-h,62px))] lg:justify-center";
@@ -57,12 +91,11 @@ export function Band({
   const takeawayClass = "m-0 max-w-[var(--measure-prose)] text-[0.9375rem] leading-[1.65] text-ink-soft";
   const frame = (
     <>
-        <header className={`flex flex-col gap-[0.7rem]${pin ? " band-pin" : ""}`}>
+        <header ref={pin ? headRef : undefined} className={`flex flex-col gap-[0.7rem]${pin ? " band-pin" : ""}`}>
           {eyebrow}
           {heading}
-          {pin ? null : <p className={takeawayClass}>{takeaway}</p>}
+          <p className={takeawayClass}>{takeaway}</p>
         </header>
-        {pin ? <p className={takeawayClass}>{takeaway}</p> : null}
         <div id={`${id}-body`} className={fill ? "flex min-h-0 flex-1 flex-col" : "min-w-0"}>
           {children}
         </div>
@@ -70,6 +103,7 @@ export function Band({
   );
   return (
     <section
+      ref={shellRef}
       id={id}
       aria-labelledby={`${id}-h`}
       className={`relative z-10 border-b border-hair${pin ? " band-pin-shell" : ""}`}

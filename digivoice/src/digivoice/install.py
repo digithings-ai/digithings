@@ -524,8 +524,12 @@ def _opentui_pin(tui_root: Path) -> str:
     deps = payload.get("dependencies")
     if not isinstance(deps, dict):
         return ""
-    spec = deps.get("@opentui/core")
-    return spec if isinstance(spec, str) else ""
+    # The launched shell depends on @opentui/react. The retired tree pins core.
+    for name in ("@opentui/react", "@opentui/core"):
+        spec = deps.get(name)
+        if isinstance(spec, str) and spec:
+            return spec
+    return ""
 
 
 def _install_bun(
@@ -555,6 +559,15 @@ def _install_bun(
     return InstallStep(id="bun", status="installed", detail=link)
 
 
+def _opentui_core_dir(tui_root: Path) -> Path:
+    """Hoisted ``@opentui/core``, or the copy nested under ``@opentui/react``."""
+    hoisted = tui_root / "node_modules" / "@opentui" / "core"
+    nested = tui_root / "node_modules" / "@opentui" / "react" / "node_modules" / "@opentui" / "core"
+    if hoisted.is_dir() or not nested.is_dir():
+        return hoisted
+    return nested
+
+
 def _install_opentui(
     home: Path,
     probe: CommandProbe,
@@ -562,7 +575,7 @@ def _install_opentui(
     tui_root: Path,
     refresh: bool,
 ) -> InstallStep:
-    package = tui_root / "node_modules" / "@opentui" / "core"
+    package = _opentui_core_dir(tui_root)
     pin = _opentui_pin(tui_root)
     if _up_to_date(
         refresh=refresh,
@@ -582,6 +595,7 @@ def _install_opentui(
     if result.code != 0:
         reason = error_tail(result.stderr) or f"exit {result.code}"
         raise InstallError(f"bun install failed ({reason})")
+    package = _opentui_core_dir(tui_root)
     if not package.is_dir():
         raise InstallError("bun install did not install @opentui/core")
     _remember(home, opentui=pin)

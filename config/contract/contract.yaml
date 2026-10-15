@@ -72,7 +72,7 @@ services:
   profiles: []
 - name: searxng
   compose_file: docker-compose.yml
-  image: searxng/searxng:latest
+  image: searxng/searxng:2026.9.3-a1144dda3
   build_context: null
   ports:
   - 127.0.0.1:8080:8080
@@ -449,7 +449,7 @@ env:
   description: >-
     Conversation an oversized Zammad retrieval is filed under (DIG-2785).
     Empty by default and honestly so - the conversation is per-session, so
-    no static default can name a live one.
+    no static default can name a live one. With it unset the tools render rows in full.
   secret: false
   sources:
     wrangler_workers: []
@@ -463,7 +463,7 @@ env:
     Bearer grant the zammad-mcp container presents to the artifact-ingest
     door (DIG-2785). Names one conversation and authorises one write; it is
     not an object-store key and not a database credential. Empty until a
-    conversation issues one.
+    conversation issues one. Issued per conversation, so no static default can name a live one.
   secret: true
   sources:
     wrangler_workers: []
@@ -476,7 +476,7 @@ env:
   description: >-
     DigiChat artifact-ingest door the zammad-mcp container posts an oversized
     retrieval to (DIG-2785). In-network URL: service name plus the digichat
-    container port, same shape as DIGIGRAPH_INTERNAL_URL.
+    container port, same shape as DIGIGRAPH_INTERNAL_URL. Oversized retrievals go to the artifact store instead of a spool in the caller.
   secret: false
   sources:
     wrangler_workers: []
@@ -496,36 +496,6 @@ env:
     - DIGICHAT_ALLOW_LOCAL_EMBED_PARENTS
   compose_literal_files:
     - infra/digichat-release/compose.profile-a-bundle.override.yml
-- name: DIGICHAT_ARTIFACT_CONVERSATION
-  description: Per-session conversation id for DigiChat artifact writes. Empty by default, and no
-    static default can name a live session; with it unset the tools render rows in full.
-  secret: false
-  sources:
-    wrangler_workers: []
-    compose_files:
-    - docker-compose.yml
-    env_example_files: []
-    compose_literal: []
-- name: DIGICHAT_ARTIFACT_GRANT
-  description: Per-conversation grant for DigiChat artifact writes. Empty by default; issued per
-    conversation, so no static default can name a live one.
-  secret: false
-  sources:
-    wrangler_workers: []
-    compose_files:
-    - docker-compose.yml
-    env_example_files: []
-    compose_literal: []
-- name: DIGICHAT_ARTIFACT_INGEST_URL
-  description: In-network DigiChat artifact ingest URL (service name plus the digichat container
-    port 3000). Oversized retrievals go to the artifact store instead of a spool in the caller.
-  secret: false
-  sources:
-    wrangler_workers: []
-    compose_files:
-    - docker-compose.yml
-    env_example_files: []
-    compose_literal: []
 - name: DIGICHAT_AUTO_MIGRATE
   description: '`1` runs digichat migrations at boot.'
   secret: false

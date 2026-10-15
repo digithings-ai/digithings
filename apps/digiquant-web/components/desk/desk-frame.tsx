@@ -12,6 +12,7 @@ import { DeskShortcuts } from "./desk-shortcuts";
 import { isTyping } from "./shortcuts";
 import { deskHref } from "./paths";
 import { RAIL_WIDTH_DEFAULT, RAIL_WIDTHS, stepRailWidth } from "./rail-width";
+import { SettingsEffects, useAppSettings } from "./app-settings-store";
 
 const NARROW = "(max-width: 759px)";
 const STORAGE = "dq.desk.rail";
@@ -106,10 +107,18 @@ export function DeskFrame({ current, children }: { current: string; children: Re
 
   const drawer = narrow && open;
   const style = { "--rail-w": `${width}px` } as CSSProperties;
+  const settings = useAppSettings();
 
   return (
     <DeskAccess>
-      <div className="desk-shell flex h-full min-h-0 flex-col bg-black font-mono text-ink" data-drawer={drawer ? "open" : "closed"} style={style}>
+      <SettingsEffects />
+      <div
+        className="desk-shell flex h-full min-h-0 flex-col bg-bg font-mono text-ink"
+        data-drawer={drawer ? "open" : "closed"}
+        data-density={settings.density}
+        data-refresh={settings.refreshSec}
+        style={style}
+      >
         <header className="relative z-50 flex h-8 min-w-0 shrink-0 items-center gap-2 border-b border-hair px-2 text-[0.7rem] sm:gap-3 sm:px-3">
           <Link href="/" className="desk-mark inline-flex shrink-0 items-center text-ink">
             <QuantWordmark className="block h-[14px] w-auto fill-current text-ink" />
@@ -129,6 +138,11 @@ export function DeskFrame({ current, children }: { current: string; children: Re
           <div className="desk-head">
             <DeskPicker />
             <DeskCommand pathname={deskHref(current)} />
+            {settings.refreshSec > 0 ? (
+              <span data-refresh-label="" className="shrink-0 text-ink-mute">
+                refresh {settings.refreshSec}s
+              </span>
+            ) : null}
           </div>
         </header>
         <div className="desk-body relative flex min-h-0 min-w-0 flex-1">
