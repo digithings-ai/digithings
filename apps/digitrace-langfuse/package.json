@@ -1,5 +1,13 @@
 {
   "name": "digitrace-langfuse",
+  "description": "Cloudflare worker for the digitrace Langfuse containers.",
+  "license": "MIT",
+  "homepage": "https://digithings.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/digithings-ai/digithings.git",
+    "directory": "apps/digitrace-langfuse"
+  },
   "private": true,
   "type": "module",
   "scripts": {

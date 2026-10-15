@@ -17,11 +17,11 @@
       "statement": "Linux hosts must avoid real BacktestEngine runs under pytest (SIGABRT #42) and must never touch brokers/ live-trading paths without a human gate, keeping pandas imports to the allowlist.",
       "evidence": [
         {
-          "resource": "repo://digiquant/AGENTS.md#L30-L60",
+          "resource": "repo://digiquant/AGENTS.md#L30-L61",
           "version": "repo-lines-v1:sha256:b78b414bfd8199a3d6b78a0714ac10d777cfb141010918297bcabdff32f05d10:eyJzZWxlY3RlZExpbmVDb3VudCI6MzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ1ODJiOTE5MjQ2YjVhYzExNzcyYmZjZDY3YjY3OTNlYzQ4NzE2Zjk3ODY2YTdmM2Q5NTJlYThjNzcyOTk4MjYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY5ZTIzNjZjOGY5NmVkNzk2ZDc5MjY0YWU1ZDdmNmViYWI0M2RhMDc0ODFjODU1OTIyYzY2YjUwODAyNjc1ZmYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUwODY0NWRiNjJiZmIyZTExMjE5MThmMzAzZjZhODliZjMzNThlOTVlMWUxMTQ3MzFmZjNmZTA5MGYzYjhjZTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBkNzgwMDcwNzRhNDVlYjBlYWY5OWYyMzI1ZjYwMjViOGJkM2EzMDZkNjY4ZWNmNWFmZjY0Y2RkNDg0MDEwNmQifQ"
         },
         {
-          "resource": "repo://digiquant/ARCHITECTURE.md#L51-L53",
+          "resource": "repo://digiquant/ARCHITECTURE.md#L62-L64",
           "version": "repo-lines-v1:sha256:c66e61b3f40288209b1da530af22ac9f317a082f5d675b7b9517808dce5e1554:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMmE4Yzg2YjFhODM2NTE5N2RhZWJmYjY2ODVhZmVmNjdjNDFiMGY2ODUzYjJlOTQ1OWI1OWU1ZDc3ZTJhZTYyYSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNWMyM2Q0MDczNzA2ZDJhNTA1YmFiNDEyOTVjODM5OTQ4MWJjNjI1Nzc3OWI3MTllODhiYWMxODRhY2IwNzhmNiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTIzZDc0NTkxMmM5MGI2YTJlZDc2NWE1OGJhZDlhODhkYjZhMWZmOGM1ZmJlODJlYWZjZWEzMDFjMTU5MzI3MyJ9"
         }
       ]

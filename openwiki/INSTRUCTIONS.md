@@ -19,10 +19,11 @@ Components and ports:
 - `digiclaw` — heartbeat, audit (JSONL), gateway
 - `digibase` — shared HTTP/audit **library** (Python package, not a service)
 - `digillm`, `digifetch`, `digiskills` — supporting libraries
+- `digivoice` — local speech CLI (whisper.cpp + Piper). No network service
 - `apps/dashboard` — digiquant operator surface
 - Repo-level: branching model, `make` targets, review/merge policy (brief — pointer to AGENTS.md, not a duplicate)
 
-Do NOT document `projects/` (confidential). Keep each component to
+Do not add pages for `digismith` (removed; tracing lives in `digitrace`) or `digibot` (not in this tree). Do NOT document `projects/` (confidential). Do not name client workspaces in these pages. Keep each component to
 3–6 pages max: quickstart, architecture, key behaviors, API + operations.
 Skip exhaustive symbol inventories.
 

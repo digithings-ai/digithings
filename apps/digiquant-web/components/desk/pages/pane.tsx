@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type RefObject } from "react";
 import { Button } from "@digithings/ui/ui";
 import { asOfStatus, toneOf } from "../../../../../clients/digiquant-tui/src/format";
+import { staleBanner } from "../app-settings";
+import { useAppSettings } from "../app-settings-store";
 import { expandLayout, type Need } from "../../../../../clients/digiquant-tui/src/expand";
 import { COLS, ROWS, type Layout, type Placement } from "../../../../../clients/digiquant-tui/src/grid";
 import { shapeLines, tidyBody, type PaneBody, type PaneBlock } from "../../../../../clients/digiquant-tui/src/pages/shape";
@@ -251,7 +253,9 @@ export function DeskPane({
   panel?: { id: string; data: unknown };
 } & PaneControls) {
   const body = tidyBody(blocks ?? shapeLines(lines ?? []));
-  const status = asOfStatus(route, asOf, dataAsOf);
+  const settings = useAppSettings();
+  const status = asOfStatus(route, asOf, dataAsOf, undefined, settings.staleSessions);
+  const banner = staleBanner(status.state, settings.notify);
   const dates = status.age ? status.label.slice(0, status.label.indexOf(` · ${status.age}`)) : status.label;
   const { ref: bodyRef, fit } = useBodyFit();
   const face = open || fit === null ? { body, hidden: null } : compactBody(body, fit);
@@ -319,6 +323,11 @@ export function DeskPane({
           {status.age && status.state ? (
             <span data-age={status.state} className={`shrink-0 border px-1 leading-[1.2] ${AGE_BADGE[status.state]}`}>
               {status.state === "fresh" ? status.age : `${status.age} · ${status.state}`}
+            </span>
+          ) : null}
+          {banner ? (
+            <span role="status" data-stale-banner="" className="shrink-0 text-down">
+              {banner}
             </span>
           ) : null}
         </span>
