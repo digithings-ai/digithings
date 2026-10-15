@@ -444,3 +444,13 @@ def test_resolve_map_accepts_comma_separated_fan_out() -> None:
             },
         )
         assert out.digisearch_index is None
+def test_digithings_tenant_parses_scoped_prompt() -> None:
+    """DIG-3556: the digithings tenant carries a scoped research prompt."""
+    m = load_tenant_corpus_map(
+        '{"digithings": {"digisearchIndex": "digithings_docs", '
+        '"vaultPathPrefix": "clients/digithings", '
+        '"researchSystemPrompt": "Answer only about digithings."}}'
+    )
+    assert m["digithings"].digisearch_index == "digithings_docs"
+    assert m["digithings"].vault_path_prefix == "clients/digithings"
+    assert m["digithings"].research_system_prompt == "Answer only about digithings."
