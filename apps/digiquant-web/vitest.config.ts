@@ -13,6 +13,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "."),
+      "@digithings/design/fonts": path.resolve(__dirname, "../../packages/design/fonts.ts"),
       // Subpath first: Vite alias matching is prefix-based, so the bare
       // "@digithings/ui" entry below would otherwise swallow
       // "@digithings/ui/ui" and resolve it as `src/index.ts/ui`.
