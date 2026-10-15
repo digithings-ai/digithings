@@ -13,6 +13,7 @@ import {
   shouldProxyToDigiChat,
 } from "./paths";
 import { legacyEmbedEnabledValue } from "./embed-flag";
+import { isOccShellPath, occGate } from "./occ-gate";
 
 /**
  * `env` from `cloudflare:workers` is untyped until `wrangler types` generates
@@ -59,6 +60,8 @@ export class DigiChatContainer extends Container {
 
 export interface Env {
   DIGICHAT: DurableObjectNamespace<DigiChatContainer>;
+  /** DIG-1210 invite key gating the /chat/occ Pages shell. Worker-only. */
+  OCC_INVITE_KEY?: string;
   /** Documented opt-in for the legacy generic anonymous embed. */
   DIGICHAT_LEGACY_EMBED_ENABLED?: string;
   /** @deprecated Use DIGICHAT_LEGACY_EMBED_ENABLED. */
@@ -82,6 +85,9 @@ export interface Env {
 export default {
   async fetch(request: Request, workerEnv: Env): Promise<Response> {
     const url = new URL(request.url);
+    if (isOccShellPath(url.pathname)) {
+      return occGate(request, workerEnv.OCC_INVITE_KEY);
+    }
     if (!shouldProxyToDigiChat(url.pathname)) {
       return new Response(
         "digichat Worker: path not routed. Marketing /chat shells are on Pages.",
