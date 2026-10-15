@@ -4,7 +4,7 @@
  *
  * Method: drive the REAL `src/index.ts` fetch handler (stub doubles, no
  * network, no secrets) and compare against the REAL client functions
- * imported from `apps/dashboard/lib/*` — never re-implemented expectations.
+ * imported from `@digiquant/contract` — never re-implemented expectations.
  * Fixture inputs that the stubs keep module-private (ledger marks, live
  * positions) are read back through the stubs' own builders where possible;
  * where the stub module does not export them, the test quotes the
@@ -47,9 +47,9 @@ import {
   isNavSeriesSeam as clientIsNavSeriesSeam,
   navContinuityStepPct as clientNavContinuityStepPct,
   navRowContractLabel as clientNavRowContractLabel,
-} from "../../dashboard/lib/accounting-views";
-import { reconcileBook as clientReconcileBook } from "../../dashboard/lib/book-reconciliation";
-import { selectBriefLedgerDayEvents as clientSelectBriefDayEvents } from "../../dashboard/lib/brief-book-event";
+} from "@digiquant/contract/accounting-views";
+import { reconcileBook as clientReconcileBook } from "@digiquant/contract/book-reconciliation";
+import { selectBriefLedgerDayEvents as clientSelectBriefDayEvents } from "@digiquant/contract/brief-book-event";
 import {
   crossesNavSeam as clientCrossesNavSeam,
   isLiveMarksOverlay as clientIsLiveMarksOverlay,
@@ -58,20 +58,20 @@ import {
   persistedHeadlinesFromNav as clientPersistedHeadlines,
   persistedInsightMetrics as clientPersistedInsights,
   resolveInvestedPct as clientResolveInvestedPct,
-} from "../../dashboard/lib/performance-ssot";
+} from "@digiquant/contract/performance-ssot";
 import {
   averageEntryAsOf as clientAverageEntryAsOf,
   ledgerEventEconomics as clientLedgerEventEconomics,
   realizedReturnVsAverageEntry as clientRealizedReturn,
   soldWeightPct as clientSoldWeightPct,
-} from "../../dashboard/lib/position-event-economics";
-import type { Position as ClientPosition } from "../../dashboard/lib/types";
+} from "@digiquant/contract/position-event-economics";
+import type { Position as ClientPosition } from "@digiquant/contract/types";
 import {
   computeLiveVsMarkPct as clientComputeLiveVsMarkPct,
   MIN_OVERLAP_DAYS as CLIENT_MIN_OVERLAP_DAYS,
 } from "@digithings/ui";
 import { benchmarkOverlapMeetsFloor as serverOverlapMeetsFloor } from "./benchmarks";
-import { sortTickerUniverse as clientSortTickerUniverse } from "../../dashboard/lib/benchmark-tickers";
+import { sortTickerUniverse as clientSortTickerUniverse } from "@digiquant/contract/benchmark-tickers";
 
 const NO_ENV: Env = { DASHBOARD_DEV_CALLER: "enterprise+12x" }; // builders under test, not the access gate
 const get = (path: string) => new Request(`https://worker${path}`);

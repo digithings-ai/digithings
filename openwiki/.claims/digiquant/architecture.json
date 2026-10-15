@@ -21,7 +21,7 @@
           "version": "repo-lines-v1:sha256:dc1f665b3f527445456a9df8f24bfe0278e7e60b74e3aabeb0fb5f4ca507308c:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZGMxZjY2NWIzZjUyNzQ0NTQ1NmE5ZGY4ZjI0YmZlMDI3OGU3ZTYwYjc0ZTNhYWJlYjBmYjVmNGNhNTA3MzA4YyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZGMxZjY2NWIzZjUyNzQ0NTQ1NmE5ZGY4ZjI0YmZlMDI3OGU3ZTYwYjc0ZTNhYWJlYjBmYjVmNGNhNTA3MzA4YyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYjVjMmY2Yzk1M2Q5NTY1MmFhOGQ1OGIxNzUwNTAxZGU1ZDc3NjY2YzEzNDRhYjhiNjA0N2UzN2U3YTUwZjEwMCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZjk5ZDlkMWNlZWQzNWI2MmJlYzY2ODZlMWMzYzQ3MzA5Y2IxNmIyNjBmNGRkMTBiZWY2ZGQ0ZDJlM2YyY2U3MyJ9"
         },
         {
-          "resource": "repo://digiquant/src/digiquant/nautilus_runner.py#L192-L228",
+          "resource": "repo://digiquant/src/digiquant/nautilus_runner.py#L247-L283",
           "version": "repo-lines-v1:sha256:a516202adaf6eaf99ab069dcf31e6b2f29eb4d4ab738c505edd53138b800c28a:eyJzZWxlY3RlZExpbmVDb3VudCI6MzcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBkYzM3ZmVmMmQ3ZjEwZmQ4OGY5NjI2YmQwNTZjNmVlNGFmZjRiOGQ4NzMwYzAzNjRhZTZjMTVjYWIyZDliZjIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjViMmJjZmE1YTRjYzI3MDVlNjMxYjJhNTBmNTdlZTQ1OWRmOGY2MGU3ZTNlODNiMzE0NDFhMGRkMzgxNjRkYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjA4MjY3NmM4ODhjMWE0ZDlmYTc3MmZjZGMzMDJmNzczYmM3MjkwZWViZmY5ZGEzNmEzOWY0NGMzMjExOTgzODUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZiMmVjMGVjMDE4YjE0OTJhN2Q2NDg1Yjg0N2FmN2VkZDU5MDk3ZWJlODQyNTMzM2JhMTU0OTlmNDlhNWE3YTkifQ"
         }
       ]
@@ -31,7 +31,7 @@
       "statement": "On Linux, BacktestEngine signal handling clashes with uvloop under uvicorn[standard] (SIGABRT, #42), mitigated by an asyncio-policy reset in the dq test conftest with engine tests skipped on Linux CI.",
       "evidence": [
         {
-          "resource": "repo://digiquant/ARCHITECTURE.md#L51-L53",
+          "resource": "repo://digiquant/ARCHITECTURE.md#L62-L64",
           "version": "repo-lines-v1:sha256:c66e61b3f40288209b1da530af22ac9f317a082f5d675b7b9517808dce5e1554:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMmE4Yzg2YjFhODM2NTE5N2RhZWJmYjY2ODVhZmVmNjdjNDFiMGY2ODUzYjJlOTQ1OWI1OWU1ZDc3ZTJhZTYyYSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMDFiYTQ3MTljODBiNmZlOTExYjA5MWE3YzA1MTI0YjY0ZWVlY2U5NjRlMDljMDU4ZWY4Zjk4MDVkYWNhNTQ2YiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNWMyM2Q0MDczNzA2ZDJhNTA1YmFiNDEyOTVjODM5OTQ4MWJjNjI1Nzc3OWI3MTllODhiYWMxODRhY2IwNzhmNiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTIzZDc0NTkxMmM5MGI2YTJlZDc2NWE1OGJhZDlhODhkYjZhMWZmOGM1ZmJlODJlYWZjZWEzMDFjMTU5MzI3MyJ9"
         }
       ]
