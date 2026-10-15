@@ -55,6 +55,13 @@ git rev-list --count origin/module/<component>..origin/develop   # 0 = current; 
 Local pushes to `main` require `ALLOW_MAIN_PUSH=1` as an environment variable
 (belt-and-suspenders on top of the PR gate).
 
+Local pushes to `develop` require `ALLOW_DEVELOP_PUSH=1` as an environment
+variable. Unlike `main`, `develop` has no server-side PR gate
+(`required_pull_request_reviews` is `null`), so the client pre-push hook is the
+only guard. The usual accident is a branch tracking `develop` upstream, so a
+bare `git push` lands there — repair it with
+`git branch --set-upstream-to=github/<branch> <branch>`, then push that branch.
+
 **Module branches managed by the tooling:** `module/digigraph`, `module/digiquant`, `module/digisearch`, `module/digichat`, `module/digikey`, `module/digismith` (remote branch predates the #4929 digitrace rename; see `scripts/module_branches.sh`), `module/digiclaw`, `module/digibase` — this is the `MODULES` array in `scripts/module_branches.sh`, so `make module-status`/`-sync`/`-switch`/`-pr` only know these eight.
 
 Other `module/*` branches exist on `origin` outside that set and are not managed by any
@@ -258,7 +265,8 @@ hook checked the name first and `exit 1`ed before it reached the deletion skip, 
 no server-side cause, and `bot/*` refs had piled up on `origin` behind it (~100 as
 of 2026-08-18; #2465 reaped them on 2026-08-19 and 5 heads remain). The `main`
 guard still covers deletions — deleting `main` is at least as serious as pushing
-to it, so it needs the same `ALLOW_MAIN_PUSH=1`.
+to it, so it needs the same `ALLOW_MAIN_PUSH=1`. The `develop` guard works the
+ same way: deleting `develop` needs `ALLOW_DEVELOP_PUSH=1`.
 
 ## What is not allowed
 
