@@ -181,6 +181,11 @@ def test_wrangler_no_longer_offers_the_retired_fred_key() -> None:
 
 def test_architecture_documents_mcp_hosting() -> None:
     text = ARCHITECTURE.read_text()
-    assert "mcp.digithings.ai" in text
+    surface = (ARCHITECTURE.parent / "docs" / "architecture" / "api-surface.md").read_text()
+    # One literal. The hostname lives in the topic file. Repeating it in the
+    # stub raises the endpoint census (DIG-3399).
+    host = "mcp.digithings.ai"
+    assert host in surface
+    assert host not in text
     assert "digiquant:backtest" in text
     assert "DigiQuantMcpContainer" in text

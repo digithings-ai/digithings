@@ -110,7 +110,14 @@ describe("stock ToolFallback", () => {
         respondToApproval={async () => undefined}
       />,
     );
-    expect(screen.getByText(/Failed tool/)).toBeTruthy();
+    // The status icon (span[data-state] role="img") carries its own name.
+    const icon = document.querySelector('[data-slot="dot-matrix"]');
+    expect(icon?.getAttribute("role")).toBe("img");
+    expect(icon?.textContent).toContain("Failed tool");
+    const label = document.querySelector(
+      '[data-slot="tool-fallback-trigger-label"]',
+    );
+    expect(label?.textContent).toMatch(/Failed tool/);
     expect(screen.queryByText(/Used tool/)).toBeNull();
   });
 });
