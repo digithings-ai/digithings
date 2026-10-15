@@ -27,6 +27,8 @@ Gate decisions go on the Paperclip Decisions board (question cards on DIG-3518).
 
 Created by Chris's direction of 2026-10-14 (private repos on Cursor Origin; public repo Origin-primary
 with a GitHub mirror). Evidence: [review.md § Cursor Origin](review.md#cursor-origin-as-the-source-control-home-direction-of-2026-10-14).
+Superseded for R0 by D-O1 below: R0 stays GitHub-primary with an inbound Origin mirror, because Origin
+cannot host public repos or mirror outward. The 14 Oct direction above is kept as the record.
 Answered by Chris on 2026-10-14.
 
 | ID | Question | Answer | What it means for the plan |

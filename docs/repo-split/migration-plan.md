@@ -329,7 +329,7 @@ Cutover day (Chris does the renames and visibility changes; agents prepare):
 Exit checks:
 - anonymous `curl -s -o /dev/null -w '%{http_code}' https://github.com/digithings-ai/digithings-mono` → 404;
 - anonymous clone of `digithings-ai/digithings` gives R0 history only (first commit is the export, not mono's);
-- one Chris-cut deploy from mono via the Mac agent succeeds; a non-tag ref is refused (and, if signing is adopted, an unsigned tag is refused);
+- one Chris-cut deploy from mono via the Mac agent succeeds; a non-tag ref is refused, and an unsigned tag is refused (D-G6 mandatory);
 - packages install from PyPI/npm in a clean container; denylist grep on the *pushed* repo = 0.
 
 Rollback before step 8: rename back and make mono public again (nothing lost).
