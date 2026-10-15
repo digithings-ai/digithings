@@ -10,7 +10,11 @@ type Profile = "local" | "cloud";
 
 const LOCAL: Record<SurfaceService, string | undefined> = {
   desk: "http://127.0.0.1:8788",
-  chat: "http://127.0.0.1:3000",
+  // 3005 is the host publish port in docker-compose.yml (127.0.0.1:3005 ->
+  // container 3000) and the only loopback origin apps/dashboard/lib/
+  // security-headers.mjs allows in frame-src. A bare `next dev` on 3000 stays
+  // reachable through DIGI_CHAT_URL.
+  chat: "http://127.0.0.1:3005",
   mcp: "http://127.0.0.1:8787/mcp",
   graph: undefined,
   stack: undefined,

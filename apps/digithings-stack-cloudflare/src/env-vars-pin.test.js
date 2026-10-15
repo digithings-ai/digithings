@@ -116,6 +116,9 @@ const WORKER_SCOPED_VARS = new Set([
   // forwarding it would put a Durable Object naming input into the container's
   // runtime env, where nothing consumes it.
   "STACK_CONTAINER_REV",
+  // DIG-3585: /chat/occ invite gate. The container authorizes via the tenant
+  // token, never this Worker secret.
+  "OCC_INVITE_KEY",
 ]);
 
 // Deliberately throws rather than returning an empty match -- a re-indented

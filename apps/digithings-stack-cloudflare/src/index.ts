@@ -68,6 +68,7 @@ import {
   SHARED_DIGICHAT_CONTAINER_ID,
   shouldProxyToDigiChat,
 } from "./digichat";
+import { isOccShellPath, occGate } from "../../digichat-cloudflare/src/occ-gate";
 
 /** Wrangler injects vars/secrets; cast until `wrangler types` is generated in CI. */
 const env = workerEnvBinding as unknown as Env;
@@ -513,6 +514,8 @@ export interface Env {
   DIGICHAT_MONITOR_TOKENS?: string;
   DIGICHAT_DASHBOARD_SUPABASE_URL?: string;
   DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY?: string;
+  /** DIG-3585 /chat/occ shell gate. Worker-scoped; never forwarded to a container. */
+  OCC_INVITE_KEY?: string;
 }
 
 /** Secret-gated MCP edge paths (`/_stack/mcp/<id>/…`) → in-container ports. */
@@ -581,6 +584,9 @@ function stackContainer(workerEnv: Env): DurableObjectStub<DigiStackContainer> {
 export default {
   async fetch(request: Request, workerEnv: Env): Promise<Response> {
     const url = new URL(request.url);
+    if (isOccShellPath(url.pathname)) {
+      return occGate(request, workerEnv.OCC_INVITE_KEY);
+    }
     if (url.pathname === "/_stack/meta") {
       // containerId is derived from the deploying commit (DIG-3229), so it is
       // the operator's proof that the running instance came from this deploy
