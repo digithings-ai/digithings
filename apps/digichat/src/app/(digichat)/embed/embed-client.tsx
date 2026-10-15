@@ -93,6 +93,7 @@ import {
   resolveReadyTargetOrigin,
 } from "@/lib/embed-seed-messages";
 import { signalDigichatBootStep } from "@digithings/ui/chat/boot-signal";
+import { startWarmup } from "@/lib/warmup-gate";
 import {
   formatParentErrorLine,
   parseParentErrorMessage,
@@ -163,6 +164,22 @@ function EmbedPageInner({
   const token = searchParams.get("token") ?? undefined;
   const host = searchParams.get("host") ?? undefined;
   const tenantCfg = useEmbedTenantConfig(token, host, initialTenantCfg);
+
+  // Warm-up on load: wake sleeping services; chat sends wait on the gate.
+  useEffect(() => {
+    void startWarmup();
+  }, []);
+
+  // Track the visible viewport (mobile keyboard) for popup max-heights.
+  useEffect(() => {
+    const vv = typeof window !== "undefined" ? window.visualViewport : null;
+    if (!vv) return;
+    const upd = () =>
+      document.documentElement.style.setProperty("--dc-vvh", `${Math.round(vv.height)}px`);
+    upd();
+    vv.addEventListener("resize", upd);
+    return () => vv.removeEventListener("resize", upd);
+  }, []);
 
   // Real boot milestone for the loader: the tenant/deploy config resolved.
   useEffect(() => {

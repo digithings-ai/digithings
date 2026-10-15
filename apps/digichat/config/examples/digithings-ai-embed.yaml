@@ -12,7 +12,7 @@ hosts:
       title: ask digichat
       welcome:
         title: Ask about digithings
-        body: Explore the documentation, dig into the stack, or search the web.
+        body: Explore the documentation, dig into the stack, or search the vault.
       placeholder: Ask a question
       suggestions:
         - What is digigraph?
@@ -67,9 +67,6 @@ hosts:
         - id: digivault
           default: true
           label: Vault
-        - id: web_search
-          default: true
-          label: Web search
     mcp:
       # Fail-closed for public digithings.ai marketing embed (#3795).
       # Example ≠ live env; prod DIGICHAT_EMBED_TENANTS omits this (schema default false).
@@ -96,5 +93,8 @@ hosts:
       llmAccess: free_then_byok
       showByok: true
       showLanguageSelector: true
-      webSearch: true
+      # The digigraph license has no hosted-web-search scope. Requesting it
+      # 403s the whole turn. Leave this off; the stream adapter still retries
+      # once as plain inference if an overlay turns it back on.
+      webSearch: false
     # token: set via DIGICHAT_HOST_DIGITHINGS_AI_TOKEN or DIGICHAT_EMBED_TENANTS
