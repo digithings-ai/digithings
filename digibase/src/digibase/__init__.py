@@ -30,7 +30,14 @@ from digibase.art9 import (
     value_patterns,
 )
 from digibase.art9_middleware import Art9AdmissionMiddleware, install_art9_admission
+from digibase.audit import AuditEvent, emit_event, redact_mapping
 from digibase.cors import install_cors, resolve_cors_origins
+from digibase.errors import (
+    ApiErrorBody,
+    ApiErrorEnvelope,
+    json_error_response,
+    register_fastapi_error_handlers,
+)
 from digibase.http import (
     current_request_id,
     install_request_id_logging,
@@ -40,6 +47,7 @@ from digibase.http import (
 )
 from digibase.http_client import DEFAULT_TIMEOUT, async_client, sync_client
 from digibase.metrics import install_metrics
+from digibase.service_auth import ServiceAuthError, clear_service_jwt_cache, get_service_jwt
 
 __all__ = [
     "ART9_CATEGORIES",
@@ -51,17 +59,24 @@ __all__ = [
     "ROUTE_KIND_INGEST",
     "ROUTE_KIND_READ",
     "ROUTE_UNREGISTERED",
+    "ApiErrorBody",
+    "ApiErrorEnvelope",
     "Art9AdmissionMiddleware",
     "Art9ConfigurationError",
+    "AuditEvent",
     "RouteDecision",
     "ScreenResult",
+    "ServiceAuthError",
     "art9_event_type",
     "async_client",
     "audit_record",
     "category_order",
     "check_route",
+    "clear_service_jwt_cache",
     "current_request_id",
+    "emit_event",
     "field_names",
+    "get_service_jwt",
     "install_art9_admission",
     "install_cors",
     "install_metrics",
@@ -71,10 +86,13 @@ __all__ = [
     "is_registered",
     "is_under_prefix",
     "iter_ingest_routes",
+    "json_error_response",
     "mask_token",
     "no_match_reason",
     "outbound_request_id_headers",
     "outbound_service_headers",
+    "redact_mapping",
+    "register_fastapi_error_handlers",
     "resolve_cors_origins",
     "route_kind",
     "screen_and_apply",
