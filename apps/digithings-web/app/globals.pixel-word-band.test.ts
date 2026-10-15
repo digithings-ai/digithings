@@ -2,6 +2,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { preparedBanner } from "@digithings/hero-banner";
+import { DIGITHINGS } from "@digithings/hero-banner/definitions";
+
 /**
  * DIG-2304: the footer wordmark must not be cropped by its own band.
  *
@@ -34,10 +37,10 @@ const markSrc = readFileSync(MARK_PATH, "utf8");
 /** --page-pad, from packages/design/tokens.css: --page-pad: var(--gutter). */
 const PAGE_PAD = "clamp(1.25rem, 4vw, 3.25rem)";
 
-/** The viewBox the mark actually renders with; the model's aspect comes from it. */
-const VIEWBOX = markSrc.match(/viewBox="0 0 (\d+) (\d+)"/);
-if (!VIEWBOX) throw new Error(`no viewBox="0 0 W H" in ${MARK_PATH}`);
-const ASPECT = Number(VIEWBOX[1]) / Number(VIEWBOX[2]);
+/** The grid the mark actually renders with, read off the shared definition
+ *  the component draws (DIG-2702). The band model assumes this aspect. */
+const { layout } = preparedBanner(DIGITHINGS);
+const ASPECT = layout.width / layout.height;
 
 const VIEWPORTS = [1280, 1440, 1600, 1728, 1920];
 
@@ -241,10 +244,17 @@ const BROKEN = `
 `;
 
 describe("footer wordmark band (DIG-2304)", () => {
-  it("keeps the viewBox the model assumes", () => {
+  it("keeps the aspect the model assumes", () => {
     // 88x10 -> 8.8, the figure the globals.css comment cites.
-    expect(`${VIEWBOX[1]}x${VIEWBOX[2]}`).toBe("88x10");
+    expect(`${layout.width}x${layout.height}`).toBe("88x10");
     expect(ASPECT).toBe(8.8);
+  });
+
+  it("renders the shared DIGITHINGS definition, not a local copy", () => {
+    // The routing pin: the mark must draw the definition above, so the
+    // aspect above is the aspect on screen.
+    expect(markSrc).toContain("@digithings/hero-banner/definitions");
+    expect(markSrc).toContain("DIGITHINGS");
   });
 
   it("gives the band no fixed height, so a box cannot crop the mark", () => {
