@@ -3,12 +3,12 @@
 
 Why this exists
 ---------------
-digiquant.io is a Cloudflare Pages static export. Every existing smoke probe in
-``smoke-site.yml`` asks *does the URL answer with the right content type* — a
-question a frozen deploy answers perfectly, forever. Pages keeps serving the
-last successful build with a 200 and no ``last-modified`` header (verified
-2026-08-01), so a project that has stopped producing deployments is
-indistinguishable from a healthy one from the outside.
+digiquant.io is a Cloudflare Pages static export. The probes in the removed
+``smoke-site.yml`` (deleted in #4919) asked *does the URL answer with the right
+content type* — a question a frozen deploy answers perfectly, forever. Pages
+keeps serving the last successful build with a 200 and no ``last-modified``
+header (verified 2026-08-01), so a project that has stopped producing
+deployments is indistinguishable from a healthy one from the outside.
 
 ``scripts/write-build-info.sh`` writes ``build-info.json`` into the export root
 at build time; this script reads it back off the live site and turns "when was
@@ -19,11 +19,12 @@ answerable only in the Cloudflare dashboard (deployment list, build logs,
 production branch, watch paths, environment variables). This script detects the
 symptom; it does not diagnose the cause.
 
-Verdict vocabulary mirrors the existing ``probe()`` shell function in
-``smoke-site.yml``, where a warning is reserved for genuinely *inconclusive*
-results (Cloudflare bot challenges from CI IPs) and everything conclusive is a
-pass or a failure. A missing stamp is conclusive: the live bundle predates the
-stamp, i.e. the deploy is older than the commit that added it.
+Verdict vocabulary mirrors the old ``probe()`` shell function from
+``smoke-site.yml`` (removed in #4919), where a warning is reserved for
+genuinely *inconclusive* results (Cloudflare bot challenges from CI IPs) and
+everything conclusive is a pass or a failure. A missing stamp is conclusive:
+the live bundle predates the stamp, i.e. the deploy is older than the commit
+that added it.
 
 Threshold
 ---------
@@ -33,7 +34,9 @@ can legitimately go several quiet days without a frontend-touching commit. A
 window under ~72h would cry wolf over a long weekend; 7 days is well inside the
 time it took for the current freeze to be noticed.
 
-Usage (see ``.github/workflows/smoke-site.yml``)::
+Usage (build-stamp asserts in ``deploy-digiquant-cloudflare.yml`` and
+``deploy-digithings-cloudflare.yml``; the daily live probe left with
+``smoke-site.yml`` in #4919)::
 
     curl -sL -o body.json -w '%{http_code}' https://digiquant.io/build-info.json
     python3 scripts/check_deploy_freshness.py \
