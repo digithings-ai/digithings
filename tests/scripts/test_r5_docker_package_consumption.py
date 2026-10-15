@@ -39,7 +39,7 @@ SIBLING_COPY = (
     "COPY apps/digiquant-runner",
     "COPY scripts/refresh_market_data_r2.py",
 )
-FORBIDDEN_REGISTRIES = ("ghcr.io", "azurecr.io", "datatapchatregistry")
+FORBIDDEN_REGISTRIES = ("ghcr.io", "azurecr.io", "forbiddenexample_registry")
 
 
 def _text(rel: str) -> str:
