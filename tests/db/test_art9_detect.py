@@ -16,13 +16,18 @@ Two claims are pinned by this file, and both are the honest ones:
   precision. `test_prose_beliefs_are_not_detected` is load-bearing — do not make
   it pass by loosening a pattern.
 
-The load-bearing test for the matching *technique* is
-`test_substring_rule_is_deliberately_broad`. Field names are matched as
-lowercased substrings, the same rule `digibase.audit` already uses, so
-`healthcheck_url` and `medical_billing_code` trip alongside `diagnosis`. That is
-a known, accepted trade-off: leaf L13 (`tests/db/test_art9_false_positives.py`)
-owns the false-positive battery and settles the policy. Narrowing the match here
-to exact keys would delete the evidence L13 needs.
+The load-bearing tests for the matching *technique* are
+`test_the_section_5_5_names_these_keys_carry_still_refuse` and
+`test_the_rule_still_trips_keys_that_embed_a_section_5_5_name`. A §5.5 field
+name matches when it is a **whole segment** of the lowercased key — segments
+being the pieces separated by underscores and by a letter/digit boundary — so
+`medical_billing_code` and `family_medical_leave` still trip alongside `diagnosis`,
+`payroll_trade_union_deduction` still trips on the contiguous run `trade`+`union`,
+and `healthcheck_url` still does not. This replaces the plain substring rule this
+file used to pin. It was not an exact-key match either way, and it is not one now:
+leaf L13 (`tests/db/test_art9_false_positives.py`) owns the false-positive battery
+and settles the policy for what still over-triggers. Narrowing to exact keys
+would delete the evidence L13 needs.
 
 Why L1 does not mask: masking is leaf L2. `redacted` is `None` in this leaf on
 every path, including `mask`.
@@ -190,11 +195,32 @@ def test_field_name_matching_is_case_insensitive() -> None:
     assert art9.screen_request({"Patient_DIAGNOSIS_CODE": "x"}).categories == ("health",)
 
 
-def test_non_string_keys_are_matched_as_text() -> None:
-    """A non-string key is screened through `str()` rather than crashing."""
+def test_non_string_keys_are_screened_without_crashing() -> None:
+    """A non-string key goes through `str()` and is screened, never raised on.
+
+    Was `test_non_string_keys_are_matched_as_text`. What such a key *finds*
+    changed with the whole-segment rule, and this pin records the new truth
+    rather than the old accident: `str()` of a non-string wraps it in
+    punctuation — `str(("medical",))` is `"('medical',)"` — and that punctuation
+    is part of the segment, so no §5.5 field name can be a whole segment of it.
+    A non-string key therefore now contributes **no** category. Under develop's
+    substring rule `"('medical',)"` contained `medical` and read as health.
+
+    That is not a hole in practice, and the reason is the branch's reachability:
+    `_scan` only str()s a key when the caller handed it a mapping with
+    non-string keys, and no JSON body can carry one — every key a decoded JSON
+    object has is a string. The screen still runs, which is the half worth
+    pinning: a hostile or merely careless payload cannot make the detector raise
+    its way past a refusal. The value side is unaffected — a §5.5 identifier in
+    a string value is still found, pinned in `test_identifier_patterns`.
+    """
     result = art9.screen_request({1: "x", ("medical",): "y"})
 
-    assert result.categories == ("health",)
+    assert result.categories == ()
+    assert result.decision == "allow"
+
+    assert art9.screen_request({("race",): "y"}).categories == ()
+    assert art9.screen_request({1: "NHS number: 943 476 5919"}).categories == ("health",)
 
 
 # ── 2. identifier patterns ───────────────────────────────────────────────────
@@ -215,6 +241,10 @@ def test_non_string_keys_are_matched_as_text() -> None:
         ("c.68_69delAG", "art9:genetic:genotype_call"),
         ("biometric template descriptor v2", "art9:biometric:biometric_template"),
         ("minutiae extracted from the scan", "art9:biometric:biometric_template"),
+        # The positive that survives the `face`/`voice` drop below. Pinned here as
+        # well as in leaf L13's `MIS_SPECIFIED_VALUES` because this leaf is what
+        # edits the pattern: the guard belongs next to the change.
+        ("fingerprint descriptor", "art9:biometric:biometric_template"),
     ],
 )
 def test_identifier_patterns(value: str, expected_reason: str) -> None:
@@ -236,6 +266,13 @@ def test_identifier_patterns(value: str, expected_reason: str) -> None:
         "see chapter 2 of the variable course outline",
         "template rendered",
         "the policy document",
+        # `face` and `voice` are out of `_biometric_template_re`. Without these
+        # two rows the drop would be an untested behaviour change: every positive
+        # above refuses on both the old and the new pattern, so the suite would
+        # stay green whether or not step 3 happened. These refuse on develop and
+        # allow here.
+        "face template",
+        "voice descriptor",
     ],
 )
 def test_identifier_patterns_do_not_fire_on_ordinary_text(value: str) -> None:
@@ -421,7 +458,53 @@ def test_prose_beliefs_are_not_detected(prose: str) -> None:
     assert result.decision == "allow", prose
 
 
-# ── 4. the substring rule is deliberately broad ──────────────────────────────
+# ── 4. the whole-segment rule, and what it still lets through ────────────────
+
+
+@pytest.mark.parametrize(
+    ("key", "embedded", "expected_category"),
+    [
+        ("medical_record_number", "xmedical_record_number", "health"),
+        ("trade_union_id", "xtradeunion_id", "trade_union_membership"),
+        ("biometric_enrolment", "xbiometric_enrolment", "biometric"),
+        ("dna_sample_id", "xdna_sample_id", "genetic"),
+    ],
+)
+def test_the_section_5_5_names_these_keys_carry_still_refuse(
+    key: str, embedded: str, expected_category: str
+) -> None:
+    """The plan rejected option C3 because C3 would have lost these four names.
+
+    Each key embeds a §5.5 field name as one of its own whole segments —
+    `medical`, `trade`+`union`, `biometric`, `dna` — and each must keep refusing
+    after the matcher narrows from substring to whole segment. C3 proposed
+    matching on a word boundary inside the name, which drops a needle that only
+    spans several segments (`trade_union`) and drops one whose segment carries a
+    suffix (`biometric_enrolment`). Pinning them first is what makes the
+    narrowing checkable rather than hopeful.
+
+    The second arm is the one that is red on the pre-change bytes, and it is
+    there for a reason the brief states plainly: *a test that passes before the
+    change is not a test of your change.* All four keys already refuse under the
+    substring rule, so a refuse-only assertion would be green on develop and
+    would pass just as well against a matcher that had learned nothing. `embedded`
+    is the same key with the §5.5 name welded into the middle of a neighbouring
+    segment — `grace_period`'s shape. Under the substring rule it refuses; under
+    the whole-segment rule the needle is not a segment and it allows. So the
+    refusal of `key` is measured as *segment-anchored*, not as substring luck,
+    and that half of the test is what moves.
+    """
+    result = art9.screen_request({key: "value"})
+
+    assert result.categories == (expected_category,), key
+    assert result.reason == f"art9:{expected_category}:field_name", key
+    assert result.decision == "refuse", key
+
+    anchored = art9.screen_request({embedded: "value"})
+
+    assert anchored.categories == (), embedded
+    assert anchored.reason == "art9:no_match", embedded
+    assert anchored.decision == "allow", embedded
 
 
 @pytest.mark.parametrize(
@@ -432,29 +515,65 @@ def test_prose_beliefs_are_not_detected(prose: str) -> None:
         ("pre_diagnosis_note", "health"),
         ("dna_sequence_length", "genetic"),
         ("political_alerts", "political_opinions"),
-        ("grace_period", "racial_or_ethnic_origin"),
         ("payroll_trade_union_deduction", "trade_union_membership"),
         ("philosophical", "religious_or_philosophical_beliefs"),
     ],
 )
-def test_substring_rule_is_deliberately_broad(key: str, expected_category: str) -> None:
-    """The `audit.py` substring rule trips these, and L1 must not narrow it.
+def test_the_rule_still_trips_keys_that_embed_a_section_5_5_name(
+    key: str, expected_category: str
+) -> None:
+    """Narrowing the rule to whole segments did not turn it into an exact-key match.
 
-    `grace_period` (contains `race`), `family_medical_leave`, `undiagnosed`,
-    `dna_sequence_length` and `payroll_trade_union_deduction` are ordinary-looking
-    keys that trip anyway, and they are here on purpose. Leaf L13 owns the
-    false-positive battery (`tests/db/test_art9_false_positives.py`): it decides
-    which of these are narrowed, replaced or accepted. Narrowing here — the
-    obvious way to make a test go green — would delete the evidence L13 needs.
+    Was `test_substring_rule_is_deliberately_broad`, on develop's pinned
+    substring rule. Each of these is an ordinary-looking business key whose
+    §5.5 name is one whole segment of it — `medical` in `family_medical_leave`,
+    `dna` in `dna_sequence_length`, `political` in `political_alerts`, `trade`
+    and `union` as a contiguous run in `payroll_trade_union_deduction`,
+    `philosophical` standing alone. They still refuse, and they are here on
+    purpose: leaf L13 owns the false-positive battery
+    (`tests/db/test_art9_false_positives.py`) and decides which of these are
+    narrowed, replaced or accepted. Narrowing further — exact keys only — would
+    delete the evidence L13 needs.
+
+    One row left this test rather than being deleted from it. `grace_period`
+    contains `race` mid-word, which the substring rule read as §5.5's bare `race`
+    and the whole-segment rule does not. It is now asserted to **allow**, in
+    `test_a_key_whose_section_5_5_name_sits_inside_a_word_now_allows` below, so
+    the change is a move with both directions pinned rather than a silent drop.
 
     Note `healthcheck_url` does **not** trip: §5.5 lists `health_status`, not
-    `health`, so a substring match on the shorter word would invent a category
-    entry the spec does not have.
+    `health`, so neither rule invents a category entry the spec does not have.
     """
     result = art9.screen_request({key: "value"})
 
     assert result.categories == (expected_category,), key
     assert result.decision == "refuse", key
+
+
+def test_a_key_whose_section_5_5_name_sits_inside_a_word_now_allows() -> None:
+    """`race` sits inside `grace`, so `grace_period` no longer reads as racial.
+
+    This is the row the whole-segment rule exists to move. Under the substring
+    rule `grace_period` refused as `art9:racial_or_ethnic_origin:field_name`
+    because the bare word `race` sits inside `grace` — and, from the same family,
+    so did `trace_id`, `freight`, `recurring` and `reliability`. §5.5 names `race`
+    as a field name in its own right and that name is **kept**; what changed is
+    that a needle now has to be a whole segment of the key rather than any
+    substring of it.
+
+    Pinned in both directions: the needle still refuses on its own (`race` is a
+    whole segment of itself), and the four open keys leaf L13 names in
+    `OPEN_FALSE_ALARMS` all allow for the same reason. If a future change puts
+    `race` back into substrings, this test fails and so does the battery.
+    """
+    assert art9.screen_request({"grace_period": "value"}).categories == ()
+    assert art9.screen_request({"trace_id": "value"}).categories == ()
+    assert art9.screen_request({"grace_period_days": "value"}).categories == ()
+
+    on_its_own = art9.screen_request({"race": "value"})
+
+    assert on_its_own.categories == ("racial_or_ethnic_origin",)
+    assert on_its_own.reason == "art9:racial_or_ethnic_origin:field_name"
 
 
 @pytest.mark.parametrize(
