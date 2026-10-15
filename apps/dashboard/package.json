@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@digiquant/contract": "*",
     "@digithings/design": "*",
     "@digithings/ui": "*",
     "@luxalgo/vela": "0.8.2",
