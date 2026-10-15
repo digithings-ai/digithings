@@ -1,5 +1,11 @@
+import * as React from "react";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+
+// Test-env only: packages/hero-banner ships no tsconfig, so vitest compiles
+// its web.tsx with classic JSX while production (Next.js) uses automatic.
+// The free `React` name resolves here at render time.
+(globalThis as unknown as Record<string, unknown>).React ??= React;
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { QuantWordmark } from "@/app/_chrome/QuantWordmark";
@@ -56,36 +62,30 @@ describe("digiquant hero play", () => {
     ).toEqual({ live: false, claim: false });
   });
 
-  it("paints the rise on the first server render and holds an idle mark", () => {
+  it("draws the shared DIGIQUANT definition through HeroBanner", () => {
+    const src = readFileSync(new URL("../app/_chrome/QuantWordmark.tsx", import.meta.url), "utf8");
+    expect(src).toContain("@digithings/hero-banner/definitions");
+    expect(src).toContain("DIGIQUANT");
+    expect(src).toContain("@digithings/hero-banner/web");
+    expect(src).toContain("HeroBanner");
+    expect(src).toContain("replayLoading={replay}");
     const html = renderToStaticMarkup(createElement(QuantWordmark));
     expect(html).toContain('aria-label="digiquant"');
-    expect(html).toContain("dq-rise");
-    expect(html).toContain("var(--up)");
-    expect(html).toContain("var(--down)");
-    expect(html).toContain("data-dq-build");
-    expect(html).not.toContain("data-dq-live");
+    expect(html).toContain("<canvas");
     const hero = renderToStaticMarkup(createElement(QuantWordmark, { replay: true }));
-    expect(hero).toContain("data-dq-live");
+    expect(hero).toContain('aria-label="digiquant"');
     const idle = renderToStaticMarkup(createElement(QuantWordmark, { phase: "idle" }));
-    expect(idle).not.toContain("data-dq-build");
-    expect(idle).toContain("opacity:0");
+    expect(idle).toContain('aria-label="digiquant"');
   });
 
-  it("keeps red and green pixels flashing after the build", () => {
-    const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
-    const glint = css.slice(css.indexOf("@keyframes dq-glint"), css.indexOf("@keyframes dq-blink"));
-    expect(glint).toContain("var(--dq-cell");
-    expect(glint).not.toContain("var(--accent)");
-    expect(css).toContain("@keyframes dq-blink");
-    const html = renderToStaticMarkup(createElement(QuantWordmark, { replay: true }));
-    const cells = [...html.matchAll(/<rect [^>]*style="([^"]*)"/g)].map((m) => m[1]);
-    const tones = (name: string) =>
-      new Set(cells.filter((st) => st.includes(name) && st.includes("infinite")).map((st) => /--dq-cell:([^;]+)/.exec(st)?.[1]));
-    expect(tones("dq-glint")).toEqual(new Set(["var(--up)", "var(--down)"]));
-    expect(tones("dq-blink")).toEqual(new Set(["var(--up)", "var(--down)"]));
-    const reduced = css.slice(css.indexOf("prefers-reduced-motion: reduce"));
-    expect(reduced).toContain("[data-dq-anim]");
-    expect(html).toContain("data-dq-anim");
+  it("keeps the shared rise definition carrying both year-round tones", () => {
+    const defs = readFileSync(
+      new URL("../../../packages/hero-banner/src/definitions/index.ts", import.meta.url),
+      "utf8",
+    );
+    expect(defs).toContain('up: { hex: "#3DD6C4"');
+    expect(defs).toContain('down: { hex: "#E5533E"');
+    expect(defs).toContain("seed: 0x9a17");
   });
 
   it("builds the top hero on every load", () => {
