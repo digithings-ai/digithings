@@ -49,7 +49,8 @@ def cache_path(ticker: str, cache_dir: Path | str = DEFAULT_CACHE_DIR) -> Path:
     # the allowlist admits no separators, so a nested path means the validator
     # was bypassed.
     base = os.path.realpath(os.fspath(cache_dir))
-    candidate = os.path.normpath(os.path.join(base, f"{ticker}.csv"))
+    logical = os.path.normpath(os.path.join(base, f"{ticker}.csv"))
+    candidate = os.path.realpath(logical)
     prefix = base if base.endswith(os.sep) else base + os.sep
     if not candidate.startswith(prefix) or os.path.dirname(candidate) != base:
         raise _unsafe_ticker(ticker)
