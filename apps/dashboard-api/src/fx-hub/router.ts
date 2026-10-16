@@ -5,9 +5,8 @@
  * the pathname. The status codes live in the handlers; this file only owns
  * the path table.
  *
- * NOT WIRED into `src/index.ts` on purpose. Mounting it is a cutover step
- * that needs the key dictionaries and the sync secret bound on the worker.
- * See README.md.
+ * `src/index.ts` dispatches `FX_HUB_PATHS` here. The key dictionaries and
+ * the sync secret are worker secrets, not wrangler vars. See README.md.
  */
 
 import type { FxHubEnv } from "./env";

@@ -5,8 +5,10 @@ import { WEB_SLOTS } from "../components/desk/web-slots";
 import { deskHref } from "../components/desk/paths";
 import {
   DASHBOARD_ACCOUNT_PATHS,
+  DASHBOARD_FX_HUB_PATHS,
   LEGACY_DESK_PATHS,
   RETIRED_DASHBOARD_PATHS,
+  ROUTE_DASHBOARD_FX_HUB_TO_APP,
   legacyDashboardCloudflareLines,
   legacyDashboardRedirects,
   legacyDashboardTarget,
@@ -22,10 +24,19 @@ describe("legacy dashboard redirects", () => {
     expect(LEGACY_DESK_PATHS).toHaveLength(expected.length);
   });
 
-  it("sends the old root to /app and known paths through deskHref", () => {
-    expect(legacyDashboardTarget("/dashboard")).toBe("/app");
-    expect(legacyDashboardTarget("/dashboard/")).toBe("/app");
-    expect(legacyDashboardTarget("/dashboard/?tab=brief")).toBe("/app");
+  it("keeps the dashboard root and FX Hub on apps/dashboard", () => {
+    expect(ROUTE_DASHBOARD_FX_HUB_TO_APP).toBe(false);
+    expect(DASHBOARD_FX_HUB_PATHS).toEqual(["/twelve-x"]);
+    expect(legacyDashboardTarget("/dashboard")).toBeNull();
+    expect(legacyDashboardTarget("/dashboard/")).toBeNull();
+    expect(legacyDashboardTarget("/dashboard/?invite=fx-hub-desk-token")).toBeNull();
+    expect(legacyDashboardTarget("/dashboard/?tab=brief")).toBeNull();
+    expect(legacyDashboardTarget("/dashboard/twelve-x")).toBeNull();
+    expect(legacyDashboardTarget("/dashboard/twelve-x/")).toBeNull();
+    expect(legacyDashboardTarget("/dashboard/twelve-x/metrics")).toBeNull();
+  });
+
+  it("sends known desk paths through deskHref", () => {
     for (const path of LEGACY_DESK_PATHS) {
       expect(legacyDeskHref(path)).toBe(deskHref(path));
       expect(legacyDashboardTarget(`/dashboard${path}`)).toBe(deskHref(path));
@@ -37,7 +48,7 @@ describe("legacy dashboard redirects", () => {
 
   it("sends retired pages to /app and leaves account pages and other sites alone", () => {
     expect(legacyDashboardTarget("/dashboard/portfolio/performance")).toBe("/app");
-    expect(legacyDashboardTarget("/dashboard/twelve-x/")).toBe("/app");
+    expect(RETIRED_DASHBOARD_PATHS).not.toContain("/twelve-x");
     for (const path of RETIRED_DASHBOARD_PATHS) {
       expect(legacyDashboardTarget(`/dashboard${path}`)).toBe("/app");
     }
@@ -64,6 +75,14 @@ describe("legacy dashboard redirects", () => {
       expect(sources).not.toContain(`/dashboard${path}/`);
       expect(text).not.toMatch(new RegExp(`^/dashboard${path}/? `, "m"));
     }
+    for (const path of DASHBOARD_FX_HUB_PATHS) {
+      expect(sources).not.toContain(`/dashboard${path}`);
+      expect(sources).not.toContain(`/dashboard${path}/`);
+      expect(text).not.toMatch(new RegExp(`^/dashboard${path}/? `, "m"));
+    }
+    expect(sources).not.toContain("/dashboard");
+    expect(sources).not.toContain("/dashboard/");
+    expect(text).not.toMatch(/^\/dashboard\/? /m);
     for (const path of RETIRED_DASHBOARD_PATHS) {
       expect(LEGACY_DESK_PATHS).not.toContain(path);
       expect(DASHBOARD_ACCOUNT_PATHS).not.toContain(path);
@@ -74,19 +93,19 @@ describe("legacy dashboard redirects", () => {
     const rules = legacyDashboardRedirects();
     const portfolio = rules.find((rule) => rule.source === "/dashboard/portfolio");
     const holdings = rules.find((rule) => rule.source === "/dashboard/portfolio/holdings");
-    const root = rules.find((rule) => rule.source === "/dashboard");
-    const slash = rules.find((rule) => rule.source === "/dashboard/");
     const research = rules.find((rule) => rule.source === "/dashboard/research");
     const vela = rules.find((rule) => rule.source === "/dashboard/research/vela-spike");
+    const brief = rules.find((rule) => rule.source === "/app/brief/");
     expect(portfolio).toEqual({
       source: "/dashboard/portfolio",
       destination: "/app/portfolio/",
       permanent: true,
     });
     expect(holdings?.destination).toBe("/app/portfolio/holdings/");
-    expect(root).toEqual({ source: "/dashboard", destination: "/app", permanent: true });
-    expect(slash).toEqual({ source: "/dashboard/", destination: "/app", permanent: true });
-    expect(rules.at(-1)).toEqual(slash);
+    expect(rules.find((rule) => rule.source === "/dashboard")).toBeUndefined();
+    expect(rules.find((rule) => rule.source === "/dashboard/")).toBeUndefined();
+    expect(rules.find((rule) => rule.source === "/dashboard/twelve-x")).toBeUndefined();
+    expect(rules.at(-1)).toEqual(brief);
     expect(rules.indexOf(holdings!)).toBeLessThan(rules.indexOf(portfolio!));
     expect(rules.indexOf(vela!)).toBeLessThan(rules.indexOf(research!));
   });
@@ -95,9 +114,24 @@ describe("legacy dashboard redirects", () => {
     const text = readFileSync(new URL("../public/_redirects", import.meta.url), "utf8");
     const lines = legacyDashboardCloudflareLines();
     expect(lines[0]?.startsWith("/dashboard/portfolio/attribution ")).toBe(true);
-    expect(lines.at(-1)).toBe("/dashboard/ /app 308");
+    expect(lines.at(-1)).toBe("/dashboard/why/ /app 308");
+    expect(lines).not.toContain("/dashboard /app 308");
+    expect(lines).not.toContain("/dashboard/twelve-x /app 308");
     const block = lines.join("\n");
     expect(text).toContain(block);
+  });
+
+  it("routes dashboard root and FX Hub to /app only when the later flag is on", () => {
+    const later = { routeFxHubToApp: true };
+    expect(legacyDashboardTarget("/dashboard", later)).toBe("/app");
+    expect(legacyDashboardTarget("/dashboard/", later)).toBe("/app");
+    expect(legacyDashboardTarget("/dashboard/twelve-x/", later)).toBe("/app");
+    expect(legacyDashboardTarget("/dashboard/twelve-x/metrics", later)).toBe("/app");
+    const sources = legacyDashboardRedirects(later).map((rule) => rule.source);
+    expect(sources).toContain("/dashboard");
+    expect(sources).toContain("/dashboard/twelve-x");
+    expect(legacyDashboardCloudflareLines(later)).toContain("/dashboard/ /app 308");
+    expect(legacyOlympusCloudflareLines(later)).toContain("/olympus/twelve-x /app/ 308");
   });
 });
 
@@ -110,6 +144,15 @@ describe("legacy olympus redirects", () => {
       expect(destination).not.toBe("/dashboard/");
       expect(destination?.startsWith("/dashboard")).toBe(false);
     }
+  });
+
+  it("keeps FX Hub bookmarks on /dashboard, ahead of the catch-all splat", () => {
+    const lines = legacyOlympusCloudflareLines();
+    expect(lines).toContain("/olympus/twelve-x /dashboard/twelve-x 308");
+    expect(lines).toContain("/olympus/twelve-x/ /dashboard/twelve-x/ 308");
+    expect(lines).toContain("/olympus/twelve-x/* /dashboard/twelve-x/:splat 308");
+    const splatIndex = lines.indexOf("/olympus/* /app/ 308");
+    expect(lines.indexOf("/olympus/twelve-x/* /dashboard/twelve-x/:splat 308")).toBeLessThan(splatIndex);
   });
 
   it("keeps account paths on /dashboard, where apps/dashboard serves them with no further redirect", () => {
