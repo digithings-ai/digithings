@@ -577,3 +577,44 @@ def test_the_python_brief_rows_supply_every_required_column():
     for row in rows:
         missing = set(DOCUMENTS_REQUIRED) - set(row)
         assert not missing, f"brief row omits required column(s): {sorted(missing)}"
+
+
+def test_the_client_path_sends_every_required_documents_column(monkeypatch):
+    """`tenants.apply` projects each brief row before the upsert.
+
+    `brief_documents` already carried `title`, but the projection in
+    `tenants.apply` dropped it, so the client path still failed with
+    `null value in column "title"` against a migrated database.
+    """
+    import supabase
+
+    from scripts.seed import tenants
+
+    sent: dict[str, list[dict]] = {}
+
+    class _Table:
+        def __init__(self, name):
+            self.name = name
+
+        def upsert(self, rows, on_conflict):
+            sent[self.name] = rows if isinstance(rows, list) else [rows]
+            return self
+
+        def execute(self):
+            return type("R", (), {"data": sent[self.name]})()
+
+    class _Client:
+        def table(self, name):
+            return _Table(name)
+
+    monkeypatch.setattr(supabase, "create_client", lambda url, key: _Client())
+    tenants.apply(
+        supabase_url="http://127.0.0.1:54321",
+        service_key="test-only",
+        documents=brief_documents(),
+    )
+    # Control: the fake really captured the documents upsert.
+    assert sent.get("documents"), "documents upsert was not captured"
+    for row in sent["documents"]:
+        missing = set(DOCUMENTS_REQUIRED) - set(row)
+        assert not missing, f"client-path documents row omits: {sorted(missing)}"
