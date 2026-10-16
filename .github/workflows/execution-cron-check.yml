@@ -54,6 +54,7 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
         with:
+          version: "0.12.24"
           enable-cache: true
 
       # supabase extra arrives via research. NautilusTrader stays out — this job

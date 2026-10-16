@@ -647,11 +647,11 @@ def main(argv: list[str] | None = None) -> int:
         try:
             print(resolve_watchdog_issue(args.repo, token, dry_run=args.dry_run))
         except GateCheckFailed as exc:
-            # A gate that recovered but whose issue cannot be closed is worth a
-            # non-zero exit -- the monitoring state is inconsistent -- but it must
-            # not be reported as a stall.
-            print(f"recovery note failed: {exc}", file=sys.stderr)
-            return 2
+            # Best-effort recovery note (DIG-3824): the gate itself is healthy,
+            # so a failed issue lookup/close — e.g. a transient GraphQL rate
+            # limit on `gh issue list` — must not fail the watchdog run. Warn
+            # and exit 0; the next tick retries the close.
+            print(f"recovery note failed (best-effort, gate healthy): {exc}", file=sys.stderr)
         return 0
 
     body = render_issue_body(
