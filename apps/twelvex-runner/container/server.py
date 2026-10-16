@@ -22,7 +22,6 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 HOST = "0.0.0.0"
 PORT = 8080
 LOG_TAIL = 4000
-BUCKETS = {"intraday", "daily", "weekly", "quarterly"}
 _LOCK = threading.Lock()
 
 _SECRET = re.compile(
@@ -47,9 +46,16 @@ def command_for(route: str, bucket: str | None) -> list[str]:
     if route == "heartbeat":
         return ["python", "-m", "twelve_x.scripts.primemarket_session_heartbeat"]
     if route == "ingest":
-        if bucket not in BUCKETS:
-            raise ValueError("invalid bucket")
-        return ["python", "-m", "twelve_x.scripts.ingest_market_context", bucket]
+        # A request string never becomes an argument. Each bucket is its own literal.
+        if bucket == "intraday":
+            return ["python", "-m", "twelve_x.scripts.ingest_market_context", "intraday"]
+        if bucket == "daily":
+            return ["python", "-m", "twelve_x.scripts.ingest_market_context", "daily"]
+        if bucket == "weekly":
+            return ["python", "-m", "twelve_x.scripts.ingest_market_context", "weekly"]
+        if bucket == "quarterly":
+            return ["python", "-m", "twelve_x.scripts.ingest_market_context", "quarterly"]
+        raise ValueError("invalid bucket")
     raise ValueError("unknown route")
 
 
