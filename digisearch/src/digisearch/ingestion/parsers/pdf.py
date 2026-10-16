@@ -31,7 +31,7 @@ except ImportError:
         _PDF_AVAILABLE = True
         _PDF_IMPL = "pymupdf"
     except ImportError:
-        pass
+        logger.debug("neither pdfplumber nor pymupdf installed; PDF parsing unavailable")
 
 # OCR support: requires pytesseract + pdf2image. Enabled by DIGISEARCH_OCR_ENABLED=true.
 _OCR_ENABLED = os.environ.get("DIGISEARCH_OCR_ENABLED", "").lower() in ("1", "true", "yes")

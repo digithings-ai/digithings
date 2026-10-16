@@ -101,8 +101,8 @@ def _maybe_wrap_otel(fn: F, name: str) -> F:
             except Exception:
                 try:
                     span.set_status(StatusCode.ERROR)
-                except Exception:
-                    pass
+                except Exception as status_exc:
+                    logger.debug("OTel span error-status failed for %r: %s", name, status_exc)
                 raise
 
     return _wrapper  # type: ignore[return-value]
