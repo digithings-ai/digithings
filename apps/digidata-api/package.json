@@ -1,5 +1,13 @@
 {
   "name": "digidata-api",
+  "description": "Worker data API over D1 with a Supabase fallback.",
+  "license": "MIT",
+  "homepage": "https://digithings.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/digithings-ai/digithings.git",
+    "directory": "apps/digidata-api"
+  },
   "private": true,
   "type": "module",
   "scripts": {
