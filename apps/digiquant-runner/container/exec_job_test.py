@@ -58,6 +58,7 @@ def main() -> int:
     if "fetch-macro" in flat:
         raise SystemExit("prices-fx-candles must not call fetch-macro")
 
+    _check_run_id_stays_in_status_dir()
     _check_phase2(commands)
     _check_busy_gate_and_publish_bound()
     _check_publish_if_present(commands)
@@ -73,6 +74,23 @@ def main() -> int:
             raise SystemExit(f"{mod_name} failed: {code}")
     print("ok")
     return 0
+
+
+def _check_run_id_stays_in_status_dir() -> None:
+    safe = exec_job._status_path("11111111-1111-1111-1111-111111111111")
+    if safe.parent != exec_job.STATUS_DIR:
+        raise SystemExit(f"uuid status path left STATUS_DIR: {safe}")
+    log = exec_job._log_path("run-1")
+    if log.parent != exec_job.STATUS_DIR or log.name != "run-1.log":
+        raise SystemExit(f"log path escaped: {log}")
+    for bad in ("../etc/passwd", "/tmp/x", "..", "a/b", "a..b", "", ".hidden"):
+        try:
+            exec_job._status_path(bad)
+        except RuntimeError as exc:
+            if "invalid run_id" not in str(exc):
+                raise
+            continue
+        raise SystemExit(f"unsafe run_id accepted: {bad!r}")
 
 
 def _check_busy_gate_and_publish_bound() -> None:
