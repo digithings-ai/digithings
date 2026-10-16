@@ -452,22 +452,21 @@ category_order: tuple[str, ...] = (
     "sex_life_or_sexual_orientation",
 )
 
-#: §5.5 field names per category, matched as **substrings** of the lowercased key.
+#: A §5.5 field name matches on whole segments of the key, not on any substring
+#: of it. Develop's rule was a plain lowercased substring; that made `race` fire
+#: on `grace_period`, `trace_id`, `freight`, `recurring` and `reliability`, and
+#: §5.5 names no such thing. `field_names` is unchanged — the list is the spec
+#: table — so every pinned field name still trips on itself; only the way a name
+#: is located in a key changed. `_match_key` owns the rule and
+#: `test_the_section_5_5_names_these_keys_carry_still_refuse` /
+#: `test_a_key_whose_section_5_5_name_sits_inside_a_word_now_allows` pin both
+#: directions.
 #:
-#: This is exactly what `digibase.audit._key_is_sensitive` does — the technique
-#: §5.5 names as already proven in this codebase — so the substring rule is
-#: deliberately **not** narrowed to exact keys or to word boundaries. It
-#: over-triggers, and that is the accepted trade: `medical_billing_code`,
-#: `dna_sequence_length`, `political_alerts` and `grace_period` (contains
-#: `race`) all trip. Leaf L13 owns the false-positive battery
-#: (`tests/db/test_art9_false_positives.py`) and settles which of those to narrow
-#: or accept; narrowing here would pre-empt it and silently change the contract.
-#:
-#: The substring rule cuts both ways, and these stay **allowed** because §5.5
-#: names the longer form and not the shorter substring: `healthcheck_url` (the
-#: table lists `health_status`, not `health`), `trades` (the table lists
-#: `trade_union`, not `trade`) and `undiagnosed` (it lists `diagnosis`, not
-#: `diagnos`). Pinned by
+#: The rule cuts both ways, and these stay **allowed** because §5.5 names the
+#: longer form and not the shorter word: `healthcheck_url` (the table lists
+#: `health_status`, not `health`), `trades` (the table lists `trade_union`, not
+#: `trade`), `membership_tier` (`union_membership`), `religiosity` (`religion`)
+#: and `undiagnosed` (`diagnosis`, not `diagnos`). Pinned by
 #: `test_keys_whose_substrings_are_not_section_5_5_names_stay_allowed`.
 field_names: Mapping[str, tuple[str, ...]] = MappingProxyType(
     {
@@ -516,8 +515,18 @@ _genotype_call_re = re.compile(
     r"|c\.[0-9]+(?:_[0-9]*)?(?:del|dup|ins|inv|[acgt]>)[a-z]*",
     re.IGNORECASE,
 )
+#: A biometric template descriptor. `face` and `voice` were dropped: `face
+#: template` and `voice template` are how a speech or video pipeline names a
+#: rendering profile, and leaf L13's ordinary-business corpus had exactly that —
+#: a runbook row for a speech-synthesis profile refusing as
+#: `art9:biometric:biometric_template`. The modality words that survive
+#: (`biometric`, `fingerprint`, `finger print`, `iris`) each name a data
+#: template rather than a profile. The §5.5 biometric *field* name is untouched
+#: and `fingerprint descriptor` still refuses, pinned in
+#: `test_art9_false_positives.py::test_the_mis_specified_values_are_true_positives`
+#: and in `test_identifier_patterns`.
 _biometric_template_re = re.compile(
-    r"\b(?:(?:biometric|fingerprint|finger\s+print|face|iris|voice)"
+    r"\b(?:(?:biometric|fingerprint|finger\s+print|iris)"
     r"\s+(?:template|descriptor|embedding|vector)"
     r"|minutiae)\b",
     re.IGNORECASE,
@@ -575,20 +584,72 @@ class ScreenResult:
     exception_ref: str | None = None
 
 
-def _match_key(key: str) -> tuple[str, ...]:
-    """Categories whose §5.5 field names occur as substrings of ``key``.
+#: A segment boundary: a letter next to a digit, in either order. Underscores
+#: are handled separately because they are the other boundary.
+_letter_digit_boundary_re = re.compile(r"(?<=[a-z])(?=[0-9])|(?<=[0-9])(?=[a-z])")
 
-    Lowercased substring matching, mirroring `digibase.audit._key_is_sensitive`.
+
+def _segments(text: str) -> tuple[str, ...]:
+    """``text`` lowercased and cut into whole segments.
+
+    Two boundaries, and only two. An underscore separates segments by
+    convention — ``Patient_DIAGNOSIS_CODE`` is three. The letter/digit
+    boundary is what keeps a bare-word needle matchable next to an index:
+    ``dna`` is a whole segment of ``dna2_sample`` only because the split puts
+    the digit in its own segment, and is *not* one inside ``xdna_sample``.
+    No boundary inside a run of letters, so nothing here is a word-stemmer and
+    the rule stays the shape §5.5 is written in.
+    """
+    segments: list[str] = []
+    for chunk in text.lower().split("_"):
+        segments.extend(piece for piece in _letter_digit_boundary_re.split(chunk) if piece)
+    return tuple(segments)
+
+
+#: Each §5.5 field name cut into its segments once, at import, so `_match_key`
+#: compares segment tuples instead of re-splitting every field name per key.
+#: Derived from `field_names` and never edited beside it: the §5.5 list is the
+#: spec table and this is only its shape.
+_needle_segments: Mapping[str, tuple[tuple[str, ...], ...]] = MappingProxyType(
+    {
+        category: tuple(_segments(field) for field in field_names[category])
+        for category in category_order
+    }
+)
+
+
+def _match_key(key: str) -> tuple[str, ...]:
+    """Categories whose §5.5 field names appear as whole segments of ``key``.
+
+    A field name matches when its own segments occur in the key's segments, in
+    order and adjacently. So `medical` still trips `family_medical_leave` and
+    `dna` still trips `dna_sequence_length`; the run `trade`+`union` still trips
+    `payroll_trade_union_deduction`; and `race` no longer trips `grace_period`,
+    where it sits inside `grace` rather than standing as its own segment.
+
+    This narrows develop's plain-substring rule — and with it
+    `digibase.audit._key_is_sensitive`, which used the same trick — without
+    touching the §5.5 list itself, so every pinned field name still trips on
+    itself and nothing is lost that the spec actually names. It is deliberately
+    not an exact-key match either: leaf L13
+    (`tests/db/test_art9_false_positives.py`) owns what still over-triggers.
+
     Every match is returned rather than the first: ``medical_religion`` really
     does carry a health category *and* a belief, and reporting one of them would
     understate what the payload holds.
     """
-    lowered = key.lower()
-    return tuple(
-        category
-        for category in category_order
-        if any(field in lowered for field in field_names[category])
-    )
+    segments = _segments(key)
+    matched: list[str] = []
+    for category in category_order:
+        for needle in _needle_segments[category]:
+            span = len(needle)
+            if any(
+                segments[start : start + span] == needle
+                for start in range(len(segments) - span + 1)
+            ):
+                matched.append(category)
+                break
+    return tuple(matched)
 
 
 def _match_value(value: str) -> tuple[tuple[str, str], ...]:

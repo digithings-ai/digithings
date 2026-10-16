@@ -63,7 +63,11 @@ def build_ticket_chunks(
     customer_name: str | None = None,
     snapshot_date: str = SNAPSHOT_DATE,
 ) -> list[Any]:
-    """Build one Chunk per article with a body (full metadata, no masking)."""
+    """Build one Chunk per article with the body and metadata unchanged.
+
+    No PII masking: the invite link is the only gate (Chris, 9 Oct, reaffirmed 16 Oct).
+    Names, emails and phone numbers stay in the chunk.
+    """
     from digisearch.core.models import Chunk
 
     from scripts.zammad_mcp.formatting import _field as _text
