@@ -421,6 +421,7 @@ workers:
   - apps/digitrace-langfuse/**
   - apps/digichat-cloudflare/**
   - apps/digithings-stack-cloudflare/**
+  - apps/twelvex-runner/**
   - apps/**/wrangler.toml
   - package.json
   - package-lock.json

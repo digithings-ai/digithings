@@ -254,6 +254,7 @@ jobs:
               - 'apps/digitrace-langfuse/**'
               - 'apps/digichat-cloudflare/**'
               - 'apps/digithings-stack-cloudflare/**'
+              - 'apps/twelvex-runner/**'
               - 'apps/**/wrangler.toml'
               - 'package.json'
               - 'package-lock.json'
@@ -666,6 +667,7 @@ jobs:
           - digitrace-langfuse
           - digichat-cloudflare
           - digithings-stack-cloudflare
+          - twelvex-runner
     steps:
       - uses: actions/checkout@v4
 

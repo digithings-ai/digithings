@@ -50,3 +50,52 @@ def test_worker_build_gated_on_workers_output() -> None:
 
 def test_standalone_workflow_deleted() -> None:
     assert not STANDALONE.exists(), "build-cloudflare-workers.yml still exists"
+
+
+def _worker_build_runs() -> list[str]:
+    steps = _ci()["jobs"]["worker-build"]["steps"]
+    return [step["run"] for step in steps if isinstance(step.get("run"), str)]
+
+
+def test_worker_build_runs_dry_run() -> None:
+    runs = _worker_build_runs()
+    assert runs, "worker-build has no run: steps to pin"
+    assert any("--dry-run" in block for block in runs), (
+        "worker-build must pass --dry-run (verified ci.yml:693); "
+        "without it the gate needs Cloudflare credentials"
+    )
+
+
+def test_worker_build_invokes_wrangler() -> None:
+    runs = _worker_build_runs()
+    assert runs, "worker-build has no run: steps to pin"
+    assert any("wrangler deploy" in block for block in runs), (
+        "worker-build must invoke wrangler deploy (verified ci.yml:693)"
+    )
+
+
+def test_worker_build_needs_no_secrets() -> None:
+    text = CI_YML.read_text(encoding="utf-8")
+    start = text.index("worker-build:")
+    block = text[start : text.index("actionlint:", start)]
+    assert "secrets." not in block, (
+        "worker-build must stay credential-free; a secrets.* ref breaks fork PRs"
+    )
+
+
+def test_worker_build_matrix_matches_derived_workers() -> None:
+    import json
+
+    matrix = set(_ci()["jobs"]["worker-build"]["strategy"]["matrix"]["app"])
+    assert matrix, "worker-build matrix.app is empty"
+    derived = set()
+    for manifest_path in sorted((REPO_ROOT / "apps").glob("*/package.json")):
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if (manifest_path.parent / "wrangler.toml").is_file() and (
+            "wrangler" in manifest.get("devDependencies", {})
+        ):
+            derived.add(manifest_path.parent.name)
+    assert derived, "derivation is empty; the comparison below would pass vacuously"
+    assert matrix == derived, (
+        f"matrix {sorted(matrix)} != derived {sorted(derived)}"
+    )
