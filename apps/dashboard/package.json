@@ -1,5 +1,13 @@
 {
   "name": "dashboard",
+  "description": "Web dashboard for digiquant.",
+  "license": "MIT",
+  "homepage": "https://digithings.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/digithings-ai/digithings.git",
+    "directory": "apps/dashboard"
+  },
   "version": "1.0.0",
   "private": true,
   "scripts": {

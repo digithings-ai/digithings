@@ -1107,7 +1107,7 @@ def migrate_row(row: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], List[str
     return new_payload, []
 
 
-# Must match chk_documents_doc_type (see supabase/migrations/014_documents_research_delta_doc_type.sql, 019).
+# Must match chk_documents_doc_type (see supabase/migrations/engine/014_documents_research_delta_doc_type.sql, engine/019).
 DOC_TYPE_DB_COLUMN: Dict[str, str] = {
     "digest_snapshot": "Daily Digest",
     "delta_digest": "Daily Delta",

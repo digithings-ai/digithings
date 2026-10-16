@@ -608,7 +608,7 @@ def azure_status() -> dict[str, bool | str]:
     except ImportError:
         return {"configured": False, "message": "Install digisearch[azure] for Azure backend"}
     except (OSError, ValueError, RuntimeError, TypeError) as e:
-        return {"configured": True, "reachable": False, "message": str(e)[:200]}
+        return {"configured": True, "reachable": False, "message": type(e).__name__}
 
 
 def _reject_raw_filter_if_disallowed(filter_raw: str | None, index_name: str | None) -> None:
