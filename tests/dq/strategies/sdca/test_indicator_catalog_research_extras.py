@@ -213,17 +213,25 @@ class TestDormantNames:
         )
         assert name not in published
 
-    def test_published_tuples_are_exactly_develops(self) -> None:
-        assert MACRO_INDICATOR_NAMES == ("m2", "rs_eth", "dxy")
-        assert PRICE_OSCILLATOR_NAMES == ("weekly_rsi", "weekly_macd", "sma_band")
-        assert EXTRA_INDICATOR_NAMES == (
+    def test_published_tuples_are_pinned(self) -> None:
+        """develop's BTC tuples plus the gold_sdca macro family (#4804, DIG-1581)."""
+        macro = (
             "m2",
             "rs_eth",
             "dxy",
-            "weekly_rsi",
-            "weekly_macd",
-            "sma_band",
+            "uup",
+            "gvz",
+            "walcl",
+            "hy_oas",
+            "ig_oas",
+            "breakeven_5y",
+            "nfci",
+            "gdx_gld",
+            "gld_slv",
         )
+        assert MACRO_INDICATOR_NAMES == macro
+        assert PRICE_OSCILLATOR_NAMES == ("weekly_rsi", "weekly_macd", "sma_band")
+        assert EXTRA_INDICATOR_NAMES == macro + PRICE_OSCILLATOR_NAMES
 
 
 class TestDisplayNames:
