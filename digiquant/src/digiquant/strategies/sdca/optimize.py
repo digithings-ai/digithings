@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import uuid
 from datetime import date
 from pathlib import Path
@@ -177,10 +178,15 @@ def load_sdca_ohlcv(
 
 
 def _first_existing(root: Path, names: tuple[str, ...]) -> Path | None:
+    real_base = os.path.realpath(os.path.abspath(os.fspath(root)))
+    base_prefix = real_base if real_base.endswith(os.sep) else real_base + os.sep
     for name in names:
-        candidate = root / name
-        if candidate.exists():
-            return candidate
+        candidate = os.path.realpath(os.path.normpath(os.path.join(real_base, name)))
+        if candidate != real_base and not candidate.startswith(base_prefix):
+            continue
+        candidate_path = Path(candidate)
+        if candidate_path.exists():
+            return candidate_path
     return None
 
 
