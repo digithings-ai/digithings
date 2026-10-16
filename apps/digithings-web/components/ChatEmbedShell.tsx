@@ -496,6 +496,8 @@ export function ChatEmbedShell({
             // Facts are the deployment's real values (never invented counts):
             // both live tenants run the digigraph backend.
             variant="tooltask"
+            // The last rows wait on real edges: "wake up services" on the
+            // warm-up probe, "wire in the backend" on digichat:ready.
             ready={revealed}
             readyEdge={revealed}
             onSettled={() => {}}
