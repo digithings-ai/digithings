@@ -14,7 +14,7 @@ from digiquant.execution.vendor_secret_files import (
     function_deploy_argv,
     inspect_vendor_secret_files,
     secrets_set_argv,
-    write_vendor_secret_env_file,
+    vendor_secret_env_payload,
 )
 
 pytestmark = pytest.mark.unit
@@ -89,7 +89,7 @@ def test_check_exits_2_when_files_missing(tmp_path: Path) -> None:
         repo_root=tmp_path,
         apply=False,
         log=logs.append,
-        run=lambda _argv: pytest.fail("check must not invoke supabase"),
+        run=lambda _argv, _payload: pytest.fail("check must not invoke supabase"),
     )
     assert code == EXIT_VENDOR_FILES_OR_KEYS_MISSING
     assert any("missing files" in line for line in logs)
@@ -110,36 +110,40 @@ def test_apply_refuses_without_files(tmp_path: Path) -> None:
 
 def test_apply_runs_secrets_set_and_deploys(tmp_path: Path) -> None:
     _write_complete(tmp_path)
-    captured: list[list[str]] = []
+    captured: list[tuple[list[str], str]] = []
     logs: list[str] = []
     code = run_vendor_secret_apply(
         repo_root=tmp_path,
         apply=True,
         log=logs.append,
-        run=lambda argv: captured.append(list(argv)),
+        run=lambda argv, payload: captured.append((list(argv), payload)),
     )
     assert code == 0
-    assert captured[0][:4] == ["npx", "supabase", "secrets", "set"]
-    assert any(item.startswith("--env-file=") for item in captured[0])
-    assert not any("sk_test_not_a_real_key" in item for item in captured[0])
-    names = [cmd[4] for cmd in captured[1:] if len(cmd) > 4]
+    assert captured[0][0][:4] == ["npx", "supabase", "secrets", "set"]
+    assert "--env-file=/dev/stdin" in captured[0][0]
+    assert not any("sk_test_not_a_real_key" in item for item in captured[0][0])
+    assert "sk_test_not_a_real_key" not in captured[0][0]
+    assert "STRIPE_SECRET_KEY=sk_test_not_a_real_key" in captured[0][1].splitlines()
+    assert "whsec_not_a_real_secret" not in " ".join(captured[0][0])
+    assert "STRIPE_WEBHOOK_SECRET=whsec_not_a_real_secret" in captured[0][1].splitlines()
+    names = [cmd[4] for cmd, _ in captured[1:] if len(cmd) > 4]
     assert "stripe-webhook" in names
     assert "settings" in names
-    webhook = next(cmd for cmd in captured if "stripe-webhook" in cmd)
+    webhook = next(cmd for cmd, _ in captured if "stripe-webhook" in cmd)
     assert "--no-verify-jwt" in webhook
     joined_logs = "\n".join(logs)
     assert "sk_test_not_a_real_key" not in joined_logs
     assert "whsec_not_a_real_secret" not in joined_logs
+    assert list((tmp_path / ".local" / "secrets").glob(".vendor-secret-apply-*")) == []
 
 
 def test_argv_builders_pin_core_project(tmp_path: Path) -> None:
-    env_file = tmp_path / "vendor.env"
-    write_vendor_secret_env_file({"STRIPE_SECRET_KEY": "x"}, env_file)
-    argv = secrets_set_argv(env_file)
+    payload = vendor_secret_env_payload({"STRIPE_SECRET_KEY": "x"})
+    assert payload == "STRIPE_SECRET_KEY=x\n"
+    argv = secrets_set_argv()
     assert "--project-ref=rwagjbkvxkdwqmouagad" in argv
-    assert f"--env-file={env_file}" in argv
+    assert "--env-file=/dev/stdin" in argv
     assert "STRIPE_SECRET_KEY=x" not in argv
-    assert env_file.stat().st_mode & 0o777 == 0o600
     deploy = function_deploy_argv("settings")
     assert "--no-verify-jwt" not in deploy
     assert function_deploy_argv("stripe-webhook")[-1] == "--no-verify-jwt"
