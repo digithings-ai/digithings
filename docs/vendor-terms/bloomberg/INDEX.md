@@ -1,7 +1,7 @@
 # Bloomberg — terms record
 
 **Vendor:** Bloomberg L.P. ("BLP")
-**Classification:** **pending Security** — see [Classification status](#classification-status)
+**Classification:** **Prohibited absent prior written consent (Counsel DIG-3600 confirms Q1b); entitlement carve-out Unclear pending the unread agreement (Counsel DIG-3600 Q1a)** — see [Classification status](#classification-status)
 **Record opened:** 2026-10-06 · **CTO**
 **Related:** DIG-1318 · DIG-503 (publication freeze, PrimeMarket) · DIG-461 (Counsel memo)
 
@@ -143,18 +143,50 @@ entitlement would permit, because no agreement has been sought or read.
 
 ## Classification status
 
-**Pending Security.** Clauses are recorded, quoted and hashed. Nobody has signed
-a classification. Security owns that step (DIG-1318 acceptance criterion 3);
-Counsel takes anything Unclear or Prohibited before implementation.
+**Classified by Security, 2026-10-14 (DIG-1463).** Clauses recorded, quoted and
+hashed 2026-10-06; this section signs the classification under DIG-1318
+acceptance criterion 3.
 
-Two questions are already shaped for whoever picks this up:
+- **The proposed shape — source market data from Bloomberg and embed/showcase it
+  in our product — is Prohibited absent a written Bloomberg agreement.** It
+  collides with three named clauses at once: §3 requires prior express written
+  consent for any "scraper, robot, bot, spider, data mining, computer code, or
+  any other automate device"; §4 grants no rights beyond use in accordance with
+  the ToS; and the redistribution clause ("You may not recirculate,
+  redistribute or publish the analysis and presentation included in the Service
+  without BLP's prior written consent") plus the competing-use prohibition bar
+  the embed-and-showcase shape. No integration exists, no credential is held,
+  and none may be built on this shape without the agreement.
+- **Whether a contractually-granted entitlement carves the shape out is Unclear
+  → Counsel.** Bloomberg's developer portal (`https://developer.bloomberg.com/`)
+  grants access by entitlement agreement, not self-service. Two questions go to
+  Counsel with the record:
+  - Does §3's "any other automate device" reach an entitled,
+    contractually-granted API pull, or does an entitlement carve it out? The
+    answer is in the entitlement agreement, not in the public ToS.
+  - Does the proposed "showcase their product and my product, and embed it"
+    shape survive the competing-use prohibition and the redistribution
+    restriction without written consent?
+- **Scope note:** the one `bloomberg.com` news-retrieval domain in
+  `search_domains.yaml` (scoped web-grounding search, not a data feed) is not
+  the shape classified here and is not cleared by this section either; whether
+  provider retrieval against a named third party is attributable to us is a
+  separate open Security call.
 
-- Does §3's "any other automate device" reach an entitled, contractually-granted
-  API pull, or does an entitlement carve it out? The answer is in the
-  entitlement agreement, not in the public ToS.
-- Does the proposed "showcase their product and my product, and embed it" shape
-  survive §3's competing-use prohibition and §4's redistribution restriction
-  without written consent?
+**Counsel recorded position (DIG-3600, 2026-10-14, no outreach, no new primary
+retrieval; positions rest on the quoted clauses above):**
+- **Q1a — entitlement carve-out: UNCLEAR.** CONFIRMED that the public ToS alone
+  cannot answer it: §3 is broad enough to reach a programmatic pull, §4 grants
+  no API entitlement, and the operative Data Terms
+  (`https://data.bloomberg.com/tos`, JS-gated, unread by anyone here) plus any
+  signed entitlement agreement are the governing documents. No implementation
+  may assume a carve-out. Changes only when the signed entitlement / Data Terms
+  text is read.
+- **Q1b — embed-and-showcase without consent: PROHIBITED absent Bloomberg's
+  prior written consent.** Counsel adopts the record's engineering read on the
+  public ToS text (redistribution + competing-use + no-mirroring + no-licence-
+  by-implication). Do not build this shape without a signed agreement containing
+  express redistribution consent.
 
 **No outreach.** Reading public terms is not contacting Bloomberg. Sounding them
 out about a partnership, a licence or an entitlement is Chris's decision.
