@@ -50,7 +50,12 @@ const isExternalHref = (href: string) => /^[a-z][a-z0-9+.-]*:/i.test(href) || hr
 export function hrefIsCurrent(href: string, currentPath?: string): boolean {
   if (!currentPath || isExternalHref(href) || href.includes("#")) return false;
   const path = href.split("?")[0] ?? href;
-  const norm = (p: string) => (p.length > 1 ? p.replace(/\/+$/, "") : p);
+  const norm = (p: string): string => {
+    if (p.length <= 1) return p;
+    let end = p.length;
+    while (end > 0 && p.charCodeAt(end - 1) === 47) end -= 1;
+    return p.slice(0, end);
+  };
   return norm(path) === norm(currentPath);
 }
 

@@ -530,12 +530,29 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _require_run_id(run_id: str) -> str:
+    """Keep a run id inside one path segment under STATUS_DIR.
+
+    Callers send a UUID. A query or body value is still attacker-controlled,
+    and ``STATUS_DIR / f"{run_id}.log"`` would follow ``../`` out of /tmp/runner.
+    """
+    if not isinstance(run_id, str) or not run_id or len(run_id) > 128:
+        raise RuntimeError("invalid run_id")
+    if run_id[0] == "." or ".." in run_id:
+        raise RuntimeError("invalid run_id")
+    for ch in run_id:
+        if ("A" <= ch <= "Z") or ("a" <= ch <= "z") or ("0" <= ch <= "9") or ch in "._-":
+            continue
+        raise RuntimeError("invalid run_id")
+    return run_id
+
+
 def _log_path(run_id: str) -> Path:
-    return STATUS_DIR / f"{run_id}.log"
+    return STATUS_DIR / f"{_require_run_id(run_id)}.log"
 
 
 def _status_path(run_id: str) -> Path:
-    return STATUS_DIR / f"{run_id}.status.json"
+    return STATUS_DIR / f"{_require_run_id(run_id)}.status.json"
 
 
 def _tail(path: Path, lines: int = LOG_TAIL_LINES) -> str:
