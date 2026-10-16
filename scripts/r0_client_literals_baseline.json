@@ -429,10 +429,6 @@
       "count": 6,
       "ticket": "DIG-3689"
     },
-    "digivault/ARCHITECTURE.md": {
-      "count": 1,
-      "ticket": "DIG-3689"
-    },
     "digivault/src/digivault/orchestrator_tools.py": {
       "count": 2,
       "ticket": "DIG-3689"
@@ -483,10 +479,6 @@
     },
     "docs/digichat/INSTALL.md": {
       "count": 6,
-      "ticket": "DIG-3689"
-    },
-    "docs/digichat/ONBOARDING.html": {
-      "count": 1,
       "ticket": "DIG-3689"
     },
     "docs/digichat/RELEASE-SMOKE.md": {
@@ -623,10 +615,6 @@
     },
     "packages/ui/src/components/chat/stock/tool-display.ts": {
       "count": 2,
-      "ticket": "DIG-3689"
-    },
-    "packages/ui/src/styles/digichat-boot-loader.css": {
-      "count": 1,
       "ticket": "DIG-3689"
     },
     "renovate.json": {

@@ -264,8 +264,7 @@
   }
 }
 
-/* Shared-loader metrics matched to the settled embed (parity with the DataTap
-   port): suggestion rows carry the embed's py-0.5 padding, 0.5 row gap and
+/* Shared-loader metrics matched to the settled embed (parity with the settled production embed): suggestion rows carry the embed's py-0.5 padding, 0.5 row gap and
    19.024px line box; the mock composer sits flush above the footer rows; and
    when a tenant has attachments off, the attach glyph and its placeholder
    gutter disappear so the handoff does not shift. */
