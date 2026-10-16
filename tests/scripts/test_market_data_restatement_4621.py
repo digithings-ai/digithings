@@ -244,9 +244,9 @@ def test_persistent_restatement_conflict_is_error_not_success() -> None:
 
 
 def test_macro_same_day_restatement_flips_pointer(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Explicit opt-in: the FRED bootstrap path builds a Gloomberb ingest client,
-    # and GLOOMBERB_ENABLED defaults OFF (DIG-1233), which would surface as
-    # mode="error" instead of the "full-repull" this test pins.
+    # Explicit opt-in: the FRED bootstrap path builds a Gloomberb ingest client.
+    # GLOOMBERB_ENABLED now defaults ON (DIG-2752 rescope, decision d4922299);
+    # still set explicitly so this test pins the form rather than the default.
     monkeypatch.setenv("GLOOMBERB_ENABLED", "1")
     hist = [
         {"source": "fred", "series_id": "DGS10", "obs_date": "2026-01-02", "value": 4.1},
