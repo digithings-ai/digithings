@@ -13,8 +13,9 @@ import indexSrc from "../index.ts?raw";
 //   1. No Deno global survives anywhere in the tree. A single `Deno.env.get`
 //      left behind would throw at request time on Workers, not at build time,
 //      and the only warning would be a 500 in production.
-//   2. The dashboard-api entrypoint does not import this module. Mounting it
-//      is a production change and this leaf must not make one.
+//   2. The dashboard-api entrypoint mounts this module on FX_HUB_PATHS.
+//      A comment that merely mentions fx-hub does not count: the import
+//      has to be in code.
 //
 // Source text is read with Vite's `?raw` import because tsconfig for this
 // package has no `@types/node`, so `node:fs` cannot be used here.
@@ -74,8 +75,11 @@ describe("router surface", () => {
     expect(routerSrc).toContain("/fx-hub-grant-sync");
   });
 
-  it("keeps fx-hub off the dashboard-api entrypoint", () => {
+  it("mounts fx-hub on the dashboard-api entrypoint", () => {
     expect(indexSrc.length, "entrypoint resolved to an empty string").toBeGreaterThan(0);
-    expect(indexSrc).not.toMatch(/fx-hub/);
+    const entry = code(indexSrc);
+    expect(entry).toMatch(/from\s+["']\.\/fx-hub\/router["']/);
+    expect(entry).toContain("createFxHubFetch");
+    expect(entry).toContain("FX_HUB_PATHS");
   });
 });

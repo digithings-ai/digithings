@@ -12,7 +12,7 @@
  */
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { createServer } from "node:http";
-import { dirname, extname, join, normalize, resolve } from "node:path";
+import { dirname, extname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -48,11 +48,11 @@ function serve(dir) {
       res.writeHead(400).end("bad request");
       return;
     }
-    // normalize collapses `..` before the join, so a request cannot escape the
-    // export directory.
-    const rel = normalize(decoded);
-    let file = join(dir, rel);
-    if (!file.startsWith(dir)) {
+    // `startsWith(dir)` treats `out-evil` as inside `out`. Resolve against the
+    // export root and refuse any relative path that still contains `..`.
+    const root = resolve(dir);
+    let file = resolve(root, decoded.replace(/^\/+/, ""));
+    if (relative(root, file).split(sep).includes("..")) {
       res.writeHead(403).end("forbidden");
       return;
     }
