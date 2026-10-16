@@ -196,7 +196,18 @@ def load_policy(path: Path = POLICY_PATH) -> Policy:
 def _gh_json(*args: str) -> Any:
     proc = subprocess.run(["gh", *args], capture_output=True, text=True)
     if proc.returncode != 0:
-        raise QueueError(f"gh {' '.join(args[:2])} failed: {proc.stderr.strip() or proc.stdout}")
+        # A non-zero exit is an operational transport failure (auth, rate
+        # limit, 504 deadline), never a parse problem: name the exit status
+        # and say the read is safe to retry. fetch_queue only reads, so a
+        # transient here must not read as a bug in the response handling.
+        stderr = proc.stderr.strip()
+        stdout = proc.stdout.strip()
+        detail = stderr or stdout or "no output"
+        empty_note = "" if stdout else " with empty stdout"
+        raise QueueError(
+            f"gh {' '.join(args[:2])} failed with exit {proc.returncode}{empty_note}: "
+            f"{detail} (retryable transport error; retry the read)"
+        )
     try:
         return json.loads(proc.stdout or "null")
     except json.JSONDecodeError as exc:

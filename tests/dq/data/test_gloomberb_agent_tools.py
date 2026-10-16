@@ -11,7 +11,6 @@ the typed-error paths), and the client's cache/breaker locks.
 from __future__ import annotations
 
 import json
-import os
 import re
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -39,9 +38,7 @@ from digiquant.data.gloomberb import (  # noqa: E402
     agent_tools,
     available_digifetch_tools,
     build_digifetch_tool_dispatcher,
-    session_gate,
 )
-from digiquant.data.gloomberb.session_gate import SessionGateStatus  # noqa: E402
 from digiquant.orchestrator_tools import build_orchestrator_tool_manifest  # noqa: E402
 from digiquant.tool_refusals import REFUSED_TOOLS  # noqa: E402
 
@@ -56,32 +53,6 @@ REFUSED_DIGIFETCH = {name for name in REFUSED_TOOLS if name.startswith("digifetc
 LIVE_ENTITLEMENTS = {n: v for n, v in TOOL_ENTITLEMENTS.items() if n not in REFUSED_DIGIFETCH}
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
-
-
-@pytest.fixture(autouse=True)
-def _gate_stubbed_to_presence(monkeypatch: pytest.MonkeyPatch):
-    """Keep the tool-list filter offline after the secret gate landed (#2752).
-
-    `available_digifetch_tools` no longer asks "is a cookie set?" but "does the
-    secret gate accept the session?", and answering that costs one request to
-    api.gloom.sh. This module is about the FILTER — which names drop for which
-    entitlement — so the verdict is stubbed to follow the cookie's presence,
-    which is what the filter used to decide for itself. The real contract
-    (presence alone is not enough; the cookie must validate) is pinned in
-    `tests/dq/data/test_gloomberb_session_gate.py`.
-    """
-    session_gate.reset_session_gate_cache()
-    monkeypatch.setattr(
-        agent_tools,
-        "session_gate_status",
-        lambda *a, **k: SessionGateStatus(
-            bool((os.environ.get(GLOOMBERB_SESSION_COOKIE_ENV) or "").strip()),
-            "presence_stub",
-            "presence stands in for validation in the filter tests",
-        ),
-    )
-    yield
-    session_gate.reset_session_gate_cache()
 
 
 AAPL_QUOTE = {
@@ -238,17 +209,19 @@ def test_subsets_are_real_distinct_and_prompt_budgeted() -> None:
 @pytest.mark.parametrize(
     "subset", [EQUITY_TOOLS, MACRO_TOOLS, PM_TOOLS], ids=["equity", "macro", "pm"]
 )
-def test_available_digifetch_tools_drops_exactly_the_gated_names(
+def test_available_digifetch_tools_drops_exactly_the_retired_names(
     subset: tuple[str, ...], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # Enable the family first (default is OFF in deployed environments).
+    # DIG-3907: the cookie path is retired, so session/preview/pro names drop
+    # with or without a cookie set — the cookie no longer opens anything.
     monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, "1")
     without_cookie = [t["function"]["name"] for t in available_digifetch_tools(subset)]
     monkeypatch.setenv(GLOOMBERB_SESSION_COOKIE_ENV, "gloomberb.session_token=test")
     with_cookie = [t["function"]["name"] for t in available_digifetch_tools(subset)]
-    assert with_cookie == list(subset)  # all subset names are free/session
-    assert without_cookie == [n for n in with_cookie if TOOL_ENTITLEMENTS[n] == "free"]
-    assert without_cookie  # each subset keeps its free core
+    assert with_cookie == without_cookie
+    assert with_cookie == [n for n in subset if TOOL_ENTITLEMENTS[n] == "free"]
+    assert with_cookie  # each subset keeps its free core
 
 
 def test_available_digifetch_tools_defaults_to_every_schema(
@@ -261,22 +234,23 @@ def test_available_digifetch_tools_defaults_to_every_schema(
     free = [n for n, v in LIVE_ENTITLEMENTS.items() if v == "free"]
     assert [t["function"]["name"] for t in available_digifetch_tools()] == free
     assert not REFUSED_DIGIFETCH & set(free)
+    # DIG-3907: a cookie no longer opens the retired session/preview/pro tools.
     monkeypatch.setenv(GLOOMBERB_SESSION_COOKIE_ENV, "token")
+    assert [t["function"]["name"] for t in available_digifetch_tools()] == free
     # The venue_session reader needs its own venue cookie, not the Gloomberb one.
-    assert len(available_digifetch_tools()) == len(DIGIFETCH_TOOLS) - 1
+    assert len(available_digifetch_tools()) == len(free)
     monkeypatch.setenv(SUBSTACK_SESSION_COOKIE_ENV, "substack.sid=test")
-    assert len(available_digifetch_tools()) == len(DIGIFETCH_TOOLS)
+    assert len(available_digifetch_tools()) == len(free) + 1
 
 
-def test_pro_tool_needs_the_gate_to_be_open(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Enable the family first (default is OFF in deployed environments). The
-    # gate verdict is stubbed to the cookie's presence by the autouse fixture;
-    # `test_gloomberb_session_gate.py` pins that an unvalidated cookie is not
-    # enough on its own.
+def test_pro_tool_is_never_advertised(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Enable the family first (default is OFF in deployed environments).
+    # DIG-3907: the cookie path is retired, so a pro tool stays dropped with
+    # or without a cookie set.
     monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, "1")
     assert available_digifetch_tools(("digifetch_transcripts",)) == []
     monkeypatch.setenv(GLOOMBERB_SESSION_COOKIE_ENV, "token")
-    assert len(available_digifetch_tools(("digifetch_transcripts",))) == 1
+    assert available_digifetch_tools(("digifetch_transcripts",)) == []
 
 
 def test_available_digifetch_tools_rejects_an_unknown_name(
@@ -288,20 +262,71 @@ def test_available_digifetch_tools_rejects_an_unknown_name(
         available_digifetch_tools(("digifetch_not_a_tool",))
 
 
-def test_available_digifetch_tools_respects_the_family_kill_switch(
+def test_keyless_tools_are_advertised_by_default_without_any_credential(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Default OFF (env unset) → no schemas; explicit opt-in → schemas.
+    """DIG-2752 rescope (Chris, decision d4922299): the keyless surface is ON by default.
+
+    Supersedes the DIG-1233 opt-in: a deployment with no ``GLOOMBERB_ENABLED``
+    and no cookie must be handed exactly the ``free`` tools, and nothing that
+    needs a credential. The gated tools stay hidden because the session gate
+    answers ``no_secret`` before it makes any request.
+    """
+    monkeypatch.delenv(GLOOMBERB_ENABLED_ENV, raising=False)
+    monkeypatch.delenv(GLOOMBERB_SESSION_COOKIE_ENV, raising=False)
+    monkeypatch.delenv(SUBSTACK_SESSION_COOKIE_ENV, raising=False)
+
+    # Anchor on the ADVERTISABLE set (the schemas), not on every entitlement:
+    # the entitlement table carries at least one name with no schema, so an
+    # entitlement-wide expectation would be unsatisfiable by construction.
+    schema_names = {t["function"]["name"] for t in DIGIFETCH_TOOLS}
+    expected = {n for n in schema_names if TOOL_ENTITLEMENTS[n] == "free"}
+    gated = {n for n in schema_names if TOOL_ENTITLEMENTS[n] != "free"}
+    # Non-vacuity: both halves must be non-empty or the equality below is vacuous.
+    # Non-vacuity: both halves must be non-empty or the equality proves nothing.
+    assert expected, "no free tools: the equality below would hold vacuously"
+    assert gated, "no gated tools: the exclusion below would hold vacuously"
+
+    advertised = {t["function"]["name"] for t in available_digifetch_tools()}
+    assert advertised == expected
+    assert advertised.isdisjoint(gated)
+
+
+def test_explicit_disable_withholds_the_keyless_subset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``GLOOMBERB_ENABLED=0`` stays a full-family stop, and a typo still fails closed.
+
+    The default flipped ON, so the opt-OUT is the property that now carries the
+    safety burden; it must be pinned in both its explicit and its typo form.
+    """
+    monkeypatch.delenv(GLOOMBERB_SESSION_COOKIE_ENV, raising=False)
+
+    monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, "0")
     assert available_digifetch_tools() == []
+
+    monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, "ture")
+    assert available_digifetch_tools() == []
+
+
+def test_available_digifetch_tools_honours_an_explicit_opt_in_and_opt_out(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The default moved (DIG-2752 rescope), so these two arms are what is left.
+
+    An explicit ``GLOOMBERB_ENABLED=1`` must still enable the family for a
+    deployment that sets it, and ``=0`` must still stop it for *every* subset.
+    The unset-by-default behaviour is pinned by
+    ``test_keyless_tools_are_advertised_by_default_without_any_credential`` and
+    the ``=0``/typo stop by ``test_explicit_disable_withholds_the_keyless_subset``.
+    """
     monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, "1")
     assert available_digifetch_tools()
     assert available_digifetch_tools(EQUITY_TOOLS)
+
     monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, "0")
     assert available_digifetch_tools() == []
     assert available_digifetch_tools(EQUITY_TOOLS) == []
-    # A typo fails closed, same as the client's kill switch.
-    monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, "ture")
-    assert available_digifetch_tools() == []
 
 
 # ── dispatcher routing + envelope ─────────────────────────────────────────────
@@ -396,7 +421,7 @@ def test_dispatcher_non_mapping_args_return_typed_invalid_input() -> None:
     assert payload["attribution"] == GLOOMBERB_ATTRIBUTION
 
 
-def test_session_gated_tool_without_a_cookie_is_auth_required_without_a_request() -> None:
+def test_retired_session_tool_without_a_cookie_is_auth_required_without_a_request() -> None:
     def _fail(request: httpx.Request) -> httpx.Response:
         raise AssertionError("a missing cookie must gate before any request")
 

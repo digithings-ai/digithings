@@ -3,14 +3,30 @@
 The single Supabase CLI project dir for the suite-wide **`core`** backend (dashboard/research
 portfolio, market data, strategy store — see
 [ADR 0021](../../docs/adr/0021-digiquant-supabase-project-topology.md)). There is exactly
-**one** migration chain: the numbered files under [`migrations/`](migrations/) —
+**one** migration chain, layered D-Q6′ (DIG-3694): the numbered files under
+[`migrations/engine/`](migrations/engine/) apply first in filename order, then
+[`migrations/prod/`](migrations/prod/) in filename order. `engine/` holds the
+migrations for tables the open pipeline uses (R0 self-host schema: market and
+reference data, research corpus, pipeline run records and observability);
+`prod/` holds the house-only remainder (books, ledger, accounting, tenancy,
+billing, broker mirror, notifications, invites, strategy store, public
+views). NNN prefixes are globally unique across both dirs —
 `001`–`143` at time of writing, with `037`, `038` and `059` never used and `062`
-**burned — see below, do not reuse it**; new work appends the next unused prefix. [`SCHEMA.md`](SCHEMA.md) inventories the live
+**burned — see below, do not reuse it**; new work appends the next unused prefix
+and lands in `engine/` iff every table it touches is an engine table, else in
+`prod/`. One deliberate exception: `engine/001_initial_schema.sql` also creates
+the base book-table shells (positions, nav_history, portfolio_metrics,
+position_events, benchmark_history) so the engine tables exist before any
+engine ALTER; prod migrations shape the books afterwards. [`SCHEMA.md`](SCHEMA.md) inventories the live
 tables and views.
 
 `digiquant/scripts/research/verify-supabase-migrations.sh` guards the chain's shape:
-`config.toml` is present, every file matches `NNN_name.sql`, and no two files share
-a numeric prefix. It runs as the first step of `test-digiquant.yml` (the
+`config.toml` is present, every file under `migrations/engine/` and
+`migrations/prod/` matches `NNN_name.sql`, no two files share a numeric prefix
+across either dir, each dir is in version order, no stray top-level `*.sql`
+exists, and every public relation an `engine/` file reads is created by an
+`engine/` file (engine self-containment, what makes engine-first apply sound).
+It runs as the first step of `test-digiquant.yml` (the
 `digiquant/**` path filter covers this directory) and locally via `make
 supabase-migrations-check`. It does **not** check ordering, and it does not compare
 against the live schema — `digithings_schema_migrations` is what records what prod has

@@ -54,7 +54,7 @@ pursued.
 ## Level vs rails — does `RiskModel` fit?
 
 `RiskModel` is a structural protocol: `rails(dates) -> DataFrame[low, median, high]`. The engine
-then calls `valuation_z_score(price, low, median, high)` and maps that z into `[0, 100]` risk.
+then calls `power_law_z_score(price, low, median, high)` and maps that z into `[0, 100]` risk.
 Crypto fills those rails with quantile regressions of *price on log calendar time*.
 
 Equities can reuse the **protocol** in one of two ways:

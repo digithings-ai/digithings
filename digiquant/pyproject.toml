@@ -15,7 +15,7 @@ dependencies = [
     "pydantic>=2",
     "uvicorn[standard]>=0.30",
     "fastapi>=0.115",
-    "polars>=1.0",
+    "polars>=1.43,<2",
     "optuna>=4.7.0",
     "digibase>=0.1.0",
     "langgraph>=0.2",
@@ -36,6 +36,10 @@ dependencies = [
     # mapping (spec §5.5). Unbounded per CLAUDE.md (runtime dep).
     "httpx>=0.27",
 ]
+[project.urls]
+Homepage = "https://digithings.ai"
+Repository = "https://github.com/digithings-ai/digithings"
+
 [project.optional-dependencies]
 # nautilus_trader is pinned EXACTLY, not ranged. See docs/adr/0033-nautilus-trader-exact-pin.md.
 # A minor bump within 1.x moved the Python-visible return type of
@@ -127,6 +131,17 @@ brokers-ibkr = ["httpx>=0.27"]
 
 [project.scripts]
 digiquant = "digiquant.cli:main"
+
+# Repo-split 1.2 (DIG-3691): plugin contract between public `digiquant` (R0)
+# and private `digiquant-strategies` (R1). R1 distributions declare these
+# groups; R0 discovers them via `digiquant.plugin`. No built-in plugin ships
+# in R0 (reference strategies stay direct-imported), so the tables are
+# intentionally empty here — they document the group names.
+[project.entry-points."digiquant.strategies"]
+
+[project.entry-points."digiquant.mcp_tools"]
+
+[project.entry-points."digiquant.cli"]
 
 [dependency-groups]
 # Synced by default with plain `uv sync` (unlike [project.optional-dependencies],
