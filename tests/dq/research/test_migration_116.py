@@ -22,7 +22,7 @@ pytestmark = pytest.mark.unit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 MIGRATIONS_DIR = REPO_ROOT / "digiquant" / "supabase" / "migrations"
-MIGRATION_PATH = MIGRATIONS_DIR / "116_authenticated_read_public_reference.sql"
+MIGRATION_PATH = MIGRATIONS_DIR / "prod" / "116_authenticated_read_public_reference.sql"
 
 POLICY_NAME = "authenticated_read_public_reference"
 
@@ -148,9 +148,9 @@ def test_does_not_open_private_surfaces(sql: str) -> None:
 def test_no_anon_select_without_authenticated_counterpart() -> None:
     """No applied migration may leave a table anon-readable but authenticated-blind.
 
-    Replays every top-level migration in filename order (the order
-    ``db-migrate.yml`` applies them) and diffs the surviving SELECT policies per
-    role. ``migrations/cutover/`` is excluded — that subdirectory is never
+    Replays the layered chain in apply order (``engine/`` in filename order,
+    then ``prod/`` in filename order) and diffs the surviving SELECT policies
+    per role. ``migrations/cutover/`` is excluded — that subdirectory is never
     executed by the apply loop.
     """
     anon: dict[str, set[str]] = {}
@@ -160,7 +160,9 @@ def test_no_anon_select_without_authenticated_counterpart() -> None:
         anon.pop(table, None)
         authed.pop(table, None)
 
-    for path in sorted(MIGRATIONS_DIR.glob("*.sql")):
+    for path in sorted((MIGRATIONS_DIR / "engine").glob("*.sql")) + sorted(
+        (MIGRATIONS_DIR / "prod").glob("*.sql")
+    ):
         body = _strip_comments(path.read_text(encoding="utf-8"))
         for match in _DROP_TABLE.finditer(body):
             retire(match.group("table"))
