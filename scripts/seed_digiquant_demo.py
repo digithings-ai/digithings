@@ -133,8 +133,9 @@ def generate_metrics_row(nav_rows: list[dict[str, Any]]) -> dict[str, Any]:
         "volatility": annual_vol,
         "max_drawdown": max_dd_pct,
         "alpha": round(total_return - 14.2, 2),  # vs approximate SPY baseline
-        "cash_pct": nav_rows[-1]["cash_pct"],
-        "total_invested": nav_rows[-1]["invested_pct"],
+        # Migration 035 dropped portfolio_metrics.cash_pct and renamed
+        # total_invested -> invested_pct.
+        "invested_pct": nav_rows[-1]["invested_pct"],
         "computed_from": "demo-seed",
     }
 
@@ -247,7 +248,7 @@ def main() -> None:
     n = _upsert(client, "nav_history", nav_rows, "date")
     print(f"nav_history:       {n} rows upserted")
 
-    d = _upsert(client, "decision_log", decision_rows, "run_id,ticker")
+    d = _upsert(client, "decision_log", decision_rows, "run_date,ticker")
     print(f"decision_log:      {d} rows upserted")
 
     m = _upsert(client, "portfolio_metrics", [metrics_row], "date")
