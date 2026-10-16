@@ -12,8 +12,8 @@ import pytest
 from digiquant.research.phases.publish_phase import _segment_category
 
 # Source of truth: chk_documents_category in
-# digiquant/supabase/migrations/{002_schema_hardening,011_unpartition_snapshots_documents,
-# 053_beliefs_category}.sql
+# digiquant/supabase/migrations/{prod/002_schema_hardening,engine/011_unpartition_snapshots_documents,
+# engine/053_beliefs_category}.sql
 ALLOWED_CATEGORIES = frozenset(
     {
         "synthesis",
