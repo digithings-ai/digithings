@@ -36,6 +36,10 @@ dependencies = [
     # mapping (spec §5.5). Unbounded per CLAUDE.md (runtime dep).
     "httpx>=0.27",
 ]
+[project.urls]
+Homepage = "https://digithings.ai"
+Repository = "https://github.com/digithings-ai/digithings"
+
 [project.optional-dependencies]
 # nautilus_trader is pinned EXACTLY, not ranged. See docs/adr/0033-nautilus-trader-exact-pin.md.
 # A minor bump within 1.x moved the Python-visible return type of
