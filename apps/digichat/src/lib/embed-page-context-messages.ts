@@ -199,6 +199,84 @@ function visibleTextComment(text: string): string {
   return `<!-- digichat:page-context-text\n${htmlCommentSafe(text)}\n-->`;
 }
 
+const PAGE_CONTEXT_TEXT_MARK = "digichat:page-context-text";
+
+function isMarkerSpace(ch: string | undefined): boolean {
+  return ch === " " || ch === "\t" || ch === "\n" || ch === "\r" || ch === "\f" || ch === "\v";
+}
+
+function skipMarkerSpace(raw: string, i: number): number {
+  while (isMarkerSpace(raw[i])) i++;
+  return i;
+}
+
+/** First page-context text comment. The close is the next newline-then-`-->`. */
+function takePageContextText(raw: string): { text: string; start: number; end: number } | null {
+  let from = 0;
+  while (from < raw.length) {
+    const open = raw.indexOf("<!--", from);
+    if (open < 0) return null;
+    let i = skipMarkerSpace(raw, open + 4);
+    if (!raw.startsWith(PAGE_CONTEXT_TEXT_MARK, i)) {
+      from = open + 4;
+      continue;
+    }
+    i += PAGE_CONTEXT_TEXT_MARK.length;
+    if (raw[i] !== "\n") {
+      from = open + 4;
+      continue;
+    }
+    const contentStart = i + 1;
+    const close = raw.indexOf("\n-->", contentStart);
+    if (close < 0) return null;
+    return { text: raw.slice(contentStart, close), start: open, end: close + 4 };
+  }
+  return null;
+}
+
+function stripPageContextText(raw: string): string {
+  let from = 0;
+  let out = "";
+  while (from < raw.length) {
+    const hit = takePageContextText(raw.slice(from));
+    if (!hit) return out + raw.slice(from);
+    out += raw.slice(from, from + hit.start);
+    from += hit.end;
+  }
+  return out;
+}
+
+/** Drop `<!-- digichat:page-context-screenshot -->`, including one leading newline. */
+function stripScreenshotMarker(raw: string): string {
+  const mark = "digichat:page-context-screenshot";
+  let from = 0;
+  let out = "";
+  while (from < raw.length) {
+    const open = raw.indexOf("<!--", from);
+    if (open < 0) return out + raw.slice(from);
+    let i = skipMarkerSpace(raw, open + 4);
+    if (!raw.startsWith(mark, i)) {
+      out += raw.slice(from, open + 4);
+      from = open + 4;
+      continue;
+    }
+    i = skipMarkerSpace(raw, i + mark.length);
+    if (!raw.startsWith("-->", i)) {
+      out += raw.slice(from, open + 4);
+      from = open + 4;
+      continue;
+    }
+    const start = open > from && raw[open - 1] === "\n" ? open - 1 : open;
+    out += raw.slice(from, start);
+    from = i + 3;
+  }
+  return out;
+}
+
+function stripPageContextMarkers(raw: string): string {
+  return stripScreenshotMarker(stripPageContextText(raw));
+}
+
 /** Snapshot stored on the document chip — HTML preferred, visible text as fallback. */
 export function pageContextSnapshotBody(ctx: {
   text: string;
@@ -305,12 +383,9 @@ function pageContextFromFilePart(part: {
   const screenshotDataUrl = raw.includes("digichat:page-context-screenshot")
     ? "data:image/png;base64,"
     : undefined;
-  const textMatch = raw.match(/<!--\s*digichat:page-context-text\n([\s\S]*?)\n-->/);
-  const supplement = textMatch?.[1]?.trim() ?? "";
-  const body = raw
-    .replace(/<!--\s*digichat:page-context-text\n[\s\S]*?\n-->/g, "")
-    .replace(/\n?<!--\s*digichat:page-context-screenshot\s*-->/g, "")
-    .trim();
+  const textBlock = takePageContextText(raw);
+  const supplement = textBlock?.text.trim() ?? "";
+  const body = stripPageContextMarkers(raw).trim();
   if (!body && !supplement && !screenshotDataUrl) return null;
   const html = (part.mediaType ?? "").includes("html");
   return html
