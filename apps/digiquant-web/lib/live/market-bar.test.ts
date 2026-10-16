@@ -11,6 +11,7 @@ import {
   formatLiveStamp,
   formatPrice,
   mergeTapeQuotes,
+  QUOTE_REFRESH_MS,
   parseTick,
   TAPE_SYMBOLS,
   type MarketBarStatus,
@@ -97,6 +98,13 @@ describe("baseline tape", () => {
   });
 });
 
+describe("quote refresh", () => {
+  it("reloads the archive inside the 15–30s band", () => {
+    expect(QUOTE_REFRESH_MS).toBeGreaterThanOrEqual(15_000);
+    expect(QUOTE_REFRESH_MS).toBeLessThanOrEqual(30_000);
+  });
+});
+
 describe("formatters", () => {
   it("formats price, change and stamp", () => {
     expect(formatPrice(65432.1)).toBe("65,432.10");
@@ -116,6 +124,21 @@ describe("formatters", () => {
     expect(c?.asOf).toBe("2026-09-29");
     expect(c?.changePct).toBeCloseTo(10);
     expect(equityCell("SPY", [])).toBeNull();
+  });
+  it("measures a repeated close against the last different print", () => {
+    const c = equityCell("SPY", [
+      { date: "2026-10-08", price: 100 },
+      { date: "2026-10-12", price: 110 },
+      { date: "2026-10-13", price: 110 },
+    ]);
+    expect(c?.price).toBe(110);
+    expect(c?.changePct).toBeCloseTo(10);
+    expect(c?.up).toBe(true);
+    const flat = equityCell("SPY", [
+      { date: "2026-10-12", price: 110 },
+      { date: "2026-10-13", price: 110 },
+    ]);
+    expect(flat?.changePct).toBeNull();
   });
 });
 

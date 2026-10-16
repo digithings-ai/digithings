@@ -305,7 +305,7 @@ def _resolve_model_policy_path() -> Path:
     form resolves relative to CWD, which is fine for an optional lenient file and wrong
     for a required one.
     """
-    config_dir_override = os.environ.get("DIGI_CONFIG_PATH")
+    config_dir_override = os.environ.get("DIGIQUANT_CONFIG_DIR") or os.environ.get("DIGI_CONFIG_PATH")
     if config_dir_override:
         return Path(config_dir_override) / "model-policy.json"
     return Path(__file__).resolve().parents[3] / "config" / "model-policy.json"
@@ -350,7 +350,7 @@ _VALID_CAPABILITIES = frozenset({"extraction", "research", "reasoning"})
 def _load_model_modes() -> ModelModesConfig:
     """Load model modes YAML (mtime-cached). ``DIGI_MODEL_MODES_FILE`` overrides filename."""
     global _model_modes_cache
-    config_dir = os.environ.get("DIGI_CONFIG_PATH", "config")
+    config_dir = os.environ.get("DIGIQUANT_CONFIG_DIR") or os.environ.get("DIGI_CONFIG_PATH", "config")
     fname = (
         os.environ.get("DIGI_MODEL_MODES_FILE") or "model_modes.yaml"
     ).strip() or "model_modes.yaml"
@@ -380,7 +380,7 @@ def _load_model_modes() -> ModelModesConfig:
 
 
 def _digiquant_models_path() -> Path:
-    config_dir = os.environ.get("DIGI_CONFIG_PATH", "config")
+    config_dir = os.environ.get("DIGIQUANT_CONFIG_DIR") or os.environ.get("DIGI_CONFIG_PATH", "config")
     return Path(config_dir) / "digiquant_models.yaml"
 
 

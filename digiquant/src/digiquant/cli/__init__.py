@@ -40,7 +40,6 @@ def main() -> None:
 
 # Register subcommand groups.
 def _register_subgroups() -> None:
-    from digiquant.cli.gloomberb import gloomberb as _gloomberb_group
     from digiquant.cli.onchain import onchain as _onchain_group
     from digiquant.cli.prices import prices as _prices_group
     from digiquant.cli.strategy import strategy as _strategy_group
@@ -49,10 +48,19 @@ def _register_subgroups() -> None:
 
     main.add_command(_prices_group)
     main.add_command(_onchain_group)
-    main.add_command(_gloomberb_group)
     main.add_command(_strategy_group)
     main.add_command(_web_search_group)
     main.add_command(_policy_replay_group)
+
+    # Repo-split 1.2 (DIG-3691): SDCA subcommands (sdca-stage0,
+    # sdca-optimize-curve) register through the ``digiquant.cli`` entry-point
+    # group. Fail-closed (warn-and-skip).
+    try:
+        from digiquant import plugin as _plugin
+
+        _plugin.register_plugin_cli(main)
+    except Exception:
+        pass
 
 
 _register_subgroups()
