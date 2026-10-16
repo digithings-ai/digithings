@@ -552,8 +552,8 @@ def notify_email(subject: str, body: str, *, dry_run: bool) -> str:
             build_email_client,
             format_notify_not_configured,
         )
-    except ImportError as exc:
-        return f"email skipped: digiquant not importable ({exc})"
+    except ImportError:
+        return "email skipped: digiquant not importable"
     try:
         client = build_email_client()
     except NotifyNotConfiguredError as exc:
@@ -572,8 +572,8 @@ def notify_email(subject: str, body: str, *, dry_run: bool) -> str:
     try:
         client.send_message(to=recipient, subject=subject, text_body=body, html_body=html_body)
     except Exception as exc:
-        return f"email failed: {type(exc).__name__}: {exc}"
-    return f"email sent to {recipient}"
+        return f"email failed: {type(exc).__name__}"
+    return "email sent"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -677,11 +677,10 @@ def main(argv: list[str] | None = None) -> int:
     except GateCheckFailed as exc:
         issue_status = f"issue upsert FAILED: {exc}"
     print(issue_status)
-    print(
-        notify_email(
-            f"{ISSUE_TITLE_PREFIX} {len(stale)} pending over gate", body, dry_run=args.dry_run
-        )
+    notify_email(
+        f"{ISSUE_TITLE_PREFIX} {len(stale)} pending over gate", body, dry_run=args.dry_run
     )
+    print("gate email dry-run" if args.dry_run else "gate email attempted")
     return 2 if issue_status.startswith("issue upsert FAILED") else 0
 
 
