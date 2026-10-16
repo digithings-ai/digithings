@@ -1983,3 +1983,11 @@ bindings:
   name: TWELVEX_DB
   database_name: twelvex
   source: apps/digidata-api/wrangler.toml
+# DIG-3759 tenant config. Recorded by binding NAME only, never the namespace
+# id: the id is a Cloudflare account resource, not a surface name, and the
+# parity gate records names and kinds only. Namespace-id pinning, if wanted
+# later, belongs in the deploy gate, not the parity baseline.
+- worker: digithings-stack
+  type: kv_namespace
+  name: TENANT_CONFIG
+  source: apps/digithings-stack-cloudflare/wrangler.toml
