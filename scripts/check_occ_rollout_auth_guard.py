@@ -37,6 +37,8 @@ import tempfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+# The entrypoint delegates to occ_invite_key_write.sh (R6). The guards under
+# test run there. This path stays the one the offline workflow invokes.
 ROLLOUT = REPO_ROOT / "scripts" / "occ_invite_key_rollout.sh"
 
 # Verbatim from the 2026-10-06 failure. The substring "logged in" occurs inside
@@ -176,9 +178,15 @@ def run_scenario(
         for needle in expect_absent:
             if needle in out:
                 failures.append(f"forbidden output present: {needle!r}")
-        for m in MUTATING:
-            if m in calls:
-                failures.append(f"reached a mutating wrangler call ({m!r}) before refusing")
+        # Match the wrangler arguments, not the cwd. A checkout path that
+        # contains "deploy" is not a deploy call.
+        for line in calls.splitlines():
+            args = line.split(" token=", 1)[0]
+            for m in MUTATING:
+                if m in args:
+                    failures.append(
+                        f"reached a mutating wrangler call ({m!r}) before refusing"
+                    )
         # The wrapper must run wrangler inside the Worker directory. From the repo
         # root there is no wrangler.toml, so `secret put` and `deploy` resolve no
         # Worker: the put would not land on digithings-digichat while the script
