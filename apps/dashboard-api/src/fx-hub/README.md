@@ -31,16 +31,20 @@ Two runtime differences are the whole substance of the port:
 the `apikey` header. `apiKeyOnlyFetch` strips `Authorization: Bearer
 sb_publishable_…` / `sb_secret_…` because those values are not JWTs.
 
-## Not wired, on purpose
+## Mounted
 
-`createFxHubFetch` is not mounted in `src/index.ts`. Mounting it means
-binding the key dictionaries and `FX_HUB_GRANT_SYNC_SECRET` as Worker
-secrets, which is a production change. `no-deno.test.ts` asserts the
-entrypoint does not reference `fx-hub`.
+`src/index.ts` sends `FX_HUB_PATHS` to `createFxHubFetch(env)` before the
+dashboard catalog. Those two paths use `X-Sync-Secret`. They are not catalog
+routes, and they do not use `x-digi-user`.
 
-No `wrangler.toml` was edited, no `[vars]` key or secret was added, and the
-Supabase Edge Functions are untouched. They stay live as the two-week
-rollback while the Worker path is exercised.
+The key dictionaries and `FX_HUB_GRANT_SYNC_SECRET` are still not in
+`wrangler.toml`. Until they are bound on the worker, a request with no
+secret answers `401 UNAUTHORIZED`. A request that passes the secret and
+finds no key dictionary answers `500 API_KEYS_UNCONFIGURED`. `no-deno.test.ts`
+asserts the entrypoint imports `createFxHubFetch` and `FX_HUB_PATHS`.
+
+No `[vars]` key or secret was added, and the Supabase Edge Functions are
+untouched. They stay live as the rollback until the cutover is proven.
 
 ## Tests
 
