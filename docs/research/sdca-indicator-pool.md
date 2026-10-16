@@ -57,7 +57,7 @@ signal delay** is later — not this note.
 
 - **In scope:** inventory, BTC v1 include/defer list, z-mapping and resample
   rules, on-chain feasibility, throwaway weekly-oscillator correlation vs
-  `valuation_z`.
+  `power_law_z`.
 - **Out of scope:** production extras, optimize, walk-forward, `risk_index.py`
   edits, site publish, delay changes, live trading, stocks implementation.
 
@@ -67,9 +67,9 @@ signal delay** is later — not this note.
 
 | Piece | Where | SDCA-relevant fact |
 |---|---|---|
-| Power-law rails → `valuation_z` | [`btc_power_law.py`](../../digiquant/src/digiquant/strategies/sdca/btc_power_law.py), [`valuation.py`](../../digiquant/src/digiquant/strategies/sdca/valuation.py) | Primary indicator. Cheap = +3, rich = −3. `#3173` real coefficients live on a parallel branch; develop still has the synthetic example. |
+| Power-law rails → `power_law_z` | [`btc_power_law.py`](../../digiquant/src/digiquant/strategies/sdca/btc_power_law.py), [`power_law_zscore.py`](../../digiquant/src/digiquant/strategies/sdca/power_law_zscore.py) | Primary indicator. Cheap = +3, rich = −3. `#3173` real coefficients live on a parallel branch; develop still has the synthetic example. |
 | Composite blend | [`composite_risk.py`](../../digiquant/src/digiquant/strategies/sdca/composite_risk.py) | Weight-normalized average of enabled z series. **Any enabled null nulls the day** — no partial blend. |
-| Risk parquet glue | [`risk_index.py`](../../digiquant/src/digiquant/strategies/sdca/risk_index.py) | `build_risk_index(..., extra_indicators=None, valuation_weight=1.0)`. Hook already exists; do not edit it here. |
+| Risk parquet glue | [`risk_index.py`](../../digiquant/src/digiquant/strategies/sdca/risk_index.py) | `build_risk_index(..., extra_indicators=None, power_law_weight=1.0)`. Hook already exists; do not edit it here. |
 | History cache | [`history_cache.py`](../../digiquant/src/digiquant/data/prices/history_cache.py) | Flat CSV `data/price-history/<TICKER>.csv`. Same store as `digiquant_fetch_coinbase_ohlcv`. |
 | Coinbase daily OHLCV | [`fetch_coinbase.py`](../../digiquant/scripts/fetch_coinbase.py) | BTC/ETH/SOL daily via CCXT. This environment's BTC cache: 2015-07-20 → 2026-08-29 (4059 bars). |
 | Daily technicals | [`technicals.py`](../../digiquant/src/digiquant/data/prices/technicals.py) | RSI(7/14/21), MACD(12,26,9), SMA 20/50/**200**, `% vs SMA200`, **zscore vs SMA200**. **Daily only** — no weekly resample. |
@@ -90,7 +90,7 @@ That is a directory, not an ingest.
 
 ## Collinearity rule
 
-A vote is only worth blending if it can disagree with power-law `valuation_z`
+A vote is only worth blending if it can disagree with power-law `power_law_z`
 on a cycle-relevant horizon. Transforms of the **same daily close** (daily RSI,
 daily MACD, ROC, `% vs SMA200`, Mayer = price / 200w SMA, subsidy-only
 “Puell”) are not independent just because the formula differs.
@@ -102,10 +102,10 @@ non-null days:
 
 | Pair | r | n | Read |
 |---|---|---|---|
-| `valuation_z` vs weekly RSI z | **+0.365** | 3962 | Related, not a duplicate |
-| `valuation_z` vs weekly MACD-hist z | **+0.066** | 3647 | Nearly orthogonal |
-| `valuation_z` vs Mayer-like 200w z | **+0.843** | 2303 | **Near-duplicate — do not add** |
-| `valuation_z` vs daily RSI z | +0.092 | 4046 | Independent but **day-trade horizon** |
+| `power_law_z` vs weekly RSI z | **+0.365** | 3962 | Related, not a duplicate |
+| `power_law_z` vs weekly MACD-hist z | **+0.066** | 3647 | Nearly orthogonal |
+| `power_law_z` vs Mayer-like 200w z | **+0.843** | 2303 | **Near-duplicate — do not add** |
+| `power_law_z` vs daily RSI z | +0.092 | 4046 | Independent but **day-trade horizon** |
 | weekly RSI z vs weekly MACD z | **+0.654** | 3647 | Oscillators overlap with each other |
 | weekly RSI z vs daily RSI z | +0.537 | 3962 | Same family, different cadence |
 
@@ -118,7 +118,7 @@ Plot: `/opt/cursor/artifacts/sdca-indicator-pool-weekly-corr.png`.
 the corridor (correction inside a bubble) and overbought while still cheap
 (early bull). The 0.37 / 0.07 correlations are the quantitative version of
 that. Mayer / 200w SMA is the opposite: another slow trend-distance of the
-same close, *r* = 0.84 with `valuation_z` — drop it.
+same close, *r* = 0.84 with `power_law_z` — drop it.
 
 Caveat on weekly MACD z: a 2y rolling-z of the histogram **saturates at ±3**
 during trend extensions. If MACD is included, prefer a longer window, a rank
@@ -135,9 +135,9 @@ weight optimizer shrink overlap.
 
 | # | Name | Include? | Source | Horizon | Why |
 |---|---|---|---|---|---|
-| 1 | `valuation` | **yes (primary)** | Power-law rails × Coinbase close | Secular | Already wired. |
+| 1 | `power_law` | **yes (primary)** | Power-law rails × Coinbase close | Secular | Already wired. |
 | 2 | `weekly_rsi` | **yes (new)** | Weekly Wilder RSI(14) of Coinbase weekly close | Cycle / months | Long-horizon technical; only moderately correlated with rails. |
-| 3 | `weekly_macd` | **yes, second oscillator** | Weekly MACD(12,26,9) histogram of weekly close | Cycle / months | Almost orthogonal to `valuation_z`; overlaps RSI (*r* ≈ 0.65) so **do not equal-weight** with RSI as two independent votes. |
+| 3 | `weekly_macd` | **yes, second oscillator** | Weekly MACD(12,26,9) histogram of weekly close | Cycle / months | Almost orthogonal to `power_law_z`; overlaps RSI (*r* ≈ 0.65) so **do not equal-weight** with RSI as two independent votes. |
 | 4 | `m2` | **yes, do not re-implement here** | FRED `M2SL` (add to YAML; client already exists) | Months, lagged | Liquidity, not a close transform. In-flight extra name `m2`. |
 | 5 | `dxy` | **optional 5th** | FRED `DTWEXBGS` already in YAML (or Yahoo `DX-Y.NYB`) | Months | Inverse USD. In-flight extra name `dxy`. Inverse sign: strong dollar = −z (risk-off for BTC). |
 
@@ -180,7 +180,7 @@ add a paid API.** Do not scrape Look Into Bitcoin without a human ToS review
 
 **#1086 v1 on-chain recommendation (when that issue is executed):** ingest
 Coinmetrics community `CapMVRVCur` only, map to one `mvrv_z` indicator, fall
-back to valuation-only when the feed is down (composite null rule currently
+back to power-law-only when the feed is down (composite null rule currently
 **cannot** fall back per indicator — see below). Do not also ingest NUPL.
 Human review of CC license vs commercial tearsheets before publish.
 
@@ -200,12 +200,12 @@ OAS, VIX) — do not wire them into `btc_sdca` “just because they exist.”
 
 ## How each series becomes a z `compute_composite_risk` can blend
 
-Convention (already in [`valuation.py`](../../digiquant/src/digiquant/strategies/sdca/valuation.py)):
+Convention (already in [`power_law_zscore.py`](../../digiquant/src/digiquant/strategies/sdca/power_law_zscore.py)):
 **cheap / buy = +3, rich / sell = −3**, clipped to `[-3, 3]`.
 
 | Series | Raw | z mapping | Nulls |
 |---|---|---|---|
-| `valuation` | log-space position in rails | already `[-3, 3]` | null if any rail/price null |
+| `power_law` | log-space position in rails | already `[-3, 3]` | null if any rail/price null |
 | `weekly_rsi` | Wilder RSI(14) on weekly close, in `[0, 100]` | `(50 − RSI) / 50 × 3`, clip | null until 14 weekly bars |
 | `weekly_macd` | weekly MACD histogram | causal trailing z of **−hist**, long window (or rank/tanh — see saturation note) | null until EMA warmup + z window |
 | `m2` | M2SL level or ROC | causal rolling z of **+ROC** (accelerating liquidity = +z / buy), matching the in-flight `m2_liquidity_z` tests | null until ROC + window; **also null before publication** (below) |
@@ -286,7 +286,7 @@ definition of done).
    existing Coinbase cache (same `history_cache.py` path as the power-law
    fit). Unit-test: causal week as-of, sign convention, warmup nulls.
 3. Add `M2SL` to the FRED YAML; align on `realtime_start`.
-4. Let `#3174` optimize weights **and** curve shape on `{valuation, weekly_rsi,
+4. Let `#3174` optimize weights **and** curve shape on `{power_law, weekly_rsi,
    weekly_macd, m2}` with a prior that RSI and MACD are **not** two full votes.
 5. File/execute [#1086](https://github.com/digithings-ai/digithings/issues/1086)
    for a single `mvrv_z` from Coinmetrics community `CapMVRVCur` after license
