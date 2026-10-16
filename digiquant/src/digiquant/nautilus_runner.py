@@ -133,15 +133,12 @@ def _resolve_tearsheet_output(path: str | Path) -> Path:
     raw = os.fspath(path)
     joined = raw if os.path.isabs(raw) else os.path.join(base, raw)
     candidate = os.path.normpath(joined)
-    prefix = base if base.endswith(os.sep) else base + os.sep
-    if candidate != base and not candidate.startswith(prefix):
-        raise ValueError(f"tearsheet_path must resolve under {BACKTEST_RESULTS_DIR!r}")
     real_base = os.path.realpath(base)
     real = os.path.realpath(candidate)
-    real_prefix = real_base if real_base.endswith(os.sep) else real_base + os.sep
-    if real != real_base and not real.startswith(real_prefix):
+    prefix = real_base if real_base.endswith(os.sep) else real_base + os.sep
+    if real != real_base and not real.startswith(prefix):
         raise ValueError(f"tearsheet_path must resolve under {BACKTEST_RESULTS_DIR!r}")
-    return Path(candidate)
+    return Path(real)
 
 
 # ---------------------------------------------------------------------------

@@ -218,8 +218,8 @@ def test_client_fault_returns_error_not_an_envelope(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     # The dispatcher's non-envelope path (agent_tools.py: the client call raised)
-    # answers {"error": "<Type>: <msg>"} — the endpoint must surface it as
-    # ok:false with the message preserved under `data`.
+    # answers {"error": "<Type>"} — the endpoint must surface it as ok:false.
+    # The exception text stays out of the body.
     class _Boom:
         def quote(self, request: Any) -> Any:
             raise RuntimeError("boom")
@@ -232,8 +232,8 @@ def test_client_fault_returns_error_not_an_envelope(
     assert r.status_code == 200
     body = r.json()
     assert body["ok"] is False
-    assert body["error"].startswith("RuntimeError")
-    assert body["data"] == {"error": "RuntimeError: boom"}
+    assert body["error"] == "RuntimeError"
+    assert body["data"] == {"error": "RuntimeError"}
 
 
 def test_section12_hosted_surface_tripwire_cookie_gated_tools_unreachable_when_switch_unset(

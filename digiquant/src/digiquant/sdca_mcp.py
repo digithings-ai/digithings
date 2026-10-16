@@ -186,6 +186,15 @@ def run_fit_sdca_weights(
             output_path=output_path,
             profile_name=profile,
         )
+    except ValueError as exc:
+        missing_cache = (
+            bool(exc.args)
+            and isinstance(exc.args[0], str)
+            and exc.args[0].startswith("no cached price history")
+        )
+        return json.dumps(
+            {"error": "no cached price history" if missing_cache else "ValueError"}
+        )
     except Exception as exc:
         return json.dumps({"error": type(exc).__name__})
     return result.model_dump_json(indent=2)
