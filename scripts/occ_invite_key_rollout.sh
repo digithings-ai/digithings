@@ -10,8 +10,10 @@
 #   WHAT IT WRITES TO PRODUCTION
 #     1. digichat Worker secret DIGICHAT_EMBED_TENANTS  (exactly two fields on
 #        the OCC entry: `token`, and `backend.digisearchIndex`)
-#     2. a local git commit bumping SHARED_DIGICHAT_CONTAINER_ID  (NOT pushed)
-#     3. a production deploy of the digithings-digichat Worker
+#     2. a production deploy of the digithings-digichat Worker, carrying
+#        DIGICHAT_CONTAINER_REV=<deploying commit> so the Container id is
+#        derived (DIG-3814; it used to be a local git commit bumping a literal,
+#        NOT pushed)
 #
 #   THE SECOND FIELD IS A CORPUS NARROWING, NOT A SIDE EFFECT (DIG-2779)
 #     The same put also rewrites occ.digithings.ai.backend.digisearchIndex to
@@ -52,8 +54,10 @@
 #     almost all of it the `sleep` that covers the drain window.
 #
 #   ROLLBACK (this is also the Act B2 rollback — see the runbook)
-#     Re-run with the previous tenant JSON and the previous key. Bump
-#     SHARED_DIGICHAT_CONTAINER_ID again (shared-v11 -> shared-v12) and redeploy.
+#     Re-run with the previous tenant JSON and the previous key, from the
+#     previous commit, and redeploy. Since DIG-3814 the Container id derives from
+#     the deploying commit, so rolling back the commit rolls back the id with it
+#     (that is what replaces the old manual shared-v11 -> shared-v12 bump).
 #     Before Act B2 lands this is a no-op in practice: nothing about the running
 #     service depends on the key yet.
 #
@@ -315,14 +319,23 @@ KEY_FP="$(printf '%s' "$NEW_KEY" | shasum -a 256 | cut -c1-8)"
 printf 'new key fingerprint (length %s, sha256 %s…) — record this, never the key\n' "$KEY_LEN" "$KEY_FP" >&2
 
 # --------------------------------------------------------------------- confirm --
+# Resolved before the confirm so the confirm can name the exact Container id the
+# deploy will derive, instead of describing a step in the abstract. Read-only:
+# it is a git rev-parse, nothing is written or deployed by this block.
+DEPLOY_REV="$(git -C "$REPO_ROOT" rev-parse --short=12 --verify HEAD 2>/dev/null || true)"
+[ -n "$DEPLOY_REV" ] || fail "could not resolve the deploying commit from $REPO_ROOT. Nothing was deployed; a deploy without a rev would silently keep the previous instance's id."
+DEPLOY_ID="shared-$DEPLOY_REV"
+
 say "3/7 confirm — this writes a production secret and deploys a Worker"
 cat >&2 <<EOF
 About to do, in order:
   1. wrangler secret put $SECRET_NAME   (digichat Worker, production)
-  2. commit the SHARED_DIGICHAT_CONTAINER_ID bump locally (not pushed)
-  3. wrangler deploy                    (digithings-digichat Worker, production)
-  4. sleep $DRAIN_SECONDS
-  5. scripts/verify_occ_invite_key.sh   (prints PASS/FAIL only)
+  2. wrangler deploy --var DIGICHAT_CONTAINER_REV=$DEPLOY_REV
+                                        (digithings-digichat Worker, production;
+                                         the Container id $DEPLOY_ID is derived
+                                         from the commit, not edited in paths.ts)
+  3. sleep $DRAIN_SECONDS
+  4. scripts/verify_occ_invite_key.sh   (prints PASS/FAIL only)
 
 Nothing user-facing changes: occ.digithings.ai is still on the first-party allowlist,
 so this cannot lock OCC out. Act B2 is a separate deploy and must not be combined
@@ -338,31 +351,35 @@ say "4/7 put the secret"
 printf '%s' "$NEW_JSON" | wrangler secret put "$SECRET_NAME" >&2 \
   || fail "the secret put failed. The deploy has NOT run, so nothing is live."
 
-# --------------------------------------------------------------- container id bump --
-say "5/7 bump SHARED_DIGICHAT_CONTAINER_ID so a warm instance is recycled"
-CURRENT_ID="$(sed -n 's/^export const SHARED_DIGICHAT_CONTAINER_ID = "\(shared-v[0-9]\+\)";.*/\1/p' "$PATHS_TS")"
-[ -n "$CURRENT_ID" ] || fail "could not read SHARED_DIGICHAT_CONTAINER_ID from $PATHS_TS. Nothing was deployed."
-CURRENT_N="${CURRENT_ID##*v}"
-NEXT_ID="shared-v$((CURRENT_N + 1))"
-printf '%s -> %s\n' "$CURRENT_ID" "$NEXT_ID" >&2
-[ "$CURRENT_ID" != "$NEXT_ID" ] || fail "refusing to deploy without a container-id change; the old instance would keep the old key."
-
-cp "$PATHS_TS" "$PATHS_TS.occ-rollout.bak"
-sed -i.bak "s/^export const SHARED_DIGICHAT_CONTAINER_ID = \"$CURRENT_ID\";/export const SHARED_DIGICHAT_CONTAINER_ID = \"$NEXT_ID\";/" "$PATHS_TS"
-rm -f "$PATHS_TS.bak"
-grep -q "SHARED_DIGICHAT_CONTAINER_ID = \"$NEXT_ID\"" "$PATHS_TS" \
-  || { cp "$PATHS_TS.occ-rollout.bak" "$PATHS_TS"; fail "the bump did not apply; $PATHS_TS was restored. Nothing was deployed."; }
-rm -f "$PATHS_TS.occ-rollout.bak"
-
-git -C "$REPO_ROOT" add "$PATHS_TS"
-if ! git -C "$REPO_ROOT" commit -q -m "chore(digichat): recycle the container so the OCC invite key takes effect (DIG-1381 Act B1)" \
-       -m "shared-v${CURRENT_N} -> shared-v${CURRENT_N}x. A warm Container keeps its boot env, so the secret put alone leaves the old token live (R5). Recorded because the container id is the only evidence that the new value was booted."; then
-  printf 'note: could not commit the container-id bump; the file on disk is still bumped. Commit it by hand.\n' >&2
-fi
+# ------------------------------------------------------------ container id (derived) --
+# DIG-3814: the container id is no longer a hand-edited literal in paths.ts. It
+# is derived from the deploying commit (sharedDigichatContainerId in
+# apps/digichat-cloudflare/src/paths.ts), so a deploy ALWAYS gets a fresh
+# instance. This step therefore no longer edits paths.ts, and no longer commits
+# a bump: there is nothing to bump and nothing to commit.
+#
+# What replaced the manual step is the deploy below carrying
+# --var DIGICHAT_CONTAINER_REV:<rev>. The recycle guarantee is unchanged in
+# strength — a warm Container keeps its boot env, so the secret put alone would
+# still leave the old token live (R5) — but it is now a property of the id
+# instead of something a human has to remember. Reading the derived id here is
+# what puts it in the rotation log.
+say "5/7 report the derived container id for the deploying commit"
+# DEPLOY_REV / DEPLOY_ID were resolved before the confirm, so the value printed
+# here is the value the deploy is already carrying.
+printf 'derived id: %s (from commit %s)\n' "$DEPLOY_ID" "$DEPLOY_REV" >&2
+printf 'the id is computed from the commit, not edited in %s\n' "$PATHS_TS" >&2
 
 # ---------------------------------------------------------------------- deploy --
-say "6/7 deploy the digichat Worker"
-wrangler deploy --outdir "$(mktemp -d)" >/dev/null 2>&1 || wrangler deploy >&2 \
+# The rev travels as a Worker var, which is the only substitution instrument
+# that works in the pinned wrangler: `wrangler deploy --define KEY=VALUE` is
+# measured broken in 4.133.0 (it rejects every form, including --define=FOO=bar,
+# because esbuild's pushCommonFlags throws on the raw KEY=VALUE string). --var
+# merges with [vars] rather than replacing them, and DIGICHAT_CONTAINER_REV is
+# deliberately absent from [vars] so it stays a per-deploy injection.
+say "6/7 deploy the digichat Worker with DIGICHAT_CONTAINER_REV=$DEPLOY_REV"
+wrangler deploy --var "DIGICHAT_CONTAINER_REV:$DEPLOY_REV" --outdir "$(mktemp -d)" >/dev/null 2>&1 \
+  || wrangler deploy --var "DIGICHAT_CONTAINER_REV:$DEPLOY_REV" >&2 \
   || fail "the deploy failed. The secret is stored but the container still has the old boot env; fix the deploy before verifying."
 
 printf 'recording the Worker version id for the rotation log:\n' >&2
@@ -381,7 +398,7 @@ set -e
 # --------------------------------------------------------------------- summary --
 say "result"
 cat >&2 <<EOF
-container id     $CURRENT_ID -> $NEXT_ID
+container id     $DEPLOY_ID (derived from commit $DEPLOY_REV)
 key fingerprint   length $KEY_LEN, sha256 $KEY_FP…
 verification     scripts/verify_occ_invite_key.sh exit $VERIFY_RC
 
@@ -393,11 +410,11 @@ that must flip to embed at Act B2.
 If exit was 1 and check 2 said embed, the new key did NOT reach the running
 registry — the recycle did not take effect. Do not start Act B2.
 
-Push the container-id commit (it is the only record of the recycle):
-  git -C $REPO_ROOT push
+There is no container-id commit to push: since DIG-3814 the id is derived from
+the deploying commit, so the deploy above is itself the record of the recycle.
 
 Append to docs/ops/SECRETS_ROTATION.md § Rotation log:
-  OCC invite key, DIGICHAT_EMBED_TENANTS, $NEXT_ID, fingerprint length $KEY_LEN
+  OCC invite key, DIGICHAT_EMBED_TENANTS, $DEPLOY_ID, fingerprint length $KEY_LEN
   sha256 $KEY_FP, verification exit $VERIFY_RC
 
 Still to do by hand, once: open https://digithings.ai/chat/occ?token=<key> as an
