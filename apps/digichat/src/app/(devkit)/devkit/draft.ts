@@ -119,17 +119,28 @@ function isBlankOrComment(line: string): boolean {
   return t === "" || t.startsWith("#");
 }
 
+function isYamlSpace(ch: string | undefined): boolean {
+  return ch === " " || ch === "\t" || ch === "\n" || ch === "\r" || ch === "\f" || ch === "\v";
+}
+
 /** `key:` header line at any indent; captures indent, key, and the rest. */
 function matchKeyLine(line: string): {
   indent: number;
   key: string;
   rest: string;
 } | null {
-  const m = /^(\s*)([^:#\s][^:]*?)\s*:(.*)$/.exec(line);
-  if (!m) return null;
+  let i = 0;
+  while (isYamlSpace(line[i])) i++;
+  if (i >= line.length) return null;
+  const first = line[i];
+  if (first === ":" || first === "#" || isYamlSpace(first)) return null;
+  const colon = line.indexOf(":", i);
+  if (colon < 0) return null;
+  const key = line.slice(i, colon).trim();
+  if (!key) return null;
   // A dash-led line (`- id: x`) is a sequence item, never a map key.
-  if (/^\s*-(\s|$)/.test(line)) return null;
-  return { indent: m[1].length, key: m[2].trim(), rest: m[3] };
+  if (line[i] === "-" && (i + 1 === line.length || isYamlSpace(line[i + 1]))) return null;
+  return { indent: i, key, rest: line.slice(colon + 1) };
 }
 
 type MapRange = { header: number; end: number; indent: number };
@@ -385,9 +396,13 @@ function locateListItems(
 
 /** Split a `- ` item line into its indent and the text after the dash. */
 function splitDash(line: string): { indent: number; rest: string } | null {
-  const m = /^(\s*)-\s+(.*)$/.exec(line);
-  if (!m) return null;
-  return { indent: m[1].length, rest: m[2] };
+  let i = 0;
+  while (isYamlSpace(line[i])) i++;
+  if (line[i] !== "-") return null;
+  let j = i + 1;
+  if (!isYamlSpace(line[j])) return null;
+  while (isYamlSpace(line[j])) j++;
+  return { indent: i, rest: line.slice(j) };
 }
 
 /**
