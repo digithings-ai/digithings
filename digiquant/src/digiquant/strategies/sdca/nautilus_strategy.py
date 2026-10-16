@@ -370,5 +370,44 @@ register(
     description="BTC-SDCA: composite valuation index (power law + M2 + DXY + weekly log-MACD + RSI) → remaining-book",
 )
 
+# Gold-SDCA (#4804). Fallback-only defaults: the publish path injects
+# preset.curve_nodes (gold_optimized) via calibration overrides, same as BTC.
+# Nodes below are the honest-v3 gated shape (buy 35/45, sell 50/30, curvature
+# 1.0/2.0, mids null — never BTC nodes) evaluated with SdcaCurveShape.to_nodes();
+# they must equal load_preset("gold_optimized").curve_nodes (pinned by test).
+register(
+    "gold_sdca",
+    SdcaStrategy,
+    SdcaStrategyConfig,
+    {
+        "initial_cash": 1000.0,
+        "long_only": False,
+        "curve_nodes": (
+            35.0,
+            31.11111111111111,
+            27.22222222222222,
+            23.333333333333332,  # risk 0, 5, 10, 15
+            19.444444444444446,
+            15.555555555555555,
+            11.666666666666666,  # risk 20, 25, 30
+            7.777777777777778,
+            3.888888888888889,
+            0.0,  # risk 35, 40, 45
+            0.0,
+            -0.30000000000000004,
+            -1.2000000000000002,
+            -2.6999999999999997,
+            -4.800000000000001,
+            -7.5,
+            -10.799999999999999,
+            -14.699999999999998,
+            -19.200000000000003,
+            -24.3,
+            -30.0,  # risk 50..100
+        ),
+    },
+    description="Gold-SDCA: generic valuation index (valuation + M2 + UUP) → remaining-book",
+)
+
 
 __all__ = ["SdcaStrategyConfig", "SdcaStrategy"]
