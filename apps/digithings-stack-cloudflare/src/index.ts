@@ -69,6 +69,13 @@ import {
   shouldProxyToDigiChat,
 } from "./digichat";
 import { isOccShellPath, occGate } from "../../digichat-cloudflare/src/occ-gate";
+import {
+  containerIsAwake,
+  isHealthProbe,
+  isScannerPath,
+  scannerResponse,
+  sleepingHealthResponse,
+} from "./wake-hygiene";
 
 /** Wrangler injects vars/secrets; cast until `wrangler types` is generated in CI. */
 const env = workerEnvBinding as unknown as Env;
@@ -730,7 +737,22 @@ export default {
           { status: 404 },
         );
       }
+      // Wake hygiene: scanners and liveness probes never boot the Container.
+      if (isScannerPath(url.pathname)) {
+        return scannerResponse();
+      }
       const container = stackContainer(workerEnv);
+      if (isHealthProbe(request, url.pathname)) {
+        let status: string | undefined;
+        try {
+          status = (await container.getState()).status;
+        } catch {
+          status = undefined;
+        }
+        if (!containerIsAwake(status)) {
+          return sleepingHealthResponse(request);
+        }
+      }
       return container.fetch(switchPort(request, port));
     });
   },
