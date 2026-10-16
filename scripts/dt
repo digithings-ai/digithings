@@ -166,6 +166,10 @@ def _report_env() -> dict[str, str]:
     report: dict[str, str] = {}
     for key, value in os.environ.items():
         upper = key.upper()
+        # Command overrides such as DT_SECRETS_CMD are paths, not credentials.
+        if upper.endswith("_CMD"):
+            report[key] = value
+            continue
         if upper.endswith("_KEY") or upper.endswith("_KEYS"):
             continue
         if any(marker in upper for marker in _SECRET_NAME_MARKERS):
