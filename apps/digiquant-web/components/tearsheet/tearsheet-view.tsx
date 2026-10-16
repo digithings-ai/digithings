@@ -132,12 +132,22 @@ function sheetFallback(slug: string): { title: string; symbol: string } {
 }
 
 const CHART_H = 440;
+const COMPACT_CHART_H = 200;
 
 function PrintHeading({ children }: { children: string }) {
   return <h2 className="ts-print-heading">{children}</h2>;
 }
 
-export function TearsheetView({ slug, embedded = false }: { slug: string; embedded?: boolean }) {
+export function TearsheetView({
+  slug,
+  embedded = false,
+  compact = false,
+}: {
+  slug: string;
+  embedded?: boolean;
+  /** Landing band: headline figures and one chart, short enough for one viewport. */
+  compact?: boolean;
+}) {
   const [loaded, setLoaded] = useState<{ slug: string; data: TearsheetData } | null>(null);
   const data = loaded?.slug === slug ? loaded.data : null;
   const [scaleOverride, setScaleOverride] = useState<ChartScale | null>(null);
@@ -407,7 +417,17 @@ export function TearsheetView({ slug, embedded = false }: { slug: string; embedd
     }
   }, [chartKnees.buy_knee_risk, chartKnees.sell_knee_risk, chartTab, data?.indicator_weights, hasLump, scale]);
 
-  if (!data) return <StrategyTearsheet model={buildStrategyTearsheet(null, sheetFallback(slug))} />;
+  if (!data) {
+    if (compact) {
+      const fallback = sheetFallback(slug);
+      return (
+        <div className="ts-compact px-3 py-4 font-mono text-[0.75rem] text-ink-mute" data-strategy={slug}>
+          {fallback.title}
+        </div>
+      );
+    }
+    return <StrategyTearsheet model={buildStrategyTearsheet(null, sheetFallback(slug))} />;
+  }
 
   const title = strategyDisplayName(slug, data?.label);
   const asset = symbolBase(data.symbol);
@@ -422,6 +442,44 @@ export function TearsheetView({ slug, embedded = false }: { slug: string; embedd
 
   const zoomed = !viewsNear(view, presetView);
   const resetZoom = () => applyLookback(lookback);
+
+  if (compact) {
+    return (
+      <div className="ts-compact grid min-w-0 gap-3 p-3">
+        <header className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <h2 className="m-0 flex items-center gap-2 font-display text-[1.15rem] font-medium tracking-[-0.02em] text-ink">
+            <AssetLogoFor strategy={slug} symbol={data.symbol} size={28} className="ts-header-logo" />
+            <span>{title}</span>
+          </h2>
+          <span className="font-mono text-[0.72rem] text-ink-mute">{data.symbol}</span>
+          <Link href={`/strategies/${slug}`} className="ms-auto font-mono text-[0.72rem] text-ink-soft">
+            Full tearsheet
+          </Link>
+        </header>
+        <KpiStrip primary ariaLabel="Headline performance">
+          <Kpi label={dcaBook ? TOTAL_RETURN_KPI_LABEL : "CAGR"} value={<Toned v={dcaBook ? data.net_profit_pct : cagr}>{fmtPct(dcaBook ? data.net_profit_pct : cagr)}</Toned>} />
+          <Kpi label="Max drawdown" value={<span className="is-neg">{fmtPct(data.max_drawdown_pct)}</span>} />
+          {dcaBook && data.dca ? (
+            <Kpi label={VS_LUMP_KPI_LABEL} value={<Toned v={data.dca.vs_lump_pct}>{fmtPct(data.dca.vs_lump_pct)}</Toned>} />
+          ) : showTradeKpis ? (
+            <Kpi label="Win rate" value={fmtPct(data.win_rate_pct)} />
+          ) : null}
+        </KpiStrip>
+        {equityPct.length > 0 ? (
+          <div className="ts-chart">
+            <TimeSeries
+              points={equityPct}
+              height={COMPACT_CHART_H}
+              scale="linear"
+              tone="accent"
+              fmt={(v) => `${fmtCompact(v)}%`}
+              ariaLabel={`${title} return`}
+            />
+          </div>
+        ) : null}
+      </div>
+    );
+  }
 
   const chartToolsExtra = chartTab === "matrix" ? (
     <>

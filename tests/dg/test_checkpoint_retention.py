@@ -1,7 +1,7 @@
 """Retention for the file-backed (sqlite) LangGraph checkpointer (DIG-2896).
 
 Ports ``public.prune_langgraph_checkpoints`` from
-``digiquant/supabase/migrations/061_checkpointer_retention.sql`` to the two tables
+``digiquant/supabase/migrations/engine/061_checkpointer_retention.sql`` to the two tables
 ``SqliteSaver`` actually creates, so the two daily ``pg_cron`` jobs (prune 05:20,
 vacuum 05:50) have a replacement that lives with the file they maintain.
 

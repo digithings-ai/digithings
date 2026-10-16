@@ -158,7 +158,8 @@ def _r2_is_stale(manifest_as_of: str, resolved_as_of: str) -> bool:
 # ``digiquant.data.gloomberb.agent_tools``) and are imported at the top of this
 # module under ``_build_gloomberb_client`` / ``_gloomberb_envelope_json``. The
 # builder remains the patchable seam tests use to inject a MockTransport-backed
-# client. ``GLOOMBERB_ENABLED`` defaults OFF (Counsel memo DIG-1233);
+# client. ``GLOOMBERB_ENABLED`` defaults ON since the DIG-2752 rescope (decision
+# d4922299, which superseded the DIG-1233 opt-in); set it to 0 to stop the family.
 # the session cookie is never logged or echoed into tool payloads.
 
 
@@ -683,18 +684,12 @@ def create_mcp_server(
     from digiquant.data.gloomberb.entitlements import (
         TOOL_ENTITLEMENTS as _GLOOMBERB_ENTITLEMENTS,
     )
-    from digiquant.data.gloomberb.session_gate import (
-        session_gate_status as _gloomberb_session_gate_status,
-    )
 
-    # #2752: a `session` / `preview` / `pro` tool is advertised only when the
-    # deployer's own cookie is configured AND validates against api.gloom.sh.
-    # Resolved ONCE per server build — the gate caches the probe for one TTL
-    # window, and this keeps a 41-tool build from re-asking. `free` and
-    # `venue_session` tools are untouched, and the LuxAlgo family is `free`
-    # only, so the entitlement value alone selects the Gloomberb gated set.
-    _gloomberb_session_tools_advertised = _gloomberb_session_gate_status().authenticated
-    _GLOOMBERB_SESSION_ENTITLEMENTS = frozenset({"session", "preview", "pro"})
+    # DIG-3907: the Gloomberb session-cookie path is retired (keyless access
+    # only). `session` / `preview` / `pro` tools are never advertised; `free`
+    # and `venue_session` tools are untouched, and the LuxAlgo family is `free`
+    # only, so the entitlement value alone selects the retired set.
+    _GLOOMBERB_RETIRED_ENTITLEMENTS = frozenset({"session", "preview", "pro"})
     from digiquant.data.gloomberb.entitlements import (
         with_entitlement_note as _gloomberb_note,
     )
@@ -735,10 +730,7 @@ def create_mcp_server(
                 doc = fn.__doc__ or ""
                 if GLOOMBERB_PLATFORM_NOTE not in doc:
                     fn.__doc__ = f"{GLOOMBERB_PLATFORM_NOTE}\n\n{doc.lstrip()}"
-            if (
-                entitlement in _GLOOMBERB_SESSION_ENTITLEMENTS
-                and not _gloomberb_session_tools_advertised
-            ):
+            if entitlement in _GLOOMBERB_RETIRED_ENTITLEMENTS:
                 return fn
             public = canonical_tool_name(name)
             if enabled is not None and name not in enabled and public not in enabled:
@@ -1099,8 +1091,8 @@ def create_mcp_server(
 
     # ── digifetch x Gloomberb market-data reads (#4069, #4110) ──────────────
     # 33 enrichment tools over api.gloom.sh (plus a Yahoo-backed earnings
-    # calendar). Default-OFF behind GLOOMBERB_ENABLED (explicit opt-in
-    # re-enables); anonymous unless
+    # calendar). On by default since the DIG-2752 rescope;
+    # GLOOMBERB_ENABLED=0 stops the family. Anonymous unless
     # GLOOMBERB_SESSION_COOKIE is set for holders / analyst / corporate-actions
     # / research-search / transcripts / statements / tweets / short-interest /
     # equity-diagnostic (transcripts and screener additionally need a Pro
@@ -1116,8 +1108,8 @@ def create_mcp_server(
         """Latest quote for one listing via Gloomberb Cloud (anonymous; JSON envelope).
 
         `exchange` is optional. Enrichment only: free-tier data is delayed up
-        to 15 minutes and is never a pipeline primary. Disabled by the
-        GLOOMBERB_ENABLED kill switch (default OFF; explicit opt-in re-enables). Carries "Sourced from
+        to 15 minutes and is never a pipeline primary. On by default; set
+        GLOOMBERB_ENABLED=0 to stop the family. Carries "Sourced from
         Gloomberb" attribution and a term.gloom.sh deep link.
         """
         try:
@@ -3214,10 +3206,22 @@ def create_mcp_server(
                 incremental_update,
                 load_cached,
             )
-            from digiquant.strategies.sdca.btc_power_law import (
-                fit_btc_power_law,
-                save_coefficients,
-            )
+            # Repo-split 1.2 (DIG-3691): power-law fitter resolves through the
+            # plugin hook first; in-tree implementation is the fallback while
+            # R1 still lives in this repo.
+            try:
+                from digiquant import plugin as _plugin
+
+                _hook = _plugin.get_power_law_hook()
+            except Exception:
+                _hook = None
+            if _hook is not None:
+                fit_btc_power_law, save_coefficients = _hook
+            else:
+                from digiquant.strategies.sdca.btc_power_law import (
+                    fit_btc_power_law,
+                    save_coefficients,
+                )
         except ImportError as exc:
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
 
@@ -3635,6 +3639,15 @@ def create_mcp_server(
         except (LookupError, PolicyReplayExposureError, ValueError) as exc:
             return json.dumps({"ok": False, "error": str(exc)})
         return json.dumps({"ok": True, "data": summary.model_dump(mode="json")}, indent=2)
+
+    # Repo-split 1.2 (DIG-3691): SDCA MCP tools register through the
+    # ``digiquant.mcp_tools`` entry-point group. Fail-closed (warn-and-skip).
+    try:
+        from digiquant import plugin as _plugin
+
+        _plugin.register_plugin_mcp_tools(mcp, _maybe_tool)
+    except Exception:
+        pass
 
     return mcp
 
