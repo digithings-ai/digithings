@@ -154,3 +154,27 @@ def test_gemini_3_1_flash_lite_mapped_to_ci() -> None:
         client_mod.cheaperinference_bare_id_for_house_slug("google/gemini-3.1-flash-lite")
         == "gemini-3.1-flash-lite"
     )
+
+
+@pytest.mark.parametrize(
+    ("base", "openrouter", "cheaper"),
+    [
+        ("https://openrouter.ai/api/v1", True, False),
+        ("https://api.openrouter.ai/api/v1", True, False),
+        ("https://api.cheaperinference.com/v1", False, True),
+        ("https://evilopenrouter.ai/api/v1", False, False),
+        ("https://evilcheaperinference.com/v1", False, False),
+        ("https://openrouter.ai.evil.com/api/v1", False, False),
+        ("https://cheaperinference.com.evil.com/v1", False, False),
+        ("", False, False),
+    ],
+)
+def test_api_base_host_is_not_a_substring(
+    monkeypatch: pytest.MonkeyPatch,
+    base: str,
+    openrouter: bool,
+    cheaper: bool,
+) -> None:
+    monkeypatch.setenv("OPENAI_API_BASE", base)
+    assert client_mod._api_base_is_openrouter() is openrouter
+    assert client_mod._api_base_is_cheaperinference() is cheaper
