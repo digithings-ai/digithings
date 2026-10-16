@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -128,16 +129,19 @@ def _default_trade_size(first_price: float, balance: float, fraction: float) -> 
 
 def _resolve_tearsheet_output(path: str | Path) -> Path:
     """Resolve tearsheet path under BACKTEST_RESULTS_DIR (reject path traversal)."""
-    out = Path(path)
-    if not out.is_absolute():
-        out = Path(BACKTEST_RESULTS_DIR) / out
-    base = Path(BACKTEST_RESULTS_DIR).resolve()
-    resolved = out.resolve()
-    try:
-        resolved.relative_to(base)
-    except ValueError as exc:
-        raise ValueError(f"tearsheet_path must resolve under {BACKTEST_RESULTS_DIR!r}") from exc
-    return resolved
+    base = os.path.normpath(os.path.abspath(BACKTEST_RESULTS_DIR))
+    raw = os.fspath(path)
+    joined = raw if os.path.isabs(raw) else os.path.join(base, raw)
+    candidate = os.path.normpath(joined)
+    prefix = base if base.endswith(os.sep) else base + os.sep
+    if candidate != base and not candidate.startswith(prefix):
+        raise ValueError(f"tearsheet_path must resolve under {BACKTEST_RESULTS_DIR!r}")
+    real_base = os.path.realpath(base)
+    real = os.path.realpath(candidate)
+    real_prefix = real_base if real_base.endswith(os.sep) else real_base + os.sep
+    if real != real_base and not real.startswith(real_prefix):
+        raise ValueError(f"tearsheet_path must resolve under {BACKTEST_RESULTS_DIR!r}")
+    return Path(candidate)
 
 
 # ---------------------------------------------------------------------------

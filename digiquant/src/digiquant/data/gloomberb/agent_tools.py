@@ -693,7 +693,7 @@ def build_digifetch_tool_dispatcher(
         except Exception as exc:  # mirror the MCP wrappers: never raise to the loop
             logger.warning("digifetch tool %s failed: %s", name, exc)
             return {
-                "content": json.dumps({"error": f"{type(exc).__name__}: {exc}"}),
+                "content": json.dumps({"error": type(exc).__name__}),
                 "ok": False,
             }
         return {

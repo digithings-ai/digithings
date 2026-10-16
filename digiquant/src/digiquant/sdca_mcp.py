@@ -65,7 +65,7 @@ def run_fetch_bitview_series(
             allow_derived=allow_derived,
         )
     except Exception as exc:
-        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return json.dumps({"error": type(exc).__name__})
     return result.model_dump_json(indent=2)
 
 
@@ -97,7 +97,7 @@ def run_fetch_bgeometrics_series(
             session=session,
         )
     except Exception as exc:
-        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return json.dumps({"error": type(exc).__name__})
     return result.model_dump_json(indent=2)
 
 
@@ -134,7 +134,7 @@ def run_fetch_coinmetrics_series(
             session=session,
         )
     except Exception as exc:
-        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return json.dumps({"error": type(exc).__name__})
     return result.model_dump_json(indent=2)
 
 
@@ -154,7 +154,7 @@ def run_list_coinmetrics_catalog(
     try:
         result = fetch_coinmetrics_catalog(asset, timeout=timeout, api_key=api_key, session=session)
     except Exception as exc:
-        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return json.dumps({"error": type(exc).__name__})
     return result.model_dump_json(indent=2)
 
 
@@ -187,7 +187,7 @@ def run_fit_sdca_weights(
             profile_name=profile,
         )
     except Exception as exc:
-        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return json.dumps({"error": type(exc).__name__})
     return result.model_dump_json(indent=2)
 
 
@@ -274,7 +274,7 @@ def run_build_sdca_risk_index(
         dest = Path(output_path) if output_path else Path(f"{ticker}_sdca_risk.parquet")
         path = write_risk_index(frame, dest)
     except Exception as exc:
-        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return json.dumps({"error": type(exc).__name__})
 
     dates_col = frame["date"]
     result = RiskIndexBuildResult(
