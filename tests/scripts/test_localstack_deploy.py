@@ -578,6 +578,7 @@ def test_binding_table_never_prints_a_value(tmp_path: Path) -> None:
     table = deploy.render_binding_table(surface)
     assert "SECRETISH" in table
     assert "placeholder" in table
+    assert "value" not in table
 
 
 def test_binding_table_reports_an_absent_route_list(tmp_path: Path) -> None:
