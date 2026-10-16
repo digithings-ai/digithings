@@ -404,7 +404,7 @@ def test_llm() -> dict[str, str | bool]:
         )
         return {"ok": True, "model": model, "reply": reply or "(empty)"}
     except _LLM_PROBE_ERRORS as e:
-        return {"ok": False, "model": "", "reply": "", "error": str(e)}
+        return {"ok": False, "model": "", "reply": "", "error": type(e).__name__}
 
 
 def _resolve_request_id(request: Request) -> str | None:

@@ -16,6 +16,7 @@ deployment:
   persistence: none
   auth: anonymous
   features:
+    view: balanced
     attachments: false
     dictation: false
     speech: false

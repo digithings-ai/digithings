@@ -1,5 +1,12 @@
 {
   "name": "digithings-monorepo",
+  "description": "npm workspace root for digithings.",
+  "license": "MIT",
+  "homepage": "https://digithings.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/digithings-ai/digithings.git"
+  },
   "private": true,
   "workspaces": [
     "apps/*",
