@@ -55,12 +55,28 @@ class TestMakeWalkForwardFolds:
 
 
 class TestObjective:
-    def test_infeasible_below_capital_floor_is_neg_inf(self) -> None:
+    def test_take_profit_net_below_floor_with_peak_above_is_feasible(self) -> None:
+        # Take-profit sells can drive net deployed below the floor after
+        # capital was once at risk; the floor measures peak, so this is
+        # FEASIBLE (#4804).
         obj = SdcaOptimizeObjective(capital_deployed_floor_pct=10.0, max_drawdown_cap_pct=50.0)
         metrics = SdcaTrialMetrics(
             vs_flat_dca_pct=12.0,
             vs_lump_pct=-3.0,
             capital_deployed_pct=5.0,
+            capital_deployed_peak_pct=40.0,
+            max_drawdown_pct=10.0,
+        )
+        assert is_feasible(metrics, obj)
+        assert objective_score(metrics, obj) == pytest.approx(12.0)
+
+    def test_infeasible_when_peak_below_floor(self) -> None:
+        obj = SdcaOptimizeObjective(capital_deployed_floor_pct=10.0, max_drawdown_cap_pct=50.0)
+        metrics = SdcaTrialMetrics(
+            vs_flat_dca_pct=12.0,
+            vs_lump_pct=-3.0,
+            capital_deployed_pct=5.0,
+            capital_deployed_peak_pct=5.0,
             max_drawdown_pct=10.0,
         )
         assert not is_feasible(metrics, obj)
@@ -72,6 +88,7 @@ class TestObjective:
             vs_flat_dca_pct=4.0,
             vs_lump_pct=99.0,
             capital_deployed_pct=40.0,
+            capital_deployed_peak_pct=40.0,
             max_drawdown_pct=15.0,
         )
         assert objective_score(metrics, obj) == pytest.approx(4.0)
@@ -82,6 +99,7 @@ class TestObjective:
             vs_flat_dca_pct=8.0,
             vs_lump_pct=0.0,
             capital_deployed_pct=50.0,
+            capital_deployed_peak_pct=50.0,
             max_drawdown_pct=21.0,
         )
         assert not is_feasible(metrics, obj)
@@ -139,6 +157,7 @@ class TestRailsRefitPerFold:
                 vs_flat_dca_pct=1.0,
                 vs_lump_pct=0.0,
                 capital_deployed_pct=40.0,
+                capital_deployed_peak_pct=40.0,
                 max_drawdown_pct=10.0,
             )
 
