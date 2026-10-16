@@ -190,15 +190,23 @@ def load_sdca_ohlcv(
 
 
 def _first_existing(root: Path, names: tuple[str, ...]) -> Path | None:
-    real_base = os.path.realpath(os.path.abspath(os.fspath(root)))
-    base_prefix = real_base if real_base.endswith(os.sep) else real_base + os.sep
+    """Return the first of ``names`` present as a regular file under ``root``.
+
+    The match resolves against the directory's own entries and the returned
+    path is that entry itself, never a string built from ``names``: a hostile
+    element can therefore never escape ``root`` however it arrives here (every
+    live caller passes constants). Keeping the parameter out of the returned
+    value entirely is also what the py/path-injection rule needs to see
+    (#5888: CodeQL flagged the previous join-then-check form at line 200).
+    """
+    try:
+        entries = [p for p in Path(root).iterdir() if p.is_file()]
+    except OSError:
+        return None
     for name in names:
-        candidate = os.path.realpath(os.path.normpath(os.path.join(real_base, name)))
-        if candidate != real_base and not candidate.startswith(base_prefix):
-            continue
-        candidate_path = Path(candidate)
-        if candidate_path.exists():
-            return candidate_path
+        for entry in entries:
+            if entry.name == name:
+                return entry
     return None
 
 
