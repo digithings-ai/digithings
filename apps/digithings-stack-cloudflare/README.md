@@ -25,10 +25,14 @@ with `printf '%s' "$VALUE" | npx wrangler secret put MCP_EDGE_KEY`; rotate by
 re-putting the secret and updating the `token` in the occ entry of
 `DIGICHAT_EMBED_TENANTS`; the Worker reads the secret per request, so the edge
 rotates instantly, while a running digichat Container keeps start-time env values
-until recycled — bump `SHARED_DIGICHAT_CONTAINER_ID`
-(`apps/digichat-cloudflare/src/paths.ts:22`) and redeploy when a rotation
-must reach a live instance. A Dockerfile rebuild-marker bump changes the image
-tag, not the instance id, and does not by itself replace a warm instance).
+until recycled — since DIG-3814 the Container id is derived from the deploying
+commit by `sharedDigichatContainerId` in
+`apps/digichat-cloudflare/src/paths.ts`, so every deploy that carries
+`DIGICHAT_CONTAINER_REV` (`apps/digichat-cloudflare/scripts/deploy.mjs`) recycles
+the instance on its own. The value is deliberately absent from `[vars]`; a deploy
+that does not carry the rev falls back to the legacy id, which is why the deploy
+wrapper refuses to run without one. A Dockerfile rebuild-marker bump changes the
+image tag, not the instance id, and does not by itself replace a warm instance).
 
 One **multi-process** Cloudflare Container replaces Mac Docker Compose +
 `*.trycloudflare.com` quick tunnels for production digichat.

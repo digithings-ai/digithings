@@ -64,7 +64,8 @@ import {
 } from "./ports";
 import {
   DIGICHAT_PORT,
-  SHARED_DIGICHAT_CONTAINER_ID,
+  digichatContainerRev,
+  sharedDigichatContainerId,
   shouldProxyToDigiChat,
 } from "./digichat";
 import { isOccShellPath, occGate } from "../../digichat-cloudflare/src/occ-gate";
@@ -508,6 +509,15 @@ export interface Env {
   DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY?: string;
   /** DIG-3585 /chat/occ shell gate. Worker-scoped; never forwarded to a container. */
   OCC_INVITE_KEY?: string;
+  /**
+   * DIG-3814: short sha of the deploying commit, injected by
+   * `apps/digichat-cloudflare/scripts/deploy.mjs` via
+   * `wrangler deploy --var DIGICHAT_CONTAINER_REV:<sha12>`. It names the folded
+   * digichat Container (see `sharedDigichatContainerId`), so the Worker reads
+   * it and deliberately does NOT forward it into `DigiChatContainer.envVars` —
+   * the container process has no use for the commit that built it.
+   */
+  DIGICHAT_CONTAINER_REV?: string;
 }
 
 /** Secret-gated MCP edge paths (`/_stack/mcp/<id>/…`) → in-container ports. */
@@ -561,6 +571,13 @@ export default {
         ok: true,
         service: "digithings-stack",
         containerId: SHARED_STACK_CONTAINER_ID,
+        // DIG-3814: the folded digichat Container id is derived from the
+        // deploying commit by the standalone worker's own paths.ts, the same
+        // derivation its own worker uses. Reporting it here is what makes the
+        // LIVE digichat surface verifiable: the zone routes moved here, so this
+        // is the route a deploy of the digichat id is actually observable on.
+        digichatContainerId: sharedDigichatContainerId(workerEnv.DIGICHAT_CONTAINER_REV),
+        digichatRev: digichatContainerRev(workerEnv.DIGICHAT_CONTAINER_REV),
         note: "Worker up; container ports may still be starting",
       });
     }
@@ -662,8 +679,8 @@ export default {
       return runIsolated(
         "digichat",
         () => import("./digichat"),
-        async ({ DIGICHAT_PORT, SHARED_DIGICHAT_CONTAINER_ID }) => {
-          const container = getContainer(workerEnv.DIGICHAT, SHARED_DIGICHAT_CONTAINER_ID);
+        async ({ DIGICHAT_PORT, sharedDigichatContainerId }) => {
+          const container = getContainer(workerEnv.DIGICHAT, sharedDigichatContainerId(workerEnv.DIGICHAT_CONTAINER_REV));
           return container.fetch(switchPort(request, DIGICHAT_PORT));
         },
       );
