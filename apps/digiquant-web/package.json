@@ -1,5 +1,13 @@
 {
   "name": "digiquant-web",
+  "description": "Web client for digiquant.",
+  "license": "MIT",
+  "homepage": "https://digithings.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/digithings-ai/digithings.git",
+    "directory": "apps/digiquant-web"
+  },
   "version": "1.0.0",
   "private": true,
   "scripts": {
