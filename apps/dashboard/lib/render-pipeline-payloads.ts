@@ -90,8 +90,9 @@ export function cleanMemoProse(text: string): string {
   return cleaned;
 }
 
-function escapeTableCell(v: unknown): string {
-  return s(v).replace(/\|/g, '\\|').replace(/\n/g, ' ').trim();
+/** A markdown table cell. `|` would open another column, and a newline would break the row. */
+export function escapeTableCell(v: unknown): string {
+  return s(v).replace(/[|\r\n]/g, ' ').trim();
 }
 
 /** Render an array of similarly-shaped objects as a compact markdown table. */
