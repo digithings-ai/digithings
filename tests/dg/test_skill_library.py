@@ -2,7 +2,7 @@
 
 Pinned properties:
 
-1. The three named skills exist, load, and carry a one-line description.
+1. The named skills exist, load, and carry a one-line description.
 2. get_skill returns the instructions; it is not a summary of them.
 3. An unknown id is refused with a corrective message naming what does exist.
 4. A skill id is validated before it reaches the filesystem — no traversal.
@@ -29,7 +29,12 @@ import re
 
 import pytest
 
-EXPECTED = ("find-precedent-tickets", "present-results", "summarize-tickets-by-topic")
+EXPECTED = (
+    "find-precedent-tickets",
+    "guide-help-docs",
+    "present-results",
+    "summarize-tickets-by-topic",
+)
 
 
 # leaf 1b of DIG-509 asserts exactly this absence on the canonical grounding
@@ -139,6 +144,56 @@ def test_no_document_names_a_capability_inventory():
         for pattern in FORBIDDEN_IN_DOCUMENTS:
             hit = re.search(pattern, text, re.IGNORECASE)
             assert hit is None, f"{doc.name} names a capability ({pattern!r}): {hit.group(0)!r}"
+
+
+@pytest.mark.unit
+def test_every_skill_translates_non_chat_language_terms():
+    """DIG-3355 (d): the same translation rule is in every skill."""
+    from digigraph.skill_library import load_skill_document
+
+    for name in EXPECTED:
+        body = load_skill_document(name).body
+        assert 'in progress ("in Bearbeitung")' in body, name
+        assert "already in the chat language" in body, name
+
+
+@pytest.mark.unit
+def test_precedent_skill_cites_resolved_tickets():
+    from digigraph.skill_library import load_skill_document
+
+    body = load_skill_document("find-precedent-tickets").body
+    assert "digisearch_zammad_tickets" in body
+    assert "Advise the fix first" in body
+    assert "get_ticket" in body
+
+
+@pytest.mark.unit
+def test_topical_skill_keeps_counts_off_semantic_search():
+    """DIG-3355 (b): semantic search explores; counts come from Zammad metadata tools."""
+    from digigraph.skill_library import load_skill_document
+
+    body = " ".join(load_skill_document("summarize-tickets-by-topic").body.split())
+    assert "Semantic search (`digisearch_zammad_tickets`) is for exploration" in body
+    assert "Counts and precise metrics must come from the Zammad metadata" in body
+    assert "aggregate_tickets" in body
+    assert "Never report a count taken from semantic-search hits." in body
+
+
+@pytest.mark.unit
+def test_help_docs_skill_carries_the_manual_map():
+    from digigraph.skill_library import load_skill_document
+
+    body = load_skill_document("guide-help-docs").body
+    for required in (
+        "digisearch_occ_help",
+        "Cloud Portal manual",
+        "OCC Search manual",
+        "6 Backup and Restore",
+        "12 Legal holds",
+        "not available",
+        "E-learning videos are out of scope",
+    ):
+        assert required in body, required
 
 
 @pytest.mark.unit
