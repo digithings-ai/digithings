@@ -107,3 +107,122 @@ dependency. There is deliberately no CI gate for licenses yet — this is a
 review-time step, and `license-checker` is run on demand via `npx` rather than
 vendored as a dependency. For Python components, `pip-licenses --format=markdown
 --with-urls` is the equivalent review.
+
+## Dependency-licence register — counsel review DIG-1768 (internal ref)
+
+**Status:** entries landed 2026-10-16 from the counsel memo (the `counsel-memo`
+document on DIG-1768; DIG-1768 `done`). `DIG-###` references below are internal
+issue IDs, cited for traceability as in `docs/VENDOR_CONTENT_BOUNDARY.md`.
+Mastra boundary adopted by Chris ("use it behind an interface we own"); LiteLLM
+PyPI-only boundary **ratified** by Chris 2026-10-07, not re-litigable at adoption
+time.
+
+Checked against the tree at `github/develop` `fb447feeb1` (2026-10-16): no
+`mastra` references anywhere in tracked files; no `THIRD_PARTY_NOTICES` anywhere
+in the tracked tree; compose files run the pinned `digillm` image (see the
+LiteLLM entry). Wording below is Counsel's, condensed; the memo holds the clause
+quotes and evidence.
+
+### Mastra `@mastra/core` — clean at import level only (CONFIRMED)
+
+Licence: Apache-2.0 **outside** any directory named `ee/`; everything under `ee/`
+is proprietary under the Mastra Enterprise Edition License v2.0 and is not
+redistributable.
+
+**The SPDX field is unreliable for this package.** `@mastra/core/package.json`
+declares `"license": "Apache-2.0"` with `"files": ["dist", ...]`, so compiled
+`ee/` output ships inside the Apache-labelled tarball, and the exports map
+exposes exactly `./auth/ee` and `./agent-builder/ee`. Our scanner reads this
+package as clean while proprietary code sits on disk. A future scan that trusts
+the SPDX field produces a false clean.
+
+Boundary: never import an `/ee` subpath. The boundary is a directory-name
+catch-all ("including but not limited to" `auth/ee`, `agent-builder/ee`),
+wider than three modules — published packages carrying `ee/` include
+`@mastra/core`, `@mastra/editor` and `@mastra/playground-ui` — and upstream may
+recompose the set at any time (`ee/LICENSE` s.5.1), so every version bump
+re-runs this check. Pin exact versions. Do not brand digithings as
+Mastra-derived (Apache-2.0 s.6 grants no trademark rights). Touching `ee/` in
+production without a signed agreement plus licence key is a material breach
+litigated in Delaware — entirely avoidable by never importing it.
+
+Enforcement: a CI grep for `/ee` imports, added with the first Mastra commit
+(see the second open obligation below).
+
+### MCP specification `2026-07-28` — clean (CONFIRMED)
+
+Licence: mixed MIT / Apache-2.0 mosaic from the 2026-01-05 relicensing
+transition; the `2026-07-28` spec is post-transition. Both grants are permissive
+and satisfiable at once. The project is now "Model Context Protocol, a Series of
+LF Projects, LLC".
+
+Implementing a protocol is not a derivative work of it, so we owe nothing
+unless we copy files. Boundary: do not vendor `schema.json`, `schema.ts` or
+`schema.mdx`; generate types at build time and keep generated output out of our
+MIT source tree. Position wording says **"compatible with"**, never "certified
+by" or "endorsed by".
+
+Enforcement: review-time (do not commit those three files); no CI gate.
+
+### AutoGen — avoid: deprecated / maintenance mode; code licence is MIT (CONFIRMED)
+
+Do not adopt: upstream README carries an explicit maintenance-mode notice
+steering users to Microsoft Agent Framework — no security patches, no fixes, no
+development.
+
+**The licence is not the reason, and must not be recorded as one.** Root
+`LICENSE` is CC-BY-4.0 over "documentation and other content"; `LICENSE-CODE`
+is MIT over "any code in the repository", confirmed by
+`python/packages/autogen-core/pyproject.toml` (`license = {file =
+"LICENSE-CODE"}`). Recording CC-BY as the reason guarantees every future scan
+re-reads the root `LICENSE` and re-raises a blocker that does not exist. Only a
+copy of AutoGen documentation into our docs would engage CC-BY; we will not do
+that.
+
+Enforcement: none needed (no adoption); this entry exists so scans conclude.
+
+### LiteLLM — PyPI only, never the vendor image [RATIFIED by Chris 2026-10-07]
+
+Licence: MIT core (`litellm`, PyPI) versus proprietary `enterprise/` tree
+(separate distribution `litellm-enterprise`, `LicenseRef-Proprietary`).
+
+Boundary: install the pinned `litellm` wheel from PyPI only. Never
+`docker.litellm.ai/berriai/litellm`, never `ghcr.io/berriai/litellm`, never
+`litellm-enterprise`. Why the image differs from the package: the MIT core
+imports the proprietary tree at runtime by source path, and the upstream
+Dockerfile copies it in — running the vendor image in production is unlicensed
+production use of proprietary code. PyPI is correctly labelled, so the boundary
+is enforceable on the artefact. Do not enable enterprise-backed hooks in our
+config (some degrade silently; one endpoint returns HTTP 400 without them).
+
+Enforcement: `tests/scripts/test_compose_litellm_pinned.py` (landed with
+DIG-1780): every compose file runs pinned `ghcr.io/digithings-ai/digillm:X.Y.Z`
+built from the same exact `litellm[proxy]` version, and no tracked compose
+file, Dockerfile, contract or workflow may name berriai. (Residual: two
+historical prose lines still name the vendor image — `RELEASES.md:115` and the
+2026-08-09 ghcr plan — neither is a compose/Dockerfile/workflow reference, so
+the guard passes; cleanup belongs to their owners.)
+
+Telemetry: the memo recorded UNSURE, pending empirical observation by Security.
+Resolved by DIG-1781 (`done` 2026-10-15): observed PyPI `litellm==1.72.6` proxy
+under a deny-by-default socket guard — no spend report, usage beacon,
+phone-home, PostHog call, PyPI version check or `models.litellm.ai` fetch. The
+single always-on outbound call is the functional public pricing-data fetch
+(`raw.githubusercontent.com`; sends no usage or customer data, suppressible).
+Verdict: CONFIRMED-clean for telemetry at 1.72.6. **Re-check when the pin moves
+past 1.72.6.**
+
+### Open obligations (stated, not omitted)
+
+1. **`THIRD_PARTY_NOTICES` does not exist** — verified absent from the tracked
+   tree 2026-10-16. MIT ("retain the notice in all copies") and Apache-2.0
+   s.4(a)/s.4(c) (ship licence copies, retain notices) require us to ship
+   dependency licence texts. On the Mastra and LiteLLM axis this is currently
+   unsatisfied anywhere in the repo. CTO owns the decision: where the file
+   lives, who regenerates it, and how it ships in each release artefact. The
+   LiteLLM entry is being added alongside the DIG-1780 image replacement —
+   coordinate with DevOps rather than duplicating.
+2. **Mastra binds future code, not current code.** Nothing in the repo imports
+   Mastra today; the `/ee` rule, the CI grep and the per-bump re-check attach
+   to the first commit that adds it. The LiteLLM telemetry question above is the
+   reverse case — an open question the register kept until evidence closed it.
