@@ -1,0 +1,18 @@
+# docker-compose.yml — project override
+# Extends the root compose stack for this project.
+# Usage: docker compose -f ../../docker-compose.yml -f docker-compose.yml up
+#
+# Set DIGI_PROJECT_CONFIG to the path of your digiproject.yaml.
+# In Docker: mount a named volume at run_data_dir when Digistore is enabled.
+
+services:
+  digigraph:
+    environment:
+      DIGI_PROJECT_CONFIG: /project/digiproject.yaml
+    volumes:
+      - ./digiproject.yaml:/project/digiproject.yaml:ro
+      # Uncomment below when run_data_dir is set in digiproject.yaml:
+      # - run_data:/data/run
+
+# volumes:
+#   run_data:

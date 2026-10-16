@@ -1,0 +1,31 @@
+{
+  "weights": {
+    "valuation": 1.0,
+    "m2": 0.0,
+    "rs_eth": 0.0,
+    "dxy": 0.0,
+    "weekly_rsi": 0.0,
+    "weekly_macd": 0.0,
+    "sma_band": 0.0
+  },
+  "search_names": [
+    "weekly_rsi",
+    "weekly_macd",
+    "sma_band",
+    "m2",
+    "rs_eth",
+    "dxy"
+  ],
+  "catalog": [
+    "m2",
+    "rs_eth",
+    "dxy",
+    "weekly_rsi",
+    "weekly_macd",
+    "sma_band"
+  ],
+  "mean_is_vs_flat_dca_pct": 915.4254476758982,
+  "mean_oos_vs_flat_dca_pct": -7.787838707761549,
+  "num_evaluations": 1458,
+    "notes": "All-catalog extra search (grid 0/0.5/1, 1458 evals). Stage A scored by IS vs_flat_dca with a frozen distribute curve; extras without data skipped. search_names=['weekly_rsi', 'weekly_macd', 'sma_band', 'm2', 'rs_eth', 'dxy']. kept={}. Curve_simulator Stage B. beats_flat_dca_oos not an OOS claim. Linux Nautilus BacktestEngine not used (#42)."
+}

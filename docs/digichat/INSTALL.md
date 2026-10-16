@@ -1,0 +1,296 @@
+# digichat self-hosted install
+
+Client / operator guide: pull a pinned digichat image, choose a backend profile, set
+env, smoke. Digi module names are always lowercase in prose.
+
+## Product model
+
+digithings ships **self-hosted AI infra**. Clients install digichat **releases from
+GitHub** and run them in **their** cloud or on-prem. There is **no** live shared
+digichat SaaS for clients.
+
+`digithings.ai/chat` is digithings’ **own** install of the same product (Pages shell
++ iframe → digichat Node via Tunnel → digigraph). It is not a multi-tenant host for
+other companies.
+
+Same pattern as DataTap: client-hosted digichat Node + **their** backend (Foundry
+**or** digigraph stack).
+
+**Hard rule:** scale by shipping a clean release + adapters + configurable
+digigraph/digivault modules. Custom work is env, secrets, and ingest — not a second
+chat app.
+
+## Install unit
+
+> **No published digichat image exists today.** The build lane is back —
+> `publish-digichat-image.yml` publishes `ghcr.io/digithings-ai/digichat:vX.Y.Z`
+> on a `digichat-vX.Y.Z` tag (the trigger is the `digichat-v*` glob, but a tag
+> that is not exactly `digichat-v<major>.<minor>.<patch>` is refused) — but the
+> package is still absent from GHCR
+> (verified 2026-10-06: anonymous pull `401`, org package list empty), because
+> the tag ladder stops at `digichat-v2.3.2` and nothing publishes until a tag
+> lands. Until then, build from the repo root and record the digest you deploy.
+> See [`docs/ops/digichat-datatap-aca.md`](../ops/digichat-datatap-aca.md).
+>
+> The **intended** primary install unit is a pinned published image — not npm
+> (`private: true`), not `:latest` in production.
+
+```bash
+# today's only supported path
+docker build -f apps/digichat/Dockerfile \
+  --build-arg DIGICHAT_VERSION=2.4.0 \
+  --build-arg DIGICHAT_REVISION="$(git rev-parse HEAD)" \
+  -t digichat:2.4.0 .
+```
+
+| Artifact | Value |
+|---|---|
+| Git tag | `digichat-vX.Y.Z` |
+| Published image | **none** — build locally (see above) |
+| Changelog | `apps/digichat/CHANGELOG.md` |
+| Current app version | `2.4.0` (`develop`) |
+
+**Existing clients (DataTap and others) are pinned to a digichat image already
+imported into their own Azure registry** (`datatapchatregistry.azurecr.io`).
+Those registries are copies, so they keep working independently of GHCR; the
+claim that `ghcr.io/digithings-ai/digichat:v0.9.3` "remains published" can no
+longer be verified from this repo and should not be relied on.
+to `v2.3.2` until those clients choose to upgrade.
+
+Compose overlays and env templates live under
+[`infra/digichat-release/`](../../infra/digichat-release/).
+
+## Choose a profile
+
+| Profile | Backend | Minimum services |
+|---|---|---|
+| **A** | digigraph → digillm → LiteLLM (+ digivault tools) | digichat + db + digikey + digigraph + LiteLLM + digivault |
+| **B** | Azure AI Foundry (`DefaultAzureCredential`) | digichat + db only |
+
+Adapters only: `digigraph` \| `foundry`. digigraph owns digillm→LiteLLM and digivault.
+
+### The deployment config — one file
+
+Every profile mounts [`infra/digichat-release/config/`](../../infra/digichat-release/config/)
+at `/app/config` and reads `/app/config/digichat.yaml`. That one YAML file defines
+the install — skin, chrome, gate, tools, MCP servers, backend:
+
+```bash
+cp infra/digichat-release/config/digichat.yaml.example \
+   infra/digichat-release/config/digichat.yaml
+# edit it: slug, chrome.skin, title/welcome, gate, backend
+
+make digichat-config-check CONFIG=infra/digichat-release/config/digichat.yaml
+```
+
+`make digichat-config-check` prints the resolved deployment(s) and fails on an
+invalid file — run it before `up -d`. A missing file falls back silently — to the
+`DIGICHAT_EMBED_TENANTS` registry when that is set, otherwise to the built-in dev
+default. An invalid file fails the container at boot.
+
+Three traps:
+
+- **The mount replaces `/app/config`.** The image's baked
+  `/app/config/examples/*` is *not* reachable in the release profiles. Copy any
+  reference config you want into `config/`. For a different catalog skin alone,
+  set `DIGICHAT_CHROME_SKIN=<id>` (`chatgpt`, `claude`, `grok`, …) instead. If you
+  previously pointed `DIGICHAT_CONFIG_PATH` at a baked example, copy that file
+  into `config/` first, or the path silently stops resolving.
+- **Pick one shape — the env templates already set the other one.** Every
+  `.env.profile-*.example` sets `DIGICHAT_EMBED_TENANTS` (hosts mode), and that
+  merges *with* a `deployment:` block rather than replacing it. The
+  `deployment:` block is what serves an unmatched host, so running the `cp` above
+  while keeping that env var leaves an anonymous, ungated fallback install on your
+  operator keys. Single client: delete `DIGICHAT_EMBED_TENANTS`. Many hostnames:
+  use `hosts:` and drop `deployment:`.
+
+Reference configs: [`apps/digichat/config/examples/`](../../apps/digichat/config/examples/)
+(`local-app.yaml`, `occ-embed.yaml`, `datatap-mcp.yaml`, `skins/*.yaml`, …).
+
+### Profile A — digigraph stack
+
+```text
+Browser → digichat → digigraph → digillm/LiteLLM
+                           └─ digivault_hub → digivault
+```
+
+Pull **all** Profile A services from GHCR (digichat + digikey + digigraph + digivault).
+LiteLLM uses the public berriai image. Pin stack and digichat tags separately:
+
+| Variable | Example | Services |
+|---|---|---|
+| `DIGICHAT_VERSION` | `2.3.2` | digichat → `…/digichat:v2.3.2` |
+| `DIGI_IMAGE_TAG` | `sha-<12>` or `v0.1.0` | digikey, digigraph, digivault |
+
+```bash
+cp infra/digichat-release/.env.profile-a.example \
+   infra/digichat-release/.env.profile-a
+# edit AUTH_SECRET, DIGIKEY_BFF_TOKEN, DIGICHAT_EMBED_TENANTS, DIGI_IMAGE_TAG, provider keys
+
+make digichat-profile-a-up
+# or:
+docker compose -f infra/digichat-release/compose.profile-a.yml \
+  --env-file infra/digichat-release/.env.profile-a up -d
+```
+
+**digikey signing key (production hardening).** The template ships
+`DIGIKEY_ALLOW_EPHEMERAL_KEY=1` so a local/dev install starts without a PEM —
+digikey generates an in-process RS256 key and its JWKS rotates on every restart.
+Production must set `DIGIKEY_PRIVATE_KEY_PEM` to a stable RS256 private key
+(multiline PEM or base64) and set `DIGIKEY_ALLOW_EPHEMERAL_KEY=0`; digikey then
+fails closed at startup if the PEM is missing.
+
+Does **not** start digiquant / digisearch / digitrace / heartbeat / observability.
+
+**Local / digithings website parity:** one supervisord image (same as Cloudflare
+Containers) instead of N GHCR services — `make digichat-profile-a-bundle-up`
+([`compose.profile-a-bundle.yml`](../../infra/digichat-release/compose.profile-a-bundle.yml)).
+Clients who want per-service pins keep multi-image Profile A above.
+
+Config for LiteLLM / digigraph / digichat is vendored under
+[`infra/digichat-release/config/`](../../infra/digichat-release/config/) (no monorepo
+`config/` clone required). Stack GHCR packages appear after
+`publish-service-images.yml` runs on `main` (promote #2023, then first publish).
+
+Full monorepo stack (all Python services) alternative:
+[`docs/templates/self-host/README.md`](../templates/self-host/README.md)
+(`make up-ghcr` + `--profile digivault --profile digichat`).
+
+digithings’ own Tunnel operator path (not the client default):
+[`infra/digichat-digithings/README.md`](../../infra/digichat-digithings/README.md).
+
+### Profile B — Foundry (client Azure only)
+
+digithings has **no Azure**. This path is for client environments (DataTap-like).
+
+```text
+Browser → digichat → Foundry (managed identity on the host)
+```
+
+```bash
+cp infra/digichat-release/.env.profile-b.example \
+   infra/digichat-release/.env.profile-b
+# edit AUTH_SECRET, AUTH_URL, DIGICHAT_EMBED_TENANTS (foundry backend)
+
+docker compose -f infra/digichat-release/compose.profile-b.yml \
+  --env-file infra/digichat-release/.env.profile-b up -d
+```
+
+Host must supply Azure identity for Foundry calls. Do **not** put a Foundry API key
+in digichat env.
+
+## Env checklist
+
+Full schema: [`apps/digichat/ARCHITECTURE.md`](../../apps/digichat/ARCHITECTURE.md).
+Product sketch: [`digichat-self-hosted-release.md`](../architecture/digichat-self-hosted-release.md) §3.
+
+### Always (both profiles)
+
+| Variable | Purpose |
+|---|---|
+| `AUTH_SECRET` / `AUTH_URL` / `AUTH_TRUST_HOST` | Auth.js |
+| `DIGICHAT_DATABASE_URL` | Postgres (Compose wires digichat-db) |
+| `DIGICHAT_AUTO_MIGRATE=1` | Apply Drizzle migrations on start |
+| `DIGICHAT_EMBED_ENABLED` | Enable `/embed` as needed |
+| `DIGICHAT_REQUIRE_ROOT_AUTH` | Default **unset/`0`** (Option A): bare `/` renders the mode menu — no Auth.js login wall. Set `1` only if the client wants the product chat (`?mode=product`) behind a session gate. Dogfood digithings.ai stays OFF. |
+| `DIGICHAT_EMBED_HOSTS` | **Runtime** comma-separated parent hostnames for CSP `frame-ancestors` (no secrets). Optional if hosts are already `DIGICHAT_EMBED_TENANTS` keys. |
+| `DIGICHAT_EMBED_TENANTS` | **Runtime** JSON registry (hostname → branding, gate, token, `backend`). **Never** a Docker build-arg — tokens leak in layers. |
+
+Illustrative registry (Profile A):
+
+```json
+{
+  "client.example.com": {
+    "slug": "client",
+    "gateMode": "token",
+    "activityDetail": "full",
+    "layout": "page",
+    "token": "<required-secret>",
+    "backend": { "type": "digigraph" }
+  }
+}
+```
+
+Foundry tenant: `"backend": { "type": "foundry", "projectEndpoint": "https://…", "agentName": "…" }`.
+
+Customer embeds always need a matching `token`. First-party digithings hosts
+(`digithings.ai` / `www.digithings.ai`) may skip token when registered.
+
+### Profile A only
+
+| Variable | Purpose |
+|---|---|
+| `DIGICHAT_VERSION` | digichat GHCR tag (`v${DIGICHAT_VERSION}`) |
+| `DIGI_IMAGE_TAG` | digikey / digigraph / digivault GHCR tag (`sha-…` or `v0.1.0`) |
+| `DIGIGRAPH_INTERNAL_URL` | digigraph base |
+| `DIGIKEY_URL` + `DIGIKEY_BFF_TOKEN` | Preferred upstream auth |
+| On digigraph: `DIGIVAULT_URL`, LiteLLM / digillm provider keys | Vault tool + LLM path |
+
+### Profile B only
+
+| Surface | Purpose |
+|---|---|
+| Tenant `backend.type: foundry` + endpoint / agent | In `DIGICHAT_EMBED_TENANTS` |
+| Host Azure identity | Foundry via `DefaultAzureCredential` |
+
+### Parent site (marketing / product shell)
+
+| Variable | Purpose |
+|---|---|
+| `NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN` | Iframe origin (e.g. Tunnel hostname) |
+| Embed URL | `/embed?host=<parent-host>&token=…` |
+
+## Custom embed parent hosts (CSP)
+
+Stock GHCR digichat sets `/embed` `frame-ancestors` at **runtime** from:
+
+1. `DIGICHAT_EMBED_HOSTS` — comma-separated parent hostnames (no secrets), and/or
+2. Host keys (and aliases) in `DIGICHAT_EMBED_TENANTS` when `DIGICHAT_EMBED_HOSTS` is unset.
+
+Example (Compose / ACA env):
+
+```bash
+DIGICHAT_EMBED_HOSTS=client.example.com,www.client.example.com
+# still required for tokens / backend — never a build-arg:
+DIGICHAT_EMBED_TENANTS={"client.example.com":{...}}
+```
+
+Security: digichat never emits `frame-ancestors *`. If neither source yields hosts,
+only first-party digithings origins (plus `'self'`) remain allowlisted.
+
+Optional seed list of known hosts: `apps/digichat/embed-hosts.txt` (not baked into the image).
+
+## Smoke
+
+```bash
+docker run --rm -p 3005:3000 digichat:2.4.0   # local build, see § Install unit
+curl -sf http://127.0.0.1:3005/api/health | jq .
+# Embed (clients always pass token):
+# open http://127.0.0.1:3005/embed?host=client.example.com&token=…
+```
+
+Profile A: expect digigraph tool activity in the embed (not a direct OpenRouter call
+from digichat). Profile B: Foundry smoke only when Azure credentials are available.
+
+Operator post-publish checklist: [`RELEASE-SMOKE.md`](RELEASE-SMOKE.md).
+
+## Populate client docs
+
+Client documentation chatbots use an **offline ops pipeline** (not this install
+unit and not a digichat fork): `scripts/docs_onboard/` crawls a docs site and
+writes digivault notes and/or a digisearch index for Profile A grounding.
+
+- Runbook: [`CLIENT-DOCS-ONBOARD.md`](CLIENT-DOCS-ONBOARD.md)
+- Ops index: [`docs/ops/CLIENT_PIPELINES.md`](../ops/CLIENT_PIPELINES.md)
+
+OCR stays in digisearch. Pick 1 (runtime CSP) and Pick 2 (GHCR Profile A) are
+orthogonal — see
+[`digichat-self-host-picks-fit.md`](../architecture/digichat-self-host-picks-fit.md).
+
+## Related
+
+- Overlays: [`infra/digichat-release/README.md`](../../infra/digichat-release/README.md)
+- digithings operator Tunnel host: [`infra/digichat-digithings/README.md`](../../infra/digichat-digithings/README.md)
+- Local ops: [`apps/digichat/OPERATIONS.md`](../../apps/digichat/OPERATIONS.md)
+- Product model: [`digichat-modular-frontend.md`](../architecture/digichat-modular-frontend.md) §5
+- Docs onboard: [`CLIENT-DOCS-ONBOARD.md`](CLIENT-DOCS-ONBOARD.md)

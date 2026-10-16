@@ -1,0 +1,45 @@
+# OpenWiki instructions — digithings repo
+
+## Scope: full repository
+
+Document every component in the monorepo. One section per component,
+each with its own quickstart (where applicable), architecture / module
+map, behavior guides, and API + operations reference — mirroring the
+established `digitrace/` pilot structure.
+
+Components and ports:
+
+- `digigraph` (8000) — LangGraph orchestration, OpenAI-compatible API, tool registry
+- `digiquant` (8001) — NautilusTrader backtest/optimize, strategy registry, research + portfolio sub-graphs
+- `digisearch` (8002) — RAG, document ingest, vector search
+- `digitrace` (8003) — LangSmith + OTLP tracing helpers, status API (pilot pages predate dual-export; regenerate when stale)
+- `digivault` (8004) — Obsidian-style markdown vault management
+- `digikey` (8005) — JWT + scoped API key auth plane
+- `digichat` (3005) — Next.js BFF + React chat UI
+- `digiclaw` — heartbeat, audit (JSONL), gateway
+- `digibase` — shared HTTP/audit **library** (Python package, not a service)
+- `digillm`, `digifetch`, `digiskills` — supporting libraries
+- `digivoice` — local speech CLI (whisper.cpp + Piper). No network service
+- `apps/dashboard` — digiquant operator surface
+- Repo-level: branching model, `make` targets, review/merge policy (brief — pointer to AGENTS.md, not a duplicate)
+
+Do not add pages for `digismith` (removed; tracing lives in `digitrace`) or `digibot` (not in this tree). Do NOT document `projects/` (confidential). Do not name client workspaces in these pages. Keep each component to
+3–6 pages max: quickstart, architecture, key behaviors, API + operations.
+Skip exhaustive symbol inventories.
+
+## Repo conventions the wiki must respect
+
+- Product/module names are always lowercase (`digichat`, never DigiChat).
+  See root `AGENTS.md` § Naming. (Code identifiers like `DigiChatSession`
+  keep their language-idiomatic casing — do not "fix" those.)
+- Non-negotiables: Pydantic v2, strict typing, ruff line length 100,
+  structured errors (no silent `except`), Polars-only (never pandas),
+  NautilusTrader for all backtest paths, LiteLLM for LLM routing.
+- `GET /healthz` is liveness (`{"ok": true}`); component `/v1/status`
+  endpoints are operator diagnostics — do not conflate them (see root
+  `AGENTS.md` § Liveness vs status).
+- Every claim about behavior must cite evidence (`repo://` spans).
+  Do not invent endpoints, ports, or env vars.
+- Never document live-trading paths beyond what source + tests show;
+  flag `digikey/` auth and `digiquant/brokers/` areas as human-gate
+  rather than operational how-tos.

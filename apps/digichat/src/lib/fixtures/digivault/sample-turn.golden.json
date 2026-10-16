@@ -1,0 +1,22 @@
+{
+  "spans": [
+    { "operation": "chat", "status": "started", "label": "Thinking…" },
+    {
+      "operation": "execute_tool",
+      "status": "started",
+      "label": "Searching digivault…",
+      "toolName": "search_digivault",
+      "query": "ports"
+    },
+    {
+      "operation": "retrieve",
+      "status": "completed",
+      "label": "Sources",
+      "toolName": "search_digivault",
+      "query": "ports",
+      "documents": [{ "title": "Ports", "path": "arch/ports.md" }]
+    },
+    { "operation": "chat", "status": "started", "label": "Writing answer…" }
+  ],
+  "text": "Digigraph listens on port 8000."
+}

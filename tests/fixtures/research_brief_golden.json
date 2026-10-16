@@ -1,0 +1,20 @@
+{
+  "themes": [
+    {
+      "label": "Commodity momentum",
+      "summary": "Trend-following on futures is discussed as a diversifying return source.",
+      "source_ids": ["gold-brief#1"]
+    }
+  ],
+  "contradictions": [],
+  "assumptions": ["Roll method for continuous futures not specified in retrieved text."],
+  "corpus_gaps": [],
+  "profiling_questions": [
+    "Which continuous gold future or spot proxy should we use?",
+    "What fee and slippage assumptions are appropriate?"
+  ],
+  "suggested_catalog_strategies": ["trend_following"],
+  "strategy_out_of_catalog": false,
+  "suggested_symbols": ["GC"],
+  "suggested_strategy_params": {}
+}

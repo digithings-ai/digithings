@@ -1,0 +1,58 @@
+# Profile A LiteLLM router — client install mount under infra/digichat-release/config.
+# digigraph calls LiteLLM at http://litellm:4000/v1.
+#
+# Set provider keys in .env.profile-a (OPENROUTER_API_KEY / GROQ_API_KEY /
+# OPENAI_API_KEY). Do not commit secrets into this file.
+
+model_list:
+  # OpenAI (optional)
+  - model_name: gpt-4o
+    litellm_params:
+      model: openai/gpt-4o
+      api_key: os.environ/OPENAI_API_KEY
+  - model_name: gpt-4o-mini
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: os.environ/OPENAI_API_KEY
+
+  # OpenRouter — digigraph often passes openrouter/… model strings
+  - model_name: openrouter/deepseek/deepseek-chat
+    litellm_params:
+      model: openrouter/deepseek/deepseek-chat
+      api_key: os.environ/OPENROUTER_API_KEY
+  - model_name: openrouter/deepseek/deepseek-v4-flash
+    litellm_params:
+      model: openrouter/deepseek/deepseek-v4-flash
+      api_key: os.environ/OPENROUTER_API_KEY
+  - model_name: openrouter/meta-llama/llama-4-maverick
+    litellm_params:
+      model: openrouter/meta-llama/llama-4-maverick
+      api_key: os.environ/OPENROUTER_API_KEY
+  - model_name: openrouter/google/gemini-2.5-flash
+    litellm_params:
+      model: openrouter/google/gemini-2.5-flash
+      api_key: os.environ/OPENROUTER_API_KEY
+
+  # Groq
+  - model_name: groq/llama-3.3-70b-versatile
+    litellm_params:
+      model: groq/llama-3.3-70b-versatile
+      api_key: os.environ/GROQ_API_KEY
+  - model_name: groq/llama-3.1-8b-instant
+    litellm_params:
+      model: groq/llama-3.1-8b-instant
+      api_key: os.environ/GROQ_API_KEY
+
+router_settings:
+  routing_strategy: simple-shuffle
+
+litellm_settings:
+  drop_params: true
+  cache: true
+  cache_params:
+    type: local
+    ttl: 3600
+  num_retries: 2
+  request_timeout: 120
+
+general_settings: {}

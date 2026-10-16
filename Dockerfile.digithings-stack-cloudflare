@@ -1,0 +1,227 @@
+# Profile A stack image for digithings Cloudflare Containers.
+# Build context: monorepo root.
+# DIG-3701: the nine Python modules install from wheels built by
+# scripts/package_r5_image_inputs.py (`uv export --frozen` of the root lock).
+# SearXNG bake, multilingual weight bake, and the litellm pin are unchanged.
+# Push target default is the Cloudflare container registry (D-R5-1).
+# This file does not log in and does not push.
+# Runs digikey + digigraph + digisearch + digivault + LiteLLM (+ redis) under supervisord.
+# Edge ports: digigraph :8000, digikey :8005, digisearch :8002. Other services
+# are loopback-only.
+#
+# HUMAN GATE — infra/network: public graph/key/search hostnames; secrets via wrangler only.
+
+FROM python:3.12-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      curl \
+      supervisor \
+      redis-server \
+      ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1
+
+RUN pip install --upgrade pip && pip install uv
+
+# ─── SearXNG: in-stack PRIMARY web-search backend for digisearch (#4297) ───
+# The upstream `searxng/searxng` image is Void/musl, so its binaries cannot be
+# copied into this Debian image. Install the pinned source into its own venv
+# (isolated from the digi stack env) and run granian exactly as the upstream
+# dist image does (GRANIAN_INTERFACE=wsgi). Pinned by commit SHA (no git: the
+# codeload tarball + a frozen version module avoid shelling out to git at
+# import time, see searx/version.py).
+ARG SEARXNG_COMMIT=a1144dda3e97668c9d445022b7019c224cd4bb1e
+RUN mkdir -p /usr/local/searxng \
+    && curl -fsSL -o /tmp/searxng.tar.gz \
+         "https://codeload.github.com/searxng/searxng/tar.gz/${SEARXNG_COMMIT}" \
+    && tar -xzf /tmp/searxng.tar.gz --strip-components=1 -C /usr/local/searxng \
+    && rm -f /tmp/searxng.tar.gz \
+    && test -f /usr/local/searxng/searx/settings.yml \
+    && uv venv /usr/local/searxng/.venv \
+    && uv pip install --python /usr/local/searxng/.venv/bin/python \
+         -r /usr/local/searxng/requirements.txt \
+         -r /usr/local/searxng/requirements-server.txt \
+    && printf '%s\n' \
+         'VERSION_STRING = "2026.9.3"' \
+         'VERSION_TAG = "2026.9.3"' \
+         'DOCKER_TAG = "2026.9.3-a1144dda3"' \
+         'GIT_URL = "https://github.com/searxng/searxng"' \
+         'GIT_BRANCH = "master"' \
+         > /usr/local/searxng/searx/version_frozen.py
+
+# Shared libs, installed from packaged wheels. Third-party pins are the
+# frozen export. Workspace wheels install with --no-deps so an extra marker
+# cannot float a dependency the lock already pinned.
+COPY image-packages/stack/requirements.txt /tmp/stack-requirements.txt
+COPY image-packages/stack/wheels /wheels
+RUN uv pip install --system -r /tmp/stack-requirements.txt \
+ && uv pip install --system --no-deps --no-index --find-links /wheels "digisearch[server,ingestion,chroma,web-search,embedding-multilingual]==0.1.0" \
+ && uv pip install --system --no-deps --no-index --find-links /wheels \
+      "digibase==0.1.0" \
+      "digikey==0.1.0" \
+      "digitrace[tracing]==0.1.0" \
+      "digillm==0.1.0" \
+      "digigraph[mcp]==0.1.0" \
+      "digifetch==0.1.0" \
+      "digiclaw==0.1.0" \
+      "digivault[service]==0.1.0"
+COPY image-packages/stack/digisearch-seeds /app/digisearch/seeds
+# ^ embedding-multilingual (onnxruntime + tokenizers + numpy, CPU-only) powers
+# the multilingual ticket/docs indexes for the OCC chat (#4756). Its weights
+# (~120 MB Xenova quantized ONNX) are baked below at build time — v14
+# prescribed that bake in this comment but never ran it, so every cold start
+# downloaded the snapshot from HF Hub on the seed's critical path, and when
+# that egress failed the seed still exited 0 (CLI ingest skips failed files)
+# and digisearch came up on an empty corpus (#5045). Inlined rather than
+# COPYing scripts/download_multilingual_model.py because .dockerignore
+# excludes scripts/ from this build context; the pins (model id + file names)
+# are imported from the installed digisearch package, so they cannot drift
+# from the provider. The assert fails the build when the snapshot is empty or
+# partial — a silent no-download bake cannot land.
+RUN python -c "from pathlib import Path; from huggingface_hub import snapshot_download; \
+from digisearch.embedding.providers.multilingual import ( \
+MULTILINGUAL_MODEL_FILE, MULTILINGUAL_MODEL_ID, MULTILINGUAL_TOKENIZER_FILE); \
+out = Path('/models/multilingual'); \
+snapshot_download(repo_id=MULTILINGUAL_MODEL_ID, \
+allow_patterns=[MULTILINGUAL_MODEL_FILE, MULTILINGUAL_TOKENIZER_FILE], \
+local_dir=str(out)); \
+missing = [str(p) for p in (out / MULTILINGUAL_MODEL_FILE, \
+out / MULTILINGUAL_TOKENIZER_FILE) if not p.is_file()]; \
+assert not missing, f'multilingual weights bake incomplete, missing: {missing}'; \
+print(f'multilingual weights ready in {out} ({MULTILINGUAL_MODEL_ID})')"
+# Runtime: the multilingual provider resolves DIGISEARCH_MULTILINGUAL_MODEL_DIR
+# with local stat()s only (multilingual.py `_resolve_under` -> onnxruntime +
+# tokenizers local file reads; huggingface_hub is never imported on that path),
+# and HF_HUB_OFFLINE=1 turns the unset-var fallback (HF snapshot_download) into
+# a loud RuntimeError instead of silent runtime egress. Both sit AFTER the bake
+# RUN on purpose: the bake itself must run online.
+ENV DIGISEARCH_MULTILINGUAL_MODEL_DIR=/models/multilingual \
+    HF_HUB_OFFLINE=1
+
+# LiteLLM proxy from the pinned PyPI wheel (DIG-1780). Same version as
+# Dockerfile.digillm (enforced by tests/scripts/test_compose_litellm_pinned.py).
+# 1.83.x no longer imports fastapi's removed get_flat_dependant, so the old
+# "fastapi<0.116" cap is gone; litellm pins its own compatible fastapi.
+RUN uv pip install --system "litellm[proxy]==1.83.14"
+
+# D-R5-1. Account id is supplied by the operator at push time (H3).
+ARG IMAGE_PUSH_REGISTRY=registry.cloudflare.com
+ARG IMAGE_PUSH_REPOSITORY=digithings/digithings-stack
+LABEL org.digithings.image.registry="${IMAGE_PUSH_REGISTRY}" \
+      org.digithings.image.repository="${IMAGE_PUSH_REPOSITORY}"
+
+# Profile A LiteLLM + digigraph config. Wheel installs do not resolve
+# config via __file__ parents, so point the loaders at this directory.
+COPY infra/digichat-release/config /app/config
+ENV DIGI_CONFIG_PATH=/app/config
+# House Cheaper Inference overlay + merge script (boot-time merge when key set)
+COPY config/litellm.cheaperinference.yaml /app/config/litellm.cheaperinference.yaml
+COPY scripts/merge_litellm_cheaperinference.py /app/scripts/merge_litellm_cheaperinference.py
+# Read-only Zammad MCP for the OCC help chat (supervisord [program:zammad-mcp];
+# deps `mcp` + `httpx` already present via digigraph[mcp]).
+COPY scripts/zammad_mcp ./scripts/zammad_mcp
+# scripts/index_occ_tickets.py is deliberately NOT copied into the image
+# (DIG-1438). It was only there for [program:seed_occ_tickets], the boot step
+# that backfilled occ_tickets from the live Zammad API with unmasked ticket
+# bodies and sender/subject metadata. With the program gone nothing invokes it,
+# and leaving the writer in the image would leave the leak one supervisord line
+# away from returning. The .dockerignore re-include stays: DIG-1210 still has to
+# change what this script writes. tests/scripts/test_stack_dockerignore_context.py
+# pins that re-include, but it is on `main` only and does not exist on develop.
+COPY apps/digithings-stack-cloudflare/container/supervisor/supervisord.conf \
+     /etc/supervisor/conf.d/digithings.conf
+# SearXNG config — the SAME file docker-compose.yml mounts into the dev
+# searxng sidecar (no fork). Its `redis.url` names the `valkey` host, which
+# entrypoint.sh aliases to 127.0.0.1 so the in-container [program:redis]
+# serves it. See #4297.
+COPY config/searxng/settings.yml /etc/searxng/settings.yml
+# Container-only botdetection config: searxng ships its default limiter.toml
+# inside the image, but once a custom settings folder exists it only reads
+# /etc/searxng/limiter.toml. Whitelist loopback (the in-container digisearch
+# caller) so the JSON API's 4/hour API_WINDOW cap and the curl/Python-UA bot
+# rule do not throttle the primary backend. See #4297.
+COPY apps/digithings-stack-cloudflare/container/searxng/limiter.toml \
+     /etc/searxng/limiter.toml
+# Rebuild marker: wrangler tags the container image from this Dockerfile, so a
+# context-only change (e.g. entrypoint.sh) must bump this comment to rebuild.
+# Rebuild marker v13 (2026-09-19): broadens the in-stack searxng engine set in
+# config/searxng/settings.yml — drops the 4-engine `keep_only` allowlist and
+# clears `disabled` (+ `inactive` where upstream sets both, e.g. swisscows/
+# luxxle/tiger) on a wide spread of no-API-key general/news engines, so one
+# blocked engine (duckduckgo 403s the container) can no longer return a
+# successful-but-empty result set that fails the digiquant research run with
+# `web_search_unhealthy`. Requires a rebuild to bake the new settings.yml. #4297.
+# Rebuild marker v12 (2026-09-19): develop relocated the stack container from
+# cloudflare/digithings-stack-cloudflare/ to apps/digithings-stack-cloudflare/;
+# this merge-forward moves the searxng limiter.toml COPY source to the new path
+# (same file, same runtime destination /etc/searxng/limiter.toml).
+# Rebuild marker v11 (2026-09-19): enables the `bing` and `mojeek` engines in
+# config/searxng/settings.yml. Both ship `disabled: true` at the pinned
+# SEARXNG_COMMIT and `use_default_settings.engines.keep_only` does NOT flip that
+# flag, so the v10 image's in-stack searxng could only reach duckduckgo (which
+# 403s the container) + wikipedia — no market/news coverage. The explicit
+# `engines: [{name: bing, disabled: false}, {name: mojeek, disabled: false}]`
+# override makes them active. See #4297.
+# Rebuild marker v14 (2026-10-01): installs digisearch[embedding-multilingual]
+# (onnxruntime + tokenizers + numpy) for the multilingual OCC ticket/docs
+# indexes (#4756). Full rebuild required (wrangler caches by Dockerfile hash).
+# Rebuild marker v15 (2026-10-04): bakes the multilingual embedding weights
+# (Xenova quantized ONNX, ~120 MB) into /models/multilingual at build time and
+# pins DIGISEARCH_MULTILINGUAL_MODEL_DIR + HF_HUB_OFFLINE=1 — closing the v14
+# gap where the bake was only prescribed in a comment and every cold start
+# pulled the snapshot from HF Hub on the seed critical path (#5045). Dockerfile
+# only; full rebuild required (wrangler caches by Dockerfile hash).
+# Rebuild marker v17 (2026-10-06): drops seed_occ_tickets.sh from the image and
+# the [program:seed_occ_tickets] boot step that called it (DIG-1438). That step
+# backfilled the Zammad ticket corpus into occ_tickets at every container start,
+# writing unmasked customer ticket bodies and sender/subject metadata, and
+# ZAMMAD_API_TOKEN is present in the live Worker env, so any deploy built from a
+# branch carrying it refilled the collection. seed_chroma.sh is now the only
+# seeder. Rebuild required: the file and its supervisord block were in the v16
+# image layer.
+# Rebuild marker v16 (2026-10-04): ships seed_occ_tickets.sh, the new
+# [program:seed_occ_tickets] boot step that backfills the Zammad ticket corpus
+# into the occ_tickets index, plus scripts/index_occ_tickets.py and the
+# .dockerignore re-include it needs. Superseded by v17, which removed the boot
+# step again and dropped the COPY (DIG-1438); only the .dockerignore re-include
+# remains, because DIG-1210 still has to change what the script writes.
+# Rebuild marker v10 (2026-09-19): installs SearXNG into the image as the
+# in-stack PRIMARY web-search backend (supervisord [program:searxng], loopback
+# :8080, granian/wsgi) and wires digisearch's DIGISEARCH_SEARXNG_URL at it, so
+# the hosted container no longer depends on a single throttled ddgs scrape
+# (#4297). Ships config/searxng/settings.yml + the entrypoint `valkey` alias.
+# Rebuild marker v9 (2026-09-17): drops zammad__* from the digiproject allowlist
+# and the entrypoint DIGI_ALLOWED_TOOLS fallback so the website digichat no
+# longer offers Zammad; OCC keeps it via its per-request live MCP union.
+# Rebuild marker v8 (2026-09-16): drop `from __future__ import annotations` from
+# the MCP tool modules (digisearch, digivault, digigraph). FastMCP 1.9.3 in this
+# image calls issubclass() on raw annotations, so PEP 563 string annotations
+# made :8765/:8769/:8766 crash at import and never bind. Full rebuild required
+# (wrangler caches the build context by Dockerfile hash).
+# Rebuild marker v7 (2026-09-16): bakes #4223's config-driven hosted MCP changes
+# (entrypoint.sh, digigraph/src, infra/digichat-release/config/digiproject.yaml).
+# Rebuild marker v6 (2026-09-16): forces a full rebuild for digigraph/src-only
+# changes (wrangler caches the build context by Dockerfile hash).
+# Rebuild marker v5 (2026-09-16): bakes the zammad__* tools into the digiproject
+# allowlist (agents.allowed_tools) so digigraph exposes them in the OCC chat.
+# Rebuild marker v4 (2026-09-16): ships the mcp 1.9.x transport-security guard so
+# zammad-mcp binds :8770 under supervisord instead of crash-looping.
+# Rebuild marker v3 (2026-09-15): ships the FastMCP 1.9.3-compatible zammad server
+# (no `from __future__ import annotations`); container instances keep their start-time env,
+# so force a fresh image (and with it a fresh instance) when secrets/env must land.
+COPY apps/digithings-stack-cloudflare/container/entrypoint.sh /entrypoint.sh
+COPY apps/digithings-stack-cloudflare/container/seed_chroma.sh /seed_chroma.sh
+COPY apps/digithings-stack-cloudflare/container/start_digikey.sh /start_digikey.sh
+COPY apps/digithings-stack-cloudflare/container/start_digisearch.sh /start_digisearch.sh
+COPY apps/digithings-stack-cloudflare/container/seed /seed
+RUN chmod +x /entrypoint.sh /seed_chroma.sh \
+        /start_digikey.sh /start_digisearch.sh \
+    && mkdir -p /data/chroma /data/vault /data/digikey /var/log/supervisor /var/cache/searxng
+
+EXPOSE 8000 8002 8005
+ENTRYPOINT ["/entrypoint.sh"]

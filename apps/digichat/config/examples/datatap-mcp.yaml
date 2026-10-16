@@ -1,0 +1,58 @@
+version: 1
+# DataTap-style client container: operator MCP servers in YAML.
+# URLs stay on the BFF — never projected to the browser.
+# Session `/datatap` empty = toggle; `/datatap query` forces that server this send.
+deployment:
+  slug: datatap
+  chrome:
+    mode: embed
+    theme: dark
+    skin: digichat
+    title: ask datatap
+    welcome: Ask about your pipelines.
+    placeholder: Ask a question
+  persistence: none
+  auth: anonymous
+  features:
+    attachments: false
+    dictation: false
+    speech: false
+    reasoning: true
+    toolCalls: true
+    sources: true
+    branchPicker: true
+    modelPicker: false
+  backend:
+    type: digigraph
+  tools:
+    allowUserToggle: true
+    catalog:
+      - id: digisearch
+        default: true
+        label: Search
+      - id: digivault
+        default: true
+        label: Vault
+  mcp:
+    allowUserServers: false
+    allowAddForm: false
+    servers:
+      - id: datatap
+        url: https://mcp.datatap.example/mcp
+        label: DataTap
+        default: true
+        # DataTap's MCP server authenticates via a custom header, not
+        # `Authorization: Bearer` — set authHeader alongside a token or
+        # tokenEnv (#3841). tokenEnv is resolved from the deploy environment
+        # at load time and never committed; an inline `token` wins if both
+        # are set. Neither is ever projected to the browser.
+        tokenEnv: DATATAP_MCP_TOKEN
+        authHeader: X-API-Key
+  gate:
+    mode: ungated
+    activityDetail: labels
+    llmAccess: operator
+    showByok: false
+    showLanguageSelector: true
+    # web search explicitly off: docs + MCP surface only
+    webSearch: false

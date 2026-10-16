@@ -1,0 +1,10 @@
+# Example digiclaw agent definitions (schedule-focused).
+# Full AgentDefinition registry lands with #217; the scheduler only needs
+# name + schedule today.
+
+name: example-cron
+description: Demo cron agent — every 30 minutes
+schedule:
+  mode: cron
+  cron: "*/30 * * * *"
+  enabled: true

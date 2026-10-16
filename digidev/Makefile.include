@@ -1,0 +1,85 @@
+# digidev — agent workflow Makefile targets
+#
+# Include this file from your project Makefile:
+#   include Makefile.digidev
+#
+# Or copy the relevant targets directly into your Makefile.
+#
+# Prerequisites: git, python3, gh (GitHub CLI), bash
+
+# ── Scoring ───────────────────────────────────────────────────────────────────
+
+SCORES ?=
+
+# Self-score staged changes against 4-dimension rubrics (Security/Quality/Optimization/Accuracy).
+# Run without args to see rubrics + automated checks.
+# Run with SCORES="security=8,quality=8,optimization=7,accuracy=9" to validate self-scores.
+score:
+	@if [ -n "$(SCORES)" ]; then \
+		python3 scripts/score.py --set "$(SCORES)"; \
+	else \
+		python3 scripts/score.py; \
+	fi
+
+# Compare staged score vs origin/$(DEFAULT_BRANCH) baseline; exits 1 on regression.
+score-delta:
+	python3 scripts/score.py --delta
+
+# ── Commits & PRs ─────────────────────────────────────────────────────────────
+
+# Validated conventional commit. Format: make commit MSG="type(component): description"
+# Types: feat | fix | refactor | docs | test | chore | perf | ci
+commit:
+	@scripts/commit_helper.sh "$(MSG)"
+
+# Create a PR using the project template (requires gh CLI + gh auth login).
+pr:
+	@scripts/create_pr.sh
+
+# ── Task orchestration ────────────────────────────────────────────────────────
+
+# Create an isolated git worktree and branch for a backlog issue, then print next steps.
+# After the worktree is ready: implement → test → make score → make commit MSG="..." → make pr
+# Usage: make task ISSUE=<number>
+task:
+	@[ -n "$(ISSUE)" ] || (echo "Usage: make task ISSUE=<number>"; exit 1)
+	@scripts/run_task.sh $(ISSUE)
+
+# Create a new GitHub Issue for the agent backlog (interactive).
+new-task:
+	@scripts/create_issue.sh
+
+# List open agent-task issues. Optional filter: make status COMPONENT=api
+status:
+	@scripts/list_tasks.sh $(if $(COMPONENT),--component $(COMPONENT),)
+
+# ── Hooks ─────────────────────────────────────────────────────────────────────
+
+# Install the pre-push git hook.
+#
+# Ask git where the hooks go — never the literal `.git/hooks`. Inside a linked
+# worktree `.git` is a file, so that path fails with "Not a directory", and
+# `--git-path hooks` both resolves to the shared common dir from a worktree and
+# honours core.hooksPath. Every worktree shares this one installed hook.
+#
+# The `|| exit 1` is load-bearing and `set -e` is no substitute: when rev-parse
+# fails it prints nothing, so `cd "$$(git rev-parse ...)"` degrades to `cd ""` —
+# a successful no-op that would install into ./hooks/ where git never looks, and
+# still exit 0. digidev scaffolds arbitrary directories, so "not a repo yet" is
+# a case that actually happens here.
+#
+# Unlike digithings' own scripts/install-hooks.sh, this installs the working
+# tree's copy — digidev scaffolds arbitrary repos, so there is no known-good
+# ref (origin/develop) it can assume exists here.
+hooks-install:
+	@set -e; \
+	if ! hooks_path="$$(git rev-parse --git-path hooks 2>/dev/null)" || [ -z "$$hooks_path" ]; then \
+		echo "hooks-install: not inside a git work tree — run 'git init' first." >&2; \
+		exit 1; \
+	fi; \
+	bash -n scripts/hooks/pre-push.sh; \
+	mkdir -p "$$hooks_path"; \
+	hooks_dir="$$(cd "$$hooks_path" && pwd)"; \
+	install -m 755 scripts/hooks/pre-push.sh "$$hooks_dir/pre-push"; \
+	echo "installed: $$hooks_dir/pre-push"
+

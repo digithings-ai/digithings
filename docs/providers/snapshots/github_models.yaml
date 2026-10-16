@@ -1,0 +1,102 @@
+provider: github_models
+last_checked: 2026-08-30
+source: agent-research
+
+free_tier:
+  available: false          # confirmed fully retired 2026-07-30; no longer available to anyone
+  tier_type: standing
+  credit_amount_usd: null
+  credit_expiry_days: null
+  privacy_warning: "RETIRED: GitHub Models was fully retired 2026-07-30 — playground, model catalog, inference API, and BYOK endpoints are shut down for everyone, including existing customers. Confirmed dead by probe on 2026-08-30 (generic connection error, not an auth error). Migration path: Microsoft Foundry or GitHub Copilot."
+  signup_required: false
+  cc_required: false
+  models:
+    - name: gpt-4o-mini
+      context_window: 128000
+      max_input_tokens: 128000
+      max_output_tokens: 16384
+      status: deprecated        # full platform retirement 2026-07-30, confirmed dead this cycle
+      verified: false
+      last_verified: 2026-08-30
+      last_verified_latency_ms: 1284
+      verification_error: "Connection error."
+    - name: gpt-4o
+      context_window: 128000
+      max_input_tokens: 128000
+      max_output_tokens: 16384
+      status: deprecated        # full platform retirement 2026-07-30
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: meta-llama/Llama-3.3-70B-Instruct
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: 4096
+      status: deprecated        # full platform retirement 2026-07-30
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: mistral-large-2411
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: 4096
+      status: deprecated        # full platform retirement 2026-07-30
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+  rate_limits:
+    rpm: 10              # high-tier (GPT-4o): 10 RPM; low-tier models higher
+    rpd: 50              # high-tier (GPT-4o): 50 RPD (was ~8 — corrected); low-tier higher
+    tpm: null
+    input_tpm: null
+    concurrent_requests: null
+    reset_window: calendar_day
+
+paid_tier:
+  available: false       # platform fully retired 2026-07-30; pay-as-you-go tier retired along with it
+  models: []             # same catalog as free but without RPD cap; routes to Azure pricing
+  batching:
+    available: false
+    discount_pct: null
+    max_batch_size: null
+    turnaround_hours: null
+    notes: null
+  prompt_caching:
+    available: false
+    min_cacheable_tokens: null
+    ttl_seconds: null
+    cost_per_1m_cached_writes: null
+    cost_per_1m_cached_reads: null
+    notes: null
+
+capabilities:
+  tool_calling: true
+  structured_output: true
+  thinking_mode: false
+  streaming: true
+  vision: true
+  embeddings: true
+  modalities: [text, image]
+
+data_privacy:
+  trains_on_free_tier: false
+  retention_days: null
+  zero_retention_on_paid: false
+  gdpr_compliant: true
+  soc2: true
+
+reliability:
+  known_instability: false
+  requires_backoff: false
+  geographic_restrictions: []
+
+verification:
+  method: litellm_probe
+  probe_prompt: "Reply with the single word: ok"
+  probe_model_alias: github-gpt4o-mini
+  github_secret_key: GITHUB_TOKEN
+
+notes: "CONFIRMED 2026-08-30: GitHub Models retirement (announced 2026-07-01, effective 2026-07-30) has completed — PROBE 2026-08-30 against gpt-4o-mini returned a generic 'Connection error.' (1284ms), not the 401 permission error seen last cycle, consistent with the endpoint being fully torn down rather than merely access-gated. free_tier.available and paid_tier.available both flipped to false this cycle. ACTION: remove github_models from scripts/provider_review/probe.py's PROVIDERS dict (currently lines 68-72) and from the active provider roster in docs/LLM_PROVIDERS.md / docs/free-providers — there is nothing left to probe or recommend. Historical note retained: platform expanded to 45+ models (DeepSeek, Phi-4, AI21 Jamba) shortly before the retirement announcement, now moot."

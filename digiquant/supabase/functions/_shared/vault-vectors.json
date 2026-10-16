@@ -1,0 +1,184 @@
+{
+  "_readme": [
+    "AES-256-GCM test vectors for the digiquant credential vault (K3).",
+    "",
+    "CONTRACT: Python (digiquant/src/digiquant/vault/envelope.py) is the ONE",
+    "implementation of record. Any second implementation — in particular the",
+    "Supabase Edge Function that accepts user-entered broker credentials and",
+    "would seal them with WebCrypto/TypeScript (work package T3) — MUST pass this",
+    "identical suite byte-for-byte before it is allowed to write a",
+    "broker_connections row. That includes the negative cases below: a TS",
+    "implementation that round-trips but does not fail closed on a wrong AAD is",
+    "not conformant.",
+    "",
+    "Every key, nonce, and plaintext here is synthetic and obviously sequential.",
+    "None of it has ever protected real data; do not copy any of it into a",
+    "deployment.",
+    "",
+    "Regenerate with digiquant/src on PYTHONPATH:",
+    "  from digiquant.vault.envelope import _seal_bytes_with_nonce, build_aad,",
+    "      canonical_json, MasterKey",
+    "  sealed = _seal_bytes_with_nonce(plaintext, nonce=nonce, aad=aad, key=key)",
+    "_seal_bytes_with_nonce is private and exists only for this file: production",
+    "seals always generate a fresh random nonce, because nonce reuse under a fixed",
+    "key breaks GCM catastrophically."
+  ],
+  "algorithm": {
+    "name": "AES-256-GCM",
+    "key_bytes": 32,
+    "nonce_bytes": 12,
+    "tag_bytes": 16,
+    "tag_placement": "appended to ciphertext (WebCrypto AES-GCM default)",
+    "aad_format": "utf8(f\"{workspace_id}:{broker}:{env}\")",
+    "aad_rule": "components must be non-empty and must not contain ':'"
+  },
+  "canonical_plaintext_rules": [
+    "Credential payloads are serialized as canonical JSON before sealing:",
+    "object keys sorted lexicographically, no whitespace (separators ',' and ':'),",
+    "null-valued optional fields omitted entirely, non-ASCII left unescaped,",
+    "encoded as UTF-8.",
+    "In TypeScript: JSON.stringify over an object built with sorted key insertion",
+    "order and absent optionals, then TextEncoder().encode(...)."
+  ],
+  "keys": {
+    "v1": {
+      "base64": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+      "hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+    },
+    "v2": {
+      "base64": "AwoRGB8mLTQ7QklQV15lbHN6gYiPlp2kq7K5wMfO1dw=",
+      "hex": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc"
+    }
+  },
+  "fingerprint_rule": "first 8 hex characters of sha256(secret material); secret material is access_token for kind=oauth and secret for kind=api_key",
+  "vectors": [
+    {
+      "name": "api_key_alpaca_paper",
+      "description": "API key-pair payload, workspace A / alpaca / paper, master key v1.",
+      "key_id": "v1",
+      "nonce_hex": "000102030405060708090a0b",
+      "aad": "11111111-1111-4111-8111-111111111111:alpaca:paper",
+      "aad_parts": {
+        "workspace_id": "11111111-1111-4111-8111-111111111111",
+        "broker": "alpaca",
+        "env": "paper"
+      },
+      "plaintext_utf8": "{\"key_id\":\"VECTORKEYID0001\",\"kind\":\"api_key\",\"secret\":\"vector-api-key-secret-0001\"}",
+      "ciphertext_hex": "3c20bd7ebcbaab7faf7bb5ddf4aa2c22d19dc26db93f6f4c0856c7a93f0269dc653294deceb17bc71fc106cfa4a55b5d8d2b05f978ec81ac5af45e766ace949e9911ad1faafc55047f26cf1ac2bf3ed809a8b4b657c156a8620f7de3e9ec88605e6a28",
+      "fingerprint": "850297c0"
+    },
+    {
+      "name": "oauth_access_only_ibkr_paper",
+      "description": "OAuth payload without refresh token — refresh_token is omitted from the canonical JSON, not serialized as null. Workspace B / ibkr / paper, key v1.",
+      "key_id": "v1",
+      "nonce_hex": "0b0a090807060504030201ff",
+      "aad": "22222222-2222-4222-8222-222222222222:ibkr:paper",
+      "aad_parts": {
+        "workspace_id": "22222222-2222-4222-8222-222222222222",
+        "broker": "ibkr",
+        "env": "paper"
+      },
+      "plaintext_utf8": "{\"access_token\":\"vector-oauth-access-0002\",\"kind\":\"oauth\"}",
+      "ciphertext_hex": "6732690fd17e8081e969d1cc2ec6c255b2bbda4d60afdb7f5d4e0b981c5e48821e34345927e44d74704412a538de204cfd83bc2ac3ecc5c89b19552dd0f62c75935ca78d71b8b3220999",
+      "fingerprint": "0534feb4"
+    },
+    {
+      "name": "oauth_with_refresh_alpaca_paper",
+      "description": "OAuth payload carrying both tokens; note the sorted key order (access_token, kind, refresh_token). Workspace A / alpaca / paper, key v1.",
+      "key_id": "v1",
+      "nonce_hex": "ffeeddccbbaa998877665544",
+      "aad": "11111111-1111-4111-8111-111111111111:alpaca:paper",
+      "aad_parts": {
+        "workspace_id": "11111111-1111-4111-8111-111111111111",
+        "broker": "alpaca",
+        "env": "paper"
+      },
+      "plaintext_utf8": "{\"access_token\":\"vector-oauth-access-0003\",\"kind\":\"oauth\",\"refresh_token\":\"vector-oauth-refresh-0003\"}",
+      "ciphertext_hex": "a56469682e9093b05618022654f2801be999e0054c0c7f2ac140b0c00cbdf85bbd10fc7690793f2bc42d353ffc2994f37dfb84123716a770cca8b7453aa5beafdd4fb7de470fcb116a96ef4e5e114faa7421bc0b1e667c6a9afe1ea21a2e2d3a4e78850992c64f33a9147b87c3a2b3176374028ae15e",
+      "fingerprint": "2ffdb381"
+    },
+    {
+      "name": "api_key_second_master_key",
+      "description": "Same payload shape under master key v2 — proves key_id selects the key and that a v1 opener must refuse this row.",
+      "key_id": "v2",
+      "nonce_hex": "102030405060708090a0b0c0",
+      "aad": "11111111-1111-4111-8111-111111111111:alpaca:paper",
+      "aad_parts": {
+        "workspace_id": "11111111-1111-4111-8111-111111111111",
+        "broker": "alpaca",
+        "env": "paper"
+      },
+      "plaintext_utf8": "{\"key_id\":\"VECTORKEYID0004\",\"kind\":\"api_key\",\"secret\":\"vector-api-key-secret-0004\"}",
+      "ciphertext_hex": "04517586c9dbc5a90b47d9c6438744dc0519302f9c7eb8263f6fc78d6b30ec1e3996aa2ab4a2737628dc27dc2c74ca22147faff1d621a635bf3e6e658f5005038a648d70b5d5c167f50711740a45d60990f74fec880a645a819ec5a7af84025bbb9d39",
+      "fingerprint": "63cbe093"
+    },
+    {
+      "name": "raw_bytes_non_ascii",
+      "description": "Not a credential payload: pins the UTF-8 encoding contract for the credential-agnostic seal_bytes/open_bytes layer (non-ASCII is encoded as UTF-8, never escaped).",
+      "key_id": "v1",
+      "nonce_hex": "aabbccddeeff001122334455",
+      "aad": "11111111-1111-4111-8111-111111111111:alpaca:live",
+      "aad_parts": {
+        "workspace_id": "11111111-1111-4111-8111-111111111111",
+        "broker": "alpaca",
+        "env": "live"
+      },
+      "plaintext_utf8": "façade-Ωmega-éü",
+      "ciphertext_hex": "01ae911704a6e4ea466945a67d890c381dc71b587a512e5638eabe9b78470d553d4692",
+      "fingerprint": null
+    },
+    {
+      "name": "raw_bytes_single_byte",
+      "description": "Shortest legal plaintext (1 byte): ciphertext is exactly 1 + 16 bytes, so a 17-byte ciphertext must be accepted while 16 or fewer must be rejected as truncated.",
+      "key_id": "v1",
+      "nonce_hex": "0f0e0d0c0b0a090807060504",
+      "aad": "22222222-2222-4222-8222-222222222222:ibkr:paper",
+      "aad_parts": {
+        "workspace_id": "22222222-2222-4222-8222-222222222222",
+        "broker": "ibkr",
+        "env": "paper"
+      },
+      "plaintext_utf8": "x",
+      "ciphertext_hex": "dc0b802b1408824e7bb0b0d0fd8a68263f",
+      "fingerprint": null
+    }
+  ],
+  "negative_cases": [
+    {
+      "vector": "api_key_alpaca_paper",
+      "mutation": "wrong_key",
+      "detail": "open with master key v2 instead of v1",
+      "expect": "authentication_failure"
+    },
+    {
+      "vector": "api_key_alpaca_paper",
+      "mutation": "wrong_aad_workspace",
+      "detail": "open with workspace_id 22222222-2222-4222-8222-222222222222 instead of 11111111-1111-4111-8111-111111111111",
+      "expect": "authentication_failure"
+    },
+    {
+      "vector": "api_key_alpaca_paper",
+      "mutation": "wrong_aad_env",
+      "detail": "open with env 'live' instead of 'paper'",
+      "expect": "authentication_failure"
+    },
+    {
+      "vector": "api_key_alpaca_paper",
+      "mutation": "truncated_ciphertext",
+      "detail": "drop the final byte of ciphertext_hex",
+      "expect": "authentication_failure"
+    },
+    {
+      "vector": "api_key_alpaca_paper",
+      "mutation": "flipped_tag_bit",
+      "detail": "XOR 0x01 into the final ciphertext byte (inside the GCM tag)",
+      "expect": "authentication_failure"
+    },
+    {
+      "vector": "api_key_alpaca_paper",
+      "mutation": "flipped_body_bit",
+      "detail": "XOR 0x01 into the first ciphertext byte (inside the body)",
+      "expect": "authentication_failure"
+    }
+  ]
+}

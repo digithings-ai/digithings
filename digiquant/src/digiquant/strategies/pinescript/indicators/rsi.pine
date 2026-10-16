@@ -1,0 +1,25 @@
+// ============================================================================
+// RSI with Optional MA Smoothing
+// ============================================================================
+// Standard RSI calculation with configurable MA overlay.
+// Requires: get_ma() from moving_averages.pine
+// ============================================================================
+
+// --- RSI core ---
+
+calc_rsi(series float src, int length) =>
+    float chg = ta.change(src)
+    float up   = ta.rma(math.max(chg, 0), length)
+    float down = ta.rma(-math.min(chg, 0), length)
+    down == 0 ? 100 : up == 0 ? 0 : 100 - (100 / (1 + up / down))
+
+// --- RSI with MA ---
+// Returns: smoothed RSI value, long crossover, short crossunder, over/under band
+
+calc_rsi_signals(series float src, int length, bool use_ma, int ma_length, string ma_type, int upper_band, int lower_band) =>
+    float rsi_raw = calc_rsi(src, length)
+    float rsi_val = use_ma ? get_ma(ma_type, rsi_raw, ma_length) : rsi_raw
+    bool  rsi_long  = ta.crossover(rsi_val, upper_band)
+    bool  rsi_short = ta.crossunder(rsi_val, upper_band)
+    bool  rsi_zone  = rsi_val > upper_band or rsi_val < lower_band
+    [rsi_val, rsi_long, rsi_short, rsi_zone]

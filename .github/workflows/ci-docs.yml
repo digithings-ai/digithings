@@ -1,0 +1,77 @@
+# Markdown link integrity + agent-instruction surface drift check.
+# The former `gh aw compile --trial` gate was removed when Copilot/gh-aw
+# workflows were retired (#1904 / ADR-0017 superseded). Replacement drift
+# check is `python scripts/agents_init.py --check` below (#1182).
+name: "CI: docs"
+
+on:
+  push:
+    branches: [main, develop]
+  # No path filter on pull_request: a workflow-level path filter means the
+  # check never posts a status on PRs outside these paths, and GitHub then
+  # blocks merge forever waiting on a check that will never run once this
+  # name is added to develop's required status checks (see CLAUDE.md §
+  # Branching model). Push keeps its path filter since that only affects
+  # direct-push runs, not PR-merge gating. The job itself is cheap
+  # (doc-link scan + agents-init --check), so running it unconditionally
+  # costs little.
+  pull_request: {}
+
+concurrency:
+  group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  docs-and-agents-init:
+    name: doc-links + agents-init
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # Installs from the committed uv.lock rather than resolving fresh (#1715).
+      # pyyaml and pydantic were installed unpinned here; both are locked now.
+      - name: Install from lockfile
+        run: uv sync --frozen --all-packages --all-extras
+
+      - name: Check internal markdown links
+        run: uv run --frozen --no-sync python scripts/check_doc_links.py
+
+      - name: Check ADR numbering
+        # docs/adr/NNNN-*.md must stay zero-padded, unique and gap-free (#3524).
+        run: uv run --frozen --no-sync python scripts/check_adr_numbering.py
+
+      - name: Check agent skills links resolve
+        # Seats load skills through slug -> slug--hash -> source. When the source is
+        # garbage-collected the links survive and the skill silently stops loading
+        # (DIG-2284: 8 dangling aliases on a 59-seat org). Read-only; repairs nothing.
+        # A CI checkout has no .claude/skills until `make agents-init` runs, so an absent
+        # home is reported, not failed — the real teeth are the operator run:
+        #   python scripts/check_agent_skills_links.py --skills-home ~/.claude/skills --strict
+        run: uv run --frozen --no-sync python scripts/check_agent_skills_links.py
+
+      - name: Lint the docs/vision digivault vault
+        # `uv run make` rather than bare `make`: the Makefile target invokes
+        # `python3` directly, and uv run puts the synced venv first on PATH so
+        # that resolves to the locked interpreter instead of the system one.
+        run: uv run --frozen --no-sync make vault-check
+
+      - name: Verify generated files are in sync
+        run: uv run --frozen --no-sync python scripts/agents_init.py --check
+
+      - name: Check production code for hardcoded model names
+        # #5029 phase 3. The model names this stack routes on belong in config/,
+        # not in code. #5046 moved them and verified it by hand once; this is
+        # what keeps it true. It reads the whole production tree, so it runs
+        # here rather than under a path filter — a filtered check does not post
+        # a status on the PRs that would have broken it, which is the same trap
+        # the pull_request comment above describes.
+        run: uv run --frozen --no-sync python scripts/check_model_name_literals.py
+

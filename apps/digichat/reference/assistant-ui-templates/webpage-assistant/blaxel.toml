@@ -1,0 +1,15 @@
+name = "xulux-template-docs-assistant"
+type = "sandbox"
+description = "Xulux hosted docs / website assistant template"
+
+[build]
+slim = false
+
+[runtime]
+generation = "mk3"
+memory = 4096
+
+[[runtime.ports]]
+name = "preview"
+target = 3000
+protocol = "tcp"

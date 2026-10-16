@@ -1,0 +1,114 @@
+"""digisearch core data contracts. Shared across digiflow, digigraph, and MCP."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any
+
+
+@dataclass
+class Segment:
+    """Structural unit of a Document: a PDF page, markdown section, or API operation."""
+
+    index: int  # 0-based position within the parent Document
+    label: str  # "page:12", "heading:Auth > Rotating Keys", "operation:POST /v1/ingest"
+    text: str
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class Document:
+    """Document ingested into digisearch. Passed between modules (digiflow, digigraph)."""
+
+    id: str
+    content: str
+    source: str  # file path, URL, or identifier
+    doc_type: str  # "pdf", "html", "docx", etc.
+    metadata: dict[str, Any] = field(default_factory=dict)
+    chunks: list["Chunk"] = field(default_factory=list)
+    segments: list["Segment"] = field(
+        default_factory=list
+    )  # structural units; empty = unstructured
+
+
+@dataclass
+class Chunk:
+    """Chunk of a document. May carry embedding for vector search."""
+
+    id: str
+    content: str
+    doc_id: str  # parent Document.id
+    embedding: list[float] | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class Query:
+    """Search query. Mode: keyword | vector | hybrid."""
+
+    text: str
+    embedding: list[float] | None = None
+    top_k: int = 10
+    filters: dict[str, Any] = field(default_factory=dict)
+    mode: str = "hybrid"
+    columns: list[str] | None = (
+        None  # optional metadata columns to return (intersected with index config)
+    )
+    facets: list[str] | None = (
+        None  # Azure: facet expressions e.g. ["sourceType", "itemType,count:20"]
+    )
+    include_facets: bool = False  # When True, response carries facet counts (from request.facets or index config facets).
+    # Azure: hit highlighting (fields must be searchable)
+    highlight_fields: list[str] | None = None
+    highlight_pre_tag: str | None = None
+    highlight_post_tag: str | None = None
+    # Azure: sort (order_by: ["sentDateTime desc", "search.score() desc"])
+    order_by: list[str] | None = None
+    skip: int = 0  # pagination offset
+    include_total_count: bool = False  # when True, total in response is full match count
+    # Multi-tenant / workspace isolation (optional; backends may map to index prefix or ACL filters).
+    workspace_id: str | None = None
+    # When True, query_index skips optional DIGISEARCH_RERANK_ENABLED second pass
+    # (fetch_all pages must not reorder partial pages — #2441).
+    skip_rerank: bool = False
+
+
+@dataclass
+class Result:
+    """Single search result with score and optional source doc."""
+
+    chunk: Chunk
+    score: float
+    source_doc: Document | None = None
+    rank: int | None = None
+    #: Which index(es) produced this hit (#5045 provenance). Single-index queries
+    #: carry ``[index_name]``; an RRF-merged hit present in several indexes carries
+    #: every contributing name in fan-out order, deduped. ``None`` when the producing
+    #: backend/path predates stamping. Index name == Chroma collection name (1:1).
+    index_names: list[str] | None = None
+
+
+@dataclass
+class SearchResponse:
+    """Result of a search: hits and optional facet counts (Azure)."""
+
+    results: list["Result"]
+    facets: dict[str, list[dict[str, Any]]] | None = None  # field -> [{value, count}, ...]
+    total_count: int | None = (
+        None  # full match count when include_total_count was True (Azure get_count())
+    )
+    #: Which backend produced ``results`` (``azure_ai_search``, ``chroma``, ``stub``,
+    #: ``multi`` for comma-separated fan-out); None if unknown.
+    backend: str | None = None
+    #: Which index names were queried (#5045 provenance): ``["occ_help"]`` for a
+    #: single-index call, ``["occ_help", "occ_tickets"]`` for a comma fan-out
+    #: (``backend="multi"``). ``None`` when the response was built outside
+    #: ``query_index`` (e.g. directly by a backend).
+    index_names: list[str] | None = None
+
+
+# Backward-compatibility aliases (prefer Document, Chunk, Query, Result in new code).
+DigiDocument = Document
+DigiChunk = Chunk
+DigiQuery = Query
+DigiResult = Result

@@ -1,0 +1,15 @@
+# pip-audit accepted-risk list
+# ----------------------------
+# One vulnerability ID per line — `GHSA-xxxx-xxxx-xxxx` or `PYSEC-YYYY-NNN`.
+# `#`-prefixed lines (and inline trailing `# …` comments) are ignored.
+#
+# Every entry MUST include a justification comment on a neighbouring line:
+#   - why the vuln doesn't apply to our usage, and
+#   - when the entry should be re-evaluated (e.g. upstream fix version / date).
+#
+# Policy: see SECURITY.md § "Dependency-audit policy".
+#
+# Example:
+#   # GHSA-aaaa-bbbb-cccc — CVE-2099-0000 in foo; only reachable via the CLI
+#   # entrypoint we don't ship. Re-check when foo 2.0 lands.
+#   GHSA-aaaa-bbbb-cccc

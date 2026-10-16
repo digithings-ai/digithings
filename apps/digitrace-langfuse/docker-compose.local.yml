@@ -1,0 +1,108 @@
+# LOCAL DEV ONLY — ClickHouse + Redis for Langfuse bring-up on a laptop.
+# NOT for production. Production CH/Redis are managed/VM outside Cloudflare
+# (see docs/ops/digitrace-langfuse.md). Do not treat this as a CF Container.
+#
+# Usage (from this directory):
+#   docker compose -f docker-compose.local.yml up -d
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.12
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: clickhouse
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+
+  # ---------------------------------------------------------------------
+  # Langfuse web + worker (S4: the services scripts/selfhost/container_shim.ts
+  # names as neededService "digitrace-langfuse-web" / "digitrace-langfuse-worker").
+  # Images and ports are the ones docs/ops/digitrace-langfuse.md already records:
+  #   Langfuse Web    -> langfuse/langfuse:4.49.0        :3000  UI + API + OTLP
+  #   Langfuse Worker -> langfuse/langfuse-worker:4.49.0 :3030  queues
+  #   (port 3000 also belongs to digichat in the MAIN compose stack — see
+  #   container_shim.ts:17 — so these two publish NO host port and are reached
+  #   in-network only, which is what the shim's ports:{} rows ask for.)
+  #
+  # postgres is new here and is required, not decorative: Langfuse v4 keeps its
+  # primary application database in Postgres. Without it langfuse-web exits at
+  # boot. This file previously shipped only clickhouse + redis, which is why
+  # container_shim.ts answered 503 for both Langfuse container classes.
+  #
+  # Credentials below are LOCAL-ONLY throwaway literals, matching the existing
+  # clickhouse/redis entries in this file. Never copy them anywhere else.
+  # ---------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: langfuse
+      POSTGRES_USER: langfuse
+      POSTGRES_PASSWORD: langfuse
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U langfuse -d langfuse"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  digitrace-langfuse-web:
+    image: langfuse/langfuse:4.49.0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      clickhouse:
+        condition: service_started
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://langfuse:langfuse@postgres:5432/langfuse
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: clickhouse
+      CLICKHOUSE_CLUSTER_ENABLED: "false"
+      # Local ClickHouse is plaintext on the compose network, so migration SSL
+      # is off. Cloudflare's own ClickHouse Cloud example requires
+      # CLICKHOUSE_MIGRATION_SSL=true; docs/ops/digitrace-langfuse.md omits this
+      # key from its secret list, which is a gap for the managed path.
+      CLICKHOUSE_MIGRATION_URL: http://clickhouse:8123
+      CLICKHOUSE_MIGRATION_SSL: "false"
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: local-dev-only-not-a-secret
+      SALT: local-dev-only-not-a-secret
+      ENCRYPTION_KEY: 00000000000000000000000000000000
+      LANGFUSE_INIT_USER_EMAIL: local@digithings.local
+      LANGFUSE_INIT_USER_PASSWORD: local-dev-only
+      TELEMETRY_ENABLED: "false"
+
+  digitrace-langfuse-worker:
+    image: langfuse/langfuse-worker:4.49.0
+    depends_on:
+      digitrace-langfuse-web:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgresql://langfuse:langfuse@postgres:5432/langfuse
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: clickhouse
+      CLICKHOUSE_CLUSTER_ENABLED: "false"
+      CLICKHOUSE_MIGRATION_URL: http://clickhouse:8123
+      CLICKHOUSE_MIGRATION_SSL: "false"
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: local-dev-only-not-a-secret
+      SALT: local-dev-only-not-a-secret
+      ENCRYPTION_KEY: 00000000000000000000000000000000
+      TELEMETRY_ENABLED: "false"

@@ -1,0 +1,34 @@
+---
+title: What you can build
+order: 11
+summary: >-
+  The same parts make a research assistant, a domain product like digiquant,
+  or an agent platform of your own.
+---
+
+The architecture is general on purpose. digiquant, the finance vertical, is the
+proof: it is an ordinary digithings vertical that adds market data and research
+tools, and everything else it needs (identity, the hub, model access, memory,
+the chat interface) comes from the shared stack.
+
+You can follow the same pattern. A **research assistant** needs only the hub,
+retrieval, the vault and digichat. A **domain product** adds one vertical
+service with your tools and data, and inherits identity, tracing and the
+interface. A team that already has its own agent can skip the hub and use the
+pieces it lacks, such as digillm for model access or digivault for memory, as
+plain libraries and services.
+
+Whatever you build, you start the same way: run the whole stack locally, prove
+it end to end on your own machine, then decide where it should live.
+
+> **Why digithings.** You adopt it a module at a time. Open source, runs on your
+> own hardware or on Cloudflare, standard protocols at every boundary, and no
+> part you cannot replace.
+
+<Reference kind="guide" href="repo:docs/SELF_HOST.md" title="Run it yourself">
+  The self-hosting guide: from a clean machine to a working stack.
+</Reference>
+
+<Reference kind="guide" href="repo:CONTRIBUTING.md" title="Contributing">
+  How to propose a change, add a vertical or improve a module.
+</Reference>

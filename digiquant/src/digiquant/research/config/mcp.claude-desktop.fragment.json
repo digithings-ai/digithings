@@ -1,0 +1,47 @@
+{
+  "mcpServers": {
+    "sec-edgar": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-e",
+        "SEC_EDGAR_USER_AGENT",
+        "stefanoamorelli/sec-edgar-mcp:latest"
+      ],
+      "env": {
+        "SEC_EDGAR_USER_AGENT": "${env:SEC_EDGAR_USER_AGENT}",
+        "FASTMCP_LOG_LEVEL": "WARNING"
+      }
+    },
+    "crypto-feargreed": {
+      "command": "uvx",
+      "args": ["--from", "crypto-feargreed-mcp", "python3", "-m", "main"],
+      "env": {
+        "FASTMCP_LOG_LEVEL": "WARNING"
+      }
+    },
+    "polymarket": {
+      "command": "uvx",
+      "args": ["polymarket-mcp"],
+      "env": {
+        "FASTMCP_LOG_LEVEL": "WARNING"
+      }
+    },
+    "frankfurter-fx": {
+      "command": "uvx",
+      "args": ["frankfurtermcp"],
+      "env": {
+        "FASTMCP_LOG_LEVEL": "WARNING"
+      }
+    },
+    "world-bank": {
+      "command": "uvx",
+      "args": ["world-bank-mcp-server"],
+      "env": {
+        "FASTMCP_LOG_LEVEL": "WARNING"
+      }
+    }
+  }
+}

@@ -1,0 +1,25 @@
+"""Smoke test: digikey exposes /metrics with service/version/environment labels."""
+
+from __future__ import annotations
+
+import os
+
+import pytest
+from fastapi.testclient import TestClient
+
+if not (os.environ.get("DIGIKEY_PRIVATE_KEY_PEM") or "").strip():
+    os.environ.setdefault("DIGIKEY_ALLOW_EPHEMERAL_KEY", "1")
+
+from digikey.server import app
+
+from tests.conftest import assert_prom_metrics_labels
+
+pytestmark = pytest.mark.unit
+
+
+def test_metrics_endpoint_live() -> None:
+    client = TestClient(app)
+    client.get("/health")
+    r = client.get("/metrics")
+    assert r.status_code == 200
+    assert_prom_metrics_labels(r.text, service="digikey")

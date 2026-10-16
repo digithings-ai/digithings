@@ -1,0 +1,808 @@
+"""Unified tearsheet data contract — one schema both backtest engines emit.
+
+The Pine-faithful validation backtester (``scripts/validation/pine_backtest.py``)
+and the production NautilusTrader engine (``digiquant.backtest``) produce very
+different native shapes. This module defines a single ``TearsheetData`` model
+that both adapt into, so the standalone HTML/JS renderer in
+``cloudflare/digiquant/`` has exactly one shape to consume.
+
+Serialize with ``TearsheetData.to_json()`` and drop the result next to the
+renderer (``cloudflare/digiquant/strategies/<strategy>.json``).
+"""
+
+from __future__ import annotations
+
+import json
+from collections.abc import Mapping, Sequence
+from datetime import datetime, timezone
+from typing import Literal
+
+from pydantic import BaseModel, Field
+
+from digiquant.stats.honesty import wilson
+
+# 1.1 — added optional ``ohlc_bars`` (price candlesticks) + per-trade signal type
+# carried in ``entry_label`` (MR/Trend/MR&T) on the nautilus path. Back-compatible:
+# 1.0 consumers ignore ``ohlc_bars``; 1.1 fixtures may carry an empty list.
+# 1.2 — added ``signal_delay_days`` (#1462): public tearsheets are generated with
+# the data end date shifted back N calendar days (end-date shift, no redaction),
+# and the payload declares that lag. Back-compatible: defaults to 0 (no delay).
+# 1.3 — optional ``dca: TearsheetDcaBreakdown`` (#3171). Absent on every existing
+# payload, so 1.0–1.2 fixtures still validate. For ``kind == "dca"`` books,
+# ``win_rate_pct`` / ``profit_factor`` / ``long`` / ``short`` are JSON ``null``.
+# Optional diagnostic series (``rails``, ``risk_curve``, …) and ``current_signal``
+# are omitted from slapper dumps via ``to_json()`` so those payloads stay unchanged.
+# Public-honesty extras (``beats_flat_dca_oos``) are optional on the same path —
+# absent means "do not claim an OOS win", never a silent true.
+# 1.4 — added ``win_rate_n`` + ``win_rate_ci95`` on ``StatBlock`` (#4828):
+# Wilson 95% CI fractions backing every rendered win rate. Back-compatible:
+# both default to null, so 1.0–1.3 fixtures still validate.
+SCHEMA_VERSION = "1.4"
+
+# Extra keys set only on DCA publish. ``to_json`` drops them when unset so a
+# Slapper dump does not grow ``null`` fields (#3170 slapper identity).
+_OPTIONAL_PUBLISH_KEYS = (
+    "current_signal",
+    "rails",
+    "risk_curve",
+    "cost_basis_curve",
+    "capital_deployed_curve",
+    "lump_equity_curve",
+    "flat_dca_equity_curve",
+    "allocated_pct_curve",
+    "fill_markers",
+    "indicator_curves",
+    "indicator_weights",
+    "curve_knees",
+    "label",
+    "kind",
+    "avg_trade_pct",
+    "beats_flat_dca_oos",
+)
+
+
+class SeriesPoint(BaseModel):
+    """One (timestamp, value) sample on a time series (equity, drawdown)."""
+
+    t: str = Field(..., description="ISO date or datetime")
+    v: float = Field(..., description="Value at t")
+
+
+class OHLCBar(BaseModel):
+    """One OHLC price bar for the candlestick price chart.
+
+    Single-letter ``t/o/h/l/c`` keys mirror ``SeriesPoint``'s compact ``t/v``
+    style and keep the per-bar JSON small across a multi-year daily series.
+    """
+
+    t: str = Field(..., description="ISO date or datetime")
+    o: float = Field(..., description="Open")
+    h: float = Field(..., description="High")
+    l: float = Field(..., description="Low")  # noqa: E741 — OHLC convention, compact chart key
+    c: float = Field(..., description="Close")
+
+
+class TearsheetRailPoint(BaseModel):
+    """One day's valuation rails (low / median / high) from the #3168 diagnostics."""
+
+    t: str = Field(..., description="ISO date")
+    low: float
+    median: float
+    high: float
+
+
+class TearsheetFillMarker(BaseModel):
+    """One day's aggregated buy or sell from actual Nautilus fills.
+
+    ``book_frac`` is ``|trade_usd| / portfolio`` that day — the fraction of
+    the book moved — not the curve remaining-book rate.
+    """
+
+    t: str
+    side: Literal["buy", "sell"]
+    book_frac: float = Field(..., ge=0.0)
+    price: float
+    trade_usd: float
+
+
+class TearsheetIndicatorCurve(BaseModel):
+    """One composite-member series on the 0–100 risk scale.
+
+    ``display_name`` is the user-facing label (``valuation`` → ``power law``).
+    ``in_index`` is true iff ``weight > 0``.
+    """
+
+    name: str
+    display_name: str
+    weight: float = Field(..., ge=0.0)
+    in_index: bool
+    points: list[SeriesPoint] = Field(default_factory=list)
+
+
+class TearsheetCurveKnees(BaseModel):
+    """Buy-start / sell-start risk thresholds from the published curve shape."""
+
+    buy_knee_risk: float
+    sell_knee_risk: float
+    preset: str = ""
+
+
+class CurrentSignal(BaseModel):
+    """Open-leg snapshot at period end.
+
+    For slapper books ``position`` is the story (long / short / flat). For
+    ``kind == "dca"`` the story is ``risk`` / ``band`` / ``daily_rate_pct``
+    (percent of remaining cash on buys, remaining holdings on sells).
+    ``position`` stays long/flat on DCA only because ``strategy_signals.position``
+    is CHECK-constrained to ``long``/``flat``/``short``.
+    """
+
+    position: str = Field(..., description="long | short | flat")
+    entry_label: str = ""
+    last_signal_date: str = ""
+    last_price: float | None = None
+    risk: float | None = None
+    band: str | None = None
+    daily_rate_pct: float | None = None
+
+
+class StatBlock(BaseModel):
+    """TradingView-style performance block (All / Long / Short)."""
+
+    trades: int = 0
+    net_profit: float = 0.0
+    net_profit_pct: float = 0.0
+    gross_profit: float | None = None
+    gross_loss: float | None = None
+    percent_profitable: float = 0.0
+    profit_factor: float | None = None
+    avg_trade: float = 0.0
+    wins: int = 0
+    losses: int = 0
+    # Honesty envelope (#4828): sample size + Wilson 95% CI fractions backing
+    # ``percent_profitable``. Null when the adapter has no (k, n) pair.
+    win_rate_n: int | None = Field(
+        default=None, description="Sample size behind percent_profitable"
+    )
+    win_rate_ci95: tuple[float, float] | None = Field(
+        default=None, description="Wilson 95% CI fractions (lo, hi)"
+    )
+
+
+class TradeRecord(BaseModel):
+    """A single closed trade."""
+
+    n: int = Field(..., description="1-based trade index")
+    direction: str = Field(..., description="long | short")
+    entry_label: str = ""
+    entry_date: str = ""
+    entry_price: float = 0.0
+    exit_date: str = ""
+    exit_price: float = 0.0
+    qty: float = 0.0
+    pnl: float = 0.0
+    pnl_pct: float = 0.0
+    equity_after: float = 0.0
+    exit_reason: str = ""
+    max_runup_pct: float | None = None
+    max_drawdown_pct: float | None = None
+
+
+class TearsheetDcaBreakdown(BaseModel):
+    """DCA-native metrics for ``kind == "dca"`` books (#3171).
+
+    Round-trip win rate / profit factor are meaningless on a continuous
+    accumulation. These fields answer: did the signal beat lump-sum and
+    beat averaging blindly?
+
+    ``_pct`` conventions — **not** uniform across ``TearsheetData`` (#2552,
+    #2549). Every field here that ends in ``_pct`` is a true percent (×100):
+    ``-15.0`` means −15%. A 100× error (storing ``-0.15``) is a bug; tests
+    pin hand-derived values that would fail under that mistake.
+    ``final_cost_basis_vs_price`` is likewise ×100 (``50.0`` = cost is 50%
+    of the final close). Absent / no-buys: ``avg_cost_basis`` and
+    ``final_cost_basis_vs_price`` are ``null``.
+    """
+
+    vs_lump_pct: float = Field(
+        ...,
+        description="Final value vs deploying all capital on day 1, ×100 percent",
+    )
+    vs_flat_dca_pct: float = Field(
+        ...,
+        description="Final value vs equal daily spend over the same window, ×100 percent",
+    )
+    avg_cost_basis: float | None = Field(
+        None, description="Total spent on buys / total units acquired (quote per unit)"
+    )
+    final_cost_basis_vs_price: float | None = Field(
+        None,
+        description="avg_cost_basis / final close × 100 (percent of last price)",
+    )
+    capital_deployed_pct: float = Field(
+        ...,
+        description=(
+            "Final net deployed / initial capital × 100. Goes negative after sells — "
+            "do not render as 'Deployed'. Public UI uses allocated_pct."
+        ),
+    )
+    capital_deployed_peak_pct: float = Field(
+        ..., description="Peak net deployed / initial capital × 100"
+    )
+    units_accumulated: float = Field(..., description="Ending position size")
+    buy_days: int = Field(
+        0,
+        description="Days with curve rate > 0 (sign of the daily rate, not fill count)",
+    )
+    sell_days: int = Field(
+        0,
+        description="Days with curve rate < 0 (sign of the daily rate, not fill count)",
+    )
+    no_trade_days: int = 0
+    avg_risk: float | None = None
+    avg_rate: float | None = None
+    allocated_pct: float | None = Field(
+        None,
+        description=(
+            "Final mark-to-market allocated % = 100 * units * price / "
+            "(cash + units * price). Always in [0, 100] when the book is long-only."
+        ),
+    )
+    fill_buy_days: int | None = Field(
+        None,
+        description="Days with a non-zero buy fill (daily_trade_usd > 0), not curve-sign",
+    )
+    fill_sell_days: int | None = Field(
+        None,
+        description="Days with a non-zero sell fill (daily_trade_usd < 0), not curve-sign",
+    )
+
+
+class TearsheetData(BaseModel):
+    """Everything the renderer needs for one strategy/symbol backtest."""
+
+    schema_version: str = SCHEMA_VERSION
+    strategy: str
+    symbol: str
+    engine: str = Field("pine", description="pine | nautilus")
+    generated_at: str = Field(..., description="ISO-8601 UTC generation timestamp")
+    data_source: str = Field("", description="Provenance of the price data")
+
+    # ── Run window ────────────────────────────────────────────────────────
+    period_start: str = ""
+    period_end: str = ""
+    bars: int = 0
+    initial_capital: float = 0.0
+    final_equity: float = 0.0
+    # Public signal delay (#1462): the run's data end date lags the freshest
+    # available bar by this many calendar days (end-date shift, so every
+    # artifact is self-consistent). 0 = no delay (internal / historical runs).
+    signal_delay_days: int = Field(0, ge=0, description="Calendar days the end date lags reality")
+
+    # ── Headline KPIs ─────────────────────────────────────────────────────
+    net_profit: float = 0.0
+    net_profit_pct: float = 0.0
+    max_drawdown_pct: float = 0.0
+    sharpe_ratio: float | None = None
+    sortino_ratio: float | None = None
+    calmar_ratio: float | None = None
+    profit_factor: float | None = None
+    win_rate_pct: float | None = 0.0
+    total_trades: int = 0
+    avg_trade: float = 0.0
+
+    # ── Directional breakdown ─────────────────────────────────────────────
+    overall: StatBlock = Field(default_factory=StatBlock)
+    long: StatBlock | None = None
+    short: StatBlock | None = None
+
+    # ── DCA book (schema 1.3; absent on Slapper payloads) ─────────────────
+    dca: TearsheetDcaBreakdown | None = None
+
+    # ── Series + trades ───────────────────────────────────────────────────
+    equity_curve: list[SeriesPoint] = Field(default_factory=list)
+    drawdown_curve: list[SeriesPoint] = Field(default_factory=list)
+    # Full-history OHLC price bars for the candlestick chart. Defaults to []
+    # for back-compat: 1.0 fixtures (and adapters that have no bars) omit it.
+    ohlc_bars: list[OHLCBar] = Field(default_factory=list)
+    trades: list[TradeRecord] = Field(default_factory=list)
+
+    notes: list[str] = Field(default_factory=list)
+
+    # ── DCA diagnostics + current signal (omitted on slapper dumps) ───────
+    current_signal: CurrentSignal | None = None
+    rails: list[TearsheetRailPoint] | None = None
+    risk_curve: list[SeriesPoint] | None = None
+    cost_basis_curve: list[SeriesPoint] | None = None
+    capital_deployed_curve: list[SeriesPoint] | None = None
+    lump_equity_curve: list[SeriesPoint] | None = None
+    flat_dca_equity_curve: list[SeriesPoint] | None = None
+    allocated_pct_curve: list[SeriesPoint] | None = None
+    fill_markers: list[TearsheetFillMarker] | None = None
+    indicator_curves: list[TearsheetIndicatorCurve] | None = None
+    indicator_weights: dict[str, float] | None = None
+    curve_knees: TearsheetCurveKnees | None = None
+    label: str | None = None
+    kind: str | None = None
+    avg_trade_pct: float | None = None
+    beats_flat_dca_oos: bool | None = Field(
+        None,
+        description=(
+            "Walk-forward OOS vs flat DCA. False / omitted = do not claim an OOS win. "
+            "Full-sample Nautilus vs_flat_dca_pct is not this flag."
+        ),
+    )
+
+    def to_json(self, *, indent: int | None = 2) -> str:
+        """Serialize to a JSON string for the static renderer to fetch.
+
+        Optional DCA publish keys are dropped when unset so Slapper payloads
+        do not grow new ``null`` fields.
+        """
+        data = self.model_dump(mode="json")
+        for key in _OPTIONAL_PUBLISH_KEYS:
+            if key not in self.model_fields_set:
+                data.pop(key, None)
+        return json.dumps(data, indent=indent)
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def _drawdown_from_equity(
+    equity: Sequence[tuple[str, float]], initial_capital: float
+) -> list[SeriesPoint]:
+    """Running peak-to-trough drawdown (%) of a mark-to-market equity curve."""
+    peak = initial_capital
+    out: list[SeriesPoint] = []
+    for ts, eq in equity:
+        peak = max(peak, eq)
+        dd = (eq - peak) / peak * 100.0 if peak > 0 else 0.0
+        out.append(SeriesPoint(t=ts, v=dd))
+    return out
+
+
+def _stat_block(block: Mapping[str, object] | None) -> StatBlock:
+    """Build a StatBlock from a pine ``_dir_metrics`` dict (tolerant of gaps)."""
+    if not block:
+        return StatBlock()
+    n = int(block.get("trades", 0) or 0)
+    k = min(n, max(0, int(block.get("wins", 0) or 0)))
+    ci95: tuple[float, float] | None = None
+    if n > 0:
+        w = wilson(k, n)
+        if w is not None:
+            ci95 = (w.lo, w.hi)
+    return StatBlock(
+        trades=n,
+        net_profit=float(block.get("net_profit", 0.0) or 0.0),
+        net_profit_pct=float(block.get("net_profit_pct", 0.0) or 0.0),
+        gross_profit=_opt_float(block.get("gross_profit")),
+        gross_loss=_opt_float(block.get("gross_loss")),
+        percent_profitable=float(block.get("percent_profitable", 0.0) or 0.0),
+        profit_factor=_opt_float(block.get("profit_factor")),
+        avg_trade=float(block.get("avg_trade", 0.0) or 0.0),
+        wins=int(block.get("wins", 0) or 0),
+        losses=int(block.get("losses", 0) or 0),
+        win_rate_n=n if n > 0 else None,
+        win_rate_ci95=ci95,
+    )
+
+
+def _opt_float(v: object) -> float | None:
+    return None if v is None else float(v)  # type: ignore[arg-type]
+
+
+def _points(
+    series: Sequence[tuple[str, float]] | Sequence[Mapping[str, object]] | None,
+) -> list[SeriesPoint]:
+    if not series:
+        return []
+    out: list[SeriesPoint] = []
+    for item in series:
+        if isinstance(item, Mapping):
+            out.append(SeriesPoint(t=str(item["t"]), v=float(item["v"])))
+        else:
+            out.append(SeriesPoint(t=str(item[0]), v=float(item[1])))
+    return out
+
+
+def _rails(
+    series: Sequence[Mapping[str, object]] | Sequence[TearsheetRailPoint] | None,
+) -> list[TearsheetRailPoint]:
+    if not series:
+        return []
+    out: list[TearsheetRailPoint] = []
+    for item in series:
+        if isinstance(item, TearsheetRailPoint):
+            out.append(item)
+        else:
+            out.append(
+                TearsheetRailPoint(
+                    t=str(item["t"]),
+                    low=float(item["low"]),
+                    median=float(item["median"]),
+                    high=float(item["high"]),
+                )
+            )
+    return out
+
+
+def _fill_markers(
+    series: Sequence[Mapping[str, object]] | Sequence[TearsheetFillMarker] | None,
+) -> list[TearsheetFillMarker]:
+    if not series:
+        return []
+    out: list[TearsheetFillMarker] = []
+    for item in series:
+        if isinstance(item, TearsheetFillMarker):
+            out.append(item)
+        else:
+            out.append(TearsheetFillMarker.model_validate(item))
+    return out
+
+
+def _indicator_curves(
+    series: Sequence[Mapping[str, object]] | Sequence[TearsheetIndicatorCurve] | None,
+) -> list[TearsheetIndicatorCurve]:
+    if not series:
+        return []
+    out: list[TearsheetIndicatorCurve] = []
+    for item in series:
+        if isinstance(item, TearsheetIndicatorCurve):
+            out.append(item)
+        else:
+            raw = dict(item)
+            pts = raw.get("points") or []
+            raw["points"] = _points(pts)  # type: ignore[arg-type]
+            out.append(TearsheetIndicatorCurve.model_validate(raw))
+    return out
+
+
+def _build_tearsheet(
+    summary: Mapping[str, object],
+    trades: Sequence[Mapping[str, object]],
+    equity_curve: Sequence[tuple[str, float]],
+    *,
+    engine: str,
+    data_source: str = "",
+    generated_at: str | None = None,
+    notes: Sequence[str] | None = None,
+    ohlc_bars: Sequence[tuple[str, float, float, float, float]] | None = None,
+    signal_delay_days: int = 0,
+    dca: TearsheetDcaBreakdown | None = None,
+    current_signal: CurrentSignal | Mapping[str, object] | None = None,
+    rails: Sequence[Mapping[str, object]] | Sequence[TearsheetRailPoint] | None = None,
+    risk_curve: Sequence[tuple[str, float]] | Sequence[Mapping[str, object]] | None = None,
+    cost_basis_curve: Sequence[tuple[str, float]] | Sequence[Mapping[str, object]] | None = None,
+    capital_deployed_curve: Sequence[tuple[str, float]]
+    | Sequence[Mapping[str, object]]
+    | None = None,
+    lump_equity_curve: Sequence[tuple[str, float]] | Sequence[Mapping[str, object]] | None = None,
+    flat_dca_equity_curve: Sequence[tuple[str, float]]
+    | Sequence[Mapping[str, object]]
+    | None = None,
+    allocated_pct_curve: Sequence[tuple[str, float]] | Sequence[Mapping[str, object]] | None = None,
+    fill_markers: Sequence[Mapping[str, object]] | Sequence[TearsheetFillMarker] | None = None,
+    indicator_curves: Sequence[Mapping[str, object]]
+    | Sequence[TearsheetIndicatorCurve]
+    | None = None,
+    indicator_weights: Mapping[str, float] | None = None,
+    curve_knees: Mapping[str, object] | TearsheetCurveKnees | None = None,
+    label: str | None = None,
+    kind: str | None = None,
+    avg_trade_pct: float | None = None,
+    beats_flat_dca_oos: bool | None = None,
+) -> TearsheetData:
+    """Shared builder for the summary-based adapters (``from_pine`` / ``from_nautilus_run``).
+
+    ``summary`` is a dict with All/Long/Short metric blocks (keys mirroring
+    ``pine_backtest.summarize``); ``trades`` is a sequence of per-closed-trade
+    mappings; ``equity_curve`` is the ``(date, mark-to-market equity)`` list.
+    ``ohlc_bars`` is an optional ``(date, open, high, low, close)`` list for the
+    candlestick price chart (raw tuples so callers need not import ``OHLCBar``).
+    ``signal_delay_days`` declares how far the run's end date was shifted back
+    from the freshest available bar (#1462); the caller shifts the data itself.
+    ``dca`` is the schema 1.3 DCA block; when set, trade-based KPIs
+    (``win_rate_pct``, ``profit_factor``, ``long``, ``short``) are forced to
+    ``None`` so a renderer cannot confuse "not applicable" with zero.
+    Diagnostic overlays and ``current_signal`` are passed only for DCA publish.
+    """
+    overall = summary.get("all")
+    overall_block = _stat_block(overall if isinstance(overall, Mapping) else None)
+    period = str(summary.get("period", ""))
+    start, _, end = period.partition("→")
+
+    trade_records = [
+        TradeRecord(
+            n=i,
+            direction=str(t.get("direction", "")),
+            entry_label=str(t.get("entry_label", "")),
+            entry_date=str(t.get("entry_date", "")),
+            entry_price=float(t.get("entry_price", 0.0) or 0.0),
+            exit_date=str(t.get("exit_date", "")),
+            exit_price=float(t.get("exit_price", 0.0) or 0.0),
+            qty=float(t.get("qty", 0.0) or 0.0),
+            pnl=float(t.get("pnl", 0.0) or 0.0),
+            pnl_pct=float(t.get("pnl_pct", 0.0) or 0.0),
+            equity_after=float(t.get("equity_after", 0.0) or 0.0),
+            exit_reason=str(t.get("exit_reason", "")),
+            max_runup_pct=_opt_float(t.get("max_runup_pct")),
+            max_drawdown_pct=_opt_float(t.get("max_drawdown_pct")),
+        )
+        for i, t in enumerate(trades, 1)
+    ]
+
+    initial_capital = float(summary.get("initial_capital", 0.0) or 0.0)
+    long_block = summary.get("long")
+    short_block = summary.get("short")
+    dca_mode = dca is not None
+
+    extras: dict[str, object] = {}
+    if current_signal is not None:
+        extras["current_signal"] = (
+            current_signal
+            if isinstance(current_signal, CurrentSignal)
+            else CurrentSignal.model_validate(current_signal)
+        )
+    if rails is not None:
+        extras["rails"] = _rails(rails)
+    if risk_curve is not None:
+        extras["risk_curve"] = _points(risk_curve)
+    if cost_basis_curve is not None:
+        extras["cost_basis_curve"] = _points(cost_basis_curve)
+    if capital_deployed_curve is not None:
+        extras["capital_deployed_curve"] = _points(capital_deployed_curve)
+    if lump_equity_curve is not None:
+        extras["lump_equity_curve"] = _points(lump_equity_curve)
+    if flat_dca_equity_curve is not None:
+        extras["flat_dca_equity_curve"] = _points(flat_dca_equity_curve)
+    if allocated_pct_curve is not None:
+        extras["allocated_pct_curve"] = _points(allocated_pct_curve)
+    if fill_markers is not None:
+        extras["fill_markers"] = _fill_markers(fill_markers)
+    if indicator_curves is not None:
+        extras["indicator_curves"] = _indicator_curves(indicator_curves)
+    if indicator_weights is not None:
+        extras["indicator_weights"] = {str(k): float(v) for k, v in indicator_weights.items()}
+    if curve_knees is not None:
+        extras["curve_knees"] = (
+            curve_knees
+            if isinstance(curve_knees, TearsheetCurveKnees)
+            else TearsheetCurveKnees.model_validate(curve_knees)
+        )
+    if label is not None:
+        extras["label"] = label
+    if kind is not None:
+        extras["kind"] = kind
+    if avg_trade_pct is not None:
+        extras["avg_trade_pct"] = avg_trade_pct
+    if beats_flat_dca_oos is not None:
+        extras["beats_flat_dca_oos"] = beats_flat_dca_oos
+
+    return TearsheetData(
+        strategy=str(summary.get("strategy", "")),
+        symbol=str(summary.get("symbol", "")),
+        engine=engine,
+        generated_at=generated_at or _utc_now_iso(),
+        data_source=data_source,
+        period_start=start.strip(),
+        period_end=end.strip(),
+        bars=int(summary.get("bars", 0) or 0),
+        signal_delay_days=signal_delay_days,
+        initial_capital=initial_capital,
+        final_equity=float(summary.get("final_equity", 0.0) or 0.0),
+        net_profit=overall_block.net_profit
+        if not dca_mode
+        else (float(summary.get("final_equity", 0.0) or 0.0) - initial_capital),
+        net_profit_pct=float(summary.get("net_profit_pct", 0.0) or 0.0),
+        max_drawdown_pct=float(summary.get("max_drawdown_pct", 0.0) or 0.0),
+        profit_factor=None if dca_mode else overall_block.profit_factor,
+        win_rate_pct=None if dca_mode else overall_block.percent_profitable,
+        total_trades=0 if dca_mode else overall_block.trades,
+        avg_trade=0.0 if dca_mode else overall_block.avg_trade,
+        overall=StatBlock() if dca_mode else overall_block,
+        long=None
+        if dca_mode
+        else _stat_block(long_block if isinstance(long_block, Mapping) else None),
+        short=None
+        if dca_mode
+        else _stat_block(short_block if isinstance(short_block, Mapping) else None),
+        dca=dca,
+        equity_curve=[SeriesPoint(t=ts, v=v) for ts, v in equity_curve],
+        drawdown_curve=_drawdown_from_equity(equity_curve, initial_capital),
+        ohlc_bars=[OHLCBar(t=t, o=o, h=h, l=low, c=c) for t, o, h, low, c in (ohlc_bars or [])],
+        trades=[] if dca_mode else trade_records,
+        notes=list(notes or []),
+        **extras,  # type: ignore[arg-type]
+    )
+
+
+def from_pine(
+    summary: Mapping[str, object],
+    trades: Sequence[Mapping[str, object]],
+    equity_curve: Sequence[tuple[str, float]],
+    *,
+    data_source: str = "",
+    generated_at: str | None = None,
+    notes: Sequence[str] | None = None,
+    ohlc_bars: Sequence[tuple[str, float, float, float, float]] | None = None,
+) -> TearsheetData:
+    """Adapt the Pine validation backtester output into ``TearsheetData`` (engine=pine)."""
+    return _build_tearsheet(
+        summary,
+        trades,
+        equity_curve,
+        engine="pine",
+        data_source=data_source,
+        generated_at=generated_at,
+        notes=notes,
+        ohlc_bars=ohlc_bars,
+    )
+
+
+def from_nautilus_run(
+    summary: Mapping[str, object],
+    trades: Sequence[Mapping[str, object]],
+    equity_curve: Sequence[tuple[str, float]],
+    *,
+    data_source: str = "",
+    generated_at: str | None = None,
+    notes: Sequence[str] | None = None,
+    ohlc_bars: Sequence[tuple[str, float, float, float, float]] | None = None,
+    signal_delay_days: int = 0,
+    dca: TearsheetDcaBreakdown | None = None,
+    current_signal: CurrentSignal | Mapping[str, object] | None = None,
+    rails: Sequence[Mapping[str, object]] | Sequence[TearsheetRailPoint] | None = None,
+    risk_curve: Sequence[tuple[str, float]] | Sequence[Mapping[str, object]] | None = None,
+    cost_basis_curve: Sequence[tuple[str, float]] | Sequence[Mapping[str, object]] | None = None,
+    capital_deployed_curve: Sequence[tuple[str, float]]
+    | Sequence[Mapping[str, object]]
+    | None = None,
+    lump_equity_curve: Sequence[tuple[str, float]] | Sequence[Mapping[str, object]] | None = None,
+    flat_dca_equity_curve: Sequence[tuple[str, float]]
+    | Sequence[Mapping[str, object]]
+    | None = None,
+    allocated_pct_curve: Sequence[tuple[str, float]] | Sequence[Mapping[str, object]] | None = None,
+    fill_markers: Sequence[Mapping[str, object]] | Sequence[TearsheetFillMarker] | None = None,
+    indicator_curves: Sequence[Mapping[str, object]]
+    | Sequence[TearsheetIndicatorCurve]
+    | None = None,
+    indicator_weights: Mapping[str, float] | None = None,
+    curve_knees: Mapping[str, object] | TearsheetCurveKnees | None = None,
+    label: str | None = None,
+    kind: str | None = None,
+    avg_trade_pct: float | None = None,
+    beats_flat_dca_oos: bool | None = None,
+) -> TearsheetData:
+    """Adapt a NautilusTrader backtest (round-trip positions + MTM equity) into
+    ``TearsheetData`` (engine=nautilus). Same summary/trades/equity shape as
+    ``from_pine`` so the renderer consumes one schema regardless of engine.
+    ``signal_delay_days`` records the public end-date shift applied upstream
+    (#1462); pass 0 for undelayed (internal) runs. Pass ``dca`` for a
+    ``kind == "dca"`` book (#3171) — trade KPIs become ``null``. Diagnostic
+    overlays and ``current_signal`` are copied onto the payload so #3172
+    charts do not degrade; omit them on Slapper runs.
+    """
+    return _build_tearsheet(
+        summary,
+        trades,
+        equity_curve,
+        engine="nautilus",
+        data_source=data_source,
+        generated_at=generated_at,
+        notes=notes,
+        ohlc_bars=ohlc_bars,
+        signal_delay_days=signal_delay_days,
+        dca=dca,
+        current_signal=current_signal,
+        rails=rails,
+        risk_curve=risk_curve,
+        cost_basis_curve=cost_basis_curve,
+        capital_deployed_curve=capital_deployed_curve,
+        lump_equity_curve=lump_equity_curve,
+        flat_dca_equity_curve=flat_dca_equity_curve,
+        allocated_pct_curve=allocated_pct_curve,
+        fill_markers=fill_markers,
+        indicator_curves=indicator_curves,
+        indicator_weights=indicator_weights,
+        curve_knees=curve_knees,
+        label=label,
+        kind=kind,
+        avg_trade_pct=avg_trade_pct,
+        beats_flat_dca_oos=beats_flat_dca_oos,
+    )
+
+
+def from_nautilus(
+    result: object,
+    *,
+    symbol: str = "",
+    equity_curve: Sequence[tuple[str, float]] | None = None,
+    trades: Sequence[Mapping[str, object]] | None = None,
+    data_source: str = "",
+    generated_at: str | None = None,
+    notes: Sequence[str] | None = None,
+) -> TearsheetData:
+    """Adapt a ``digiquant.models.BacktestResult`` into ``TearsheetData``.
+
+    ``result`` is duck-typed (only attribute access is used) so this module
+    stays import-light and does not pull in the Nautilus stack. Optional
+    ``equity_curve`` / ``trades`` enrich the charts when the caller has the
+    account and fills reports; otherwise headline KPIs still render.
+    """
+    initial_capital = float(getattr(result, "initial_capital", 0.0) or 0.0)
+    total_pnl = float(getattr(result, "total_pnl", 0.0) or 0.0)
+    symbols = getattr(result, "symbols", None) or []
+    resolved_symbol = symbol or (symbols[0] if symbols else "")
+    eq = list(equity_curve or [])
+    final_equity = eq[-1][1] if eq else initial_capital + total_pnl
+
+    trade_records = [
+        TradeRecord(
+            n=i,
+            direction=str(t.get("direction", "")),
+            entry_label=str(t.get("entry_label", "")),
+            entry_date=str(t.get("entry_date", "")),
+            entry_price=float(t.get("entry_price", 0.0) or 0.0),
+            exit_date=str(t.get("exit_date", "")),
+            exit_price=float(t.get("exit_price", 0.0) or 0.0),
+            qty=float(t.get("qty", 0.0) or 0.0),
+            pnl=float(t.get("pnl", 0.0) or 0.0),
+            pnl_pct=float(t.get("pnl_pct", 0.0) or 0.0),
+            equity_after=float(t.get("equity_after", 0.0) or 0.0),
+            exit_reason=str(t.get("exit_reason", "")),
+            max_runup_pct=_opt_float(t.get("max_runup_pct")),
+            max_drawdown_pct=_opt_float(t.get("max_drawdown_pct")),
+        )
+        for i, t in enumerate(trades or [], 1)
+    ]
+
+    dd_curve = _drawdown_from_equity(eq, initial_capital) if eq else []
+    max_dd = getattr(result, "max_drawdown_pct", None)
+    if max_dd is None and dd_curve:
+        # A missing Nautilus drawdown is not a flat curve. The equity path
+        # already has the peak-to-trough; reporting 0% would hide it.
+        max_dd = min(point.v for point in dd_curve)
+
+    return TearsheetData(
+        strategy=str(getattr(result, "strategy_name", "")),
+        symbol=resolved_symbol,
+        engine="nautilus",
+        generated_at=generated_at or _utc_now_iso(),
+        data_source=data_source,
+        period_start=str(getattr(result, "start_time", "")),
+        period_end=str(getattr(result, "end_time", "")),
+        bars=0,
+        initial_capital=initial_capital,
+        final_equity=final_equity,
+        net_profit=total_pnl,
+        net_profit_pct=float(getattr(result, "total_return_pct", 0.0) or 0.0),
+        max_drawdown_pct=float(max_dd) if max_dd is not None else 0.0,
+        sharpe_ratio=_opt_float(getattr(result, "sharpe_ratio", None)),
+        total_trades=int(getattr(result, "num_trades", 0) or 0),
+        equity_curve=[SeriesPoint(t=ts, v=v) for ts, v in eq],
+        drawdown_curve=dd_curve,
+        trades=trade_records,
+        notes=list(notes or []),
+    )
+
+
+__all__ = [
+    "SCHEMA_VERSION",
+    "OHLCBar",
+    "SeriesPoint",
+    "StatBlock",
+    "TearsheetDcaBreakdown",
+    "TearsheetData",
+    "TearsheetRailPoint",
+    "TearsheetFillMarker",
+    "TearsheetIndicatorCurve",
+    "TearsheetCurveKnees",
+    "CurrentSignal",
+    "TradeRecord",
+    "from_nautilus",
+    "from_nautilus_run",
+    "from_pine",
+]

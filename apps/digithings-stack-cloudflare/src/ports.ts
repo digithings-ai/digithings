@@ -1,0 +1,81 @@
+/** digigraph default edge port inside the Profile A stack Container. */
+export const DIGIGRAPH_PORT = 8000;
+
+/** digikey edge port inside the Profile A stack Container. */
+export const DIGIKEY_PORT = 8005;
+
+/**
+ * digisearch edge port inside the Profile A stack Container. Hosted on
+ * search.digithings.ai (#4063) for CI web grounding, behind a digikey JWT
+ * scoped `digisearch:query` — never anonymous.
+ */
+export const DIGISEARCH_PORT = 8002;
+
+/**
+ * digiquant-mcp market-data edge port (dedicated Container, #3780 Task 8).
+ * Matches DIGIQUANT_MCP_PORT in digiquant/Dockerfile.mcp and the
+ * streamable-http default in digiquant/src/digiquant/mcp_server.py.
+ */
+export const DIGIQUANT_MCP_PORT = 8767;
+
+/** Reserved public hostname for the hosted market-data MCP server. */
+export const DIGIQUANT_MCP_HOSTNAME = "mcp.digithings.ai";
+
+/**
+ * Durable Object / Container id for the dedicated digiquant-mcp instance.
+ * Single pinned id on purpose: the MCP read path assumes a single replica
+ * (in-memory 900s TTL cache), so this container runs max_instances = 1.
+ */
+export const MCP_CONTAINER_ID = "mcp-v1";
+
+/** Single Durable Object / Container id for the shared Profile A stack.
+ * Bump the suffix when a deploy must force a new Firecracker instance
+ * (old DO can keep a stale image until sleepAfter expires) — e.g. v15,
+ * to pick up the rotated DIGIKEY_ADMIN_TOKEN, since the container reads
+ * worker env only when the instance starts.
+ *
+ * v16 → v17 (2026-10-06, DIG-1506 / DIG-1500): the v16 instance kept serving
+ * an image whose boot chain still re-ingested the committed `occ_tickets`
+ * PII snapshot on every cold start. Container disk is ephemeral, so the fix in
+ * #5192 (payload + fan-out retired) only reaches the store once every instance
+ * id that can still hold the old image is retired. A v16 instance survives a
+ * Worker redeploy until `sleepAfter` expires, so the redeploy alone is not the
+ * containment — this bump is. Rollback: restore the previous suffix and redeploy
+ * (container-name token only; no migration, schema, or binding change).
+ * Verify: `curl -sf https://graph.digithings.ai/_stack/meta | python3 -c
+ * 'import sys,json;print(json.load(sys.stdin)["containerId"])'`.
+ *
+ * v17 → v18 (2026-10-08, digikey hotfix #5283 / #5010): a v17 instance keeps
+ * serving the digikey build whose `_one_required` let a requested `ns:*`
+ * scope be satisfied by any narrow `ns:x` grant (scope escalation on both
+ * token exchanges). Under steady traffic a v17 instance never reaches
+ * `sleepAfter`, so the Worker redeploy alone does not take the old scopes.py
+ * out of service — this bump does. Rollback: restore the previous suffix and
+ * redeploy (container-name token only; no migration, schema, or binding
+ * change; digikey state lives in DIGIKEY_DATABASE_URL, not on container disk).
+ * Verify: same `_stack/meta` check as above → "shared-v18".
+ */
+export const SHARED_STACK_CONTAINER_ID = "shared-v18";
+
+/**
+ * Map public hostname → container port.
+ * Unknown hosts return null (Worker responds 404).
+ */
+export function portForHostname(hostname: string): number | null {
+  const host = hostname.trim().toLowerCase();
+  if (host === "graph.digithings.ai" || host.startsWith("graph.")) {
+    return DIGIGRAPH_PORT;
+  }
+  if (host === "key.digithings.ai" || host.startsWith("key.")) {
+    return DIGIKEY_PORT;
+  }
+  if (host === "search.digithings.ai" || host.startsWith("search.")) {
+    return DIGISEARCH_PORT;
+  }
+  // wrangler.dev / workers.dev fallback: path-prefix routing not used;
+  // default to digigraph so /healthz works on the workers.dev URL.
+  if (host.endsWith(".workers.dev") || host === "localhost" || host === "127.0.0.1") {
+    return DIGIGRAPH_PORT;
+  }
+  return null;
+}

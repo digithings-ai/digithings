@@ -1,0 +1,55 @@
+.desk {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-height: 36rem;
+  background: var(--hair);
+}
+
+.cell {
+  min-height: 11rem;
+  min-width: 0;
+}
+
+@media (min-width: 64rem) {
+  .desk {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    grid-template-rows: repeat(12, minmax(0, 1fr));
+    min-height: min(46rem, calc(100svh - 16rem));
+  }
+
+  .cell {
+    min-height: 0;
+  }
+
+  .book {
+    grid-column: 1 / span 4;
+    grid-row: 1 / span 6;
+  }
+
+  .sleeves {
+    grid-column: 5 / span 4;
+    grid-row: 1 / span 6;
+  }
+
+  .movers {
+    grid-column: 9 / span 4;
+    grid-row: 1 / span 6;
+  }
+
+  .holdings {
+    grid-column: 1 / span 6;
+    grid-row: 7 / span 6;
+  }
+
+  .nav {
+    grid-column: 7 / span 3;
+    grid-row: 7 / span 6;
+  }
+
+  .drawdown {
+    grid-column: 10 / span 3;
+    grid-row: 7 / span 6;
+  }
+}

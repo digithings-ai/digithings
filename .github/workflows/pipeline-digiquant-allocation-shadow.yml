@@ -1,0 +1,182 @@
+name: "Pipeline: allocation shadow"
+
+# WP10.2 (#2762) — write-denied shadow evaluation surface for WP10.1 artifacts.
+#
+# Isolation contract (enforced by digiquant/scripts/research/check_allocation_shadow_isolation.py):
+#   - artifact-in / file-out only
+#   - no production Supabase / provider / broker / checkpointer secrets
+#   - no secrets: inherit
+#   - permissions: contents:read + actions:read only (artifact download)
+#   - trusted producer: "Pipeline: dashboard research" on main
+#   - workflow_dispatch verifies producer run identity via Actions API (#2832)
+#     — never trust hardcoded workflow labels from free-form inputs
+#
+# This workflow does NOT run the challenger optimizer (WP10.3+) and must never
+# call H9 commit I/O, live Nautilus, or broker adapters. Disable this workflow
+# to roll back; production dashboard graph is unaffected.
+
+on:
+  workflow_run:
+    workflows:
+      - "Pipeline: dashboard research"
+    types:
+      - completed
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: "dashboard research Actions run id to download artifacts from (required for dispatch)."
+        required: true
+        type: string
+      source_branch:
+        description: "Producer branch trust gate (must be main)."
+        required: false
+        default: "main"
+
+# Explicit least privilege — never secrets: inherit, never write scopes.
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: digiquant-allocation-shadow
+  cancel-in-progress: false
+
+jobs:
+  isolate:
+    name: Check write-denied isolation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # workflow_run: only after a successful producer on trusted branch (branches: filter above).
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    steps:
+      - name: Check out released digiquant source
+        uses: actions/checkout@v4
+        with:
+          # Match production pipelines: scheduled/default-branch triggers still
+          # check out released code from main (#814).
+          ref: main
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install digiquant (no research/network extras required)
+        run: uv sync --frozen --package digiquant
+
+      - name: Resolve producer identity
+        id: producer
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RUN_ID_DISPATCH: ${{ inputs.source_run_id }}
+          BRANCH_DISPATCH: ${{ inputs.source_branch }}
+          RUN_ID_WORKFLOW: ${{ github.event.workflow_run.id }}
+          BRANCH_WORKFLOW: ${{ github.event.workflow_run.head_branch }}
+          WORKFLOW_NAME_WORKFLOW: ${{ github.event.workflow_run.name }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          TRUSTED_WORKFLOW="Pipeline: dashboard research"
+          TRUSTED_BRANCH="main"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            source_run_id="${RUN_ID_DISPATCH}"
+            if [ -z "${source_run_id}" ]; then
+              echo "::error::missing producer run id"
+              exit 1
+            fi
+            # Verify the run id actually belongs to the trusted dashboard producer
+            # on main — never trust hardcoded labels from dispatch inputs (#2832).
+            meta="$(gh api "repos/${REPO}/actions/runs/${source_run_id}" \
+              --jq '{name:.name,head_branch:.head_branch,path:.path}')"
+            source_workflow="$(printf '%s' "$meta" | jq -r .name)"
+            source_branch="$(printf '%s' "$meta" | jq -r .head_branch)"
+            if [ "${source_workflow}" != "${TRUSTED_WORKFLOW}" ]; then
+              echo "::error::untrusted producer workflow '${source_workflow}' (required: ${TRUSTED_WORKFLOW})"
+              exit 1
+            fi
+            if [ -n "${BRANCH_DISPATCH:-}" ] && [ "${BRANCH_DISPATCH}" != "${source_branch}" ]; then
+              echo "::error::source_branch input '${BRANCH_DISPATCH}' does not match run head_branch '${source_branch}'"
+              exit 1
+            fi
+          else
+            source_run_id="${RUN_ID_WORKFLOW}"
+            source_branch="${BRANCH_WORKFLOW}"
+            source_workflow="${WORKFLOW_NAME_WORKFLOW}"
+          fi
+          if [ -z "${source_run_id}" ]; then
+            echo "::error::missing producer run id"
+            exit 1
+          fi
+          if [ "${source_branch}" != "${TRUSTED_BRANCH}" ]; then
+            echo "::error::untrusted source branch '${source_branch}' (required: ${TRUSTED_BRANCH})"
+            exit 1
+          fi
+          if [ "${source_workflow}" != "${TRUSTED_WORKFLOW}" ]; then
+            echo "::error::untrusted producer workflow '${source_workflow}' (required: ${TRUSTED_WORKFLOW})"
+            exit 1
+          fi
+          {
+            echo "source_run_id=${source_run_id}"
+            echo "source_branch=${source_branch}"
+            echo "source_workflow=${source_workflow}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Download producer artifacts (read-only)
+        uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ steps.producer.outputs.source_run_id }}
+          github-token: ${{ github.token }}
+          pattern: digiquant-daily-*
+          merge-multiple: true
+          path: incoming
+          # github.token only — never repository secrets / secrets: inherit.
+
+      - name: Collect shadow allocation artifacts
+        id: collect
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts incoming
+          : > artifacts/shadow-artifact-args.txt
+          count=0
+          while IFS= read -r -d '' f; do
+            printf -- '--artifact\0%s\0' "$f" >> artifacts/shadow-artifact-args.txt
+            count=$((count + 1))
+          done < <(find incoming -type f -name 'shadow-allocation-*.json' -print0 | sort -z)
+          echo "artifact_count=${count}" >> "$GITHUB_OUTPUT"
+          if [ "${count}" -eq 0 ]; then
+            echo "No shadow-allocation-*.json in producer artifacts — isolation check on workflow only."
+          else
+            echo "Found ${count} shadow allocation artifact(s)"
+          fi
+
+      - name: Run write-denied isolation checker
+        env:
+          SOURCE_WORKFLOW: ${{ steps.producer.outputs.source_workflow }}
+          SOURCE_BRANCH: ${{ steps.producer.outputs.source_branch }}
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          args=()
+          if [ -s artifacts/shadow-artifact-args.txt ]; then
+            while IFS= read -r -d '' token; do
+              args+=("$token")
+            done < artifacts/shadow-artifact-args.txt
+          fi
+          uv run --frozen --no-sync python digiquant/scripts/research/check_allocation_shadow_isolation.py \
+            --source-workflow "${SOURCE_WORKFLOW}" \
+            --source-branch "${SOURCE_BRANCH}" \
+            --output artifacts/allocation-shadow-isolation-report.json \
+            "${args[@]}"
+
+      - name: Upload isolation report (file-only)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: digiquant-allocation-shadow-${{ steps.producer.outputs.source_run_id }}
+          path: artifacts/
+          retention-days: 30

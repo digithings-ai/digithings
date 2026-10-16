@@ -1,0 +1,603 @@
+"""Macro time-series ingestion — Yahoo FX (+ legacy FRED row mapping).
+
+Consolidates two research scripts:
+
+* ``ingest_fred.py`` → :func:`fetch_fred` (removed #4794 PR3: the sealed panel
+  refreshes from gloomberb ``econ_series``; ``fred_observations_to_rows`` stays
+  as the row-mapping helper with its unit tests)
+* ``scripts/lib/macro_ingest.py`` helpers → private in this module
+
+The default daily pipeline pulls FRED + Yahoo FX (:func:`fetch_fx_yahoo`).
+Frankfurter FX and crypto Fear & Greed were dropped as default sources in
+issue #328 and their fetchers removed in the deslop pass (WS4b).
+
+:func:`fetch_fx_intraday` pulls Yahoo intraday OHLC candles for the separate
+``fx_intraday_observations`` table (twelve-x trade grading); its series ids
+match the daily convention exactly and every candle carries its bar length
+(``interval``) so 5m and 1h bars can coexist on the same timestamp grid.
+
+Each daily fetcher returns a list of row dicts matching the
+``macro_series_observations`` Supabase schema exactly:
+
+    {"source": str, "series_id": str, "obs_date": "YYYY-MM-DD",
+     "value": float, "unit": str | None, "meta": dict | None}
+
+Callers (CLI / supabase_writer) are responsible for upserting. This separation
+keeps the fetchers unit-testable without a Supabase client.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from math import isfinite
+from pathlib import Path
+from typing import Any, TypedDict
+
+# DIG-335: the keyed endpoint this constant pointed at is gone. Macro series are
+# ingested from anonymous gloomberb econ_series pages (see research/config/
+# macro_series.yaml); nothing here calls the FRED observations API any more.
+FRED_OVERLAP_DAYS = 14
+
+
+class FredSeriesEntry(TypedDict, total=False):
+    """One FRED series entry from the macro manifest YAML (SIMP-014)."""
+
+    id: str
+    series_id: str
+    unit: str | None
+    title: str | None
+    # Native publication cadence ("daily" | "weekly" | "monthly" | "quarterly").
+    # A series with no cadence is treated as daily by the R2 refresh, which is
+    # the pre-#4588 behaviour. See scripts/refresh_market_data_r2.py.
+    cadence: str | None
+
+
+class FredRawObservation(TypedDict, total=False):
+    """Single observation dict from the FRED JSON API (SIMP-014)."""
+
+    date: str
+    value: str
+    realtime_start: str
+
+
+class MacroObservationMeta(TypedDict, total=False):
+    """Optional ``macro_series_observations.meta`` JSON (SIMP-014)."""
+
+    title: str
+    realtime_start: str
+    base: str
+    quote: str
+    yahoo_symbol: str
+    quote_convention: str
+    classification: str
+    # Fed rate-probability provenance (#778, fed_probabilities.py).
+    event_ticker: str
+    strike: float
+    strike_type: str
+    yes_bid: float | None
+    yes_ask: float | None
+    question: str
+    group_item_threshold: str
+
+
+class MacroObservation(TypedDict, total=False):
+    """One ``macro_series_observations`` row (SIMP-014)."""
+
+    source: str
+    series_id: str
+    obs_date: str
+    value: float
+    unit: str | None
+    meta: MacroObservationMeta | None
+
+
+@dataclass(frozen=True)
+class CandleObservation:
+    """One ``fx_intraday_observations`` row (intraday OHLC candle).
+
+    ``ts`` is the candle OPEN instant in UTC — yfinance indexes intraday bars
+    by their start. ``interval`` is the requested yfinance bar length ('1h',
+    '5m', …) and is part of the table's upsert key, because coarser and finer
+    bars share their :00 opens and would otherwise overwrite each other.
+    ``series_id`` reuses the daily ``FX/<CUR>`` ids so both tables join on it,
+    and the OHLC values stay in Yahoo's native quote direction per pair (see
+    :data:`YAHOO_FX_DEFAULT`).
+    """
+
+    series_id: str
+    interval: str
+    ts: datetime
+    open: float
+    high: float
+    low: float
+    close: float
+
+
+@dataclass(frozen=True)
+class MacroManifest:
+    """Parsed macro series manifest (YAML-equivalent).
+
+    Only FRED fields are tracked here; Frankfurter and FNG were dropped as
+    default sources in issue #328 and their fetchers removed in WS4b.
+    """
+
+    fred_series: list[FredSeriesEntry]
+    fred_backfill_start: str
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "MacroManifest":
+        fred = payload.get("fred") or {}
+        raw_series = fred.get("series") or []
+        fred_series: list[FredSeriesEntry] = [s for s in raw_series if isinstance(s, dict)]  # type: ignore[misc]
+        return cls(
+            fred_series=fred_series,
+            fred_backfill_start=str(fred.get("backfill_start") or "1990-01-01"),
+        )
+
+    @classmethod
+    def from_yaml(cls, path: str | Path) -> "MacroManifest":
+        import yaml  # type: ignore[import-not-found]
+
+        data = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError(f"Manifest {path} must be a mapping")
+        return cls.from_dict(data)
+
+
+# ─── HTTP session with retries (shared by all three upstreams) ──────────────
+
+
+def _retrying_session(
+    *,
+    total: int = 3,
+    backoff_factor: float = 1.5,
+) -> Any:
+    """``requests.Session`` with retry on 5xx / connection errors / read timeouts.
+
+    Upstream data providers (FRED in particular) occasionally return transient
+    5xx. Without retries, a single flake kills the whole daily job. Defaults
+    (3 tries, 1.5s exponential backoff) cover a window of roughly 0s → 1.5s →
+    4.5s → 10.5s before giving up.
+    """
+    import requests  # type: ignore[import-not-found]
+    from requests.adapters import HTTPAdapter
+    from urllib3.util.retry import Retry
+
+    retry = Retry(
+        total=total,
+        connect=total,
+        read=total,
+        status=total,
+        backoff_factor=backoff_factor,
+        status_forcelist=(500, 502, 503, 504),
+        allowed_methods=frozenset(["GET"]),
+        raise_on_status=True,
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    s = requests.Session()
+    s.mount("https://", adapter)
+    s.mount("http://", adapter)
+    return s
+
+
+# Public, stable alias so other ingest modules (e.g. fed_probabilities) don't depend on the
+# underscored private name.
+retrying_session = _retrying_session
+
+
+# ─── FRED row mapping (legacy; the live FRED API fetchers were removed ──────
+# in #4794 PR3 when the sealed panel moved to gloomberb ``econ_series``) ──────
+
+
+def fred_observations_to_rows(
+    series_id: str,
+    unit: str | None,
+    title: str | None,
+    observations: list[FredRawObservation],
+) -> list[MacroObservation]:
+    rows: list[MacroObservation] = []
+    for obs in observations:
+        d = obs.get("date")
+        raw = obs.get("value")
+        if not d or raw in (None, ".", ""):
+            continue
+        try:
+            val = float(raw)
+        except (TypeError, ValueError):
+            continue
+        meta: MacroObservationMeta = {}
+        if title:
+            meta["title"] = title
+        if rs := obs.get("realtime_start"):
+            meta["realtime_start"] = rs
+        row: MacroObservation = {
+            "source": "fred",
+            "series_id": series_id,
+            "obs_date": d,
+            "value": val,
+            "unit": unit,
+        }
+        if meta:
+            row["meta"] = meta
+        rows.append(row)
+    return rows
+
+
+# ─── Yahoo FX (replaces Frankfurter for the default daily pipeline) ─────────
+
+# Default Yahoo FX symbol map → series_id. Yahoo's quote conventions differ:
+#   * ``EURUSD=X``  → USD per 1 EUR (e.g. 1.08)
+#   * ``GBPUSD=X``  → USD per 1 GBP (e.g. 1.27)
+#   * ``JPY=X``     → JPY per 1 USD (e.g. 150)
+#   * ``CAD=X``     → CAD per 1 USD (e.g. 1.35)
+#   * ``AUDUSD=X``  → USD per 1 AUD (e.g. 0.66)
+#   * ``USDCHF=X``  → CHF per 1 USD (e.g. 0.81)
+#   * ``NZDUSD=X``  → USD per 1 NZD (e.g. 0.59)
+# We persist Yahoo's native quote unchanged and stamp ``meta.quote_convention``
+# so downstream consumers can disambiguate. Skill prompts already speak in the
+# natural EUR/USD, GBP/USD, USD/JPY, USD/CAD, AUD/USD, USD/CHF, NZD/USD
+# direction — this matches them.
+YAHOO_FX_DEFAULT: dict[str, dict[str, str]] = {
+    "EURUSD=X": {"series_id": "FX/EUR", "quote_convention": "USD_per_EUR"},
+    "GBPUSD=X": {"series_id": "FX/GBP", "quote_convention": "USD_per_GBP"},
+    "JPY=X": {"series_id": "FX/JPY", "quote_convention": "JPY_per_USD"},
+    "CAD=X": {"series_id": "FX/CAD", "quote_convention": "CAD_per_USD"},
+    "AUDUSD=X": {"series_id": "FX/AUD", "quote_convention": "USD_per_AUD"},
+    "USDCHF=X": {"series_id": "FX/CHF", "quote_convention": "CHF_per_USD"},
+    "NZDUSD=X": {"series_id": "FX/NZD", "quote_convention": "USD_per_NZD"},
+}
+
+
+def _finite_float(value: Any) -> float | None:
+    """Coerce ``value`` to a finite float, or ``None`` when it cannot be one.
+
+    ``None`` covers missing (``None``/empty), non-numeric, NaN and ±inf — the
+    shapes yfinance emits for holidays, halts and the trailing partial candle.
+    """
+    try:
+        fval = float(value)
+    except (TypeError, ValueError):
+        return None
+    return fval if isfinite(fval) else None
+
+
+def _utc_datetime(value: Any) -> datetime | None:
+    """Coerce a frame timestamp to a tz-aware UTC datetime.
+
+    Naive timestamps are stamped UTC (yfinance's intraday index carries no
+    exchange ambiguity for FX); aware ones are converted. Non-parseable values
+    return ``None`` so callers can skip the row instead of raising.
+    """
+    try:
+        if hasattr(value, "to_pydatetime"):  # pandas Timestamp
+            dt = value.to_pydatetime()
+        elif isinstance(value, datetime):
+            dt = value
+        else:
+            dt = datetime.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
+
+
+def _yahoo_fx_download(
+    yahoo_symbols: list[str],
+    *,
+    start: str | None = None,
+    end: str | None = None,
+    interval: str | None = None,
+    period: str | None = None,
+    ohlc: bool = False,
+):
+    """Boundary helper: call yfinance and return a long-format Polars frame.
+
+    The daily path (``ohlc=False``) returns columns ``(obs_date, yahoo_symbol,
+    close)``, NaN closes already filtered. The intraday path (``ohlc=True``,
+    driven by ``interval``/``period``) returns ``(ts, yahoo_symbol, open, high,
+    low, close)`` with rows missing any OHLC value filtered and ``ts`` a
+    tz-aware UTC datetime. Split out so tests can monkeypatch this one seam
+    without leaking pandas anywhere into the test surface.
+
+    We deliberately do not reuse :func:`_retrying_session` — yfinance manages
+    its own HTTP session and retry semantics internally.
+    """
+    import polars as pl
+    import yfinance as yf  # type: ignore[import-not-found]
+
+    empty_schema = (
+        {
+            "ts": pl.Datetime("us", "UTC"),
+            "yahoo_symbol": pl.String,
+            "open": pl.Float64,
+            "high": pl.Float64,
+            "low": pl.Float64,
+            "close": pl.Float64,
+        }
+        if ohlc
+        else {"obs_date": pl.String, "yahoo_symbol": pl.String, "close": pl.Float64}
+    )
+    kwargs: dict[str, Any] = {"progress": False, "threads": True, "auto_adjust": False}
+    if start:
+        kwargs["start"] = start
+    if end:
+        kwargs["end"] = end
+    if interval:
+        kwargs["interval"] = interval
+    if period:
+        kwargs["period"] = period
+    raw = yf.download(yahoo_symbols, **kwargs)
+    if raw is None or getattr(raw, "empty", True):
+        return pl.DataFrame(schema=empty_schema)
+    if ohlc:
+        return _yahoo_fx_candles_pandas_to_long(raw, yahoo_symbols)
+    return _yahoo_fx_pandas_to_long(raw, yahoo_symbols)
+
+
+def _yahoo_fx_pandas_to_long(raw, yahoo_symbols: list[str]):
+    """Convert yfinance's pandas frame to a long-format Polars DataFrame.
+
+    yfinance returns either a column-multiindexed frame (multi-symbol) or a
+    flat OHLCV frame (single-symbol). We use the ``Close`` column only —
+    FX series are stored as a single per-day reference value.
+    """
+    import polars as pl
+
+    flat = raw.reset_index()
+    cols = list(flat.columns)
+    # Detect multi-symbol layout by tuple-typed column labels.
+    is_multi = any(isinstance(c, tuple) for c in cols)
+    records: list[dict[str, Any]] = []
+    n_rows = len(flat)
+    for i in range(n_rows):
+        ts = flat.iloc[i, 0]
+        obs_date = ts.date().isoformat() if hasattr(ts, "date") else str(ts)[:10]
+        for sym in yahoo_symbols:
+            col = ("Close", sym) if is_multi else "Close"
+            if col not in cols:
+                continue
+            raw_val = flat.iloc[i][col]
+            try:
+                fval = float(raw_val)
+            except (TypeError, ValueError):
+                continue
+            # NaN check without importing pandas — NaN != NaN by definition.
+            if fval != fval:
+                continue
+            records.append({"obs_date": obs_date, "yahoo_symbol": sym, "close": fval})
+    if not records:
+        return pl.DataFrame(
+            schema={"obs_date": pl.String, "yahoo_symbol": pl.String, "close": pl.Float64}
+        )
+    return pl.DataFrame(records)
+
+
+def _yahoo_fx_candles_pandas_to_long(raw, yahoo_symbols: list[str]):
+    """Convert yfinance's intraday pandas frame to a long-format OHLC frame.
+
+    Same multi-symbol/flat detection as :func:`_yahoo_fx_pandas_to_long`, but
+    keeps all four OHLC fields. The index is the candle OPEN time, normalized
+    to UTC by :func:`_utc_datetime`; a row is skipped when any OHLC value is
+    missing or non-finite (holidays, halts, and the trailing partial candle all
+    arrive that way). The emitted ``ts`` is a Python datetime; the payload
+    conversion step is what guarantees the candles handed to callers are
+    tz-aware UTC.
+    """
+    import polars as pl
+
+    flat = raw.reset_index()
+    cols = list(flat.columns)
+    # Detect multi-symbol layout by tuple-typed column labels.
+    is_multi = any(isinstance(c, tuple) for c in cols)
+    records: list[dict[str, Any]] = []
+    n_rows = len(flat)
+    for i in range(n_rows):
+        ts = _utc_datetime(flat.iloc[i, 0])
+        if ts is None:
+            continue
+        for sym in yahoo_symbols:
+            values: list[float | None] = []
+            for field in ("Open", "High", "Low", "Close"):
+                col = (field, sym) if is_multi else field
+                values.append(_finite_float(flat.iloc[i][col]) if col in cols else None)
+            if any(value is None for value in values):
+                continue
+            records.append(
+                {
+                    "ts": ts,
+                    "yahoo_symbol": sym,
+                    "open": values[0],
+                    "high": values[1],
+                    "low": values[2],
+                    "close": values[3],
+                }
+            )
+    if not records:
+        return pl.DataFrame(
+            schema={
+                "ts": pl.Datetime("us", "UTC"),
+                "yahoo_symbol": pl.String,
+                "open": pl.Float64,
+                "high": pl.Float64,
+                "low": pl.Float64,
+                "close": pl.Float64,
+            }
+        )
+    return pl.DataFrame(records)
+
+
+def yahoo_fx_payload_to_rows(
+    payload,
+    yahoo_to_series: dict[str, dict[str, str]],
+) -> list[MacroObservation]:
+    """Convert a long-format Polars FX frame into ``macro_series_observations`` rows.
+
+    ``payload`` is the ``pl.DataFrame`` returned by :func:`_yahoo_fx_download`
+    with columns ``(obs_date, yahoo_symbol, close)``.
+    """
+    if payload is None or payload.is_empty():
+        return []
+    rows: list[MacroObservation] = []
+    for record in payload.iter_rows(named=True):
+        sym = record["yahoo_symbol"]
+        cfg = yahoo_to_series.get(sym)
+        if cfg is None:
+            continue
+        meta: MacroObservationMeta = {
+            "yahoo_symbol": sym,
+            "quote_convention": cfg["quote_convention"],
+        }
+        rows.append(
+            {
+                "source": "yahoo",
+                "series_id": cfg["series_id"],
+                "obs_date": record["obs_date"],
+                "value": float(record["close"]),
+                "unit": "fx",
+                "meta": meta,
+            }
+        )
+    return rows
+
+
+def fetch_fx_yahoo(
+    *,
+    start: str | None = None,
+    end: str | None = None,
+    symbols: dict[str, dict[str, str]] | None = None,
+    latest_only: bool = False,
+) -> list[MacroObservation]:
+    """Fetch daily FX closes from Yahoo Finance.
+
+    Returns ``macro_series_observations`` rows for each symbol in ``symbols``
+    (defaults to :data:`YAHOO_FX_DEFAULT` — G10 USD majors plus EUR/GBP).
+    ``source="yahoo"`` distinguishes these from legacy Frankfurter rows so the
+    upsert key ``(source, series_id, obs_date)`` does not collide on historical
+    data.
+
+    No FRED-style per-series isolation is needed — yfinance batches all symbols
+    in one HTTP call, so failure modes are all-or-nothing.
+    """
+    yahoo_to_series = symbols or YAHOO_FX_DEFAULT
+    if not yahoo_to_series:
+        return []
+    payload = _yahoo_fx_download(list(yahoo_to_series.keys()), start=start, end=end)
+    rows = yahoo_fx_payload_to_rows(payload, yahoo_to_series)
+    if not latest_only:
+        return rows
+
+    # The frequent refresh only needs Yahoo's newest daily candle per USD leg.
+    # During the FX day that candle is a moving "last", not a settled close.
+    # Its obs_date is still today, so the existing core PK intentionally
+    # overwrites the same row on every refresh.
+    latest: dict[str, MacroObservation] = {}
+    for row in rows:
+        series_id = str(row["series_id"])
+        current = latest.get(series_id)
+        if current is None or str(row["obs_date"]) > str(current["obs_date"]):
+            latest[series_id] = row
+    return list(latest.values())
+
+
+def fx_intraday_payload_to_candles(
+    payload,
+    yahoo_to_series: dict[str, dict[str, str]],
+    *,
+    interval: str,
+) -> list[CandleObservation]:
+    """Convert a long-format OHLC frame into :class:`CandleObservation` rows.
+
+    ``payload`` is the ``pl.DataFrame`` returned by :func:`_yahoo_fx_download`
+    with ``ohlc=True`` — columns ``(ts, yahoo_symbol, open, high, low, close)``.
+    ``interval`` is the requested yfinance bar length and is stamped on every
+    candle (the frame itself does not carry it); it is keyword-only so the
+    caller cannot silently persist candles under the wrong bar length.
+    Timestamps are normalized to tz-aware UTC and rows with any missing or
+    non-finite OHLC value are dropped (defensive: the download seam already
+    filters them, but a hand-built payload must not poison the contract).
+    """
+    if payload is None or payload.is_empty():
+        return []
+    candles: list[CandleObservation] = []
+    for record in payload.iter_rows(named=True):
+        cfg = yahoo_to_series.get(record["yahoo_symbol"])
+        if cfg is None:
+            continue
+        ts = _utc_datetime(record["ts"])
+        if ts is None:
+            continue
+        open_, high, low, close = (
+            _finite_float(record[field]) for field in ("open", "high", "low", "close")
+        )
+        if open_ is None or high is None or low is None or close is None:
+            continue
+        candles.append(
+            CandleObservation(
+                series_id=cfg["series_id"],
+                interval=interval,
+                ts=ts,
+                open=open_,
+                high=high,
+                low=low,
+                close=close,
+            )
+        )
+    return candles
+
+
+def fetch_fx_intraday(
+    *,
+    interval: str = "1h",
+    period: str = "730d",
+    symbols: dict[str, dict[str, str]] | None = None,
+) -> list[CandleObservation]:
+    """Fetch intraday FX candles from Yahoo Finance (``source="yahoo"``).
+
+    One batched yfinance download for ``symbols`` (defaults to
+    :data:`YAHOO_FX_DEFAULT`). ``interval``/``period`` are passed straight to
+    yfinance; ``1h`` bars cap at ``730d`` of history (``5m`` at ``60d``). Every
+    candle is stamped with the requested ``interval`` so bars of different
+    lengths can share a ``ts``. Rows whose OHLC is missing or non-finite are
+    dropped, every ``ts`` is a tz-aware UTC datetime, and ``series_id`` values
+    match the daily :func:`fetch_fx_yahoo` convention exactly so consumers can
+    join the two tables on ``(source, series_id)``.
+    """
+    yahoo_to_series = symbols or YAHOO_FX_DEFAULT
+    if not yahoo_to_series:
+        return []
+    payload = _yahoo_fx_download(
+        list(yahoo_to_series.keys()), interval=interval, period=period, ohlc=True
+    )
+    return fx_intraday_payload_to_candles(payload, yahoo_to_series, interval=interval)
+
+
+def dedupe_observation_rows(rows: list[MacroObservation]) -> list[MacroObservation]:
+    """Last-wins per (source, series_id, obs_date) — matches the research helper."""
+    out: dict[tuple[str, str, str], MacroObservation] = {}
+    for r in rows:
+        key = (
+            str(r.get("source", "")),
+            str(r.get("series_id", "")),
+            str(r.get("obs_date", ""))[:10],
+        )
+        out[key] = r
+    return list(out.values())
+
+
+__all__ = [
+    "YAHOO_FX_DEFAULT",
+    "CandleObservation",
+    "FredRawObservation",
+    "FredSeriesEntry",
+    "MacroManifest",
+    "MacroObservation",
+    "MacroObservationMeta",
+    "dedupe_observation_rows",
+    "fetch_fx_intraday",
+    "fetch_fx_yahoo",
+    "fred_observations_to_rows",
+    "fx_intraday_payload_to_candles",
+    "yahoo_fx_payload_to_rows",
+]

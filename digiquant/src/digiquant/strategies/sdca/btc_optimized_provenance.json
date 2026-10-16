@@ -1,0 +1,66 @@
+{
+  "preset": "btc_optimized",
+  "evaluator": "curve_simulator",
+  "objective": {
+    "capital_deployed_floor_pct": 10.0,
+    "max_drawdown_cap_pct": 50.0
+  },
+  "fit_window": [
+    "2015-07-20",
+    "2024-06-09"
+  ],
+  "folds": [
+    {
+      "fold": 0,
+      "is_start": "2015-07-20",
+      "is_end": "2017-10-08",
+      "oos_start": "2017-10-09",
+      "oos_end": "2019-12-29"
+    },
+    {
+      "fold": 1,
+      "is_start": "2015-07-20",
+      "is_end": "2019-12-29",
+      "oos_start": "2019-12-30",
+      "oos_end": "2022-03-20"
+    },
+    {
+      "fold": 2,
+      "is_start": "2015-07-20",
+      "is_end": "2022-03-20",
+      "oos_start": "2022-03-21",
+      "oos_end": "2024-06-09"
+    }
+  ],
+  "holdout": [
+    "2024-06-10",
+    "2026-08-29"
+  ],
+  "best_params": {
+    "buy_max_rate": 35.0,
+    "buy_knee_risk": 45.0,
+    "sell_knee_risk": 50.0,
+    "sell_max_rate": 30.0,
+    "buy_curvature": 1.5,
+    "sell_curvature": 2.5,
+    "buy_mid_knee_risk": 15.0,
+    "buy_mid_curvature": 1.0,
+    "sell_mid_knee_risk": 85.0,
+    "sell_mid_curvature": 1.0,
+    "valuation_weight": 1.0,
+    "m2_weight": 0.5,
+    "rs_eth_weight": 0.0,
+    "dxy_weight": 0.5,
+    "weekly_rsi_weight": 0.25,
+    "weekly_macd_weight": 0.5,
+    "sma_band_weight": 0.0
+  },
+  "mean_is_vs_flat_dca_pct": 915.4254476758982,
+  "mean_oos_vs_flat_dca_pct": -7.787838707761549,
+  "is_oos_gap_pct": 923.2132863836598,
+  "holdout_vs_flat_dca_pct": 3.5228013923788604,
+  "beats_flat_dca_oos": false,
+  "sensitivity_stable": true,
+  "rails_protocol": "refit per fold on the in-sample window only; never a full-history fit. Truncated quadratic log-time rails do not extrapolate (#3173).",
+  "notes": "best_params now the promoted cycle-4 candidate (tiered 35/45 mid 15/85 + 50/30 mid 85 on the live 5-weight index; presets.json btc_optimized.shape; owner accept 2026-09-29). The mean_is/mean_oos/beats_flat/beats_live/sensitivity fields in THIS file are the PRIOR fit walk-forward and do NOT describe the promoted curve -- its gate record is duration-OOS +43.21% vs flat, fold 1 vetoed on max_dd 51.84 vs 50, sensitivity 5.62 (worst_neighbor buy_knee_risk), detail digiquant/.scratch/periodic_cycle_4.json. Prior fit (3-weight index, 24.1/71.9 knees): SUPERSEDED 2026-09-29, retained above as its record. Do not --push-supabase from the agent environment. best_params key names follow develop's 7-key SdcaCompositeWeights (valuation_*); zero-valued research-branch-only keys omitted as inert."
+}

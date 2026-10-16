@@ -1,0 +1,347 @@
+"""Shared in-memory FakeSupabaseClient for unit tests (#1196).
+
+Canonical location for the research/portfolio/overlay PostgREST fake. Prefer::
+
+    from tests.fixtures.fake_supabase import FakeSupabaseClient
+
+``tests.dq.research.test_supabase_io`` re-exports the same symbols for older
+imports. Simpler upsert-only stubs in ``tests/dq/data/`` and friends stay
+local — they intentionally omit filter semantics.
+
+score:allow untyped any — fake-client payload dict shape mirrors PostgREST rows.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import (
+    Any,  # score:allow untyped any — fake-client payload dict shape mirrors PostgREST rows
+)
+
+from digiquant.dashboard.tenancy import house_workspace_id
+
+# ─── In-memory fake Supabase client ─────────────────────────────────────────
+
+
+def _split_logical(expr: str) -> list[str]:
+    """Split a PostgREST logical expression on top-level commas (paren-aware)."""
+    parts: list[str] = []
+    depth = 0
+    buf: list[str] = []
+    for ch in expr:
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+        if ch == "," and depth == 0:
+            parts.append("".join(buf).strip())
+            buf = []
+        else:
+            buf.append(ch)
+    parts.append("".join(buf).strip())
+    return [p for p in parts if p]
+
+
+def _matches_like(text: str, pattern: str) -> bool:
+    """Emulate PostgREST ``like`` for the in-repo ``%``-wildcard forms.
+
+    Supports prefix (``foo%``), suffix (``%foo``) and contains (``%foo%``)
+    with the ``%`` wildcard only — the repository never sends ``_`` or an
+    escaped ``%``.
+    """
+    prefix = not pattern.startswith("%")
+    suffix = not pattern.endswith("%")
+    core = pattern.strip("%")
+    if prefix and suffix:
+        return text == core
+    if prefix:
+        return text.startswith(core)
+    if suffix:
+        return text.endswith(core)
+    return core in text
+
+
+def _eval_or_expression(row: dict[str, Any], expr: str) -> bool:
+    """Evaluate the body of PostgREST ``or=(...)``: a top-level list is OR."""
+    return any(_eval_condition(row, part) for part in _split_logical(expr))
+
+
+def _eval_condition(row: dict[str, Any], term: str) -> bool:
+    if term.startswith("and(") and term.endswith(")"):
+        return all(_eval_condition(row, p) for p in _split_logical(term[4:-1]))
+    if term.startswith("or(") and term.endswith(")"):
+        return any(_eval_condition(row, p) for p in _split_logical(term[3:-1]))
+    return _eval_leaf(row, term)
+
+
+def _eval_leaf(row: dict[str, Any], term: str) -> bool:
+    col, op, val = term.split(".", 2)
+    row_val = row.get(col)
+    if op == "is":
+        return (row_val is None) if val.lower() == "null" else (row_val is not None)
+    if op == "eq":
+        return row_val is not None and str(row_val) == val
+    if op == "neq":
+        return not (row_val is not None and str(row_val) == val)
+    text = str(row_val or "")
+    if op == "gt":
+        return text > val
+    if op == "gte":
+        return text >= val
+    if op == "lt":
+        return text < val
+    if op == "lte":
+        return text <= val
+    if op == "like":
+        return _matches_like(text, val)
+    raise AssertionError(f"FakeSupabaseClient.or_ cannot parse {term!r}")
+
+
+@dataclass
+class _FakeResponse:
+    data: list[dict[str, Any]]
+
+
+@dataclass
+class _FakeQuery:
+    """Records calls and returns canned rows, honoring lt/gte/order/limit.
+
+    The previous version of this fake made those methods no-ops, so tests
+    that set ``desc=True`` or ``.limit(5)`` were validating Python list
+    order, not real filter semantics. Now the fake actually applies them —
+    so callers break loudly if the adapter forgets a filter.
+    """
+
+    table_name: str
+    store: dict[str, list[dict[str, Any]]]
+    canned: list[dict[str, Any]] = field(default_factory=list)
+    _upsert_row: dict[str, Any] | list[dict[str, Any]] | None = None
+    _insert_rows: list[dict[str, Any]] | None = None
+    _update_row: dict[str, Any] | None = None
+    _delete: bool = False
+    _filters: list[tuple[str, str, Any]] = field(default_factory=list)
+    _orders: list[tuple[str, bool]] = field(default_factory=list)
+    _or_raw: str | None = None
+    _limit: int | None = None
+    _range: tuple[int, int] | None = None
+    _single: bool = False
+
+    def select(self, _cols: str) -> "_FakeQuery":
+        return self
+
+    def gt(self, col: str, val: Any) -> "_FakeQuery":
+        self._filters.append(("gt", col, val))
+        return self
+
+    def lt(self, col: str, val: Any) -> "_FakeQuery":
+        self._filters.append(("lt", col, val))
+        return self
+
+    def lte(self, col: str, val: Any) -> "_FakeQuery":
+        self._filters.append(("lte", col, val))
+        return self
+
+    def gte(self, col: str, val: Any) -> "_FakeQuery":
+        self._filters.append(("gte", col, val))
+        return self
+
+    def eq(self, col: str, val: Any) -> "_FakeQuery":
+        self._filters.append(("eq", col, val))
+        return self
+
+    def neq(self, col: str, val: Any) -> "_FakeQuery":
+        self._filters.append(("neq", col, val))
+        return self
+
+    def in_(self, col: str, vals: list[Any] | tuple[Any, ...]) -> "_FakeQuery":
+        # Match the Supabase Python client surface — ``in_`` filters rows whose
+        # column value is one of ``vals``.
+        self._filters.append(("in_", col, list(vals)))
+        return self
+
+    def like(self, col: str, pattern: str) -> "_FakeQuery":
+        # PostgREST ``like``; prefix/suffix/contains ``%`` forms all match.
+        self._filters.append(("like", col, pattern))
+        return self
+
+    def ilike(self, col: str, pattern: str) -> "_FakeQuery":
+        # PostgREST ``ilike``; fixtures are already lowercase so ``like`` matches.
+        return self.like(col, pattern)
+
+    def is_(self, col: str, val: str) -> "_FakeQuery":
+        # PostgREST ``.is_(col, "null")``. Used by house ops scripts.
+        self._filters.append(("is", col, val))
+        return self
+
+    def order(self, col: str, desc: bool = False) -> "_FakeQuery":
+        # Chained ``.order()`` calls append (PostgREST honors each ``order=``
+        # param in call order: first call is the primary key). ``execute``
+        # applies them via reverse stable sorts.
+        self._orders.append((col, desc))
+        return self
+
+    @property
+    def _order(self) -> tuple[str, bool] | None:
+        # Backward compatibility for test-local ``_FakeQuery`` subclasses that
+        # read the old single-order attribute (e.g. the merging fake in
+        # ``test_finalize_period_accounting.py``). Multi-order callers read
+        # ``_orders``; this reports the most recent order only.
+        return self._orders[-1] if self._orders else None
+
+    def or_(self, filters: str) -> "_FakeQuery":
+        # PostgREST ``or=`` — ANDed with the other filters. The fake only
+        # needs the house-or-null shape used by Group A readers
+        # (``workspace_id.eq.<id>,workspace_id.is.null``); anything else
+        # raises loudly instead of silently matching everything.
+        self._or_raw = filters
+        return self
+
+    def limit(self, n: int) -> "_FakeQuery":
+        self._limit = n
+        return self
+
+    def range(self, start: int, end: int) -> "_FakeQuery":
+        # PostgREST ``.range`` is inclusive on both ends (0-indexed).
+        self._range = (start, end)
+        return self
+
+    def single(self) -> "_FakeQuery":
+        # PostgREST ``.single()``: execute returns the matching object (or None),
+        # not a one-element list.
+        self._single = True
+        return self
+
+    def insert(self, row: dict[str, Any] | list[dict[str, Any]]) -> "_FakeQuery":
+        # PostgREST ``insert()``. Deliberately does **not** stamp ``_on_conflict``
+        # the way ``upsert`` below does: the portfolio-ledger tables (migration 069)
+        # grant service_role SELECT + INSERT only and are append-only by trigger, so
+        # a writer that reaches for ``upsert`` on one of them is a bug. Keeping the
+        # two paths distinguishable in ``store`` is what lets a test assert which
+        # verb the writer actually used.
+        self._insert_rows = [dict(r) for r in row] if isinstance(row, list) else [dict(row)]
+        return self
+
+    def upsert(
+        self,
+        row: dict[str, Any] | list[dict[str, Any]],
+        on_conflict: str | None = None,
+    ) -> "_FakeQuery":
+        if isinstance(row, list):
+            self._upsert_row = [{**item, "_on_conflict": on_conflict} for item in row]
+        else:
+            self._upsert_row = {**row, "_on_conflict": on_conflict}
+        return self
+
+    def update(self, payload: dict[str, Any]) -> "_FakeQuery":
+        self._update_row = dict(payload)
+        return self
+
+    def delete(self) -> "_FakeQuery":
+        # PostgREST ``delete().eq(...).execute()``; removes matching rows from the
+        # write-side ``store`` (reads come from ``canned``, so a test that exercises
+        # a delete seeds the row in both).
+        self._delete = True
+        return self
+
+    def _matches(self, row: dict[str, Any]) -> bool:
+        house = str(house_workspace_id())
+        for op, col, val in self._filters:
+            if op == "eq" and "->>" in col:
+                # PostgREST JSON extraction (``source_key->>workspace_id``):
+                # compare against the nested object's text value (#3792).
+                parent, _, sub = col.partition("->>")
+                container = row.get(parent)
+                if not isinstance(container, dict) or container.get(sub) != val:
+                    return False
+                continue
+            row_val = row.get(col)
+            if op == "eq" and col == "workspace_id" and row_val is None and val == house:
+                # TEST-FAKE courtesy only: legacy house fixtures omit the column.
+                # Production PostgREST .eq("workspace_id", house) does not match
+                # NULL/missing rows; migration 097 backfill stamps live rows.
+                continue
+            if op == "eq" and row_val != val:
+                return False
+            if op == "neq" and row_val == val:
+                return False
+            if op == "lt" and str(row.get(col, "")) >= str(val):
+                return False
+            if op == "lte" and str(row.get(col, "")) > str(val):
+                return False
+            if op == "gte" and str(row.get(col, "")) < str(val):
+                return False
+            if op == "in_" and row_val not in val:
+                return False
+            if op == "like" and not _matches_like(str(row.get(col, "")), str(val)):
+                return False
+            if op == "is":
+                if str(val).lower() == "null" and row_val is not None:
+                    return False
+                if str(val).lower() != "null" and row_val is None:
+                    return False
+            if op == "gt" and str(row.get(col, "")) <= str(val):
+                return False
+        if self._or_raw is not None and not self._matches_or(row):
+            return False
+        return True
+
+    def _matches_or(self, row: dict[str, Any]) -> bool:
+        """Evaluate the stored ``or=`` string against one row.
+
+        Supports the house-or-null shape used by Group A readers and the
+        nested ``and(...)``/``or(...)`` keyset seeks used by
+        ``verify_nav_replay._fetch_table`` (#3948).
+        """
+        assert self._or_raw is not None
+        return _eval_or_expression(row, self._or_raw)
+
+    def execute(self) -> _FakeResponse:
+        if self._insert_rows is not None:
+            self.store.setdefault(self.table_name, []).extend(self._insert_rows)
+            return _FakeResponse(data=[dict(row) for row in self._insert_rows])
+        if self._upsert_row is not None:
+            rows = self._upsert_row if isinstance(self._upsert_row, list) else [self._upsert_row]
+            self.store.setdefault(self.table_name, []).extend(rows)
+            return _FakeResponse(data=[dict(row) for row in rows])
+        if self._delete is True:
+            rows = self.store.get(self.table_name, [])
+            removed = [r for r in rows if self._matches(r)]
+            self.store[self.table_name] = [r for r in rows if not self._matches(r)]
+            return _FakeResponse(data=removed)
+        if self._update_row is not None:
+            # Apply update to rows in store that match all eq filters. Mirrors
+            # PostgREST's ``update().eq(...).execute()`` chain semantics so the
+            # ``status='pending'`` idempotency guard in
+            # ``update_decision_resolution`` is exercised end-to-end.
+            updated: list[dict[str, Any]] = []
+            for row in self.store.get(self.table_name, []):
+                if self._matches(row):
+                    row.update(self._update_row)
+                    updated.append(row)
+            return _FakeResponse(data=updated)
+        rows = [r for r in self.canned if self._matches(r)]
+        for col, desc in reversed(self._orders):
+            rows.sort(key=lambda r, _c=col: r.get(_c, ""), reverse=desc)
+        if self._range is not None:
+            start, end = self._range
+            rows = rows[start : end + 1]
+        if self._limit is not None:
+            rows = rows[: self._limit]
+        if self._single:
+            return _FakeResponse(data=rows[0] if rows else None)
+        return _FakeResponse(data=rows)
+
+
+@dataclass
+class FakeSupabaseClient:
+    """Fake client with per-table canned-read state."""
+
+    store: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    canned_reads: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+
+    def table(self, name: str) -> _FakeQuery:
+        return _FakeQuery(
+            table_name=name,
+            store=self.store,
+            canned=list(self.canned_reads.get(name, [])),
+        )

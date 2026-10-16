@@ -1,0 +1,6 @@
+.next
+node_modules
+out
+.next-cache
+.DS_Store
+tsconfig.tsbuildinfo

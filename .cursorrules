@@ -1,0 +1,13 @@
+# digithings — Cursor legacy rules
+
+Canonical rules for this repo live in AGENTS.md. Read that file and follow it.
+This file is a pointer, not a second copy. Do not add stack-wide rules here.
+
+Cursor Agent loads .cursor/rules/digithings.mdc (alwaysApply: true).
+Regenerate that adapter with: make agents-init
+
+CLAUDE.md is the Claude Code loader. It points at AGENTS.md too.
+opencode.json and .mcp.json are tool configuration (model provider and MCP servers).
+They are not rule copies. Do not paste AGENTS.md into them.
+
+Workflow: docs/agents/AGENT_WORKFLOW.md

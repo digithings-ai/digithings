@@ -1,0 +1,123 @@
+# Contributing to digithings
+
+Thanks for your interest in contributing to **digithings** (digithings.ai) — the open-core agentic stack.
+
+All AI coding agents read [AGENTS.md](AGENTS.md) first. Human contributors: the rules below apply to you too.
+
+## Required reading
+
+1. [README.md](README.md) — repo overview.
+2. [docs/VISION.md](docs/VISION.md) — strategy and strategic decisions.
+3. [ARCHITECTURE.md](ARCHITECTURE.md) — system diagram and interfaces.
+4. [ROADMAP.md](ROADMAP.md) — phases and current priorities.
+5. [SECURITY.md](SECURITY.md) — non-negotiable security defaults.
+6. [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — Contributor Covenant 2.1.
+7. The `ARCHITECTURE.md` and `AGENTS.md` in the component you're touching (e.g. `digigraph/`).
+
+## Hard rules (non-negotiable)
+
+- **MCP-first** — every new capability is a discoverable MCP tool.
+- **Polars only** — never pandas.
+- **NautilusTrader core** — all backtest/optimize/live execution goes through Nautilus.
+- **LiteLLM with caching** — token efficiency is mandatory.
+- **Dockerized** — every component runs via the root `docker-compose.yml`.
+- **LangGraph supervisor + sub-graph** — all agent logic in digigraph follows this pattern.
+- **Security** — follow every rule in [SECURITY.md](SECURITY.md): loopback by default, least privilege, human gates before any live trade.
+- **Projects** — anything under `projects/` is confidential client/pilot work. Never push to public remotes.
+
+## Code style
+
+- Python 3.12+ with strict type hints.
+- ruff-compliant (line length 100, target `py312`).
+- All LLM outputs use Pydantic v2 models, never raw strings.
+- File layout matches the component's existing structure.
+- Update the relevant `{component}/ARCHITECTURE.md` when interfaces change.
+
+## Workflow
+
+1. Pick or open an issue on the [GitHub Project](https://github.com/orgs/digithings-ai/projects/1). Scope the work.
+2. Branch: `feature/<short-description>` or `fix/<short-description>`.
+3. Implement with small, focused commits (conventional commit messages — `make commit MSG="feat(x): ..."` helps).
+4. Open a PR with the template. Include: what changed, why, how it was tested. Quality bar is review ([CODE_REVIEW_POLICY.md](docs/agents/CODE_REVIEW_POLICY.md)), not a self-score.
+5. CI runs lint, unit tests, and doc-link checks. Fix failures before requesting review.
+
+For agent-driven work, the full end-to-end workflow is in [docs/agents/AGENT_WORKFLOW.md](docs/agents/AGENT_WORKFLOW.md).
+
+## PR titles (into develop)
+
+Pull requests targeting **develop** must use a [Conventional Commits](https://www.conventionalcommits.org/) title with a **required scope** from the module allow-list. Squash merges use the PR title as the commit subject, so scoped titles keep release-please working.
+
+Examples:
+
+- `feat(digillm): add streaming tool calls`
+- `ci(root): conventional-commit PR title lint`
+- `fix(digiquant): correct fill timestamp timezone`
+
+Canonical scopes live in [`.github/workflows/ci-pr-title.yml`](.github/workflows/ci-pr-title.yml) (includes digichat, digiskills, digillm, digifetch, digibase, digikey, digigraph, digivault, digiclaw, digismith, **digitrace**, digisearch, digiquant, digivoice, digidev, digiweb, ui, web, dashboard, root, deps, release).
+
+Exempt patterns (not blocked):
+
+- `chore(*): release …` / `chore(release): …` (release-please)
+- `chore: promote develop to main`
+- PRs labeled `autorelease: pending`
+
+## Testing
+
+- Unit tests for every new MCP tool, LangGraph node, and HTTP endpoint.
+- Real tests only — no `assert True`, no smoke stubs, no tests that mock out the entire code path being claimed as "tested."
+- End-to-end: `chat idea → backtest → cached strategy` continues to pass.
+- Performance: 10 M-row Nautilus backtest stays under 2 s.
+
+## Always requires human review
+
+- Auth, JWT, or cryptography code.
+- Broker adapters or live-trading paths.
+- Any score below threshold on any dimension.
+- New external service or infrastructure dependency.
+- Novel architectural decisions not covered by an ADR — open an ADR in `docs/adr/` first.
+
+## Questions
+
+- Default to the most conservative, secure, and token-efficient option.
+- If unclear, open an issue on the [GitHub Project](https://github.com/orgs/digithings-ai/projects/1) referencing the relevant `ARCHITECTURE.md` section.
+
+## Contributor terms — DCO 1.1
+
+digithings is open-core under the MIT license ([LICENSE](LICENSE)). The MIT
+license covers our code; it does not grant us any rights in the code *you*
+contribute. Every contribution therefore carries a Developer Certificate of
+Origin 1.1 sign-off, which is the record that you have the right to submit it.
+
+Sign off every commit:
+
+    git commit -s -m "feat(x): ..."
+
+or add the line automatically for this repo:
+
+    git config --local format.signoff true
+
+A pull request whose commits are missing the sign-off cannot be merged — the
+CI check enforces this. The full text is at <https://developercertificate.org/>.
+
+This applies from 2026-10-04 forward. Commits before that date are not retro-signed.
+
+Pull requests are squash-merged. A GitHub squash keeps the full message body of
+each squashed commit, separated by `---------`, so the `Signed-off-by` trailers
+of a pull request's commits land on the squash commit itself, on `develop`.
+Squash commit `cd54873e4` ("feat(root): land DCO 1.1 sign-off and
+TRADEMARKS.md") is the worked example: it carries four
+`Signed-off-by: Chris Stefan <chris.stefan@proton.me>` trailers.
+
+The trail is not continuous, so read it rather than assume it. A branch whose
+commits were never signed off squashes to a commit with no trailer, and a merge
+commit never carries one because git writes it. Find the commit that introduced
+a file, then read its body:
+
+    git log -1 --format='%H%n%B' -- <path>
+
+If that commit has no `Signed-off-by` line, fall back to the pull request and
+the commit shas — GitHub keeps those after the branch is deleted. So: cite
+`develop` when the trailer is there, and the pull request when it is not.
+
+MIT covers copyright only. See [TRADEMARKS.md](TRADEMARKS.md) for what you may
+not reuse.

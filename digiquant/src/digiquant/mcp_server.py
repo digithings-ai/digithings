@@ -1,0 +1,3678 @@
+"""digiquant MCP server: backtest, optimize, export, strategy catalog.
+
+Run::
+
+    pip install -e "digiquant[mcp]"
+    python -m digiquant.mcp_server
+
+Uses the same ``service_*`` functions as the HTTP API.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import os
+import time
+from typing import Any, Literal, overload  # score:allow untyped any — MCP payloads
+
+# The digifetch x Gloomberb client factory + §7 envelope serializer live in the
+# data package (#4146) so the MCP tools and the pipeline's in-process dispatch
+# share one env-keyed client (pacing/cache/circuit breaker). Importing them
+# under the historical private names keeps the module-level patch seam the MCP
+# tests use (``monkeypatch.setattr(mcp_server, "_build_gloomberb_client", ...)``).
+from digiquant.data.gloomberb.agent_tools import (
+    build_gloomberb_client as _build_gloomberb_client,
+)
+from digiquant.data.gloomberb.agent_tools import (
+    gloomberb_envelope_json as _gloomberb_envelope_json,
+)
+from digiquant.data.luxalgo.agent_tools import (
+    build_luxalgo_client as _build_luxalgo_client,
+)
+from digiquant.data.luxalgo.agent_tools import (
+    luxalgo_envelope_json as _luxalgo_envelope_json,
+)
+
+logger = logging.getLogger(__name__)
+
+
+# ── Market-data backend: Supabase vs versioned R2 history (#3780, Task 4) ──
+#
+# ``DIGIQUANT_MARKET_DATA_BACKEND=r2`` routes the price/macro tools through the
+# R2HistoryStore generations + manifest sealed at ``manifest["as_of"]``, merged
+# with a live overlap and settled-close semantics. Default ``supabase`` keeps
+# the current bodies byte-for-byte (extracted as ``_supabase_*`` below).
+
+_TTL_SECONDS = 900
+_MAX_LOOKBACK = 500
+_ttl: dict[tuple, tuple[float, str]] = {}
+
+
+def _bounded_lookback(lookback: int) -> int:
+    """Clamp a positive window length to ``1..500``.
+
+    Callers must reject a non-positive value before slicing. ``rows[-0:]`` is
+    the whole series, and a negative index slices from the front.
+    """
+    return min(int(lookback), _MAX_LOOKBACK)
+
+
+def _lookback_error(lookback: int) -> str | None:
+    """Error envelope for a non-positive lookback, or None when it is usable.
+
+    An empty ``rows`` array is also what a ticker with no bars looks like, so
+    a bad argument is an ``{"error"}`` instead of a silent empty window. The
+    research reader in ``research/data/queries.py`` does not use this envelope;
+    it slices ``_read_r2_window`` itself.
+    """
+    try:
+        n = int(lookback)
+    except (TypeError, ValueError):
+        return json.dumps({"error": "lookback must be an integer >= 1"})
+    if isinstance(lookback, bool) or n < 1:
+        return json.dumps({"error": "lookback must be an integer >= 1"})
+    return None
+
+
+def _tail(rows: list[Any], n: int) -> list[Any]:
+    if n <= 0:
+        return []
+    return rows[-n:]
+
+
+# Calendar days of live overlap fetched ahead of the R2 manifest seal.
+_R2_LIVE_OVERLAP_DAYS = 30
+
+
+def _ttl_get(key: tuple) -> str | None:
+    hit = _ttl.get(key)
+    if hit and time.time() - hit[0] < _TTL_SECONDS:
+        return hit[1]
+    return None
+
+
+def _supabase_macro(series_ids: list[str], lookback: int) -> str:
+    """Current Supabase body, extracted unchanged (non-R2 path)."""
+    from digiquant.research.data.queries import get_macro_series
+    from digiquant.research.supabase_io import SupabaseConfig, build_client
+
+    try:
+        client = build_client(SupabaseConfig.from_env())
+        result = get_macro_series(client=client, series_ids=series_ids, lookback=lookback)
+    except Exception as exc:  # surface as JSON to the caller, never crash
+        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+    return json.dumps(result, default=str)
+
+
+def _get_r2_store() -> Any:
+    """Build the read-path ``R2HistoryStore`` from env (patchable seam for tests)."""
+    from digiquant.data.prices.r2_history import R2HistoryStore
+    from digiquant.ops.checkpoint_archive import (
+        R2_ACCESS_KEY_ENV,
+        R2_ACCOUNT_ENV,
+        R2_BUCKET_ENV,
+        R2_SECRET_KEY_ENV,
+        R2Backend,
+    )
+
+    account = (os.environ.get(R2_ACCOUNT_ENV) or "").strip()
+    bucket = (os.environ.get(R2_BUCKET_ENV) or "").strip()
+    access = (os.environ.get(R2_ACCESS_KEY_ENV) or "").strip()
+    secret = (os.environ.get(R2_SECRET_KEY_ENV) or "").strip()
+    if not (account and bucket and access and secret):
+        raise RuntimeError(
+            "missing R2 credentials; set R2_ACCOUNT_ID/R2_BUCKET/R2_ACCESS_KEY_ID/"
+            "R2_SECRET_ACCESS_KEY"
+        )
+    backend = R2Backend(
+        endpoint_url=f"https://{account}.r2.cloudflarestorage.com",
+        bucket=bucket,
+        access_key=access,
+        secret_key=secret,
+    )
+
+    def _read_only_registry_insert(
+        source_table: str, source_key: dict, r2_key: str, sha256: str, size: int
+    ) -> None:
+        raise RuntimeError("market-data MCP read path must not write registry rows")
+
+    return R2HistoryStore(backend, _read_only_registry_insert)
+
+
+def _read_manifest() -> dict:
+    """Read the R2 market-data manifest (version-checked by the store)."""
+    return _get_r2_store().read_manifest()  # type: ignore[no-any-return]
+
+
+def _r2_is_stale(manifest_as_of: str, resolved_as_of: str) -> bool:
+    """Task 6 staleness gate on the read path: seal >5 trading days behind as_of."""
+    from digiquant.data.prices.refresh_gate import staleness_gate
+
+    return not bool(staleness_gate(manifest_as_of, resolved_as_of)["ok"])
+
+
+# ── digifetch x Gloomberb client seam (#4069) ───────────────────────────────
+#
+# The client factory + envelope serializer moved to the data package (#4146,
+# ``digiquant.data.gloomberb.agent_tools``) and are imported at the top of this
+# module under ``_build_gloomberb_client`` / ``_gloomberb_envelope_json``. The
+# builder remains the patchable seam tests use to inject a MockTransport-backed
+# client. ``GLOOMBERB_ENABLED`` defaults OFF (Counsel memo DIG-1233);
+# the session cookie is never logged or echoed into tool payloads.
+
+
+@overload
+def _read_r2_window(ticker: str, as_of: str, manifest: dict | None = ...) -> list[dict]: ...
+
+
+@overload
+def _read_r2_window(
+    ticker: str, as_of: str, manifest: dict | None = ..., *, return_stale: Literal[True]
+) -> tuple[list[dict], bool]: ...
+
+
+def _read_r2_window(
+    ticker: str, as_of: str, manifest: dict | None = None, *, return_stale: bool = False
+) -> list[dict] | tuple[list[dict], bool]:
+    """Date-ascending indicator dicts for *ticker* sealed at *as_of*.
+
+    R2 history (SHA-verified via the manifest) + live overlap fetched from
+    ``(manifest_as_of, as_of]`` → :func:`merge_history_live` with
+    ``sealed=False`` (settled close: the live ``as_of`` bar is excluded) →
+    :func:`compute_indicators`. An ``as_of`` at or before the manifest seal
+    skips the live fetch entirely, and the merged frame is additionally bounded
+    to ``date <= as_of`` so historical reads (``as_of`` behind the seal — the
+    cutover's backfill use case) cannot leak newer history (#3780 Task 7).
+    A missing ``latest`` pointer (``KeyError`` from a dict-like store, or the
+    boto3 ``ClientError`` ``NoSuchKey``/404 the real R2 backend raises) maps to
+    an unknown-ticker ``LookupError`` for the MCP error envelope — other
+    backend faults (auth/transient) still propagate.
+    A live-fetch failure raises (surfaced as the ``{"error"}`` envelope by
+    the caller) — it is never swallowed into a valid-looking window.
+    A per-ticker fetch *error entry* (``FetchResult.errors`` with no raised
+    exception, e.g. vendor ``no_data``) serves history-only rows but marks the
+    read stale (fail-soft serving + loud flag — Task 7 decision, mirroring the
+    Task 6 cron): pass ``return_stale=True`` to get ``(rows, live_stale)``.
+    Indicator columns are attached to the merged frame via a date-ordered
+    left join, with a row-count guard so a reordering/filtering change in
+    :func:`compute_indicators` fails loud instead of misaligning.
+    """
+    import io
+    from datetime import date as _date
+    from datetime import timedelta as _td
+
+    import polars as pl
+
+    from digiquant.data.prices.merge import merge_history_live
+    from digiquant.data.prices.r2_history import (
+        is_missing_object_error,
+        latest_pointer_key,
+        normalize_ticker,
+    )
+    from digiquant.data.prices.technicals import compute_indicators
+
+    manifest = manifest if manifest is not None else _read_manifest()
+    as_of_d = _date.fromisoformat(as_of)
+    manifest_d = _date.fromisoformat(str(manifest["as_of"]))
+    manifest_seal = manifest_d.isoformat()
+    resolved_as_of = as_of_d.isoformat()
+    store = _get_r2_store()
+    datasets = manifest.get("datasets") or {}
+    entry = datasets.get(ticker) or datasets.get(normalize_ticker(ticker))
+    if entry is not None:
+        payload = store.get_generation(str(entry["object"]), str(entry["sha256"]))
+    else:
+        try:
+            gen_key = store.read_latest(latest_pointer_key(ticker))
+        except Exception as exc:
+            if not is_missing_object_error(exc):
+                raise
+            raise LookupError(f"unknown ticker {ticker!r}") from None
+        sha: str | None = None
+        for cand in datasets.values():
+            if isinstance(cand, dict) and cand.get("object") == gen_key:
+                sha = cand.get("sha256")
+                break
+        if sha is None:
+            raise LookupError(f"unknown ticker {ticker!r}")
+        payload = store.get_generation(gen_key, str(sha))
+
+    hist = pl.read_parquet(io.BytesIO(payload))
+    if "date" not in hist.columns and "timestamp" in hist.columns:
+        hist = hist.rename({"timestamp": "date"})
+    hist = hist.with_columns(pl.col("date").cast(pl.Date)).sort("date")
+
+    if as_of_d <= manifest_d:
+        live = hist.clear()
+        live_stale = False
+    else:
+        live_stale = False
+        try:
+            from digiquant.data.prices.fetchers import fetch_batch
+
+            live_start = max(manifest_d + _td(days=1), as_of_d - _td(days=_R2_LIVE_OVERLAP_DAYS))
+            fetched = fetch_batch(
+                [ticker],
+                start=live_start.isoformat(),
+                end=(as_of_d + _td(days=1)).isoformat(),
+            )
+            if ticker in fetched.errors:
+                # Vendor error entry, no exception: serve history-only but flag
+                # stale (Task 7 fail-soft decision) — never a fresh-looking seal.
+                live_stale = True
+                logger.warning(
+                    "R2 read %s as_of=%s: live fetch error entry (%s); "
+                    "serving history-only (stale)",
+                    ticker,
+                    resolved_as_of,
+                    fetched.errors[ticker],
+                )
+            frame = fetched.frames.get(ticker)
+            if frame is None or frame.is_empty():
+                live = hist.clear()
+            else:
+                staged = frame.with_columns(pl.col("timestamp").cast(pl.Date).alias("date"))
+                live = staged.select(
+                    pl.col("date").cast(pl.Date),
+                    *(
+                        pl.col(c).cast(hist.schema[c])
+                        if c in staged.columns
+                        else pl.lit(None).cast(hist.schema[c]).alias(c)
+                        for c in hist.columns
+                        if c != "date"
+                    ),
+                )
+        except Exception as exc:
+            raise RuntimeError(f"live fetch failed for {ticker!r}: {exc}") from exc
+
+    merged = merge_history_live(hist, live, manifest_seal, resolved_as_of, sealed=False)
+    # Historical-read bound: the merge only caps history at the seal, so an
+    # as_of behind the seal would leak newer history (look-ahead). No-op when
+    # as_of >= seal (merge output is already <= as_of there).
+    merged = merged.filter(pl.col("date") <= pl.lit(resolved_as_of).cast(pl.Date))
+    if merged.is_empty():
+        return ([], live_stale) if return_stale else []
+    ohlcv = merged.rename({"date": "timestamp"}) if "timestamp" not in merged.columns else merged
+    indicators = compute_indicators(ohlcv)
+    if indicators.height != merged.height:
+        raise RuntimeError(
+            f"indicator/price row mismatch for {ticker!r}: "
+            f"{indicators.height} indicator rows vs {merged.height} merged rows"
+        )
+    rows = (
+        merged.select(pl.col("date"), pl.col("close"))
+        .with_row_index("_mcp_pos")
+        .join(indicators.with_row_index("_mcp_pos"), on="_mcp_pos", how="left")
+        .drop("_mcp_pos")
+        .sort("date")
+        .to_dicts()
+    )
+    return (rows, live_stale) if return_stale else rows
+
+
+def _read_r2_macro_window(
+    series_ids: list[str], as_of: str, manifest: dict | None = None
+) -> dict[str, dict]:
+    """Per-series ``{latest, window}`` macro observations sealed at *as_of*.
+
+    A series whose generation is missing from the manifest (unknown sha) or
+    whose ``latest`` pointer is absent (``KeyError`` or the boto3
+    ``ClientError`` ``NoSuchKey``/404) raises ``LookupError`` — surfaced as
+    the ``{"error"}`` envelope by the caller — so backfill key mismatches
+    fail loud instead of serving empty windows. Only the pointer read is
+    classified; a fault in parquet/row handling propagates as itself rather
+    than masquerading as an unknown series. Other backend faults
+    (auth/transient) propagate unchanged.
+    """
+    import io
+
+    import polars as pl
+
+    from digiquant.data.prices.r2_history import (
+        is_missing_object_error,
+        macro_latest_pointer_key,
+    )
+
+    manifest = manifest if manifest is not None else _read_manifest()
+    datasets = manifest.get("datasets") or {}
+    store = _get_r2_store()
+    out: dict[str, dict] = {}
+    for sid in series_ids:
+        try:
+            gen_key = store.read_latest(macro_latest_pointer_key("fred", sid))
+        except Exception as exc:
+            if not is_missing_object_error(exc):
+                raise
+            raise LookupError(f"unknown macro series {sid!r}") from None
+        sha = None
+        for cand in datasets.values():
+            if isinstance(cand, dict) and cand.get("object") == gen_key:
+                sha = cand.get("sha256")
+                break
+        if sha is None:
+            raise LookupError(f"unknown macro series {sid!r}")
+        frame = pl.read_parquet(io.BytesIO(store.get_generation(gen_key, str(sha))))
+        date_col = "obs_date" if "obs_date" in frame.columns else "date"
+        rows = (
+            frame.with_columns(pl.col(date_col).cast(pl.Date))
+            .filter(pl.col(date_col) <= pl.lit(as_of).cast(pl.Date))
+            .sort(date_col)
+            .to_dicts()
+        )
+        out[sid] = {"latest": rows[-1] if rows else {}, "window": rows}
+    return out
+
+
+def digiquant_get_price_technicals(
+    ticker: str, lookback: int = 20, as_of: str | None = None
+) -> str:
+    """Technicals for *ticker* from the versioned R2 history (only path, #4053).
+
+    The Supabase ``price_technicals`` body was retired with the table (migration
+    127); the flag no longer selects a backend here.
+
+    The envelope is ``{"as_of", "rows", "stale"}``: ``stale`` is true when
+    the manifest seal is >5 trading days behind ``as_of`` (Task 6 gate) or the
+    live overlap carried a per-ticker fetch error entry (history-only serve).
+
+    Two independent ``stale`` signals share the name (#3780 Task 7 fix round
+    M2): the manifest's writer-side ``stale`` (Task 6 refresh cron — the seal's
+    age at generation time) vs this envelope's reader-side ``stale`` (evaluated
+    per request from the seal and the live overlap). They can disagree (a fresh
+    manifest served through a flaked live fetch reads stale here). Task 10 docs
+    must carry the glossary entry.
+    """
+    try:
+        rejected = _lookback_error(lookback)
+        if rejected is not None:
+            return rejected
+        lookback = _bounded_lookback(lookback)
+        manifest = _read_manifest()
+        if manifest["version"] != 1:
+            return json.dumps({"error": f"unsupported manifest version {manifest['version']}"})
+        resolved = as_of or manifest["as_of"]
+        cache_key = ("technicals", ticker, resolved, manifest["version"], lookback)
+        cached = _ttl_get(cache_key)
+        if cached is not None:
+            return cached
+        rows, live_stale = _read_r2_window(ticker, resolved, manifest, return_stale=True)
+        stale = live_stale or _r2_is_stale(str(manifest["as_of"]), resolved)
+        if stale:
+            logger.warning(
+                "R2 technicals %s as_of=%s seal=%s live_stale=%s: serving stale window",
+                ticker,
+                resolved,
+                manifest["as_of"],
+                live_stale,
+            )
+        payload = json.dumps(
+            {"as_of": resolved, "rows": _tail(rows, lookback), "stale": stale}, default=str
+        )
+        # Task 7 fix round (M1): never cache a stale-flagged payload — a stale
+        # serve pinned for the full 900s TTL would keep reporting stale after
+        # the vendor flake clears. Fresh payloads cache normally.
+        if not stale:
+            _ttl[cache_key] = (time.time(), payload)
+        return payload
+    except Exception as exc:
+        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+
+
+def digiquant_get_macro_series(
+    series_ids: list[str], lookback: int = 6, as_of: str | None = None
+) -> str:
+    """Macro observations for *series_ids*, Supabase-backed by default or R2-backed.
+
+    The R2 envelope is ``{"as_of", "series", "stale"}`` (per-series
+    ``{latest, window}``). Unknown series fail loud (``{"error"}``); a stale
+    manifest seal only flags ``stale`` — macro has no live overlap to repair it.
+
+    Same two-``stale`` note as technicals (#3780 Task 7 fix round M2): the
+    manifest's writer-side ``stale`` (Task 6 cron) vs this envelope's
+    reader-side ``stale``. Task 10 docs must carry the glossary entry.
+    """
+    try:
+        rejected = _lookback_error(lookback)
+        if rejected is not None:
+            return rejected
+        lookback = _bounded_lookback(lookback)
+        from digiquant.research.data.queries import r2_backend_enabled
+
+        if not r2_backend_enabled():
+            return _supabase_macro(series_ids, lookback)
+        manifest = _read_manifest()
+        if manifest["version"] != 1:
+            return json.dumps({"error": f"unsupported manifest version {manifest['version']}"})
+        resolved = as_of or manifest["as_of"]
+        cache_key = ("macro", tuple(series_ids), resolved, manifest["version"], lookback)
+        cached = _ttl_get(cache_key)
+        if cached is not None:
+            return cached
+        per_series = _read_r2_macro_window(series_ids, resolved, manifest)
+        stale = _r2_is_stale(str(manifest["as_of"]), resolved)
+        if stale:
+            logger.warning(
+                "R2 macro %s as_of=%s seal=%s: serving stale window",
+                series_ids,
+                resolved,
+                manifest["as_of"],
+            )
+        series = {
+            sid: {"latest": payload["latest"], "window": _tail(payload["window"], lookback)}
+            for sid, payload in per_series.items()
+        }
+        payload = json.dumps({"as_of": resolved, "series": series, "stale": stale}, default=str)
+        # Task 7 fix round (M1): same no-cache-on-stale rule as technicals.
+        if not stale:
+            _ttl[cache_key] = (time.time(), payload)
+        return payload
+    except Exception as exc:
+        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+
+
+def digiquant_get_trade_levels(
+    direction: str,
+    ohlc_json: str | None = None,
+    pair: str | None = None,
+    ticker: str | None = None,
+    config_json: str | None = None,
+    cache_dir: str | None = None,
+) -> str:
+    """Causal ATR / swing-pivot / Donchian trade levels for one direction (JSON).
+
+    READ-scope and read-only: computes candidate entry band, stop, R-multiple
+    ladder and trail policy; it never sizes or places orders. The caller-
+    supplied OHLC frame (``ohlc_json``: JSON array of
+    ``{timestamp, open, high, low, close, volume}`` bars) is the primary path.
+    ``ticker`` is a non-blocking convenience over the local history cache.
+
+    Returns the contract ``{pair, direction, entry{low,high,ref}, sl,
+    tp_ladder[], trail_policy, source_ref, computed_at}`` or ``{"error": ...}``.
+    The contract also carries the ``reward_uncapped`` diagnostic (``true`` when
+    no opposite structure bounded the reward, so the stop was accepted without
+    an R:R check).
+    """
+    try:
+        from digiquant.data.prices.levels_api import (
+            config_from_json,
+            levels_for_ticker,
+            levels_json,
+            parse_ohlc,
+        )
+
+        cfg = config_from_json(config_json)
+        if ohlc_json:
+            df = parse_ohlc(ohlc_json)
+            return levels_json(df, direction, pair=pair or "UNKNOWN", cfg=cfg)
+        if ticker:
+            return levels_for_ticker(ticker, direction, cache_dir=cache_dir, cfg=cfg, pair=pair)
+        return json.dumps({"error": "either ohlc_json or ticker is required"})
+    except Exception as exc:  # surface as JSON to the caller, never crash
+        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+
+
+try:
+    from mcp.server.fastmcp import FastMCP
+
+    _MCP_AVAILABLE = True
+except ImportError:
+    FastMCP = None  # type: ignore[assignment,misc]
+    _MCP_AVAILABLE = False
+
+
+def _require_mcp() -> type:
+    if not _MCP_AVAILABLE:
+        raise ImportError("Install mcp: pip install digiquant[mcp]")
+    return FastMCP  # type: ignore[return-value]
+
+
+#: Tools safe for the dashboard-chat surface: latest/historical runs, published
+#: research reads, prices/technicals, macro, the house book, read-only gate
+#: evaluations, the coinmetrics catalog discovery tool, the 89 digifetch x
+#: Gloomberb enrichment reads (#4069, #4110, #4837 130-coverage, spec §12.3
+#: scope=read — every digifetch tool is read-scope, including the 13 inert
+#: write-shaped workspace/broker tools), and the 14
+#: luxalgo hosted reads (#4779 P0 Library + #4844 edge/trackers, scope=read).
+#: Everything else (backtest / optimize / pipeline / export / fetches / fits /
+#: tearsheets / policy-replay runs) is compute or mutate and stays on
+#: ``scope="full"`` only.
+READ_SCOPE_TOOLS: frozenset[str] = frozenset(
+    {
+        "digiquant_list_strategies",
+        "digiquant_get_price_technicals",
+        "digiquant_get_macro_series",
+        "digiquant_get_trade_levels",
+        "digiquant_query_research",
+        "dashboard_get_policy_replay",
+        "dashboard_get_policy_comparison",
+        "dashboard_evaluate_policy_gate",
+        "dashboard_get_policy_gate_evaluation",
+        "digiquant_list_coinmetrics_catalog",
+        "digifetch_quote",
+        "digifetch_quotes_batch",
+        "digifetch_price_history",
+        "digifetch_ticker_financials",
+        "digifetch_options_chain",
+        "digifetch_sec_filings",
+        "digifetch_holders",
+        "digifetch_analyst_research",
+        "digifetch_corporate_actions",
+        "digifetch_earnings_calendar",
+        "digifetch_exchange_rate",
+        "digifetch_search",
+        "digifetch_news",
+        "digifetch_econ_calendar",
+        "digifetch_econ_series",
+        "digifetch_yield_curve",
+        "digifetch_cds",
+        "digifetch_research_search",
+        "digifetch_transcripts",
+        "digifetch_statements",
+        "digifetch_ticker_tweets",
+        "digifetch_tweet_search",
+        "digifetch_venues",
+        "digifetch_screener",
+        "digifetch_13f_funds",
+        "digifetch_13f_holdings",
+        "digifetch_shiller",
+        "digifetch_proxy_statements",
+        "digifetch_filing_events",
+        "digifetch_risk_reports",
+        "digifetch_short_interest",
+        "digifetch_equity_diagnostic",
+        "digifetch_saved_searches",
+        "digifetch_prediction_markets",
+        "digifetch_options_calculator",
+        "digifetch_bond_calculator",
+        "digifetch_kelly_sizer",
+        "digifetch_dividend_yield",
+        "digifetch_fx_cross_rates",
+        "digifetch_vix_term_structure",
+        "digifetch_options_scenario",
+        "digifetch_compare_performance",
+        "digifetch_correlation_matrix",
+        "digifetch_relationship_graph",
+        "digifetch_relative_valuation",
+        "digifetch_fundamental_graph",
+        "digifetch_valuation_graph",
+        "digifetch_custom_chart",
+        "digifetch_market_valuation",
+        "digifetch_money_markets",
+        "digifetch_rate_path",
+        "digifetch_time_and_sales",
+        "digifetch_quote_recap",
+        "digifetch_estimate_revisions",
+        "digifetch_short_volume",
+        "digifetch_hiring",
+        "digifetch_central_bank_rates",
+        "digifetch_cdx",
+        "digifetch_sovereign_cds",
+        "digifetch_options_flow",
+        "digifetch_cot",
+        "digifetch_crypto_markets",
+        "digifetch_iv_screen",
+        "digifetch_iv_history",
+        "digifetch_iv_surface",
+        "digifetch_debt_maturities",
+        "digifetch_session_movers",
+        "digifetch_trending",
+        "digifetch_substack",
+        "digifetch_ipo_calendar",
+        "digifetch_fear_greed",
+        "digifetch_polls",
+        "digifetch_treasury_auctions",
+        "digifetch_market_halts",
+        "digifetch_hacker_news",
+        # Workspace writes + broker reads + approval-gated orders (130-coverage
+        # Task 7): session-gated but read-only in this phase (no verified Cloud
+        # write route); preview mints a local ticket, execute ships disabled.
+        "digifetch_portfolio_view",
+        "digifetch_watchlist_add",
+        "digifetch_watchlist_remove",
+        "digifetch_portfolio_add",
+        "digifetch_portfolio_remove",
+        "digifetch_alert_add",
+        "digifetch_alert_list",
+        "digifetch_note_add",
+        "digifetch_thesis_add",
+        "digifetch_view_add",
+        "digifetch_broker_positions",
+        "digifetch_ibkr_preview_order",
+        "digifetch_ibkr_execute_order",
+        "luxalgo_library_search",
+        "luxalgo_library_get_concept",
+        "luxalgo_library_get_indicator",
+        "luxalgo_library_list_concepts",
+        "luxalgo_library_list_indicators",
+        "luxalgo_library_list_tags",
+        "luxalgo_library_list_families",
+        "luxalgo_library_get_family",
+        "luxalgo_edge_symbols",
+        "luxalgo_edge_presets",
+        "luxalgo_edge_report",
+        "luxalgo_trackers_datasets",
+        "luxalgo_trackers_latest",
+        "luxalgo_trackers_ticker",
+    }
+)
+
+_MCP_SCOPES = ("full", "read")
+
+
+def create_mcp_server(
+    scope: str = "full",
+    host: str = "127.0.0.1",
+    port: int = 8767,
+) -> Any:
+    """Build the digiquant FastMCP server.
+
+    ``scope="read"`` registers only :data:`READ_SCOPE_TOOLS` (dashboard chat);
+    ``scope="full"`` (default) registers every tool. ``host``/``port`` go on
+    the server — installed mcp's ``run()`` takes transport only.
+    """
+    if scope not in _MCP_SCOPES:
+        raise ValueError(f"unknown MCP scope {scope!r}; expected one of {', '.join(_MCP_SCOPES)}")
+    _require_mcp()
+    mcp = FastMCP("digiquant", host=host, port=port)
+    enabled = READ_SCOPE_TOOLS if scope == "read" else None
+    # Declared per-tool entitlements for the digifetch x Gloomberb family
+    # (#4110 phase 5) and the LuxAlgo hosted family (#4779 P0, #4844). Attached to
+    # the registered function and appended to the description so MCP and the
+    # orchestrator manifest cannot drift.
+    from digiquant.data.gloomberb.entitlements import (
+        TOOL_ENTITLEMENTS as _GLOOMBERB_ENTITLEMENTS,
+    )
+    from digiquant.data.gloomberb.session_gate import (
+        session_gate_status as _gloomberb_session_gate_status,
+    )
+
+    # #2752: a `session` / `preview` / `pro` tool is advertised only when the
+    # deployer's own cookie is configured AND validates against api.gloom.sh.
+    # Resolved ONCE per server build — the gate caches the probe for one TTL
+    # window, and this keeps a 41-tool build from re-asking. `free` and
+    # `venue_session` tools are untouched, and the LuxAlgo family is `free`
+    # only, so the entitlement value alone selects the Gloomberb gated set.
+    _gloomberb_session_tools_advertised = _gloomberb_session_gate_status().authenticated
+    _GLOOMBERB_SESSION_ENTITLEMENTS = frozenset({"session", "preview", "pro"})
+    from digiquant.data.gloomberb.entitlements import (
+        with_entitlement_note as _gloomberb_note,
+    )
+    from digiquant.data.luxalgo.entitlements import TOOL_ENTITLEMENTS as _LUXALGO_ENTITLEMENTS
+    from digiquant.data.luxalgo.entitlements import with_entitlement_note as _luxalgo_note
+
+    def _maybe_tool(name: str):
+        """Register the tool unless a read scope excludes it or it is refused.
+
+        A digifetch/luxalgo tool with a declared entitlement gets
+        ``fn.entitlement`` and an entitlement sentence appended to the
+        registered description.
+
+        A refused tool (:mod:`digiquant.tool_refusals`) is never registered —
+        on either scope, so ``scope="full"`` cannot reopen it.
+        """
+        from digiquant.tool_refusals import is_refused
+
+        def _register(fn):
+            from digiquant.tool_names import (
+                GLOOMBERB_PLATFORM_NOTE,
+                canonical_tool_name,
+                gloomberb_family,
+            )
+
+            if is_refused(name):
+                return fn
+            entitlement = _GLOOMBERB_ENTITLEMENTS.get(name)
+            note_fn = _gloomberb_note
+            note_name = name
+            if entitlement is None:
+                entitlement = _LUXALGO_ENTITLEMENTS.get(name)
+                note_fn = _luxalgo_note
+            if entitlement is not None:
+                fn.entitlement = entitlement
+                fn.__doc__ = note_fn(note_name, fn.__doc__ or "")
+            if gloomberb_family(name):
+                doc = fn.__doc__ or ""
+                if GLOOMBERB_PLATFORM_NOTE not in doc:
+                    fn.__doc__ = f"{GLOOMBERB_PLATFORM_NOTE}\n\n{doc.lstrip()}"
+            if (
+                entitlement in _GLOOMBERB_SESSION_ENTITLEMENTS
+                and not _gloomberb_session_tools_advertised
+            ):
+                return fn
+            public = canonical_tool_name(name)
+            if enabled is not None and name not in enabled and public not in enabled:
+                return fn
+            # One MCP name. ``digifetch_*`` is the internal key and the invoke
+            # redirect; it is not a second tool on this server (DIG-3313).
+            mcp.tool(name=public)(fn)
+            return fn
+
+        return _register
+
+    @_maybe_tool("digiquant_list_strategies")
+    def digiquant_list_strategies() -> str:
+        """List registered strategies (name, aliases, description, default_params)."""
+        from digiquant.service import service_list_strategies
+
+        return json.dumps(service_list_strategies(), indent=2)
+
+    @_maybe_tool("digiquant_run_backtest")
+    def digiquant_run_backtest(
+        strategy_name: str,
+        symbols_json: str,
+        data_dir: str | None = None,
+        data_path: str | None = None,
+        strategy_params_json: str | None = None,
+    ) -> str:
+        """Run a Nautilus backtest. symbols_json is a JSON array e.g. '["AAPL"]'."""
+        symbols: list[str] = json.loads(symbols_json)
+        params = json.loads(strategy_params_json) if strategy_params_json else None
+        from digiquant.service import service_run_backtest
+
+        result = service_run_backtest(
+            strategy_name=strategy_name,
+            symbols=symbols,
+            data_path=data_path,
+            data_dir=data_dir,
+            strategy_params=params,
+        )
+        return result.model_dump_json(indent=2)
+
+    @_maybe_tool("digiquant_run_optimize")
+    def digiquant_run_optimize(
+        strategy_name: str,
+        symbols_json: str,
+        data_dir: str | None = None,
+        data_path: str | None = None,
+        method: str = "grid",
+        n_trials: int = 50,
+        param_grid_json: str | None = None,
+        strategy_params_json: str | None = None,
+    ) -> str:
+        """Run parameter optimization (grid, bayesian, or random).
+
+        ``strategy_name='sdca'`` / ``'btc_sdca'`` is Stage B walk-forward
+        (vs-flat-DCA). Freeze Stage A weights by passing them in
+        ``strategy_params_json`` as ``*_weight`` keys. Stage A itself is
+        ``digiquant_fit_sdca_weights``.
+        """
+        symbols: list[str] = json.loads(symbols_json)
+        params = json.loads(strategy_params_json) if strategy_params_json else None
+        grid = json.loads(param_grid_json) if param_grid_json else None
+        from digiquant.service import service_run_optimize
+
+        result = service_run_optimize(
+            strategy_name=strategy_name,
+            symbols=symbols,
+            data_path=data_path,
+            data_dir=data_dir,
+            method=method,
+            n_trials=n_trials,
+            param_grid=grid,
+            base_params=params,
+        )
+        return result.model_dump_json(indent=2)
+
+    @_maybe_tool("digiquant_export")
+    def digiquant_export(
+        strategy_name: str,
+        target: str,
+        params_json: str | None = None,
+    ) -> str:
+        """Export strategy config (JSON or nautilus_bundle zip). targets: nautilus, nautilus_bundle, …"""
+        params = json.loads(params_json) if params_json else {}
+        from digiquant.service import service_run_export
+
+        result = service_run_export(
+            strategy_name=strategy_name,
+            params=params,
+            target=target,
+        )
+        return result.model_dump_json(indent=2)
+
+    @_maybe_tool("digiquant_run_pipeline")
+    def digiquant_run_pipeline(
+        strategy_name: str,
+        symbols_json: str,
+        data_dir: str | None = None,
+        data_path: str | None = None,
+        strategy_params_json: str | None = None,
+        export_target: str = "nautilus",
+        run_optimize: bool = True,
+        run_export: bool = True,
+        method: str = "grid",
+        n_trials: int = 50,
+        constraints_json: str | None = None,
+    ) -> str:
+        """Run validate → backtest → optional optimize → optional export via internal LangGraph.
+
+        Returns JSON with ``trace``, and serialized ``backtest`` / ``optimize`` / ``export`` when run.
+        """
+        symbols: list[str] = json.loads(symbols_json)
+        params = json.loads(strategy_params_json) if strategy_params_json else None
+        constraints = json.loads(constraints_json) if constraints_json else None
+        if isinstance(n_trials, bool) or int(n_trials) < 1:
+            return json.dumps({"error": "n_trials must be an integer >= 1"})
+        from digiquant.graph.pipeline import run_quant_workflow
+
+        raw = run_quant_workflow(
+            {
+                "strategy_name": strategy_name,
+                "symbols": symbols,
+                "data_path": data_path,
+                "data_dir": data_dir,
+                "strategy_params": params,
+                "export_target": export_target,
+                "run_optimize": run_optimize,
+                "run_export": run_export,
+                "method": method,
+                "n_trials": n_trials,
+                "constraints": constraints,
+            }
+        )
+        return json.dumps(raw, indent=2)
+
+    @_maybe_tool("digiquant_get_price_technicals")
+    def digiquant_get_price_technicals_tool(
+        ticker: str, lookback: int = 20, as_of: str | None = None
+    ) -> str:
+        """Latest technical indicators + recent daily window for a ticker (JSON).
+
+        Reads the versioned R2 history sealed at ``as_of`` (default: manifest
+        seal); the Supabase ``price_technicals`` table is dropped in migration
+        127 and is no longer read. Returns ``{"error": ...}`` if the data layer
+        is unavailable.
+        """
+        return digiquant_get_price_technicals(ticker, lookback=lookback, as_of=as_of)
+
+    @_maybe_tool("digiquant_get_macro_series")
+    def digiquant_get_macro_series_tool(
+        series_ids: list[str], lookback: int = 6, as_of: str | None = None
+    ) -> str:
+        """Latest values + recent window for FRED macro series ids (JSON).
+
+        Reads the maintained ``macro_series_observations`` table in Supabase.
+        Returns ``{"error": ...}`` if the data layer is unavailable.
+        With ``DIGIQUANT_MARKET_DATA_BACKEND=r2``, reads the versioned R2
+        history sealed at ``as_of`` (default: manifest seal) instead.
+        """
+        return digiquant_get_macro_series(series_ids, lookback=lookback, as_of=as_of)
+
+    @_maybe_tool("digiquant_get_trade_levels")
+    def digiquant_get_trade_levels_tool(
+        direction: str,
+        ohlc_json: str | None = None,
+        pair: str | None = None,
+        ticker: str | None = None,
+        config_json: str | None = None,
+        cache_dir: str | None = None,
+    ) -> str:
+        """Causal entry/stop/target levels for a direction (JSON, read-only).
+
+        Pass ``ohlc_json`` (a JSON array of OHLC bars) or a cached ``ticker``.
+        Never places orders; returns candidate levels with full precision.
+        """
+        return digiquant_get_trade_levels(
+            direction,
+            ohlc_json=ohlc_json,
+            pair=pair,
+            ticker=ticker,
+            config_json=config_json,
+            cache_dir=cache_dir,
+        )
+
+    @_maybe_tool("digiquant_query_research")
+    def digiquant_query_research(
+        dataset: str = "documents",
+        run_type: str = "baseline",
+        run_id: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        document_key: str | None = None,
+        segment: str | None = None,
+        ticker: str | None = None,
+        sector: str | None = None,
+        subject: str | None = None,
+        doc_type: str | None = None,
+        phase: str | None = None,
+        include_prior: bool = False,
+        as_of_date: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+        full_content: bool = False,
+    ) -> str:
+        """Search the research pipeline and book for prior work (JSON).
+
+        Reads live rows from Supabase and transparently hydrates archived
+        document payloads from R2 (#4436). ``dataset`` is one of
+        ``documents``, ``daily_snapshots``, ``theses``, ``thesis_vehicles``,
+        ``positions``, ``nav_history``, ``portfolio_metrics``,
+        ``position_events``, ``decision_log``. Filter by ``run_type``
+        (default ``baseline``), a ``date_from``/``date_to`` range, an exact
+        ``document_key``, ``ticker``, ``sector``, free-text ``subject``
+        (title/category/key) or ``doc_type``. ``segment`` is an alias of
+        ``document_key``, not a filter on the ``segment`` column.
+
+        ``phase`` is the retrieval/blinding phase (one of ``research_edit``,
+        ``thesis``, ``market``, ``analyst``, ``deliberation``,
+        ``direction``, ``sizing``). ``documents`` and ``daily_snapshots`` reads
+        default to the blinded ``analyst`` view, so the digest,
+        ``digest-delta`` and ``beliefs`` artifacts are withheld unless the
+        caller widens the phase explicitly (``phase="research_edit"``); book
+        datasets keep the operator default. ``include_prior=true`` spans prior
+        days for continuity; otherwise the range defaults to a single day
+        (``as_of_date`` or today). ``limit`` is capped server-side and
+        ``offset`` pages it.
+        Market history stays on ``digiquant_get_price_technicals`` /
+        ``digiquant_get_macro_series``. Returns ``{"error": ...}`` on failure.
+        """
+        from datetime import UTC, datetime
+        from datetime import date as _date
+
+        from digiquant.dashboard.research_retrieval.queries import search_research
+        from digiquant.research.supabase_io import SupabaseConfig, build_client
+
+        def _parse(raw: str | None) -> _date | None:
+            if not raw:
+                return None
+            return _date.fromisoformat(str(raw)[:10])
+
+        # Blinded default on the external read-scope surface (#4467 D2): the
+        # document and digest reads are blinded unless the caller names a phase
+        # explicitly; book datasets keep the operator default.
+        default_phase = (
+            "analyst" if dataset in {"documents", "daily_snapshots"} else "research_edit"
+        )
+
+        try:
+            client = build_client(SupabaseConfig.from_env())
+            result = search_research(
+                client=client,
+                run_date=datetime.now(tz=UTC).date(),
+                dataset=dataset,
+                run_type=run_type,
+                run_id=run_id,
+                date_from=_parse(date_from),
+                date_to=_parse(date_to),
+                document_key=document_key,
+                segment=segment,
+                ticker=ticker,
+                sector=sector,
+                subject=subject,
+                doc_type=doc_type,
+                retrieval_phase=phase or default_phase,
+                include_prior=include_prior,
+                as_of_date=_parse(as_of_date),
+                limit=limit,
+                offset=offset,
+                full_content=full_content,
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return json.dumps(result, default=str)
+
+    # ── Slapper tearsheet pipeline (price → Nautilus backtest → TradingView parity) ──
+    # These wrap the repo's pipeline scripts so the whole flow is MCP-discoverable.
+    # Paths are resolved relative to this package (editable/source checkout).
+    def _scripts_dir() -> str:
+        from pathlib import Path
+
+        return str(Path(__file__).resolve().parents[2] / "scripts")
+
+    def _validation_dir() -> str:
+        from pathlib import Path
+
+        return str(Path(__file__).resolve().parents[3] / "scripts" / "validation")
+
+    @_maybe_tool("digiquant_fetch_coinbase_ohlcv")
+    def digiquant_fetch_coinbase_ohlcv(
+        symbols_json: str = '["BTC/USD", "ETH/USD", "SOL/USD"]',
+        start: str = "2015-07-20",
+        end: str | None = None,
+        timeframe: str = "1d",
+        through_yesterday: bool = False,
+        cache_dir: str | None = None,
+    ) -> str:
+        """Fetch OHLCV bars from Coinbase (CCXT) into the price-history cache.
+
+        ``symbols_json`` is a JSON array of CCXT symbols (any Coinbase spot
+        pair, not just BTC/ETH/SOL — e.g. ``["DOGE/USD"]``). ``timeframe`` is
+        any CCXT-supported Coinbase timeframe: ``1m,5m,15m,30m,1h,2h,6h,1d``.
+        ``start`` defaults to Coinbase BTC listing ``2015-07-20``; ``end``
+        defaults to now. ``through_yesterday`` drops the current UTC day's
+        bar (only meaningful for ``timeframe="1d"``, where today's daily bar
+        is still incomplete). Returns JSON mapping each ticker to
+        ``{bars, first, last, path}`` (or ``{error}``).
+        """
+        import sys
+        from datetime import UTC, datetime
+        from pathlib import Path
+
+        sd = _scripts_dir()
+        if sd not in sys.path:
+            sys.path.insert(0, sd)
+        try:
+            import ccxt
+            import polars as pl
+            from fetch_coinbase import (
+                DEFAULT_CACHE,
+                SYMBOLS,
+                bars_to_polars,
+                cache_path_for,
+                fetch_all_daily,
+            )
+        except ImportError as exc:
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+
+        cache = Path(cache_dir) if cache_dir else DEFAULT_CACHE
+        cache.mkdir(parents=True, exist_ok=True)
+        exchange = ccxt.coinbase()
+        out: dict[str, Any] = {}
+        for sym in json.loads(symbols_json):
+            ticker = SYMBOLS.get(sym, sym.replace("/", "-"))
+            try:
+                bars = fetch_all_daily(exchange, sym, start, timeframe=timeframe, end=end)
+                if not bars:
+                    out[ticker] = {"error": "no data"}
+                    continue
+                df = (
+                    bars_to_polars(bars, ticker, timeframe=timeframe)
+                    .unique(subset=["timestamp"], keep="last")
+                    .sort("timestamp")
+                )
+                if through_yesterday:
+                    today = datetime.now(UTC).date().isoformat()
+                    df = df.filter(pl.col("timestamp") < today)
+                path = cache_path_for(cache, ticker, timeframe)
+                path.parent.mkdir(parents=True, exist_ok=True)
+                df.write_csv(path)
+                out[ticker] = {
+                    "bars": len(df),
+                    "first": df["timestamp"][0],
+                    "last": df["timestamp"][-1],
+                    "path": str(path),
+                }
+            except Exception as exc:  # surface per-symbol, never crash
+                out[ticker] = {"error": f"{type(exc).__name__}: {exc}"}
+        return json.dumps(out, indent=2, default=str)
+
+    # ── digifetch x Gloomberb market-data reads (#4069, #4110) ──────────────
+    # 33 enrichment tools over api.gloom.sh (plus a Yahoo-backed earnings
+    # calendar). Default-OFF behind GLOOMBERB_ENABLED (explicit opt-in
+    # re-enables); anonymous unless
+    # GLOOMBERB_SESSION_COOKIE is set for holders / analyst / corporate-actions
+    # / research-search / transcripts / statements / tweets / short-interest /
+    # equity-diagnostic (transcripts and screener additionally need a Pro
+    # plan; the equity diagnostic is an AI product endpoint that answers a
+    # pending payload while it generates). Read scope only. Cloud payloads
+    # carry §7 attribution ("Sourced from Gloomberb" + delay notice) and a
+    # term.gloom.sh deep link where a single listing is addressed; the Yahoo
+    # earnings tool is explicitly NOT attributed to Gloomberb. Never a pipeline
+    # primary (15-minute delay / caps).
+
+    @_maybe_tool("digifetch_quote")
+    def digifetch_quote(symbol: str, exchange: str | None = None) -> str:
+        """Latest quote for one listing via Gloomberb Cloud (anonymous; JSON envelope).
+
+        `exchange` is optional. Enrichment only: free-tier data is delayed up
+        to 15 minutes and is never a pipeline primary. Disabled by the
+        GLOOMBERB_ENABLED kill switch (default OFF; explicit opt-in re-enables). Carries "Sourced from
+        Gloomberb" attribution and a term.gloom.sh deep link.
+        """
+        try:
+            envelope = _build_gloomberb_client().quote({"symbol": symbol, "exchange": exchange})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=symbol)
+
+    @_maybe_tool("digifetch_quotes_batch")
+    def digifetch_quotes_batch(symbols: list[str]) -> str:
+        """Batch quotes for 1-20 listings via Gloomberb Cloud (anonymous).
+
+        Per-item status/stale is preserved: a stale listing returns a null quote
+        with a reason code instead of failing the whole batch.
+        """
+        try:
+            envelope = _build_gloomberb_client().quotes_batch({"symbols": symbols})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_price_history")
+    def digifetch_price_history(
+        symbol: str,
+        resolution: str,
+        range: str | None = None,
+        exchange: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> str:
+        """OHLCV bars for one listing (Gloomberb Cloud; JSON envelope).
+
+        `resolution` is 1m/5m/15m/30m/1h/1d/1wk/1mo. `range` is 1D/1W/1M/3M/
+        6M/1Y/5Y/ALL and is capped per resolution (5m→1wk, 15m→1mo, 1h→3mo,
+        1d→5y default, 1wk→5y, 1mo→all-time). Out-of-contract requests return
+        typed `invalid_input` - requests are rejected, never silently clamped.
+        `start_date`/`end_date` (ISO YYYY-MM-DD) request an explicit window
+        beyond those caps for long history (e.g. 1wk back to 2015); they are
+        mutually exclusive with `range` and are sent as rangeKey=ALL +
+        startDate/endDate upstream. Only the weekly (1wk) window path is
+        probe-verified; intraday windows are allowed but upstream-unverified.
+        """
+        try:
+            envelope = _build_gloomberb_client().price_history(
+                {
+                    "symbol": symbol,
+                    "resolution": resolution,
+                    "range": range,
+                    "exchange": exchange,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                }
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=symbol)
+
+    @_maybe_tool("digifetch_ticker_financials")
+    def digifetch_ticker_financials(
+        symbol: str,
+        exchange: str | None = None,
+        extended_statements: bool = False,
+    ) -> str:
+        """Quote, profile, fundamentals, statements, and price history (Gloomberb Cloud).
+
+        `extended_statements=true` requests the extended statement history
+        (SEC-sourced upstream, slowest path). Statement rows type the common
+        fields and preserve the rest.
+        """
+        try:
+            envelope = _build_gloomberb_client().ticker_financials(
+                {
+                    "symbol": symbol,
+                    "exchange": exchange,
+                    "extended_statements": extended_statements,
+                }
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=symbol)
+
+    @_maybe_tool("digifetch_options_chain")
+    def digifetch_options_chain(
+        symbol: str,
+        exchange: str | None = None,
+        expiration: int | None = None,
+    ) -> str:
+        """Options chain for one listing (Gloomberb Cloud; JSON envelope).
+
+        `expiration` is epoch seconds and optional (all expirations when
+        omitted). Calls/puts are normalized to a `side` field per contract.
+        """
+        try:
+            envelope = _build_gloomberb_client().options_chain(
+                {"symbol": symbol, "exchange": exchange, "expiration": expiration}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=symbol)
+
+    @_maybe_tool("digifetch_sec_filings")
+    def digifetch_sec_filings(
+        ticker: str,
+        what: str = "filings",
+        count: int = 15,
+        cik: str | None = None,
+        accession: str | None = None,
+        form: str | None = None,
+    ) -> str:
+        """SEC filings, filing documents, or filing content (Gloomberb Cloud).
+
+        `what` selects `filings` | `documents` | `content`; documents/content
+        require `cik` + `accession` from an earlier filings lookup. Anonymous
+        (live-verified 200 without a session cookie).
+        """
+        try:
+            envelope = _build_gloomberb_client().sec_filings(
+                {
+                    "ticker": ticker,
+                    "what": what,
+                    "count": count,
+                    "cik": cik,
+                    "accession": accession,
+                    "form": form,
+                }
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=ticker)
+
+    @_maybe_tool("digifetch_holders")
+    def digifetch_holders(symbol: str, owner_type: str = "all") -> str:
+        """Holder records for one symbol (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE; without it the envelope data is a
+        typed `auth_required` error and no request is made. `owner_type`
+        (all/insider/institution/fund/direct) filters client-side.
+        """
+        try:
+            envelope = _build_gloomberb_client().holders(
+                {"symbol": symbol, "owner_type": owner_type}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=symbol)
+
+    @_maybe_tool("digifetch_analyst_research")
+    def digifetch_analyst_research(symbol: str, limit: int = 20) -> str:
+        """Analyst recommendation, price target, and rating actions (session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE; returns typed `auth_required`
+        without it. `limit` caps the client-side action list.
+        """
+        try:
+            envelope = _build_gloomberb_client().analyst_research(
+                {"symbol": symbol, "limit": limit}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=symbol)
+
+    @_maybe_tool("digifetch_corporate_actions")
+    def digifetch_corporate_actions(symbol: str) -> str:
+        """Dividends, splits, and earnings history for one symbol (session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE; returns typed `auth_required`
+        without it. Flattened to one list of `kind`-discriminated records.
+        """
+        try:
+            envelope = _build_gloomberb_client().corporate_actions({"symbol": symbol})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=symbol)
+
+    @_maybe_tool("digifetch_earnings_calendar")
+    def digifetch_earnings_calendar(symbols: list[str], horizon_days: int = 90) -> str:
+        """Upcoming earnings dates for 1-20 symbols (Yahoo via yfinance).
+
+        No Cloud route exists for earnings, so this tool is NOT attributed to
+        Gloomberb. `horizon_days` bounds the window from today. Fail-soft per
+        symbol: a throttled symbol lands in `warnings`, not a raised error.
+        """
+        try:
+            envelope = _build_gloomberb_client().earnings_calendar(
+                {"symbols": symbols, "horizon_days": horizon_days}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_exchange_rate")
+    def digifetch_exchange_rate(from_currency: str, to_currency: str = "USD") -> str:
+        """USD exchange rate for an ISO-4217 `from_currency` (Gloomberb Cloud).
+
+        The Cloud route is USD-based, so `to_currency` must be USD. The
+        free-tier 15-minute delay is reported in `data.delay_note`, kept
+        distinct from `stale`.
+        """
+        try:
+            envelope = _build_gloomberb_client().exchange_rate(
+                {"from_currency": from_currency, "to_currency": to_currency}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_search")
+    def digifetch_search(query: str, limit: int = 10) -> str:
+        """Search listings across venues (Gloomberb Cloud; anonymous).
+
+        `limit` is 1-10. Multi-venue results keep symbol/exchange per row so a
+        caller can pick the right listing before a quote/history call.
+        """
+        try:
+            envelope = _build_gloomberb_client().search({"query": query, "limit": limit})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_news")
+    def digifetch_news(
+        feed: str = "latest",
+        ticker: str | None = None,
+        story_id: str | None = None,
+        limit: int = 20,
+    ) -> str:
+        """Aggregated market news headlines (Gloomberb Cloud; anonymous).
+
+        `feed` selects latest/top/breaking/ticker/sector/topic; `ticker`
+        filters the ticker feed and adds a term.gloom.sh deep link; `story_id`
+        fetches one story by id. `limit` caps the page.
+        """
+        try:
+            envelope = _build_gloomberb_client().news(
+                {"feed": feed, "ticker": ticker, "story_id": story_id, "limit": limit}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=ticker)
+
+    @_maybe_tool("digifetch_econ_calendar")
+    def digifetch_econ_calendar() -> str:
+        """Structured economic calendar (Gloomberb Cloud; anonymous).
+
+        The route returns a fixed-size window (~105 rows; the upstream ignores
+        `limit`), so the tool takes no parameters. Rows carry date/time/country/
+        event/actual/forecast/prior/impact and preserve unknown fields. Wire
+        prints may be numeric or text (e.g. "3.2%"). Enrichment only: the
+        platform's data is delayed and is never a pipeline primary.
+        """
+        try:
+            envelope = _build_gloomberb_client().econ_calendar()
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_econ_series")
+    def digifetch_econ_series(series_id: str, limit: int = 100, sort_order: str = "desc") -> str:
+        """FRED-style macro series observations + metadata (Gloomberb Cloud; anonymous).
+
+        `series_id` is the FRED id (e.g. CPIAUCSL); `sort_order` is asc/desc.
+        Missing prints (FRED ".") map to null. Unknown metadata stays extras.
+        """
+        try:
+            envelope = _build_gloomberb_client().econ_series(
+                {"series_id": series_id, "limit": limit, "sort_order": sort_order}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_yield_curve")
+    def digifetch_yield_curve() -> str:
+        """Treasury yield-curve tenors (Gloomberb Cloud; anonymous).
+
+        Each point carries maturity/maturityYears/yield/asOf/stale; any stale
+        tenor folds into the envelope `stale` flag. Enrichment only.
+        """
+        try:
+            envelope = _build_gloomberb_client().yield_curve()
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_cds")
+    def digifetch_cds(issuer: str | None = None, days: int = 30, limit: int = 100) -> str:
+        """DTCC PPD CDS trade tape (Gloomberb Cloud; anonymous).
+
+        `days` is bounded 1-90 and validated client-side, so an out-of-range
+        value is typed `invalid_input` with no request. Trade rows type the
+        dissemination/notional/rate fields and preserve the rest.
+        """
+        try:
+            envelope = _build_gloomberb_client().cds(
+                {"issuer": issuer, "days": days, "limit": limit}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_research_search")
+    def digifetch_research_search(query: str, limit: int = 10, offset: int = 0) -> str:
+        """Full-text research search across transcripts/news/filings (session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE; HTTP 401 (or a missing cookie) is a
+        typed `auth_required` and no request is made. Hits carry
+        docType/ticker/title/url/snippet; `offset`/`limit` page the result and
+        `data.pagination` returns total/hasMore/nextOffset/countCapped.
+        Enrichment only: the platform's data is delayed.
+        """
+        try:
+            envelope = _build_gloomberb_client().research_search(
+                {"query": query, "limit": limit, "offset": offset}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_congress_trades")
+    def digifetch_congress_trades(year: int | None = None, limit: int = 50) -> str:
+        """US House disclosure trades (Gloomberb Cloud; anonymous).
+
+        REFUSED and never registered on any scope (5 U.S.C. 13107(c)(1)(B) — a
+        House/Senate disclosure report is not ours to obtain or use for a
+        commercial purpose; DIG-1057, Counsel's ruling on the inert feed
+        DIG-1029). The upstream is live — `GET /cloud/congress/house` answers
+        200 with parsed house-clerk rows — which is why this is refused rather
+        than left inert. The client call is retained only so the route can be
+        restored if Counsel clears it; see :mod:`digiquant.tool_refusals`.
+        """
+        try:
+            envelope = _build_gloomberb_client().congress_trades({"year": year, "limit": limit})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_transcripts")
+    def digifetch_transcripts(
+        ticker: str | None = None,
+        limit: int = 20,
+        transcript_id: str | None = None,
+    ) -> str:
+        """Earnings-call transcripts (Gloomberb Cloud; session-gated, requires Pro).
+
+        Two modes; provide exactly one target. `ticker` lists that listing's
+        calls; `transcript_id` (from a list row) fetches one call's detail.
+        Requires GLOOMBERB_SESSION_COOKIE **and** a Gloomberb Pro plan: a free
+        (email-verified) session answers a "Pro plan required" body, mapped to
+        a typed `pro_required` with the upstream text - never an empty
+        success. List mode carries a term.gloom.sh deep link for `ticker`;
+        detail mode has no link unless `ticker` is known from the payload.
+        """
+        try:
+            envelope = _build_gloomberb_client().transcripts(
+                {"ticker": ticker, "limit": limit, "transcript_id": transcript_id}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        # Detail mode has no ticker argument, but the row can carry one — the
+        # spec's "or the payload carries one" deep-link rule. Kept in `ticker`
+        # so the parity test still reads the deep-link field from `symbol=ticker`.
+        if ticker is None:
+            rows = getattr(envelope.data, "transcripts", None) or []
+            ticker = rows[0].ticker if rows else None
+        return _gloomberb_envelope_json(envelope, symbol=ticker)
+
+    @_maybe_tool("digifetch_statements")
+    def digifetch_statements(
+        symbol: str, period: str = "annual", exchange: str | None = None
+    ) -> str:
+        """Annual/quarterly financial statement rows (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE; without it the envelope is a typed
+        `auth_required` and no request is made. `period` selects annual |
+        quarterly | both. Rows are sparse line items: `date`/`currency` plus
+        common typed fields, everything else preserved as extras. Enrichment
+        only: the platform's data is delayed and is never a pipeline primary.
+        """
+        try:
+            envelope = _build_gloomberb_client().statements(
+                {"symbol": symbol, "period": period, "exchange": exchange}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=symbol)
+
+    @_maybe_tool("digifetch_ticker_tweets")
+    def digifetch_ticker_tweets(
+        ticker: str,
+        limit: int = 50,
+        hours: int | None = None,
+        include_replies: bool = False,
+    ) -> str:
+        """Recent X/Twitter posts mentioning one ticker (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE. The upstream echoes `limit`/`hours`
+        but applies neither (it answers its cached window), so the client
+        drops rows older than `now - hours` when `hours` is given, slices to
+        `limit`, and reports `total_available`/`truncated`. Social posts are
+        delayed and best-effort - not a real-time feed. Carries a term.gloom.sh
+        deep link.
+        """
+        try:
+            envelope = _build_gloomberb_client().ticker_tweets(
+                {
+                    "ticker": ticker,
+                    "limit": limit,
+                    "hours": hours,
+                    "include_replies": include_replies,
+                }
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=ticker)
+
+    @_maybe_tool("digifetch_tweet_search")
+    def digifetch_tweet_search(
+        query: str, query_type: str = "Latest", limit: int = 50, hours: int | None = None
+    ) -> str:
+        """Search X/Twitter posts by query (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE. `query_type` is Latest | Top; the
+        upstream applies neither `limit` nor `hours`, so the client drops rows
+        older than `now - hours` when `hours` is given, slices to `limit`, and
+        reports `total_available`/`truncated`. Social search is delayed and
+        best-effort - pair it with a live web search when recency matters.
+        """
+        try:
+            envelope = _build_gloomberb_client().tweet_search(
+                {"query": query, "query_type": query_type, "limit": limit, "hours": hours}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_venues")
+    def digifetch_venues() -> str:
+        """Exchange venue metadata (Gloomberb Cloud; anonymous).
+
+        No parameters. Rows carry mic/name/title/country/timezone and session
+        clock fields (isOpen, timeToOpenSeconds, ...). Enrichment only.
+        """
+        try:
+            envelope = _build_gloomberb_client().venues()
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_saved_searches")
+    def digifetch_saved_searches() -> str:
+        """The signed-in session's saved searches (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE; without it the envelope is a typed
+        `auth_required` and no request is made. No parameters; rows carry the
+        saved-search id/name/query and unknown fields are preserved. Enrichment
+        only: the platform's data is delayed - pair with a live web search when
+        recency matters.
+        """
+        try:
+            envelope = _build_gloomberb_client().saved_searches()
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_screener")
+    def digifetch_screener(category: str, count: int = 25, mode: str = "cache-first") -> str:
+        """Market screener for gainers/losers/most-active (Gloomberb Cloud; **requires Pro**).
+
+        Requires GLOOMBERB_SESSION_COOKIE **and** a Gloomberb Pro plan. A free
+        session answers HTTP 200 `status=unsupported` + `reasonCode=PRO_REQUIRED`
+        (or a 402 "Pro plan required" body), both mapped to a typed
+        `pro_required` - never `not_found` and never an empty success.
+        `count` is 1-50; `mode` is cache-first | refresh. Prices are delayed.
+        """
+        try:
+            envelope = _build_gloomberb_client().screener(
+                {"category": category, "count": count, "mode": mode}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_13f_funds")
+    def digifetch_13f_funds(
+        what: str,
+        query: str | None = None,
+        quarter: str | None = None,
+        tickers: list[str] | None = None,
+        cusip: str | None = None,
+        period_of_report: str | None = None,
+        limit: int = 25,
+        offset: int = 0,
+    ) -> str:
+        """13F fund lookup: search / top funds / ticker map / CUSIP holders (anonymous).
+
+        `what` selects the route: `search` (query -> `name`), `top` (quarter in
+        the live `2026Q2` form), `tickers` (list -> `tickers=A,B`), `holders`
+        (`cusip` + `period_of_report`). Live-verified for search/top/tickers;
+        the holders route currently answers an upstream 400 for every period
+        format probed. Returns SEC filing data, delayed/cached - cross-check
+        against EDGAR for decisions.
+        """
+        try:
+            envelope = _build_gloomberb_client().thirteen_f_funds(
+                {
+                    "what": what,
+                    "query": query,
+                    "quarter": quarter,
+                    "tickers": tickers or [],
+                    "cusip": cusip,
+                    "period_of_report": period_of_report,
+                    "limit": limit,
+                    "offset": offset,
+                }
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_13f_holdings")
+    def digifetch_13f_holdings(
+        what: str,
+        cik: str | None = None,
+        accession_number: str | None = None,
+        from_date: str | None = None,
+        to_date: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> str:
+        """13F filings / fund forms / one form's holdings (Gloomberb Cloud; anonymous).
+
+        `what` selects the route: `filings` (from_date/to_date, ISO
+        YYYY-MM-DD), `forms` (cik), `form` (cik + accession_number). `cik` is
+        zero-padded to the SEC's 10-digit form and `accession_number` is
+        normalized to the dashed form client-side; malformed dates/accessions
+        are typed `invalid_input` with no request. An upstream 13F rejection
+        proxied as a 5xx (`Forms13F 4xx` body) maps to non-retryable
+        `invalid_input` without opening the circuit breaker. Holding rows map
+        to issuer/shares/share_type plus the voting-authority columns; `form`
+        computes `has_more` from a full page (bare array, no continuation
+        token; the upstream caps one form at 20,000 rows — MAX_FORM_ROWS).
+        SEC filing data is cached/delayed - cross-check against EDGAR.
+        """
+        try:
+            envelope = _build_gloomberb_client().thirteen_f_holdings(
+                {
+                    "what": what,
+                    "cik": cik,
+                    "accession_number": accession_number,
+                    "from_date": from_date,
+                    "to_date": to_date,
+                    "limit": limit,
+                    "offset": offset,
+                }
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_shiller")
+    def digifetch_shiller(limit: int = 240) -> str:
+        """Robert Shiller's monthly valuation series (Gloomberb Cloud; anonymous).
+
+        Returns the most recent `limit` monthly rows (default 240 = 20 years;
+        the full series is ~1869 rows back to 1871) with price/dividend/
+        earnings/CPI/long-rate plus CAPE and Shiller's excess CAPE yield.
+        `total_available`/`truncated` report the tail slice. Long-run
+        reference data - update cadence is monthly, not intraday.
+        """
+        try:
+            envelope = _build_gloomberb_client().shiller({"limit": limit})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_proxy_statements")
+    def digifetch_proxy_statements(ticker: str, what: str = "list", year: int | None = None) -> str:
+        """Executive-compensation proxy statements (Gloomberb Cloud; anonymous).
+
+        Open public reads - no account or plan needed. `what=list` lists every
+        available proxy for `ticker`; `what=statement` returns one full proxy
+        and requires `year`, which is the **proxy** (filing) year, not the
+        fiscal year (AAPL's 2026 proxy reports fiscal 2025). Adds a
+        term.gloom.sh deep link for `ticker`.
+        """
+        try:
+            envelope = _build_gloomberb_client().proxy_statements(
+                {"what": what, "ticker": ticker, "year": year}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=ticker)
+
+    @_maybe_tool("digifetch_filing_events")
+    def digifetch_filing_events(ticker: str, limit: int = 20) -> str:
+        """Classified 8-K filing events for one ticker (Gloomberb Cloud; anonymous).
+
+        Rows carry item codes/labels/kinds, materiality, the SEC document URL,
+        named people (officer changes and similar) and, when the filing carried
+        news, a model reading (`read=true`). Newest first; `limit` caps the
+        page. Adds a term.gloom.sh deep link. Filing data is cached/delayed -
+        cross-check against EDGAR for decisions.
+        """
+        try:
+            envelope = _build_gloomberb_client().filing_events({"ticker": ticker, "limit": limit})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=ticker)
+
+    @_maybe_tool("digifetch_risk_reports")
+    def digifetch_risk_reports(ticker: str, what: str = "list", year: int | None = None) -> str:
+        """10-K risk-factor reports, diffed year-over-year (Gloomberb Cloud; anonymous).
+
+        `what=list` lists report years with counts and an overview;
+        `what=report` returns one year's extracted risk factors, groups, the
+        added/removed/reworded diff against the prior year, and notes
+        (requires `year`). Anonymous public reads. Adds a term.gloom.sh deep
+        link. Cached/delayed - cross-check against EDGAR for decisions.
+        """
+        try:
+            envelope = _build_gloomberb_client().risk_reports(
+                {"what": what, "ticker": ticker, "year": year}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=ticker)
+
+    @_maybe_tool("digifetch_short_interest")
+    def digifetch_short_interest(symbol: str, years: int = 3) -> str:
+        """Biweekly short-interest settlements (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE; without it the envelope is a typed
+        `auth_required` and no request is made. `years` is 1-10 (the upstream
+        silently falls back to a 3-year window outside that range; the contract
+        rejects it first). Points carry shares short, average daily volume,
+        days to cover, and change percent. Adds a term.gloom.sh deep link.
+        Exchange-reported data, delayed by reporting cadence.
+        """
+        try:
+            envelope = _build_gloomberb_client().short_interest({"symbol": symbol, "years": years})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=symbol)
+
+    @_maybe_tool("digifetch_equity_diagnostic")
+    def digifetch_equity_diagnostic(
+        symbol: str, exchange: str | None = None, mode: str = "cache-first"
+    ) -> str:
+        """AI evidence review for one listing (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE. The first request per symbol answers
+        a `pending` payload (`status=generating` + `retryAfterMs`); retry until
+        a report arrives (`complete`/`partial`/`insufficient_data`), whose
+        findings keep observation and interpretation separate. Free sessions
+        only receive `access=preview`; `mode=refresh` asks the server to
+        regenerate. This is Gloomberb's model-generated reading of its data -
+        not investment advice - and complete reports are cached, pending ones
+        are not. Adds a term.gloom.sh deep link.
+        """
+        try:
+            envelope = _build_gloomberb_client().equity_diagnostic(
+                {"symbol": symbol, "exchange": exchange, "mode": mode}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=symbol)
+
+    @_maybe_tool("digifetch_prediction_markets")
+    def digifetch_prediction_markets(
+        venue: str = "all",
+        query: str | None = None,
+        category: str | None = None,
+        tab: str = "top",
+        limit: int = 20,
+    ) -> str:
+        """Prediction-markets catalog across Polymarket + Kalshi (venue-direct).
+
+        No Cloud route exists for prediction markets, so this tool is NOT
+        attributed to Gloomberb: it reads the venues' public APIs anonymously
+        and normalizes the catalog rows. `venue` selects all/polymarket/kalshi;
+        `query`/`category`/`tab` filter client-side; `limit` bounds the rows
+        (1-100). A failing venue lands in `warnings`; rows carry the venue deep
+        link. Enrichment only, never a pipeline primary.
+        """
+        try:
+            envelope = _build_gloomberb_client().prediction_markets(
+                {
+                    "venue": venue,
+                    "query": query,
+                    "category": category,
+                    "tab": tab,
+                    "limit": limit,
+                }
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    # ── Calculators + compositions (130-coverage Task 2) ────────────────────
+    #
+    # Derived math, never Cloud-sourced: pure local calculators plus fan-out
+    # compositions whose numbers are computed locally. All six are unattributed.
+
+    @_maybe_tool("digifetch_options_calculator")
+    def digifetch_options_calculator(
+        spot: float,
+        strike: float,
+        rate: float,
+        vol: float,
+        expiry_years: float,
+        kind: str,
+        price: float | None = None,
+    ) -> str:
+        """European Black-Scholes price / IV solve (pure local math).
+
+        NOT attributed to Gloomberb: no transport, no cookies. Without `price`
+        it returns the model price at `vol`; with `price` it solves the implied
+        vol by bisection. Contract violations are typed `invalid_input`.
+        """
+        try:
+            envelope = _build_gloomberb_client().options_calculator(
+                {
+                    "spot": spot,
+                    "strike": strike,
+                    "rate": rate,
+                    "vol": vol,
+                    "expiry_years": expiry_years,
+                    "kind": kind,
+                    "price": price,
+                }
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_bond_calculator")
+    def digifetch_bond_calculator(
+        coupon: float, face: float, ytm: float, years: float, freq: int
+    ) -> str:
+        """Par-bond analytics over local discounting math (pure local math).
+
+        NOT attributed to Gloomberb: no transport, no cookies. Returns price,
+        accrued (always 0.0 — settlement is assumed exactly on a coupon date,
+        so the dirty price equals the clean price), modified duration, convexity,
+        and DV01. Contract violations are typed `invalid_input`.
+        """
+        try:
+            envelope = _build_gloomberb_client().bond_calculator(
+                {"coupon": coupon, "face": face, "ytm": ytm, "years": years, "freq": freq}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_kelly_sizer")
+    def digifetch_kelly_sizer(win_prob: float, win_loss_ratio: float) -> str:
+        """Kelly-criterion position size (pure local math).
+
+        NOT attributed to Gloomberb: no transport, no cookies. Returns
+        p - (1 - p) / b clamped at 0.0 from below. A sizing rule, not advice.
+        """
+        try:
+            envelope = _build_gloomberb_client().kelly_sizer(
+                {"win_prob": win_prob, "win_loss_ratio": win_loss_ratio}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_dividend_yield")
+    def digifetch_dividend_yield(symbol: str) -> str:
+        """Trailing dividend yield (composition of corporate-actions + quote).
+
+        NOT attributed to Gloomberb: the number is derived locally (trailing
+        cash distributions over the latest quote price). Warns and returns
+        `upstream_error` when either leg errors.
+        """
+        try:
+            envelope = _build_gloomberb_client().dividend_yield({"symbol": symbol})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_fx_cross_rates")
+    def digifetch_fx_cross_rates(currencies: list[str], to_currency: str = "USD") -> str:
+        """USD-pair FX matrix over the exchange-rate read (USD base only).
+
+        NOT attributed to Gloomberb: the crosses are derived locally
+        (cross = rate_a / rate_b). A non-USD `to_currency` is typed
+        `invalid_input`; a failed leg returns `upstream_error` naming it.
+        """
+        try:
+            envelope = _build_gloomberb_client().fx_cross_rates(
+                {"currencies": currencies, "to_currency": to_currency}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_vix_term_structure")
+    def digifetch_vix_term_structure(
+        near_series: str = "VIXCLS", far_series: str = "VIX3M", limit: int = 5
+    ) -> str:
+        """VIX term snapshot over two econ-series closes (composition).
+
+        NOT attributed to Gloomberb: the spread and regime are derived locally
+        (far-minus-near; contango/inversion/flat). Warns and returns
+        `upstream_error` when either series errors or carries no closes.
+        """
+        try:
+            envelope = _build_gloomberb_client().vix_term_structure(
+                {"near_series": near_series, "far_series": far_series, "limit": limit}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    # ── Options scenario (130-coverage Task 8: OSA) ──────────────────────────
+    #
+    # Derived math over the options_chain read (European Black-Scholes grid,
+    # expiry payoff, breakevens, Greeks). Unattributed; MCP-only (all three
+    # curated subsets are at their 16-name prompt-budget caps).
+
+    @_maybe_tool("digifetch_options_scenario")
+    def digifetch_options_scenario(
+        symbol: str,
+        legs_json: str,
+        rate: float,
+        spots: list[float],
+        valuation_dates: list[str],
+        vol_shifts: list[float] | None = None,
+    ) -> str:
+        """Multi-leg European option scenario over the options_chain read.
+
+        `legs_json` is a JSON array of legs — {"expiry": epoch seconds,
+        "strike", "kind": "call"/"put", "qty": +long/-short} — each matched to
+        a listed chain contract for its implied vol and last-price cost basis.
+        Values the book over the spot/date/vol-shift grid with European
+        Black-Scholes math (intrinsic at/after expiry). NOT attributed to
+        Gloomberb: every number is derived locally.
+        """
+        try:
+            legs = json.loads(legs_json)
+            envelope = _build_gloomberb_client().options_scenario(
+                {
+                    "symbol": symbol,
+                    "legs": legs,
+                    "rate": rate,
+                    "spots": spots,
+                    "valuation_dates": valuation_dates,
+                    "vol_shifts": vol_shifts if vol_shifts is not None else [0.0],
+                }
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    # ── Portfolio-math compositions (130-coverage Task 3) ───────────────────
+    #
+    # Derived math over existing reads (price history, financials, econ
+    # series, Shiller, the Kalshi KXFED venue path). All ten are unattributed.
+
+    @_maybe_tool("digifetch_compare_performance")
+    def digifetch_compare_performance(
+        tickers: list[str], resolution: str = "1d", range: str | None = None
+    ) -> str:
+        """Rebased multi-ticker performance (composition).
+
+        NOT attributed to Gloomberb: the series are derived locally (one
+        history read per ticker, date-aligned inner join, rebased to 100).
+        Fewer than two tickers or an empty overlap is `invalid_input`.
+        """
+        try:
+            envelope = _build_gloomberb_client().compare_performance(
+                {"tickers": tickers, "resolution": resolution, "range": range}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_correlation_matrix")
+    def digifetch_correlation_matrix(
+        tickers: list[str], resolution: str = "1d", range: str | None = None
+    ) -> str:
+        """Pearson correlation matrix over aligned daily returns (composition).
+
+        NOT attributed to Gloomberb: the matrix is derived locally. A flat
+        leg correlates with nothing (null). Fewer than two tickers or an
+        empty overlap is `invalid_input`.
+        """
+        try:
+            envelope = _build_gloomberb_client().correlation_matrix(
+                {"tickers": tickers, "resolution": resolution, "range": range}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_relationship_graph")
+    def digifetch_relationship_graph(
+        base: str,
+        quote: str,
+        resolution: str = "1d",
+        range: str | None = None,
+        window: int = 20,
+    ) -> str:
+        """Pair relationship: indexed prices, ratio, rolling correlation, beta.
+
+        NOT attributed to Gloomberb: every number is derived locally over two
+        history reads. Base and quote must be distinct tickers.
+        """
+        try:
+            envelope = _build_gloomberb_client().relationship_graph(
+                {
+                    "base": base,
+                    "quote": quote,
+                    "resolution": resolution,
+                    "range": range,
+                    "window": window,
+                }
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_relative_valuation")
+    def digifetch_relative_valuation(tickers: list[str]) -> str:
+        """Peer trailing-multiples table over financials reads (composition).
+
+        NOT attributed to Gloomberb: the table is derived locally. A failed
+        leg returns `upstream_error` naming the ticker.
+        """
+        try:
+            envelope = _build_gloomberb_client().relative_valuation({"tickers": tickers})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_fundamental_graph")
+    def digifetch_fundamental_graph(
+        symbol: str, field: str = "total_revenue", period: str = "annual"
+    ) -> str:
+        """One statement field's per-period series (composition).
+
+        NOT attributed to Gloomberb: the series is derived locally from the
+        financials read.
+        """
+        try:
+            envelope = _build_gloomberb_client().fundamental_graph(
+                {"symbol": symbol, "field": field, "period": period}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_valuation_graph")
+    def digifetch_valuation_graph(symbol: str, period: str = "annual") -> str:
+        """Per-period valuation rows plus the multiples snapshot (composition).
+
+        NOT attributed to Gloomberb: the rows are derived locally from the
+        financials read.
+        """
+        try:
+            envelope = _build_gloomberb_client().valuation_graph(
+                {"symbol": symbol, "period": period}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_custom_chart")
+    def digifetch_custom_chart(series_json: str) -> str:
+        """Explicit-series alignment onto one date union (composition).
+
+        `series_json` is a JSON array of legs — {"source": "price", "symbol"},
+        {"source": "statement", "symbol", "field"}, or {"source": "fred",
+        "ref"} — each optionally carrying its own resolution/range. NOT
+        attributed to Gloomberb: the columns are derived locally.
+        """
+        try:
+            legs = json.loads(series_json)
+            envelope = _build_gloomberb_client().custom_chart({"series": legs})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_market_valuation")
+    def digifetch_market_valuation(
+        limit: int = 240, econ_series_ids: list[str] | None = None
+    ) -> str:
+        """Shiller CAPE plus optional econ ratios vs history thirds.
+
+        NOT attributed to Gloomberb: zones are derived locally (cheap/fair/
+        expensive thirds of each series' window).
+        """
+        try:
+            envelope = _build_gloomberb_client().market_valuation(
+                {"limit": limit, "econ_series_ids": econ_series_ids or []}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_money_markets")
+    def digifetch_money_markets(
+        sofr_series: str = "SOFR",
+        effr_series: str = "EFFR",
+        reserves_series: str = "WRESBAL",
+        limit: int = 5,
+    ) -> str:
+        """SOFR/EFFR/reserve prints plus the funding spread (composition).
+
+        NOT attributed to Gloomberb: the spread is derived locally over three
+        econ-series reads. A failed leg returns `upstream_error` naming it.
+        """
+        try:
+            envelope = _build_gloomberb_client().money_markets(
+                {
+                    "sofr_series": sofr_series,
+                    "effr_series": effr_series,
+                    "reserves_series": reserves_series,
+                    "limit": limit,
+                }
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_rate_path")
+    def digifetch_rate_path(limit: int = 200) -> str:
+        """US rate path over live Kalshi KXFED markets (venue-direct).
+
+        NOT attributed to Gloomberb: the venue read is direct and the
+        distributions are derived locally with the fed-prob ladder semantics.
+        """
+        try:
+            envelope = _build_gloomberb_client().rate_path({"limit": limit})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    # ── Probe-backed tools (130-coverage Task 5) ─────────────────────────────
+    #
+    # One wrapper per Task 4 GO verdict (NO-ROUTE verdicts compose over
+    # shipped tools instead). Session-gated Cloud reads answer a typed
+    # auth_required with no request when the cookie is absent.
+
+    @_maybe_tool("digifetch_time_and_sales")
+    def digifetch_time_and_sales(symbol: str, exchange: str) -> str:
+        """Time and sales prints for one symbol (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE and `exchange`. Returns the trades
+        half of the tape snapshot plus the session high/low and feed
+        counters. Prices are delayed. Adds a term.gloom.sh deep link.
+        """
+        try:
+            envelope = _build_gloomberb_client().time_and_sales(
+                {"symbol": symbol, "exchange": exchange}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=symbol)
+
+    @_maybe_tool("digifetch_quote_recap")
+    def digifetch_quote_recap(symbol: str, exchange: str) -> str:
+        """NBBO quote recap for one symbol (Gloomberb Cloud; session-gated).
+
+        Same tape route as time-and-sales (the quotes tab of the same pane).
+        Requires GLOOMBERB_SESSION_COOKIE and `exchange`. Prices are delayed.
+        Adds a term.gloom.sh deep link.
+        """
+        try:
+            envelope = _build_gloomberb_client().quote_recap(
+                {"symbol": symbol, "exchange": exchange}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=symbol)
+
+    @_maybe_tool("digifetch_estimate_revisions")
+    def digifetch_estimate_revisions(symbol: str, exchange: str | None = None) -> str:
+        """Estimate revisions for one symbol (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE. Per-period observations, 7/30d
+        revision breadth, surprises, guidance, coverage/gaps. Delayed. Adds
+        a term.gloom.sh deep link.
+        """
+        try:
+            envelope = _build_gloomberb_client().estimate_revisions(
+                {"symbol": symbol, "exchange": exchange}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=symbol)
+
+    @_maybe_tool("digifetch_short_volume")
+    def digifetch_short_volume(symbol: str, scope: str = "nms") -> str:
+        """FINRA daily short volume, NMS or OTC (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE. Rows carry the FINRA source link
+        plus the latest row, change, percentile, and coverage window.
+        Delayed. Adds a term.gloom.sh deep link.
+        """
+        try:
+            envelope = _build_gloomberb_client().short_volume({"symbol": symbol, "scope": scope})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=symbol)
+
+    @_maybe_tool("digifetch_hiring")
+    def digifetch_hiring(
+        mode: str = "summary",
+        ticker: str | None = None,
+        name: str | None = None,
+        limit: int = 25,
+        offset: int = 0,
+    ) -> str:
+        """Hiring summary / postings / movers (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE. mode=summary (needs ticker) or a
+        pending status; mode=postings (needs ticker) pages postings;
+        mode=movers needs no ticker. Delayed. Adds a term.gloom.sh deep
+        link when a ticker is given.
+        """
+        try:
+            envelope = _build_gloomberb_client().hiring(
+                {
+                    "mode": mode,
+                    "ticker": ticker,
+                    "name": name,
+                    "limit": limit,
+                    "offset": offset,
+                }
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=ticker)
+
+    @_maybe_tool("digifetch_central_bank_rates")
+    def digifetch_central_bank_rates() -> str:
+        """Central-bank policy-rate board (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE. No parameters. Delayed.
+        """
+        try:
+            envelope = _build_gloomberb_client().central_bank_rates({})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_cdx")
+    def digifetch_cdx(days: int | None = None) -> str:
+        """Index-CDS board (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE. `days` sets the history depth.
+        Delayed.
+        """
+        try:
+            envelope = _build_gloomberb_client().cdx({"days": days})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_sovereign_cds")
+    def digifetch_sovereign_cds(days: int | None = None) -> str:
+        """Sovereign-CDS board, 5Y spreads in bp (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE. `days` sets the history depth.
+        Delayed.
+        """
+        try:
+            envelope = _build_gloomberb_client().sovereign_cds({"days": days})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_options_flow")
+    def digifetch_options_flow(
+        before: str | None = None,
+        limit: int | None = None,
+        min_premium: float | None = None,
+        right: str | None = None,
+        kind: str | None = None,
+        min_vol_oi: float | None = None,
+        max_expiry_days: int | None = None,
+        symbols: list[str] | None = None,
+    ) -> str:
+        """Recorded options-flow history (Gloomberb Cloud; **requires Pro**).
+
+        Requires GLOOMBERB_SESSION_COOKIE **and** a Pro plan — no delayed
+        tier, so a denial is typed auth_required/pro_required, never an
+        empty success. Delayed.
+        """
+        try:
+            envelope = _build_gloomberb_client().options_flow(
+                {
+                    "before": before,
+                    "limit": limit,
+                    "min_premium": min_premium,
+                    "right": right,
+                    "kind": kind,
+                    "min_vol_oi": min_vol_oi,
+                    "max_expiry_days": max_expiry_days,
+                    "symbols": symbols,
+                }
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_cot")
+    def digifetch_cot(
+        report: str = "legacy",
+        trader_class: str | None = None,
+        code: str | None = None,
+    ) -> str:
+        """CFTC positioning board or one contract (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE. `code` reads one contract instead
+        of the board. Delayed.
+        """
+        try:
+            envelope = _build_gloomberb_client().cot(
+                {"report": report, "trader_class": trader_class, "code": code}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_crypto_markets")
+    def digifetch_crypto_markets() -> str:
+        """Crypto board, up to 100 coins (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE. No parameters. The
+        server-declared source passes through (no vendor asserted here).
+        Delayed.
+        """
+        try:
+            envelope = _build_gloomberb_client().crypto_markets({})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_iv_screen")
+    def digifetch_iv_screen(symbols: list[str]) -> str:
+        """IV rich/cheap screen over stored history (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE. A server plan denial surfaces
+        verbatim (typed pro_required on a 402 plan body). Delayed.
+        """
+        try:
+            envelope = _build_gloomberb_client().iv_screen({"symbols": symbols})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_iv_history")
+    def digifetch_iv_history(symbol: str, days: int = 1100) -> str:
+        """Stored daily IV history with rank/percentile (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE. A server plan denial surfaces
+        verbatim (typed pro_required on a 402 plan body). Delayed. Adds a
+        term.gloom.sh deep link.
+        """
+        try:
+            envelope = _build_gloomberb_client().iv_history({"symbol": symbol, "days": days})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=symbol)
+
+    @_maybe_tool("digifetch_iv_surface")
+    def digifetch_iv_surface(symbol: str, date: str | None = None) -> str:
+        """Stored volatility-close surface (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE. Without `date` lists the stored
+        surface dates; with `date` reads that close surface. A server plan
+        denial surfaces verbatim (typed pro_required on a 402 plan body).
+        Delayed. Adds a term.gloom.sh deep link.
+        """
+        try:
+            envelope = _build_gloomberb_client().iv_surface({"symbol": symbol, "date": date})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=symbol)
+
+    @_maybe_tool("digifetch_debt_maturities")
+    def digifetch_debt_maturities(symbol: str) -> str:
+        """US-GAAP debt maturities with provenance (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE. Delayed. Adds a term.gloom.sh
+        deep link.
+        """
+        try:
+            envelope = _build_gloomberb_client().debt_maturities({"symbol": symbol})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=symbol)
+
+    @_maybe_tool("digifetch_session_movers")
+    def digifetch_session_movers(
+        category: str, side: str, count: int = 25, mode: str = "cache-first"
+    ) -> str:
+        """Pre-market / after-hours / gaps movers (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE. Session categories only
+        (gainers/losers/most-active stay on digifetch_screener). A server
+        plan denial surfaces verbatim. Delayed.
+        """
+        try:
+            envelope = _build_gloomberb_client().session_movers(
+                {"category": category, "side": side, "count": count, "mode": mode}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_trending")
+    def digifetch_trending(limit: int = 10) -> str:
+        """Yahoo trending symbols with delayed quotes (venue-direct).
+
+        Trend symbols come from Yahoo Finance's public endpoint, rows carry
+        the Yahoo deep link and Yahoo-only attribution. Enrichment only.
+        """
+        try:
+            envelope = _build_gloomberb_client().trending({"limit": limit})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_substack")
+    def digifetch_substack(
+        publication: str,
+        mode: str = "feed",
+        post_id: str | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> str:
+        """Own-account Substack reader (venue-direct).
+
+        Reads the publication's Substack API with your own account
+        (unofficial, ToS grey area) and carries Substack-only attribution.
+        Requires SUBSTACK_SESSION_COOKIE — without it the call is a typed
+        auth_required with login instructions and no request. Enrichment only.
+        """
+        try:
+            envelope = _build_gloomberb_client().substack(
+                {
+                    "publication": publication,
+                    "mode": mode,
+                    "post_id": post_id,
+                    "limit": limit,
+                    "offset": offset,
+                }
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_ipo_calendar")
+    def digifetch_ipo_calendar(
+        status: str | None = None,
+        region: str | None = None,
+        deal_type: str | None = None,
+        from_date: str | None = None,
+        to_date: str | None = None,
+        limit: int = 50,
+    ) -> str:
+        """Worldwide IPO calendar (Gloomberb Cloud, anonymous).
+
+        No session needed — the route is public. Filter by status/region/
+        type/date window. Delayed.
+        """
+        try:
+            envelope = _build_gloomberb_client().ipo_calendar(
+                {
+                    "status": status,
+                    "region": region,
+                    "deal_type": deal_type,
+                    "from_date": from_date,
+                    "to_date": to_date,
+                    "limit": limit,
+                }
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope)
+
+    @_maybe_tool("digifetch_fear_greed")
+    def digifetch_fear_greed() -> str:
+        """CNN Fear & Greed gauge + 7 components (venue-direct, anonymous).
+
+        Unofficial CNN read (ToS grey area) — cross-check before citing.
+        Carries CNN-only attribution, never the terminal sourcing block.
+        Enrichment only.
+        """
+        try:
+            envelope = _build_gloomberb_client().fear_greed({})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_polls")
+    def digifetch_polls(
+        poll_type: str | None = None,
+        subject: str | None = None,
+        limit: int = 20,
+    ) -> str:
+        """VoteHub political polls (venue-direct, anonymous).
+
+        VoteHub data © VoteHub contributors, CC BY 4.0 — every row carries
+        the CC BY attribution plus its source link. Enrichment only.
+        """
+        try:
+            envelope = _build_gloomberb_client().polls(
+                {
+                    "poll_type": poll_type,
+                    "subject": subject,
+                    "limit": limit,
+                }
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_treasury_auctions")
+    def digifetch_treasury_auctions(
+        security_type: str | None = None,
+        from_date: str | None = None,
+        to_date: str | None = None,
+        limit: int = 20,
+    ) -> str:
+        """US Treasury auction results, newest first (venue-direct, anonymous).
+
+        Treasury Fiscal Data, public — rows carry the result-document link.
+        Enrichment only.
+        """
+        try:
+            envelope = _build_gloomberb_client().treasury_auctions(
+                {
+                    "security_type": security_type,
+                    "from_date": from_date,
+                    "to_date": to_date,
+                    "limit": limit,
+                }
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_market_halts")
+    def digifetch_market_halts(
+        symbol: str | None = None,
+        limit: int = 100,
+    ) -> str:
+        """US equity trade halts with reason (venue-direct, anonymous).
+
+        Nasdaq Trader, delayed — rows carry the halt-codes link. Enrichment
+        only.
+        """
+        try:
+            envelope = _build_gloomberb_client().market_halts(
+                {
+                    "symbol": symbol,
+                    "limit": limit,
+                }
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_hacker_news")
+    def digifetch_hacker_news(feed: str = "top", limit: int = 10) -> str:
+        """Hacker News stories (venue-direct, anonymous).
+
+        Reads the public API — rows carry the article or discussion link.
+        Enrichment only.
+        """
+        try:
+            envelope = _build_gloomberb_client().hacker_news(
+                {
+                    "feed": feed,
+                    "limit": limit,
+                }
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    # ── Workspace writes + broker reads + approval-gated orders (130-coverage Task 7) ──
+    #
+    # No personal Cloud write route is verified (team-scoped account APIs only),
+    # so the workspace/broker tools are session-gated but read-only in this
+    # phase (typed upstream_error, zero HTTP). Preview mints a local approval
+    # ticket and never executes; execute ships disabled pending human gate
+    # review. Payloads carry no Gloomberb-sourced data and stay unattributed.
+
+    @_maybe_tool("digifetch_portfolio_view")
+    def digifetch_portfolio_view() -> str:
+        """Portfolio snapshot for the signed-in session (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE; without it the envelope data is a
+        typed `auth_required` error and no request is made. Read-only in this
+        phase: no personal Cloud portfolio route is verified, so no request is
+        made even with a session.
+        """
+        try:
+            envelope = _build_gloomberb_client().portfolio_view({})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_watchlist_add")
+    def digifetch_watchlist_add(symbol: str, exchange: str | None = None) -> str:
+        """Add one symbol to the session watchlist (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE; without it the envelope data is a
+        typed `auth_required` error and no request is made. Read-only in this
+        phase: no personal Cloud watchlist write route is verified.
+        """
+        try:
+            envelope = _build_gloomberb_client().watchlist_add(
+                {"symbol": symbol, "exchange": exchange}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=symbol, attributed=False)
+
+    @_maybe_tool("digifetch_watchlist_remove")
+    def digifetch_watchlist_remove(symbol: str, exchange: str | None = None) -> str:
+        """Remove one symbol from the session watchlist (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE; without it the envelope data is a
+        typed `auth_required` error and no request is made. Read-only in this
+        phase: no personal Cloud watchlist write route is verified.
+        """
+        try:
+            envelope = _build_gloomberb_client().watchlist_remove(
+                {"symbol": symbol, "exchange": exchange}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=symbol, attributed=False)
+
+    @_maybe_tool("digifetch_portfolio_add")
+    def digifetch_portfolio_add(
+        symbol: str,
+        exchange: str | None = None,
+        quantity: float | None = None,
+        note: str | None = None,
+    ) -> str:
+        """Add one symbol to the session portfolio (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE; without it the envelope data is a
+        typed `auth_required` error and no request is made. Read-only in this
+        phase: no personal Cloud portfolio write route is verified.
+        """
+        try:
+            envelope = _build_gloomberb_client().portfolio_add(
+                {"symbol": symbol, "exchange": exchange, "quantity": quantity, "note": note}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=symbol, attributed=False)
+
+    @_maybe_tool("digifetch_portfolio_remove")
+    def digifetch_portfolio_remove(symbol: str, exchange: str | None = None) -> str:
+        """Remove one symbol from the session portfolio (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE; without it the envelope data is a
+        typed `auth_required` error and no request is made. Read-only in this
+        phase: no personal Cloud portfolio write route is verified.
+        """
+        try:
+            envelope = _build_gloomberb_client().portfolio_remove(
+                {"symbol": symbol, "exchange": exchange}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=symbol, attributed=False)
+
+    @_maybe_tool("digifetch_alert_add")
+    def digifetch_alert_add(
+        symbol: str, condition: str, price: float, exchange: str | None = None
+    ) -> str:
+        """Add a price alert for one symbol (Gloomberb Cloud; session-gated).
+
+        `condition` is above/below, `price` the trigger. Requires
+        GLOOMBERB_SESSION_COOKIE; without it the envelope data is a typed
+        `auth_required` error and no request is made. Read-only in this phase:
+        no personal Cloud alert write route is verified.
+        """
+        try:
+            envelope = _build_gloomberb_client().alert_add(
+                {"symbol": symbol, "condition": condition, "price": price, "exchange": exchange}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=symbol, attributed=False)
+
+    @_maybe_tool("digifetch_alert_list")
+    def digifetch_alert_list() -> str:
+        """Price alerts for the signed-in session (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE; without it the envelope data is a
+        typed `auth_required` error and no request is made. Read-only in this
+        phase: no personal Cloud alert route is verified, so no request is made
+        even with a session.
+        """
+        try:
+            envelope = _build_gloomberb_client().alert_list({})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_note_add")
+    def digifetch_note_add(
+        symbol: str, content: str, title: str | None = None, exchange: str | None = None
+    ) -> str:
+        """Add a note on one symbol (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE; without it the envelope data is a
+        typed `auth_required` error and no request is made. Read-only in this
+        phase: no personal Cloud note write route is verified.
+        """
+        try:
+            envelope = _build_gloomberb_client().note_add(
+                {"symbol": symbol, "content": content, "title": title, "exchange": exchange}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=symbol, attributed=False)
+
+    @_maybe_tool("digifetch_thesis_add")
+    def digifetch_thesis_add(ticker: str, title: str, document: str) -> str:
+        """Add an investment thesis for one ticker (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE; without it the envelope data is a
+        typed `auth_required` error and no request is made. Read-only in this
+        phase: no personal Cloud thesis write route is verified.
+        """
+        try:
+            envelope = _build_gloomberb_client().thesis_add(
+                {"ticker": ticker, "title": title, "document": document}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=ticker, attributed=False)
+
+    @_maybe_tool("digifetch_view_add")
+    def digifetch_view_add(name: str, spec_json: str) -> str:
+        """Add a custom view from a spec object (Gloomberb Cloud; session-gated).
+
+        `spec_json` is a JSON object describing the view. Requires
+        GLOOMBERB_SESSION_COOKIE; without it the envelope data is a typed
+        `auth_required` error and no request is made. Read-only in this phase:
+        no personal Cloud view write route is verified.
+        """
+        try:
+            spec = json.loads(spec_json)
+            envelope = _build_gloomberb_client().view_add({"name": name, "spec": spec})
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_broker_positions")
+    def digifetch_broker_positions(broker: str = "ibkr", account: str | None = None) -> str:
+        """Broker positions/account sync (Gloomberb Cloud; session-gated, read-only).
+
+        Requires GLOOMBERB_SESSION_COOKIE; without it the envelope data is a
+        typed `auth_required` error and no request is made. Read-only in this
+        phase: no fixed Cloud broker positions route is verified (the Cloud
+        broker surface is a generic session proxy and IBKR orders go through
+        the local gateway), so no request is made even with a session.
+        """
+        try:
+            envelope = _build_gloomberb_client().broker_positions(
+                {"broker": broker, "account": account}
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, attributed=False)
+
+    @_maybe_tool("digifetch_ibkr_preview_order")
+    def digifetch_ibkr_preview_order(
+        symbol: str,
+        side: str,
+        quantity: float,
+        order_type: str = "market",
+        limit_price: float | None = None,
+        exchange: str | None = None,
+    ) -> str:
+        """Validate an IBKR order and mint its approval ticket (Gloomberb Cloud; session-gated).
+
+        Never executes. Requires GLOOMBERB_SESSION_COOKIE; without it the
+        envelope data is a typed `auth_required` error and no request is made.
+        Returns the bound ticket plus `approval_token` for
+        `digifetch_ibkr_execute_order` (single-use, 15-minute TTL). A limit
+        order requires `limit_price`. The approval key comes from
+        GLOOMBERB_APPROVAL_KEY (server-side, never committed).
+        """
+        try:
+            envelope = _build_gloomberb_client().ibkr_preview_order(
+                {
+                    "symbol": symbol,
+                    "side": side,
+                    "quantity": quantity,
+                    "order_type": order_type,
+                    "limit_price": limit_price,
+                    "exchange": exchange,
+                }
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=symbol, attributed=False)
+
+    @_maybe_tool("digifetch_ibkr_execute_order")
+    def digifetch_ibkr_execute_order(
+        symbol: str,
+        side: str,
+        quantity: float,
+        approval_token: str,
+        order_type: str = "market",
+        limit_price: float | None = None,
+        exchange: str | None = None,
+        dry_run: bool = False,
+    ) -> str:
+        """Redeem an approval token and place the bound IBKR order (Gloomberb Cloud; session-gated).
+
+        Requires GLOOMBERB_SESSION_COOKIE and the single-use `approval_token`
+        from `digifetch_ibkr_preview_order`; without either the call is typed
+        `auth_required` / `invalid_input` with no request. DISABLED pending
+        human approval-gate review: a valid token ends in typed
+        `upstream_error` with zero brokerage traffic; `dry_run` returns the
+        would-be request, also with zero traffic.
+        """
+        try:
+            envelope = _build_gloomberb_client().ibkr_execute_order(
+                {
+                    "symbol": symbol,
+                    "side": side,
+                    "quantity": quantity,
+                    "order_type": order_type,
+                    "limit_price": limit_price,
+                    "exchange": exchange,
+                    "approval_token": approval_token,
+                    "dry_run": dry_run,
+                }
+            )
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _gloomberb_envelope_json(envelope, symbol=symbol, attributed=False)
+
+    # ── LuxAlgo hosted family (#4779 P0, #4844) ──────────────────────────────
+    #
+    # Thin wrap of the hosted LuxAlgo MCP (Library + Edge + Trackers reads,
+    # all keyless). Args are validated through the tool's Pydantic input model;
+    # invalid args answer a typed invalid_input envelope with no request (the
+    # same contract as the in-process dispatcher).
+
+    def _luxalgo_invalid_input(name: str, exc: Exception) -> str:
+        from pydantic import ValidationError
+
+        from digiquant.data.luxalgo.models import LuxalgoEnvelope, LuxalgoError
+
+        detail = exc.errors(include_url=False) if isinstance(exc, ValidationError) else str(exc)
+        return _luxalgo_envelope_json(
+            LuxalgoEnvelope(
+                data=LuxalgoError(
+                    code="invalid_input",
+                    message=f"invalid args for {name}: {detail}",
+                    retryable=False,
+                )
+            ),
+            tool=name,
+        )
+
+    @_maybe_tool("luxalgo_library_search")
+    def luxalgo_library_search(query: str, limit: int = 10) -> str:
+        """Full-text search over the LuxAlgo Library (concepts + indicators; anonymous).
+
+        `query` is free text; `limit` caps the page (1-50). Rows carry
+        kind/slug/name/family plus the canonical url/md_url. Research
+        reference only: attribute LuxAlgo and link back.
+        """
+        from digiquant.data.luxalgo.models import LibrarySearchInput
+
+        try:
+            args = LibrarySearchInput(query=query, limit=limit)
+        except Exception as exc:  # typed invalid_input, no request
+            return _luxalgo_invalid_input("luxalgo_library_search", exc)
+        try:
+            envelope = _build_luxalgo_client().library_search(args)
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _luxalgo_envelope_json(envelope)
+
+    @_maybe_tool("luxalgo_library_get_concept")
+    def luxalgo_library_get_concept(slug: str) -> str:
+        """One LuxAlgo Library concept page by slug (e.g. rsi; anonymous).
+
+        Returns slug/name/family/aliases, the canonical url/md_url, and
+        content_markdown. Research reference only: attribute LuxAlgo and link
+        back.
+        """
+        from digiquant.data.luxalgo.models import LibraryGetConceptInput
+
+        try:
+            args = LibraryGetConceptInput(slug=slug)
+        except Exception as exc:  # typed invalid_input, no request
+            return _luxalgo_invalid_input("luxalgo_library_get_concept", exc)
+        try:
+            envelope = _build_luxalgo_client().library_get_concept(args)
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _luxalgo_envelope_json(envelope)
+
+    @_maybe_tool("luxalgo_library_get_indicator")
+    def luxalgo_library_get_indicator(slug: str) -> str:
+        """One LuxAlgo Library indicator's metadata by slug (anonymous).
+
+        Metadata only — indicator source code is not exposed (CC BY-NC-SA).
+        Research reference only: attribute LuxAlgo and link back.
+        """
+        from digiquant.data.luxalgo.models import LibraryGetIndicatorInput
+
+        try:
+            args = LibraryGetIndicatorInput(slug=slug)
+        except Exception as exc:  # typed invalid_input, no request
+            return _luxalgo_invalid_input("luxalgo_library_get_indicator", exc)
+        try:
+            envelope = _build_luxalgo_client().library_get_indicator(args)
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _luxalgo_envelope_json(envelope)
+
+    @_maybe_tool("luxalgo_library_list_concepts")
+    def luxalgo_library_list_concepts(limit: int = 50) -> str:
+        """List LuxAlgo Library concept pages (anonymous).
+
+        `limit` bounds the page (1-200). Research reference only: attribute
+        LuxAlgo and link back.
+        """
+        from digiquant.data.luxalgo.models import LibraryListConceptsInput
+
+        try:
+            args = LibraryListConceptsInput(limit=limit)
+        except Exception as exc:  # typed invalid_input, no request
+            return _luxalgo_invalid_input("luxalgo_library_list_concepts", exc)
+        try:
+            envelope = _build_luxalgo_client().library_list_concepts(args)
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _luxalgo_envelope_json(envelope)
+
+    @_maybe_tool("luxalgo_library_list_indicators")
+    def luxalgo_library_list_indicators(limit: int = 50) -> str:
+        """List LuxAlgo Library indicator entries (anonymous).
+
+        `limit` bounds the page (1-200). Entries are metadata only — no source
+        code. Research reference only.
+        """
+        from digiquant.data.luxalgo.models import LibraryListIndicatorsInput
+
+        try:
+            args = LibraryListIndicatorsInput(limit=limit)
+        except Exception as exc:  # typed invalid_input, no request
+            return _luxalgo_invalid_input("luxalgo_library_list_indicators", exc)
+        try:
+            envelope = _build_luxalgo_client().library_list_indicators(args)
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _luxalgo_envelope_json(envelope)
+
+    @_maybe_tool("luxalgo_library_list_tags")
+    def luxalgo_library_list_tags() -> str:
+        """List LuxAlgo Library tags (anonymous).
+
+        Takes no parameters. Research reference only.
+        """
+        try:
+            envelope = _build_luxalgo_client().library_list_tags()
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _luxalgo_envelope_json(envelope)
+
+    @_maybe_tool("luxalgo_library_list_families")
+    def luxalgo_library_list_families() -> str:
+        """List LuxAlgo Library indicator families (anonymous).
+
+        Takes no parameters. Research reference only.
+        """
+        try:
+            envelope = _build_luxalgo_client().library_list_families()
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _luxalgo_envelope_json(envelope)
+
+    @_maybe_tool("luxalgo_library_get_family")
+    def luxalgo_library_get_family(family: str) -> str:
+        """One LuxAlgo Library indicator family by name/slug (anonymous).
+
+        Research reference only: attribute LuxAlgo and link back.
+        """
+        from digiquant.data.luxalgo.models import LibraryGetFamilyInput
+
+        try:
+            args = LibraryGetFamilyInput(family=family)
+        except Exception as exc:  # typed invalid_input, no request
+            return _luxalgo_invalid_input("luxalgo_library_get_family", exc)
+        try:
+            envelope = _build_luxalgo_client().library_get_family(args)
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _luxalgo_envelope_json(envelope)
+
+    @_maybe_tool("luxalgo_edge_symbols")
+    def luxalgo_edge_symbols() -> str:
+        """Coverage of the hosted LuxAlgo Edge Stats store (anonymous).
+
+        Symbols, session calendars, coverage windows, session counts, and the
+        nightly build time. Takes no parameters. Precomputed statistics only.
+        """
+        try:
+            envelope = _build_luxalgo_client().edge_symbols()
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _luxalgo_envelope_json(envelope, tool="luxalgo_edge_symbols")
+
+    @_maybe_tool("luxalgo_edge_presets")
+    def luxalgo_edge_presets(category: str | None = None) -> str:
+        """Catalog of hosted LuxAlgo Edge Stats preset questions (anonymous).
+
+        `category` narrows to one category. Preset ids feed edge_report.
+        """
+        from digiquant.data.luxalgo.models import EdgePresetsInput
+
+        try:
+            args = EdgePresetsInput(category=category)
+        except Exception as exc:  # typed invalid_input, no request
+            return _luxalgo_invalid_input("luxalgo_edge_presets", exc)
+        try:
+            envelope = _build_luxalgo_client().edge_presets(args)
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _luxalgo_envelope_json(envelope, tool="luxalgo_edge_presets")
+
+    @_maybe_tool("luxalgo_edge_report")
+    def luxalgo_edge_report(preset: str, symbol: str) -> str:
+        """One precomputed LuxAlgo Edge Stats result (anonymous).
+
+        P(outcome | conditions) with N, Wilson 95% CI, sample guards, and the
+        stability split. `preset` comes from edge_presets, `symbol` from
+        edge_symbols. Historical conditional frequencies with sample sizes.
+        Not predictions, not advice.
+        """
+        from digiquant.data.luxalgo.models import EdgeReportInput
+
+        try:
+            args = EdgeReportInput(preset=preset, symbol=symbol)
+        except Exception as exc:  # typed invalid_input, no request
+            return _luxalgo_invalid_input("luxalgo_edge_report", exc)
+        try:
+            envelope = _build_luxalgo_client().edge_report(args)
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _luxalgo_envelope_json(envelope, tool="luxalgo_edge_report")
+
+    @_maybe_tool("luxalgo_trackers_datasets")
+    def luxalgo_trackers_datasets(dataset: str | None = None) -> str:
+        """Market Trackers catalog of CC0-1.0 public-record datasets (anonymous).
+
+        `dataset` selects one dataset's full field roster. The dumps are the
+        source of record. Two families carry a limit the CC0 grant cannot
+        supply: congress-trades (5 U.S.C. 13107(c)(1)(B) restricts commercial
+        use) and short-volume (unresolved upstream FINRA terms) — DIG-1464.
+        """
+        from digiquant.data.luxalgo.models import TrackersDatasetsInput
+
+        try:
+            args = TrackersDatasetsInput(dataset=dataset)
+        except Exception as exc:  # typed invalid_input, no request
+            return _luxalgo_invalid_input("luxalgo_trackers_datasets", exc)
+        try:
+            envelope = _build_luxalgo_client().trackers_datasets(args)
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _luxalgo_envelope_json(envelope, tool="luxalgo_trackers_datasets")
+
+    @_maybe_tool("luxalgo_trackers_latest")
+    def luxalgo_trackers_latest(
+        dataset: str,
+        ticker: str | None = None,
+        text: str | None = None,
+        where_json: str | None = None,
+        sort: str | None = None,
+        limit: int = 25,
+        offset: int = 0,
+    ) -> str:
+        """Newest ingestion day's rows for one Trackers dataset (anonymous).
+
+        The cheapest freshness check. `dataset` is required; `ticker`/`text`
+        narrow the rows; `where_json` is an optional JSON object of exact field
+        matches (e.g. '{"code": "P"}'); `sort` is newest|oldest; `limit` is
+        1-100 (default 25); `offset` pages. Freshness/ad-hoc lookups only.
+        """
+        import json as _json
+
+        from digiquant.data.luxalgo.models import TrackersLatestInput
+
+        where: dict[str, Any] | None = None
+        if where_json is not None:
+            try:
+                parsed = _json.loads(where_json)
+            except Exception as exc:
+                return _luxalgo_invalid_input(
+                    "luxalgo_trackers_latest", ValueError(f"bad where_json: {exc}")
+                )
+            if not isinstance(parsed, dict):
+                return _luxalgo_invalid_input(
+                    "luxalgo_trackers_latest",
+                    ValueError("where_json must decode to a JSON object"),
+                )
+            where = parsed
+        try:
+            args = TrackersLatestInput(
+                dataset=dataset,
+                ticker=ticker,
+                text=text,
+                where=where,
+                sort=sort,
+                limit=limit,
+                offset=offset,
+            )
+        except Exception as exc:  # typed invalid_input, no request
+            return _luxalgo_invalid_input("luxalgo_trackers_latest", exc)
+        try:
+            envelope = _build_luxalgo_client().trackers_latest(args)
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _luxalgo_envelope_json(envelope, tool="luxalgo_trackers_latest")
+
+    @_maybe_tool("luxalgo_trackers_ticker")
+    def luxalgo_trackers_ticker(ticker: str, year: int | None = None, limit: int = 5) -> str:
+        """One ticker across every ticker-bearing Trackers dataset (anonymous).
+
+        A public-record dossier from primary sources for one year. `ticker` is
+        required; `year` is 1900-2100 (default the current year); `limit` is
+        1-25 newest rows per dataset (default 5). Ad-hoc lookups only.
+        """
+        from digiquant.data.luxalgo.models import TrackersTickerInput
+
+        try:
+            args = TrackersTickerInput(ticker=ticker, year=year, limit=limit)
+        except Exception as exc:  # typed invalid_input, no request
+            return _luxalgo_invalid_input("luxalgo_trackers_ticker", exc)
+        try:
+            envelope = _build_luxalgo_client().trackers_ticker(args)
+        except Exception as exc:  # surface as JSON to the caller, never crash
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return _luxalgo_envelope_json(envelope, tool="luxalgo_trackers_ticker")
+
+    @_maybe_tool("digiquant_fit_btc_power_law")
+    def digiquant_fit_btc_power_law(
+        ticker: str = "BTC-USD",
+        cache_dir: str | None = None,
+        refresh: bool = True,
+        bulk_period: str = "max",
+        output_path: str | None = None,
+        notes: str = "",
+    ) -> str:
+        """Fit the BTC power-law (RAQQR) SDCA valuation rails from cached price history (#1082).
+
+        Sources ``ticker`` daily closes via the canonical price-history cache
+        (``digiquant.data.prices.history_cache``) rather than a bespoke fetch —
+        ``refresh=True`` (default) incrementally updates the cache first via the
+        same yfinance pipeline every other price-history consumer uses, bulk-fetching
+        ``bulk_period`` of history for a ticker that isn't cached yet (default ``"max"``,
+        since the fit requires at least 730 daily observations and a short bulk window
+        would leave a cold cache short of that); ``refresh=False`` fits directly from
+        whatever is already cached (useful when network access is unavailable). Persists
+        the fit to ``output_path`` (default: ``sdca/btc_power_law_coefficients.json``,
+        replacing the synthetic placeholder shipped with #1082 — pass an explicit
+        ``output_path`` under a non-editable/read-only install where the package source
+        tree isn't writable). Returns a JSON summary
+        (``{fit_start, fit_end, fit_rows, path}``) or ``{"error": ...}``.
+        """
+        from pathlib import Path
+
+        try:
+            import polars as pl
+
+            from digiquant.data.prices.history_cache import (
+                DEFAULT_CACHE_DIR,
+                incremental_update,
+                load_cached,
+            )
+            from digiquant.strategies.sdca.btc_power_law import (
+                fit_btc_power_law,
+                save_coefficients,
+            )
+        except ImportError as exc:
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+
+        cdir = Path(cache_dir) if cache_dir else DEFAULT_CACHE_DIR
+        try:
+            if refresh:
+                df = incremental_update([ticker], cdir, bulk_period=bulk_period).get(ticker)
+            else:
+                df = load_cached(ticker, cdir)
+            if df is None or df.is_empty():
+                return json.dumps({"error": f"no cached price history for {ticker!r}"})
+
+            prices = (
+                df.select(
+                    pl.col("timestamp").cast(pl.Date).alias("date"),
+                    pl.col("close"),
+                )
+                .unique(subset=["date"], keep="last")
+                .sort("date")
+            )
+            coefficients = fit_btc_power_law(
+                prices["date"],
+                prices["close"],
+                notes=notes
+                or f"Fit from cached {ticker!r} history via digiquant_fit_btc_power_law.",
+            )
+            path = save_coefficients(coefficients, Path(output_path) if output_path else None)
+        except Exception as exc:  # surface as JSON, never crash the server
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+
+        return json.dumps(
+            {
+                "fit_start": str(coefficients.fit_start),
+                "fit_end": str(coefficients.fit_end),
+                "fit_rows": coefficients.fit_rows,
+                "path": str(path),
+            },
+            indent=2,
+        )
+
+    @_maybe_tool("digiquant_build_sdca_risk_index")
+    def digiquant_build_sdca_risk_index(
+        ticker: str = "BTC-USD",
+        cache_dir: str | None = None,
+        refresh: bool = True,
+        bulk_period: str = "max",
+        risk_model: str = "btc_power_law",
+        profile: str | None = None,
+        profile_json: str | None = None,
+        coefficients_path: str | None = None,
+        output_path: str | None = None,
+        indicator_weights: str = "{}",
+        m2_path: str | None = None,
+        dxy_path: str | None = None,
+        eth_ticker: str = "ETH-USD",
+        valuation_form: str = "log_quadratic",
+        rolling_window: int = 90,
+    ) -> str:
+        """Build the SDCA ``date``/``risk`` parquet from a ``RiskModel`` + cached prices (#3168).
+
+        Sources ``ticker`` daily closes via the canonical price-history cache.
+        ``profile`` (``btc_v1`` / ``eth_research_v1``) or ``profile_json`` applies
+        an ``SdcaAssetProfile`` (rails, oscillators, extra allowlist). Returns
+        JSON or ``{"error": ...}`` (never raises).
+        """
+        from digiquant.sdca_mcp import run_build_sdca_risk_index
+
+        return run_build_sdca_risk_index(
+            ticker=ticker,
+            cache_dir=cache_dir,
+            refresh=refresh,
+            bulk_period=bulk_period,
+            risk_model=risk_model,
+            profile=profile,
+            profile_json=profile_json,
+            coefficients_path=coefficients_path,
+            output_path=output_path,
+            indicator_weights=indicator_weights,
+            m2_path=m2_path,
+            dxy_path=dxy_path,
+            eth_ticker=eth_ticker,
+            valuation_form=valuation_form,
+            rolling_window=rolling_window,
+        )
+
+    @_maybe_tool("digiquant_fetch_bitview_series")
+    def digiquant_fetch_bitview_series(
+        series_ids_json: str = '["mvrv", "asopr_24h", "puell_multiple", "rhodl_ratio"]',
+        cache_dir: str | None = None,
+        timeout: float = 30.0,
+        start: int | None = None,
+        end: int | None = None,
+        allow_derived: bool = False,
+    ) -> str:
+        """Fetch Bitview/BRK on-chain ``day1`` series into ``data/onchain/bitview/``.
+
+        JSON API only (no HTML scrape). Default catalog is the #1086 v1 subset.
+        ``nupl`` is refused by default (monotone of MVRV — the SDCA composite
+        avoids dual-counting it alongside MVRV); pass ``allow_derived=True``
+        to fetch it anyway for uses outside that composite. Fail-soft +
+        timeout. Coin Metrics community CC BY-NC series are not fetched.
+        Network is the operator opt-in of invoking this tool. The upstream
+        base URL is fixed (SSRF guard, #3944) — it is not a caller parameter.
+        """
+        from digiquant.sdca_mcp import run_fetch_bitview_series
+
+        return run_fetch_bitview_series(
+            series_ids_json=series_ids_json,
+            cache_dir=cache_dir,
+            timeout=timeout,
+            start=start,
+            end=end,
+            allow_derived=allow_derived,
+        )
+
+    @_maybe_tool("digiquant_fetch_bgeometrics_series")
+    def digiquant_fetch_bgeometrics_series(
+        metric: str = "mvrv",
+        startday: str | None = None,
+        endday: str | None = None,
+        last: bool = False,
+        cache_dir: str | None = None,
+        timeout: float = 30.0,
+        token: str | None = None,
+    ) -> str:
+        """Fetch one Bitcoin valuation/on-chain metric from bitcoin-data.com (BGeometrics).
+
+        700+ metric catalog (MVRV, NUPL, SOPR, realized cap/price, HODL
+        waves, Mayer multiple, NVT, Pi-cycle, rainbow chart, power-law model,
+        and more — see ``KNOWN_METRICS`` for a curated subset; any other
+        bitcoin-data.com slug also works). Treat ``token`` as required —
+        bitcoin-data.com now markets registration as mandatory even for the
+        free tier (pass it, or set ``BGEOMETRICS_API_TOKEN``; the env token is
+        only ever sent to the fixed bitcoin-data.com host).
+
+        Free-tier limits (enforced by the API, not just documented): 10
+        requests/hour, 15/day, shared across every metric — fetch **one
+        metric per call**. History is capped at roughly the last 4 years;
+        for deeper multi-cycle history use
+        ``digiquant_fetch_coinmetrics_series`` instead (MVRV back to 2010,
+        no rate-limit concern). Fail-soft + timeout. The upstream base URL is
+        fixed (SSRF guard, #3944) — it is not a caller parameter.
+        """
+        from digiquant.sdca_mcp import run_fetch_bgeometrics_series
+
+        return run_fetch_bgeometrics_series(
+            metric=metric,
+            startday=startday,
+            endday=endday,
+            last=last,
+            cache_dir=cache_dir,
+            timeout=timeout,
+            token=token,
+        )
+
+    @_maybe_tool("digiquant_fetch_coinmetrics_series")
+    def digiquant_fetch_coinmetrics_series(
+        metric: str = "CapMVRVCur",
+        asset: str = "btc",
+        start_time: str | None = None,
+        end_time: str | None = None,
+        page_size: int = 10_000,
+        cache_dir: str | None = None,
+        timeout: float = 30.0,
+        api_key: str | None = None,
+    ) -> str:
+        """Fetch one on-chain metric for one asset from the CoinMetrics Community API.
+
+        One metric/asset per call — comma-separated lists are rejected (use
+        ``digiquant_list_coinmetrics_catalog`` to discover what's available
+        per-asset first, rather than assuming BTC's metric set applies
+        elsewhere). MVRV (``CapMVRVCur``) has full BTC history back to
+        2010-07-18, unlike bgeometrics' ~4-year cap. No API key required for
+        the free tier (generous rate limit); pass ``api_key`` if you have a
+        registered CoinMetrics key for a higher limit. CC BY-NC —
+        research-only, do not republish derived series commercially.
+        Fail-soft + timeout. The upstream base URL is fixed (SSRF guard,
+        #3944) — it is not a caller parameter.
+        """
+        from digiquant.sdca_mcp import run_fetch_coinmetrics_series
+
+        return run_fetch_coinmetrics_series(
+            metric=metric,
+            asset=asset,
+            start_time=start_time,
+            end_time=end_time,
+            page_size=page_size,
+            cache_dir=cache_dir,
+            timeout=timeout,
+            api_key=api_key,
+        )
+
+    @_maybe_tool("digiquant_list_coinmetrics_catalog")
+    def digiquant_list_coinmetrics_catalog(
+        asset: str | None = None,
+        timeout: float = 30.0,
+        api_key: str | None = None,
+    ) -> str:
+        """List which CoinMetrics community metrics exist for ``asset`` (or all assets).
+
+        Discovery tool — call before ``digiquant_fetch_coinmetrics_series``
+        to find real metric names instead of guessing from the BTC-only
+        ``KNOWN_COMMUNITY_METRICS`` snapshot. Returns the raw
+        ``catalog-v2/asset-metrics`` JSON. Fail-soft + timeout. The upstream
+        base URL is fixed (SSRF guard, #3944) — it is not a caller parameter.
+        """
+        from digiquant.sdca_mcp import run_list_coinmetrics_catalog
+
+        return run_list_coinmetrics_catalog(asset=asset, timeout=timeout, api_key=api_key)
+
+    @_maybe_tool("digiquant_fit_sdca_weights")
+    def digiquant_fit_sdca_weights(
+        profile: str = "btc_v1",
+        profile_json: str | None = None,
+        cache_dir: str | None = None,
+        coefficients_path: str | None = None,
+        output_path: str | None = None,
+        m2_path: str | None = None,
+        dxy_path: str | None = None,
+        eth_ticker: str = "ETH-USD",
+        valuation_form: str = "log_quadratic",
+        rolling_window: int = 90,
+    ) -> str:
+        """Stage A: fit composite weights so risk overlaps cycle windows.
+
+        Not a second optimizer. Stage B is ``digiquant_run_optimize`` with
+        ``strategy_name='sdca'``; pass ``regularized_weight_params`` as
+        ``strategy_params_json``. No live-trading. Do not ``--push-supabase``.
+        """
+        from digiquant.sdca_mcp import run_fit_sdca_weights
+
+        return run_fit_sdca_weights(
+            profile=profile,
+            profile_json=profile_json,
+            cache_dir=cache_dir,
+            coefficients_path=coefficients_path,
+            output_path=output_path,
+            m2_path=m2_path,
+            dxy_path=dxy_path,
+            eth_ticker=eth_ticker,
+            valuation_form=valuation_form,
+            rolling_window=rolling_window,
+        )
+
+    @_maybe_tool("digiquant_generate_slapper_tearsheet")
+    def digiquant_generate_slapper_tearsheet(
+        strategy: str | None = None,
+        cache_dir: str | None = None,
+        signal_delay_days: int = 0,
+        allow_example_calibrations: bool = False,
+    ) -> str:
+        """Run the NautilusTrader backtest for the Slapper family and write TV-style
+        tearsheet JSON to the digiquant.io frontend. ``strategy=None`` runs all three.
+
+        Structure comes from ``strategies/settings.json`` (public); calibrations
+        resolve file -> Supabase (-> example only when ``allow_example_calibrations``).
+        Each strategy runs in its own spawned process (#1389): NautilusTrader's Rust
+        logging initializes once per process, so a second in-process engine would
+        abort this server. ``signal_delay_days`` lags the public tearsheets by N
+        calendar days (#1462). Returns ``{"entries": [...], "failures": {...}}``.
+        """
+        import sys
+        from pathlib import Path
+
+        sd = _scripts_dir()
+        if sd not in sys.path:
+            sys.path.insert(0, sd)
+        try:
+            import generate_tearsheets as gt
+        except ImportError as exc:
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+
+        if signal_delay_days < 0:
+            return json.dumps({"error": "signal_delay_days must be >= 0"})
+
+        gt.load_repo_env()
+        try:
+            from digiquant.strategies.calibrations_loader import pick_calibration_source
+
+            cal_source = pick_calibration_source(
+                prefer_supabase=False,
+                allow_example=allow_example_calibrations,
+            )
+        except Exception as exc:  # surface as JSON to the caller
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+
+        settings = gt.load_settings()
+        if strategy is not None and strategy not in settings["strategies"]:
+            return json.dumps(
+                {
+                    "error": f"Unknown strategy {strategy!r}; "
+                    f"expected one of {sorted(settings['strategies'])}"
+                }
+            )
+        cache = Path(cache_dir) if cache_dir else gt.DEFAULT_CACHE
+        targets = (
+            {strategy: settings["strategies"][strategy]} if strategy else settings["strategies"]
+        )
+        entries: list[dict[str, Any]] = []
+        failures: dict[str, str] = {}
+        for strat, cfg in targets.items():
+            entry, error = gt.run_strategy_isolated(
+                strat,
+                cfg["symbol"],
+                settings,
+                cache,
+                gt.FRONTEND_STRATEGIES,
+                cal_source=cal_source,
+                signal_delay_days=signal_delay_days,
+            )
+            if entry is not None:
+                entries.append(entry)
+            else:
+                failures[strat] = error or "unknown error"
+        return json.dumps({"entries": entries, "failures": failures}, indent=2, default=str)
+
+    @_maybe_tool("digiquant_validate_slapper_vs_tradingview")
+    def digiquant_validate_slapper_vs_tradingview(
+        strategy: str,
+        ohlcv_csv: str,
+        tv_export_csv: str,
+        start_date: str = "2018-01-01",
+    ) -> str:
+        """Trade-level parity check of a Slapper strategy against a TradingView
+        'List of Trades' CSV export (matches entry date + direction; breaks misses
+        down by signal family). Returns match counts and the diff lists as JSON.
+        """
+        import sys
+
+        vd = _validation_dir()
+        if vd not in sys.path:
+            sys.path.insert(0, vd)
+        try:
+            from compare_tv import compare
+        except ImportError as exc:
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        try:
+            return json.dumps(
+                compare(strategy, ohlcv_csv, tv_export_csv, start_date), indent=2, default=str
+            )
+        except Exception as exc:  # surface as JSON to the caller
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+
+    @_maybe_tool("dashboard_run_policy_replay")
+    def dashboard_run_policy_replay(
+        pair_content_hash: str,
+        run_id: str | None = None,
+    ) -> str:
+        """Register a policy replay run against a stored pair (summary IDs only).
+
+        Recommendation/read only — never activates or promotes production policy.
+        """
+        from digiquant.dashboard.replay.exposure import PolicyReplayExposureError
+        from digiquant.service import service_run_policy_replay
+
+        try:
+            summary = service_run_policy_replay(
+                pair_content_hash=pair_content_hash,
+                run_id=run_id,
+            )
+        except (LookupError, PolicyReplayExposureError, ValueError) as exc:
+            return json.dumps({"ok": False, "error": str(exc)})
+        return json.dumps({"ok": True, "data": summary.model_dump(mode="json")}, indent=2)
+
+    @_maybe_tool("dashboard_get_policy_replay")
+    def dashboard_get_policy_replay(run_id: str) -> str:
+        """Fetch a policy replay run summary by id (fail closed if unknown)."""
+        from digiquant.dashboard.replay.exposure import PolicyReplayExposureError
+        from digiquant.service import service_get_policy_replay
+
+        try:
+            summary = service_get_policy_replay(run_id)
+        except (LookupError, PolicyReplayExposureError, ValueError) as exc:
+            return json.dumps({"ok": False, "error": str(exc)})
+        return json.dumps({"ok": True, "data": summary.model_dump(mode="json")}, indent=2)
+
+    @_maybe_tool("dashboard_get_policy_comparison")
+    def dashboard_get_policy_comparison(comparison_id: str) -> str:
+        """Fetch a policy comparison summary (artifact IDs / status only)."""
+        from digiquant.dashboard.replay.exposure import PolicyReplayExposureError
+        from digiquant.service import service_get_policy_comparison
+
+        try:
+            summary = service_get_policy_comparison(comparison_id)
+        except (LookupError, PolicyReplayExposureError, ValueError) as exc:
+            return json.dumps({"ok": False, "error": str(exc)})
+        return json.dumps({"ok": True, "data": summary.model_dump(mode="json")}, indent=2)
+
+    @_maybe_tool("dashboard_evaluate_policy_gate")
+    def dashboard_evaluate_policy_gate(
+        comparison_id: str,
+        criteria_version_id: str,
+    ) -> str:
+        """Evaluate immutable gate criteria (eligibility only — never activates)."""
+        from digiquant.dashboard.replay.exposure import PolicyReplayExposureError
+        from digiquant.service import service_evaluate_policy_gate
+
+        try:
+            summary = service_evaluate_policy_gate(
+                comparison_id=comparison_id,
+                criteria_version_id=criteria_version_id,
+            )
+        except (LookupError, PolicyReplayExposureError, ValueError) as exc:
+            return json.dumps({"ok": False, "error": str(exc)})
+        return json.dumps({"ok": True, "data": summary.model_dump(mode="json")}, indent=2)
+
+    @_maybe_tool("dashboard_get_policy_gate_evaluation")
+    def dashboard_get_policy_gate_evaluation(evaluation_id: str) -> str:
+        """Fetch a gate-evaluation summary by id (fail closed if unknown)."""
+        from digiquant.dashboard.replay.exposure import PolicyReplayExposureError
+        from digiquant.service import service_get_policy_gate_evaluation
+
+        try:
+            summary = service_get_policy_gate_evaluation(evaluation_id)
+        except (LookupError, PolicyReplayExposureError, ValueError) as exc:
+            return json.dumps({"ok": False, "error": str(exc)})
+        return json.dumps({"ok": True, "data": summary.model_dump(mode="json")}, indent=2)
+
+    return mcp
+
+
+def run_mcp(
+    transport: str = "streamable-http",
+    host: str | None = None,
+    port: int = 8767,
+    scope: str = "full",
+) -> None:
+    bind = host or os.environ.get("DIGIQUANT_MCP_HOST", "127.0.0.1")
+    mcp = create_mcp_server(scope=scope, host=bind, port=port)
+    logger.info(
+        "Starting digiquant MCP server on %s:%d (transport=%s scope=%s)",
+        bind,
+        port,
+        transport,
+        scope,
+    )
+    mcp.run(transport=transport)
+
+
+if __name__ == "__main__":
+    import argparse
+
+    logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
+    parser = argparse.ArgumentParser(description="digiquant MCP server")
+    parser.add_argument("--stdio", action="store_true", help="Use stdio transport (Claude Desktop)")
+    parser.add_argument("--host", default=os.environ.get("DIGIQUANT_MCP_HOST", "127.0.0.1"))
+    parser.add_argument(
+        "--port", type=int, default=int(os.environ.get("DIGIQUANT_MCP_PORT", "8767"))
+    )
+    parser.add_argument(
+        "--scope",
+        choices=_MCP_SCOPES,
+        default=os.environ.get("DIGIQUANT_MCP_SCOPE", "full"),
+        help="Tool scope: 'full' (default) or 'read' (dashboard-chat surface).",
+    )
+    args = parser.parse_args()
+    transport = "stdio" if args.stdio else "streamable-http"
+    run_mcp(transport=transport, host=args.host, port=args.port, scope=args.scope)

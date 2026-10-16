@@ -1,0 +1,13 @@
+# Example public dogfood shape for the docs_onboard pipeline.
+# Replace seed_url / hosts with a real client docs host for live runs.
+client: example-docs-client
+seed_url: https://docs.example.com/
+allowed_hosts:
+  - docs.example.com
+max_pages: 100
+max_depth: 3
+sinks: [vault, search]
+digisearch_index: example_docs
+vault_subdir: clients/example-docs-client
+docs_path_prefixes: ["/docs", "/guide", "/api", "/reference"]
+skip_path_prefixes: ["/blog", "/careers", "/pricing"]

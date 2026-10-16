@@ -1,0 +1,890 @@
+@import "tailwindcss";
+@import "@digithings/design/tokens.css";
+/* layer(components): site.css ships a global reset (* { margin: 0 }); unlayered
+   it outranks @layer utilities and kills every margin utility (MIGRATION.md rule 2). */
+@import "@digithings/design/site/site.css" layer(components);
+/* BEFORE the bridge: the kit's Base UI-aware collapsible keyframes must stay source-last. */
+@import "tw-animate-css";
+@import "@digithings/ui/styles/web-theme.css";
+@import "@digithings/ui/styles/controls-core.css";
+@import "@digithings/ui/styles/nav-shell.css";
+@import "@digithings/ui/styles/stages.css";
+@import "@digithings/ui/styles/marquee.css";
+@import "@digithings/ui/styles/data-layout.css";
+@import "@digithings/ui/styles/deck.css";
+@import "@digithings/ui/styles/diagrams.css";
+@import "@digithings/ui/styles/chat-widgets.css";
+@import "@digithings/ui/styles/chat-aui.css";
+@import "@digithings/ui/styles/chat-digichat.css";
+/* finance-tearsheet family: .ts-* grammar incl. the @media print export grammar
+   (self-layering, imported plainly). Kept for the tearsheet routes. */
+@import "@digithings/ui/styles/finance-tearsheet.css";
+@import "@digithings/ui/styles/finance-tearsheet-overlay.css";
+
+/* Tailwind never scans package sources; paths stay file-relative on purpose. */
+@source "../../../packages/ui/src/components/NavShell.tsx";
+@source "../../../packages/ui/src/components/chrome.tsx";
+@source "../../../packages/ui/src/components/document";
+@source "../../../packages/ui/src/components/footer";
+@source "../../../packages/ui/src/components/docs";
+@source "../../../packages/ui/src/components/figure";
+@source "../../../packages/ui/src/components/contact";
+@source "../../../packages/ui/src/components/symbols";
+@source "../../../packages/ui/src/components/finance-tearsheet";
+@source "../../../packages/ui/src/components/finance-charts";
+@source "../../../packages/ui/src/components/stages";
+@source "../../../packages/ui/src/components/effects-chrome";
+@source "../../../packages/ui/src/components/data-layout";
+@source "../../../packages/ui/src/components/deck";
+@source "../../../packages/ui/src/components/finance-composites";
+@source "../../../packages/ui/src/components/marquee";
+@source "../../../packages/ui/src/components/chat";
+@source "../../../packages/ui/src/ui";
+
+/* Hero wordmark (QuantWordmark): cells grow up from the baseline like bars. The
+   rects carry inline animations; [data-dq-anim] lets reduced motion switch them
+   off. Keyframes only, no classes. */
+@keyframes dq-rise {
+  from { opacity: 0; transform: scaleY(0); fill: var(--dq-cell, var(--up)); }
+  72% { fill: var(--dq-cell, var(--up)); }
+  to { opacity: 1; transform: scaleY(1); fill: currentColor; }
+}
+@keyframes dq-stray {
+  0%, 100% { opacity: 0; fill: var(--dq-cell, var(--up)); }
+  1%, 99% { opacity: 0.25; fill: var(--dq-cell, var(--up)); }
+}
+/* After the build: letters glint and strays blink in their own up/down tone. */
+@keyframes dq-glint {
+  0% { fill: var(--dq-cell, var(--up)); }
+  45%, 100% { fill: currentColor; }
+}
+@keyframes dq-blink {
+  0% { opacity: 0.35; fill: var(--dq-cell, var(--up)); }
+  30%, 100% { opacity: 0; }
+}
+/* A later load in the same tab keeps the glint and drops the rise. The live
+   mark (data-dq-live) is the one already playing, and the top hero always
+   carries it, so this does not cut either off. */
+html[data-dq-hero="played"] :not([data-dq-live]) > [data-dq-build] {
+  animation: var(--dq-glint, none) !important;
+  opacity: 1 !important;
+  transform: none !important;
+}
+html[data-dq-hero="played"] :not([data-dq-live]) > [data-dq-stray] {
+  animation: none !important;
+  opacity: 0 !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-dq-anim],
+  html[data-dq-hero="played"] :not([data-dq-live]) > [data-dq-build],
+  html[data-dq-hero="played"] :not([data-dq-live]) > [data-dq-stray] {
+    animation: none !important;
+  }
+}
+
+/* One mono voice (DIG-2695): Geist Mono serves sans, mono and display, the
+   same single-face setup as the dashboard. Both stacks come from tokens.css,
+   built off the face in app/fonts.ts — no font family is named here. */
+:root[data-theme] {
+  --font-sans: var(--font-stack-mono);
+  --font-mono: var(--font-stack-mono);
+  --font-display: var(--font-sans);
+}
+
+/* One solid black canvas for the whole page. Surfaces share it, so cards, ledgers and
+   the nav are separated by hairlines only, never by a second paint. */
+:root[data-theme="dark"] {
+  --bg: #000;
+  --surface: #000;
+  --surface-2: rgba(255, 255, 255, 0.05);
+  --term-bg: #000;
+}
+
+/* Compact density is a settings choice. Regular keeps the desk type as written. */
+:root[data-density="compact"] .desk-pane-body {
+  font-size: 0.6875rem;
+  line-height: 1.3;
+}
+
+html,
+body {
+  background: var(--bg);
+}
+
+/* The desk header scrolls inside .desk-head. That track is wider than a phone,
+   and overflow on the track still widens the document unless the page clips it. */
+html {
+  overflow-x: clip;
+}
+
+/* The thread group slot is `aui_message-group`. An arbitrary Tailwind variant
+   cannot quote that underscore (it becomes a space and the stylesheet fails
+   to parse), so the gap lives here. */
+.scripted-digichat [data-slot="aui_message-group"] {
+  row-gap: 0.75rem;
+}
+
+/* The band chat sits on the page ground: sidebar, message area and footer are
+   one surface with no panel fills of their own. The thread column runs the
+   frame's full width. Text size comes from the frame (DIGICHAT_TEXT). */
+.scripted-digichat :is(
+  .digichat-thread,
+  .digichat-thread__viewport,
+  .digichat-thread__footer,
+  .aui-thread-viewport-footer,
+  .digichat-thread-list,
+  [data-slot="aui_composer-shell"]
+) {
+  --background: transparent;
+  --card: transparent;
+  --composer-bg: transparent;
+  --term-bg: transparent;
+  --thread-max-width: 100%;
+  background: transparent !important;
+  background-color: transparent !important;
+}
+.scripted-digichat .digichat-thread__viewport > .mx-auto {
+  width: 100%;
+  max-width: none !important;
+}
+/* At tour start the transcript is short, so in a full-height frame it floated at
+   the top with a void under it. Pin it to the footer instead; once the tour fills
+   the column the auto margin resolves to zero and the rule is inert. */
+.scripted-digichat .digichat-thread__viewport > .mx-auto > .mb-14 {
+  margin-top: auto;
+}
+/* The skin pins messages and the composer at 0.88rem; follow the frame size. */
+.scripted-digichat :is(
+  .aui-user-message-content,
+  .aui-assistant-message-content,
+  .aui-assistant-message-content .aui-md,
+  .aui-composer-input
+) {
+  font-size: inherit !important;
+}
+
+/* Crosshair, hero only: the pointer becomes a crosshair over the hero (QuantField
+   draws the matching lines). Links and buttons keep the kit's pointer.
+   Full-viewport chart under the fixed nav: TopBand uses -mt + h-[100svh] so the
+   canvas fills the page with no bottom gap; copy is padded below --nav-shell-h. */
+.dq-hero {
+  cursor: crosshair;
+}
+
+/* Finished Vela chart. Opacity only — the axis is Vela's. */
+.hero-chart {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-chart {
+    opacity: 1;
+    transition: none;
+  }
+}
+
+/* Hero chart construct strokes: draw X L→R, Y B→T, then faint grid over an empty
+   Vela plot (series hidden). Timings mirror AXIS_* / GRID_* in lib/hero-build.ts.
+   Construction — not a black mask peel over finished candles. */
+.hero-construct {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+  transition: opacity 160ms ease, visibility 160ms ease;
+}
+.hero-construct[data-phase="done"],
+.hero-construct[data-phase="armed"] {
+  /* armed: strokes parked; done: remove overlay so Vela axes/grid own the frame */
+}
+.hero-construct[data-phase="done"] {
+  opacity: 0;
+  visibility: hidden;
+}
+.hero-construct__x,
+.hero-construct__y {
+  fill: none;
+  stroke: var(--chart-axis, var(--ink-mute));
+  stroke-width: 0.35;
+  stroke-linecap: square;
+  vector-effect: non-scaling-stroke;
+}
+.hero-construct__x {
+  stroke-dasharray: 90;
+  stroke-dashoffset: 90;
+  transition: stroke-dashoffset 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.hero-construct__y {
+  stroke-dasharray: 92;
+  stroke-dashoffset: 92;
+  transition: stroke-dashoffset 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.hero-construct__grid {
+  fill: none;
+  stroke: var(--chart-grid, var(--hair));
+  stroke-width: 0.2;
+  vector-effect: non-scaling-stroke;
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+.hero-construct[data-phase="x"] .hero-construct__x,
+.hero-construct[data-phase="xy"] .hero-construct__x,
+.hero-construct[data-phase="grid"] .hero-construct__x,
+.hero-construct[data-phase="done"] .hero-construct__x {
+  stroke-dashoffset: 0;
+}
+.hero-construct[data-phase="xy"] .hero-construct__y,
+.hero-construct[data-phase="grid"] .hero-construct__y,
+.hero-construct[data-phase="done"] .hero-construct__y {
+  stroke-dashoffset: 0;
+}
+.hero-construct[data-phase="grid"] .hero-construct__grid,
+.hero-construct[data-phase="done"] .hero-construct__grid {
+  opacity: 1;
+}
+
+/* web-theme.css sets the body to --font-mono; prose is sans here, and mono is
+   opt-in (`font-mono`) for chrome, labels and figures. */
+body {
+  font-family: var(--font-sans);
+  letter-spacing: -0.011em;
+}
+
+/* Band eyebrow: `NN / label`, numbered like the gutter rail. The tick matches the
+   rail's own stroke so the two read as one system. */
+.section-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  color: var(--ink-mute);
+}
+
+.section-eyebrow__tick {
+  display: block;
+  width: 1.1rem;
+  height: 1px;
+  background: var(--ink-mute);
+}
+
+@media (min-width: 640px) {
+  .section-eyebrow__tick { width: 1.6rem; }
+}
+
+/* ── pinned band head (DIG-2854, DIG-3311) ─────────────────────────────────
+   A band may pin its section head — eyebrow + title + takeaway, as one
+   block — under the nav for the length of the band. The head carries the
+   hairline on its own bottom edge, so that rule is where scrolling stops and
+   the band body starts stacking below it.
+
+   `--band-pin-h` is written by Band.tsx (a ResizeObserver against the head's
+   real rendered box, not a fixed guess — the takeaway's line count varies
+   with viewport width and font scaling, and a fixed number has undershot
+   before, letting a stacked card's top edge stick in behind the head) and
+   read by the band body as `--deck-top`'s offset. This sheet only supplies
+   a pre-hydration fallback for first paint.
+
+   Wide only, matching deck.css: below 901px the deck drops sticky entirely,
+   so a pinned head would cost the reader screen height for nothing. Band.tsx
+   writes 0px there too, which leaves `--deck-top` at the plain nav
+   clearance. */
+.band-pin-shell {
+  --band-pin-h: 0px;
+}
+
+/* The canvas behind the head. Needed even un-pinned (narrow): the head is the
+   only element in the band that overlaps the body. */
+.band-pin {
+  background: var(--bg);
+}
+
+@media (min-width: 901px) {
+  .band-pin-shell {
+    /* Pre-hydration fallback only: eyebrow + 0.7rem gap + one title line +
+       a two-line takeaway + 0.75rem pad + 1px rule. Band.tsx overwrites this
+       with the head's measured height the instant it mounts. */
+    --band-pin-h: 8.4rem;
+  }
+
+  .band-pin {
+    position: sticky;
+    top: var(--nav-shell-h, 62px);
+    /* Above the deck's own stacking (cards and the rail carry no z-index)
+       but below the nav, which sits outside the band's stacking context. */
+    z-index: 2;
+    box-sizing: border-box;
+    /* Natural height, not clamped to --band-pin-h — that var is an output
+       of this box's real size (see Band.tsx), not an input to it. Clamping
+       it here would re-introduce the undershoot/clip this rewrite removed. */
+    block-size: auto;
+    padding-block-end: 0.75rem;
+  }
+
+  /* The rule runs to the same edges as the band's own border-b, so the pinned
+     line and the band boundary land on one rule. The head is sticky (hence
+     positioned), so this pseudo sizes against it. */
+  .band-pin::after {
+    content: "";
+    position: absolute;
+    inset-inline: calc(-1 * var(--page-pad, 0rem));
+    inset-block-end: -1px;
+    block-size: 1px;
+    background: var(--hair);
+  }
+}
+
+/* Hero entrance: logo + copy + buttons first; chart builds afterward (see QuantField). */
+@media (prefers-reduced-motion: no-preference) {
+  .hero-rise {
+    animation: hero-rise 0.55s var(--ease) calc(0.12s + var(--rise, 0) * 0.08s) both;
+  }
+}
+
+@keyframes hero-rise {
+  from { opacity: 0; transform: translateY(0.6rem); }
+  to { opacity: 1; transform: none; }
+}
+
+/* digithings hero wordmark. Same widths and cell build as the digithings.ai
+   hero (apps/digithings-web). The integrations block zeros the hero's top
+   margin so the lockup sits in the band. */
+.pixel-word {
+  display: block;
+  width: 264px;
+  height: auto;
+  margin-top: 2.25rem;
+  color: var(--ink);
+  shape-rendering: crispEdges;
+  --glint: var(--accent);
+}
+
+@media (min-width: 380px) {
+  .pixel-word { width: 352px; }
+}
+
+@media (min-width: 640px) {
+  .pixel-word { width: 528px; }
+}
+
+@media (min-width: 768px) {
+  .pixel-word { width: 616px; }
+}
+
+/* The website hero glints in ink. This site's accent is teal, and that flash is the wrong mark. */
+.integrations-hero .pixel-word { margin-top: 0; --glint: var(--ink); }
+
+.pixel-word .c { opacity: var(--f); }
+.pixel-word .n { opacity: 0; }
+
+@media (prefers-reduced-motion: no-preference) {
+  html:not(.no-js) .pixel-word:not(.is-live) .c { opacity: 0; }
+  .pixel-word.is-live .c { animation: pixel-build var(--t) linear var(--d) both; }
+  .pixel-word.is-live .g {
+    animation:
+      pixel-build var(--t) linear var(--d) both,
+      pixel-glint var(--gp) step-end var(--g) infinite;
+  }
+  .pixel-word.is-live .n { animation: pixel-stray var(--t) linear var(--d) both; }
+
+  html.scroll-resumed .pixel-word-hero .c { animation: none; opacity: var(--f); }
+  html.scroll-resumed .pixel-word-hero .g {
+    animation: pixel-glint var(--gp) step-end var(--g) infinite;
+  }
+  html.scroll-resumed .pixel-word-hero .n { animation: none; }
+}
+
+@keyframes pixel-build {
+  0% { opacity: 0; }
+  0.1%, 33% { opacity: var(--a); }
+  33.1%, 66% { opacity: var(--b); }
+  66.1%, 99.9% { opacity: var(--c); }
+  100% { opacity: var(--f); }
+}
+
+@keyframes pixel-stray {
+  0% { opacity: 0; }
+  0.1%, 99.9% { opacity: 0.25; }
+  100% { opacity: 0; }
+}
+
+@keyframes pixel-glint {
+  0% { fill: var(--glint); opacity: 1; }
+  5%, 100% { fill: currentColor; opacity: var(--f); }
+}
+
+.hero-action {
+  transition:
+    background-color var(--duration-hover) var(--ease),
+    border-color var(--duration-hover) var(--ease);
+}
+
+.hero-action:hover { border-color: var(--ink-mute); }
+
+.hero-action:focus-visible {
+  outline: 1px solid var(--ink);
+  outline-offset: 3px;
+}
+
+.hero-action__arrow {
+  display: inline-block;
+  margin-inline-start: 0.6em;
+  color: var(--ink-mute);
+  transition:
+    transform var(--duration-hover) var(--ease),
+    color var(--duration-hover) var(--ease);
+}
+
+.hero-action:hover .hero-action__arrow {
+  color: var(--ink);
+  transform: translateY(2px);
+}
+
+/* Desk path field. Same chrome as the terminal draft: .cmd / .cmd-in / .cmd-list.
+   --win, --wash, and --mono are local because this site does not define them.
+   The pointer on a row comes from the kit Button, not from a cursor rule here. */
+.cmd {
+  --win: var(--term-bg);
+  --wash: var(--term-fill);
+  --mono: var(--font-mono);
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  flex: 0 1 340px;
+  min-width: 0;
+}
+.cmd-in {
+  width: 100%;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  height: 20px;
+  padding: 0;
+  outline: 0;
+}
+.cmd-in:focus,
+.cmd-in:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 0;
+  padding-left: 6px;
+}
+.cmd-list {
+  position: absolute;
+  top: 100%;
+  left: 10px;
+  right: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: var(--win);
+  border: 1px solid var(--hair-strong);
+  z-index: 40;
+  font: 11px/1 var(--mono);
+}
+.cmd-list li {
+  display: flex;
+}
+.cmd-list li.on {
+  background: var(--wash);
+  color: var(--accent);
+}
+.cmd-list .cmd-hit {
+  display: flex;
+  width: 100%;
+  height: auto;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  padding: 6px 7px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 400;
+  box-shadow: none;
+}
+.cmd .mute { color: var(--ink-mute); }
+.cmd .sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Desk folder sidebar and desk selector, ported from the terminal draft.
+   --win, --wash, and --mono are local because this site does not define them.
+   Pointers stay on the kit Button. These rules do not set cursor. */
+.rail,
+.desk-pick,
+.desk-list {
+  --win: var(--term-bg);
+  --wash: var(--term-fill);
+  --mono: var(--font-mono);
+}
+.rail {
+  position: relative;
+  width: var(--rail-w, 200px);
+  flex: none;
+  background: var(--win);
+  border-right: 1px solid var(--hair-strong);
+  overflow: auto;
+  min-height: 0;
+  min-width: 0;
+}
+.rail-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 1.75rem;
+  padding: 0 0.35rem 0 0.75rem;
+  border-bottom: 1px solid var(--hair);
+  font: 0.6875rem/1 var(--mono);
+  letter-spacing: 0.04em;
+  color: var(--ink-mute);
+}
+.rail-size {
+  display: inline-flex;
+  align-items: center;
+}
+.rail-step,
+.desk-pages {
+  height: 1.25rem;
+  min-height: 0;
+  margin: 0;
+  padding: 0 0.3rem;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--ink-soft);
+  font: 0.75rem/1 var(--mono);
+  font-weight: 400;
+}
+.rail-step { width: 1.25rem; padding: 0; }
+.desk-pages { display: none; }
+/* Desk name, blurb and path stay whole on one line. A narrow header scrolls
+   them sideways. The track is not positioned, so the desk and path lists
+   anchor to the header and are not clipped by the scroll. */
+.desk-head {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  align-self: stretch;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  white-space: nowrap;
+}
+.desk-head::-webkit-scrollbar { display: none; }
+.desk-head > * { flex-shrink: 0; }
+.desk-head .desk-pick,
+.desk-head .cmd { position: static; }
+.desk-head .cmd { flex: 1 0 auto; }
+.desk-head .desk-list { left: 0.5rem; }
+.desk-head .cmd-list {
+  left: auto;
+  right: 0.5rem;
+  width: min(26rem, calc(100% - 1rem));
+}
+.desk-sub {
+  margin-left: 10px;
+  color: var(--ink-mute);
+}
+/* Desk tiles are placed by inline rects from the shared expand solve. Opening
+   one eases it and its neighbours to their new rects on the mosaic's timing
+   (kit ModuleGrid: 0.5s on the brand curve). Reduced motion places them at once. */
+.desk-tile {
+  transition:
+    left 0.5s var(--ease),
+    top 0.5s var(--ease),
+    width 0.5s var(--ease),
+    height 0.5s var(--ease);
+}
+@media (prefers-reduced-motion: reduce) {
+  .desk-tile { transition: none; }
+}
+@media (max-width: 759px) {
+  .desk-pages { display: inline-flex; }
+  .desk-shell > header {
+    gap: 0.35rem;
+    padding-inline: 0.4rem;
+  }
+  .desk-mark {
+    flex: 0 0 auto;
+    width: 3.25rem;
+  }
+  .desk-shell > header .desk-mark svg {
+    width: 3.25rem;
+    height: auto;
+  }
+  .desk-pick { padding-inline: 0.15rem; }
+  .desk-shell > header .cmd {
+    padding-inline: 0.2rem;
+  }
+  .rail-size { display: none; }
+  .desk-shell .rail {
+    position: fixed;
+    z-index: 35;
+    top: 2rem;
+    bottom: 0;
+    left: 0;
+    width: min(18.5rem, calc(100vw - 2.5rem));
+    transform: translateX(-110%);
+    visibility: hidden;
+  }
+  .desk-shell[data-drawer="open"] .rail {
+    transform: none;
+    visibility: visible;
+  }
+  /* Wide layout keeps the 12 by 12 mosaic. A phone stacks each pane. */
+  .desk-main {
+    overflow-x: clip;
+    overflow-y: auto;
+  }
+  .desk-mosaic {
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    width: 100%;
+    min-width: 0;
+    flex: none;
+  }
+  .desk-mosaic > * {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    height: auto;
+    flex: none;
+  }
+  /* The stack ignores the solved rects: every tile takes the full width in flow,
+     and an open tile grows down in place. */
+  .desk-mosaic { gap: 1px; }
+  .desk-mosaic > .desk-tile {
+    position: relative !important;
+    inset: auto !important;
+    width: 100% !important;
+    height: auto !important;
+    transition: none;
+  }
+  .desk-mosaic section {
+    height: auto;
+    max-width: 100%;
+    overflow: visible;
+  }
+  .desk-pane-body {
+    flex: none;
+    height: auto;
+    max-width: 100%;
+    overflow: visible;
+    overflow-wrap: anywhere;
+  }
+  .desk-pane-body .whitespace-pre {
+    white-space: pre-wrap;
+  }
+}
+/* Desk tables at every width. A wide table scrolls inside its own strip, so
+   the right edge never clips. The key column stays pinned, numbers and dates
+   stay whole, and prose is the column that wraps. The edge shade shows only
+   while there is more to the right: the cover scrolls with the content, the
+   shade does not. */
+.desk-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  background:
+    linear-gradient(to left, var(--surface) 50%, transparent) right center / 1.5rem 100% no-repeat local,
+    linear-gradient(to left, color-mix(in srgb, var(--ink) 14%, transparent), transparent) right center / 0.75rem 100% no-repeat scroll;
+}
+.desk-table-scroll:focus-visible {
+  outline: 1px solid var(--ink);
+  outline-offset: -1px;
+}
+.desk-pane-table {
+  width: max-content;
+  min-width: 100%;
+  overflow-wrap: normal;
+}
+.desk-pane-table [data-col="key"] {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  max-width: 16ch;
+  background: var(--surface);
+}
+.desk-pane-table [data-col="num"] {
+  white-space: nowrap;
+  text-align: right;
+}
+.desk-pane-table [data-col="text"] {
+  min-width: 12ch;
+  max-width: 36ch;
+}
+/* Page body only. The shell stays painted. Never fades toward invisible. */
+@keyframes desk-page-settle {
+  from { transform: translateY(0.35rem); }
+  to { transform: none; }
+}
+.desk-page-settle {
+  animation: desk-page-settle 180ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .desk-page-settle { animation: none; }
+}
+.nav-title {
+  font: 0.6875rem/1 var(--mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  padding: 0.55rem 0.75rem 0.2rem;
+}
+.nav-row {
+  display: flex;
+  align-items: center;
+  min-height: 1.75rem;
+  font: 0.75rem/1 var(--mono);
+}
+.nav-row.kid { padding-left: 0.85rem; }
+.nav-tri {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  width: 1.5rem;
+  min-width: 1.5rem;
+  height: 1.75rem;
+  margin: 0;
+  padding: 0 0 0 0.75rem;
+  justify-content: flex-start;
+  text-align: left;
+  font: 0.6875rem/1 var(--mono);
+  font-weight: 400;
+  color: var(--ink-mute);
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.nav-tri.leaf { opacity: 0.5; }
+.nav-tri:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
+.nav-link {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 1.75rem;
+  padding: 0 0.75rem 0 0.35rem;
+  color: var(--ink-soft);
+  text-decoration: none;
+}
+.nav-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.nav-link:hover { color: var(--ink); background: var(--wash); }
+.nav-link:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
+.nav-link.on { color: var(--accent); background: var(--wash); }
+.nav-link.locked .nav-path { color: var(--ink-mute); }
+.nav-tag {
+  margin-left: auto;
+  font: 10px/1 var(--mono);
+  color: var(--ink-mute);
+}
+.nav-empty {
+  margin: 0;
+  padding: 8px 12px;
+  color: var(--ink-mute);
+  font: 11px/1.4 var(--mono);
+}
+.desk-pick {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  font: 11px/1 var(--mono);
+  white-space: nowrap;
+}
+.desk-pick .desk-toggle {
+  height: auto;
+  margin: 0;
+  padding: 2px 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--ink-soft);
+  font: inherit;
+  font-weight: 400;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--hair-strong);
+}
+.desk-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.desk-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 40;
+  min-width: 260px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: var(--win);
+  border: 1px solid var(--hair-strong);
+}
+.desk-list .desk-hit {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--ink);
+  font: 11px/1.3 var(--mono);
+  font-weight: 400;
+  text-align: left;
+  white-space: normal;
+}
+.desk-list .desk-hit:hover:not(:disabled),
+.desk-list .desk-hit:focus-visible {
+  background: var(--wash);
+  color: var(--accent);
+  outline: 0;
+}
+.desk-list .desk-hit:disabled { color: var(--ink-mute); }
+.desk-list .desk-hit[aria-current="true"] .desk-name::before { content: "▸ "; color: var(--accent); }
+.desk-name { display: flex; gap: 8px; }
+.desk-blurb {
+  display: block;
+  color: var(--ink-mute);
+  font-size: 10px;
+  margin-top: 3px;
+}

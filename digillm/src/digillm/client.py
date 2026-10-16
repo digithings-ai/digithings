@@ -1,0 +1,2886 @@
+"""Provider-agnostic, OpenAI-compatible LLM client.
+
+Extracted from the mature ``digigraph.llm`` implementation and made standalone:
+no FastAPI, no digigraph, no digitrace hard dependencies. Speaks to any
+OpenAI-compatible endpoint (LiteLLM proxy, Ollama, OpenRouter, OpenAI direct,
+or a registered external provider) and provides:
+
+- :func:`completion` — single completion (optional tools and/or json_schema
+  structured output); returns the OpenAI ``ChatCompletion`` object, with
+  transparent SHA-256 response caching and retry/backoff on transient errors.
+- :func:`get_client_for_model` — the single client entry point: routes a
+  ``provider/model`` prefix to a registered provider client, otherwise the
+  default ``OPENAI_API_BASE`` / ``OPENAI_API_KEY`` client. Honors per-request
+  overrides set via the contextvar setters below.
+- :func:`run_tools` — an agentic tool-calling loop (optional streaming).
+- Per-request overrides via plain contextvars: :func:`set_proxy_key` /
+  :func:`set_byok` (and the ``proxy_key`` / ``byok`` context managers).
+
+The header parsing that feeds these contextvars lives in the consuming service
+(e.g. digigraph's FastAPI middleware) — digillm never imports FastAPI nor
+accepts ``Request`` objects.
+
+Usage::
+
+    from digillm import completion
+
+    resp = completion(
+        "openrouter/mistral/mistral-7b",
+        [{"role": "user", "content": "Hello"}],
+    )
+    text = resp.choices[0].message.content
+"""
+
+from __future__ import annotations
+
+import asyncio
+import contextlib
+import functools
+import json
+import logging
+import os
+import random
+import re
+import threading
+import time
+from collections.abc import Callable, Iterator
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextvars import ContextVar, copy_context
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from decimal import Decimal, InvalidOperation
+from typing import (  # score:allow untyped any — OpenAI message dict payloads are heterogeneous
+    Any,
+    NoReturn,
+)
+from urllib.parse import urlsplit, urlunsplit
+from uuid import UUID, uuid4
+
+from openai import BadRequestError, OpenAI, Timeout
+from openai.types.chat import ChatCompletion
+
+from digillm import cache as _cache
+from digillm import overrides as _overrides
+from digillm import types as _types
+from digillm.egress_record import (
+    NO_EGRESS_DESTINATION,
+    UNKNOWN_DESTINATION,
+    EgressDecision,
+    record_egress,
+)
+from digillm.telemetry import (
+    ArtifactRef,
+    CacheStatus,
+    CallPurpose,
+    NoArtifactReason,
+    ProviderAttemptOutcome,
+    ProviderAttemptRecord,
+    ProviderCallOutcome,
+    ProviderCallRecord,
+    RetryReason,
+    TelemetryObserver,
+    emit_telemetry,
+)
+
+ChatCompletionMessage = _types.ChatCompletionMessage
+JsonSchemaResponseFormat = _types.JsonSchemaResponseFormat
+ToolArguments = _types.ToolArguments
+ToolCallDict = _types.ToolCallDict
+ToolCallFunction = _types.ToolCallFunction
+ToolDefinition = _types.ToolDefinition
+ToolFunctionSpec = _types.ToolFunctionSpec
+
+_byok_override = _overrides._byok_override
+_proxy_key_override = _overrides._proxy_key_override
+byok = _overrides.byok
+clear_byok = _overrides.clear_byok
+get_byok = _overrides.get_byok
+get_proxy_key = _overrides.get_proxy_key
+proxy_key = _overrides.proxy_key
+reset_byok = _overrides.reset_byok
+reset_proxy_key = _overrides.reset_proxy_key
+set_byok = _overrides.set_byok
+set_proxy_key = _overrides.set_proxy_key
+
+_clear_response_cache = _cache.clear_response_cache
+_llm_cache_get = _cache.llm_cache_get
+_llm_cache_key = _cache.llm_cache_key
+_llm_cache_set = _cache.llm_cache_set
+
+logger = logging.getLogger(__name__)
+
+# Optional tracing: degrade to a no-op decorator when digitrace is not installed.
+try:
+    from digitrace.trace import traceable as _traceable  # type: ignore[import-not-found]
+except ImportError:  # pragma: no cover - exercised only when digitrace is absent
+
+    def _traceable(name: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+        """No-op stand-in for ``digitrace.trace.traceable`` when digitrace is absent."""
+
+        def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
+            return fn
+
+        return decorator
+
+
+# Cap tool result text injected into the next LLM turn (full blobs stay upstream).
+_MAX_TOOL_MESSAGE_CHARS = int(os.environ.get("DIGI_TOOL_MESSAGE_MAX_CHARS", "12000"))
+
+
+# ── Banned models ─────────────────────────────────────────────────────────────
+# Central source of truth for model ids that must never run (#3078). A banned
+# id reaching digillm means routing above it failed — raise immediately with a
+# clear error instead of billing a call the house policy forbids.
+_BANNED_MODELS = frozenset({"ollama/qwen3:8b"})
+_BANNED_MODELS_LOWER = frozenset(m.lower() for m in _BANNED_MODELS)
+# A provider may serve a banned id under a suffixed tag/digest/qualifier. Matching
+# only the bare id lets `ollama/qwen3:8b:cloud`, `...-instruct` or `...@q4_K_M`
+# through the ban, so any of these separators marks a banned variant too.
+_BANNED_MODEL_SUFFIX_SEPARATORS = (":", "-", "@")
+
+
+def _reject_banned_model(model: str) -> None:
+    """Raise :class:`ValueError` when *model* is a banned id (see :data:`_BANNED_MODELS`).
+
+    Comparison is case-insensitive so ``OLLAMA/QWEN3:8B`` cannot bypass the ban, and
+    a suffixed variant (``ollama/qwen3:8b:cloud``, ``...-instruct``) is rejected too.
+    """
+    normalized = (model or "").strip().lower()
+    is_banned = normalized in _BANNED_MODELS_LOWER or any(
+        normalized.startswith(f"{banned_id}{sep}")
+        for banned_id in _BANNED_MODELS_LOWER
+        for sep in _BANNED_MODEL_SUFFIX_SEPARATORS
+    )
+    if is_banned:
+        raise ValueError(
+            f"model {model!r} is banned by house policy (#3078); "
+            "resolve a cheap-inference route through digillm instead"
+        )
+
+
+# ── Provider retry budget ─────────────────────────────────────────────────────
+# Per-error time budget (#3078): one logical provider call gets this many total
+# attempts (initial + retries). Default 12 preserves the historical behavior;
+# the daily pipeline sets ``DIGILLM_PROVIDER_MAX_ATTEMPTS=2`` (one retry only).
+def _provider_max_attempts() -> int:
+    """Total attempts for one provider call (default 12, minimum 1)."""
+    try:
+        return max(int((os.environ.get("DIGILLM_PROVIDER_MAX_ATTEMPTS") or "").strip() or 12), 1)
+    except ValueError:
+        logger.warning(
+            "invalid DIGILLM_PROVIDER_MAX_ATTEMPTS=%r; using default 12",
+            os.environ.get("DIGILLM_PROVIDER_MAX_ATTEMPTS"),
+        )
+        return 12
+
+
+# ── Same-tool error breaker ───────────────────────────────────────────────────
+# Stop instead of retrying when the same tool fails repeatedly with the same
+# error (#3078): after this many *consecutive* same-tool+same-error failures,
+# run_tools raises instead of feeding another identical error back to the model.
+_SAME_TOOL_ERROR_LIMIT = int(os.environ.get("DIGILLM_SAME_TOOL_ERROR_LIMIT", "") or 2)
+
+
+# ── Provider concurrency cap ────────────────────────────────────────────────
+# Burst smoothing (#3738): fan-out stages fire all LLM calls at once, and a
+# 429 burst with the 1-retry budget degrades many segments simultaneously.
+# Every provider call funnels through ``_create_with_retry`` (no tool
+# implementation calls back into the LLM, so the semaphore cannot deadlock),
+# and the slot is held for the whole logical call including short backoffs.
+# Default 8; the daily pipeline pins ``DIGILLM_MAX_CONCURRENT_CALLS``.
+_CONCURRENT_CALLS_DEFAULT = 8
+
+
+def _max_concurrent_calls() -> int:
+    """Max in-flight provider calls (default 8, minimum 1)."""
+    try:
+        return max(
+            int(
+                (os.environ.get("DIGILLM_MAX_CONCURRENT_CALLS") or "").strip()
+                or _CONCURRENT_CALLS_DEFAULT
+            ),
+            1,
+        )
+    except ValueError:
+        logger.warning(
+            "invalid DIGILLM_MAX_CONCURRENT_CALLS=%r; using default 8",
+            os.environ.get("DIGILLM_MAX_CONCURRENT_CALLS"),
+        )
+        return _CONCURRENT_CALLS_DEFAULT
+
+
+_PROVIDER_SEMAPHORE: threading.BoundedSemaphore | None = None
+_PROVIDER_SEMAPHORE_LIMIT = 0
+
+
+def _provider_semaphore() -> threading.BoundedSemaphore:
+    """Process-wide slot gate, rebuilt when the env-derived limit changes."""
+    global _PROVIDER_SEMAPHORE, _PROVIDER_SEMAPHORE_LIMIT
+    limit = _max_concurrent_calls()
+    if _PROVIDER_SEMAPHORE is None or _PROVIDER_SEMAPHORE_LIMIT != limit:
+        _PROVIDER_SEMAPHORE = threading.BoundedSemaphore(limit)
+        _PROVIDER_SEMAPHORE_LIMIT = limit
+    return _PROVIDER_SEMAPHORE
+
+
+# ── Provider registry ─────────────────────────────────────────────────────────
+# Maps a ``provider/`` model prefix to its OpenAI-compatible base_url + the env
+# var holding its API key. House traffic does **not** use this table: when
+# ``OPENAI_API_BASE`` points at a declared LiteLLM proxy, prefixes stay on the
+# wire as model ids. BYOK through LiteLLM puts the user's key/base in
+# ``extra_body`` (clientside credentials) only for those declared proxies.
+# Direct vendor bases, Ollama, and the CLI OpenRouter rewrite of
+# ``OPENAI_API_BASE`` are **not** LiteLLM — registered prefixes open vendor
+# clients there, and BYOK uses the user Bearer directly. The registry is
+# diagnostics-only without a LiteLLM base. Do not default callers onto a
+# hosted marketplace.
+
+_EXTERNAL_PROVIDERS: dict[str, dict[str, str]] = {
+    "xai": {
+        "base_url": "https://api.x.ai/v1",
+        "api_key_env": "XAI_API_KEY",
+    },
+    "gemini": {
+        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
+        "api_key_env": "GEMINI_API_KEY",
+    },
+    "openrouter": {
+        "base_url": "https://openrouter.ai/api/v1",
+        "api_key_env": "OPENROUTER_API_KEY",
+    },
+    "anthropic": {
+        "base_url": "https://api.anthropic.com/v1/",
+        "api_key_env": "ANTHROPIC_API_KEY",
+    },
+}
+
+
+def register_provider(prefix: str, base_url: str, api_key_env: str) -> None:
+    """Register (or override) an external provider routed by ``prefix/model``.
+
+    Args:
+        prefix:      The ``provider/`` prefix to match (e.g. ``"mistral"``).
+        base_url:    OpenAI-compatible base URL for the provider.
+        api_key_env: Environment variable name holding the provider API key.
+    """
+    _EXTERNAL_PROVIDERS[prefix] = {"base_url": base_url, "api_key_env": api_key_env}
+
+
+def is_registered_provider(prefix: str) -> bool:
+    """True if ``prefix`` is a registered external provider (see :func:`register_provider`)."""
+    return prefix in _EXTERNAL_PROVIDERS
+
+
+def get_provider_api_key_env(prefix: str) -> str | None:
+    """Return the API-key env var name for a registered provider, or ``None`` if unregistered.
+
+    Lets callers (e.g. digigraph's request-model resolution) check whether a
+    provider's key is configured *before* routing to it, without duplicating
+    this registry or triggering :func:`get_client_for_model`'s ``RuntimeError``
+    on a missing key.
+    """
+    cfg = _EXTERNAL_PROVIDERS.get(prefix)
+    return cfg["api_key_env"] if cfg else None
+
+
+# ── Client cache ──────────────────────────────────────────────────────────────
+# Keyed by provider name (external providers) or ``(api_key, base_url)`` for the
+# default client. Reuses the underlying httpx connection pool across requests.
+# Automatically invalidated when env vars change (their values are in the key).
+
+_client_cache: dict[str | tuple[str, str | None], OpenAI] = {}
+
+
+def _parse_provider_prefix(model: str) -> tuple[str | None, str]:
+    """Split ``provider/model_id`` into ``(provider, model_id)`` for registered providers.
+
+    Returns ``(None, model)`` for any model string whose prefix is not a
+    registered external provider (the default client handles it).
+    """
+    if "/" in model:
+        provider, _, model_id = model.partition("/")
+        if provider in _EXTERNAL_PROVIDERS:
+            return provider, model_id
+    return None, model
+
+
+# A provider's model id normally does not repeat the provider's own name, so the wire
+# id is the litellm string minus exactly one routing prefix
+# (``openrouter/anthropic/claude-sonnet-4`` -> ``anthropic/claude-sonnet-4``). A few ids
+# break that assumption by *being* prefixed with their provider: OpenRouter's auto-router
+# is itself called ``openrouter/auto``, so its litellm form carries the prefix twice and
+# stripping one still has to leave one behind.
+#
+# Listing those ids here is what lets BOTH spellings land on the same wire id. Operators
+# write the doubled ``openrouter/openrouter/auto`` (README, and the research provider
+# diagnostics under ``digiquant/scripts/research/``; no tier config lists it), but a BYOK
+# caller cannot: :func:`digigraph.llm_auth.byok_routable_model` strips the provider's own
+# prefix to a fixpoint and re-applies exactly one, by design — that fixpoint is what keeps
+# the middleware and the resolver from disagreeing about a hostile header. So the single-
+# prefix form is the only one BYOK can produce, and without this table it reached the wire
+# as a bare ``auto``, which OpenRouter rejects. Fixing it here rather than in the
+# normalizer keeps the credential-path invariant untouched.
+_SELF_PREFIXED_MODELS: dict[str, frozenset[str]] = {
+    "openrouter": frozenset({"auto"}),
+}
+
+
+def _wire_model(provider: str | None, model_id: str, model: str) -> str:
+    """Return the model id to send to *provider*'s endpoint.
+
+    ``model`` is the caller's full litellm string and ``(provider, model_id)`` its
+    :func:`_parse_provider_prefix` split. Normally the wire id is ``model_id`` (one prefix
+    stripped), but for an id listed in :data:`_SELF_PREFIXED_MODELS` the provider's name is
+    part of the id itself, so it is restored. Both ``openrouter/auto`` and
+    ``openrouter/openrouter/auto`` therefore reach the wire as ``openrouter/auto``.
+    """
+    if provider is None:
+        return model
+    if model_id in _SELF_PREFIXED_MODELS.get(provider, frozenset()):
+        return f"{provider}/{model_id}"
+    return model_id
+
+
+# Bearer for a declared trusted LiteLLM proxy running without auth — the
+# documented no-key loopback dev stack (`make stack-local`, default compose
+# before LITELLM_MASTER_KEY). Only ever sent to a base :func:`_litellm_proxy_configured`
+# accepts; direct/vendor endpoints still fail fast (#3939).
+_DEV_LITELLM_SENTINEL = "sk-no-key-required"
+
+
+def _default_client_api_key() -> str:
+    """Bearer token for the default (non-prefixed) client.
+
+    Priority (highest first):
+    1. Per-request proxy-key override (:func:`set_proxy_key`).
+    2. ``LITELLM_PROXY_API_KEY`` env var.
+    3. ``OPENAI_API_KEY`` env var.
+    4. :data:`_DEV_LITELLM_SENTINEL` when ``OPENAI_API_BASE`` is a declared
+       trusted LiteLLM proxy (the documented no-key loopback/dev stack).
+
+    Raises:
+        RuntimeError: when no key is configured and the base is not a declared
+            trusted LiteLLM proxy. A vendor/direct base still fails fast — never
+            the sentinel ``"not-set"`` that used to produce a late provider 401.
+    """
+    override = _proxy_key_override.get()
+    if override:
+        return override
+    proxy = (os.environ.get("LITELLM_PROXY_API_KEY") or "").strip()
+    if proxy:
+        return proxy
+    openai_key = (os.environ.get("OPENAI_API_KEY") or "").strip()
+    if openai_key:
+        return openai_key
+    if _litellm_proxy_configured():
+        # A no-auth loopback LiteLLM (make stack-local / default compose without
+        # LITELLM_MASTER_KEY) still needs *a* bearer for the OpenAI SDK, but
+        # ignores its value. Gated on the trusted-proxy allowlist: a direct
+        # vendor ``OPENAI_API_BASE`` (or no base) keeps failing fast above (#3939).
+        return _DEV_LITELLM_SENTINEL
+    raise RuntimeError(
+        "No LLM API key configured: set LITELLM_PROXY_API_KEY or OPENAI_API_KEY "
+        "(or call set_proxy_key) before creating a house client."
+    )
+
+
+# ── Request timeout ───────────────────────────────────────────────────────────
+# Calls were never actually unbounded: the OpenAI SDK substitutes its own
+# ``httpx.Timeout(timeout=600, connect=5.0)`` whenever ``timeout`` is omitted. But that
+# bound lived only in the SDK's constants module — invisible from this repo, unanswerable
+# by an operator, and free to change under us on any dependency bump. #1734 burned 210
+# minutes of a 240-minute CI job in unexplained silence and the first question asked was
+# "what is our request timeout?"; nobody could answer it from the source. So the bound is
+# now stated here and tunable without a code change.
+#
+# The defaults below are byte-identical to the SDK's, so this states the status quo rather
+# than changing it. Note ``connect`` must stay separate: passing a bare ``600.0`` float
+# would widen the connect timeout from 5s to 600s — a regression dressed as a fix.
+#
+# The full silence budget for one ``completion`` call is the product of three layers, not
+# this value alone: SDK ``max_retries=2`` (3 HTTP attempts) x ``_create_with_retry``'s 12
+# attempts, each attempt bounded by the read timeout below. Lowering this number is the
+# only single-knob way to shrink that product; it is left at the SDK default because a
+# large-context reasoning completion can legitimately run for minutes.
+#
+# Resolved once at import — matching the ``_EMPTY_RETRY_*`` idiom below — rather than per
+# call: ``_client_cache`` is keyed on ``(api_key, base_url)`` only, so a call-time env read
+# would hand a cached client its stale timeout and quietly falsify the cache's documented
+# "recreated when env changes" contract.
+_REQUEST_TIMEOUT_SECONDS = float(os.environ.get("DIGILLM_REQUEST_TIMEOUT_SECONDS", "") or 600.0)
+_CONNECT_TIMEOUT_SECONDS = float(os.environ.get("DIGILLM_CONNECT_TIMEOUT_SECONDS", "") or 5.0)
+_REQUEST_TIMEOUT = Timeout(_REQUEST_TIMEOUT_SECONDS, connect=_CONNECT_TIMEOUT_SECONDS)
+
+
+# ── Art. 9 egress screen (leaf L11, DIG-1085) ─────────────────────────────────
+# Defence in depth. The in-process screens (leaves 1, 2, 6) sit on digibase's own
+# ingest seams and therefore never see a prompt that reaches a model another way --
+# an MCP-originated prompt, or anything a caller sends straight at a client it got
+# from get_client_for_model(). This screen is installed on the *client object*, so
+# it covers every call that leaves through it, whoever made the call.
+#
+# ARCHITECTURAL NOTE -- digillm does not depend on digibase, and must not acquire
+# it: digibase requires fastapi, and digillm/AGENTS.md forbids "import fastapi ...
+# anywhere in the package". digillm/egress_record.py already sets the precedent for
+# this exact tension (DIG-1139 duplicated its digest rather than importing). So the
+# screen is a *pluggable seam* rather than an import: digillm resolves it lazily,
+# once, and digisearch -- which does hard-depend on digibase -- is where the
+# digibase-backed screen is normally supplied. Every consumer of digillm in the
+# stack (digigraph, digisearch, digiclaw) already has digibase installed.
+#
+# When no screen can be resolved the call proceeds UNSCREENED and the record says
+# so. That is deliberate and is the one honest option: this is a second line of
+# defence behind the in-process screens, so failing closed would take every
+# digillm consumer down for a control they may not have installed, while claiming
+# a verdict nobody computed would put a fabrication in the audit ledger. The
+# unscreened case is visible precisely because DIG-2708's validator makes
+# PASS (screened, found nothing) and UNSCREENED (never screened) distinct rows.
+
+_EGRESS_SCREEN_UNSET: Any = object()
+_egress_screen: Any = _EGRESS_SCREEN_UNSET
+
+
+class Art9EgressRefused(RuntimeError):
+    """Raised at the egress boundary when Art. 9 screening refuses a payload.
+
+    Carries the stable ``art9:<category>:<signal>`` machine code and the category
+    ids, never the matched value: this exception is raised inside retry and
+    telemetry machinery that can end up in a log aggregator or an error envelope,
+    and digibase's own contract for ``reason`` is that it stays safe to log.
+    """
+
+    def __init__(self, reason: str, categories: tuple[str, ...]) -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.categories = categories
+
+
+def _refusal_outcome(refusal: Art9EgressRefused) -> EgressScreenOutcome:
+    """The record-shaped view of a refusal.
+
+    The screen raises rather than returning, so the verdict would otherwise exist
+    only as an exception the caller has to already know about. Writing it onto the
+    client lets any caller read the verdict back off the object it holds --
+    including digisearch, which screens through this seam but must not import this
+    module's exception type.
+    """
+    return EgressScreenOutcome(EgressDecision.REFUSED, tuple(refusal.categories), refusal.reason)
+
+
+@dataclass(frozen=True)
+class EgressScreenOutcome:
+    """What the egress screen decided, in this module's own vocabulary.
+
+    ``masked_payload`` holds the redaction to substitute when ``decision`` is
+    MASKED. It is ``None`` whenever the screen did not produce one, which is the
+    case for every current digibase screen -- see :func:`screen_egress_payload`.
+    """
+
+    decision: EgressDecision
+    category_ids: tuple[str, ...]
+    reason: str
+    masked_payload: Any = None
+
+
+def set_egress_screen(screen: Any) -> None:
+    """Install the process-wide egress screen; pass ``None`` to restore the default.
+
+    Mirrors :func:`set_telemetry_observer` and the ``overrides`` seam: one
+    process-wide hook, resolvable once, no per-call plumbing for callers to forget.
+    """
+    global _egress_screen
+    _egress_screen = screen
+
+
+def get_egress_screen() -> Any:
+    """Return the installed egress screen, or ``None`` when none is available.
+
+    Resolution order: an explicitly installed screen, then digibase's
+    ``art9.screen_request`` reached through a function-local import. The import is
+    deliberately not at module scope -- that would make ``import digillm`` fail in
+    every environment without digibase, which is the coupling the seam exists to
+    avoid. The resolved value is cached, including a negative one: the answer
+    cannot change within a process, and re-attempting the import on every model
+    call would put a failed import on the hot path.
+    """
+    global _egress_screen
+    if _egress_screen is _EGRESS_SCREEN_UNSET:
+        try:
+            from digibase.art9 import screen_request
+        except ImportError:
+            _egress_screen = None
+        else:
+            _egress_screen = screen_request
+    return _egress_screen
+
+
+def screen_egress_payload(payload: Any) -> EgressScreenOutcome:
+    """Screen one outbound payload. Returns UNSCREENED when no screen is available.
+
+    The verdict vocabulary maps onto the egress record's own decision enum, and the
+    mapping is forced by ``EgressRecord._validate_shape``: MASKED and REFUSED must
+    carry their categories, and nothing else may carry any. So "screened and clean"
+    is PASS, "screened and tripped" is REFUSED, and "never screened" is UNSCREENED --
+    three different facts a data-subject request needs to tell apart.
+    """
+    screen = get_egress_screen()
+    if screen is None:
+        return EgressScreenOutcome(EgressDecision.UNSCREENED, (), "egress_screen_unavailable")
+
+    result = screen(payload)
+    categories = tuple(result.categories)
+    if result.decision == "allow":
+        return EgressScreenOutcome(EgressDecision.PASS, (), str(result.reason))
+
+    if result.decision == "mask":
+        # ``mask`` is reachable only alongside an Art. 9(2) exception_ref, and
+        # digibase's screen_text/screen_request return ``redacted=None`` on every
+        # path in leaf L1 -- there is no redaction implementation to honour the
+        # narrower outcome with. Substituting None would send *less* than was
+        # screened; sending the original unmasked payload would be the exact
+        # failure this epic exists to prevent. Refuse instead, and say so.
+        if result.redacted is None:
+            raise Art9EgressRefused(f"{result.reason}:mask_without_redaction", categories)
+        return EgressScreenOutcome(
+            EgressDecision.MASKED, categories, str(result.reason), result.redacted
+        )
+
+    raise Art9EgressRefused(str(result.reason), categories)
+
+
+class _ScreenedCompletions:
+    """``client.chat.completions`` with the outbound messages screened."""
+
+    __slots__ = ("_inner", "_owner")
+
+    def __init__(self, inner: Any, owner: "_ScreenedOpenAI") -> None:
+        self._inner = inner
+        self._owner = owner
+
+    def create(self, *args: Any, **kwargs: Any) -> Any:
+        if "messages" in kwargs:
+            messages = kwargs["messages"]
+            owner = self._owner
+            try:
+                screened = screen_egress_payload(messages)
+            except Art9EgressRefused as refusal:
+                owner.last_screen = _refusal_outcome(refusal)
+                raise
+            owner.last_screen = screened
+            if screened.decision is EgressDecision.MASKED:
+                kwargs["messages"] = screened.masked_payload
+        return self._inner.create(*args, **kwargs)
+
+
+class _ScreenedEmbeddings:
+    """``client.embeddings`` with the outbound inputs screened."""
+
+    __slots__ = ("_inner", "_owner")
+
+    def __init__(self, inner: Any, owner: "_ScreenedOpenAI") -> None:
+        self._inner = inner
+        self._owner = owner
+
+    def create(self, *args: Any, **kwargs: Any) -> Any:
+        if "input" in kwargs:
+            owner = self._owner
+            try:
+                screened = screen_egress_payload(kwargs["input"])
+            except Art9EgressRefused as refusal:
+                owner.last_screen = _refusal_outcome(refusal)
+                raise
+            owner.last_screen = screened
+            if screened.decision is EgressDecision.MASKED:
+                kwargs["input"] = screened.masked_payload
+        return self._inner.create(*args, **kwargs)
+
+
+class _ScreenedChat:
+    __slots__ = ("_inner", "_owner")
+
+    def __init__(self, inner: Any, owner: "_ScreenedOpenAI") -> None:
+        self._inner = inner
+        self._owner = owner
+
+    @property
+    def completions(self) -> _ScreenedCompletions:
+        return _ScreenedCompletions(self._inner.completions, self._owner)
+
+
+class _ScreenedOpenAI:
+    """Transparent proxy that screens every payload leaving a constructed client.
+
+    Screening at the client, rather than at the call sites inside digillm, is the
+    point of this leaf: ``get_client_for_model`` hands the object to callers, and a
+    caller that uses the client directly -- an MCP tool handler, for instance -- is
+    exactly the path no in-process screen covers.
+
+    Everything that is not ``chat.completions.create`` / ``embeddings.create``
+    delegates untouched, so the proxy cannot change a client's behaviour beyond
+    screening. ``base_url`` in particular must stay reachable: ``_egress_destination``
+    reads it to place the call in the ledger.
+    """
+
+    __slots__ = ("_inner", "chat", "embeddings", "last_screen")
+
+    def __init__(self, inner: OpenAI) -> None:
+        self._inner = inner
+        # Mirror whatever surfaces the wrapped object actually has. A real
+        # ``openai.OpenAI`` has both, but an embeddings-only client double does
+        # not, and a transparent proxy must not be the thing that decides a
+        # client is malformed: synthesising ``chat`` unconditionally raised
+        # AttributeError on construction and broke a landed leaf's suite. An
+        # unset slot falls through ``__getattr__`` to the inner object, so the
+        # proxy raises the same error the inner object would have.
+        chat = getattr(inner, "chat", None)
+        if chat is not None:
+            self.chat = _ScreenedChat(chat, self)
+        embeddings = getattr(inner, "embeddings", None)
+        if embeddings is not None:
+            self.embeddings = _ScreenedEmbeddings(embeddings, self)
+        self.last_screen: EgressScreenOutcome | None = None
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._inner, name)
+
+    def __enter__(self) -> "_ScreenedOpenAI":
+        self._inner.__enter__()
+        return self
+
+    def __exit__(self, *exc: Any) -> Any:
+        return self._inner.__exit__(*exc)
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return f"_ScreenedOpenAI({self._inner!r})"
+
+
+def screened_client(inner: OpenAI) -> _ScreenedOpenAI:
+    """Wrap a freshly constructed client in the Art. 9 egress screen."""
+    return _ScreenedOpenAI(inner)
+
+
+def client_screen_outcome(client: Any) -> EgressScreenOutcome | None:
+    """The full verdict the screen recorded for the call this client just made.
+
+    Returns ``None`` when no call has been screened through this client yet. A
+    caller that records the outbound payload needs ``masked_payload`` as well as
+    the decision: once a screen substitutes a redaction, the honest thing to
+    digest is what went on the wire, not the payload that was screened.
+    """
+    screened = getattr(client, "last_screen", None)
+    # ``last_screen`` is set only by the screen, and only to an
+    # EgressScreenOutcome -- but "the attribute is not None" is not the same
+    # statement as "a verdict was recorded". An object that fabricates
+    # attributes on access (a test double, a duck-typed client) answers the
+    # getattr with a mock, and forwarding that to the ledger would write a
+    # decision no screen ever made and a category set that fails to build the
+    # record at all. The isinstance is the whole guard: it asks who wrote the
+    # value, not merely whether there is one.
+    return screened if isinstance(screened, EgressScreenOutcome) else None
+
+
+def client_screen_fields(
+    client: Any,
+) -> tuple[EgressDecision, tuple[str, ...]]:
+    """Read the verdict the screen recorded for the call this client just made."""
+    screened = client_screen_outcome(client)
+    if screened is None:
+        return EgressDecision.UNSCREENED, ()
+    return screened.decision, screened.category_ids
+
+
+def wire_payload(client: Any, payload: Any) -> Any:
+    """The payload as it actually left, which is what a ledger row must digest.
+
+    Identical to ``payload`` unless the screen masked it, in which case the
+    substituted redaction is what the provider received.
+    """
+    screened = client_screen_outcome(client)
+    if screened is not None and screened.decision is EgressDecision.MASKED:
+        return screened.masked_payload
+    return payload
+
+
+def get_client() -> OpenAI:
+    """Return an OpenAI client for the default (non-prefixed) path.
+
+    When a declared LiteLLM proxy is configured (``OPENAI_API_BASE`` on the
+    trusted-proxy allowlist), this is always that proxy client — house key as
+    Bearer, BYOK keys passed per-request via :func:`_with_byok_litellm_pass_through`.
+    The leftover CLI OpenRouter rewrite, a direct vendor ``OPENAI_API_BASE``,
+    and Ollama are not LiteLLM: BYOK then returns an *uncached* client at the
+    user's ``base_url``.
+    Otherwise returns a client cached by ``(api_key, base_url)`` so the httpx
+    connection pool is reused; the cache key embeds both env-derived values so
+    the client is recreated automatically when either changes (e.g. in tests).
+    """
+    byok_override = _byok_override.get()
+    if byok_override and not _litellm_proxy_configured():
+        api_key, base_url = byok_override
+        return screened_client(
+            OpenAI(api_key=api_key, base_url=base_url, timeout=_REQUEST_TIMEOUT),
+        )
+
+    api_key = _default_client_api_key()
+    base_url = os.environ.get("OPENAI_API_BASE")
+    normalized_base = base_url.rstrip("/") if base_url else None
+    # Key on the normalized base so http://h/v1 and http://h/v1/ reuse one client.
+    cache_key: tuple[str, str | None] = (api_key, normalized_base)
+    client = _client_cache.get(cache_key)
+    if client is None:
+        kwargs: dict[str, Any] = {"api_key": api_key, "timeout": _REQUEST_TIMEOUT}
+        if normalized_base:
+            kwargs["base_url"] = normalized_base
+        client = screened_client(OpenAI(**kwargs))
+        _client_cache[cache_key] = client
+    return client
+
+
+def _default_base_configured() -> bool:
+    """True when ``OPENAI_API_BASE`` is set (LiteLLM *or* leftover OpenRouter rewrite)."""
+    return bool((os.environ.get("OPENAI_API_BASE") or "").strip())
+
+
+def _api_hostname(base: str) -> str:
+    """Hostname of an API base, or empty when the value is not a URL.
+
+    A substring test is true for ``https://evilopenrouter.ai``. CodeQL
+    ``py/incomplete-url-substring-sanitization`` does not accept that.
+    """
+    raw = (base or "").strip()
+    if not raw:
+        return ""
+    if "://" not in raw:
+        raw = f"//{raw}"
+    try:
+        return (urlsplit(raw).hostname or "").rstrip(".").lower()
+    except ValueError:
+        return ""
+
+
+def _hostname_is(base: str, host: str) -> bool:
+    name = _api_hostname(base)
+    return name == host or name.endswith("." + host)
+
+
+def _api_base_is_openrouter() -> bool:
+    """True when the default client talks to OpenRouter's OpenAI-compat API (CLI/GHA)."""
+    return _hostname_is(os.environ.get("OPENAI_API_BASE") or "", "openrouter.ai")
+
+
+_DEFAULT_CHEAPERINFERENCE_API_BASE = "https://api.cheaperinference.com/v1"
+
+# House OpenRouter-style slugs → Cheaper Inference bare catalog ids (verified 2026-09).
+# Excludes anthropic/* (quality bake-off), x-ai/grok-4.3|4.6 (CI has grok-4.5 only),
+# meta-llama/*, perplexity/*, and all ``:online`` variants — those are not on the
+# CI catalog and fail closed when CI is the selected house upstream (#3660).
+_CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE: dict[str, str] = {
+    "deepseek/deepseek-v4-flash": "deepseek-v4-flash",
+    "deepseek/deepseek-v4-pro": "deepseek-v4-pro",
+    "google/gemini-3.7-flash": "gemini-3.7-flash",
+    "google/gemini-3.1-flash-lite": "gemini-3.1-flash-lite",
+    "openai/gpt-5.6-luna": "gpt-5.6-luna",
+    "openai/gpt-5.6-sol": "gpt-5.6-sol",
+    "deepseek/deepseek-v4-flash-0731": "deepseek-v4-flash-0731",
+    "openai/gpt-oss-120b": "gpt-oss-120b",
+    "z-ai/glm-5.3-flash": "glm-5.3-flash",
+}
+
+
+def _api_base_is_cheaperinference() -> bool:
+    """True when the default client talks to hosted Cheaper Inference (CLI/GHA)."""
+    return _hostname_is(os.environ.get("OPENAI_API_BASE") or "", "cheaperinference.com")
+
+
+def cheaperinference_house_preferred() -> bool:
+    """True when house traffic should prefer hosted Cheaper Inference.
+
+    House default: ``CHEAPERINFERENCE_API_KEY`` present → prefer CI.
+    Force OpenRouter: ``DIGI_HOUSE_UPSTREAM=openrouter|or`` or
+    ``CHEAPERINFERENCE_HOUSE=0|false|no|off``.
+    Explicit CI: ``DIGI_HOUSE_UPSTREAM=cheaperinference|ci`` or
+    ``CHEAPERINFERENCE_HOUSE=1|true|yes|on`` (still requires the key).
+    Distinct from self-hosted OmniRoute (``OMNIROUTE_*``).
+    """
+    key = (os.environ.get("CHEAPERINFERENCE_API_KEY") or "").strip()
+    if not key:
+        return False
+    upstream = (os.environ.get("DIGI_HOUSE_UPSTREAM") or "").strip().lower()
+    if upstream in {"openrouter", "or"}:
+        return False
+    if upstream in {"cheaperinference", "ci"}:
+        return True
+    flag = (os.environ.get("CHEAPERINFERENCE_HOUSE") or "").strip().lower()
+    if flag in {"0", "false", "no", "off"}:
+        return False
+    if flag in {"1", "true", "yes", "on"}:
+        return True
+    return True
+
+
+def cheaperinference_bare_id_for_house_slug(model: str) -> str | None:
+    """Return CI bare id for a mapped house slug, else ``None`` (stay OpenRouter)."""
+    if ":online" in model:
+        return None
+    return _CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE.get(model)
+
+
+def _cheaperinference_api_base() -> str:
+    return (
+        os.environ.get("CHEAPERINFERENCE_API_BASE") or ""
+    ).strip() or _DEFAULT_CHEAPERINFERENCE_API_BASE
+
+
+def _cheaperinference_direct_house() -> bool:
+    """True when mapped house slugs should hit hosted CI, not OpenRouter.
+
+    LiteLLM proxy stays on the overlay (merged ``model_name`` keys). Direct
+    clients (CLI / leftover ``OPENAI_API_BASE``) prefer CI whenever the key
+    is set — including when ``OPENROUTER_API_KEY`` is also present.
+    """
+    if _litellm_proxy_configured():
+        return False
+    return cheaperinference_house_preferred() or _api_base_is_cheaperinference()
+
+
+def _cheaperinference_direct_client() -> OpenAI:
+    """Uncached-on-key-change client pointed at hosted Cheaper Inference."""
+    key = (os.environ.get("CHEAPERINFERENCE_API_KEY") or "").strip() or _default_client_api_key()
+    base = _cheaperinference_api_base().rstrip("/")
+    cache_key: tuple[str, str | None] = (key, base)
+    client = _client_cache.get(cache_key)
+    if client is None:
+        client = screened_client(OpenAI(api_key=key, base_url=base, timeout=_REQUEST_TIMEOUT))
+        _client_cache[cache_key] = client
+    return client
+
+
+def _is_ci_catalog_miss(model: str) -> bool:
+    """Selected house upstream is CI but this house slug is not on the catalog.
+
+    Fail-fast: callers raise via :func:`_raise_for_ci_catalog_miss` — there is
+    no quiet OpenRouter fallback. A misconfigured pin must surface, not spend
+    silently on another upstream. LiteLLM proxy is excluded: the merged overlay
+    still carries OpenRouter-only pins (sonar, :online, …).
+    """
+    return (
+        _cheaperinference_direct_house()
+        and _is_openrouter_backed_house_slug(model)
+        and cheaperinference_bare_id_for_house_slug(model) is None
+    )
+
+
+def _raise_for_ci_catalog_miss(model: str) -> NoReturn:
+    """Raise for a CI-catalog miss — never fall back to OpenRouter."""
+    raise RuntimeError(
+        f"house model {model!r} is not on the Cheaper Inference catalog and CI is the "
+        "selected house upstream — refusing to fall back to OpenRouter. "
+        "Remap the pin to a CI catalog id (see docs/providers/cheaperinference.md) or "
+        "set DIGI_HOUSE_UPSTREAM=openrouter to route house traffic to OpenRouter."
+    )
+
+
+# Documented LiteLLM listen URLs. A non-empty ``DIGILLM_TRUSTED_LITELLM_BASES``
+# (comma-separated) replaces this tuple so an operator can pin a single proxy.
+# ``OPENAI_API_BASE`` is a trusted proxy only when it canonicalizes to one of
+# these — never merely because it is set and is not OpenRouter (#3605).
+_DEFAULT_TRUSTED_LITELLM_BASES = (
+    "http://127.0.0.1:4000/v1",
+    "http://localhost:4000/v1",
+    "http://[::1]:4000/v1",
+    "http://litellm:4000/v1",
+    "http://host.docker.internal:4000/v1",
+)
+
+# Catalog ``baseUrl`` values from ``config/byok-providers.json``, trailing slash
+# stripped. digillm does not read that file (standalone library); tests pin
+# this set to the catalog so a new provider cannot silently skip the regex.
+_BYOK_CATALOG_API_BASES = frozenset(
+    {
+        "https://openrouter.ai/api/v1",
+        "https://api.openai.com/v1",
+        "https://api.anthropic.com/v1",
+        "https://generativelanguage.googleapis.com/v1beta/openai",
+        "https://api.x.ai/v1",
+    }
+)
+
+
+def _canonical_llm_base(url: str) -> str:
+    """Lowercase origin+port, dropping a trailing ``/v1`` so allowlist matches both forms."""
+    raw = (url or "").strip().rstrip("/")
+    if not raw:
+        return ""
+    lower = raw.lower()
+    if lower.endswith("/v1"):
+        return lower[: -len("/v1")].rstrip("/")
+    return lower
+
+
+def _trusted_litellm_bases() -> frozenset[str]:
+    extra = (os.environ.get("DIGILLM_TRUSTED_LITELLM_BASES") or "").strip()
+    raw = (
+        [part.strip() for part in extra.split(",") if part.strip()]
+        if extra
+        else list(_DEFAULT_TRUSTED_LITELLM_BASES)
+    )
+    return frozenset(filter(None, (_canonical_llm_base(item) for item in raw)))
+
+
+def _litellm_proxy_configured() -> bool:
+    """True when ``OPENAI_API_BASE`` is an explicitly declared LiteLLM proxy.
+
+    The allowlist is :data:`_DEFAULT_TRUSTED_LITELLM_BASES` unless
+    ``DIGILLM_TRUSTED_LITELLM_BASES`` replaces it. Direct vendor endpoints
+    (OpenAI, OpenRouter, Ollama :11434, …) are not proxies even when they
+    speak the OpenAI protocol.
+    """
+    base = (os.environ.get("OPENAI_API_BASE") or "").strip()
+    if not base:
+        return False
+    return _canonical_llm_base(base) in _trusted_litellm_bases()
+
+
+# OpenRouter org slugs used as house ``model_name`` keys in ``config/litellm.yaml``.
+# Not leftover vendor prefixes (``gemini/``, ``xai/``) and not native OpenAI ids
+# (``gpt-4o-mini``) or self-hosted ``ollama/`` / ``omniroute/`` models.
+_OPENROUTER_HOUSE_SLUG_PREFIXES: tuple[str, ...] = (
+    "deepseek/",
+    "anthropic/",
+    "openai/",
+    "google/",
+    "meta-llama/",
+    "x-ai/",
+    "perplexity/",
+    "openrouter/",
+)
+
+
+def _is_openrouter_backed_house_slug(model: str) -> bool:
+    return model.startswith(_OPENROUTER_HOUSE_SLUG_PREFIXES)
+
+
+def _use_default_base_client(model: str) -> bool:
+    """Route a registered prefix through ``OPENAI_API_BASE`` when that is the house path.
+
+    LiteLLM: every prefix (caller → digillm → LiteLLM). Leftover OpenRouter rewrite:
+    house OpenRouter slugs that collide with the registry (``anthropic/``, leftover
+    ``openrouter/``) stay on the default client so ``anthropic/claude-sonnet-5`` does
+    not hit api.anthropic.com. ``gemini/`` and ``xai/`` stay vendor clients. Any
+    other non-proxy ``OPENAI_API_BASE`` (direct OpenAI, Ollama, …) is not treated
+    as LiteLLM.
+    """
+    provider, _ = _parse_provider_prefix(model)
+    if provider is None or not _default_base_configured():
+        return False
+    if _litellm_proxy_configured():
+        return True
+    if _api_base_is_openrouter():
+        return provider in {"anthropic", "openrouter"}
+    return False
+
+
+def _with_byok_litellm_pass_through(kwargs: dict[str, Any]) -> dict[str, Any]:
+    """Attach LiteLLM clientside credentials when BYOK is bound on the proxy path.
+
+    Only when ``OPENAI_API_BASE`` is a declared LiteLLM proxy. HTTP still
+    authenticates to LiteLLM with the house proxy key. ``extra_body``
+    ``api_key`` / ``api_base`` are LiteLLM's request-level pass-through so the
+    proxy spends the user's token at the catalog provider host. ``api_base``
+    outside :data:`_BYOK_CATALOG_API_BASES` is refused here — LiteLLM's regex
+    allowlist is the second gate. BYOK requests also set
+    ``cache: {no-cache, no-store}`` so LiteLLM's shared proxy cache cannot
+    reuse one principal's response for another. No-op without LiteLLM or
+    without BYOK.
+    """
+    if not _litellm_proxy_configured():
+        return kwargs
+    byok_override = _byok_override.get()
+    if not byok_override:
+        return kwargs
+    api_key, base_url = byok_override
+    catalog_base = base_url.rstrip("/")
+    if catalog_base not in _BYOK_CATALOG_API_BASES:
+        raise RuntimeError(
+            f"BYOK api_base {base_url!r} is not a catalog provider host; "
+            "clientside pass-through is limited to config/byok-providers.json bases."
+        )
+    merged = dict(kwargs)
+    extra = dict(merged.get("extra_body") or {})
+    extra["api_key"] = api_key
+    extra["api_base"] = catalog_base
+    cache = dict(extra.get("cache") or {})
+    cache["no-cache"] = True
+    cache["no-store"] = True
+    extra["cache"] = cache
+    merged["extra_body"] = extra
+    return merged
+
+
+def _effective_model_id(model: str) -> str:
+    """Model id on the wire: full caller string for LiteLLM; vendor slug otherwise."""
+    bare = cheaperinference_bare_id_for_house_slug(model)
+    if bare is not None and _cheaperinference_direct_house():
+        return bare
+    if _is_ci_catalog_miss(model):
+        _raise_for_ci_catalog_miss(model)
+    provider, model_id = _parse_provider_prefix(model)
+    if _use_default_base_client(model):
+        return model
+    return _wire_model(provider, model_id, model)
+
+
+def get_client_for_model(model: str) -> OpenAI:
+    """Return the OpenAI client for ``model`` (the single public client entry point).
+
+    Declared LiteLLM proxy (``OPENAI_API_BASE`` on the trusted-proxy allowlist):
+    house and BYOK use :func:`get_client`. Registered prefixes are LiteLLM
+    ``model_name`` keys. BYOK keys ride ``extra_body``.
+
+    Default base set (including leftover OpenRouter rewrite): house
+    ``anthropic/`` / leftover ``openrouter/`` stay on :func:`get_client` so
+    they do not hit api.anthropic.com. Prefixed BYOK uses the user Bearer
+    against the vendor URL. ``gemini/`` / ``xai/`` stay vendor clients.
+
+    No default base: a ``provider/model_id`` prefix matching a registered
+    provider yields a dedicated vendor client (BYOK: uncached user key;
+    otherwise cached operator key). Every other model string uses
+    :func:`get_client`.
+
+    Raises:
+        RuntimeError: when a registered provider's API key env var is unset
+            **and** the call is not using the default-base client.
+    """
+    provider, _ = _parse_provider_prefix(model)
+    byok_override = _byok_override.get()
+    if byok_override and not _litellm_proxy_configured() and provider is not None:
+        api_key, base_url = byok_override
+        cfg = _EXTERNAL_PROVIDERS.get(provider)
+        if cfg and base_url.rstrip("/") == cfg["base_url"].rstrip("/"):
+            return screened_client(
+                OpenAI(api_key=api_key, base_url=base_url, timeout=_REQUEST_TIMEOUT),
+            )
+        expected = cfg["base_url"] if cfg else "a registered provider base_url"
+        raise RuntimeError(
+            f"BYOK api_base {base_url!r} does not match registered base for "
+            f"provider {provider!r} (expected {expected!r}); refusing silent "
+            "house/vendor fallthrough."
+        )
+    # Cheaper Inference default base: mapped house slugs use get_client(); a catalog
+    # miss (sonar / :online / maverick / grok-4.3|4.6 / anthropic) always raises —
+    # there is no OpenRouter fallback.
+    if _is_ci_catalog_miss(model):
+        _raise_for_ci_catalog_miss(model)
+    elif cheaperinference_bare_id_for_house_slug(model) is not None and (
+        _cheaperinference_direct_house()
+    ):
+        if _api_base_is_cheaperinference():
+            return get_client()
+        return _cheaperinference_direct_client()
+    if provider is None or _use_default_base_client(model):
+        return get_client()
+    cfg = _EXTERNAL_PROVIDERS[provider]
+    api_key = os.environ.get(cfg["api_key_env"], "").strip()
+    if not api_key:
+        raise RuntimeError(f"Model {model!r} requires env var {cfg['api_key_env']} to be set.")
+    # Key by (provider, api_key) so a rotated/changed key rebuilds the client,
+    # honoring the env-change invalidation the cache promises.
+    cache_key = (provider, api_key)
+    cached = _client_cache.get(cache_key)
+    if cached is not None:
+        return cached
+    client = screened_client(
+        OpenAI(api_key=api_key, base_url=cfg["base_url"], timeout=_REQUEST_TIMEOUT),
+    )
+    _client_cache[cache_key] = client
+    return client
+
+
+def clear_caches() -> None:
+    """Clear the response cache and the client cache (primarily for tests)."""
+    _clear_response_cache()
+    _client_cache.clear()
+
+
+# ── Physical-attempt telemetry ───────────────────────────────────────────────
+
+_telemetry_observer: TelemetryObserver | None = None
+
+
+def set_telemetry_observer(observer: TelemetryObserver | None) -> None:
+    """Register a process-wide provider telemetry sink; pass ``None`` to disable."""
+    global _telemetry_observer
+    _telemetry_observer = observer
+
+
+@dataclass
+class ProviderCallContextHandle:
+    """Mutable logical-call result and deferred-disposition handle."""
+
+    last_call_id: UUID | None = None
+    _pending_records: list[ProviderCallRecord] = field(default_factory=list, repr=False)
+
+    def set_no_artifact_reason(self, reason: NoArtifactReason) -> bool:
+        """Replace the latest deferred successful disposition when one exists."""
+        if not self._pending_records:
+            return False
+        record = self._pending_records[-1]
+        if record.outcome is not ProviderCallOutcome.SUCCEEDED:
+            return False
+        self._pending_records[-1] = record.model_copy(
+            update={"artifacts": (), "no_artifact_reason": reason}
+        )
+        return True
+
+    def finalize(self) -> None:
+        """Deliver and clear all deferred logical records exactly once."""
+        records = tuple(self._pending_records)
+        self._pending_records.clear()
+        observer = _telemetry_observer
+        if observer is None:
+            return
+        for record in records:
+            emit_telemetry(observer, record)
+
+
+@dataclass(frozen=True)
+class _ProviderCallMetadata:
+    node_run_id: UUID
+    purpose: CallPurpose
+    parent_call_id: UUID | None
+    artifacts: tuple[ArtifactRef, ...]
+    no_artifact_reason: NoArtifactReason | None
+    follow_up_purpose: CallPurpose | None
+    follow_up_artifacts: tuple[ArtifactRef, ...]
+    follow_up_no_artifact_reason: NoArtifactReason | None
+    defer_finalization: bool
+    handle: ProviderCallContextHandle
+
+
+_provider_call_metadata: ContextVar[_ProviderCallMetadata | None] = ContextVar(
+    "digillm_provider_call_metadata", default=None
+)
+
+
+@contextlib.contextmanager
+def provider_call_context(
+    *,
+    node_run_id: UUID,
+    purpose: CallPurpose,
+    parent_call_id: UUID | None = None,
+    artifacts: tuple[ArtifactRef, ...] = (),
+    no_artifact_reason: NoArtifactReason | None = None,
+    follow_up_purpose: CallPurpose | None = None,
+    follow_up_artifacts: tuple[ArtifactRef, ...] = (),
+    follow_up_no_artifact_reason: NoArtifactReason | None = None,
+    defer_finalization: bool = False,
+    handle: ProviderCallContextHandle | None = None,
+) -> Iterator[ProviderCallContextHandle]:
+    """Inject generic logical-call metadata without changing provider call signatures."""
+    if bool(artifacts) == (no_artifact_reason is not None):
+        raise ValueError("provide either artifacts or one no_artifact_reason")
+    if follow_up_purpose is not None and bool(follow_up_artifacts) == (
+        follow_up_no_artifact_reason is not None
+    ):
+        raise ValueError("provide either follow_up_artifacts or one follow_up_no_artifact_reason")
+    call_handle = handle or ProviderCallContextHandle()
+    token = _provider_call_metadata.set(
+        _ProviderCallMetadata(
+            node_run_id=node_run_id,
+            purpose=purpose,
+            parent_call_id=parent_call_id,
+            artifacts=artifacts,
+            no_artifact_reason=no_artifact_reason,
+            follow_up_purpose=follow_up_purpose,
+            follow_up_artifacts=follow_up_artifacts,
+            follow_up_no_artifact_reason=follow_up_no_artifact_reason,
+            defer_finalization=defer_finalization,
+            handle=call_handle,
+        )
+    )
+    try:
+        yield call_handle
+    finally:
+        _provider_call_metadata.reset(token)
+
+
+def detach_provider_call_context() -> None:
+    """Drop the inherited logical-call metadata in the *current* context, token-free.
+
+    For a thread running inside a :func:`contextvars.copy_context` snapshot taken to
+    carry a request's *credentials* across the boundary. A copy propagates references
+    rather than values, so the snapshot hands every fan-out worker the same mutable
+    :class:`ProviderCallContextHandle`: they all write its ``last_call_id`` (leaving a
+    follow-up call parented on whichever sibling happened to finish last) and all append
+    to the one deferred-record list that ``finalize`` tuples and clears. A worker that
+    inherited an empty context read ``None`` here, so this restores that *for this
+    module's var*. It says nothing about a consumer's own logical-call vars, which the
+    same snapshot carries and which can hold the same handle one layer up --
+    :func:`set_fan_out_detach_hook` is how a consumer clears those alongside this one.
+
+    Nesting fan-out calls under their parent's logical call is a separate feature, and a
+    real one -- it needs a per-worker handle plus a merge at the join, not a shared
+    handle written concurrently.
+    """
+    _provider_call_metadata.set(None)
+
+
+@dataclass
+class _AttemptScope:
+    call_id: UUID
+    requested_model: str
+    started_at: datetime
+    metadata: _ProviderCallMetadata | None
+    next_attempt_number: int = 1
+    next_retry_reason: RetryReason = RetryReason.NOT_APPLICABLE
+    cache_status: CacheStatus = CacheStatus.UNAVAILABLE
+    finalized: bool = False
+    terminal_outcome: ProviderCallOutcome | None = None
+    logical_error_type: str | None = None
+    last_attempt_id: UUID | None = None
+
+    def start(self) -> tuple[int, RetryReason, datetime]:
+        attempt_number = self.next_attempt_number
+        retry_reason = self.next_retry_reason
+        self.next_attempt_number += 1
+        self.next_retry_reason = RetryReason.UNKNOWN
+        return attempt_number, retry_reason, datetime.now(UTC)
+
+
+_attempt_scope: ContextVar[_AttemptScope | None] = ContextVar("digillm_attempt_scope", default=None)
+
+
+@contextlib.contextmanager
+def _logical_attempt_scope(requested_model: str = "unknown") -> Iterator[_AttemptScope]:
+    existing = _attempt_scope.get()
+    if existing is not None:
+        yield existing
+        return
+    context_metadata = _provider_call_metadata.get()
+    metadata = context_metadata
+    if (
+        context_metadata is not None
+        and context_metadata.handle.last_call_id is not None
+        and context_metadata.follow_up_purpose is not None
+    ):
+        metadata = _ProviderCallMetadata(
+            node_run_id=context_metadata.node_run_id,
+            purpose=context_metadata.follow_up_purpose,
+            parent_call_id=context_metadata.handle.last_call_id,
+            artifacts=context_metadata.follow_up_artifacts,
+            no_artifact_reason=context_metadata.follow_up_no_artifact_reason,
+            follow_up_purpose=context_metadata.follow_up_purpose,
+            follow_up_artifacts=context_metadata.follow_up_artifacts,
+            follow_up_no_artifact_reason=context_metadata.follow_up_no_artifact_reason,
+            defer_finalization=context_metadata.defer_finalization,
+            handle=context_metadata.handle,
+        )
+    scope = _AttemptScope(
+        call_id=uuid4(),
+        requested_model=requested_model,
+        started_at=datetime.now(UTC),
+        metadata=metadata,
+    )
+    if metadata is not None:
+        metadata.handle.last_call_id = scope.call_id
+    token = _attempt_scope.set(scope)
+    try:
+        yield scope
+    finally:
+        _attempt_scope.reset(token)
+
+
+def _with_logical_attempt_scope(function: Callable[..., Any]) -> Callable[..., Any]:
+    @functools.wraps(function)
+    def wrapped(*args: Any, **kwargs: Any) -> Any:
+        if _attempt_scope.get() is not None:
+            return function(*args, **kwargs)
+        requested_model = str(args[0]) if args else str(kwargs.get("model") or "unknown")
+        with _logical_attempt_scope(requested_model) as scope:
+            try:
+                result = function(*args, **kwargs)
+            except (GeneratorExit, asyncio.CancelledError):
+                _emit_logical_call(
+                    scope,
+                    scope.terminal_outcome or ProviderCallOutcome.CANCELLED,
+                    error_type=scope.logical_error_type,
+                )
+                raise
+            except Exception as error:
+                _emit_logical_call(
+                    scope,
+                    scope.terminal_outcome or ProviderCallOutcome.FAILED,
+                    error_type=scope.logical_error_type or type(error).__name__,
+                )
+                raise
+            if scope.next_attempt_number > 1 or scope.cache_status is CacheStatus.HIT:
+                _emit_logical_call(
+                    scope,
+                    scope.terminal_outcome or ProviderCallOutcome.SUCCEEDED,
+                    error_type=scope.logical_error_type,
+                )
+            return result
+
+    return wrapped
+
+
+def _emit_logical_call(
+    scope: _AttemptScope,
+    outcome: ProviderCallOutcome,
+    *,
+    error_type: str | None = None,
+) -> None:
+    if scope.finalized:
+        return
+    scope.finalized = True
+    observer = _telemetry_observer
+    metadata = scope.metadata
+    if observer is None or metadata is None:
+        return
+    try:
+        artifacts = metadata.artifacts
+        no_artifact_reason = metadata.no_artifact_reason
+        if outcome is ProviderCallOutcome.FAILED:
+            artifacts = ()
+            no_artifact_reason = NoArtifactReason.CALL_FAILED
+        elif outcome is ProviderCallOutcome.CANCELLED:
+            artifacts = ()
+            no_artifact_reason = NoArtifactReason.CALL_CANCELLED
+            error_type = None
+        record = ProviderCallRecord(
+            call_id=scope.call_id,
+            node_run_id=metadata.node_run_id,
+            parent_call_id=metadata.parent_call_id,
+            purpose=metadata.purpose,
+            requested_model=scope.requested_model,
+            cache_status=scope.cache_status,
+            outcome=outcome,
+            attempt_count=scope.next_attempt_number - 1,
+            artifacts=artifacts,
+            no_artifact_reason=no_artifact_reason,
+            error_type=error_type,
+            started_at=scope.started_at,
+            finished_at=datetime.now(UTC),
+        )
+        if metadata.defer_finalization and outcome is ProviderCallOutcome.SUCCEEDED:
+            metadata.handle._pending_records.append(record)
+        else:
+            emit_telemetry(observer, record)
+    except Exception as telemetry_error:
+        logger.debug("logical-call telemetry failed: %s", type(telemetry_error).__name__)
+
+
+def _provider_name(provider: str | None) -> str:
+    return provider or "default"
+
+
+def _retry_reason(error: Exception) -> RetryReason:
+    from openai import APIConnectionError, APITimeoutError, InternalServerError, RateLimitError
+
+    if isinstance(error, RateLimitError):
+        return RetryReason.RATE_LIMIT
+    if isinstance(error, APITimeoutError):
+        return RetryReason.TIMEOUT
+    if isinstance(error, APIConnectionError):
+        return RetryReason.CONNECTION_ERROR
+    if isinstance(error, InternalServerError):
+        return RetryReason.SERVER_ERROR
+    return RetryReason.UNKNOWN
+
+
+def _optional_nonnegative_int(value: Any) -> int | None:
+    # ``bool`` subclasses ``int``, so ``isinstance(False, int)`` is True. Treating False as 0
+    # would invent a measured-zero token count when the provider omitted usage (#1989).
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None
+    return value
+
+
+def _optional_attribute(value: Any, name: str) -> Any:
+    try:
+        return getattr(value, name, None)
+    except Exception:
+        return None
+
+
+def _response_usage(response: Any) -> tuple[int | None, int | None, Decimal | None]:
+    usage = _optional_attribute(response, "usage")
+    prompt_tokens = _optional_attribute(usage, "prompt_tokens")
+    if prompt_tokens is None:
+        prompt_tokens = _optional_attribute(usage, "input_tokens")
+    completion_tokens = _optional_attribute(usage, "completion_tokens")
+    if completion_tokens is None:
+        completion_tokens = _optional_attribute(usage, "output_tokens")
+    cost = _optional_attribute(usage, "cost")
+    if cost is None:
+        extra = _optional_attribute(usage, "model_extra")
+        if isinstance(extra, dict):
+            cost = extra.get("cost")
+    cost_usd: Decimal | None = None
+    if cost is not None:
+        try:
+            parsed_cost = Decimal(str(cost))
+        except (InvalidOperation, ValueError):
+            pass
+        else:
+            if parsed_cost.is_finite() and parsed_cost >= 0:
+                cost_usd = parsed_cost
+    return (
+        _optional_nonnegative_int(prompt_tokens),
+        _optional_nonnegative_int(completion_tokens),
+        cost_usd,
+    )
+
+
+@dataclass
+class _StreamEvidence:
+    model: str | None = None
+    usage: Any = None
+
+    def observe(self, chunk: Any) -> None:
+        chunk_model = _optional_attribute(chunk, "model")
+        if isinstance(chunk_model, str) and chunk_model:
+            self.model = chunk_model
+        chunk_usage = _optional_attribute(chunk, "usage")
+        if chunk_usage is not None:
+            self.usage = chunk_usage
+
+
+def _emit_attempt(
+    *,
+    scope: _AttemptScope,
+    attempt_number: int,
+    retry_reason: RetryReason,
+    provider: str,
+    requested_model: str,
+    started_at: datetime,
+    outcome: ProviderAttemptOutcome,
+    response: Any = None,
+    error: Exception | None = None,
+) -> None:
+    attempt_id = uuid4()
+    scope.last_attempt_id = attempt_id
+    observer = _telemetry_observer
+    if observer is None:
+        return
+    try:
+        prompt_tokens, completion_tokens, cost_usd = _response_usage(response)
+        served_model = _optional_attribute(response, "model")
+        record = ProviderAttemptRecord(
+            attempt_id=attempt_id,
+            call_id=scope.call_id,
+            attempt_number=attempt_number,
+            provider=provider,
+            requested_model=requested_model,
+            served_model=served_model if isinstance(served_model, str) and served_model else None,
+            started_at=started_at,
+            finished_at=datetime.now(UTC),
+            outcome=outcome,
+            retry_reason=retry_reason,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            cost_usd=cost_usd,
+            error_type=type(error).__name__ if error is not None else None,
+        )
+        emit_telemetry(observer, record)
+    except Exception as telemetry_error:
+        logger.debug("attempt telemetry failed: %s", type(telemetry_error).__name__)
+
+
+def _wp1_join_fields() -> dict[str, Any]:
+    """Soft-stamp fields for the glass-box usage observer (#2763)."""
+    scope = _attempt_scope.get()
+    if scope is None:
+        return {}
+    fields: dict[str, Any] = {"call_id": scope.call_id}
+    if scope.last_attempt_id is not None:
+        fields["attempt_id"] = scope.last_attempt_id
+    if scope.metadata is not None and scope.metadata.node_run_id is not None:
+        fields["node_run_id"] = scope.metadata.node_run_id
+    return fields
+
+
+# ── Usage observer ──────────────────────────────────────────────────────────────
+# digillm stays a leaf library (no digigraph/service imports), so it can't write into
+# a consumer's per-run usage accumulator directly. Instead the consuming app registers
+# an observer here; digillm calls it after each completion / grounding call. No-op
+# until registered, and observer errors never break the LLM call.
+
+_usage_observer: Callable[..., None] | None = None
+
+
+def set_usage_observer(observer: Callable[..., None] | None) -> None:
+    """Register a telemetry sink called after each completion.
+
+    The observer is invoked with keyword fields: ``kind`` ("chat" |
+    "empty_retry"), ``model``, and per-kind ``prompt_tokens`` /
+    ``completion_tokens`` / ``ok``. Pass ``None`` to disable. Observer errors
+    are swallowed.
+    """
+    global _usage_observer
+    _usage_observer = observer
+
+
+def _record_usage(**fields: Any) -> None:
+    """Forward a usage record to the registered observer (no-op / swallow if none)."""
+    observer = _usage_observer
+    if observer is None:
+        return
+    try:
+        # Stamp WP1 join keys from the active attempt scope unless the caller already set them.
+        for key, value in _wp1_join_fields().items():
+            fields.setdefault(key, value)
+        observer(**fields)
+    except Exception as exc:  # telemetry must never break the LLM call
+        logger.debug("usage observer raised: %s", exc)
+
+
+# ── Egress record ─────────────────────────────────────────────────────────────
+# One record per physical attempt that reached the wire, plus one for the cache-hit
+# path where nothing left the process. The record carries a keyed digest of the
+# outbound messages, never the messages: see digillm.egress_record for why an
+# unkeyed fallback is worse than no digest at all.
+
+
+def _egress_destination(client: OpenAI) -> str:
+    """Resolve where a call is going, without ever reading the API key.
+
+    A base URL may legitimately carry credentials in its userinfo
+    (``https://user:token@proxy/v1``), so the userinfo is stripped before the
+    value reaches a plain-text ledger. When the client has no usable base URL the
+    destination is recorded as ``unknown`` rather than ``none``: ``none`` is the
+    no-egress sentinel, and an egress we cannot place must not be filed as one.
+    """
+    base_url = getattr(client, "base_url", None)
+    if not base_url:
+        return UNKNOWN_DESTINATION
+    text = str(base_url)
+    try:
+        parts = urlsplit(text)
+    except ValueError:  # pragma: no cover - urlsplit is very permissive
+        return text.split("@")[-1]
+    if "@" not in parts.netloc:
+        return text
+    host = parts.netloc.rsplit("@", 1)[1]
+    return urlunsplit((parts.scheme, host, parts.path, parts.query, parts.fragment))
+
+
+def _record_egress(
+    *,
+    scope: _AttemptScope,
+    destination: str,
+    provider: str,
+    model: str,
+    outcome: str,
+    decision: EgressDecision = EgressDecision.UNSCREENED,
+    category_ids: tuple[str, ...] = (),
+    payload: Any = None,
+) -> None:
+    """Emit one egress record for a call that left (or did not leave) the process."""
+    metadata = scope.metadata
+    record_egress(
+        call_id=scope.call_id,
+        attempt_id=uuid4(),
+        destination=destination,
+        provider=provider,
+        model=model,
+        purpose=str(metadata.purpose) if metadata is not None else "unknown",
+        cache_status=str(scope.cache_status),
+        outcome=outcome,
+        decision=decision,
+        category_ids=category_ids,
+        payload=payload,
+    )
+
+
+# ── Tool-argument normalization ───────────────────────────────────────────────
+
+
+def _normalize_tool_arguments(args_str: str | None) -> str:
+    """Return a valid JSON string for tool-call arguments.
+
+    Some models stream invalid JSON (incomplete, trailing comma). Best-effort
+    repairs (missing closing ``}``, trailing commas) are applied when they yield
+    valid JSON. Empty / whitespace-only becomes ``"{}"``. Irreparable garbage
+    raises ``ValueError`` (fail-fast) rather than silently substituting ``"{}"``.
+    """
+    s = (args_str or "").strip()
+    if not s:
+        return "{}"
+    try:
+        json.loads(s)
+        return s
+    except json.JSONDecodeError:
+        pass
+    fixed = s.rstrip()
+    if fixed and not fixed.endswith("}"):
+        fixed = fixed[:-1] + "}" if fixed.endswith(",") else fixed + "}"
+    try:
+        json.loads(fixed)
+        return fixed
+    except json.JSONDecodeError:
+        pass
+    fixed = re.sub(r",\s*}", "}", fixed)
+    fixed = re.sub(r",\s*]", "]", fixed)
+    try:
+        json.loads(fixed)
+        return fixed
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            f"tool call arguments are not valid JSON and could not be repaired: {s!r}"
+        ) from exc
+
+
+def _compact_tool_message_content(msg_content: str) -> str:
+    """Truncate oversized tool-result text before injecting it into the next turn."""
+    if len(msg_content) <= _MAX_TOOL_MESSAGE_CHARS:
+        return msg_content
+    return (
+        msg_content[: _MAX_TOOL_MESSAGE_CHARS - 80].rstrip()
+        + "\n...[truncated for LLM context; full tool payload retained upstream]"
+    )
+
+
+# ── Retry ─────────────────────────────────────────────────────────────────────
+
+
+def _sleep_transient_retry(delay: float, *, max_delay: float = 300.0) -> float:
+    """Sleep ``delay`` plus up to 25% jitter; return the next (doubled, capped) delay."""
+    jitter = random.uniform(0.0, delay * 0.25)
+    time.sleep(delay + jitter)  # intentional blocking backoff
+    return min(delay * 2, max_delay)
+
+
+def _create_with_retry(
+    client: OpenAI,
+    *,
+    _provider: str | None = None,
+    _requested_model: str | None = None,
+    _defer_success: bool = False,
+    on_attempt: Callable[[], None] | None = None,
+    **kwargs: Any,
+) -> Any:
+    """Call ``client.chat.completions.create`` with backoff on transient errors.
+
+    Retries on ``RateLimitError`` (429), ``InternalServerError`` (5xx),
+    ``APIConnectionError`` (TCP/DNS/proxy blips) and ``APITimeoutError``. Other
+    exceptions (auth, bad-request) propagate immediately. Backoff starts at 5s,
+    doubles per attempt, caps at 300s, with up to 25% jitter to avoid
+    thundering-herd retries; ~12 attempts ≈ a 30-minute budget.
+    """
+    from openai import (
+        APIConnectionError,
+        APITimeoutError,
+        InternalServerError,
+        RateLimitError,
+    )
+
+    transient = (RateLimitError, InternalServerError, APIConnectionError, APITimeoutError)
+    max_attempts = _provider_max_attempts()
+    delay = 5.0
+    # The semaphore smooths fan-out bursts into a steady flow (#3738); it is
+    # held for the whole logical call, backoffs included.
+    with _provider_semaphore(), _logical_attempt_scope() as scope:
+        requested_model = _requested_model or str(kwargs.get("model") or "unknown")
+        provider = _provider_name(_provider)
+        kwargs = _with_byok_litellm_pass_through(kwargs)
+        # The digest covers the messages as they go on the wire, which is after any
+        # DIGI_TOOL_MESSAGE_MAX_CHARS compaction -- and only the messages, never the
+        # whole kwargs dict, which can carry a BYOK key in extra_body.
+        #
+        # "As they go on the wire" is not this binding on its own. The screen
+        # substitutes the redacted copy *inside* create, on a fresh dict built by
+        # the **kwargs expansion, so on a masked attempt this binding still holds
+        # the text the screen withheld. Every record therefore digests through
+        # wire_payload(), which substitutes the copy the provider actually
+        # received; digests against the binding and the ledger describes an egress
+        # that did not happen.
+        outbound_payload = kwargs.get("messages")
+        destination = _egress_destination(client)
+        # Set by the client's egress screen during the attempt below. Bound before
+        # the loop so every record this function writes carries the verdict that
+        # actually applied to that attempt, rather than whatever a later attempt
+        # left behind on the client.
+        screen_decision, screen_categories = EgressDecision.UNSCREENED, ()
+        for attempt in range(max_attempts):
+            attempt_number, retry_reason, started_at = scope.start()
+            try:
+                if on_attempt is not None:
+                    on_attempt()
+                response = client.chat.completions.create(**kwargs)
+                screen_decision, screen_categories = client_screen_fields(client)
+            except Art9EgressRefused as refusal:
+                # The screen refused the payload, so nothing left the process. This
+                # gets its own branch ahead of the generic one below precisely so it
+                # is NOT recorded as a failed attempt: the comment there says an
+                # attempt "reached the wire (or failed to)", and this one never left
+                # the building. It is still recorded -- an Art. 9 refusal is exactly
+                # what the ledger exists to show -- under its own outcome, with the
+                # real destination (only a cache hit may claim "none") and the
+                # categories that triggered it. Never retried: the payload did not
+                # change between attempts, so a retry would be refused identically.
+                _record_egress(
+                    scope=scope,
+                    destination=destination,
+                    provider=provider,
+                    model=str(kwargs.get("model") or "unknown"),
+                    # Not "failed": nothing was attempted, so a reader filtering on
+                    # outcome would otherwise count this as a provider outage. The
+                    # record's outcome is a free-form string precisely so a blocked
+                    # call can say so; the telemetry enum below has no such member
+                    # and keeps FAILED, which is the closest thing it can express.
+                    outcome="refused",
+                    decision=EgressDecision.REFUSED,
+                    category_ids=refusal.categories,
+                    payload=wire_payload(client, outbound_payload),
+                )
+                _emit_attempt(
+                    scope=scope,
+                    attempt_number=attempt_number,
+                    retry_reason=retry_reason,
+                    provider=provider,
+                    requested_model=requested_model,
+                    started_at=started_at,
+                    outcome=ProviderAttemptOutcome.FAILED,
+                    error=refusal,
+                )
+                scope.terminal_outcome = ProviderCallOutcome.FAILED
+                raise
+            except asyncio.CancelledError:
+                screen_decision, screen_categories = client_screen_fields(client)
+                scope.terminal_outcome = ProviderCallOutcome.CANCELLED
+                _record_egress(
+                    scope=scope,
+                    destination=destination,
+                    provider=provider,
+                    model=str(kwargs.get("model") or "unknown"),
+                    outcome=ProviderAttemptOutcome.CANCELLED.value,
+                    decision=screen_decision,
+                    category_ids=screen_categories,
+                    payload=wire_payload(client, outbound_payload),
+                )
+                _emit_attempt(
+                    scope=scope,
+                    attempt_number=attempt_number,
+                    retry_reason=retry_reason,
+                    provider=provider,
+                    requested_model=requested_model,
+                    started_at=started_at,
+                    outcome=ProviderAttemptOutcome.CANCELLED,
+                )
+                raise
+            except Exception as error:
+                screen_decision, screen_categories = client_screen_fields(client)
+                # The attempt reached the wire (or failed to), so it gets a record
+                # even when the retry loop will try again.
+                _record_egress(
+                    scope=scope,
+                    destination=destination,
+                    provider=provider,
+                    model=str(kwargs.get("model") or "unknown"),
+                    outcome=ProviderAttemptOutcome.FAILED.value,
+                    decision=screen_decision,
+                    category_ids=screen_categories,
+                    payload=wire_payload(client, outbound_payload),
+                )
+                _emit_attempt(
+                    scope=scope,
+                    attempt_number=attempt_number,
+                    retry_reason=retry_reason,
+                    provider=provider,
+                    requested_model=requested_model,
+                    started_at=started_at,
+                    outcome=ProviderAttemptOutcome.FAILED,
+                    error=error,
+                )
+                if not isinstance(error, transient) or attempt >= max_attempts - 1:
+                    raise
+                scope.next_retry_reason = _retry_reason(error)
+                logger.warning(
+                    "%s (attempt %d/%d): backing off %.1fs before retry",
+                    type(error).__name__,
+                    attempt + 1,
+                    max_attempts,
+                    delay,
+                )
+                delay = _sleep_transient_retry(delay)
+                continue
+            _record_egress(
+                scope=scope,
+                destination=destination,
+                provider=provider,
+                model=str(kwargs.get("model") or "unknown"),
+                # A streaming call has already sent the payload at this point, but
+                # its body has not been read yet, so the attempt's fate is still
+                # open. Recording "started" is the honest value; recording
+                # "succeeded" here would leave a permanent false success for every
+                # stream that dies mid-flight, which is the case counsel asks about.
+                outcome=(
+                    ProviderAttemptOutcome.STARTED.value
+                    if _defer_success
+                    else ProviderAttemptOutcome.SUCCEEDED.value
+                ),
+                decision=screen_decision,
+                category_ids=screen_categories,
+                payload=wire_payload(client, outbound_payload),
+            )
+            if _defer_success:
+                return response, scope, attempt_number, retry_reason, started_at
+            _emit_attempt(
+                scope=scope,
+                attempt_number=attempt_number,
+                retry_reason=retry_reason,
+                provider=provider,
+                requested_model=requested_model,
+                started_at=started_at,
+                outcome=ProviderAttemptOutcome.SUCCEEDED,
+                response=response,
+            )
+            return response
+    raise RuntimeError("chat completion failed after all retry attempts")  # pragma: no cover
+
+
+# Empty-response self-heal: a 200-OK with no usable output (empty ``choices`` / blank
+# content and no tool_calls) is a transient provider hiccup — the one that aborted the
+# #726 baseline. Under a wide analyst fan-out on cheapest routing, empty completions
+# became a storm (#814). Defaults raised:
+#   DIGILLM_EMPTY_RETRY_MAX     2 → 4  (more healing attempts before giving up)
+#   DIGILLM_EMPTY_RETRY_BACKOFF 2s → 5s  (longer pause lets the provider recover)
+# If still empty after all retries, the response is returned unchanged (callers stay
+# graceful: completion_text → "" and the node/chain fail-soft handles a persistent blank).
+#
+# DIGILLM_EMPTY_RETRY_DELAY is accepted as a back-compat alias for DIGILLM_EMPTY_RETRY_BACKOFF
+# (avoids a breaking change for operators who pinned the old name; new name wins if both set).
+_EMPTY_RETRY_MAX = int(os.environ.get("DIGILLM_EMPTY_RETRY_MAX", "4") or 4)
+_backoff_raw = (
+    os.environ.get("DIGILLM_EMPTY_RETRY_BACKOFF", "").strip()
+    or os.environ.get("DIGILLM_EMPTY_RETRY_DELAY", "").strip()
+    or "5.0"
+)
+_EMPTY_RETRY_DELAY = float(_backoff_raw)
+
+
+def _is_empty_completion(resp: Any) -> bool:
+    """A completion with no usable output: no choices, or blank content AND no tool_calls."""
+    choices = getattr(resp, "choices", None)
+    if not choices:
+        return True
+    message = getattr(choices[0], "message", None)
+    content = (getattr(message, "content", None) or "").strip()
+    tool_calls = getattr(message, "tool_calls", None)
+    return not content and not tool_calls
+
+
+# ── Public API: chat_completion ────────────────────────────────────────────────
+
+
+@_traceable("completion")
+@_with_logical_attempt_scope
+def completion(
+    model: str,
+    messages: list[ChatCompletionMessage],
+    *,
+    temperature: float = 0.2,
+    tools: list[ToolDefinition] | None = None,
+    tool_choice: str | ToolArguments = "auto",
+    response_format: JsonSchemaResponseFormat | None = None,
+    max_tokens: int | None = None,
+    usage_kind: str = "chat",
+) -> ChatCompletion:
+    """Single chat completion — mirrors ``litellm.completion`` / OpenAI's ``chat.completions.create``.
+
+    The model string is used as given: when ``OPENAI_API_BASE`` is set (house
+    LiteLLM path), the full caller id is sent on the wire so it matches
+    ``config/litellm.yaml`` ``model_name`` keys. Without a proxy, a registered
+    ``provider/model_id`` prefix routes to that vendor (bare ``model_id`` on the
+    wire). No hidden env/YAML model substitution happens here — use
+    :func:`resolve_model` explicitly if you want mode-based selection.
+
+    Behavior:
+    - Returns the OpenAI ``ChatCompletion`` object — read
+      ``resp.choices[0].message.content`` and ``.tool_calls``.
+    - Tool-free, non-BYOK requests are cached by a SHA-256 key of the request
+      parameters (the serialized response is stored and rehydrated on a hit, so
+      the return type is always a ``ChatCompletion``). ``tools`` requests are
+      never cached (they may have side effects).
+    - ``response_format``: OpenAI-compatible json_schema structured-output
+      descriptor, e.g. ``{"type": "json_schema", "json_schema": {"name": ...,
+      "schema": {...}}}``. Mutually exclusive with ``tools`` — passing both
+      raises ``ValueError`` (fail-fast). Providers without json_schema support silently
+      ignore it, so an in-prompt schema remains the primary contract there.
+
+    Raises:
+        RuntimeError: when a registered provider's API key env var is unset, or
+            when no house API key is configured for the default client.
+        ValueError: when ``model`` is a banned id (house policy, #3078), or when
+            both ``tools`` and ``response_format`` are provided.
+    """
+    if tools and response_format is not None:
+        raise ValueError(
+            "completion: tools and response_format are mutually exclusive; "
+            "pass one or the other, not both."
+        )
+    _reject_banned_model(model)
+    provider, _ = _parse_provider_prefix(model)
+    client = get_client_for_model(model)
+    effective_model = _effective_model_id(model)
+    usage_started = time.perf_counter()
+    provider_attempts = 0
+
+    def create_with_retry(call_kwargs: dict[str, Any]) -> ChatCompletion:
+        def count_attempt() -> None:
+            nonlocal provider_attempts
+            provider_attempts += 1
+
+        return _create_with_retry(
+            client,
+            _provider=provider,
+            _requested_model=model,
+            on_attempt=count_attempt,
+            **call_kwargs,
+        )
+
+    attempt_scope = _attempt_scope.get()
+    cache_status = (
+        CacheStatus.BYPASSED if tools or _byok_override.get() is not None else CacheStatus.MISS
+    )
+    if attempt_scope is not None:
+        attempt_scope.cache_status = cache_status
+
+    # Cache only tool-free, non-BYOK requests (BYOK keys must not pollute or
+    # read the shared in-process cache; tool calls may have side effects).
+    cache_key: str | None = None
+    if not tools and _byok_override.get() is None:
+        cache_key = _llm_cache_key(
+            effective_model, messages, temperature, response_format, max_tokens
+        )
+        cached = _llm_cache_get(cache_key)
+        if cached is not None:
+            logger.debug("LLM cache hit: model=%s key=%s…", effective_model, cache_key[:8])
+            if attempt_scope is not None:
+                attempt_scope.cache_status = CacheStatus.HIT
+                # Nothing left the process, and the record has to say so: a log that
+                # omits the no-egress path is a spotty sample, not a ledger.
+                _record_egress(
+                    scope=attempt_scope,
+                    destination=NO_EGRESS_DESTINATION,
+                    provider=_provider_name(provider),
+                    model=effective_model,
+                    outcome=ProviderAttemptOutcome.SUCCEEDED.value,
+                    decision=EgressDecision.CACHE_HIT,
+                    payload=None,
+                )
+            return ChatCompletion.model_validate_json(cached)
+
+    kwargs: dict[str, Any] = {
+        "model": effective_model,
+        "messages": messages,
+        "temperature": temperature,
+    }
+    if max_tokens is not None:
+        kwargs["max_tokens"] = max_tokens
+    if tools:
+        kwargs["tools"] = tools
+        kwargs["tool_choice"] = tool_choice
+    elif response_format is not None:
+        kwargs["response_format"] = response_format
+
+    try:
+        r = create_with_retry(kwargs)
+    except Exception:
+        _record_usage(
+            kind=usage_kind,
+            model=effective_model,
+            ok=False,
+            duration_ms=round((time.perf_counter() - usage_started) * 1000),
+            retry_count=max(0, provider_attempts - 1),
+        )
+        raise
+
+    # Empty-response self-heal. An empty body is transient; retry with backoff.
+    # Empty retries re-ask the same model with the same cost controls as the
+    # primary request. A persistent blank falls through unchanged.
+    empty_attempts = 0
+    while _is_empty_completion(r) and empty_attempts < _EMPTY_RETRY_MAX:
+        empty_attempts += 1
+        retry_kwargs = kwargs
+        logger.warning(
+            "empty completion from %s (empty-retry %d/%d); backing off %.1fs",
+            effective_model,
+            empty_attempts,
+            _EMPTY_RETRY_MAX,
+            _EMPTY_RETRY_DELAY,
+        )
+        _record_usage(
+            kind="empty_retry",
+            model=getattr(r, "model", None) or effective_model,
+        )
+        time.sleep(_EMPTY_RETRY_DELAY)  # intentional short backoff on empty
+        attempt_scope = _attempt_scope.get()
+        if attempt_scope is not None:
+            attempt_scope.next_retry_reason = RetryReason.EMPTY_RESPONSE
+        try:
+            r = create_with_retry(retry_kwargs)
+        except Exception:
+            _record_usage(
+                kind=usage_kind,
+                model=effective_model,
+                ok=False,
+                duration_ms=round((time.perf_counter() - usage_started) * 1000),
+                retry_count=max(0, provider_attempts - 1),
+            )
+            raise
+
+    _u = getattr(r, "usage", None)
+    _details = getattr(_u, "prompt_tokens_details", None) if _u is not None else None
+    _cached_raw = getattr(_details, "cached_tokens", None) if _details is not None else None
+    _, _, _cost_usd = _response_usage(r)
+    _record_usage(
+        kind=usage_kind,
+        # Record the model actually served (``r.model``), not the request string,
+        # so cost telemetry reflects what was really billed.
+        model=getattr(r, "model", None) or effective_model,
+        prompt_tokens=_optional_nonnegative_int(getattr(_u, "prompt_tokens", None) if _u else None),
+        completion_tokens=_optional_nonnegative_int(
+            getattr(_u, "completion_tokens", None) if _u else None
+        ),
+        cached_tokens=_optional_nonnegative_int(_cached_raw),
+        # Actual USD when reported; None when unknown — never fabricate 0 (#2763).
+        cost=float(_cost_usd) if _cost_usd is not None else None,
+        duration_ms=round((time.perf_counter() - usage_started) * 1000),
+        retry_count=max(0, provider_attempts - 1),
+    )
+    # Cache the serialized response (tool-free, non-BYOK, non-empty content) so a
+    # future hit rehydrates a ChatCompletion — keeping the return type consistent.
+    if cache_key is not None and r.choices and (r.choices[0].message.content or "").strip():
+        _llm_cache_set(cache_key, r.model_dump_json())
+    return r
+
+
+# ── Public API: tool-calling loop ───────────────────────────────────────────────
+
+
+def _extract_tool_call(tc: ToolCallDict) -> tuple[str, str]:
+    """Return ``(name, raw_arguments_str)`` from a tool-call dict."""
+    fn = tc.get("function") if isinstance(tc, dict) else getattr(tc, "function", None)
+    if isinstance(fn, dict):
+        return fn.get("name", ""), fn.get("arguments", "{}")
+    name = getattr(fn, "name", "") if fn else ""
+    args = getattr(fn, "arguments", "{}") if fn else "{}"
+    return name, args
+
+
+def _message_from_response(resp: ChatCompletion) -> tuple[str, list[ToolCallDict] | None]:
+    """Extract ``(content, tool_calls)`` from a :func:`completion` response.
+
+    Adapts the ``ChatCompletion`` object that :func:`completion` now returns into
+    the ``(content, tool_calls|None)`` shape the tool loop consumes.
+    """
+    if not resp.choices:
+        return "", None
+    msg = resp.choices[0].message
+    content = (msg.content or "").strip()
+    tool_calls = getattr(msg, "tool_calls", None)
+    if not tool_calls:
+        return content, None
+    tc_list: list[ToolCallDict] = []
+    for tc in tool_calls:
+        fn = tc.function
+        if isinstance(fn, dict):
+            name = fn.get("name", "")
+            args = fn.get("arguments", "{}")
+        else:
+            name = getattr(fn, "name", "") or ""
+            args = getattr(fn, "arguments", "{}")
+        tc_list.append(
+            {"id": tc.id, "type": "function", "function": {"name": name, "arguments": args or "{}"}}
+        )
+    return content, tc_list
+
+
+@_with_logical_attempt_scope
+def _stream_completion_one_turn(
+    model: str,
+    messages: list[ChatCompletionMessage],
+    *,
+    temperature: float = 0.2,
+    tools: list[ToolDefinition] | None = None,
+    tool_choice: str | ToolArguments = "auto",
+    on_content_delta: Callable[[str], None] | None = None,
+    on_reasoning_delta: Callable[[str], None] | None = None,
+) -> tuple[str, list[ToolCallDict] | None]:
+    """Run one ``stream=True`` completion, accumulating content and tool calls.
+
+    Routes the client exactly like :func:`chat_completion` (a registered
+    ``provider/`` prefix selects that provider; every other model uses the default
+    client), so streaming honors the same provider registry and proxy-key/BYOK
+    overrides. Calls ``on_content_delta(piece)`` for each new content chunk and
+    ``on_reasoning_delta(piece)`` for each ``reasoning_content`` chunk (reasoning
+    models). Returns ``(content, tool_calls)``: ``tool_calls`` is ``None`` when the
+    model called no tool (caller returns the content), else the accumulated calls
+    for the caller to run before looping.
+    """
+    provider, _ = _parse_provider_prefix(model)
+    client = get_client_for_model(model)
+    effective_model = _effective_model_id(model)
+
+    kwargs: dict[str, Any] = {
+        "model": effective_model,
+        "messages": messages,
+        "temperature": temperature,
+        "stream": True,
+        "stream_options": {"include_usage": True},
+    }
+    if tools:
+        kwargs["tools"] = tools
+        kwargs["tool_choice"] = tool_choice
+
+    usage_started = time.perf_counter()
+    try:
+        stream, scope, attempt_number, retry_reason, started_at = _create_with_retry(
+            client,
+            _provider=provider,
+            _requested_model=model,
+            _defer_success=True,
+            **kwargs,
+        )
+    except BadRequestError as error:
+        # Strict OpenAI-compatible endpoints 400 on the unknown ``stream_options``
+        # field rather than ignoring it. Retry once without the field so streaming
+        # still works there; usage then simply arrives only if that provider reports
+        # it some other way. Only a 400 that names the field is treated as this
+        # dialect mismatch — every other bad request propagates untouched.
+        if "stream_options" not in str(error).lower():
+            raise
+        kwargs.pop("stream_options", None)
+        stream, scope, attempt_number, retry_reason, started_at = _create_with_retry(
+            client,
+            _provider=provider,
+            _requested_model=model,
+            _defer_success=True,
+            **kwargs,
+        )
+    content_parts: list[str] = []
+    tool_calls_accum: dict[int, ToolCallDict] = {}
+    evidence = _StreamEvidence()
+
+    stream_iterator = iter(stream)
+    while True:
+        try:
+            chunk = next(stream_iterator)
+        except StopIteration:
+            break
+        except (GeneratorExit, asyncio.CancelledError):
+            scope.terminal_outcome = ProviderCallOutcome.CANCELLED
+            _emit_attempt(
+                scope=scope,
+                attempt_number=attempt_number,
+                retry_reason=retry_reason,
+                provider=_provider_name(provider),
+                requested_model=model,
+                started_at=started_at,
+                outcome=ProviderAttemptOutcome.CANCELLED,
+                response=evidence,
+            )
+            raise
+        except Exception as error:
+            scope.terminal_outcome = ProviderCallOutcome.FAILED
+            scope.logical_error_type = type(error).__name__
+            _emit_attempt(
+                scope=scope,
+                attempt_number=attempt_number,
+                retry_reason=retry_reason,
+                provider=_provider_name(provider),
+                requested_model=model,
+                started_at=started_at,
+                outcome=ProviderAttemptOutcome.FAILED,
+                response=evidence,
+                error=error,
+            )
+            raise
+
+        evidence.observe(chunk)
+        try:
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta
+            if not delta:
+                continue
+
+            reasoning_piece = getattr(delta, "reasoning_content", None)
+            if reasoning_piece is not None and on_reasoning_delta:
+                on_reasoning_delta(str(reasoning_piece))
+
+            if getattr(delta, "content", None):
+                piece = delta.content or ""
+                accumulated = "".join(content_parts)
+                content_parts.append(piece)
+                # Some providers resend the full message in the final chunk; emit only
+                # the new suffix so callers never see duplicated content.
+                if on_content_delta and piece:
+                    if (
+                        accumulated
+                        and piece.startswith(accumulated)
+                        and len(piece) > len(accumulated)
+                    ):
+                        piece = piece[len(accumulated) :]
+                    elif accumulated and piece == accumulated:
+                        piece = ""
+                    if piece:
+                        on_content_delta(piece)
+
+            for tc in getattr(delta, "tool_calls", None) or []:
+                idx = getattr(tc, "index", None)
+                if idx is None:
+                    continue
+                acc = tool_calls_accum.setdefault(
+                    idx,
+                    {
+                        "id": "",
+                        "type": "function",
+                        "function": {"name": "", "arguments": ""},
+                    },
+                )
+                if getattr(tc, "id", None):
+                    acc["id"] = tc.id
+                fn = getattr(tc, "function", None)
+                if fn:
+                    if getattr(fn, "name", None):
+                        acc["function"]["name"] = (acc["function"]["name"] or "") + (fn.name or "")
+                    if getattr(fn, "arguments", None):
+                        acc["function"]["arguments"] = (acc["function"]["arguments"] or "") + (
+                            fn.arguments or ""
+                        )
+        except (GeneratorExit, asyncio.CancelledError):
+            scope.terminal_outcome = ProviderCallOutcome.CANCELLED
+            _emit_attempt(
+                scope=scope,
+                attempt_number=attempt_number,
+                retry_reason=retry_reason,
+                provider=_provider_name(provider),
+                requested_model=model,
+                started_at=started_at,
+                outcome=ProviderAttemptOutcome.CANCELLED,
+                response=evidence,
+            )
+            raise
+        except Exception as error:
+            scope.terminal_outcome = ProviderCallOutcome.FAILED
+            scope.logical_error_type = type(error).__name__
+            _emit_attempt(
+                scope=scope,
+                attempt_number=attempt_number,
+                retry_reason=retry_reason,
+                provider=_provider_name(provider),
+                requested_model=model,
+                started_at=started_at,
+                outcome=ProviderAttemptOutcome.FAILED,
+                response=evidence,
+                error=error,
+            )
+            raise
+    content = "".join(content_parts).strip()
+    tc_list: list[ToolCallDict] | None = None
+    if tool_calls_accum:
+        # Normalize BEFORE emitting SUCCEEDED. A malformed tool payload raises
+        # ValueError out of _normalize_tool_arguments (#3788); a turn that raises
+        # there must not already be on the record as a succeeded provider attempt
+        # (telemetry would show SUCCEEDED for a call the caller saw fail).
+        tc_list = []
+        for i in sorted(tool_calls_accum):
+            acc = tool_calls_accum[i]
+            tc_list.append(
+                {
+                    "id": acc["id"],
+                    "type": "function",
+                    "function": {
+                        "name": acc["function"]["name"],
+                        "arguments": _normalize_tool_arguments(
+                            acc["function"].get("arguments", "{}")
+                        ),
+                    },
+                }
+            )
+
+    _emit_attempt(
+        scope=scope,
+        attempt_number=attempt_number,
+        retry_reason=retry_reason,
+        provider=_provider_name(provider),
+        requested_model=model,
+        started_at=started_at,
+        outcome=ProviderAttemptOutcome.SUCCEEDED,
+        response=evidence,
+    )
+    if evidence.usage is not None:
+        _prompt_tokens, _completion_tokens, _cost_usd = _response_usage(evidence)
+        _record_usage(
+            kind="chat",
+            model=evidence.model or effective_model,
+            prompt_tokens=_optional_nonnegative_int(_prompt_tokens),
+            completion_tokens=_optional_nonnegative_int(_completion_tokens),
+            cost=float(_cost_usd) if _cost_usd is not None else None,
+            ok=True,
+            duration_ms=round((time.perf_counter() - usage_started) * 1000),
+        )
+
+    return content, tc_list
+
+
+# ── Fan-out detach hook ─────────────────────────────────────────────────────────
+# :func:`detach_provider_call_context` clears *this* module's logical-call var, but a
+# consumer that layers its own logical-call ContextVar on top of it -- digigraph's
+# ``usage._LOGICAL_CALL_CONTEXT`` does, and its value holds the very same mutable
+# :class:`ProviderCallContextHandle` -- would still hand every parallel worker one
+# shared handle through the credential snapshot. digillm is a leaf library and cannot
+# reach into a consumer's module to clear it, exactly as it cannot write into a
+# consumer's usage accumulator, so the consumer registers a callback here on the same
+# terms: process-wide, no-op until registered, errors never break the tool call.
+
+_fan_out_detach_hook: Callable[[], None] | None = None
+
+
+def set_fan_out_detach_hook(hook: Callable[[], None] | None) -> None:
+    """Register a callback run at the top of every parallel tool worker.
+
+    Called inside the worker's own copied context, so it must clear caller-side
+    logical-call state token-free (a copy carries values, never reset tokens) and must
+    not touch credentials -- carrying those across the boundary is the whole point of
+    the copy. Pass ``None`` to disable.
+    """
+    global _fan_out_detach_hook
+    _fan_out_detach_hook = hook
+
+
+def _detach_consumer_call_context() -> None:
+    """Run the consumer's detach hook, if one is registered."""
+    hook = _fan_out_detach_hook
+    if hook is None:
+        return
+    try:
+        hook()
+    except Exception as exc:  # a broken hook must not fail the tool call
+        logger.warning("fan-out detach hook raised, telemetry may be shared: %s", exc)
+
+
+def _execute_tool_in_fan_out(
+    execute_tool: Callable[[str, ToolArguments], str | dict[str, Any]],
+    name: str,
+    args: ToolArguments,
+) -> str | dict[str, Any]:
+    """Run one parallel tool call: credentials inherited, telemetry handles dropped."""
+    detach_provider_call_context()
+    _detach_consumer_call_context()
+    return execute_tool(name, args)
+
+
+# DeepSeek V3.2+/V4 sometimes emits its native "DSML" tool-call markup as plain
+# content instead of structured tool_calls (OCC demo: raw "<｜DSML｜tool_calls>"
+# in the chat and the turn ending). The bar is U+FF5C; ASCII "|" is accepted too.
+_DSML_BAR = r"\s*[｜|]+\s*"
+_DSML_TAG = rf"<{_DSML_BAR}DSML{_DSML_BAR}"
+_DSML_END = rf"</{_DSML_BAR}DSML{_DSML_BAR}"
+_DSML_WRAP = r"\s*(?:tool_calls|function_calls|calls)\s*"
+_DSML_BLOCK_RE = re.compile(
+    rf"{_DSML_TAG}{_DSML_WRAP}>(.*?)(?:{_DSML_END}{_DSML_WRAP}>|\Z)",
+    re.S,
+)
+_DSML_INVOKE_RE = re.compile(
+    rf"{_DSML_TAG}\s*invoke\s+name=\"([^\"]+)\"\s*>(.*?)(?:{_DSML_END}\s*invoke\s*>|(?={_DSML_TAG}\s*invoke)|\Z)",
+    re.S,
+)
+_DSML_PARAM_RE = re.compile(
+    rf"{_DSML_TAG}\s*parameter\s+name=\"([^\"]+)\"(?:\s+string=\"(true|false)\")?\s*>(.*?){_DSML_END}\s*parameter\s*>",
+    re.S,
+)
+_DSML_MARK_RE = re.compile(_DSML_TAG)
+
+
+def _parse_dsml_tool_calls(content: str | None) -> tuple[str, list[dict[str, Any]]]:
+    """Lift DSML tool-call markup out of ``content`` into OpenAI-shaped tool_calls.
+
+    Returns (content with the markup removed, tool_calls). Leaves content untouched
+    and returns [] when there is no parseable markup.
+    """
+    if not content or not _DSML_MARK_RE.search(content):
+        return content or "", []
+    calls: list[dict[str, Any]] = []
+    for block in _DSML_BLOCK_RE.finditer(content):
+        for inv in _DSML_INVOKE_RE.finditer(block.group(1)):
+            args: dict[str, Any] = {}
+            for pname, is_str, raw in _DSML_PARAM_RE.findall(inv.group(2)):
+                value: Any = raw.strip() if is_str != "false" else raw.strip()
+                if is_str == "false":
+                    try:
+                        value = json.loads(raw.strip())
+                    except ValueError:
+                        value = raw.strip()
+                args[pname] = value
+            calls.append(
+                {
+                    "id": f"dsml_{len(calls)}",
+                    "type": "function",
+                    "function": {"name": inv.group(1).strip(), "arguments": json.dumps(args)},
+                }
+            )
+    if not calls:
+        return content, []
+    stripped = _DSML_BLOCK_RE.sub("", content).strip()
+    return stripped, calls
+
+
+def _emit_tool_result(
+    on_tool_step: Callable[[str, Any], None], name: str, result: str | dict[str, Any]
+) -> None:
+    """Emit one tool_result step, keyed by the *tool* name.
+
+    The tool name must win over any "name" key in the result: get_skill returns
+    {"name": <skill id>, ...}, and spreading the result last relabelled the
+    completion as a phantom tool named after the skill while the real row
+    never completed (OCC demo, DIG-3089).
+    """
+    body = result if isinstance(result, dict) else {"content": result}
+    payload = {**body, "name": name}
+    if isinstance(body.get("name"), str) and body["name"] != name:
+        payload["result_name"] = body["name"]
+    on_tool_step("tool_result", payload)
+
+
+@_traceable("run_tools")
+def run_tools(
+    model: str,
+    messages: list[ChatCompletionMessage],
+    tools: list[ToolDefinition],
+    execute_tool: Callable[[str, ToolArguments], str | dict[str, Any]],
+    *,
+    temperature: float = 0.2,
+    max_tool_rounds: int = 5,
+    tool_choice: str | ToolArguments = "auto",
+    on_tool_step: Callable[[str, Any], None] | None = None,
+    parallel_safe_tools: set[str] | None = None,
+    stream_deltas: bool = False,
+    final_response_format: JsonSchemaResponseFormat | None = None,
+) -> str:
+    """Run a non-streaming tool-calling loop until the model returns a final answer.
+
+    Args:
+        model:        Model string (provider-prefix routing applies).
+        messages:     Initial conversation.
+        tools:        Tool definitions exposed to the model.
+        execute_tool: ``execute_tool(name, arguments) -> str | {"content": str, ...}``.
+        temperature:  Sampling temperature.
+        max_tool_rounds: Maximum tool rounds before forcing a final answer.
+        tool_choice:  Passed to every turn's completion call ("auto" default;
+            "required" forces a tool call every round). See :func:`completion`.
+        on_tool_step: Optional callback invoked with ``("tool_call", {name,
+            arguments})`` before each call and ``("tool_result", {name, content,
+            ...})`` after. Also receives ``("round_boundary", {round_idx,
+            narration})`` after each tool round that produced non-empty assistant
+            narration — consumers may handle or ignore it. Tool-only rounds
+            (empty narration) deliberately skip this event so callbacks stay
+            ordered ``tool_call`` → ``tool_result`` without a vacuous boundary.
+            With ``stream_deltas`` enabled, narration content deltas were already
+            emitted before ``round_boundary``; without streaming,
+            ``round_boundary`` is the only callback that exposes that narration.
+            Receives ``("round_limit_exhausted", {max_tool_rounds})`` once when
+            ``max_tool_rounds`` is exhausted (every round through the budget still
+            returned tool_calls), immediately before a forced tool-free completion
+            synthesizes the final answer from the full transcript -- including
+            that last round's own tool results, which its own narration (written
+            before those tools ran) cannot reflect.
+        parallel_safe_tools: Optional set of tool names that may run concurrently;
+            when *all* calls in a round are in this set (and there is more than
+            one), they are dispatched in parallel. Defaults to fully sequential.
+        stream_deltas: When True, each assistant turn is produced with
+            ``stream=True`` and ``on_tool_step`` additionally receives
+            ``("content", delta)`` for each answer chunk and ``("reasoning",
+            delta)`` for each reasoning chunk (reasoning models). Defaults to
+            False (one non-streaming call per turn); tool execution is unaffected
+            either way. Exception: when ``tool_choice="required"``, a tool-enabled
+            round's deltas are buffered and released as one end-of-round batch
+            instead of live per-token, since a delta already streamed can't be
+            un-streamed if that round then turns out to have no tool_calls and
+            (see ``_produce_turn``'s docstring below).
+        final_response_format: Optional JSON-schema descriptor applied to the
+            forced tool-free wrap-up completion ONLY (#4556). Tool-enabled turns
+            cannot carry ``response_format`` at all -- ``completion`` rejects
+            ``tools`` + ``response_format`` together (fail-fast), because the
+            provider json_schema and function-calling modes are mutually
+            exclusive. Without enforcement here the cheap model may answer the
+            wrap-up in prose or return an empty body, which forces the caller's
+            retry path and discards the grounding this loop just gathered. The
+            wrap-up runs with ``turn_tools=None``, so it is the one legal place
+            to enforce a schema; providers without json_schema support ignore it.
+
+    Returns:
+        The model's final response content.
+
+    Raises:
+        ValueError: when ``model`` is a banned id (house policy, #3078).
+        RuntimeError: when the same tool fails with the same error
+            ``DIGILLM_SAME_TOOL_ERROR_LIMIT`` times consecutively (#3078).
+    """
+    _reject_banned_model(model)
+    current: list[ChatCompletionMessage] = list(messages)
+    content = ""
+    safe = parallel_safe_tools or set()
+    failure_streak: tuple[str, str, int] | None = None
+
+    def _note_tool_success() -> None:
+        nonlocal failure_streak
+        failure_streak = None
+
+    def _note_tool_error(name: str, error: BaseException) -> None:
+        """Track consecutive same-tool+same-error failures; raise at the limit."""
+        nonlocal failure_streak
+        signature = f"{type(error).__name__}: {error}"
+        if failure_streak is not None and failure_streak[:2] == (name, signature):
+            count = failure_streak[2] + 1
+        else:
+            count = 1
+        failure_streak = (name, signature, count)
+        if count >= _SAME_TOOL_ERROR_LIMIT:
+            raise RuntimeError(
+                f"run_tools: tool {name!r} failed {count}x consecutively with the "
+                f"same error; failing fast instead of retrying: {signature}"
+            )
+
+    def _produce_turn(
+        turn_messages: list[ChatCompletionMessage],
+        turn_tools: list[ToolDefinition] | None,
+        *,
+        response_format: JsonSchemaResponseFormat | None = None,
+    ) -> tuple[str, list[ToolCallDict] | None]:
+        """Produce one assistant turn as ``(content, tool_calls|None)``.
+
+        Streams content/reasoning deltas to ``on_tool_step`` when ``stream_deltas`` is
+        set; otherwise makes a single non-streaming call.
+
+        When this turn is tool-enabled (``turn_tools`` set) and ``tool_choice ==
+        "required"``, content/reasoning deltas are buffered instead of published live,
+        released only once this turn's own ``tool_calls`` come back non-empty. A delta
+        already streamed to ``on_tool_step`` can't be un-streamed, so once the caller's
+        fail-closed check (below) rejects a turn that came back with no tool_calls,
+        buffering is what keeps that turn's narration from ever reaching a consumer
+        that would otherwise have shown it as an accepted answer. Trading live
+        per-token delivery for that is only worth it under the explicit
+        ``require_tool_calls`` opt-in floor -- the default ``tool_choice="auto"``
+        path is unaffected and keeps streaming deltas live, per the round_boundary
+        comment below.
+
+        ``response_format`` (the forced wrap-up's schema, #4556) makes the turn
+        non-streaming: a schema-enforced completion cannot also emit live deltas,
+        and the schema guarantee is the more valuable one. Every other caller
+        leaves it ``None`` and keeps the streaming behaviour above.
+        """
+        if stream_deltas and response_format is None:
+            gate_required = bool(turn_tools) and tool_choice == "required"
+            buffered: list[tuple[str, str]] = []
+
+            def _on_content(delta: str) -> None:
+                if on_tool_step is None or not delta:
+                    return
+                if gate_required:
+                    buffered.append(("content", delta))
+                else:
+                    on_tool_step("content", delta)
+
+            def _on_reasoning(delta: str) -> None:
+                if on_tool_step is None or not delta:
+                    return
+                if gate_required:
+                    buffered.append(("reasoning", delta))
+                else:
+                    on_tool_step("reasoning", delta)
+
+            content, tool_calls = _stream_completion_one_turn(
+                model,
+                turn_messages,
+                temperature=temperature,
+                tools=turn_tools,
+                tool_choice=tool_choice,
+                on_content_delta=_on_content,
+                on_reasoning_delta=_on_reasoning,
+            )
+            if gate_required and on_tool_step is not None and tool_calls:
+                # Requirement satisfied this round -- release the buffered narration in
+                # original order, same as the ungated live path would have delivered it.
+                for kind, delta in buffered:
+                    on_tool_step(kind, delta)
+            # else (gate_required and no tool_calls): discard the buffer silently --
+            # the caller raises immediately on seeing empty tool_calls (below), before
+            # this content could otherwise be mistaken for an accepted answer.
+            return content, tool_calls
+        return _message_from_response(
+            completion(
+                model,
+                turn_messages,
+                temperature=temperature,
+                tools=turn_tools,
+                tool_choice=tool_choice,
+                response_format=response_format,
+            )
+        )
+
+    def _wrapup_turn(turn_messages: list[ChatCompletionMessage]) -> str:
+        """Tool-free wrap-up turn with DSML markup filtered from stream and result."""
+        nonlocal on_tool_step
+        outer = on_tool_step
+        held: list[str] = []
+        state = {"suppress": False}
+
+        def _filter(kind: str, payload: Any) -> None:
+            if outer is None:
+                return
+            if kind != "content" or not isinstance(payload, str):
+                outer(kind, payload)
+                return
+            if state["suppress"]:
+                return
+            held.append(payload)
+            text = "".join(held)
+            hit = _DSML_MARK_RE.search(text)
+            if hit:
+                state["suppress"] = True
+                held.clear()
+                if text[: hit.start()]:
+                    outer("content", text[: hit.start()])
+                return
+            cut = text.rfind("<")
+            if cut >= 0 and ">" not in text[cut:] and len(text) - cut < 24:
+                # Could be the start of a DSML tag split across deltas: hold it.
+                if text[:cut]:
+                    outer("content", text[:cut])
+                held[:] = [text[cut:]]
+                return
+            held.clear()
+            outer("content", text)
+
+        on_tool_step = _filter if outer is not None else None
+        try:
+            raw, _ = _produce_turn(turn_messages, None, response_format=final_response_format)
+        finally:
+            on_tool_step = outer
+        if held and not state["suppress"] and outer is not None:
+            outer("content", "".join(held))
+        cleaned, _ = _parse_dsml_tool_calls(raw)
+        if _DSML_MARK_RE.search(cleaned):
+            cleaned = cleaned[: _DSML_MARK_RE.search(cleaned).start()].rstrip()
+        return cleaned
+
+    for round_idx in range(max_tool_rounds):
+        content, tool_calls = _produce_turn(current, tools)
+        streamed_content = content
+        if not tool_calls and tools:
+            content, dsml_calls = _parse_dsml_tool_calls(content)
+            if dsml_calls:
+                logger.warning(
+                    "run_tools: lifted %d DSML tool call(s) out of round %d content",
+                    len(dsml_calls),
+                    round_idx,
+                )
+                tool_calls = dsml_calls
+        if not tool_calls:
+            if tool_choice == "required":
+                # tool_choice="required" is a floor a deployment opted into (see
+                # digigraph.tool_policy.require_tool_calls_for_workflow) specifically so a
+                # tool-enabled turn can never silently answer without calling a tool. A
+                # provider that honors tool_choice shouldn't reach this branch at all; one
+                # that returns content anyway is a fail-open path we must not paper over by
+                # returning that content as if it were a legitimate final answer.
+                # NOTE: this does not extend to the tool-free wrap-up completion below (after
+                # the round budget is exhausted) — that call passes tools=None, so neither
+                # _produce_turn branch puts tool_choice on the wire for it.
+                raise RuntimeError(
+                    "run_tools: tool_choice='required' but the model returned no tool_calls "
+                    f"in round {round_idx}"
+                )
+            return content or ""
+
+        if on_tool_step is not None and streamed_content:
+            # This round's content already streamed live via on_tool_step("content", ...)
+            # inside _produce_turn, before tool_calls was known — that is unavoidable for
+            # a live per-token stream (buffering the whole round to decide "is this
+            # final" would delay the common single-round, no-tool-call case waiting on
+            # a completion that was never provisional). What was missing is a signal,
+            # emitted the moment tool_calls becomes known, marking that content as NOT
+            # the final answer. Without it, a caller has no way to tell "the model
+            # narrated its plan while also calling tools" apart from "this is the
+            # answer" — confirmed in production (#2306 follow-up): a round's narration
+            # ("I will load the full notes...") streamed as ordinary content and landed
+            # directly in front of the next round's real answer with nothing between
+            # them. Retroactive, not preventive — costs nothing extra token-wise, since
+            # the content already streamed before this fires.
+            #
+            # Empty-narration tool rounds deliberately skip this callback: there is no
+            # streamed content to demote, and emitting a vacuous boundary would reorder
+            # consumer callbacks ahead of tool_call (see digigraph rag_stream tests).
+            # streamed_content, not content: DSML markup lifted into tool_calls
+            # above already streamed live and must be demoted with the narration.
+            on_tool_step("round_boundary", {"round_idx": round_idx, "narration": streamed_content})
+
+        asst_entries: list[ToolCallDict] = []
+        for tc in tool_calls:
+            name, args_str = _extract_tool_call(tc)
+            asst_entries.append(
+                {
+                    "id": tc.get("id", ""),
+                    "type": "function",
+                    "function": {"name": name, "arguments": _normalize_tool_arguments(args_str)},
+                }
+            )
+        current.append(
+            {"role": "assistant", "content": content or None, "tool_calls": asst_entries}
+        )
+
+        # Parse (tool_call_id, name, args-dict) for each requested call.
+        parsed: list[tuple[str, str, ToolArguments]] = []
+        for tc in tool_calls:
+            name, args_str = _extract_tool_call(tc)
+            normalized = _normalize_tool_arguments(
+                args_str if isinstance(args_str, str) else str(args_str)
+            )
+            # _normalize_tool_arguments returns valid JSON or raises ValueError, so
+            # this cannot fail. The old try/except silently substituted {} and hid
+            # a malformed tool call (#3788) — let the failure surface instead.
+            args = json.loads(normalized)
+            parsed.append((tc.get("id", ""), name, args))
+
+        run_parallel = len(parsed) > 1 and all(name in safe for (_, name, _) in parsed)
+        if run_parallel:
+            results: dict[int, str | dict[str, Any]] = {}
+            tool_errors: dict[int, BaseException] = {}
+            # A pool worker starts with an *empty* context, so every ContextVar bound
+            # per-request -- the BYOK key/base-url override above all (:func:`set_byok`)
+            # -- reads as its default inside it. A parallel-safe tool that itself calls
+            # an LLM would then bill the operator's key while the caller's was bound.
+            # Copy per submit, never once for the batch: a single Context cannot be
+            # entered concurrently and raises "is already entered" on the second thread.
+            #
+            # What the copy must NOT carry is the logical-call telemetry handle: a copy
+            # propagates references, so all N workers would share one mutable handle and
+            # race its ``last_call_id`` and deferred-record list. Hence the wrapper --
+            # propagate credentials, not the mutable telemetry handle. It clears two
+            # vars, not one: this module's, and (via the consumer's registered hook) any
+            # logical-call var a consumer layers on top holding the same handle.
+            with ThreadPoolExecutor(max_workers=len(parsed)) as executor:
+                future_to_idx = {
+                    executor.submit(
+                        copy_context().run, _execute_tool_in_fan_out, execute_tool, name, args
+                    ): i
+                    for i, (_, name, args) in enumerate(parsed)
+                }
+                for future in as_completed(future_to_idx):
+                    i = future_to_idx[future]
+                    try:
+                        results[i] = future.result()
+                    except (RuntimeError, OSError, ValueError, TypeError, KeyError) as e:
+                        results[i] = {"content": str(e)}
+                        tool_errors[i] = e
+            ordered = [(parsed[i], results[i]) for i in range(len(parsed))]
+        else:
+            ordered = []
+            for tc_id, name, args in parsed:
+                if on_tool_step is not None:
+                    on_tool_step("tool_call", {"name": name, "arguments": args})
+                try:
+                    result = execute_tool(name, args)
+                except (RuntimeError, OSError, ValueError, TypeError, KeyError) as e:
+                    # Mirror the parallel branch's except-tuple 3 lines above (line 167) —
+                    # a raised exception here must become a recoverable tool result, not
+                    # abort the whole run and discard every tool result already gathered
+                    # this round.
+                    _note_tool_error(name, e)
+                    result = {"content": str(e)}
+                else:
+                    _note_tool_success()
+                if on_tool_step is not None:
+                    _emit_tool_result(on_tool_step, name, result)
+                ordered.append(((tc_id, name, args), result))
+
+        for idx, ((tc_id, name, args), result) in enumerate(ordered):
+            if run_parallel:
+                if idx in tool_errors:
+                    _note_tool_error(name, tool_errors[idx])
+                else:
+                    _note_tool_success()
+            # Sequential calls already emitted their result the moment each
+            # tool returned (below), so a slow round no longer leaves earlier
+            # rows "running" until the last tool of the round finishes.
+            if on_tool_step is not None and run_parallel:
+                on_tool_step("tool_call", {"name": name, "arguments": args})
+                _emit_tool_result(on_tool_step, name, result)
+            msg_content = (
+                result.get("content", str(result)) if isinstance(result, dict) else str(result)
+            )
+            current.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tc_id,
+                    "content": _compact_tool_message_content(msg_content),
+                }
+            )
+
+    # Reaching here means every round through max_tool_rounds still returned tool_calls
+    # (any round with no tool_calls returns early above) — the budget is genuinely
+    # exhausted, not just "the model happened to stop." A forced tool-free completion
+    # unconditionally follows below (see its own comment) — this log/signal always
+    # precedes it.
+    #
+    # Guard against max_tool_rounds <= 0: `range(max_tool_rounds)` above is then empty,
+    # so the for loop body never ran a single round — there is nothing to have
+    # "exhausted." Firing the log/signal in that case would falsely claim the model
+    # burned through a budget it was never given a chance to use.
+    if max_tool_rounds > 0:
+        logger.warning(
+            "run_tools: exhausted max_tool_rounds=%d without the model returning an "
+            "empty tool_calls response",
+            max_tool_rounds,
+        )
+        if on_tool_step is not None:
+            on_tool_step("round_limit_exhausted", {"max_tool_rounds": max_tool_rounds})
+
+    # Force one more answer without tools, unconditionally -- not only when the last
+    # round's own narration was empty. That narration is written *before* its
+    # tool_calls are executed, so it can never reflect what those tools actually
+    # returned; returning it directly would silently discard the tool results this
+    # same round just appended to `current` (CodeRabbit follow-up review on PR #2361,
+    # confirmed real: a round narrates a plan, calls a tool, the tool's result lands
+    # in `current`, and the stale pre-execution narration used to be returned as if
+    # it were the answer that used that result). Always synthesize from the full
+    # transcript instead.
+    #
+    # `len(current) > len(messages)` is the max_tool_rounds<=0 guard from above: if no
+    # round ever ran, there is no tool result to synthesize from, and `content` (used
+    # in the fallback below) was never assigned this call.
+    if len(current) > len(messages):
+        current.append(
+            {
+                "role": "user",
+                "content": "Based on the tool results above, provide a concise final answer.",
+            }
+        )
+        # #4556: the wrap-up is the one legal schema-enforced turn (tools=None).
+        # Enforcing the caller's output schema here stops the cheap model from
+        # answering in prose or returning an empty body, which is what forced the
+        # tool-free retry that could not re-ground.
+        # With tool history in context, DeepSeek V4.x often answers this tool-free
+        # wrap-up with DSML tool-call markup instead of prose (OCC demo). The live
+        # stream is filtered so the markup never reaches the client, the returned
+        # text is stripped, and an all-markup answer gets one explicit retry.
+        final = _wrapup_turn(current)
+        if not final.strip():
+            logger.warning("run_tools: wrap-up returned only DSML tool calls; retrying for prose")
+            current.append(
+                {
+                    "role": "user",
+                    "content": (
+                        "No more tools are available. Do not call or write any tool calls. "
+                        "Write the final answer now in plain prose/markdown from the tool "
+                        "results above, and say what could not be retrieved."
+                    ),
+                }
+            )
+            final = _wrapup_turn(current)
+        return final or ""
+    return content or ""

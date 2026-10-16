@@ -1,0 +1,26 @@
+# digidata-api: Worker data API over D1 with a Supabase fallback (DIG-2895, epic DIG-2887).
+# NOT deployed: there is no deploy workflow for this app, and no routes or custom domain.
+# Deploying, adding routes, or creating remote D1 databases needs Chris's approval.
+#
+# Backend switch: DATA_BACKEND = "supabase" (default when unset) | "d1".
+# Set it locally in .dev.vars; it is deliberately not a [vars] entry yet.
+# Secrets (local .dev.vars only for now; never commit values):
+#   DATA_API_TOKEN            bearer required on every /v1 call
+#   SUPABASE_TWELVEX_URL, SUPABASE_TWELVEX_SERVICE_KEY   (supabase backend)
+#   SUPABASE_CORE_URL, SUPABASE_CORE_SERVICE_KEY
+
+name = "digidata-api"
+main = "src/index.ts"
+compatibility_date = "2026-09-04"
+workers_dev = false
+
+[observability]
+enabled = true
+
+# Local-only D1 (wrangler dev / d1 execute --local). The id is a placeholder;
+# a real remote database is created only at cutover, with approval.
+[[d1_databases]]
+binding = "TWELVEX_DB"
+database_name = "twelvex"
+database_id = "00000000-0000-0000-0000-00000000d1a1"
+migrations_dir = "d1/twelvex"

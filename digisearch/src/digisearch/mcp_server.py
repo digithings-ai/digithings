@@ -1,0 +1,741 @@
+"""digisearch MCP server. Exposes document search as MCP tools for digigraph/digiflow."""
+
+# score:allow untyped any
+# MCP tool payloads carry heterogeneous JSON; Any is the honest annotation.
+# No `from __future__ import annotations`: the stack image ships FastMCP 1.9.3,
+# which calls issubclass() on raw annotations — PEP 563 string annotations crash
+# every @mcp.tool() at import (Dockerfile.digithings-stack-cloudflare marker v8).
+import json
+import logging
+import os
+import secrets
+import sqlite3
+from typing import Any, Literal
+
+from mcp.server.fastmcp import FastMCP
+from pydantic import ValidationError
+
+from digisearch.client import SURFACE_MCP, require_art9_clear
+from digisearch.core.models import Query
+from digisearch.grokipedia.tools import grokipedia_get_page as _grokipedia_get_page
+from digisearch.grokipedia.tools import grokipedia_search as _grokipedia_search
+from digisearch.logging import configure_logging
+from digisearch.monitors.models import DeliveryConfig, Watch, WatchSchedule
+from digisearch.monitors.store import MonitorStore, MonitorStoreError, get_store
+from digisearch.monitors.validation import watch_config_error
+from digisearch.research_search import search_strategies as _search_strategies_impl
+from digisearch.search._stub import query_index
+from digisearch.web_search.models import summarize_validation_error
+from digisearch.websets import service as websets_service
+from digisearch.websets.driver import webset_task_lifespan
+from digisearch.websets.export import export_csv, export_json
+from digisearch.websets.models import VerificationState
+from digisearch.websets.service import WebsetServiceError
+from digisearch.websets.store import WebsetStore
+from digisearch.websets.store import get_store as get_webset_store
+
+configure_logging()
+logger = logging.getLogger(__name__)
+
+mcp = FastMCP(
+    "digisearch",
+    json_response=True,
+    lifespan=webset_task_lifespan,
+)
+
+DIGISEARCH_INDEX = os.environ.get("DIGISEARCH_INDEX", "default")
+
+_digisearch_client: Any | None = None
+
+
+def create_mcp_with_indexes(client: object) -> FastMCP:
+    """Wire a digisearch client into the MCP server so tools use the real backend.
+
+    Call this at startup when a configured client is available. Without it, tools
+    fall back to the in-memory stub (development only).
+    """
+    global _digisearch_client
+    _digisearch_client = client
+    if client is not None:
+        logger.info("digisearch MCP server wired to real client: %s", type(client).__name__)
+    else:
+        logger.warning("create_mcp_with_indexes called with None — MCP tools will use stub backend")
+    return mcp
+
+
+@mcp.tool()
+def semantic(
+    text: str,
+    index_name: str | None = None,
+    top_k: int = 10,
+    mode: str = "hybrid",
+) -> str:
+    """Search documents in digisearch. Returns relevant chunks for RAG or agent context.
+
+    Use this when you need to find information in ingested documents (research papers,
+    strategy docs, compliance docs, etc.). Supports keyword, vector, and hybrid search.
+    """
+    idx = index_name or DIGISEARCH_INDEX or "default"
+    q = Query(text=text, top_k=top_k, mode=mode)
+    if _digisearch_client is not None:
+        try:
+            results = _digisearch_client.query(text=text, index_name=idx, top_k=top_k, mode=mode)
+            from digisearch.core.models import SearchResponse
+
+            response = SearchResponse(results=results)
+        except (RuntimeError, ValueError, ImportError, OSError, TypeError) as e:
+            logger.error("digisearch client query failed: %s", e)
+            return f"[digisearch query error: {e}]"
+    else:
+        allow_stub = os.environ.get("DIGISEARCH_ALLOW_STUB", "0").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+        )
+        if not allow_stub:
+            return "digisearch MCP is not wired to a backend client and stub fallback is disabled."
+        response = query_index(q, index_name=idx)
+    if not response.results:
+        return f"No results for query: {text!r}"
+    lines = [f"Query: {text}\n---"]
+    for r in response.results[:top_k]:
+        meta = r.chunk.metadata
+        parts = []
+        if meta.get("subject"):
+            parts.append(f"subject={meta['subject'][:80]!r}")
+        if meta.get("fromName") or meta.get("fromAddress"):
+            parts.append(f"from={meta.get('fromName') or meta.get('fromAddress')}")
+        if meta.get("sourceType"):
+            parts.append(f"source={meta['sourceType']}")
+        if meta.get("sentDateTime") or meta.get("createdDateTime"):
+            parts.append(f"date={meta.get('sentDateTime') or meta.get('createdDateTime')}")
+        meta_line = " | ".join(parts) if parts else None
+        content_preview = (
+            (r.chunk.content[:400] + "...") if len(r.chunk.content) > 400 else r.chunk.content
+        )
+        if meta_line:
+            lines.append(f"[score={r.score:.2f}] {meta_line}\n{content_preview}")
+        else:
+            lines.append(f"[score={r.score:.2f}] {content_preview}")
+    return "\n\n".join(lines)
+
+
+@mcp.tool()
+def web_search(
+    query: str,
+    provider: str = "auto",
+    include_domains: list[str] | None = None,
+    exclude_domains: list[str] | None = None,
+    max_results: int = 4,
+    recency_days: int | None = 7,
+    purpose: str | None = None,
+    effort: str | None = None,
+    offset: int = 0,
+) -> str:
+    """Search the public web through a swappable provider (#4711).
+
+    Returns JSON ``WebSearchResponse``. ``provider='auto'`` (default) is always
+    the in-house searxng→ddgs engine, even when external API keys are
+    configured; naming a provider uses that provider fail-closed (a missing key
+    returns a disabled message instead of falling back to another provider).
+
+    ``provider``: internal | exa | tavily | parallel | firecrawl | tinyfish
+    (externals appear only once their API key is configured).
+    ``effort``: fast | thorough — a latency/quality tier mapped per provider;
+    the in-house engine has no tiers. ``purpose``: natural-language intent,
+    honoured by tinyfish and parallel. ``offset``: page start (default 0);
+    only providers that can page (exa) accept offset > 0.
+    """
+    from digisearch.web_providers import (
+        UnknownProviderError,
+        WebProviderBadRequestError,
+        WebProviderCapabilityError,
+        WebProviderError,
+        WebProviderNotConfiguredError,
+        WebProviderUnavailableError,
+        get_provider,
+    )
+    from digisearch.web_search.models import (
+        WebSearchConfigError,
+        WebSearchRequest,
+        summarize_validation_error,
+    )
+
+    try:
+        req = WebSearchRequest(
+            query=query,
+            include_domains=include_domains or [],
+            exclude_domains=exclude_domains or [],
+            max_results=max_results,
+            recency_days=recency_days,
+            provider=provider,
+            purpose=purpose,
+            effort=effort,  # type: ignore[arg-type]
+            offset=offset,
+        )
+    except ValidationError as e:
+        return f"[web_search invalid input: {summarize_validation_error(e)}]"
+    try:
+        engine = get_provider(req.provider)
+    except UnknownProviderError as e:
+        return f"[web_search error: {e}]"
+    try:
+        return engine.search(req).model_dump_json()
+    except WebProviderNotConfiguredError as e:
+        # Fail-closed disabled message, not a raised error (MCP convention).
+        return f"[web_search disabled: {e}]"
+    except (WebProviderUnavailableError, WebSearchConfigError) as e:
+        return f"[web_search unavailable: {e}]"
+    except WebProviderCapabilityError as e:
+        return f"[web_search error: {e}]"
+    except WebProviderBadRequestError as e:
+        # Caller error, not an outage: info-level so it does not read as a
+        # provider outage in operator logs (#4711 review).
+        logger.info("web_search rejected input: %s", e)
+        return f"[web_search error: {e}]"
+    except WebProviderError as e:
+        logger.error("web_search provider failure: %s", e)
+        return f"[web_search error: {e}]"
+
+
+@mcp.tool()
+def search_strategies(
+    query: str,
+    top_k: int = 10,
+    date_from_ymd: int | None = None,
+    date_to_ymd: int | None = None,
+    doc_type: str | None = None,
+    segment: str | None = None,
+    sector: str | None = None,
+    run_type: str | None = None,
+    index_name: str | None = None,
+) -> list[dict[str, Any]]:
+    """Semantic search over the research library indexed by digisearch.
+
+    Filters are AND-combined. Date range filters use ``date_ordinal`` (an
+    integer ``YYYYMMDD`` stamped at ingest); pass e.g. ``date_from_ymd=20260420``
+    for "on or after 2026-04-20". String filters (``doc_type``, ``segment``,
+    ``sector``, ``run_type``) match exactly and case-sensitively against the
+    metadata stamped by :func:`digisearch.research_ingest.ingest_research_payload`.
+
+    Returns up to ``top_k`` typed result dicts:
+    ``{chunk_id, doc_id, content, content_length, score, metadata}``. Empty
+    list when nothing matches.
+    """
+    return _search_strategies_impl(
+        query=query,
+        top_k=top_k,
+        date_from_ymd=date_from_ymd,
+        date_to_ymd=date_to_ymd,
+        doc_type=doc_type,
+        segment=segment,
+        sector=sector,
+        run_type=run_type,
+        index_name=index_name,
+    )
+
+
+try:
+    import json as _json
+
+    from digisearch.agent.pipeline import run_research_turn as _run_research_turn
+
+    @mcp.tool()
+    def research_turn(
+        user_message: str,
+        index_name: str | None = None,
+        top_k: int = 10,
+        mode: str = "hybrid",
+        workspace_id: str | None = None,
+        source: str = "corpus",
+        effort: str = "fast",
+    ) -> str:
+        """Composite research turn (plan → retrieve → aggregate) with citations for hub/trace parity.
+
+        ``source`` defaults to ``corpus``; pass ``web`` or ``auto`` to run the
+        OSS web branch (``effort``: fast | thorough).
+        """
+        payload = {
+            "user_message": user_message,
+            "index_name": index_name or DIGISEARCH_INDEX or "default",
+            "top_k": top_k,
+            "mode": mode,
+            "workspace_id": workspace_id,
+            "source": source,
+            "effort": effort,
+        }
+        return _json.dumps(_run_research_turn(payload), indent=2)
+
+except ImportError:
+    logger.info("research_turn MCP tool omitted (install digisearch[agent])")
+
+
+# --- Phase C monitors (§4.7, #4065) -------------------------------------------------
+#
+# Four MCP tools over the same store/runner the HTTP routes use. Fail-closed
+# shape of `web_search`: without a reachable store the tools return a
+# disabled message instead of raising. Create/update-time validation goes
+# through `watch_config_error` — the same gate the HTTP API applies — because a
+# watch with an unparseable cron would raise inside `is_due` at tick time, where
+# `tick_due_watches` swallows the failure per watch and it would silently never
+# run.
+
+_MONITORS_DISABLED = "digisearch monitors are disabled (monitor store is unavailable)."
+
+
+def _monitor_store_or_none() -> MonitorStore | None:
+    """Open the monitor store, or fail closed with ``None`` when unreachable."""
+    try:
+        return get_store()
+    except (OSError, sqlite3.Error) as e:
+        logger.error("digisearch monitor store unavailable: %s", e)
+        return None
+
+
+@mcp.tool()
+def monitors_create_watch(
+    query: str,
+    schedule_cron: str | None = None,
+    interval_seconds: int | None = None,
+    num_results: int = 8,
+    category: str | None = None,
+    include_domains: list[str] | None = None,
+    exclude_domains: list[str] | None = None,
+    delivery_mode: Literal["poll", "webhook", "fanout"] = "poll",
+) -> str:
+    """Create a scheduled web-search watch. Returns JSON {watch, delivery_secret}.
+
+    The one-time ``delivery_secret`` (used to verify delivery HMACs) appears in
+    this response only — never on list/read. Provide ``schedule_cron`` (5-field
+    digiclaw grammar) or ``interval_seconds`` (>= 60); cron wins when both are
+    given. The watch is named after the query. ``delivery_mode`` other than
+    ``poll`` needs targets, which this surface cannot set, so those are rejected.
+    This surface creates oss watches only: an EXA-backed watch (``backend``,
+    delivery targets, remote ``webhookSecret`` provisioning) is created through
+    ``POST /v1/monitors``, which can express both.
+    """
+    store = _monitor_store_or_none()
+    if store is None:
+        return _MONITORS_DISABLED
+    text = query.strip()
+    if not text:
+        return "[monitors create error: query is required]"
+    if not schedule_cron and interval_seconds is None:
+        return "[monitors create error: schedule_cron or interval_seconds is required]"
+    try:
+        # Both WatchSchedule constructions stay inside this try: the interval
+        # floor (ge=60) and the cron-required validator raise pydantic
+        # ValidationError, which must flatten to the documented string, not escape.
+        if schedule_cron:
+            schedule = WatchSchedule(mode="cron", cron=schedule_cron)
+        else:
+            schedule = WatchSchedule(mode="interval", interval_seconds=interval_seconds)
+        watch = Watch(
+            name=text[:120],
+            query=text,
+            num_results=num_results,
+            category=category,
+            include_domains=include_domains or [],
+            exclude_domains=exclude_domains or [],
+            schedule=schedule,
+            delivery=DeliveryConfig(mode=delivery_mode),
+        )
+    except ValidationError as e:
+        return f"[monitors create error: {summarize_validation_error(e)}]"
+    failure = watch_config_error(watch)
+    if failure is not None:
+        _, code, message = failure
+        return f"[monitors create error: {code}: {message}]"
+    created = store.create_watch(watch)
+    secret = secrets.token_hex(32)
+    store.set_delivery_secret(created.watch_id, secret)
+    return json.dumps(
+        {"watch": created.model_dump(mode="json"), "delivery_secret": secret}, indent=2
+    )
+
+
+@mcp.tool()
+def monitors_list_watches() -> str:
+    """List scheduled watches newest-updated first as JSON {"watches": [...]}."""
+    store = _monitor_store_or_none()
+    if store is None:
+        return _MONITORS_DISABLED
+    watches = store.list_watches()
+    return json.dumps({"watches": [watch.model_dump(mode="json") for watch in watches]}, indent=2)
+
+
+@mcp.tool()
+def monitors_trigger_watch(watch_id: str, mode: Literal["manual", "poll"] = "manual") -> str:
+    """Run one watch turn now and return its JSON MonitorRun.
+
+    A failed turn is still persisted and returned with ``status="failed"``
+    (mirrors ``POST /v1/monitors/{watch_id}/trigger``).
+    """
+    store = _monitor_store_or_none()
+    if store is None:
+        return _MONITORS_DISABLED
+    try:
+        from digisearch.monitors.runner import MonitorRunError, run_watch
+    except ImportError as e:
+        return f"[monitors unavailable: install digisearch[web-search] for monitors: {e}]"
+    try:
+        run = run_watch(watch_id, trigger=mode, store=store)
+    except MonitorStoreError as e:
+        return f"[monitors trigger error: {e.code}: {e}]"
+    except MonitorRunError as e:
+        run = store.get_run(watch_id, e.run_id)
+    return json.dumps(run.model_dump(mode="json"), indent=2)
+
+
+@mcp.tool()
+def monitors_get_runs(watch_id: str, limit: int = 20) -> str:
+    """List stored runs for one watch, newest first, as JSON {"runs", "next_cursor"}."""
+    store = _monitor_store_or_none()
+    if store is None:
+        return _MONITORS_DISABLED
+    try:
+        runs, next_cursor = store.list_runs(watch_id, limit=limit)
+    except MonitorStoreError as e:
+        return f"[monitors runs error: {e.code}: {e}]"
+    return json.dumps(
+        {"runs": [run.model_dump(mode="json") for run in runs], "next_cursor": next_cursor},
+        indent=2,
+    )
+
+
+# --- Phase D websets (#4066, R10) ---------------------------------------------
+#
+# Six unprefixed ``websets_*`` tools over the same T6 service facade the HTTP
+# routes use (the manifest keeps the prefixed ``digisearch_websets_*`` names).
+# The async-first contract holds here too: ``websets_create`` /
+# ``websets_add_search`` return ids while the run is scheduled — the chat surface
+# polls ``websets_get`` / ``websets_events``. Enrichment add/remove, webhook
+# secrets, monitors, and cancel are deliberate HTTP-only v1 operator ops.
+# Fail-closed shape of ``web_search``: without a reachable store the
+# tools return a disabled string instead of raising.
+
+_WEBSETS_DISABLED = "digisearch websets are disabled (webset store is unavailable)."
+
+
+def _webset_store_or_none() -> WebsetStore | None:
+    """Open the webset store, or fail closed with ``None`` when unreachable."""
+    try:
+        return get_webset_store()
+    except (OSError, sqlite3.Error) as e:
+        logger.error("digisearch webset store unavailable: %s", e)
+        return None
+
+
+def _websets_error(op: str, exc: Exception) -> str:
+    """Flatten a facade failure to the documented string (stable code included)."""
+    if isinstance(exc, WebsetServiceError):
+        return f"[websets {op} error: {exc.code}: {exc}]"
+    return f"[websets {op} error: {exc}]"
+
+
+@mcp.tool()
+def websets_create(
+    query: str,
+    count: int = 10,
+    criteria_json: str = "",
+    enrichments_json: str = "",
+) -> str:
+    """Create a verified + enriched dataset (webset) asynchronously.
+
+    Returns JSON ``{"id", "object", "status"}`` immediately (status ``running``);
+    poll ``websets_get`` / ``websets_events`` until ``idle``, then
+    ``websets_export``. ``criteria_json`` is a JSON array of ``{name, rule}``
+    (1-5 rules); ``enrichments_json`` is a JSON array of ``{name, type, ...}``.
+    The MCP server drives its own runs through the shared in-process driver
+    (same service facade, runner, and ``WEBSET_TASKS`` registry as the HTTP
+    lifespan), so the webset settles without an HTTP process (#4170). The
+    driver install is per process and reference-counted (#4189): concurrent
+    streamable-http MCP client sessions share one install, and a session's exit
+    neither uninstalls the seam nor cancels another session's runs.
+    """
+    store = _webset_store_or_none()
+    if store is None:
+        return _WEBSETS_DISABLED
+    text = query.strip()
+    if not text:
+        return "[websets create error: query is required]"
+    try:
+        criteria = json.loads(criteria_json) if criteria_json.strip() else []
+        enrichments = json.loads(enrichments_json) if enrichments_json.strip() else None
+    except ValueError as e:
+        return f"[websets create error: criteria_json/enrichments_json is not valid JSON: {e}]"
+    if not isinstance(criteria, list):
+        return "[websets create error: criteria_json must be a JSON array]"
+    if enrichments is not None and not isinstance(enrichments, list):
+        return "[websets create error: enrichments_json must be a JSON array]"
+    try:
+        webset = websets_service.create_webset(
+            query=text,
+            count=count,
+            criteria=criteria,
+            enrichments=enrichments,
+            store=store,
+        )
+    except (WebsetServiceError, ValidationError) as e:
+        return _websets_error("create", e)
+    return json.dumps({"id": webset.id, "object": webset.object, "status": webset.status})
+
+
+@mcp.tool()
+def websets_get(webset_id: str) -> str:
+    """Return one webset's status/search generations + item counts, as JSON.
+
+    ``counts`` carries verified/pending/rejected item counts.
+    """
+    store = _webset_store_or_none()
+    if store is None:
+        return _WEBSETS_DISABLED
+    try:
+        webset = websets_service.get_webset(webset_id, store=store)
+        counts = websets_service.count_items(webset_id, store=store)
+    except WebsetServiceError as e:
+        return _websets_error("get", e)
+    return json.dumps(
+        {"webset": webset.model_dump(mode="json"), "counts": counts},
+        indent=2,
+    )
+
+
+@mcp.tool()
+def websets_add_search(webset_id: str, query: str, count: int = 10) -> str:
+    """Attach a follow-up search generation to a running/idle webset (async).
+
+    Returns JSON ``{"id", "object", "status"}`` for the new search; the refresh
+    is observed through the webset's new search row + events. The refresh is
+    driven by the shared in-process driver, so it settles without an HTTP
+    process (#4170); the install lasts per MCP client session on
+    streamable-http (per process on stdio).
+    """
+    store = _webset_store_or_none()
+    if store is None:
+        return _WEBSETS_DISABLED
+    text = query.strip()
+    if not text:
+        return "[websets add_search error: query is required]"
+    try:
+        search = websets_service.add_search(webset_id, query=text, count=count, store=store)
+    except (WebsetServiceError, ValidationError) as e:
+        return _websets_error("add_search", e)
+    return json.dumps({"id": search.id, "object": "webset_search", "status": search.status})
+
+
+@mcp.tool()
+def websets_list_items(
+    webset_id: str,
+    verification: VerificationState | None = None,
+    limit: int = 20,
+    cursor: str | None = None,
+) -> str:
+    """List a webset's items NEWEST-first as compact text.
+
+    Optional ``verification`` filter (verified | rejected | pending). The last
+    line is ``next_cursor: <id>`` when more items exist — pass it back as
+    ``cursor`` to page.
+    """
+    store = _webset_store_or_none()
+    if store is None:
+        return _WEBSETS_DISABLED
+    try:
+        items, next_cursor = websets_service.list_items(
+            webset_id, verification=verification, limit=limit, cursor=cursor, store=store
+        )
+    except WebsetServiceError as e:
+        return _websets_error("list_items", e)
+    if not items:
+        return "No webset items."
+    lines: list[str] = []
+    for item in items:
+        lines.append(f"[{item.verification}] {item.url} — {item.title or '(no title)'}")
+        for name, field in item.enrichments.items():
+            lines.append(f"  {name}: {field.value!r} ({field.status})")
+    if next_cursor:
+        lines.append(f"next_cursor: {next_cursor}")
+    return "\n".join(lines)
+
+
+@mcp.tool()
+def websets_events(webset_id: str, after: str | None = None, limit: int = 50) -> str:
+    """Tail a webset's append-only event log OLDEST-first as compact text.
+
+    ``after`` is the last seen event id; only strictly newer events are
+    returned. The last line is ``next_cursor: <id>`` when more events exist.
+    """
+    store = _webset_store_or_none()
+    if store is None:
+        return _WEBSETS_DISABLED
+    try:
+        events, next_cursor = websets_service.list_events(
+            webset_id, after=after, limit=limit, store=store
+        )
+    except WebsetServiceError as e:
+        return _websets_error("events", e)
+    if not events:
+        return "No webset events."
+    lines = [
+        f"{event.created_at.isoformat() if event.created_at else ''} {event.type} "
+        f"search={event.search_id} item={event.item_id or '-'}"
+        for event in events
+    ]
+    if next_cursor:
+        lines.append(f"next_cursor: {next_cursor}")
+    return "\n".join(lines)
+
+
+@mcp.tool()
+def websets_export(webset_id: str, format: str = "json") -> str:
+    """Export a webset's verified items as CSV or citation-preserving JSON text.
+
+    Caps at 200 rows in chat; rejected audit rows are never exported.
+    """
+    store = _webset_store_or_none()
+    if store is None:
+        return _WEBSETS_DISABLED
+    fmt = format.strip().lower()
+    if fmt not in ("csv", "json"):
+        return f"[websets export error: format must be csv or json, got {format!r}]"
+    try:
+        webset = websets_service.get_webset(webset_id, store=store)
+        items, _cursor = websets_service.list_items(
+            webset_id, verification="verified", limit=200, store=store
+        )
+    except WebsetServiceError as e:
+        return _websets_error("export", e)
+    return export_csv(webset, items) if fmt == "csv" else export_json(webset, items)
+
+
+# --- grokipedia unofficial JSON spike -----------------------------------------
+#
+# Read-only tools over grokipedia.com JSON APIs the public site JS already
+# calls. ``/api/page`` 404s; ``get_page`` uses ``/api/page-preview``. robots.txt
+# currently Disallow: /api/ — HOLD hatch (legal/product). No HTML scrape.
+
+
+@mcp.tool()
+def grokipedia_search(query: str, limit: int = 10) -> str:
+    """Search grokipedia.com (unofficial JSON spike; HOLD hatch).
+
+    Calls ``GET /api/full-text-search?query=&limit=``. Returns JSON
+    ``{ok, query, results:[{slug,title,snippet,...}], total_count}`` or
+    ``{ok:false, error, status_code, retryable}``. Polite rate limits apply.
+    Not an official xAI API. robots.txt currently Disallow: /api/.
+    """
+    return _grokipedia_search(query=query, limit=limit)
+
+
+@mcp.tool()
+def grokipedia_get_page(slug: str, include_content: bool = True) -> str:
+    """Fetch one grokipedia page via page-preview (unofficial JSON spike).
+
+    Calls ``GET /api/page-preview?slug=`` (``/api/page`` is dead / 404).
+    ``include_content=True`` sends ``includeContent=true``; ``False`` sends
+    the site's short-preview flag ``content=0``. Long content is truncated.
+    Returns JSON ``{ok, found, page:{slug,title,content,truncated}}`` or
+    ``{ok:false, error, status_code, retryable}``. No HTML scrape.
+    """
+    return _grokipedia_get_page(slug=slug, include_content=include_content)
+
+
+# --- Art. 9 screen on the MCP surface (DIG-1083 leaf 10; spec DIG-912 §5.4) --
+# This server is loopback-bound and unauthenticated by default: ``DIGI_MCP_REQUIRE_AUTH``
+# is read in exactly one place repo-wide and it is not here. Screening is therefore the
+# only control standing in front of the surface, which is why the surface is declared
+# explicitly (``digisearch.client.SURFACE_MCP``) rather than left to the path-keyed floor
+# in ``digibase.art9`` — a registry keyed by path cannot see a surface that has no path.
+#
+# FastMCP 1.9.3 has no middleware hook (``mcp.server.fastmcp.middleware`` does not exist),
+# so the seam is the registered ``Tool.fn``: dispatch runs
+# ``ToolManager.call_tool`` -> ``Tool.run`` -> ``fn_metadata`` -> ``fn(**arguments)``.
+# Reassigning ``Tool.fn`` therefore intercepts genuine server-side tool calls. Wrapping
+# ``FastMCP.call_tool`` instead would intercept nothing — that is the client-facing path —
+# and would read like a guard while screening no tool call at all.
+def _tool_payload(args: tuple[Any, ...], kwargs: dict[str, Any]) -> dict[str, Any]:
+    """The argument map a tool call arrives with, as a screenable payload."""
+    if kwargs:
+        return dict(kwargs)
+    return {"args": list(args)}
+
+
+def _screened_tool_fn(tool_name: str, fn: Any, is_async: bool) -> Any:
+    if is_async:
+
+        async def screened(*args: Any, **kwargs: Any) -> Any:
+            require_art9_clear(SURFACE_MCP, _tool_payload(args, kwargs))
+            return await fn(*args, **kwargs)
+
+    else:
+
+        def screened(*args: Any, **kwargs: Any) -> Any:  # type: ignore[misc]
+            require_art9_clear(SURFACE_MCP, _tool_payload(args, kwargs))
+            return fn(*args, **kwargs)
+
+    screened.__name__ = getattr(fn, "__name__", tool_name)
+    screened.__doc__ = fn.__doc__
+    screened.__art9_screened__ = True
+    # Record what was wrapped so a test can undo the screen in place and
+    # prove the guard can go red (DIG-1083).
+    screened.__wrapped__ = fn
+    return screened
+
+
+def install_art9_surface_screen(server: Any | None = None) -> int:
+    """Screen every registered MCP tool call through the Art. 9 surface registry.
+
+    Returns the number of tools wrapped. Raises when the server serves **no tools
+    at all**: a screen covering nothing is indistinguishable from a screen that is
+    not installed, and FastMCP's private manager going away must fail loudly rather
+    than pass silently. Re-installing over already-screened tools returns 0 and
+    raises nothing — that is idempotence, not absence.
+    """
+    srv = mcp if server is None else server
+    manager = getattr(srv, "_tool_manager", None)
+    if manager is None:
+        raise RuntimeError("FastMCP exposes no _tool_manager; Art. 9 screen cannot be installed")
+    tools = list(manager.list_tools())
+    if not tools:
+        raise RuntimeError("no digisearch MCP tools registered; Art. 9 screen would cover nothing")
+    wrapped = 0
+    for tool in tools:
+        original = tool.fn
+        if getattr(original, "__art9_screened__", False):
+            continue
+        tool.fn = _screened_tool_fn(tool.name, original, bool(tool.is_async))
+        wrapped += 1
+    if wrapped:
+        logger.info("art9 screen installed on %d digisearch MCP tools", wrapped)
+    return wrapped
+
+
+#: Number of MCP tools the import-time screen covers. Asserted non-zero by the tests.
+ART9_SCREENED_TOOLS = install_art9_surface_screen()
+
+
+def run_mcp(
+    transport: str = "streamable-http",
+    host: str | None = None,
+    port: int = 8765,
+) -> None:
+    """Run the MCP server. Default: streamable HTTP on 127.0.0.1:8765."""
+    from digisearch.backend_require import require_real_search_backend
+
+    require_real_search_backend()
+    bind = host or os.environ.get("DIGISEARCH_MCP_HOST", "127.0.0.1")
+    mcp.settings.host = bind
+    # FastMCP fixes its DNS-rebinding allowlist to loopback at construction; a
+    # container bind to all interfaces must also accept the compose service name or every
+    # in-network call is refused 421. Extra hosts via DIGISEARCH_MCP_ALLOWED_HOSTS.
+    if bind not in ("127.0.0.1", "localhost", "::1"):
+        from mcp.server.transport_security import TransportSecuritySettings
+
+        extra = os.environ.get("DIGISEARCH_MCP_ALLOWED_HOSTS", "digisearch-mcp:*")
+        hosts = ["127.0.0.1:*", "localhost:*", "[::1]:*"]
+        hosts += [h.strip() for h in extra.split(",") if h.strip()]
+        mcp.settings.transport_security = TransportSecuritySettings(
+            enable_dns_rebinding_protection=True, allowed_hosts=hosts
+        )
+    mcp.settings.port = port
+    mcp.run(transport=transport)

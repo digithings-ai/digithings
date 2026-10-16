@@ -1,0 +1,24 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "allowJs": true,
+    // The book's chapter reader is imported by scripts/book/render-diagrams.mjs,
+    // which runs in plain Node with type stripping. Node ESM will not resolve an
+    // extensionless specifier, so the book's own intra-module imports carry the
+    // .ts extension; this option is what lets TypeScript accept them (and
+    // `noEmit` above is what lets it be on at all).
+    "allowImportingTsExtensions": true,
+    "paths": {
+      "@/*": ["./*"]
+    }
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
+  ],
+  "exclude": ["node_modules"]
+}

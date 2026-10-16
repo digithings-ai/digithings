@@ -1,0 +1,660 @@
+"""digikey FastAPI service."""
+
+from __future__ import annotations
+
+import logging
+import os
+import secrets
+import time
+from typing import Any
+
+from digibase.cors import install_cors
+from digibase.errors import register_fastapi_error_handlers
+from digibase.http import install_request_id_logging, install_request_id_middleware
+from digibase.metrics import install_metrics
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+from sqlalchemy import select, text
+
+from digikey import __version__, blocklist
+from digikey.blocklist_rehydrate import rehydrate_blocklist_from_db
+from digikey.crypto_keys import load_or_create_signing_key, public_key_to_pem
+from digikey.db import init_db, session_factory
+from digikey.db_schema import ApiKeyRow, JtiIssuedRow, utcnow
+from digikey.jwt_issue import _issuer as _jwt_issuer
+from digikey.jwt_issue import issue_access_token, public_jwks
+from digikey.key_crypto import generate_raw_key, hash_secret, verify_secret
+from digikey.license_heartbeat import (
+    ERROR_INVALID_BODY,
+    ERROR_STORE_UNAVAILABLE,
+    ERROR_UNAUTHORIZED,
+    count_heartbeat,
+    get_license_row,
+    heartbeat_status_body,
+    resolve_license_state,
+    validate_heartbeat_body,
+)
+from digikey.license_verify import LicenseVerificationError, verify_license_token
+from digikey.profile_pointer import get_profile_pointer
+from digikey.ratelimit import rate_limit_dependency, register_rate_limit_handler
+from digikey.scopes import DEFAULT_BFF_SESSION_SCOPES, scope_grants_required
+from digikey.settings import KEY_PREFIX_LEN, admin_token, allow_dev_global_keys, bff_token
+
+logger = logging.getLogger(__name__)
+
+app = FastAPI(
+    title="digikey",
+    version=__version__,
+    description=(
+        "JWT + scoped API-key auth plane for digithings. "
+        "Issues short-lived RS256 JWTs, publishes JWKS, and administers opaque API keys. "
+        "Interactive docs: `/docs` (Swagger) and `/redoc`."
+    ),
+    openapi_tags=[
+        {"name": "health", "description": "Liveness probes (auth-exempt)."},
+        {"name": "jwks", "description": "Public signing keys for JWT verification."},
+        {"name": "oauth", "description": "Token exchange (API key → JWT)."},
+        {"name": "admin", "description": "Key issue/revoke (requires DIGIKEY_ADMIN_TOKEN)."},
+        {
+            "name": "licenses",
+            "description": "Customer license heartbeat + license revoke.",
+        },
+    ],
+)
+register_rate_limit_handler(app)
+install_metrics(app, service="digikey", version=__version__)
+install_cors(app, service="digikey")
+install_request_id_middleware(app)
+install_request_id_logging()
+
+_private_key, _kid = load_or_create_signing_key()
+
+
+@app.on_event("startup")
+def _startup() -> None:
+    init_db()
+    if not admin_token():
+        logger.warning("DIGIKEY_ADMIN_TOKEN is unset — POST /v1/admin/keys returns 503")
+    try:
+        blocklist.assert_blocklist_ready()
+    except blocklist.BlocklistUnavailable as e:
+        logger.error("%s", e)
+        raise
+    if not blocklist.is_configured():
+        logger.warning(
+            "DIGIKEY_BLOCKLIST_REDIS_URL is unset — JWT revocation blocklist disabled "
+            "(tokens issued before revoke_at will remain valid until exp)",
+        )
+    else:
+        try:
+            rehydrate_blocklist_from_db(session_factory)
+        except blocklist.BlocklistUnavailable as e:
+            logger.error("blocklist rehydrate failed: %s", e)
+            raise
+        except Exception as e:
+            logger.error("blocklist rehydrate failed: %s", e)
+            raise RuntimeError("blocklist rehydrate failed") from e
+    if not (os.environ.get("DIGIKEY_PRIVATE_KEY_PEM") or "").strip():
+        if os.environ.get("DIGIKEY_ALLOW_EPHEMERAL_KEY", "0").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+        ):
+            logger.warning(
+                "DIGIKEY_ALLOW_EPHEMERAL_KEY=1: ephemeral signing key; set DIGIKEY_PRIVATE_KEY_PEM "
+                "for stable JWKS across restarts",
+            )
+
+
+@app.get("/health", tags=["health"], summary="Legacy health check")
+def health() -> dict[str, str]:
+    """Legacy health check (kept for back-compat)."""
+    return {"status": "ok", "service": "digikey"}
+
+
+@app.get("/healthz", tags=["health"], summary="Liveness probe")
+def healthz() -> dict[str, bool]:
+    """Minimal liveness probe. Auth-exempt, rate-limit-exempt, secret-free.
+
+    Returns HTTP 200 with ``{"ok": true}``. Intended for load-balancer and
+    k8s liveness checks. For richer cross-service diagnostics, call digitrace's
+    ``/v1/status``.
+    """
+    return {"ok": True}
+
+
+@app.get("/.well-known/jwks.json", tags=["jwks"], summary="JWKS public keys")
+def jwks() -> dict[str, Any]:
+    """Return the RS256 public JWK set used to verify digikey-issued JWTs."""
+    return public_jwks(_private_key, _kid)
+
+
+def _require_admin(request: Request) -> None:
+    tok = admin_token()
+    if not tok:
+        raise HTTPException(status_code=503, detail="DIGIKEY_ADMIN_TOKEN not configured")
+    auth = request.headers.get("Authorization") or ""
+    if not secrets.compare_digest(auth, f"Bearer {tok}"):
+        raise HTTPException(status_code=401, detail="admin unauthorized")
+
+
+def _nonblank_tenant_slug(value: str) -> str:
+    """Strip and reject blank tenants.
+
+    ``Field(min_length=1)`` accepts whitespace-only strings; after ``.strip()`` those
+    become ``""`` and mint JWTs that fail open into the unsigned ``X-Digi-Tenant``
+    header fallback (#2303). Match the CLI guard in ``digikey.cli``.
+    """
+    slug = value.strip()
+    if not slug:
+        raise ValueError("tenant_slug must not be blank")
+    return slug
+
+
+class AdminIssueBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    tenant_slug: str = Field(..., min_length=1, max_length=256)
+    label: str | None = Field(default=None, max_length=256)
+    scopes: list[str] = Field(default_factory=list)
+    kind: str = Field(default="standard", pattern="^(standard|dev_global)$")
+    project_id: str | None = None
+    project_config_ref: str | None = None
+
+    @field_validator("tenant_slug")
+    @classmethod
+    def _tenant_slug_nonblank(cls, value: str) -> str:
+        return _nonblank_tenant_slug(value)
+
+
+class AdminIssueResponse(BaseModel):
+    key_prefix: str
+    api_key: str
+    id: str
+
+
+@app.post(
+    "/v1/admin/keys",
+    response_model=AdminIssueResponse,
+    dependencies=[Depends(rate_limit_dependency)],
+    tags=["admin"],
+    summary="Issue API key",
+)
+def admin_issue_key(body: AdminIssueBody, request: Request) -> AdminIssueResponse:
+    _require_admin(request)
+    if body.kind == "dev_global" and not allow_dev_global_keys():
+        raise HTTPException(
+            status_code=403, detail="dev_global keys disabled (set DIGIKEY_ALLOW_DEV_GLOBAL=1)"
+        )
+    raw, prefix = generate_raw_key()
+    scopes = body.scopes
+    if body.kind == "dev_global" and (not scopes or scopes == ["*"]):
+        scopes = ["*"]
+    row = ApiKeyRow(
+        key_hash=hash_secret(raw),
+        key_prefix=prefix,
+        # Validator already stripped; keep strip for clarity if model reused elsewhere.
+        tenant_slug=body.tenant_slug.strip(),
+        project_id=(body.project_id or "").strip() or None,
+        project_config_ref=(body.project_config_ref or "").strip() or None,
+        scopes=scopes,
+        kind=body.kind,
+        label=body.label,
+    )
+    sf = session_factory()
+    with sf() as session:
+        session.add(row)
+        session.commit()
+        session.refresh(row)
+        rid = row.id
+    return AdminIssueResponse(key_prefix=prefix, api_key=raw, id=rid)
+
+
+class TokenRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    grant_type: str = Field(..., pattern="^(api_key|bff_session)$")
+    api_key: str | None = None
+    tenant_slug: str | None = None
+    subject: str | None = None
+    project_id: str | None = None
+    project_config_ref: str | None = None
+    audience: str | None = None
+    requested_scopes: list[str] | None = None
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "Bearer"
+    expires_in: int
+    #: When set via DIGIKEY_LITELLM_PROXY_KEY, clients use this Bearer to LiteLLM (same as LITELLM_MASTER_KEY in dev).
+    litellm_proxy_api_key: str | None = None
+
+
+def _jwt_ttl() -> int:
+    return int(os.environ.get("DIGIKEY_JWT_TTL_SEC") or "900")
+
+
+@app.post(
+    "/v1/oauth/token",
+    response_model=TokenResponse,
+    response_model_exclude_none=True,
+    dependencies=[Depends(rate_limit_dependency)],
+    tags=["oauth"],
+    summary="Exchange API key or BFF session for JWT",
+)
+def oauth_token(body: TokenRequest, request: Request) -> TokenResponse:
+    ttl = _jwt_ttl()
+    if body.grant_type == "bff_session":
+        btok = bff_token()
+        if not btok:
+            raise HTTPException(
+                status_code=503, detail="bff_session grant not configured (DIGIKEY_BFF_TOKEN)"
+            )
+        auth = request.headers.get("Authorization") or ""
+        if not secrets.compare_digest(auth, f"Bearer {btok}"):
+            raise HTTPException(status_code=401, detail="bff unauthorized")
+        if not body.tenant_slug or not body.subject:
+            raise HTTPException(status_code=400, detail="tenant_slug and subject required")
+        try:
+            tenant_slug = _nonblank_tenant_slug(body.tenant_slug)
+        except ValueError as exc:
+            # Whitespace-only passes the truthy check above but would mint an empty
+            # claim and unlock the unsigned tenant-header fallback (#2303).
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        scopes = list(DEFAULT_BFF_SESSION_SCOPES)
+        if body.requested_scopes:
+            if not scope_grants_required(scopes, body.requested_scopes):
+                raise HTTPException(
+                    status_code=400, detail="requested_scopes not allowed for bff session"
+                )
+            scopes = body.requested_scopes
+        # Profile pointers (#308): include on JWT when a row exists for this
+        # subject; omit both claims when missing so clients can route to intake.
+        # Full profile payload CRUD is #307 — this lookup is id/version only.
+        subject = body.subject.strip()
+        profile_id: str | None = None
+        profile_version: int | None = None
+        sf = session_factory()
+        with sf() as session:
+            pointer = get_profile_pointer(session, subject)
+            if pointer is not None:
+                profile_id = pointer.profile_id
+                profile_version = pointer.profile_version
+            token, jti = issue_access_token(
+                _private_key,
+                kid=_kid,
+                sub=f"bff:{subject}",
+                tenant_slug=tenant_slug,
+                scopes=scopes,
+                key_pub=None,
+                project_id=(body.project_id or "").strip() or None,
+                project_config_ref=(body.project_config_ref or "").strip() or None,
+                principal_kind="bff_session",
+                audience=body.audience,
+                ttl_sec=ttl,
+                profile_id=profile_id,
+                profile_version=profile_version,
+            )
+            # An untracked BFF jti can never be revoked or rehydrated, so refuse
+            # to emit the token if the durable record can't be written. Mirrors
+            # the api_key path. See ADR-0007 / #3917.
+            try:
+                session.add(
+                    JtiIssuedRow(
+                        jti=jti,
+                        api_key_id=None,
+                        subject=subject,
+                        exp=int(time.time()) + ttl,
+                    )
+                )
+                session.commit()
+            except Exception as e:
+                session.rollback()
+                logger.error("jti_issued insert failed; refusing to issue BFF token: %s", e)
+                raise HTTPException(status_code=503, detail="token issuance unavailable") from e
+        llm_key = (os.environ.get("DIGIKEY_LITELLM_PROXY_KEY") or "").strip() or None
+        return TokenResponse(access_token=token, expires_in=ttl, litellm_proxy_api_key=llm_key)
+
+    if not body.api_key:
+        raise HTTPException(status_code=400, detail="api_key required")
+    raw = body.api_key.strip()
+    prefix = raw[:KEY_PREFIX_LEN]
+    sf = session_factory()
+    with sf() as session:
+        rows = list(session.scalars(select(ApiKeyRow).where(ApiKeyRow.key_prefix == prefix)))
+        row: ApiKeyRow | None = None
+        for r in rows:
+            if verify_secret(raw, r.key_hash):
+                row = r
+                break
+        if row is None:
+            raise HTTPException(status_code=401, detail="invalid api_key")
+        if row.revoked_at is not None:
+            raise HTTPException(status_code=401, detail="key revoked")
+        if row.kind == "dev_global" and not allow_dev_global_keys():
+            raise HTTPException(status_code=403, detail="dev_global exchange disabled")
+        # Defense in depth for any pre-fix row that stored a blank tenant after strip.
+        try:
+            tenant_slug = _nonblank_tenant_slug(row.tenant_slug or "")
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        scopes = list(row.scopes) if isinstance(row.scopes, list) else []
+        if body.requested_scopes:
+            if not scope_grants_required(scopes, body.requested_scopes):
+                raise HTTPException(
+                    status_code=400, detail="requested_scopes not allowed for this key"
+                )
+            scopes = body.requested_scopes
+
+        token, jti = issue_access_token(
+            _private_key,
+            kid=_kid,
+            sub=f"key:{row.id}",
+            tenant_slug=tenant_slug,
+            scopes=scopes,
+            key_pub=row.key_prefix,
+            project_id=row.project_id,
+            project_config_ref=row.project_config_ref,
+            principal_kind="api_key",
+            audience=body.audience,
+            ttl_sec=ttl,
+        )
+        # An untracked jti can never be revoked, so refuse to emit the token
+        # if the durable record can't be written. See ADR-0007.
+        try:
+            session.add(JtiIssuedRow(jti=jti, api_key_id=row.id, exp=int(time.time()) + ttl))
+            session.commit()
+        except Exception as e:
+            session.rollback()
+            logger.error("jti_issued insert failed; refusing to issue token: %s", e)
+            raise HTTPException(status_code=503, detail="token issuance unavailable") from e
+    llm_key = (os.environ.get("DIGIKEY_LITELLM_PROXY_KEY") or "").strip() or None
+    return TokenResponse(access_token=token, expires_in=ttl, litellm_proxy_api_key=llm_key)
+
+
+class RevokeResponse(BaseModel):
+    revoked: bool
+    jtis_invalidated: int
+
+
+@app.post(
+    "/v1/admin/keys/{key_id}/revoke",
+    response_model=RevokeResponse,
+    dependencies=[Depends(rate_limit_dependency)],
+    tags=["admin"],
+    summary="Revoke API key",
+)
+def admin_revoke_key(key_id: str, request: Request) -> RevokeResponse:
+    """Revoke a key and blocklist all live JWTs issued from it (ADR-0007)."""
+    _require_admin(request)
+    sf = session_factory()
+    now_ts = int(time.time())
+    with sf() as session:
+        row = session.get(ApiKeyRow, key_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="key not found")
+        if row.revoked_at is None:
+            row.revoked_at = utcnow()
+        live = list(
+            session.scalars(
+                select(JtiIssuedRow).where(
+                    JtiIssuedRow.api_key_id == key_id,
+                    JtiIssuedRow.exp > now_ts,
+                )
+            )
+        )
+        entries = [(r.jti, r.exp - now_ts) for r in live]
+        try:
+            written = blocklist.write_blocklist_bulk(entries)
+        except blocklist.BlocklistUnavailable as e:
+            # If we can't guarantee every live JWT is blocked, don't mark the
+            # key revoked — otherwise ``revoked_at`` would suggest closure
+            # the blocklist hasn't actually delivered. Caller retries on 503.
+            session.rollback()
+            logger.error("revoke blocklist write failed: %s", e)
+            raise HTTPException(status_code=503, detail="auth_backend_unavailable") from e
+        session.commit()
+    return RevokeResponse(revoked=True, jtis_invalidated=written)
+
+
+class RevokeSessionBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    subject: str = Field(..., min_length=1, max_length=256)
+
+    @field_validator("subject")
+    @classmethod
+    def _subject_nonblank(cls, value: str) -> str:
+        slug = value.strip()
+        if not slug:
+            raise ValueError("subject must not be blank")
+        return slug
+
+
+@app.post(
+    "/v1/admin/bff-sessions/revoke",
+    response_model=RevokeResponse,
+    dependencies=[Depends(rate_limit_dependency)],
+    tags=["admin"],
+    summary="Revoke BFF sessions for a subject",
+)
+def admin_revoke_bff_subject(body: RevokeSessionBody, request: Request) -> RevokeResponse:
+    """Blocklist all live BFF JWTs for a subject (#3917).
+
+    BFF sessions have no ``digikey_api_keys`` row, so this mirrors the API-key
+    revoke endpoint for subject principals. Durable via
+    ``JtiIssuedRow.revoked_at`` so ``rehydrate_blocklist_from_db`` can restore
+    the entries after a Redis restart. Idempotent: already-revoked rows are
+    skipped on the next call.
+
+    Scope: ``JtiIssuedRow`` has no tenant column, so this revokes the subject
+    across the whole deployment. Subjects are unique and the endpoint is gated
+    on ``DIGIKEY_ADMIN_TOKEN``, so this cannot be used cross-tenant by a
+    non-admin. (F2)
+
+    Limitation: this blocks tokens already issued. It does not stop a caller
+    holding ``DIGIKEY_BFF_TOKEN`` from minting a fresh JWT for the same subject;
+    rotate the BFF secret to fully cut off a compromised BFF credential. (F3)
+    """
+    _require_admin(request)
+    subject = body.subject.strip()
+    sf = session_factory()
+    now_ts = int(time.time())
+    with sf() as session:
+        live = list(
+            session.scalars(
+                select(JtiIssuedRow).where(
+                    JtiIssuedRow.subject == subject,
+                    JtiIssuedRow.revoked_at.is_(None),
+                    JtiIssuedRow.exp > now_ts,
+                )
+            )
+        )
+        entries = [(r.jti, r.exp - now_ts) for r in live]
+        try:
+            written = blocklist.write_blocklist_bulk(entries)
+        except blocklist.BlocklistUnavailable as e:
+            # Fail-closed: don't mark rows revoked if the blocklist write failed,
+            # or rehydrate would treat an un-delivered revocation as done.
+            session.rollback()
+            logger.error("bff revoke blocklist write failed: %s", e)
+            raise HTTPException(status_code=503, detail="auth_backend_unavailable") from e
+        for r in live:
+            r.revoked_at = utcnow()
+        session.commit()
+    return RevokeResponse(revoked=True, jtis_invalidated=written)
+
+
+class LicenseRevokeResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    revoked: bool = Field(description="True when the row is revoked (idempotent)")
+
+
+@app.post(
+    "/v1/licenses/heartbeat",
+    dependencies=[Depends(rate_limit_dependency)],
+    tags=["licenses"],
+    summary="Customer license heartbeat (four-state allowlist read)",
+)
+async def license_heartbeat(request: Request) -> JSONResponse:
+    """Answer the heartbeat sender with the four-state allowlist read.
+
+    This route authenticates *as* a license: its only credential check is
+    signature + allowlist + expiry, in that order. It never touches the
+    API-key exchange path (prefix lookup + bcrypt) or the admin bearer gate.
+
+    Contract (slice 1 §4.4 / slice 2 §8): live row → 200 ``valid``; live but
+    expired row → 200 ``expired`` (never 401); revoked row → 401
+    ``license_revoked``; no row → 401 ``unknown_license``. Crypto failures
+    answer generic 401 ``unauthorized`` (an error outcome, never a latch);
+    bad telemetry answers 400 (never a deny). The ``error``-key shape is what
+    the sender matches on — do not normalize it to the middleware ``code``
+    idiom. Never logs the raw JWT.
+    """
+    auth = request.headers.get("Authorization") or ""
+    raw = auth[7:].strip() if auth[:7].lower() == "bearer " else ""
+    if not raw or len(raw.split(".")) != 3:
+        count_heartbeat("error")
+        return JSONResponse(
+            status_code=401,
+            content={"error": ERROR_UNAUTHORIZED, "message": "Bearer license token required"},
+        )
+    try:
+        info = verify_license_token(
+            raw,
+            public_key_pem=public_key_to_pem(_private_key.public_key()),
+            issuer=_jwt_issuer(),
+            verify_exp=False,
+        )
+    except LicenseVerificationError as e:
+        logger.warning("license heartbeat verify failed: reason=%s", e.reason)
+        count_heartbeat("error")
+        return JSONResponse(
+            status_code=401,
+            content={"error": ERROR_UNAUTHORIZED, "message": "Invalid license token"},
+        )
+    # Ordering note: telemetry validation (400 below) intentionally runs before
+    # the allowlist read. A malformed body must never latch (400 is an error
+    # outcome the sender rides out), at the cost of delaying a revoked/unknown
+    # latch by one cycle when the body is also bad. Keep this order.
+    try:
+        payload = await request.json()
+    except Exception:
+        logger.info("license heartbeat bad body: license_id=%s detail=not-json", info.license_id)
+        count_heartbeat("error")
+        return JSONResponse(
+            status_code=400,
+            content={"error": ERROR_INVALID_BODY, "message": "Heartbeat body must be JSON"},
+        )
+    cleaned, detail = validate_heartbeat_body(payload, jwt_license_id=info.license_id)
+    if detail is not None:
+        logger.info(
+            "license heartbeat bad body: license_id=%s customer=%s detail=%s",
+            info.license_id,
+            info.customer,
+            detail,
+        )
+        count_heartbeat("error")
+        return JSONResponse(
+            status_code=400, content={"error": ERROR_INVALID_BODY, "message": detail}
+        )
+    try:
+        sf = session_factory()
+        with sf() as session:
+            row = get_license_row(session, info.license_id)
+    except Exception as e:
+        logger.error("license heartbeat store read failed: %s", e)
+        count_heartbeat("error")
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": ERROR_STORE_UNAVAILABLE,
+                "message": "License store temporarily unavailable",
+            },
+        )
+    now = int(time.time())
+    state = resolve_license_state(
+        row_exists=row is not None,
+        revoked=bool(row is not None and row.get("revoked_at") is not None),
+        expires_at=(row.get("expires_at") if row is not None else None),
+        now=now,
+    )
+    status, body = heartbeat_status_body(state)
+    if status == 401:
+        logger.warning(
+            "license heartbeat: license_id=%s customer=%s state=%s seq=%s sender=%s version=%s",
+            info.license_id,
+            info.customer,
+            state,
+            cleaned["seq"],
+            cleaned["license_status"],
+            cleaned["version"],
+        )
+    else:
+        logger.info(
+            "license heartbeat: license_id=%s customer=%s state=%s seq=%s sender=%s version=%s",
+            info.license_id,
+            info.customer,
+            state,
+            cleaned["seq"],
+            cleaned["license_status"],
+            cleaned["version"],
+        )
+    count_heartbeat(state)
+    return JSONResponse(status_code=status, content=body)
+
+
+@app.post(
+    "/v1/admin/licenses/{license_id}/revoke",
+    response_model=LicenseRevokeResponse,
+    dependencies=[Depends(rate_limit_dependency)],
+    tags=["admin"],
+    summary="Revoke customer license",
+)
+def admin_revoke_license(license_id: str, request: Request) -> LicenseRevokeResponse:
+    """Set ``revoked_at`` on a ``digikey_licenses`` row (slice 3 §5).
+
+    Mirrors ``POST /v1/admin/keys/{key_id}/revoke`` minus the blocklist: license
+    revocation is allowlist-enforced, never jti-blocklisted (slice 1 §4.3), so
+    there is no blocklist write and no 503-on-blocklist-failure branch.
+    Idempotent; unknown ids 404 distinctly from revoked ones.
+    """
+    _require_admin(request)
+    lid = (license_id or "").strip()
+    if not lid:
+        raise HTTPException(status_code=404, detail="license not found")
+    sf = session_factory()
+    try:
+        with sf() as session:
+            row = (
+                session.execute(
+                    text(
+                        "SELECT license_id, revoked_at FROM digikey_licenses"
+                        " WHERE license_id = :lid"
+                    ),
+                    {"lid": lid},
+                )
+                .mappings()
+                .first()
+            )
+            if row is None:
+                raise HTTPException(status_code=404, detail="license not found")
+            if row["revoked_at"] is None:
+                session.execute(
+                    text("UPDATE digikey_licenses SET revoked_at = :now WHERE license_id = :lid"),
+                    {"now": utcnow(), "lid": lid},
+                )
+            session.commit()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("license revoke store write failed: %s", e)
+        raise HTTPException(status_code=503, detail="license_store_unavailable") from e
+    return LicenseRevokeResponse(revoked=True)
+
+
+register_fastapi_error_handlers(app, service="digikey")

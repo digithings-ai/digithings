@@ -1,0 +1,8 @@
+{% extends "base.html.j2" %}
+{% block title %}Execution alert — {{ symbol }}{% endblock %}
+{% block content %}
+<h1>Execution alert</h1>
+<p>Date: {{ run_date }}</p>
+<p>{{ side | upper }} {{ quantity }} {{ symbol }} @ {{ price }}</p>
+<p>Executed at: {{ executed_at }}</p>
+{% endblock %}

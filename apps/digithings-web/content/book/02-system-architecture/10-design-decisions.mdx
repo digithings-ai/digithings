@@ -1,0 +1,30 @@
+---
+title: Design decisions
+order: 10
+summary: >-
+  Eight decisions shaped this architecture. Each comes with its reason, so you
+  can tell when a decision should change.
+---
+
+Every architecture is a set of decisions. The reasons matter more than the
+decisions themselves: a reader who disagrees with a reason can predict exactly
+when the decision ought to change.
+
+| Decision | Reason |
+| --- | --- |
+| Cloudflare is production only; self-hosting is the gate before it. | A second hosted stack doubles cost without catching more, and a local stack that runs the real interface is a better test. |
+| One configuration contract for both homes. | If either home could invent its own settings, "it works locally" would stop meaning anything in production. |
+| The hub discovers vertical tools at run time. | A vertical should be able to ship a new tool without waiting for a hub release. |
+| Model access is a library; routing is a separate layer. | Calling a model is code; choosing a model is operations. Keeping them apart makes switching providers a configuration change. |
+| Identity is verified on every service-to-service hop. | Trusting the internal network turns one weak component into access to everything. |
+| Direct tool access has its own credential. | Tool servers expose capability directly, so they need a gate the hub's permissions cannot be routed around. |
+| Market history is served read-only from the edge. | A hot, read-only dataset gains latency and failure modes, not safety, from an extra server hop. |
+| The production chat interface keeps no database. | Fewer moving parts in the path of every message means fewer ways for it to fail. |
+
+None of these is permanent. Each records the conditions under which it was
+right, and the architecture decision records explain what would have to change
+for the answer to change.
+
+<Reference kind="reference" href="repo:docs/adr" title="Architecture decision records">
+  The full record behind each decision, with alternatives considered.
+</Reference>

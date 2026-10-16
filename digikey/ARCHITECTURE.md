@@ -1,0 +1,716 @@
+# digikey Architecture
+
+**Version:** 0.1.0
+**Service port:** 8005
+**Source root:** `digikey/src/digikey/`
+
+---
+
+## 1. Overview
+
+digikey is the single authentication and authorization control plane for the digithings ecosystem. Every protected route on every other service — digigraph, digiquant, digisearch — refuses traffic unless the caller presents a short-lived JWT signed by digikey. No service issues its own tokens. No service trusts tokens from any other issuer. This is the zero-trust boundary.
+
+The service has two responsibilities:
+
+1. **Opaque API key management.** External callers hold a `dgk_live_` prefixed secret. digikey stores only a bcrypt hash. The raw secret is shown once on creation and never retrievable again.
+
+2. **JWT issuance via token exchange.** A caller presents their opaque API key (or a BFF session credential) to `POST /v1/oauth/token`. digikey verifies the key, checks revocation, and returns a short-lived RS256 JWT that carries the caller's scopes, tenant context, and identity. When a user profile pointer exists for a `bff_session` subject, the JWT also carries `profile_id` / `profile_version` (#308). Downstream services verify this JWT locally against the published JWKS — they never call digikey per-request.
+
+This architecture means digikey sits on the hot path for key exchange but is completely off the hot path for request verification. A JWKS cache in each consumer service means digikey can be down for minutes without affecting in-flight requests.
+
+---
+
+## 2. Current Implementation State
+
+### Implemented in v0.1
+
+**JWT issuance (RS256, JWKS)**
+- `crypto_keys.py`: loads or generates a 2048-bit RSA key pair on startup. Key material source is controlled by `DIGIKEY_PRIVATE_KEY_PEM` (preferred) or `DIGIKEY_ALLOW_EPHEMERAL_KEY=1` (development only; JWKS rotates on restart).
+- `jwt_issue.py`: signs JWTs with PyJWT using `RS256`, embeds `kid` in the header, returns `(token_str, jti)`.
+- `server.py` (`GET /.well-known/jwks.json`): serves the public key as a JWKS document via `public_jwks()`.
+
+**API key types**
+- `standard`: service-to-service or machine keys. Prefix `dgk_live_`. Scopes are explicitly assigned at creation time.
+- `dev_global`: wildcard-scope keys (`scopes=["*"]`). Requires `DIGIKEY_ALLOW_DEV_GLOBAL=1`. Intended for local development only.
+- Both kinds are stored with the same bcrypt-hashed schema.
+
+**Token exchange (`POST /v1/oauth/token`)**
+- `grant_type=api_key`: caller presents raw key; digikey looks up by prefix, runs bcrypt verification, checks `revoked_at`, emits JWT.
+- `grant_type=bff_session`: digichat's BFF presents `Authorization: Bearer DIGIKEY_BFF_TOKEN`. digikey issues a JWT with `principal_kind=bff_session` and `sub=bff:<subject>`.
+
+**Admin key issuance (`POST /v1/admin/keys`)**
+- Protected by `DIGIKEY_ADMIN_TOKEN` bearer. Creates a new `ApiKeyRow`, returns the plaintext key once.
+
+**Scope enforcement**
+- `scopes.py`: wildcard matching. `*` grants everything. `service:*` grants all sub-scopes for that service. Exact string match for leaf scopes. Scope downscoping: callers can request a subset of their granted scopes by passing `requested_scopes`; digikey verifies the subset is within the granted set before issuing.
+
+**Source file map**
+
+| File | Responsibility |
+|------|---------------|
+| `server.py` | FastAPI app, all HTTP routes, startup hook |
+| `jwt_issue.py` | JWT construction, JWKS document, customer-license minting (`LICENSE_*`, `issue_license_token`) |
+| `jwt_verify.py` | JWT decode + JWKS client (used by consumers) |
+| `crypto_keys.py` | RSA key load/generate, PEM serialization |
+| `key_crypto.py` | API key generation (`secrets`), bcrypt hash/verify |
+| `db.py` | SQLAlchemy engine and session factory |
+| `db_schema.py` | `ApiKeyRow` (`digikey_api_keys`), `LicenseRow` (`digikey_licenses`) |
+| `scopes.py` | Scope matching logic, `DEFAULT_BFF_SESSION_SCOPES` |
+| `settings.py` | Env-driven constants (`KEY_PREFIX_LEN=16`, `RAW_KEY_PREFIX="dgk_live_"`) |
+| `models.py` | `TokenClaims`, `DigiAuthContext`, `PrincipalKind` Pydantic v2 models |
+| `integrations/service_middleware.py` | `DigiAuthMiddleware`, per-service path-scope tables |
+| `license_verify.py` | Customer-license JWT verification (heartbeat + edge) |
+| `license_heartbeat.py` | Four-state allowlist read, telemetry validation, raw-SQL row lookup |
+| `license_edge.py` | Hosted-capability scope checks over `X-Digi-License` (digigraph edge) |
+| `ratelimit.py` | In-process per-IP token-bucket limiter + FastAPI dependency for auth-path routes |
+| `cli.py` | Bootstrap CLI (`digikey issue-key`, `license-mint`, `license-revoke`) |
+| `licenses.py` | Customer-license registry helpers: mint validation, allowlist insert/revoke |
+
+---
+
+## 3. API Surface
+
+### digikey-owned endpoints
+
+**`GET /health`** and **`GET /healthz`**
+`/health` returns `{"status": "ok", "service": "digikey"}` (legacy, kept for back-compat). `/healthz` returns `{"ok": true}` — the preferred liveness probe. Both are always public, rate-limit-exempt, and secret-free. Docker healthcheck targets `/healthz`. See AGENTS.md "Liveness vs status".
+
+**`GET /.well-known/jwks.json`**
+Public. Returns the RSA public key as a JWKS document. Consumers cache this with a TTL (default 300 seconds, configurable via `DIGIKEY_JWKS_CACHE_SEC`). No authentication required — the public key is safe to expose.
+
+**`POST /v1/oauth/token`**
+Body: `TokenRequest` (Pydantic v2). Supported `grant_type` values: `api_key`, `bff_session`.
+
+Response shape:
+```json
+{
+  "access_token": "<RS256 JWT>",
+  "token_type": "Bearer",
+  "expires_in": 900,
+  "litellm_proxy_api_key": "<optional>"
+}
+```
+`litellm_proxy_api_key` is present only when `DIGIKEY_LITELLM_PROXY_KEY` is set.
+
+**`POST /v1/admin/keys`**
+Requires `Authorization: Bearer <DIGIKEY_ADMIN_TOKEN>`. Body: `AdminIssueBody`. Returns `AdminIssueResponse` with the plaintext key (shown once). If `DIGIKEY_ADMIN_TOKEN` is unset, returns 503 — no anonymous key creation.
+
+**`POST /v1/admin/keys/{key_id}/revoke`**
+Requires `Authorization: Bearer <DIGIKEY_ADMIN_TOKEN>`. Revokes an API key and blocklists every live JWT issued from it (ADR-0007). Response: `{"revoked": true, "jtis_invalidated": N}`. Returns 503 `auth_backend_unavailable` if the blocklist write fails (fail-closed).
+
+**`POST /v1/licenses/heartbeat`**
+Authenticates *as* a license: `Authorization: Bearer <raw license JWT>` plus a
+telemetry JSON body (`license_id`, `customer`, `license_status`, `version`,
+`hosts_configured`, `started_at`, `seq`). Never passes through the API-key
+exchange path or the admin bearer gate. Reads the `digikey_licenses` allowlist
+(written by slice 1's CLI) with raw SQL and answers the four-state contract:
+
+| State | Row condition | HTTP | Body |
+|-------|---------------|------|------|
+| valid | row live, `expires_at` in future | 200 | `{"license_status": "valid"}` |
+| expired | row live, `expires_at` past | 200 | `{"license_status": "expired"}` (never 401) |
+| revoked | `revoked_at` set (beats expired) | 401 | `{"error": "license_revoked"}` |
+| unknown | no row | 401 | `{"error": "unknown_license"}` |
+
+Crypto failures (bad signature, `none`/symmetric `alg`, wrong `aud`/`iss`,
+missing `kind`/`license_id`) answer generic 401 `{"error": "unauthorized"}` —
+an error outcome, never a latch. Bad telemetry answers 400
+`{"error": "invalid_heartbeat_body"}`. The `error`-key shape is what the
+heartbeat sender matches on; it deliberately differs from the middleware
+`code`-key idiom. Expiry uses a 300s symmetric clock-skew leeway. Logs carry
+only `license_id`, customer slug, state, and `seq` — never the raw JWT.
+
+**`POST /v1/admin/licenses/{license_id}/revoke`**
+Requires `Authorization: Bearer <DIGIKEY_ADMIN_TOKEN>`. Sets `revoked_at` on a
+`digikey_licenses` row. Idempotent (`{"revoked": true}`); unknown ids 404
+distinctly. No blocklist writes — license revocation is allowlist-enforced,
+never jti-blocklisted.
+
+**`POST /v1/admin/bff-sessions/revoke`**
+Requires `Authorization: Bearer <DIGIKEY_ADMIN_TOKEN>`. Body: `{"subject": "<bare BFF subject>"}`. Blocklists every live `bff_session` JWT for that subject (#3917) — BFF sessions have no API-key row, so this is the subject-scoped analogue of the key revoke endpoint. Idempotent, same response shape, same fail-closed 503 behaviour.
+
+### DigiAuthMiddleware (shared across services)
+
+`digikey.integrations.service_middleware.DigiAuthMiddleware` is a Starlette `BaseHTTPMiddleware` shipped as part of the `digikey` package. All three consumer services register it at app startup:
+
+```python
+# digigraph/src/digigraph/server.py
+app.add_middleware(DigiAuthMiddleware, service="digigraph", path_scopes=digigraph_path_scopes)
+
+# digiquant/src/digiquant/server.py
+app.add_middleware(DigiAuthMiddleware, service="digiquant", path_scopes=digiquant_path_scopes)
+
+# digisearch/src/digisearch/server.py
+app.add_middleware(DigiAuthMiddleware, service="digisearch", path_scopes=digisearch_path_scopes)
+```
+
+Middleware behaviour on each request:
+1. OPTIONS requests bypass auth (CORS preflight).
+2. `path_scopes(method, path)` returns `None` (exempt) or a list of required scopes.
+3. If required is `None` (e.g., `/health`, `/docs`): pass through.
+4. If `DIGIKEY_JWKS_URL` and `DIGIKEY_PUBLIC_KEY_PEM` are both unset: return 503 `auth_not_configured`. No silent fallback to anonymous access.
+5. Extract `Authorization: Bearer <token>`. If missing: 401.
+6. Decode and verify JWT via `jwt_verify.decode_token`. If invalid/expired: 401.
+7. Check `scope_grants_required`. If insufficient: 403 `insufficient_scope`.
+8. Attach `DigiAuthContext` to `request.state.digi_auth`. Downstream handlers read tenant, scopes, and project context from there.
+
+**`tenant_slug` provenance (#2303).** If the verified JWT's own `tenant_slug` claim is
+empty, `jwt_context` falls back to the unsigned `X-Digi-Tenant` / `X-Digichat-Tenant`
+request header — this keeps routing/logging usable for legacy callers that predate
+per-tenant tokens, but it means `tenant_slug` alone does not prove the caller is
+authorized for that tenant. `DigiAuthContext.tenant_slug_verified` disambiguates: `True`
+only when `tenant_slug` came from the decoded JWT claim, `False` when it is empty or was
+filled from the header. **Any consumer using `tenant_slug` for real authorization (not
+just routing/logging) must check `tenant_slug_verified is True` first** — trusting
+`tenant_slug` alone lets a caller with an empty-tenant token pick any tenant via the
+header. Issuance refuses blank tenants after strip: CLI `--tenant`, `POST /v1/admin/keys`
+(Pydantic validator), `bff_session` token exchange, and `api_key` exchange of a row whose
+stored `tenant_slug` is blank. Whitespace-only strings are rejected the same way — they
+previously passed `min_length=1` then became `""` after `.strip()`.
+
+---
+
+## 4. Data Model
+
+### JWT claims
+
+All tokens issued by digikey include these claims:
+
+| Claim | Type | Notes |
+|-------|------|-------|
+| `sub` | string | `key:<row_id>` for api_key grants; `bff:<subject>` for bff_session |
+| `iss` | string | `DIGIKEY_ISSUER` (default `http://127.0.0.1:8005`) |
+| `aud` | string | `DIGIKEY_AUDIENCE` (default `digi-ecosystem`) |
+| `iat` | int | Unix timestamp, issued-at |
+| `exp` | int | Unix timestamp, expiry (`iat + DIGIKEY_JWT_TTL_SEC`, default 900s) |
+| `jti` | string | UUID hex, unique token ID — present but not indexed for revocation |
+| `tenant_slug` | string | Tenant identifier from key row or bff request |
+| `scopes` | list[str] | Granted scopes list |
+| `scope` | string | Space-separated scopes (OAuth 2.0 interop) |
+| `principal_kind` | string | `api_key` / `bff_session` / `legacy_static` |
+| `legacy_static` | bool | Always `false` for new tokens |
+| `key_pub` | string? | Key prefix (first 16 chars), api_key grants only |
+| `project_id` | string? | Optional project scoping |
+| `project_config_ref` | string? | Optional project config reference |
+| `tenant_id` | string? | Optional tenant UUID (not currently populated by server) |
+| `profile_id` | string? | Optional user profile pointer (#308). Present only when a profile exists for the BFF subject. |
+| `profile_version` | int? | Monotonic profile revision (≥1). Always paired with `profile_id`; both omitted when no profile. |
+
+#### Profile claims contract (#308)
+
+`profile_id` and `profile_version` are **optional, pairwise** claims on `bff_session` JWTs:
+
+| Case | JWT payload | Downstream behaviour |
+|------|-------------|----------------------|
+| Profile exists for `subject` | Both claims present | research / digigraph may key caches / personalization off these values without a second DB round-trip |
+| No profile yet | Both claims **absent** (not `null`) | Frontend may route the user to intake; digikey does not invent an intake flow |
+
+Rules:
+
+- Claims are looked up from `digikey_user_profile_pointers` at mint time (`grant_type=bff_session` only). `api_key` grants never carry them (machine principals, not users).
+- Updating a profile bumps `profile_version`; the next token exchange embeds the new value. Already-issued JWTs keep the old version until expiry (short TTL).
+- digikey stores only the **pointer** (id + version + subject). Full investment-profile / asset-preferences payload CRUD is [#307](https://github.com/digithings-ai/digithings/issues/307); this table is the interim identity seam until digistore (#172).
+
+### License claims (`digichat-license`)
+
+Customer licenses are RS256 JWTs minted with the existing digikey access-token
+keypair (`issue_license_token()` in `jwt_issue.py`) — the `aud` claim
+discriminates a license from an access token, so no separate issuer or keypair
+is needed. Owner-run CLI only (`digikey license-mint`); there is no minting
+HTTP endpoint.
+
+| Claim | Value |
+|-------|-------|
+| `iss` | Existing digikey issuer (same as access tokens) |
+| `aud` | `digichat-license` (a license never validates as an access token and vice versa) |
+| `sub` / `tenant_slug` | Customer slug (mirrored; keeps the digikey claim vocabulary) |
+| `jti` / `license_id` | Fresh uuid4 hex per issuance (mirrored for heartbeat correlation) |
+| `hosts` | Embed-parent hostnames, non-empty list |
+| `services` | Hosted-service scopes (`digisearch-corpus`, `hosted-web-search`); omitted entirely when not passed — absent means entitled, not unentitled |
+| `kind` | `digichat-license` (discriminator on top of `aud`) |
+| `iat` / `exp` | Now / now + term (`term_days * 86400`; default 90d = 7776000s, max 180d) |
+| `scope` | `" ".join(services)` when services present, else omitted |
+
+Deliberately absent: `scopes`, `key_pub`, `principal_kind`, `project_id`,
+`tenant_id` (access-token vocabulary). License rows are never written to
+`digikey_jti_issued` or the Redis blocklist — revocation is allowlist-enforced
+(see below), never jti-blocklisted.
+
+### API key storage (`digikey_api_keys` table)
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | `VARCHAR(36)` PK | UUID v4 |
+| `key_hash` | `TEXT` NOT NULL | bcrypt hash of full raw key |
+| `key_prefix` | `VARCHAR(64)` UNIQUE INDEX | First 16 characters of raw key, used for DB lookup |
+| `tenant_slug` | `VARCHAR(256)` INDEX | Tenant identifier |
+| `project_id` | `VARCHAR(512)` nullable | |
+| `project_config_ref` | `TEXT` nullable | |
+| `scopes` | `JSONB` / `JSON` | List of scope strings |
+| `kind` | `VARCHAR(32)` | `standard` or `dev_global` |
+| `label` | `VARCHAR(256)` nullable | Human-readable description |
+| `created_at` | `TIMESTAMPTZ` | Server-generated |
+| `revoked_at` | `TIMESTAMPTZ` nullable | Set to revoke; checked on every exchange |
+
+Column type note: `scopes` uses `JSONB` on Postgres and `JSON` on SQLite via SQLAlchemy dialect variants (`db_schema.py:_json_type()`).
+
+### Issued JTIs (`digikey_jti_issued` table)
+
+Durable record of every `jti` issued via token exchange — the source of truth for revocation and Redis blocklist rehydration (ADR-0007). Both `api_key` and `bff_session` grants write a row at exchange time; if the insert fails the exchange returns 503 rather than emitting an untracked token.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `jti` | `VARCHAR(36)` PK | UUID hex from `jwt_issue.py` |
+| `api_key_id` | `VARCHAR(36)` nullable FK → `digikey_api_keys.id` | Set for `api_key` grants; NULL for `bff_session` |
+| `subject` | `VARCHAR(256)` nullable INDEX | Bare BFF subject (no `bff:` prefix) for `bff_session` grants; NULL otherwise |
+| `exp` | `INT` NOT NULL | Unix timestamp; sets Redis TTL and filters stale rows |
+| `issued_at` | `TIMESTAMPTZ` | Audit trail |
+| `revoked_at` | `TIMESTAMPTZ` nullable | Set by subject-scoped BFF revoke; durable marker for rehydrate (key-scoped revoke uses `ApiKeyRow.revoked_at`) |
+
+Composite indexes: `(api_key_id, exp)` for key revoke, `(subject, exp)` for BFF revoke. Rows where `exp < now()` are dead and can be purged by a nightly job.
+
+**In-place upgrade:** digikey has no migration framework, and `create_all` does not alter existing tables. `init_db()` calls `digikey.db_migrate.upgrade_jti_issued_table()` (before `create_all`) to add `subject`/`revoked_at` and drop `NOT NULL` on `api_key_id` for a pre-#3917 database. SQLite uses a non-destructive table rebuild; other dialects use `ALTER TABLE`. It is idempotent and recovers interrupted rebuilds. Never delete `digikey.db` to resolve drift — it holds API keys and revocation state.
+
+### License registry (`digikey_licenses` table)
+
+Allowlist of issued customer licenses. `init_db()` picks the table up via
+`create_all` on next startup — no migration module, no backfill.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `license_id` | `VARCHAR(36)` PK | The JWT `jti`; stable id per issuance |
+| `customer_slug` | `VARCHAR(256)` INDEX NOT NULL | Mirrors `sub`/`tenant_slug` |
+| `hosts` | `JSON` NOT NULL | As minted |
+| `services` | `JSON` nullable | NULL = absent = entitled |
+| `issued_at` | `TIMESTAMPTZ` | Server-generated |
+| `expires_at` | `INT` NOT NULL | Unix `exp`; allowlist reads report expired without parsing the JWT |
+| `revoked_at` | `TIMESTAMPTZ` nullable | NULL = live; set = revoked |
+| `label` | `VARCHAR(256)` nullable | Owner note, never in the JWT |
+
+Allowlist read contract (normative for the heartbeat slice): `valid` = row
+exists, `revoked_at IS NULL`, `expires_at > now`; `expired` = live row with
+`expires_at <= now` (identified-but-lapsed, expiry checked with ~5 minutes of
+clock-skew leeway); `revoked` = `revoked_at IS NOT NULL`; `unknown` = no row.
+Revoked and unknown are distinct answers end to end (CLI, and later the admin
+HTTP revoke). Slice 1 ships the write side (`license-mint` inserts,
+`license-revoke` sets `revoked_at`); the read side ships with the heartbeat
+slice against this contract.
+
+### User profile pointers (`digikey_user_profile_pointers` table)
+
+Minimal identity seam for JWT profile claims (#308). Not the full profile body store (#307).
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | `VARCHAR(36)` PK | UUID v4 — emitted as JWT `profile_id` |
+| `subject` | `VARCHAR(256)` UNIQUE INDEX | Bare BFF subject (no `bff:` prefix) |
+| `tenant_slug` | `VARCHAR(256)` INDEX | Tenant of the owning user |
+| `profile_version` | `INTEGER` NOT NULL | Starts at 1; bumps on each update |
+| `created_at` | `TIMESTAMPTZ` | Server-generated |
+| `updated_at` | `TIMESTAMPTZ` | Bumped with `profile_version` |
+| `deleted_at` | `TIMESTAMPTZ` nullable | Soft-delete; soft-deleted rows are ignored at mint |
+
+Library helpers: `digikey.profile_pointer.create_profile_pointer`, `bump_profile_version`, `get_profile_pointer`. Public HTTP CRUD for profile payloads lands with #307.
+
+### Scope definitions
+
+Scopes follow a `service:action` namespace. Defined (implicitly) in `scopes.py` and `service_middleware.py`:
+
+| Scope | Service | Grants access to |
+|-------|---------|-----------------|
+| `digigraph:workflow` | digigraph | `POST /workflow`, debug endpoints, default fallback |
+| `digigraph:chat` | digigraph | `/v1/chat/completions`, `/v1/models` |
+| `digigraph:mcp` | digigraph | `/threads/*`, `/files/*` |
+| `digiquant:backtest` | digiquant | `/run_backtest`, `/backtest/*`, `/v1/jobs/*`, `/v1/orchestrator_tools` |
+| `digiquant:optimize` | digiquant | `/run_optimize`, `/run_pipeline`, `/v1/workflow` |
+| `digisearch:query` | digisearch | `/query`, `/v1/research_turn`, `/v1/orchestrator_tools`, `/indexes/*` |
+| `digisearch:ingest` | digisearch | `/ingest*` |
+| `digivault:read` | digivault | `/v1/orchestrator_tools`, `/v1/orchestrator_invoke`, `POST /v1/notes/by-path`, and all GET note routes |
+| `digivault:write` | digivault | Mutating note routes; `digivault_create_note` is additionally handler-enforced on the shared `/v1/orchestrator_invoke` |
+| `*` | all | Wildcard — all scopes |
+
+Default BFF session scopes (from `scopes.py`): `digigraph:workflow`, `digigraph:chat`, `digigraph:mcp`, `digiquant:backtest`, `digiquant:optimize`, `digisearch:query`, `digisearch:ingest`, `digivault:read`.
+
+### LiteLLM proxy key funnel
+
+When `DIGIKEY_LITELLM_PROXY_KEY` is set on the digikey container, `POST /v1/oauth/token` appends `litellm_proxy_api_key` to the response. This key (typically equal to `LITELLM_MASTER_KEY`) is forwarded by digichat as `X-LiteLLM-Proxy-Key` to digigraph, enabling one token exchange to bootstrap both service JWT auth and LiteLLM bearer auth. The LiteLLM key is a static pass-through — digikey does not scope or validate it.
+
+---
+
+## 5. Internal Architecture
+
+### Token exchange flow
+
+```
+Client                   digikey                     DB
+  |                         |                          |
+  | POST /v1/oauth/token    |                          |
+  | {grant_type: api_key,   |                          |
+  |  api_key: "dgk_live_…"} |                          |
+  |------------------------>|                          |
+  |                         | SELECT WHERE             |
+  |                         | key_prefix = raw[:16]    |
+  |                         |------------------------->|
+  |                         |<-- [ApiKeyRow(s)]        |
+  |                         |                          |
+  |                         | bcrypt.checkpw(raw, hash)|
+  |                         | check revoked_at is None |
+  |                         | check dev_global allowed |
+  |                         | apply scope downscoping  |
+  |                         | issue_access_token()     |
+  |                         |  → RS256 JWT + jti       |
+  |<------------------------|                          |
+  | {access_token, expires} |                          |
+```
+
+### Consumer JWT verification (no digikey call)
+
+```
+Client                 DigiAuthMiddleware              JWKS Cache
+  |                         |                              |
+  | GET /workflow            |                              |
+  | Authorization: Bearer <JWT>                            |
+  |------------------------>|                              |
+  |                         | path_scopes("GET","/workflow")|
+  |                         | → ["digigraph:workflow"]     |
+  |                         |                              |
+  |                         | PyJWKClient.get_signing_key  |
+  |                         |----------------------------->|
+  |                         |<-- RSAPublicKey (cached 300s)|
+  |                         |                              |
+  |                         | jwt.decode(RS256, aud, iss)  |
+  |                         | scope_grants_required()      |
+  |                         | → attach request.state       |
+  |<-- 200 OK               |                              |
+```
+
+### JWKS rotation
+
+The signing key is loaded once at process startup in `server.py` at module level:
+
+```python
+_private_key, _kid = load_or_create_signing_key()
+```
+
+`kid` comes from `DIGIKEY_KEY_ID` (default `"digikey-1"`). There is no in-process rotation. Key rotation requires a new deployment. Consumers cache the JWKS for up to `DIGIKEY_JWKS_CACHE_SEC` seconds (default 300). During a key rotation, tokens signed by the old key will fail verification once the cache expires and the consumer fetches the new JWKS. There is no overlap/grace period implemented.
+
+### SQLAlchemy DB schema
+
+Tables: `digikey_api_keys`, `digikey_jti_issued`, `digikey_user_profile_pointers`. The engine is created on first use via `db.py`, and `init_db()` runs the JTI migration plus `create_all` at server startup. SQLite uses `check_same_thread=False` to allow access from FastAPI's async thread pool. Postgres uses the default pool. `pool_pre_ping=True` reconnects stale connections.
+
+### Scope matching (wildcards)
+
+`scopes.py:scope_grants_required(granted, required)` implements three-level matching:
+1. If any granted scope is `"*"`: grant everything.
+2. Exact string match: `"digisearch:query"` satisfies `"digisearch:query"`.
+3. Prefix wildcard: granted `"digisearch:*"` satisfies any `"digisearch:X"`.
+4. No reverse wildcard: a required `"digisearch:*"` is satisfied only by `"*"` or `"digisearch:*"`, never by a narrower `"digisearch:X"`. Token exchange issues `requested_scopes` verbatim once this check passes, so a reverse match would let `digivault:read` mint `digivault:*` and then pass `digivault:write`.
+
+---
+
+## 6. Security Analysis
+
+### RS256 signing
+
+digikey uses asymmetric RS256 (RSA 2048-bit). The private key never leaves the digikey container. Consumer services hold only the public key or a JWKS URL. This is correct for a multi-service ecosystem: compromise of a consumer service does not expose signing capability.
+
+**Gap:** The default `kid` is the static string `"digikey-1"`. Without a meaningful `kid` rotation scheme, JWKS consumers cannot distinguish keys across rotations.
+
+### bcrypt key storage
+
+Raw API keys are never stored. Only bcrypt hashes are persisted in the `key_hash` column. Key lookup is a two-step process: fetch by `key_prefix` (plaintext, indexed), then bcrypt verify the matching rows. This is correct. The prefix is not a secret — it only narrows the bcrypt candidates from the full table.
+
+**Gap:** bcrypt work factor is not set explicitly. `bcrypt.gensalt()` defaults to cost factor 12. This is reasonable but should be documented and potentially tunable for high-throughput environments.
+
+### JWT revocation (Redis blocklist — ADR-0007)
+
+When `DIGIKEY_BLOCKLIST_REDIS_URL` is set (wired in root `docker-compose.yml`), digikey:
+
+1. Persists issued `jti` values in Postgres (`jti_issued`) at token exchange time — for **both** `api_key` and `bff_session` grants. A failed insert fails the exchange (503), so no untracked token is ever emitted.
+2. On `POST /v1/admin/keys/{id}/revoke`, marks the API key revoked and adds its live JTIs to the Redis blocklist. On `POST /v1/admin/bff-sessions/revoke`, marks the subject's live JTI rows `revoked_at` and blocklists them (subject-scoped; BFF has no key row).
+3. `rehydrate_blocklist_from_db()` repopulates Redis on startup for revoked API keys **and** revoked BFF subjects.
+4. Consumer `DigiAuthMiddleware` calls `blocklist.is_blocked(jti)` — **fail-closed** when Redis is configured but unreachable.
+
+When Redis is **unset**, blocklist checks are skipped (legacy dev mode). Production stacks must set `DIGIKEY_BLOCKLIST_REDIS_URL`.
+
+**Subject revocation scope and limits (#3917).** `POST /v1/admin/bff-sessions/revoke` operates on the bare subject. `JtiIssuedRow` has no tenant column, so a subject revoke is deployment-global — acceptable because subjects are unique and the route is admin-gated, but it is not tenant-scoped. Revocation blocks **already-issued** tokens; it does not prevent a holder of the shared `DIGIKEY_BFF_TOKEN` from minting a new JWT for the same subject, so a compromised BFF secret still requires rotation.
+
+**Schema upgrades (no migration framework).** digikey applies `Base.metadata.create_all()`, which never alters an existing table. `init_db()` therefore runs `digikey.db_migrate.upgrade_jti_issued_table()` **before** `create_all()` to bring a pre-#3917 `digikey_jti_issued` (`api_key_id NOT NULL`, no `subject`/`revoked_at`) forward without dropping rows: SQLite gets an in-place table rebuild (create new → copy → drop old → rename), other dialects get additive `ALTER TABLE`s. It is idempotent and recovers an interrupted rebuild on the next start. Deployments must not delete `digikey.db` to "fix" schema drift — that destroys API keys and revocation state.
+
+### Historical gap (pre–Wave 1 remediation)
+
+Prior to ADR-0007 implementation, `jti` was included in tokens but not indexed for revocation. See git history for the fail-closed middleware and compose wiring landed in audit Wave 1.
+
+### Customer license issuance guards
+
+`digikey license-mint` refuses to mint when `DIGIKEY_PRIVATE_KEY_PEM` is
+unset — a license signed by an ephemeral key could never verify, so minting
+under one is always a bug (exit non-zero naming the missing var). Mint also
+requires `DIGIKEY_DATABASE_URL`, takes no `dev_global`-style bypass kind
+(licenses are always customer-scoped), and caps `--term-days` at 180. The raw
+license JWT is shown once on stdout (like the raw `dgk_live_` key) and stored
+nowhere retrievable; only `license_id`, customer slug, and `exp` are safe to
+log. Access-token defaults (TTL, `aud`, bcrypt paths, revoke endpoint) are
+untouched by the license path.
+
+### `dev_global` keys risk
+
+Keys with `kind=dev_global` carry `scopes=["*"]` — full access to all services. They are gated behind `DIGIKEY_ALLOW_DEV_GLOBAL=1`, which must never be set in production. No additional runtime enforcement prevents `DIGIKEY_ALLOW_DEV_GLOBAL=1` from being set in a production deployment. In the Docker Compose file, it defaults to `0`, which is correct.
+
+### Admin token rotation risk
+
+`DIGIKEY_ADMIN_TOKEN` is a static bearer secret with no expiry. Leaking this token grants unlimited key creation ability. There is no per-request rate limit or audit trail on `POST /v1/admin/keys` beyond what the standard FastAPI error handler provides.
+
+### SQLite single-writer bottleneck
+
+SQLite — a local file, or a mounted volume in the Compose stack — has a global write lock. Under concurrent load, key creation and token exchange (which reads the DB) will serialize. For production deployments with any significant token exchange rate, Postgres is required.
+
+Additionally, SQLite's `check_same_thread=False` allows cross-thread access but does not address the write lock. FastAPI runs handlers in a thread pool. Under load, this will cause lock contention.
+
+### JWKS caching staleness in consumers
+
+`jwt_verify.py` maintains a module-level `PyJWKClient` singleton with `lifespan=300` (default). After a digikey restart with an ephemeral key (or a deliberate key rotation), consumers continue accepting old-key tokens for up to 5 minutes. This is a feature (resilience) but also a security window: rotated-out keys remain trusted by consumers for 300 seconds.
+
+### Constant-time comparison
+
+`_require_admin` and `bff_session` bearer validation use `secrets.compare_digest`, which prevents timing attacks on token comparison. This is correct.
+
+---
+
+## 7. Scalability Analysis
+
+### Single DB dependency
+
+All state (API keys, revocation via `revoked_at`) lives in one database. digikey itself is stateless between requests — the private key is loaded in memory. Horizontal scaling of digikey is straightforward as long as all instances share the same Postgres database and the same `DIGIKEY_PRIVATE_KEY_PEM` (or coordinate JWKS via a shared volume/secret store).
+
+SQLite cannot support multi-instance digikey. Postgres is required for any horizontal scaling.
+
+### Revocation check latency (Redis blocklist)
+
+When `DIGIKEY_BLOCKLIST_REDIS_URL` is set, consumers call `blocklist.is_blocked(jti)` on each protected request (typically one Redis `EXISTS` or `SISMEMBER`). This adds sub-millisecond latency but closes the pre-ADR-0007 gap where revoked keys stayed valid until JWT `exp`. When Redis is unset, validation remains purely cryptographic with no blocklist round-trip (dev-only).
+
+### JWKS caching
+
+Consumers cache the JWKS for 300 seconds by default. digikey's `/.well-known/jwks.json` endpoint is read-only and stateless — it can handle high fan-out traffic without DB involvement. The endpoint's bottleneck is CPU (RSA key serialization), not I/O.
+
+### Token exchange rate
+
+`POST /v1/oauth/token` for `grant_type=api_key` involves:
+1. One indexed DB read (`SELECT WHERE key_prefix = ?`).
+2. One bcrypt verify (CPU-bound, ~100ms at cost factor 12).
+3. One RSA sign (CPU-bound, ~1ms for 2048-bit).
+
+At high exchange rates, bcrypt is the bottleneck. digikey does not cache exchange results. If the same API key exchanges tokens in a tight loop, each exchange runs a full bcrypt verify. There is no negative effect on correctness, but throughput is bounded by bcrypt latency times available threads.
+
+### Multi-instance considerations
+
+Each digikey instance generates its own ephemeral key when `DIGIKEY_ALLOW_EPHEMERAL_KEY=1`. Multiple instances would publish different JWKS documents, causing cross-instance token verification failures. In any multi-instance deployment, `DIGIKEY_PRIVATE_KEY_PEM` must be identical across instances (e.g., injected from a shared secret store).
+
+---
+
+## 8. Performance Analysis
+
+### bcrypt cost factor
+
+`bcrypt.gensalt()` defaults to cost factor 12 (~100-150ms per verification on modern hardware). With FastAPI's default thread pool of `min(32, os.cpu_count() + 4)` threads, the maximum sustained key exchange throughput is approximately:
+
+```
+throughput ≈ thread_count / bcrypt_latency_sec
+```
+
+For a 4-core host: ~8 threads / 0.1s = ~80 exchanges/second maximum. This is sufficient for most deployments but worth monitoring under high load. Cost factor is not configurable without a code change.
+
+### RS256 JWT verification vs HMAC
+
+RS256 signature verification in consumers is slower than HMAC-SHA256 by roughly 3-5x. For typical request rates (hundreds/second per service), this is not a bottleneck. The JWKS cache ensures the public key is not re-fetched per request.
+
+### JWKS caching TTL in DigiAuthMiddleware
+
+`PyJWKClient` with `lifespan=300` caches signing keys in memory within the consumer process. Cache miss (first request after startup or after TTL expiry) triggers an HTTP request to `DIGIKEY_JWKS_URL`. If digikey is unreachable at that moment, the cache miss becomes a hard 401/503 for that request. There is no stale-while-revalidate behavior.
+
+### Connection pool for Postgres
+
+`db.py` uses `create_engine` with defaults (5 connections, 10 overflow). For production Postgres deployments under significant exchange load, pool sizing should be tuned via `DIGIKEY_DATABASE_URL` pool parameters or explicit engine kwargs. The current code does not expose pool sizing via environment variables.
+
+---
+
+## 9. Integration Points
+
+### Consumer services
+
+All three protected services import from the `digikey` package directly:
+
+```
+digigraph   → digikey.integrations.service_middleware.{DigiAuthMiddleware, digigraph_path_scopes}
+digiquant   → digikey.integrations.service_middleware.{DigiAuthMiddleware, digiquant_path_scopes}
+digisearch  → digikey.integrations.service_middleware.{DigiAuthMiddleware, digisearch_path_scopes}
+```
+
+This means the `digikey` package is a compile-time dependency of every service, not just a runtime network dependency. Path-scope tables live in the `digikey` package itself (`service_middleware.py`), not in each service. A scope change requires updating `digikey` and rebuilding all three consumer images.
+
+### digichat (BFF)
+
+digichat holds `DIGIKEY_URL` and `DIGIKEY_BFF_TOKEN`. On session establishment (user login via OIDC or API key auth), digichat calls `POST /v1/oauth/token` with `grant_type=bff_session`. The returned JWT is forwarded as `Authorization: Bearer` to digigraph on all upstream calls. `litellm_proxy_api_key` is forwarded as `X-LiteLLM-Proxy-Key`.
+
+The static fallback `DIGIGRAPH_UPSTREAM_API_KEY` bypasses digikey entirely. It is documented as emergency/bootstrap only.
+
+### LiteLLM proxy key funnel
+
+digikey is not a LiteLLM auth provider. It acts only as a distribution mechanism: the value of `DIGIKEY_LITELLM_PROXY_KEY` (a pre-configured LiteLLM master key) is included verbatim in the token response. digikey does not create, validate, or scope LiteLLM keys. If `DIGIKEY_LITELLM_PROXY_KEY` is rotated, all currently-held JWTs contain the old LiteLLM key until they expire.
+
+### Audit trail
+
+JWT claims include `jti`, `tenant_slug`, `project_id`, `key_pub`, and `principal_kind`. Consumer services are expected to include these in audit events (as documented in root `SECURITY.md`). digikey itself does not emit audit events on token exchange. There is no `AUDIT_SINK_URL` integration yet.
+
+---
+
+## 10. Docker and Composition
+
+### Service definition
+
+```yaml
+# docker-compose.yml (excerpt)
+digikey:
+  build: { context: ., dockerfile: digikey/Dockerfile }
+  ports: ["127.0.0.1:8005:8005"]          # loopback-only
+  volumes: [digikey_data:/data]            # SQLite persistence
+  healthcheck:
+    test: ["CMD", "curl", "-sf", "http://127.0.0.1:8005/health"]
+    interval: 15s
+    timeout: 5s
+    retries: 3
+    start_period: 10s
+```
+
+digikey has no `depends_on` — it starts first. All other services declare `condition: service_healthy` on `digikey`. The full startup order is:
+
+```
+digikey (healthy) → digiquant (healthy) → digisearch (healthy) → litellm (healthy) → digigraph (healthy)
+```
+
+digichat depends on `digikey` and `digigraph` being healthy.
+
+### Environment variables
+
+| Variable | Default | Required | Purpose |
+|----------|---------|----------|---------|
+| `DIGIKEY_DATABASE_URL` | — | Yes | Postgres or SQLite URL. Required with no fallback: on the Cloudflare Container the `/data` disk is ephemeral, so a synthesized SQLite default would silently lose issued keys and revocation state (#4080) |
+| `DIGIKEY_PRIVATE_KEY_PEM` | — | Prod: Yes | PEM private key for RS256 signing |
+| `DIGIKEY_ALLOW_EPHEMERAL_KEY` | `0` (compose: `0`) | Dev only | Generate ephemeral key if PEM not set (set `1` for local dev only) |
+| `DIGIKEY_KEY_ID` | `digikey-1` | No | `kid` in JWKS and JWT header |
+| `DIGIKEY_ISSUER` | `http://127.0.0.1:8005` | Yes (match consumers) | JWT `iss` claim |
+| `DIGIKEY_AUDIENCE` | `digi-ecosystem` | No | JWT `aud` claim |
+| `DIGIKEY_ADMIN_TOKEN` | — | Yes for key creation | Bearer for `POST /v1/admin/keys` |
+| `DIGIKEY_BFF_TOKEN` | — | Yes for digichat | Bearer for `bff_session` grants |
+| `DIGIKEY_ALLOW_DEV_GLOBAL` | `0` | No (never in prod) | Enable `dev_global` key issuance/exchange |
+| `DIGIKEY_JWT_TTL_SEC` | `900` | No | JWT lifetime in seconds |
+| `DIGIKEY_LITELLM_PROXY_KEY` | — | No | Forwarded as `litellm_proxy_api_key` |
+| `DIGIKEY_JWKS_CACHE_SEC` | `300` | No | Consumer-side JWKS cache TTL |
+| `DIGIKEY_RL_PER_MIN` | `10` | No | Auth-path rate limit: sustained req/min per IP |
+| `DIGIKEY_RL_BURST` | `20` | No | Auth-path rate limit: burst capacity per IP |
+
+Consumer-side variables (set on digigraph/digiquant/digisearch):
+
+| Variable | Purpose |
+|----------|---------|
+| `DIGIKEY_JWKS_URL` | Fetch signing keys (preferred) |
+| `DIGIKEY_PUBLIC_KEY_PEM` | Static public key alternative |
+| `DIGIKEY_ISSUER` | Must match digikey's configured issuer |
+| `DIGIKEY_AUDIENCE` | Must match digikey's configured audience |
+
+### Volume and key persistence
+
+The named volume `digikey_data` is mounted at `/data` inside the container. SQLite writes to `/data/digikey.db`. The private key is not persisted to this volume — it is set via `DIGIKEY_PRIVATE_KEY_PEM` env var (from `.env` or secret store). If using ephemeral keys, a container restart invalidates all previously issued tokens once consumer JWKS caches expire.
+
+### MCP server
+
+digikey does not expose an MCP server. It is infrastructure, not a capability provider. There is no `POST /v1/orchestrator_tools` endpoint.
+
+---
+
+## 11. Phase 2+ Gaps and Roadmap
+
+The following capabilities are absent from v0.1. Each represents a production readiness gap or an identified roadmap item from `ARCHITECTURE.md`.
+
+**JWT revocation via `jti` blocklist** — *implemented (ADR-0007).*
+Redis-backed blocklist with per-entry TTL, `jti_issued` persistence at exchange time, and fail-closed `DigiAuthMiddleware` checks. Remaining gaps: introspection endpoint (RFC 7662), org-level scope policies, refresh tokens.
+
+**Vault/KMS-backed signing keys**
+Private key material is currently a PEM string in an environment variable. This is acceptable for low-risk deployments but fails compliance requirements (SOC 2, PCI DSS) that mandate HSM-backed keys and key usage audit trails. HashiCorp Vault Transit or AWS KMS would provide signing without exposing private key material.
+
+**OPA policy engine**
+Scope definitions are hardcoded in `service_middleware.py`. An OPA integration would externalize policy (scope-to-path mappings) into versioned policy files, enabling policy changes without code deployments or service restarts.
+
+**Usage aggregation from `AUDIT_SINK_URL`**
+digikey does not emit events on token exchange. An `AUDIT_SINK_URL` integration would let operators track per-tenant, per-key token exchange volume for billing, anomaly detection, and compliance reporting.
+
+**Org-level scope policies**
+Current scopes are per-key. There is no concept of an organization-level policy that caps what any key under a tenant can grant. A `TenantPolicy` table could enforce upper bounds on scope grants independent of individual key configuration.
+
+**Refresh token support**
+The `grant_type` field accepts `api_key` and `bff_session` only. There is no refresh token mechanism. Clients must re-exchange their API key every 15 minutes (default TTL). A `refresh_token` grant would allow silent re-issuance without re-presenting the API key secret.
+
+**Rate limiting on token endpoint** — *partially closed in v0.1.1.*
+A per-IP in-process token-bucket limiter (see `ratelimit.py`) is now applied as a FastAPI dependency on `POST /v1/oauth/token` and `POST /v1/admin/keys`. Defaults: 10 req/min sustained, burst 20 — configurable via `DIGIKEY_RL_PER_MIN` / `DIGIKEY_RL_BURST`. Exempt routes (`/health`, `/.well-known/jwks.json`) carry no limiter overhead. The bucket is process-local; cross-process sharing (Redis or a digibase-backed store) is the remaining follow-up for multi-instance deployments, and per-API-key-prefix limiting is still a gap. Responses on breach: HTTP 429 with `{"detail":"rate_limited","retry_after":N}` and a `Retry-After` header.
+
+---
+
+## 12. Redesign Recommendations
+
+These are ordered by severity of current risk.
+
+### (a) ~~Implement `jti` blocklist~~ — shipped (ADR-0007)
+
+See Section 6 (JWT revocation). Follow-ups: multi-instance rate-limit sharing, introspection endpoint, key rotation overlap (below).
+
+### (b) Add key rotation ceremony with JWKS key ID overlap
+
+A new digikey key pair deployment currently invalidates all in-flight tokens as soon as consumer JWKS caches expire (up to 300 seconds after deployment). Tokens signed with the old key are rejected.
+
+Recommended approach: support multiple keys in the JWKS document. On rotation, publish `{"keys": [new_key, old_key]}` for at least one full cache TTL (300 seconds). Consumers select the correct key by `kid`. After the overlap period, remove the old key from JWKS. This requires:
+- `DIGIKEY_KEY_ID` to be rotated (new value) per deployment.
+- digikey to optionally load a secondary PEM (`DIGIKEY_PREV_KEY_PEM`, `DIGIKEY_PREV_KEY_ID`) and include it in the JWKS response.
+
+### (c) Add token introspection endpoint
+
+Services that need real-time validity checks (e.g., after key revocation) cannot use local JWT verification — they need to call digikey. Add `POST /v1/introspect` following RFC 7662:
+
+```json
+{ "token": "<JWT>" }
+→ { "active": true, "sub": "key:...", "scopes": [...], "exp": ... }
+```
+
+This endpoint checks both cryptographic validity and `jti_blocklist` membership. It is optional — services can use local verification for performance and fall back to introspection only when they require real-time revocation guarantees.
+
+### (d) Version and externalize scope definitions
+
+`service_middleware.py` embeds path-scope mappings for all three services. This creates a coupling: adding a new digisearch endpoint requires updating `digikey`, rebuilding `digikey`, and redeploying all consumers that inherit the package.
+
+Recommended: move path-scope tables into each service's own configuration (loaded at startup), with digikey responsible only for scope validation at exchange time. The middleware's `PathScopeFn` signature already supports this — it just needs to be wired to a config file rather than hardcoded functions.
+
+### (e) Add rate limiting on `POST /v1/oauth/token`
+
+Brute-force guessing of the non-prefix portion of an API key (32 random URL-safe base64 chars) is computationally infeasible, but repeated bcrypt calls from a single source waste CPU. Add per-IP or per-prefix rate limiting. A simple in-process leaky bucket (or Redis with `INCR`/`EXPIRE`) on `(client_ip, key_prefix)` tuples would prevent abuse. Return 429 after the threshold is exceeded.
+
+### (f) Vault integration for HSM-backed signing
+
+For production environments subject to audit or compliance requirements, the private key must not exist as a plaintext environment variable. Integrate with HashiCorp Vault Transit:
+
+- `jwt_issue.py` calls `POST /transit/sign/digikey` instead of `jwt.encode` with local key.
+- Vault Transit returns the RS256 signature; digikey assembles the JWT.
+- JWKS is constructed from Vault Transit's public key endpoint.
+- Key rotation is managed by Vault, not digikey deployment cycles.
+
+Until this is implemented, at minimum rotate `DIGIKEY_PRIVATE_KEY_PEM` on a regular schedule (monthly) and store it in a secrets manager (AWS Secrets Manager, 1Password Secrets Automation) rather than in `.env` files on disk.
+
+## Observability
+
+This service exposes a Prometheus `/metrics` endpoint (counter, histogram, in-flight gauge for every HTTP route) via `digibase.metrics.install_metrics`; scraped by the `observability` compose profile per [ADR-0003](../docs/adr/0003-observability-baseline.md).
+
+## CORS
+
+CORS is installed via the shared `digibase.cors.install_cors(app, service="digikey")` helper; allowlist precedence is `DIGIKEY_CORS_ORIGINS` → `DIGI_CORS_ORIGINS` → legacy `DIGI_ALLOWED_ORIGINS`, defaulting to empty. See `SECURITY.md` §"CORS policy".
+
+## Input Validation Posture
+
+All HTTP request bodies are typed with Pydantic v2 models using `ConfigDict(extra="forbid")`, which rejects unknown fields with HTTP 422 at the framework boundary. Shared validation-error shape lives in `digibase.errors`.

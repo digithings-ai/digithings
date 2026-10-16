@@ -1,0 +1,18 @@
+// ============================================================================
+// Moving Average Selector
+// ============================================================================
+// Shared utility used by ADF, RSI, and Bollinger Bands indicators.
+// Not a standalone script — paste into strategy or wrap in a library.
+// ============================================================================
+
+get_ma(string ma_type, float src, int len) =>
+    float result = na
+    switch ma_type
+        "SMA"       => result := ta.sma(src, len)
+        "EMA"       => result := ta.ema(src, len)
+        "VWMA"      => result := ta.vwma(src, len)
+        "WMA"       => result := ta.wma(src, len)
+        "HMA"       => result := ta.hma(src, len)
+        "RMA"       => result := ta.rma(src, len)
+        "SMMA (RMA)" => result := ta.rma(src, len)
+    result

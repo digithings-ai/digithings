@@ -1,0 +1,298 @@
+"""Unit tests for digigraph.project_config."""
+
+from __future__ import annotations
+
+import logging
+import os
+from pathlib import Path
+
+import digigraph.project_config as project_config_module
+import pytest
+from digigraph.project_config import DigiProjectConfig, _resolve_config_path, load_project_config
+
+
+def test_load_project_config_returns_empty_when_no_file(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("DIGI_PROJECT_CONFIG", raising=False)
+    result = load_project_config()
+    # May find config/digi_project.yaml if it exists; otherwise {}
+    assert isinstance(result, dict)
+
+
+def test_load_project_config_from_path(tmp_path: Path) -> None:
+    cfg_file = tmp_path / "digi_project.yaml"
+    cfg_file.write_text("""
+project:
+  name: test-desk
+agents:
+  enabled: [research, backtest]
+  llm_mode: medium
+indexes:
+  - name: docs
+    backend: chroma
+mcp:
+  enabled: true
+  port: 8765
+  tools: [digigraph_workflow]
+""")
+    result = load_project_config(str(cfg_file))
+    assert result["project"]["name"] == "test-desk"
+    assert result["agents"]["llm_mode"] == "medium"
+    assert result["agents"]["enabled"] == ["research", "backtest"]
+    assert len(result["indexes"]) == 1
+    assert result["indexes"][0]["name"] == "docs"
+    assert result["mcp"]["tools"] == ["digigraph_workflow"]
+
+
+def test_digi_project_config_getters(tmp_path: Path) -> None:
+    cfg_file = tmp_path / "digi_project.yaml"
+    cfg_file.write_text("""
+project:
+  name: my-desk
+agents:
+  enabled: [research]
+  llm_mode: best
+indexes:
+  - name: research_docs
+mcp:
+  enabled: true
+  port: 9000
+  tools: [digigraph_workflow, digisearch_research_docs_query]
+""")
+    cfg = DigiProjectConfig.load(str(cfg_file))
+    assert cfg.get_enabled_agents() == ["research"]
+    assert cfg.get_llm_mode() == "best"
+    assert cfg.get_mcp_port() == 9000
+    assert cfg.is_mcp_enabled() is True
+    assert cfg.get_mcp_tools() == ["digigraph_workflow", "digisearch_research_docs_query"]
+    assert len(cfg.get_indexes()) == 1
+    assert cfg.get_indexes()[0]["name"] == "research_docs"
+
+
+def test_digi_project_config_defaults() -> None:
+    cfg = DigiProjectConfig({})
+    assert cfg.get_enabled_agents() == ["research", "backtest"]
+    assert cfg.get_llm_mode() == "test"
+    assert cfg.get_mcp_port() == 8765
+    assert cfg.is_mcp_enabled() is True
+    assert cfg.get_allowed_tools() == []
+
+
+def test_digi_project_config_allowed_tools() -> None:
+    cfg = DigiProjectConfig({"agents": {"allowed_tools": ["digisearch", "todo"]}})
+    assert cfg.get_allowed_tools() == ["digisearch", "todo"]
+
+
+@pytest.mark.unit
+def test_digi_project_config_require_tool_calls_true() -> None:
+    cfg = DigiProjectConfig({"agents": {"require_tool_calls": True}})
+    assert cfg.get_require_tool_calls() is True
+
+
+@pytest.mark.unit
+def test_digi_project_config_require_tool_calls_defaults_false() -> None:
+    cfg = DigiProjectConfig({"agents": {}})
+    assert cfg.get_require_tool_calls() is False
+
+
+@pytest.mark.unit
+def test_digi_project_config_always_retrieve_tools() -> None:
+    cfg = DigiProjectConfig(
+        {"agents": {"always_retrieve_tools": ["digisearch", "digivault_search_notes"]}}
+    )
+    assert cfg.get_always_retrieve_tools() == ["digisearch", "digivault_search_notes"]
+
+
+@pytest.mark.unit
+def test_digi_project_config_research_brief_default_and_yaml() -> None:
+    assert DigiProjectConfig({}).get_research_brief() is True
+    assert DigiProjectConfig({"agents": {"research_brief": False}}).get_research_brief() is False
+    assert DigiProjectConfig({"agents": {"research_brief": True}}).get_research_brief() is True
+    assert DigiProjectConfig({"agents": {"research_brief": "false"}}).get_research_brief() is False
+    assert DigiProjectConfig({"agents": {"research_brief": "0"}}).get_research_brief() is False
+
+
+@pytest.mark.unit
+def test_digi_project_config_research_brief_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg = DigiProjectConfig({"agents": {"research_brief": True}})
+    monkeypatch.setenv("DIGI_RESEARCH_BRIEF", "0")
+    assert cfg.get_research_brief() is False
+    monkeypatch.setenv("DIGI_RESEARCH_BRIEF", "1")
+    cfg_off = DigiProjectConfig({"agents": {"research_brief": False}})
+    assert cfg_off.get_research_brief() is True
+    monkeypatch.delenv("DIGI_RESEARCH_BRIEF", raising=False)
+    assert DigiProjectConfig({"agents": {"research_brief": False}}).get_research_brief() is False
+
+
+def test_get_digivault_url_defaults_and_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("DIGIVAULT_URL", raising=False)
+    assert DigiProjectConfig({}).get_digivault_url() == "http://digivault:8004"
+
+    monkeypatch.setenv("DIGIVAULT_URL", "http://example.test:8004")
+    assert DigiProjectConfig({}).get_digivault_url() == "http://example.test:8004"
+
+    cfg = DigiProjectConfig({"services": {"digivault_url": "http://from-config:8004"}})
+    assert cfg.get_digivault_url() == "http://from-config:8004"
+
+
+def test_digi_project_config_indexes_dir_discovery(tmp_path: Path) -> None:
+    """When indexes_dir is set, indexes are discovered from that directory."""
+    (tmp_path / "indexes").mkdir()
+    (tmp_path / "indexes" / "unified-content-index.yaml").write_text(
+        "index_name: unified-content-index\n"
+    )
+    (tmp_path / "config.yaml").write_text("""
+project:
+  name: sitas
+indexes_dir: indexes
+mcp:
+  tools: [digigraph_workflow]
+""")
+    cfg = DigiProjectConfig.load(str(tmp_path / "config.yaml"))
+    indexes = cfg.get_indexes()
+    assert len(indexes) == 1
+    assert indexes[0]["name"] == "unified-content-index"
+    assert indexes[0]["config_ref"] == "indexes/unified-content-index.yaml"
+    tools = cfg.get_mcp_tools()
+    assert "digigraph_workflow" in tools
+    assert "digisearch_unified_content_index_query" in tools
+
+
+@pytest.mark.unit
+def test_resolve_config_path_prefers_digiproject_yaml_over_config_yaml(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """When config.yaml is given but digiproject.yaml sibling exists, prefer digiproject.yaml and warn."""
+    (tmp_path / "config.yaml").write_text("project:\n  name: old\n")
+    (tmp_path / "digiproject.yaml").write_text("project:\n  name: new\n")
+    with caplog.at_level(logging.WARNING, logger="digigraph.project_config"):
+        resolved = _resolve_config_path(str(tmp_path / "config.yaml"))
+    assert resolved is not None
+    assert resolved.name == "digiproject.yaml"
+    assert "DEPRECATED" in caplog.text
+    assert "digiproject.yaml" in caplog.text
+
+
+@pytest.mark.unit
+def test_resolve_config_path_warns_on_config_yaml_when_no_digiproject(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """When config.yaml is given and no digiproject.yaml exists, use config.yaml with deprecation warning."""
+    (tmp_path / "config.yaml").write_text("project:\n  name: legacy\n")
+    with caplog.at_level(logging.WARNING, logger="digigraph.project_config"):
+        resolved = _resolve_config_path(str(tmp_path / "config.yaml"))
+    assert resolved is not None
+    assert resolved.name == "config.yaml"
+    assert "DEPRECATED" in caplog.text
+
+
+@pytest.mark.unit
+def test_resolve_config_path_default_prefers_digiproject_yaml(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Default search (no explicit path) prefers digiproject.yaml in cwd over config/digi_project.yaml."""
+    monkeypatch.delenv("DIGI_PROJECT_CONFIG", raising=False)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "digiproject.yaml").write_text("project:\n  name: preferred\n")
+    (tmp_path / "config").mkdir()
+    (tmp_path / "config" / "digi_project.yaml").write_text("project:\n  name: fallback\n")
+    resolved = _resolve_config_path()
+    assert resolved is not None
+    assert resolved.name == "digiproject.yaml"
+
+
+@pytest.mark.unit
+def test_load_project_config_legacy_config_yaml(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """load_project_config honours config.yaml with deprecation warning when no digiproject.yaml."""
+    cfg_file = tmp_path / "config.yaml"
+    cfg_file.write_text("project:\n  name: legacy-project\n")
+    with caplog.at_level(logging.WARNING, logger="digigraph.project_config"):
+        result = load_project_config(str(cfg_file))
+    assert result["project"]["name"] == "legacy-project"
+    assert "DEPRECATED" in caplog.text
+
+
+def test_get_search_index_config_loads_index_yaml(tmp_path: Path) -> None:
+    """get_search_index_config() returns full index YAML when config_ref exists."""
+    (tmp_path / "indexes").mkdir()
+    (tmp_path / "indexes" / "unified-content-index.yaml").write_text("""
+index_name: unified-content-index
+filterable_fields:
+  - sourceType
+  - itemType
+result_metadata_fields:
+  - subject
+  - fromAddress
+""")
+    (tmp_path / "config.yaml").write_text("""
+project:
+  name: sitas
+indexes_dir: indexes
+mcp:
+  tools: []
+""")
+    cfg = DigiProjectConfig.load(str(tmp_path / "config.yaml"))
+    index_config = cfg.get_search_index_config()
+    assert index_config.get("index_name") == "unified-content-index"
+    assert "sourceType" in (index_config.get("filterable_fields") or [])
+    assert "subject" in (index_config.get("result_metadata_fields") or [])
+
+
+@pytest.mark.unit
+def test_digi_project_config_load_re_reads_on_mtime_change(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    Given  a project config file that DigiProjectConfig.load() has already loaded,
+    When   the file content is mutated and the mtime is bumped by ≥1 second,
+    Then   a subsequent DigiProjectConfig.load() call returns the new value without
+           a process restart (mtime-keyed cache invalidation per project-spec-v1alpha1).
+
+    The spec states: "digigraph reads the project config on every request (cached by mtime).
+    No restart required for non-secret field changes."
+    """
+    # Isolate: clear the module-level cache so previous tests don't interfere.
+    monkeypatch.setattr(project_config_module, "_config_cache", {})
+
+    cfg_file = tmp_path / "digiproject.yaml"
+    cfg_file.write_text("project:\n  name: before-reload\nagents:\n  llm_mode: test\n")
+    # Establish initial mtime explicitly at t=1000 so we can reliably bump it.
+    initial_ts = 1_000_000_000.0
+    os.utime(cfg_file, (initial_ts, initial_ts))
+
+    # First load — populates cache keyed by (path, mtime).
+    cfg_before = DigiProjectConfig.load(str(cfg_file))
+    assert cfg_before.get_llm_mode() == "test"
+    assert cfg_before.project.get("name") == "before-reload"
+
+    # Mutate file and bump mtime by 1 second — simulates an in-place edit on disk.
+    cfg_file.write_text("project:\n  name: after-reload\nagents:\n  llm_mode: best\n")
+    bumped_ts = initial_ts + 1.0
+    os.utime(cfg_file, (bumped_ts, bumped_ts))
+
+    # Second load — must see the new values (cache miss due to mtime change).
+    cfg_after = DigiProjectConfig.load(str(cfg_file))
+    assert cfg_after.get_llm_mode() == "best", (
+        "DigiProjectConfig.load() did not pick up the updated file after mtime bump; "
+        "mtime-keyed cache invalidation is broken."
+    )
+    assert cfg_after.project.get("name") == "after-reload"
+
+
+@pytest.mark.unit
+def test_unsupported_version_warns(tmp_path: Path) -> None:
+    """Given a digiproject.yaml with an unrecognised version, loader emits a UserWarning but still returns a valid config."""
+    cfg_file = tmp_path / "digiproject.yaml"
+    cfg_file.write_text("""
+version: v99alpha1
+project:
+  name: future-project
+agents:
+  enabled: [research]
+""")
+    with pytest.warns(UserWarning, match="v99alpha1"):
+        cfg = DigiProjectConfig.load(str(cfg_file))
+    # still returns a valid config
+    assert cfg.project.get("name") == "future-project"
+    assert cfg.get_enabled_agents() == ["research"]

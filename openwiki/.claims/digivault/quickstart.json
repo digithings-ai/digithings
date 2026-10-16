@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:d64fa040d6dd5550e84cc70e790e87674e54b5eef68ce987ecf3ea1fe8fa8cc9",
+  "claims": [
+    {
+      "id": "claim_1d4b0230e3554df7a67a3bae9989f02d",
+      "statement": "The core Vault API (list, backlinks, tag search, create, rename, lint) works library-first with a CLI offering init, lint, reindex, and new-note.",
+      "evidence": [
+        {
+          "resource": "repo://digivault/ARCHITECTURE.md#L46-L46",
+          "version": "repo-lines-v1:sha256:f67a7320c101f3274b934559263b81914278e977b5ecf221a6cbdd30dd3adb64:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZjY3YTczMjBjMTAxZjMyNzRiOTM0NTU5MjYzYjgxOTE0Mjc4ZTk3N2I1ZWNmMjIxYTZjYmRkMzBkZDNhZGI2NCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZjY3YTczMjBjMTAxZjMyNzRiOTM0NTU5MjYzYjgxOTE0Mjc4ZTk3N2I1ZWNmMjIxYTZjYmRkMzBkZDNhZGI2NCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZGVlZWUyODIxNDIyYTRjMDg0YzIwZTY0ZThiZjQyNGZkM2UwN2U2OTk5NDVmMGY5NTc5Y2MxMGNjMmMwNWUyYiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMGE0MzdjYWIwZWQ2ZmU5ODBmZTQzNzQ4ZjQ4OGM4MThiY2IzMzBkN2EzNmFlNDU5ZDY3NzBlOTY4YWI0NDgwNiJ9"
+        },
+        {
+          "resource": "repo://digivault/ARCHITECTURE.md#L48-L65",
+          "version": "repo-lines-v1:sha256:06ed2e2eae7164490aecdb1946574cbaae7ef385ab36b056d67303d108543249:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjVkNTgxZDk0ZmQyNjU5MWQ0M2I1MmNiNmE0NmVlZWMyYWNkZjUzYWJhMWM0M2M5ZjBlZTEyNWYzOTNlOTg1MzgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIzZDIzMDg5OTI1Nzc3MWNkNzYxN2Y3OGYyYmIwZDY2NWQ1ZDYyZjM1Yzk4MTI1ZWU5MTY1MzczMDIyYzdiMjkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY2OTY4NWNmNzRiNzc1ODhiNjYyNjIwZWE2MGU3MmZiZDc3NmVjZWIwZjcxOTYwMzg1MmI4NWRhZTljMzY2MzAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc2NjNjNWJjMzgyY2UxMGNiYTk0MjhjMmM3NGE3NzhkOGQzZGU3YzQ3MDg1OTBkZWY1YTRjOWFlZjE5NzFlNTEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_f9eee856af2f409199c871c2b39efe86",
+      "statement": "Verification is core install plus pytest tests/dv -m unit, a FastAPI-free import-cost guard, and ruff check plus format --check on src and tests.",
+      "evidence": [
+        {
+          "resource": "repo://digivault/AGENTS.md#L63-L80",
+          "version": "repo-lines-v1:sha256:2a245be61ba0a064cfef28892227479380ccb374ac9ca7588517019ca678e4e4:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIzOWQyODYyZWVjYjE3ZDg4NWM3NDY4ODI1MTI4NjIzMzdkY2FiOWViYjlkZDJmMThjOWI5MTdmZWU2YjI0OTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ3YzA2YzU2MWQ1YzMyNzM0MzY4NTI2OGE0NmIzMzkxZjM5OThlZWU4OTBkMmJlNTFmMGQyMWNjNGE1M2FlNmQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI1YjdhYjEyNWZjYTEyOGUyNjdkZDljMmM0ODljZTdmZDY5Mjg5Zjk5MzRjMjEyMWFhNzM1Y2M2NTBkNTljNDEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.0",
+    "at": "2026-09-09T14:37:17.158Z"
+  }
+}

@@ -1,0 +1,53 @@
+# Daily R2 market-data refresh (#3780, Task 6).
+#
+# The clock is digithings-cron -> digiquant-runner (issue #4761). This file is
+# a manual override only. Do not add a schedule key; enabling the workflow
+# does not restore a clock. GITHUB_OVERRIDE_JOBS on digithings-cron is the
+# rollback that workflow_dispatch-es this file.
+#
+# yfinance/Gloomberb/Yahoo-FX latest -> merge into new immutable R2 generations
+# via scripts/refresh_market_data_r2.py. Fail-soft: on a fetch failure the
+# previous objects keep serving, the manifest is written with stale=true,
+# and the non-zero exit fails the run so the failure alerts.
+#
+# CORE_POSTGRES_URI is additional to the brief's pins: the store seam
+# (R2HistoryStore) needs the direct-PG archive_objects registry insert, same
+# as the Task 5 backfill. Without it no generation can be recorded.
+name: market-data-refresh
+on:
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: market-data-refresh
+  cancel-in-progress: false
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    # DIG-248: CI-read secrets live at `cron` environment scope, not repo/org scope.
+    environment: cron
+    timeout-minutes: 30
+    env:
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      CORE_POSTGRES_URI: ${{ secrets.CORE_POSTGRES_URI }}
+      # FX mirror (#4150): refresh_market_data_r2.py mirrors sealed Yahoo-FX
+      # generations back into core macro_series_observations — twelve-x reads
+      # that table for pair fixes. Without core creds the mirror is inert
+      # (fail-soft by design), so pass them here.
+      CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL }}
+      CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --frozen --package digiquant --extra prices --extra research
+      - run: uv run --frozen --no-sync python scripts/refresh_market_data_r2.py --manifest-out /tmp/market-data-refresh.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: market-data-refresh-manifest
+          path: /tmp/market-data-refresh.json
+          retention-days: 90

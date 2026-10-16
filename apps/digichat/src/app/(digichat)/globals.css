@@ -1,0 +1,29 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+/* Shared digichat app theme bridge (WS1) — variants, keyframes, dark
+   variant, shadcn @theme, :root, .dark, @layer base. Byte-identical to the
+   blocks this file and (baseline)/baseline.css used to duplicate. */
+@import "@digithings/ui/styles/digichat-app-theme.css";
+
+/* Product stock CSS — mirrors (baseline)/baseline.css (Inter + registry Thread).
+ * Does NOT import assistant-ui-cli, digichat-ui session/cursor, or terminal-loaders.
+ * ChatShell loads those via @/styles/chat-shell-cli.css.
+ */
+@import "../../styles/product-chrome.css";
+@import "@digithings/ui/styles/chat-core.css";
+@import "@digithings/ui/styles/chat-widgets.css";
+@import "@digithings/ui/styles/chat-aui.css";
+@import "@digithings/ui/styles/chat-digichat.css";
+@import "@digithings/ui/styles/digichat-launcher.css";
+
+
+
+@source "../../components/stock";
+@source "../../components/ui";
+@source "../../components/byok-cli-flow.tsx";
+@source "../../app/(digichat)/embed";
+@source "../../app/(digichat)/home-stock-client.tsx";
+@source "../../../../../packages/ui/src/components/chat";
+
+/* Dark variant, shadcn @theme, :root, .dark, @layer base now live in the
+   shared bridge imported at the top of this file. */

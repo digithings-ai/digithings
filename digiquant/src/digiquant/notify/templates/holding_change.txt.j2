@@ -1,0 +1,8 @@
+Holding change — {{ ticker }}
+Date: {{ run_date }}
+Change: {{ change_kind }}
+{% if delta_pp is not none %}Weight delta: {{ "%.1f"|format(delta_pp) }}pp
+{% endif %}{% if current_weight_pct is not none %}Current weight: {{ current_weight_pct }}%
+{% endif %}{% if prior_weight_pct is not none %}Prior weight: {{ prior_weight_pct }}%
+{% endif %}
+Unsubscribe or manage notifications: {{ unsubscribe_url }}

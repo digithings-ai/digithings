@@ -1,0 +1,239 @@
+"""Request → WorkflowRequest digikey field injection and thread config."""
+
+from __future__ import annotations
+
+import json
+from typing import Any  # score:allow untyped any — Starlette headers / request extras
+
+from fastapi import HTTPException, Request
+
+from digigraph.models import (
+    MAX_MCP_TOOL_ENTRIES,
+    MAX_MCP_TOOL_NAME_LENGTH,
+    McpServerRef,
+    WorkflowRequest,
+)
+from digigraph.thread_scope import (
+    assert_thread_access,
+    auth_subject_from_request,
+    resolve_client_thread_id,
+    workflow_thread_id,
+)
+
+
+def _hget(headers: Any, *keys: str) -> str:
+    """Read a header; dict tests are case-sensitive, Starlette is not."""
+    get = getattr(headers, "get", None)
+    if not callable(get):
+        return ""
+    for key in keys:
+        raw = get(key)
+        if raw and str(raw).strip():
+            return str(raw)
+    return ""
+
+
+def _mcp_setup(raw: Any) -> dict[str, str] | None:
+    """Decode a parsed-header ``setup`` value into the ``McpServerRef`` mapping.
+
+    ``parse_mcp_servers_json`` keeps each server row flat (``dict[str, str]``),
+    so ``setup`` arrives JSON-encoded; the model field is a mapping. Malformed
+    or non-object values are dropped rather than failing the turn.
+    """
+    if isinstance(raw, dict):
+        return {str(k): str(v) for k, v in raw.items()}
+    if not raw:
+        return None
+    try:
+        decoded = json.loads(raw)
+    except (TypeError, json.JSONDecodeError):
+        return None
+    if not isinstance(decoded, dict):
+        return None
+    return {str(k): str(v) for k, v in decoded.items()}
+
+
+def _mcp_tool_names(raw: Any) -> list[str] | None:
+    """Decode one header tool allowlist into the model's list of names.
+
+    ``parse_mcp_servers_json`` keeps each server row flat (``dict[str, str]``),
+    so an allowlist arrives JSON-encoded and the model field is a list. Absent
+    stays ``None`` and an explicit ``[]`` stays ``[]``: the gate reads that
+    difference as rule 1 (both offer nothing) versus rule 5 (which of the allowed
+    tools mutate), so collapsing the two spellings would silently change an
+    operator's answer.
+
+    Malformed input is refused whole rather than trimmed (rule 3). A non-list, a
+    non-string or empty entry, a name with whitespace or over
+    ``MAX_MCP_TOOL_NAME_LENGTH``, or more than ``MAX_MCP_TOOL_ENTRIES`` entries
+    all read as absent, which denies everything — the same thing the BFF does
+    when it refuses an overshoot. Dropping only the bad entries would keep the
+    tools the operator wrote while the config still looked correct, which is the
+    failure a brake is supposed to make impossible. Values are used verbatim, so
+    a name the BFF would have refused cannot gain a different meaning here.
+    """
+    if isinstance(raw, str):
+        if not raw:
+            return None
+        try:
+            raw = json.loads(raw)
+        except json.JSONDecodeError:
+            return None
+    if not isinstance(raw, list) or len(raw) > MAX_MCP_TOOL_ENTRIES:
+        return None
+    names: list[str] = []
+    for name in raw:
+        if not isinstance(name, str):
+            return None
+        if not name or len(name) > MAX_MCP_TOOL_NAME_LENGTH or any(c.isspace() for c in name):
+            return None
+        names.append(name)
+    return names
+
+
+def _digi_fields_from_request(http_request: Request) -> dict[str, Any]:
+    from digigraph.corpus_routing import (
+        TenantCorpusMapError,
+        load_tenant_corpus_map,
+        resolve_corpus_override,
+    )
+
+    bearer = getattr(http_request.state, "digi_bearer", None)
+    auth = getattr(http_request.state, "digi_auth", None)
+    updates: dict[str, Any] = {"digi_bearer": bearer}
+    # digi_subject keys the cross-thread Store namespace (supervisor_node,
+    # ARCHITECTURE.md §6.10) and, via workflow_thread_id, the checkpoint thread_id — so
+    # it must NEVER survive from a client-supplied WorkflowRequest.digi_subject unless
+    # backed by verified auth (CWE-639 IDOR). This key must always be present in
+    # `updates` (never merely omitted): `req.model_copy(update=updates)` in
+    # _with_digi_request_context only clears a field when its key is explicitly present
+    # here — an absent key leaves the client's original value untouched. So this is an
+    # unconditional assignment, not a conditional override: it sets the verified
+    # `auth.subject` when `auth` is present and its `subject` claim is non-empty, and
+    # explicitly `None` in every other case — no `auth` object at all, OR an `auth`
+    # object present with an empty/falsy `subject` claim. Both are real overrides, not
+    # skips, because the key is always present.
+    updates["digi_subject"] = auth.subject if (auth is not None and auth.subject) else None
+    tenant_from_auth: str | None = None
+    if auth is not None:
+        if auth.key_prefix:
+            updates["digi_trace_key_prefix"] = auth.key_prefix
+        if auth.tenant_slug:
+            updates["digi_trace_tenant"] = auth.tenant_slug
+            tenant_from_auth = auth.tenant_slug
+        if auth.project_id:
+            updates["digi_trace_project_id"] = auth.project_id
+        if auth.jti:
+            updates["digi_trace_jti"] = auth.jti
+    # Mirror digivault tenant_scope: set-but-broken DIGI_TENANT_CORPUS_MAP is 503,
+    # never silently treated as unset (which would re-enable client corpus headers).
+    try:
+        corpus_map = load_tenant_corpus_map()
+    except TenantCorpusMapError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    corpus = resolve_corpus_override(
+        headers=http_request.headers,
+        tenant_slug=tenant_from_auth,
+        corpus_map=corpus_map,
+    )
+    # Same CWE-639 class as digi_subject: when DIGI_TENANT_CORPUS_MAP is configured,
+    # digisearch_index / vault_path_prefix must be written unconditionally so a client
+    # body value cannot survive into graph state (digisearch has no server-side
+    # tenant→index bind; digivault does for prefixes).
+    # research_system_prompt_override is written unconditionally for the same reason:
+    # the research system prompt is operator-configured only (digiproject.yaml
+    # agents.research_system_prompt or the tenant corpus map). A client body value
+    # must never become it — an unmapped tenant (or the map-unset single-tenant path)
+    # clears to None rather than letting a caller inject its own system prompt.
+    updates["research_system_prompt_override"] = corpus.research_system_prompt
+    # Hosted license gate (spec §7): corpus/vault headers request the hosted
+    # corpus capability, which requires the ``digisearch-corpus`` license scope
+    # (403 ``insufficient_license_scope`` when lacking). The gate sits after map
+    # resolution — the map stays authoritative (a set-but-broken map already
+    # 503'd above; a usable map ignores client headers, so the gate does not
+    # fire there either). It can only narrow header-driven selection, never
+    # widen or disturb mapped selection. Requests without corpus headers never
+    # touch license code (plain open).
+    from digigraph.http_api.license_gate import enforce_corpus_license
+
+    enforce_corpus_license(http_request.headers, headers_effective=not corpus_map)
+    if corpus_map:
+        updates["digisearch_index"] = corpus.digisearch_index
+        updates["vault_path_prefix"] = corpus.vault_path_prefix
+    else:
+        if corpus.digisearch_index:
+            updates["digisearch_index"] = corpus.digisearch_index
+        if corpus.vault_path_prefix:
+            updates["vault_path_prefix"] = corpus.vault_path_prefix
+    # Per-request response language (X-Digi-Language) — a per-request signal, not a
+    # tenant-derived value, so it's read directly rather than via resolve_corpus_override.
+    # The raw header is never interpolated: resolve_language_directive / apply_language_preference
+    # only ever emit mapped display names for curated 2-char codes. Capped defensively
+    # before it reaches WorkflowRequest/checkpointed state. Curated codes are 2 characters,
+    # so 16 is generous headroom, not a functional constraint.
+    lang = http_request.headers.get("x-digi-language")
+    if lang and lang.strip():
+        updates["response_language"] = lang.strip().lower()[:16]
+    from digigraph.orchestration.mcp_client import (
+        merge_mcp_servers,
+        parse_mcp_servers_json,
+        resolve_mcp_force_id,
+    )
+    from digigraph.retrieval import resolve_force_tool
+
+    headers = http_request.headers
+    mcp_servers = merge_mcp_servers(
+        parse_mcp_servers_json(_hget(headers, "X-Digi-Mcp-Servers", "x-digi-mcp-servers"))
+    )
+    # Always write so a client body value cannot survive (same CWE-639 class as
+    # digi_subject). Empty list clears a prior turn's URLs on the checkpoint.
+    updates["mcp_servers"] = [
+        McpServerRef(
+            id=s["id"],
+            url=s["url"],
+            auth=s.get("auth") or None,
+            token=s.get("token") or None,
+            auth_header=s.get("authHeader") or None,
+            setup=_mcp_setup(s.get("setup")),
+            # Operator allowlists (DIG-284). Field by field like everything else
+            # above, because that is how `setup` was silently dropped once: a
+            # header key the rebuild does not name never reaches the model.
+            allowed_tools=_mcp_tool_names(s.get("allowedTools")),
+            mutating_tools=_mcp_tool_names(s.get("mutatingTools")),
+        )
+        for s in mcp_servers
+    ]
+    disabled_raw = _hget(headers, "X-Digi-Disabled-Tools", "x-digi-disabled-tools")
+    tokens = [p.strip() for p in disabled_raw.split(",") if p.strip()]
+    updates["disabled_tools"] = tokens or None
+    force_raw = _hget(headers, "x-digi-force-tool", "X-Digi-Force-Tool")
+    resolved_force = resolve_force_tool(force_raw) or resolve_mcp_force_id(force_raw, mcp_servers)
+    if resolved_force:
+        updates["force_tool"] = resolved_force
+    effort = _hget(headers, "X-Digi-Effort", "x-digi-effort").strip().lower()
+    updates["effort"] = effort if effort in ("low", "medium", "high") else None
+    return updates
+
+
+def _with_digi_request_context(http_request: Request, req: WorkflowRequest) -> WorkflowRequest:
+    updates = _digi_fields_from_request(http_request)
+    subject = updates.get("digi_subject")
+    if subject:
+        updates["session_id"] = workflow_thread_id(subject, req.session_id)
+    if not (req.search_engine or "").strip():
+        # POST /workflow has no chat-resolve step: fall back to the
+        # X-Digi-Search-Engine header here, mirroring _resolve_search_engine_chat
+        # (body wins — a non-blank body value is never overwritten). Chat paths
+        # resolve before this point, so this is a no-op for them (#4722). Capped
+        # to the hub's provider max length; the hub still owns validation.
+        engine = _hget(http_request.headers, "X-Digi-Search-Engine", "x-digi-search-engine").strip()
+        if engine:
+            updates["search_engine"] = engine[:64]
+    return req.model_copy(update=updates)
+
+
+def _thread_config(http_request: Request, thread_id: str) -> dict:
+    subject = auth_subject_from_request(http_request)
+    scoped = resolve_client_thread_id(subject, thread_id)
+    assert_thread_access(subject, scoped)
+    return {"configurable": {"thread_id": scoped}}

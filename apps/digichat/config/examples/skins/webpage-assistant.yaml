@@ -1,0 +1,38 @@
+version: 1
+# Official assistant-ui template `webpage-assistant` — copy to DIGICHAT_CONFIG_PATH
+# or set DIGICHAT_CHROME_SKIN=webpage-assistant on any valid deployment YAML.
+deployment:
+  slug: client-webpage-assistant
+  chrome:
+    mode: app
+    theme: light
+    skin: webpage-assistant
+    title: Product Guides
+    welcome: Ask Product Guides
+    placeholder: Ask about these docs
+  persistence: none
+  auth: anonymous
+  features:
+    attachments: true
+    dictation: false
+    speech: false
+    reasoning: collapsed
+    toolCalls: collapsed
+    sources: true
+    branchPicker: true
+    modelPicker: false
+  backend:
+    type: digigraph
+  tools:
+    allowUserToggle: true
+    catalog:
+      - id: digisearch
+        default: true
+        label: Search
+      - id: digivault
+        default: true
+        label: Vault
+  gate:
+    mode: ungated
+    activityDetail: labels
+    llmAccess: operator

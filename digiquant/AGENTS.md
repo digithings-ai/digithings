@@ -1,0 +1,965 @@
+# Agent Guide: digiquant
+
+## Purpose
+
+digiquant is the **deterministic quant engine** of digithings. It owns and executes the ordered pipeline: validate → backtest → optimize → export. No other service may make performance claims (Sharpe, PnL, trade count) without a result originating from this service. It is the sole source of truth for strategy evaluation.
+
+---
+
+## Read First
+
+In this order, before writing any code:
+
+1. [`ARCHITECTURE.md`](ARCHITECTURE.md) — full pipeline, API surface, data models, Nautilus integration notes
+2. [`docs/NAUTILUS_NAVIGATION.md`](docs/NAUTILUS_NAVIGATION.md) — **required** before any Nautilus strategy or backtest change
+3. [`docs/NAUTILUS_QUICK_REF.md`](docs/NAUTILUS_QUICK_REF.md) — Nautilus Actor/Bar/Order quick reference
+4. [`../AGENTS.md`](../AGENTS.md) — non-negotiable stack-wide rules
+5. [`../ROADMAP.md`](../ROADMAP.md) — do not implement VectorBT/Qlib/FinRL until Phase 3
+6. [`../docs/agent-backlog/INDEX.md`](../docs/agent-backlog/INDEX.md) — current task queue
+
+---
+
+## Pre-Flight Checklist
+
+Before making any change to `digiquant/`:
+
+- [ ] Read `ARCHITECTURE.md` section for the area you're touching (data, strategies, backtest, optimize, server)
+- [ ] Read `docs/NAUTILUS_NAVIGATION.md` if touching any strategy, backtest runner, or Nautilus wrapper
+- [ ] If touching Group A books (`positions`, `nav_history`, `position_events`, `portfolio_metrics`), overlay cron, or house GHA writers/readers — read [`docs/ops/HOUSE_BOOK_SCOPE.md`](../docs/ops/HOUSE_BOOK_SCOPE.md)
+- [ ] Run `pytest tests/ -m unit -k "digiquant" -v` — passes before and after
+- [ ] Run `ruff check digiquant/ && ruff format --check digiquant/` — zero errors
+- [ ] Confirm no `import pandas` outside the [pandas allowlist](#pandas-allowlist-rem-058059) below
+- [ ] Confirm no live-trading path touched (broker adapters, order submission) without human gate
+- [ ] Confirm `BacktestResult` Pydantic model is unchanged or versioned if modified
+- [ ] Confirm new Group A reads/writes pin `workspace_id` (house via `eq_house_workspace` / `house_workspace_id()`, overlay via explicit id) — never date-only scans
+
+---
+
+## Non-Negotiable Rules
+
+Beyond root `AGENTS.md`:
+
+- **Nautilus only**: NautilusTrader is the sole backtest and live-trade engine. Do not add a second backtest path. VectorBT Pro sweeps are Phase 3.
+- **Polars except at documented boundaries**: Use Polars for all new data paths. Pandas is allowed only on paths in the allowlist below (Nautilus wrangler, tearsheet Plotly bridge, legacy research preload script). Do not add new pandas imports without updating this table.
+
+### Pandas allowlist (REM-058/059)
+
+| Path | Reason | Migration |
+|------|--------|-------------|
+| `digiquant/nautilus_runner.py` | Nautilus `BarDataWrangler` requires pandas | None — documented boundary |
+| `digiquant/data/prices/fetchers.py` | yfinance returns pandas DataFrames; pandas is imported lazily only at the yfinance conversion boundary (`_pandas_to_polars` and the fetch path) | None — documented boundary |
+| `digiquant/strategies/sdca/nautilus_evaluator.py` | Same BarDataWrangler boundary for SDCA walk-forward trials (#3174) | None — documented boundary |
+| `digiquant/dashboard/replay/nautilus_portfolio.py` | Same BarDataWrangler boundary for shared-cash portfolio replay (#2784) | None — documented boundary |
+| `digiquant/tearsheet.py` | Nautilus `account_report` / `fills_report` are pandas DataFrames | Defer — Plotly quantstats bridge |
+| `digiquant/tearsheet_extract.py` | Same Nautilus report boundary as `tearsheet.py` (#1185 split) | Defer — same as tearsheet |
+| `digiquant/tearsheet_stats.py` | HTML stats from Nautilus/Pandas-origin metrics (#1185) | Defer — same as tearsheet |
+| `digiquant/tearsheet_page.py` | HTML page assembly for Plotly tearsheet (#1185) | Defer — same as tearsheet |
+| `digiquant/tearsheet_charts.py` | Plotly/quantstats expect pandas Series for rolling stats | Defer — same as tearsheet |
+| `digiquant/scripts/research/*.py` | Legacy ops: yfinance / pandas-ta / treasury XML (REM-058 allowlist) | Migrate per-script to Polars in [#579](https://github.com/digithings-ai/digithings/issues/579); `compute-technicals.py` Polars date fix (REM-009) |
+| `digiquant/scripts/research/preload-history.py` | Same research ops family | Delegate to `scripts/preload-history.py` (Polars) when touched |
+| `digiquant/strategies/bollinger_mr.py` | Nautilus strategy bar helpers | Issue backlog — migrate to stdlib `timedelta` pattern (see `rsi_momentum.py`) |
+| `digiquant/strategies/macd_trend.py` | Same | Same |
+| `digiquant/strategies/sdca/nautilus_evaluator.py` | Nautilus `BarDataWrangler` for SDCA walk-forward trials (#3174) | None — documented boundary |
+| `digiquant/strategies/rsi_momentum.py` | **Migrated** — uses `datetime.timedelta` only | Done (audit PR) |
+| `tests/dq/test_strategies.py` | `TestSdcaStrategyNautilusParity` and `TestSdcaRiskIndexNautilusChain` build bars via `BarDataWrangler`, same boundary as `nautilus_runner.py` (#1081, #3168) | None — documented boundary |
+
+- **No perf claims without results**: Never return Sharpe, PnL, or drawdown values from anywhere except a completed `BacktestResult` or `OptimizeResult`.
+- **Pipeline ordering is sacrosanct**: validate → backtest → optimize → export. Never skip validation. Never run optimize before backtest.
+- **Strategies compile to Nautilus Actor**: All strategies must implement the Nautilus `Actor`/`Strategy` interface. Custom Python strategy logic goes in `strategies/`, not inline in the backtest runner.
+- **ADDM drift is wired**: `GET /check_drift` accepts `current_sharpe`; `run_backtest` calls `record_sharpe()`. Heartbeat still needs product wiring to act on `drift_detected`.
+- **Human gate on live trading**: Broker adapter code (`digiquant/brokers/`) must never be called from any automated path without an explicit human gate.
+
+### NautilusTrader version pinning (ADR-0033)
+
+- **The build we ship is `nautilus_trader==1.230.0`.** It is pinned exactly in `pyproject.toml` under the `nautilus` extra. Do not widen it to a range. A minor bump inside the old `>=1.190,<2` moved the Python-visible return type of `PortfolioAnalyzer.realized_pnls()` (1.228.0 → 1.230.0) and silently changed dedup semantics in the honesty envelope.
+- **One lock only: the repo-root `uv.lock`.** `digiquant` is a `[tool.uv.workspace]` member; uv resolves the workspace root. **No module ships its own `uv.lock`.** `digiquant/uv.lock` was deleted under ADR-0033 — it was inert (68 packages vs the root lock's 297) and referenced by nothing, so it *looked* like a pin at 1.223.0 while pinning nothing. If you find a module-level `uv.lock`, it is dead weight: delete it and say so in an ADR.
+- **The pin is the shipping control for the engine, not the lock.** `digiquant/Dockerfile` copies no lockfile and runs `uv pip install --system -e ".[nautilus]"`, so the `==1.230.0` in `pyproject.toml` is the only thing pinning `nautilus_trader` in that image — the one `docker-compose.yml` builds. Before ADR-0033 even that floated to whatever was newest on PyPI. **Do not read this as "the image is reproducible."** Every other dependency in that image — including the transitive closure under `nautilus_trader` — still floats at build time. Same commit, different image bytes.
+- **The pin governs one build surface, not the whole service.** The other two digiquant images are unaffected: `apps/digithings-stack-cloudflare/wrangler.toml:115` builds `digiquant/Dockerfile.mcp`, which installs `[research,mcp]` and **no** `nautilus` extra, so the Workers stack never had an engine to pin; and `Dockerfile.digiquant-runner` (repo root) already runs `uv sync --frozen --package digiquant --extra nautilus`, i.e. it installs from the root lock and was correct before this pin existed.
+- **Nothing in the repo publishes the digiquant image.** `.github/workflows/publish-service-images.yml` was removed in `f54af7052` (strict-essentials cut, #4919); `RELEASES.md` records the removal and points operators at `docker compose build` / `make up`. Do not cite that workflow as a live publisher in a doc — several older pages still do.
+- **Never edit a manifest without re-locking the root.** 35 `uv sync --frozen` invocations across 29 workflow files depend on the root lock; a desynced lock breaks all of them. Use `uv lock` at the repo root, then read the diff — a version bump should touch only the `nautilus-trader` specifier line.
+- **Verify with `uv lock --check`** from the repo root *and* from inside `digiquant/`. Both must pass.
+- **Local venv may lag.** A checkout that was not re-synced still runs whatever it installed. Run `uv sync --frozen --package digiquant --extra nautilus` before trusting a local backtest to match CI.
+- **Bumping is deliberate.** Change the pin → `uv lock` at the root → read the diff → `uv lock --check` both locations → update the version named here and in `ARCHITECTURE.md` → run the DIG-937 analyzer-shape matrix against the new build → amend or supersede ADR-0033. Full rationale: [`../docs/adr/0033-nautilus-trader-exact-pin.md`](../docs/adr/0033-nautilus-trader-exact-pin.md).
+
+---
+
+## Test Commands
+
+```bash
+# Unit tests (no stack required)
+pytest tests/ -m unit -k "digiquant" -v
+
+# Single strategy test
+pytest tests/digiquant/test_strategies.py -v
+
+# Backtest smoke test (requires data file)
+digiquant backtest -s ema_cross -S BTC-USD -d digiquant/data/BTC-USD.csv -v
+
+# Optimize smoke test
+digiquant optimize -s bollinger_mr -S BTC-USD -d digiquant/data/BTC-USD.csv -m grid -n 10
+
+# Full unit suite
+make test-unit
+
+# Lint
+ruff check digiquant/ && ruff format --check digiquant/
+```
+
+---
+
+## Dashboard (research + portfolio)
+
+Public path is **`/app`** on digiquant.io (`apps/digiquant-web`). `/dashboard/` redirects there. `apps/dashboard` stays in the tree and is no longer the served desk.
+
+When touching `digiquant/src/digiquant/dashboard/` **or** `apps/dashboard/` Group A queries:
+
+1. Read [`ARCHITECTURE.md`](ARCHITECTURE.md) § research + portfolio and
+   [`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md).
+2. Read **house book scope**: [`docs/ops/HOUSE_BOOK_SCOPE.md`](../docs/ops/HOUSE_BOOK_SCOPE.md) —
+   omitted `workspace_id` = house; dashboard uses `houseBook()`; MCP `query_research`
+   stamps `HOUSE_BOOK_READ_TABLES`.
+3. Read component guides: [`src/digiquant/research/docs/AGENTS.md`](src/digiquant/research/docs/AGENTS.md),
+   [`src/digiquant/portfolio/docs/AGENTS.md`](src/digiquant/portfolio/docs/AGENTS.md).
+4. **One graph, one daily cadence** — do not add a portfolio-lite env fork, `run_type` graph forks,
+   or `monthly` synthesis paths. Cost control = `DIGIQUANT_MODEL_TIER` + per-artifact `skip`/`edit`/`full`.
+5. **Edit-mode extension pattern** (`digiquant.dashboard.edit_mode`):
+   - Call `resolve_edit_mode(artifact_key, run_date, prior_loader, triage, force_full_rewrite)`
+     at node entry.
+   - `skip` → shallow-carry prior row (0 LLM); `edit` → load `*-edit.md` skill, expect
+     `DocumentPatch`, merge via `merge_document_patch`; `full` → `*-full.md` skill, full body.
+   - Prior = `prior_published(run_date, document_key)` (latest `date < run_date`), not calendar
+     yesterday only. Stale gap > `DIGIQUANT_STALE_FULL_DAYS` (default 7) → `full`.
+   - Track B WP13-class shadow (#2616): `digiquant.dashboard.attention_plan.plan_attention_shadow`
+     records `AttentionPlan` + refresh reasons beside incumbent modes (`off`/`shadow` only;
+     never actuates; cannot expand screener or rewrite direction/sizing).
+   - Track C glass-box (#1945 / #2622): `attention_plan_io` +
+     `attention_plan_graph.maybe_publish_attention_plan_shadow` (research
+     `publish_phase`) upsert `attention-plan` on daily runs when triage ran and
+     `DIGIQUANT_PLANNER_MODE` is `shadow` (default). Never fabricate UI rows without
+     a published document; never actuate (`enforce` absent).
+6. **portfolio extension pattern** (thesis–commit): add phases via `build_portfolio_phases_thesis`; wire
+   `build_grounding` + phase blinding; direction must not emit weights (`PMDirectionMemo` only); sizing
+   sizes; commit `commit_run` is the portfolio terminal — do not add parallel `portfolio_materialize`
+   or phase9 evolution on the daily path.
+7. Tests: `pytest tests/dq/dashboard/ tests/dq/research/ tests/dq/portfolio/ -m unit -v`
+
+---
+
+## Strategy aliases (#1185)
+
+Canonical map: `digiquant.strategy_aliases` (`STRATEGY_ALIASES`,
+`resolve_strategy_name`, `resolve_param_spec_name`). Optimize param-spec keys
+may differ from the registry name (`btc_sdca` → `sdca`). When adding an alias:
+
+1. Add it to `STRATEGY_ALIASES` (so optimize/export/CLI resolve without Nautilus).
+2. Pass the same names in `register(..., aliases=...)`.
+3. If the optimize key differs from the registry name, add `PARAM_SPEC_NAMES`.
+4. Do not invent a second private alias dict in `strategy_specs` / `export`.
+
+`sweep.py` was deleted — use `run_optimize(..., param_grid=...)` for grid
+evaluation.
+
+---
+
+## SDCA Engine (#1080, #1081)
+
+`strategies/sdca/` is the asset-agnostic Strategic-DCA engine (composite risk →
+accumulation/distribution curve → daily backtest). See
+[`ARCHITECTURE.md` § SDCA Engine](ARCHITECTURE.md#sdca-engine-1080-1081) for
+the full module map.
+
+- **The core engine (`curve.py`, `composite_risk.py`, `risk_model.py`,
+  `valuation.py`, `backtest.py`) has zero NautilusTrader dependency.** Only
+  `nautilus_strategy.py` imports `nautilus_trader` — don't add a `nautilus_trader`
+  import to any other file in this package, or `strategies.sdca` stops being
+  importable without the `nautilus` extra.
+- **`SdcaStrategy` is registered as `btc_sdca` (#3170)** with `risk_path`-less
+  `default_params`. `generate_tearsheets.py` materializes the parquet from the
+  already-signal-delayed OHLCV frame (`materialize_sdca_risk_index`) and
+  injects `risk_path` via `get_strategy(..., **overrides)`. Direct
+  `SdcaStrategyConfig` construction is still valid for tests. Do not pass
+  `trade_size` into configs that do not declare it (`config_declares_field`).
+  `m2_liquidity` remains unregistered — same runtime-path pattern, not a
+  second special case. Research parquets also come from
+  `sdca/risk_index.py::build_risk_index()` + `write_risk_index()`, or the
+  `digiquant_build_sdca_risk_index` MCP tool — do not hand-assemble them.
+- **`SdcaStrategy.on_bar()` must call `AccumDistCurve.value_at_risk()` and
+  mirror `sdca/backtest.py::run_backtest()`'s buy/sell sizing loop, never
+  reimplement it.** This is what keeps the Nautilus-run result and the
+  standalone parity harness (`tests/dq/strategies/sdca/test_backtest.py`) from
+  silently diverging.
+- **Sizing is remaining-book, not initial.** `size_trade(rate, cash, units)`
+  does `buy_usd = cash * rate / 100` and `sell_units = holdings * |rate| / 100`.
+  Both `run_backtest` and `on_bar` pass the running cash/holdings, never
+  `initial_cash`. A high daily buy rate (balanced `buy_max_rate=8`) compounds
+  remaining cash toward dust during a cheap window — that is intended
+  remaining-% math, not a percent-of-initial bug, and it is **not** a
+  long/short book. Pin: `tests/dq/strategies/sdca/test_remaining_pct.py`.
+- **Publish copies #3168 diagnostics** (`rails`, `risk_curve`,
+  `cost_basis_curve`, `capital_deployed_curve`, `lump_equity_curve`,
+  `flat_dca_equity_curve`) plus a DCA `current_signal` (today's risk, band,
+  daily remaining-book rate) onto the tearsheet JSON so the #3172 charts do
+  not degrade. Trade KPIs stay `null` for `kind=dca`.
+- **Library, not broker live.** `btc_sdca` ships into the public strategy
+  library (delayed signals, #1462). Do **not** enable Nautilus live-trading
+  or broker adapters for SDCA. Publish uses a spot CASH venue and leaves
+  the remaining book open at engine stop. `--push-supabase` is an operator
+  step after a real Nautilus generate; do not run it from an agent
+  environment.
+- **Published `btc_sdca` is a composite valuation index + remaining-book.**
+  Keepers **power law + M2 + DXY + weekly log-MACD + weekly/monthly RSI**
+  (`valuation=1.0`, `m2=0.5`, `dxy=0.5`, `weekly_macd=0.5`, `weekly_rsi=0.25`)
+  are persisted in `settings.json`. SMA band and BTC/ETH RS stay at 0.
+  Oscillator z is cycle-scaled (RSI dead-zone + cap; log-MACD sloped top),
+  not 90-day rolling z. Preset `btc_optimized` sells (`long_only: false`)
+  with a concentrated remaining-book curve (high max daily % of remaining
+  cash/coins at the extremes). Walk-forward OOS `beats_flat_dca_oos` is
+  still false — do not claim an OOS win over flat DCA unless a new run
+  actually prints true. Extras are also searched as Stage 0 solos (OOS vs
+  `power_law_solo`); `indicator_weights` only change when an operator
+  passes `--persist-settings` *and* combined OOS is not worse. The Stage 0
+  CLI default is sidecar-only — a 2-trial `curve_simulator` Stage B is not
+  a published-weight flip. Allocation
+  charts draw MTM allocated % plus fill dots; do not draw a percent-cash
+  line (it is the inverse of allocated).
+- **Public copy.** User-facing name is **BTC-SDCA** (asset then type; never
+  “BTC SDCA Strat”). The other BTC book in the suite is **BTC L/S** — Slapper
+  is a true long/short (`enable_short`, net-short, BTC reversal flip), not
+  relative strength. Same pattern for **ETH L/S** and **SOL L/S**. The page
+  is a strategy (fills chart, latest remaining-book signal, MTM allocated, vs
+  buy-and-hold). Honesty lives in notes, not a chip wall. Do not render
+  vs-flat DCA as a public KPI (`flat_dca_mark_to_market` is equal remaining-cash
+  spend each day, fully deploying by the last bar — not a public comparable).
+  Do not render `capital_deployed_pct` as "Deployed". `StrategyNotes` must
+  render for SDCA (not slapper-only).
+
+### RiskModel providers (#1082)
+
+`strategies/sdca/btc_power_law.py` is the first concrete `RiskModel`
+(`BtcPowerLawRiskModel`) — a fitted BTC power-law (RAQQR). Anti-patterns:
+
+- **Never treat `btc_power_law_coefficients.example.json` as a real fit**
+  when the committed `btc_power_law_coefficients.json` is present (#3173).
+  `load_coefficients()` still falls back to the placeholder with a warning
+  if the real file is deleted. Don't silence that warning.
+- **Fit real coefficients via the `digiquant_fit_btc_power_law` MCP tool**
+  (or `fit_btc_power_law()` + `save_coefficients()` directly), which sources
+  price history through `data/prices/history_cache.py` — the same cache
+  every other price consumer uses. Don't write a bespoke fetch path for this.
+  (`digiquant_fetch_coinbase_ohlcv`'s CCXT/Coinbase script pipeline writes to
+  the *same* `data/price-history/` directory and ticker naming, not a
+  separate cache — `history_cache.py` is still the right one to call from a
+  new tool because it's the actively-maintained, incrementally-updating
+  pipeline every other consumer builds on, not because the data differs.)
+- **`low_quantile`/`high_quantile` (default 10th/95th) are an unvalidated
+  judgment call**, not verified against the reference artifact's corridor —
+  revisit once that artifact is reachable, don't assume the default is
+  correct.
+- The per-asset ladder is `btc_power_law` → `generic_valuation` →
+  `rolling_z` (`sdca/providers.py`, #3175). RS-driven risk is still #1084,
+  not this WP. Equity CAPE is #3176 — do not add it here.
+
+### Adding an asset (SDCA framework)
+
+SDCA is a **repurposable framework**, not a Bitcoin-only strategy. The shared
+core is generic technicals + composite + two-stage fit + regularize.
+Asset-specific series (BTC on-chain SOPR/MVRV, later stock put/call) plug in
+on the extra-indicator allowlist.
+
+1. Cache OHLCV in `data/prices/history_cache.py` (never a bespoke fetch).
+2. Pick `risk_model`: `btc_power_law` (BTC), `generic_valuation`, or
+   `rolling_z`.
+3. Pin `SdcaCycleWindows` from that asset's history; set
+   `SdcaOscillatorSpec` (RSI / MACD / SMA-band windows) to its cycle.
+4. Allowlist extras: generic (`weekly_rsi`, `weekly_macd`, `sma_band`) vs
+   plugins (BTC M2/rs_eth/dxy; on-chain #1086 later). No put/call scrape
+   in this WP.
+5. Stage 0 solo books (`run_stage_0`, OOS vs `power_law_solo`) then
+   Stage 1 survivor weights (`optimize_stage_1_survivor_weights`, no 0 on
+   the grid) → Stage B → `regularize`. Legacy Stage A IS keep/drop
+   (`optimize_stage_a_by_backtest`) remains for diagnostics. Cycle
+   overlap is diagnostic. Platform MCP: `digiquant_fit_sdca_weights` /
+   `digiquant_run_optimize` (`strategy_name=sdca`, freeze `*_weight` keys).
+   Do not publish until the backtest looks comfortable. Do not claim
+   `beats_flat_dca_oos` unless a new run prints true.
+6. Only then add `settings.json`. `SdcaAssetProfile.eth_research_v1()` is
+   research-only — not `eth_sdca` in settings, no `--push-supabase`, no
+   live-trading. Do not change publish `signal_delay_days`.
+
+On-chain extras (#1086): Bitview/BRK is the free ingest source (`mvrv`,
+`asopr_24h`, `puell_multiple`, `rhodl_ratio`; no NUPL; no HTML scrape;
+fail-soft). MCP `digiquant_fetch_bitview_series` and CLI
+`digiquant onchain fetch-bitview` write parquet under `data/onchain/bitview/`
+and optionally upsert `macro_series_observations` (`source=bitview`). Scheduled
+job: `.github/workflows/pipeline-digiquant-onchain.yml` (persistent failure
+tracker). Local **MVRV-Z** + companion z-series live in
+`strategies/sdca/onchain_valuation.py` (`OnChainValuationProvider`) and are
+consumable by `compute_composite_risk` — **not published composite votes yet**
+(null-rule would halt SDCA on a Bitview gap). Coverage is BTC-rich; ETH/SOL
+fall back to basic `rolling_z` via `resolve_sdca_valuation_tier`. Coin Metrics
+community CC BY-NC stays research-only.
+
+`pytest -m unit tests/dq/strategies/sdca/test_asset_profile.py` is the
+multi-asset smoke (full ETH Coinbase cache if present, else a synthetic
+second series — document "add ETH when cache is present"). Do not prefix-
+clip QuantReg at 900 days; subsample evenly with `max_fit_rows` if the
+fit is slow, and still score every cached day. Oscillator nulls are a
+short leading warmup (`documented_warmup_calendar_days`, 105 days for
+weekly RSI 14), not a 2018/2021 cliff.
+
+### Adding a preset
+
+Presets are public personalities in `strategies/sdca/presets.json`, loaded via
+`strategies/sdca/presets.py` (`list_presets()`, `load_preset(name)`). Since
+#3169 they are authored as `SdcaCurveShape` parameters (a dead zone and two
+knees), not 21 free nodes. `load_preset()` still returns `SdcaPreset.curve_nodes`
+for `SdcaStrategyConfig`.
+
+1. Append an entry to `presets.json` with `long_only`, a `description`, and a
+   `shape` object: `buy_max_rate`, `buy_knee_risk`, `sell_knee_risk`,
+   `sell_max_rate`, `buy_curvature`, `sell_curvature`. Long-only personalities
+   use `sell_max_rate: 0` and `sell_knee_risk: 100`.
+2. If `long_only: true`, generated nodes must all be `>= 0` — the loader
+   rejects a negative node. `tests/dq/strategies/sdca/test_presets.py::test_long_only_preset_never_sells`
+   is the regression net.
+3. Run `pytest tests/dq/strategies/sdca/test_presets.py tests/dq/strategies/sdca/test_curve_shape.py -v`.
+
+### Re-running SDCA walk-forward (#3174)
+
+When new BTC history lands, do **not** reuse a full-history rail fit inside the
+optimizer (#3173: truncated quadratic log-time fits do not extrapolate).
+
+```bash
+# Injected-evaluator unit tests (no Nautilus, no statsmodels fit)
+pytest -m unit tests/dq/strategies/sdca/test_walk_forward.py tests/dq/strategies/sdca/test_optimize.py
+
+# Operator run (Nautilus; may SIGABRT on Linux — #42). Never --push-supabase.
+PATH="$PWD/.venv/bin:$PATH" python -c "
+from pathlib import Path
+from digiquant.optimize import run_optimize
+from digiquant.strategies.sdca.optimize import persist_btc_optimized, run_sdca_walk_forward
+# Prefer run_optimize(strategy_name='sdca', ...) which already refits rails per fold.
+"
+```
+
+`run_optimize(strategy_name='sdca'|'btc_sdca', ...)` is the MCP/HTTP path
+(`digiquant_run_optimize`) — Stage B. Stage A is
+`digiquant_fit_sdca_weights` (cycle-window overlap; cannot honestly live
+inside `run_optimize`). Objective is maximize `vs_flat_dca_pct` subject to
+a 10% capital-deployed floor and a 50% drawdown cap — **not** vs-lump, **not**
+Sharpe. Extra-indicator weights (`m2_weight`, `rs_eth_weight`, `dxy_weight`,
+`weekly_rsi_weight`, `weekly_macd_weight`, `sma_band_weight`) are searched by
+`method=random`/`bayesian` or an explicit `param_grid`; auto-grid holds them
+at 0 (valuation-only, current BTC charts) unless Stage A weights are passed
+as `strategy_params` (frozen onto every trial). Weekly RSI/MACD/SMA-band z are
+computed from **that asset's** close via `technicals_from_ohlcv` (no sibling
+file). Place `M2SL.csv`, `ETH-USD.csv`, and/or `DTWEXBGS.csv` next to a BTC
+OHLCV file to enable those **BTC-plugin** rails — missing files skip trials
+that need them. Two-stage fit: published BTC Stage A
+(`optimize_stage_a_by_backtest`) grids every extra with data and keeps
+weights by in-sample `vs_flat_dca_pct` (frozen curve; OOS reported, not
+used to pick). Cycle overlap (`optimize_stage_a_weights` via
+`digiquant_fit_sdca_weights`) is diagnostic. Stage B freezes those
+weights and runs this
+walk-forward; `persist_two_stage` writes aggressive vs regularized provenance.
+Linux Nautilus may SIGABRT (#42) — then inject `evaluate_sdca_trial_curve_sim`
+and record that evaluator in provenance. Persist even if OOS vs-flat-DCA is
+negative. Do not publish `btc_optimized` / composite variants to digiquant.io
+from this WP. No live-trading.
+
+### Strategy research loop
+
+Building a strategy is **trial and error**, not a stack of PRs. Keep one
+working branch. The inner loop is: try a change → see how the book
+behaves → keep or revert. Creativity lives in *what* you try (indicator,
+transform, knee, rate). Speed lives in *not* wrapping each try in a
+review/merge cycle.
+
+Do this, in any order the evidence asks for — skip what you already
+trust:
+
+- **Engine first.** Confirm remaining-book actually trades through the
+  sample (Nautilus halt, dust, pending) *before* hunting extras. A
+  simulator that sells in 2025 and an engine stuck in 2023 is not a
+  research disagreement — it is a bug.
+- **One evaluator per question.** `curve_simulator` is for fast
+  add/drop and curve search (Linux-safe, #42). Nautilus tearsheet is
+  for “does this book sell / allocate the way we think?” Never mix
+  simulator OOS, full-sample vs-flat, and Nautilus fills in one
+  sentence. Buy-and-hold is the public comparable.
+- **Look at fills.** Allocation step + sized buy/sell dots. If buys
+  drip through a bull or sells never cluster at a top, the curve or
+  the index is wrong — do not “fix” it with more PRs or more copy.
+  No percent-cash line (inverse of allocated).
+- **Index then curve, then again.** Add or drop an extra (and its
+  *transform* — 90-day rolling-z will sit rich through a bull).
+  Re-run `sdca-optimize-curve` on **that** composite. Do not freeze
+  weights, fit a curve, then change weights and ship the old curve.
+- **Research feeds the next trial**, it does not become the session.
+  A catalog (TradingView, on-chain, macro) is a list of *candidates*.
+  Pull one, wire data you can actually fetch, look at fills, keep or
+  drop. Do not port 27 scripts or open a research PR per indicator.
+- **Persist last.** Sidecars and charts are cheap. `settings.json` /
+  `btc_optimized` / the public page change when a trial is the
+  candidate, not when the search starts. `--push-supabase` stays
+  operator-only. Public names (asset then type: **BTC-SDCA**) wait
+  until the book looks right.
+
+Anti-patterns from the first BTC-SDCA build:
+
+- A PR per extra hunt, chart, copy pass, and sibling “freeze index”
+  vs “widen index” branch — then a day of consolidating GitHub.
+- Joint extra search on a curve fitted to power law, then treating
+  weight 0 as “extras are useless.”
+- Publishing honesty chrome (“power-law remaining-book”) before the
+  fills chart looked like buy-cheap / sell-rich.
+
+### Remaining-book curve search
+
+When fills look like a slow drip instead of clustering at bottoms/tops,
+search the **curve** on **today's** composite. If you just changed
+indicator weights or transforms, re-run this search — do not reuse a
+curve fitted to a different index.
+
+```bash
+# Linux-safe curve_simulator. Never --push-supabase.
+PATH="$PWD/.venv/bin:$PATH" digiquant sdca-optimize-curve \
+  --cache-dir data/price-history --signal-delay-days 3 \
+  --n-random 400 --seed 42 --sidecar /tmp/sdca_curve_search.json
+# Optional: write btc_optimized only if return AND fill concentration both beat
+# the published 3% / 25 / 70 curve.
+PATH="$PWD/.venv/bin:$PATH" digiquant sdca-optimize-curve \
+  --cache-dir data/price-history --persist-preset
+```
+
+Search space is `SdcaCurveShape` only (`buy_max_rate`/`sell_max_rate` up to
+40%/day, knees inside the published 25/70 dead zone, curvature up to 5).
+Objective is `total_return_pct` plus fill concentration. vs-flat-DCA is
+logged, never `beats_flat_dca_oos`. Gates require remaining-book identity
+and sells in rich windows (including a recent top when the sample has
+one).
+
+### SDCA test commands
+
+```bash
+# Core engine + presets + Nautilus wrapper config/instantiation tests
+pytest -m unit -k "sdca" -v
+
+# Full Nautilus BacktestEngine parity test (gated: needs nautilus_trader installed)
+pytest tests/dq/test_strategies.py::TestSdcaStrategyNautilusParity -v
+```
+
+### Adding a strategy family to the publish pipeline
+
+`scripts/generate_tearsheets.py` is no longer Slapper-only (#3170). To add a family:
+
+1. Add `"strategy_type": "<family>"` on the `settings.json` entry (omit it to stay
+   `slapper`). Put family-specific fields in a nested block named after the type
+   (SDCA uses `"sdca": {preset, risk_model, long_only, initial_cash}`).
+2. `register()` the Nautilus class with **runtime-only paths omitted** from
+   `default_params` (`risk_path`, `signal_path`). Inject those via overrides after
+   a materialization hook that reads the **signal-delayed** OHLCV frame, never the
+   full cache.
+3. Skip `resolve_calibrations()` for non-Slapper families. Record provenance in
+   tearsheet notes instead.
+4. Pass `trade_size` only when `config_declares_field(name, "trade_size")`.
+  5. Nightly `pipeline-digiquant-tearsheets.yml` is the live-library path and
+   must stage `export_sdca_macro.py` (M2/DXY siblings) before generate so
+   `btc_sdca` weights are not silently dropped. A one-shot operator push is
+   `generate_tearsheets.py --strategy btc_sdca --signal-delay-days 3 --push-supabase`
+   after a real Nautilus run (#3453). Do not SQL-insert fake metrics.
+
+---
+
+## digiquant Supabase backend — `core` (#1064)
+
+The digiquant shared backend is the **`core`** Supabase project — the project historically
+used by dashboard/research ([`supabase/`](supabase/), `project_id "digiquant-research"`), repurposed
+(renamed `core`) as the suite-wide backend. It is **not** a separate project: the free-tier
+2-project limit is taken by dashboard + the confidential **twelve-x** project. The shared market
+datasets already live here; #1064 only **adds** the strategy store
+([`supabase/migrations/046_strategy_store.sql`](supabase/migrations/046_strategy_store.sql)).
+
+The strategy-store accessor (`digiquant.data.store`, `build_digiquant_client`) resolves the
+standardized `CORE_SUPABASE_URL` / `CORE_SUPABASE_SERVICE_KEY`
+([ADR 0022](../docs/adr/0022-supabase-env-naming-standard.md)), falling back to the legacy
+`*_DIGIQUANT` and shared `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` names. `CORE_SUPABASE_*`
+is a **GitHub org secret** (all repos write `core`) — **never commit values**.
+
+See [`ARCHITECTURE.md` § digiquant Data Layer](ARCHITECTURE.md#digiquant-data-layer--strategy-store--shared-data-1064)
+and [`docs/adr/0021-digiquant-supabase-project-topology.md`](../docs/adr/0021-digiquant-supabase-project-topology.md).
+
+---
+
+## Gloomberb market-data client (#4069)
+
+Public MCP names use the **`gloomberb_` prefix** (DIG-3313), the same shape as
+`luxalgo_`. Describe them as programmatic extensions of the Gloomberb platform.
+The MCP server lists `gloomberb_*` only. `digifetch_*` is not a second tool.
+`POST /v1/orchestrator_invoke` and the in-process dispatcher still accept
+`digifetch_*` and call the same handler.
+`gloomberb_congress_trades` stays refused with `digifetch_congress_trades`.
+
+`src/digiquant/data/gloomberb/` is the digifetch x Gloomberb enrichment layer
+(spec: [`../docs/superpowers/specs/2026-09-12-digifetch-scoping-design.md`](../docs/superpowers/specs/2026-09-12-digifetch-scoping-design.md)).
+It is the **only** place the `api.gloom.sh` URL/site logic lives — `digifetch`
+stays a generic transport engine (no URLs, no env reads).
+
+- **89 tools, read scope, default OFF (#4069, #4110, #4813, #4837
+  130-coverage).** `digifetch_quote`, `digifetch_quotes_batch`,
+  `digifetch_price_history`, `digifetch_ticker_financials`, `digifetch_options_chain`,
+  `digifetch_sec_filings`, `digifetch_holders`, `digifetch_analyst_research`,
+  `digifetch_corporate_actions`, `digifetch_earnings_calendar`,
+  `digifetch_exchange_rate`, `digifetch_search`, `digifetch_news`, plus the #4110
+  phase-1 cohort `digifetch_econ_calendar`, `digifetch_econ_series`,
+  `digifetch_yield_curve`, `digifetch_cds`, `digifetch_research_search`,
+  `digifetch_congress_trades`†, `digifetch_transcripts`, the #4110 phase-2
+  cohort `digifetch_statements`, `digifetch_ticker_tweets`,
+  `digifetch_tweet_search`, `digifetch_venues`, `digifetch_screener`,
+  `digifetch_13f_funds`, `digifetch_13f_holdings`, and the #4110 phase-3
+  cohort `digifetch_shiller`, `digifetch_proxy_statements`,
+  `digifetch_filing_events`, `digifetch_risk_reports`,
+  `digifetch_short_interest`, `digifetch_equity_diagnostic`, and the #4110
+  phase-4a `digifetch_saved_searches` (`digifetch_transcripts` also gained a
+  `transcript_id` detail mode), the #4813 `digifetch_prediction_markets`
+  (Polymarket + Kalshi venue-direct catalog, free, in `MACRO_TOOLS`), and the
+  #4837 130-coverage cohorts below are registered in
+  `mcp_server.py` (`_maybe_tool`, `READ_SCOPE_TOOLS`) and listed in
+  `orchestrator_tools.py`. Keep them read-scope — every digifetch tool is
+  read-scope, including the 13 inert write-shaped workspace/broker tools
+  (inert by verdict, not by scope: read-scope membership is not a read-only
+  guarantee); the family is default-OFF behind
+  `GLOOMBERB_ENABLED` — only `1`/`true`/`yes`/`on` enable it, and any other value
+  (a typo included) leaves the family off, returning a typed `upstream_error`
+  without a request.
+  - **Calculators + compositions (local math, no transport).**
+    `digifetch_options_calculator`, `digifetch_bond_calculator`,
+    `digifetch_kelly_sizer`, `digifetch_dividend_yield`,
+    `digifetch_fx_cross_rates`, `digifetch_vix_term_structure`, and the
+    multi-leg `digifetch_options_scenario` composer — all `free`, all
+    `attributed=False` (derived math, never Cloud-sourced).
+  - **Portfolio-math compositions (derived math over tooled routes).**
+    `digifetch_compare_performance`, `digifetch_correlation_matrix`,
+    `digifetch_relationship_graph`, `digifetch_relative_valuation`,
+    `digifetch_fundamental_graph`, `digifetch_valuation_graph`,
+    `digifetch_custom_chart`, `digifetch_market_valuation`,
+    `digifetch_money_markets`, `digifetch_rate_path` — all `free`.
+  - **Probe-backed Cloud reads (session-gated).** `digifetch_time_and_sales`,
+    `digifetch_quote_recap`, `digifetch_estimate_revisions`,
+    `digifetch_short_volume`, `digifetch_hiring`,
+    `digifetch_central_bank_rates`, `digifetch_cdx`,
+    `digifetch_sovereign_cds`, `digifetch_cot`, `digifetch_crypto_markets`,
+    `digifetch_iv_screen`, `digifetch_iv_history`, `digifetch_iv_surface`,
+    `digifetch_debt_maturities`, `digifetch_session_movers` (`session`;
+    the IV trio's entitlement is a guess pending live smoke), plus
+    `digifetch_options_flow` (`pro`), `digifetch_trending` and
+    `digifetch_ipo_calendar` (`free`), and `digifetch_substack`
+    (`venue_session` — own Substack account, fail-soft).
+  - **ToS/direct venue readers (anonymous).** `digifetch_fear_greed`,
+    `digifetch_polls`, `digifetch_treasury_auctions`,
+    `digifetch_market_halts`, `digifetch_hacker_news` — all `free`,
+    all `attributed=False` (venue-direct, never "Sourced from Gloomberb").
+  - **Workspace-read-only + approval-gated broker tools (inert).**
+    `digifetch_portfolio_view`, `digifetch_watchlist_add/remove`,
+    `digifetch_portfolio_add/remove`, `digifetch_alert_add/list`,
+    `digifetch_note_add`, `digifetch_thesis_add`, `digifetch_view_add`,
+    `digifetch_broker_positions` (all `session`, read-only posture: no
+    personal Cloud write route verified), plus
+    `digifetch_ibkr_preview_order` (mints a local single-use 15-minute HMAC
+    ticket) and `digifetch_ibkr_execute_order` (**DISABLED** pending human
+    review of the approval-gate design — only `dry_run` returns data).
+- **Pacing.** 900s TTL cache whose expired entries are evicted on access (and
+  which is size-bounded); retries narrowed to timeouts/5xx; a 429 `Retry-After`
+  is honored with a bounded injectable sleep; the circuit breaker counts only
+  upstream-health failures, so repeated `auth_required`/`not_found` never block
+  unrelated tools; per-call session cookies are forwarded only to same-origin
+  redirect hops.
+- **Enrichment only, never a pipeline primary.** 15-minute free-tier delay, rate
+  limits, and the §5.2 caps (5m→1wk … 1wk→5y, 1mo→all-time) disqualify Cloud as a
+  source of record. Contract violations are **rejected** (`invalid_input`), never
+  clamped. `digifetch_price_history`'s explicit `start_date`/`end_date` window
+  (ISO `YYYY-MM-DD`, mutually exclusive with `range`, #4100) widens history reads
+  past the caps by sending `rangeKey=ALL` + `startDate`/`endDate`; the
+  delay/rate limits still stand. Do not rewire prices/history/technicals onto it.
+  **Panel exception (owner lock 2026-09-29, #4794):** anonymous `econ_series`
+  is the writer for the 23 kept macro ids sealed to R2 `fred__*` generations
+  (`data/prices/gloomberb_macro.py`). Delay on econ prints is publisher lag
+  (a monthly CPI print), not the 15-minute equity delay — do not stamp
+  "delayed up to 15 minutes" on these parquet rows.
+  **twelve-x exception (owner lock 2026-10-04, DIG-20):** the twelve-x FX pipeline — and only that
+  pipeline — uses Gloomberb as its price source of record: spot fixes, daily price history and
+  technicals. The 15-minute free-tier delay, rate limits, §5.2 resolution/range caps and the
+  measured 24–101 bps same-date disagreement against the core fix are accepted as known and
+  documented. On any Gloomberb failure the run fails loudly and publishes no board; core
+  substitution is permitted only as an explicit, default-off opt-in with feed attribution on every
+  artefact and a report to the board. `GLOOMBERB_ENABLED=0` on this path means refused-or-declared,
+  never silent. The enrichment-only rule stands for every other pipeline.
+- **Envelope contract.** Every call returns `DigifetchEnvelope[T]` with `data`
+  either the payload or a typed `DigifetchError` (`auth_required` / `pro_required` /
+  `not_found` / `rate_limited` / `upstream_error` / `invalid_input`); tools never raise. Keep the
+  two freshness signals distinct: wire `stale` → `"Upstream cache stale"`;
+  `dataSource: "delayed"` / `delayMinutes > 0` → `"Free-tier data delayed up to
+  15 minutes"` (not stale).
+- **Session cookie.** `GLOOMBERB_SESSION_COOKIE` (bare token or `name=value`) is
+  attached **only** to the 41 cookie-gated tools (37 `session` + 1 `preview` +
+  3 `pro`, declared once in `data/gloomberb/entitlements.py`):
+  the original nine reads (holders / analyst research / corporate actions /
+  research search / statements / ticker tweets / tweet search / short interest /
+  saved searches) plus equity diagnostic (preview) and
+  transcripts / screener / options-flow (pro), the 15 probe-backed Cloud reads,
+  and the 13 inert workspace/broker tools (`digifetch_substack` instead needs
+  its own `SUBSTACK_SESSION_COOKIE`). Never log it, never put it in a tool
+  payload; without it those tools return `auth_required` with no request.
+  SEC filings, econ, credit, congress, news, venues, 13F, the anonymous
+  `/market/search` listings lookup, and the open `/public/proxies/*` +
+  `/public/risks/*` + `/public/events/*` filing reads stay anonymous (the
+  `/cloud/search` research search is the cookie-gated one). Operator runbook:
+  [`docs/ops/gloomberb-session-cookie.md`](../docs/ops/gloomberb-session-cookie.md).
+- **Plan and upstream caveats (#4110 phase 1).** `digifetch_transcripts` requires
+  a **Gloomberb Pro** plan: a free (email-verified) session's non-JSON
+  `Pro plan required` body maps to a typed `pro_required` with the upstream
+  text — never an empty success and never a generic non-JSON error; the live
+  status is 402 and the body-based plan detection runs before `_map_http_error`
+  (a bare 402 with no recognizable plan body keeps the generic `auth_required`
+  mapping), and the plan-gate path must not trip the circuit breaker. Read transcript rows from the upstream `calls`
+  key (`companyName`/`callAt`/`webcastUrl`); `transcripts` is accepted only as a
+  wrapped variant. † `digifetch_congress_trades` is **REFUSED on every
+  digiquant surface** — see "Refused tools" below; do not re-add it to
+  `READ_SCOPE_TOOLS`, the orchestrator manifest, or any pipeline subset
+  without Counsel's written clearance. Its upstream is live, not failing
+  (probed 2026-10-05: `GET https://api.gloom.sh/cloud/congress/house?limit=3`
+  → HTTP 200, `source: "house-clerk"`, `filingCount: 407`, `filingsParsed: 20`),
+  so an earlier note here claiming a Mistral OCR spend-cap HTTP 500 was wrong.
+  Client, normalizer and models are retained in-tree for a possible clearance.
+  `digifetch_econ_calendar` takes **no parameters** — upstream ignores `limit`
+  (fixed ~105-row window), so do not reintroduce a page-size knob.
+  `digifetch_cds.days` is bounded 1–90 in the **input model** (the upstream
+  would answer 400) so an out-of-range value is `invalid_input` with no
+  request. The new `/cloud/*` routes answer direct payloads (bare arrays
+  included) rather than the `/market/*` envelope —
+  `_request_json(allow_array=...)` covers arrays and row-level `stale` folds
+  into the envelope. Those payloads carry no `dataSource`/`delayMinutes`, so
+  `delay_note` stays null for the new tools; state the platform-wide delay in
+  the description rather than promising `data.delay_note`. Do not tighten the
+  deliberately permissive wire types (`float | str`, `str | int`) for the
+  partly-probed routes without a live probe.
+- **Refused tools (DIG-1057).** `digiquant.tool_refusals` holds a deny-by-default
+  `REFUSED_TOOLS` frozenset — currently `{"digifetch_congress_trades"}` — naming
+  tools Counsel has ruled we must not obtain or serve (currently 5 U.S.C.
+  13107(c)(1)(B)). A refused name is dropped in `mcp_server._maybe_tool` **before**
+  registration, so it is absent from `create_mcp_server(scope="read")` *and*
+  `scope="full"` — dropping it from `READ_SCOPE_TOOLS` alone is not enough.
+  `build_orchestrator_tool_manifest()` filters refused names out of the
+  `POST /v1/orchestrator_tools` manifest, and `server.v1_orchestrator_invoke`
+  answers `{"ok": false, "refused": true, "code": "tool_refused", …}` before any
+  dispatch branch, so the HTTP invoke path cannot reach the upstream even though
+  `DIGIFETCH_DISPATCH` still carries the name. The refusal is
+  registration-level by design: client, normalizer, models and the `free`
+  entitlement entry stay in-tree so a Counsel clearance is a one-line removal
+  from the frozenset.
+- **The refusal env denylist is additive only (DIG-1251 Q5).** The effective rule
+  is `refused = REFUSED_TOOLS | env_denied_tools(DIGIQUANT_REFUSED_TOOLS)`, where
+  `DIGIQUANT_REFUSED_TOOLS` is a separator-delimited list (`,` `;` or whitespace)
+  of extra tool names, read per call. It can only **add** refusals: there is no
+  allow/negate/un-refuse syntax, so `-name`, `!name` and `allow=name` parse as
+  unknown tokens rather than permissions, and no value can lift a
+  `REFUSED_TOOLS` member. Missing, empty or whitespace-only means *no extra
+  names*, which leaves the code constant in force (fail closed); a malformed value
+  yields tokens and never raises past the refusal check. Counsel approved this
+  shape on condition that the code constant stays the carrier of the refusal — an
+  env var is not a legal gate, and the real gate is Counsel's written clearance
+  plus the CTO's merge. Proof is
+  `tests/dq/test_tool_refusals_env_denylist.py`, not a log line: it pins every
+  `REFUSED_TOOLS` member as still refused under every legal value of the variable
+  *and* pins that the variable does add refusals, so a parser that ignored the
+  environment entirely could not pass.
+- **Plan and upstream caveats (#4110 phase 2).** `digifetch_screener` is the
+  second Pro-only tool and has **two plan-gate shapes** that must map to the
+  same non-retryable `pro_required`: the 402 text body
+  (`Pro plan required`) and the live free-session HTTP 200 envelope
+  `{"status":"unsupported","data":null,"reasonCode":"PRO_REQUIRED"}` (matched
+  by `pro_gated` in `_request_json`, before `_status_error` can turn it into
+  `not_found`); neither may trip the breaker. The Pro success payload is
+  unobservable — rows are typed from the TS plugin's
+  `CloudMarketScreenerItem` (`rank`/`currency`/`tradeCount`/`high52w`/`low52w`/
+  `dayHigh`/`dayLow`/`lastUpdated`/`dataSource`; no `marketCap`) with every
+  field optional and extras open, so keep it that way until a Pro probe.
+  Tweets (`digifetch_ticker_tweets` / `digifetch_tweet_search`) are
+  session-gated; the upstream echoes `limit`/`hours` but applies neither
+  (~375 rows for `limit=1`; ~394 rows spanning ~13 days for `hours=1`,
+  live-verified), so the client **drops rows older than `now - hours` when
+  `hours` is given, then slices to `limit`**, reporting
+  `total_available`/`truncated` — never remove either reduction. 13F routes
+  are anonymous: `digifetch_13f_holdings` normalizes `cik` to the SEC's
+  10-digit zero-padded form and `accession_number` to the dashed
+  `XXXXXXXXXX-YY-ZZZZZZ` form (an undashed value passed through would silently
+  return an empty result set), validates `from_date`/`to_date` as ISO
+  `YYYY-MM-DD` before any request, and computes `has_more` from a full page
+  (`len(rows) >= limit`) because the upstream answers a bare array with no
+  continuation token; the upstream caps one form at 20,000 rows
+  (`MAX_FORM_ROWS`). Upstream 13F rejections are proxied as HTTP 500 with a
+  `Forms13F 4xx for /route` body — the transport detects that body and maps it
+  to non-retryable `invalid_input` **without retrying and without recording a
+  breaker failure** (three such calls must never open the shared circuit).
+  `digifetch_13f_funds.what='holders'` is exposed against the documented shape
+  but the upstream currently answers such a proxied 4xx for every
+  `period_of_report` format probed. The `what`-discriminated inputs validate
+  required fields per branch **before** any request (dashed quarters like
+  `2026-Q2` are rejected client-side, since the upstream answers 500).
+- **Plan and upstream caveats (#4110 phase 3).** `digifetch_shiller` returns
+  the **most recent** `limit` monthly rows (default 240, max 2000) — the
+  upstream sends the whole ~1869-row series from 1871, so keep the tail slice
+  and the `total_available`/`truncated` flags. `digifetch_proxy_statements` and
+  `digifetch_risk_reports` read the anonymous **`/public/proxies`** and
+  **`/public/risks`** open products (list + per-year detail); the `year` for a
+  proxy statement is the **proxy** (filing) year, not the fiscal year, and an
+  unknown ticker 404s to `not_found`. `digifetch_filing_events` is the
+  classified 8-K feed (newest first, `limit` ≤200). `digifetch_short_interest`
+  is session-gated with `years` bounded **1–10 client-side** (live: 1→24
+  points, 5→120, 10→209; 0/11/99 silently fall back to the 3-year window
+  upstream, so the contract must reject them first). `digifetch_equity_diagnostic`
+  is the only **POST** route outside `digifetch_quotes_batch` (#4069 POSTs
+  `/market/quotes/batch`) and the only **AI product endpoint**: its payload
+  carries its own `status` (`generating`/`partial`/`complete`) rather than the
+  CloudMarketResponse discriminator, so it is read with
+  `_request_json(direct_payload=True)`; the first call per symbol answers a
+  `pending` envelope (`status=generating` + `retryAfterMs`) and **pending
+  payloads are never client-cached** (`_cached(should_cache=...)`), while
+  completed reports use the normal 900s TTL; the POST also pins **one attempt**
+  (`_SINGLE_ATTEMPT_POLICY`) because it triggers server-side generation and has
+  no idempotency key — a timed-out retry must not silently re-request a
+  generation (the server's `refreshAllowedAt` hints at de-dupe, unverified).
+  Free sessions only ever get
+  `access="preview"`, and the verdict/summary are the model's reading — say so
+  in copy, never as advice. The old "remaining plugin panes" out-of-scope list
+  is superseded by the #4837 full-function coverage: every one of the 130
+  command-bar functions now carries exactly one status in the
+  [function matrix](../docs/superpowers/plans/2026-09-30-gloomberb-function-matrix.md)
+  (57 DONE, 24 COMP, 4 CALC, 1 TOS, 11 WRITE, 2 GATE, 1 NATIVE, 30 OUT), with
+  OUT reasons in ARCHITECTURE §5. The per-transcript detail route
+  (`/cloud/transcripts/{id}`) is `digifetch_transcripts`' `transcript_id` mode,
+  and `digifetch_saved_searches` covers `/cloud/search/saved`.
+- **Entitlements (#4110 phase 5, #4837 130-coverage).** Every digifetch tool declares exactly one
+  entitlement in `data/gloomberb/entitlements.py` (`TOOL_ENTITLEMENTS`):
+  `free` (anonymous; 47 of the 89), `session` (`GLOOMBERB_SESSION_COOKIE` required; without
+  it the tool returns `auth_required` with no HTTP request; 37 tools), `preview`
+  (session required, but a free session still gets a labeled preview —
+  `digifetch_equity_diagnostic` only), `pro` (session **and** a Gloomberb
+  Pro plan — `digifetch_transcripts`, `digifetch_screener`,
+  `digifetch_options_flow`), or `venue_session` (own-venue session —
+  `digifetch_substack` needs `SUBSTACK_SESSION_COOKIE`, fail-soft). The declaration is
+  surfaced in the MCP registration (`_maybe_tool` sets `fn.entitlement` and
+  appends the note to the description), as a top-level `entitlement` key on the
+  orchestrator manifest entry plus the same description note, and therefore in
+  every tool description. Keep MCP and manifest in sync by editing only
+  `TOOL_ENTITLEMENTS` — `test_entitlement_note_is_surfaced_in_mcp_and_manifest`
+  pins it. `pro_required` is deliberately distinct from `auth_required`: the
+  session is valid but not entitled (upgrade the account / supply a Pro
+  account's cookie), and it is always non-retryable and breaker-safe. A Pro
+  session is supplied by putting a **Gloomberb Pro account's** cookie in
+  `GLOOMBERB_SESSION_COOKIE` (bare token or `name=value`); there is no separate
+  Pro switch. Preview reports carry the envelope warning
+  `preview access: report is a free-tier preview (access=preview)`
+  (`PREVIEW_ACCESS_WARNING`) plus `data.report.access == "preview"`; full
+  reports carry neither. Note: DigiQuant's highest subscription tier may bundle
+  Gloomberb Pro in the future — a business/partnership follow-up only; the
+  `pro` declaration is the hook, and no billing/entitlement-upgrade code exists
+  in this phase.
+- **Attribution (spec §7).** Payloads carry "Sourced from Gloomberb" + the delay
+  notice and a `term.gloom.sh/?ticker=` deep link where one listing is addressed.
+  39 tools opt out explicitly (`attributed=False`): the calculators/compositions
+  (derived math, never Cloud-sourced), the venue-direct readers (prediction
+  markets, the five ToS tools, trending, substack), the Yahoo-backed earnings
+  calendar, and the 13 inert workspace/broker tools — their attribution, if
+  any, lives inside `data`, never top-level, and none emits a term.gloom.sh link.
+- **Human gate.** `api.gloom.sh` is a new external service dependency — the
+  implementation PR cannot self-merge (`agents.yml` `human_gates`), and the
+  container-egress / ToS spike items (spec §12 item 5) stay open.
+- **Pipeline agent access (#4146).** `data/gloomberb/agent_tools.py` is the
+  in-process surface for the research analysts + PM: `DIGIFETCH_TOOLS` is
+  generated from the `orchestrator_tools.py` manifest builders (never hand-copy
+  schemas), `build_digifetch_tool_dispatcher()` routes name → input model →
+  `GloomberbClient` method and returns the attribution envelope, and the
+  curated subsets `EQUITY_TOOLS` / `MACRO_TOOLS` / `PM_TOOLS` (each at the 16-name
+  prompt-budget cap)
+  are wired through `build_grounding(digifetch_tools=...)` +
+  `SegmentNodeSpec.digifetch_tools`: equity + sector phases take EQUITY, macro
+  takes MACRO, portfolio analyst + direction take PM. Unlike the MCP surface (which
+  registers gated tools and answers `auth_required` / disabled envelopes), the
+  in-process list **filters instead of advertising**:
+  `available_digifetch_tools` returns no digifetch tools at all when
+  `GLOOMBERB_ENABLED` disables the family, and drops session/preview/pro names
+  when `GLOOMBERB_SESSION_COOKIE` is unset (CI has neither → never advertised);
+  the client still applies both gates per call.
+  `digifetch_polls`, `digifetch_hacker_news`,
+  `digifetch_compare_performance`, `digifetch_correlation_matrix`, and
+  `digifetch_relative_valuation` stay MCP-only (the first three for upstream
+  reliability/ToS reasons, the last three until an owner-signed subset
+  eviction frees a prompt-budget slot) and are not in any subset.
+  `digifetch_congress_trades` is in no subset either and must stay out: it is
+  refused outright (DIG-1057, 5 U.S.C. 13107(c)(1)(B)), not merely MCP-only.
+  deliberation stays off (research-tools-only by #2908) and legacy Phase 7D is unwired.
+  Enrichment-only is enforced structurally: the subset attaches **only when a
+  primary data/research executor built**. The client factory + envelope
+  serializer moved here from `mcp_server.py` (which imports them) so MCP and
+  pipeline share one env-keyed, lock-guarded pacing/cache/breaker client. When
+  adding a tool, add it to `TOOL_ENTITLEMENTS` + the dispatcher table +
+  (usually) a subset — the parity tests pin the rest.
+- **Tests are offline.** `httpx.MockTransport` on the injected
+  `digifetch.HttpFetcher`, or a patched `_build_gloomberb_client`; never hit the
+  live API. Run `pytest tests/dq/test_mcp_gloomberb_tools.py tests/dq/data/test_gloomberb_*.py`
+  plus `pytest tests/dq/test_mcp_server_scope.py`.
+
+---
+
+## LuxAlgo hosted thin wrap (#4779 P0, #4844 companions)
+
+`src/digiquant/data/luxalgo/` is the LuxAlgo Library research layer, mirroring
+the Gloomberb layering (`attribution` / `entitlements` / `models` / `client` /
+`agent_tools`, same MCP + manifest + dispatcher surfaces). It is the **only**
+place the `mcp.luxalgo.com` URL/logic lives — callers never supply a URL.
+
+- **8 Library tools + 6 edge/trackers companions, read scope, default ON, all
+  keyless (`free`).**
+  `luxalgo_library_search`, `luxalgo_library_get_concept`,
+  `luxalgo_library_get_indicator` (metadata only), `luxalgo_library_list_concepts`,
+  `luxalgo_library_list_indicators`, `luxalgo_library_list_tags`,
+  `luxalgo_library_list_families`, `luxalgo_library_get_family`, plus the #4844
+  companions `luxalgo_edge_symbols`, `luxalgo_edge_presets`,
+  `luxalgo_edge_report` (preset reads with the honesty disclaimer) and
+  `luxalgo_trackers_datasets`, `luxalgo_trackers_latest`,
+  `luxalgo_trackers_ticker` (freshness/ad-hoc lookups over the CC0-1.0
+  dumps, per-family limits classified DIG-1464: congress-trades is a 13107
+  disclosure report and short-volume carries FINRA's non-commercial terms)
+  are
+  registered in `mcp_server.py` (`_maybe_tool`, `READ_SCOPE_TOOLS`) and listed
+  in `orchestrator_tools.py`. Default-ON behind `LUXALGO_ENABLED` — only
+  `1`/`true`/`yes`/`on` enable it, any other explicit value fails closed to a
+  typed `upstream_error` with no request.
+- **Upstream contract.** One `tools/call` JSON-RPC round trip per tool over
+  streamable HTTP (SSE `data:` lines; bare JSON also accepted). Every upstream
+  tool requires a `context` string — the client injects the fixed generic
+  `LUXALGO_CONTEXT` server-side and always overwrites any caller value, so no
+  PII reaches the upstream. Library results answer `structuredContent`; the
+  edge/trackers tools answer MCP content blocks whose text part is the JSON
+  payload — both shapes unwrap to the same envelope `data`. Upstream payloads
+  pass through unchanged (shapes vary); errors map to `not_found` /
+  `rate_limited` / `upstream_error` / `invalid_input`. 900s size-bounded TTL
+  cache; no rate-limiter/breaker in this phase (low-volume keyless reads). An
+  upstream `stale` flag on a trackers payload folds into the envelope `stale`
+  bit.
+- **Attribution + license boundary.** Every payload carries a per-family
+  "Sourced from LuxAlgo ..." attribution (`attribution_fields_for` in
+  `attribution.py`; the edge/trackers families do NOT reuse the Library
+  sentence) plus a canonical link. Library payloads additionally state the
+  `LUXALGO_COMMERCIAL_LICENSE` flag state they were produced under
+  (`commercial_license` + `license_state`, #4845). Every `edge_report` result
+  carries the honesty disclaimer (`digiquant.stats.honesty.DISCLAIMER`) in both
+  the upstream `data.disclaimer` field and the envelope `warnings`. Research
+  reference only — never a pipeline primary. `library_get_source_code` is
+  deliberately NOT wrapped (CC BY-NC-SA: no indicator source in paid
+  surfaces); `trackers_query` is deliberately NOT wrapped (the CC0-1.0 dumps,
+per-family limits classified DIG-1464 — congress-trades restricted by 5 U.S.C.
+13107, short-volume carrying unresolved FINRA terms — stay
+  the source of record — live queries are freshness checks only);
+  `broker_*` keys are never sent to the hosted MCP; `journal_*`/`propfirms_*`
+  are separate packages.
+- **License guard (#4845).** `data/luxalgo/license_guard.py` (stdlib-only) is
+  the enforcement point: default-OFF commercial flag, dispatcher runtime
+  refusal with no request while OFF, `source_code_violations` surface
+  assertions (only the dispatcher may add the 9th tool, and only when
+  licensed), `payload_contains_source_code` /
+  `assert_payload_has_no_source_code` for persist/render sinks, and the
+  repo-wide reference scan. Guard halves: `tests/dq/test_luxalgo_license_guard.py`
+  (unit) + `scripts/check_luxalgo_license_boundary.py` (CI-adjacent, exit 1 on
+  violations). Hub `/v1/orchestrator_invoke` 400s unknown `luxalgo_*` names.
+  **That guard is the _code_ licence only** (indicator Pine source, CC BY-NC-SA).
+  The _data_ licence that governs every trackers row is CC0-1.0 (classified
+  2026-10-06, DIG-1464, from the upstream `LICENSE` at `main`), and it carries
+  two per-family limits a copyright waiver cannot supply: congress-trades is
+  restricted by 5 U.S.C. 13107(c)(1)(B) and refused as a data class by Counsel
+  (DIG-1472, in service only by business decision), and short-volume carries
+  unresolved upstream FINRA terms (with Counsel). Both live in
+  `attribution.LUXALGO_TRACKERS_DATA_CAVEATS`; every trackers licence note and
+  entitlement note renders them via `attribution.trackers_data_caveat`. A CC0
+  claim without them is a defect, guarded in
+  `tests/dq/test_congress_trades_statute_and_ingest_provenance.py` across all
+  six claim surfaces.
+- **Tests are offline.** `httpx.MockTransport` straight into `LuxAlgoClient`
+  (SSE-shaped `data:` bodies), or a patched `_build_luxalgo_client`; never hit
+  the live MCP. Run `pytest tests/dq/test_mcp_luxalgo_tools.py
+  tests/dq/test_mcp_luxalgo_edge_trackers_tools.py` plus
+  `pytest tests/dq/test_mcp_server_scope.py`.
+
+---
+
+## research sandbox image (#396)
+
+`digiquant/Dockerfile.sandbox` is a **separate** image from the digiquant HTTP
+service (`digiquant/Dockerfile`). research agents execute Python research / paper-book
+code inside it. The open-source quant stack is baked at **build time** — do not
+`pip install` inside agent runs.
+
+**Scope:** research sandbox only. No live trading, no broker credentials, no
+order paths. Optional outbound HTTPS for free data (Yahoo / FRED); never wire
+this image to live trading venues.
+
+### Build / run
+
+```bash
+# From repo root (context = digiquant/)
+docker build -f digiquant/Dockerfile.sandbox -t digiquant-sandbox digiquant
+
+# Or from digiquant/
+docker build -f Dockerfile.sandbox -t digiquant-sandbox .
+
+# Smoke — all named imports must succeed
+docker run --rm digiquant-sandbox \
+  python -c "import skfolio, riskfolio, pandas_ta, arch, alphalens"
+
+# Full package spot-check
+docker run --rm digiquant-sandbox python -c "
+import pandas_ta, talib, vectorbt
+import skfolio, pypfopt, riskfolio, cvxpy
+import empyrical, pyfolio, arch, statsmodels, alphalens
+import yfinance, pandas_datareader
+import polars, numpy, scipy, openpyxl, matplotlib
+print('sandbox imports ok')
+"
+
+# Agent pattern — run a one-liner or mounted script
+docker run --rm digiquant-sandbox python -c "import pandas_ta as ta; print(ta.__version__)"
+docker run --rm -v \"\$PWD:/work:ro\" -w /work digiquant-sandbox python my_research.py
+```
+
+Manifest: [`requirements.sandbox.txt`](requirements.sandbox.txt). Import notes:
+
+| Package | Import |
+|---------|--------|
+| `pandas-ta-classic` | `pandas_ta` (shim) or `pandas_ta_classic` |
+| `TA-Lib` | `talib` |
+| `riskfolio-lib` | `riskfolio` |
+| `alphalens-reloaded` | `alphalens` |
+| `empyrical-reloaded` / `pyfolio-reloaded` | `empyrical` / `pyfolio` |
+
+**TA-Lib:** modern wheels (`TA-Lib>=0.7`) bundle the C library — no
+`libta-lib-dev` on debian slim. Documented in the Dockerfile header.
+
+**yfinance:** Yahoo rate-limits without notice. Prefer
+`from yfinance_retry import download_with_retry` (baked at
+`/opt/digiquant_sandbox`, on `PYTHONPATH`) over bare `yfinance.download`.
+
+**Image size:** target < 3GB. Measure after a successful local/CI build with
+`docker images digiquant-sandbox` — do not invent a size figure.
+
+**Not in scope for #396:** `execute_code` / MCP wrappers (#397), skills library
+(#398). Those consume this image later.
+
+See [`ARCHITECTURE.md` § 10](ARCHITECTURE.md#10-docker-and-mcp-composition) for
+the sandbox layer in the component diagram.
+
+---
+
+## More
+
+Extension patterns, anti-patterns, and integration boundaries live in [`ARCHITECTURE.md`](ARCHITECTURE.md). Update that doc when changing interfaces or behavior.

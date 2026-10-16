@@ -1,0 +1,110 @@
+{
+  "version": 1,
+  "description": "Required Pipeline glass-box screenshot fixtures (#2645 / #1945). Paths are relative to this directory. Committed PNGs may be 1×1 placeholders until operator capture replaces them.",
+  "stages": [
+    {
+      "stageId": "inputs",
+      "desktop": "stages/inputs-desktop.png",
+      "mobile": "stages/inputs-mobile.png"
+    },
+    {
+      "stageId": "research",
+      "desktop": "stages/research-desktop.png",
+      "mobile": "stages/research-mobile.png"
+    },
+    {
+      "stageId": "synthesis",
+      "desktop": "stages/synthesis-desktop.png",
+      "mobile": "stages/synthesis-mobile.png"
+    },
+    {
+      "stageId": "selection",
+      "desktop": "stages/selection-desktop.png",
+      "mobile": "stages/selection-mobile.png"
+    },
+    {
+      "stageId": "decision",
+      "desktop": "stages/decision-desktop.png",
+      "mobile": "stages/decision-mobile.png"
+    },
+    {
+      "stageId": "learning",
+      "desktop": "stages/learning-desktop.png",
+      "mobile": "stages/learning-mobile.png"
+    }
+  ],
+  "artifactFamilies": [
+    {
+      "id": "attention-plan",
+      "label": "Attention plan (conditional Inputs)",
+      "path": "artifacts/attention-plan-desktop.png",
+      "exampleDocumentKey": "attention-plan"
+    },
+    {
+      "id": "research-segment",
+      "label": "Research segment leaf (macro)",
+      "path": "artifacts/research-segment-desktop.png",
+      "exampleDocumentKey": "macro"
+    },
+    {
+      "id": "fanout-alt-data",
+      "label": "Alt-data fan-out branch",
+      "path": "artifacts/fanout-alt-data-desktop.png",
+      "exampleDocumentKey": "alt-cta-positioning"
+    },
+    {
+      "id": "fanout-analyst",
+      "label": "Analyst fan-out branch",
+      "path": "artifacts/fanout-analyst-desktop.png",
+      "exampleDocumentKey": "analyst/QQQ"
+    },
+    {
+      "id": "digest",
+      "label": "Daily digest",
+      "path": "artifacts/digest-desktop.png",
+      "exampleDocumentKey": "digest"
+    },
+    {
+      "id": "deliberation",
+      "label": "Deliberation fan-out",
+      "path": "artifacts/deliberation-desktop.png",
+      "exampleDocumentKey": "deliberation/QQQ"
+    },
+    {
+      "id": "pm-direction",
+      "label": "PM direction memo",
+      "path": "artifacts/pm-direction-desktop.png",
+      "exampleDocumentKey": "pm-direction-memo"
+    },
+    {
+      "id": "pm-rebalance",
+      "label": "PM rebalance",
+      "path": "artifacts/pm-rebalance-desktop.png",
+      "exampleDocumentKey": "pm-rebalance"
+    },
+    {
+      "id": "commit",
+      "label": "Commit run record",
+      "path": "artifacts/commit-desktop.png",
+      "exampleDocumentKey": "commit-run/1234567890"
+    },
+    {
+      "id": "beliefs",
+      "label": "Beliefs fold (conditional Learning)",
+      "path": "artifacts/beliefs-desktop.png",
+      "exampleDocumentKey": "beliefs"
+    },
+    {
+      "id": "call-trace",
+      "label": "Call trace inspection surface",
+      "path": "artifacts/call-trace-desktop.png",
+      "exampleDocumentKey": null
+    },
+    {
+      "id": "artifact-ledger",
+      "label": "All artifacts ledger (ledger-only key)",
+      "path": "artifacts/artifact-ledger-desktop.png",
+      "exampleDocumentKey": "risk-debate"
+    }
+  ]
+}

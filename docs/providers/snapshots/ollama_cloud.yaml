@@ -1,0 +1,129 @@
+provider: ollama_cloud
+last_checked: 2026-10-11
+source: agent-research
+
+free_tier:
+  available: true
+  tier_type: standing        # Metered in GPU-seconds; usage levels 1-4 (1=lightest, 4=heaviest)
+  credit_amount_usd: null
+  credit_expiry_days: null
+  privacy_warning: null
+  signup_required: true
+  cc_required: false
+  models:
+    - name: gpt-oss:20b
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: 32768
+      status: active          # usage level 1 (lightest)
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: deepseek-v3.1:671b
+      context_window: 163840
+      max_input_tokens: 163840
+      max_output_tokens: 32768
+      status: active          # confirmed free
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: cogito-2.1:671b
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: 32768
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: nemotron-3-super:cloud
+      context_window: 1048576
+      max_input_tokens: 1048576
+      max_output_tokens: 32768
+      status: active
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: deepseek-v4-flash
+      context_window: 1048576
+      max_input_tokens: 1048576
+      max_output_tokens: 65536
+      status: active          # confirmed free as of May 2026; Apr 403 was temporary outage
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: deepseek-v4-pro:cloud
+      context_window: 1048576
+      max_input_tokens: 1048576
+      max_output_tokens: 65536
+      status: active          # usage level 4 (heaviest); may require Pro plan in practice
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+    - name: kimi-k2-thinking
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: 32768
+      status: paid-only       # moved behind subscription Apr 2026
+      verified: null
+      last_verified: null
+      last_verified_latency_ms: null
+      verification_error: null
+  rate_limits:
+    rpm: null               # rate-limited by GPU-seconds, not RPM
+    rpd: null
+    tpm: null
+    input_tpm: null
+    concurrent_requests: 1  # 1 concurrent model on free tier
+    reset_window: rolling_24h
+
+paid_tier:
+  available: true
+  models: []               # Same models; Pro $20/mo (or $200/yr; 50× free, 3 concurrent), Max $100/mo
+  batching:
+    available: false
+    discount_pct: null
+    max_batch_size: null
+    turnaround_hours: null
+    notes: null
+  prompt_caching:
+    available: false
+    min_cacheable_tokens: null
+    ttl_seconds: null
+    cost_per_1m_cached_writes: null
+    cost_per_1m_cached_reads: null
+    notes: null
+
+capabilities:
+  tool_calling: true
+  structured_output: true
+  thinking_mode: true      # cogito, deepseek-v3.1, deepseek-v4 have thinking modes
+  streaming: true
+  vision: true
+  embeddings: false
+  modalities: [text, image]
+
+data_privacy:
+  trains_on_free_tier: false
+  retention_days: null
+  zero_retention_on_paid: false
+  gdpr_compliant: false
+  soc2: false
+
+reliability:
+  known_instability: false
+  requires_backoff: true
+  geographic_restrictions: []
+
+verification:
+  method: litellm_probe
+  probe_prompt: "Reply with the single word: ok"
+  probe_model_alias: ollama-cloud/rnj-1
+  github_secret_key: OLLAMA_API_KEY
+
+notes: "PROBE 2026-08-30: probe against rnj-1:cloud again returned 404 model not found — second consecutive cycle, config still unfixed. rnj-1:cloud never existed as a valid cloud-tier id ('rnj-1' is a local-only Ollama library model; Essential AI, 8B dense); it was already removed from this snapshot's free_tier.models as a data-quality correction on 2026-07-19, so this cycle's probe failure is expected and carries no new information about the actual cloud catalog. ACTION NEEDED (unresolved from last cycle): scripts/provider_review/probe.py:53-57 still hard-codes model: 'rnj-1:cloud' for this provider — repoint it at any of the confirmed-live free models already listed below (e.g. gpt-oss:20b or deepseek-v4-flash) so the probe actually exercises something real. Live cloud catalog and the deepseek-v3.1:671b / cogito-2.1:671b / kimi-k2-thinking rename-mapping question were not re-checked this cycle (no new research performed on ollama_cloud beyond the repeat probe failure) — carried forward unchanged from 2026-07-19: OpenAI-compatible passthrough at https://ollama.com/v1, uses OLLAMA_API_KEY, deepseek-v4-flash confirmed free, kimi-k2-thinking remains paid-only."

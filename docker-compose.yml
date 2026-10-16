@@ -1,0 +1,860 @@
+# Digi Ecosystem – Docker Compose (Phase 0+)
+# See ARCHITECTURE.md, SECURITY.md. For hardened deploy: docker compose --profile hardened up
+# Usage: docker compose up --build
+#
+# Service groups (S4 / DIG-2772). Compose profiles select what starts:
+#   core   digivault, litellm-cache, omniroute(+guard), digisearch-mcp, digivault-mcp, zammad-mcp
+#   quant  (digiquant + ollama) -- always-on, see note
+#   chat   digichat, digichat-db
+#   trace  digitrace (always-on) + otel-collector
+#   edge   the *.digithings.localhost reverse proxy (infra/local-proxy/Caddyfile)
+#   all    everything above, including heartbeat + observability
+#   e.g. docker compose --profile core --profile edge up -d
+#
+# ADR-0001 constraint: the root file and `make up` stay the ZERO-CONFIG path, so the
+# always-on backends (digikey, digigraph, digisearch, searxng, valkey, litellm, ollama,
+# digitrace, digiquant) deliberately carry NO `profiles:`. The named groups above tag the
+# OPT-IN services; they never gate the core. Do not add `profiles:` to an always-on
+# service -- it would make `make up` and `make build` start/build nothing.
+# For testing without OpenAI: set OLLAMA_MODEL=ollama/deepseek-r1:14b in .env; Ollama runs in Docker below.
+
+services:
+  # ─── Redis for digikey JWT revocation blocklist (ADR-0007) ───
+  digikey-blocklist-redis:
+    image: redis:7-alpine
+    container_name: digi-digikey-blocklist-redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  # ─── digikey: API keys + JWT exchange (consumers use DIGIKEY_JWKS_URL → /.well-known/jwks.json) ───
+  digikey:
+    build:
+      context: .
+      dockerfile: digikey/Dockerfile
+    image: digi-digikey:latest
+    container_name: digi-digikey
+    ports:
+      - "127.0.0.1:8005:8005"
+    env_file:
+      - .env
+    environment:
+      - DIGIKEY_DATABASE_URL=${DIGIKEY_DATABASE_URL:-sqlite:////data/digikey.db}
+      - DIGIKEY_ISSUER=${DIGIKEY_ISSUER:-http://digikey:8005}
+      - DIGIKEY_BLOCKLIST_REDIS_URL=${DIGIKEY_BLOCKLIST_REDIS_URL:-redis://digikey-blocklist-redis:6379/0}
+      # Fail closed by default: auth must not silently skip revocation when Redis is
+      # unreachable. Local dev without Redis sets DIGIKEY_REQUIRE_BLOCKLIST=0 explicitly.
+      - DIGIKEY_REQUIRE_BLOCKLIST=${DIGIKEY_REQUIRE_BLOCKLIST:-1}
+      - DIGIKEY_LITELLM_PROXY_KEY=${DIGIKEY_LITELLM_PROXY_KEY:-${LITELLM_MASTER_KEY:-}}
+      - DIGIKEY_ADMIN_TOKEN=${DIGIKEY_ADMIN_TOKEN:-}
+      - DIGIKEY_BFF_TOKEN=${DIGIKEY_BFF_TOKEN:-}
+      - DIGIKEY_ALLOW_DEV_GLOBAL=${DIGIKEY_ALLOW_DEV_GLOBAL:-0}
+      # Production default is 0: require DIGIKEY_PRIVATE_KEY_PEM so JWKS is stable across
+      # restarts. Local Docker dev opts in explicitly with DIGIKEY_ALLOW_EPHEMERAL_KEY=1.
+      - DIGIKEY_ALLOW_EPHEMERAL_KEY=${DIGIKEY_ALLOW_EPHEMERAL_KEY:-0}
+      - PYTHONUNBUFFERED=1
+      - DIGI_OTEL_ENDPOINT=${DIGI_OTEL_ENDPOINT:-}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    volumes:
+      - digikey_data:/data
+    depends_on:
+      digikey-blocklist-redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8005/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ─── Ollama: local LLM (no OpenAI needed for testing) ───
+  ollama:
+    image: ollama/ollama:latest
+    container_name: digi-ollama
+    ports:
+      # Use 11435 on host if 11434 is taken by local Ollama
+      - "127.0.0.1:11435:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:11434/api/tags"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ─── digitrace: LangSmith-aligned observability (health + tracing status) ───
+  digitrace:
+    build:
+      context: .
+      dockerfile: digitrace/Dockerfile
+    image: digi-digitrace:latest
+    container_name: digi-digitrace
+    ports:
+      - "127.0.0.1:8003:8003"
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DIGI_OTEL_ENDPOINT=${DIGI_OTEL_ENDPOINT:-}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8003/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ─── digigraph: LangGraph orchestration + MCP/HTTP workflow entrypoint ───
+  digigraph:
+    build:
+      context: .
+      dockerfile: digigraph/Dockerfile
+    image: digi-digigraph:latest
+    container_name: digi-digigraph
+    ports:
+      - "127.0.0.1:8000:8000"
+    env_file:
+      - .env
+    environment:
+      - DIGIQUANT_URL=http://digiquant:8001
+      - DIGISEARCH_URL=http://digisearch:8002
+      - DIGITRACE_URL=http://digitrace:8003
+      # digivault is opt-in (dedicated Compose profile, not part of the always-on
+      # core stack) — leave empty by default so the digivault skill stays hidden
+      # unless an operator explicitly enables the profile and sets this.
+      - DIGIVAULT_URL=${DIGIVAULT_URL:-}
+      - DIGIKEY_JWKS_URL=${DIGIKEY_JWKS_URL:-http://digikey:8005/.well-known/jwks.json}
+      - DIGIKEY_ISSUER=${DIGIKEY_ISSUER:-http://digikey:8005}
+      - DIGIKEY_AUDIENCE=${DIGIKEY_AUDIENCE:-digi-ecosystem}
+      - DIGIKEY_PUBLIC_KEY_PEM=${DIGIKEY_PUBLIC_KEY_PEM:-}
+      - DIGIQUANT_DATA_DIR=/app/data
+      - DIGISEARCH_INDEX=${DIGISEARCH_INDEX:-digithings_docs}
+      - OPENAI_API_BASE=http://litellm:4000/v1
+      - DIGI_CONFIG_PATH=/app/config
+      - DIGI_PROJECT_CONFIG=${DIGI_PROJECT_CONFIG:-/app/config/dogfood-digiproject.yaml}
+      - DIGI_LLM_MODE=${DIGI_LLM_MODE:-test}
+      - DIGI_ENABLE_DEBUG_ENDPOINTS=${DIGI_ENABLE_DEBUG_ENDPOINTS:-0}
+      - DIGI_ENABLE_THREAD_API=${DIGI_ENABLE_THREAD_API:-0}
+      - LITELLM_PROXY_API_KEY=${LITELLM_PROXY_API_KEY:-}
+      - PYTHONUNBUFFERED=1
+      - DIGI_OTEL_ENDPOINT=${DIGI_OTEL_ENDPOINT:-}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      - AUDIT_LOG_PATH=/audit/events.jsonl
+    volumes:
+      # This mount SHADOWS the Dockerfile's baked-in config/, it does not merge
+      # with it. ./config here must contain byok-providers.json AND
+      # model-policy.json or digigraph crash-loops at startup (both load
+      # fail-loud at import, by design). A missing model_modes.yaml does NOT
+      # crash -- that loader degrades to an empty config and the mode ladder
+      # falls through to `fallback_model` from model-policy.json -- so supply
+      # all three regardless. See digigraph/Dockerfile and ARCHITECTURE.md's
+      # DIGI_CONFIG_PATH entry.
+      - ./config:/app/config:ro
+      - ./digiquant/results/audit:/audit
+    depends_on:
+      digikey:
+        condition: service_healthy
+      digiquant:
+        condition: service_healthy
+      digisearch:
+        condition: service_healthy
+      digillm:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ─── digiquant: Nautilus + Polars backtest/optimize (MCP tools) ───
+  digiquant:
+    build:
+      context: .
+      dockerfile: digiquant/Dockerfile
+    image: digi-digiquant:latest
+    container_name: digi-digiquant
+    ports:
+      - "127.0.0.1:8001:8001"
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DIGI_OTEL_ENDPOINT=${DIGI_OTEL_ENDPOINT:-}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      - AUDIT_LOG_PATH=/app/results/audit/events.jsonl
+      - EXPORT_OUTPUT_DIR=/app/results/exports
+      - DIGIQUANT_DATA_DIR=/app/data
+      - DIGIKEY_JWKS_URL=${DIGIKEY_JWKS_URL:-http://digikey:8005/.well-known/jwks.json}
+      - DIGIKEY_ISSUER=${DIGIKEY_ISSUER:-http://digikey:8005}
+      - DIGIKEY_AUDIENCE=${DIGIKEY_AUDIENCE:-digi-ecosystem}
+      - DIGIKEY_PUBLIC_KEY_PEM=${DIGIKEY_PUBLIC_KEY_PEM:-}
+    volumes:
+      - ./digiquant/data:/app/data:ro
+      - ./digiquant/results:/app/results
+    depends_on:
+      digikey:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8001/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ─── digisearch: RAG, document search (MCP + HTTP for digigraph/digiflow) ───
+  digisearch:
+    build:
+      context: .
+      dockerfile: digisearch/Dockerfile
+    image: digi-digisearch:latest
+    container_name: digi-digisearch
+    ports:
+      - "127.0.0.1:8002:8002"
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DIGI_OTEL_ENDPOINT=${DIGI_OTEL_ENDPOINT:-}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      - DIGISEARCH_INDEX=${DIGISEARCH_INDEX:-default}
+      - DIGISEARCH_SEARXNG_URL=${DIGISEARCH_SEARXNG_URL:-http://searxng:8080}
+      - CHROMA_PATH=/data/chroma
+      # Monitor store home (Phase C, #4065): {DIGI_WORKSPACE}/.digisearch/monitors.sqlite3
+      # — persisted by the digisearch_monitors volume below.
+      - DIGI_WORKSPACE=/data/monitors
+      - DIGIKEY_JWKS_URL=${DIGIKEY_JWKS_URL:-http://digikey:8005/.well-known/jwks.json}
+      - DIGIKEY_ISSUER=${DIGIKEY_ISSUER:-http://digikey:8005}
+      - DIGIKEY_AUDIENCE=${DIGIKEY_AUDIENCE:-digi-ecosystem}
+      - DIGIKEY_PUBLIC_KEY_PEM=${DIGIKEY_PUBLIC_KEY_PEM:-}
+    volumes:
+      - digisearch_chroma:/data/chroma
+      - digisearch_monitors:/data/monitors
+      - ./digisearch/devdata/edgar_sample:/data/edgar_dev_corpus:ro
+    depends_on:
+      digikey:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8002/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ─── searxng + valkey: proprietary web-search sidecar for digisearch (#3853) ───
+  # Loopback-only on the host; digisearch reaches searxng as http://searxng:8080
+  # via DIGISEARCH_SEARXNG_URL. ddgs remains the zero-infra fallback.
+  searxng:
+    # Tag pinned to the commit the production bundle builds from
+    # (Dockerfile.digithings-stack-cloudflare SEARXNG_COMMIT a1144dda…, #3239),
+    # so local search behaviour matches the container bundle. Upstream ships no
+    # bare `YYYY.M.D` tag, only `YYYY.M.D-<hash>`. The digest is still not
+    # enforced: see digisearch/ARCHITECTURE.md, owner decision #3871.
+    image: searxng/searxng:2026.9.3-a1144dda3
+    container_name: digi-searxng
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./config/searxng/settings.yml:/etc/searxng/settings.yml:ro
+    depends_on:
+      - valkey
+    healthcheck:
+      # searxng image ships wget (no curl): probe with wget or the
+      # container never becomes healthy (#3859).
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  valkey:
+    image: valkey/valkey:9-alpine
+    container_name: digi-searxng-valkey
+    healthcheck:
+      test: ["CMD-SHELL", "valkey-cli ping || redis-cli ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  # ─── digivault: Obsidian-style markdown vault management (profile: digivault) ───
+  digivault:
+    build:
+      context: .
+      dockerfile: digivault/Dockerfile
+    image: digi-digivault:latest
+    container_name: digi-digivault
+    # `core` and `quant` mirror scripts/localstack/contracts.py, which probes this
+    # service's 8004 /healthz in exactly those profiles; `all` is what
+    # `dt up --profile all` resolves to. `digivault` is kept so the old
+    # `--profile digivault` spelling still works. Adding a profile to a service
+    # that already had one does not change a bare `docker compose up`.
+    profiles:
+      - digivault
+      # core group (S4): what graph.digithings.localhost proxies
+      - core
+      - quant
+      - all
+    ports:
+      - "127.0.0.1:8004:8004"
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DIGI_OTEL_ENDPOINT=${DIGI_OTEL_ENDPOINT:-}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      - DIGIVAULT_ROOT=${DIGIVAULT_ROOT:-/data/vault}
+      - DIGIKEY_JWKS_URL=${DIGIKEY_JWKS_URL:-http://digikey:8005/.well-known/jwks.json}
+      - DIGIKEY_ISSUER=${DIGIKEY_ISSUER:-http://digikey:8005}
+      - DIGIKEY_AUDIENCE=${DIGIKEY_AUDIENCE:-digi-ecosystem}
+      - DIGIKEY_PUBLIC_KEY_PEM=${DIGIKEY_PUBLIC_KEY_PEM:-}
+    volumes:
+      - digivault_data:/data/vault
+    depends_on:
+      digikey:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8004/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ─── digillm: digithings' LiteLLM proxy (DIG-1780) ───
+  # LiteLLM from the pinned PyPI wheel inside a digithings image (Dockerfile.digillm),
+  # never the vendor image. The `litellm` network alias and port 4000 keep every
+  # existing OPENAI_API_BASE=http://litellm:4000/v1 caller working unchanged.
+  digillm:
+    image: ghcr.io/digithings-ai/digillm:0.1.0
+    build:
+      context: .
+      dockerfile: Dockerfile.digillm
+    container_name: digi-digillm
+    networks:
+      default:
+        aliases:
+          - litellm
+    ports:
+      - "127.0.0.1:4000:4000"
+    env_file:
+      - .env
+    # Do not inject REDIS_URL with an empty default: an empty string makes
+    # LiteLLM treat Redis as configured and exit 3
+    # (ValueError: Redis URL must specify one of the following schemes).
+    # Leave the var unset for the default local cache. When using
+    # --profile litellm-cache, set REDIS_URL=redis://redis:6379 in .env so
+    # env_file passes a real URL through.
+    # Cheap inference is the house default route (same overlay the Cloudflare
+    # stack bakes in): with CHEAPERINFERENCE_API_KEY set, merge
+    # config/litellm.cheaperinference.yaml over litellm.yaml at start, so no
+    # OpenRouter/xAI key is needed locally.
+    environment:
+      - CHEAPERINFERENCE_API_BASE=${CHEAPERINFERENCE_API_BASE:-https://api.cheaperinference.com/v1}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        if [ -n "$$CHEAPERINFERENCE_API_KEY" ] && python3 /app/scripts/merge_litellm_cheaperinference.py > /tmp/litellm.yaml; then CFG=/tmp/litellm.yaml; else CFG=/app/config/litellm.yaml; fi;
+        exec litellm --config "$$CFG" --host 0.0.0.0 --port 4000
+    volumes:
+      - ./config:/app/config:ro
+      - ./scripts:/app/scripts:ro
+    # LiteLLM can start without Ollama; Ollama models fail until ollama is healthy.
+    # The slim image has no curl/wget — probe with the bundled Python.
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness', timeout=4)\"",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 25s
+
+  # ─── Redis for LiteLLM proxy cache (optional profile: litellm-cache) ───
+  redis:
+    image: redis:7-alpine
+    container_name: digi-litellm-redis
+    profiles:
+      - litellm-cache
+      - core
+      - all
+    # Internal only; no host port. Use REDIS_URL=redis://redis:6379 in .env when this profile is active.
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  # ─── OmniRoute (optional profile: omniroute) — #3413 ───
+  # Off by default. Self-host OpenAI-compat at 127.0.0.1:20128/v1.
+  # Do not enable cookie / MITM / web-session providers. Do not cut digiquant
+  # house pins over to OmniRoute. See docs/providers/omniroute.md.
+  #
+  # Compose interpolates env for EVERY service at `docker compose config`,
+  # including inactive profiles — a `${VAR:?}` here must be seeded in
+  # .env.example or compose-validate fails (the digichat AUTH_SECRET / grafana
+  # GRAFANA_ADMIN_PASSWORD required vars are; OMNIROUTE_AUTH_PASSWORD
+  # deliberately is not, because there is no safe placeholder for it). Require
+  # the password only when the profile actually starts (omniroute-auth-guard below).
+  omniroute-auth-guard:
+    image: busybox:1.36
+    container_name: digi-omniroute-auth-guard
+    profiles:
+      - omniroute
+      - core
+      - all
+    environment:
+      - OMNIROUTE_AUTH_PASSWORD=${OMNIROUTE_AUTH_PASSWORD:-}
+    command:
+      - /bin/sh
+      - -c
+      - |
+        if [ -z "$$OMNIROUTE_AUTH_PASSWORD" ]; then
+          echo "OMNIROUTE_AUTH_PASSWORD is required to start the omniroute profile" >&2
+          exit 1
+        fi
+        if [ "$$OMNIROUTE_AUTH_PASSWORD" = "CHANGEME" ]; then
+          echo "OMNIROUTE_AUTH_PASSWORD must not be the vendor default" >&2
+          exit 1
+        fi
+  omniroute:
+    # Pin a version tag + index digest, never :latest (#3432 Gate 1).
+    image: diegosouzapw/omniroute:3.8.50@sha256:085c57adf499a8aaa9f35ccde95c0df9c11bd9ecd18d6c9edbf3b68b8079ba9d
+    container_name: digi-omniroute
+    profiles:
+      - omniroute
+      - core
+      - all
+    depends_on:
+      omniroute-auth-guard:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:20128:20128"
+    environment:
+      - PORT=20128
+      - INITIAL_PASSWORD=${OMNIROUTE_AUTH_PASSWORD:-}
+      - OMNIROUTE_API_KEY=${OMNIROUTE_API_KEY:-}
+    volumes:
+      - omniroute_data:/app/data
+
+  # ─── digisearch MCP server (optional: run with docker compose --profile digisearch-mcp up) ───
+  digisearch-mcp:
+    build:
+      context: .
+      dockerfile: digisearch/Dockerfile
+    image: digi-digisearch:latest
+    container_name: digi-digisearch-mcp
+    profiles:
+      - digisearch-mcp
+      - core
+      - all
+    ports:
+      - "127.0.0.1:8765:8765"
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DIGI_OTEL_ENDPOINT=${DIGI_OTEL_ENDPOINT:-}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      - DIGISEARCH_INDEX=${DIGISEARCH_INDEX:-default}
+      - CHROMA_PATH=/data/chroma
+      - DIGIKEY_JWKS_URL=${DIGIKEY_JWKS_URL:-http://digikey:8005/.well-known/jwks.json}
+      - DIGIKEY_ISSUER=${DIGIKEY_ISSUER:-http://digikey:8005}
+      - DIGIKEY_AUDIENCE=${DIGIKEY_AUDIENCE:-digi-ecosystem}
+    volumes:
+      - digisearch_chroma:/data/chroma
+      - ./digisearch/devdata/edgar_sample:/data/edgar_dev_corpus:ro
+    command: ["python", "-m", "digisearch.cli", "mcp", "--port", "8765"]
+
+  # ─── digivault MCP server (optional: run with docker compose --profile digivault-mcp up) ───
+  digivault-mcp:
+    build:
+      context: .
+      dockerfile: digivault/Dockerfile.mcp
+    image: digi-digivault-mcp:latest
+    container_name: digi-digivault-mcp
+    profiles:
+      - digivault-mcp
+      - core
+      - all
+    ports:
+      - "127.0.0.1:8769:8769"
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DIGIVAULT_ROOT=${DIGIVAULT_ROOT:-/data/vault}
+      # Loopback by default; set DIGIVAULT_MCP_HOST in .env for published-port access.
+    volumes:
+      - digivault_data:/data/vault
+
+  # ─── digiquant runner (optional: run with docker compose --profile quant up) ───
+  # Backs the DigiQuantRunnerContainer class in scripts/selfhost/container_shim.ts,
+  # which answers 503 for that class until a compose service exists for it. The
+  # image is real today (Dockerfile.digiquant-runner: EXPOSE 8080, CMD
+  # `python /opt/runner/exec_job.py serve`) and serves HTTP on 8080
+  # (exec_job.py `serve()` -> ThreadingHTTPServer).
+  #
+  # NO published host port, on purpose: 8080 is already published by searxng
+  # (`127.0.0.1:8080:8080`), so publishing it here would make `docker compose up`
+  # fail with a port conflict for every developer and in CI (smoke-stack.yml runs
+  # a bare `up`). The shim routes over the compose network
+  # (http://digiquant-runner:8080), which needs no published port at all.
+  #
+  # Healthcheck: exec_job.py `_Handler.do_GET` serves `/healthz`. The probe uses
+  # python rather than curl because python is what the image's own CMD runs, so
+  # it is the only interpreter its presence is guaranteed by.
+  # No credentials are set here: R2_* and RUNNER_* come from env_file .env,
+  # rendered by `dt secrets render` (slice S5). Never inline a secret.
+  digiquant-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.digiquant-runner
+    image: digi-digiquant-runner:latest
+    container_name: digi-digiquant-runner
+    profiles: [quant, core, all]
+    env_file: .env
+    environment:
+      PYTHONUNBUFFERED: "1"
+    depends_on:
+      digikey:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz').read()"
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ─── digiquant MCP server (optional: run with docker compose --profile quant up) ───
+  # Backs the DigiQuantMcpContainer class in scripts/selfhost/container_shim.ts,
+  # which answers 503 for that class until a compose service publishes 8767.
+  # FastMCP over streamable-http; the entrypoint defaults to DIGIQUANT_MCP_PORT
+  # 8767, the port the shim routes to. The host must be 0.0.0.0 inside the
+  # container, or the shim cannot reach it (same reason as zammad-mcp below).
+  # No healthcheck: streamable-http has no plain GET probe. MCP reachability is
+  # checked by the tools/list probe in the self-host health gate (slice S7).
+  digiquant-mcp:
+    build:
+      context: .
+      dockerfile: digiquant/Dockerfile
+    image: digi-digiquant-mcp:latest
+    container_name: digi-digiquant-mcp
+    # `core` added because scripts/localstack/contracts.py runs the
+    # mcp-tools-list probe in `core`, `quant` and `all`.
+    profiles:
+      - quant
+      - core
+      - all
+    ports:
+      - "127.0.0.1:8767:8767"
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DIGIQUANT_MCP_HOST=0.0.0.0
+      - DIGIQUANT_MCP_PORT=8767
+      - DIGIQUANT_DATA_DIR=/app/data
+      - DIGIKEY_JWKS_URL=${DIGIKEY_JWKS_URL:-http://digikey:8005/.well-known/jwks.json}
+    volumes:
+      - ./digiquant/data:/app/data:ro
+    depends_on:
+      digikey:
+        condition: service_healthy
+    command: ["python", "-m", "digiquant.mcp_server", "--host", "0.0.0.0", "--port", "8767"]
+
+  # ─── zammad-mcp: read-only Zammad helpdesk MCP for the OCC embed (profile: zammad-mcp) ───
+  # Operator MCP server for the occ tenant (config/examples/occ-embed.yaml,
+  # `mcp.servers[].url: http://zammad-mcp:8770/mcp`): URLs stay on the BFF, the
+  # token travels as the raw Authorization value via tokenEnv (#3841). The
+  # dotless name is dialable by digigraph's remote-MCP guard; loopback is not
+  # (#3879). Zammad has no Bearer scheme — auth rides as `Token token=<x>`.
+  zammad-mcp:
+    build:
+      context: .
+      dockerfile: scripts/zammad_mcp/Dockerfile.mcp
+    image: digi-zammad-mcp:latest
+    container_name: digi-zammad-mcp
+    profiles:
+      - zammad-mcp
+      - core
+      - all
+    ports:
+      - "127.0.0.1:8770:8770"
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - ZAMMAD_BASE_URL=${ZAMMAD_BASE_URL:-https://ticket.sitaas.de}
+      # ZAMMAD_API_TOKEN arrives via env_file (.env): the raw token or the full
+      # `Token token=<x>` header value. Server-side only — never committed.
+      - ZAMMAD_MCP_HOST=0.0.0.0
+      # digigraph dials `http://zammad-mcp:8770/mcp`; FastMCP's DNS-rebinding
+      # guard rejects the non-localhost Host header unless it is allowlisted.
+      - ZAMMAD_MCP_ALLOWED_HOSTS=zammad-mcp
+      # Oversized retrievals go to the DigiChat artifact store instead of a
+      # spool inside this container (DIG-2785). The ingest URL is the house
+      # in-network idiom: service name + the digichat CONTAINER port 3000
+      # (3005 is only the host publish port), same shape as DIGIGRAPH_INTERNAL_URL.
+      - DIGICHAT_ARTIFACT_INGEST_URL=${DIGICHAT_ARTIFACT_INGEST_URL:-http://digichat:3000/api/artifact-ingest}
+      # Empty by default, and honestly so: the conversation is per-session and
+      # the grant is issued per conversation, so no static default can name a
+      # live one. With any of the three below unset this container writes
+      # nothing, and the tools fall back to rendering the rows in full.
+      - DIGICHAT_ARTIFACT_CONVERSATION=${DIGICHAT_ARTIFACT_CONVERSATION:-}
+      - DIGICHAT_ARTIFACT_GRANT=${DIGICHAT_ARTIFACT_GRANT:-}
+
+  # ─── Phase 3: Heartbeat (run with: docker compose --profile heartbeat up) ───
+  heartbeat:
+    build:
+      context: .
+      dockerfile: digiclaw/Dockerfile
+    image: digi-digiclaw:latest
+    container_name: digi-heartbeat
+    profiles:
+      - heartbeat
+      - all
+    env_file:
+      - .env
+    environment:
+      - DIGIGRAPH_URL=http://digigraph:8000
+      - DIGIQUANT_URL=http://digiquant:8001
+      - DIGISEARCH_URL=http://digisearch:8002
+      - DIGIKEY_URL=${DIGIKEY_URL:-http://digikey:8005}
+      - DIGICLAW_DIGIKEY_API_KEY=${DIGICLAW_DIGIKEY_API_KEY:-}
+      - DIGIQUANT_DATA_DIR=/app/data
+      - AUDIT_LOG_PATH=/audit/events.jsonl
+      - DIGI_WORKSPACE=/workspace
+      # Phase C tick (#4065): agents come from the mounted repo, scheduler state
+      # from the digiclaw_state volume (DIGI_WORKSPACE itself is read-only).
+      - DIGICLAW_AGENTS_DIR=/workspace/digiclaw/agents
+      - DIGICLAW_SCHEDULER_STATE=/state/scheduler_state.json
+    volumes:
+      - ./digiquant/results/audit:/audit
+      - ./:/workspace:ro
+      - digiclaw_state:/state
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        # `schedule start` is idempotent when the agent is already running (exit 0,
+        # re-arms it), so `|| exit 1` turns only real bootstrap failures into a loud exit.
+        digiclaw schedule start web-watch-tick || exit 1
+        while true; do python -m digiclaw; sleep 1800; done &
+        while true; do digiclaw schedule tick; sleep 60; done
+    depends_on:
+      digigraph:
+        condition: service_healthy
+      digiquant:
+        condition: service_healthy
+
+  # ─── digichat: Next.js BFF + React UI (profile: digichat) ───
+  digichat-db:
+    image: postgres:16-alpine
+    container_name: digi-digichat-db
+    # Paired with `digichat`; both follow scripts/localstack/contracts.py, which
+    # probes digichat's 3000 /api/health in the `core` and `chat` profiles.
+    profiles:
+      - digichat
+      # chat group (S4)
+      - core
+      - chat
+      - all
+    environment:
+      POSTGRES_USER: digichat
+      POSTGRES_PASSWORD: ${DIGICHAT_POSTGRES_PASSWORD:-digichat}
+      POSTGRES_DB: digichat
+    volumes:
+      - digichat_pg:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U digichat -d digichat"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  digichat:
+    build:
+      # Repo-root context: digichat is an npm workspace member; its lockfile and
+      # the private @digithings/design package only exist at the root (#675).
+      context: .
+      dockerfile: apps/digichat/Dockerfile
+    image: digi-digichat:latest
+    container_name: digi-digichat
+    # `core` and `chat` mirror scripts/localstack/contracts.py (3000 /api/health
+    # is probed in those profiles). `digichat` is kept for the old spelling.
+    profiles:
+      - digichat
+      - core
+      - chat
+      - all
+    # Bind host: default loopback; set DIGICHAT_PUBLISH_HOST=0.0.0.0 in .env for LAN (see SECURITY.md).
+    ports:
+      - "${DIGICHAT_PUBLISH_HOST:-127.0.0.1}:${DIGICHAT_PUBLISH_PORT:-3005}:3000"
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      # Deny-by-default. Set AUTH_TRUST_HOST=true in .env ONLY when digichat is
+      # behind a trusted reverse proxy that sets X-Forwarded-Host; always pin
+      # AUTH_URL to the public origin as well (see apps/digichat/ARCHITECTURE.md §6).
+      - AUTH_TRUST_HOST=${AUTH_TRUST_HOST:-false}
+      # Required: no predictable fallback. Local dev gets a placeholder from
+      # .env.example; production must generate one: openssl rand -base64 32
+      - AUTH_SECRET=${AUTH_SECRET:?set AUTH_SECRET (openssl rand -base64 32)}
+      # Must match the origin you open in the browser (host + publish port).
+      - AUTH_URL=${AUTH_URL:-http://127.0.0.1:${DIGICHAT_PUBLISH_PORT:-3005}}
+      - DIGICHAT_DATABASE_URL=postgresql://digichat:${DIGICHAT_POSTGRES_PASSWORD:-digichat}@digichat-db:5432/digichat
+      - DIGIGRAPH_INTERNAL_URL=http://digigraph:8000
+      - DIGIQUANT_INTERNAL_URL=http://digiquant:8001
+      - DIGITRACE_INTERNAL_URL=http://digitrace:8003
+      - DIGISEARCH_INTERNAL_URL=http://digisearch:8002
+      - DIGIGRAPH_UPSTREAM_API_KEY=${DIGIGRAPH_UPSTREAM_API_KEY:-}
+      - DIGIKEY_URL=${DIGIKEY_URL:-http://digikey:8005}
+      - DIGIKEY_BFF_TOKEN=${DIGIKEY_BFF_TOKEN:-}
+      - DIGICHAT_AUTO_MIGRATE=1
+      # Catalog template: DIGICHAT_CHROME_SKIN=claude
+      # or DIGICHAT_CONFIG_PATH=/app/config/examples/skins/claude.yaml (baked in image)
+      - DIGICHAT_CONFIG_PATH=${DIGICHAT_CONFIG_PATH:-/app/config/digichat.yaml}
+      - DIGICHAT_CHROME_SKIN=${DIGICHAT_CHROME_SKIN:-}
+    # Mounts the source config dir (so the baked examples stay reachable).
+    # Drop a digichat.yaml here and point DIGICHAT_CONFIG_PATH at it to drive
+    # the stack from one file.
+    volumes:
+      - ./apps/digichat/config:/app/config:ro
+    depends_on:
+      digichat-db:
+        condition: service_healthy
+      digikey:
+        condition: service_healthy
+      digigraph:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:3000/api/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
+
+  # ─── Prometheus: pull-based metrics scraper (profile: observability; see ADR-0003) ───
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: digi-prometheus
+    profiles:
+      - observability
+      - all
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./docs/ops/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.listen-address=0.0.0.0:9090"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://127.0.0.1:9090/-/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ─── Grafana: metrics dashboards (profile: observability) ───
+  grafana:
+    image: grafana/grafana:latest
+    container_name: digi-grafana
+    profiles:
+      - observability
+      - all
+    ports:
+      - "127.0.0.1:3001:3000"
+    environment:
+      # No admin/admin fallback: Grafana refuses to start without a password.
+      # Set GRAFANA_ADMIN_PASSWORD in .env before `make up-observability`.
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD (observability profile)}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+    volumes:
+      - ./docs/ops/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docs/ops/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # ─── OpenTelemetry Collector (profile: otel; #222) ───
+  # Off by default. Start with: docker compose --profile otel up otel-collector
+  # Then set DIGI_OTEL_ENDPOINT=http://otel-collector:4318 in .env so services
+  # export spans via digibase.otel.setup_otel_fastapi (no-op when unset).
+  # ─── Reverse proxy: *.digithings.localhost -> the compose services, mirroring prod path routing (S4 / DIG-2772) ───
+  # Route table: infra/local-proxy/Caddyfile. Host port is configurable so it never
+  # collides with the 3000-3005 / 8000-8005 service ports on the dev Mac.
+  proxy:
+    image: caddy:2.8-alpine
+    container_name: digi-proxy
+    profiles:
+      - edge
+      - all
+    ports:
+      - "127.0.0.1:${DT_PROXY_PORT:-8088}:80"
+    volumes:
+      - ./infra/local-proxy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    # Deliberately NO depends_on: every upstream is optional, and Caddy dials lazily.
+    # A missing profile must 502 on that one route, not stop the proxy from booting.
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:2019/config/"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.109.0
+    container_name: digi-otel-collector
+    profiles:
+      - otel
+      # trace group (S4)
+      - trace
+      - all
+    command: ["--config=/etc/otelcol/config.yaml"]
+    ports:
+      - "127.0.0.1:4317:4317"   # OTLP gRPC
+      - "127.0.0.1:4318:4318"   # OTLP HTTP
+    volumes:
+      - ./docs/ops/otel/otel-collector-config.yaml:/etc/otelcol/config.yaml:ro
+
+
+volumes:
+  ollama_data:
+  omniroute_data:
+  digichat_pg:
+  digikey_data:
+  digisearch_chroma:
+  digisearch_monitors:
+  digivault_data:
+  digiclaw_state:
+  prometheus_data:
+  grafana_data:
+  caddy_data:
+  caddy_config:

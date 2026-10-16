@@ -1,0 +1,46 @@
+# Refresh docs/agent-backlog/generated-snapshot.md from open agent-task issues.
+# Production clock: Cloudflare Worker digithings-cron (apps/digithings-cron). Schedule removed #3579.
+name: "Agent: backlog snapshot"
+
+on:
+  workflow_dispatch:
+    inputs:
+      start_key:
+        description: "Dedupe key from digithings-cron: <job.id>:<scheduledTime>. Blank when dispatched by hand."
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    # DIG-248: CI-read secrets live at `cron` environment scope, not repo/org scope.
+    environment: cron
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: develop
+
+      - name: Generate snapshot
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/agent_backlog_snapshot.py
+
+      - name: Open PR if changed
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.DIGITHINGS_PROJECT_TOKEN || github.token }}
+          commit-message: "chore(docs): refresh agent backlog snapshot"
+          branch: bot/agent-backlog-snapshot
+          base: develop
+          title: "chore(docs): refresh agent backlog snapshot"
+          body: |
+            Auto-generated weekly refresh of `docs/agent-backlog/generated-snapshot.md`.
+
+            Triggered by the [Agent backlog snapshot](../actions/workflows/agent-backlog-snapshot.yml) scheduled workflow.
+          labels: "automerge-docs"
+          add-paths: docs/agent-backlog/generated-snapshot.md
+          delete-branch: true

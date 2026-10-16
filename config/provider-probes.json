@@ -1,0 +1,64 @@
+{
+  "_comment": [
+    "Providers the weekly provider review live-probes, and the model each probe sends.",
+    "Moved out of scripts/provider_review/probe.py in #5029 so a probe model is data,",
+    "not a literal in code: editing a model here is a one-line diff with no code review",
+    "of the probing logic attached to it.",
+    "",
+    "base_url      OpenAI-compatible base for the provider.",
+    "api_key_env   GitHub org secret holding the key (scripts/provider_review/probe.py).",
+    "model         The model the probe sends PROBE_PROMPT to. It must answer with a",
+    "              short string, so pick a cheap fast model, not the provider's flagship.",
+    "",
+    "The list is deliberately not derived from config/model-catalog.json: that catalog",
+    "carries first-party provider metadata and has no row for an OpenAI-compatible",
+    "gateway or a free-tier route, so deriving the probe list from it would silently",
+    "drop providers. Adding a provider here is a deliberate act.",
+    "",
+    "github_models was removed — platform fully retired 2026-07-30 (#1589).",
+    "tests/provider_review/test_probe.py pins the provider set, so removing one is a",
+    "test change too, which is the point."
+  ],
+  "providers": {
+    "gemini": {
+      "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
+      "api_key_env": "GEMINI_API_KEY",
+      "model": "gemini-2.5-flash"
+    },
+    "groq": {
+      "base_url": "https://api.groq.com/openai/v1",
+      "api_key_env": "GROQ_API_KEY",
+      "model": "llama-3.3-70b-versatile"
+    },
+    "cerebras": {
+      "base_url": "https://api.cerebras.ai/v1",
+      "api_key_env": "CEREBRAS_API_KEY",
+      "model": "llama-3.3-70b"
+    },
+    "mistral": {
+      "base_url": "https://api.mistral.ai/v1",
+      "api_key_env": "MISTRAL_API_KEY",
+      "model": "mistral-small-latest"
+    },
+    "nvidia_nim": {
+      "base_url": "https://integrate.api.nvidia.com/v1",
+      "api_key_env": "NVIDIA_API_KEY",
+      "model": "meta/llama-3.3-70b-instruct"
+    },
+    "ollama_cloud": {
+      "base_url": "https://ollama.com/v1",
+      "api_key_env": "OLLAMA_API_KEY",
+      "model": "rnj-1:cloud"
+    },
+    "openrouter": {
+      "base_url": "https://openrouter.ai/api/v1",
+      "api_key_env": "OPENROUTER_API_KEY",
+      "model": "meta-llama/llama-3.3-70b-instruct:free"
+    },
+    "deepseek": {
+      "base_url": "https://api.deepseek.com/v1",
+      "api_key_env": "DEEPSEEK_API_KEY",
+      "model": "deepseek-chat"
+    }
+  }
+}

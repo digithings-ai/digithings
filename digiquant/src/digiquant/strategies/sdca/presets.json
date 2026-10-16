@@ -1,0 +1,66 @@
+{
+  "conservative_hold": {
+    "description": "Gentle, long-only accumulation. Buys a small % of cash only when risk is low-to-mid; stops buying by the dead zone. Never sells (sell_max_rate=0). Authored as SdcaCurveShape parameters, not 21 free nodes.",
+    "long_only": true,
+    "shape": {
+      "buy_max_rate": 3.0,
+      "buy_knee_risk": 40.0,
+      "sell_knee_risk": 100.0,
+      "sell_max_rate": 0.0,
+      "buy_curvature": 1.0,
+      "sell_curvature": 1.0
+    }
+  },
+  "balanced": {
+    "description": "Moderate, long-only accumulation across a wider low-to-mid risk band, tapering to zero at the dead zone. Never sells. Authored as SdcaCurveShape parameters, not 21 free nodes.",
+    "long_only": true,
+    "shape": {
+      "buy_max_rate": 8.0,
+      "buy_knee_risk": 45.0,
+      "sell_knee_risk": 100.0,
+      "sell_max_rate": 0.0,
+      "buy_curvature": 1.0,
+      "sell_curvature": 1.0
+    }
+  },
+  "aggressive_accumulate": {
+    "description": "Aggressive, long-only accumulation: high buy rates at low risk, decaying through mid risk. Never sells. Authored as SdcaCurveShape parameters, not 21 free nodes.",
+    "long_only": true,
+    "shape": {
+      "buy_max_rate": 15.0,
+      "buy_knee_risk": 55.0,
+      "sell_knee_risk": 100.0,
+      "sell_max_rate": 0.0,
+      "buy_curvature": 1.0,
+      "sell_curvature": 1.0
+    }
+  },
+  "accumulate_and_distribute": {
+    "description": "Full accumulation + distribution: buys through low-to-mid risk, holds flat through the value zone, sells into high risk. BTC-reference personality encoded as SdcaCurveShape (sell_curvature=2.0 back-loads distribution). Not optimized.",
+    "long_only": false,
+    "shape": {
+      "buy_max_rate": 10.0,
+      "buy_knee_risk": 35.0,
+      "sell_knee_risk": 80.0,
+      "sell_max_rate": 10.0,
+      "buy_curvature": 1.0,
+      "sell_curvature": 2.0
+    }
+  },
+  "btc_optimized": {
+    "description": "Periodic cycle-4 candidate (robust worst-case-vs-flat tiered search on the live 5-weight index, 2026-09-28; OOS +43.21% vs flat DCA, beats live and risk50-linear). Full parity gate NOT cleared: fold 1 vetoed on max_dd 51.84 vs 50 cap, sensitivity unstable 5.62 (worst_neighbor buy_knee_risk). Promoted to the live preset on owner accept 2026-09-29 with those bars overridden on record. Detail: digiquant/.scratch/periodic_cycle_4.json. Do not --push-supabase from the agent environment.",
+    "long_only": false,
+    "shape": {
+      "buy_max_rate": 35.0,
+      "buy_knee_risk": 45.0,
+      "sell_knee_risk": 50.0,
+      "sell_max_rate": 30.0,
+      "buy_curvature": 1.5,
+      "sell_curvature": 2.5,
+      "buy_mid_knee_risk": 15.0,
+      "buy_mid_curvature": 1.0,
+      "sell_mid_knee_risk": 85.0,
+      "sell_mid_curvature": 1.0
+    }
+  }
+}

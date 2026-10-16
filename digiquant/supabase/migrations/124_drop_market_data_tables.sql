@@ -1,0 +1,40 @@
+-- 124_drop_market_data_tables.sql
+--
+-- Run with:  supabase db push   (or apply via MCP against the core project).
+-- Unwrapped on purpose: db-migrate.yml applies the file + ledger in one
+-- transaction. Do not write an unbackticked begin-statement in this file
+-- (comments included) — that grep drops the wrapping transaction.
+--
+-- DEFERRED (#3951, 2026-09-13): the R2 market-data cutover (#3780, spec §7.4)
+-- shipped this file as the point of no return, but the on-cron Supabase readers
+-- were NOT migrated to the R2 read helpers. Dropping price_history /
+-- price_technicals would break, under DIGIQUANT_MARKET_DATA_BACKEND=r2:
+--   * execute_at_open.py            (at-open fill reads price_history.open)
+--   * refresh_performance_metrics.py
+--   * verify_nav_replay.py
+--   * finalize_period_accounting.py
+--   * fill-entry-prices.py
+-- plus the research freshness/close probes in research/supabase_io.py and
+-- forecast_outcomes.py. The tables are therefore RETAINED until those readers
+-- have R2 seams with tests (tracked in #3951). The DROPs below are commented
+-- out on purpose: this file must stay a no-op.
+--
+-- IMPORTANT — do NOT un-comment the DROPs in this file later. db-migrate.yml
+-- records every executed file in olympus_schema_migrations by basename; once
+-- this no-op runs it is ledgered as applied and every future edit is silently
+-- skipped. The real drop MUST land as a NEW numbered migration file (e.g.
+-- 126_drop_market_data_tables.sql) once the readers are migrated — never by
+-- re-editing 124. Likewise do not "restore the drop assertions" here; the new
+-- file gets its own test.
+--
+-- This correction lands before the ledger ever applied 124: the last db-migrate
+-- run on main predates #3840, so no production rollback or restore-from-
+-- generation is needed. Post-cutover rollback semantics (restore-from-generation
+-- + replay) apply to the future drop migration.
+--
+-- CARVE-OUT (ruling 2026-09-09): macro_series_observations is NOT dropped — it
+-- remains the sole store for fedprob/bitview series, which have no R2 home yet
+-- (Task 7b review). R2 homes for those series are future work outside this epic.
+--
+-- DROP TABLE IF EXISTS price_history;
+-- DROP TABLE IF EXISTS price_technicals;
