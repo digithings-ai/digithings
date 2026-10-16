@@ -113,7 +113,7 @@ def _parse_llm_json_object(content: str) -> dict[str, Any]:
         if isinstance(obj, dict):
             return obj
     except json.JSONDecodeError:
-        pass
+        logger.debug("LLM output did not parse as JSON at offset 0; retrying from first brace")
     start = s.find("{")
     if start == -1:
         raise json.JSONDecodeError("No JSON object found in model response", s, 0)
@@ -228,7 +228,7 @@ def _is_likely_network_failure(exc: Exception) -> bool:
         if isinstance(exc, _OpenAIAPIConnectionError):
             return True
     except ImportError:
-        pass
+        logger.debug("openai package not installed; skipping openai transient-error check")
     try:
         import httpx
 
@@ -238,7 +238,7 @@ def _is_likely_network_failure(exc: Exception) -> bool:
         ):
             return True
     except ImportError:
-        pass
+        logger.debug("httpx package not installed; skipping httpx transient-error check")
     return False
 
 
