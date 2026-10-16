@@ -418,13 +418,15 @@ def test_only_honest_decisions_are_reachable_through_the_screen(screen: None) ->
     category without a screen that returned one.
     """
     reached = set()
-    for messages in (CLEAN_MESSAGES, REFUSING_MESSAGES):
+    for messages, expect_refusal in ((CLEAN_MESSAGES, False), (REFUSING_MESSAGES, True)):
         fake = _fake_client()
         client = client_mod.screened_client(fake)
+        refused = False
         try:
             client.chat.completions.create(model="gpt-4o-mini", messages=list(messages))
         except client_mod.Art9EgressRefused:
-            pass
+            refused = True
+        assert refused == expect_refusal
         decision, categories = client_mod.client_screen_fields(client)
         assert (categories == ()) == (decision is EgressDecision.PASS)
         reached.add(decision)

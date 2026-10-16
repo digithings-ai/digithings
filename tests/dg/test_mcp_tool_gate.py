@@ -214,6 +214,8 @@ def test_decision_cannot_substitute_the_payload(transport, audit):
     parameters = inspect.signature(registry.decide_mcp_call).parameters
     assert "tool" not in parameters
     assert "args" not in parameters
+    # code-quality #3008 (py/call/wrong-named-argument): intentional negative
+    # test — stray kwargs must be rejected with TypeError (see asserts above).
     with pytest.raises(TypeError):
         registry.decide_mcp_call(
             pending_id,

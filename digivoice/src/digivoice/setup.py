@@ -155,6 +155,8 @@ def render_setup_overview(settings: VoiceSettings, paths: VoicePaths) -> str:
         f"  tts_voice ............... {settings.tts_voice or '(auto / DIGIVOICE_PIPER_VOICE)'}",
         "",
         "— Post-process —",
+        # Intentional implicit concatenation (CodeQL #2821): one sentence
+        # wrapped for line length; no comma is missing.
         "  Clean up after dictation lightly fixes grammar and spelling when on; "
         "off pastes them as spoken. It does not add content.",
         "  Select a suggested local model to download and wire it. Never a cloud URL.",
@@ -199,6 +201,8 @@ def render_setup_overview(settings: VoiceSettings, paths: VoicePaths) -> str:
         )
     lines += [
         "",
+        # Intentional implicit concatenation (CodeQL #2822): one sentence
+        # wrapped for line length; no comma is missing.
         "Drive without a TTY: `digivoice setup --print` (or "
         "DIGIVOICE_SETUP_NONINTERACTIVE=1), `digivoice setup --json`, "
         "or `digivoice settings set <key> <value>`.",

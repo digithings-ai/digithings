@@ -140,6 +140,8 @@ def _clear_stop_file(stop_file: Path) -> None:
     try:
         stop_file.unlink(missing_ok=True)
     except OSError:
+        # Best effort: missing_ok covers absence; a concurrent removal race
+        # must not fail the stop.
         pass
 
 
@@ -149,6 +151,8 @@ def discard_wav(wav: str | Path | None) -> None:
     try:
         Path(wav).unlink(missing_ok=True)
     except OSError:
+        # Best effort: discarding a best-effort recording must not fail
+        # the command.
         pass
 
 
@@ -193,6 +197,8 @@ def _terminate_recorder(proc: subprocess.Popen[str]) -> None:
             try:
                 proc.kill()
             except (ProcessLookupError, OSError):
+                # Already gone: the SIGKILL target exited between the killpg
+                # attempt and the fallback.
                 pass
         proc.wait(timeout=2.0)
 
