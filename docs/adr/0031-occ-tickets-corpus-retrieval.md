@@ -57,6 +57,10 @@ and 86 metadata display names to 0. The board rejected it.
 
 ## Decision
 
+**No PII masking: the invite link is the only gate (Chris, 9 Oct, reaffirmed 16 Oct).**
+Do not add a masker, a redaction pass, or a PII fixture for OCC, digichat, digisearch,
+or Zammad ticket text. Secret scrubbing and gitleaks are a different control and stay.
+
 **1. No masking. The corpus is removed, not filtered.**
 PRs #5159 and #5148 are closed unmerged. No masking code exists on `develop` or on `main` and
 none ever did, so nothing needs reverting. Instead of redacting the corpus, the `occ_tickets`

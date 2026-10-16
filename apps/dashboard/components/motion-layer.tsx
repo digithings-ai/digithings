@@ -43,6 +43,8 @@ export default function MotionLayer() {
     const start = () => {
       root.classList.add("motion-on");
 
+      // CodeQL js/superfluous-trailing-arguments false positive: the DOM
+      // IntersectionObserver constructor takes (callback, options?) — both args are consumed.
       io = new IntersectionObserver(
         (entries) => {
           for (const e of entries) {

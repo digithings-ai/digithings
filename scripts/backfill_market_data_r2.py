@@ -255,8 +255,10 @@ def _pg_rollback(conn: Any) -> None:
     """Best-effort rollback so one dataset's error never poisons the next (#4621)."""
     try:
         conn.rollback()
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001 - best-effort cleanup; any rollback error is noise
+        # The connection is already broken; the dataset error being handled
+        # (not this cleanup failure) is what the caller reports.
+        print(f"warning: rollback failed ({type(exc).__name__}): {exc}", file=sys.stderr)
 
 
 def _dict_rows(conn: Any, sql: str, params: tuple[Any, ...]) -> list[dict[str, Any]]:
