@@ -374,6 +374,12 @@ export const JOBS: readonly Job[] = [
   }),
   wd("agent-backlog-snapshot", "13 6 * * MON", MONOREPO, "agent-backlog-snapshot.yml"),
   wd("ci-pr-hygiene", "21 6 * * *", MONOREPO, "ci-pr-hygiene.yml"),
+  // DIG-1578: daily census of remote branches carrying no open PR whose head is
+  // over 10 days old (docs/ops/branch-hygiene-policy.md §6.2 item 2). Report only —
+  // it never deletes and never gates CI; deletion is the tiered run on DIG-1575 and
+  // the rebuild stop is the branch-filtered push triggers, pinned in
+  // tests/scripts/test_branch_age_guard.py. Off-grid minute, siblings at :41/:33/:37.
+  wd("branch-age-guard", "29 6 * * *", MONOREPO, "branch-age-guard.yml"),
   wd("refresh-repo-activity", "10 6 * * MON", MONOREPO, "refresh-repo-activity.yml"),
   wd(
     "project-enforce-assignment",

@@ -77,6 +77,7 @@ crons = [
   "11 7 * * *",        # agent-pr-finalizer
   "13 6 * * MON",      # agent-backlog-snapshot
   "21 6 * * *",        # ci-pr-hygiene
+  "29 6 * * *",        # branch-age-guard (DIG-1578)
   "10 6 * * MON",      # refresh-repo-activity
   "23 9 * * *",        # project-enforce-assignment
   "27 7 * * *",        # smoke-stack
