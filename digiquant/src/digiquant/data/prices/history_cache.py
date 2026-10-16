@@ -35,9 +35,14 @@ def is_safe_ticker(ticker: str) -> bool:
     return isinstance(ticker, str) and _TICKER_RE.fullmatch(ticker) is not None
 
 
+def _unsafe_ticker(ticker: str) -> ValueError:
+    """One construction site for the cache-path refusal (keeps the four legs identical)."""
+    return ValueError(f"unsafe ticker for cache path: {ticker!r}")
+
+
 def cache_path(ticker: str, cache_dir: Path | str = DEFAULT_CACHE_DIR) -> Path:
     if not is_safe_ticker(ticker):
-        raise ValueError(f"unsafe ticker for cache path: {ticker!r}")
+        raise _unsafe_ticker(ticker)
     dest = Path(cache_dir) / f"{ticker}.csv"
     # Containment, CodeQL-canonical form: normalize via resolve(), then require
     # the result to sit inside the resolved cache dir (relative_to raises
@@ -48,13 +53,13 @@ def cache_path(ticker: str, cache_dir: Path | str = DEFAULT_CACHE_DIR) -> Path:
     try:
         resolved = dest.resolve()
     except OSError as exc:
-        raise ValueError(f"unsafe ticker for cache path: {ticker!r}") from exc
+        raise _unsafe_ticker(ticker) from exc
     try:
         resolved.relative_to(base)
     except ValueError:
-        raise ValueError(f"unsafe ticker for cache path: {ticker!r}")
+        raise _unsafe_ticker(ticker)
     if resolved.parent != base:
-        raise ValueError(f"unsafe ticker for cache path: {ticker!r}")
+        raise _unsafe_ticker(ticker)
     return dest
 
 
