@@ -53,7 +53,8 @@ export const DIGI_CHAT_BOOT_STEP_EVENT = "digichat:boot-step";
 /**
  * Real boot milestones the app reports.
  * `services` lands once every sleep-on-idle backend the chat needs has
- * answered its warm-up probe.
+ * answered its warm-up probe. The iframe host reports that step.
+ */
  */
 export type DigichatBootStep = "config" | "runtime" | "services";
 
