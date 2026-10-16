@@ -92,7 +92,8 @@ export function isNavSeriesSeam(
   if (row.series_seam === true) return true;
   if (prevSource == null) return false;
   const source = row.source ?? null;
-  return source != null && prevSource != null && source !== prevSource;
+  // `prevSource` is non-null here (early return above); only `source` needs the check.
+  return source != null && source !== prevSource;
 }
 
 /**

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import uuid
 from queue import Full, Queue
 from threading import Event
@@ -123,7 +124,7 @@ def _clip_scalar(val: Any) -> Any | None:
     if isinstance(val, bool):
         return val
     if isinstance(val, int | float):
-        return val if abs(val) != float("inf") and val == val else None
+        return val if math.isfinite(val) else None
     return None
 
 

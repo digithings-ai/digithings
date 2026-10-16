@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import json
+import math
 from datetime import date
 from pathlib import Path
 
@@ -183,7 +184,7 @@ class TestGenericTechnicalsFromAnyOhlcv:
         finite = [
             (float(a), float(b))
             for a, b in zip(default.to_list(), slower.to_list(), strict=True)
-            if a is not None and b is not None and a == a and b == b
+            if a is not None and b is not None and not math.isnan(a) and not math.isnan(b)
         ]
         assert len(finite) > 10
         assert any(abs(a - b) > 1e-6 for a, b in finite)
@@ -290,12 +291,14 @@ class TestOscillatorWarmupIsLeadingGap:
         close = pl.Series([100.0 + 0.05 * i for i in range(n)])
         z = weekly_rsi_z(dates, close)
         values = z.to_list()
-        first_finite = next(i for i, v in enumerate(values) if v is not None and v == v)
+        first_finite = next(i for i, v in enumerate(values) if v is not None and not math.isnan(v))
         warmup = documented_warmup_calendar_days()
         assert first_finite <= warmup
         assert first_finite < 200
         assert dates[first_finite].year == 2015
         assert values[-1] is not None
         leading_nulls = first_finite
-        trailing_finite = sum(1 for v in values[first_finite:] if v is not None and v == v)
+        trailing_finite = sum(
+            1 for v in values[first_finite:] if v is not None and not math.isnan(v)
+        )
         assert trailing_finite == n - leading_nulls

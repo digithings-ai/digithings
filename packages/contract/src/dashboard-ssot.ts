@@ -17,7 +17,7 @@ function latestMatching(
 }
 
 function queryErrorDetail(error: unknown): string {
-  if (typeof error === 'object' && error && 'message' in error) {
+  if (typeof error === 'object' && error !== null && 'message' in error) {
     return String(error.message);
   }
   return String(error);
