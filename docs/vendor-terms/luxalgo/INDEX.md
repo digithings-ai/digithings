@@ -1,7 +1,7 @@
 # LuxAlgo — terms record
 
 **Vendor:** LuxAlgo Global, LLC (Delaware)
-**Classification:** **CC0-1.0 CONFIRMED for the trackers dumps (Security, 2026-10-06)** — five families confirmed · **one Prohibited** (`short-volume`, Counsel 2026-10-06) · three items open with Counsel · see [Classification status](#classification-status)
+**Classification:** **CC0-1.0 CONFIRMED for the trackers dumps (Security, 2026-10-06)** — five families confirmed · **one Prohibited** (`short-volume`, Counsel 2026-10-06) · **hosted-MCP access Permitted; rendered Library values Prohibited absent express permission (Counsel DIG-3600); tier Unclear, likely Enterprise; free tier Unclear, treat as not permitted for production** · see [Classification status](#classification-status)
 **Record opened:** 2026-10-06 · **CTO**
 **Related:** DIG-1318 · DIG-1447 (three live trackers tools) · DIG-1251 (Counsel's ruling that *bounds* these tools — it is not their origin, and their absence from `REFUSED_TOOLS` is not a clearance)
 
@@ -420,6 +420,12 @@ the licence and theirs is about what we may do with it.
    answer it for anything the vendor delivers over the hosted MCP.
 3. Is the free/anonymous entitlement tier itself permitted for our use, given the
    exhaustion clause?
+4. **Hosted-MCP access method: Permitted (Security, 2026-10-14, DIG-1463).**
+   The Library (8) and Edge (3) tools run over the vendor's own documented
+   hosted interface: no replayed session, keys local, no brokerage password
+   reaches the vendor. That is the permitted shape. It does not answer item 2
+   (redistribution of rendered values) or item 3 (free-tier permissibility),
+   both of which stay Unclear with Counsel.
 
 Adjacent, and tracked separately: **DIG-1447** — three `luxalgo_trackers_*` tools
 are live, declared `free`, and absent from `REFUSED_TOOLS` in
@@ -428,6 +434,27 @@ access-log check on `POST /v1/orchestrator_invoke` for trackers-tool invocation,
 which has not been run because nobody with log access has run it. That question
 is about who called the tool, not about whether the licence permits it, and it
 does not block this record.
+
+**Counsel recorded position (DIG-3600, 2026-10-14, no outreach, no new primary
+retrieval; positions rest on the quoted clauses above):**
+- **Q2a — rendering Library values: PROHIBITED absent express permission.**
+  Rendering LuxAlgo-sourced Library values inside our product — even with
+  attribution — reproduces, distributes and publicly displays vendor data;
+  attribution does not convert distribution into non-distribution. Covers Library
+  surfaces over the hosted MCP only; the CC0 trackers dumps are untouched.
+- **Q2b — which tier: UNCLEAR, do not proceed on a Business-Tier self-serve
+  assumption (likely Enterprise Agreement required).** Whether hosted-MCP-
+  delivered Library values fall inside the §2.2 "Software" grant is not
+  established, and our scale against the §1.6 caps is unmeasured. Changes when
+  both are confirmed; treat Enterprise Agreement as the route meanwhile.
+- **Q3 — free/anonymous tier: UNCLEAR, treated as NOT PERMITTED for production
+  product use until the free-tier grant is read.** The closed-list default
+  applies; liveness (`LUXALGO_ENABLED` default ON) is not permission.
+- **Live-surface consequence, flagged not fixed here:** Library-value rendering
+  surfaces are live on `develop`, so Q2a names a live surface as
+  Prohibited-absent-permission. Gating or remediating those surfaces — and any
+  Business purchase or Enterprise negotiation — belongs to the surface owners
+  and Chris, not to this record.
 
 **No outreach.** LuxAlgo is a live vendor relationship. Nothing here contacts
 them. Any commercial licence discussion is Chris's decision.
