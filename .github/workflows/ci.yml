@@ -362,6 +362,7 @@ jobs:
   # files for committed credential-shaped values; it is stdlib-only, so no
   # install step. Shallow checkout is fine: the script reads `git ls-files`
   # on the working tree, never history.
+  # Run locally: python3 scripts/check_example_credentials.py
   example-credentials-guard:
     name: Example-credentials guard
     runs-on: ubuntu-latest
