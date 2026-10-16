@@ -238,7 +238,7 @@
       "ticket": "DIG-3689"
     },
     "apps/digichat/src/lib/embed-occ-invite-key.test.ts": {
-      "count": 5,
+      "count": 4,
       "ticket": "DIG-3689"
     },
     "apps/digichat/src/lib/embed-seed-messages.test.ts": {
@@ -380,6 +380,22 @@
     "digigraph/src/digigraph/orchestration/mcp_client.py": {
       "count": 3,
       "ticket": "DIG-3689"
+    },
+    "digigraph/src/digigraph/skill_library/find-precedent-tickets/SKILL.md": {
+      "count": 2,
+      "ticket": "DIG-3895"
+    },
+    "digigraph/src/digigraph/skill_library/guide-help-docs/SKILL.md": {
+      "count": 5,
+      "ticket": "DIG-3895"
+    },
+    "digigraph/src/digigraph/skill_library/loader.py": {
+      "count": 1,
+      "ticket": "DIG-3895"
+    },
+    "digigraph/src/digigraph/skill_library/summarize-tickets-by-topic/SKILL.md": {
+      "count": 3,
+      "ticket": "DIG-3895"
     },
     "digikey/src/digikey/cli.py": {
       "count": 1,
@@ -557,6 +573,10 @@
       "count": 12,
       "ticket": "DIG-3689"
     },
+    "docs/release/supabase-exit/caller-inventory.md": {
+      "count": 10,
+      "ticket": "DIG-2889"
+    },
     "docs/repo-split/cloudflare-deploy-map.md": {
       "count": 1,
       "ticket": "DIG-3895"
@@ -677,9 +697,9 @@
       "count": 1,
       "ticket": "DIG-3689"
     },
-    "scripts/occ_invite_key_rollout.sh": {
-      "count": 12,
-      "ticket": "DIG-3689"
+    "scripts/occ_invite_key_write.sh": {
+      "count": 11,
+      "ticket": "DIG-3697"
     },
     "scripts/r0_client_literals_baseline.json": {
       "count": 19,
@@ -712,6 +732,10 @@
     "scripts/selfhost_target.py": {
       "count": 1,
       "ticket": "DIG-3689"
+    },
+    "scripts/smoke_occ_invite_gate.sh": {
+      "count": 1,
+      "ticket": "DIG-3585"
     },
     "scripts/split/manifest.py": {
       "count": 2,
@@ -769,6 +793,10 @@
       "count": 54,
       "ticket": "DIG-3689"
     },
+    "tests/db/test_art9_false_positives.py": {
+      "count": 1,
+      "ticket": "DIG-1086"
+    },
     "tests/dg/test_api.py": {
       "count": 8,
       "ticket": "DIG-3689"
@@ -812,6 +840,10 @@
     "tests/dg/test_occ_ticket_payload_retired.py": {
       "count": 25,
       "ticket": "DIG-3689"
+    },
+    "tests/dg/test_skill_library.py": {
+      "count": 5,
+      "ticket": "DIG-3895"
     },
     "tests/dg/test_tool_allowlist.py": {
       "count": 1,
