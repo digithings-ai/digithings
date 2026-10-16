@@ -165,24 +165,43 @@ BUILTIN_CHECKS: tuple[Check, ...] = (
             '"${DIGICHAT_PUBLISH_HOST:-127.0.0.1}:${DIGICHAT_PUBLISH_PORT:-3005}:3000"'
         ),
     ),
-    # ── checks with no source we are willing to fake ────────────────────────
-    # The wrangler-dev port table is owned by S3 (PR #5353), the contract by S1.
     Check(
         name="dashboard-api",
         kind="http",
-        url=None,
+        url="http://127.0.0.1:${DT_DASHBOARD_API_PORT:-8887}/healthz",
         profiles=("core", "chat", "all"),
-        # The configured value is an ORIGIN. dashboard-api routes only
-        # /healthz, /ledger, /v1/tables/* and the MCP path; anything else
-        # falls through to errorResponse("bad_request", "unknown route")
-        # (apps/dashboard-api/src/index.ts:193). Probing the origin alone
-        # therefore returns 400 from a healthy service and the gate reports
-        # it as down. Opt in with path= rather than appending inside
-        # resolve(), which must return a requires URL exactly as configured.
-        path="/healthz",
-        source="apps/dashboard-api/src/index.ts:160 serves /healthz; :193 answers 400 on any other path",
-        requires="DT_DASHBOARD_API_URL",
+        # /healthz, never the origin. dashboard-api routes only /healthz,
+        # /ledger, /v1/tables/* and the MCP path; every other GET falls
+        # through to errorResponse("bad_request", "unknown route ...") at
+        # :244/:255, so probing the origin alone reads 400 from a healthy
+        # service and the gate reports it as down. Measured on the running
+        # local stack: 127.0.0.1:8887/ -> 400 unknown route,
+        # 127.0.0.1:8887/healthz -> 200 {"ok":true,"service":"dashboard-api"}.
+        #
+        # DIG-2697 (2026-10-15, board answer on card 2f3d600f): this row
+        # used to require DT_DASHBOARD_API_URL, which has NO producer
+        # anywhere in the repo, so resolve() returned (None, "... not set"),
+        # the check was permanently SKIPPED, and health.py counts a skipped
+        # check as a failure under REQUIRE_ALL=1 -- so that one key made
+        # the gate unreachable. A literal loopback default removes the
+        # no-producer condition instead of masking it.
+        #
+        # Only the PORT is templated, for the digichat reason: templating
+        # the host would let this gate point off the developer's machine,
+        # and test_builtin_urls_are_labelled_local_loopback requires a
+        # provably loopback default.
+        #
+        # 8887 is the measured wrangler-dev port for dashboard-api (workerd
+        # listening there, answering for this service). orchestrate.py passes
+        # no --port, so the default follows the variable rather than the
+        # worker argv. S3 still owns the full port table (PR #5353); when it
+        # lands it supersedes this default rather than replacing the row.
+        source=(
+            "apps/dashboard-api/src/index.ts:174 serves /healthz; "
+            ":244/:255 answer 400 on any other path"
+        ),
     ),
+    # ── checks with no source we are willing to fake ────────────────────────
     Check(
         name="mcp-tools-list",
         kind="jsonrpc",
