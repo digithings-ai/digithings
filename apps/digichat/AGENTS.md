@@ -39,6 +39,8 @@ Before making any change to `apps/digichat/`:
 
 Beyond root `AGENTS.md`:
 
+- **No PII masking: the invite link is the only gate (Chris, 9 Oct, reaffirmed 16 Oct).** OCC and Zammad ticket text is stored and shown as written. Do not add a masker on that path. Secret scrubbing stays.
+
 - **BFF pattern is non-negotiable**: No digigraph URL, digikey token, or upstream service credential may ever reach the browser. All upstream calls go through Next.js Route Handlers.
 - **Auth on every route except the documented few**: Every `src/app/api/` route handler must call `requireDigiChatAuth()`, except the intentionally public routes (`GET /api/health`, `GET /api/deploy/chrome`, `GET /api/embed/tenant-config`, dev-only `POST /api/baseline-chat`) and the self-authenticating ones (`POST /api/plan-proof` embed token, `/api/ecosystem/config` `auth()` session, `GET /api/mcp/oauth/callback` OAuth state cookie).
 - **SSRF guard on ecosystem endpoints**: Any user-supplied service URL must pass `isAllowedServiceUrl()` before being fetched. Never construct a fetch URL from raw user input.
