@@ -186,7 +186,7 @@ while being tree-identical to the tag.
 The branch is **not** where the release is stabilised: by the time it exists,
 that version is already on `main` and deployed. Its job is to keep carrying
 fixes for *that* version after `main` has moved on — pinned clients (self-host
-stacks, DataTap on `ghcr.io/digithings-ai/digichat:v0.9.3`) keep consuming it.
+stacks, clients pinned on `ghcr.io/digithings-ai/digichat:v0.9.3`) keep consuming it.
 
 Do not delete the branch when the next release ships. There is one branch per
 released version, and the older ones are the reason you can still patch them.

@@ -1751,7 +1751,7 @@ Healthcheck: `curl -sf http://127.0.0.1:3000/api/health`.
 | `DIGICHAT_MODEL` | digigraph model name (default: `digigraph-rag`) | Optional |
 | `DIGICHAT_BASELINE_UPSTREAM` | Dev `/baseline` proxy target (allowlisted `https://digithings.ai/api/chat` only) | Dev only |
 | `DIGICHAT_OPENWEBUI_FORMAT` | Opt-in Open WebUI format (`1` only). Default off; digichat sends `X-Response-Format: plain` | Optional |
-| `DIGICHAT_WEB_SEARCH` | First-party web-search fallback (`1` = on): lets the BFF forward `X-Digi-Enable-Web-Search` for authenticated first-party chat (null `embedConfig`) when the browser asks. Tenant embeds still need `webSearch: true`; datatap stays off | Set `1` in deploy |
+| `DIGICHAT_WEB_SEARCH` | First-party web-search fallback (`1` = on): lets the BFF forward `X-Digi-Enable-Web-Search` for authenticated first-party chat (null `embedConfig`) when the browser asks. Tenant embeds still need `webSearch: true`; non-first-party tenants stay off unless enabled | Set `1` in deploy |
 | `DIGICHAT_ENDPOINT_HOST_ALLOWLIST` | Comma-separated hosts for SSRF guard | Security hardening |
 | `DIGICHAT_LEGACY_EMBED_ENABLED` | Enable legacy generic embed for **unregistered** hosts (`1` = on). **Defaults OFF** in code, `wrangler.toml`, compose, and `.env.example`; a stock deploy must set it explicitly. **Ignored when `DIGICHAT_EMBED_TENANTS` is configured** — those unregistered hosts are refused (503). Deprecated alias: `DIGICHAT_EMBED_ENABLED` | Optional |
 | `DIGICHAT_EMBED_TOKEN` | Alternative to legacy flag: gate unregistered `/embed` on `X-Embed-Token` | Optional |
