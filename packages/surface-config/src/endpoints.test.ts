@@ -39,6 +39,19 @@ test("cloud chat uses digithings.ai; cloud mcp stays unset", () => {
   expect(() => endpoint("mcp", { DIGI_ENV: "cloud" })).toThrow(/unset/);
 });
 
+test("cloud desk and graph use the product defaults", () => {
+  expect(endpoint("desk", { DIGI_ENV: "cloud" })).toBe(
+    "https://dashboard-api.chris-stefan.workers.dev",
+  );
+  expect(endpoint("graph", { DIGI_ENV: "cloud" })).toBe("https://graph.digithings.ai");
+});
+
+test("DIGI_DESK_URL wins over the cloud desk default", () => {
+  expect(endpoint("desk", { DIGI_ENV: "cloud", DIGI_DESK_URL: "https://desk.example/" })).toBe(
+    "https://desk.example",
+  );
+});
+
 test("the local chat profile origin is already allowed by the shipped dashboard CSP", () => {
   // This pins the frame-src half of the policy. connect-src names no loopback
   // origin at all, so local fetches are a separate, pre-existing header gap and

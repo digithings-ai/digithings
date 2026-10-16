@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from digisearch.core.models import Document
 from digisearch.ingestion.base import Parser
 from digisearch.ingestion.parsers.plaintext import PlainTextParser
+
+logger = logging.getLogger(__name__)
 
 
 def _default_parsers() -> list[Parser]:
@@ -15,27 +18,27 @@ def _default_parsers() -> list[Parser]:
         from digisearch.ingestion.parsers.pdf import PDFParser
         parsers.append(PDFParser())
     except ImportError:
-        pass
+        logger.debug("optional pdf dependency missing; skipping PDFParser")
     try:
         from digisearch.ingestion.parsers.docx import DocxParser
         parsers.append(DocxParser())
     except ImportError:
-        pass
+        logger.debug("optional docx dependency missing; skipping DocxParser")
     try:
         from digisearch.ingestion.parsers.html import HTMLParser
         parsers.append(HTMLParser())
     except ImportError:
-        pass
+        logger.debug("optional html dependency missing; skipping HTMLParser")
     try:
         from digisearch.ingestion.parsers.markdown import MarkdownParser
         parsers.append(MarkdownParser())
     except ImportError:
-        pass
+        logger.debug("optional markdown dependency missing; skipping MarkdownParser")
     try:
         from digisearch.ingestion.parsers.csv import CSVParser
         parsers.append(CSVParser())
     except ImportError:
-        pass
+        logger.debug("optional csv dependency missing; skipping CSVParser")
     parsers.append(PlainTextParser())
     return parsers
 

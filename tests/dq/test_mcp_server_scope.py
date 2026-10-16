@@ -14,10 +14,10 @@ import pytest
 
 pytest.importorskip("mcp.server.fastmcp")
 
-from digiquant.data.gloomberb import session_gate
-from digiquant.data.gloomberb.session_gate import SessionGateStatus
+from digiquant.data.gloomberb.entitlements import TOOL_ENTITLEMENTS
 from digiquant.mcp_server import READ_SCOPE_TOOLS, create_mcp_server
 from digiquant.tool_names import canonical_tool_name
+from digiquant.tool_refusals import REFUSED_TOOLS
 
 from digiquant import mcp_server
 
@@ -27,39 +27,29 @@ def _advertised(names: set[str]) -> set[str]:
     return {canonical_tool_name(name) if name.startswith("digifetch_") else name for name in names}
 
 
+#: Entitlements retired with the Gloomberb session-cookie path (DIG-3907,
+#: keyless access only): never advertised on any scope.
+RETIRED_GLOOMBERB_ENTITLEMENTS = frozenset({"session", "preview", "pro"})
+
+
+def _expected_advertised(base: set[str]) -> set[str]:
+    """Scope keys minus refused tools minus retired cookie-gated tools."""
+    out = set()
+    for name in base:
+        if name in REFUSED_TOOLS:
+            continue
+        if TOOL_ENTITLEMENTS.get(name) in RETIRED_GLOOMBERB_ENTITLEMENTS:
+            continue
+        out.add(canonical_tool_name(name) if name.startswith("digifetch_") else name)
+    return out
+
+
 def _tool_names(server) -> set[str]:
     if hasattr(server, "list_tools_sync"):
         tools = server.list_tools_sync()
     else:
         tools = server._tool_manager.list_tools()
     return {t.name for t in tools}
-
-
-@pytest.fixture(autouse=True)
-def authenticated_gloomberb_session():
-    """Every test in this module is about SCOPE, not about the Gloomberb
-    advertisement gate (#2752), so the whole file runs with the gate held open
-    against a stubbed verdict and no probe on the network.
-
-    ``create_mcp_server`` imports ``session_gate_status`` inside its own body,
-    on every call, so patching the module attribute here is what the server
-    sees. Without this fixture the scope tables below would be read at 85 tools
-    instead of 126 and three tests would fail for the wrong reason. The gate
-    itself is pinned in ``test_gloomberb_session_gate.py`` and, at registration
-    level, by ``test_session_tools_disappear_without_an_authenticated_cookie``
-    at the end of this file."""
-    session_gate.reset_session_gate_cache()
-    monkey = pytest.MonkeyPatch()
-    monkey.setattr(
-        session_gate,
-        "session_gate_status",
-        lambda *args, **kwargs: SessionGateStatus(True, "ok", "authenticated for the scope tests"),
-    )
-    try:
-        yield
-    finally:
-        monkey.undo()
-        session_gate.reset_session_gate_cache()
 
 
 READ_TOOLS_EXTRA = {"digiquant_list_coinmetrics_catalog"}
@@ -204,7 +194,7 @@ COMPUTE_TOOLS = {
 def test_full_scope_is_default_and_complete():
     names = _tool_names(create_mcp_server())
     base = set(READ_SCOPE_TOOLS) | COMPUTE_TOOLS
-    assert names == _advertised(base)
+    assert names == _expected_advertised(base)
     assert not any(name.startswith("digifetch_") for name in names)
 
 
@@ -212,7 +202,7 @@ def test_full_scope_is_default_and_complete():
 def test_read_scope_exposes_only_read_tools():
     names = _tool_names(create_mcp_server(scope="read"))
     base = set(READ_SCOPE_TOOLS)
-    assert names == _advertised(base)
+    assert names == _expected_advertised(base)
     assert not (names & COMPUTE_TOOLS)
     assert not any(name.startswith("digifetch_") for name in names)
 
@@ -287,11 +277,16 @@ def test_tool_counts_pin_post_3855_surface():
     # 113 → 112: `digifetch_congress_trades` left the read scope (DIG-1057).
     assert len(READ_SCOPE_TOOLS) == 112
     assert len(COMPUTE_TOOLS) == 14
-    # 126 registrations. Each digifetch scope key is replaced by one gloomberb
+    # 126 → 85: the 41 retired session/preview/pro tools are never registered
+    # (DIG-3907). Each digifetch scope key is replaced by one gloomberb
     # name, so the list does not grow (DIG-3313). The refused congress tool
     # is absent under both prefixes.
+    gated = {
+        name for name, tier in TOOL_ENTITLEMENTS.items() if tier in RETIRED_GLOOMBERB_ENTITLEMENTS
+    }
+    assert len(gated) == 41
     names = _tool_names(create_mcp_server())
-    assert len(names) == 126
+    assert len(names) == 85
     assert not any(name.startswith("digifetch_") for name in names)
 
 
@@ -310,40 +305,20 @@ def test_congress_trades_is_refused_on_every_scope():
 
 
 @pytest.mark.unit
-def test_session_tools_disappear_without_an_authenticated_cookie():
-    """The gate is the only reason the surface can shrink below the tables.
+def test_retired_session_tools_are_never_advertised():
+    """DIG-3907: the cookie path is retired, so the session/preview/pro tools
+    leave both scopes unconditionally — no cookie, no probe, no gate.
 
-    With the cookie gone and the real gate running, exactly the
-    session/preview/pro tools leave both scopes: nothing else may, or a typo in
-    the entitlement set would silently drop the free family too. Counts come
-    from ``TOOL_ENTITLEMENTS`` rather than from a literal, so this follows the
-    vocabulary instead of restating it.
+    Counts come from ``TOOL_ENTITLEMENTS`` rather than from a literal, so this
+    follows the vocabulary instead of restating it.
     """
-    from digiquant.data.gloomberb.entitlements import TOOL_ENTITLEMENTS
-
-    session_gate.reset_session_gate_cache()
-    monkey = pytest.MonkeyPatch()
-    monkey.delenv("GLOOMBERB_SESSION_COOKIE", raising=False)
-    monkey.setattr(
-        session_gate,
-        "session_gate_status",
-        lambda *args, **kwargs: SessionGateStatus(
-            False, "no_secret", "GLOOMBERB_SESSION_COOKIE is not set"
-        ),
-    )
-    try:
-        full = _tool_names(create_mcp_server())
-        read = _tool_names(create_mcp_server(scope="read"))
-    finally:
-        monkey.undo()
-        session_gate.reset_session_gate_cache()
+    full = _tool_names(create_mcp_server())
+    read = _tool_names(create_mcp_server(scope="read"))
 
     gated = {
         name for name, tier in TOOL_ENTITLEMENTS.items() if tier in {"session", "preview", "pro"}
     }
     gated_public = gated | {canonical_tool_name(name) for name in gated}
-    from digiquant.tool_refusals import REFUSED_TOOLS
-
     free = {
         name
         for name, tier in TOOL_ENTITLEMENTS.items()
@@ -352,7 +327,7 @@ def test_session_tools_disappear_without_an_authenticated_cookie():
     venue = {name for name, tier in TOOL_ENTITLEMENTS.items() if tier == "venue_session"}
     expected_public = {canonical_tool_name(name) for name in free | venue}
 
-    assert gated, "the gate would have nothing to hide"
+    assert gated, "the retirement would have nothing to hide"
     assert not (full & gated_public), sorted(full & gated_public)[:5]
     assert not (read & gated_public), sorted(read & gated_public)[:5]
     # The free family stays on the list under the public name only.

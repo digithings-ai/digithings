@@ -21,7 +21,8 @@ export function coerceMessageContentToString(content: unknown): string {
     }
     return parts.join("");
   }
-  if (typeof content === "object" && content !== null && "text" in content) {
+  // `content` is non-null here (early return above); the object check suffices.
+  if (typeof content === "object" && "text" in content) {
     const text = (content as { text?: unknown }).text;
     return typeof text === "string" ? text : "";
   }

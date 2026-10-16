@@ -8,7 +8,8 @@ export type JobKind =
   | "container"
   | "probe"
   | "watch"
-  | "twelvex-watch";
+  | "twelvex-watch"
+  | "twelvex";
 
 export type Job = {
   id: string;
@@ -30,6 +31,8 @@ export type Job = {
   codeRef?: "main";
   /** Set when kind is "probe". Worker fetch; does not start the container. */
   probe?: "site" | "stack";
+  /** Set when kind is "twelvex". POST /run/{route} on twelvex-runner. */
+  route?: "ingest" | "heartbeat";
   /**
    * Set when kind is "watch". The service this job only READS. There is no
    * `command`: a watch job has nothing to start, and nothing to time out. Its
@@ -159,6 +162,31 @@ function cj(
     concurrency,
     timeoutSeconds,
     codeRef: "main",
+  };
+}
+
+/** twelve-x container job. workflow + ref stay so GITHUB_OVERRIDE_JOBS can still dispatch. */
+function tx(
+  id: string,
+  cron: string,
+  route: "ingest" | "heartbeat",
+  workflow: string,
+  opts: {
+    inputs?: Record<string, string>;
+    timeoutSeconds?: number;
+  } = {},
+): Job {
+  return {
+    id,
+    cron,
+    repo: TWELVE_X,
+    kind: "twelvex",
+    route,
+    workflow,
+    inputs: opts.inputs,
+    ref: DEVELOP,
+    enabled: true,
+    timeoutSeconds: opts.timeoutSeconds ?? (route === "ingest" ? 1200 : 300),
   };
 }
 
@@ -326,6 +354,12 @@ export const JOBS: readonly Job[] = [
   }),
   wd("agent-backlog-snapshot", "13 6 * * MON", MONOREPO, "agent-backlog-snapshot.yml"),
   wd("ci-pr-hygiene", "21 6 * * *", MONOREPO, "ci-pr-hygiene.yml"),
+  // DIG-1578: daily census of remote branches carrying no open PR whose head is
+  // over 10 days old (docs/ops/branch-hygiene-policy.md §6.2 item 2). Report only —
+  // it never deletes and never gates CI; deletion is the tiered run on DIG-1575 and
+  // the rebuild stop is the branch-filtered push triggers, pinned in
+  // tests/scripts/test_branch_age_guard.py. Off-grid minute, siblings at :41/:33/:37.
+  wd("branch-age-guard", "29 6 * * *", MONOREPO, "branch-age-guard.yml"),
   wd("refresh-repo-activity", "10 6 * * MON", MONOREPO, "refresh-repo-activity.yml"),
   wd(
     "project-enforce-assignment",
@@ -385,21 +419,25 @@ export const JOBS: readonly Job[] = [
   wd("twelve-x-london", "12 7 * * MON-FRI", TWELVE_X, "daily_run_london.yml"),
   // Weekday FX Hub clock; house-run-12 stays a disabled daily retry slot.
   wd("twelve-x-new-york", "17 12 * * MON-FRI", TWELVE_X, "daily_run_new_york.yml"),
-  wd("twelve-x-market-context-intraday", "4 */4 * * *", TWELVE_X, "market_context_ingest.yml", {
+  tx("twelve-x-market-context-intraday", "4 */4 * * *", "ingest", "market_context_ingest.yml", {
     inputs: { bucket: "intraday" },
+    timeoutSeconds: 1200,
   }),
-  wd("twelve-x-market-context-daily", "30 5 * * *", TWELVE_X, "market_context_ingest.yml", {
+  tx("twelve-x-market-context-daily", "30 5 * * *", "ingest", "market_context_ingest.yml", {
     inputs: { bucket: "daily" },
+    timeoutSeconds: 1200,
   }),
-  wd("twelve-x-market-context-weekly", "8 7 * * SAT", TWELVE_X, "market_context_ingest.yml", {
+  tx("twelve-x-market-context-weekly", "8 7 * * SAT", "ingest", "market_context_ingest.yml", {
     inputs: { bucket: "weekly" },
+    timeoutSeconds: 1200,
   }),
   wd("twelve-x-performance-eval", "30 17 * * MON-FRI", TWELVE_X, "performance_eval.yml"),
-  wd(
+  tx(
     "twelve-x-primemarket-heartbeat",
     "3 6,18 * * *",
-    TWELVE_X,
+    "heartbeat",
     "primemarket_session_heartbeat.yml",
+    { timeoutSeconds: 300 },
   ),
   // Gated in the Worker: most hourly ticks found nothing due and still billed a
   // private-repo Actions job. The gate only skips when every due slot is covered.

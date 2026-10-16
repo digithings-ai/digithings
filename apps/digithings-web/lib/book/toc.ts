@@ -40,9 +40,14 @@ export interface ChapterRef {
   headingCount: number;
 }
 
+/** One URL path segment. Encoding stops a slug from becoming a scheme or a query. */
+function bookSegment(raw: string): string {
+  return encodeURIComponent(raw);
+}
+
 /** The URL of a chapter page. `trailingSlash: true` in next.config needs it. */
 export function chapterHref(slug: string): string {
-  return `/book/${slug}/`;
+  return `/book/${bookSegment(slug)}/`;
 }
 
 /**
@@ -127,7 +132,7 @@ export interface ChapterWithSections extends ChapterRef {
 
 /** The URL of a section page. */
 export function sectionHref(chapter: string, slug: string): string {
-  return `/book/${chapter}/${slug}/`;
+  return `/book/${bookSegment(chapter)}/${bookSegment(slug)}/`;
 }
 
 /** Every section of the book, in reading order. */

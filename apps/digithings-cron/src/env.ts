@@ -8,6 +8,8 @@ export interface Env {
   DRY_RUN?: string;
   /** Service binding to the private digiquant-runner Worker. */
   RUNNER?: Fetcher;
+  /** Service binding to the private twelvex-runner Worker. */
+  TWELVEX_RUNNER?: Fetcher;
   /** Bearer for POST /v1/jobs on digiquant-runner. Required for kind "container". */
   RUNNER_AUTH_TOKEN?: string;
   /**
@@ -34,6 +36,7 @@ declare namespace Cloudflare {
     CRON_KICK_SECRET?: string;
     DRY_RUN?: string;
     RUNNER?: Fetcher;
+    TWELVEX_RUNNER?: Fetcher;
     RUNNER_AUTH_TOKEN?: string;
     GITHUB_OVERRIDE_JOBS?: string;
     BACKFILL_LEDGER?: DurableObjectNamespace;

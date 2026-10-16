@@ -272,11 +272,7 @@ def render_issue_body(
         f"**Threshold:** {max_age_minutes} minutes  ",
         f"**Waiting deployments:** {len(stale)}",
         "",
-        "A deployment listed here started, passed its checks, and is waiting on "
-        "human approval. Nothing ships until it is approved or rejected, and "
-        "until then **production is serving the previous build**. If the previous "
-        "build is the one carrying the fix you are waiting on, the fix is not "
-        "live.",
+        "A deployment listed here started, passed its checks, and is waiting on human approval. Nothing ships until it is approved or rejected, and until then **production is serving the previous build**. If the previous build is the one carrying the fix you are waiting on, the fix is not live.",
         "",
         "| Created | Age | State | Ref | Commit | Creator |",
         "|---|---|---|---|---|---|",
@@ -298,18 +294,13 @@ def render_issue_body(
         "",
     ]
     lines += [
-        f"   - [`{item.short_sha}` on `{item.ref}`]"
-        f"(https://github.com/{repo}/commit/{item.sha})"
-        f" — deployment [{item.deployment_id}]"
-        f"(https://github.com/{repo}/deployments/{item.deployment_id})"
+        f"   - [`{item.short_sha}` on `{item.ref}`](https://github.com/{repo}/commit/{item.sha}) — deployment [{item.deployment_id}](https://github.com/{repo}/deployments/{item.deployment_id})"
         for item in stale
     ]
     lines += [
         "",
-        "2. Approve or reject it at the environment gate — the deploy stays parked "
-        "until a human answers.",
-        "3. If this deployment is not wanted, reject it and confirm nothing newer "
-        "is also parked behind it.",
+        "2. Approve or reject it at the environment gate — the deploy stays parked until a human answers.",
+        "3. If this deployment is not wanted, reject it and confirm nothing newer is also parked behind it.",
         "",
         f"Pending deployments for `{environment}`: {f'https://github.com/{repo}/deployments'}",
     ]
@@ -552,8 +543,8 @@ def notify_email(subject: str, body: str, *, dry_run: bool) -> str:
             build_email_client,
             format_notify_not_configured,
         )
-    except ImportError as exc:
-        return f"email skipped: digiquant not importable ({exc})"
+    except ImportError:
+        return "email skipped: digiquant not importable"
     try:
         client = build_email_client()
     except NotifyNotConfiguredError as exc:
@@ -572,8 +563,8 @@ def notify_email(subject: str, body: str, *, dry_run: bool) -> str:
     try:
         client.send_message(to=recipient, subject=subject, text_body=body, html_body=html_body)
     except Exception as exc:
-        return f"email failed: {type(exc).__name__}: {exc}"
-    return f"email sent to {recipient}"
+        return f"email failed: {type(exc).__name__}"
+    return "email sent"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -647,11 +638,11 @@ def main(argv: list[str] | None = None) -> int:
         try:
             print(resolve_watchdog_issue(args.repo, token, dry_run=args.dry_run))
         except GateCheckFailed as exc:
-            # A gate that recovered but whose issue cannot be closed is worth a
-            # non-zero exit -- the monitoring state is inconsistent -- but it must
-            # not be reported as a stall.
-            print(f"recovery note failed: {exc}", file=sys.stderr)
-            return 2
+            # Best-effort recovery note (DIG-3824): the gate itself is healthy,
+            # so a failed issue lookup/close — e.g. a transient GraphQL rate
+            # limit on `gh issue list` — must not fail the watchdog run. Warn
+            # and exit 0; the next tick retries the close.
+            print(f"recovery note failed (best-effort, gate healthy): {exc}", file=sys.stderr)
         return 0
 
     body = render_issue_body(
@@ -671,17 +662,15 @@ def main(argv: list[str] | None = None) -> int:
     # The two channels are independent: neither may suppress the other. An earlier
     # draft returned early on an issue-API failure, so a GitHub outage took out the
     # email too and both channels went dark at exactly the moment they mattered.
-    issue_status = "issue not filed"
     try:
         issue_status = file_or_update_issue(args.repo, body, token, dry_run=args.dry_run)
     except GateCheckFailed as exc:
         issue_status = f"issue upsert FAILED: {exc}"
     print(issue_status)
-    print(
-        notify_email(
-            f"{ISSUE_TITLE_PREFIX} {len(stale)} pending over gate", body, dry_run=args.dry_run
-        )
+    notify_email(
+        f"{ISSUE_TITLE_PREFIX} {len(stale)} pending over gate", body, dry_run=args.dry_run
     )
+    print("gate email dry-run" if args.dry_run else "gate email attempted")
     return 2 if issue_status.startswith("issue upsert FAILED") else 0
 
 

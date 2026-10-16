@@ -19,7 +19,7 @@ import { JOBS } from "./jobs";
 /** The heartbeat workflow file, read from its own dispatch row (one home). */
 export const HEARTBEAT_CRON = "3 6,18 * * *";
 function heartbeatWorkflow(): string {
-  const row = JOBS.find((j) => j.repo === REPO && j.cron === HEARTBEAT_CRON && j.kind === "workflow_dispatch");
+  const row = JOBS.find((j) => j.id === "twelve-x-primemarket-heartbeat" && j.cron === HEARTBEAT_CRON);
   if (!row?.workflow) throw new Error("heartbeat dispatch row missing");
   return row.workflow;
 }

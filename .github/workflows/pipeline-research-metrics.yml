@@ -63,6 +63,7 @@ jobs:
 
       - uses: astral-sh/setup-uv@v5
         with:
+          version: "0.12.24"
           enable-cache: true
 
       # Installs from the uv.lock in the CHECKED-OUT tree, which is `main` above,
