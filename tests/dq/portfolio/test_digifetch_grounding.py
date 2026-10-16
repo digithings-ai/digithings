@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 from datetime import date
 from typing import Any
 
@@ -16,9 +15,7 @@ from digiquant.data.gloomberb import (
     TOOL_ENTITLEMENTS,
     GloomberbClient,
     agent_tools,
-    session_gate,
 )
-from digiquant.data.gloomberb.session_gate import SessionGateStatus
 from digiquant.portfolio.phases import direction, portfolio_common
 from digiquant.portfolio.phases.deliberation import _deliberation_grounding
 from digiquant.portfolio.phases.portfolio_common import _portfolio_grounding
@@ -100,14 +97,13 @@ def _sweep_handler(request: httpx.Request) -> httpx.Response:
 
 @pytest.fixture(autouse=True)
 def _grounding_env(monkeypatch: pytest.MonkeyPatch):
-    """Opt the Gloomberb family back in and keep the tool-list filter offline.
+    """Opt the Gloomberb family back in.
 
     GLOOMBERB_ENABLED now defaults ON (DIG-2752 rescope, decision
     d4922299, superseding the DIG-1233 opt-in), so the explicit opt-in below
     is belt-and-braces rather than load-bearing.
-    The session-gate verdict is stubbed to follow the cookie's presence — the
-    same seam tests/dq/data/test_gloomberb_agent_tools.py uses — because
-    answering it for real costs one live request to api.gloom.sh (DIG-2752).
+    DIG-3907 retired the session-cookie path, so there is no gate to stub:
+    session/preview/pro tools never advertise.
     """
     monkeypatch.setenv("DIGIQUANT_RESEARCH_DATA_TOOLS", "1")
     monkeypatch.setenv(GLOOMBERB_ENABLED_ENV, "1")
@@ -117,18 +113,7 @@ def _grounding_env(monkeypatch: pytest.MonkeyPatch):
         "digiquant.research.data.web_grounding.fetch_web_grounding",
         lambda **_kwargs: {"summary": "canned", "sources": [], "as_of": "2026-09-15"},
     )
-    session_gate.reset_session_gate_cache()
-    monkeypatch.setattr(
-        agent_tools,
-        "session_gate_status",
-        lambda *a, **k: SessionGateStatus(
-            bool((os.environ.get(GLOOMBERB_SESSION_COOKIE_ENV) or "").strip()),
-            "presence_stub",
-            "presence stands in for validation in the grounding tests",
-        ),
-    )
     yield
-    session_gate.reset_session_gate_cache()
 
 
 @pytest.mark.unit
@@ -143,7 +128,7 @@ def test_portfolio_grounding_equips_the_free_pm_subset(
     free_pm = {n for n in PM_TOOLS if TOOL_ENTITLEMENTS[n] == "free"}
     gated_pm = {n for n in PM_TOOLS if TOOL_ENTITLEMENTS[n] != "free"}
     assert free_pm.issubset(names)
-    # Session-gated names are absent without a cookie.
+    # Retired session-gated names are always absent (DIG-3907), cookie or not.
     assert names.isdisjoint(gated_pm)
 
     payload = json.loads(_content(execute_tool("digifetch_quote", {"symbol": "AAPL"})))

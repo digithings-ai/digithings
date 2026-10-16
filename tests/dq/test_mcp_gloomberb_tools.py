@@ -2,10 +2,12 @@
 
 Wrappers are exercised through FastMCP's tool manager with a
 MockTransport-backed GloomberbClient patched over the env-seam builder. No
-network, no session cookie required (gated tools are exercised both ways).
-Since #2752 the secret gate is forced open by an autouse fixture here, because
-this module tests what each tool does once it is advertised; whether it is
-advertised at all is pinned in tests/dq/data/test_gloomberb_session_gate.py.
+network, no session cookie required. DIG-3907 retired the session-cookie path
+(keyless access only): the 41 session/preview/pro tools are never advertised,
+so only the free (+venue_session) wrappers are exercised here; the retired
+wrappers' absence is pinned by `test_retired_session_tools_are_never_registered`.
+Call-time fail-closed behavior of the retired tools' client methods is still
+pinned in tests/dq/data/.
 """
 
 from __future__ import annotations
@@ -25,13 +27,12 @@ pytestmark = pytest.mark.unit
 from digiquant.data.gloomberb import (  # noqa: E402  # noqa: E402
     GLOOMBERB_ATTRIBUTION,
     GLOOMBERB_DELAY_NOTICE,
-    PREVIEW_ACCESS_WARNING,
     EarningsEvent,
     GloomberbClient,
-    agent_tools,
-    session_gate,
 )
-from digiquant.data.gloomberb.session_gate import SessionGateStatus  # noqa: E402
+from digiquant.data.gloomberb.entitlements import (  # noqa: E402
+    TOOL_ENTITLEMENTS as _TOOL_ENTITLEMENTS,
+)
 from digiquant.mcp_server import create_mcp_server  # noqa: E402
 from digiquant.orchestrator_tools import build_orchestrator_tool_manifest  # noqa: E402
 from digiquant.tool_names import canonical_tool_name  # noqa: E402
@@ -196,31 +197,16 @@ AAPL_QUOTE = {
 
 @pytest.fixture(autouse=True)
 def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """No inherited Gloomberb env, and an authenticated secret gate (#2752).
+    """No inherited Gloomberb env.
 
-    Since #2752 a session/preview/pro tool is advertised only when the
-    configured cookie is *validated* against api.gloom.sh, not merely present.
-    This module exercises tool behaviour (envelopes, entitlement notes, wire
-    access), so it asks for a server that is authenticated and then drives every
-    tool with a mocked transport -- no request leaves the process either way.
-
-    The advertisement contract itself is pinned in
-    `tests/dq/data/test_gloomberb_session_gate.py`; the absent/invalid cases are
-    not asserted here because this module deliberately opens the gate.
+    DIG-3907 retired the session-cookie path, so there is no advertisement
+    gate to hold open: the 41 session/preview/pro tools are never registered,
+    and this module exercises the free (+venue_session) wrappers with a mocked
+    transport -- no request leaves the process either way.
     """
     monkeypatch.delenv("GLOOMBERB_ENABLED", raising=False)
     monkeypatch.delenv("GLOOMBERB_SESSION_COOKIE", raising=False)
-    session_gate.reset_session_gate_cache()
-    monkeypatch.setattr(
-        session_gate,
-        "session_gate_status",
-        lambda *a, **k: SessionGateStatus(True, "ok", "authenticated for this test"),
-    )
-    monkeypatch.setattr(
-        agent_tools, "session_gate_status", session_gate.session_gate_status, raising=False
-    )
     yield
-    session_gate.reset_session_gate_cache()
 
 
 def _mcp(name: str):
@@ -1141,13 +1127,28 @@ def _sweep_handler(request: httpx.Request) -> httpx.Response:
     raise AssertionError(f"unexpected Gloomberb path {path!r}")
 
 
-def test_all_88_live_tools_registered_in_full_and_read_scope() -> None:
+def test_free_tools_registered_in_full_and_read_scope() -> None:
+    """DIG-3907: only the keyless tools are advertised on either scope.
+
+    The 41 retired session/preview/pro tools are never registered; the free
+    (+venue_session) family stays on the list under the public name only.
+    """
+    from digiquant.data.gloomberb.entitlements import TOOL_ENTITLEMENTS
+
     assert REFUSED_DIGIFETCH == {"digifetch_congress_trades"}
     assert len(DIGIFETCH_TOOLS) == 88
-    assert LIVE_DIGIFETCH_TOOLS == DIGIFETCH_TOOLS
-    public = {canonical_tool_name(name) for name in LIVE_DIGIFETCH_TOOLS}
-    assert public <= _names()
-    assert public <= _names(scope="read")
+    retired = {
+        name for name, tier in TOOL_ENTITLEMENTS.items() if tier in RETIRED_TOOL_ENTITLEMENTS
+    }
+    assert len(retired) == 41
+    advertised = {canonical_tool_name(name) for name in LIVE_DIGIFETCH_TOOLS - retired}
+    assert advertised <= _names()
+    assert advertised <= _names(scope="read")
+    for name in sorted(retired | REFUSED_DIGIFETCH):
+        assert name not in _names()
+        assert canonical_tool_name(name) not in _names()
+        assert name not in _names(scope="read")
+        assert canonical_tool_name(name) not in _names(scope="read")
     assert not any(name.startswith("digifetch_") for name in _names())
 
 
@@ -1304,22 +1305,6 @@ def test_anon_quote_returns_attributed_envelope(monkeypatch: pytest.MonkeyPatch)
     assert "symbol=AAPL" in seen["url"]
 
 
-def test_holders_without_cookie_is_auth_required_without_request(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    calls: list[int] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        calls.append(1)
-        return _envelope({"symbol": "AAPL", "holders": []})
-
-    _patch_client(monkeypatch, handler)
-    payload = json.loads(_mcp("digifetch_holders")("AAPL"))
-    assert payload["data"]["code"] == "auth_required"
-    assert "GLOOMBERB_SESSION_COOKIE" in payload["data"]["message"]
-    assert calls == []
-
-
 def test_kill_switch_disabled_returns_typed_error(monkeypatch: pytest.MonkeyPatch) -> None:
     # No builder patch: the env-seam path builds a real client, and the kill
     # switch short-circuits before any request, so this stays offline.
@@ -1327,16 +1312,6 @@ def test_kill_switch_disabled_returns_typed_error(monkeypatch: pytest.MonkeyPatc
     payload = json.loads(_mcp("digifetch_quote")("AAPL"))
     assert payload["data"]["code"] == "upstream_error"
     assert "kill switch" in payload["data"]["message"]
-
-
-def test_session_cookie_is_never_echoed_in_payloads(monkeypatch: pytest.MonkeyPatch) -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        return _envelope({"symbol": "AAPL", "holders": []})
-
-    _patch_client(monkeypatch, handler, session_cookie="super-secret-token")
-    result = _mcp("digifetch_holders")("AAPL")
-    assert "super-secret-token" not in result
-    assert json.loads(result)["data"]["holders"] == []
 
 
 def test_earnings_calendar_reports_missing_yfinance(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1558,6 +1533,23 @@ TOOL_CALLS: dict[str, tuple[Any, ...]] = {
 }
 
 
+#: Entitlements retired with the Gloomberb session-cookie path (DIG-3907,
+#: keyless access only): still declared, never advertised on any surface.
+RETIRED_TOOL_ENTITLEMENTS = frozenset({"session", "preview", "pro"})
+RETIRED_TOOL_CALLS = {
+    name for name, tier in _TOOL_ENTITLEMENTS.items() if tier in RETIRED_TOOL_ENTITLEMENTS
+}
+assert RETIRED_TOOL_CALLS, "the retirement would have nothing to hide"
+FREE_TOOL_CALLS = {
+    name: args for name, args in TOOL_CALLS.items() if name not in RETIRED_TOOL_CALLS
+}
+#: Anonymous tools only (the venue_session reader needs its own venue cookie
+#: to reach the wire, so the cookieless sweeps exclude it).
+FREE_ONLY_TOOL_CALLS = {
+    name: args for name, args in FREE_TOOL_CALLS.items() if _TOOL_ENTITLEMENTS.get(name) == "free"
+}
+
+
 #: Pure calculators never touch the transport (local math only).
 _NO_WIRE_TOOLS = {
     "digifetch_options_calculator",
@@ -1615,7 +1607,7 @@ def _expected_wire_calls(name: str, *, with_cookie: bool) -> list[int]:
     return [1]
 
 
-@pytest.mark.parametrize(("name", "args"), sorted(TOOL_CALLS.items()))
+@pytest.mark.parametrize(("name", "args"), sorted(FREE_TOOL_CALLS.items()))
 def test_every_tool_returns_attributed_json(
     monkeypatch: pytest.MonkeyPatch, name: str, args: tuple[Any, ...]
 ) -> None:
@@ -1748,21 +1740,6 @@ def test_sec_filings_content_via_wrapper(monkeypatch: pytest.MonkeyPatch) -> Non
 # ── coverage expansion (#4110 phase 1) ──────────────────────────────────────
 
 
-def test_research_search_without_cookie_is_auth_required_without_request(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    calls: list[int] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        calls.append(1)
-        return _envelope({"hits": []})
-
-    _patch_client(monkeypatch, handler)
-    payload = json.loads(_mcp("digifetch_research_search")("inflation"))
-    assert payload["data"]["code"] == "auth_required"
-    assert calls == []
-
-
 def test_cds_out_of_range_days_is_invalid_input_without_request(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1776,71 +1753,6 @@ def test_cds_out_of_range_days_is_invalid_input_without_request(
     payload = json.loads(_mcp("digifetch_cds")(None, 91))
     assert payload["data"]["code"] == "invalid_input"
     assert calls == []
-
-
-def test_transcripts_plan_required_maps_to_pro_required(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, text="Pro plan required")
-
-    _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
-    payload = json.loads(_mcp("digifetch_transcripts")("AAPL"))
-    assert payload["data"]["code"] == "pro_required"
-    assert "Pro plan" in payload["data"]["message"]
-    assert payload["attribution"] == GLOOMBERB_ATTRIBUTION
-    assert payload["source_url"] == "https://term.gloom.sh/?ticker=AAPL"
-
-
-@pytest.mark.parametrize("status", [200, 402])
-def test_transcripts_402_plan_required_maps_to_pro_required(
-    monkeypatch: pytest.MonkeyPatch, status: int
-) -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(status, text="Pro plan required")
-
-    _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
-    payload = json.loads(_mcp("digifetch_transcripts")("AAPL"))
-    assert payload["data"]["code"] == "pro_required"
-    assert "Pro plan" in payload["data"]["message"]
-
-
-def test_research_search_402_maps_to_auth_required(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(402, json={"message": "Payment Required"})
-
-    _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
-    payload = json.loads(_mcp("digifetch_research_search")("inflation"))
-    assert payload["data"]["code"] == "auth_required"
-
-
-def test_transcripts_wrapper_maps_the_upstream_calls_payload(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(
-            200,
-            json={
-                "calls": [
-                    {
-                        "id": "t1",
-                        "ticker": "AAPL",
-                        "companyName": "Apple Inc.",
-                        "callAt": "2026-08-01T16:30:00Z",
-                        "webcastUrl": "https://example.test/call/t1",
-                    }
-                ]
-            },
-        )
-
-    _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
-    payload = json.loads(_mcp("digifetch_transcripts")("AAPL"))
-    row = payload["data"]["transcripts"][0]
-    assert row["company_name"] == "Apple Inc."
-    assert row["call_at"] == "2026-08-01T16:30:00Z"
-    assert row["webcast_url"] == "https://example.test/call/t1"
 
 
 def test_congress_trades_refused_surface_makes_no_request(
@@ -1872,119 +1784,6 @@ def test_yield_curve_tool_returns_points_without_a_deep_link(
 
 
 # ── coverage expansion (#4110 phase 2) ──────────────────────────────────────
-
-
-def test_statements_without_cookie_is_auth_required_without_request(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    calls: list[int] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        calls.append(1)
-        return httpx.Response(200, json={"status": "success", "data": {}})
-
-    _patch_client(monkeypatch, handler)
-    payload = json.loads(_mcp("digifetch_statements")("AAPL"))
-    assert payload["data"]["code"] == "auth_required"
-    assert calls == []
-
-
-def test_statements_wrapper_maps_rows_and_deep_link(monkeypatch: pytest.MonkeyPatch) -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(
-            200,
-            json={
-                "status": "success",
-                "data": {
-                    "annualStatements": [
-                        {"date": "2021-09-30", "currency": "USD", "purchaseOfBusiness": -1}
-                    ],
-                    "quarterlyStatements": [],
-                },
-            },
-        )
-
-    _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
-    payload = json.loads(_mcp("digifetch_statements")("AAPL", "annual"))
-    assert payload["data"]["annual_statements"][0]["date"] == "2021-09-30"
-    assert payload["source_url"] == "https://term.gloom.sh/?ticker=AAPL"
-
-
-def test_ticker_tweets_wrapper_slices_to_the_requested_limit(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(
-            200,
-            json={"query": "$AAPL", "tweets": [{"id": str(i), "text": "t"} for i in range(5)]},
-        )
-
-    _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
-    payload = json.loads(_mcp("digifetch_ticker_tweets")("AAPL", 2))
-    assert len(payload["data"]["tweets"]) == 2
-    assert payload["data"]["total_available"] == 5
-    assert payload["data"]["truncated"] is True
-    assert payload["source_url"] == "https://term.gloom.sh/?ticker=AAPL"
-
-
-def test_tweet_search_without_cookie_is_auth_required_without_request(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    calls: list[int] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        calls.append(1)
-        return httpx.Response(200, json={"query": "tariffs", "tweets": []})
-
-    _patch_client(monkeypatch, handler)
-    payload = json.loads(_mcp("digifetch_tweet_search")("tariffs"))
-    assert payload["data"]["code"] == "auth_required"
-    assert calls == []
-
-
-def test_screener_pro_required_envelope_maps_to_pro_required(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The live free-session shape: 200 status=unsupported + PRO_REQUIRED."""
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(
-            200,
-            json={"status": "unsupported", "data": None, "reasonCode": "PRO_REQUIRED"},
-        )
-
-    _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
-    payload = json.loads(_mcp("digifetch_screener")("gainers"))
-    assert payload["data"]["code"] == "pro_required"
-    assert "Pro plan" in payload["data"]["message"]
-    assert payload["data"]["retryable"] is False
-
-
-def test_screener_402_text_body_maps_to_the_same_error(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(402, text="Pro plan required")
-
-    _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
-    payload = json.loads(_mcp("digifetch_screener")("gainers"))
-    assert payload["data"]["code"] == "pro_required"
-    assert "Pro plan" in payload["data"]["message"]
-
-
-def test_screener_without_cookie_is_auth_required_without_request(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    calls: list[int] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        calls.append(1)
-        return httpx.Response(200, json={"status": "success", "data": []})
-
-    _patch_client(monkeypatch, handler)
-    payload = json.loads(_mcp("digifetch_screener")("gainers"))
-    assert payload["data"]["code"] == "auth_required"
-    assert calls == []
 
 
 def test_13f_holdings_forms_normalizes_cik_and_sends_it(
@@ -2064,37 +1863,6 @@ def test_13f_holders_proxied_4xx_maps_to_invalid_input(
     assert payload["data"]["code"] == "invalid_input"
     assert payload["data"]["retryable"] is False
     assert "Forms13F 400" in payload["data"]["message"]
-
-
-def test_ticker_tweets_wrapper_applies_the_hours_window(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(
-            200,
-            json={
-                "query": "$AAPL",
-                "tweets": [
-                    {"id": "recent", "createdAt": "2026-09-15T16:00:00.000Z"},
-                    {"id": "old", "createdAt": "2026-09-01T00:00:00.000Z"},
-                ],
-            },
-        )
-
-    _patch_client(
-        monkeypatch,
-        handler,
-        session_cookie="gloomberb.session_token=test",
-        now=lambda: datetime(2026, 9, 15, 17, 0, tzinfo=timezone.utc),
-    )
-    payload = json.loads(_mcp("digifetch_ticker_tweets")("AAPL", 50, 24))
-    data = payload["data"]
-    assert [tweet["id"] for tweet in data["tweets"]] == ["recent"]
-    assert data["total_available"] == 2
-    assert data["truncated"] is True
-
-
-# ── coverage expansion (#4110 phase 3) ──────────────────────────────────────
 
 
 def test_shiller_wrapper_slices_the_series(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -2223,153 +1991,6 @@ def test_filing_events_wrapper_maps_rows(monkeypatch: pytest.MonkeyPatch) -> Non
     assert payload["source_url"] == "https://term.gloom.sh/?ticker=AAPL"
 
 
-def test_short_interest_without_cookie_is_auth_required_without_request(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    calls: list[int] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        calls.append(1)
-        return _envelope({"symbol": "AAPL", "points": []})
-
-    _patch_client(monkeypatch, handler)
-    payload = json.loads(_mcp("digifetch_short_interest")("AAPL"))
-    assert payload["data"]["code"] == "auth_required"
-    assert calls == []
-
-
-def test_short_interest_out_of_range_years_is_invalid_input_without_request(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    calls: list[int] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        calls.append(1)
-        return _envelope({"symbol": "AAPL", "points": []})
-
-    _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
-    payload = json.loads(_mcp("digifetch_short_interest")("AAPL", 11))
-    assert payload["data"]["code"] == "invalid_input"
-    assert calls == []
-
-
-def test_short_interest_wrapper_maps_points(monkeypatch: pytest.MonkeyPatch) -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        return _envelope(
-            {
-                "symbol": "AAPL",
-                "issueName": "Apple Inc.",
-                "points": [{"settlementDate": "2026-08-31", "sharesShort": 1.0, "revised": False}],
-            }
-        )
-
-    _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
-    payload = json.loads(_mcp("digifetch_short_interest")("AAPL", 1))
-    point = payload["data"]["points"][0]
-    assert point["settlement_date"] == "2026-08-31"
-    assert point["shares_short"] == 1.0
-    assert payload["source_url"] == "https://term.gloom.sh/?ticker=AAPL"
-
-
-def test_equity_diagnostic_pending_is_mapped_and_not_client_cached(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    calls: list[int] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        calls.append(1)
-        return httpx.Response(202, json={"status": "generating", "retryAfterMs": 2000})
-
-    _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
-    first = json.loads(_mcp("digifetch_equity_diagnostic")("AAPL"))
-    assert first["data"]["pending"]["retry_after_ms"] == 2000
-    assert first["data"]["report"] is None
-    # A pending payload must not enter the 900s client cache: the retry hits
-    # the wire again.
-    second = json.loads(_mcp("digifetch_equity_diagnostic")("AAPL"))
-    assert second["data"]["pending"]["status"] == "generating"
-    assert calls == [1, 1]
-
-
-def test_equity_diagnostic_report_is_mapped(monkeypatch: pytest.MonkeyPatch) -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(
-            200,
-            json={
-                "schemaVersion": 1,
-                "access": "preview",
-                "symbol": "AAPL",
-                "status": "partial",
-                "verdict": "risk_skewed",
-                "summary": "Two flags found",
-                "findings": [
-                    {
-                        "id": "F1",
-                        "kind": "red_flag",
-                        "severity": 3,
-                        "title": "Margin compression",
-                        "observation": "Gross margin fell",
-                        "interpretation": "Pricing pressure",
-                        "evidenceIds": ["E1"],
-                    }
-                ],
-                "coverage": [{"dataset": "statements", "status": "available"}],
-                "evidence": [{"id": "E1", "dataset": "statements", "label": "10-K"}],
-            },
-        )
-
-    _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
-    payload = json.loads(_mcp("digifetch_equity_diagnostic")("AAPL"))
-    report = payload["data"]["report"]
-    assert report["access"] == "preview"
-    assert report["verdict"] == "risk_skewed"
-    assert report["findings"][0]["kind"] == "red_flag"
-    assert report["findings"][0]["evidence_ids"] == ["E1"]
-    assert payload["source_url"] == "https://term.gloom.sh/?ticker=AAPL"
-
-
-def test_equity_diagnostic_without_cookie_is_auth_required_without_request(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    calls: list[int] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        calls.append(1)
-        return httpx.Response(200, json={"status": "generating", "retryAfterMs": 1})
-
-    _patch_client(monkeypatch, handler)
-    payload = json.loads(_mcp("digifetch_equity_diagnostic")("AAPL"))
-    assert payload["data"]["code"] == "auth_required"
-    assert calls == []
-
-
-# ── entitlement infrastructure (#4110 phase 5) ──────────────────────────────
-
-
-def test_equity_diagnostic_preview_report_carries_the_marker(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(
-            200,
-            json={
-                "schemaVersion": 1,
-                "access": "preview",
-                "symbol": "AAPL",
-                "status": "partial",
-                "verdict": "unclear",
-                "findings": [],
-                "coverage": [],
-                "evidence": [],
-            },
-        )
-
-    _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
-    payload = json.loads(_mcp("digifetch_equity_diagnostic")("AAPL"))
-    assert payload["data"]["report"]["access"] == "preview"
-    assert PREVIEW_ACCESS_WARNING in payload["warnings"]
-
-
 def test_every_digifetch_tool_declares_an_entitlement() -> None:
     from typing import get_args
 
@@ -2445,15 +2066,22 @@ def test_declared_entitlements_match_the_gate_behavior() -> None:
     }
 
 
-@pytest.mark.parametrize(("name", "args"), sorted(TOOL_CALLS.items()))
+@pytest.mark.parametrize(("name", "args"), sorted(FREE_ONLY_TOOL_CALLS.items()))
 def test_entitlement_zero_http_gating_matches_the_declaration(
     monkeypatch: pytest.MonkeyPatch, name: str, args: tuple[Any, ...]
 ) -> None:
-    """Without a cookie: gated tools short-circuit, free tools reach the wire."""
+    """Without a cookie every advertised anonymous tool reaches the wire.
+
+    DIG-3907 retired the session/preview/pro tools, so this sweep covers the
+    free tools only (the venue_session reader answers ``auth_required``
+    without its own venue cookie and is pinned separately below): anonymous
+    tools are never gated, the request goes out and succeeds.
+    """
 
     from digiquant.data.gloomberb.entitlements import TOOL_ENTITLEMENTS
 
     entitlement = TOOL_ENTITLEMENTS[name]
+    assert entitlement == "free", name
     calls: list[int] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -2467,21 +2095,37 @@ def test_entitlement_zero_http_gating_matches_the_declaration(
     # to one request per venue (Polymarket + Kalshi); the FX and VIX
     # compositions fan out to one request per leg.
     expected_calls = _expected_wire_calls(name, with_cookie=False)
-    if entitlement == "free":
-        # Anonymous tools are never gated: the request goes out and succeeds.
-        assert calls == expected_calls, name
-        assert payload["data"] is not None, name
-    else:
-        # session / preview / pro: auth_required with zero HTTP when cookieless.
-        assert calls == [], name
-        assert payload["data"]["code"] == "auth_required", name
+    assert calls == expected_calls, name
+    assert payload["data"] is not None, name
 
 
-@pytest.mark.parametrize(("name", "args"), sorted(TOOL_CALLS.items()))
+def test_substack_without_venue_cookie_is_auth_required_without_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The venue_session reader is registered but answers ``auth_required``
+    without its own venue cookie (DIG-3907 leaves venue auth untouched)."""
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return _envelope({})
+
+    _patch_client(monkeypatch, handler)
+    payload = json.loads(_mcp("digifetch_substack")("examplepub"))
+    assert payload["data"]["code"] == "auth_required"
+    assert calls == []
+
+
+@pytest.mark.parametrize(("name", "args"), sorted(FREE_TOOL_CALLS.items()))
 def test_entitlement_wire_access_with_a_session_cookie(
     monkeypatch: pytest.MonkeyPatch, name: str, args: tuple[Any, ...]
 ) -> None:
-    """With a cookie every declared tool reaches the wire (no other pre-gate)."""
+    """With a cookie every advertised tool still reaches the wire.
+
+    DIG-3907: the cookie no longer opens the retired tools (they are not
+    registered), but it changes nothing for the free family either — this sweep
+    pins that a configured cookie does not disturb anonymous access.
+    """
 
     from digiquant.data.gloomberb.entitlements import TOOL_ENTITLEMENTS
 
@@ -2507,43 +2151,14 @@ def test_entitlement_wire_access_with_a_session_cookie(
     assert "code" not in payload["data"], name
 
 
-def test_pro_route_plan_gates_and_bare_402_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Both Pro shapes map to pro_required; an unrecognized 402 keeps auth_required."""
-
-    def transcripts_plan(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, text="Pro plan required")
-
-    _patch_client(monkeypatch, transcripts_plan, session_cookie="gloomberb.session_token=test")
-    transcripts = json.loads(_mcp("digifetch_transcripts")("AAPL"))
-    assert transcripts["data"]["code"] == "pro_required"
-    assert transcripts["data"]["retryable"] is False
-
-    def screener_envelope(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(
-            200,
-            json={"status": "unsupported", "data": None, "reasonCode": "PRO_REQUIRED"},
-        )
-
-    _patch_client(monkeypatch, screener_envelope, session_cookie="gloomberb.session_token=test")
-    screener = json.loads(_mcp("digifetch_screener")("gainers"))
-    assert screener["data"]["code"] == "pro_required"
-
-    def bare_402(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(402, text="payment required, no plan wording")
-
-    _patch_client(monkeypatch, bare_402, session_cookie="gloomberb.session_token=test")
-    fallback = json.loads(_mcp("digifetch_transcripts")("AAPL"))
-    # A bare 402 with no recognizable plan body keeps the generic mapping.
-    assert fallback["data"]["code"] == "auth_required"
-    assert fallback["data"]["retryable"] is False
-
-
 def test_entitlement_note_is_surfaced_in_mcp_and_manifest() -> None:
     from digiquant.data.gloomberb.entitlements import TOOL_ENTITLEMENTS, entitlement_note
 
     rows = {row["function"]["name"]: row for row in build_orchestrator_tool_manifest()}
     server = create_mcp_server()
-    for name in sorted(LIVE_DIGIFETCH_TOOLS):
+    advertised = [n for n in sorted(LIVE_DIGIFETCH_TOOLS) if n not in RETIRED_TOOL_CALLS]
+    assert advertised, "the retirement would leave nothing advertised"
+    for name in advertised:
         expected = TOOL_ENTITLEMENTS[name]
         note = entitlement_note(name)
         assert note is not None
@@ -2553,48 +2168,8 @@ def test_entitlement_note_is_surfaced_in_mcp_and_manifest() -> None:
         assert note in tool.description, name
         assert rows[name].get("entitlement") == expected, name
         assert note in rows[name]["function"]["description"], name
-
-
-def test_transcripts_detail_mode_maps_the_wrapped_payload(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path == "/cloud/transcripts/t1"
-        return httpx.Response(200, json={"companyName": "Apple Inc."})
-
-    _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
-    payload = json.loads(_mcp("digifetch_transcripts")(None, 20, "t1"))
-    row = payload["data"]["transcripts"][0]
-    assert row["id"] == "t1"
-    assert row["company_name"] == "Apple Inc."
-    assert payload["attribution"] == GLOOMBERB_ATTRIBUTION
-    assert "source_url" not in payload
-
-
-def test_saved_searches_without_cookie_is_auth_required_without_request(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    calls: list[int] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        calls.append(1)
-        return _envelope({"searches": []})
-
-    _patch_client(monkeypatch, handler)
-    payload = json.loads(_mcp("digifetch_saved_searches")())
-    assert payload["data"]["code"] == "auth_required"
-    assert calls == []
-    assert payload["attribution"] == GLOOMBERB_ATTRIBUTION
-    assert payload["delay_notice"] == GLOOMBERB_DELAY_NOTICE
-    assert "source_url" not in payload
-
-
-def test_saved_searches_maps_rows_with_a_session(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"searches": [{"id": "s1", "name": "AI capex"}]})
-
-    _patch_client(monkeypatch, handler, session_cookie="gloomberb.session_token=test")
-    payload = json.loads(_mcp("digifetch_saved_searches")())
-    assert payload["data"]["searches"][0]["name"] == "AI capex"
+    # The retired tools keep their declaration (and manifest row) but are
+    # registered nowhere.
+    for name in sorted(RETIRED_TOOL_CALLS):
+        assert entitlement_note(name) is not None, name
+        assert server._tool_manager.get_tool(canonical_tool_name(name)) is None, name
