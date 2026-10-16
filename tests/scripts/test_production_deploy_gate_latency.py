@@ -596,6 +596,27 @@ def test_main_exits_0_when_the_gate_is_healthy(monkeypatch: pytest.MonkeyPatch) 
     assert mod.main(["--now", NOW.isoformat(), "--dry-run"]) == 0
 
 
+def test_main_exits_0_when_healthy_but_recovery_note_rate_limited(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """DIG-3824: a best-effort recovery note must not fail a healthy gate.
+
+    The gate check passed; only the `gh issue list` recovery-note write hit a
+    transient GraphQL rate limit. That is a warning, not exit 2.
+    """
+    import production_deploy_gate_latency as mod
+
+    monkeypatch.setattr(mod, "fetch_deployments", lambda *a, **k: [_deployment(minutes_old=2)])
+
+    def boom(*a: object, **k: object) -> str:
+        raise mod.GateCheckFailed(
+            "gh issue list failed: GraphQL: API rate limit already exceeded for user ID 34689321"
+        )
+
+    monkeypatch.setattr(mod, "resolve_watchdog_issue", boom)
+    assert mod.main(["--now", NOW.isoformat()]) == 0
+
+
 def test_main_exits_0_and_alerts_when_the_gate_is_stalled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

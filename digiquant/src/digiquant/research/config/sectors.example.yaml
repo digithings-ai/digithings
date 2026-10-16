@@ -1,0 +1,14 @@
+# Neutral example for open-source / self-host installs (repo-split 1b).
+# Copy to $DIGIQUANT_CONFIG_DIR/sectors.yaml and extend. No house views.
+sectors:
+  - slug: sector-example-broad
+    name: Example Broad
+    etfs: [EXAMPLE]
+    subsegments:
+      - name: Example subsegment
+        tickers: [EXAMPLE]
+        driver: Example driver
+    top_tickers: [EXAMPLE]
+    key_drivers:
+      - Example driver
+    nuance_notes: Neutral placeholder.

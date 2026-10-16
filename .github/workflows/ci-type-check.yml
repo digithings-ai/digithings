@@ -36,6 +36,7 @@ jobs:
 
       - uses: astral-sh/setup-uv@v5
         with:
+          version: "0.12.24"
           enable-cache: true
 
       # mypy was installed bare here until #1711 bounded it and #1714 declared it
