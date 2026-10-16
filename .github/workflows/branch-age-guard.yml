@@ -1,0 +1,69 @@
+# Branch-age guard (DIG-1578). Warns about remote branches nobody is waiting on.
+# Production clock: Cloudflare Worker digithings-cron (apps/digithings-cron), wd() row
+# "branch-age-guard". Schedule removed in #3579 — do not add on.schedule here.
+#
+# This workflow reports; it never deletes and never gates CI.
+# docs/ops/branch-hygiene-policy.md §6.2 item 2 asks for "a labelled warning and a
+# stop". The warning is this job. The stop is structural: measured 2026-10-15 across
+# all 64 workflows on develop, every on: push trigger carries a branches:/tags: filter
+# and the single on: workflow_run trigger is filtered to main, so a branch with no open
+# PR starts no workflow run at all. That is pinned by
+# tests/scripts/test_branch_age_guard.py::test_every_push_trigger_is_branch_filtered,
+# so a workflow that adds an unfiltered push: fails CI instead of silently billing
+# 288 stale branches per push.
+#
+# Permissions are read-only on purpose. The guard reads branches, commits and open
+# PRs and writes a job summary; it holds no write scope because it performs no write.
+# `contents: write` on the neighbouring agent-* workflows is for their PR-creating
+# steps, which this job has no equivalent of.
+name: "Branch: age guard"
+
+on:
+  workflow_dispatch:
+    inputs:
+      start_key:
+        description: "Dedupe key from digithings-cron: <job.id>:<scheduledTime>. Blank when dispatched by hand."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    # DIG-248: CI-read secrets live at `cron` environment scope, not repo/org scope.
+    environment: cron
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: develop
+          sparse-checkout: scripts/branch_age_guard.py
+          sparse-checkout-cone-mode: false
+
+      - name: Census aged branches
+        id: census
+        env:
+          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN || github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          python3 scripts/branch_age_guard.py \
+            --repo "$REPO" \
+            --json branch-age-census.json \
+            | tee guard-report.md
+
+      - name: Publish report
+        env:
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # The census must have run: an empty report file means the step above
+          # wrote nothing, and an empty summary reads exactly like "no stale
+          # branches". Fail loudly instead.
+          test -s guard-report.md
+          cat guard-report.md >> "$GITHUB_STEP_SUMMARY"
+          # Branch names and ages only — never a token, never a commit body.
+          test -s branch-age-census.json

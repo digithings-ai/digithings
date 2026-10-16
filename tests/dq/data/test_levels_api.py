@@ -174,6 +174,18 @@ def test_cache_path_containment_holds_on_unresolved_cache_dir(tmp_path) -> None:
     assert dest.name == "EUR-USD.csv"
 
 
+def test_cache_path_rejects_a_symlink_that_leaves_the_cache(tmp_path) -> None:
+    from digiquant.data.prices.history_cache import cache_path
+
+    outside = tmp_path / "outside.csv"
+    outside.write_text("x", encoding="utf-8")
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    (cache / "EUR-USD.csv").symlink_to(outside)
+    with pytest.raises(ValueError, match="unsafe ticker"):
+        cache_path("EUR-USD", cache)
+
+
 # ─── MCP function + manifest + dispatch ───────────────────────────────────────
 
 
