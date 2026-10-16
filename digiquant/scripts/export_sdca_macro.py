@@ -43,6 +43,12 @@ from _env import load_repo_env  # noqa: E402
 # Filename ``load_sdca_extra_sources`` looks for next to BTC-USD.csv.
 SERIES_FILES: dict[str, str] = {
     "M2SL": "M2SL.csv",
+    "GVZCLS": "GVZCLS.csv",
+    "WALCL": "WALCL.csv",
+    "BAMLH0A0HYM2": "BAMLH0A0HYM2.csv",
+    "BAMLC0A0CM": "BAMLC0A0CM.csv",
+    "T5YIE": "T5YIE.csv",
+    "NFCI": "NFCI.csv",
 }
 
 #: Legacy dollar sibling: not on the gloomberb panel, never fetched here.

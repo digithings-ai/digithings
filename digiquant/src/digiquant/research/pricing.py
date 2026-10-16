@@ -129,7 +129,9 @@ def _config_path() -> Path:
     CWD-relative ``config/`` that ``digigraph.model_config`` reads, so the table does not
     depend on the process's working directory.
     """
-    override = (os.environ.get("DIGI_CONFIG_PATH") or "").strip()
+    override = (os.environ.get("DIGIQUANT_CONFIG_DIR") or "").strip() or (
+        os.environ.get("DIGI_CONFIG_PATH") or ""
+    ).strip()
     if override:
         return Path(override) / _CONFIG_FILENAME
     repo_root_config = _REPO_ROOT / "config" / _CONFIG_FILENAME
@@ -348,7 +350,10 @@ def __getattr__(name: str) -> Any:
 
 
 __all__ = [
-    # Provided lazily by __getattr__ below, so this is a re-export rather than a binding.
+    # No module-level binding on purpose: __getattr__ (PEP 562) above supplies this name
+    # lazily, so `import digiquant` does no filesystem I/O and the mtime cache stays
+    # honest. CodeQL's py/undefined-export (alert #2785) cannot see PEP 562 and does not
+    # read the ruff noqa below; the alert is dismissed CodeQL-side, not by adding a binding.
     "MODEL_PRICES_USD_PER_1M",  # noqa: F822
     "ModelPrice",
     "UnpricedModel",

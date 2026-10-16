@@ -404,7 +404,7 @@ def test_llm() -> dict[str, str | bool]:
         )
         return {"ok": True, "model": model, "reply": reply or "(empty)"}
     except _LLM_PROBE_ERRORS as e:
-        return {"ok": False, "model": "", "reply": "", "error": str(e)}
+        return {"ok": False, "model": "", "reply": "", "error": type(e).__name__}
 
 
 def _resolve_request_id(request: Request) -> str | None:
@@ -565,8 +565,8 @@ def model_info() -> dict:
 
         cfg = DigiProjectConfig.load()
         mode = cfg.get_llm_mode() or mode
-    except PROJECT_CONFIG_ERRORS:
-        pass
+    except PROJECT_CONFIG_ERRORS as exc:
+        logger.debug("project config load failed (%s); keeping env LLM mode %r", exc, mode)
     model = get_model_for_mode()
     return {"model": model, "mode": mode, "base_url": os.environ.get("OPENAI_API_BASE", "")}
 

@@ -238,6 +238,8 @@ export function ChatPlayback({ script, badge, header, ariaLabel, className }: Ch
     if (s.mode !== "armed") return;
     const el = frameRef.current;
     if (!el) return;
+    // CodeQL js/superfluous-trailing-arguments false positive: the DOM
+    // IntersectionObserver constructor takes (callback, options?) — both args are consumed.
     const io = new IntersectionObserver(
       (entries) => {
         if (entries.some((e) => e.isIntersecting)) {

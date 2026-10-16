@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import re
 import shutil
@@ -33,13 +34,16 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple  # score:allow untyped any — duck-typed PostgREST rows
 
+
+logger = logging.getLogger(__name__)
+
 try:
     from dotenv import load_dotenv  # type: ignore
 
     load_dotenv(Path(__file__).parent.parent / "config" / "supabase.env")
     load_dotenv()
-except ImportError:
-    pass
+except ImportError:  # python-dotenv is an optional probe; not fatal
+    logger.debug("python-dotenv is not installed; continuing without it")
 
 try:
     from supabase import create_client  # type: ignore
@@ -236,7 +240,7 @@ def _create_issue(title: str, body: str, labels: List[str], dry_run: bool) -> No
         try:
             os.unlink(tmp_path)
         except OSError:
-            pass
+            logger.debug("temporary file not removed: %s", tmp_path, exc_info=True)
 
 
 def main() -> int:

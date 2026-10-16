@@ -72,6 +72,7 @@ from pathlib import Path
 import polars as pl
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from digiquant.paths import canonicalize_path
 from digiquant.strategies.sdca.composite_risk import IndicatorWeight
 from digiquant.strategies.sdca.price_oscillators import (
     SdcaOscillatorSpec,
@@ -82,7 +83,31 @@ from digiquant.strategies.sdca.price_oscillators import (
     weekly_macd_z,
 )
 
-MACRO_INDICATOR_NAMES: tuple[str, ...] = ("m2", "rs_eth", "dxy")
+MACRO_INDICATOR_NAMES: tuple[str, ...] = (
+    "m2",
+    "rs_eth",
+    "dxy",
+    "uup",
+    "gvz",
+    "walcl",
+    "hy_oas",
+    "ig_oas",
+    "breakeven_5y",
+    "nfci",
+    "gdx_gld",
+    "gld_slv",
+)
+GOLD_MACRO_NAMES: tuple[str, ...] = (
+    "gvz",
+    "walcl",
+    "hy_oas",
+    "ig_oas",
+    "breakeven_5y",
+    "nfci",
+    "gdx_gld",
+    "gld_slv",
+    "uup",
+)
 PRICE_OSCILLATOR_NAMES: tuple[str, ...] = ("weekly_rsi", "weekly_macd", "sma_band")
 GENERIC_TECHNICAL_NAMES: tuple[str, ...] = PRICE_OSCILLATOR_NAMES
 BTC_PLUGIN_INDICATOR_NAMES: tuple[str, ...] = MACRO_INDICATOR_NAMES
@@ -108,6 +133,15 @@ WEIGHT_PARAM_BY_NAME: dict[str, str] = {
     "onchain_rhodl": "onchain_rhodl_weight",
     "onchain_addr_ratio": "onchain_addr_ratio_weight",
     "fear_greed": "fear_greed_weight",
+    "uup": "uup_weight",
+    "gvz": "gvz_weight",
+    "walcl": "walcl_weight",
+    "hy_oas": "hy_oas_weight",
+    "ig_oas": "ig_oas_weight",
+    "breakeven_5y": "breakeven_5y_weight",
+    "nfci": "nfci_weight",
+    "gdx_gld": "gdx_gld_weight",
+    "gld_slv": "gld_slv_weight",
     "weekly_rsi": "weekly_rsi_weight",
     "weekly_macd": "weekly_macd_weight",
     "sma_band": "sma_band_weight",
@@ -126,6 +160,15 @@ INDICATOR_DISPLAY_NAMES: dict[str, str] = {
     "onchain_rhodl": "on-chain RHODL Ratio",
     "onchain_addr_ratio": "on-chain price/active-address ratio",
     "fear_greed": "Fear & Greed Index",
+    "uup": "dollar proxy (UUP)",
+    "gvz": "gold volatility (GVZ)",
+    "walcl": "Fed balance sheet",
+    "hy_oas": "HY credit spread",
+    "ig_oas": "IG credit spread",
+    "breakeven_5y": "5Y breakeven",
+    "nfci": "financial conditions (NFCI)",
+    "gdx_gld": "GDX/GLD participation",
+    "gld_slv": "gold/silver ratio",
     "weekly_rsi": "weekly RSI",
     "weekly_macd": "weekly log-MACD",
     "sma_band": "SMA band",
@@ -156,6 +199,15 @@ class SdcaCompositeWeights(BaseModel):
     onchain_rhodl: float = Field(0.0, ge=0.0)
     onchain_addr_ratio: float = Field(0.0, ge=0.0)
     fear_greed: float = Field(0.0, ge=0.0)
+    uup: float = Field(0.0, ge=0.0)
+    gvz: float = Field(0.0, ge=0.0)
+    walcl: float = Field(0.0, ge=0.0)
+    hy_oas: float = Field(0.0, ge=0.0)
+    ig_oas: float = Field(0.0, ge=0.0)
+    breakeven_5y: float = Field(0.0, ge=0.0)
+    nfci: float = Field(0.0, ge=0.0)
+    gdx_gld: float = Field(0.0, ge=0.0)
+    gld_slv: float = Field(0.0, ge=0.0)
     weekly_rsi: float = Field(0.0, ge=0.0)
     weekly_macd: float = Field(0.0, ge=0.0)
     sma_band: float = Field(0.0, ge=0.0)
@@ -181,6 +233,15 @@ class SdcaCompositeWeights(BaseModel):
             ("onchain_rhodl", self.onchain_rhodl),
             ("onchain_addr_ratio", self.onchain_addr_ratio),
             ("fear_greed", self.fear_greed),
+            ("uup", self.uup),
+            ("gvz", self.gvz),
+            ("walcl", self.walcl),
+            ("hy_oas", self.hy_oas),
+            ("ig_oas", self.ig_oas),
+            ("breakeven_5y", self.breakeven_5y),
+            ("nfci", self.nfci),
+            ("gdx_gld", self.gdx_gld),
+            ("gld_slv", self.gld_slv),
             ("weekly_rsi", self.weekly_rsi),
             ("weekly_macd", self.weekly_macd),
             ("sma_band", self.sma_band),
@@ -223,6 +284,24 @@ class ExtraIndicatorSources(BaseModel):
     onchain_addr_ratio_values: pl.Series | None = None
     fear_greed_dates: pl.Series | None = None
     fear_greed_values: pl.Series | None = None
+    uup_dates: pl.Series | None = None
+    uup_close: pl.Series | None = None
+    gvz_dates: pl.Series | None = None
+    gvz_values: pl.Series | None = None
+    walcl_dates: pl.Series | None = None
+    walcl_values: pl.Series | None = None
+    hy_oas_dates: pl.Series | None = None
+    hy_oas_values: pl.Series | None = None
+    ig_oas_dates: pl.Series | None = None
+    ig_oas_values: pl.Series | None = None
+    breakeven_5y_dates: pl.Series | None = None
+    breakeven_5y_values: pl.Series | None = None
+    nfci_dates: pl.Series | None = None
+    nfci_values: pl.Series | None = None
+    gdx_dates: pl.Series | None = None
+    gdx_close: pl.Series | None = None
+    slv_dates: pl.Series | None = None
+    slv_close: pl.Series | None = None
 
 
 def composite_weights_from_params(params: Mapping[str, float | int | str]) -> SdcaCompositeWeights:
@@ -238,6 +317,15 @@ def composite_weights_from_params(params: Mapping[str, float | int | str]) -> Sd
         onchain_rhodl=float(params.get("onchain_rhodl_weight", 0.0)),
         onchain_addr_ratio=float(params.get("onchain_addr_ratio_weight", 0.0)),
         fear_greed=float(params.get("fear_greed_weight", 0.0)),
+        uup=float(params.get("uup_weight", 0.0)),
+        gvz=float(params.get("gvz_weight", 0.0)),
+        walcl=float(params.get("walcl_weight", 0.0)),
+        hy_oas=float(params.get("hy_oas_weight", 0.0)),
+        ig_oas=float(params.get("ig_oas_weight", 0.0)),
+        breakeven_5y=float(params.get("breakeven_5y_weight", 0.0)),
+        nfci=float(params.get("nfci_weight", 0.0)),
+        gdx_gld=float(params.get("gdx_gld_weight", 0.0)),
+        gld_slv=float(params.get("gld_slv_weight", 0.0)),
         weekly_rsi=float(params.get("weekly_rsi_weight", 0.0)),
         weekly_macd=float(params.get("weekly_macd_weight", 0.0)),
         sma_band=float(params.get("sma_band_weight", 0.0)),
@@ -264,6 +352,15 @@ def parse_indicator_weights_json(raw: str) -> SdcaCompositeWeights:
         onchain_rhodl=float(payload.get("onchain_rhodl", 0.0)),
         onchain_addr_ratio=float(payload.get("onchain_addr_ratio", 0.0)),
         fear_greed=float(payload.get("fear_greed", 0.0)),
+        uup=float(payload.get("uup", 0.0)),
+        gvz=float(payload.get("gvz", 0.0)),
+        walcl=float(payload.get("walcl", 0.0)),
+        hy_oas=float(payload.get("hy_oas", 0.0)),
+        ig_oas=float(payload.get("ig_oas", 0.0)),
+        breakeven_5y=float(payload.get("breakeven_5y", 0.0)),
+        nfci=float(payload.get("nfci", 0.0)),
+        gdx_gld=float(payload.get("gdx_gld", 0.0)),
+        gld_slv=float(payload.get("gld_slv", 0.0)),
         weekly_rsi=float(payload.get("weekly_rsi", 0.0)),
         weekly_macd=float(payload.get("weekly_macd", 0.0)),
         sma_band=float(payload.get("sma_band", 0.0)),
@@ -631,6 +728,157 @@ def rs_eth_confluence_z(
     )
 
 
+def uup_z(
+    dates: pl.Series,
+    uup_dates: pl.Series,
+    uup_values: pl.Series,
+    *,
+    window: int = DEFAULT_ROLLING_WINDOW,
+    min_samples: int = _MIN_SAMPLES,
+) -> pl.Series:
+    """UUP dollar-proxy rolling-z, sign-flipped like DXY: strong dollar → −z.
+
+    UUP↔DXY correlate 0.86/0.88 (levels/63d changes, 4857 joint days) — this
+    leg is a refreshability swap for the unstageable DTWEXBGS file, not a new
+    independent vote. Parity with dxy, not outperformance, is success.
+    """
+    aligned = align_to_dates(dates, uup_dates, uup_values, forward_fill=True)
+    return (-causal_rolling_z(aligned, window=window, min_samples=min_samples)).alias("uup")
+
+
+def _macro_level_z(
+    dates: pl.Series,
+    src_dates: pl.Series,
+    src_values: pl.Series,
+    name: str,
+    *,
+    window: int = DEFAULT_ROLLING_WINDOW,
+    min_samples: int = _MIN_SAMPLES,
+) -> pl.Series:
+    """Level rolling-z for fear-bid macro legs. Rising series → +z (buy gold)."""
+    aligned = align_to_dates(dates, src_dates, src_values, forward_fill=True)
+    return causal_rolling_z(aligned, window=window, min_samples=min_samples).alias(name)
+
+
+def gvz_z(
+    dates: pl.Series,
+    gvz_dates: pl.Series,
+    gvz_values: pl.Series,
+    *,
+    window: int = DEFAULT_ROLLING_WINDOW,
+    min_samples: int = _MIN_SAMPLES,
+) -> pl.Series:
+    """Gold implied-vol level z. Spiking GVZ = stress = gold bid → +z (no flip)."""
+    return _macro_level_z(
+        dates, gvz_dates, gvz_values, "gvz", window=window, min_samples=min_samples
+    )
+
+
+def walcl_liquidity_z(
+    dates: pl.Series,
+    walcl_dates: pl.Series,
+    walcl_values: pl.Series,
+    *,
+    roc_days: int = 365,
+    window: int = DEFAULT_ROLLING_WINDOW,
+    min_samples: int = _MIN_SAMPLES,
+) -> pl.Series:
+    """YoY Fed-balance-sheet growth, rolling-z. Expanding sheet → +z (buy).
+
+    Mirrors ``m2_liquidity_z``: WALCL trends monotonically, so a level-z is
+    meaningless and growth is the vote.
+    """
+    aligned = align_to_dates(dates, walcl_dates, walcl_values, forward_fill=True)
+    roc = aligned / aligned.shift(roc_days) - 1.0
+    return causal_rolling_z(roc, window=window, min_samples=min_samples).alias("walcl")
+
+
+def hy_oas_z(
+    dates: pl.Series,
+    hy_dates: pl.Series,
+    hy_values: pl.Series,
+    *,
+    window: int = DEFAULT_ROLLING_WINDOW,
+    min_samples: int = _MIN_SAMPLES,
+) -> pl.Series:
+    """HY spread level z. Widening = stress = gold bid → +z (no flip)."""
+    return _macro_level_z(
+        dates, hy_dates, hy_values, "hy_oas", window=window, min_samples=min_samples
+    )
+
+
+def ig_oas_z(
+    dates: pl.Series,
+    ig_dates: pl.Series,
+    ig_values: pl.Series,
+    *,
+    window: int = DEFAULT_ROLLING_WINDOW,
+    min_samples: int = _MIN_SAMPLES,
+) -> pl.Series:
+    """IG spread level z. Same fear-bid sign convention as ``hy_oas_z``."""
+    return _macro_level_z(
+        dates, ig_dates, ig_values, "ig_oas", window=window, min_samples=min_samples
+    )
+
+
+def breakeven_5y_z(
+    dates: pl.Series,
+    be_dates: pl.Series,
+    be_values: pl.Series,
+    *,
+    window: int = DEFAULT_ROLLING_WINDOW,
+    min_samples: int = _MIN_SAMPLES,
+) -> pl.Series:
+    """5Y breakeven level z. Rising inflation compensation → +z (no flip)."""
+    return _macro_level_z(
+        dates, be_dates, be_values, "breakeven_5y", window=window, min_samples=min_samples
+    )
+
+
+def nfci_z(
+    dates: pl.Series,
+    nfci_dates: pl.Series,
+    nfci_values: pl.Series,
+    *,
+    window: int = DEFAULT_ROLLING_WINDOW,
+    min_samples: int = _MIN_SAMPLES,
+) -> pl.Series:
+    """NFCI level z. Positive (tight) conditions = stress bid → +z (no flip)."""
+    return _macro_level_z(
+        dates, nfci_dates, nfci_values, "nfci", window=window, min_samples=min_samples
+    )
+
+
+def gdx_gld_z(
+    dates: pl.Series,
+    gld_price: pl.Series,
+    gdx_dates: pl.Series,
+    gdx_close: pl.Series,
+    *,
+    window: int = DEFAULT_ROLLING_WINDOW,
+    min_samples: int = _MIN_SAMPLES,
+) -> pl.Series:
+    """``log(GDX/GLD)`` rolling-z. Miner participation confirms the bid → +z (no flip)."""
+    gdx = align_to_dates(dates, gdx_dates, gdx_close, forward_fill=False)
+    ratio = (gdx / gld_price).log()
+    return causal_rolling_z(ratio, window=window, min_samples=min_samples).alias("gdx_gld")
+
+
+def gld_slv_z(
+    dates: pl.Series,
+    gld_price: pl.Series,
+    slv_dates: pl.Series,
+    slv_close: pl.Series,
+    *,
+    window: int = DEFAULT_ROLLING_WINDOW,
+    min_samples: int = _MIN_SAMPLES,
+) -> pl.Series:
+    """``log(GLD/SLV)`` rolling-z. Silver weak vs gold = stress → +z (no flip)."""
+    slv = align_to_dates(dates, slv_dates, slv_close, forward_fill=False)
+    ratio = (gld_price / slv).log()
+    return causal_rolling_z(ratio, window=window, min_samples=min_samples).alias("gld_slv")
+
+
 def build_extra_indicators(
     dates: pl.Series,
     btc_price: pl.Series,
@@ -807,6 +1055,146 @@ def build_extra_indicators(
                 weight=enabled["fear_greed"],
             )
         )
+    if "uup" in enabled:
+        uup_dates = _require_pair(sources.uup_dates, sources.uup_close, "uup")
+        extras.append(
+            IndicatorWeight(
+                name="uup",
+                z=uup_z(
+                    dates,
+                    uup_dates,
+                    sources.uup_close,  # type: ignore[arg-type]
+                    window=window,
+                    min_samples=min_samples,
+                ),
+                weight=enabled["uup"],
+            )
+        )
+    if "gvz" in enabled:
+        gvz_dates = _require_pair(sources.gvz_dates, sources.gvz_values, "gvz")
+        extras.append(
+            IndicatorWeight(
+                name="gvz",
+                z=gvz_z(
+                    dates,
+                    gvz_dates,
+                    sources.gvz_values,  # type: ignore[arg-type]
+                    window=window,
+                    min_samples=min_samples,
+                ),
+                weight=enabled["gvz"],
+            )
+        )
+    if "walcl" in enabled:
+        walcl_dates = _require_pair(sources.walcl_dates, sources.walcl_values, "walcl")
+        extras.append(
+            IndicatorWeight(
+                name="walcl",
+                z=walcl_liquidity_z(
+                    dates,
+                    walcl_dates,
+                    sources.walcl_values,  # type: ignore[arg-type]
+                    roc_days=roc_days,
+                    window=window,
+                    min_samples=min_samples,
+                ),
+                weight=enabled["walcl"],
+            )
+        )
+    if "hy_oas" in enabled:
+        hy_oas_dates = _require_pair(sources.hy_oas_dates, sources.hy_oas_values, "hy_oas")
+        extras.append(
+            IndicatorWeight(
+                name="hy_oas",
+                z=hy_oas_z(
+                    dates,
+                    hy_oas_dates,
+                    sources.hy_oas_values,  # type: ignore[arg-type]
+                    window=window,
+                    min_samples=min_samples,
+                ),
+                weight=enabled["hy_oas"],
+            )
+        )
+    if "ig_oas" in enabled:
+        ig_oas_dates = _require_pair(sources.ig_oas_dates, sources.ig_oas_values, "ig_oas")
+        extras.append(
+            IndicatorWeight(
+                name="ig_oas",
+                z=ig_oas_z(
+                    dates,
+                    ig_oas_dates,
+                    sources.ig_oas_values,  # type: ignore[arg-type]
+                    window=window,
+                    min_samples=min_samples,
+                ),
+                weight=enabled["ig_oas"],
+            )
+        )
+    if "breakeven_5y" in enabled:
+        be_dates = _require_pair(
+            sources.breakeven_5y_dates, sources.breakeven_5y_values, "breakeven_5y"
+        )
+        extras.append(
+            IndicatorWeight(
+                name="breakeven_5y",
+                z=breakeven_5y_z(
+                    dates,
+                    be_dates,
+                    sources.breakeven_5y_values,  # type: ignore[arg-type]
+                    window=window,
+                    min_samples=min_samples,
+                ),
+                weight=enabled["breakeven_5y"],
+            )
+        )
+    if "nfci" in enabled:
+        nfci_dates = _require_pair(sources.nfci_dates, sources.nfci_values, "nfci")
+        extras.append(
+            IndicatorWeight(
+                name="nfci",
+                z=nfci_z(
+                    dates,
+                    nfci_dates,
+                    sources.nfci_values,  # type: ignore[arg-type]
+                    window=window,
+                    min_samples=min_samples,
+                ),
+                weight=enabled["nfci"],
+            )
+        )
+    if "gdx_gld" in enabled:
+        gdx_dates = _require_pair(sources.gdx_dates, sources.gdx_close, "gdx_gld")
+        extras.append(
+            IndicatorWeight(
+                name="gdx_gld",
+                z=gdx_gld_z(
+                    dates,
+                    btc_price,
+                    gdx_dates,
+                    sources.gdx_close,  # type: ignore[arg-type]
+                    window=window,
+                    min_samples=min_samples,
+                ),
+                weight=enabled["gdx_gld"],
+            )
+        )
+    if "gld_slv" in enabled:
+        slv_dates = _require_pair(sources.slv_dates, sources.slv_close, "gld_slv")
+        extras.append(
+            IndicatorWeight(
+                name="gld_slv",
+                z=gld_slv_z(
+                    dates,
+                    btc_price,
+                    slv_dates,
+                    sources.slv_close,  # type: ignore[arg-type]
+                    window=window,
+                    min_samples=min_samples,
+                ),
+                weight=enabled["gld_slv"],
+            )
+        )
     if "weekly_rsi" in enabled:
         extras.append(
             IndicatorWeight(
@@ -980,7 +1368,7 @@ def load_date_value_frame(path: Path | str) -> tuple[pl.Series, pl.Series]:
     Accepts ``date`` / ``timestamp`` / ``observation_date`` (FRED fredgraph.csv)
     plus ``value`` / ``close`` or the remaining numeric series column.
     """
-    dest = Path(path)
+    dest = canonicalize_path(path)
     if not dest.exists():
         raise ValueError(f"macro/extra series file not found: {dest}")
     frame = pl.read_parquet(dest) if dest.suffix.lower() == ".parquet" else pl.read_csv(dest)
@@ -1024,6 +1412,7 @@ __all__ = [
     "DEFAULT_ROLLING_WINDOW",
     "EXTRA_INDICATOR_NAMES",
     "GENERIC_TECHNICAL_NAMES",
+    "GOLD_MACRO_NAMES",
     "MACRO_INDICATOR_NAMES",
     "PRICE_OSCILLATOR_NAMES",
     "WEIGHT_PARAM_BY_NAME",
@@ -1032,13 +1421,20 @@ __all__ = [
     "SdcaCompositeWeights",
     "align_to_dates",
     "build_extra_indicators",
+    "breakeven_5y_z",
     "causal_rolling_z",
     "composite_weights_from_params",
     "dxy_z",
+    "uup_z",
     "extra_indicators_for_window",
     "extra_z_vectors",
     "fast_crash_vol_z",
     "fear_greed_z",
+    "gdx_gld_z",
+    "gld_slv_z",
+    "gvz_z",
+    "hy_oas_z",
+    "ig_oas_z",
     "indicator_display_name",
     "load_date_value_frame",
     "m2_liquidity_z",
@@ -1048,8 +1444,10 @@ __all__ = [
     "onchain_mvrv_z",
     "onchain_puell_z",
     "onchain_rhodl_z",
+    "nfci_z",
     "parse_indicator_weights_json",
     "rs_eth_confluence_z",
     "rs_eth_z",
     "sources_from_optional_paths",
+    "walcl_liquidity_z",
 ]
