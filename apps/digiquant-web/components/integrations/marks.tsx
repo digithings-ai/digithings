@@ -102,9 +102,9 @@ interface SimpleIcon {
  * over. Simple Icons 15.18.0 carries no official path for Alpaca or Yahoo
  * Finance; public/marks/ holds only the LuxAlgo and NautilusTrader assets; and
  * the vendor sites serve favicons (16–32px ICOs) or full-colour app icons rather
- * than an official monochrome SVG. Those rows keep the plain lozenge on purpose.
- * A recoloured favicon or a hand-drawn monogram is not the vendor's mark, and a
- * scraped one carries no provenance — so the gap is named rather than faked.
+ * than an official monochrome SVG. Those rows show initials instead (DIG-3314).
+ * The initials are not a redraw of the vendor logo, and a recoloured favicon or
+ * a scraped mark would carry no provenance — so the gap stays named in the JSON.
  *
  * scripts/build_providers_band.py reads this object to record a `logo` for each
  * generated row, so adding an entry here and regenerating is what closes a gap;
@@ -119,21 +119,37 @@ export function rowMark(id: RowProviderId): SimpleIcon | null {
   return ROW_MARKS[id] ?? null;
 }
 
-/** The row glyph: an official monochrome path, or nothing at all. */
+const ROW_MONOGRAM: Partial<Record<RowProviderId, string>> = {
+  alpaca: "Al",
+  yahoo: "Y!",
+};
+
+/** The row glyph: an official monochrome path, or initials when none exists. */
 export function RowMark({ id, size = 14 }: { id: RowProviderId; size?: number }) {
   const mark = rowMark(id);
-  if (!mark) return null;
+  if (mark) {
+    return (
+      <svg
+        viewBox="0 0 24 24"
+        width={size}
+        height={size}
+        aria-hidden="true"
+        focusable="false"
+        className="shrink-0"
+      >
+        <path d={mark.path} fill="currentColor" />
+      </svg>
+    );
+  }
+  const letter = ROW_MONOGRAM[id];
+  if (!letter) return null;
   return (
-    <svg
-      viewBox="0 0 24 24"
-      width={size}
-      height={size}
+    <span
       aria-hidden="true"
-      focusable="false"
-      className="shrink-0"
+      className="inline-grid shrink-0 place-items-center border border-current font-mono font-medium leading-none"
+      style={{ width: size, height: size, fontSize: Math.max(7, Math.round(size * 0.42)) }}
     >
-      <path d={mark.path} fill="currentColor" />
-    </svg>
+      {letter}
+    </span>
   );
 }
-
