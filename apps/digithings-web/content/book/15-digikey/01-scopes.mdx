@@ -1,0 +1,29 @@
+---
+title: Scopes, the narrow grant
+order: 1
+summary: >-
+  How each credential carries exactly what it allows, and why narrow grants
+  keep incidents small.
+---
+
+A credential that can do everything is a catastrophe waiting for a leak.
+Scopes are how the system avoids minting one. Every credential carries a
+short list of named permissions — which services it may call, which actions
+it may take — and every service checks the list before acting. A credential
+for reading research cannot move funds, not because operators are careful,
+but because the grant never included it.
+
+Scope design follows two habits. Grants start narrow and widen on request,
+never the reverse; it is easy to add a permission someone needs and nearly
+impossible to notice one nobody needed. And scopes name business actions —
+read research, run backtests, manage documents — rather than technical
+operations, so an operator can reason about a grant without reading code.
+
+<Reference kind="architecture" href="repo:digikey/ARCHITECTURE.md" title="digikey architecture">
+  The scope catalogue and how services enforce it.
+</Reference>
+
+> **Why digithings.** Fine-grained, understandable grants are usually the
+> part of access control that only enterprises get. Here they are the
+> default shape of every credential, documented openly and enforced
+> uniformly.

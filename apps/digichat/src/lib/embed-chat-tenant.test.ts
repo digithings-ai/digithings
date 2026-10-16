@@ -399,7 +399,7 @@ describe("product embed YAML hosts", () => {
     expect(painted.gateMode).toBe("ungated");
   });
 
-  it("paints OCC YAML host without web_search", () => {
+  it("does not paint the OCC YAML host without its invite key (DIG-1210 Act B2)", () => {
     vi.stubEnv("DIGICHAT_CONFIG_PATH", OCC_EMBED_YAML);
     vi.stubEnv("DIGICHAT_EMBED_TENANTS", "");
     resetDigichatConfigForTests();
@@ -409,10 +409,7 @@ describe("product embed YAML hosts", () => {
       "https://occ.digithings.ai",
       "https://digithings.ai",
     );
-    expect(painted.skin).toBe("digichat");
-    expect(painted.slug).toBe("occ");
-    expect(painted.backendType).toBe("digigraph");
-    expect(painted.webSearch).toBe(false);
+    expect(painted.slug).not.toBe("occ");
   });
 
   it("paints first-party DIGICHAT_EMBED_TENANTS as digichat when skin is omitted", () => {

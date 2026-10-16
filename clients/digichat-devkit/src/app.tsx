@@ -1,21 +1,14 @@
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react";
 import { useEffect, useRef, useState } from "react";
-import {
-  MARK_COLS,
-  MARK_ROWS,
-  REVEAL_MS,
-  glintCell,
-  markDirection,
-  markElapsed,
-  markLines,
-  revealedColumns,
-} from "./mark";
+import { MARK_COLS, MARK_ROWS, DigichatMark } from "./wordmark";
 import { GLYPH } from "./glyphs";
 import {
   activateStrip,
   backspace,
   blankDraft,
   chatBody,
+  cycleChoice,
+  enumOptions,
   liveFrom,
   mainChrome,
   postBaseline,
@@ -32,7 +25,7 @@ import {
   type SettingRow,
   type StripRow,
 } from "./live";
-import { fieldKey as settingKey } from "./present";
+import { exportFileName, fieldKey as settingKey, getExportYaml } from "./present";
 import { loadKit, type KitRead } from "./read";
 
 const BG = "#08090b";
@@ -110,7 +103,7 @@ export function App() {
 
   const view = liveFrom(read, draft);
   const rows = rowsFor(read, draft);
-  const strip = stripRows(view);
+  const strip = stripRows(view, rows);
   const viewRef = useRef(view);
   const rowsRef = useRef(rows);
   const stripRef = useRef(strip);
@@ -255,7 +248,10 @@ export function App() {
       return;
     }
     const row = rowsRef.current[sideRef.current];
-    const textField = row?.kind === "field" && !row.toggle;
+    // An enum field is not a text field: it cycles its option list instead of taking
+    // free text, so `k`/`j` still move the caret and the type branch below skips it.
+    const choices = row?.kind === "field" && !row.toggle && !row.secret ? enumOptions(row.pane, row.label) : null;
+    const textField = row?.kind === "field" && !row.toggle && choices === null;
     if (name === "up" || (name === "k" && !textField)) {
       setSide((index) => Math.max(0, index - 1));
       setNote("");
@@ -270,6 +266,35 @@ export function App() {
       setDraft(selectEntry(row.id));
       setTurns([]);
       setCompose("");
+      setNote("");
+      return;
+    }
+    if (row?.kind === "field" && row.pane === "export" && (name === "space" || name === "return" || name === "enter")) {
+      // The row value is the promise of what gets written; compare, never re-derive.
+      const file = exportFileName(read, draftRef.current, row.label);
+      if (file === "" || row.value !== file) {
+        setNote(row.value);
+        return;
+      }
+      const body = getExportYaml(read, draftRef.current);
+      if (row.label === "embed snippet") {
+        const copied = Bun.spawnSync(["pbcopy"], { stdin: new TextEncoder().encode(body) });
+        setNote(copied.exitCode === 0 ? `copied ${file}` : "copy failed");
+        return;
+      }
+      Bun.write(file, body).then(
+        () => setNote(`wrote ${file}`),
+        () => setNote("write failed"),
+      );
+      return;
+    }
+    if (row?.kind === "field" && choices && (name === "left" || name === "right")) {
+      setDraft((current) => cycleChoice(current, settingKey(row.pane, row.label), choices, row.value, name === "left" ? -1 : 1));
+      setNote("");
+      return;
+    }
+    if (row?.kind === "field" && choices && (name === "space" || name === "return" || name === "enter")) {
+      setDraft((current) => cycleChoice(current, settingKey(row.pane, row.label), choices, row.value));
       setNote("");
       return;
     }
@@ -296,7 +321,7 @@ export function App() {
       setNote("redacted");
       return;
     }
-    if (row?.kind === "field" && !row.toggle && !row.secret) {
+    if (row?.kind === "field" && !row.toggle && !row.secret && choices === null) {
       const setting = settingKey(row.pane, row.label);
       if (name === "backspace") {
         setDraft((current) => backspace(current, setting, row.value, false));
@@ -332,7 +357,7 @@ export function App() {
     <box width="100%" height="100%" flexDirection="column" backgroundColor={BG}>
       <box height={MARK_ROWS + 1} flexDirection="row" border={["bottom"]} borderColor={HAIR} backgroundColor={BG}>
         <box paddingLeft={1} paddingRight={2} justifyContent="center">
-          <DigichatMark accent={accent} />
+          <DigichatMark />
         </box>
         <box flexGrow={1} flexDirection="column" justifyContent="center">
           <box flexDirection="row">
@@ -427,44 +452,9 @@ export function App() {
         </box>
       </box>
       <box height={2} paddingLeft={1} paddingRight={1} flexDirection="row" border={["top"]} borderColor={HAIR} backgroundColor={BG}>
-        <text fg={MUTE}>tab focus   ↑↓ move   space toggle   enter send   esc back   q quit</text>
+        <text fg={MUTE}>tab focus   ↑↓ move   space toggle   enter send   ←→ cycle   esc back   q quit</text>
         {note ? <text fg={SOFT}>{`   ${note}`}</text> : null}
       </box>
-    </box>
-  );
-}
-
-function DigichatMark({ accent }: { accent: string }) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 100);
-    return () => clearInterval(timer);
-  }, []);
-  const elapsed = markElapsed(now);
-  const revealing = elapsed < REVEAL_MS;
-  const lines = markLines(revealedColumns(elapsed));
-  const glint = glintCell(elapsed);
-  return (
-    <box width={MARK_COLS} height={MARK_ROWS} flexDirection="column">
-      {lines.map((line, row) => (
-        <text key={row}>
-          {[...line].map((ch, col) => {
-            const glinting = glint !== null && glint.row === row && glint.col === col;
-            const fg = glinting
-              ? accent
-              : revealing && ch !== " "
-                ? markDirection(row, col) === "up"
-                  ? INK
-                  : SOFT
-                : INK;
-            return (
-              <span key={col} fg={fg}>
-                {ch}
-              </span>
-            );
-          })}
-        </text>
-      ))}
     </box>
   );
 }
@@ -551,11 +541,13 @@ function StripLine({ row, hot, caret }: { row: StripRow; hot: boolean; caret: bo
   const label =
     row.kind === "model"
       ? `model  ${row.value}`
-      : row.kind === "tool"
-        ? `tool  ${row.label}  ${row.on ? "on" : "off"}`
-        : row.kind === "mcp"
-          ? `mcp  ${row.label}  ${row.on ? "on" : "off"}`
-          : `${row.slot}  ${row.text}`;
+      : row.kind === "choice"
+        ? `${row.key}  ${row.value}`
+        : row.kind === "tool"
+          ? `tool  ${row.label}  ${row.on ? "on" : "off"}`
+          : row.kind === "mcp"
+            ? `mcp  ${row.label}  ${row.on ? "on" : "off"}`
+            : `${row.slot}  ${row.text}`;
   return (
     <box flexDirection="row" backgroundColor={BG}>
       <text fg={hot ? INK : MUTE}>{`${hot ? GLYPH.user : GLYPH.system} ${label}`}</text>
