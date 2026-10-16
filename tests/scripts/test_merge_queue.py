@@ -1261,6 +1261,31 @@ def test_an_operational_gh_failure_is_reported_not_swallowed(gh_stub: Any) -> No
     assert "authentication required" in done.stderr
 
 
+def test_a_gh_transport_failure_names_the_exit_status_and_retry(gh_stub: Any) -> None:
+    """A gh non-zero exit with empty stdout is a retryable transport error.
+
+    DIG-3822: a 504-class `gh` failure surfaced as a JSON parse error, which
+    reads as a bug in the response handling rather than a transient transport
+    fault on a read. The message must name the exit status and say retry.
+    """
+    _queue_stub(
+        gh_stub(
+            gh_rule(
+                r"^pr list",
+                stdout="",
+                stderr="HTTP 504: upstream request timeout (https://api.github.com/graphql)",
+                exit_code=1,
+            )
+        ),
+        [],
+    )
+    done = _run("list", "--repo", "digithings-ai/twelve-x", "--acting-role", "cto")
+    assert done.returncode == EXIT_OPERATIONAL
+    assert "exit 1" in done.stderr
+    assert "retry" in done.stderr.lower()
+    assert "non-JSON" not in done.stderr
+
+
 def test_the_policy_file_is_validated_not_assumed(tmp_path: Path) -> None:
     """A roster edited into an unknown schema fails closed rather than merging under defaults."""
     bad = tmp_path / "policy.json"

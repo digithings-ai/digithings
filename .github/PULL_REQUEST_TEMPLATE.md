@@ -40,6 +40,32 @@ Fixes #
 
 ---
 
+## Modules / files / folders touched
+
+<!-- Required by the develop merge rule (Chris, 15 Oct 2026, DIG-3845).
+List every module, file and folder this PR touches, e.g.
+`digibase/src/digibase/art9.py`, `tests/db/`, `.github/workflows/ci-docs.yml`. -->
+
+---
+
+## What this PR delivers
+
+<!-- Required: what the PR delivers, in concrete terms. -->
+
+---
+
+## Feature or epic it belongs to
+
+<!-- Required: the feature or epic this PR belongs to (issue link, e.g. Fixes #123). -->
+
+---
+
+## How it fits the project vision
+
+<!-- Required: how this change fits the project vision. -->
+
+---
+
 ## Review
 
 Quality bar is **review**, not a self-score — see [CODE_REVIEW_POLICY.md](docs/agents/CODE_REVIEW_POLICY.md).

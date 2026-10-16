@@ -4,7 +4,7 @@
 # PEP 562 lazy exports resolve dynamically typed module attributes; Any is the honest annotation.
 
 from importlib import import_module
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from digisearch.web.grounding_models import (
     EFFORT_PRESETS,
@@ -38,6 +38,13 @@ __all__ = [
     "structured_synthesis",
     "verify_grounding",
 ]
+
+if TYPE_CHECKING:
+    # Static visibility for the PEP 562 lazy exports below; never runs,
+    # so the lazy-loading behaviour is unchanged.
+    from digisearch.web.answer import grounded_answer
+    from digisearch.web.structured import structured_synthesis, verify_grounding
+
 
 _LAZY_EXPORTS: dict[str, str] = {
     "grounded_answer": "digisearch.web.answer",

@@ -278,11 +278,8 @@ def render_metadata_only(
             [
                 "",
                 f"Full set (CSV and JSON in one artifact): {link}",
-                "  The link belongs to this chat session: it stops working when the "
-                "session is reloaded or ended, and needs the same OCC invite-key "
-                "credential as these tools.",
-                "  Quote numbers from the metadata above, or fetch a single ticket "
-                "with get_ticket; do not claim to have read the rows you were not given.",
+                "  The link belongs to this chat session: it stops working when the session is reloaded or ended, and needs the same OCC invite-key credential as these tools.",
+                "  Quote numbers from the metadata above, or fetch a single ticket with get_ticket; do not claim to have read the rows you were not given.",
             ]
         )
     return "\n".join(lines)

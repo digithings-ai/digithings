@@ -8,6 +8,9 @@ part of §1, and it also holds the **Act B2 rollback**.
 **No value ever appears in this file, in a ticket, in a comment, or in a log.** Every literal
 below is a placeholder or a command that reads the key from your shell.
 
+**No PII masking: the invite link is the only gate (Chris, 9 Oct, reaffirmed 16 Oct).**
+Ticket and Zammad text is stored and shown as written. Do not add a masker.
+
 ## What the key is
 
 A **bearer capability, not authentication** — the same model as a Stripe publishable key in an

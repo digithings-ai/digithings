@@ -300,6 +300,8 @@ async def _tick_loop(stop: asyncio.Event) -> None:
         try:
             await asyncio.wait_for(stop.wait(), timeout=WEBSET_TICK_SECONDS)
         except TimeoutError:
+            # Expected: the timeout is the tick interval itself; expiry just
+            # ends this wait cycle.
             pass
         if stop.is_set():
             return
@@ -362,6 +364,8 @@ async def _redelivery_loop(stop: asyncio.Event) -> None:
         try:
             await asyncio.wait_for(stop.wait(), timeout=WEBSET_REDELIVERY_SECONDS)
         except TimeoutError:
+            # Expected: the timeout is the redelivery interval itself; expiry
+            # just ends this wait cycle.
             pass
         if stop.is_set():
             return

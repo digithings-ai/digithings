@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { siBinance, siCoinbase, siSupabase } from "simple-icons";
+import { siCoinbase, siSupabase } from "simple-icons";
 
 /** Marks for the integrations band. DigiThings, LuxAlgo and NautilusTrader use
  *  the vendors' own assets: the digithings favicon, the LuxAlgo app icon, and the
@@ -79,17 +79,13 @@ export function IntegrationMark({ id, size = 20 }: { id: IntegrationId; size?: n
   );
 }
 
-/** The providers named in the two connected-package rows. */
-export type RowProviderId =
-  | "coinbase"
-  | "alpaca"
-  | "ibkr"
-  | "kraken"
-  | "tradier"
-  | "yahoo"
-  | "fred"
-  | "supabase"
-  | "binance";
+/** The providers the two connected-package rows can name. Narrower than it
+ *  looks: the rows themselves are generated from this tree's real dependencies
+ *  by scripts/build_providers_band.py, so a provider only belongs here while
+ *  some manifest declares one of its packages and a non-test source file
+ *  imports it. tests/scripts/test_providers_band_is_current.py fails CI when the
+ *  generated JSON names an id this union does not cover. */
+export type RowProviderId = "alpaca" | "supabase" | "yahoo";
 
 interface SimpleIcon {
   hex: string;
@@ -98,24 +94,24 @@ interface SimpleIcon {
 
 /**
  * Marks for the connected-package rows, taken from Simple Icons — the CC0 source
- * of official brand paths this repo already uses, kept tree-shakeable in
- * packages/ui/src/components/logos.ts. Each path renders with fill="currentColor",
- * so a mark is monochrome by construction and takes the row's ink colour on any
- * surface.
+ * of official brand paths this repo already uses. Each path renders with
+ * fill="currentColor", so a mark is monochrome by construction and takes the
+ * row's ink colour on any surface.
  *
  * A provider with NO entry here is a real gap, not a rendering failure to paper
- * over. Simple Icons 15.18.0 carries no official path for Alpaca, Interactive
- * Brokers, Kraken, Tradier, Yahoo Finance or FRED; public/marks/ holds only the
- * LuxAlgo and NautilusTrader assets; and the vendor sites serve favicons
- * (16–32px ICOs) or full-colour app icons rather than an official monochrome SVG.
- * Those rows keep the plain lozenge on purpose. A recoloured favicon or a
- * hand-drawn monogram is not the vendor's mark, and a scraped one carries no
- * provenance — so the missing six are named rather than faked.
+ * over. Simple Icons 15.18.0 carries no official path for Alpaca or Yahoo
+ * Finance; public/marks/ holds only the LuxAlgo and NautilusTrader assets; and
+ * the vendor sites serve favicons (16–32px ICOs) or full-colour app icons rather
+ * than an official monochrome SVG. Those rows show initials instead (DIG-3314).
+ * The initials are not a redraw of the vendor logo, and a recoloured favicon or
+ * a scraped mark would carry no provenance — so the gap stays named in the JSON.
+ *
+ * scripts/build_providers_band.py reads this object to record a `logo` for each
+ * generated row, so adding an entry here and regenerating is what closes a gap;
+ * the generator cannot invent one this file does not register.
  */
 const ROW_MARKS: Partial<Record<RowProviderId, SimpleIcon>> = {
-  coinbase: siCoinbase,
   supabase: siSupabase,
-  binance: siBinance,
 };
 
 /** The official monochrome path for a row provider, or null when none exists. */
@@ -123,21 +119,37 @@ export function rowMark(id: RowProviderId): SimpleIcon | null {
   return ROW_MARKS[id] ?? null;
 }
 
-/** The row glyph: an official monochrome path, or nothing at all. */
+const ROW_MONOGRAM: Partial<Record<RowProviderId, string>> = {
+  alpaca: "Al",
+  yahoo: "Y!",
+};
+
+/** The row glyph: an official monochrome path, or initials when none exists. */
 export function RowMark({ id, size = 14 }: { id: RowProviderId; size?: number }) {
   const mark = rowMark(id);
-  if (!mark) return null;
+  if (mark) {
+    return (
+      <svg
+        viewBox="0 0 24 24"
+        width={size}
+        height={size}
+        aria-hidden="true"
+        focusable="false"
+        className="shrink-0"
+      >
+        <path d={mark.path} fill="currentColor" />
+      </svg>
+    );
+  }
+  const letter = ROW_MONOGRAM[id];
+  if (!letter) return null;
   return (
-    <svg
-      viewBox="0 0 24 24"
-      width={size}
-      height={size}
+    <span
       aria-hidden="true"
-      focusable="false"
-      className="shrink-0"
+      className="inline-grid shrink-0 place-items-center border border-current font-mono font-medium leading-none"
+      style={{ width: size, height: size, fontSize: Math.max(7, Math.round(size * 0.42)) }}
     >
-      <path d={mark.path} fill="currentColor" />
-    </svg>
+      {letter}
+    </span>
   );
 }
-

@@ -13,9 +13,10 @@
  * the ticker with no frontend edit. {@link loadTapeUniverse} is the only
  * caller-facing entry point; {@link mergeTapeUniverse} is the pure join.
  *
- * {@link TAPE_SYMBOLS} is retained as the DEGRADED FALLBACK for a build with
- * `NEXT_PUBLIC_MARKET_DATA_URL` unset (`apps/digiquant-web/.env.local.example`
- * ships it commented out). It is the snapshot of
+ * {@link TAPE_SYMBOLS} is the interim list when the price-table manifest is
+ * empty (`NEXT_PUBLIC_MARKET_DATA_URL` unset, or the worker down). The book is
+ * kept in front of that list. A manifest that returns tickers replaces it.
+ * It is the snapshot of
  * `digiquant/src/digiquant/data/prices/ticker_venues.py` (`_NYSE_TICKERS`,
  * `_CRYPTO_TICKERS`, `_FX_TICKERS`) as it stood when this module was written:
  * ETFs (incl. commodity and fixed-income funds), currencies, crypto. It is no
@@ -106,16 +107,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * The live universe: portfolio holdings ∪ price-table symbols.
  *
  * Both reads are independent, so either may fail alone — a withheld portfolio
- * still yields the archive, and an unconfigured market worker still yields the
- * book. Only when BOTH are empty does this fall back to
- * {@link TAPE_SYMBOLS}, so a missing feed degrades to the old baseline rather
- * than to an empty ticker.
+ * still yields the archive. An empty price-table manifest (worker unset or
+ * down) keeps the book and fills every other name from {@link TAPE_SYMBOLS},
+ * so the landing tape still has the interim crypto and ETF list. A manifest
+ * that returned tickers stays the live union and does not grow the hand list.
  */
 export async function loadTapeUniverse(): Promise<string[]> {
   const [market, portfolio] = await Promise.all([
     fetchMarketTickers(),
     officialGet("/portfolio").then((read) => (read.ok ? portfolioTickersFrom(read.body) : [])),
   ]);
-  const universe = mergeTapeUniverse(portfolio, market);
-  return universe.length > 0 ? universe : [...TAPE_SYMBOLS];
+  const live = mergeTapeUniverse(portfolio, market);
+  if (market.length > 0) return live;
+  return mergeTapeUniverse(live, TAPE_SYMBOLS);
 }
