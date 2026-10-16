@@ -89,6 +89,7 @@ def _evaluator(
         vs_flat_dca_pct=vs_flat,
         vs_lump_pct=-1.0,
         capital_deployed_pct=40.0,
+        capital_deployed_peak_pct=40.0,
         max_drawdown_pct=12.0,
     )
 
@@ -98,6 +99,7 @@ def _cadence(sell_days: int) -> Stage0Cadence:
         buy_days=20,
         sell_days=sell_days,
         capital_deployed_pct=40.0,
+        capital_deployed_peak_pct=40.0,
         max_drawdown_pct=12.0,
     )
 
@@ -176,6 +178,7 @@ class TestStage0OosGate:
                 vs_flat_dca_pct=vs,
                 vs_lump_pct=0.0,
                 capital_deployed_pct=40.0,
+                capital_deployed_peak_pct=40.0,
                 max_drawdown_pct=12.0,
             )
 
@@ -219,6 +222,7 @@ class TestStage0OosGate:
                 vs_flat_dca_pct=vs + 0.1 * valuation_weight,
                 vs_lump_pct=0.0,
                 capital_deployed_pct=deployed,
+                capital_deployed_peak_pct=deployed,
                 max_drawdown_pct=12.0,
             )
 
@@ -260,6 +264,7 @@ class TestStage1SurvivorWeights:
                 vs_flat_dca_pct=vs,
                 vs_lump_pct=0.0,
                 capital_deployed_pct=40.0,
+                capital_deployed_peak_pct=40.0,
                 max_drawdown_pct=12.0,
             )
 
