@@ -2,6 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildAuthorizationUrl,
   callbackHtml,
+  MCP_OAUTH_MESSAGE,
+  MCP_OAUTH_RESULT_COOKIE,
+  oauthResultCookieHeader,
   discoverMcpAuthorization,
   exchangeAuthorizationCode,
   parseResourceMetadataUrl,
@@ -45,15 +48,26 @@ describe("mcp oauth helpers", () => {
     expect(verifyOAuthState(raw, "other")).toBeNull();
   });
 
-  it("callback HTML postMessages without logging extras", () => {
-    const html = callbackHtml({
-      origin: "http://127.0.0.1:3000",
-      id: "linear",
-      accessToken: "tok",
-    });
+  it("callback HTML postMessages without embedding the token", () => {
+    const html = callbackHtml();
     expect(html).toContain("digichat-mcp-oauth");
-    expect(html).toContain("tok");
     expect(html).toContain("window.opener.postMessage");
+    expect(html).toContain(MCP_OAUTH_RESULT_COOKIE);
+    expect(html).not.toContain("tok");
+    expect(html).not.toContain("</script><script>");
+  });
+
+  it("result cookie carries the token outside the html", () => {
+    const token = "tok</script>";
+    const cookie = oauthResultCookieHeader(
+      { type: MCP_OAUTH_MESSAGE, id: "linear", accessToken: token },
+      "https://chat.example/api/mcp/oauth/callback",
+    );
+    expect(cookie.startsWith(`${MCP_OAUTH_RESULT_COOKIE}=`)).toBe(true);
+    expect(cookie).toContain(encodeURIComponent(token));
+    expect(cookie).not.toContain(token);
+    expect(cookie).toContain("Secure");
+    expect(cookie).not.toContain("HttpOnly");
   });
 
   it("buildAuthorizationUrl uses PKCE S256", () => {
