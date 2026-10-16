@@ -3,6 +3,7 @@
 #   • pushes to any remote URL other than GitHub, the Origin mirror, or Origin /local
 #   • origin/<slug> drafts pushed anywhere except the Origin /local endpoint
 #   • pushes to `main` without ALLOW_MAIN_PUSH=1
+#   • pushes to `develop` without ALLOW_DEVELOP_PUSH=1
 #   • pushes that touch live-trading paths without a `Human-Approved-By:` trailer
 #
 # Warns, and never blocks (DIG-1579):
@@ -132,6 +133,16 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   # Block push to main without explicit opt-in.
   if [ "$remote_ref" = "refs/heads/main" ] && [ "${ALLOW_MAIN_PUSH:-0}" != "1" ]; then
     echo "pre-push: refusing to push to 'main'. Set ALLOW_MAIN_PUSH=1 if this is intentional." >&2
+    failed=1
+    continue
+  fi
+
+  # Block push to develop without explicit opt-in. develop carries
+  # required_pull_request_reviews: null (BRANCHING.md), so unlike main there
+  # is no server-side PR gate on it and this hook is the only guard.
+  if [ "$remote_ref" = "refs/heads/develop" ] && [ "${ALLOW_DEVELOP_PUSH:-0}" != "1" ]; then
+    echo "pre-push: refusing to push to 'develop'. Set ALLOW_DEVELOP_PUSH=1 if this is intentional." >&2
+    echo "         Usual cause: this branch tracks develop upstream, so a bare 'git push' lands there. Fix: git branch --set-upstream-to=github/<branch> <branch>." >&2
     failed=1
     continue
   fi

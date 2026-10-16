@@ -42,6 +42,10 @@ DT_BASE_URL = "https://digithings.ai"
 binding = "RUNNER"
 service = "digiquant-runner"
 
+[[services]]
+binding = "TWELVEX_RUNNER"
+service = "twelvex-runner"
+
 # Per-date remediation ledger for POST /backfill. No cron trigger attaches to
 # it; POST /backfill is its only entry point.
 [[durable_objects.bindings]]
