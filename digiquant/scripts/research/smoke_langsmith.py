@@ -14,6 +14,7 @@ from __future__ import annotations
 import operator
 import os
 from typing import Annotated, Any, TypedDict
+from urllib.parse import urlsplit
 
 
 class S(TypedDict, total=False):
@@ -110,6 +111,19 @@ def _nesting_ok() -> bool:
     return ok
 
 
+def _is_us_langsmith(endpoint: str) -> bool:
+    """True for the US LangSmith host, not a lookalike or the EU region.
+
+    ``endpoint.endswith("api.smith.langchain.com")`` is true for
+    ``https://evilapi.smith.langchain.com``.
+    """
+    try:
+        host = (urlsplit(endpoint).hostname or "").rstrip(".").lower()
+    except ValueError:
+        return False
+    return host == "api.smith.langchain.com"
+
+
 def main() -> int:
     if not os.environ.get("LANGSMITH_API_KEY"):
         print("FAIL: LANGSMITH_API_KEY not set (secret missing)")
@@ -120,7 +134,7 @@ def main() -> int:
     if endpoint and nesting:
         extra = (
             ""
-            if endpoint.endswith("api.smith.langchain.com") and "eu." not in endpoint
+            if _is_us_langsmith(endpoint)
             else f" — set LANGSMITH_ENDPOINT={endpoint} on the workflows"
         )
         print(f"\nVERDICT: READY — enable LANGSMITH_TRACING on the workflows{extra}")
