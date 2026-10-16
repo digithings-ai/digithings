@@ -113,7 +113,13 @@ def parse_migrations(migrations_dir: pathlib.Path = MIGRATIONS_DIR):
     triggers: list[dict] = []
     unsupported: list[tuple[str, str, str, str]] = []
 
-    for path in sorted(migrations_dir.glob("*.sql")):
+    layered = sorted((migrations_dir / "engine").glob("*.sql")) + sorted(
+        (migrations_dir / "prod").glob("*.sql")
+    )
+    # No stray top-level files: the chain lives in engine/ and prod/ (D-Q6′).
+    strays = sorted(migrations_dir.glob("*.sql"))
+    assert not strays, f"top-level migration(s) outside engine/ and prod/: {strays}"
+    for path in layered:
         # Strip line comments so a commented-out definition cannot inflate a count.
         sql = re.sub(r"--[^\n]*", "", path.read_text(encoding="utf-8"))
 
