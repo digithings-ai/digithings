@@ -8,7 +8,7 @@
 }
 
 .aui-md {
-  color: var(--text-primary);
+  color: var(--ink);
   font-family: var(--font-family-mono);
   font-size: 0.875rem;
   line-height: 1.5;

@@ -2,9 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { NAV, isDbExempt } from './nav';
 
 describe('NAV', () => {
-  it('is the 4-destination owner spine + FX Hub (System removed)', () => {
-    expect(NAV.map((n) => n.href)).toEqual(['/', '/portfolio', '/pipeline', '/twelve-x']);
-    expect(NAV.map((n) => n.label)).toEqual(['Brief', 'Portfolio', 'Pipeline', 'FX Hub']);
+  it('is FX Hub only (brief, portfolio, and pipeline are the desk at /app)', () => {
+    expect(NAV.map((n) => n.href)).toEqual(['/twelve-x']);
+    expect(NAV.map((n) => n.label)).toEqual(['FX Hub']);
+    expect(NAV.find((n) => n.href === '/')).toBeUndefined();
+    expect(NAV.find((n) => n.href === '/portfolio')).toBeUndefined();
+    expect(NAV.find((n) => n.href === '/pipeline')).toBeUndefined();
     expect(NAV.find((n) => n.href === '/system')).toBeUndefined();
   });
 

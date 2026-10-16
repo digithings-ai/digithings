@@ -151,7 +151,7 @@ def client(service, **kwargs):
 R2_CREDS = {
     "R2_ACCOUNT_ID": "acc0123456789",
     "R2_BUCKET": "digithings-archive",
-    "R2_ACCESS_KEY_ID": "AKIAEXAMPLEEXAMPLE00",
+    "R2_ACCESS_KEY_ID": "test-r2-access-key",
     "R2_SECRET_ACCESS_KEY": "s3cr3taccesskeyvalue0123456789",
 }
 
@@ -481,6 +481,17 @@ def test_all_targets_are_dumped_into_one_timestamped_directory(
         assert entry["archive"]["bytes"] == len(STUB_ARCHIVE)
     assert (run / "core.dump.list").exists()
     assert (run / "twelve-x.dump.list").exists()
+
+    # SHA256SUMS is one sidecar for the run. Writing it with `>` inside the
+    # target loop used to keep only whichever target ran last.
+    sums = (run / "SHA256SUMS").read_text()
+    names = [line.split("  ", 1)[1].strip() for line in sums.strip().splitlines()]
+    assert names == [
+        "core.dump",
+        "core.dump.list",
+        "twelve-x.dump",
+        "twelve-x.dump.list",
+    ]
 
 
 def test_the_local_sha256_check_can_actually_fail(tmp_path, stub_bin, stub_home, fake_boto_dir):
