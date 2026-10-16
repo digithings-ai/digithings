@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 from pathlib import Path
 from typing import Any  # score:allow untyped any — tearsheet HTML assembly
 
@@ -78,7 +79,16 @@ def create_tearsheet(
     except ImportError as e:
         raise ImportError("Tearsheet requires plotly. pip install digiquant[visualization]") from e
 
-    out = Path(output_path)
+    # The hub already confines tearsheet_path. This check is in the function
+    # that writes, which is the check CodeQL counts. relative_to is not it.
+    base = os.path.realpath(os.path.abspath("backtest_results"))
+    raw = os.fspath(output_path)
+    joined = raw if os.path.isabs(raw) else os.path.join(base, raw)
+    real = os.path.realpath(os.path.normpath(joined))
+    prefix = base if base.endswith(os.sep) else base + os.sep
+    if real != base and not real.startswith(prefix):
+        raise ValueError("tearsheet_path must resolve under 'backtest_results'")
+    out = Path(real)
     out.parent.mkdir(parents=True, exist_ok=True)
 
     timestamps, balances = _extract_equity_curve(account_report)

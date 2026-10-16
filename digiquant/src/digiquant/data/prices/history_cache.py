@@ -13,6 +13,7 @@ grace period. Writes are atomic (temp file + rename).
 
 from __future__ import annotations
 
+import os
 import re
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -43,24 +44,17 @@ def _unsafe_ticker(ticker: str) -> ValueError:
 def cache_path(ticker: str, cache_dir: Path | str = DEFAULT_CACHE_DIR) -> Path:
     if not is_safe_ticker(ticker):
         raise _unsafe_ticker(ticker)
-    dest = Path(cache_dir) / f"{ticker}.csv"
-    # Containment, CodeQL-canonical form: normalize via resolve(), then require
-    # the result to sit inside the resolved cache dir (relative_to raises
-    # ValueError otherwise). The flat-file invariant (parent == base) is kept
-    # as a second leg: the allowlist admits no separators, so any nesting
-    # here would mean a future caller bypassed the validator.
-    base = Path(cache_dir).resolve()
-    try:
-        resolved = dest.resolve()
-    except OSError as exc:
-        raise _unsafe_ticker(ticker) from exc
-    try:
-        resolved.relative_to(base)
-    except ValueError:
+    # Containment CodeQL models: normalize, then require the file to sit inside
+    # the cache directory. relative_to is not that check. The flat-file leg stays:
+    # the allowlist admits no separators, so a nested path means the validator
+    # was bypassed.
+    base = os.path.realpath(os.fspath(cache_dir))
+    logical = os.path.normpath(os.path.join(base, f"{ticker}.csv"))
+    candidate = os.path.realpath(logical)
+    prefix = base if base.endswith(os.sep) else base + os.sep
+    if not candidate.startswith(prefix) or os.path.dirname(candidate) != base:
         raise _unsafe_ticker(ticker)
-    if resolved.parent != base:
-        raise _unsafe_ticker(ticker)
-    return dest
+    return Path(candidate)
 
 
 def load_cached(ticker: str, cache_dir: Path | str = DEFAULT_CACHE_DIR) -> pl.DataFrame | None:
@@ -97,9 +91,8 @@ def save_cached(ticker: str, df: pl.DataFrame, cache_dir: Path | str = DEFAULT_C
     missing = set(OHLCV_COLUMNS) - set(df.columns)
     if missing:
         raise ValueError(f"save_cached({ticker}): missing columns {missing}")
-    cdir = Path(cache_dir)
-    cdir.mkdir(parents=True, exist_ok=True)
-    dest = cache_path(ticker, cdir)
+    dest = cache_path(ticker, cache_dir)
+    os.makedirs(os.path.dirname(os.fspath(dest)), exist_ok=True)
     tmp = dest.with_suffix(".csv.tmp")
     df.select(list(OHLCV_COLUMNS)).sort("timestamp").write_csv(tmp)
     tmp.rename(dest)
