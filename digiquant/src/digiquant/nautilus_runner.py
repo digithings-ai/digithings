@@ -47,6 +47,7 @@ import polars as pl
 
 from digiquant.constraints import normalize_drawdown_pct
 from digiquant.models import BacktestResult
+from digiquant.paths import canonicalize_path
 from digiquant.stats import HonestRateBlock, normalize_series, stability_split
 
 if TYPE_CHECKING:
@@ -188,7 +189,7 @@ def _load_ohlcv_for_backtest(
     from digiquant.data.loader import load_ohlcv_csv
 
     if data_path is not None:
-        path = Path(data_path)
+        path = canonicalize_path(data_path)
         if not path.exists():
             return None
         df = load_ohlcv_csv(path)
@@ -196,16 +197,19 @@ def _load_ohlcv_for_backtest(
         return df, str(symbol)
 
     if data_dir is not None and symbols:
-        data_dir = Path(data_dir)
+        data_dir = canonicalize_path(data_dir)
         if not data_dir.is_dir():
             return None
-        data_dir_resolved = data_dir.resolve()
+        data_dir_resolved = Path(os.path.realpath(os.fspath(data_dir)))
         for sym in symbols:
             for candidate in (data_dir / f"{sym}.csv", data_dir / f"{sym}_ohlcv.csv"):
-                resolved_candidate = candidate.resolve()
-                if not resolved_candidate.is_relative_to(data_dir_resolved):
+                real_candidate = os.path.realpath(os.path.normpath(os.fspath(candidate)))
+                real_base = os.path.realpath(os.path.abspath(os.fspath(data_dir_resolved)))
+                base_prefix = real_base if real_base.endswith(os.sep) else real_base + os.sep
+                if real_candidate != real_base and not real_candidate.startswith(base_prefix):
                     logger.warning("Symbol path escapes data_dir, skipping: %s", candidate)
                     continue
+                resolved_candidate = Path(real_candidate)
                 if resolved_candidate.exists():
                     df = load_ohlcv_csv(resolved_candidate)
                     return df, sym
@@ -219,17 +223,20 @@ def _load_all_ohlcv_for_backtest(
     """Load all available symbol CSVs from data_dir. Returns {symbol: df} for found symbols."""
     from digiquant.data.loader import load_ohlcv_csv
 
-    data_dir = Path(data_dir)
+    data_dir = canonicalize_path(data_dir)
     if not data_dir.is_dir():
         return {}
-    data_dir_resolved = data_dir.resolve()
+    data_dir_resolved = Path(os.path.realpath(os.fspath(data_dir)))
     loaded: dict[str, pl.DataFrame] = {}
     for sym in symbols:
         for candidate in (data_dir / f"{sym}.csv", data_dir / f"{sym}_ohlcv.csv"):
-            resolved_candidate = candidate.resolve()
-            if not resolved_candidate.is_relative_to(data_dir_resolved):
+            real_candidate = os.path.realpath(os.path.normpath(os.fspath(candidate)))
+            real_base = os.path.realpath(os.path.abspath(os.fspath(data_dir_resolved)))
+            base_prefix = real_base if real_base.endswith(os.sep) else real_base + os.sep
+            if real_candidate != real_base and not real_candidate.startswith(base_prefix):
                 logger.warning("Symbol path escapes data_dir, skipping: %s", candidate)
                 continue
+            resolved_candidate = Path(real_candidate)
             if resolved_candidate.exists():
                 try:
                     loaded[sym] = load_ohlcv_csv(resolved_candidate)
