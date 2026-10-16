@@ -34,7 +34,22 @@ const SENTINEL = "__DEVKIT_PRESERVED__";
 const SECRET_LINE_RE = /^(\s*)(["']?)(token|consumeUrl)\2(\s*:)(.*)$/;
 const SERVER_ID_RE = /^(\s*)-\s*id:\s*(\S+)\s*$/;
 const TOKEN_ENV_RE = /^(\s*)tokenEnv:\s*(\S+)\s*$/;
-const BLOCK_SCALAR_RE = /[|>][+-]?\s*(#.*)?$/;
+function isYamlSpace(ch: string | undefined): boolean {
+  return ch === " " || ch === "\t" || ch === "\n" || ch === "\r" || ch === "\f" || ch === "\v";
+}
+
+/** YAML block scalar (`|`, `>`, optional chomp) then only a comment. Linear scan. */
+function isBlockScalar(value: string): boolean {
+  for (let i = 0; i < value.length; i++) {
+    const marker = value[i];
+    if (marker !== "|" && marker !== ">") continue;
+    let j = i + 1;
+    if (value[j] === "+" || value[j] === "-") j++;
+    while (isYamlSpace(value[j])) j++;
+    if (j >= value.length || value[j] === "#") return true;
+  }
+  return false;
+}
 
 function indentOf(line: string): number {
   return /^(\s*)/.exec(line)?.[1].length ?? 0;
@@ -150,7 +165,7 @@ function substituteSecrets(text: string, secrets: ExportSecret[]): string {
         ? `${m[1]}${m[2]}consumeUrl${m[2]}${m[4]} https://replace-me.invalid/consume`
         : `${m[1]}${m[2]}${hit.key}${m[2]}${m[4]} \${${hit.variable}}`;
     out.push(value);
-    if (BLOCK_SCALAR_RE.test(m[5])) skipIndent = indentOf(line);
+    if (isBlockScalar(m[5])) skipIndent = indentOf(line);
   });
   return out.join("\n");
 }
