@@ -65,8 +65,8 @@ def build_ticket_chunks(
 ) -> list[Any]:
     """Build one Chunk per article with the body and metadata unchanged.
 
-    No PII masking: the invite link is the only gate (Chris, 9 Oct,
-    reaffirmed 16 Oct). Names, emails and phone numbers stay in the chunk.
+    No PII masking: the invite link is the only gate (Chris, 9 Oct, reaffirmed 16 Oct).
+    Names, emails and phone numbers stay in the chunk.
     """
     from digisearch.core.models import Chunk
 

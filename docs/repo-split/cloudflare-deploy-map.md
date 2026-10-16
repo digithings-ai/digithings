@@ -84,7 +84,7 @@ Six distinctive strings are present in both the deployed bundle and the branch s
 
 **The deployed build carries the privacy fix.** Commit dates are +0200, so the add commit is 16:12 UTC and the fix commit is 17:57 UTC. The Worker was created at 17:33 UTC and modified at 18:38 UTC. The fix landed after the first deploy and was deployed 41 minutes later. The live Worker masks names, mail headers and organisations.
 
-Source update (16 Oct 2026): `pii.ts` is deleted from the corpus-index layout. No PII masking: the invite link is the only gate (Chris, 9 Oct, reaffirmed 16 Oct). Do not put the masker back. The sentences above record a deploy that still contained it.
+Source update (16 Oct 2026): do not restore a ticket masker. **No PII masking: the invite link is the only gate (Chris, 9 Oct, reaffirmed 16 Oct).** The sentence above records a deploy that still contained one.
 
 **What this changes.**
 

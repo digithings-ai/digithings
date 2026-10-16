@@ -19,6 +19,8 @@ export function FooterWordmark() {
     if (!safe || !el || typeof IntersectionObserver === "undefined") return;
     setPhase("idle");
     setArmed(true);
+    // CodeQL js/superfluous-trailing-arguments false positive: the DOM
+    // IntersectionObserver constructor takes (callback, options?) — both args are consumed.
     const io = new IntersectionObserver(
       ([entry]) => {
         if (entry?.isIntersecting) {
