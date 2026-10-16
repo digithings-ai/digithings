@@ -191,7 +191,11 @@ def get_checkpointer():
 
                 _checkpointer_instance = MemorySaver()
             except ImportError:
-                pass
+                import logging as _logging
+
+                _logging.getLogger(__name__).debug(
+                    "langgraph-checkpoint-memory not installed; running without a checkpointer"
+                )
         elif kind == "sqlite":
             try:
                 from langgraph.checkpoint.sqlite import SqliteSaver
@@ -218,7 +222,11 @@ def get_checkpointer():
 
                     _checkpointer_instance = MemorySaver()
                 except ImportError:
-                    pass
+                    import logging as _logging
+
+                    _logging.getLogger(__name__).debug(
+                        "langgraph-checkpoint-memory not installed; running without a checkpointer"
+                    )
         elif kind == "postgres":
             try:
                 from langgraph.checkpoint.postgres import PostgresSaver
@@ -230,7 +238,11 @@ def get_checkpointer():
                     _checkpointer_instance = cm.__enter__()
                     _checkpointer_instance.setup()
             except ImportError:
-                pass
+                import logging as _logging
+
+                _logging.getLogger(__name__).debug(
+                    "langgraph-checkpoint-postgres not installed; running without a checkpointer"
+                )
         if _checkpointer_instance is not None and not isinstance(
             _checkpointer_instance, McpTokenRedactingCheckpointer
         ):

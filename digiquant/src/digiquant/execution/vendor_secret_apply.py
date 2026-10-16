@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import argparse
 import subprocess
-import tempfile
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
@@ -21,16 +20,15 @@ from digiquant.execution.vendor_secret_files import (
     inspect_vendor_secret_files,
     load_vendor_secret_environ,
     secrets_set_argv,
-    vendor_secrets_dir,
-    write_vendor_secret_env_file,
+    vendor_secret_env_payload,
 )
 
 EXIT_APPLY_FAILED: int = 3
-RunArgv = Callable[[Sequence[str]], None]
+RunArgv = Callable[[Sequence[str], str], None]
 
 
-def _run_argv(argv: Sequence[str]) -> None:
-    subprocess.run(argv, check=True, capture_output=True, text=True)
+def _run_argv(argv: Sequence[str], payload: str) -> None:
+    subprocess.run(argv, check=True, capture_output=True, text=True, input=payload)
 
 
 def run_vendor_secret_apply(
@@ -53,26 +51,15 @@ def run_vendor_secret_apply(
         return 0
     environ = load_vendor_secret_environ(repo_root)
     log("vendor secret apply: setting core EF secret names (values not logged)")
-    env_file: Path | None = None
+    payload = vendor_secret_env_payload(environ)
     try:
-        with tempfile.NamedTemporaryFile(
-            dir=vendor_secrets_dir(repo_root),
-            prefix=".vendor-secret-apply-",
-            suffix=".env",
-            delete=False,
-        ) as handle:
-            env_file = Path(handle.name)
-        write_vendor_secret_env_file(environ, env_file)
-        run(secrets_set_argv(env_file))
+        run(secrets_set_argv(), payload)
         for function in BILLING_FUNCTIONS:
             log(f"vendor secret apply: deploy {function}")
-            run(function_deploy_argv(function))
+            run(function_deploy_argv(function), "")
     except (OSError, subprocess.CalledProcessError):
         log("vendor secret apply failed (supabase output not echoed)")
         return EXIT_APPLY_FAILED
-    finally:
-        if env_file is not None:
-            env_file.unlink(missing_ok=True)
     log("vendor secret apply: done")
     return 0
 

@@ -272,11 +272,7 @@ def render_issue_body(
         f"**Threshold:** {max_age_minutes} minutes  ",
         f"**Waiting deployments:** {len(stale)}",
         "",
-        "A deployment listed here started, passed its checks, and is waiting on "
-        "human approval. Nothing ships until it is approved or rejected, and "
-        "until then **production is serving the previous build**. If the previous "
-        "build is the one carrying the fix you are waiting on, the fix is not "
-        "live.",
+        "A deployment listed here started, passed its checks, and is waiting on human approval. Nothing ships until it is approved or rejected, and until then **production is serving the previous build**. If the previous build is the one carrying the fix you are waiting on, the fix is not live.",
         "",
         "| Created | Age | State | Ref | Commit | Creator |",
         "|---|---|---|---|---|---|",
@@ -298,18 +294,13 @@ def render_issue_body(
         "",
     ]
     lines += [
-        f"   - [`{item.short_sha}` on `{item.ref}`]"
-        f"(https://github.com/{repo}/commit/{item.sha})"
-        f" — deployment [{item.deployment_id}]"
-        f"(https://github.com/{repo}/deployments/{item.deployment_id})"
+        f"   - [`{item.short_sha}` on `{item.ref}`](https://github.com/{repo}/commit/{item.sha}) — deployment [{item.deployment_id}](https://github.com/{repo}/deployments/{item.deployment_id})"
         for item in stale
     ]
     lines += [
         "",
-        "2. Approve or reject it at the environment gate — the deploy stays parked "
-        "until a human answers.",
-        "3. If this deployment is not wanted, reject it and confirm nothing newer "
-        "is also parked behind it.",
+        "2. Approve or reject it at the environment gate — the deploy stays parked until a human answers.",
+        "3. If this deployment is not wanted, reject it and confirm nothing newer is also parked behind it.",
         "",
         f"Pending deployments for `{environment}`: {f'https://github.com/{repo}/deployments'}",
     ]
@@ -671,7 +662,6 @@ def main(argv: list[str] | None = None) -> int:
     # The two channels are independent: neither may suppress the other. An earlier
     # draft returned early on an issue-API failure, so a GitHub outage took out the
     # email too and both channels went dark at exactly the moment they mattered.
-    issue_status = "issue not filed"
     try:
         issue_status = file_or_update_issue(args.repo, body, token, dry_run=args.dry_run)
     except GateCheckFailed as exc:
