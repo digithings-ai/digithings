@@ -102,21 +102,25 @@ def test_inventory_and_contexts_are_internally_consistent() -> None:
 
 
 def test_removing_a_policy_check_from_the_inventory_fails() -> None:
-    """DoD: take `All commits signed off` out and the guard fails.
+    """DoD: take `gitleaks-scan` out and the guard fails.
 
     The check still reports on every PR. Deleting its inventory entry does not
     stop it reporting — it only stops anything recording that it ought to be a
     gate. That is the DIG-1952 bug in its purest form: the check goes red and
     the merge proceeds.
+
+    DIG-3683 note: this used `All commits signed off` as the example until the
+    GHA DCO workflow was retired — DCO is now enforced by the `local-ci`
+    required status check, so no entry here can own it.
     """
     inventory, tracked = guard.load_inventory(INVENTORY)
-    assert "All commits signed off" in {c.context for c in inventory}
-    stripped = [c for c in inventory if c.context != "All commits signed off"]
+    assert "gitleaks-scan" in {c.context for c in inventory}
+    stripped = [c for c in inventory if c.context != "gitleaks-scan"]
 
     findings = _run(stripped, tracked, guard.read_contexts_file(CONTEXTS))
 
     assert "policy.ungated" in _codes(findings)
-    assert "All commits signed off" in _subjects(findings, "policy.ungated")
+    assert "gitleaks-scan" in _subjects(findings, "policy.ungated")
 
 
 def test_declaring_a_check_required_that_the_gate_does_not_hold_fails() -> None:
@@ -125,7 +129,7 @@ def test_declaring_a_check_required_that_the_gate_does_not_hold_fails() -> None:
     inventory, tracked = guard.load_inventory(INVENTORY)
     mutated = [
         dataclasses.replace(c, enforcement="required")
-        if c.context == "All commits signed off"
+        if c.context == "gitleaks-scan"
         else c
         for c in inventory
     ]
@@ -133,21 +137,22 @@ def test_declaring_a_check_required_that_the_gate_does_not_hold_fails() -> None:
     findings = _run(mutated, tracked, guard.read_contexts_file(CONTEXTS))
 
     assert "policy.missing-required" in _codes(findings)
-    assert "All commits signed off" in _subjects(findings, "policy.missing-required")
+    assert "gitleaks-scan" in _subjects(findings, "policy.missing-required")
 
 
 def test_every_ungated_policy_check_is_reported() -> None:
-    """The five drift checks DIG-1952 names must all be visible, not just DCO."""
+    """The four drift checks DIG-1952 names must all be visible. (DCO sign-off
+    was a fifth until Chris dropped it entirely on 2026-10-15, DIG-3845.)"""
     inventory, _tracked = guard.load_inventory(INVENTORY)
     declared = {c.context: c for c in inventory}
     expected = {
-        "All commits signed off",
         "gitleaks-scan",
         "All agent-task issues in TSV with real phase and valid model",
         "Validate PR title",
         "Every commit reaching main was reviewed",
     }
     assert expected <= set(declared)
+    assert "All commits signed off" not in declared
     for context in expected:
         assert not declared[context].is_required, context
         assert declared[context].reason, f"{context} needs a reason"
@@ -353,7 +358,7 @@ def test_script_exits_zero_on_this_repository() -> None:
 def test_script_exits_nonzero_when_the_inventory_is_mutated(tmp_path: Path) -> None:
     """The DoD test, run through the real CLI rather than only in-process."""
     inventory, tracked = guard.load_inventory(INVENTORY)
-    stripped = [c for c in inventory if c.context != "All commits signed off"]
+    stripped = [c for c in inventory if c.context != "gitleaks-scan"]
     path = tmp_path / "policy-checks.yml"
     # yaml.dump, not f-strings: several reasons contain apostrophes and colons
     # that hand-quoting mangles into unparseable YAML.
@@ -386,7 +391,7 @@ def test_script_exits_nonzero_when_the_inventory_is_mutated(tmp_path: Path) -> N
     )
     assert proc.returncode == 1, proc.stdout + proc.stderr
     assert "policy.ungated" in proc.stdout
-    assert "All commits signed off" in proc.stdout
+    assert "gitleaks-scan" in proc.stdout
 
 
 # ── the writer and the snapshot are coupled (DIG-2223) ───────────────────────
