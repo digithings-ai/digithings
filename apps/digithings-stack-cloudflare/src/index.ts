@@ -67,6 +67,14 @@ import {
   SHARED_DIGICHAT_CONTAINER_ID,
   shouldProxyToDigiChat,
 } from "./digichat";
+import { isOccShellPath, occGate } from "../../digichat-cloudflare/src/occ-gate";
+import {
+  containerIsAwake,
+  isHealthProbe,
+  isScannerPath,
+  scannerResponse,
+  sleepingHealthResponse,
+} from "./wake-hygiene";
 
 /** Wrangler injects vars/secrets; cast until `wrangler types` is generated in CI. */
 const env = workerEnvBinding as unknown as Env;
@@ -505,6 +513,8 @@ export interface Env {
   DIGICHAT_MONITOR_TOKENS?: string;
   DIGICHAT_DASHBOARD_SUPABASE_URL?: string;
   DIGICHAT_DASHBOARD_SUPABASE_ANON_KEY?: string;
+  /** DIG-3585 /chat/occ shell gate. Worker-scoped; never forwarded to a container. */
+  OCC_INVITE_KEY?: string;
 }
 
 /** Secret-gated MCP edge paths (`/_stack/mcp/<id>/…`) → in-container ports. */
@@ -550,6 +560,9 @@ function isMcpHostname(hostname: string): boolean {
 export default {
   async fetch(request: Request, workerEnv: Env): Promise<Response> {
     const url = new URL(request.url);
+    if (isOccShellPath(url.pathname)) {
+      return occGate(request, workerEnv.OCC_INVITE_KEY);
+    }
     if (url.pathname === "/_stack/meta") {
       return Response.json({
         ok: true,
@@ -688,7 +701,22 @@ export default {
           { status: 404 },
         );
       }
+      // Wake hygiene: scanners and liveness probes never boot the Container.
+      if (isScannerPath(url.pathname)) {
+        return scannerResponse();
+      }
       const container = getContainer(workerEnv.STACK, SHARED_STACK_CONTAINER_ID);
+      if (isHealthProbe(request, url.pathname)) {
+        let status: string | undefined;
+        try {
+          status = (await container.getState()).status;
+        } catch {
+          status = undefined;
+        }
+        if (!containerIsAwake(status)) {
+          return sleepingHealthResponse(request);
+        }
+      }
       return container.fetch(switchPort(request, port));
     });
   },

@@ -22,6 +22,10 @@
 #      digithings-cron job.
 name: self-host-parity
 
+# Checkout and local python only. No write token.
+permissions:
+  contents: read
+
 on:
   workflow_dispatch:
   push:

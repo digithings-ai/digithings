@@ -44,7 +44,7 @@ Create a GitLab personal access token with `api` scope:
 `GitLab → Settings → Access Tokens → Add new token`
 
 ```bash
-export GITLAB_PERSONAL_ACCESS_TOKEN=glpat-...
+export GITLAB_PERSONAL_ACCESS_TOKEN="<your-token>"
 ```
 
 Install the `glab` CLI for `create_pr.sh`:
