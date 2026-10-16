@@ -21,6 +21,7 @@ import {
   renderRebalanceMarkdown,
   renderRiskDebateMarkdown,
   renderSegmentReportMarkdown,
+  escapeTableCell,
   regimeChipsFromMacroPayload,
   summarizeRecommendedPortfolio,
 } from './render-pipeline-payloads';
@@ -569,5 +570,12 @@ describe('AttentionPlan glass-box renderer (#1945)', () => {
     expect(renderDocumentMarkdownFromPayload(planPayload, 'attention-plan')).toContain(
       'Refresh decisions',
     );
+  });
+});
+
+describe('escapeTableCell', () => {
+  it('removes pipes and newlines so a cell cannot add a column', () => {
+    expect(escapeTableCell('left|right\nstill')).toBe('left right still');
+    expect(escapeTableCell('left|right\rstill')).not.toContain('|');
   });
 });
