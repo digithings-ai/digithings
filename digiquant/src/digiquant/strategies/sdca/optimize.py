@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import uuid
 from datetime import date
 from pathlib import Path
@@ -151,6 +152,9 @@ def btc_power_law_rails_fitter(dates: list[date], prices: list[float]) -> RiskMo
     return BtcPowerLawRiskModel(coeffs)
 
 
+_SDCA_SYMBOL_RE = re.compile(r"[A-Za-z0-9._-]+")
+
+
 def load_sdca_ohlcv(
     *,
     symbols: list[str],
@@ -161,7 +165,15 @@ def load_sdca_ohlcv(
     if data_path is not None:
         path = Path(data_path)
     elif data_dir is not None and symbols:
-        path = Path(data_dir) / f"{symbols[0]}.csv"
+        symbol = symbols[0]
+        if not _SDCA_SYMBOL_RE.fullmatch(symbol) or ".." in symbol:
+            raise ValueError(f"SDCA optimize refuses symbol {symbol!r}: unsafe characters")
+        real_dir = os.path.realpath(os.path.abspath(os.fspath(data_dir)))
+        dir_prefix = real_dir if real_dir.endswith(os.sep) else real_dir + os.sep
+        candidate = os.path.realpath(os.path.normpath(os.path.join(real_dir, f"{symbol}.csv")))
+        if candidate != real_dir and not candidate.startswith(dir_prefix):
+            raise ValueError(f"SDCA optimize refuses symbol {symbol!r}: escapes data_dir")
+        path = Path(candidate)
     else:
         raise ValueError("SDCA optimize requires data_path or data_dir with symbols")
     df = load_ohlcv_csv(path)
