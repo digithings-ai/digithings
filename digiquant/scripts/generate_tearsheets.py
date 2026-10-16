@@ -160,7 +160,28 @@ def materialize_sdca_risk_index(
     selects the valuation rails via ``resolve_sdca_risk_model`` — pass a
     prebuilt ``RiskModel`` to reuse one fit. The ``"btc_power_law"`` default
     resolves to the historical BTC power-law construction.
+
+    Repo-split 1.2 (DIG-3691): resolves through the plugin hook first; the
+    in-tree build below is the fallback while R1 still lives in this repo.
+    This script ships to R2 and must keep calling the hook after the split.
     """
+    try:
+        import sys
+
+        sys.path.insert(0, str(DIGIQUANT_ROOT / "src"))
+        from digiquant import plugin as _plugin
+
+        _hook = _plugin.get_risk_index_hook()
+    except Exception:
+        _hook = None
+    if _hook is not None:
+        return _hook(
+            ohlcv,
+            output_path,
+            coefficients_path=coefficients_path,
+            extra_indicators=extra_indicators,
+            valuation_weight=valuation_weight,
+        )
     import polars as pl
 
     from digiquant.strategies.sdca.providers import resolve_sdca_risk_model
@@ -1036,6 +1057,14 @@ def run_and_write(
             f"NautilusTrader backtest, {settings['strategies'][strategy].get('label', strategy)}; "
             f"100% equity compounding, trade window from {trade_start}."
         ]
+    # DIG-945: the engine stamp renders through the one builder next to the
+    # model. This path never runs _verified_returns_series, so it reports
+    # unverified rather than borrowing another run's outcome.
+    from digiquant.models import build_engine_provenance, engine_provenance_note
+
+    provenance_notes.append(
+        engine_provenance_note(build_engine_provenance(returns_series_verified=False))
+    )
     notes.extend(provenance_notes)
     if signal_delay_days:
         notes.append(
