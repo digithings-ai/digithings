@@ -451,5 +451,9 @@ def test_tool_makes_no_network_call():
 
 def test_check_reports_missing_without_writing(tmp_path):
     out = tmp_path / ".dev.vars"
-    run("check", "--only", "AUTH_SECRET,CHEAPERINFERENCE_API_KEY", expect=1)
+    proc = run("check", "--only", "AUTH_SECRET,CHEAPERINFERENCE_API_KEY", expect=1)
+    # A traceback also exits 1, so the exit code alone cannot tell a report from
+    # a crash (`check` has no --output flag and once died reading args.output).
+    assert "Traceback" not in proc.stderr, proc.stderr
+    assert "resolved," in proc.stdout and "missing: CHEAPERINFERENCE_API_KEY" in proc.stdout
     assert not out.exists()
