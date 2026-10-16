@@ -488,6 +488,22 @@ export const JOBS: readonly Job[] = [
     "primarketet_heartbeat_watchdog.yml",
     "session-heartbeat",
   ),
+  // Dated twelve-x backfill (DIG-1335, CTO verdict on DIG-1272). Manual-only
+  // by design: dated backfills are on-demand, one missed date per kick, so a
+  // standing clock would re-dispatch one date every day. enabled:false keeps
+  // the cron out of uniqueEnabledCrons() — the deploy contract asserts
+  // wrangler.toml [triggers] equals that list in order, so no cron line is
+  // added there either — while POST /kick still addresses the row by cron
+  // (it resolves with includeDisabled). run_date reaches GitHub via
+  // backfillArgs() in index.ts: a caller-supplied date always wins, a missing
+  // one falls back to the scheduled day. No static inputs here: pinning a
+  // date on the row would re-dispatch that same date on every kick.
+  // ref is develop like every other twelve-x row: the wrapper file lives on
+  // develop while daily_run_reusable.yml checks out main, so that split is
+  // the pipeline's shape, not a defect.
+  wd("twelve-x-backfill", "41 3 * * *", TWELVE_X, "daily_run.yml", {
+    enabled: false,
+  }),
   // OCC help-docs weekly recrawl (DIG-3576, Chris 14 Oct 18:26: WEEKLY, not
   // daily; freshness alert > 8 days; tickets stay DAILY on DIG-3578). Worker-
   // native row (ow): crawl help.online-compliance-center.com, idempotent upsert
