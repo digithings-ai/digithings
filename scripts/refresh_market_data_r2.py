@@ -1490,6 +1490,23 @@ class MacroSpecResolution(list):
         super().__init__(specs)
         self.manifest_error = manifest_error
 
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, MacroSpecResolution):
+            return list(self) == list(other) and self.manifest_error == other.manifest_error
+        if isinstance(other, list):
+            return list(self) == list(other)
+        return NotImplemented
+
+    def __ne__(self, other: object) -> bool:
+        # list defines __ne__ at C level, so it does not delegate to our
+        # __eq__; override it explicitly or a != b disagrees with a == b.
+        eq = self.__eq__(other)
+        if eq is NotImplemented:
+            return eq
+        return not eq
+
+    __hash__ = None  # type: ignore[assignment] - list is unhashable; keep it so.
+
 
 def _resolve_macro_specs(cli_specs: list[str], manifest_path: str) -> MacroSpecResolution:
     """``--macro-series SOURCE:SERIES`` or the research manifest + Yahoo FX.

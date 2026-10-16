@@ -30,7 +30,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from math import isfinite
+from math import isfinite, isnan
 from pathlib import Path
 from typing import Any, TypedDict
 
@@ -363,8 +363,8 @@ def _yahoo_fx_pandas_to_long(raw, yahoo_symbols: list[str]):
                 fval = float(raw_val)
             except (TypeError, ValueError):
                 continue
-            # NaN check without importing pandas — NaN != NaN by definition.
-            if fval != fval:
+            # float() already coerced the cell; isnan is the NaN test for a float.
+            if isnan(fval):
                 continue
             records.append({"obs_date": obs_date, "yahoo_symbol": sym, "close": fval})
     if not records:
