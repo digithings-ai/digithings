@@ -95,6 +95,8 @@ describe("ChatEmbedShell contracts", () => {
     // Same gate for the landing pop-up, /chat, and /chat/occ.
     expect(src).toContain("readyEdge={revealed}");
     expect(src).toContain("waitForServices");
+    expect(src).toContain("const revealed = (embedReady && servicesReady) || forceReveal");
+    expect(src).toContain(`signalDigichatBootStep("services")`);
     expect(src).toContain("WARMUP_DELAY_MS");
     expect(src).toContain("dc-chat-frame");
     expect(src).toContain("digichat:ready");
