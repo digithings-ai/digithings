@@ -71,6 +71,14 @@ def flat_dca_mark_to_market(prices: Sequence[float], initial_cash: float) -> lis
     return out
 
 
+def first_trade_index(daily_trade_usd: Sequence[float]) -> int:
+    """Index of the first non-zero fill, or ``0`` if the book never traded."""
+    for i, usd in enumerate(daily_trade_usd):
+        if usd != 0:
+            return i
+    return 0
+
+
 def lump_mark_to_market(prices: Sequence[float], initial_cash: float) -> list[float]:
     """All capital deployed at day-0 price, marked to each later close."""
     if not prices:
