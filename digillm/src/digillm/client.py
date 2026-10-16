@@ -741,9 +741,31 @@ def _default_base_configured() -> bool:
     return bool((os.environ.get("OPENAI_API_BASE") or "").strip())
 
 
+def _api_hostname(base: str) -> str:
+    """Hostname of an API base, or empty when the value is not a URL.
+
+    A substring test is true for ``https://evilopenrouter.ai``. CodeQL
+    ``py/incomplete-url-substring-sanitization`` does not accept that.
+    """
+    raw = (base or "").strip()
+    if not raw:
+        return ""
+    if "://" not in raw:
+        raw = f"//{raw}"
+    try:
+        return (urlsplit(raw).hostname or "").rstrip(".").lower()
+    except ValueError:
+        return ""
+
+
+def _hostname_is(base: str, host: str) -> bool:
+    name = _api_hostname(base)
+    return name == host or name.endswith("." + host)
+
+
 def _api_base_is_openrouter() -> bool:
     """True when the default client talks to OpenRouter's OpenAI-compat API (CLI/GHA)."""
-    return "openrouter.ai" in (os.environ.get("OPENAI_API_BASE") or "").lower()
+    return _hostname_is(os.environ.get("OPENAI_API_BASE") or "", "openrouter.ai")
 
 
 _DEFAULT_CHEAPERINFERENCE_API_BASE = "https://api.cheaperinference.com/v1"
@@ -767,7 +789,7 @@ _CHEAPERINFERENCE_HOUSE_SLUG_TO_BARE: dict[str, str] = {
 
 def _api_base_is_cheaperinference() -> bool:
     """True when the default client talks to hosted Cheaper Inference (CLI/GHA)."""
-    return "cheaperinference.com" in (os.environ.get("OPENAI_API_BASE") or "").lower()
+    return _hostname_is(os.environ.get("OPENAI_API_BASE") or "", "cheaperinference.com")
 
 
 def cheaperinference_house_preferred() -> bool:
