@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Throwaway research: weekly RSI / MACD z vs BTC power-law valuation_z.
+"""Throwaway research: weekly RSI / MACD z vs BTC power-law power_law_z.
 
 Not production code. Companion to ``docs/research/sdca-indicator-pool.md``.
 Polars-only (matplotlib is used only to write a PNG).
@@ -132,7 +132,7 @@ def attach_weekly_oscillators(weekly: pl.DataFrame) -> pl.DataFrame:
     macd = ema12 - ema26
     hist = macd - macd.ewm_mean(span=9, adjust=False, min_samples=9)
     sma200 = pl.col("close").rolling_mean(window_size=200, min_samples=200)
-    # Invert Mayer/MACD so cheap or oversold = +z, matching valuation_z.
+    # Invert Mayer/MACD so cheap or oversold = +z, matching power_law_z.
     return weekly.with_columns(
         hist.alias("weekly_macd_hist"),
         (pl.col("close") / sma200).alias("mayer"),
@@ -170,7 +170,7 @@ def main() -> int:
         BtcPowerLawRiskModel,
         load_coefficients,
     )
-    from digiquant.strategies.sdca.valuation import valuation_z_score
+    from digiquant.strategies.sdca.power_law_zscore import power_law_z_score
 
     daily = load_daily(cache)
     weekly = attach_weekly_oscillators(weekly_from_daily(daily))
@@ -178,9 +178,9 @@ def main() -> int:
     coeffs = load_coefficients(coeff_path)
     model = BtcPowerLawRiskModel(coeffs)
     rails = model.rails(daily["date"])
-    val_z = valuation_z_score(daily["close"], rails["low"], rails["median"], rails["high"])
+    val_z = power_law_z_score(daily["close"], rails["low"], rails["median"], rails["high"])
 
-    daily = daily.with_columns(val_z.alias("valuation_z"))
+    daily = daily.with_columns(val_z.alias("power_law_z"))
     daily = _with_wilder_rsi(daily, "close", "daily_rsi", 14)
     daily = daily.with_columns(_rsi_to_z_expr("daily_rsi").alias("daily_rsi_z"))
 
@@ -200,10 +200,10 @@ def main() -> int:
     )
 
     pairs = (
-        ("valuation_z", "weekly_rsi_z"),
-        ("valuation_z", "weekly_macd_z"),
-        ("valuation_z", "mayer_z"),
-        ("valuation_z", "daily_rsi_z"),
+        ("power_law_z", "weekly_rsi_z"),
+        ("power_law_z", "weekly_macd_z"),
+        ("power_law_z", "mayer_z"),
+        ("power_law_z", "daily_rsi_z"),
         ("weekly_rsi_z", "weekly_macd_z"),
         ("weekly_rsi_z", "daily_rsi_z"),
         ("weekly_macd_z", "mayer_z"),
@@ -244,7 +244,7 @@ def _write_plot(
 
     plot_df = joined.select(
         "date",
-        "valuation_z",
+        "power_law_z",
         "weekly_rsi_z",
         "weekly_macd_z",
         "mayer_z",
@@ -252,14 +252,14 @@ def _write_plot(
 
     fig, axes = plt.subplots(2, 1, figsize=(11, 7), constrained_layout=True)
     ax = axes[0]
-    ax.plot(plot_df["date"], plot_df["valuation_z"], label="valuation_z (power-law)", lw=1.2)
+    ax.plot(plot_df["date"], plot_df["power_law_z"], label="power_law_z (power-law)", lw=1.2)
     ax.plot(plot_df["date"], plot_df["weekly_rsi_z"], label="weekly RSI z", lw=0.9, alpha=0.85)
     ax.plot(plot_df["date"], plot_df["weekly_macd_z"], label="weekly MACD-hist z", lw=0.9, alpha=0.85)
     ax.axhline(0, color="0.6", lw=0.6)
     ax.set_ylim(-3.2, 3.2)
     ax.set_ylabel("z (cheap = +)")
     ax.legend(loc="upper left", fontsize=8)
-    ax.set_title("BTC SDCA indicator pool — weekly oscillators vs power-law valuation_z")
+    ax.set_title("BTC SDCA indicator pool — weekly oscillators vs power-law power_law_z")
     ax.grid(True, alpha=0.25)
 
     ax2 = axes[1]
