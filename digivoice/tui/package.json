@@ -4,6 +4,13 @@
   "private": true,
   "type": "module",
   "description": "Retired plain-JS screen. The digivoice CLI launches clients/digivoice-tui.",
+  "license": "MIT",
+  "homepage": "https://digithings.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/digithings-ai/digithings.git",
+    "directory": "digivoice/tui"
+  },
   "scripts": {
     "start": "bun src/main.js",
     "test": "bun test"

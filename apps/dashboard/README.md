@@ -1,6 +1,6 @@
 # digiquant dashboard
 
-Next.js 15 investment-intelligence dashboard for **digiquant** — research, portfolio, and execution in one operator surface (ADR-0026). The served desk is `/app` on `apps/digiquant-web`. This package (npm name `dashboard`, folder `apps/dashboard`) stays in the tree and is no longer a destination: `/dashboard/` redirects to `/app`. Joins the root npm workspace and consumes the shared design system via
+Next.js 15 investment-intelligence dashboard for **digiquant** — research, portfolio, and execution in one operator surface (ADR-0026). The served desk is `/app` on `apps/digiquant-web`. This package (npm name `dashboard`, folder `apps/dashboard`) stays in the tree. This release the sidebar and command palette list FX Hub only; brief, portfolio, and pipeline are the brief desk at `/app`. FX Hub stays at `/dashboard/twelve-x`, and `?invite=` on `/dashboard` is unchanged. Joins the root npm workspace and consumes the shared design system via
 `@digithings/design` as a workspace dependency.
 
 ## Quant-native visual layer
