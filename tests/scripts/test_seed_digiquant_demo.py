@@ -175,7 +175,7 @@ def test_decision_log_upsert_targets_the_live_unique_constraint(mod, monkeypatch
     42P10 "no unique or exclusion constraint matching the ON CONFLICT".
     """
     migration = (
-        REPO_ROOT / "digiquant/supabase/migrations/044_decision_log_rundate_unique.sql"
+        REPO_ROOT / "digiquant/supabase/migrations/engine/044_decision_log_rundate_unique.sql"
     ).read_text()
     # Control: the constraint this test pins is the one 044 actually defines.
     assert "UNIQUE (run_date, ticker)" in migration
@@ -191,7 +191,7 @@ def test_decision_log_upsert_targets_the_live_unique_constraint(mod, monkeypatch
 def test_metrics_row_uses_post_035_column_names(mod) -> None:
     """035 dropped portfolio_metrics.cash_pct and renamed total_invested."""
     migration = (
-        REPO_ROOT / "digiquant/supabase/migrations/035_drop_derived_duplicate_columns.sql"
+        REPO_ROOT / "digiquant/supabase/migrations/prod/035_drop_derived_duplicate_columns.sql"
     ).read_text()
     # Control: the schema change this test pins is the one 035 makes.
     assert "ALTER TABLE portfolio_metrics DROP COLUMN IF EXISTS cash_pct" in migration
