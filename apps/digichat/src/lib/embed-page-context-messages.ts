@@ -228,7 +228,10 @@ function takePageContextText(raw: string): { text: string; start: number; end: n
     }
     const contentStart = i + 1;
     const close = raw.indexOf("\n-->", contentStart);
-    if (close < 0) return null;
+    if (close < 0) {
+      from = open + 4;
+      continue;
+    }
     return { text: raw.slice(contentStart, close), start: open, end: close + 4 };
   }
   return null;
