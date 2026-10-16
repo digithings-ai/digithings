@@ -350,7 +350,29 @@ def _run_sdca_optimize(
     data_dir: str | Path | None,
     base_params: dict[str, float | int | str] | None,
 ) -> OptimizeResult:
-    """Walk-forward SDCA path. Objective is vs-flat-DCA, not Sharpe."""
+    """Walk-forward SDCA path. Objective is vs-flat-DCA, not Sharpe.
+
+    Repo-split 1.2 (DIG-3691): a ``digiquant.strategies`` plugin providing
+    ``run_sdca_optimize`` takes precedence; the in-tree implementation below
+    is the fallback while R1 still lives in this repo.
+    """
+    try:
+        from digiquant import plugin as _plugin
+
+        _hook = _plugin.get_sdca_optimize_hook()
+    except Exception:
+        _hook = None
+    if _hook is not None:
+        return _hook(
+            strategy_name=strategy_name,
+            symbols=symbols,
+            param_grid=param_grid,
+            method=method,
+            n_trials=n_trials,
+            data_path=data_path,
+            data_dir=data_dir,
+            base_params=base_params,
+        )
     # nautilus_trader is an optional extra; importing at module load would
     # pull Nautilus into every optimize caller.
     try:

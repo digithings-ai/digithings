@@ -108,6 +108,7 @@ def _evaluator(
         vs_flat_dca_pct=vs_flat,
         vs_lump_pct=-1.0,
         capital_deployed_pct=40.0,
+        capital_deployed_peak_pct=40.0,
         max_drawdown_pct=12.0,
     )
 
@@ -171,6 +172,7 @@ class TestWalkForwardSearch:
         assert result.is_oos_gap_pct != 0.0
         assert result.holdout_metrics is not None
         assert result.sensitivity.neighbor_count > 0
+        assert result.sensitivity.worst_neighbor_key == "buy_max_rate:+5%"
 
     def test_optimize_result_message_states_oos(self) -> None:
         dates = _dates()
