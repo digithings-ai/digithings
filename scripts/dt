@@ -156,10 +156,28 @@ def _env() -> dict[str, str]:
     return dict(os.environ)
 
 
+# Names that carry a credential. `dt` still passes the full environment to
+# child processes. The printed report only receives the copy below, so a
+# secret value cannot reach stdout through the status, URL, or preflight text.
+_SECRET_NAME_MARKERS = ("SECRET", "PASSWORD", "TOKEN", "CREDENTIAL", "PRIVATE")
+
+
+def _report_env() -> dict[str, str]:
+    report: dict[str, str] = {}
+    for key, value in os.environ.items():
+        upper = key.upper()
+        if upper.endswith("_KEY") or upper.endswith("_KEYS"):
+            continue
+        if any(marker in upper for marker in _SECRET_NAME_MARKERS):
+            continue
+        report[key] = value
+    return report
+
+
 def cmd_preflight(args: argparse.Namespace, root: Path) -> int:
     # `path` is the PATH string `which` searches: pass this process's own PATH
     # so the report describes the environment dt will really run in.
-    report = preflight.run_preflight(env=_env(), path=os.environ.get("PATH"))
+    report = preflight.run_preflight(env=_report_env(), path=os.environ.get("PATH"))
     emit(
         report.to_dict(),
         args.json,
@@ -175,7 +193,7 @@ def _gate(args: argparse.Namespace, root: Path) -> tuple[int, object, str]:
         selected,
         profile=args.profile,
         origin=origin,
-        config=_env(),
+        config=_report_env(),
         timeout=getattr(args, "timeout", DEFAULT_TIMEOUT),
         require_all=getattr(args, "require_all", False),
     )
@@ -194,14 +212,14 @@ def cmd_urls(args: argparse.Namespace, root: Path) -> int:
     emit(
         {"profile": args.profile, "catalogue": origin},
         args.json,
-        render.render_url_table(selected, _env(), args.profile),
+        render.render_url_table(selected, _report_env(), args.profile),
     )
     return 0
 
 
 def cmd_plan(args: argparse.Namespace, root: Path) -> int:
     env = _env()
-    steps = orchestrate.steps_for(args.command, args.profile, env, args.seed)
+    steps = orchestrate.steps_for(args.command, args.profile, _report_env(), args.seed)
     destructive = args.command == "reset"
     if destructive and not args.dry_run and not args.yes:
         print(
@@ -213,7 +231,7 @@ def cmd_plan(args: argparse.Namespace, root: Path) -> int:
     # Plan step 1 is the preflight; steps 2-7 are the commands; step 8 is the gate.
     banner = ""
     if args.command in ("up", "reset", "seed"):
-        pre = preflight.run_preflight(env=env, path=env.get("PATH"))
+        pre = preflight.run_preflight(env=_report_env(), path=env.get("PATH"))
         if not pre.ok:
             banner = render.render_preflight_table(pre)
             if not args.dry_run:
@@ -246,7 +264,7 @@ def cmd_plan(args: argparse.Namespace, root: Path) -> int:
                     "",
                     render.render_url_table(
                         contracts.select(contracts.load_checks(root)[0], args.profile),
-                        env,
+                        _report_env(),
                         args.profile,
                     ),
                 ]

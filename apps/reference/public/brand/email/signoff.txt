@@ -1,3 +1,0 @@
-digithings
-AI infrastructure in a glass box you own.
-https://digithings.ai

@@ -1,3 +1,0 @@
-# Back-compat for the legacy static digithings.ai URLs.
-/chat.html            /chat/            301
-/index.html           /                 301

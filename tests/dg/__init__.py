@@ -1,1 +1,0 @@
-# digigraph tests
