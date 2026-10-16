@@ -1,18 +1,18 @@
 """Unit tests for luxalgo market-trackers-data wave-2 ingest (#4849).
 
-Offline (mocked transport — no live HTTP): per-dataset fetch → normalize →
-``index_chunks`` into the dedicated ``trackers`` stub index with deterministic
-ids, so re-ingest is a no-op. Golden rows are trimmed copies of the live
-``latest.json`` schemas (verified 2026-09-30); the two synthetic rows (marked)
-exercise ticker paths the current upstream snapshots never populate
-(13F ``ticker`` is always null from ``thirteenf-xml@1``; short-volume always
-carries one).
+DIG-1175 / DIG-959 leaf 15: all five wave-2 feeds are refused in code until
+the client-side Art. 9 facts justify them, so the fetch → normalize →
+``index_chunks`` path below is closed at every ingest entry point. What stays
+live: the pure row→payload mapper (:func:`normalize_tracker_row`), pinned
+unchanged, and the dataset order / unknown-key contracts.
 
-Covers per dataset (insider → 13F → short-volume → lobbying →
-gov-contracts): live-schema normalize, null-ticker rows kept (never dropped),
-idempotent re-ingest, stale-manifest refusal before any write, keyless rows
-counted as skipped. Plus the #4849 performance pin: bulk ingest builds the
-stub-index key set once per run, not once per row (O(n), not O(n²)).
+Offline (mocked transport — no live HTTP): every ingest entry point must
+raise :class:`RefusedDatasetError` naming the dataset before any URL is
+fetched, and the ``trackers`` stub index stays empty. Golden rows are trimmed
+copies of the live ``latest.json`` schemas (verified 2026-09-30); the two
+synthetic rows (marked) exercise ticker paths the current upstream snapshots
+never populate (13F ``ticker`` is always null from ``thirteenf-xml@1``;
+short-volume always carries one).
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ import pytest
 from digisearch.search._stub import _stub_index
 from digisearch.trackers_ingest import (
     TRACKERS_INDEX_NAME,
-    StaleDatasetError,
+    RefusedDatasetError,
 )
 from digisearch.trackers_wave2_ingest import (
     TRACKER_DATASET_ORDER,
@@ -404,80 +404,75 @@ def test_normalize_requires_upstream_id(dataset: str) -> None:
 
 @pytest.mark.unit
 @pytest.mark.parametrize("dataset", _DATASET_IDS)
-def test_fetch_uses_mocked_transport(dataset: str) -> None:
-    """Fetch returns raw row dicts through the injected fetcher (no socket)."""
+def test_fetch_refuses_before_transport(dataset: str) -> None:
+    """DIG-1175: fetch refuses naming the dataset; transport untouched."""
     case = _CASES[dataset]
-    rows = fetch_tracker_rows_latest(dataset, _FakeFetcher(dataset, [case["ticker_row"]]))
-    assert rows == [case["ticker_row"]]
-
-
-@pytest.mark.unit
-@pytest.mark.parametrize("dataset", _DATASET_IDS)
-def test_ingest_two_rows_then_reingest_is_idempotent(dataset: str) -> None:
-    """First ingest writes 2 rows; replay writes nothing and duplicates nothing."""
-    case: dict[str, Any] = _CASES[dataset]
-    ingest: Callable[..., Any] = case["ingest"]
-    fetcher = _FakeFetcher(dataset, [case["ticker_row"], case["null_row"]])
-
-    first = ingest(fetcher)
-    assert first.ingested == 2
-    assert first.skipped == 0
-    assert first.dataset == dataset
-    count_after_first = len(_stub_index[TRACKERS_INDEX_NAME])
-    assert count_after_first >= 2
-
-    # Null-ticker row landed with searchable content; its ticker key is absent
-    # post-Chroma-normalization (None values are dropped, never stored).
-    null_key = f"{dataset}:{case['null_row']['id']}"
-    null_chunks = [
-        c for c in _stub_index[TRACKERS_INDEX_NAME] if c.metadata.get("natural_key") == null_key
-    ]
-    assert null_chunks, "null-ticker row must be ingested, not dropped"
-    assert "ticker" not in null_chunks[0].metadata
-
-    # Every stored chunk carries the exact upstream source_url.
-    for chunk in _stub_index[TRACKERS_INDEX_NAME]:
-        assert chunk.metadata.get("source_url", "").startswith(case["source_host"])
-
-    second = ingest(fetcher)
-    assert second.ingested == 0
-    assert second.skipped == 2
-    assert len(_stub_index[TRACKERS_INDEX_NAME]) == count_after_first
-
-
-@pytest.mark.unit
-@pytest.mark.parametrize("dataset", _DATASET_IDS)
-def test_ingest_refuses_stale_manifest(dataset: str) -> None:
-    """A dataset flagged stale:true refuses before any chunk is written."""
-    case = _CASES[dataset]
-    fetcher = _FakeFetcher(dataset, [case["ticker_row"]], manifest=_stale_manifest(dataset))
-    with pytest.raises(StaleDatasetError, match="[Ss]tale"):
-        case["ingest"](fetcher)
+    fetcher = _FakeFetcher(dataset, [case["ticker_row"]])
+    with pytest.raises(RefusedDatasetError, match=dataset):
+        fetch_tracker_rows_latest(dataset, fetcher)
+    assert fetcher.calls == [], "refusal must happen before any URL is fetched"
     assert not _stub_index.get(TRACKERS_INDEX_NAME)
 
 
 @pytest.mark.unit
 @pytest.mark.parametrize("dataset", _DATASET_IDS)
-def test_ingest_skips_keyless_row_with_count(dataset: str) -> None:
-    """A row without an upstream id is counted as skipped, loudly — not silent."""
-    case = _CASES[dataset]
-    fetcher = _FakeFetcher(dataset, [case["ticker_row"], {"ticker": "ORPHAN"}])
-    result = case["ingest"](fetcher)
-    assert result.ingested == 1
-    assert result.skipped == 1
+def test_ingest_wrappers_refuse_before_transport(dataset: str) -> None:
+    """DIG-1175: per-dataset wrappers refuse; nothing is written."""
+    case: dict[str, Any] = _CASES[dataset]
+    ingest: Callable[..., Any] = case["ingest"]
+    fetcher = _FakeFetcher(dataset, [case["ticker_row"], case["null_row"]])
+    with pytest.raises(RefusedDatasetError, match=dataset):
+        ingest(fetcher)
+    assert fetcher.calls == [], "refusal must happen before any URL is fetched"
+    assert not _stub_index.get(TRACKERS_INDEX_NAME)
 
 
 @pytest.mark.unit
-def test_all_five_datasets_share_one_index_without_key_collision() -> None:
-    """All wave-2 datasets cohabit the ``trackers`` index (namespaced keys)."""
-    total = 0
+@pytest.mark.parametrize("dataset", _DATASET_IDS)
+def test_ingest_dataset_refuses_before_transport(dataset: str) -> None:
+    """DIG-1175: the generic bulk entry point refuses; nothing is written."""
+    case = _CASES[dataset]
+    fetcher = _FakeFetcher(dataset, [case["ticker_row"], case["null_row"]])
+    with pytest.raises(RefusedDatasetError, match=dataset):
+        ingest_tracker_dataset(dataset, fetcher)
+    assert fetcher.calls == [], "refusal must happen before any URL is fetched"
+    assert not _stub_index.get(TRACKERS_INDEX_NAME)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("dataset", _DATASET_IDS)
+def test_refusal_takes_precedence_over_stale_manifest(dataset: str) -> None:
+    """DIG-1175: refusal fires before the freshness check, stale or not."""
+    case = _CASES[dataset]
+    fetcher = _FakeFetcher(dataset, [case["ticker_row"]], manifest=_stale_manifest(dataset))
+    with pytest.raises(RefusedDatasetError, match=dataset):
+        case["ingest"](fetcher)
+    assert fetcher.calls == [], "refusal must happen before any URL is fetched"
+    assert not _stub_index.get(TRACKERS_INDEX_NAME)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("dataset", _DATASET_IDS)
+def test_keyless_row_still_refused_at_dataset_level(dataset: str) -> None:
+    """DIG-1175: refusal is per-feed, so a keyless row never reaches counting."""
+    case = _CASES[dataset]
+    fetcher = _FakeFetcher(dataset, [case["ticker_row"], {"ticker": "ORPHAN"}])
+    with pytest.raises(RefusedDatasetError, match=dataset):
+        case["ingest"](fetcher)
+    assert fetcher.calls == []
+    assert not _stub_index.get(TRACKERS_INDEX_NAME)
+
+
+@pytest.mark.unit
+def test_all_five_wrappers_refuse() -> None:
+    """DIG-1175: every named wrapper is closed — no feed has a live path."""
     for dataset in TRACKER_DATASET_ORDER:
         case = _CASES[dataset]
-        result = case["ingest"](_FakeFetcher(dataset, [case["ticker_row"]]))
-        assert result.ingested == 1
-        total += 1
-    keys = [str(c.metadata.get("natural_key")) for c in _stub_index[TRACKERS_INDEX_NAME]]
-    assert len(set(keys)) == len(keys) >= total
+        fetcher = _FakeFetcher(dataset, [case["ticker_row"]])
+        with pytest.raises(RefusedDatasetError, match=dataset):
+            case["ingest"](fetcher)
+        assert fetcher.calls == []
+    assert not _stub_index.get(TRACKERS_INDEX_NAME)
 
 
 # DIG-1307: `test_congress_bulk_scans_stub_index_once` was removed here.
@@ -487,21 +482,8 @@ def test_all_five_datasets_share_one_index_without_key_collision() -> None:
 # `_natural_keys_in_index` memo through a dataset that is still live.
 
 
-@pytest.mark.unit
-def test_wave2_bulk_scans_stub_index_once(monkeypatch: pytest.MonkeyPatch) -> None:
-    """#4849 perf pin: wave-2 bulk ingest builds the key set once (O(n))."""
-    import digisearch.trackers_wave2_ingest as wave2
-
-    calls = 0
-    original = wave2._natural_keys_in_index
-
-    def _counting(index_name: str) -> set[str]:
-        nonlocal calls
-        calls += 1
-        return original(index_name)
-
-    monkeypatch.setattr(wave2, "_natural_keys_in_index", _counting)
-    rows = [dict(_SHORT_VOLUME_ROW, id=f"2026-09-04:A:CNMS:{i}") for i in range(5)]
-    result = ingest_short_volume(_FakeFetcher("short-volume", rows))
-    assert result.ingested == 5
-    assert calls == 1
+# DIG-1175: `test_wave2_bulk_scans_stub_index_once` was removed here.
+# Bulk ingest is refused before any fetch, so the O(n) key-scan it pinned is
+# unreachable — the same reasoning as the DIG-1307 removal above. If the feeds
+# are ever re-opened with per-dataset Art. 9 clearance, the pin must be
+# restored alongside the entry points.
