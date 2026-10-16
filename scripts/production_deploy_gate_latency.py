@@ -677,11 +677,10 @@ def main(argv: list[str] | None = None) -> int:
     except GateCheckFailed as exc:
         issue_status = f"issue upsert FAILED: {exc}"
     print(issue_status)
-    print(
-        notify_email(
-            f"{ISSUE_TITLE_PREFIX} {len(stale)} pending over gate", body, dry_run=args.dry_run
-        )
+    notify_email(
+        f"{ISSUE_TITLE_PREFIX} {len(stale)} pending over gate", body, dry_run=args.dry_run
     )
+    print("gate email dry-run" if args.dry_run else "gate email attempted")
     return 2 if issue_status.startswith("issue upsert FAILED") else 0
 
 
