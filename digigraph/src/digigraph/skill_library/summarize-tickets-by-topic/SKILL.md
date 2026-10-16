@@ -9,10 +9,21 @@ version: "1"
 Use this when you have been asked what a set of tickets is about — "summarize the
 open tickets", "what are these tickets about", "group these by theme".
 
+## What each lookup is for
+
+Semantic search (`digisearch_zammad_tickets`) is for exploration: finding
+themes and similar subjects. It does not count tickets and it is not a
+complete set. Counts and precise metrics must come from the Zammad metadata
+tools (`aggregate_tickets` for counts and rankings, `ticket_report` for a
+status report, `list_tickets` for a paged live list). Never report a count
+taken from semantic-search hits.
+
 ## Order of work
 
 1. **Retrieve first.** Every ticket you report must come from a result you
-   observed this turn. Retrieve before you write a word.
+   observed this turn. Retrieve before you write a word. Use semantic search
+   to explore themes. Use the Zammad metadata tools when the question asks
+   how many, a ranking, or a precise list.
 2. **Propose the topics yourself** from what the retrieved titles and text
    actually say. There is no fixed topic list. Name a topic in the customer's
    own words where you can.
@@ -61,3 +72,11 @@ open tickets", "what are these tickets about", "group these by theme".
 
 Say so in one line and stop. Do not fall back to what you happen to know about
 the customer or the product.
+
+## Language of shown terms
+
+The chat language is the language the user writes in. When an answer shows a
+term, status, title, or quote that is not already in the chat language, put
+the chat-language wording first and the original in parentheses and quotes.
+When the chat is English: in progress ("in Bearbeitung"). When the source
+text is already in the chat language, do not add a translation.

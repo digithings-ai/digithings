@@ -9,6 +9,7 @@ import { isAllowedMcpServerUrl } from "@/lib/deploy-config/mcp-servers";
 import { sameOrigin } from "@/lib/fetch-guarded";
 
 export const MCP_OAUTH_COOKIE = "dc_mcp_oauth";
+export const MCP_OAUTH_RESULT_COOKIE = "dc_mcp_oauth_result";
 export const MCP_OAUTH_MESSAGE = "digichat-mcp-oauth";
 const STATE_TTL_MS = 10 * 60_000;
 
@@ -321,22 +322,40 @@ export function readOAuthCookie(req: Request): string | null {
   return null;
 }
 
-export function callbackHtml(opts: {
-  origin: string;
-  id: string;
-  accessToken?: string;
-  error?: string;
-}): string {
-  const msg = {
-    type: MCP_OAUTH_MESSAGE,
-    id: opts.id,
-    ...(opts.accessToken ? { accessToken: opts.accessToken } : {}),
-    ...(opts.error ? { error: opts.error } : {}),
-  };
+export function oauthResultCookieHeader(
+  msg: { type: string; id: string; accessToken?: string; error?: string },
+  reqUrl: string,
+): string {
+  const secure = new URL(reqUrl).protocol === "https:";
+  const parts = [
+    `${MCP_OAUTH_RESULT_COOKIE}=${encodeURIComponent(JSON.stringify(msg))}`,
+    "SameSite=Lax",
+    `Path=${p("/api/mcp/oauth/callback") || "/"}`,
+    "Max-Age=60",
+  ];
+  if (secure) parts.push("Secure");
+  return parts.join("; ");
+}
+
+/** Static callback page. The token rides in the result cookie, never in this HTML. */
+export function callbackHtml(): string {
   return `<!doctype html><html><body><script>
 (function(){
-  var msg = ${JSON.stringify(msg)};
-  if (window.opener) window.opener.postMessage(msg, ${JSON.stringify(opts.origin)});
+  var name = "dc_mcp_oauth_result=";
+  var raw = "";
+  var parts = document.cookie.split(";");
+  for (var i = 0; i < parts.length; i++) {
+    var part = parts[i];
+    var j = 0;
+    while (part.charCodeAt(j) === 32) j++;
+    part = part.slice(j);
+    if (part.indexOf(name) === 0) raw = part.slice(name.length);
+  }
+  var msg = { type: "digichat-mcp-oauth", error: "oauth_result_missing" };
+  if (raw) {
+    try { msg = JSON.parse(decodeURIComponent(raw)); } catch (e) {}
+  }
+  if (window.opener) window.opener.postMessage(msg, window.location.origin);
   window.close();
 })();
 </script><p>You can close this window.</p></body></html>`;
