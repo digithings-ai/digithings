@@ -88,8 +88,11 @@ _TRACKERS_ENTITLEMENT_NOTE = (
     "congress-trades rows are 13107(c) disclosure reports whose commercial use "
     "5 U.S.C. 13107(c)(1)(B) restricts — and 13107(c)(2) runs to whoever "
     "obtains or uses the report, so no vendor licence moves the exposure to "
-    "LuxAlgo; short-volume rows carry unresolved upstream FINRA terms. Do not "
-    "present either as plain CC0. DIG-1472."
+    "LuxAlgo; short-volume rows are FINRA's own compilation, whose Equity Data "
+    "Specific Terms §2.3 cap End User use at non-commercial use at no charge, so "
+    "commercial redistribution is prohibited and no vendor licence cures it "
+    "(Counsel, PROHIBITED, DIG-1521) — in service by dated business decision, "
+    "which is not a clearance. Do not present either as plain CC0. DIG-1472."
 )
 
 #: Per-tool note overrides (#4844): the Edge Stats and Trackers families share
@@ -97,7 +100,8 @@ _TRACKERS_ENTITLEMENT_NOTE = (
 #: Library source-code note would mislead on a preset stat or a CC0-1.0 row,
 #: so the trackers note repeats the per-family limits from
 #: :data:`attribution.LUXALGO_TRACKERS_DATA_CAVEATS` — congress-trades under
-#: 5 U.S.C. 13107 and short-volume under the unresolved FINRA terms.
+#: 5 U.S.C. 13107 and short-volume under FINRA's own terms, ruled PROHIBITED in
+#: DIG-1521 and in service by dated business decision against that advice.
 TOOL_NOTES: dict[str, str] = {
     "luxalgo_edge_symbols": (
         "Entitlement: free (anonymous; no key needed). Edge Stats content is "
