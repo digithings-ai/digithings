@@ -891,11 +891,18 @@ fi
 # creation signal — and the hook already computes it for the diff base. Reading
 # it in the arm, not somewhere else, is the difference between refusing a
 # rebuild and refusing every follow-up commit to an unmerged branch.
+# DIG-1579 scoping: three arms in this hook now share the same gate line,
+# `is_deletion -eq 0 && refs/heads/*` (taxonomy, duplicate-work, branch-age).
+# This guard took the LAST such line in the file, so the branch-age arm, which
+# has no `is_zero_sha "$remote_sha"`, reset `signal` to 0 and failed a
+# duplicate-work arm that never moved. Restrict the scan to the region at and
+# above the branch_restart_check.py anchor, which is where that arm ends. The
+# property under test is unchanged; only the window is.
 if awk '
   /^[[:space:]]*#/ { next }
-  /is_deletion.*-eq 0/ && /refs\/heads/ { gate = NR; signal = 0 }
-  /is_zero_sha "\$remote_sha"/ && gate && !signal { signal = NR }
   /branch_restart_check\.py/ && !anchor { anchor = NR }
+  /is_deletion.*-eq 0/ && /refs\/heads/ && !anchor { gate = NR; signal = 0 }
+  /is_zero_sha "\$remote_sha"/ && gate && !signal && !anchor { signal = NR }
   END { exit (gate && anchor && signal && signal > gate && signal < anchor) ? 0 : 1 }
 ' "$HOOK"; then
   echo "PASS [structure] duplicate-work arm passes the create-vs-update signal"
@@ -904,6 +911,312 @@ else
   echo "FAIL [structure] duplicate-work arm must read is_zero_sha \"\$remote_sha\" before the checker"
   fail=$((fail + 1))
 fi
+
+# ── DIG-1579: branch-age warning (warns, never blocks) ────────────────────────
+# policy § 6, item 3. The hook delegates to scripts/branch_age_warning.py, pointed at
+# the working copy through the same override the duplicate-work arm honours, so
+# the seed commit every branch above was built from stays untouched and the
+# overlap counts earlier in this suite remain comparable.
+AGE_HELPER="$REPO_ROOT/scripts/branch_age_warning.py"
+cd "$FIXTURE"
+
+# A branch whose tip commit is `days` old, off develop so the duplicate-work
+# guard sees a sibling-free branch. `GIT_*_DATE="@<epoch>"` is the portable
+# spelling — it dates the committer as well as the author, which is the field
+# `git log -1 --format=%ct` reads, so the age under test is the real one and not
+# an author-date substitute. One new file per commit keeps every patch-id
+# distinct, so a multi-commit fixture really reports N unmerged patches.
+make_stale_tip() {
+  local branch="$1"
+  local days="$2"
+  local commits="${3:-1}"
+  local epoch i tip
+  epoch="$(( $(date +%s) - days * 86400 ))"
+  git -C "$FIXTURE" checkout -q -B "$branch" develop
+  for ((i = 1; i <= commits; i++)); do
+    echo "stale-$RANDOM-$i" > "$FIXTURE/digiquant/src/digiquant/dashboard/${branch##*/}-${i}.txt"
+    git -C "$FIXTURE" add -A
+    GIT_AUTHOR_DATE="@${epoch}" GIT_COMMITTER_DATE="@${epoch}" \
+      git -C "$FIXTURE" commit -q -m "chore: stale change $i on ${branch}"
+  done
+  tip="$(git -C "$FIXTURE" rev-parse HEAD)"
+  printf '%s' "$tip"
+}
+
+# The warning must carry the three things needed to act — how old, which tier,
+# where the rule lives — and still let the push through. An exit status alone
+# cannot tell "warned" from "refused for some other reason and printed text".
+assert_warns() {
+  local desc="$1"
+  local url="$2"
+  local line="$3"
+  shift 3
+  local out rc=0 missing=""
+  out="$(capture_hook "$FIXTURE" "$url" "$line" "$@")" || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    echo "FAIL [warn] $desc  (expected exit 0, got $rc)"
+    echo "$out" | sed 's/^/      | /'
+    fail=$((fail + 1))
+    return
+  fi
+  grep -qF 'last commit is' <<<"$out" || missing="$missing age"
+  grep -qE 'tier T[0-9]' <<<"$out" || missing="$missing tier"
+  grep -qF 'docs/ops/branch-hygiene-policy.md' <<<"$out" || missing="$missing policy"
+  grep -qF 'Non-blocking' <<<"$out" || missing="$missing non-blocking-claim"
+  if [ -n "$missing" ]; then
+    echo "FAIL [warn] $desc  (missing:$missing)"
+    echo "$out" | sed 's/^/      | /'
+    fail=$((fail + 1))
+    return
+  fi
+  echo "PASS [warn] $desc"
+  pass=$((pass + 1))
+}
+
+# No age output at all — not merely "no line matching one wording", which a
+# reworded warning would satisfy.
+assert_silent() {
+  local desc="$1"
+  local url="$2"
+  local line="$3"
+  shift 3
+  local out rc=0
+  out="$(capture_hook "$FIXTURE" "$url" "$line" "$@")" || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    echo "FAIL [silent] $desc  (expected exit 0, got $rc)"
+    echo "$out" | sed 's/^/      | /'
+    fail=$((fail + 1))
+    return
+  fi
+  if grep -qE 'last commit is|tier T[0-9]|branch-age' <<<"$out"; then
+    echo "FAIL [silent] $desc  (age output printed on a branch that is not stale)"
+    echo "$out" | sed 's/^/      | /'
+    fail=$((fail + 1))
+    return
+  fi
+  echo "PASS [silent] $desc"
+  pass=$((pass + 1))
+}
+
+assert_no_taxonomy_error() {
+  local desc="$1"
+  local url="$2"
+  local line="$3"
+  shift 3
+  local out rc=0
+  out="$(capture_hook "$FIXTURE" "$url" "$line" "$@")" || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    echo "FAIL [delete] $desc  (expected exit 0, got $rc)"
+    echo "$out" | sed 's/^/      | /'
+    fail=$((fail + 1))
+    return
+  fi
+  if grep -qi 'taxonomy' <<<"$out"; then
+    echo "FAIL [delete] $desc  (a deletion raised the branch-name taxonomy)"
+    echo "$out" | sed 's/^/      | /'
+    fail=$((fail + 1))
+    return
+  fi
+  echo "PASS [delete] $desc"
+  pass=$((pass + 1))
+}
+
+# Every age case below points the hook at the working copy through
+# BRANCH_AGE_WARNING_PATH, which capture_hook forwards to `env` as an assignment.
+
+# ── a 14-day-old branch warns, and the push still succeeds ──────────────────
+STALE_TIP="$(make_stale_tip fix/1579-stale-14d 14)"
+assert_warns "stale branch warns with age, tier and policy link, and pushes" \
+  "$ORIGIN_URL" \
+  "refs/heads/fix/1579-stale-14d $STALE_TIP refs/heads/fix/1579-stale-14d $ZERO40" \
+  BRANCH_AGE_WARNING_PATH="$AGE_HELPER"
+
+# ── a fresh branch says nothing at all ──────────────────────────────────────
+FRESH_TIP="$(make_safe_tip)"
+assert_silent "fresh branch prints no age warning" \
+  "$ORIGIN_URL" \
+  "refs/heads/task/2483-safe-tmp $FRESH_TIP refs/heads/task/2483-safe-tmp $ZERO40" \
+  BRANCH_AGE_WARNING_PATH="$AGE_HELPER"
+
+# ── the 10-day boundary, tested either side of it ───────────────────────────
+# 9 and 11 rather than 10: a commit dated exactly at the threshold is decided by
+# the seconds between `date +%s` here and the hook's own `time.time()`, so the
+# threshold case itself would be a coin toss.
+NINE_TIP="$(make_stale_tip fix/1579-nine-days 9)"
+assert_silent "a 9-day-old branch is below the threshold" \
+  "$ORIGIN_URL" \
+  "refs/heads/fix/1579-nine-days $NINE_TIP refs/heads/fix/1579-nine-days $ZERO40" \
+  BRANCH_AGE_WARNING_PATH="$AGE_HELPER"
+
+ELEVEN_TIP="$(make_stale_tip fix/1579-eleven-days 11)"
+assert_warns "an 11-day-old branch is above the threshold" \
+  "$ORIGIN_URL" \
+  "refs/heads/fix/1579-eleven-days $ELEVEN_TIP refs/heads/fix/1579-eleven-days $ZERO40" \
+  BRANCH_AGE_WARNING_PATH="$AGE_HELPER"
+
+# ── § 5 exclusions stay silent even when ancient ────────────────────────────
+MODULE_TIP="$(make_stale_tip module/1579-stale-module 90)"
+assert_silent "a 90-day-old module/* branch is exempt (policy section 5)" \
+  "$ORIGIN_URL" \
+  "refs/heads/module/1579-stale-module $MODULE_TIP refs/heads/module/1579-stale-module $ZERO40" \
+  BRANCH_AGE_WARNING_PATH="$AGE_HELPER"
+
+# ── deleting a stale branch still succeeds, with no taxonomy error ───────────
+# The branch is real on the fixture's own bare remote first, so this is the
+# literal § 4 disposal shape and not a simulation of it.
+STALE_DELETE_BRANCH='fix/1579-stale-delete'
+STALE_DELETE_TIP="$(make_stale_tip "$STALE_DELETE_BRANCH" 40)"
+git push -q origin "$STALE_DELETE_BRANCH"
+assert_no_taxonomy_error "deleting a 40-day-old branch still succeeds (#2468 exemption intact)" \
+  "$ORIGIN_URL" \
+  "refs/heads/$STALE_DELETE_BRANCH $ZERO40 refs/heads/$STALE_DELETE_BRANCH $STALE_DELETE_TIP" \
+  BRANCH_AGE_WARNING_PATH="$AGE_HELPER"
+assert_silent "a deletion prints no age warning — the branch is on its way out" \
+  "$ORIGIN_URL" \
+  "refs/heads/$STALE_DELETE_BRANCH $ZERO40 refs/heads/$STALE_DELETE_BRANCH $STALE_DELETE_TIP" \
+  BRANCH_AGE_WARNING_PATH="$AGE_HELPER"
+
+# ── the warning must not turn a refusal into a pass ─────────────────────────
+# `main` still needs ALLOW_MAIN_PUSH, and the age arm sits after that refusal,
+# so a stale main push refuses exactly as it did before DIG-1579.
+STALE_MAIN_TIP="$(make_stale_tip main 30)"
+assert_exit 1 "stale push to main still refuses without ALLOW_MAIN_PUSH" \
+  "$FIXTURE" "$ORIGIN_URL" \
+  "refs/heads/main $STALE_MAIN_TIP refs/heads/main $ZERO40" \
+  BRANCH_AGE_WARNING_PATH="$AGE_HELPER"
+assert_exit 0 "stale push to main is allowed with ALLOW_MAIN_PUSH=1 and warns" \
+  "$FIXTURE" "$ORIGIN_URL" \
+  "refs/heads/main $STALE_MAIN_TIP refs/heads/main $ZERO40" \
+  BRANCH_AGE_WARNING_PATH="$AGE_HELPER" ALLOW_MAIN_PUSH=1
+
+# ── a missing helper is fail-open, not a refusal ────────────────────────────
+# An installed hook is a copy under .git/hooks shared by every worktree and is
+# installed from origin/develop, so "the helper is not there yet" is the normal
+# state between a hook landing and the branch being pulled — not an error.
+assert_exit 0 "a missing branch_age_warning.py does not block the push" \
+  "$FIXTURE" "$ORIGIN_URL" \
+  "refs/heads/fix/1579-stale-14d $STALE_TIP refs/heads/fix/1579-stale-14d $ZERO40" \
+  BRANCH_AGE_WARNING_PATH=/nonexistent/branch_age_warning.py
+
+MISSING_OUT="$(capture_hook "$FIXTURE" "$ORIGIN_URL" \
+  "refs/heads/fix/1579-stale-14d $STALE_TIP refs/heads/fix/1579-stale-14d $ZERO40" \
+  BRANCH_AGE_WARNING_PATH=/nonexistent/branch_age_warning.py)"
+if grep -qF 'branch-age warning skipped' <<<"$MISSING_OUT"; then
+  echo "PASS [warn] the missing helper is reported, not silent"
+  pass=$((pass + 1))
+else
+  echo "FAIL [warn] a missing helper must say so rather than fail quietly"
+  echo "$MISSING_OUT" | sed 's/^/      | /'
+  fail=$((fail + 1))
+fi
+
+# ── the hook's default resolution finds the helper at the git toplevel ───────
+# The cases above all used BRANCH_AGE_WARNING_PATH. This one relies on the
+# lookup the hook performs on every real push, so the override cannot be the
+# only thing that works.
+cp "$AGE_HELPER" "$FIXTURE/scripts/branch_age_warning.py"
+assert_warns "the helper is found at the git toplevel without an override" \
+  "$ORIGIN_URL" \
+  "refs/heads/fix/1579-stale-14d $STALE_TIP refs/heads/fix/1579-stale-14d $ZERO40"
+rm -f "$FIXTURE/scripts/branch_age_warning.py"
+
+# ── structure: the arm is a warning, wired like one ──────────────────────────
+if grep -qF 'branch_age_warning.py' "$HOOK"; then
+  echo "PASS [structure] hook delegates to branch_age_warning.py"
+  pass=$((pass + 1))
+else
+  echo "FAIL [structure] hook must invoke scripts/branch_age_warning.py"
+  fail=$((fail + 1))
+fi
+
+# Branch pushes only, and never a deletion — the same gate the duplicate-work arm
+# uses, because both of those refs have nothing to warn about.
+#
+# This has to be a SOURCE-level assertion, and scoped to the branch-age arm
+# alone. Two measured reasons, both from the M7 mutation (deleting the arm's own
+# `is_deletion -eq 0`), which the behavioural deletion test cannot see:
+#
+#  1. The deletion exemption is enforced TWICE. The hook `continue`s on every
+#     deletion at the "deletions have no commit range to scan" early exit, some
+#     125 lines ABOVE this arm, so the arm is already unreachable before its own
+#     gate is consulted. Dropping the gate leaves the push behaviour byte-for-byte
+#     identical. Verified by running both revisions against a deletion with
+#     BRANCH_AGE_WARNING_PYTHON pointed at an absent binary — the skip line is
+#     loud when the arm IS reached, and both revisions print nothing. A control on
+#     the same fixture, same hook, as a non-deletion, does print the skip line.
+#  2. The previous version of this guard took the LAST `is_deletion -eq 0 &&
+#     refs/heads` line in the whole file, and never confirmed that line belonged
+#     to this arm. Three arms now share that gate shape, so under M7 the scan
+#     silently re-bound to the duplicate-work arm at an earlier line — whose gate
+#     is intact — and passed on a hook that had lost this arm's gate entirely.
+#     Its `!early` half was dead in both revisions: the gate always precedes this
+#     arm's own filename mention, so `early` was never set and could not fail.
+#
+# So: window the scan at this arm's own comment banner (unique in the file, read
+# off disk and asserted), and require the gate to appear EXACTLY ONCE inside that
+# window and ahead of the arm body. `n == 1` is what turns "some arm has this
+# gate" into "this arm has this gate".
+if awk '
+  BEGIN { win = 0; n = 0; gate = 0; body = 0 }
+  /DIG-1579: branch-age warning/ { win = 1; next }
+  win && /^[[:space:]]*#/ { next }
+  win && /branch_age_warning\.py/ && !body { body = NR }
+  win && /is_deletion.*-eq 0/ && /refs\/heads/ { n++; gate = NR }
+  END { exit (n == 1 && gate > 0 && body > 0 && gate < body) ? 0 : 1 }
+' "$HOOK"; then
+  echo "PASS [structure] branch-age arm is gated on refs/heads and not on deletions"
+  pass=$((pass + 1))
+else
+  echo "FAIL [structure] branch-age arm must be gated on refs/heads and not on deletions"
+  fail=$((fail + 1))
+fi
+
+# `|| true` on the invocation is what makes "never blocks" true of the wiring and
+# not only of the module: the hook reads any non-zero exit as a deliberate
+# block, so an un-editable `|| true` here would be the one path that can refuse.
+# The statement is joined across its line continuations first — read one physical
+# line and the guard matches the `age_checker=` assignment, never the call.
+if awk '
+  /\\$/ { pending = pending $0 " "; next }
+  {
+    line = pending $0; pending = ""
+    if (line ~ /"\$age_checker" "\$local_sha"/) {
+      anchor = NR
+      if (line ~ /\|\|[[:space:]]*true/) ok = NR
+    }
+  }
+  END { exit (anchor && ok) ? 0 : 1 }
+' "$HOOK"; then
+  echo "PASS [structure] the branch-age invocation is || true-ed"
+  pass=$((pass + 1))
+else
+  echo "FAIL [structure] the branch-age invocation must be || true-ed so a crash cannot refuse"
+  fail=$((fail + 1))
+fi
+
+# The threshold lives in the module as a named constant for the same reason
+# MIN_UNMERGED_PATCH_OVERLAP does: a bare literal is how it became 1 and turned
+# every pair of parallel leaves into a refusal.
+if grep -qE '^STALE_AFTER_DAYS = 10$' "$AGE_HELPER" \
+  && grep -qF 'section 6, item 3' "$AGE_HELPER"; then
+  echo "PASS [structure] STALE_AFTER_DAYS = 10 is a named constant tied to the policy section"
+  pass=$((pass + 1))
+else
+  echo "FAIL [structure] branch_age_warning.py must define STALE_AFTER_DAYS = 10 and cite section 6, item 3"
+  fail=$((fail + 1))
+fi
+
+# The module must never reach the network: a pre-push hook that called out would
+# be disabled with --no-verify, taking the live-trading co-sign gate down with it.
+if grep -qE 'https?://|urllib|requests\.|urlopen|fetch\(' "$AGE_HELPER"; then
+  echo "FAIL [structure] branch_age_warning.py must not call the network"
+  fail=$((fail + 1))
+else
+  echo "PASS [structure] branch_age_warning.py makes no network call"
+  pass=$((pass + 1))
+fi
+
+cd "$REPO_ROOT"
 
 echo "pre-push hook: $pass passed, $fail failed"
 [[ "$fail" -eq 0 ]]

@@ -6,6 +6,9 @@
 #   • pushes to `develop` without ALLOW_DEVELOP_PUSH=1
 #   • pushes that touch live-trading paths without a `Human-Approved-By:` trailer
 #
+# Warns, and never blocks (DIG-1579):
+#   • the branch being pushed is older than 10 days — see the policy pointer it prints
+#
 # Installed by `make hooks-install` (and by `make agents-init`), which installs
 # this file **as committed on origin/develop**, not your working copy — one hook
 # is shared by every linked worktree, so installing a task branch's copy would
@@ -258,6 +261,32 @@ while read -r local_ref local_sha remote_ref remote_sha; do
       # Allowed, but something worth recording — an applied escape, or a
       # fail-open path. An escape that is invisible is an escape nobody trusts.
       printf '%s\n' "$restart_out" >&2
+    fi
+  fi
+
+  # ── DIG-1579: branch-age warning (never blocks) ────────────────────────────
+  # Appended last for the same reason as the arm above: a content refusal must
+  # never be masked by a warning. Also purely additive — no existing arm moves.
+  #
+  # Deletions are exempt here too, and for a second reason to the taxonomy one:
+  # § 4 of the policy clears stale refs with `git push origin --delete`, so
+  # warning on the way out would print at the operator during exactly the
+  # cleanup this hook exists to make cheap — and it must never become the reason
+  # such a push fails.
+  if [ "$is_deletion" -eq 0 ] && [[ "$remote_ref" == refs/heads/* ]]; then
+    age_top="$(git rev-parse --show-toplevel 2>/dev/null || echo '')"
+    age_checker="${BRANCH_AGE_WARNING_PATH:-${age_top:+$age_top/scripts/branch_age_warning.py}}"
+    if [ -z "$age_checker" ] || [ ! -f "$age_checker" ]; then
+      echo "pre-push: branch-age warning skipped — scripts/branch_age_warning.py not found." >&2
+      echo "         Run 'git fetch origin' and retry." >&2
+    elif ! command -v "${BRANCH_AGE_WARNING_PYTHON:-python3}" >/dev/null 2>&1; then
+      echo "pre-push: branch-age warning skipped — '${BRANCH_AGE_WARNING_PYTHON:-python3}' not found." >&2
+    else
+      # `|| true` is load-bearing, not defensive noise: the module already exits 0
+      # on every path, but a traceback or a signal must not become a non-zero
+      # exit the way a refusal is. This arm has no opinion on the push.
+      "${BRANCH_AGE_WARNING_PYTHON:-python3}" "$age_checker" "$local_sha" \
+        --branch-name "${branch_name:-$local_ref}" 2>&1 || true
     fi
   fi
 done
