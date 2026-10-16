@@ -4,8 +4,11 @@
 #   1. apps/digiquant-web/out/ — the digiquant.io landing (Next.js static
 #      export, root domain, no basePath) → dist/ root
 #   2. apps/dashboard/out/     — the dashboard (basePath /dashboard)
-#      → dist/dashboard/ only. The landing export keeps a one-hop 308 from
-#      /olympus/* to the desk (mostly /app/*) so existing bookmarks do not fail closed.
+#      → dist/dashboard/ only. Non-FX dashboard paths 308 to the brief desk
+#      at /app. /dashboard and /dashboard/twelve-x stay here so FX Hub and
+#      invite links (https://digiquant.io/dashboard?invite=) keep working.
+#      The landing export keeps a one-hop 308 from /olympus/* to the desk
+#      (mostly /app/*), except /olympus/twelve-x which stays on /dashboard.
 # The digiquant-web export ships public/_headers (root /* security headers +
 # /dashboard* CSP).
 set -euo pipefail
@@ -67,6 +70,19 @@ echo "--- building digiquant-web (Next.js static export) ---"
 npm --workspace apps/digiquant-web run build
 cp -r apps/digiquant-web/out/. dist/
 
+# Brief desk v1 is the static export at /app. FX Hub invites are
+# /dashboard?invite= and the page is /dashboard/twelve-x. Those must not 308
+# to /app while ROUTE_DASHBOARD_FX_HUB_TO_APP is false (DIG-3315).
+[ -f dist/app/index.html ] || { echo "ERROR: dist/app/index.html missing — brief desk v1 did not export" >&2; exit 1; }
+if grep -E '^/dashboard/?[[:space:]]+/app([[:space:]]|$)' dist/_redirects >/dev/null; then
+  echo "ERROR: /dashboard root redirects to /app; FX Hub invites live at /dashboard?invite=" >&2
+  exit 1
+fi
+if grep -E '^/dashboard/twelve-x/?[[:space:]]+/app([[:space:]]|$)' dist/_redirects >/dev/null; then
+  echo "ERROR: /dashboard/twelve-x redirects to /app; FX Hub stays on the dashboard this release" >&2
+  exit 1
+fi
+
 # 2. Dashboard (basePath /dashboard) → dist/dashboard/.
 echo "--- building dashboard ---"
 # T1 Pages gap: default Auth login UI on Cloudflare Pages without cutover 900
@@ -108,6 +124,7 @@ bash scripts/write-build-info.sh dist/build-info.json digiquant.io
 [ -f dist/subsystems/research/index.html ] || { echo "ERROR: subsystem pages missing" >&2; exit 1; }
 [ -f dist/_headers ] || { echo "ERROR: dist/_headers missing — CSP would not apply" >&2; exit 1; }
 [ -f dist/dashboard/index.html ] || { echo "ERROR: dist/dashboard/index.html missing — dashboard did not export" >&2; exit 1; }
+[ -f dist/dashboard/twelve-x/index.html ] || { echo "ERROR: dist/dashboard/twelve-x/index.html missing — FX Hub route not exported" >&2; exit 1; }
 # Auth routes (T1) — trailingSlash export → login/index.html (fixes prod 404).
 [ -f dist/dashboard/login/index.html ] || { echo "ERROR: dist/dashboard/login/index.html missing — Auth login route not exported" >&2; exit 1; }
 [ -f dist/dashboard/auth/callback/index.html ] || { echo "ERROR: dist/dashboard/auth/callback/index.html missing — Auth callback route not exported" >&2; exit 1; }
