@@ -510,7 +510,7 @@ def digiquant_get_trade_levels(
             return levels_for_ticker(ticker, direction, cache_dir=cache_dir, cfg=cfg, pair=pair)
         return json.dumps({"error": "either ohlc_json or ticker is required"})
     except Exception as exc:  # surface as JSON to the caller, never crash
-        return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+        return json.dumps({"error": type(exc).__name__})
 
 
 try:
