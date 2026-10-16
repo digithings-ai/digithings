@@ -59,8 +59,15 @@ export class UpstreamError extends Error {
   }
 }
 
+/** Drop trailing `/` without a quantified regex (CodeQL js/polynomial-redos). */
+function trimTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 47) end -= 1;
+  return value.slice(0, end);
+}
+
 function restBase(env: SupabaseEnv): string {
-  return `${env.SUPABASE_URL!.trim().replace(/\/+$/, '')}/rest/v1`;
+  return `${trimTrailingSlashes(env.SUPABASE_URL!.trim())}/rest/v1`;
 }
 
 /** PostgREST GET with the service-role key. Non-OK throws `UpstreamError`. */
@@ -276,7 +283,7 @@ async function loadCommittedBook(
 // --- Market API (R2-only closes) --------------------------------------------
 
 function marketBase(env: SupabaseEnv): string {
-  return (env.MARKET_DATA_URL ?? '').trim().replace(/\/+$/, '');
+  return trimTrailingSlashes((env.MARKET_DATA_URL ?? '').trim());
 }
 
 interface MarketCloseRow {
