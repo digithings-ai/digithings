@@ -72,10 +72,11 @@ describe('Sidebar', () => {
     entitlementMock.effectivePlanTier = 'enterprise';
   });
 
-  it('renders the owner destinations without System', () => {
+  it('renders FX Hub and hides brief, portfolio, and pipeline', () => {
     const html = renderToStaticMarkup(createElement(Sidebar));
-    for (const label of ['Brief', 'Portfolio', 'Pipeline', 'FX Hub']) {
-      expect(html).toContain(label);
+    expect(html).toContain('FX Hub');
+    for (const label of ['Brief', 'Portfolio', 'Pipeline']) {
+      expect(html).not.toContain(label);
     }
     expect(html).not.toContain('>System<');
     expect(html).not.toContain('System');
@@ -159,29 +160,22 @@ describe('Sidebar', () => {
     expect(html).not.toContain('sidebar-bottom-tools');
   });
 
-  it('a paying free-tier-on-paper but plan_floor-elevated account is unaffected', () => {
-    // effectivePlanTier only reads 'free' for a genuinely unpaid account —
-    // any real tier (brief/desk/studio/enterprise) sees the full spine
-    // regardless of fx_hub, matching a normal paying customer or the
-    // studio-floor creator/admin.
+  it('a paying account still sees only FX Hub in the sidebar', () => {
     entitlementMock.canFxHub = true;
     entitlementMock.effectivePlanTier = 'desk';
     const html = renderToStaticMarkup(createElement(Sidebar));
-    for (const label of ['Brief', 'Portfolio', 'Pipeline', 'FX Hub']) {
-      expect(html).toContain(label);
+    expect(html).toContain('FX Hub');
+    for (const label of ['Brief', 'Portfolio', 'Pipeline']) {
+      expect(html).not.toContain(label);
     }
   });
 
-  it('a free-tier account without fx_hub sees neither FX Hub nor is nav-suppressed', () => {
-    // No product grant at all (not an fx_hub invitee) — FX Hub hides as
-    // before, but this is not the "invited, nothing else" case, so the
-    // rest of the spine stays visible.
+  it('a free-tier account without fx_hub sees no primary destinations', () => {
     entitlementMock.canFxHub = false;
     entitlementMock.effectivePlanTier = 'free';
     const html = renderToStaticMarkup(createElement(Sidebar));
-    for (const label of ['Brief', 'Portfolio', 'Pipeline']) {
-      expect(html).toContain(label);
+    for (const label of ['Brief', 'Portfolio', 'Pipeline', 'FX Hub']) {
+      expect(html).not.toContain(label);
     }
-    expect(html).not.toContain('FX Hub');
   });
 });

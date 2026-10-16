@@ -68,11 +68,9 @@ export default function Sidebar() {
     useAppShell();
   const { authEnabled, user, signOut } = useAuth();
   const [signOutError, setSignOutError] = useState<string | null>(null);
-  // An FX-Hub-invited account with no paid plan (the 12x trader invite path)
-  // sees ONLY FX Hub — no Brief/Portfolio/Pipeline nav, not even teaser
-  // content, to avoid the confusion of a research dashboard they weren't
-  // given access to. A real paying tier (or the studio-floor creator/admin)
-  // is unaffected — this only fires for fx_hub-granted + free tier.
+  // This release the sidebar lists FX Hub only (see NAV). An FX-Hub-invited
+  // free-tier account also loses the external terminal link. A caller with
+  // no fx_hub grant does not see FX Hub.
   const { canFxHub, fxHubOnlyInvitee } = useFxHubOnlyInvitee();
 
   useEffect(() => {

@@ -6,16 +6,27 @@
  * non-finite scores so a single bad point never poisons the average.
  */
 import { G10_CURRENCIES } from './types';
+import { asOfMs } from './snapshot-generation';
 
 interface ConsensusSnapshotIdentity {
   run_date: string;
   currency: string;
+  /** `timestamptz` publish stamp; read as epoch ms, never compared as a string. */
+  as_of?: string | null;
 }
 
 /**
  * Select the newest run containing the full canonical G10 universe. During an
  * incremental publish, this skips the newest partial run; if no complete run
  * exists yet, it returns that newest partial run rather than hiding real data.
+ *
+ * A rerun of one run_date publishes a second generation of rows next to the
+ * first, so several rows share a (run_date, currency) key. The write is
+ * compare-before-write on `as_of`: the newest stamp wins, and a tie or a
+ * missing stamp keeps the incumbent. The generation of a run is per currency,
+ * NOT per date — a currency the newest generation did not reach is still
+ * returned, carrying the newest stamp that did publish it, which is what keeps
+ * the G10 completeness rule intact.
  */
 export function selectLatestCompleteConsensus<T extends ConsensusSnapshotIdentity>(
   series: T[],
@@ -25,7 +36,8 @@ export function selectLatestCompleteConsensus<T extends ConsensusSnapshotIdentit
     const currency = row.currency.toUpperCase();
     if (!G10_CURRENCIES.includes(currency as (typeof G10_CURRENCIES)[number])) continue;
     const rows = byDate.get(row.run_date) ?? new Map<string, T>();
-    rows.set(currency, row);
+    const incumbent = rows.get(currency);
+    if (incumbent === undefined || supersedes(row, incumbent)) rows.set(currency, row);
     byDate.set(row.run_date, rows);
   }
 
@@ -44,6 +56,18 @@ export function selectLatestCompleteConsensus<T extends ConsensusSnapshotIdentit
         return row ? [row] : [];
       })
     : [];
+}
+
+/**
+ * True when `candidate` supersedes `incumbent`: a usable stamp over none, or a
+ * strictly newer one. A tie keeps the incumbent, and an unusable stamp never
+ * displaces one — so two rows of the same generation never trade places.
+ */
+function supersedes(candidate: ConsensusSnapshotIdentity, incumbent: ConsensusSnapshotIdentity): boolean {
+  const candidateMs = asOfMs(candidate);
+  if (Number.isNaN(candidateMs)) return false;
+  const incumbentMs = asOfMs(incumbent);
+  return Number.isNaN(incumbentMs) || candidateMs > incumbentMs;
 }
 
 export interface ScorePoint {
