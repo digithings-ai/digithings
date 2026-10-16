@@ -120,9 +120,5 @@ if __name__ == "__main__":
     for r in results:
         status = r["status"].upper()
         latency = f"{r['latency_ms']}ms" if r["latency_ms"] is not None else "—"
-        suffix = (
-            f" ({r['error'][:80]})"
-            if r.get("error")
-            else (f" — {r['reason']}" if r.get("reason") else "")
-        )
+        suffix = " (error)" if r.get("error") else (" — reason" if r.get("reason") else "")
         print(f"  {status:7} {r['provider']:<15} {latency}{suffix}")
