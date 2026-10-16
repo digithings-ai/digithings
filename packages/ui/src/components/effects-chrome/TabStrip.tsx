@@ -187,7 +187,7 @@ export function TabStrip({
       : false;
     const nextInDom = (active + 1) % tabs.length;
     const prevInDom = (active - 1 + tabs.length) % tabs.length;
-    let next = active;
+    let next: number;
     if (e.key === "ArrowRight") next = rtl ? prevInDom : nextInDom;
     else if (e.key === "ArrowLeft") next = rtl ? nextInDom : prevInDom;
     else if (e.key === "Home") next = 0;

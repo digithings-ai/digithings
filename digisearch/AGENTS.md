@@ -38,6 +38,8 @@ Before making any change to `digisearch/`:
 
 Beyond root `AGENTS.md`:
 
+- **No PII masking: the invite link is the only gate (Chris, 9 Oct, reaffirmed 16 Oct).** OCC, digichat, digisearch and Zammad ticket text is indexed as written. Do not add a masker, a redaction pass, or a PII fixture for that text. Secret scrubbing and gitleaks stay.
+
 - **Backend registry only**: New index backends must register via `search/_stub.py` returning `None` when not configured. Never add `if backend == "x":` dispatch logic directly in the query path.
 - **No production stub**: `DIGISEARCH_ALLOW_STUB=1` is for unit tests only. `_require_real_search_backend()` enforces this at startup — do not bypass it.
 - **Entity naming**: Class and model names drop the `Digi` prefix: `Document`, `Chunk`, `Query`, `Result` — not `DigiDocument`. Follow this for all new models.

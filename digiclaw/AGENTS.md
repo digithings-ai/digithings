@@ -49,8 +49,12 @@ Beyond root `AGENTS.md`:
   external. Do not add a daemon loop inside the heartbeat runner.
 - **Scheduler is separate from heartbeat**: `digiclaw schedule …` owns agent lifecycle
   (start/stop/pause/resume) and next-run persistence. Continuous mode is expressed as
-  `interval_seconds` between isolated ticks — supervisors call `digiclaw schedule tick`
-  (or invoke `Scheduler.tick()`). Do not merge the scheduler daemon into `heartbeat_runner`.
+  `interval_seconds` between isolated ticks — supervisors invoke `Scheduler.tick()` with an
+  explicit `runner=`, or call `digiclaw schedule tick` once a real runner is wired. The bare
+  CLI `schedule tick` builds its `Scheduler` with no runner (`_scheduler_from_args`), so it
+  falls back to `default_agent_runner`, which raises `AgentRunnerNotConfiguredError`: due
+  agents are recorded `error` and the command exits non-zero rather than reporting `ok`.
+  Do not merge the scheduler daemon into `heartbeat_runner`.
 - **AUDIT_SINK_URL is best-effort**: Any exception from the remote POST must be caught and swallowed. Never let audit sink failures propagate to the caller.
 - **No channel adapters**: Do not add Slack, Discord, Telegram, or WhatsApp integration. That is OpenClaw scope, Phase 2+.
 
