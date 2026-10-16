@@ -242,7 +242,13 @@ def write_shadow_artifact_atomic(
         try:
             tmp_path.unlink(missing_ok=True)
         except OSError:
-            pass
+            # Best-effort cleanup: never let a failed unlink mask the export
+            # failure we are about to re-raise, but record the orphaned temp file.
+            _logger.warning(
+                "shadow artifact: failed to remove temp file %s after a failed export",
+                tmp_path,
+                exc_info=True,
+            )
         raise
     return dest
 

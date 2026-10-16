@@ -117,19 +117,17 @@ def format_vendor_apply_blocked(report: VendorSecretLoad) -> str:
     )
 
 
-def write_vendor_secret_env_file(environ: Mapping[str, str], path: Path) -> None:
-    """Write the selected vendor secrets to a mode-0600 CLI env file."""
+def vendor_secret_env_payload(environ: Mapping[str, str]) -> str:
+    """Render the selected vendor secrets as ``KEY=VALUE`` payload (never stored)."""
     lines: list[str] = []
     for name in (*STAGING_REQUIRED_SECRETS, *STAGING_OPTIONAL_SECRETS):
         value = environ.get(name, "").strip()
         if value:
             lines.append(f"{name}={value}")
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    path.chmod(0o600)
+    return "\n".join(lines) + "\n"
 
 
 def secrets_set_argv(
-    env_file: Path,
     *,
     project_ref: str = CORE_PROJECT_REF,
 ) -> list[str]:
@@ -140,7 +138,7 @@ def secrets_set_argv(
         "secrets",
         "set",
         f"--project-ref={project_ref}",
-        f"--env-file={env_file}",
+        "--env-file=/dev/stdin",
     ]
 
 
@@ -180,6 +178,6 @@ __all__ = [
     "load_vendor_secret_environ",
     "parse_env_file",
     "secrets_set_argv",
+    "vendor_secret_env_payload",
     "vendor_secrets_dir",
-    "write_vendor_secret_env_file",
 ]

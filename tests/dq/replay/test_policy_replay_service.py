@@ -474,6 +474,8 @@ def test_decision_write_requires_authenticated_principal() -> None:
     assert "actor_principal" not in sig.parameters
     assert "principal" in sig.parameters
 
+    # code-quality #1574 (py/call/wrong-named-argument): intentional negative
+    # test — a spoofed 'actor' kwarg must be rejected (see signature asserts).
     with pytest.raises((TypeError, ValidationError, ValueError)):
         service_record_policy_governance_decision(  # type: ignore[call-arg]
             evaluation_id=str(evaluation.evaluation_id),
