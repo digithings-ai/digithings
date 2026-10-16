@@ -5,10 +5,6 @@
       "count": 2,
       "ticket": "DIG-3689"
     },
-    ".env.example": {
-      "count": 1,
-      "ticket": "DIG-3689"
-    },
     ".github/workflows/pipeline-dependency-freshness.yml": {
       "count": 1,
       "ticket": "DIG-3689"
@@ -25,10 +21,6 @@
       "count": 3,
       "ticket": "DIG-3689"
     },
-    "BRANCHING.md": {
-      "count": 1,
-      "ticket": "DIG-3689"
-    },
     "Dockerfile.digithings-stack-cloudflare": {
       "count": 11,
       "ticket": "DIG-3689"
@@ -38,7 +30,7 @@
       "ticket": "DIG-3689"
     },
     "RELEASES.md": {
-      "count": 2,
+      "count": 1,
       "ticket": "DIG-3689"
     },
     "SECURITY.md": {
@@ -50,7 +42,7 @@
       "ticket": "DIG-3689"
     },
     "apps/digichat/ARCHITECTURE.md": {
-      "count": 16,
+      "count": 15,
       "ticket": "DIG-3689"
     },
     "apps/digichat/CHANGELOG.md": {
