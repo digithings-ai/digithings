@@ -94,7 +94,9 @@ def _mutation_capturing_post(
                 if mutation_id:
                     mutation_ids.append(str(mutation_id))
             except json.JSONDecodeError:
-                pass
+                # Non-JSON upsert response: no mutation id to collect; the
+                # status code above is still what the caller acts on.
+                logger.debug("upsert response was not JSON; skipping mutation-id capture")
         return status, text
 
     return post

@@ -234,6 +234,8 @@ export default function TradesTab({
     const el = sentinelRef.current;
     if (!el || !hasMore) return;
     if (typeof IntersectionObserver === 'undefined') return;
+    // CodeQL js/superfluous-trailing-arguments false positive: the DOM
+    // IntersectionObserver constructor takes (callback, options?) — both args are consumed.
     const io = new IntersectionObserver(
       (entries) => {
         if (entries.some((e) => e.isIntersecting)) loadMore();

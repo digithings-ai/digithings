@@ -44,6 +44,8 @@ export function ProductStage() {
     if (!stage) return;
     let visible = false;
     let settle: ReturnType<typeof setTimeout> | null = null;
+    // CodeQL js/superfluous-trailing-arguments false positive: the DOM
+    // IntersectionObserver constructor takes (callback, options?) — both args are consumed.
     const observer = new IntersectionObserver(
       ([entry]) => {
         visible = entry.isIntersecting && entry.intersectionRatio >= 0.55;

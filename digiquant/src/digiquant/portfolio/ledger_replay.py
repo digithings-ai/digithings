@@ -135,7 +135,7 @@ def is_calendar_date(value: Any) -> bool:
 def round_pct(value: float) -> float:
     """Round to 6dp, half away from zero (the read side uses JS ``Math.round``)."""
     scaled = float(value) * 1e6
-    if scaled != scaled or scaled in (float("inf"), float("-inf")):  # NaN / inf
+    if math.isnan(scaled) or math.isinf(scaled):  # NaN / inf
         return float(value)
     rounded = math.floor(scaled + 0.5) if scaled >= 0 else math.ceil(scaled - 0.5)
     return rounded / 1e6
@@ -154,7 +154,7 @@ def _coerce_weight(raw: Any) -> Optional[float]:
         value = float(raw)
     except (TypeError, ValueError):
         return None
-    if value != value or value in (float("inf"), float("-inf")):
+    if math.isnan(value) or math.isinf(value):
         return None
     return value
 

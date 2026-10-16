@@ -174,7 +174,9 @@ def _expect_call(upstream: str, extra: dict[str, Any] | None = None) -> Any:
         assert body["params"]["name"] == upstream
         arguments = body["params"]["arguments"]
         # The required upstream `context` is injected server-side, never caller PII.
-        assert arguments.pop("context") == LUXALGO_CONTEXT
+        # code-quality #2677 (py/side-effect-in-assert): pop hoisted out of assert.
+        context_value = arguments.pop("context")
+        assert context_value == LUXALGO_CONTEXT
         for key, value in (extra or {}).items():
             assert arguments.get(key) == value
         payloads = {

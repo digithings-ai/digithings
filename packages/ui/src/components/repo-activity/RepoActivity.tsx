@@ -357,8 +357,7 @@ function Activity({
 
       {contributor ? (
         <div className="ra-activity-foot">
-          {contributor ? (
-            <div className="ra-contributor">
+          <div className="ra-contributor">
               <p className="ra-kicker">{"// maintainer"}</p>
               <div className="ra-contributor-body">
                 <ContributorAvatar contributor={contributor} />
@@ -376,7 +375,6 @@ function Activity({
                 </div>
               </div>
             </div>
-          ) : null}
           <div className="ra-meta">
             <RepoLink href={repoUrl} />
           </div>
