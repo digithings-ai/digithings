@@ -1,0 +1,48 @@
+# syntax=docker/dockerfile:1
+# twelvex-runner image. Build context is the monorepo root.
+# twelve-x is cloned at the pin in apps/twelvex-runner/twelvex-ref.txt
+# (the same SHA is the default for TWELVEX_REF below).
+#
+# Private clone. Pass a BuildKit secret named github_token with contents:read
+# on digithings-ai/twelve-x and digithings-ai/digithings. It is not an ARG and
+# not an ENV. Do not echo it.
+#
+#   DOCKER_BUILDKIT=1 docker build \
+#     --secret id=github_token,env=GITHUB_TOKEN \
+#     -f Dockerfile.twelvex-runner .
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    GIT_TERMINAL_PROMPT=0
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+ARG TWELVEX_REF=3adea4811c436d6da90e532be16305ee0f70fc13
+WORKDIR /opt/twelve-x
+
+RUN --mount=type=secret,id=github_token \
+    set -eu; \
+    printf '%s\n' '#!/bin/sh' \
+      'case "$1" in' \
+      '  *Username*) printf "%s\n" "x-access-token" ;;' \
+      '  *) cat /run/secrets/github_token ;;' \
+      'esac' > /tmp/askpass; \
+    chmod 700 /tmp/askpass; \
+    export GIT_ASKPASS=/tmp/askpass; \
+    git init /opt/twelve-x; \
+    git -C /opt/twelve-x remote add origin https://github.com/digithings-ai/twelve-x.git; \
+    git -C /opt/twelve-x fetch --depth 1 origin "$TWELVEX_REF"; \
+    git -C /opt/twelve-x checkout --detach FETCH_HEAD; \
+    rm -rf /opt/twelve-x/.git; \
+    pip install --no-cache-dir -e /opt/twelve-x; \
+    rm -f /tmp/askpass /root/.gitconfig; \
+    rm -rf /root/.cache
+
+COPY apps/twelvex-runner/container/server.py /opt/runner/server.py
+
+EXPOSE 8080
+CMD ["python", "/opt/runner/server.py"]

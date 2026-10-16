@@ -37,6 +37,7 @@ jobs:
           ref: main
       - uses: astral-sh/setup-uv@v5
         with:
+          version: "0.12.24"
           enable-cache: true
       - name: Install from lockfile
         run: uv sync --frozen --package digiquant --extra prices
