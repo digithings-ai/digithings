@@ -8,7 +8,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 (globalThis as unknown as Record<string, unknown>).React ??= React;
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { QuantWordmark } from "@/app/_chrome/QuantWordmark";
+import { QuantWordmark, quantArmed } from "@/app/_chrome/QuantWordmark";
 import { HERO_ADOPT_MS, HERO_PLAYED_KEY, HERO_PLAYED_SCRIPT, nextHeroLive } from "./hero-play";
 
 describe("digiquant hero play", () => {
@@ -86,6 +86,13 @@ describe("digiquant hero play", () => {
     expect(defs).toContain('up: { hex: "#3DD6C4"');
     expect(defs).toContain('down: { hex: "#E5533E"');
     expect(defs).toContain("seed: 0x9a17");
+  });
+
+  it("holds idle marks back until they may start", () => {
+    expect(quantArmed({ phase: "run", armed: true })).toBe(true);
+    expect(quantArmed({ phase: "run", armed: false })).toBe(false);
+    expect(quantArmed({ phase: "idle", armed: true })).toBe(false);
+    expect(quantArmed({ phase: "idle", armed: false })).toBe(false);
   });
 
   it("builds the top hero on every load", () => {

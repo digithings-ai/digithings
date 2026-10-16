@@ -13,7 +13,7 @@ export const DQ_CONTACT_EMAIL = "contact@digiquant.io";
 export const Brand = () => (
   <>
     <TerminalMark size={24} variant="compact" className="hidden max-[880px]:block" />
-    <QuantWordmark replay className="block h-[18px] w-auto fill-current text-ink max-[880px]:hidden" />
+    <QuantWordmark replay className="block h-[18px] w-[126px] fill-current text-ink max-[880px]:hidden" />
   </>
 );
 

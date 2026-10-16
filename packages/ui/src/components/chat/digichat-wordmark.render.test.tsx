@@ -22,6 +22,10 @@ describe("DigichatWordmark", () => {
     expect(SRC).toContain("DIGICHAT");
     expect(SRC).toContain("@digithings/hero-banner/web");
     expect(SRC).toContain("HeroBanner");
+    expect(SRC).toContain("<span");
+    expect(SRC).toContain("live={false}");
+    expect(SRC).not.toContain("replayLoading");
+    expect(SRC).not.toContain("<div");
     const html = renderToStaticMarkup(<DigichatWordmark />);
     expect(html).toContain('aria-label="digichat"');
     expect(html).toContain("<canvas");

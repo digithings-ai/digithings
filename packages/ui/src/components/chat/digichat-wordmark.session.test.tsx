@@ -5,9 +5,8 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { claimLoading } from "@digithings/hero-banner";
 
-import { DIGICHAT } from "@digithings/hero-banner/definitions";
+
 import { DigichatWordmark } from "./DigichatWordmark";
 import * as React from "react";
 
@@ -22,6 +21,11 @@ describe("DigichatWordmark session", () => {
 
   beforeEach(() => {
     sessionStorage.clear();
+    // happy-dom has no canvas 2d context; without this the banner effect
+    // returns before the session claim and the once-per-tab pin is void.
+    HTMLCanvasElement.prototype.getContext = function () {
+      return new Proxy({}, { get: () => () => {} }) as unknown as CanvasRenderingContext2D;
+    };
     window.matchMedia = ((query: string) => ({
       matches: false,
       media: query,
@@ -58,11 +62,19 @@ describe("DigichatWordmark session", () => {
     expect(canvas?.getAttribute("aria-label")).toBe("digichat");
   });
 
-  it("plays loading once per tab through the shared claim", () => {
-    expect(claimLoading(DIGICHAT, sessionStorage)).toBe(true);
-    expect(claimLoading(DIGICHAT, sessionStorage)).toBe(false);
+  it("plays loading once per tab through the component", () => {
     renderMark();
+    expect(sessionStorage.getItem("hero-banner:digichat:played")).toBe("1");
     expect(container.querySelector("canvas")).not.toBeNull();
+  });
+
+  it("does not replay on header remount", () => {
+    renderMark();
+    act(() => root.unmount());
+    root = createRoot(container);
+    renderMark();
+    expect(sessionStorage.getItem("hero-banner:digichat:played")).toBe("1");
+    expect(container.querySelector("canvas")?.getAttribute("aria-label")).toBe("digichat");
   });
 
   it("survives a header remount without losing the label", () => {
