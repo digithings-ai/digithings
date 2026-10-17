@@ -227,6 +227,42 @@ class TestPersistAndDispatch:
         roundtrip = SdcaOptimizeProvenance.model_validate_json(provenance_path.read_text())
         assert roundtrip.beats_flat_dca_oos == result.beats_flat_dca_oos
 
+    def test_persist_carries_the_mid_tier_into_the_preset(self, tmp_path: Path) -> None:
+        dates = _dates()
+        prices = [100.0] * len(dates)
+        params = {
+            **_HIDDEN,
+            "buy_mid_knee_risk": 15.0,
+            "buy_mid_curvature": 1.5,
+            "sell_mid_knee_risk": 85.0,
+            "sell_mid_curvature": 1.2,
+        }
+        result = run_sdca_walk_forward(
+            dates,
+            prices,
+            [params],
+            rails_fitter=_fitter,
+            evaluator=_evaluator,
+            evaluator_label="synthetic_fixture",
+        )
+        presets = tmp_path / "presets.json"
+        presets.write_text(json.dumps({}))
+        persist_btc_optimized(
+            result,
+            presets_path=presets,
+            provenance_path=tmp_path / "prov.json",
+            notes="mid-tier persist",
+        )
+        shape = json.loads(presets.read_text())["btc_optimized"]["shape"]
+        assert shape["buy_mid_knee_risk"] == pytest.approx(15.0)
+        assert shape["buy_mid_curvature"] == pytest.approx(1.5)
+        assert shape["sell_mid_knee_risk"] == pytest.approx(85.0)
+        assert shape["sell_mid_curvature"] == pytest.approx(1.2)
+        # The persisted dict must re-validate as the same shape, mid tier included.
+        reloaded = SdcaCurveShape.model_validate(shape)
+        assert reloaded.buy_mid_knee_risk == pytest.approx(15.0)
+        assert reloaded.sell_mid_curvature == pytest.approx(1.2)
+
     def test_checked_in_preset_and_provenance_load(self) -> None:
         preset = load_preset("btc_optimized")
         assert preset.shape is not None

@@ -612,6 +612,10 @@ def persist_btc_optimized(
             "sell_max_rate": shape.sell_max_rate,
             "buy_curvature": shape.buy_curvature,
             "sell_curvature": shape.sell_curvature,
+            "buy_mid_knee_risk": shape.buy_mid_knee_risk,
+            "buy_mid_curvature": shape.buy_mid_curvature,
+            "sell_mid_knee_risk": shape.sell_mid_knee_risk,
+            "sell_mid_curvature": shape.sell_mid_curvature,
         },
     }
     dest.write_text(json.dumps(raw, indent=2) + "\n")

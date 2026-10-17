@@ -215,7 +215,13 @@ def params_from_shape(shape: SdcaCurveShape) -> dict[str, float | None]:
 
 
 def round_shape_for_preset(shape: SdcaCurveShape) -> SdcaCurveShape:
-    """One-decimal published curve; re-validates dead zone / signs."""
+    """One-decimal published curve; re-validates dead zone / signs.
+
+    The four mid-tier fields are carried too. Rebuilding the model from only
+    the six required keys would drop a disabled knee to ``None`` and reset both
+    mid curvatures to ``1.0``, silently reverting the published curve to its
+    single-knee projection on the next persist.
+    """
     return SdcaCurveShape(
         buy_max_rate=round(shape.buy_max_rate, 1),
         buy_knee_risk=round(shape.buy_knee_risk, 1),
@@ -223,6 +229,14 @@ def round_shape_for_preset(shape: SdcaCurveShape) -> SdcaCurveShape:
         sell_max_rate=round(shape.sell_max_rate, 1),
         buy_curvature=round(shape.buy_curvature, 1),
         sell_curvature=round(shape.sell_curvature, 1),
+        buy_mid_knee_risk=(
+            None if shape.buy_mid_knee_risk is None else round(shape.buy_mid_knee_risk, 1)
+        ),
+        buy_mid_curvature=round(shape.buy_mid_curvature, 1),
+        sell_mid_knee_risk=(
+            None if shape.sell_mid_knee_risk is None else round(shape.sell_mid_knee_risk, 1)
+        ),
+        sell_mid_curvature=round(shape.sell_mid_curvature, 1),
     )
 
 

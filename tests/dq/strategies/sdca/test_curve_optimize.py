@@ -564,6 +564,42 @@ class TestConcentrationHelper:
         assert rounded.buy_curvature == pytest.approx(1.3)
         assert rounded.sell_curvature == pytest.approx(4.0)
 
+    def test_round_shape_for_preset_carries_the_mid_tier(self) -> None:
+        rounded = round_shape_for_preset(
+            SdcaCurveShape(
+                buy_max_rate=35.0,
+                buy_knee_risk=45.0,
+                sell_knee_risk=50.0,
+                sell_max_rate=30.0,
+                buy_curvature=1.5432,
+                sell_curvature=2.5678,
+                buy_mid_knee_risk=15.4864,
+                buy_mid_curvature=1.0449,
+                sell_mid_knee_risk=85.4166,
+                sell_mid_curvature=1.0551,
+            )
+        )
+        assert rounded.buy_mid_knee_risk == pytest.approx(15.5)
+        assert rounded.buy_mid_curvature == pytest.approx(1.0)
+        assert rounded.sell_mid_knee_risk == pytest.approx(85.4)
+        assert rounded.sell_mid_curvature == pytest.approx(1.1)
+
+    def test_round_shape_for_preset_keeps_a_disabled_mid_tier_disabled(self) -> None:
+        rounded = round_shape_for_preset(
+            SdcaCurveShape(
+                buy_max_rate=3.0,
+                buy_knee_risk=25.0,
+                sell_knee_risk=70.0,
+                sell_max_rate=3.0,
+                buy_curvature=1.0,
+                sell_curvature=2.0,
+            )
+        )
+        assert rounded.buy_mid_knee_risk is None
+        assert rounded.sell_mid_knee_risk is None
+        assert rounded.buy_mid_curvature == pytest.approx(1.0)
+        assert rounded.sell_mid_curvature == pytest.approx(1.0)
+
 
 class TestContinuousCurveParams:
     def test_crossing_risk_splits_into_a_tiny_symmetric_knee_gap(self) -> None:
