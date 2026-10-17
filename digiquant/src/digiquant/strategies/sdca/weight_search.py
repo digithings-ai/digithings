@@ -93,7 +93,6 @@ def _require_extra_name(indicator_name: str, caller: str) -> str:
     return indicator_name
 
 
-
 def search_names_with_data(
     allowlist: Sequence[str],
     extra_z: Mapping[str, Sequence[float | None]],
@@ -175,7 +174,14 @@ def _score_weights_on_cached_folds(
                 fold=fold,
                 in_sample=in_sample,
                 out_of_sample=out_of_sample,
-                feasible=in_sample.capital_deployed_pct >= objective.capital_deployed_floor_pct,
+                # Peak net deployed, not the end-of-window cash snapshot: a
+                # profitable sell-out book (negative endpoint) still
+                # participated. Matches walk_forward.is_feasible's metric
+                # (endpoint-metric fix). Informational here -- Stage A ranks
+                # on IS return.
+                feasible=(
+                    in_sample.capital_deployed_peak_pct >= objective.capital_deployed_floor_pct
+                ),
             )
         )
     return scores
@@ -564,7 +570,6 @@ def search_oscillator_periods_by_cycle_overlap(
         all_scores=scores,
         num_evaluations=len(scores),
     )
-
 
 
 __all__ = [

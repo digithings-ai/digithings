@@ -52,7 +52,7 @@
     "fold_scores": [
       {"fold": 0, "is": "2014-09-17→2017-02-06", "oos": "2017-02-07→2019-06-30", "is_vs_flat_dca_pct": -65.01, "oos_vs_flat_dca_pct": -1.85},
       {"fold": 1, "is": "2014-09-17→2019-06-30", "oos": "2019-07-01→2021-11-20", "is_vs_flat_dca_pct": -28.42, "oos_vs_flat_dca_pct": -8.21},
-      {"fold": 2, "is": "2014-09-17→2021-11-20", "oos": "2021-11-21→2024-04-12", "is_vs_flat_dca_pct": 52.10, "oos_vs_flat_dca_pct": -38.57, "note": "fold 2 in-sample capital_deployed_pct came back at -2558% -- degenerate/anomalous, not a trustworthy percentage; needs investigation before this fold's numbers are relied on (possibly related to long_only=false short-side accounting)."}
+      {"fold": 2, "is": "2014-09-17→2021-11-20", "oos": "2021-11-21→2024-04-12", "is_vs_flat_dca_pct": 52.10, "oos_vs_flat_dca_pct": -38.57, "note": "CORRECTED 2026-10-17 (endpoint-metric fix): fold 2 in-sample capital_deployed_pct = -2558% is NOT short-side accounting. It is the documented end-of-window cash snapshot, (initial_cash - cash)/initial_cash*100 (backtest.py::SdcaBacktestReport.capital_deployed_pct). No short position is possible -- size_trade clamps every sell to units held -- so the figure only goes negative because the curve sold appreciated BTC into the 2021 top and ended holding far more cash than the initial stake. The book fully participated (capital_deployed_peak_pct ~100%). Reproduced on the real fold-2 window (2014-09-17->2021-11-20, power-law rails, published cycle-4 curve): capital_deployed_pct = -19402%, peak = 100.0%, min(asset_units) = 0, min(cash) = 0. Gate feasibility on the peak, not this snapshot; this fold's vs-flat figures are unaffected."}
     ]
   },
   "notes": [

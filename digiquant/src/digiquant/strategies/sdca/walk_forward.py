@@ -70,12 +70,21 @@ class SdcaTrialMetrics(BaseModel):
 
     vs_flat_dca_pct: float
     vs_lump_pct: float
-    capital_deployed_pct: float
+    capital_deployed_pct: float = Field(
+        ...,
+        description=(
+            "End-of-window cash snapshot: (initial_cash - cash) / initial_cash × 100. "
+            "Diagnostic only — goes deeply negative whenever a curve has sold "
+            "appreciated asset into a rally, so it is NOT a participation measure "
+            "and must not gate feasibility (endpoint-metric fix)."
+        ),
+    )
     capital_deployed_peak_pct: float = Field(
         ...,
         description=(
             "Peak net deployed over the window — the floor measures capital once "
-            "at risk; net can go negative after take-profit sells."
+            "at risk; net can go negative after take-profit sells. This is the "
+            "quantity walk_forward.is_feasible gates on."
         ),
     )
     max_drawdown_pct: float = Field(

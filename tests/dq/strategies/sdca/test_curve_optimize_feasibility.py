@@ -16,7 +16,6 @@ from digiquant.strategies.sdca.curve_optimize import score_shape_on_index
 from digiquant.strategies.sdca.curve_optimize_feasibility import (
     CAPITAL_DEPLOYED_COMFORT_PCT,
     CAPITAL_DEPLOYED_FLOOR_PCT,
-    CAPITAL_DEPLOYED_UPPER_PCT,
     INFEASIBLE_SCORE,
     MAX_DRAWDOWN_CAP_PCT,
     MAX_DRAWDOWN_COMFORT_PCT,
@@ -137,26 +136,61 @@ def _dip_cycle(
     return pl.Series("date", shifted, dtype=pl.Date), pl.Series(prices), pl.Series(risks)
 
 
+def _deploy_then_liquidate(
+    n_buy: int = 30, n_sell: int = 60
+) -> tuple[pl.Series, pl.Series, pl.Series]:
+    """Deploy fully at a flat cheap price, then liquidate into a ×5 rip.
+
+    This is the shape the endpoint metric misreads: the book participates
+    fully (peak net deployed ~99%), then sells appreciated BTC through a rich
+    window and ends holding far more cash than it started. The end-of-window
+    ``capital_deployed_pct`` is therefore strongly NEGATIVE even though the
+    curve behaved exactly as intended. The feasibility gate must read the peak,
+    not this snapshot, and so must NOT reject it.
+    """
+    prices: list[float] = [100.0] * n_buy
+    risks: list[float] = [5.0] * n_buy
+    for i in range(n_sell):
+        t = i / max(n_sell - 1, 1)
+        prices.append(100.0 + 400.0 * t)
+        risks.append(100.0)
+    # Rich/sell window lands in 2025, same require_2025_sells rationale.
+    shifted = [date(2022, 1, 1) + timedelta(days=i) for i in range(n_buy)]
+    shifted.extend(date(2025, 6, 1) + timedelta(days=i) for i in range(n_sell))
+    return pl.Series("date", shifted, dtype=pl.Date), pl.Series(prices), pl.Series(risks)
+
+
 class TestCapitalDeployedPenalty:
-    """Direct tests of the ``(floor, comfort, upper)`` band, edge to edge."""
+    """Direct tests of the ``(floor, comfort)`` band on the PEAK deployed.
+
+    The penalty reads ``capital_deployed_peak_pct`` (peak net deployed), never
+    the end-of-window ``capital_deployed_pct`` cash snapshot -- the latter goes
+    deeply negative for any curve that sold appreciated BTC into a rally and is
+    not a participation measure (endpoint-metric fix).
+    """
 
     def test_floor_matches_walk_forward_gate_default(self) -> None:
         assert CAPITAL_DEPLOYED_FLOOR_PCT == SdcaOptimizeObjective().capital_deployed_floor_pct
 
-    def test_below_floor_hard_rejects(self) -> None:
+    def test_peak_below_floor_hard_rejects(self) -> None:
         score, reject = _capital_deployed_penalty(CAPITAL_DEPLOYED_FLOOR_PCT - 0.01, 5.0)
         assert reject is True
         assert score == INFEASIBLE_SCORE
 
-    def test_negative_net_seller_hard_rejects(self) -> None:
-        score, reject = _capital_deployed_penalty(-35.0, 5.0)
+    def test_never_deployed_hard_rejects(self) -> None:
+        # A window the curve never traded has peak 0.0 -- the real
+        # never-participated case (a negative *endpoint* is NOT this case).
+        score, reject = _capital_deployed_penalty(0.0, 5.0)
         assert reject is True
         assert score == INFEASIBLE_SCORE
 
-    def test_above_upper_bound_hard_rejects(self) -> None:
-        score, reject = _capital_deployed_penalty(CAPITAL_DEPLOYED_UPPER_PCT + 0.01, 5.0)
-        assert reject is True
-        assert score == INFEASIBLE_SCORE
+    def test_full_deployment_is_not_rejected_despite_negative_endpoint(self) -> None:
+        # endpoint-metric regression: a fully-deployed, profitable sell-out book has a
+        # peak of 100% and must not be hard-rejected, even though its
+        # end-of-window capital_deployed_pct is deeply negative.
+        score, reject = _capital_deployed_penalty(100.0, 5.0)
+        assert reject is False
+        assert score == pytest.approx(5.0)
 
     def test_at_floor_exactly_is_feasible_but_penalized(self) -> None:
         score, reject = _capital_deployed_penalty(CAPITAL_DEPLOYED_FLOOR_PCT, 5.0)
@@ -170,7 +204,7 @@ class TestCapitalDeployedPenalty:
 
     def test_at_and_above_comfort_line_is_unpenalized(self) -> None:
         at_comfort, reject_a = _capital_deployed_penalty(CAPITAL_DEPLOYED_COMFORT_PCT, 5.0)
-        well_above, reject_b = _capital_deployed_penalty(CAPITAL_DEPLOYED_UPPER_PCT, 5.0)
+        well_above, reject_b = _capital_deployed_penalty(100.0, 5.0)
         assert reject_a is False
         assert reject_b is False
         assert at_comfort == pytest.approx(5.0)
@@ -219,7 +253,7 @@ class TestScoreShapeOnIndexFeasibilityAware:
         base = score_shape_on_index(dates, prices, risk, shape, 1000.0)
         aware = score_shape_on_index_feasibility_aware(dates, prices, risk, shape, 1000.0)
 
-        assert aware.capital_deployed_pct == pytest.approx(0.0)
+        assert aware.capital_deployed_peak_pct == pytest.approx(0.0)
         # Unpenalized score is unaffected (no trades -> ~0 return, ~0 drawdown).
         assert aware.risk_adjusted_return == pytest.approx(base.risk_adjusted_return)
         # The feasibility-aware score is not just lower, it is hard-rejected.
@@ -236,14 +270,35 @@ class TestScoreShapeOnIndexFeasibilityAware:
         base = score_shape_on_index(dates, prices, risk, shape, 1000.0)
         aware = score_shape_on_index_feasibility_aware(dates, prices, risk, shape, 1000.0)
 
-        assert aware.capital_deployed_pct > CAPITAL_DEPLOYED_COMFORT_PCT, (
+        assert aware.capital_deployed_peak_pct > CAPITAL_DEPLOYED_COMFORT_PCT, (
             f"fixture drifted below the comfort line "
-            f"({aware.capital_deployed_pct}); this test needs deployment "
+            f"({aware.capital_deployed_peak_pct}); this test needs deployment "
             "comfortably above CAPITAL_DEPLOYED_COMFORT_PCT to be meaningful"
         )
         assert aware.capital_deployed_reject is False
         assert aware.risk_adjusted_return == pytest.approx(base.risk_adjusted_return)
         assert aware.feasibility_adjusted_score == pytest.approx(base.risk_adjusted_return)
+
+    def test_profitable_sell_out_is_not_rejected_despite_negative_endpoint(self) -> None:
+        # endpoint-metric regression, end to end: the book deploys fully then liquidates
+        # into a rich rip, so its end-of-window capital_deployed_pct is deeply
+        # NEGATIVE while its peak deployed is near 100%. The gate must read the
+        # peak and keep the shape (it used to be discarded as a "net seller").
+        dates, prices, risk = _deploy_then_liquidate()
+        shape = _shape(buy_max_rate=15.0)
+        aware = score_shape_on_index_feasibility_aware(dates, prices, risk, shape, 1000.0)
+
+        assert aware.capital_deployed_pct < 0.0, (
+            f"fixture drifted: expected a negative endpoint snapshot, got "
+            f"{aware.capital_deployed_pct}"
+        )
+        # The bug: this used to be True (hard-rejected as a "net seller").
+        assert aware.capital_deployed_reject is False
+        assert aware.capital_deployed_peak_pct >= CAPITAL_DEPLOYED_COMFORT_PCT, (
+            f"fixture drifted: peak deployed should be near 100%, got "
+            f"{aware.capital_deployed_peak_pct}"
+        )
+        assert aware.feasibility_adjusted_score > INFEASIBLE_SCORE
 
     def test_existing_reject_reasons_still_hard_reject_regardless_of_capital_deployed(
         self,

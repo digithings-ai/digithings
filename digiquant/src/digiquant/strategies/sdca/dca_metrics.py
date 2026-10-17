@@ -11,8 +11,11 @@ tolerance; they must not substitute one for the other at publish time.
   ``SdcaBacktestReport.vs_lump_pct`` / ``total_return_pct``.
 - ``final_cost_basis_vs_price`` — cost basis as a percent of the final
   close (×100): ``50.0`` means the average buy is 50% of the last price.
-- ``capital_deployed_pct`` / ``capital_deployed_peak_pct`` — share of
-  initial cash put to work (×100).
+- ``capital_deployed_pct`` — end-of-window cash snapshot
+  ``(initial_cash - cash) / initial_cash × 100``: diagnostic only, NOT a
+  participation measure (it goes deeply negative for a profitable sell-out
+  book; endpoint-metric fix). ``capital_deployed_peak_pct`` — peak net
+  deployed, the capital-once-at-risk measure the feasibility floor gates on.
 - ``max_drawdown_pct`` on ``TearsheetData`` is **not** this module; it
   stays a percent on the tearsheet path (already ×100 from
   ``generate_tearsheets``) and a raw fraction on ``SdcaBacktestReport``.

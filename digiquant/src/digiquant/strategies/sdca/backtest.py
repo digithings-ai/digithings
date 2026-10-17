@@ -63,9 +63,23 @@ class SdcaBacktestReport(BaseModel):
         None,
         description="avg_cost_basis / final price × 100 (percent of last close)",
     )
-    capital_deployed_pct: float = Field(..., description="Final net deployed / initial cash × 100")
+    capital_deployed_pct: float = Field(
+        ...,
+        description=(
+            "END-OF-WINDOW cash snapshot: (initial_cash - cash) / initial_cash × 100. "
+            "Diagnostic only, NOT a participation measure — it goes deeply negative "
+            "(e.g. -2558%) whenever a curve has sold appreciated asset into a rally "
+            "and holds more cash than it started (endpoint-metric fix). Gate "
+            "feasibility on "
+            "capital_deployed_peak_pct instead."
+        ),
+    )
     capital_deployed_peak_pct: float = Field(
-        ..., description="Peak net deployed / initial cash × 100"
+        ...,
+        description=(
+            "Peak net deployed / initial cash × 100 — capital once at risk. The "
+            "walk-forward feasibility floor gates on this (endpoint-metric fix)."
+        ),
     )
     units_accumulated: float = Field(..., description="Ending asset units")
 

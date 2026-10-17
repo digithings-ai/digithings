@@ -8,13 +8,18 @@ walk-forward gate's own feasibility rails
 (``SdcaOptimizeObjective.capital_deployed_floor_pct`` /
 ``max_drawdown_cap_pct``, ``walk_forward.py``). Two consecutive full
 recalibration rounds on this branch were REJECTED post-hoc at Stage 4 for
-exactly this: OOS folds with ``capital_deployed_pct`` of 0% (never traded
-that window) or -35% (net seller -- sold more than it ever bought).
+exactly this: OOS folds whose *peak* net deployed never cleared the floor
+(a window the curve did not trade).
 
-``capital_deployed_pct`` is not a new computation: ``run_backtest()`` already
-puts it on ``SdcaBacktestReport`` as part of the very same simulation
-``score_shape_on_index`` runs (``backtest.py::SdcaBacktestReport
-.capital_deployed_pct``) -- it is simply not propagated by
+The gate reads ``capital_deployed_peak_pct`` (peak net deployed) -- the same
+quantity ``walk_forward.is_feasible`` enforces OOS -- and never the
+end-of-window ``capital_deployed_pct`` *cash snapshot*. That snapshot goes
+deeply negative whenever a curve sells appreciated BTC into a rally (a
+profitable sell-out book can show -2558% or worse), so it is not a
+participation measure and must not gate feasibility. Both quantities already
+ride on ``run_backtest()``'s ``SdcaBacktestReport`` as part of the very same
+simulation ``score_shape_on_index`` runs
+(``backtest.py::SdcaBacktestReport``) -- they are simply not propagated by
 ``score_shape_on_index``'s ``CurveTrialScore`` return value. This module does
 not change that. It is a strictly additive, opt-in alternative entry point:
 ``score_shape_on_index`` / ``search_wide_knee_curve`` and every other caller
@@ -66,13 +71,13 @@ CAPITAL_DEPLOYED_FLOOR_PCT: float = SdcaOptimizeObjective().capital_deployed_flo
 # headroom.
 CAPITAL_DEPLOYED_COMFORT_PCT: float = CAPITAL_DEPLOYED_FLOOR_PCT + 5.0
 
-# Upper bound. ``run_backtest`` clamps every buy to the cash remaining
-# (``backtest.py::size_trade``), so under the current evaluator
-# ``capital_deployed_pct`` cannot structurally exceed 100% -- this branch is
-# a defensive guard against a future evaluator (e.g. a margin/leverage-aware
-# one) that doesn't share that invariant, so a shape is never rewarded for
-# "deploying" more capital than it actually has.
-CAPITAL_DEPLOYED_UPPER_PCT: float = 100.0
+# No upper bound. The gate reads ``capital_deployed_peak_pct`` -- peak net
+# deployed -- and ``run_backtest`` clamps every buy to the cash remaining
+# (``backtest.py::size_trade``), so the peak can never exceed 100%. The old
+# ``CAPITAL_DEPLOYED_UPPER_PCT = 100.0`` guard was dead: it could never fire,
+# and the end-of-window snapshot it was written against goes *negative*, never
+# above 100%. Removed with the endpoint-metric fix rather than left as a
+# misleading second rail.
 
 # Dominates any real risk_adjusted_return (for a plausible SDCA shape this
 # stays within roughly [-5, 10]: total_return_pct / max(drawdown_pct, 0.5))
@@ -109,24 +114,27 @@ class FeasibilityAwareCurveTrialScore(BaseModel):
     """``score_shape_on_index``'s trial, plus capital-deployment- and
     drawdown-aware scoring.
 
-    ``risk_adjusted_return`` / ``capital_deployed_pct`` are the raw,
+    ``risk_adjusted_return`` / ``capital_deployed_peak_pct`` are the raw,
     unpenalized numbers (same definitions as ``CurveTrialScore`` /
     ``SdcaTrialMetrics``; ``base.max_drawdown_pct`` carries the drawdown
     equivalent). ``feasibility_adjusted_score`` is what a feasibility-aware
-    search should rank candidates on.
+    search should rank candidates on. ``capital_deployed_pct`` is reported for
+    diagnostics only -- it is the end-of-window *cash snapshot*, which goes
+    negative for any profitable sell-out book and never gates anything.
     """
 
     model_config = ConfigDict(frozen=True, strict=True)
 
     shape: SdcaCurveShape
     risk_adjusted_return: float
+    capital_deployed_peak_pct: float
     capital_deployed_pct: float
     feasibility_adjusted_score: float
     capital_deployed_reject: bool = Field(
-        description="True when capital_deployed_pct fell outside "
-        "[CAPITAL_DEPLOYED_FLOOR_PCT, CAPITAL_DEPLOYED_UPPER_PCT] (the same "
-        "band the walk-forward gate enforces OOS), or score_shape_on_index's "
-        "own gates already rejected this shape."
+        description="True when capital_deployed_peak_pct fell below "
+        "CAPITAL_DEPLOYED_FLOOR_PCT (the same floor the walk-forward gate "
+        "enforces OOS), or score_shape_on_index's own gates already rejected "
+        "this shape."
     )
     drawdown_reject: bool = Field(
         description="True when base.max_drawdown_pct exceeded "
@@ -137,16 +145,18 @@ class FeasibilityAwareCurveTrialScore(BaseModel):
 
 
 def _capital_deployed_penalty(
-    capital_deployed_pct: float, risk_adjusted_return: float
+    capital_deployed_peak_pct: float, risk_adjusted_return: float
 ) -> tuple[float, bool]:
-    """Return ``(feasibility_adjusted_score, hard_reject)`` for one trial."""
-    if (
-        capital_deployed_pct < CAPITAL_DEPLOYED_FLOOR_PCT
-        or capital_deployed_pct > CAPITAL_DEPLOYED_UPPER_PCT
-    ):
+    """Return ``(feasibility_adjusted_score, hard_reject)`` for one trial.
+
+    Takes the *peak* net deployed, not the end-of-window snapshot: a book that
+    fully deployed and later sold out is participating, not absent
+    (endpoint-metric fix).
+    """
+    if capital_deployed_peak_pct < CAPITAL_DEPLOYED_FLOOR_PCT:
         return INFEASIBLE_SCORE, True
-    if capital_deployed_pct < CAPITAL_DEPLOYED_COMFORT_PCT:
-        shortfall_frac = (CAPITAL_DEPLOYED_COMFORT_PCT - capital_deployed_pct) / (
+    if capital_deployed_peak_pct < CAPITAL_DEPLOYED_COMFORT_PCT:
+        shortfall_frac = (CAPITAL_DEPLOYED_COMFORT_PCT - capital_deployed_peak_pct) / (
             CAPITAL_DEPLOYED_COMFORT_PCT - CAPITAL_DEPLOYED_FLOOR_PCT
         )
         return risk_adjusted_return - SOFT_ZONE_PENALTY_SCALE * shortfall_frac, False
@@ -182,6 +192,11 @@ def score_shape_on_index_feasibility_aware(
 ) -> FeasibilityAwareCurveTrialScore:
     """``score_shape_on_index``, plus a capital-deployment-aware objective.
 
+    The capital gate uses ``capital_deployed_peak_pct`` (peak net deployed),
+    matching ``walk_forward.is_feasible``; the end-of-window
+    ``capital_deployed_pct`` is reported but never gates (endpoint-metric
+    fix).
+
     Additive and opt-in: ``score_shape_on_index`` itself, ``search_curve``
     and ``search_wide_knee_curve`` are untouched -- this is a separate
     function callers must choose to use.
@@ -191,6 +206,7 @@ def score_shape_on_index_feasibility_aware(
     report, _frame = run_backtest(
         dates, prices, risk, AccumDistCurve(shape.to_nodes()), initial_cash
     )
+    capital_deployed_peak_pct = report.capital_deployed_peak_pct
     capital_deployed_pct = report.capital_deployed_pct
     if not base.feasible:
         # score_shape_on_index's own gates (no_sells, negative_cash,
@@ -201,7 +217,7 @@ def score_shape_on_index_feasibility_aware(
         drawdown_reject = True
     else:
         capital_score, capital_deployed_reject = _capital_deployed_penalty(
-            capital_deployed_pct, base.risk_adjusted_return
+            capital_deployed_peak_pct, base.risk_adjusted_return
         )
         drawdown_score, drawdown_reject = _drawdown_penalty(
             base.max_drawdown_pct, base.risk_adjusted_return
@@ -222,6 +238,7 @@ def score_shape_on_index_feasibility_aware(
     return FeasibilityAwareCurveTrialScore(
         shape=shape,
         risk_adjusted_return=base.risk_adjusted_return,
+        capital_deployed_peak_pct=capital_deployed_peak_pct,
         capital_deployed_pct=capital_deployed_pct,
         feasibility_adjusted_score=feasibility_adjusted_score,
         capital_deployed_reject=capital_deployed_reject,
@@ -239,9 +256,9 @@ class FeasibilityAwareCurveSearchResult(BaseModel):
     baseline: FeasibilityAwareCurveTrialScore
     num_evaluations: int
     num_capital_deployed_rejected: int = Field(
-        description="Trials with capital_deployed_reject=True, i.e. outside "
-        "[CAPITAL_DEPLOYED_FLOOR_PCT, CAPITAL_DEPLOYED_UPPER_PCT] or already "
-        "rejected by score_shape_on_index's own gates."
+        description="Trials with capital_deployed_reject=True, i.e. peak net "
+        "deployed below CAPITAL_DEPLOYED_FLOOR_PCT, or already rejected by "
+        "score_shape_on_index's own gates."
     )
     num_drawdown_rejected: int = Field(
         description="Trials with drawdown_reject=True, i.e. "
@@ -304,14 +321,14 @@ def search_wide_knee_curve_feasibility_aware(
     n_drawdown_rejected = sum(1 for s in scored if s.drawdown_reject)
     notes = (
         "Objective=feasibility_adjusted_score (risk_adjusted_return, "
-        f"penalized below capital_deployed_pct={CAPITAL_DEPLOYED_COMFORT_PCT:.1f}% "
+        f"penalized below peak net deployed={CAPITAL_DEPLOYED_COMFORT_PCT:.1f}% "
         f"and above max_drawdown_pct={MAX_DRAWDOWN_COMFORT_PCT:.1f}%, hard-rejected "
-        f"outside [{CAPITAL_DEPLOYED_FLOOR_PCT:.1f}%, {CAPITAL_DEPLOYED_UPPER_PCT:.1f}%] "
-        f"capital deployed, above {MAX_DRAWDOWN_CAP_PCT:.1f}% drawdown, or already "
+        f"below {CAPITAL_DEPLOYED_FLOOR_PCT:.1f}% peak net deployed, "
+        f"above {MAX_DRAWDOWN_CAP_PCT:.1f}% drawdown, or already "
         "rejected by score_shape_on_index's own gates). "
         f"best feasibility_adjusted_score={best.feasibility_adjusted_score:.4f} "
         f"(risk_adjusted_return={best.risk_adjusted_return:.4f}, "
-        f"capital_deployed_pct={best.capital_deployed_pct:.2f}%, "
+        f"capital_deployed_peak_pct={best.capital_deployed_peak_pct:.2f}%, "
         f"max_drawdown_pct={best.base.max_drawdown_pct:.2f}%) "
         f"shape={params_from_shape(best.shape)}. "
         f"{n_capital_rejected}/{len(scored)} trials capital-deployed-rejected, "
@@ -406,7 +423,9 @@ def score_shape_on_windows_robust(
         max_drawdown_pcts.append(w_score.max_drawdown_pct)
     worst_vs_flat_dca_pct = min(vs_flat_dca_pcts)
     worst_max_drawdown_pct = max(max_drawdown_pcts)
-    _drawdown_score, drawdown_reject = _drawdown_penalty(worst_max_drawdown_pct, base.risk_adjusted_return)
+    _drawdown_score, drawdown_reject = _drawdown_penalty(
+        worst_max_drawdown_pct, base.risk_adjusted_return
+    )
     return RobustCurveTrialScore(
         shape=shape,
         worst_vs_flat_dca_pct=worst_vs_flat_dca_pct,
@@ -504,7 +523,6 @@ class RobustCurveSearchResult(BaseModel):
 __all__ = [
     "CAPITAL_DEPLOYED_COMFORT_PCT",
     "CAPITAL_DEPLOYED_FLOOR_PCT",
-    "CAPITAL_DEPLOYED_UPPER_PCT",
     "INFEASIBLE_SCORE",
     "MAX_DRAWDOWN_CAP_PCT",
     "MAX_DRAWDOWN_COMFORT_PCT",
