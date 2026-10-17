@@ -1250,3 +1250,39 @@ work: as real indicators + curve search improve, compare their OOS
 `total_return_pct` against this $148,330 / +14,733% figure to see how much
 headroom remains — never as a bar any real (causal) strategy is expected to
 clear.
+
+## Holdout axis: non-discriminating on the current window (2026-10-18)
+
+The third validation axis reports nothing on the current data, and the reason is
+the rails, not a bug. Measured on the gate's own candidate params; a standalone
+reproduction of `_holdout_metrics` returned metrics byte-identical to the result
+object, so this is the real behaviour.
+
+- **Window:** holdout 2024-07-16 to 2026-10-13 (820 days); searchable span
+  2015-07-20 to 2024-07-15 (n=3284).
+- **All 820 holdout days fall in the sell band.** Composite risk stayed 61-71
+  (buy knee 45, sell knee 50), so the strategy never bought, held cash, and had
+  nothing to sell.
+- **Both sides therefore produce the same numbers:** `vs_flat_dca_pct`
+  -1.1899844821010142, `vs_lump_pct` -21.67577455124722, `capital_deployed_pct`
+  0.0, `capital_deployed_peak_pct` 0.0, `max_drawdown_pct` 0.0. The identity is a
+  held-cash outcome, not a comparison.
+- **Why:** price sat above the rails' median for all 820 days (in-sample it sits
+  below the median about 50% of the time). Related: the power-law `low` rail
+  collapses onto the `median` out of sample (`log(median/low)` minimum tends to
+  0), which makes the buy-side z-score a knife-edge step rather than the graded
+  band it is in-sample. Latent here only because price never crossed the median.
+- **This is a window effect, not a regression:** the checked-in
+  `btc_optimized_provenance.json` records `holdout_vs_flat_dca_pct` 3.5228. The
+  price CSV now ends 2026-10-13, so the tail rolled into a single-regime
+  overvaluation window.
+- **Blast radius: report-only.** No gate, promotion or feasibility path reads the
+  holdout; `beats_baseline_oos` comes only from the OOS mean. The
+  `holdout_vs_flat_dca_pct` the research drivers print is currently
+  uninformative and must not be quoted as evidence about a shape.
+- **Guard shipped:** `a65dd1d43d` sets `SdcaWalkForwardResult.holdout_traded`
+  False when the window never deployed capital, derived from
+  `capital_deployed_peak_pct`, and prints it in the `OptimizeResult` message.
+- **Open decisions:** whether to accept an informational holdout for BTC or move
+  to a rolling holdout; and whether to guard the rails degeneracy explicitly
+  (not done — that would be an unrequested modelling change).
