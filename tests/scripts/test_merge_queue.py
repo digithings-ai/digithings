@@ -13,13 +13,15 @@ path-filtered workflow, a skipped step, a waiver — is exactly the hole this
 script exists to plug, and the obvious implementations miss it three ways:
 requiring the check to merely be *present* rather than to have reported, treating
 `NEUTRAL`/`SKIPPED` as a pass because GitHub renders them grey rather than red,
-and accepting the author's own review or the merging role's own attestation.
-Each of those has a test below.
+and accepting a review claim that left no artifact on the PR. Each of those has a
+test below.
 
 The other direction is refusing everything, which is how a queue that needs a
 human for every merge looks like a queue that fixed nothing. So the tests also
-pin the paths that must *succeed*: an approving review from another person, and an
-attestation from a role other than the one merging.
+pin the paths that must *succeed*: a review pass that left its findings on the PR
+(a reviewer bot, an in-session review, or a human approval) with no review thread left
+open on the current code. No non-author approval is required (Chris, 2026-10-15), and
+QA's `qa/gate` status is ignored (Chris, 2026-10-17).
 
 `gh` is stubbed on PATH throughout (see the `gh_stub` fixture). An unstubbed `gh`
 here would run these cases against the real twelve-x repo.
@@ -60,6 +62,11 @@ def _load() -> Any:
 
 
 mq = _load()
+
+#: `gh api graphql` answer for a PR with no review threads.
+NO_THREADS: dict[str, Any] = {
+    "data": {"repository": {"pullRequest": {"reviewThreads": {"totalCount": 0, "nodes": []}}}}
+}
 
 
 def _pr(
@@ -180,7 +187,6 @@ def test_required_check_that_never_reported_blocks_the_merge() -> None:
         mq.load_policy(),
         acting_role="cto",
         base="develop",
-        attest_role="qa",
     )
     assert not verdict.eligible
     assert "required check 'test' has not reported" in verdict.reasons
@@ -201,7 +207,7 @@ def test_only_success_passes_a_required_check(conclusion: str | None) -> None:
         entry["conclusion"] = conclusion
     pr = _pr(1, test_conclusion=None)
     pr["statusCheckRollup"] = [entry]
-    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop", attest_role="qa")
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop")
     assert not verdict.eligible
     assert any("required check 'test'" in reason for reason in verdict.reasons)
 
@@ -217,7 +223,7 @@ def test_a_pr_targeting_a_different_base_is_refused() -> None:
     """
     pr = _pr(1)
     pr["baseRefName"] = "main"
-    verdict = mq.evaluate(pr, mq.load_policy(), base="develop", acting_role="cto", attest_role="qa")
+    verdict = mq.evaluate(pr, mq.load_policy(), base="develop", acting_role="cto")
     assert not verdict.eligible
     assert "baseRefName=main, expected develop" in verdict.reasons
 
@@ -228,7 +234,6 @@ def test_a_pending_required_check_blocks() -> None:
         mq.load_policy(),
         acting_role="cto",
         base="develop",
-        attest_role="qa",
     )
     assert not verdict.eligible
 
@@ -246,7 +251,7 @@ def test_a_failing_non_required_check_also_blocks() -> None:
             }
         ],
     )
-    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop", attest_role="qa")
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop")
     assert not verdict.eligible
     assert "check 'pip-audit' is FAILURE" in verdict.reasons
 
@@ -267,7 +272,6 @@ def test_an_ignored_check_cannot_fail_the_queue() -> None:
     policy = mq.load_policy()
     policy = mq.Policy(
         merge_authorities=policy.merge_authorities,
-        review_path=policy.review_path,
         blocked_bases=policy.blocked_bases,
         merge_method=policy.merge_method,
         delete_branch=policy.delete_branch,
@@ -275,7 +279,7 @@ def test_an_ignored_check_cannot_fail_the_queue() -> None:
         required_checks_by_repo=policy.required_checks_by_repo,
         ignored_checks=frozenset({"advisory-score"}),
     )
-    assert mq.evaluate(pr, policy, acting_role="cto", base="develop", attest_role="qa").eligible
+    assert mq.evaluate(pr, policy, acting_role="cto", base="develop").eligible
 
 
 # --- which checks are required, and telling misconfiguration from a red build --
@@ -484,6 +488,7 @@ def test_the_warning_cannot_repeat_because_nothing_can_merge_while_it_fires(
     stub = _queue_stub(
         gh_stub(
             gh_rule(r"^pr list", stdout=prs),
+            gh_rule(r"^api graphql", stdout=NO_THREADS),
             gh_rule(r"^pr merge", stdout=""),
             gh_rule(r"^pr comment", stdout=""),
         ),
@@ -512,8 +517,8 @@ def test_a_matching_gate_announces_nothing(gh_stub: Any) -> None:
     assert done.returncode == EXIT_OK
     assert "misconfigured" not in done.stderr
     assert done.stderr.strip() == "", done.stderr
-    # These PRs block on review EVIDENCE (the coverage gate), not on the check gate —
-    # so the silence is not just "everything was blocked anyway". The check passed:
+    # These PRs block on review (no non-author approval), not on the gate — so the
+    # silence is not just "everything was blocked anyway". The check gate passed:
     # with the wrong list every one of them would say `required check 'test'`.
     assert "required check" not in done.stdout
 
@@ -538,14 +543,13 @@ def test_the_audit_comment_records_the_checks_actually_required(gh_stub: Any) ->
     stub = _queue_stub(
         gh_stub(
             gh_rule(r"^pr list", stdout=prs),
+            gh_rule(r"^api graphql", stdout=NO_THREADS),
             gh_rule(r"^pr merge", stdout=""),
             gh_rule(r"^pr comment", stdout=""),
         ),
         prs,
     )
-    _run(
-        "run", "--repo", "digithings-ai/digithings", "--acting-role", "cto", "--attest-review", "qa"
-    )
+    _run("run", "--repo", "digithings-ai/digithings", "--acting-role", "cto")
     comments = stub.matching("pr comment 42")
     assert len(comments) == 1
     body = comments[0][comments[0].index("--body") + 1]
@@ -568,49 +572,49 @@ def _coverage_state() -> dict[str, Any]:
     }
 
 
+def test_no_review_evidence_is_refused() -> None:
+    """With no review pass on the PR at all, the review gate refuses."""
+    verdict = mq.evaluate(_pr(1), mq.load_policy(), acting_role="cto", base="develop")
+    assert not verdict.eligible
+    assert any("review coverage" in r for r in verdict.reasons)
+    # The old hand-back told agents to reach for an attestation. It must not.
+    assert not any("attest" in r for r in verdict.reasons)
+
+
 def test_the_author_approving_their_own_pr_does_not_count() -> None:
+    """A self-approval is not evidence that anyone else read the change."""
     pr = _pr(1, reviews=[{"author": {"login": "chrizefan"}, "state": "APPROVED"}])
-    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop", attest_role=None)
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop")
     assert not verdict.eligible
     assert any("review coverage" in r for r in verdict.reasons), verdict.reasons
-
-
-def test_an_approving_review_from_someone_else_is_enough() -> None:
-    """No attestation needed when a real approval exists — the queue must not stall here."""
-    pr = _pr(1, reviews=[{"author": {"login": "coderabbit"}, "state": "APPROVED"}])
-    assert mq.evaluate(
-        pr, mq.load_policy(), acting_role="cto", base="develop", attest_role=None
-    ).eligible
 
 
 def test_an_unlisted_bots_bare_login_approval_is_refused() -> None:
     """DIG-4298: an unlisted bot's APPROVED must not clear coverage.
 
     `gh` returns the bare login (no `[bot]` suffix — in production it is
-    `flaky-lint` with `is_bot: true` on the author record), and the sink used to
-    exclude only three suffixed logins from `approvals`, so this review cleared
-    the gate as though a person had approved. Both filters that make up
-    `_gate_review_coverage` have to refuse it: the batched/`gh pr view` sink rule
-    and `_evidence_reviews`' pass-through feed the same evidence.
+    `flaky-lint` with `is_bot: true` on the author record). The queue reads
+    reviews through `_evidence_reviews` and hands them to the coverage sink,
+    which applies the one bot rule, so this review must not clear the gate as
+    though a person had approved.
     """
     pr = _pr(
         1,
         reviews=[{"author": {"login": "flaky-lint", "is_bot": True}, "state": "APPROVED"}],
     )
-    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop", attest_role=None)
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop")
     assert not verdict.eligible
     assert any("review coverage" in r for r in verdict.reasons), verdict.reasons
 
 
 def test_an_unlisted_suffixed_bot_approval_is_refused_too() -> None:
-    """The name rule catches what the 2026-10-18 sink missed: any `[bot]` suffix,
-    listed or not, is a linter verdict that must not be evidence either way. The
-    outcome is unchanged from the old queue (its suffix strip refused it via
-    `_evidence_reviews`); what changed is the mechanism - the refusal now comes
-    from the one sink rule both gates share, which the coverage suite pins
-    (`approvals` empty while the review stays in the list)."""
+    """Any `[bot]` suffix is a linter verdict that must not be evidence either way.
+
+    The refusal comes from the one sink rule both gates share, not from a second
+    filter in the queue, so the queue and the promotion gate cannot disagree.
+    """
     pr = _pr(1, reviews=[{"author": {"login": "netlify[bot]"}, "state": "APPROVED"}])
-    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop", attest_role=None)
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop")
     assert not verdict.eligible
     assert any("review coverage" in r for r in verdict.reasons), verdict.reasons
 
@@ -620,16 +624,13 @@ def test_a_listed_reviewer_bots_approval_counts_as_an_agent_review_not_an_approv
 
     Excluding bot logins from `approvals` (DIG-4298) must not exclude their
     reviews from the gate: CodeRabbit and friends clear coverage through the
-    `REVIEW_BOTS` hatch, bare or suffixed, in both the queue path and the
-    promotion path, and the verdict they produce never claims `approved by` —
-    the audit trail must not say a person approved.
+    `REVIEW_BOTS` hatch, bare or suffixed, and the verdict they produce never
+    claims `approved by` — the audit trail must not say a person approved.
     """
     crc = mq._coverage_module()
     for login in ("coderabbitai", "coderabbitai[bot]"):
         pr = _pr(1, reviews=[{"author": {"login": login}, "state": "APPROVED"}])
-        verdict = mq.evaluate(
-            pr, mq.load_policy(), acting_role="cto", base="develop", attest_role=None
-        )
+        verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop")
         assert verdict.eligible, (login, verdict.reasons)
         state = _coverage_state()
         crc._apply_reviews_checks_comments(
@@ -646,13 +647,12 @@ def test_a_listed_reviewer_bots_approval_counts_as_an_agent_review_not_an_approv
 
 
 def test_review_evidence_alone_is_enough_at_the_production_setting() -> None:
-    """The configuration production actually runs: `attest_role` is None and no seat
-    can approve its own PR, so review EVIDENCE alone must make a PR eligible.
+    """The configuration production actually runs: no seat can approve its own PR,
+    so review EVIDENCE alone must make a PR eligible.
 
-    Every other `attest_role=None` case in this file asserts a REFUSAL, so before this
-    test the queue's happy path was only exercised with an approval or an attestation —
-    neither of which production can supply. Without this, the queue could be re-broken
-    (stalled as it was from 2026-10-17) with the suite still green.
+    Every other no-approval case in this file asserts a REFUSAL, so without this
+    test the queue's happy path would only be exercised with an approval that
+    production cannot supply.
     """
     pr = _pr(
         1,
@@ -669,8 +669,36 @@ def test_review_evidence_alone_is_enough_at_the_production_setting() -> None:
             }
         ],
     )
-    pr["labels"] = ["reviewed:agent"]
-    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop", attest_role=None)
+    pr["labels"] = [{"name": "reviewed:agent"}]
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop")
+    assert verdict.eligible, verdict.reasons
+
+
+def test_a_non_author_approval_is_not_required() -> None:
+    """Chris's 2026-10-15 definition: a review pass that left comments is the review.
+
+    Every agent pushes under one login, so no agent can give a non-author approval.
+    An in-session review with its findings comment, and no approval, must merge.
+    """
+    pr = _labeled_pr(1, [_finding_comment()])
+    assert pr["reviews"] == []
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop")
+    assert verdict.eligible, verdict.reasons
+    assert "in-session review" in verdict.review_evidence
+
+
+def test_a_human_approval_still_counts() -> None:
+    """A real approval stays an alternative way to meet the review gate."""
+    pr = _pr(1, reviews=[{"author": {"login": "someone"}, "state": "APPROVED"}])
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop")
+    assert verdict.eligible, verdict.reasons
+
+
+@pytest.mark.parametrize("login", ["coderabbitai[bot]", "copilot-pull-request-reviewer[bot]"])
+def test_a_reviewer_bot_pass_counts_as_the_review(login: str) -> None:
+    """A reviewer bot that reviewed the diff is a review pass that left comments."""
+    pr = _pr(1, reviews=[{"author": {"login": login}, "state": "COMMENTED"}])
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop")
     assert verdict.eligible, verdict.reasons
 
 
@@ -686,7 +714,7 @@ def test_a_commit_status_cannot_stand_in_for_the_build() -> None:
     pr["statusCheckRollup"] = [
         {"__typename": "StatusContext", "context": "test", "state": "SUCCESS"}
     ]
-    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop", attest_role="qa")
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop")
     assert not verdict.eligible
     assert any("only reported as a commit status" in r for r in verdict.reasons)
 
@@ -697,69 +725,155 @@ def test_outstanding_change_requests_block() -> None:
         reviews=[{"author": {"login": "someone"}, "state": "CHANGES_REQUESTED"}],
     )
     pr["reviewDecision"] = "CHANGES_REQUESTED"
-    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop", attest_role="qa")
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop")
     assert not verdict.eligible
     assert "review has outstanding change requests" in verdict.reasons
 
 
-def test_attestation_no_longer_gates_the_review() -> None:
-    """`--attest-review` is inert: review EVIDENCE is the gate (2026-10-18, Chris).
-
-    The approval-or-attestation demand is retired, so the role a run attests (or that it
-    attests nothing at all) cannot change the verdict. The old rule refused the merging
-    role's own attestation because every agent here pushes under one GitHub login - which
-    is also why the demand was unreachable in the first place: GitHub refuses
-    `gh pr review --approve` on a seat-authored PR, so a PR with no review evidence was
-    blocked no matter what it waited for.
-
-    `_pr(1)` carries no review evidence, so every arm is refused by the COVERAGE gate,
-    and the refusal must not mention attestation or roles.
-    """
-    for role in (None, "qa", "cto"):
-        verdict = mq.evaluate(
-            _pr(1), mq.load_policy(), acting_role="cto", base="develop", attest_role=role
-        )
-        assert not verdict.eligible, role
-        assert any("review coverage" in reason for reason in verdict.reasons), (role, verdict.reasons)
-        assert not any("merging role" in reason or "attest" in reason for reason in verdict.reasons), (
-            role,
-            verdict.reasons,
-        )
-
-
-def test_attestation_alone_no_longer_suffices() -> None:
-    """Attestation without review evidence is refused (DIG-3154 reopen).
-
-    PRs #5489 and #5277 merged attested by `qa` with zero reviews and zero
-    comments, and the promotion gate refused both. An attestation asserts a
-    review happened; with no artifact the promotion gate cannot see it, so the
-    queue cannot accept it either. The attestation mechanism itself is
-    not changed by the 2026-10-18 retirement — but it does not satisfy
-    review coverage.
-    """
-    verdict = mq.evaluate(
-        _pr(1), mq.load_policy(), acting_role="cto", base="develop", attest_role="qa"
+def test_the_attest_review_option_is_gone(gh_stub: Any) -> None:
+    """`--attest-review` was removed (2026-10-17); passing it is a usage error."""
+    _queue_stub(gh_stub(gh_rule(r"^pr list", stdout=[])), [])
+    done = _run(
+        "list", "--repo", "digithings-ai/twelve-x", "--acting-role", "cto", "--attest-review", "qa"
     )
-    assert not verdict.eligible
-    assert any("review coverage" in reason for reason in verdict.reasons)
+    assert done.returncode == 2
+    assert "unrecognized arguments: --attest-review" in done.stderr
 
 
-def test_attestation_with_review_evidence_still_passes() -> None:
-    """The mechanism is not removed: attestation plus an approval still merges."""
-    pr = _pr(1, approved=True)
+def test_an_em_merge_with_review_evidence_passes() -> None:
     assert mq.evaluate(
-        pr, mq.load_policy(), acting_role="cto", base="develop", attest_role="qa"
+        _pr(1, approved=True), mq.load_policy(), acting_role="em", base="develop"
     ).eligible
 
 
-def test_an_em_merge_attested_by_the_cto_passes() -> None:
-    assert mq.evaluate(
-        _pr(1, approved=True),
+# --- QA is not in the review path ---------------------------------------------
+
+
+@pytest.mark.parametrize("state", ["SUCCESS", "FAILURE", "PENDING", "ERROR"])
+def test_a_qa_gate_status_is_ignored(state: str) -> None:
+    """`qa/gate` neither clears nor blocks a merge (Chris, 2026-10-17)."""
+    qa = {"__typename": "StatusContext", "context": "qa/gate", "state": state}
+    with_evidence = mq.evaluate(
+        _pr(1, approved=True, extra_checks=[qa]), mq.load_policy(), acting_role="em", base="develop"
+    )
+    assert with_evidence.eligible, with_evidence.reasons
+    assert not any("qa/gate" in c for c in with_evidence.checks)
+    without_evidence = mq.evaluate(
+        _pr(2, extra_checks=[qa]), mq.load_policy(), acting_role="em", base="develop"
+    )
+    assert not without_evidence.eligible
+    assert any("review coverage" in r for r in without_evidence.reasons)
+
+
+def test_no_role_is_on_a_review_path() -> None:
+    raw = json.loads((REPO_ROOT / "scripts" / "merge_queue_policy.json").read_text())
+    assert "review_path" not in raw
+
+
+# --- review comments must be resolved or addressed ----------------------------
+
+
+def test_an_open_review_thread_on_current_code_blocks() -> None:
+    pr = _pr(1, approved=True)
+    pr["reviewThreads"] = [
+        {"isResolved": False, "isOutdated": False, "path": "scripts/merge_queue.py"}
+    ]
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert not verdict.eligible
+    assert any(
+        "review comments not addressed" in r and "scripts/merge_queue.py" in r
+        for r in verdict.reasons
+    )
+
+
+@pytest.mark.parametrize(
+    "thread",
+    [
+        {"isResolved": True, "isOutdated": False, "path": "a.py"},
+        {"isResolved": False, "isOutdated": True, "path": "a.py"},
+    ],
+)
+def test_a_resolved_or_outdated_thread_does_not_block(thread: dict[str, Any]) -> None:
+    pr = _pr(1, approved=True)
+    pr["reviewThreads"] = [thread]
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
+    assert verdict.eligible, verdict.reasons
+
+
+def test_review_threads_are_read_from_github(gh_stub: Any) -> None:
+    open_thread = {
+        "data": {
+            "repository": {
+                "pullRequest": {
+                    "reviewThreads": {
+                        "totalCount": 1,
+                        "nodes": [{"isResolved": False, "isOutdated": False, "path": "x.py"}],
+                    }
+                }
+            }
+        }
+    }
+    stub = gh_stub(gh_rule(r"^api graphql", stdout=open_thread))
+    verdict = mq.evaluate(
+        _pr(7, approved=True),
         mq.load_policy(),
         acting_role="em",
         base="develop",
-        attest_role="cto",
-    ).eligible
+        repo="digithings-ai/digithings",
+    )
+    assert not verdict.eligible
+    call = stub.matching("api graphql")[0]
+    assert "number=7" in call and "owner=digithings-ai" in call
+
+
+def test_an_unreadable_thread_list_holds_the_pr(gh_stub: Any) -> None:
+    gh_stub(gh_rule(r"^api graphql", stderr="HTTP 502", exit_code=1))
+    verdict = mq.evaluate(
+        _pr(7, approved=True),
+        mq.load_policy(),
+        acting_role="em",
+        base="develop",
+        repo="digithings-ai/digithings",
+    )
+    assert not verdict.eligible
+    assert any("review threads could not be read" in r for r in verdict.reasons)
+
+
+def test_threads_past_the_first_page_hold_the_pr(gh_stub: Any) -> None:
+    many = {
+        "data": {
+            "repository": {
+                "pullRequest": {
+                    "reviewThreads": {
+                        "totalCount": 101,
+                        "nodes": [{"isResolved": True, "isOutdated": False, "path": "a"}] * 100,
+                    }
+                }
+            }
+        }
+    }
+    gh_stub(gh_rule(r"^api graphql", stdout=many))
+    verdict = mq.evaluate(
+        _pr(7, approved=True),
+        mq.load_policy(),
+        acting_role="em",
+        base="develop",
+        repo="digithings-ai/digithings",
+    )
+    assert not verdict.eligible
+
+
+def test_threads_are_not_read_for_a_pr_already_refused(gh_stub: Any) -> None:
+    stub = gh_stub(gh_rule(r"^api graphql", stdout=NO_THREADS))
+    verdict = mq.evaluate(
+        _pr(7, draft=True, approved=True),
+        mq.load_policy(),
+        acting_role="em",
+        base="develop",
+        repo="digithings-ai/digithings",
+    )
+    assert not verdict.eligible
+    assert stub.matching("api graphql") == []
 
 
 # --- a verdict posted as a PR comment has to reach the gate --------------------
@@ -771,8 +885,8 @@ def test_an_em_merge_attested_by_the_cto_passes() -> None:
 # satisfied the gate and pointed straight past the verdict.
 
 
-def test_a_posted_verdict_of_changes_requested_blocks_even_with_an_attestation() -> None:
-    """The exact #347 shape: no blocking review, a distinct attestation, one verdict.
+def test_a_posted_verdict_of_changes_requested_blocks_even_with_an_approval() -> None:
+    """The exact #347 shape: no blocking review, an approval, one verdict.
 
     Every other input here is the one that merged. Only the posted verdict is new,
     and it has to be enough on its own.
@@ -783,7 +897,7 @@ def test_a_posted_verdict_of_changes_requested_blocks_even_with_an_attestation()
         approved=True,
         comments=[_review_comment(verdict="changes_requested")],
     )
-    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop", attest_role="qa")
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
     assert not verdict.eligible
     # The refusal has to name the comment. A queue that refuses without saying
     # where the block came from is a queue nobody can clear.
@@ -793,9 +907,7 @@ def test_a_posted_verdict_of_changes_requested_blocks_even_with_an_attestation()
 def test_a_posted_verdict_of_approved_does_not_block() -> None:
     """An approving verdict is a signal, not a gate. It must not turn into one."""
     pr = _pr(347, reviews=[], approved=True, comments=[_review_comment(verdict="approved")])
-    assert mq.evaluate(
-        pr, mq.load_policy(), acting_role="em", base="develop", attest_role="qa"
-    ).eligible
+    assert mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop").eligible
 
 
 def test_a_comment_without_the_marker_is_ignored() -> None:
@@ -819,9 +931,7 @@ def test_a_comment_without_the_marker_is_ignored() -> None:
             }
         ],
     )
-    assert mq.evaluate(
-        pr, mq.load_policy(), acting_role="em", base="develop", attest_role="qa"
-    ).eligible
+    assert mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop").eligible
 
 
 def test_a_pr_without_a_comments_key_does_not_crash_the_gate() -> None:
@@ -832,9 +942,7 @@ def test_a_pr_without_a_comments_key_does_not_crash_the_gate() -> None:
     """
     pr = _pr(347, approved=True)
     assert "comments" not in pr
-    assert mq.evaluate(
-        pr, mq.load_policy(), acting_role="em", base="develop", attest_role="qa"
-    ).eligible
+    assert mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop").eligible
 
 
 def test_a_verdict_against_an_older_commit_on_the_branch_still_blocks() -> None:
@@ -854,9 +962,7 @@ def test_a_verdict_against_an_older_commit_on_the_branch_still_blocks() -> None:
         comments=[_review_comment(verdict="changes_requested", head_sha=older)],
         commits=[{"oid": older}, {"oid": head}],
     )
-    assert not mq.evaluate(
-        pr, mq.load_policy(), acting_role="em", base="develop", attest_role="qa"
-    ).eligible
+    assert not mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop").eligible
 
 
 def test_a_verdict_against_a_head_this_pr_does_not_carry_does_not_block() -> None:
@@ -876,9 +982,7 @@ def test_a_verdict_against_a_head_this_pr_does_not_carry_does_not_block() -> Non
         comments=[_review_comment(verdict="changes_requested", head_sha="f" * 40)],
         commits=[{"oid": head}],
     )
-    assert mq.evaluate(
-        pr, mq.load_policy(), acting_role="em", base="develop", attest_role="qa"
-    ).eligible
+    assert mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop").eligible
 
 
 def test_the_latest_posted_verdict_wins() -> None:
@@ -892,9 +996,7 @@ def test_the_latest_posted_verdict_wins() -> None:
             _review_comment(verdict="approved", created="2026-10-07T22:20:00Z"),
         ],
     )
-    assert mq.evaluate(
-        pr, mq.load_policy(), acting_role="em", base="develop", attest_role="qa"
-    ).eligible
+    assert mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop").eligible
 
 
 def test_an_older_block_still_blocks_when_a_later_marker_has_no_verdict() -> None:
@@ -913,9 +1015,7 @@ def test_an_older_block_still_blocks_when_a_later_marker_has_no_verdict() -> Non
             _review_comment(verdict="looks-fine", created="2026-10-07T22:20:00Z"),
         ],
     )
-    assert not mq.evaluate(
-        pr, mq.load_policy(), acting_role="em", base="develop", attest_role="qa"
-    ).eligible
+    assert not mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop").eligible
 
 
 def test_the_fetch_asks_github_for_the_fields_the_posted_verdict_needs() -> None:
@@ -949,21 +1049,20 @@ def test_the_default_limit_stays_under_github_node_cap() -> None:
     assert match is not None, "the --limit default is gone from merge_queue.py"
     default = int(match.group(1))
     assert default * 10502 < 500000, (
-        f"default --limit {default} costs ~{default * 10502} nodes, "
-        "over GitHub's 500,000 cap"
+        f"default --limit {default} costs ~{default * 10502} nodes, over GitHub's 500,000 cap"
     )
 
 
-def test_a_pr_with_no_evidence_at_all_is_refused_despite_attestation() -> None:
-    """The #5489/#5277 shape: no labels, no reviews, no Bot runs — refused even attested."""
+def test_a_pr_with_no_evidence_at_all_is_refused() -> None:
+    """The #5489/#5277 shape: no labels, no reviews, no Bot runs — refused."""
     pr = _pr(1)
-    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop", attest_role="qa")
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="em", base="develop")
     assert not verdict.eligible
     assert any("no completed agent review" in reason for reason in verdict.reasons)
 
 
 def test_a_bugbot_success_clears_review_coverage() -> None:
-    """The strongest hatch: attestation carries `_gate_review`, Bugbot carries coverage."""
+    """The strongest hatch: a completed Bugbot run is the review."""
     pr = _pr(
         1,
         extra_checks=[
@@ -975,7 +1074,7 @@ def test_a_bugbot_success_clears_review_coverage() -> None:
             }
         ],
     )
-    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop", attest_role="qa")
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop")
     assert verdict.eligible
     assert not any("review coverage" in reason for reason in verdict.reasons)
 
@@ -988,7 +1087,7 @@ def test_a_reviewed_owner_label_clears_review_coverage() -> None:
     """
     pr = _pr(1)
     pr["labels"] = [{"name": "reviewed:owner"}]
-    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop", attest_role="qa")
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop")
     assert verdict.eligible
     assert not any("review coverage" in reason for reason in verdict.reasons)
 
@@ -1004,21 +1103,18 @@ def test_queue_order_is_creation_order_not_greenness() -> None:
             mq.load_policy(),
             acting_role="cto",
             base="develop",
-            attest_role="qa",
         ),
         mq.evaluate(
             _pr(1, created="2026-10-01T00:00:00Z"),
             mq.load_policy(),
             acting_role="cto",
             base="develop",
-            attest_role="qa",
         ),
         mq.evaluate(
             _pr(2, created="2026-10-02T00:00:00Z"),
             mq.load_policy(),
             acting_role="cto",
             base="develop",
-            attest_role="qa",
         ),
     ]
     assert [v.number for v in sorted(verdicts, key=mq.Verdict.order_key)] == [1, 2, 3]
@@ -1032,7 +1128,6 @@ def test_ties_on_creation_time_break_on_pr_number() -> None:
             mq.load_policy(),
             acting_role="cto",
             base="develop",
-            attest_role="qa",
         )
         for n in (11, 4, 7)
     ]
@@ -1063,21 +1158,6 @@ def test_the_roster_is_the_cto_and_the_em_only() -> None:
     assert roles == {"cto", "em"}
     assert "qa" not in roles  # QA reviews; QA does not merge.
     assert "chris" not in roles and "chrisstefan" not in roles
-
-
-def test_attesting_a_role_outside_the_review_path_is_refused(gh_stub: Any) -> None:
-    _queue_stub(gh_stub(gh_rule(r"^pr list", stdout=[])), [])
-    done = _run(
-        "list",
-        "--repo",
-        "digithings-ai/twelve-x",
-        "--acting-role",
-        "cto",
-        "--attest-review",
-        "devops",
-    )
-    assert done.returncode == EXIT_NOT_AUTHORISED
-    assert "not in the review path" in done.stderr
 
 
 @pytest.mark.parametrize("base", ["main", "master", "release/v1.2.3"])
@@ -1115,8 +1195,6 @@ def test_a_pr_behind_its_base_does_not_queue(gh_stub: Any) -> None:
         "digithings-ai/twelve-x",
         "--acting-role",
         "cto",
-        "--attest-review",
-        "qa",
     )
     assert done.returncode == EXIT_OK
     assert "queued: none" in done.stdout
@@ -1138,8 +1216,6 @@ def test_the_queue_asks_github_for_the_oldest_prs(gh_stub: Any) -> None:
         "digithings-ai/twelve-x",
         "--acting-role",
         "cto",
-        "--attest-review",
-        "qa",
     )
     assert done.returncode == EXIT_OK
     assert stub.matching("sort:created-asc") != []
@@ -1161,8 +1237,6 @@ def test_drafts_and_conflicts_do_not_queue(gh_stub: Any) -> None:
         "digithings-ai/twelve-x",
         "--acting-role",
         "cto",
-        "--attest-review",
-        "qa",
     )
     assert done.returncode == EXIT_OK
     assert "queued: none" in done.stdout
@@ -1184,6 +1258,7 @@ def test_run_merges_the_head_and_pins_the_evaluated_sha(gh_stub: Any) -> None:
     stub = _queue_stub(
         gh_stub(
             gh_rule(r"^pr list", stdout=prs),
+            gh_rule(r"^api graphql", stdout=NO_THREADS),
             gh_rule(r"^pr merge", stdout=""),
             gh_rule(r"^pr comment", stdout=""),
         ),
@@ -1195,8 +1270,6 @@ def test_run_merges_the_head_and_pins_the_evaluated_sha(gh_stub: Any) -> None:
         "digithings-ai/twelve-x",
         "--acting-role",
         "cto",
-        "--attest-review",
-        "qa",
     )
     assert done.returncode == EXIT_OK, done.stderr
     merges = stub.matching("pr merge 42")
@@ -1217,12 +1290,13 @@ def test_run_never_escalates_with_admin(gh_stub: Any) -> None:
     stub = _queue_stub(
         gh_stub(
             gh_rule(r"^pr list", stdout=prs),
+            gh_rule(r"^api graphql", stdout=NO_THREADS),
             gh_rule(r"^pr merge", stdout=""),
             gh_rule(r"^pr comment", stdout=""),
         ),
         prs,
     )
-    _run("run", "--repo", "digithings-ai/twelve-x", "--acting-role", "em", "--attest-review", "qa")
+    _run("run", "--repo", "digithings-ai/twelve-x", "--acting-role", "em")
     assert stub.matching("pr merge")
     assert all("--admin" not in call for call in stub.matching("pr merge"))
 
@@ -1235,6 +1309,7 @@ def test_run_re_reads_the_queue_after_every_merge(gh_stub: Any) -> None:
     """
     stub = gh_stub(
         gh_rule(r"^pr list", stdout_files=["q1.json", "q2.json", "q3.json"]),
+        gh_rule(r"^api graphql", stdout=NO_THREADS),
         gh_rule(r"^pr merge", stdout=""),
         gh_rule(r"^pr comment", stdout=""),
     )
@@ -1247,8 +1322,6 @@ def test_run_re_reads_the_queue_after_every_merge(gh_stub: Any) -> None:
         "digithings-ai/twelve-x",
         "--acting-role",
         "cto",
-        "--attest-review",
-        "qa",
         "--max-merges",
         "2",
     )
@@ -1268,6 +1341,7 @@ def test_run_stops_when_a_merge_makes_the_next_pr_ineligible(gh_stub: Any) -> No
     """
     stub = gh_stub(
         gh_rule(r"^pr list", stdout_files=["q1.json", "q2.json"]),
+        gh_rule(r"^api graphql", stdout=NO_THREADS),
         gh_rule(r"^pr merge", stdout=""),
         gh_rule(r"^pr comment", stdout=""),
     )
@@ -1280,8 +1354,6 @@ def test_run_stops_when_a_merge_makes_the_next_pr_ineligible(gh_stub: Any) -> No
         "digithings-ai/twelve-x",
         "--acting-role",
         "cto",
-        "--attest-review",
-        "qa",
         "--max-merges",
         "5",
     )
@@ -1300,8 +1372,6 @@ def test_dry_run_changes_nothing(gh_stub: Any) -> None:
         "digithings-ai/twelve-x",
         "--acting-role",
         "cto",
-        "--attest-review",
-        "qa",
         "--dry-run",
     )
     assert done.returncode == EXIT_OK, done.stderr
@@ -1320,18 +1390,21 @@ def test_the_audit_comment_names_the_role_and_the_verdicts(gh_stub: Any) -> None
     stub = _queue_stub(
         gh_stub(
             gh_rule(r"^pr list", stdout=prs),
+            gh_rule(r"^api graphql", stdout=NO_THREADS),
             gh_rule(r"^pr merge", stdout=""),
             gh_rule(r"^pr comment", stdout=""),
         ),
         prs,
     )
-    _run("run", "--repo", "digithings-ai/twelve-x", "--acting-role", "em", "--attest-review", "qa")
+    _run("run", "--repo", "digithings-ai/twelve-x", "--acting-role", "em")
     comments = stub.matching("pr comment 42")
     assert len(comments) == 1
     body = comments[0][comments[0].index("--body") + 1]
     assert "no decision card required" in body
     assert "`em`" in body
-    assert "`qa`" in body
+    assert "`qa`" not in body
+    assert "approved by reviewer" in body
+    assert "no unresolved review threads" in body
     assert ("c" * 12) in body
 
 
@@ -1344,12 +1417,13 @@ def test_max_merges_defaults_to_one(gh_stub: Any) -> None:
     stub = _queue_stub(
         gh_stub(
             gh_rule(r"^pr list", stdout=prs),
+            gh_rule(r"^api graphql", stdout=NO_THREADS),
             gh_rule(r"^pr merge", stdout=""),
             gh_rule(r"^pr comment", stdout=""),
         ),
         prs,
     )
-    _run("run", "--repo", "digithings-ai/twelve-x", "--acting-role", "cto", "--attest-review", "qa")
+    _run("run", "--repo", "digithings-ai/twelve-x", "--acting-role", "cto")
     assert [c[2] for c in stub.matching("pr merge")] == ["1"]
 
 
@@ -1498,7 +1572,6 @@ def test_a_claimed_review_with_its_findings_comment_merges() -> None:
         mq.load_policy(),
         acting_role="cto",
         base="develop",
-        attest_role="qa",
     )
     assert verdict.eligible
     assert not any("reviewed:agent" in reason for reason in verdict.reasons)
@@ -1516,7 +1589,7 @@ def test_a_claimed_review_without_its_findings_comment_is_refused() -> None:
             }
         ],
     )
-    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop", attest_role="qa")
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop")
     assert not verdict.eligible
     assert any(
         "reviewed:agent" in reason and "in-session-review" in reason for reason in verdict.reasons
@@ -1527,21 +1600,23 @@ def test_a_claimed_review_whose_comments_cannot_be_read_is_refused() -> None:
     """Fail closed: without a repo to read comments from, the claim is unverifiable."""
     pr = _labeled_pr(5526, None)
     assert "comments" not in pr
-    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop", attest_role="qa")
+    verdict = mq.evaluate(pr, mq.load_policy(), acting_role="cto", base="develop")
     assert not verdict.eligible
     assert any("cannot be verified" in reason for reason in verdict.reasons)
 
 
 def test_a_claimed_review_fetches_comments_lazily(gh_stub: Any) -> None:
     """`gh pr list` carries labels but no comments; the queue fetches them only for a claim."""
-    gh_stub(gh_rule(r"^pr view", stdout={"comments": [_finding_comment()]}))
+    gh_stub(
+        gh_rule(r"^pr view", stdout={"comments": [_finding_comment()]}),
+        gh_rule(r"^api graphql", stdout=NO_THREADS),
+    )
     pr = _labeled_pr(5526, None)
     verdict = mq.evaluate(
         pr,
         mq.load_policy(),
         acting_role="cto",
         base="develop",
-        attest_role="qa",
         repo="digithings-ai/digithings",
     )
     assert verdict.eligible
@@ -1556,7 +1631,6 @@ def test_an_unreadable_comments_fetch_is_refused(gh_stub: Any) -> None:
         mq.load_policy(),
         acting_role="cto",
         base="develop",
-        attest_role="qa",
         repo="digithings-ai/digithings",
     )
     assert not verdict.eligible
