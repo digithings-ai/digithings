@@ -125,6 +125,17 @@ _NAMES: dict[str, tuple[str, str]] = {
     "breakdown_from_daily": ("dca_metrics", "breakdown_from_daily"),
     # -- evaluation against the baseline -------------------------------------
     "compare_to_baseline": ("baseline_evaluator", "compare_to_baseline"),
+    # -- the golden path: research -> backtest -> optimize -> tearsheet -------
+    "research_asset": ("golden_path", "research_asset"),
+    "backtest_asset": ("golden_path", "backtest_asset"),
+    "optimize_asset": ("golden_path", "optimize_asset"),
+    "tearsheet_payload": ("golden_path", "tearsheet_payload"),
+    "run_golden_path": ("golden_path", "run_golden_path"),
+    "persist_golden_path": ("golden_path", "persist_golden_path"),
+    "GoldenPathResult": ("golden_path", "GoldenPathResult"),
+    "GoldenPathVerdict": ("golden_path", "GoldenPathVerdict"),
+    "ResearchStage": ("golden_path", "ResearchStage"),
+    "BacktestStage": ("golden_path", "BacktestStage"),
 }
 
 #: Star-import yields the toolkit's API, not the 38 module handles.

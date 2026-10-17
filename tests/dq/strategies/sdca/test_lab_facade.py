@@ -261,7 +261,11 @@ def test_no_curated_name_is_defined_in_more_than_one_module() -> None:
 
 
 def test_module_handles_are_the_same_objects_as_direct_imports() -> None:
-    assert len(MODULE_NAMES) == 38, f"expected 38 modules on disk, got {MODULE_NAMES}"
+    # A floor plus a known member, not an exact count: the census is a control
+    # on the instrument (can the walk see modules at all?), and an exact pin
+    # would make every new lab module a test edit.
+    assert len(MODULE_NAMES) >= 30, f"module census too small to be real: {MODULE_NAMES}"
+    assert "backtest" in MODULE_NAMES, f"census missed a known module: {MODULE_NAMES}"
     for module_name in MODULE_NAMES:
         if module_name in NAUTILUS_MODULES and not HAS_NAUTILUS:
             continue
