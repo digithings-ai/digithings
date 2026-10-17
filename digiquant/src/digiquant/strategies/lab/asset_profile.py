@@ -3,8 +3,14 @@
 The reusable core is the same for every asset: generic technicals from that
 asset's OHLCV → composite risk → Stage A weights on that asset's cycle
 windows → Stage B curve → regularize. Asset-specific series (BTC on-chain
-SOPR/MVRV, later equity put/call) are plugins on the extra-indicators
-allowlist, not this shared path.
+SOPR/MVRV, gold GVZ / GLD-SLV / real rates, later equity put/call) are plugins
+on the extra-indicators allowlist, not this shared path.
+
+Profiles are registered by name (``register_profile`` / ``get_profile``), so a
+new asset is data rather than a code edit: declare its cycle pins in
+``cycle_windows``, then register an ``SdcaAssetProfile``. The allowlist says
+what an asset MAY search; the calibrated subset it DOES use lives in the
+``settings.json`` presets, not here.
 
 Do not add a published ``settings.json`` entry until a calibrated backtest
 for that asset looks comfortable. ``eth_research_v1()`` is research-only.
@@ -12,8 +18,10 @@ for that asset looks comfortable. ``eth_research_v1()`` is research-only.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 import polars as pl
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -22,7 +30,9 @@ from digiquant.data.prices.history_cache import load_cached
 from digiquant.strategies.lab.cycle_windows import SdcaCycleWindows
 from digiquant.strategies.lab.indicator_catalog import (
     BTC_PLUGIN_INDICATOR_NAMES,
+    EXTRA_INDICATOR_NAMES,
     GENERIC_TECHNICAL_NAMES,
+    MACRO_INDICATOR_NAMES,
     SdcaCompositeWeights,
 )
 from digiquant.strategies.lab.price_oscillators import (
@@ -30,6 +40,10 @@ from digiquant.strategies.lab.price_oscillators import (
     price_oscillator_z_vectors,
 )
 from digiquant.strategies.lab.providers import SdcaRiskModelName
+
+# Every extra an allowlist may name, across all assets. Built from the catalogue
+# itself so a new plugin family is legal without editing this module.
+_KNOWN_EXTRAS: frozenset[str] = frozenset(EXTRA_INDICATOR_NAMES)
 
 
 class SdcaAssetProfile(BaseModel):
@@ -46,8 +60,7 @@ class SdcaAssetProfile(BaseModel):
 
     @model_validator(mode="after")
     def _known_extras(self) -> SdcaAssetProfile:
-        known = set(GENERIC_TECHNICAL_NAMES) | set(BTC_PLUGIN_INDICATOR_NAMES)
-        unknown = [name for name in self.extra_indicators if name not in known]
+        unknown = [name for name in self.extra_indicators if name not in _KNOWN_EXTRAS]
         if unknown:
             raise ValueError(f"unknown extra_indicators: {unknown}")
         return self
@@ -56,7 +69,7 @@ class SdcaAssetProfile(BaseModel):
         return tuple(n for n in self.extra_indicators if n in GENERIC_TECHNICAL_NAMES)
 
     def plugin_extras(self) -> tuple[str, ...]:
-        return tuple(n for n in self.extra_indicators if n in BTC_PLUGIN_INDICATOR_NAMES)
+        return tuple(n for n in self.extra_indicators if n in MACRO_INDICATOR_NAMES)
 
     def ensure_extras_allowed(self, weights: SdcaCompositeWeights) -> None:
         """Raise if an enabled extra is not on this asset's allowlist."""
@@ -91,6 +104,26 @@ class SdcaAssetProfile(BaseModel):
             oscillators=SdcaOscillatorSpec(),
             cycle_windows=SdcaCycleWindows.eth_research_v1(),
             extra_indicators=GENERIC_TECHNICAL_NAMES,
+            signal_delay_days=0,
+        )
+
+    @classmethod
+    def gold_v1(cls) -> SdcaAssetProfile:
+        """Checked-in gold profile: rolling-z rails, gold macro family + technicals.
+
+        ``rolling_z`` (90d) is what the live ``gold_sdca`` preset in
+        ``settings.json`` (``gold_reselect``) selects. Cycle pins come from
+        ``SdcaCycleWindows.gold_v1()``. The allowlist is the full extra
+        catalogue, because the calibrated subset actually used (valuation, m2,
+        uup, oscillators) belongs to the preset — a macro leg can be
+        re-weighted there without editing this module.
+        """
+        return cls(
+            symbol="GLD-USD",
+            risk_model="rolling_z",
+            oscillators=SdcaOscillatorSpec(),
+            cycle_windows=SdcaCycleWindows.gold_v1(),
+            extra_indicators=GENERIC_TECHNICAL_NAMES + MACRO_INDICATOR_NAMES,
             signal_delay_days=0,
         )
 
@@ -157,12 +190,58 @@ def stage_a_search_names(profile: SdcaAssetProfile) -> tuple[str, ...]:
     return names if names else GENERIC_TECHNICAL_NAMES
 
 
+ProfileFactory = Callable[[], SdcaAssetProfile]
+
+_PROFILES: dict[str, ProfileFactory] = {}
+
+
+def register_profile(name: str, factory: ProfileFactory) -> None:
+    """Register an asset profile factory under ``name`` (later calls overwrite)."""
+    _PROFILES[name] = factory
+
+
+def get_profile(name: str) -> SdcaAssetProfile:
+    """Build the registered profile ``name`` (e.g. ``"btc"``, ``"gold"``)."""
+    factory = _PROFILES.get(name)
+    if factory is None:
+        raise ValueError(f"Unknown asset profile: {name}. Registered: {list(_PROFILES.keys())}.")
+    return factory()
+
+
+def list_profiles() -> list[dict[str, Any]]:
+    """List registered profiles with symbol, risk model and cycle-window count."""
+    rows: list[dict[str, Any]] = []
+    for name, factory in _PROFILES.items():
+        profile = factory()
+        rows.append(
+            {
+                "name": name,
+                "symbol": profile.symbol,
+                "risk_model": profile.risk_model,
+                "cycle_windows": len(profile.cycle_windows.windows),
+                "extras": len(profile.extra_indicators),
+            }
+        )
+    return rows
+
+
+register_profile("btc", SdcaAssetProfile.btc_v1)
+register_profile("eth", SdcaAssetProfile.eth_research_v1)
+register_profile("gold", SdcaAssetProfile.gold_v1)
+
+
 __all__ = [
     "BTC_PLUGIN_INDICATOR_NAMES",
+    "EXTRA_INDICATOR_NAMES",
     "GENERIC_TECHNICAL_NAMES",
+    "MACRO_INDICATOR_NAMES",
+    "ProfileFactory",
     "SdcaAssetProfile",
     "daily_closes_from_cache",
     "daily_closes_from_ohlcv",
+    "get_profile",
+    "list_profiles",
+    "register_profile",
     "stage_a_search_names",
     "technicals_from_ohlcv",
     "union_date_range",

@@ -12,18 +12,25 @@ import polars as pl
 import pytest
 from digiquant.data.prices import OHLCV_COLUMNS
 from digiquant.data.prices.history_cache import save_cached
+from digiquant.strategies.sdca import asset_profile as _asset_profile_mod
 from digiquant.strategies.sdca.asset_profile import (
     BTC_PLUGIN_INDICATOR_NAMES,
+    EXTRA_INDICATOR_NAMES,
     GENERIC_TECHNICAL_NAMES,
+    MACRO_INDICATOR_NAMES,
     SdcaAssetProfile,
     daily_closes_from_cache,
     daily_closes_from_ohlcv,
+    get_profile,
+    list_profiles,
+    register_profile,
     stage_a_search_names,
     technicals_from_ohlcv,
     union_date_range,
 )
 from digiquant.strategies.sdca.cycle_windows import CycleKind, SdcaCycleWindows
 from digiquant.strategies.sdca.indicator_catalog import (
+    GOLD_MACRO_NAMES,
     ExtraIndicatorSources,
     SdcaCompositeWeights,
     build_extra_indicators,
@@ -302,3 +309,108 @@ class TestOscillatorWarmupIsLeadingGap:
             1 for v in values[first_finite:] if v is not None and not math.isnan(v)
         )
         assert trailing_finite == n - leading_nulls
+
+
+class TestGoldProfile:
+    """Gold is the second live asset; it must be data, not a fork of the core."""
+
+    def test_gold_v1_pins_rolling_z_and_gold_cycle_windows(self) -> None:
+        profile = SdcaAssetProfile.gold_v1()
+        assert profile.symbol == "GLD-USD"
+        assert profile.risk_model == "rolling_z"
+        assert profile.cycle_windows == SdcaCycleWindows.gold_v1()
+        assert profile.cycle_windows != SdcaCycleWindows.btc_v1()
+        assert set(GOLD_MACRO_NAMES).issubset(set(profile.extra_indicators))
+        assert set(GENERIC_TECHNICAL_NAMES).issubset(set(profile.extra_indicators))
+        assert profile.plugin_extras() == MACRO_INDICATOR_NAMES
+        assert profile.signal_delay_days == 0
+
+    def test_gold_cycle_pins_span_the_documented_extremes(self) -> None:
+        windows = SdcaAssetProfile.gold_v1().cycle_windows
+        assert len(windows.windows) == 7
+        # CycleWindow carries start/end (pin +- 45d); the pin is the window midpoint.
+        pins = sorted(w.start + (w.end - w.start) / 2 for w in windows.windows)
+        assert pins[0].year == 2008
+        assert pins[-1].year == 2026
+        assert {w.kind for w in windows.windows} == {CycleKind.PEAK, CycleKind.TROUGH}
+        assert all((w.end - w.start).days == 90 for w in windows.windows)
+        assert len({w.name for w in windows.windows}) == 7
+
+    def test_live_gold_preset_weights_are_all_allowed(self) -> None:
+        """The published gold preset enables m2/uup/oscillators -- every leg must be legal."""
+        payload = json.loads(_SETTINGS.read_text())
+        sdca = payload["strategies"]["gold_sdca"]["sdca"]
+        assert sdca["risk_model"] == "rolling_z"
+        assert sdca["preset"] == "gold_reselect"
+        weights = SdcaCompositeWeights(valuation=1.0, m2=0.5, uup=0.5, weekly_rsi=0.25)
+        # Raises if any enabled extra is off the allowlist.
+        SdcaAssetProfile.gold_v1().ensure_extras_allowed(weights)
+
+
+class TestProfileRegistry:
+    """A new asset is a registration, not an edit to asset_profile.py."""
+
+    def test_published_assets_are_registered(self) -> None:
+        names = {row["name"] for row in list_profiles()}
+        assert {"btc", "eth", "gold"}.issubset(names)
+        payload = json.loads(_SETTINGS.read_text())
+        assert {"btc_sdca", "gold_sdca"}.issubset(payload["strategies"])
+
+    def test_get_profile_round_trips_the_classmethods(self) -> None:
+        assert get_profile("btc") == SdcaAssetProfile.btc_v1()
+        assert get_profile("eth") == SdcaAssetProfile.eth_research_v1()
+        assert get_profile("gold") == SdcaAssetProfile.gold_v1()
+
+    def test_list_profiles_reports_the_load_bearing_fields(self) -> None:
+        rows = {row["name"]: row for row in list_profiles()}
+        assert rows["gold"]["symbol"] == "GLD-USD"
+        assert rows["gold"]["risk_model"] == "rolling_z"
+        assert rows["gold"]["cycle_windows"] == 7
+        assert rows["btc"]["cycle_windows"] == 5
+        # A zero here would make the census vacuous, so assert it is non-zero.
+        assert sum(row["extras"] for row in rows.values()) > 0
+
+    def test_unknown_profile_names_what_is_registered(self) -> None:
+        with pytest.raises(ValueError, match="Unknown asset profile: sol"):
+            get_profile("sol")
+
+    def test_register_profile_adds_an_asset_without_editing_the_module(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(_asset_profile_mod, "_PROFILES", dict(_asset_profile_mod._PROFILES))
+        register_profile("sol_research", SdcaAssetProfile.btc_v1)
+        assert get_profile("sol_research").symbol == "BTC-USD"
+        assert "sol_research" in {row["name"] for row in list_profiles()}
+        # The registry is dict-backed, so a re-registration overwrites rather than forks.
+        register_profile("sol_research", SdcaAssetProfile.gold_v1)
+        assert get_profile("sol_research").symbol == "GLD-USD"
+
+
+class TestAllowlistIsCatalogueDriven:
+    """The validator names the whole catalogue, not a BTC-only union."""
+
+    def test_a_profile_may_name_every_catalogue_extra(self) -> None:
+        profile = SdcaAssetProfile(
+            symbol="TEST-USD",
+            risk_model="generic_valuation",
+            cycle_windows=SdcaCycleWindows.btc_v1(),
+            extra_indicators=EXTRA_INDICATOR_NAMES,
+        )
+        assert set(profile.extra_indicators) == set(EXTRA_INDICATOR_NAMES)
+
+    def test_unknown_extra_is_still_rejected(self) -> None:
+        """The validator must be able to fail, or the previous test is vacuous."""
+        with pytest.raises(ValueError, match="unknown extra_indicators"):
+            SdcaAssetProfile(
+                symbol="TEST-USD",
+                risk_model="generic_valuation",
+                cycle_windows=SdcaCycleWindows.btc_v1(),
+                extra_indicators=("not_a_real_indicator",),
+            )
+
+    def test_catalogue_covers_the_old_btc_union_exactly(self) -> None:
+        """Pins the refactor as behaviour-preserving, and gold as needing no code edit."""
+        legacy_union = set(GENERIC_TECHNICAL_NAMES) | set(BTC_PLUGIN_INDICATOR_NAMES)
+        assert set(EXTRA_INDICATOR_NAMES) == legacy_union
+        assert BTC_PLUGIN_INDICATOR_NAMES == MACRO_INDICATOR_NAMES
+        assert set(GOLD_MACRO_NAMES) <= set(EXTRA_INDICATOR_NAMES)
