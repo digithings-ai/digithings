@@ -66,8 +66,12 @@ branch: the sidecar-only Stage-B runs
 print `beats_flat_dca_oos: true` (combined OOS vs-flat `+38.42%`), and
 `gold_optimized_provenance.json` does too. None of those was published
 (`wrote_settings=false`; a 2-trial Stage B is not a published-weight flip). For
-the **published** `btc_sdca` config the flag is still `false`, and that is the
-claim that matters.
+the **published** `btc_sdca` config, the *sidecar* still records the flag as
+`false` — but that sidecar's own `summary_fields_describe` says its figures
+describe a **superseded** prior fit, so it is not a statement about the shipped
+index. The **fresh 2026-10-17 gate re-run on the live 5-weight index prints
+`true`** (mean OOS vs flat DCA `+22.98%`); see "Fresh gate re-run (2026-10-17)"
+below, which is now the claim that matters.
 
 **`btc_optimized_provenance.json` field trap.** Its top-level `mean_oos` /
 `beats_flat_dca_oos` / `sensitivity_stable` fields describe the **superseded
@@ -75,17 +79,62 @@ prior fit**, not the promoted cycle-4 curve whose `best_params` the file now
 holds. The `notes` already say so; a machine-readable `summary_fields_describe`
 guard was added alongside this reconciliation.
 
-**PENDING: fresh gate re-run (data-blocked, 2026-10-17).** A faithful re-run on
-the live 5-weight index is **blocked** in this worktree:
+**Fresh gate re-run (2026-10-17) — supersedes the data-blocked PENDING note.**
+Both blockers cleared. The BTC-plugin macro siblings are staged in
+`digiquant/data/price-history/` (`M2SL.csv` from Supabase
+`macro_series_observations`; `DTWEXBGS.csv` written by hand, 2006-01-02 →
+2026-09-04, because `export_sdca_macro.py` deliberately skips that series since
+it left the gloomberb panel in #4794 PR3). The figures below come from the
+`curve_simulator` evaluator, so the local `nautilus_trader 1.223.0` vs pin
+`1.230.0` gap (ADR-0033) does not touch them — **a full Nautilus pass is still
+not reproduced here.**
 
-- the BTC-plugin macro siblings (`M2SL.csv`, `DTWEXBGS.csv`) and the on-chain
-  series are not staged, so the `m2`/`dxy` (and on-chain) legs would silently
-  drop to 0 — a re-run now would score a different index than live; and
-- the local venv carries `nautilus_trader 1.223.0` against the repo pin
-  `1.230.0` (ADR-0033), so a full Nautilus pass would not match CI.
+Method, stated so the number can be re-derived: `run_sdca_walk_forward_vs_baseline`
+over the **live 5-weight index** (`settings.json`
+`strategies.btc_sdca.sdca.indicator_weights`) × the published `btc_optimized`
+shape, 3 calendar days of signal delay, rails **refit per fold** (the result
+artefact's own `rails_protocol` says so), extras `m2`+`dxy` from the staged CSVs,
+**one candidate, no search** (`num_evaluations 1`), `fold_weighting="duration"`,
+3 folds + holdout, BTC 2015-07-20 → 2026-10-13 post-delay. Driver and full
+result: `.scratch/gate_btc2.py` and `.scratch/gate_btc_result.json` (untracked,
+local only).
 
-When the data is staged, run backlog item 5 and replace this block with the
-fresh numbers — do not carry these forward as if they were re-validated.
+| fold | OOS window | OOS vs flat DCA | OOS max_dd | feasible |
+|---|---|---|---|---|
+| 1 | 2017-10-18 → 2020-01-16 | −2.04% | **61.61%** | **no** |
+| 2 | 2020-01-17 → 2022-04-16 | +55.36% | 14.10% | yes |
+| 3 | 2022-04-17 → 2024-07-15 | +15.63% | 37.72% | yes |
+
+- **Mean OOS vs flat DCA `+22.98%`** — duration-weighted `+22.98%` too, because
+  the three OOS windows are the same length and the weighting is a no-op here.
+  `beats_flat_dca_oos` prints **`true`**.
+- **The gate still fails.** Fold 1 is vetoed on `max_dd 61.61` against the 50 cap,
+  and sensitivity is unstable: `max_abs_delta_oos_pct 7.84` against the 2.0 spike
+  threshold, `worst_neighbor sell_knee_risk:+5%`.
+- Against the naive reference — the same index with only the six curve-shape
+  fields swapped for `risk50_linear_reference_curve` — mean OOS is **`−5.79%`**
+  (−4.10 / −12.31 / −0.97), sensitivity stable at 1.49. So `beats_baseline_oos`
+  is **`true`**, delta `+28.78pp`.
+- **Read that delta narrowly.** It says the composite index adds value over a
+  naive risk-threshold curve. It does **not** overturn the fold-1 veto or the
+  sensitivity failure, and it is not a promotion: nothing here is re-accepted,
+  and `settings.json` is untouched.
+
+Three caveats, so this is not over-read:
+
+- the previous preset gate record (`+43.21%` duration-OOS, fold 1 veto
+  `max_dd 51.84`, sensitivity `5.62` / `buy_knee_risk`) has the **same failure
+  shape and worse numbers** on fresh data. The comparison is recency plus the
+  band-crossing fix, not a new defect;
+- `btc_optimized.shape` carries four **mid-tier** fields
+  (`buy_mid_knee_risk 15.0`, `buy_mid_curvature 1.0`, `sell_mid_knee_risk 85.0`,
+  `sell_mid_curvature 1.0`) that `params_from_shape` **projects out** — measured
+  2026-10-17: the shape has 10 keys, `params_from_shape` returns 6, and
+  `SDCA_SHAPE_DEFAULTS` has no `*_mid_*` key. The gate therefore scores the tiered
+  curve **without** its mid-tier override. Real, and currently unowned;
+- `holdout_metrics` is byte-identical for the candidate and the baseline
+  (`vs_flat_dca_pct −1.190`, every deployed/drawdown field `0.0`), so it is **not
+  a measurement** — do not quote the holdout as a result.
 
 **Endpoint-metric fix in place.** The fold-2 degenerate `capital_deployed_pct`
 (`-2558%`) previously read as "net seller / short-side accounting" is now
@@ -108,9 +157,12 @@ has been walk-forward-validated twice this session and loses both times:
   **-46.23% to -51.28%** OOS (varies with rolling-composite window; see
   git log on `composite_rolling_window` work, commit `b38c89440`)
 
-The **published** `btc_sdca` config prints no `beats_flat_dca_oos: true`
+The **published** `btc_sdca` config's sidecar prints no `beats_flat_dca_oos: true`
 (corrected 2026-10-17 — a couple of sidecar-only, `wrote_settings=false`
-Stage-B runs do; see "Baseline reconciliation (2026-10-17)" above). The
+Stage-B runs do), and that sidecar's own `summary_fields_describe` says its
+figures describe a **superseded** prior fit. A **fresh 2026-10-17 gate re-run on
+the live 5-weight index prints `true`** — see "Fresh gate re-run (2026-10-17)"
+above. The
 3-weight baseline above is the best validated result, not a strategy that
 reliably beats flat DCA — "current best candidate" and "beats the public
 benchmark" are different claims; don't conflate them in a trial report.
