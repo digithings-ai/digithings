@@ -31,7 +31,7 @@ import { mountEnvelopeRoutes, type AddRoute, type RouteHandler } from "./envelop
 import type { FxHubEnv } from "./fx-hub/env";
 import { createFxHubFetch, FX_HUB_PATHS } from "./fx-hub/router";
 import { tryHandleLedger } from "./ledger";
-import { tryHandleTables } from "./tables";
+import { isPublicTablePath, tryHandleTables } from "./tables";
 import { registerBriefRoutes } from "./brief";
 import { registerPerformanceRoutes } from "./performance";
 import { registerLiveRoutes } from "./kpis-live";
@@ -225,9 +225,16 @@ async function routeGet(request: Request, env: Env): Promise<Response> {
   }
   if (request.method === "GET" && path.startsWith("/v1/tables/")) {
     // Raw tables carry paid-tier data (ledger, attribution, trace): brief and above only.
+    // Exception: a PUBLISHED table (tables.ts PUBLIC_TABLES) is public by construction —
+    // Supabase grants it anonymous SELECT, so gating it here 403'd the one table a public
+    // tearsheet is made of. A table not named there stays private.
     // With no Supabase and no caller, fail closed as upstream_empty (502) instead of 403.
     const caller = callerFor(request, env);
-    if (!secretlessStubLane(request, env) && !tierAtLeast(caller, "brief")) {
+    if (
+      !secretlessStubLane(request, env) &&
+      !tierAtLeast(caller, "brief") &&
+      !isPublicTablePath(path)
+    ) {
       return errorResponse("forbidden", `${path} is not available to this caller`, url.searchParams.get("retrieval_pin"), { path, tier: caller.tier });
     }
     try {

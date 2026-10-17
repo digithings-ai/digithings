@@ -5,6 +5,7 @@
 import { describe, expect, it } from "vitest";
 import app, { type Env } from "./index";
 import { callerFor, routeMatches, routeVerdict, buildManifest } from "./access";
+import { isPublicTablePath } from "./tables";
 
 const KEY = "k";
 const ENV: Env = { DASHBOARD_TRUST_IDENTITY_HEADERS: "1", MCP_EDGE_KEY: KEY };
@@ -83,8 +84,26 @@ describe("edge identity key", () => {
 });
 
 describe("raw tables are brief+", () => {
-  it("free caller is 403", async () => {
-    expect((await get("/v1/tables/positions?select=*", FREE)).status).toBe(403);
+  it("a private table is 403 for a free caller", async () => {
+    const res = await get("/v1/tables/positions?select=*", FREE);
+    expect(res.status).toBe(403);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe("forbidden");
+  });
+
+  it("a published table is not gated on tier at all", async () => {
+    // `strategy_tearsheets` is a public reference surface (anon SELECT policy
+    // `strategy_tearsheets_anon_select`, documented in tables.ts), so the worker must not
+    // 403 it. With no Supabase configured the read is honest-empty, never forbidden.
+    const res = await get("/v1/tables/strategy_tearsheets?select=strategy_id,metrics&limit=1", FREE);
+    expect(res.status).not.toBe(403);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe("upstream_empty");
+  });
+
+  it("only a named table is public", () => {
+    expect(isPublicTablePath("/v1/tables/positions")).toBe(false);
+    expect(isPublicTablePath("/v1/tables/strategy_tearsheets?select=*")).toBe(true);
+    expect(isPublicTablePath("/v1/tables/")).toBe(false);
+    expect(isPublicTablePath("/performance")).toBe(false);
   });
 });
 

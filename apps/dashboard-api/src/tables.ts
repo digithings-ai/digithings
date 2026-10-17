@@ -59,6 +59,41 @@ const TABLE_ALLOWLIST = new Set([
   'strategy_tearsheets',
 ]);
 
+/**
+ * Allowlisted tables that are readable with NO identity at all.
+ *
+ * `TABLE_ALLOWLIST` answers "may this table be read?"; this answers "may it be read
+ * anonymously?". They are different axes, and a table is PRIVATE unless it is named
+ * here — so widening the allowlist can never silently widen the entitlement.
+ *
+ * `strategy_tearsheets` is a published reference surface, not a house book: Supabase
+ * grants anonymous SELECT on it (`strategy_tearsheets_anon_select`, created by
+ * migration 046, deliberately kept by 051 and 129). Gating it at `brief` in the
+ * worker therefore contradicted the database's own policy and 403'd the one table a
+ * public tearsheet is made of.
+ */
+export const PUBLIC_TABLES = new Set(['strategy_tearsheets']);
+
+/** Path prefix this module owns, so the parse lives in one place. */
+export const TABLES_PATH_PREFIX = '/v1/tables/';
+
+/**
+ * Table name addressed by a `/v1/tables/<name>` path, or null when the path is not a
+ * table read. Query strings and extra segments are ignored, so
+ * `/v1/tables/strategy_tearsheets?select=strategy_id&limit=1` yields the table name.
+ */
+export function tableNameFromPath(path: string): string | null {
+  if (!path.startsWith(TABLES_PATH_PREFIX)) return null;
+  const name = path.slice(TABLES_PATH_PREFIX.length).split(/[/?]/)[0] ?? '';
+  return name === '' ? null : name;
+}
+
+/** May this table be read with no identity? Fails closed: an unknown name is false. */
+export function isPublicTablePath(path: string): boolean {
+  const table = tableNameFromPath(path);
+  return table !== null && PUBLIC_TABLES.has(table);
+}
+
 /** Tables that must always be scoped to the house workspace. */
 const HOUSE_PINNED = new Set(['positions', 'position_events', 'portfolio_metrics']);
 /**
