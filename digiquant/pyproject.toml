@@ -181,6 +181,17 @@ where = ["src"]
     "templates/**/*.j2",
 ]
 
+# The strategy engine keeps its calibrated sidecars (presets, provenance
+# ledgers, coefficient fits) beside the modules that read them, so they must
+# travel with the wheel. Without this block the 18 JSON files under
+# src/digiquant/strategies/ were absent from the built wheel while every test
+# passed in the source tree - a module opens its sidecar only on first use, so
+# an installed digiquant raised FileNotFoundError at runtime, not at import.
+"digiquant.strategies" = [
+    "*.json",
+    "lab/*.json",
+]
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"
