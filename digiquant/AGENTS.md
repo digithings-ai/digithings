@@ -40,28 +40,37 @@ Before making any change to `digiquant/`:
 Beyond root `AGENTS.md`:
 
 - **Nautilus only**: NautilusTrader is the sole backtest and live-trade engine. Do not add a second backtest path. VectorBT Pro sweeps are Phase 3.
-- **Polars except at documented boundaries**: Use Polars for all new data paths. Pandas is allowed only on paths in the allowlist below (Nautilus wrangler, tearsheet Plotly bridge, legacy research preload script). Do not add new pandas imports without updating this table.
+- **Polars except at documented boundaries**: Use Polars for all new data paths. Pandas is allowed only on the paths in the allowlist below (the Nautilus `BarDataWrangler` boundary, the yfinance conversion boundary, and legacy `digiquant/scripts/` ops). Do not add new pandas imports without updating this table.
 
 ### Pandas allowlist (REM-058/059)
 
+Verified 2026-10-17 with
+`grep -rlE '(^|[^.[:alnum:]_])(import pandas|from pandas)' --include='*.py' digiquant tests`
+— these ten modules are the complete set of direct pandas importers. A module that does
+not import pandas is not an allowlist row: a row is removed when a migration lands and
+re-added if the import returns. Paths are repo-relative
+(`digiquant/src/digiquant/<x>` for package modules).
+
 | Path | Reason | Migration |
 |------|--------|-------------|
-| `digiquant/nautilus_runner.py` | Nautilus `BarDataWrangler` requires pandas | None — documented boundary |
-| `digiquant/data/prices/fetchers.py` | yfinance returns pandas DataFrames; pandas is imported lazily only at the yfinance conversion boundary (`_pandas_to_polars` and the fetch path) | None — documented boundary |
-| `digiquant/strategies/lab/nautilus_evaluator.py` | Same BarDataWrangler boundary for SDCA walk-forward trials (#3174) | None — documented boundary |
-| `digiquant/dashboard/replay/nautilus_portfolio.py` | Same BarDataWrangler boundary for shared-cash portfolio replay (#2784) | None — documented boundary |
-| `digiquant/tearsheet.py` | Nautilus `account_report` / `fills_report` are pandas DataFrames | Defer — Plotly quantstats bridge |
-| `digiquant/tearsheet_extract.py` | Same Nautilus report boundary as `tearsheet.py` (#1185 split) | Defer — same as tearsheet |
-| `digiquant/tearsheet_stats.py` | HTML stats from Nautilus/Pandas-origin metrics (#1185) | Defer — same as tearsheet |
-| `digiquant/tearsheet_page.py` | HTML page assembly for Plotly tearsheet (#1185) | Defer — same as tearsheet |
-| `digiquant/tearsheet_charts.py` | Plotly/quantstats expect pandas Series for rolling stats | Defer — same as tearsheet |
-| `digiquant/scripts/research/*.py` | Legacy ops: yfinance / pandas-ta / treasury XML (REM-058 allowlist) | Migrate per-script to Polars in [#579](https://github.com/digithings-ai/digithings/issues/579); `compute-technicals.py` Polars date fix (REM-009) |
-| `digiquant/scripts/research/preload-history.py` | Same research ops family | Delegate to `scripts/preload-history.py` (Polars) when touched |
-| `digiquant/strategies/bollinger_mr.py` | Nautilus strategy bar helpers | Issue backlog — migrate to stdlib `timedelta` pattern (see `rsi_momentum.py`) |
-| `digiquant/strategies/macd_trend.py` | Same | Same |
-| `digiquant/strategies/lab/nautilus_evaluator.py` | Nautilus `BarDataWrangler` for SDCA walk-forward trials (#3174) | None — documented boundary |
-| `digiquant/strategies/rsi_momentum.py` | **Migrated** — uses `datetime.timedelta` only | Done (audit PR) |
+| `digiquant/src/digiquant/nautilus_runner.py` | Nautilus `BarDataWrangler` requires pandas | None — documented boundary |
+| `digiquant/src/digiquant/data/prices/fetchers.py` | yfinance returns pandas DataFrames; imported lazily only at the yfinance conversion boundary (`_pandas_to_polars` and the fetch path) | None — documented boundary |
+| `digiquant/src/digiquant/strategies/lab/nautilus_evaluator.py` | Same BarDataWrangler boundary for SDCA walk-forward trials (#3174) | None — documented boundary |
+| `digiquant/src/digiquant/dashboard/replay/nautilus_portfolio.py` | Same BarDataWrangler boundary for shared-cash portfolio replay (#2784) | None — documented boundary |
+| `digiquant/scripts/fetch_real_ohlcv.py` | Legacy ops: OHLCV fetch/reshape boundary (REM-058) | Migrate to Polars in [#579](https://github.com/digithings-ai/digithings/issues/579) |
+| `digiquant/scripts/generate_tearsheets.py` | Legacy ops: tearsheet generation boundary (REM-058) | Migrate to Polars in [#579](https://github.com/digithings-ai/digithings/issues/579) |
+| `digiquant/scripts/research/update_tearsheet.py` | Legacy ops: tearsheet refresh boundary (REM-058); `compute-technicals.py` Polars date fix tracked as REM-009 | Migrate to Polars in [#579](https://github.com/digithings-ai/digithings/issues/579) |
 | `tests/dq/test_strategies.py` | `TestSdcaStrategyNautilusParity` and `TestSdcaRiskIndexNautilusChain` build bars via `BarDataWrangler`, same boundary as `nautilus_runner.py` (#1081, #3168) | None — documented boundary |
+| `tests/dq/test_nautilus_runner.py` | Builds bars via `BarDataWrangler` for the runner suite | None — documented boundary |
+| `tests/dq/test_tearsheet_missing_values.py` | Constructs pandas frames to exercise the tearsheet missing-value path | None — documented boundary |
+
+Removed 2026-10-17 because they no longer import pandas (add the row back if an import
+returns): `tearsheet.py`, `tearsheet_extract.py`, `tearsheet_stats.py`, `tearsheet_page.py`,
+`tearsheet_charts.py` (now a re-export shim over `digiquant.charts`),
+`strategies/{bollinger_mr,macd_trend,rsi_momentum}.py`, and the `scripts/research/*.py`
+glob (replaced by the one real importer above); `scripts/research/preload-history.py` is
+listed nowhere because the file does not exist. `digiquant/build/lib/**` mirrors `src/`
+and `digiquant/sandbox/pandas_ta/` is a vendored shim — both out of policy scope.
 
 - **No perf claims without results**: Never return Sharpe, PnL, or drawdown values from anywhere except a completed `BacktestResult` or `OptimizeResult`.
 - **Pipeline ordering is sacrosanct**: validate → backtest → optimize → export. Never skip validation. Never run optimize before backtest.
