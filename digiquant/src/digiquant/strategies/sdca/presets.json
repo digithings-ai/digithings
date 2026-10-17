@@ -48,7 +48,7 @@
     }
   },
   "btc_optimized": {
-    "description": "Periodic cycle-4 candidate (robust worst-case-vs-flat tiered search on the live 5-weight index, 2026-09-28; OOS +43.21% vs flat DCA, beats live and risk50-linear). Full parity gate NOT cleared: fold 1 vetoed on max_dd 51.84 vs 50 cap, sensitivity unstable 5.62 (worst_neighbor buy_knee_risk). Promoted to the live preset on owner accept 2026-09-29 with those bars overridden on record. Detail: digiquant/.scratch/periodic_cycle_4.json. Do not --push-supabase from the agent environment.",
+    "description": "Periodic cycle-4 candidate (robust worst-case-vs-flat tiered search on the live 5-weight index, 2026-09-28; OOS +43.21% vs flat DCA, beats live and risk50-linear). Full parity gate NOT cleared: fold 1 vetoed on max_dd 51.84 vs 50 cap, sensitivity unstable 5.62 (worst_neighbor buy_knee_risk). Promoted to the live preset on owner accept 2026-09-29 with those bars overridden on record. Detail: digiquant/.scratch/periodic_cycle_4.json. Gate re-run pending macro-data staging as of 2026-10-17 (see RESEARCH_STATE.md 'Baseline reconciliation (2026-10-17)'). Do not --push-supabase from the agent environment.",
     "long_only": false,
     "shape": {
       "buy_max_rate": 35.0,

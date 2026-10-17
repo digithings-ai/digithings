@@ -12,6 +12,12 @@ by itself mean it ships).
 
 ## Current best validated candidate
 
+> **STATUS 2026-10-17 — every figure in this section is SUPERSEDED.** It is kept
+> as the record of what was accepted on 2026-09-03, not as the current baseline.
+> See "Baseline reconciliation (2026-10-17)" below for what is published now,
+> why these numbers no longer hold, and what is pending. Nothing here is
+> re-accepted or re-rejected — that remains Chris's call under the accept gate.
+
 - **Weights:** `power_law=1.0, m2=0.5, dxy=0.5` (all other indicators — `rs_eth`,
   `weekly_rsi`, `weekly_macd`, `sma_band` — at `0.0`)
 - **Curve:** published `btc_optimized` shape (buy knee 24.1, sell knee 71.9)
@@ -19,6 +25,74 @@ by itself mean it ships).
   `evaluate_sdca_trial_nautilus`) — same 3-fold walk-forward split, both
   evaluators agree to within 0.1pp once both are run fresh under current code.
 - **Date:** 2026-09-03
+
+### Baseline reconciliation (2026-10-17)
+
+Three sources disagreed about the BTC baseline. This records the reconciled
+status. It is a documentation pass: **no new candidate is promoted**, no
+performance number is created, and the accept gate still governs the heading
+above. Every figure quoted here is read from an existing artifact
+(`presets.json`, the provenance sidecars, item 10 Phase 3) — none is
+re-estimated.
+
+**Published now (the canonical shipped baseline).** `settings.json`'s
+`btc_sdca` ships preset `btc_optimized`: the 5-weight index
+(`valuation=1.0, m2=0.5, dxy=0.5, weekly_rsi=0.25, weekly_macd=0.5`) on the
+cycle-4 tiered curve (`presets.json` `btc_optimized.shape`). The preset's
+`description` is the authoritative gate record.
+
+**What the banner above actually is.** A 3-weight research candidate
+(`power_law=1.0, m2=0.5, dxy=0.5`) on the *prior* curve (knees 24.1/71.9),
+scored `+84.90%` OOS on **2026-09-03 — before the band-crossing fix**
+(item 10 Phase 1). It is superseded twice over:
+
+- the fix re-scores this exact config at **`+21.73%`** duration-weighted OOS,
+  `beats_flat_dca_oos=True` but `beats_baseline_oos=False` (loses to the naive
+  `risk50_linear` reference by `-0.76%`), `sensitivity.stable=False`
+  (item 10 Phase 3); and
+- the shipped curve is no longer 24.1/71.9 — it is the cycle-4 tiered shape.
+
+**The published preset never cleared its own gate.** `btc_optimized`'s record
+(`presets.json` description; `btc_optimized_provenance.json` notes):
+duration-OOS `+43.21%` vs flat DCA, **fold 1 vetoed on `max_dd 51.84` vs the
+50 cap**, `sensitivity` unstable at `5.62` (`worst_neighbor buy_knee_risk`). It
+was promoted on **owner accept 2026-09-29 with those bars overridden on
+record** — not because it passed.
+
+**`beats_flat_dca_oos` — corrected.** The "Known discrepancy" section below
+said no provenance file prints `true`. That is no longer accurate on this
+branch: the sidecar-only Stage-B runs
+`btc_solo_then_combine_aggressive.json` / `btc_solo_then_combine_regularized.json`
+print `beats_flat_dca_oos: true` (combined OOS vs-flat `+38.42%`), and
+`gold_optimized_provenance.json` does too. None of those was published
+(`wrote_settings=false`; a 2-trial Stage B is not a published-weight flip). For
+the **published** `btc_sdca` config the flag is still `false`, and that is the
+claim that matters.
+
+**`btc_optimized_provenance.json` field trap.** Its top-level `mean_oos` /
+`beats_flat_dca_oos` / `sensitivity_stable` fields describe the **superseded
+prior fit**, not the promoted cycle-4 curve whose `best_params` the file now
+holds. The `notes` already say so; a machine-readable `summary_fields_describe`
+guard was added alongside this reconciliation.
+
+**PENDING: fresh gate re-run (data-blocked, 2026-10-17).** A faithful re-run on
+the live 5-weight index is **blocked** in this worktree:
+
+- the BTC-plugin macro siblings (`M2SL.csv`, `DTWEXBGS.csv`) and the on-chain
+  series are not staged, so the `m2`/`dxy` (and on-chain) legs would silently
+  drop to 0 — a re-run now would score a different index than live; and
+- the local venv carries `nautilus_trader 1.223.0` against the repo pin
+  `1.230.0` (ADR-0033), so a full Nautilus pass would not match CI.
+
+When the data is staged, run backlog item 5 and replace this block with the
+fresh numbers — do not carry these forward as if they were re-validated.
+
+**Endpoint-metric fix in place.** The fold-2 degenerate `capital_deployed_pct`
+(`-2558%`) previously read as "net seller / short-side accounting" is now
+understood as the end-of-window cash snapshot, and the curve feasibility gate
+gates on `capital_deployed_peak_pct` instead (commit `14e79f26a`). The pending
+re-run should therefore no longer veto a profitable sell-out fold on that
+artifact.
 
 ## Known discrepancy: this is NOT what's live in settings.json
 
@@ -34,10 +108,12 @@ has been walk-forward-validated twice this session and loses both times:
   **-46.23% to -51.28%** OOS (varies with rolling-composite window; see
   git log on `composite_rolling_window` work, commit `b38c89440`)
 
-No provenance file currently has `beats_flat_dca_oos: true`. The 3-weight
-baseline above is the best validated result, not a strategy that reliably
-beats flat DCA — "current best candidate" and "beats the public benchmark"
-are different claims; don't conflate them in a trial report.
+The **published** `btc_sdca` config prints no `beats_flat_dca_oos: true`
+(corrected 2026-10-17 — a couple of sidecar-only, `wrote_settings=false`
+Stage-B runs do; see "Baseline reconciliation (2026-10-17)" above). The
+3-weight baseline above is the best validated result, not a strategy that
+reliably beats flat DCA — "current best candidate" and "beats the public
+benchmark" are different claims; don't conflate them in a trial report.
 
 **Open question for Chris:** is the "Cursor Agent" process still actively
 changing this composite? Reverting `settings.json` to the validated 3-weight
@@ -148,7 +224,11 @@ explicit that they're still blocked on Stage 2's OHLC plumbing.)
    early since this loop leans on Nautilus validation every iteration.
 5. Regenerate the stale `btc_optimized_provenance.json` (predates this
    session's confluence-indicator upgrades, so its cached numbers no longer
-   describe the current code path).
+   describe the current code path). **Blocked as of 2026-10-17**: the missing
+   macro siblings / on-chain series and the `nautilus_trader` 1.223.0 vs
+   1.230.0 venv gap that block the fresh gate re-run also block a faithful
+   regeneration — see "Baseline reconciliation (2026-10-17)". A machine-readable
+   `summary_fields_describe` guard was added to the file in the meantime.
 6. **Dual-timeframe valuation framework** (Chris's 2026-09-04 direction, then
    redirected 2026-09-04→05 to a single composite — see
    `../DCA_VALUATION_FRAMEWORK.md`): composite smoothing landed

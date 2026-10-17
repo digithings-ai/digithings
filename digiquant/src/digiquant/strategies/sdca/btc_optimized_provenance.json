@@ -1,5 +1,6 @@
 {
   "preset": "btc_optimized",
+  "summary_fields_describe": "SUPERSEDED prior fit -- NOT the promoted cycle-4 candidate. The mean_is/mean_oos/is_oos_gap/holdout/beats_flat_dca_oos/sensitivity_stable fields below describe the PRIOR fit (3-weight index, knees 24.1/71.9) only. best_params now holds the promoted cycle-4 curve, whose gate record is in notes (duration-OOS +43.21% vs flat; fold 1 vetoed max_dd 51.84 vs 50; sensitivity 5.62). Detail: digiquant/.scratch/periodic_cycle_4.json. Reconciliation: RESEARCH_STATE.md 'Baseline reconciliation (2026-10-17)'.",
   "evaluator": "curve_simulator",
   "objective": {
     "capital_deployed_floor_pct": 10.0,

@@ -270,6 +270,12 @@ class TestBtcOptimizedPromotion:
         provenance = json.loads(provenance_path.read_text())
         assert "SUPERSEDED" in provenance["notes"]
         assert "periodic_cycle_4" in provenance["notes"]
+        # Machine-readable guard for a reader that grabs top-level fields only
+        # (the notes are prose; this key survives in-place rewrites by
+        # sdca-optimize-curve and is what a field-grabber should hit first).
+        guard = provenance["summary_fields_describe"]
+        assert "SUPERSEDED" in guard
+        assert "periodic_cycle_4" in guard
 
 
 class TestGoldOptimizedPromotion:
