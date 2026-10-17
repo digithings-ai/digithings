@@ -37,11 +37,23 @@ one command and asserted rather than assumed:
   60 moves the final z by **1.5e-02**, at distance 300 by **4.0e-08**, which
   is the gap the `_MACD_DAILY_Z_WINDOW = 90` thresholds sit in.
 
-Both suites were mutation-checked: ten deliberate defects injected into
-`price_oscillators.py` (look-ahead `join_asof`, swapped boost/damp, removed
-silent-leg passthrough, widened clip, dropped sign flip, widened z-window,
-removed magnitude weighting, shifted RSI midpoint, broken null passthrough)
-were each caught by at least one test here.
+Both suites were mutation-checked. Seventeen deliberate defects were injected
+into the ported code (blend weights collapsed, silent-leg passthrough disabled,
+swapped boost/damp, dropped clip, dropped sign flip, removed magnitude
+weighting, shifted RSI midpoint, broken null passthrough, fast/slow MACD legs
+swapped, and so on) and **16 of 17 are caught** by at least one test here. The
+17th is a deliberate neutral control — a no-op dtype coercion — whose survival
+is the point: it proves the harness is not simply failing every mutation.
+
+The first pass of that check found **one real gap**, which is why
+`TestBlendWeightContract` exists. Every other test here passes
+`long_term_weight=0.5`, and so does every shipped module constant, so
+rewriting `medium_term_weight = 1.0 - long_term_weight` as
+`medium_term_weight = long_term_weight` was invisible to all of them. That is
+not an equivalent mutant: the docstring promises a
+`long_term_weight`/`1 - long_term_weight` blend, `long_term_weight` is a public
+keyword argument, and a caller passing an asymmetric weight would have been
+silently mis-weighted. Same shape of defect as the two that survived in leaf 5.
 """
 
 from __future__ import annotations
@@ -56,7 +68,9 @@ from digiquant.strategies.sdca.indicator_catalog import (
     SdcaCompositeWeights,
 )
 from digiquant.strategies.sdca.price_oscillators import (
+    _wilder_rsi,
     agreement_scaled_blend,
+    completed_weekly_closes,
     daily_macd_z,
     daily_rsi_z,
     macd_confluence_z,
@@ -184,11 +198,16 @@ class TestRsiContinuousZ:
 class TestAgreementScaledBlend:
     """Blend two timeframe legs: boost on sign-agreement, damp on conflict."""
 
-    def _blend(self, lv: float | None, mv: float | None) -> float | None:
+    def _blend(
+        self,
+        lv: float | None,
+        mv: float | None,
+        long_term_weight: float = 0.5,
+    ) -> float | None:
         out = agreement_scaled_blend(
             pl.Series([lv], dtype=pl.Float64),
             pl.Series([mv], dtype=pl.Float64),
-            long_term_weight=0.5,
+            long_term_weight=long_term_weight,
             agreement_boost=0.5,
             disagreement_damp=0.5,
             name="blend",
@@ -235,6 +254,88 @@ class TestAgreementScaledBlend:
         ).to_list()
         assert out[0] > 0
         assert out[1] < 0
+
+
+class TestBlendWeightContract:
+    """``long_term_weight`` must weight the long leg and ``1 - w`` the medium leg.
+
+    Every other test in this file — and every shipped module constant
+    (``_RSI_CONFLUENCE_WEEKLY_WEIGHT``, ``_MACD_CONFLUENCE_WEEKLY_WEIGHT``,
+    ``_SMA_BAND_CONFLUENCE_SLOW_WEIGHT``, ``_RS_ETH_CONFLUENCE_SLOW_WEIGHT``)
+    — uses ``long_term_weight=0.5``, where ``1 - w`` and ``w`` are the same
+    number. So replacing ``medium_term_weight = 1.0 - long_term_weight`` with
+    ``medium_term_weight = long_term_weight`` changes no result any of them
+    can see, and the suite stays green.
+
+    That makes the whole class invisible to a mutant that breaks the one part
+    of the contract the docstring actually promises: "a
+    ``long_term_weight``/``1 - long_term_weight`` blend of the two z-scores".
+    ``long_term_weight`` is a public keyword argument, so a caller passing an
+    asymmetric weight is a supported call, not an internal detail.
+    """
+
+    def _blend(
+        self,
+        lv: float | None,
+        mv: float | None,
+        long_term_weight: float,
+    ) -> float | None:
+        out = agreement_scaled_blend(
+            pl.Series([lv], dtype=pl.Float64),
+            pl.Series([mv], dtype=pl.Float64),
+            long_term_weight=long_term_weight,
+            agreement_boost=0.5,
+            disagreement_damp=0.5,
+            name="blend",
+        )
+        return out.to_list()[0]
+
+    def test_medium_leg_carries_the_complement_of_the_long_leg(self) -> None:
+        # Both legs positive, so agreement_frac = 1/2 and the multiplier is
+        # 1 + 0.5 * 1/2 = 1.25 regardless of the weights.
+        #   w=0.75 -> base = 0.75*2 + 0.25*1 = 1.75 -> 2.1875
+        #   w=0.25 -> base = 0.25*2 + 0.75*1 = 1.25 -> 1.5625
+        # With the complement dropped, both become w*(lv+mv)*1.25 and the
+        # medium leg silently doubles in influence at w != 0.5.
+        assert self._blend(2.0, 1.0, long_term_weight=0.75) == pytest.approx(2.1875)
+        assert self._blend(2.0, 1.0, long_term_weight=0.25) == pytest.approx(1.5625)
+
+    def test_weight_one_zeroes_the_medium_leg(self) -> None:
+        # base = 1.0*2 + 0.0*1 = 2.0, multiplier 1.25 -> 2.5. The medium leg
+        # must contribute exactly nothing.
+        assert self._blend(2.0, 1.0, long_term_weight=1.0) == pytest.approx(2.5)
+
+    def test_weight_zero_zeroes_the_long_leg(self) -> None:
+        # base = 0.0*2 + 1.0*1 = 1.0, multiplier 1.25 -> 1.25.
+        assert self._blend(2.0, 1.0, long_term_weight=0.0) == pytest.approx(1.25)
+
+    def test_the_two_weights_sum_to_one(self) -> None:
+        """A convex blend: w and 1-w must land on opposite sides of the mean."""
+        # lv=2.0, mv=1.0, multiplier 1.25 throughout.
+        #   w=0.75 -> 2.1875, w=0.50 -> 1.875, w=0.25 -> 1.5625
+        # Uniform spacing of 0.3125 per 0.25 of weight is only possible if the
+        # two legs' weights sum to 1. Under `medium = long`, the step is
+        # 0.625 per 0.25 instead — uneven, and the midpoint sits at 1.875 by
+        # coincidence rather than by construction.
+        steps = [self._blend(2.0, 1.0, long_term_weight=w) for w in (0.75, 0.5, 0.25)]
+        assert steps[0] - steps[1] == pytest.approx(0.3125)
+        assert steps[1] - steps[2] == pytest.approx(0.3125)
+
+    def test_asymmetric_weight_holds_on_the_disagreement_path(self) -> None:
+        # The damped branch is a separate code path from agreement, so pin the
+        # weighting there too. base = 0.75*2 + 0.25*(-1) = 1.25, damp 0.5 -> 0.625.
+        # At w=0.25 the medium leg dominates: base = 0.25*2 + 0.75*(-1) = -0.25,
+        # damped -> -0.125. The sign flip is the point — a damping factor can
+        # only scale the blend, so it must never manufacture a sign the
+        # weighted blend did not already have.
+        assert self._blend(2.0, -1.0, long_term_weight=0.75) == pytest.approx(0.625)
+        assert self._blend(2.0, -1.0, long_term_weight=0.25) == pytest.approx(-0.125)
+
+    def test_asymmetric_weight_holds_on_the_null_passthrough(self) -> None:
+        # A missing medium leg passes the long leg through unscaled, so the
+        # weight must not leak in as a partial value.
+        assert self._blend(2.0, None, long_term_weight=0.75) == pytest.approx(2.0)
+        assert self._blend(None, 2.0, long_term_weight=0.75) == pytest.approx(2.0)
 
 
 class TestDailyLegs:
@@ -565,3 +666,109 @@ class TestDevelopApiUnchanged:
         vectors = price_oscillator_z_vectors(dates, close)
         assert set(vectors) == set(PRICE_OSCILLATOR_NAMES)
         assert len(PRICE_OSCILLATOR_NAMES) == 3
+
+
+class TestCompletedPeriodBoundary:
+    """G5: *which day* the in-progress period is dropped on, not just that it is.
+
+    ``TestNoLookAhead`` already pins that the incomplete week is filtered out --
+    dropping the filter entirely fails the suite. What no test pinned was the
+    boundary itself: ``week_start + 6 days <= last_daily``. Flip ``<=`` to ``<``
+    and a week that ends exactly on the final cached bar gets discarded, which
+    silently costs the strategy its most recent week of signal.
+
+    The rule is: a week is complete when the data covers the whole ISO week,
+    Sunday included. A series whose last bar *is* that Sunday keeps the week. A
+    series one day short does not.
+    """
+
+    def test_a_week_that_ends_on_the_last_bar_is_kept(self) -> None:
+        dates = _dates(7)  # Monday 2020-01-06 .. Sunday 2020-01-12
+        close = _sawtooth(7)
+        assert dates[-1].isoweekday() == 7
+        weekly = completed_weekly_closes(dates, close)
+        assert len(weekly) == 1
+        assert weekly["week_end"][0] == dates[-1]
+
+    def test_the_same_week_one_day_short_is_dropped(self) -> None:
+        dates = _dates(6)
+        close = _sawtooth(6)
+        assert dates[-1] == date(2020, 1, 11)  # Saturday
+        weekly = completed_weekly_closes(dates, close)
+        assert len(weekly) == 0
+
+    def test_the_boundary_is_the_sunday_not_the_data_end(self) -> None:
+        """Two weeks of data; only the first is complete until the Sunday lands."""
+        dates = _dates(13)  # Monday .. Saturday of the second week
+        weekly = completed_weekly_closes(dates, _sawtooth(13))
+        assert dates[-1].isoweekday() == 6
+        assert len(weekly) == 1
+        assert weekly["week_start"][0] == dates[0]
+
+        dates_sunday = _dates(14)  # now includes the Sunday
+        weekly_sunday = completed_weekly_closes(dates_sunday, _sawtooth(14))
+        assert len(weekly_sunday) == 2
+        assert weekly_sunday["week_start"][-1] == dates_sunday[7]
+
+    def test_the_last_complete_close_is_the_week_end_close_not_the_first(self) -> None:
+        dates = _dates(7)
+        close = _sawtooth(7)
+        assert close[-1] != close[0]
+        weekly = completed_weekly_closes(dates, close)
+        assert weekly["close"][0] == close[-1]
+
+
+class TestWilderRsiWarmup:
+    """G6: RSI must emit nothing until ``length`` samples exist.
+
+    ``avg_gain``/``avg_loss`` use ``min_periods=length``. That warmup is what
+    makes the first published RSI value a real ``length``-sample average rather
+    than an artefact of whatever handful of bars came before it. Nothing
+    asserted it: ``min_periods=1`` survives the whole suite. Since every
+    RSI-derived leg -- ``weekly_rsi_z``, ``monthly_rsi_z``, the continuous map,
+    all the confluence pairings -- reads this function, a wrong warmup shifts
+    the entire family, and the shift is invisible in aggregate scores.
+
+    ``avg_loss`` alone was the measured survivor, so the loss side is named
+    explicitly below as well as the gain side.
+    """
+
+    def test_nothing_is_emitted_before_length_samples_exist(self) -> None:
+        close = _sawtooth(40)
+        rsi = _wilder_rsi(close, length=14)
+        # min_periods=length leaves the first `length - 1` positions null.
+        assert rsi.null_count() == 13
+        assert rsi[0] is None
+        assert rsi[12] is None
+        assert rsi[13] is not None
+
+    @pytest.mark.parametrize("length", [2, 5, 14, 30])
+    def test_the_first_value_lands_exactly_on_the_length_th_bar(self, length: int) -> None:
+        close = _sawtooth(80)
+        rsi = _wilder_rsi(close, length=length)
+        assert rsi.null_count() == length - 1
+        assert rsi[length - 2] is None
+        assert rsi[length - 1] is not None
+
+    def test_the_warmup_length_scales_with_the_requested_length(self) -> None:
+        """A short warmup is the mutation; a long one must not happen by accident."""
+        close = _sawtooth(60)
+        short = _wilder_rsi(close, length=5)
+        long = _wilder_rsi(close, length=30)
+        assert short.null_count() == 4
+        assert long.null_count() == 29
+        assert short[4] is not None
+        assert long[4] is None
+
+    def test_the_loss_average_needs_the_same_warmup_as_the_gain(self) -> None:
+        """``avg_loss`` is the side the mutation was injected into.
+
+        A series that only ever rises has no losses at all, so a warmup leak on
+        ``avg_loss`` alone shows up as an RSI published before there is any loss
+        data to average -- and then pinned at the ceiling.
+        """
+        rising_close = _rising(40, step=1.0)
+        rsi = _wilder_rsi(rising_close, length=14)
+        assert rsi.null_count() == 13
+        assert rsi[13] is not None
+        assert rsi[13] == pytest.approx(100.0)
