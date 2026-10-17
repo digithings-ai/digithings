@@ -1,0 +1,201 @@
+{
+  "candidates": {
+    "seed": {
+      "coverage": 5107,
+      "buy_zone_share": 0.03446250244762091,
+      "mean_risk": 50.25854336302722,
+      "legs": [
+        "dxy",
+        "m2"
+      ]
+    },
+    "ratio_pair": {
+      "coverage": 5102,
+      "buy_zone_share": 0.014112112896903175,
+      "mean_risk": 50.01255119394348,
+      "legs": [
+        "dxy",
+        "gdx_gld",
+        "gld_slv",
+        "m2"
+      ]
+    },
+    "miners_only": {
+      "coverage": 5102,
+      "buy_zone_share": 0.021756174049392396,
+      "mean_risk": 50.665666859590345,
+      "legs": [
+        "dxy",
+        "gdx_gld",
+        "m2"
+      ]
+    },
+    "metal_stress_only": {
+      "coverage": 5107,
+      "buy_zone_share": 0.02467201879772861,
+      "mean_risk": 49.55052610362284,
+      "legs": [
+        "dxy",
+        "gld_slv",
+        "m2"
+      ]
+    },
+    "kitchen_sink": {
+      "coverage": 732,
+      "buy_zone_share": 0.004098360655737705,
+      "mean_risk": 51.05052100397377,
+      "legs": [
+        "breakeven_5y",
+        "dxy",
+        "gdx_gld",
+        "gld_slv",
+        "gvz",
+        "hy_oas",
+        "ig_oas",
+        "m2",
+        "nfci",
+        "walcl"
+      ]
+    },
+    "drop_valuation_tilt": {
+      "coverage": 732,
+      "buy_zone_share": 0.01639344262295082,
+      "mean_risk": 48.90010750032771,
+      "legs": [
+        "breakeven_5y",
+        "dxy",
+        "gdx_gld",
+        "gld_slv",
+        "gvz",
+        "hy_oas",
+        "ig_oas",
+        "m2",
+        "nfci",
+        "walcl"
+      ]
+    }
+  },
+  "correlations": {
+    "m2": {
+      "m2": 1.0,
+      "dxy": -0.101,
+      "gvz": -0.068,
+      "walcl": -0.313,
+      "hy_oas": -0.103,
+      "ig_oas": -0.116,
+      "breakeven_5y": -0.314,
+      "nfci": 0.123,
+      "gdx_gld": -0.105,
+      "gld_slv": 0.21
+    },
+    "dxy": {
+      "m2": -0.101,
+      "dxy": 1.0,
+      "gvz": 0.174,
+      "walcl": 0.258,
+      "hy_oas": 0.078,
+      "ig_oas": 0.112,
+      "breakeven_5y": -0.1,
+      "nfci": -0.078,
+      "gdx_gld": 0.514,
+      "gld_slv": 0.014
+    },
+    "gvz": {
+      "m2": -0.068,
+      "dxy": 0.174,
+      "gvz": 1.0,
+      "walcl": 0.031,
+      "hy_oas": 0.369,
+      "ig_oas": 0.281,
+      "breakeven_5y": -0.068,
+      "nfci": 0.303,
+      "gdx_gld": 0.305,
+      "gld_slv": -0.169
+    },
+    "walcl": {
+      "m2": -0.313,
+      "dxy": 0.258,
+      "gvz": 0.031,
+      "walcl": 1.0,
+      "hy_oas": 0.394,
+      "ig_oas": 0.446,
+      "breakeven_5y": -0.036,
+      "nfci": 0.239,
+      "gdx_gld": 0.294,
+      "gld_slv": -0.052
+    },
+    "hy_oas": {
+      "m2": -0.103,
+      "dxy": 0.078,
+      "gvz": 0.369,
+      "walcl": 0.394,
+      "hy_oas": 1.0,
+      "ig_oas": 0.86,
+      "breakeven_5y": -0.194,
+      "nfci": 0.674,
+      "gdx_gld": 0.11,
+      "gld_slv": 0.144
+    },
+    "ig_oas": {
+      "m2": -0.116,
+      "dxy": 0.112,
+      "gvz": 0.281,
+      "walcl": 0.446,
+      "hy_oas": 0.86,
+      "ig_oas": 1.0,
+      "breakeven_5y": -0.238,
+      "nfci": 0.635,
+      "gdx_gld": 0.172,
+      "gld_slv": 0.231
+    },
+    "breakeven_5y": {
+      "m2": -0.314,
+      "dxy": -0.1,
+      "gvz": -0.068,
+      "walcl": -0.036,
+      "hy_oas": -0.194,
+      "ig_oas": -0.238,
+      "breakeven_5y": 1.0,
+      "nfci": -0.28,
+      "gdx_gld": -0.26,
+      "gld_slv": -0.029
+    },
+    "nfci": {
+      "m2": 0.123,
+      "dxy": -0.078,
+      "gvz": 0.303,
+      "walcl": 0.239,
+      "hy_oas": 0.674,
+      "ig_oas": 0.635,
+      "breakeven_5y": -0.28,
+      "nfci": 1.0,
+      "gdx_gld": 0.142,
+      "gld_slv": -0.002
+    },
+    "gdx_gld": {
+      "m2": -0.105,
+      "dxy": 0.514,
+      "gvz": 0.305,
+      "walcl": 0.294,
+      "hy_oas": 0.11,
+      "ig_oas": 0.172,
+      "breakeven_5y": -0.26,
+      "nfci": 0.142,
+      "gdx_gld": 1.0,
+      "gld_slv": -0.484
+    },
+    "gld_slv": {
+      "m2": 0.21,
+      "dxy": 0.014,
+      "gvz": -0.169,
+      "walcl": -0.052,
+      "hy_oas": 0.144,
+      "ig_oas": 0.231,
+      "breakeven_5y": -0.029,
+      "nfci": -0.002,
+      "gdx_gld": -0.484,
+      "gld_slv": 1.0
+    }
+  },
+  "seed_repro_max_abs_diff": 0.0
+}

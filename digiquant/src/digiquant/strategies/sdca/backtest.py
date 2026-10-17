@@ -10,6 +10,7 @@ no dependency on any specific indicator or ``RiskModel``.
 from __future__ import annotations
 
 import math
+from datetime import date
 
 import polars as pl
 from pydantic import BaseModel, ConfigDict, Field
@@ -107,8 +108,19 @@ def run_backtest(
     risk: pl.Series,
     curve: AccumDistCurve,
     initial_cash: float,
+    *,
+    sell_dates: set[date] | None = None,
 ) -> tuple[SdcaBacktestReport, pl.DataFrame]:
-    """Run the daily SDCA backtest and return ``(report, per_day_export_frame)``."""
+    """Run the daily SDCA backtest and return ``(report, per_day_export_frame)``.
+
+    ``sell_dates`` is an optional veto on the sell branch only: when not
+    ``None``, a day with a negative curve rate sells only if its date is a
+    member of the set; otherwise the day is held exactly like a null-risk
+    day (no trade, ``no_trade_days`` incremented, cash/units carried
+    forward, MTM marking proceeds). ``None`` (the default) disables the
+    veto and reproduces the legacy path exactly. Buy sizing, MTM, and
+    report math are untouched by the veto.
+    """
     if dates.len() == 0:
         raise ValueError("run_backtest requires at least one row")
     if not (price.len() == dates.len() and risk.len() == dates.len()):
@@ -151,7 +163,7 @@ def run_backtest(
     risk_sum = rate_sum = 0.0
     non_null_days = 0
 
-    for day_risk, day_price in zip(risks, prices, strict=True):
+    for day_date, day_risk, day_price in zip(date_list, risks, prices, strict=True):
         if day_risk is None:
             rates.append(None)
             daily_trade_usd.append(0.0)
@@ -170,10 +182,14 @@ def run_backtest(
                 daily_trade_usd.append(buy_usd)
                 buy_days += 1
             elif rate < 0:
-                cash += sell_units * day_price
-                asset_units -= sell_units
-                daily_trade_usd.append(-sell_units * day_price)
-                sell_days += 1
+                if sell_dates is not None and day_date not in sell_dates:
+                    daily_trade_usd.append(0.0)
+                    no_trade_days += 1
+                else:
+                    cash += sell_units * day_price
+                    asset_units -= sell_units
+                    daily_trade_usd.append(-sell_units * day_price)
+                    sell_days += 1
             else:
                 daily_trade_usd.append(0.0)
                 no_trade_days += 1

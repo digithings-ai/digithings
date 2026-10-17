@@ -58,6 +58,7 @@ def test_series_files_match_load_sdca_extra_sources() -> None:
         "BAMLC0A0CM": "BAMLC0A0CM.csv",
         "T5YIE": "T5YIE.csv",
         "NFCI": "NFCI.csv",
+        "DFII10": "DFII10.csv",
     }
 
 

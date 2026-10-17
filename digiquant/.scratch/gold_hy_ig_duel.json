@@ -1,0 +1,79 @@
+{
+  "candidates": {
+    "seed": {
+      "coverage": 5107,
+      "buy_zone_share": 0.03446250244762091,
+      "mean_risk": 50.25854336302722,
+      "legs": [
+        "dxy",
+        "m2"
+      ]
+    },
+    "hy_only": {
+      "coverage": 732,
+      "buy_zone_share": 0.0,
+      "mean_risk": 55.70117407076266,
+      "legs": [
+        "dxy",
+        "hy_oas",
+        "m2"
+      ]
+    },
+    "ig_only": {
+      "coverage": 732,
+      "buy_zone_share": 0.0,
+      "mean_risk": 55.34513697585254,
+      "legs": [
+        "dxy",
+        "ig_oas",
+        "m2"
+      ]
+    }
+  },
+  "correlations": {
+    "hy_oas": {
+      "hy_oas": 1.0,
+      "ig_oas": 0.86,
+      "dxy": 0.078,
+      "nfci": 0.674,
+      "valuation": -0.287
+    },
+    "ig_oas": {
+      "hy_oas": 0.86,
+      "ig_oas": 1.0,
+      "dxy": 0.112,
+      "nfci": 0.635,
+      "valuation": -0.343
+    },
+    "dxy": {
+      "hy_oas": 0.078,
+      "ig_oas": 0.112,
+      "dxy": 1.0,
+      "nfci": -0.078,
+      "valuation": -0.156
+    },
+    "nfci": {
+      "hy_oas": 0.674,
+      "ig_oas": 0.635,
+      "dxy": -0.078,
+      "nfci": 1.0,
+      "valuation": -0.142
+    },
+    "valuation": {
+      "hy_oas": -0.287,
+      "ig_oas": -0.343,
+      "dxy": -0.156,
+      "nfci": -0.142,
+      "valuation": 1.0
+    }
+  },
+  "seed_repro_max_abs_diff": 0.0,
+  "decision": {
+    "keep": "ig_oas",
+    "reason": "tied buy-zone share 0.000000; ig max|r| 0.635 < hy max|r| 0.674",
+    "hy_buy_zone_share": 0.0,
+    "ig_buy_zone_share": 0.0,
+    "hy_max_abs_r": 0.674,
+    "ig_max_abs_r": 0.635
+  }
+}

@@ -49,6 +49,7 @@ SERIES_FILES: dict[str, str] = {
     "BAMLC0A0CM": "BAMLC0A0CM.csv",
     "T5YIE": "T5YIE.csv",
     "NFCI": "NFCI.csv",
+    "DFII10": "DFII10.csv",
 }
 
 #: Legacy dollar sibling: not on the gloomberb panel, never fetched here.

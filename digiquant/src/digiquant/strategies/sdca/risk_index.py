@@ -64,6 +64,8 @@ def build_risk_index(
     Null semantics are inherited from ``valuation_z_score`` /
     ``compute_composite_risk``: a null in any enabled indicator makes that
     day's ``risk`` null (an explicit no-trade day for ``SdcaStrategy``).
+    A zero ``valuation_weight`` omits the valuation leg entirely (no vote,
+    no null mask), mirroring the ``build_extra_indicators`` weight-0 rule.
     """
     dates = _require_date_series(dates, name="dates")
     if price.len() != dates.len():

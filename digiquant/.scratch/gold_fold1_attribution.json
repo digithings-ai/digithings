@@ -1,0 +1,230 @@
+{
+  "fold_dates": {
+    "folds": [
+      {
+        "fold": "0",
+        "is_start": "2004-11-18",
+        "is_end": "2009-04-02",
+        "oos_start": "2009-04-03",
+        "oos_end": "2013-08-15"
+      },
+      {
+        "fold": "1",
+        "is_start": "2004-11-18",
+        "is_end": "2013-08-15",
+        "oos_start": "2013-08-16",
+        "oos_end": "2017-12-27"
+      },
+      {
+        "fold": "2",
+        "is_start": "2004-11-18",
+        "is_end": "2017-12-27",
+        "oos_start": "2017-12-28",
+        "oos_end": "2022-05-11"
+      }
+    ],
+    "holdout": [
+      "2022-05-12",
+      "2026-09-29"
+    ],
+    "fold1_oos_assert": "2013-08-16..2017-12-27"
+  },
+  "winner_shape": {
+    "buy_max_rate": 35.0,
+    "buy_knee_risk": 60.0,
+    "sell_knee_risk": 65.0,
+    "sell_max_rate": 30.0,
+    "buy_curvature": 1.0,
+    "sell_curvature": 1.0
+  },
+  "winner_shape_source": "gold_curve_search.stdout.log (v1 gate record)",
+  "subperiod_diagnostics": {
+    "full_oos": {
+      "valuation": {
+        "n": 1100,
+        "n_zero_skipped": 0,
+        "hit_rate": 0.6190909090909091,
+        "mean_abs_z_right": 1.2253359811785616,
+        "mean_abs_z_wrong": 0.7525350529499991,
+        "mean_z_bias": 0.6417044694171614,
+        "n_null_z": 0
+      },
+      "m2": {
+        "n": 1100,
+        "n_zero_skipped": 0,
+        "hit_rate": 0.4618181818181818,
+        "mean_abs_z_right": 1.014895551225008,
+        "mean_abs_z_wrong": 1.001652566575061,
+        "mean_z_bias": -0.11375935051876429,
+        "n_null_z": 0
+      },
+      "dxy": {
+        "n": 1100,
+        "n_zero_skipped": 0,
+        "hit_rate": 0.5109090909090909,
+        "mean_abs_z_right": 1.2540230946079542,
+        "mean_abs_z_wrong": 1.2385189350240382,
+        "mean_z_bias": -0.4324523841147041,
+        "n_null_z": 0
+      }
+    },
+    "crash_tail": {
+      "valuation": {
+        "n": 95,
+        "n_zero_skipped": 0,
+        "hit_rate": 0.6210526315789474,
+        "mean_abs_z_right": 1.1191329008581568,
+        "mean_abs_z_wrong": 0.5894931609553808,
+        "mean_z_bias": -0.9184273152107891,
+        "n_null_z": 0
+      },
+      "m2": {
+        "n": 95,
+        "n_zero_skipped": 0,
+        "hit_rate": 0.35789473684210527,
+        "mean_abs_z_right": 0.8185826736932367,
+        "mean_abs_z_wrong": 0.8751859208696322,
+        "mean_z_bias": -0.1272356555039547,
+        "n_null_z": 0
+      },
+      "dxy": {
+        "n": 95,
+        "n_zero_skipped": 0,
+        "hit_rate": 0.28421052631578947,
+        "mean_abs_z_right": 0.7471340932373243,
+        "mean_abs_z_wrong": 0.8144638218204903,
+        "mean_z_bias": 0.12933534595137375,
+        "n_null_z": 0
+      }
+    },
+    "range": {
+      "valuation": {
+        "n": 504,
+        "n_zero_skipped": 0,
+        "hit_rate": 0.5079365079365079,
+        "mean_abs_z_right": 0.8842940077747978,
+        "mean_abs_z_wrong": 0.6627804757075112,
+        "mean_z_bias": 0.2507323061497227,
+        "n_null_z": 0
+      },
+      "m2": {
+        "n": 504,
+        "n_zero_skipped": 0,
+        "hit_rate": 0.49404761904761907,
+        "mean_abs_z_right": 1.1136371037861355,
+        "mean_abs_z_wrong": 1.049366552275249,
+        "mean_z_bias": -0.2176998165311337,
+        "n_null_z": 0
+      },
+      "dxy": {
+        "n": 504,
+        "n_zero_skipped": 0,
+        "hit_rate": 0.5416666666666666,
+        "mean_abs_z_right": 1.3473672342078855,
+        "mean_abs_z_wrong": 1.4103319917741333,
+        "mean_z_bias": -1.0276908146211896,
+        "n_null_z": 0
+      }
+    },
+    "rally": {
+      "valuation": {
+        "n": 252,
+        "n_zero_skipped": 0,
+        "hit_rate": 0.7182539682539683,
+        "mean_abs_z_right": 1.0201901333121977,
+        "mean_abs_z_wrong": 0.5277088075329096,
+        "mean_z_bias": 0.8615539563927466,
+        "n_null_z": 0
+      },
+      "m2": {
+        "n": 252,
+        "n_zero_skipped": 0,
+        "hit_rate": 0.4603174603174603,
+        "mean_abs_z_right": 1.0320599178148868,
+        "mean_abs_z_wrong": 0.8555814554601087,
+        "mean_z_bias": 0.41632044904998056,
+        "n_null_z": 0
+      },
+      "dxy": {
+        "n": 252,
+        "n_zero_skipped": 0,
+        "hit_rate": 0.5952380952380952,
+        "mean_abs_z_right": 1.1727620527306388,
+        "mean_abs_z_wrong": 1.353372300047558,
+        "mean_z_bias": -0.5699111295185366,
+        "n_null_z": 0
+      }
+    },
+    "breakout": {
+      "valuation": {
+        "n": 249,
+        "n_zero_skipped": 0,
+        "hit_rate": 0.7429718875502008,
+        "mean_abs_z_right": 1.9318447670925034,
+        "mean_abs_z_wrong": 1.4414617200211959,
+        "mean_z_bias": 1.8058025381263836,
+        "n_null_z": 0
+      },
+      "m2": {
+        "n": 249,
+        "n_zero_skipped": 0,
+        "hit_rate": 0.43775100401606426,
+        "mean_abs_z_right": 0.8322985303436643,
+        "mean_abs_z_wrong": 1.1117459247616088,
+        "mean_z_bias": -0.434698569986622,
+        "n_null_z": 0
+      },
+      "dxy": {
+        "n": 249,
+        "n_zero_skipped": 0,
+        "hit_rate": 0.4497991967871486,
+        "mean_abs_z_right": 1.2575249625349456,
+        "mean_abs_z_wrong": 1.073788193098274,
+        "mean_z_bias": 0.6971457623140366,
+        "n_null_z": 0
+      }
+    }
+  },
+  "replay_table": {
+    "full_vote": {
+      "oos_vs_flat_dca_pct": -11.189135069641832,
+      "max_drawdown_pct": 26.046717442936234,
+      "feasible": true,
+      "flips_positive": false
+    },
+    "drop_valuation": {
+      "oos_vs_flat_dca_pct": -2.1020265475448774,
+      "max_drawdown_pct": 15.46104114428775,
+      "feasible": true,
+      "flips_positive": false
+    },
+    "drop_m2": {
+      "oos_vs_flat_dca_pct": -11.137491080739526,
+      "max_drawdown_pct": 26.337043420540795,
+      "feasible": true,
+      "flips_positive": false
+    },
+    "drop_dxy": {
+      "oos_vs_flat_dca_pct": -11.182566818781158,
+      "max_drawdown_pct": 26.339963199202,
+      "feasible": true,
+      "flips_positive": false
+    }
+  },
+  "frame_stats": {
+    "max_drawdown_pct": 26.046717442936234,
+    "dd_peak_date": "2013-08-27",
+    "dd_trough_date": "2015-12-17",
+    "longest_underwater_bars": 1092,
+    "underwater_start": "2013-08-28",
+    "underwater_end": "2017-12-27",
+    "underwater_worst_depth_pct": 26.046717442936234
+  },
+  "replay_rails_check": {
+    "n": 1100,
+    "mean_valuation_z": 2.999407752311621,
+    "frac_positive": 1.0,
+    "frac_pinned_at_plus3": 0.9945454545454545
+  },
+  "hypothesis": "Fold-1 OOS (2013-08-16..2017-12-27, GLD 132.58 -> 100.50 trough -> 122.23) loses because the gate's own fold-1 IS-refit rails extrapolate the 2004-2013 bull trend and pin valuation-z at +3.0 (max buy) for 1094/1100 OOS bars (replay_rails_check frac_pinned_at_plus3=0.995, mean=+3.00), so the composite never leaves the buy zone and the 35%/day winner curve deploys the full book into the decline: max drawdown 26.05% peaking 2013-08-27 and troughing 2015-12-17 at the bear bottom, underwater 1092/1100 bars to 2017-12-27, while flat DCA keeps averaging at lower prices. Neither macro leg offsets this: m2/dxy full-OOS hit rates are 0.462/0.511 (coin flips), systematically wrong in the crash tail (0.358/0.284), and drop_m2/drop_dxy move OOS by only +0.05pp/+0.01pp. Dropping valuation helps (+9.09pp to -2.10%) but does NOT flip fold-1 positive \u2014 the residual macro-only vote still trails flat DCA. The frozen-rails Step-2 diagnostics understate the mechanism (valuation hit 0.619 there only because full-history rails have seen the bear market); the failure is the IS-refit rails' non-extrapolation (#3173), not one bad voting leg."
+}

@@ -1,0 +1,3274 @@
+{
+  "task": "plan18-task2",
+  "in_sample": true,
+  "in_sample_statement": "Stage-A is in-sample and selects nothing shippable: weights maximize cycle-window overlap on the same full-history series they are measured on; only the Stage-B walk-forward gate judges.",
+  "entry_point": {
+    "mirrored_call": "optimize_stage_a_weights(dates, valuation_z=<frozen generic_valuation/log_quadratic full-history rails, seed-identical>, extra_z=<15 gold extras>, windows=SdcaCycleWindows.gold_v1(), search_names=search_names_with_data(stage_a_search_names(profile), extra_z), grid=(0.0,0.5,1.0), valuation_grid=(0.0,0.5,1.0))",
+    "not_used": "fit_sdca_weights_from_cache / MCP run_fit_sdca_weights: sources_from_optional_paths() stages only m2/dxy/eth, so gold macros cannot flow through; no engine change made (STOP respected).",
+    "profile_json_equivalent": {
+      "symbol": "GLD-USD",
+      "risk_model": "generic_valuation",
+      "oscillators": {
+        "rsi_length": 14,
+        "macd_fast": 12,
+        "macd_slow": 26,
+        "macd_signal": 9,
+        "macd_z_window": 52,
+        "sma_band_window": 90,
+        "sma_band_min_samples": 30
+      },
+      "cycle_windows": {
+        "windows": [
+          {
+            "name": "2008_peak",
+            "kind": "peak",
+            "start": "2008-02-01",
+            "end": "2008-05-01"
+          },
+          {
+            "name": "2008_trough",
+            "kind": "trough",
+            "start": "2008-09-09",
+            "end": "2008-12-08"
+          },
+          {
+            "name": "2011_peak",
+            "kind": "peak",
+            "start": "2011-07-23",
+            "end": "2011-10-21"
+          },
+          {
+            "name": "2015_trough",
+            "kind": "trough",
+            "start": "2015-11-02",
+            "end": "2016-01-31"
+          },
+          {
+            "name": "2020_peak",
+            "kind": "peak",
+            "start": "2020-06-23",
+            "end": "2020-09-21"
+          },
+          {
+            "name": "2022_trough",
+            "kind": "trough",
+            "start": "2022-09-06",
+            "end": "2022-12-05"
+          },
+          {
+            "name": "2026_peak",
+            "kind": "peak",
+            "start": "2026-08-15",
+            "end": "2026-11-13"
+          }
+        ]
+      },
+      "extra_indicators": [
+        "weekly_rsi",
+        "weekly_macd",
+        "sma_band",
+        "m2",
+        "dxy",
+        "uup",
+        "gvz",
+        "walcl",
+        "hy_oas",
+        "ig_oas",
+        "breakeven_5y",
+        "nfci",
+        "gdx_gld",
+        "gld_slv",
+        "real_rate"
+      ],
+      "signal_delay_days": 0
+    },
+    "resolver_entry": "none (constructed SdcaAssetProfile; no resolver change)"
+  },
+  "objective": {
+    "formula": "objective = (mean_peak_risk - mean_trough_risk) + 25.0 * (trough_in_accumulate_frac + peak_in_distribute_frac)",
+    "formula_site": "digiquant/src/digiquant/strategies/sdca/stage_a.py:99 (cycle_overlap_score)",
+    "spread_site": "stage_a.py:90",
+    "band_thresholds": {
+      "accumulate_risk_max": 35.0,
+      "distribute_risk_min": 80.0,
+      "threshold_site": "stage_a.py:16-17"
+    },
+    "parsimony_rule": "exact-objective ties -> fewer enabled extras, then higher valuation weight",
+    "parsimony_site": "stage_a.py:46-62 (_weight_complexity, _is_better)",
+    "search_filter_site": "weight_search.py:50-56 (search_names_with_data)"
+  },
+  "data": {
+    "symbol": "GLD-USD",
+    "bars": 5499,
+    "first": "2004-11-18",
+    "last": "2026-09-29",
+    "trough_window_days": 189,
+    "peak_window_days": 221,
+    "availability": {
+      "weekly_rsi": {
+        "valid_days": 5436,
+        "first_valid": "2005-02-18",
+        "last_valid": "2026-09-29"
+      },
+      "weekly_macd": {
+        "valid_days": 5378,
+        "first_valid": "2005-05-13",
+        "last_valid": "2026-09-29"
+      },
+      "sma_band": {
+        "valid_days": 5470,
+        "first_valid": "2004-12-31",
+        "last_valid": "2026-09-29"
+      },
+      "m2": {
+        "valid_days": 5107,
+        "first_valid": "2006-06-12",
+        "last_valid": "2026-09-29"
+      },
+      "dxy": {
+        "valid_days": 5198,
+        "first_valid": "2006-01-31",
+        "last_valid": "2026-09-29"
+      },
+      "uup": {
+        "valid_days": 4908,
+        "first_valid": "2007-03-28",
+        "last_valid": "2026-09-29"
+      },
+      "gvz": {
+        "valid_days": 4591,
+        "first_valid": "2008-06-30",
+        "last_valid": "2026-09-29"
+      },
+      "walcl": {
+        "valid_days": 5111,
+        "first_valid": "2006-06-06",
+        "last_valid": "2026-09-29"
+      },
+      "hy_oas": {
+        "valid_days": 732,
+        "first_valid": "2023-10-27",
+        "last_valid": "2026-09-29"
+      },
+      "ig_oas": {
+        "valid_days": 732,
+        "first_valid": "2023-10-27",
+        "last_valid": "2026-09-29"
+      },
+      "breakeven_5y": {
+        "valid_days": 5480,
+        "first_valid": "2004-12-16",
+        "last_valid": "2026-09-29"
+      },
+      "nfci": {
+        "valid_days": 5479,
+        "first_valid": "2004-12-17",
+        "last_valid": "2026-09-29"
+      },
+      "gdx_gld": {
+        "valid_days": 5102,
+        "first_valid": "2006-06-19",
+        "last_valid": "2026-09-29"
+      },
+      "gld_slv": {
+        "valid_days": 5118,
+        "first_valid": "2006-05-25",
+        "last_valid": "2026-09-29"
+      },
+      "real_rate": {
+        "valid_days": 5480,
+        "first_valid": "2004-12-16",
+        "last_valid": "2026-09-29"
+      }
+    },
+    "skipped_no_data": [
+      "rs_eth (no ETH sibling staged; also meaningless for gold)"
+    ],
+    "hy_ig_note": "hy_oas/ig_oas have data (732d from 2023-10-27) but zero trough-window overlap (latest trough window ends 2022-12-05), so every combo enabling them raises in cycle_overlap_score and is skipped by the shipped try/except (stage_a.py:170-172); verified on 1082 sampled combos (shipped-raise 1082, vectorized-skip 1082)."
+  },
+  "grid": {
+    "search_names": [
+      "weekly_rsi",
+      "weekly_macd",
+      "sma_band",
+      "m2",
+      "dxy",
+      "uup",
+      "gvz",
+      "walcl",
+      "hy_oas",
+      "ig_oas",
+      "breakeven_5y",
+      "nfci",
+      "gdx_gld",
+      "gld_slv",
+      "real_rate"
+    ],
+    "grid": [
+      0.0,
+      0.5,
+      1.0
+    ],
+    "valuation_grid": [
+      0.0,
+      0.5,
+      1.0
+    ],
+    "num_grid_combos": 43046721,
+    "num_evaluated_shipped_definition": 43046720,
+    "num_scored": 4782968,
+    "num_skipped_no_overlap": 38263753
+  },
+  "acceleration": {
+    "method": "chunked float64 matmul over window days only; identical grid, identical null rule (composite_risk.py:6-7), identical formula, identical tie-break incl. shipped loop order (valuation outer).",
+    "shipped_wall_estimate_h": 33.4,
+    "verification": {
+      "compared": 1352,
+      "bitwise_exact": 586,
+      "max_abs_diff": 2.842170943040401e-14
+    }
+  },
+  "winner": {
+    "weights": {
+      "valuation": 1.0,
+      "m2": 0.0,
+      "rs_eth": 0.0,
+      "dxy": 0.0,
+      "uup": 0.0,
+      "gvz": 0.0,
+      "walcl": 0.0,
+      "hy_oas": 0.0,
+      "ig_oas": 0.0,
+      "breakeven_5y": 0.0,
+      "nfci": 0.0,
+      "gdx_gld": 0.0,
+      "gld_slv": 0.0,
+      "real_rate": 0.0,
+      "weekly_rsi": 0.0,
+      "weekly_macd": 0.0,
+      "sma_band": 0.0
+    },
+    "score": {
+      "objective": 87.8281856601879,
+      "spread": 59.35671160047855,
+      "trough_in_accumulate_frac": 0.708994708994709,
+      "peak_in_distribute_frac": 0.4298642533936652,
+      "mean_trough_risk": 19.34660063819328,
+      "mean_peak_risk": 78.70331223867183,
+      "trough_days": 189,
+      "peak_days": 221
+    },
+    "vectorized_objective": 87.8281856601879
+  },
+  "top100": [
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.0
+      },
+      "score": {
+        "flat": 28697814,
+        "objective": 87.8281856601879,
+        "spread": 59.35671160047855,
+        "trough_frac": 0.708994708994709,
+        "peak_frac": 0.4298642533936652,
+        "mean_trough": 19.34660063819328,
+        "mean_peak": 78.70331223867183
+      },
+      "enabled_extras": 0
+    },
+    {
+      "weights": {
+        "valuation": 0.5,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.0
+      },
+      "score": {
+        "flat": 14348907,
+        "objective": 87.8281856601879,
+        "spread": 59.35671160047855,
+        "trough_frac": 0.708994708994709,
+        "peak_frac": 0.4298642533936652,
+        "mean_trough": 19.34660063819328,
+        "mean_peak": 78.70331223867183
+      },
+      "enabled_extras": 0
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.5,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.0
+      },
+      "score": {
+        "flat": 29229255,
+        "objective": 80.09452470699648,
+        "spread": 51.33575624234565,
+        "trough_frac": 0.7883597883597884,
+        "peak_frac": 0.36199095022624433,
+        "mean_trough": 24.481178973810675,
+        "mean_peak": 75.81693521615632
+      },
+      "enabled_extras": 1
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.5
+      },
+      "score": {
+        "flat": 28697815,
+        "objective": 79.99925373867687,
+        "spread": 52.97562377387044,
+        "trough_frac": 0.7777777777777778,
+        "peak_frac": 0.3031674208144796,
+        "mean_trough": 21.39440731473398,
+        "mean_peak": 74.37003108860442
+      },
+      "enabled_extras": 1
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 1.0
+      },
+      "score": {
+        "flat": 28697816,
+        "objective": 78.75632647887183,
+        "spread": 49.785079860566384,
+        "trough_frac": 0.8783068783068783,
+        "peak_frac": 0.28054298642533937,
+        "mean_trough": 22.41831065300433,
+        "mean_peak": 72.20339051357071
+      },
+      "enabled_extras": 1
+    },
+    {
+      "weights": {
+        "valuation": 0.5,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.5
+      },
+      "score": {
+        "flat": 14348908,
+        "objective": 78.75632647887183,
+        "spread": 49.785079860566384,
+        "trough_frac": 0.8783068783068783,
+        "peak_frac": 0.28054298642533937,
+        "mean_trough": 22.41831065300433,
+        "mean_peak": 72.20339051357071
+      },
+      "enabled_extras": 1
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.5,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 1.0
+      },
+      "score": {
+        "flat": 29229257,
+        "objective": 74.38569578664953,
+        "spread": 46.88683299366909,
+        "trough_frac": 0.8465608465608465,
+        "peak_frac": 0.25339366515837103,
+        "mean_trough": 24.884715651412552,
+        "mean_peak": 71.77154864508164
+      },
+      "enabled_extras": 2
+    },
+    {
+      "weights": {
+        "valuation": 0.5,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 1.0
+      },
+      "score": {
+        "flat": 14348909,
+        "objective": 74.37710196512245,
+        "spread": 46.594535947262315,
+        "trough_frac": 0.8624338624338624,
+        "peak_frac": 0.248868778280543,
+        "mean_trough": 23.44221399127468,
+        "mean_peak": 70.036749938537
+      },
+      "enabled_extras": 1
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.5,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.5
+      },
+      "score": {
+        "flat": 29229256,
+        "objective": 74.18483278275284,
+        "spread": 48.55517921192279,
+        "trough_frac": 0.798941798941799,
+        "peak_frac": 0.22624434389140272,
+        "mean_trough": 24.73338939731185,
+        "mean_peak": 73.28856860923464
+      },
+      "enabled_extras": 2
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 1.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.0
+      },
+      "score": {
+        "flat": 29760696,
+        "objective": 72.9148306234195,
+        "spread": 47.32527856327921,
+        "trough_frac": 0.7566137566137566,
+        "peak_frac": 0.2669683257918552,
+        "mean_trough": 27.04846814161937,
+        "mean_peak": 74.37374670489858
+      },
+      "enabled_extras": 1
+    },
+    {
+      "weights": {
+        "valuation": 0.5,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.5,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.0
+      },
+      "score": {
+        "flat": 14880348,
+        "objective": 72.9148306234195,
+        "spread": 47.32527856327921,
+        "trough_frac": 0.7566137566137566,
+        "peak_frac": 0.2669683257918552,
+        "mean_trough": 27.04846814161937,
+        "mean_peak": 74.37374670489858
+      },
+      "enabled_extras": 1
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 1.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.5
+      },
+      "score": {
+        "flat": 29760697,
+        "objective": 71.0956391380691,
+        "spread": 45.9029124747542,
+        "trough_frac": 0.7407407407407407,
+        "peak_frac": 0.2669683257918552,
+        "mean_trough": 26.736778646858568,
+        "mean_peak": 72.63969112161277
+      },
+      "enabled_extras": 2
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 1.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 1.0
+      },
+      "score": {
+        "flat": 29760698,
+        "objective": 71.03501508431951,
+        "spread": 44.954668415737544,
+        "trough_frac": 0.7671957671957672,
+        "peak_frac": 0.27601809954751133,
+        "mean_trough": 26.528985650351373,
+        "mean_peak": 71.48365406608892
+      },
+      "enabled_extras": 2
+    },
+    {
+      "weights": {
+        "valuation": 0.5,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.5,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.5
+      },
+      "score": {
+        "flat": 14880349,
+        "objective": 71.03501508431951,
+        "spread": 44.954668415737544,
+        "trough_frac": 0.7671957671957672,
+        "peak_frac": 0.27601809954751133,
+        "mean_trough": 26.528985650351373,
+        "mean_peak": 71.48365406608892
+      },
+      "enabled_extras": 2
+    },
+    {
+      "weights": {
+        "valuation": 0.5,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.5,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 1.0
+      },
+      "score": {
+        "flat": 14880350,
+        "objective": 69.9263218518664,
+        "spread": 43.769363341966724,
+        "trough_frac": 0.7883597883597884,
+        "peak_frac": 0.2579185520361991,
+        "mean_trough": 26.26924440471737,
+        "mean_peak": 70.0386077466841
+      },
+      "enabled_extras": 2
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.5,
+        "real_rate": 1.0
+      },
+      "score": {
+        "flat": 28697819,
+        "objective": 69.7942999682515,
+        "spread": 42.876609815267216,
+        "trough_frac": 0.9047619047619048,
+        "peak_frac": 0.17194570135746606,
+        "mean_trough": 26.37171497327374,
+        "mean_peak": 69.24832478854096
+      },
+      "enabled_extras": 2
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.5,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.0
+      },
+      "score": {
+        "flat": 28697841,
+        "objective": 69.60241420546149,
+        "spread": 45.46070624022411,
+        "trough_frac": 0.8253968253968254,
+        "peak_frac": 0.14027149321266968,
+        "mean_trough": 21.268554376214738,
+        "mean_peak": 66.72926061643885
+      },
+      "enabled_extras": 1
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.5,
+        "real_rate": 0.5
+      },
+      "score": {
+        "flat": 28697818,
+        "objective": 69.45934821469197,
+        "spread": 43.54240023892047,
+        "trough_frac": 0.8783068783068783,
+        "peak_frac": 0.1583710407239819,
+        "mean_trough": 26.592138549638328,
+        "mean_peak": 70.1345387885588
+      },
+      "enabled_extras": 2
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.5,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 1.0
+      },
+      "score": {
+        "flat": 28697843,
+        "objective": 67.79260095260588,
+        "spread": 43.36180299239615,
+        "trough_frac": 0.9365079365079365,
+        "peak_frac": 0.04072398190045249,
+        "mean_trough": 22.95714089285499,
+        "mean_peak": 66.31894388525114
+      },
+      "enabled_extras": 2
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.5,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.5,
+        "real_rate": 1.0
+      },
+      "score": {
+        "flat": 29229260,
+        "objective": 67.45135631149225,
+        "spread": 41.61281576706935,
+        "trough_frac": 0.8253968253968254,
+        "peak_frac": 0.2081447963800905,
+        "mean_trough": 27.768151751902355,
+        "mean_peak": 69.3809675189717
+      },
+      "enabled_extras": 3
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.5,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.5
+      },
+      "score": {
+        "flat": 28697842,
+        "objective": 67.2970398584798,
+        "spread": 44.148891710331654,
+        "trough_frac": 0.9259259259259259,
+        "peak_frac": 0.0,
+        "mean_trough": 22.323920949114893,
+        "mean_peak": 66.47281265944655
+      },
+      "enabled_extras": 2
+    },
+    {
+      "weights": {
+        "valuation": 0.5,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 1.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.0
+      },
+      "score": {
+        "flat": 15411789,
+        "objective": 66.80710378828039,
+        "spread": 43.31480088421277,
+        "trough_frac": 0.6772486772486772,
+        "peak_frac": 0.26244343891402716,
+        "mean_trough": 29.615757309428066,
+        "mean_peak": 72.93055819364083
+      },
+      "enabled_extras": 1
+    },
+    {
+      "weights": {
+        "valuation": 0.5,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 1.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 1.0
+      },
+      "score": {
+        "flat": 15411791,
+        "objective": 66.75703887333314,
+        "spread": 42.07425977878934,
+        "trough_frac": 0.7248677248677249,
+        "peak_frac": 0.26244343891402716,
+        "mean_trough": 27.96546265278299,
+        "mean_peak": 70.03972243157233
+      },
+      "enabled_extras": 2
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.5,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.0
+      },
+      "score": {
+        "flat": 33480783,
+        "objective": 66.70599420826214,
+        "spread": 42.026806293780105,
+        "trough_frac": 0.6613756613756614,
+        "peak_frac": 0.3257918552036199,
+        "mean_trough": 29.56440042546219,
+        "mean_peak": 71.5912067192423
+      },
+      "enabled_extras": 1
+    },
+    {
+      "weights": {
+        "valuation": 0.5,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 1.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.5
+      },
+      "score": {
+        "flat": 15411790,
+        "objective": 66.67398829843697,
+        "spread": 42.53946269332314,
+        "trough_frac": 0.6984126984126984,
+        "peak_frac": 0.2669683257918552,
+        "mean_trough": 28.58432314902489,
+        "mean_peak": 71.12378584234803
+      },
+      "enabled_extras": 2
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.5,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.5,
+        "real_rate": 0.5
+      },
+      "score": {
+        "flat": 29229259,
+        "objective": 66.55990661062847,
+        "spread": 41.892689296352344,
+        "trough_frac": 0.783068783068783,
+        "peak_frac": 0.20361990950226244,
+        "mean_trough": 28.223777968719755,
+        "mean_peak": 70.1164672650721
+      },
+      "enabled_extras": 3
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.5,
+        "real_rate": 0.0
+      },
+      "score": {
+        "flat": 28697817,
+        "objective": 66.32063290770884,
+        "spread": 44.652050945009236,
+        "trough_frac": 0.7671957671957672,
+        "peak_frac": 0.09954751131221719,
+        "mean_trough": 26.959511176912645,
+        "mean_peak": 71.61156212192188
+      },
+      "enabled_extras": 1
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.5,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.5,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 1.0
+      },
+      "score": {
+        "flat": 29229284,
+        "objective": 66.29471769225106,
+        "spread": 42.01714341467678,
+        "trough_frac": 0.8941798941798942,
+        "peak_frac": 0.07692307692307693,
+        "mean_trough": 24.9226733515534,
+        "mean_peak": 66.93981676623018
+      },
+      "enabled_extras": 3
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.5,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.5,
+        "real_rate": 0.0
+      },
+      "score": {
+        "flat": 29229258,
+        "objective": 66.18606611090223,
+        "spread": 42.312499590276886,
+        "trough_frac": 0.7513227513227513,
+        "peak_frac": 0.20361990950226244,
+        "mean_trough": 28.90721729394585,
+        "mean_peak": 71.21971688422273
+      },
+      "enabled_extras": 2
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.5,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.5
+      },
+      "score": {
+        "flat": 28700002,
+        "objective": 65.78807138708575,
+        "spread": 38.1204231312022,
+        "trough_frac": 0.8306878306878307,
+        "peak_frac": 0.27601809954751133,
+        "mean_trough": 29.644306147207914,
+        "mean_peak": 67.76472927841012
+      },
+      "enabled_extras": 2
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 1.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.0
+      },
+      "score": {
+        "flat": 28697868,
+        "objective": 65.3382200914958,
+        "spread": 38.51270356009691,
+        "trough_frac": 0.9417989417989417,
+        "peak_frac": 0.13122171945701358,
+        "mean_trough": 22.22953124522546,
+        "mean_peak": 60.74223480532237
+      },
+      "enabled_extras": 1
+    },
+    {
+      "weights": {
+        "valuation": 0.5,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.5,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.0
+      },
+      "score": {
+        "flat": 14348934,
+        "objective": 65.3382200914958,
+        "spread": 38.51270356009691,
+        "trough_frac": 0.9417989417989417,
+        "peak_frac": 0.13122171945701358,
+        "mean_trough": 22.22953124522546,
+        "mean_peak": 60.74223480532237
+      },
+      "enabled_extras": 1
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.5,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 1.0
+      },
+      "score": {
+        "flat": 33480785,
+        "objective": 65.17682513518598,
+        "spread": 41.301463024529745,
+        "trough_frac": 0.783068783068783,
+        "peak_frac": 0.17194570135746606,
+        "mean_trough": 27.934648522403457,
+        "mean_peak": 69.2361115469332
+      },
+      "enabled_extras": 2
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.5,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.5,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.0
+      },
+      "score": {
+        "flat": 29229282,
+        "objective": 65.13762210384851,
+        "spread": 42.918991061688054,
+        "trough_frac": 0.8253968253968254,
+        "peak_frac": 0.06334841628959276,
+        "mean_trough": 24.638999693422413,
+        "mean_peak": 67.55799075511047
+      },
+      "enabled_extras": 2
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 1.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.5,
+        "real_rate": 1.0
+      },
+      "score": {
+        "flat": 29760701,
+        "objective": 65.13013015266667,
+        "spread": 40.71010573264225,
+        "trough_frac": 0.746031746031746,
+        "peak_frac": 0.23076923076923078,
+        "mean_trough": 28.765606593779946,
+        "mean_peak": 69.4757123264222
+      },
+      "enabled_extras": 3
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 1.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.5,
+        "real_rate": 0.5
+      },
+      "score": {
+        "flat": 29760700,
+        "objective": 65.04232536839736,
+        "spread": 40.792882001306936,
+        "trough_frac": 0.7301587301587301,
+        "peak_frac": 0.2398190045248869,
+        "mean_trough": 29.311537581440707,
+        "mean_peak": 70.10441958274764
+      },
+      "enabled_extras": 3
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.5,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.5,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.5
+      },
+      "score": {
+        "flat": 29229283,
+        "objective": 64.9203182512112,
+        "spread": 42.3778824734813,
+        "trough_frac": 0.8835978835978836,
+        "peak_frac": 0.01809954751131222,
+        "mean_trough": 24.809203888301006,
+        "mean_peak": 67.1870863617823
+      },
+      "enabled_extras": 3
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 1.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.5,
+        "real_rate": 0.0
+      },
+      "score": {
+        "flat": 29760699,
+        "objective": 64.49683648315225,
+        "spread": 40.90876877743749,
+        "trough_frac": 0.7037037037037037,
+        "peak_frac": 0.2398190045248869,
+        "mean_trough": 30.075840964165774,
+        "mean_peak": 70.98460974160326
+      },
+      "enabled_extras": 2
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.5,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 1.0
+      },
+      "score": {
+        "flat": 28704377,
+        "objective": 64.29411981675759,
+        "spread": 40.65035851476844,
+        "trough_frac": 0.8571428571428571,
+        "peak_frac": 0.08860759493670886,
+        "mean_trough": 26.342142857571556,
+        "mean_peak": 66.99250137234
+      },
+      "enabled_extras": 2
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.5,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.0
+      },
+      "score": {
+        "flat": 30292137,
+        "objective": 64.25684197923498,
+        "spread": 39.57765406475294,
+        "trough_frac": 0.6613756613756614,
+        "peak_frac": 0.3257918552036199,
+        "mean_trough": 29.56440042546219,
+        "mean_peak": 69.14205449021513
+      },
+      "enabled_extras": 1
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.5,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 1.0
+      },
+      "score": {
+        "flat": 28700003,
+        "objective": 63.884978475042956,
+        "spread": 38.539028129092614,
+        "trough_frac": 0.783068783068783,
+        "peak_frac": 0.23076923076923078,
+        "mean_trough": 28.813449051329403,
+        "mean_peak": 67.35247718042201
+      },
+      "enabled_extras": 2
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.5,
+        "weekly_macd": 0.0,
+        "sma_band": 0.5,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 1.0
+      },
+      "score": {
+        "flat": 34012226,
+        "objective": 63.87269936690187,
+        "spread": 40.300193441454766,
+        "trough_frac": 0.7619047619047619,
+        "peak_frac": 0.18099547511312217,
+        "mean_trough": 29.070596376177125,
+        "mean_peak": 69.37078981763189
+      },
+      "enabled_extras": 3
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 1.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.5,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 1.0
+      },
+      "score": {
+        "flat": 29760725,
+        "objective": 63.72599642764675,
+        "spread": 41.05667228773437,
+        "trough_frac": 0.7936507936507936,
+        "peak_frac": 0.11312217194570136,
+        "mean_trough": 26.32662510776655,
+        "mean_peak": 67.38329739550092
+      },
+      "enabled_extras": 3
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.5,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.5
+      },
+      "score": {
+        "flat": 33480784,
+        "objective": 63.67179326058984,
+        "spread": 41.573466750498625,
+        "trough_frac": 0.6984126984126984,
+        "peak_frac": 0.18552036199095023,
+        "mean_trough": 28.545805486050483,
+        "mean_peak": 70.11927223654911
+      },
+      "enabled_extras": 2
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.5,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.0
+      },
+      "score": {
+        "flat": 28700001,
+        "objective": 63.370819671025046,
+        "spread": 37.42274813471822,
+        "trough_frac": 0.7619047619047619,
+        "peak_frac": 0.27601809954751133,
+        "mean_trough": 31.02906797367209,
+        "mean_peak": 68.4518161083903
+      },
+      "enabled_extras": 1
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.5,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.5
+      },
+      "score": {
+        "flat": 28704376,
+        "objective": 63.11838647882203,
+        "spread": 40.81830610912141,
+        "trough_frac": 0.873015873015873,
+        "peak_frac": 0.0189873417721519,
+        "mean_trough": 26.555173405010603,
+        "mean_peak": 67.37347951413201
+      },
+      "enabled_extras": 2
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.5,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.5,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 1.0
+      },
+      "score": {
+        "flat": 29235818,
+        "objective": 63.09580596530599,
+        "spread": 39.98365674556184,
+        "trough_frac": 0.8042328042328042,
+        "peak_frac": 0.12025316455696203,
+        "mean_trough": 27.74350832215054,
+        "mean_peak": 67.72716506771238
+      },
+      "enabled_extras": 3
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.5,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 1.0
+      },
+      "score": {
+        "flat": 30292139,
+        "objective": 63.028600766095465,
+        "spread": 39.831971687113445,
+        "trough_frac": 0.783068783068783,
+        "peak_frac": 0.14479638009049775,
+        "mean_trough": 27.934648522403457,
+        "mean_peak": 67.7666202095169
+      },
+      "enabled_extras": 2
+    },
+    {
+      "weights": {
+        "valuation": 0.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.5
+      },
+      "score": {
+        "flat": 1,
+        "objective": 62.87738549047394,
+        "spread": 40.21344812065422,
+        "trough_frac": 0.6984126984126984,
+        "peak_frac": 0.2081447963800905,
+        "mean_trough": 25.490020667815376,
+        "mean_peak": 65.70346878846959
+      },
+      "enabled_extras": 1
+    },
+    {
+      "weights": {
+        "valuation": 0.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 1.0
+      },
+      "score": {
+        "flat": 2,
+        "objective": 62.87738549047394,
+        "spread": 40.21344812065422,
+        "trough_frac": 0.6984126984126984,
+        "peak_frac": 0.2081447963800905,
+        "mean_trough": 25.490020667815376,
+        "mean_peak": 65.70346878846959
+      },
+      "enabled_extras": 1
+    },
+    {
+      "weights": {
+        "valuation": 0.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.5,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 1.0
+      },
+      "score": {
+        "flat": 531443,
+        "objective": 62.76556507523155,
+        "spread": 38.57358058912942,
+        "trough_frac": 0.7142857142857143,
+        "peak_frac": 0.25339366515837103,
+        "mean_trough": 28.576792326892072,
+        "mean_peak": 67.1503729160215
+      },
+      "enabled_extras": 2
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 1.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.5,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.5
+      },
+      "score": {
+        "flat": 29760724,
+        "objective": 62.658700228052034,
+        "spread": 41.197209648914395,
+        "trough_frac": 0.7724867724867724,
+        "peak_frac": 0.08597285067873303,
+        "mean_trough": 26.466059181091747,
+        "mean_peak": 67.66326883000615
+      },
+      "enabled_extras": 3
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.5,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.5,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.5
+      },
+      "score": {
+        "flat": 29235817,
+        "objective": 62.596187426817124,
+        "spread": 39.98467446720289,
+        "trough_frac": 0.8095238095238095,
+        "peak_frac": 0.0949367088607595,
+        "mean_trough": 28.194205853017568,
+        "mean_peak": 68.17888032022046
+      },
+      "enabled_extras": 3
+    },
+    {
+      "weights": {
+        "valuation": 0.5,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.5,
+        "real_rate": 1.0
+      },
+      "score": {
+        "flat": 14348912,
+        "objective": 62.518824307674905,
+        "spread": 38.75658436896438,
+        "trough_frac": 0.783068783068783,
+        "peak_frac": 0.167420814479638,
+        "mean_trough": 28.127993557043855,
+        "mean_peak": 66.88457792600823
+      },
+      "enabled_extras": 2
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.5,
+        "weekly_macd": 0.0,
+        "sma_band": 1.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 1.0
+      },
+      "score": {
+        "flat": 34543667,
+        "objective": 62.49433555615607,
+        "spread": 39.58500088211551,
+        "trough_frac": 0.7037037037037037,
+        "peak_frac": 0.21266968325791855,
+        "mean_trough": 29.88198770030117,
+        "mean_peak": 69.46698858241668
+      },
+      "enabled_extras": 3
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.5,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.0
+      },
+      "score": {
+        "flat": 28704375,
+        "objective": 62.46483855071766,
+        "spread": 41.09821876637636,
+        "trough_frac": 0.7407407407407407,
+        "peak_frac": 0.11392405063291139,
+        "mean_trough": 26.910224317409007,
+        "mean_peak": 68.00844308378537
+      },
+      "enabled_extras": 1
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 1.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.5
+      },
+      "score": {
+        "flat": 28697869,
+        "objective": 62.24639792457735,
+        "spread": 38.85285247220837,
+        "trough_frac": 0.9312169312169312,
+        "peak_frac": 0.004524886877828055,
+        "mean_trough": 22.881629129743445,
+        "mean_peak": 61.73448160195181
+      },
+      "enabled_extras": 2
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.5,
+        "weekly_macd": 0.0,
+        "sma_band": 0.5,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.5
+      },
+      "score": {
+        "flat": 34012225,
+        "objective": 62.22793059247354,
+        "spread": 40.31754250561487,
+        "trough_frac": 0.708994708994709,
+        "peak_frac": 0.167420814479638,
+        "mean_trough": 29.78671151784948,
+        "mean_peak": 70.10425402346435
+      },
+      "enabled_extras": 3
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.5,
+        "weekly_macd": 0.0,
+        "sma_band": 0.5,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.0
+      },
+      "score": {
+        "flat": 34012224,
+        "objective": 62.19649530772542,
+        "spread": 40.34356610185504,
+        "trough_frac": 0.6931216931216931,
+        "peak_frac": 0.18099547511312217,
+        "mean_trough": 30.860884230358003,
+        "mean_peak": 71.20445033221304
+      },
+      "enabled_extras": 2
+    },
+    {
+      "weights": {
+        "valuation": 0.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.5,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.5
+      },
+      "score": {
+        "flat": 531442,
+        "objective": 62.03960052108544,
+        "spread": 37.753646823367035,
+        "trough_frac": 0.708994708994709,
+        "peak_frac": 0.26244343891402716,
+        "mean_trough": 30.120178156430416,
+        "mean_peak": 67.87382497979745
+      },
+      "enabled_extras": 2
+    },
+    {
+      "weights": {
+        "valuation": 0.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 1.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 1.0
+      },
+      "score": {
+        "flat": 1062884,
+        "objective": 62.03960052108544,
+        "spread": 37.753646823367035,
+        "trough_frac": 0.708994708994709,
+        "peak_frac": 0.26244343891402716,
+        "mean_trough": 30.120178156430416,
+        "mean_peak": 67.87382497979745
+      },
+      "enabled_extras": 2
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 1.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.5,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.0
+      },
+      "score": {
+        "flat": 29760723,
+        "objective": 62.00613844909585,
+        "spread": 41.393961954566414,
+        "trough_frac": 0.7566137566137566,
+        "peak_frac": 0.06787330316742081,
+        "mean_trough": 26.661266883747025,
+        "mean_peak": 68.05522883831344
+      },
+      "enabled_extras": 2
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 1.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 1.0
+      },
+      "score": {
+        "flat": 28697870,
+        "objective": 61.96321629721389,
+        "spread": 39.079618413616004,
+        "trough_frac": 0.9153439153439153,
+        "peak_frac": 0.0,
+        "mean_trough": 23.316361052755433,
+        "mean_peak": 62.395979466371436
+      },
+      "enabled_extras": 2
+    },
+    {
+      "weights": {
+        "valuation": 0.5,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.5,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.5
+      },
+      "score": {
+        "flat": 14348935,
+        "objective": 61.96321629721389,
+        "spread": 39.079618413616004,
+        "trough_frac": 0.9153439153439153,
+        "peak_frac": 0.0,
+        "mean_trough": 23.316361052755433,
+        "mean_peak": 62.395979466371436
+      },
+      "enabled_extras": 2
+    },
+    {
+      "weights": {
+        "valuation": 0.5,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.5,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.5,
+        "real_rate": 1.0
+      },
+      "score": {
+        "flat": 14880353,
+        "objective": 61.862786869725994,
+        "spread": 38.06403660038749,
+        "trough_frac": 0.7619047619047619,
+        "peak_frac": 0.19004524886877827,
+        "mean_trough": 29.452461974644173,
+        "mean_peak": 67.51649857503166
+      },
+      "enabled_extras": 3
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.5,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.5
+      },
+      "score": {
+        "flat": 30292138,
+        "objective": 61.834929088819464,
+        "spread": 39.73660257872825,
+        "trough_frac": 0.6984126984126984,
+        "peak_frac": 0.18552036199095023,
+        "mean_trough": 28.545805486050483,
+        "mean_peak": 68.28240806477874
+      },
+      "enabled_extras": 2
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.5,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 1.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.0
+      },
+      "score": {
+        "flat": 29229309,
+        "objective": 61.807139715030694,
+        "spread": 37.86893195329352,
+        "trough_frac": 0.8941798941798942,
+        "peak_frac": 0.06334841628959276,
+        "mean_trough": 24.733692125189457,
+        "mean_peak": 62.602624078482975
+      },
+      "enabled_extras": 2
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.5,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.5,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.0
+      },
+      "score": {
+        "flat": 28704402,
+        "objective": 61.767724548629246,
+        "spread": 36.66893679161364,
+        "trough_frac": 0.9153439153439153,
+        "peak_frac": 0.08860759493670886,
+        "mean_trough": 26.460783701121166,
+        "mean_peak": 63.129720492734805
+      },
+      "enabled_extras": 2
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.5,
+        "sma_band": 0.5,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 1.0
+      },
+      "score": {
+        "flat": 30823580,
+        "objective": 61.74314587682268,
+        "spread": 39.075617326941185,
+        "trough_frac": 0.7619047619047619,
+        "peak_frac": 0.14479638009049775,
+        "mean_trough": 29.070596376177125,
+        "mean_peak": 68.1462137031183
+      },
+      "enabled_extras": 3
+    },
+    {
+      "weights": {
+        "valuation": 0.5,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 1.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.5,
+        "real_rate": 1.0
+      },
+      "score": {
+        "flat": 15411794,
+        "objective": 61.43759868796936,
+        "spread": 37.60233808800288,
+        "trough_frac": 0.7407407407407407,
+        "peak_frac": 0.21266968325791855,
+        "mean_trough": 30.33544091971105,
+        "mean_peak": 67.93777900771393
+      },
+      "enabled_extras": 3
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.5,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 1.0,
+        "real_rate": 1.0
+      },
+      "score": {
+        "flat": 29229263,
+        "objective": 61.28768698841523,
+        "spread": 37.84566060521237,
+        "trough_frac": 0.7883597883597884,
+        "peak_frac": 0.1493212669683258,
+        "mean_trough": 29.82774896653793,
+        "mean_peak": 67.6734095717503
+      },
+      "enabled_extras": 3
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.5,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.5,
+        "real_rate": 1.0
+      },
+      "score": {
+        "flat": 28697846,
+        "objective": 61.27518542472675,
+        "spread": 38.675290766008565,
+        "trough_frac": 0.8994708994708994,
+        "peak_frac": 0.004524886877828055,
+        "mean_trough": 26.161839453104385,
+        "mean_peak": 64.83713021911295
+      },
+      "enabled_extras": 3
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 1.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 1.0,
+        "real_rate": 1.0
+      },
+      "score": {
+        "flat": 29760704,
+        "objective": 61.19315885738419,
+        "spread": 37.52668372032082,
+        "trough_frac": 0.7566137566137566,
+        "peak_frac": 0.19004524886877827,
+        "mean_trough": 30.443072301351368,
+        "mean_peak": 67.96975602167218
+      },
+      "enabled_extras": 3
+    },
+    {
+      "weights": {
+        "valuation": 0.5,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.5,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.5,
+        "real_rate": 0.5
+      },
+      "score": {
+        "flat": 14880352,
+        "objective": 61.19315885738419,
+        "spread": 37.52668372032082,
+        "trough_frac": 0.7566137566137566,
+        "peak_frac": 0.19004524886877827,
+        "mean_trough": 30.443072301351368,
+        "mean_peak": 67.96975602167218
+      },
+      "enabled_extras": 3
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.5,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.5,
+        "real_rate": 0.5
+      },
+      "score": {
+        "flat": 28697845,
+        "objective": 61.11898204640218,
+        "spread": 38.367659295079434,
+        "trough_frac": 0.91005291005291,
+        "peak_frac": 0.0,
+        "mean_trough": 26.29620321016219,
+        "mean_peak": 64.66386250524162
+      },
+      "enabled_extras": 3
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 1.0,
+        "real_rate": 1.0
+      },
+      "score": {
+        "flat": 28697822,
+        "objective": 61.110868311247486,
+        "spread": 38.27096311840111,
+        "trough_frac": 0.8095238095238095,
+        "peak_frac": 0.10407239819004525,
+        "mean_trough": 29.007317853453348,
+        "mean_peak": 67.27828097185446
+      },
+      "enabled_extras": 2
+    },
+    {
+      "weights": {
+        "valuation": 0.5,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.5,
+        "real_rate": 0.5
+      },
+      "score": {
+        "flat": 14348911,
+        "objective": 61.110868311247486,
+        "spread": 38.27096311840111,
+        "trough_frac": 0.8095238095238095,
+        "peak_frac": 0.10407239819004525,
+        "mean_trough": 29.007317853453348,
+        "mean_peak": 67.27828097185446
+      },
+      "enabled_extras": 2
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 1.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.5,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 1.0
+      },
+      "score": {
+        "flat": 29767259,
+        "objective": 61.11014697604949,
+        "spread": 39.507441196128525,
+        "trough_frac": 0.7248677248677249,
+        "peak_frac": 0.13924050632911392,
+        "mean_trough": 28.74448365399267,
+        "mean_peak": 68.2519248501212
+      },
+      "enabled_extras": 3
+    },
+    {
+      "weights": {
+        "valuation": 0.5,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.5,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 1.0
+      },
+      "score": {
+        "flat": 14348936,
+        "objective": 61.056197533497254,
+        "spread": 39.36307584037556,
+        "trough_frac": 0.8677248677248677,
+        "peak_frac": 0.0,
+        "mean_trough": 23.85977595652042,
+        "mean_peak": 63.222851796895974
+      },
+      "enabled_extras": 2
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.5,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 1.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.5
+      },
+      "score": {
+        "flat": 29229310,
+        "objective": 61.01100739917638,
+        "spread": 38.25968464785363,
+        "trough_frac": 0.91005291005291,
+        "peak_frac": 0.0,
+        "mean_trough": 24.859746882293773,
+        "mean_peak": 63.1194315301474
+      },
+      "enabled_extras": 3
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.5,
+        "weekly_macd": 0.0,
+        "sma_band": 1.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.5
+      },
+      "score": {
+        "flat": 34543666,
+        "objective": 60.804088352462216,
+        "spread": 39.480259675692366,
+        "trough_frac": 0.671957671957672,
+        "peak_frac": 0.18099547511312217,
+        "mean_trough": 30.613982205715473,
+        "mean_peak": 70.09424188140784
+      },
+      "enabled_extras": 3
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.5,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.5,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.5
+      },
+      "score": {
+        "flat": 29231443,
+        "objective": 60.72899254876856,
+        "spread": 37.55510761017774,
+        "trough_frac": 0.7142857142857143,
+        "peak_frac": 0.21266968325791855,
+        "mean_trough": 30.665512046775422,
+        "mean_peak": 68.22061965695316
+      },
+      "enabled_extras": 3
+    },
+    {
+      "weights": {
+        "valuation": 0.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 1.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.5
+      },
+      "score": {
+        "flat": 1062883,
+        "objective": 60.671413265893094,
+        "spread": 36.93371305760465,
+        "trough_frac": 0.6825396825396826,
+        "peak_frac": 0.2669683257918552,
+        "mean_trough": 31.66356398596876,
+        "mean_peak": 68.59727704357341
+      },
+      "enabled_extras": 2
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.5,
+        "sma_band": 0.5,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.5
+      },
+      "score": {
+        "flat": 30823579,
+        "objective": 60.645317083111536,
+        "spread": 38.848051168198566,
+        "trough_frac": 0.708994708994709,
+        "peak_frac": 0.16289592760180996,
+        "mean_trough": 29.78671151784948,
+        "mean_peak": 68.63476268604805
+      },
+      "enabled_extras": 3
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.5,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.5,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 1.0
+      },
+      "score": {
+        "flat": 29231444,
+        "objective": 60.64474436144499,
+        "spread": 37.99816436192381,
+        "trough_frac": 0.7248677248677249,
+        "peak_frac": 0.18099547511312217,
+        "mean_trough": 29.80293015028208,
+        "mean_peak": 67.80109451220589
+      },
+      "enabled_extras": 3
+    },
+    {
+      "weights": {
+        "valuation": 0.5,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 1.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.5,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 1.0
+      },
+      "score": {
+        "flat": 15411818,
+        "objective": 60.43059257130189,
+        "spread": 38.00666573561034,
+        "trough_frac": 0.7883597883597884,
+        "peak_frac": 0.1085972850678733,
+        "mean_trough": 27.489962519362095,
+        "mean_peak": 65.49662825497244
+      },
+      "enabled_extras": 3
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.5,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 1.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 1.0
+      },
+      "score": {
+        "flat": 29229311,
+        "objective": 60.36419054079339,
+        "spread": 38.538793715396565,
+        "trough_frac": 0.873015873015873,
+        "peak_frac": 0.0,
+        "mean_trough": 24.94978599451115,
+        "mean_peak": 63.48857970990772
+      },
+      "enabled_extras": 3
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.5,
+        "sma_band": 0.5,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.0
+      },
+      "score": {
+        "flat": 30823578,
+        "objective": 60.35963113595505,
+        "spread": 38.50670193008467,
+        "trough_frac": 0.6931216931216931,
+        "peak_frac": 0.18099547511312217,
+        "mean_trough": 30.860884230358003,
+        "mean_peak": 69.36758616044267
+      },
+      "enabled_extras": 2
+    },
+    {
+      "weights": {
+        "valuation": 0.5,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 1.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.5,
+        "real_rate": 0.5
+      },
+      "score": {
+        "flat": 15411793,
+        "objective": 60.34797023167971,
+        "spread": 37.080116081472625,
+        "trough_frac": 0.708994708994709,
+        "peak_frac": 0.22171945701357465,
+        "mean_trough": 31.304524970090185,
+        "mean_peak": 68.38464105156281
+      },
+      "enabled_extras": 3
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 1.0,
+        "real_rate": 0.5
+      },
+      "score": {
+        "flat": 28697821,
+        "objective": 60.3446988743009,
+        "spread": 37.8824661179505,
+        "trough_frac": 0.798941798941799,
+        "peak_frac": 0.09954751131221719,
+        "mean_trough": 29.71077729058094,
+        "mean_peak": 67.59324340853144
+      },
+      "enabled_extras": 2
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 1.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.5,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.5
+      },
+      "score": {
+        "flat": 29767258,
+        "objective": 60.31834472615023,
+        "spread": 39.42892003925719,
+        "trough_frac": 0.708994708994709,
+        "peak_frac": 0.12658227848101267,
+        "mean_trough": 29.28689415168888,
+        "mean_peak": 68.71581419094608
+      },
+      "enabled_extras": 3
+    },
+    {
+      "weights": {
+        "valuation": 0.5,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.5,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.5,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 1.0
+      },
+      "score": {
+        "flat": 14880377,
+        "objective": 60.14479107896008,
+        "spread": 38.54922977751643,
+        "trough_frac": 0.8095238095238095,
+        "peak_frac": 0.05429864253393665,
+        "mean_trough": 26.037887894225424,
+        "mean_peak": 64.58711767174185
+      },
+      "enabled_extras": 3
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.5,
+        "weekly_macd": 0.0,
+        "sma_band": 1.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.0
+      },
+      "score": {
+        "flat": 34543665,
+        "objective": 60.01522796242364,
+        "spread": 39.33362198670001,
+        "trough_frac": 0.6507936507936508,
+        "peak_frac": 0.17647058823529413,
+        "mean_trough": 31.63877451329549,
+        "mean_peak": 70.9723964999955
+      },
+      "enabled_extras": 2
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.5,
+        "gld_slv": 0.0,
+        "real_rate": 0.0
+      },
+      "score": {
+        "flat": 28697823,
+        "objective": 59.97406970109013,
+        "spread": 36.70980673094481,
+        "trough_frac": 0.6455026455026455,
+        "peak_frac": 0.2850678733031674,
+        "mean_trough": 32.771943307009415,
+        "mean_peak": 69.48175003795423
+      },
+      "enabled_extras": 1
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.5,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.5,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.5
+      },
+      "score": {
+        "flat": 28704403,
+        "objective": 59.94991067980986,
+        "spread": 37.33086306076224,
+        "trough_frac": 0.9047619047619048,
+        "peak_frac": 0.0,
+        "mean_trough": 26.266631094460006,
+        "mean_peak": 63.59749415522225
+      },
+      "enabled_extras": 3
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.5,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.5,
+        "real_rate": 0.0
+      },
+      "score": {
+        "flat": 28697844,
+        "objective": 59.825578125698826,
+        "spread": 37.906212088685734,
+        "trough_frac": 0.8677248677248677,
+        "peak_frac": 0.00904977375565611,
+        "mean_trough": 26.497748845748898,
+        "mean_peak": 64.40396093443464
+      },
+      "enabled_extras": 2
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.5,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.5,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 0.0
+      },
+      "score": {
+        "flat": 29231442,
+        "objective": 59.778908606238865,
+        "spread": 36.89052248255862,
+        "trough_frac": 0.6666666666666666,
+        "peak_frac": 0.248868778280543,
+        "mean_trough": 31.95938489151543,
+        "mean_peak": 68.84990737407405
+      },
+      "enabled_extras": 2
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.5,
+        "sma_band": 1.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 1.0
+      },
+      "score": {
+        "flat": 31355021,
+        "objective": 59.74786630738747,
+        "spread": 38.53536421253243,
+        "trough_frac": 0.7037037037037037,
+        "peak_frac": 0.14479638009049775,
+        "mean_trough": 29.88198770030117,
+        "mean_peak": 68.4173519128336
+      },
+      "enabled_extras": 3
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.5,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.0,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.0,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.5,
+        "real_rate": 1.0
+      },
+      "score": {
+        "flat": 33480788,
+        "objective": 59.74258269467551,
+        "spread": 36.95834079278655,
+        "trough_frac": 0.8253968253968254,
+        "peak_frac": 0.08597285067873303,
+        "mean_trough": 30.30976247772812,
+        "mean_peak": 67.26810327051467
+      },
+      "enabled_extras": 3
+    },
+    {
+      "weights": {
+        "valuation": 1.0,
+        "weekly_rsi": 0.0,
+        "weekly_macd": 0.0,
+        "sma_band": 0.0,
+        "m2": 0.0,
+        "dxy": 0.0,
+        "uup": 0.0,
+        "gvz": 0.5,
+        "walcl": 0.0,
+        "hy_oas": 0.0,
+        "ig_oas": 0.0,
+        "breakeven_5y": 0.0,
+        "nfci": 0.5,
+        "gdx_gld": 0.0,
+        "gld_slv": 0.0,
+        "real_rate": 1.0
+      },
+      "score": {
+        "flat": 28704404,
+        "objective": 59.59754406559145,
+        "spread": 37.77214724019462,
+        "trough_frac": 0.873015873015873,
+        "peak_frac": 0.0,
+        "mean_trough": 26.137196023352573,
+        "mean_peak": 63.90934326354719
+      },
+      "enabled_extras": 3
+    }
+  ],
+  "parsimony": {
+    "exact_ties_at_winner_objective": 2,
+    "winner_enabled_extras": 0
+  },
+  "repro_gate": {
+    "seed": "digiquant/.scratch/gold_seed.json",
+    "max_abs_risk_diff": 0.0
+  },
+  "wall_s": 89.61403725000127
+}

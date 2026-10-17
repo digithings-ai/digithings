@@ -1,0 +1,32 @@
+{
+  "seed": {
+    "vs_flat_dca_pct": 117.09435050807886,
+    "vs_lump_pct": -16.064935265841275,
+    "dca_max_drawdown_pct": -27.086435085683796,
+    "delta_vs_seed_pp": 0.0
+  },
+  "drop_m2": {
+    "vs_flat_dca_pct": 50.12329981144854,
+    "vs_lump_pct": -41.95791434328211,
+    "dca_max_drawdown_pct": -24.548448945691202,
+    "delta_vs_seed_pp": -66.97105069663033
+  },
+  "drop_dxy": {
+    "vs_flat_dca_pct": 47.79415678950376,
+    "vs_lump_pct": -42.85842957946636,
+    "dca_max_drawdown_pct": -24.34282449142355,
+    "delta_vs_seed_pp": -69.3001937185751
+  },
+  "valuation_only": {
+    "vs_flat_dca_pct": 91.21783388475792,
+    "vs_lump_pct": -26.069558107429923,
+    "dca_max_drawdown_pct": -21.92871503356574,
+    "delta_vs_seed_pp": -25.87651662332094
+  },
+  "challenger_log_linear": {
+    "vs_flat_dca_pct": 117.09435050807886,
+    "vs_lump_pct": -16.064935265841275,
+    "dca_max_drawdown_pct": -27.086435085683796,
+    "delta_vs_seed_pp": 0.0
+  }
+}

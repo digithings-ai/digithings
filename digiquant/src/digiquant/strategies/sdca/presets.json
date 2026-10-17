@@ -78,5 +78,21 @@
       "sell_mid_knee_risk": null,
       "sell_mid_curvature": 1.0
     }
+  },
+  "gold_reselect": {
+    "description": "Gold reselected #1 (frontier reselect on the v6b beats-both frontier, 2026-10-01; gate mean-OOS +24.32% vs flat DCA / +3.85% vs lump, fresh sensitivity STABLE 1.63 maxAbsDelta, 48 neighbors, worst-neighbor sell_knee_risk:-5%). Chosen rank 1 of 144 eligible (frontier 144/1080): buy 35/60/c1.0, sell 65/30/c1.0, no mids (gate projection drops mid-tier keys; ranks 1-4 are a projection tie with identical means). Weights valuation 1.0/m2 0.5/uup 0.5/osc 0.25 (v4 vote; hy/ig at zero, depth work outstanding). Mask days per fold 73/0/1 (f1 ran with zero mask days; f2 lump -0.81 on 1 mask day). CAVEATS: thin +3.85 lump margin; selection-on-metric optimism (argmax-min criterion picked this shape); holdout ABSENT for the reselect (spent on v3, never re-scored) — a candidate, not a proven beat. Supersedes gold_optimized on-record; v3 preset stays for history. Detail: digiquant/.scratch/gold_reselect_v6.json (selection) + digiquant/.scratch/gold_curve_search_v6b.json (frontier/gate). Do not --push-supabase from the agent environment.",
+    "long_only": false,
+    "shape": {
+      "buy_max_rate": 35.0,
+      "buy_knee_risk": 60.0,
+      "sell_knee_risk": 65.0,
+      "sell_max_rate": 30.0,
+      "buy_curvature": 1.0,
+      "sell_curvature": 1.0,
+      "buy_mid_knee_risk": null,
+      "buy_mid_curvature": 1.0,
+      "sell_mid_knee_risk": null,
+      "sell_mid_curvature": 1.0
+    }
   }
 }

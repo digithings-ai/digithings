@@ -279,7 +279,79 @@ def test_run_and_write_windows_engine_bars_to_trade_start(
     assert payload["period_start"] >= "2018-01-01"
 
 
-def test_run_and_write_gold_sdca_dispatches_generic_valuation_offline(
+def test_run_and_write_per_entry_trade_start_gold_override_btc_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Per-entry trade_start override, Ruling 5 (#4804): gold resolves its
+    entry-level 2010-01-01 window while BTC entries without the key fall back
+    to defaults (2018-01-01) byte-identically.
+
+    Mirrors the sell_mask BTC-None paired pattern: the gold arm proves the
+    override takes effect (engine bars start 2010, strictly before the
+    default), the BTC arm proves the fallback is undisturbed.
+    """
+    import digiquant.strategies.sdca.providers as providers_mod
+
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    start, days = date(2009, 6, 1), 3400
+    _daily_ohlcv(start, days, close0=100.0, symbol="GLD-USD").write_csv(cache / "GLD-USD.csv")
+    _daily_ohlcv(start, days, close0=10_000.0, symbol="BTC-USD").write_csv(cache / "BTC-USD.csv")
+    output = tmp_path / "out"
+    captured: dict[str, object] = {}
+
+    class _EmptyPositions:
+        def iterrows(self):
+            return iter(())
+
+    def _fake_nautilus(strategy, symbol, ohlcv, settings, calibration=None):
+        captured[strategy] = ohlcv["timestamp"].min()
+        ts = ohlcv["timestamp"].to_list()
+        closes = ohlcv["close"].to_list()
+        bars = [(str(t)[:10], float(c)) for t, c in zip(ts, closes, strict=True)]
+        ohlc = [
+            (str(t)[:10], float(c), float(c), float(c), float(c))
+            for t, c in zip(ts, closes, strict=True)
+        ]
+        return _EmptyPositions(), bars, ohlc, {}, None
+
+    monkeypatch.setattr(gts, "run_nautilus", _fake_nautilus)
+
+    class _StubRiskModel:
+        def __init__(self) -> None:
+            from types import SimpleNamespace
+
+            self.coefficients = SimpleNamespace(
+                fit_start=start, fit_end=start + timedelta(days=days - 1), fit_rows=days
+            )
+
+        def rails(self, dates):  # type: ignore[no-untyped-def]
+            n = len(dates)
+            return pl.DataFrame({"low": [90.0] * n, "median": [100.0] * n, "high": [110.0] * n})
+
+    def _fake_resolve(name: str, **kwargs: object):  # type: ignore[no-untyped-def]
+        return _StubRiskModel()
+
+    monkeypatch.setattr(providers_mod, "resolve_sdca_risk_model", _fake_resolve)
+
+    settings = gts.load_settings()
+    assert settings["strategies"]["gold_sdca"].get("trade_start") == "2010-01-01"
+    assert "trade_start" not in settings["strategies"]["btc_sdca"]
+
+    gold_entry = gts.run_and_write(
+        "gold_sdca", "GLD-USD", settings, cache, output, cal_source="file", signal_delay_days=0
+    )
+    btc_entry = gts.run_and_write(
+        "btc_sdca", "BTC-USD", settings, cache, output, cal_source="file", signal_delay_days=0
+    )
+    assert gold_entry is not None
+    assert btc_entry is not None
+    assert str(captured["gold_sdca"])[:10] == "2010-01-01"
+    assert str(captured["gold_sdca"])[:10] < "2018-01-01"
+    assert str(captured["btc_sdca"])[:10] == "2018-01-01"
+
+
+def test_run_and_write_gold_sdca_dispatches_rolling_z_offline(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Gold live-path plumbing (#4804): entry-driven dispatch, no live fit.
@@ -287,7 +359,8 @@ def test_run_and_write_gold_sdca_dispatches_generic_valuation_offline(
     Canned ``gold_sdca``-shaped run through ``run_and_write`` with the rails
     seam stubbed (assert dispatch *name*, not fit values) and only a UUP
     sibling staged: uup must survive the drop-guard while the unstaged m2 leg
-    is zeroed, and provenance must name uup + the generic risk model.
+    is zeroed, and provenance must name uup + the rolling-z risk model
+    (Ruling 4: the reselect rides rolling90/z1.0 rails, not generic trend).
     """
     from types import SimpleNamespace
 
@@ -360,7 +433,7 @@ def test_run_and_write_gold_sdca_dispatches_generic_valuation_offline(
     assert entry is not None
     assert entry["kind"] == "dca"
     # Rails dispatch reads the entry's risk_model (no live fit in tests).
-    assert resolved_names == ["generic_valuation"]
+    assert resolved_names == ["rolling_z"]
     # Drop-guard: staged uup survives, unstaged m2 is zeroed.
     published = settings["strategies"]["gold_sdca"]["sdca"]["indicator_weights"]
     assert published["uup"] == 0.5
@@ -371,8 +444,8 @@ def test_run_and_write_gold_sdca_dispatches_generic_valuation_offline(
     payload = json.loads((output / "gold_sdca.json").read_text())
     notes = " ".join(payload["notes"])
     assert "uup:0.5" in notes
-    assert "risk_model=generic_valuation" in notes
-    assert "Preset gold_optimized" in notes
+    assert "risk_model=rolling_z" in notes
+    assert "Preset gold_reselect" in notes
     assert "Coefficients" in notes
     assert payload["dca"] is not None
     assert payload["kind"] == "dca"
@@ -478,3 +551,406 @@ def test_gold_sdca_registry_resolves_v3_nodes_and_btc_undisturbed() -> None:
 
     # Optimize/export param-spec path resolves gold to the shared sdca specs.
     assert get_param_specs("gold_sdca") == get_param_specs("btc_sdca")
+
+
+def test_settings_gold_sdca_sell_mask_strict_box() -> None:
+    """Gold entry carries the frozen strict-box sell-mask spec (#4804).
+
+    BTC entries gain nothing (no ``sell_mask`` key anywhere else).
+    """
+    from build_gold_sell_mask import FROZEN_M_THRESH, FROZEN_Z_THRESH
+
+    settings = gts.load_settings()
+    sdca = settings["strategies"]["gold_sdca"]["sdca"]
+    mask = sdca["sell_mask"]
+    assert mask["z_thresh"] == FROZEN_Z_THRESH == -2.0
+    assert mask["m_thresh"] == FROZEN_M_THRESH == 1.5
+    assert mask["z_window"] == 1260
+    assert mask["sma_window"] == 1000
+    assert "sell_mask" not in settings["strategies"]["btc_sdca"].get("sdca", {})
+    assert "sell_mask" not in settings["strategies"]["btc_slapper"]
+
+
+def test_run_and_write_gold_sell_mask_threads_veto_offline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Masked gold-shaped entry through the live path with stubbed seams (#4804).
+
+    Mirror of the Plan-11 dispatch test: rails seam stubbed, engine seam
+    stubbed, but the mask itself is the SHIPPED builder on staged inputs
+    (strict box values). Asserts: the builder ran with strict thresholds,
+    ``sell_dates`` reach the strategy overrides (calibration), provenance
+    names the mask-day count. Paired BTC run resolves mask None with the
+    same calibration key set (modulo ``sell_dates``) and no mask note.
+    """
+    import copy
+
+    import build_gold_sell_mask as mask_mod
+    import digiquant.strategies.sdca.providers as providers_mod
+
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    start, days = date(2020, 1, 1), 300
+    step_at = 280
+    # Drifted (not flat) closes with the 2x jump preserved: the promoted
+    # entry carries nonzero oscillator weights, and flat stretches give
+    # zero-variance windows → non-finite extras → risk-index rejection.
+    # Drift keeps every window finite; the jump still drives the m-leg.
+    gld_closes = [
+        (100.0 * (1.001**i)) if i < step_at else (200.0 * (1.001**i)) for i in range(days)
+    ]
+    gld_dates = [start + timedelta(days=i) for i in range(days)]
+    pl.DataFrame(
+        {
+            "timestamp": [d.isoformat() for d in gld_dates],
+            "open": gld_closes,
+            "high": gld_closes,
+            "low": gld_closes,
+            "close": gld_closes,
+            "volume": [1.0] * days,
+            "symbol": ["GLD-USD"] * days,
+        }
+    ).write_csv(cache / "GLD-USD.csv")
+    _daily_ohlcv(start, days, close0=10_000.0, symbol="BTC-USD").write_csv(cache / "BTC-USD.csv")
+    with (cache / "DFII10.csv").open("w") as f:
+        f.write("observation_date,DFII10\n")
+        for i in range(days):
+            f.write(f"{(start + timedelta(days=i)).isoformat()},{2.0 if i < step_at else -3.0}\n")
+    pl.DataFrame({"date": gld_dates, "value": [28.0] * days}).write_csv(cache / "UUP.csv")
+    output = tmp_path / "out"
+
+    # Expected mask, computed by the SHIPPED builder on the staged inputs
+    # (independent call — the implementation must call this same builder).
+    src_dates, src_vals = mask_mod.read_dfii10_csv(cache / "DFII10.csv")
+    expected = mask_mod.build_mask(
+        gld_dates,
+        gld_closes,
+        src_dates,
+        src_vals,
+        z_thresh=-2.0,
+        m_thresh=1.5,
+        z_window=20,
+        sma_window=10,
+    )
+    expected_days = frozenset(
+        d for d, m in zip(expected["dates"], expected["mask"], strict=True) if m
+    )
+    assert 0 < len(expected_days) < days
+
+    build_calls: list[dict] = []
+    _real_build = mask_mod.build_mask
+
+    def _recording_build(*args: object, **kwargs: object):  # type: ignore[no-untyped-def]
+        build_calls.append(dict(kwargs))
+        return _real_build(*args, **kwargs)
+
+    monkeypatch.setattr(mask_mod, "build_mask", _recording_build)
+
+    resolve_calls: list[tuple[str, dict]] = []
+
+    class _StubRiskModel:
+        def __init__(self) -> None:
+            from types import SimpleNamespace
+
+            self.coefficients = SimpleNamespace(
+                fit_start=start, fit_end=start + timedelta(days=days - 1), fit_rows=days
+            )
+
+        def rails(self, dates):  # type: ignore[no-untyped-def]
+            n = len(dates)
+            return pl.DataFrame({"low": [90.0] * n, "median": [100.0] * n, "high": [110.0] * n})
+
+    def _fake_resolve(name: str, **kwargs: object):  # type: ignore[no-untyped-def]
+        resolve_calls.append((name, dict(kwargs)))
+        return _StubRiskModel()
+
+    monkeypatch.setattr(providers_mod, "resolve_sdca_risk_model", _fake_resolve)
+
+    captured: dict[str, dict] = {}
+
+    class _EmptyPositions:
+        def iterrows(self):
+            return iter(())
+
+    def _fake_nautilus(strategy, symbol, ohlcv, settings, calibration=None):
+        captured[strategy] = dict(calibration or {})
+        assert Path(captured[strategy]["risk_path"]).exists()
+        ts = ohlcv["timestamp"].to_list()
+        closes = ohlcv["close"].to_list()
+        bars = [(str(t)[:10], float(c)) for t, c in zip(ts, closes, strict=True)]
+        ohlc = [
+            (str(t)[:10], float(c), float(c), float(c), float(c))
+            for t, c in zip(ts, closes, strict=True)
+        ]
+        return _EmptyPositions(), bars, ohlc, {}, None
+
+    monkeypatch.setattr(gts, "run_nautilus", _fake_nautilus)
+
+    settings = copy.deepcopy(gts.load_settings())
+    settings["strategies"]["gold_sdca"]["sdca"]["sell_mask"] = {
+        "z_thresh": -2.0,
+        "m_thresh": 1.5,
+        "z_window": 20,
+        "sma_window": 10,
+    }
+    gold_entry = gts.run_and_write(
+        "gold_sdca", "GLD-USD", settings, cache, output, cal_source="file", signal_delay_days=0
+    )
+    assert gold_entry is not None
+
+    # Mask built via the shipped builder at strict box values.
+    assert len(build_calls) == 1
+    assert build_calls[0]["z_thresh"] == -2.0
+    assert build_calls[0]["m_thresh"] == 1.5
+    # Sell dates reach the strategy overrides, equal to the builder's days.
+    assert captured["gold_sdca"]["sell_dates"] == expected_days
+    assert isinstance(captured["gold_sdca"]["sell_dates"], frozenset)
+    # Window/z thread through to the selector at reselect defaults.
+    gold_resolve = [kw for name, kw in resolve_calls if name == "rolling_z"]
+    assert gold_resolve and gold_resolve[0].get("rolling_window") == 90
+    assert gold_resolve[0].get("rolling_z") == 1.0
+    # Provenance names the mask-day count.
+    gold_payload = json.loads((output / "gold_sdca.json").read_text())
+    assert f"{len(expected_days)} mask days" in " ".join(gold_payload["notes"])
+    # Ruling 1 companion (LOW, #4804): the count labels its frame.
+    assert "full delayed frame" in " ".join(gold_payload["notes"])
+
+    # PAIRED BTC-None assert: identical outputs, no mask.
+    btc_entry = gts.run_and_write(
+        "btc_sdca", "BTC-USD", settings, cache, output, cal_source="file", signal_delay_days=0
+    )
+    assert btc_entry is not None
+    assert "sell_dates" not in captured["btc_sdca"]
+    assert set(captured["btc_sdca"]) == set(captured["gold_sdca"]) - {"sell_dates"}
+    btc_payload = json.loads((output / "btc_sdca.json").read_text())
+    assert "mask days" not in " ".join(btc_payload["notes"])
+
+
+def _run_fail_closed_case(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, dfii10_body: str | None
+) -> tuple[dict, dict, str, str]:
+    """Shared stubbed harness for the Ruling-1 fail-closed tests (#4804).
+
+    ``dfii10_body=None`` → DFII10.csv absent; otherwise that exact body is
+    staged (a corrupt body proves the unreadable path). Runs gold (mask
+    specified) + BTC (no mask) through ``run_and_write`` and returns
+    ``(gold_calibration, btc_calibration, gold_notes, btc_notes)``.
+    """
+    import copy
+
+    import digiquant.strategies.sdca.providers as providers_mod
+
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    start, days = date(2020, 1, 1), 60
+    closes = [100.0] * days
+    gld_dates = [start + timedelta(days=i) for i in range(days)]
+    pl.DataFrame(
+        {
+            "timestamp": [d.isoformat() for d in gld_dates],
+            "open": closes,
+            "high": closes,
+            "low": closes,
+            "close": closes,
+            "volume": [1.0] * days,
+            "symbol": ["GLD-USD"] * days,
+        }
+    ).write_csv(cache / "GLD-USD.csv")
+    _daily_ohlcv(start, days, close0=10_000.0, symbol="BTC-USD").write_csv(cache / "BTC-USD.csv")
+    pl.DataFrame({"date": gld_dates, "value": [28.0] * days}).write_csv(cache / "UUP.csv")
+    if dfii10_body is None:
+        assert not (cache / "DFII10.csv").exists()
+    else:
+        (cache / "DFII10.csv").write_text(dfii10_body)
+    output = tmp_path / "out"
+
+    class _StubRiskModel:
+        def __init__(self) -> None:
+            from types import SimpleNamespace
+
+            self.coefficients = SimpleNamespace(
+                fit_start=start, fit_end=start + timedelta(days=days - 1), fit_rows=days
+            )
+
+        def rails(self, dates):  # type: ignore[no-untyped-def]
+            n = len(dates)
+            return pl.DataFrame({"low": [90.0] * n, "median": [100.0] * n, "high": [110.0] * n})
+
+    def _fake_resolve(name: str, **kwargs: object):  # type: ignore[no-untyped-def]
+        return _StubRiskModel()
+
+    monkeypatch.setattr(providers_mod, "resolve_sdca_risk_model", _fake_resolve)
+
+    captured: dict[str, dict] = {}
+
+    class _EmptyPositions:
+        def iterrows(self):
+            return iter(())
+
+    def _fake_nautilus(strategy, symbol, ohlcv, settings, calibration=None):
+        captured[strategy] = dict(calibration or {})
+        assert Path(captured[strategy]["risk_path"]).exists()
+        ts = ohlcv["timestamp"].to_list()
+        closes_ = ohlcv["close"].to_list()
+        bars = [(str(t)[:10], float(c)) for t, c in zip(ts, closes_, strict=True)]
+        ohlc = [
+            (str(t)[:10], float(c), float(c), float(c), float(c))
+            for t, c in zip(ts, closes_, strict=True)
+        ]
+        return _EmptyPositions(), bars, ohlc, {}, None
+
+    monkeypatch.setattr(gts, "run_nautilus", _fake_nautilus)
+
+    settings = copy.deepcopy(gts.load_settings())
+    settings["strategies"]["gold_sdca"]["sdca"]["sell_mask"] = {
+        "z_thresh": -2.0,
+        "m_thresh": 1.5,
+        "z_window": 20,
+        "sma_window": 10,
+    }
+    gold_entry = gts.run_and_write(
+        "gold_sdca", "GLD-USD", settings, cache, output, cal_source="file", signal_delay_days=0
+    )
+    assert gold_entry is not None
+    btc_entry = gts.run_and_write(
+        "btc_sdca", "BTC-USD", settings, cache, output, cal_source="file", signal_delay_days=0
+    )
+    assert btc_entry is not None
+    gold_notes = " ".join(json.loads((output / "gold_sdca.json").read_text())["notes"])
+    btc_notes = " ".join(json.loads((output / "btc_sdca.json").read_text())["notes"])
+    return captured["gold_sdca"], captured["btc_sdca"], gold_notes, btc_notes
+
+
+def test_run_and_write_gold_sell_mask_missing_dfii10_fail_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Fail-closed mask, Ruling 1 (#4804): mask specified but DFII10 missing.
+
+    ``sell_dates`` is the EMPTY set (sells blocked — premise-preserving for a
+    long-biased system), never absent; provenance carries an explicit
+    ``mask_unavailable`` flag, never silence. Paired BTC arm proves trigger
+    exactness: no-mask entries keep None (no ``sell_dates`` key, no flag).
+    """
+    gold_cal, btc_cal, gold_notes, btc_notes = _run_fail_closed_case(
+        tmp_path, monkeypatch, dfii10_body=None
+    )
+    assert gold_cal["sell_dates"] == frozenset()
+    assert isinstance(gold_cal["sell_dates"], frozenset)
+    assert "mask_unavailable" in gold_notes
+    assert "sell_dates" not in btc_cal
+    assert set(btc_cal) == set(gold_cal) - {"sell_dates"}
+    assert "mask_unavailable" not in btc_notes
+
+
+def test_run_and_write_gold_sell_mask_unreadable_dfii10_fail_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Fail-closed mask, Ruling 1 (#4804): mask specified but DFII10 corrupt.
+
+    Same empty-set + flag contract as the missing-file case; paired BTC arm
+    again proves the trigger never leaks onto no-mask entries.
+    """
+    gold_cal, btc_cal, gold_notes, btc_notes = _run_fail_closed_case(
+        tmp_path,
+        monkeypatch,
+        # One valid row (so the extra-sources loader still parses) + one
+        # corrupt date row (so the mask reader raises) — the unreadable path.
+        dfii10_body="observation_date,DFII10\n2020-01-01,2.0\nnot-a-date,2.0\n",
+    )
+    assert gold_cal["sell_dates"] == frozenset()
+    assert isinstance(gold_cal["sell_dates"], frozenset)
+    assert "mask_unavailable" in gold_notes
+    assert "sell_dates" not in btc_cal
+    assert set(btc_cal) == set(gold_cal) - {"sell_dates"}
+    assert "mask_unavailable" not in btc_notes
+
+
+def test_run_and_write_rolling_z_provenance_records_window_z_without_coefficients(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Parameter-free provenance, Ruling 6 (#4804): REAL RollingZRiskModel through run_and_write.
+
+    First real rolling model through the publish path (research built it via
+    run_gold_curve_search; every unit pin stubs resolve). The gold arm builds
+    a REAL RollingZRiskModel from the resolve kwargs — rails + index
+    materialize for real — so provenance must record the window/z params
+    instead of crashing on the fit-model assumption, and must NOT fabricate
+    a Coefficients note. The paired BTC arm (fitted stub carrying
+    .coefficients) proves fitted-model provenance is byte-unchanged.
+    """
+    from types import SimpleNamespace
+
+    import digiquant.strategies.sdca.providers as providers_mod
+    from digiquant.strategies.sdca.rolling_z import RollingZRiskModel
+
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    start, days = date(2020, 1, 1), 300
+    _daily_ohlcv(start, days, close0=2500.0, symbol="GLD-USD").write_csv(cache / "GLD-USD.csv")
+    _daily_ohlcv(start, days, close0=10_000.0, symbol="BTC-USD").write_csv(cache / "BTC-USD.csv")
+    uup_dates = [start + timedelta(days=i) for i in range(days)]
+    pl.DataFrame({"date": uup_dates, "value": [28.0 * (1.0005**i) for i in range(days)]}).write_csv(
+        cache / "UUP.csv"
+    )
+    output = tmp_path / "out"
+
+    class _StubFittedModel:
+        """Fitted-model shape (btc_power_law / generic_valuation): carries .coefficients."""
+
+        def __init__(self) -> None:
+            self.coefficients = SimpleNamespace(
+                fit_start=start, fit_end=start + timedelta(days=days - 1), fit_rows=days
+            )
+
+        def rails(self, dates):  # type: ignore[no-untyped-def]
+            n = len(dates)
+            return pl.DataFrame({"low": [90.0] * n, "median": [100.0] * n, "high": [110.0] * n})
+
+    def _fake_resolve(name: str, **kwargs: object):  # type: ignore[no-untyped-def]
+        if name == "rolling_z":
+            return RollingZRiskModel(
+                kwargs["dates"],
+                kwargs["price"],
+                window=int(kwargs["rolling_window"]),
+                z=float(kwargs["rolling_z"]),
+            )
+        return _StubFittedModel()
+
+    monkeypatch.setattr(providers_mod, "resolve_sdca_risk_model", _fake_resolve)
+
+    class _EmptyPositions:
+        def iterrows(self):
+            return iter(())
+
+    def _fake_nautilus(strategy, symbol, ohlcv, settings, calibration=None):
+        assert Path(calibration["risk_path"]).exists()
+        ts = ohlcv["timestamp"].to_list()
+        closes = ohlcv["close"].to_list()
+        bars = [(str(t)[:10], float(c)) for t, c in zip(ts, closes, strict=True)]
+        ohlc = [
+            (str(t)[:10], float(c), float(c), float(c), float(c))
+            for t, c in zip(ts, closes, strict=True)
+        ]
+        return _EmptyPositions(), bars, ohlc, {}, None
+
+    monkeypatch.setattr(gts, "run_nautilus", _fake_nautilus)
+
+    settings = gts.load_settings()
+    gold_entry = gts.run_and_write(
+        "gold_sdca", "GLD-USD", settings, cache, output, cal_source="file", signal_delay_days=0
+    )
+    assert gold_entry is not None
+    gold_notes = " ".join(json.loads((output / "gold_sdca.json").read_text())["notes"])
+    assert "risk_model=rolling_z" in gold_notes
+    assert "window=90" in gold_notes
+    assert "z=1.0" in gold_notes
+    assert "Coefficients" not in gold_notes
+
+    # PAIRED fitted-path assert: BTC provenance byte-unchanged.
+    btc_entry = gts.run_and_write(
+        "btc_sdca", "BTC-USD", settings, cache, output, cal_source="file", signal_delay_days=0
+    )
+    assert btc_entry is not None
+    btc_notes = " ".join(json.loads((output / "btc_sdca.json").read_text())["notes"])
+    assert f"Coefficients {start} → {start + timedelta(days=days - 1)} ({days} rows)" in btc_notes
+    assert "Preset btc_optimized" in btc_notes

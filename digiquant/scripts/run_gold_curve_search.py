@@ -27,12 +27,16 @@ gates exactly.
 
 Reads `.scratch/gold_seed.json` (frozen index) by default, or the seed file
 given via ``--seed-path`` (v2 gate: ``gold_seed_v2deep.json`` /
-``gold_seed_v2.json``); writes `.scratch/gold_curve_search.json`.
+``gold_seed_v2.json``); writes `.scratch/gold_curve_search.json` unless
+``--out PATH`` is given. ``--causal-rolling`` (rolling90/rolling1260 only) scores gate
+folds through the concatenated-history rolling loop instead of the engine
+walk-forward (Task-4 void repair — see ``run_causal_rolling_gate``).
 Research-only; touches nothing else.
 
 Usage (gold worktree has no venv; research venv + src on PYTHONPATH):
     PYTHONPATH=digiquant/src <research-venv>/bin/python \\
         digiquant/scripts/run_gold_curve_search.py [--seed-path <seed.json>]
+            [--rails-variant rolling90] [--causal-rolling] [--out <out.json>]
 """
 
 from __future__ import annotations
@@ -59,16 +63,25 @@ from digiquant.strategies.sdca.generic_valuation import (
 from digiquant.strategies.sdca.indicator_catalog import (
     WEIGHT_PARAM_BY_NAME,
     SdcaCompositeWeights,
+    composite_weights_from_params,
+    extra_indicators_for_window,
     extra_z_vectors,
+    missing_extra_names,
 )
 from digiquant.strategies.sdca.optimize import (
     load_sdca_extra_sources,
     run_sdca_walk_forward,
 )
 from digiquant.strategies.sdca.risk_model import RiskModel
+from digiquant.strategies.sdca.rolling_z import RollingZRiskModel
 from digiquant.strategies.sdca.walk_forward import (
+    SENSITIVITY_SPIKE_PCT,
     SdcaOptimizeObjective,
+    SdcaTrialMetrics,
+    WalkForwardFold,
+    is_feasible,
     make_walk_forward_folds,
+    sensitivity_neighbors,
     shape_from_params,
     window_slice,
 )
@@ -141,11 +154,243 @@ def _make_bounded_lookback_rails_fitter(
     return _fitter
 
 
+def _make_rolling_z_rails_fitter(
+    name: str, window: int, z: float
+) -> Callable[[list[date], list[float]], RiskModel]:
+    """Inline rolling-z rails variant (#4804 Task 4): same closure pattern as
+    the bounded-lookback factory above, but constructing ``RollingZRiskModel``
+    (trailing mean-reversion rails, no time-trend fit) with the v4 seed's
+    anchor params (window 90, z 1.0). Defined inline for the same reason:
+    no behavioral gain from sharing a module with ``run_gold_rails_variants``
+    (whose factory only expresses generic_valuation kwargs).
+    """
+
+    def _fitter(dates: list[date], prices: list[float]) -> RiskModel:
+        return RollingZRiskModel(
+            pl.Series("date", dates, dtype=pl.Date),
+            pl.Series("price", prices, dtype=pl.Float64),
+            window=window,
+            z=z,
+        )
+
+    _fitter.__name__ = f"rails_fitter_{name}"
+    return _fitter
+
+
+# Anchor params shared by each rolling fitter below and the causal fold loop
+# further down — one literal pair per variant so the two paths cannot diverge.
+ROLLING_WINDOW = 90
+ROLLING_Z = 1.0
+ROLLING1260_WINDOW = 1260
+ROLLING1260_Z = 1.0
+
 RAILS_FITTERS = {
     "default": gold_generic_rails_fitter,
     "quad_3y": _make_bounded_lookback_rails_fitter("quad_3y", 756),
     "quad_5y": _make_bounded_lookback_rails_fitter("quad_5y", 1260),
+    "rolling90": _make_rolling_z_rails_fitter("rolling90", ROLLING_WINDOW, ROLLING_Z),
+    "rolling1260": _make_rolling_z_rails_fitter("rolling1260", ROLLING1260_WINDOW, ROLLING1260_Z),
 }
+
+# Causal-rolling variants: variant -> (window, z), same literals as the
+# fitters above so the rails fit and the causal fold loop cannot diverge.
+CAUSAL_ROLLING_VARIANTS = {
+    "rolling90": (ROLLING_WINDOW, ROLLING_Z),
+    "rolling1260": (ROLLING1260_WINDOW, ROLLING1260_Z),
+}
+
+
+def causal_rolling_model_for_fold(
+    dates: list[date],
+    prices: list[float],
+    fold: WalkForwardFold,
+    *,
+    window: int,
+    z: float,
+) -> RollingZRiskModel:
+    """Rolling rails model for one OOS fold, built on concatenated history.
+
+    Option (ii) (#4804 Task 5): the model sees ``is_start..oos_end`` so its
+    history covers every OOS date (the engine ``score_trial_on_folds`` path
+    builds on the IS window only, whose history misses OOS dates entirely —
+    that join miss is the Task-4 void). Leak-free by construction: ``window``
+    / ``z`` are fixed constants (no OOS parameter estimation), and polars
+    trailing ``rolling_mean`` / ``rolling_std`` use only inputs <= t (proven
+    by ``test_causal_rolling_folds.py::test_rolling_rails_full_calendar_equal_truncated_at_t``).
+    The engine ``score_trial_on_folds`` / fitter protocol is untouched — this
+    path never calls it, so the #3173-family guard
+    (``test_fitter_never_sees_oos_or_holdout_dates``) never fires here.
+    """
+    hist_dates, hist_prices = window_slice(dates, prices, fold.is_start, fold.oos_end)
+    return RollingZRiskModel(
+        pl.Series("date", hist_dates, dtype=pl.Date),
+        pl.Series("price", hist_prices, dtype=pl.Float64),
+        window=window,
+        z=z,
+    )
+
+
+def run_causal_rolling_gate(
+    dates: list[date],
+    prices: list[float],
+    winner_params: dict[str, float | int | str],
+    *,
+    window: int,
+    z: float,
+    extra_z: dict[str, list[float | None]],
+    weights: SdcaCompositeWeights,
+    objective: SdcaOptimizeObjective | None = None,
+    sensitivity_frac: float = 0.05,
+    frontier_params: list[dict[str, float | int | str]] | None = None,
+    sell_mask: set[date] | None = None,
+) -> dict:
+    """Causal rolling walk-forward gate: per-fold OOS via concatenated history.
+
+    Same geometry as the engine path (``make_walk_forward_folds`` defaults),
+    same evaluator (``evaluate_sdca_trial_curve_sim``), same feasibility and
+    sensitivity semantics (neighbors re-scored through this same causal loop —
+    never through ``score_trial_on_folds``). Returns a JSON-ready record whose
+    ``per_fold`` rows carry the engine record's exact keys plus
+    ``oos_vs_lump_dca_pct`` (``SdcaTrialMetrics.vs_lump_pct``, same ×100
+    convention as vs_flat — recorded, never hand-rolled). When
+    ``frontier_params`` is given, each entry is re-scored through the same
+    loop and ``frontier_beats_both`` counts the entries whose mean OOS beats
+    BOTH flat and lump. No holdout metric: the tail stays unscored
+    (recorded as absent by the caller).
+
+    When ``sell_mask`` is given, EVERY trial evaluation in this loop — winner
+    OOS, sensitivity neighbors, frontier re-scores, all through ``_score_oos``
+    below — passes the window-sliced allow-set to
+    ``evaluate_sdca_trial_curve_sim``; ``None`` reproduces the unmasked gate
+    exactly. The search phase stays vote-only: selection never sees the mask
+    (mask-robustness variants are report-only, never selected on).
+    """
+    obj = objective or SdcaOptimizeObjective()
+    folds, _holdout = make_walk_forward_folds(dates, n_folds=3, holdout_frac=0.2, oos_frac=0.25)
+
+    def _score_oos(
+        params: dict[str, float | int | str], w: SdcaCompositeWeights
+    ) -> list[SdcaTrialMetrics]:
+        s = shape_from_params(params)
+        out: list[SdcaTrialMetrics] = []
+        for fold in folds:
+            model = causal_rolling_model_for_fold(dates, prices, fold, window=window, z=z)
+            oos_dates, oos_prices = window_slice(dates, prices, fold.oos_start, fold.oos_end)
+            extras = extra_indicators_for_window(oos_dates, dates, extra_z, w)
+            # Mask choke point: the window-sliced allow-set (possibly empty,
+            # which vetoes all sells — never None-collapsed) reaches every
+            # evaluation in this gate: winner OOS, neighbors, frontier.
+            window_sell = None
+            if sell_mask is not None:
+                window_sell = {d for d in oos_dates if d in sell_mask}
+            out.append(
+                evaluate_sdca_trial_curve_sim(
+                    oos_dates, oos_prices, model, s, w.valuation, extras, sell_dates=window_sell
+                )
+            )
+        return out
+
+    oos = _score_oos(winner_params, weights)
+    per_fold = [
+        {
+            "fold": fold.fold,
+            "oos_vs_flat_dca_pct": m.vs_flat_dca_pct,
+            "oos_vs_lump_dca_pct": m.vs_lump_pct,
+            "oos_capital_deployed_pct": m.capital_deployed_pct,
+            "oos_capital_deployed_peak_pct": m.capital_deployed_peak_pct,
+            "max_drawdown_pct": m.max_drawdown_pct,
+            "feasible": is_feasible(m, obj),
+            "oos_sell_mask_days": (
+                sum(1 for d in sell_mask if fold.oos_start <= d <= fold.oos_end)
+                if sell_mask is not None
+                else 0
+            ),
+        }
+        for fold, m in zip(folds, oos, strict=True)
+    ]
+    mean_oos = sum(m.vs_flat_dca_pct for m in oos) / len(oos)
+    mean_lump = sum(m.vs_lump_pct for m in oos) / len(oos)
+
+    deltas: list[float] = []
+    worst_neighbor: dict[str, float | int | str] | None = None
+    worst_delta = float("-inf")
+    neighbors = sensitivity_neighbors(winner_params, frac=sensitivity_frac)
+    for neighbor in neighbors:
+        w = composite_weights_from_params(neighbor)
+        if missing_extra_names(w, extra_z):
+            continue
+        n_oos = _score_oos(neighbor, w)
+        delta = abs(sum(m.vs_flat_dca_pct for m in n_oos) / len(n_oos) - mean_oos)
+        deltas.append(delta)
+        if delta > worst_delta:
+            worst_delta = delta
+            worst_neighbor = neighbor
+    max_delta = max(deltas) if deltas else 0.0
+    # Mirrors walk_forward._worst_neighbor_key: '<param>:<sign><pct>'.
+    worst_key: str | None = None
+    if worst_neighbor is not None:
+        diffs = [k for k in worst_neighbor if worst_neighbor[k] != winner_params.get(k)]
+        if len(diffs) == 1:
+            key = diffs[0]
+            best_val = float(winner_params[key])  # type: ignore[arg-type]
+            n_val = float(worst_neighbor[key])  # type: ignore[arg-type]
+            rel = (n_val - best_val) / best_val * 100.0 if best_val != 0.0 else 0.0
+            worst_key = f"{key}:{rel:+g}%"
+    frontier_total = len(frontier_params) if frontier_params else 0
+    frontier_beats_both = 0
+    # Per-shape OOS persistence (record-keeping ONLY — values below reuse the
+    # already-computed f_oos; no scoring change). Enables trust-nothing
+    # recount + frozen-criterion re-selection (Plan 16 Ruling 1).
+    frontier_shapes: list[dict] = []
+    for fparams in frontier_params or []:
+        fw = composite_weights_from_params(fparams)
+        if missing_extra_names(fw, extra_z):
+            frontier_shapes.append({"params": fparams, "scored": False})
+            continue
+        f_oos = _score_oos(fparams, fw)
+        f_flat = sum(m.vs_flat_dca_pct for m in f_oos) / len(f_oos)
+        f_lump = sum(m.vs_lump_pct for m in f_oos) / len(f_oos)
+        if f_flat > 0.0 and f_lump > 0.0:
+            frontier_beats_both += 1
+        frontier_shapes.append(
+            {
+                "params": fparams,
+                "scored": True,
+                "mean_oos_vs_flat_dca_pct": f_flat,
+                "mean_oos_vs_lump_dca_pct": f_lump,
+                "mean_abs_drawdown_pct": sum(abs(m.max_drawdown_pct) for m in f_oos) / len(f_oos),
+                "feasible_per_fold": [is_feasible(m, obj) for m in f_oos],
+                "per_fold": [
+                    {
+                        "fold": fold.fold,
+                        "oos_vs_flat_dca_pct": m.vs_flat_dca_pct,
+                        "oos_vs_lump_dca_pct": m.vs_lump_pct,
+                        "max_drawdown_pct": m.max_drawdown_pct,
+                        "feasible": is_feasible(m, obj),
+                    }
+                    for fold, m in zip(folds, f_oos, strict=True)
+                ],
+            }
+        )
+    return {
+        "mean_oos_vs_flat_dca_pct": mean_oos,
+        "beats_flat_dca_oos": mean_oos > 0.0,
+        "mean_oos_vs_lump_dca_pct": mean_lump,
+        "beats_lump_oos": mean_lump > 0.0,
+        "per_fold": per_fold,
+        "sensitivity_stable": max_delta <= SENSITIVITY_SPIKE_PCT,
+        "sensitivity_max_abs_delta": max_delta,
+        "sensitivity_neighbor_count": len(neighbors),
+        "sensitivity_worst_neighbor_key": worst_key,
+        "frontier_beats_both": frontier_beats_both,
+        "frontier_total": frontier_total,
+        "frontier_shapes": frontier_shapes,
+        "evaluation": "causal_rolling",
+        "rolling_window": window,
+        "rolling_z": z,
+        "engine_path_used": False,
+        "holdout": "absent — tail unscored in the causal re-gate",
+    }
 
 
 def iter_grid() -> list[SdcaCurveShape]:
@@ -172,7 +417,46 @@ def main() -> None:
     )
     parser.add_argument("--deployed-floor", type=float, default=None)
     parser.add_argument("--dd-cap", type=float, default=None)
+    parser.add_argument(
+        "--out",
+        default=str(OUT_PATH),
+        help="Output JSON path (default preserves current behavior).",
+    )
+    parser.add_argument(
+        "--causal-rolling",
+        action="store_true",
+        help=(
+            "Score gate folds through the causal rolling loop "
+            "(concatenated-history model per fold) instead of the engine "
+            "walk-forward. Valid only with a rolling rails variant "
+            "(rolling90, rolling1260): fitted rails on concatenated "
+            "history would estimate parameters on OOS."
+        ),
+    )
+    parser.add_argument(
+        "--sell-mask",
+        default=None,
+        help=(
+            "Strict-box mask JSON (gold_sell_mask.json). The mask affects GATE "
+            "scoring only — the search stays vote-only, so selection never "
+            "depends on the mask (mask-robustness variants are report-only, "
+            "never selected on). Requires --causal-rolling."
+        ),
+    )
     args = parser.parse_args()
+    if args.causal_rolling and args.rails_variant not in CAUSAL_ROLLING_VARIANTS:
+        parser.error("--causal-rolling requires --rails-variant rolling90 or rolling1260")
+    if args.sell_mask is not None and not args.causal_rolling:
+        parser.error("--sell-mask requires --causal-rolling (v6 reuses the causal loop)")
+    sell_mask: set[date] | None = None
+    mask_thresholds: dict | None = None
+    if args.sell_mask is not None:
+        mask_payload = json.loads(Path(args.sell_mask).read_text())
+        sell_mask = {date.fromisoformat(d) for d in mask_payload["mask_days"]}
+        mask_thresholds = mask_payload["thresholds"]
+        print(
+            f"sell mask: {len(sell_mask)} days thresholds={mask_thresholds} from {args.sell_mask}"
+        )
     seed = json.loads(Path(args.seed_path).read_text())
     dates = [date.fromisoformat(d) for d in seed["dates"]]
     prices = list(seed["prices"])
@@ -207,6 +491,7 @@ def main() -> None:
     best_worst = float("-inf")
     evaluations = 0
     feasible_count = 0
+    feasible_params: list[dict[str, float | int | str]] = []
     for shape in shapes:
         worst = float("inf")
         feasible_all = True
@@ -219,6 +504,13 @@ def main() -> None:
             worst = min(worst, score.vs_flat_dca_pct)
         if feasible_all:
             feasible_count += 1
+            # Same trial-params construction as winner_params below, kept per
+            # feasible shape so the causal gate can score the frontier.
+            params = dict(seed_weight_params)
+            for key, value in shape.model_dump().items():
+                if value is not None:
+                    params[key] = value
+            feasible_params.append(params)
             if worst > best_worst:
                 best_worst = worst
                 best = shape
@@ -250,40 +542,121 @@ def main() -> None:
             else 10.0,
             max_drawdown_cap_pct=args.dd_cap if args.dd_cap is not None else 50.0,
         )
-    result = run_sdca_walk_forward(
-        dates,
-        prices,
-        [winner_params],
-        rails_fitter=RAILS_FITTERS[args.rails_variant],
-        evaluator=evaluate_sdca_trial_curve_sim,
-        evaluator_label="curve_simulator",
-        extra_z=extra_z,
-        objective=objective,
-    )
-    per_fold = [
-        {
-            "fold": fs.fold.fold,
-            "oos_vs_flat_dca_pct": fs.out_of_sample.vs_flat_dca_pct,
-            "oos_capital_deployed_pct": fs.out_of_sample.capital_deployed_pct,
-            "oos_capital_deployed_peak_pct": fs.out_of_sample.capital_deployed_peak_pct,
-            "max_drawdown_pct": fs.out_of_sample.max_drawdown_pct,
-            "feasible": fs.feasible,
-        }
-        for fs in result.fold_scores
-    ]
-    print(
-        f"gate: mean_oos_vs_flat={result.mean_oos_vs_flat_dca_pct:+.2f}% "
-        f"beats_flat_dca_oos={result.beats_flat_dca_oos} "
-        f"sensitivity_stable={result.sensitivity.stable} "
-        f"(max_abs_delta={result.sensitivity.max_abs_delta_oos_pct:.2f})"
-    )
+    result = None
+    causal_gate: dict | None = None
+    if args.causal_rolling:
+        window, z = CAUSAL_ROLLING_VARIANTS[args.rails_variant]
+        causal_gate = run_causal_rolling_gate(
+            dates,
+            prices,
+            winner_params,
+            window=window,
+            z=z,
+            extra_z=extra_z,
+            weights=composite_weights_from_params(winner_params),
+            objective=objective,
+            frontier_params=feasible_params,
+            sell_mask=sell_mask,
+        )
+        per_fold = causal_gate["per_fold"]
+        print(
+            f"gate (causal_rolling window={window} z={z}): "
+            f"mean_oos_vs_flat={causal_gate['mean_oos_vs_flat_dca_pct']:+.2f}% "
+            f"beats_flat_dca_oos={causal_gate['beats_flat_dca_oos']} "
+            f"mean_oos_vs_lump={causal_gate['mean_oos_vs_lump_dca_pct']:+.2f}% "
+            f"beats_lump_oos={causal_gate['beats_lump_oos']} "
+            f"sensitivity_stable={causal_gate['sensitivity_stable']} "
+            f"(max_abs_delta={causal_gate['sensitivity_max_abs_delta']:.2f}) "
+            f"frontier={causal_gate['frontier_beats_both']}/{causal_gate['frontier_total']}"
+        )
+    else:
+        result = run_sdca_walk_forward(
+            dates,
+            prices,
+            [winner_params],
+            rails_fitter=RAILS_FITTERS[args.rails_variant],
+            evaluator=evaluate_sdca_trial_curve_sim,
+            evaluator_label="curve_simulator",
+            extra_z=extra_z,
+            objective=objective,
+        )
+        per_fold = [
+            {
+                "fold": fs.fold.fold,
+                "oos_vs_flat_dca_pct": fs.out_of_sample.vs_flat_dca_pct,
+                "oos_vs_lump_dca_pct": fs.out_of_sample.vs_lump_pct,
+                "oos_capital_deployed_pct": fs.out_of_sample.capital_deployed_pct,
+                "oos_capital_deployed_peak_pct": fs.out_of_sample.capital_deployed_peak_pct,
+                "max_drawdown_pct": fs.out_of_sample.max_drawdown_pct,
+                "feasible": fs.feasible,
+            }
+            for fs in result.fold_scores
+        ]
+        print(
+            f"gate: mean_oos_vs_flat={result.mean_oos_vs_flat_dca_pct:+.2f}% "
+            f"beats_flat_dca_oos={result.beats_flat_dca_oos} "
+            f"sensitivity_stable={result.sensitivity.stable} "
+            f"(max_abs_delta={result.sensitivity.max_abs_delta_oos_pct:.2f})"
+        )
     for f in per_fold:
+        mask_note = f" mask_days={f['oos_sell_mask_days']}" if causal_gate is not None else ""
         print(
             f"  fold {f['fold']}: oos_vs_flat={f['oos_vs_flat_dca_pct']:+.2f}% "
-            f"max_dd={f['max_drawdown_pct']:.2f}% feasible={f['feasible']}"
+            f"oos_vs_lump={f['oos_vs_lump_dca_pct']:+.2f}% "
+            f"deployed={f['oos_capital_deployed_pct']:.2f}% "
+            f"peak={f['oos_capital_deployed_peak_pct']:.2f}% "
+            f"max_dd={f['max_drawdown_pct']:.2f}% feasible={f['feasible']}{mask_note}"
         )
 
-    OUT_PATH.write_text(
+    if causal_gate is not None:
+        gate_record = {
+            "mean_oos_vs_flat_dca_pct": causal_gate["mean_oos_vs_flat_dca_pct"],
+            "beats_flat_dca_oos": causal_gate["beats_flat_dca_oos"],
+            "mean_oos_vs_lump_dca_pct": causal_gate["mean_oos_vs_lump_dca_pct"],
+            "beats_lump_oos": causal_gate["beats_lump_oos"],
+            "per_fold": per_fold,
+            "sensitivity_stable": causal_gate["sensitivity_stable"],
+            "sensitivity_max_abs_delta": causal_gate["sensitivity_max_abs_delta"],
+            # Gate-level worst-neighbor attribution (mean-OOS design; per-fold
+            # neighbor keys are explicitly out of scope).
+            "sensitivity_neighbor_count": causal_gate["sensitivity_neighbor_count"],
+            "sensitivity_worst_neighbor_key": causal_gate["sensitivity_worst_neighbor_key"],
+            "frontier_beats_both": causal_gate["frontier_beats_both"],
+            "frontier_total": causal_gate["frontier_total"],
+            "frontier_shapes": causal_gate["frontier_shapes"],
+            "evaluation": "causal_rolling",
+            "rolling_window": causal_gate["rolling_window"],
+            "rolling_z": causal_gate["rolling_z"],
+            "engine_path_used": False,
+            "holdout": causal_gate["holdout"],
+            "sell_mask": (
+                {
+                    "source": args.sell_mask,
+                    "thresholds": mask_thresholds,
+                    "mask_days": sorted(str(d) for d in sell_mask) if sell_mask is not None else [],
+                    "mask_count": len(sell_mask) if sell_mask is not None else 0,
+                }
+                if sell_mask is not None
+                else None
+            ),
+        }
+    else:
+        assert result is not None
+        gate_record = {
+            "mean_oos_vs_flat_dca_pct": result.mean_oos_vs_flat_dca_pct,
+            "beats_flat_dca_oos": result.beats_flat_dca_oos,
+            "per_fold": per_fold,
+            "sensitivity_stable": result.sensitivity.stable,
+            "sensitivity_max_abs_delta": result.sensitivity.max_abs_delta_oos_pct,
+            # Gate-level worst-neighbor attribution (mean-OOS design; per-fold
+            # neighbor keys are explicitly out of scope).
+            "sensitivity_neighbor_count": result.sensitivity.neighbor_count,
+            "sensitivity_worst_neighbor_key": result.sensitivity.worst_neighbor_key,
+            "evaluation": "engine_walk_forward",
+            "engine_path_used": True,
+        }
+
+    Path(args.out).write_text(
         json.dumps(
             {
                 "weights": weights.model_dump(),
@@ -296,22 +669,12 @@ def main() -> None:
                 },
                 "gate_projection_drops_mid_tier": mid_dropped,
                 "gated_shape": gated_shape.model_dump(),
-                "gate": {
-                    "mean_oos_vs_flat_dca_pct": result.mean_oos_vs_flat_dca_pct,
-                    "beats_flat_dca_oos": result.beats_flat_dca_oos,
-                    "per_fold": per_fold,
-                    "sensitivity_stable": result.sensitivity.stable,
-                    "sensitivity_max_abs_delta": result.sensitivity.max_abs_delta_oos_pct,
-                    # Gate-level worst-neighbor attribution (mean-OOS design; per-fold
-                    # neighbor keys are explicitly out of scope).
-                    "sensitivity_neighbor_count": result.sensitivity.neighbor_count,
-                    "sensitivity_worst_neighbor_key": result.sensitivity.worst_neighbor_key,
-                },
+                "gate": gate_record,
             },
             indent=2,
         )
     )
-    print(f"wrote {OUT_PATH}")
+    print(f"wrote {args.out}")
 
 
 if __name__ == "__main__":

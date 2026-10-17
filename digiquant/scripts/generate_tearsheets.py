@@ -796,9 +796,12 @@ def run_and_write(
 
     d = settings["defaults"]
     initial_capital = float(d["initial_capital"])
-    trade_start = d.get("trade_start") or ""
-    family = strategy_type_of(settings, strategy)
     entry = settings["strategies"][strategy]
+    # Per-entry trade_start override (Ruling 5, #4804): an entry-level window
+    # wins (gold resolves 2010-01-01); entries without the key fall back to
+    # defaults (BTC resolves identically).
+    trade_start = entry.get("trade_start") or d.get("trade_start") or ""
+    family = strategy_type_of(settings, strategy)
 
     calibration: dict | None = None
     provenance_notes: list[str] = []
@@ -826,6 +829,7 @@ def run_and_write(
         )
         from digiquant.strategies.sdca.presets import load_preset
         from digiquant.strategies.sdca.providers import resolve_sdca_risk_model
+        from digiquant.strategies.sdca.rolling_z import DEFAULT_ROLLING_WINDOW
 
         sdca_cfg = entry.get("sdca") or {}
         preset_name = str(sdca_cfg.get("preset") or "balanced")
@@ -864,7 +868,17 @@ def run_and_write(
         # is not a Nautilus walk-forward result).
         beats_flat_dca_oos = False
         risk_model_name = str(sdca_cfg.get("risk_model") or "btc_power_law")
-        model = resolve_sdca_risk_model(risk_model_name, dates=idx_dates, price=ohlcv["close"])
+        rolling_window = sdca_cfg.get("rolling_window")
+        rolling_z = sdca_cfg.get("rolling_z")
+        model = resolve_sdca_risk_model(
+            risk_model_name,
+            dates=idx_dates,
+            price=ohlcv["close"],
+            rolling_window=int(rolling_window)
+            if rolling_window is not None
+            else DEFAULT_ROLLING_WINDOW,
+            rolling_z=float(rolling_z) if rolling_z is not None else 1.0,
+        )
         extras = build_extra_indicators(idx_dates, ohlcv["close"], weights, sources)
         index = materialize_sdca_risk_index(
             ohlcv,
@@ -874,7 +888,7 @@ def run_and_write(
             risk_model=model,
         )
         sdca_index = index
-        coefficients = model.coefficients
+        coefficients = getattr(model, "coefficients", None)
         calibration = {
             "risk_path": str(tmp_risk),
             "curve_nodes": preset.curve_nodes,
@@ -883,6 +897,69 @@ def run_and_write(
             "preset": preset_name,
             "indicator_weights": weights.model_dump(),
         }
+        mask_cfg = sdca_cfg.get("sell_mask") or {}
+        if mask_cfg:
+            # Optional sell-side veto (#4804): strict-box mask days built by the
+            # SHIPPED builder (never a copy) from the signal-delayed OHLCV
+            # closes + staged DFII10. Absent block (BTC) → no key, no note.
+            # ``run_nautilus`` threads ``sell_dates`` into the strategy config
+            # via the ``config_declares_field`` filter (SdcaStrategyConfig
+            # declares it, None-default).
+            from build_gold_sell_mask import build_mask as build_gold_sell_mask
+            from build_gold_sell_mask import read_dfii10_csv
+
+            dfii10_path = Path(cache_dir) / "DFII10.csv"
+            mask_result = None
+            if dfii10_path.exists():
+                try:
+                    src_dates, src_vals = read_dfii10_csv(dfii10_path)
+                    mask_result = build_gold_sell_mask(
+                        idx_dates.to_list(),
+                        [float(c) for c in ohlcv["close"].to_list()],
+                        src_dates,
+                        src_vals,
+                        z_thresh=float(mask_cfg.get("z_thresh", -2.0)),
+                        m_thresh=float(mask_cfg.get("m_thresh", 1.5)),
+                        z_window=int(mask_cfg.get("z_window", 1260)),
+                        sma_window=int(mask_cfg.get("sma_window", 1000)),
+                    )
+                except Exception as exc:
+                    # Fail-closed (Ruling 1, #4804): the mask was specified
+                    # but its inputs are unreadable — handled below.
+                    logger.warning(
+                        "Gold sell mask unavailable (unreadable %s): %s",
+                        dfii10_path,
+                        exc,
+                    )
+            if mask_result is not None:
+                mask_days = [
+                    day
+                    for day, flagged in zip(mask_result["dates"], mask_result["mask"], strict=True)
+                    if flagged
+                ]
+                calibration["sell_dates"] = frozenset(mask_days)
+                first_last = (
+                    f"{mask_days[0].isoformat()}..{mask_days[-1].isoformat()}"
+                    if mask_days
+                    else "none"
+                )
+                provenance_notes.append(
+                    f"Sell mask (strict box z<={mask_result['z_thresh']} & "
+                    f"m>={mask_result['m_thresh']}, z_window={mask_result['z_window']}, "
+                    f"sma_window={mask_result['sma_window']}): "
+                    f"{len(mask_days)} mask days over the full delayed frame {first_last}."
+                )
+            else:
+                # Fail-closed (Ruling 1, #4804): mask specified but its
+                # inputs are missing/unreadable → EMPTY set blocks sells
+                # (premise-preserving for a long-biased system) + explicit
+                # mask_unavailable flag, never silent. No-mask entries (BTC)
+                # never enter this branch.
+                calibration["sell_dates"] = frozenset()
+                provenance_notes.append(
+                    "Sell mask UNAVAILABLE (mask_unavailable: DFII10.csv missing "
+                    "or unreadable in cache) — sell_dates empty, sells blocked."
+                )
         extra_weights = tuple(
             weight for name, weight in published_weights.model_dump().items() if name != "valuation"
         )
@@ -928,10 +1005,18 @@ def run_and_write(
                 + ", ".join(dropped_this_run)
                 + " (missing source series)."
             )
-        provenance_notes.append(
-            f"Coefficients {coefficients.fit_start} → {coefficients.fit_end} "
-            f"({coefficients.fit_rows} rows). Preset {preset_name}."
-        )
+        if coefficients is not None:
+            provenance_notes.append(
+                f"Coefficients {coefficients.fit_start} → {coefficients.fit_end} "
+                f"({coefficients.fit_rows} rows). Preset {preset_name}."
+            )
+        else:
+            # Parameter-free model (rolling_z, Ruling 6 #4804): no fit, so no
+            # Coefficients note — record the rail params instead.
+            provenance_notes.append(
+                f"Rolling-z rails (no fit): window={model.window}, z={model.z}. "
+                f"Preset {preset_name}."
+            )
         provenance_notes.append(
             "Nautilus venue: spot CurrencyPair + CASH (remaining cash / remaining "
             "holdings). Engine bars from trade_start; risk index uses the full "

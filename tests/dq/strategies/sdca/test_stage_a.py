@@ -42,6 +42,32 @@ class TestSdcaCycleWindows:
         assert names["2025_peak"].kind == CycleKind.PEAK
         assert names["2025_peak"].start <= date(2025, 1, 20) <= names["2025_peak"].end
 
+    def test_gold_v1_pins_documented_extrema(self) -> None:
+        windows = SdcaCycleWindows.gold_v1()
+        names = {w.name: w for w in windows.windows}
+        pins = {
+            "2008_peak": (CycleKind.PEAK, date(2008, 3, 17)),
+            "2008_trough": (CycleKind.TROUGH, date(2008, 10, 24)),
+            "2011_peak": (CycleKind.PEAK, date(2011, 9, 6)),
+            "2015_trough": (CycleKind.TROUGH, date(2015, 12, 17)),
+            "2020_peak": (CycleKind.PEAK, date(2020, 8, 7)),
+            "2022_trough": (CycleKind.TROUGH, date(2022, 10, 21)),
+            "2026_peak": (CycleKind.PEAK, date(2026, 9, 29)),
+        }
+        assert set(names) == set(pins)
+        for name, (kind, pin) in pins.items():
+            assert names[name].kind == kind
+            assert names[name].start == pin - _dt.timedelta(days=45)
+            assert names[name].end == pin + _dt.timedelta(days=45)
+        assert len(windows.peaks()) == 4
+        assert len(windows.troughs()) == 3
+        ordered = sorted(windows.windows, key=lambda w: w.start)
+        assert [w.start for w in ordered] == sorted(w.start for w in windows.windows)
+        for first, second in zip(ordered, ordered[1:]):
+            assert first.end < second.start
+        for w in windows.windows:
+            assert w.start >= date(2004, 11, 18)
+
     def test_rejects_empty(self) -> None:
         with pytest.raises(ValueError, match="at least one"):
             SdcaCycleWindows(windows=())

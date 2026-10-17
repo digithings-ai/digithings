@@ -13,6 +13,7 @@ EXPECTED_PRESET_NAMES = {
     "accumulate_and_distribute",
     "btc_optimized",
     "gold_optimized",
+    "gold_reselect",
 }
 
 
