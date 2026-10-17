@@ -442,6 +442,14 @@ def run_sdca_walk_forward(
     best_score, best_params, best_folds = ranked[0]
     if best_score == float("-inf"):
         logger.warning("all SDCA trials infeasible under capital/drawdown rails")
+    # A ``None`` mid-tier knee means "tier disabled". The result envelope types
+    # ``best_params`` as ``dict[str, float | int | str]``, so carry a disabled knee as an
+    # ABSENT key -- ``shape_from_params`` reads absent and ``None`` identically. Stripping
+    # here (rather than letting the value through) is also what keeps the baseline swap
+    # honest: ``params_from_shape(risk50_linear_reference_curve(...))`` deliberately writes
+    # ``None`` over any mid knee the candidate carried, and this drop is what makes that
+    # override stick instead of leaking the candidate's mid tier into the comparator.
+    best_params = {key: value for key, value in best_params.items() if value is not None}
 
     mean_is = _mean_is_for(best_folds, fold_weighting)
     mean_oos = _mean_oos_for(best_folds, fold_weighting)
@@ -538,7 +546,17 @@ def _sensitivity_of(
         if delta > worst_delta:
             worst_delta = delta
             worst_neighbor = neighbor
-    max_delta = max(deltas) if deltas else 0.0
+    if not deltas:
+        # Every neighbour was dropped before it could be scored -- an invalid shape, or a
+        # neighbour missing extra-indicator sources. Returning ``stable=True`` here would be
+        # a guard that cannot fail: the sensitivity half of the gate would pass on zero
+        # measurements. Fail loudly instead.
+        raise ValueError(
+            "sensitivity check scored no neighbours "
+            f"(neighbors={len(neighbors)}, scored={len(deltas)}); "
+            "the stability verdict would be unfalsifiable"
+        )
+    max_delta = max(deltas)
     return SensitivityReport(
         frac=frac,
         spike_threshold_pct=SENSITIVITY_SPIKE_PCT,

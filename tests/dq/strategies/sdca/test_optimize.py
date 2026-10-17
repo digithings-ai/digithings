@@ -16,6 +16,7 @@ from digiquant.strategies.sdca.optimize import (
     SDCA_SHAPE_DEFAULTS,
     SdcaOptimizeProvenance,
     SdcaWalkForwardResult,
+    _sensitivity_of,
     load_btc_optimized_provenance,
     load_sdca_extra_z,
     persist_btc_optimized,
@@ -25,7 +26,11 @@ from digiquant.strategies.sdca.optimize import (
 from digiquant.strategies.sdca.presets import load_preset
 from digiquant.strategies.sdca.price_oscillators import SdcaOscillatorSpec
 from digiquant.strategies.sdca.risk_model import RiskModel
-from digiquant.strategies.sdca.walk_forward import SdcaTrialMetrics
+from digiquant.strategies.sdca.walk_forward import (
+    SdcaOptimizeObjective,
+    SdcaTrialMetrics,
+    sensitivity_neighbors,
+)
 from digiquant.strategy_specs import (
     _resolve_strategy_name,
     get_param_specs,
@@ -546,3 +551,31 @@ class TestLoadSdcaExtraZWindows:
             "load_sdca_extra_z is not threading extra_windows through to "
             "build_extra_indicators"
         )
+
+
+class TestSensitivityGuardFailsLoudly:
+    """An empty neighbour set must raise, not be reported as a stable plateau (#3174).
+
+    The old ``max(deltas) if deltas else 0.0`` made ``stable=True, neighbor_count=0``
+    reachable whenever every neighbour was dropped -- a guard that cannot fail.
+    """
+
+    def test_no_scoreable_neighbour_raises_instead_of_reporting_stable(self) -> None:
+        params: dict[str, float | int | str] = {"note": "no numeric parameters"}
+        # Precondition: a params dict with no numeric subject yields no neighbours,
+        # which is exactly the state the old code silently reported as stable.
+        assert sensitivity_neighbors(params, frac=0.05) == []
+
+        with pytest.raises(ValueError, match="scored no neighbours"):
+            _sensitivity_of(
+                params,
+                0.0,
+                _dates(10),
+                [100.0] * 10,
+                [],
+                _fitter,
+                _evaluator,
+                SdcaOptimizeObjective(),
+                0.05,
+                None,
+            )

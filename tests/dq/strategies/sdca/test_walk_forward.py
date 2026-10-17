@@ -20,6 +20,8 @@ from digiquant.strategies.sdca.walk_forward import (
     objective_score,
     params_are_valid,
     score_trial_on_folds,
+    sensitivity_neighbors,
+    shape_from_params,
     window_slice,
 )
 
@@ -291,3 +293,67 @@ class TestDurationWeightedMean:
 
     def test_empty_scores_is_negative_infinity(self) -> None:
         assert duration_weighted_mean([]) == float("-inf")
+
+
+class TestMidTierParamsReachTheGate:
+    """The four ``*_mid_*`` keys are part of the gate's parameter surface (#3174).
+
+    ``presets.json`` publishes a two-knee ``btc_optimized`` curve, but
+    ``shape_from_params`` used to read only the six required keys, so every gate run
+    scored that curve's single-knee projection. These pin the mid-tier carry through
+    the read path, including the ``None`` (tier-off) case that a naive ``float(...)``
+    coercion silently drops.
+    """
+
+    _BASE = {
+        "buy_max_rate": 30.0,
+        "buy_knee_risk": 40.0,
+        "sell_knee_risk": 60.0,
+        "sell_max_rate": 25.0,
+        "buy_curvature": 1.0,
+        "sell_curvature": 1.0,
+    }
+    _MID = {
+        "buy_mid_knee_risk": 20.0,
+        "buy_mid_curvature": 1.5,
+        "sell_mid_knee_risk": 80.0,
+        "sell_mid_curvature": 1.2,
+    }
+
+    def test_shape_from_params_carries_the_four_mid_keys(self) -> None:
+        shape = shape_from_params({**self._BASE, **self._MID})
+        assert shape.buy_mid_knee_risk == pytest.approx(20.0)
+        assert shape.buy_mid_curvature == pytest.approx(1.5)
+        assert shape.sell_mid_knee_risk == pytest.approx(80.0)
+        assert shape.sell_mid_curvature == pytest.approx(1.2)
+
+    def test_a_none_mid_knee_is_carried_as_disabled_not_coerced(self) -> None:
+        params: dict[str, float | None] = {
+            **self._BASE,
+            **self._MID,
+            "buy_mid_knee_risk": None,
+            "sell_mid_knee_risk": None,
+        }
+        shape = shape_from_params(params)  # type: ignore[arg-type]
+        assert shape.buy_mid_knee_risk is None
+        assert shape.sell_mid_knee_risk is None
+        assert shape.buy_mid_curvature == pytest.approx(1.5)
+
+    def test_params_are_valid_when_a_mid_knee_is_none(self) -> None:
+        params: dict[str, float | None] = {**self._BASE, "buy_mid_knee_risk": None}
+        assert params_are_valid(params) is True  # type: ignore[arg-type]
+
+    def test_sensitivity_neighbors_survives_a_none_valued_subject(self) -> None:
+        params: dict[str, float | None] = {
+            **self._BASE,
+            "buy_mid_knee_risk": None,
+            "buy_mid_curvature": 1.0,
+            "sell_mid_knee_risk": None,
+            "sell_mid_curvature": 1.0,
+        }
+        neighbors = sensitivity_neighbors(params, frac=0.05)  # type: ignore[arg-type]
+        # The hazard: a None-valued key used to drop EVERY neighbour, which made the
+        # sensitivity gate report a stable plateau on zero measurements.
+        assert neighbors
+        assert any(n["buy_max_rate"] != params["buy_max_rate"] for n in neighbors)
+        assert all(n["buy_mid_knee_risk"] is None for n in neighbors)

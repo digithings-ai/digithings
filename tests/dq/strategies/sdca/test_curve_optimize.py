@@ -30,6 +30,7 @@ from digiquant.strategies.sdca.curve_optimize import (
     dead_zone_shape_params,
     fill_concentration,
     load_frozen_index,
+    params_from_shape,
     persist_curve_winner,
     published_curve_shape,
     published_indicator_weights,
@@ -990,3 +991,48 @@ class TestLoadFrozenIndex:
         assert search_kwargs["initial_cash"] == 2500.0
         assert search_kwargs["frozen_weights"] is sentinel_weights
         assert search_kwargs["baseline"] == published_curve_shape()
+
+
+class TestParamsFromShapeCarriesTheMidTier:
+    """``params_from_shape`` is the read side of the walk-forward gate (#3174)."""
+
+    def _shape(self, **overrides: float) -> SdcaCurveShape:
+        base = {
+            "buy_max_rate": 35.0,
+            "buy_knee_risk": 45.0,
+            "sell_knee_risk": 50.0,
+            "sell_max_rate": 30.0,
+            "buy_curvature": 1.5,
+            "sell_curvature": 2.5,
+        }
+        base.update(overrides)
+        return SdcaCurveShape(**base)
+
+    def test_carries_the_four_mid_keys(self) -> None:
+        shape = self._shape(
+            buy_mid_knee_risk=15.0,
+            buy_mid_curvature=1.0,
+            sell_mid_knee_risk=85.0,
+            sell_mid_curvature=1.0,
+        )
+        params = params_from_shape(shape)
+        assert params["buy_mid_knee_risk"] == pytest.approx(15.0)
+        assert params["buy_mid_curvature"] == pytest.approx(1.0)
+        assert params["sell_mid_knee_risk"] == pytest.approx(85.0)
+        assert params["sell_mid_curvature"] == pytest.approx(1.0)
+
+    def test_a_disabled_mid_knee_is_preserved_as_none(self) -> None:
+        params = params_from_shape(self._shape())
+        assert params["buy_mid_knee_risk"] is None
+        assert params["sell_mid_knee_risk"] is None
+        # Mid curvatures have a numeric default, so they are always carried.
+        assert params["buy_mid_curvature"] == pytest.approx(1.0)
+        assert params["sell_mid_curvature"] == pytest.approx(1.0)
+
+    def test_the_published_curve_reaches_the_param_surface(self) -> None:
+        # The gap this ticket closes: the gate builds its trial from params_from_shape,
+        # so a dropped mid knee made it score the single-knee projection of the very
+        # curve presets.json publishes.
+        params = params_from_shape(load_preset("btc_optimized").shape)
+        assert params["buy_mid_knee_risk"] == pytest.approx(15.0)
+        assert params["sell_mid_knee_risk"] == pytest.approx(85.0)

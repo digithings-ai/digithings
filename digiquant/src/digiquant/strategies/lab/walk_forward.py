@@ -23,7 +23,7 @@ from typing import Literal, Protocol
 from pydantic import BaseModel, ConfigDict, Field
 
 from digiquant.strategies.lab.composite_risk import IndicatorWeight
-from digiquant.strategies.lab.curve_shape import SdcaCurveShape
+from digiquant.strategies.lab.curve_shape import _MID_TIER_KEYS, SdcaCurveShape
 from digiquant.strategies.lab.indicator_catalog import (
     composite_weights_from_params,
     extra_indicators_for_window,
@@ -169,15 +169,26 @@ def make_walk_forward_folds(
 
 
 def shape_from_params(params: dict[str, float | int | str]) -> SdcaCurveShape:
-    """Build ``SdcaCurveShape`` from an optimizer param dict. May raise ValueError."""
-    return SdcaCurveShape(
-        buy_max_rate=float(params["buy_max_rate"]),
-        buy_knee_risk=float(params["buy_knee_risk"]),
-        sell_knee_risk=float(params["sell_knee_risk"]),
-        sell_max_rate=float(params["sell_max_rate"]),
-        buy_curvature=float(params["buy_curvature"]),
-        sell_curvature=float(params["sell_curvature"]),
-    )
+    """Build ``SdcaCurveShape`` from an optimizer param dict. May raise ValueError.
+
+    The four optional mid-tier fields are carried through when present and not
+    ``None``. A ``None`` knee means "tier disabled" (``curve_shape`` routes to the
+    single-knee branch), so it is left to the field default rather than coerced --
+    ``float(None)`` raises and would silently drop the trial.
+    """
+    kwargs: dict[str, float] = {
+        "buy_max_rate": float(params["buy_max_rate"]),
+        "buy_knee_risk": float(params["buy_knee_risk"]),
+        "sell_knee_risk": float(params["sell_knee_risk"]),
+        "sell_max_rate": float(params["sell_max_rate"]),
+        "buy_curvature": float(params["buy_curvature"]),
+        "sell_curvature": float(params["sell_curvature"]),
+    }
+    for key in _MID_TIER_KEYS:
+        value = params.get(key)
+        if value is not None:
+            kwargs[key] = float(value)
+    return SdcaCurveShape(**kwargs)
 
 
 def params_are_valid(params: dict[str, float | int | str]) -> bool:

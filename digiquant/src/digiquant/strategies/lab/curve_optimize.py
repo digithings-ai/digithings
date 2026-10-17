@@ -28,7 +28,7 @@ from digiquant.data.prices.history_cache import load_cached
 from digiquant.strategies.lab.backtest import run_backtest
 from digiquant.strategies.lab.btc_power_law import BtcPowerLawRiskModel, load_coefficients
 from digiquant.strategies.lab.curve import AccumDistCurve
-from digiquant.strategies.lab.curve_shape import SdcaCurveShape
+from digiquant.strategies.lab.curve_shape import _MID_TIER_KEYS, SdcaCurveShape
 from digiquant.strategies.lab.indicator_catalog import SdcaCompositeWeights, build_extra_indicators
 from digiquant.strategies.lab.optimize import drop_extras_missing_sources, load_sdca_extra_sources
 from digiquant.strategies.lab.presets import load_preset
@@ -197,8 +197,21 @@ def shape_from_bounds_ok(
     return shape.sell_max_rate > 0.0
 
 
-def params_from_shape(shape: SdcaCurveShape) -> dict[str, float]:
-    return {key: float(getattr(shape, key)) for key in _SHAPE_KEYS}
+def params_from_shape(shape: SdcaCurveShape) -> dict[str, float | None]:
+    """Read the full optimizer-parameter surface off a curve shape.
+
+    ``_SHAPE_KEYS`` deliberately stays the six required keys -- it also seeds the
+    coarse grid, the search bounds and the dedup tuples. The four optional mid-tier
+    keys are emitted alongside them so the walk-forward gate scores the curve it
+    publishes rather than that curve's single-knee projection. A disabled knee is
+    carried as ``None`` (not omitted) so ``shape_from_params`` reads it back as
+    "tier off"; the mid curvatures are always numeric.
+    """
+    params: dict[str, float | None] = {key: float(getattr(shape, key)) for key in _SHAPE_KEYS}
+    for key in _MID_TIER_KEYS:
+        value = getattr(shape, key)
+        params[key] = None if value is None else float(value)
+    return params
 
 
 def round_shape_for_preset(shape: SdcaCurveShape) -> SdcaCurveShape:
