@@ -21,6 +21,7 @@ from digiquant.strategies.sdca.indicator_catalog import (
     extra_indicators_for_window,
     load_date_value_frame,
     m2_liquidity_z,
+    onchain_addr_ratio_z,
     parse_indicator_weights_json,
     rs_eth_z,
 )
@@ -167,6 +168,34 @@ class TestNamedExtras:
         assert z[0] is not None, (
             "DXY z must be non-null on 2015-08-01 when DTWEXBGS has 2014 history"
         )
+    def test_m2_smooths_monthly_print_steps(self) -> None:
+        n = 500
+        dates = _dates(n)
+        # Monthly FRED prints forward-filled to daily, like the real source
+        # -- each print jumps M2 by a fixed step, so the unsmoothed
+        # rolling-z is a literal step function (see the module comment on
+        # ``_M2_SMOOTHING_HALFLIFE_DAYS``). The causal-EMA post-step should
+        # turn that step into a ramp, i.e. strictly damp the day-over-day
+        # jump relative to the same rolling-z with no smoothing.
+        m2_dates = pl.Series(
+            "date", [dates[0] + _dt.timedelta(days=30 * i) for i in range(n // 30 + 1)], dtype=pl.Date
+        )
+        m2_values = pl.Series([100.0 * (1.01**i) for i in range(m2_dates.len())])
+        smoothed = m2_liquidity_z(dates, m2_dates, m2_values, roc_days=90, window=180, min_samples=60)
+
+        aligned = align_to_dates(dates, m2_dates, m2_values, forward_fill=True)
+        roc = aligned / aligned.shift(90) - 1.0
+        unsmoothed = causal_rolling_z(roc, window=180, min_samples=60)
+
+        def max_jump(z: pl.Series) -> float:
+            vals = z.to_list()
+            return max(
+                abs(a - b)
+                for a, b in zip(vals[1:], vals[:-1], strict=True)
+                if a is not None and b is not None
+            )
+
+        assert max_jump(smoothed) < max_jump(unsmoothed)
 
     def test_dxy_strength_is_negative_z(self) -> None:
         n = 50
@@ -213,6 +242,57 @@ class TestBuildExtraIndicators:
                 SdcaCompositeWeights(valuation=1.0, m2=0.5),
                 ExtraIndicatorSources(),
             )
+
+    def test_onchain_addr_ratio_wires_into_build_extra_indicators(self) -> None:
+        dates = _dates(30)
+        price = pl.Series([100.0] * 30)
+        addr = pl.Series([1000.0 + i for i in range(30)])
+        sources = ExtraIndicatorSources(onchain_addr_ratio_dates=dates, onchain_addr_ratio_values=addr)
+        extras = build_extra_indicators(
+            dates,
+            price,
+            SdcaCompositeWeights(valuation=1.0, onchain_addr_ratio=1.0),
+            sources,
+            window=10,
+            min_samples=5,
+        )
+        by_name = {e.name: e for e in extras}
+        assert "onchain_addr_ratio" in by_name
+        assert by_name["onchain_addr_ratio"].enabled
+        expected = onchain_addr_ratio_z(dates, price, dates, addr, window=10, min_samples=5)
+        assert by_name["onchain_addr_ratio"].z.to_list() == expected.to_list()
+
+    def test_extra_windows_overrides_per_indicator_window(self) -> None:
+        """extra_windows lets dxy use its own period while m2 (absent from the
+        dict) still falls back to the shared `window` kwarg, unchanged."""
+        dates = _dates(60)
+        price = pl.Series([100.0 + 0.5 * i for i in range(60)])
+        dxy = pl.Series([90.0 + 0.2 * i for i in range(60)])
+        m2 = pl.Series([1000.0 + i for i in range(60)])
+        sources = ExtraIndicatorSources(
+            dxy_dates=dates, dxy_values=dxy, m2_dates=dates, m2_values=m2
+        )
+        extras = build_extra_indicators(
+            dates,
+            price,
+            SdcaCompositeWeights(valuation=1.0, dxy=1.0, m2=1.0),
+            sources,
+            window=10,
+            min_samples=5,
+            roc_days=5,
+            extra_windows={"dxy": 20},
+        )
+        by_name = {e.name: e for e in extras}
+
+        # (a) dxy, present in extra_windows, is computed at its own window (20)
+        # rather than the shared default (10).
+        expected_dxy = dxy_z(dates, dates, dxy, window=20, min_samples=5)
+        assert by_name["dxy"].z.to_list() == expected_dxy.to_list()
+
+        # (b) m2, absent from extra_windows, keeps the prior shared-default
+        # behavior: computed at the shared `window` kwarg (10), unchanged.
+        expected_m2 = m2_liquidity_z(dates, dates, m2, roc_days=5, window=10, min_samples=5)
+        assert by_name["m2"].z.to_list() == expected_m2.to_list()
 
     def test_window_slice_keeps_alignment(self) -> None:
         dates = [date(2020, 1, 1) + _dt.timedelta(days=i) for i in range(10)]

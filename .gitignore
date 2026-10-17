@@ -137,6 +137,13 @@ apps/*/.selfhost-dev/
 **/data/**/*.parquet
 **/data/**/*.pkl
 **/data/**/*.pickle
+
+# Research scratch output (diagnostic JSON/scripts referenced from
+# RESEARCH_STATE.md as "(gitignored)" -- regeneratable, not a validated
+# candidate; never commit).
+.scratch/
+**/.scratch/
+
 # Packaging output
 digi-bundle-*.tar.gz
 .DS_Store

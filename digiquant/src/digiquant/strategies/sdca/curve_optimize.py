@@ -416,23 +416,35 @@ def search_continuous_curve(
     )
 
 
-# Wide-knee search: the owner's visual-inspection hypothesis -- looking at the
-# aggregate risk chart, buying should start somewhere in the mid range and get
-# aggressive below it; selling should start above fair value and get more
-# aggressive toward the top. Curvature >= 1 already gives the "slow near the
-# knee, exponential near the edge" ramp. buy_knee_risk and sell_knee_risk stay
-# fully independent here (unlike Stage A's single crossing point), so the search
-# is free to land on an asymmetric result. `sell_max_rate`'s ceiling is lifted
-# well past the published search bound so the optimizer can actually explore
-# selling the position down toward empty at extreme risk, and the knee bounds are
-# shifted into the middle territory that hypothesis describes -- these are this
-# search's own bounds, deliberately wider than the published `CURVE_SEARCH_BOUNDS`
-# that `search_curve`'s default trials still use.
+# Wide-knee search: Chris's direct visual-inspection hypothesis (2026-09-05,
+# same session as Stage A/B) -- looking at the aggregate risk chart, buying
+# should start around risk 40 and get aggressive by ~25; selling should start
+# around risk 60 and get aggressive by ~75, and since the composite is
+# z-scored that split is naturally symmetric as a *starting point*, not a
+# constraint: buy_knee_risk and sell_knee_risk stay fully independent here
+# (unlike Stage A's single crossing point), so the search is free to land on
+# an asymmetric result. Curvature >= 1 already gives the "slow near the knee,
+# exponential near the edge" ramp Chris described; CURVE_SEARCH_BOUNDS caps
+# sell_max_rate at 40, but Stage A/B fills showed sells never came close to
+# depleting the position even with a wide dead zone -- so this search widens
+# the sell-rate ceiling well past that, to let the optimizer actually explore
+# selling the position down toward empty at extreme risk if that's what
+# improves risk_adjusted_return.
+# 2026-09-24 recalibration: widened on the sell side only (buy side
+# untouched) so the search can reach more aggressive medium-dip selling --
+# lower sell_knee_risk (starts selling earlier, before a dip becomes a large
+# drawdown), lower sell_curvature (front-loaded: rate ramps up right after
+# the knee instead of staying near-zero until close to risk=100 -- see
+# SdcaCurveShape.rate_at's t**curvature), and a higher sell_max_rate ceiling.
+# Safe to widen unconditionally: curve_optimize_feasibility.py's new
+# MAX_DRAWDOWN_CAP_PCT gate rejects any shape that doesn't actually reduce
+# drawdown, so a wider search space can only find more candidates, never
+# accept a worse one it wouldn't have accepted before.
 WIDE_KNEE_SEARCH_BOUNDS: dict[str, tuple[float, float]] = {
     "buy_max_rate": (5.0, 40.0),
     "buy_knee_risk": (20.0, 48.0),
-    "sell_knee_risk": (52.0, 80.0),
-    "sell_max_rate": (5.0, 95.0),
+    "sell_knee_risk": (40.0, 80.0),
+    "sell_max_rate": (5.0, 100.0),
     "buy_curvature": (1.0, 6.0),
     "sell_curvature": (1.0, 6.0),
 }
@@ -440,10 +452,10 @@ WIDE_KNEE_SEARCH_BOUNDS: dict[str, tuple[float, float]] = {
 WIDE_KNEE_COARSE_GRID: dict[str, tuple[float, ...]] = {
     "buy_max_rate": (15.0, 25.0, 35.0),
     "buy_knee_risk": (30.0, 35.0, 40.0, 45.0),
-    "sell_knee_risk": (55.0, 60.0, 65.0, 70.0),
-    "sell_max_rate": (15.0, 30.0, 50.0, 70.0, 90.0),
+    "sell_knee_risk": (45.0, 50.0, 55.0, 60.0, 65.0, 70.0),
+    "sell_max_rate": (15.0, 30.0, 50.0, 70.0, 90.0, 100.0),
     "buy_curvature": (1.5, 2.5, 4.0),
-    "sell_curvature": (1.5, 2.5, 4.0),
+    "sell_curvature": (1.0, 1.5, 2.5, 4.0),
 }
 
 
@@ -968,6 +980,7 @@ def load_frozen_index(
     ticker: str = "BTC-USD",
     weights: SdcaCompositeWeights | None = None,
     oscillators: SdcaOscillatorSpec | None = None,
+    extra_windows: dict[str, int] | None = None,
 ) -> tuple[pl.Series, pl.Series, pl.Series, SdcaCompositeWeights]:
     """Composite risk on the delayed cache, sliced from ``trade_start``.
 
@@ -978,7 +991,12 @@ def load_frozen_index(
     ``SdcaOscillatorSpec()``'s production periods; pass an explicit spec to
     freeze indicator construction periods a Stage-2-style period search has
     already picked, instead of silently falling back to defaults tuned for a
-    different indicator formula.
+    different indicator formula. ``extra_windows`` passes through to
+    ``build_extra_indicators`` -- an optional per-indicator override of the
+    shared macro/on-chain rolling-z window (m2, dxy, onchain_mvrv,
+    onchain_asopr, onchain_puell, onchain_rhodl, onchain_addr_ratio,
+    fear_greed). Absent or ``None``, every extra keeps the shared default
+    (unchanged behavior).
     """
     ohlcv = load_cached(ticker, cache_dir)
     if ohlcv is None or ohlcv.is_empty():
@@ -992,7 +1010,7 @@ def load_frozen_index(
     sources = load_sdca_extra_sources(cache_dir)
     resolved = drop_extras_missing_sources(requested, sources)
     extras = build_extra_indicators(
-        dates, ohlcv["close"], resolved, sources, oscillators=oscillators
+        dates, ohlcv["close"], resolved, sources, oscillators=oscillators, extra_windows=extra_windows
     )
     index = build_risk_index(
         dates,

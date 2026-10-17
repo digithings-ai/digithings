@@ -62,7 +62,13 @@ _LMACD_RICH_FRAC = 0.20
 # A linear map through 50 pegs a bull at the floor for the whole run.
 _RSI_DAILY_LENGTH = 14
 _RSI_MID = 50.0
-_RSI_CURVE_POWER = 4.0
+# 2026-09-24 (SDCA recalibration v1, PR #5777): lowered from quartic (4.0) to
+# 3.5. Quartic's near-zero output through ordinary 55-75 RSI followed by a
+# steep run-up at the extremes reads, through ``agreement_scaled_blend``'s
+# up-to-1.5x amplification, as a flatline-then-spike rather than a ramp.
+# 3.25 and below re-triggers the mid-bull pegging regression guard in
+# test_price_oscillators.py; 3.5 is the lowest value that stays clear of it.
+_RSI_CURVE_POWER = 3.5
 
 # Medium-term daily legs. RSI needs no z-window: Wilder smoothing is already
 # causal on the daily series, so it maps straight through rsi_continuous_z.

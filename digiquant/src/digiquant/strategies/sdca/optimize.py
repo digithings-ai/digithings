@@ -14,6 +14,7 @@ import re
 import uuid
 from datetime import date
 from pathlib import Path
+from typing import Literal
 
 import polars as pl
 from pydantic import BaseModel, ConfigDict, Field
@@ -30,7 +31,7 @@ from digiquant.strategies.sdca.indicator_catalog import (
     load_date_value_frame,
     missing_extra_names,
 )
-from digiquant.strategies.sdca.price_oscillators import price_oscillator_z_vectors
+from digiquant.strategies.sdca.price_oscillators import SdcaOscillatorSpec, price_oscillator_z_vectors
 from digiquant.strategies.sdca.risk_model import RiskModel
 from digiquant.strategies.sdca.walk_forward import (
     SENSITIVITY_SPIKE_PCT,
@@ -40,6 +41,7 @@ from digiquant.strategies.sdca.walk_forward import (
     SdcaTrialEvaluator,
     SdcaTrialMetrics,
     WalkForwardFold,
+    duration_weighted_mean,
     make_walk_forward_folds,
     objective_score,
     params_are_valid,
@@ -118,6 +120,9 @@ class SdcaWalkForwardResult(BaseModel):
     rails_protocol: str = RAILS_PROTOCOL
     evaluator_label: str
     beats_flat_dca_oos: bool
+    fold_weighting: Literal["unweighted", "duration"] = "unweighted"
+    mean_oos_vs_flat_dca_pct_unweighted: float
+    mean_oos_vs_flat_dca_pct_duration_weighted: float
 
 
 class SdcaOptimizeProvenance(BaseModel):
@@ -306,6 +311,8 @@ def load_sdca_extra_z(
     *,
     data_path: str | Path | None,
     data_dir: str | Path | None,
+    oscillators: SdcaOscillatorSpec | None = None,
+    extra_windows: dict[str, int] | None = None,
 ) -> dict[str, list[float | None]]:
     """Load independent extras from sibling files next to the BTC OHLCV CSV.
 
@@ -314,6 +321,18 @@ def load_sdca_extra_z(
     ``BAMLC0A0CM.csv``, ``T5YIE.csv``, ``NFCI.csv``, ``GDX-USD.csv``, ``SLV.csv``
     (each also accepted as parquet).
     Missing files omit that extra (trials that need it are skipped).
+
+    ``oscillators`` defaults to ``SdcaOscillatorSpec()``'s production periods;
+    pass an explicit spec to freeze the price-oscillator extras (weekly_rsi,
+    weekly_macd, sma_band, monthly_rsi, monthly_macd, weekly_monthly_rsi,
+    weekly_monthly_macd) at periods a period search has already picked,
+    instead of silently reverting to defaults tuned for a different formula.
+
+    ``extra_windows`` passes through to ``extra_z_vectors`` /
+    ``build_extra_indicators`` -- an optional per-indicator override of the
+    shared macro/on-chain rolling-z window (m2, dxy, onchain_mvrv,
+    onchain_asopr, onchain_puell, onchain_rhodl, onchain_addr_ratio,
+    fear_greed). Absent or ``None``, every extra keeps the shared default.
     """
     root = Path(data_path).parent if data_path is not None else None
     if root is None and data_dir is not None:
@@ -328,7 +347,11 @@ def load_sdca_extra_z(
         rs_eth=1.0 if sources.eth_dates is not None else 0.0,
         dxy=1.0 if sources.dxy_dates is not None else 0.0,
     )
-    extra.update(extra_z_vectors(date_s, price_s, weights, sources))
+    extra.update(
+        extra_z_vectors(
+            date_s, price_s, weights, sources, oscillators=oscillators, extra_windows=extra_windows
+        )
+    )
     return extra
 
 
@@ -342,6 +365,18 @@ def _mean_is(scores: list[FoldScore]) -> float:
     if not scores:
         return float("-inf")
     return sum(s.in_sample.vs_flat_dca_pct for s in scores) / len(scores)
+
+
+def _mean_oos_for(scores: list[FoldScore], fold_weighting: Literal["unweighted", "duration"]) -> float:
+    if fold_weighting == "duration":
+        return duration_weighted_mean(scores, leg="out_of_sample")
+    return _mean_oos(scores)
+
+
+def _mean_is_for(scores: list[FoldScore], fold_weighting: Literal["unweighted", "duration"]) -> float:
+    if fold_weighting == "duration":
+        return duration_weighted_mean(scores, leg="in_sample")
+    return _mean_is(scores)
 
 
 def _trial_oos_objective(scores: list[FoldScore], objective: SdcaOptimizeObjective) -> float:
@@ -365,8 +400,16 @@ def run_sdca_walk_forward(
     oos_frac: float = 0.25,
     sensitivity_frac: float = 0.05,
     extra_z: dict[str, list[float | None]] | None = None,
+    fold_weighting: Literal["unweighted", "duration"] = "unweighted",
 ) -> SdcaWalkForwardResult:
-    """Search ``trials`` under walk-forward; score the winner on the held-out tail."""
+    """Search ``trials`` under walk-forward; score the winner on the held-out tail.
+
+    ``fold_weighting`` selects which mean is primary (``mean_oos_vs_flat_dca_pct``,
+    ``mean_is_vs_flat_dca_pct``, ranking, sensitivity deltas). Default
+    ``"unweighted"`` reproduces every existing caller byte-for-byte. Both the
+    unweighted and duration-weighted mean OOS are always populated on the
+    result regardless of which is primary.
+    """
     obj = objective or SdcaOptimizeObjective()
     folds, holdout = make_walk_forward_folds(
         dates, n_folds=n_folds, holdout_frac=holdout_frac, oos_frac=oos_frac
@@ -391,8 +434,10 @@ def run_sdca_walk_forward(
     if best_score == float("-inf"):
         logger.warning("all SDCA trials infeasible under capital/drawdown rails")
 
-    mean_is = _mean_is(best_folds)
-    mean_oos = _mean_oos(best_folds)
+    mean_is = _mean_is_for(best_folds, fold_weighting)
+    mean_oos = _mean_oos_for(best_folds, fold_weighting)
+    mean_oos_unweighted = _mean_oos(best_folds)
+    mean_oos_duration_weighted = duration_weighted_mean(best_folds, leg="out_of_sample")
     sensitivity = _sensitivity_of(
         best_params,
         mean_oos,
@@ -404,6 +449,7 @@ def run_sdca_walk_forward(
         obj,
         sensitivity_frac,
         extra_z,
+        fold_weighting,
     )
     holdout_metrics = _holdout_metrics(
         best_params, dates, prices, folds, holdout, rails_fitter, evaluator, extra_z
@@ -422,6 +468,9 @@ def run_sdca_walk_forward(
         objective=obj,
         evaluator_label=evaluator_label,
         beats_flat_dca_oos=mean_oos > 0.0,
+        fold_weighting=fold_weighting,
+        mean_oos_vs_flat_dca_pct_unweighted=mean_oos_unweighted,
+        mean_oos_vs_flat_dca_pct_duration_weighted=mean_oos_duration_weighted,
     )
 
 
@@ -456,6 +505,7 @@ def _sensitivity_of(
     objective: SdcaOptimizeObjective,
     frac: float,
     extra_z: dict[str, list[float | None]] | None,
+    fold_weighting: Literal["unweighted", "duration"] = "unweighted",
 ) -> SensitivityReport:
     deltas: list[float] = []
     neighbors = sensitivity_neighbors(best_params, frac=frac)
@@ -474,7 +524,7 @@ def _sensitivity_of(
             objective,
             extra_z=extra_z,
         )
-        delta = abs(_mean_oos(scores) - mean_oos)
+        delta = abs(_mean_oos_for(scores, fold_weighting) - mean_oos)
         deltas.append(delta)
         if delta > worst_delta:
             worst_delta = delta

@@ -70,6 +70,65 @@ If a trial's own weight set is later validated and accepted, replace the
 "Current best validated candidate" section above — don't leave two entries
 that could both be read as "the baseline."
 
+## Phase B: indicator validation gate
+
+`indicator_catalog.py`'s per-field comments (`adx`, `stochastic`, `vol_regime`,
+`halving_cycle`) refer to a staged "Phase B" gate for admitting a new
+indicator into the composite. That gate was never written up here — this
+section is the missing write-up, reconstructed from those comments and from
+the (mostly uncommitted, one-off) scripts they name. It runs *before* the
+"Standard trial protocol" above: Phase B decides whether a candidate
+indicator is worth carrying into a full trial at all; the standard protocol
+then governs how any resulting weight/curve change gets accepted.
+
+Four stages, in order — a candidate must clear one to be tried at the next:
+
+1. **Solo-validation.** Score the candidate alone (not blended into any
+   existing pool) via a `combined` cycle-overlap-style objective against a
+   `0.00` noise baseline, via a one-off `scripts/run_<indicator>_solo_
+   validation.py` script (`.scratch/`-style, not committed per the
+   project's "persist last" convention — these are cheap to regenerate and
+   not meant to live in the repo).
+2. **Fixed-baseline reweight.** Add the candidate at a positive weight on
+   top of the current validated baseline (`power_law=1.0, m2=0.5, dxy=0.5`)
+   and check whether it improves the objective at any positive weight.
+3. **Joint reweight.** Re-run the full pool search
+   (`optimize_stage_a_weights_combined`/`_multi_ratio`) with the candidate
+   included, to see how it behaves once every other indicator is free to
+   move too (not just added on top of a fixed set).
+4. **Curve + OOS walk-forward.** Only Stage-3 survivors get a curve re-fit
+   and a full 3-fold walk-forward OOS check — at that point they've entered
+   the "Standard trial protocol" above and are gated the same as any other
+   trial (Chris's explicit accept before touching this file or
+   `settings.json`).
+
+**Where each candidate currently stands:**
+
+- `adx`, `stochastic` — cleared Stage 1 (2026-09-17, via
+  `scripts/run_adx_stochastic_solo_validation.py`, script no longer in the
+  repo). **Not yet reached Stage 2** — blocked on `ExtraIndicatorSources`
+  OHLC high/low plumbing not yet wired into `build_extra_indicators` (every
+  other indicator in the catalog derives from close alone; ADX/stochastic
+  need high/low).
+- `vol_regime` — cleared Stage 1 (2026-09-18, best `short=60/long=180`,
+  `combined=71.11`, via `run_vol_regime_solo_validation.py`). **Stage 2
+  REJECTED** (dead end #21, via `run_vol_regime_stage2_fixed_baseline.py`):
+  any positive weight on top of the fixed baseline monotonically degrades
+  the objective.
+- `halving_cycle` — cleared Stage 1 (2026-09-18, best
+  `cycle_length=1317.6d/phase_shift=+0.30`, `combined=140.42`, via
+  `run_halving_cycle_solo_validation.py`; confirmed not an edge-of-grid
+  artifact by widening the phase-shift grid). **Stage 2 REJECTED** (dead
+  end #22, via `run_halving_cycle_stage2_fixed_baseline.py`): same
+  monotonic-degradation pattern as `vol_regime`.
+
+None of the four has reached Stage 3 or 4 yet. (`indicator_catalog.py`'s
+`halving_cycle` comment describes its rejection as following "the same
+pattern as adx/stochastic/vol_regime" — read that as referring to the
+general fixed-baseline-degradation pattern, not as a claim that adx/
+stochastic have themselves been Stage-2-tested; their own comment is
+explicit that they're still blocked on Stage 2's OHLC plumbing.)
+
 ## Immediate backlog (proposed order)
 
 1. Fresh Stage-A weight search on the dead-zone-fixed rolling composite
@@ -440,6 +499,560 @@ that could both be read as "the baseline."
    directly — pending his read on the sell-side result and any further
    iteration on the bounds/objective per his own framing ("we'll have to
    play around with those variables").
+
+9. **Task #93: full 17-indicator recalibration pass — three rounds, all
+   rejected** (2026-09-23; worked from the existing 17-survivor pool
+   (11 original + 6 on-chain/sentiment extras) as-is, predating the SDCA
+   post-mortem's finding that `power_law`'s apparent search-dominance may
+   trace to the band-crossing bug / sell-side z-score-denominator shrink
+   rather than genuine edge):
+   - **Round 1** (`81e5f1dc5`: `run_dual_timeframe_composite_search.py`
+     Stage 1 extended to all 17 survivors +
+     `run_aggregate_reweight_full17.py`/`_aggregate_reweight_parallel.py`
+     Stage 2 floor-diversified reweight — exhaustive `2*2**16=131072`-combo
+     coarse grid, fork-based multiprocessing + `run_full_recalibration.py`
+     Stage 1-4 driver): Stage 3 in-sample curve search (5112 evals)
+     `beats_baseline_return=False`, `beats_baseline_concentration=False`
+     against the live 5-weight preset. Stage 4 walk-forward:
+     `beats_flat_dca_oos=True` but thin and fragile — mean OOS vs. flat-DCA
+     `+7.64%` (vs. the validated baseline's `+84.90%`), 2 of 3 folds
+     infeasible (near-zero/negative `capital_deployed_pct`), held-out tail
+     slightly negative (`-1.44%`), `sensitivity.stable=False`
+     (`max_abs_delta_oos=5.71pp` under a ±5% weight perturbation).
+     **REJECT.** Also closed two `.gitignore` gaps hit producing this run's
+     artifacts: the data-cache glob only covered 2 levels under any `data/`
+     dir (missed `digiquant/data/onchain/<source>/*.parquet`'s 3-level
+     cache path) — generalized to `**/data/**/*.ext` for any nesting depth;
+     and `.scratch/` (repeatedly described in this doc as "gitignored")
+     had no actual ignore rule — added one.
+   - **Round 2** (`60cf0777c`): found and fixed a window-default bug —
+     `build_extra_indicators` (and its callers `extra_z_vectors`/
+     `load_sdca_extra_z`/`load_frozen_index`) computed every macro/on-chain
+     extra at one shared `window` kwarg, silently discarding each
+     indicator's own Stage 1 period-search result. Added an opt-in
+     `extra_windows: dict[str, int] | None` override, resolved
+     per-indicator — an indicator present in the dict uses its own window,
+     one absent (or the dict absent/`None`) keeps the prior shared-default
+     behavior unchanged (additive, no existing caller affected). Re-ran the
+     Stage 2b reweight + Stage 4 gate against the fixed index with each
+     extra's real Stage 1 period (`dxy=60`, `onchain_*=365`,
+     `fear_greed=270`) instead of the shared 90-day default:
+     `beats_flat_dca_oos=True`, `sensitivity_stable=False`
+     (`max_abs_delta_oos_pct=2.79` vs. the 2.0 threshold — improved from
+     Round 1's 5.71 but still fails the stability gate). **Diagnostic
+     only, not promoted.**
+   - **Round 3** (`54c4a95f9`): built an opt-in, additive feasibility-aware
+     curve-search objective (`curve_optimize_feasibility.py`,
+     `score_shape_on_index_feasibility_aware`/
+     `search_wide_knee_curve_feasibility_aware`) that penalizes/hard-
+     rejects in-sample curve shapes whose `capital_deployed_pct` falls
+     outside the walk-forward gate's own `[capital_deployed_floor_pct,
+     100%]` band — aimed at the failure mode behind both prior rounds'
+     rejections (OOS folds with 0%/negative capital deployed);
+     `curve_optimize.py` itself untouched byte-for-byte. Re-ran Stage 4
+     with Round 2's unchanged Stage 1 oscillators + Stage 2b weights,
+     swapping in the feasibility-aware Stage 3b curve winner. **REJECT**
+     — the new objective didn't rescue this round's curve winner:
+     `beats_flat_dca_oos=False` (mean OOS `-2.66%`, down from Round 2's
+     positive result), `sensitivity_stable=False`
+     (`max_abs_delta_oos_pct=3.18`, worse than Round 2's 2.79),
+     `feasible_fold_count=1/3` unchanged from Round 2 (fold 0 feasible,
+     folds 1-2 still 0%-deployed OOS). It steered the in-sample search
+     away from low-deployment shapes as designed, but the resulting curve
+     still produced 0%-deployed OOS folds on data the in-sample search
+     never saw.
+   - All three rounds diagnostic only — `settings.json` and this file's
+     "Current best validated candidate" section untouched throughout, per
+     the standing accept gate. `tests/dq/strategies/sdca/` stayed green
+     across all three (505→507 passed as new tests were added alongside
+     each round, 38 skipped for optional deps throughout).
+
+10. **SDCA post-mortem follow-up: band-bug fix, baseline-relative
+    evaluator, re-score, iterative ablation** (2026-09-24; the post-mortem
+    published after item 9 above flagged that `power_law`'s apparent
+    search-dominance may trace to two real bugs, not genuine edge — see
+    the plan at the top of this session's work). Four phases, all
+    diagnostic — `settings.json` and this file's "Current best validated
+    candidate" section untouched throughout:
+    - **Phase 1 (band-crossing fix).** `btc_power_law.py`'s
+      `_evaluate_rails()` and `quantile_rails.py`'s
+      `evaluate_quadratic_log10()` both used a row-wise `np.sort()` to
+      force `low < median < high`, which can silently splice a
+      *different* quantile's raw curve into a mislabeled slot once two
+      rails cross. Replaced both with `rearrange_non_crossing()` (clamps
+      each quantile toward its already-reconciled inner neighbor —
+      identity-preserving, never swaps labels) plus a `detect_crossings()`
+      warning. **The bug is real and large**: real-data runs this session
+      logged reconciliation on up to 856/856 rows in a fold's in-sample
+      window (see `_evaluate_rails` warnings in any script's stdout) —
+      not a rare edge case.
+    - **Phase 2 (baseline-relative evaluator).** New
+      `curve_shape.risk50_linear_reference_curve()` (buy below composite
+      risk 50 / sell above, linear rate schedule, no optimization) and
+      `baseline_evaluator.run_sdca_walk_forward_vs_baseline()` (runs
+      candidate + risk50-linear baseline under identical folds/rails,
+      returns both plus the delta). `optimize.py`'s `run_sdca_walk_forward`
+      gained an additive `fold_weighting: Literal["unweighted",
+      "duration"]` param; `SdcaWalkForwardResult` now always carries both
+      the unweighted and duration-weighted mean OOS.
+    - **Phase 3 (re-score, `scripts/run_baseline_relative_rescore.py`).**
+      Re-ran the four live/recent candidates against the *fixed* rails and
+      the new baseline. **Notable finding: the currently-accepted
+      validated baseline itself changes under the fix** —
+      `power_law=1.0, m2=0.5, dxy=0.5` now scores `+21.73%`
+      duration-weighted OOS (down from the `+84.90%` on file, dated
+      2026-09-03, which was computed pre-fix), still
+      `beats_flat_dca_oos=True` but `beats_baseline_oos=False` (loses to
+      the naive risk50-linear baseline's `+22.49%` by `-0.76%`) and
+      `sensitivity.stable=False`. `live_settings_json` still loses
+      outright (`-34.80%`, confirms the known discrepancy).
+      `task93_round2`/`round3` both now clearly beat the baseline
+      (`+53.52%`/`+46.85%` delta) but neither is a promotable candidate on
+      its own steam (`round2` `beats_flat_dca_oos=True` at a thin
+      `+4.07%`; `round3` `beats_flat_dca_oos=False`).
+    - **Phase 4 (iterative ablation, `ablation.py` +
+      `scripts/run_iterative_ablation.py`).** Reweight the full
+      12-indicator pool (`power_law` + all 11 `EXTRA_INDICATOR_NAMES`),
+      drop whichever comes out dominant, repeat, gated by a fast
+      per-round sanity check. Full 8-round real-data run:
+      `stop_reason=budget_exhausted`; dominant indicator per round —
+      R1 `onchain_rhodl`, R2 `onchain_addr_ratio`, **R3 `power_law`**
+      (only once two other ceiling-tied indicators are cleared — direct
+      evidence that `power_law`'s historical round-1 dominance was partly
+      a coarse-grid tie-break artifact, not privileged weighting), R4
+      `onchain_mvrv`, R5 `weekly_monthly_macd`, R6 `onchain_puell`, R7
+      `dxy`, R8 `m2`. Best round: **#8**, surviving pool
+      `m2=1.0, rs_eth=0.1, onchain_asopr=0.1, fear_greed=0.1,
+      weekly_monthly_rsi=0.1` (`power_law=0.0` — dropped entirely by
+      round 8), fast-gate `+52.01%` duration-weighted OOS.
+      **Full-resolution re-validation** of round 8
+      (`scripts/run_ablation_best_round_full_resolution.py`, n_random=3000
+      curve search + full walk-forward vs. baseline): confirms
+      `+52.01%` OOS, `beats_flat_dca_oos=True`, **and
+      `beats_baseline_oos=True`** (`+9.13%` over the risk50-linear
+      baseline's own `+42.87%`) — the first candidate this session to
+      clear that bar. But `sensitivity.stable=False`
+      (`max_abs_delta_oos_pct=4.25` vs. the 2.0pp threshold), and
+      **fold 1 (2019-09-12→2022-01-14) — one of the two OOS windows
+      that have failed under every technique tried to date — is still
+      `feasible=False`** (`capital_deployed_pct=-506%`, a degenerate
+      simulation, not a real loss). Fold 2 (2022-01-15→2024-05-19, the
+      other historically-failing window) is now feasible with a real if
+      modest edge (`+8.23%`) — a genuine improvement over prior rounds,
+      but fold 1's failure mode persists unchanged. **Not promoted** —
+      same stability-gate failure as every other candidate tried under
+      Task #93 and this follow-up.
+    - **Net read for the Phase 5 decision**: fixing the crossing bug and
+      searching the full pool (a) confirms `power_law`'s search-dominance
+      was partly artifactual, (b) lowers the accepted baseline's own
+      apparent edge from `+84.90%` to `+21.73%` and now shows it losing to
+      a naive linear baseline, (c) produces one new candidate (round 8)
+      that clears the baseline-relative bar Chris asked for, but (d) that
+      candidate still fails the sensitivity-stability gate on the same
+      2019-09-12→2022-01-14 window that has broken every technique tried
+      across this entire research program. Presented to Chris as the
+      sharpened choice the original plan anticipated: pursue a genuinely
+      new, uncorrelated data source for that window, or accept that no
+      technique explored so far — including this session's full ablation
+      over 12 indicators — resolves it, and treat the current baseline
+      (now understood to be weaker than believed, `+21.73%` not
+      `+84.90%`) as the practical ceiling until new data arrives.
+    - `tests/dq/strategies/sdca/` stayed green throughout (571 passed, 38
+      skipped for optional deps, by the end of Phase 4).
+
+7. **2026-09-24 — SDCA recalibration v1** (Chris: increase indicator breadth,
+   fix M2/RSI z-score spikiness, add a drawdown cap + widen the curve search
+   + enable crash_override, re-run and calibrate toward ~30% drawdown; "operate
+   independently... treat this as exploration"). Design doc:
+   `docs/superpowers/specs/2026-09-24-sdca-recalibration-v1-design.md`.
+   - Phase 1 (floored 12-name weight search,
+     `scripts/run_full_pool_floored_search.py`), Phase 3 (drawdown cap in
+     `curve_optimize_feasibility.py`, widened `WIDE_KNEE_SEARCH_BOUNDS`/
+     `WIDE_KNEE_COARSE_GRID`, `crash_override_enabled=True`) and Phase 4
+     (combined re-run/calibration, `scripts/run_recalibration_v1_full_resolution.py`)
+     are the diagnostic search work this backlog item covers — same
+     never-writes-settings.json protocol as every prior round; see the design
+     doc for the full walk-forward result once Phase 4 completes.
+   - Phase 2 (z-score spikiness) landed as code, not just search config:
+     `composite_risk.py` gained a `causal_ema_smooth` helper, applied only
+     inside `m2_liquidity_z` (`indicator_catalog.py`, short 5-day halflife —
+     the root cause is monthly FRED data forward-filled daily then
+     rolling-z'd over a window with ~3 distinct real prints, a literal step
+     function). `price_oscillators.py`'s `_RSI_CURVE_POWER` moved from 4.0
+     (quartic, chosen 2026-09-07 specifically to stop a linear map from
+     pegging a bull market at the z floor — see that section's
+     `test_mid_bull_rsi_does_not_sit_at_floor_for_entire_bull` regression
+     guard) to 3.5: quartic's near-zero read through ordinary 55-75 RSI
+     followed by a steep run-up near the extremes, compounded with
+     `agreement_scaled_blend`'s up-to-1.5x same-sign amplification, was
+     reading as a flatline-then-spike. 3.5 is the lowest power that stays
+     clear of the 2026-09-07 guard (empirically, power ≤3.25 already pushes
+     that guard's mean mid-bull `|z|` back over its 1.25 threshold — the old
+     pegging problem returns before reaching the originally-guessed 2.5-3.0
+     range) while still measurably softening the ordinary-range flatline and
+     verified clean against the real 2023-2024 BTC bull run (~4% of days
+     pegged at the floor, not the whole run). `tests/dq/strategies/sdca/`
+     green throughout (576 passed after adding coverage for
+     `causal_ema_smooth` and the M2 step-vs-ramp behavior).
+   - **Round 1 result (2026-09-24, commit `9abe32429`)** — Phase 3's blanket
+     `MAX_DRAWDOWN_CAP_PCT`/`MAX_DRAWDOWN_COMFORT_PCT` gate set to 30.0/25.0
+     (a binding search-time constraint, not a backstop) and Phase 4 run with
+     `crash_override_enabled=True` (`trigger_z=-2.0, ramp_z=1.0,
+     override_risk=95.0, window=14`). Winning shape: `buy_max_rate=15.0,
+     buy_knee_risk=30.0, sell_knee_risk=45.0, sell_max_rate=15.0,
+     buy_curvature=1.5, sell_curvature=1.0`. **Failed**: mean OOS
+     (duration-weighted) `-37.31%` vs. flat DCA, `beats_flat_dca_oos=False`,
+     `beats_baseline_oos=False` (that run's own risk50-linear baseline came
+     in at `-27.32%`). A hollow win by construction — the tight cap forced
+     the search to resolve the drawdown/capital-deployed tension by
+     starving capital deployment (fold 0 `capital_deployed=-94.1%`, fold 1
+     `0.3%`, fold 2 `-9.4%` — barely investing) instead of finding a
+     genuinely safer shape. Not promoted.
+   - **Round 2 result (2026-09-24→25, commit `f748630`)** — per Chris's
+     direction to use `crash_override` as the primary crash-response lever
+     instead of the blanket cap: loosened `MAX_DRAWDOWN_CAP_PCT`/
+     `MAX_DRAWDOWN_COMFORT_PCT` to 50.0/45.0 (a true backstop, no longer the
+     dominant force shaping the curve search); `crash_override` itself left
+     unchanged and independently re-verified against the real Feb–Mar 2020
+     COVID crash (fires exactly on 2020-03-12 "Black Thursday", forces risk
+     to 95 for ~10 days, back to baseline by 03-26 — no retuning needed).
+     Winning shape: `buy_max_rate=25.0, buy_knee_risk=40.0,
+     sell_knee_risk=70.0, sell_max_rate=30.0, buy_curvature=1.5,
+     sell_curvature=1.0`. Headline result is real and clears both bars for
+     the first time this round: mean OOS (duration-weighted) `+3.53%`,
+     `beats_flat_dca_oos=True`, `beats_baseline_oos=True` (`+36.30%` over
+     that run's baseline of `-32.76%`). Two problems remain unresolved:
+     (a) fold 2 `max_drawdown_pct=50.8%`, above both the original ~30%
+     target and the loosened 50% backstop itself; (b) **all three OOS
+     folds still fail `walk_forward.py`'s own
+     `SdcaOptimizeObjective.capital_deployed_floor_pct=10.0` gate** (fold 0
+     `-28.5%`, fold 1 `-1.1%`, fold 2 `-7.8%` — net sellers over each OOS
+     window, not net buyers). The improved headline return is coming from a
+     sell-and-stay-out curve correctly avoiding two bad windows, not from
+     staying invested through them — fold 1's OOS window
+     (2019-09-12→2022-01-14) swallows the entire 2020-21 bull run and
+     fold 2's (2022-01-15→2024-05-19) swallows the 2023-24 recovery, both
+     missed entirely (the "non-participation problem"). Two
+     `test_curve_optimize_feasibility.py` drawdown-gate fixture tests
+     needed recalibrating to the new 50/45 band (same commit).
+     `tests/dq/strategies/sdca/` green (585 passed, 38 skipped). Not
+     promoted.
+   - **Phase 2 audit (2026-09-25)**: Chris flagged that round 1's own chat
+     report described Phase 2 as "folded into Phase 1's indicator-breadth
+     widening", which read as possibly not a real, separate code change.
+     Checked against the bullet immediately above (already correct) and
+     against current source: `causal_ema_smooth` (`composite_risk.py`),
+     `_M2_SMOOTHING_HALFLIFE_DAYS=5.0` (`indicator_catalog.py`), and
+     `_RSI_CURVE_POWER=3.5` (`price_oscillators.py`, moved from 4.0) are
+     all still in place exactly as landed in commit `4e05eda9c`
+     ("fix(sdca): damp M2/RSI composite z-score spikiness at the source"),
+     confirmed via `git log -L` on each symbol's line — no round 1 or
+     round 2 work touched or reverted any of it. **Real, implemented,
+     unchanged — not open work.** The chat-report phrasing was just
+     imprecise about timing (it landed as its own commit before Phase 1's,
+     not "inside" Phase 1); RESEARCH_STATE.md's own record (bullet above)
+     had it right all along.
+   - **Round 3 result (2026-09-25)** — Chris flagged that round 2 "wins on
+     headline OOS return but does it by exiting and staying out through
+     entire bull/recovery windows... capital_deployed negative in all 3 OOS
+     folds, failing `walk_forward.py`'s own `capital_deployed_floor_pct=10.0`
+     gate. That's not what 'best risk-adjusted return' should mean for a DCA
+     strategy." Investigated three angles Chris raised (buy-side bounds,
+     `crash_override`'s ramp-down, the Phase 2 RSI/M2 fix) plus a diagnostic
+     of composite-risk zone occupancy through the OOS windows themselves.
+     **Important metric-definition finding, not previously documented**:
+     `capital_deployed_pct` (`backtest.py`) is `(initial_cash - cash) /
+     initial_cash` measured at the END of a window — a cash *snapshot*, not a
+     participation measure. It goes sharply negative whenever a curve sells
+     more (in realized dollars) than it ever bought by a window's close,
+     which is exactly what a GOOD curve does when it sells appreciated BTC
+     late in a window — round 2's own fold 0 proves this
+     (`vs_flat_dca=+37.21%`, crushing the benchmark, alongside
+     `capital_deployed=-28.5%`, which the floor gate flags as infeasible).
+     Fold 1/fold 2's negative `capital_deployed_pct` pairs with genuine
+     underperformance (`vs_flat_dca=-13.30%`/`-13.31%`) — that pairing, not
+     the sign of `capital_deployed_pct` alone, is the real non-participation
+     signal. `curve_optimize_feasibility.py`'s existing feasibility gate also
+     only ever checked `capital_deployed_pct` against the full 2015-2026
+     history (an 11-year average across many regimes), never against
+     individual walk-forward fold windows — a shape can clear that average
+     (round 2: `86.2%`) while being a severe net seller in a specific
+     regime nested inside it (round 2's shape: `-724.4%` on fold 2's IS
+     window alone). Root behavioral cause (zone-occupancy diagnostic,
+     round 2's shape, real composite risk incl. `crash_override`): composite
+     risk sits in the "dead zone" between `buy_knee_risk` (40) and
+     `sell_knee_risk` (70) — neither buying nor selling — for **65.2% of
+     fold 1's OOS window and 55.6% of fold 2's**, versus `crash_override`
+     itself only pushing 14 buy-zone days out per fold (4.4–8.3% of days) —
+     the dead zone, not `crash_override`'s ramp-down, is the dominant driver.
+     Buy-side bounds were not the binding constraint either: round 2's
+     `buy_knee_risk=40.0` sits well inside its `(20, 48)` bound, not pinned
+     at the edge.
+     **Fix applied**: added `curve_optimize_feasibility.
+     search_wide_knee_curve_multi_window_robust` (additive; the
+     capital-deployed-gated multi-window functions from the same file were
+     replaced, not kept, once proven structurally unsatisfiable — see below)
+     — ranks candidates on **worst-case `vs_flat_dca_pct`** across {full
+     2015-2026 history, fold 0/1/2 IS windows}, gated only on the existing
+     drawdown cap (legitimate — drawdown magnitude isn't endpoint-dependent
+     the way `capital_deployed_pct` is). `capital_deployed_pct` is still
+     computed and reported for visibility, never hard-gated on, in this or
+     any future round. (A first attempt gated the same multi-window search on
+     worst-case `capital_deployed_pct` instead and rejected **100% of the
+     7844-trial search space** — direct proof of the metric-definition
+     finding above; discarded before being run through Phase 4.)
+     **Round 3 outcome, full walk-forward** (`crash_override` enabled, same
+     params as round 2): winning shape `buy_max_rate=35.0,
+     buy_knee_risk=40.0, sell_knee_risk=70.0, sell_max_rate=90.0,
+     buy_curvature=1.5, sell_curvature=1.0` — **same knees as round 2**,
+     only the sell rate changed. Mean OOS `+1.91%` (vs round 2's `+3.53%` —
+     *lower*), `beats_flat_dca_oos=True`. Per fold: fold 0 `+30.68%`
+     (down from round 2's `+37.21%`, still strongly positive), **fold 1
+     `-29.49%` (worse than round 2's `-13.30%` — regressed)**, **fold 2
+     `+4.54%` (up from round 2's `-13.31%` — flipped positive, the 2023-24
+     recovery non-participation is genuinely fixed)**. Mixed result: the
+     dead-zone hypothesis is confirmed correct for fold 2 but round 3's
+     specific search did not carry the fix through to fold 1
+     (2019-09-12→2022-01-14, the window that has now failed under every
+     technique tried across this entire research program — see item 6 above).
+     Diagnosed why: scoring the search objective against each fold's own
+     *expanding* IS window makes all three fold-IS scores converge to
+     roughly the same value (~-78% `vs_flat_dca_pct` in-sample for the
+     round-3 winner on every fold IS window) because each expanding window is
+     dominated by the same explosive 2015-2017 early history — the search
+     effectively could not distinguish candidates on later-regime robustness
+     and fell back to whichever shape did best on the full-history window
+     (favoring an aggressive `sell_max_rate`, which then hurt fold 1's actual
+     OOS more than it helped). Feasibility-gate note for future rounds:
+     `capital_deployed_pct` is `feasible=False` on every OOS fold and the
+     baseline comparison uses a simplified non-Nautilus evaluator built for
+     this round (`window_report` in
+     `.scratch/recalibration_v1_round3.py`), so its
+     `delta_mean_oos_vs_flat_dca_pct`/`beats_baseline_oos` numbers are not
+     directly comparable to round 2's Nautilus-evaluator baseline figures —
+     comparable within round 3 only. `tests/dq/strategies/sdca/` green
+     throughout (585 passed, 38 skipped). **Not promoted** — net headline OOS
+     is a regression vs round 2 despite fixing one of the two known-bad
+     windows; next well-motivated step (not yet run) is a direct dead-zone
+     width sweep scored against fold 1's own regime rather than through the
+     expanding-IS-window proxy, flagged for Chris/coordinator rather than run
+     unilaterally given it revisits how much OOS-adjacent data a search
+     proxy may see. Committed as `30c79b920` (`curve_optimize_feasibility.py`
+     + this entry).
+   - **Round 4 result (2026-09-25)** — coordinator directive: use the
+     pre-existing `curve_optimize.sweep_dead_zone_width` mechanism to target
+     fold 1's dead-zone-occupancy problem directly (the "safer" of the two
+     round-3 follow-ups), explicitly WITHOUT touching which windows the
+     search proxy sees — the OOS-adjacency tradeoff stays off-limits pending
+     Chris's sign-off. Held round 2's shape's crossing point/rates/curvatures
+     fixed (`buy_max_rate=25.0, sell_max_rate=30.0, buy_curvature=1.5,
+     sell_curvature=1.0`, `crossing_risk=55.0`, the midpoint of round 2's own
+     `40`/`70` knees) and swept ONLY dead-zone width across
+     `curve_optimize.DEAD_ZONE_WIDTH_GRID` (pre-existing, unedited:
+     `0.5..50.0`), scoring each width with round 3's own
+     `score_shape_on_windows_robust` (worst-case `vs_flat_dca_pct` across
+     full history + fold 0/1/2 IS, gated on drawdown) plus an explicit
+     fold-1-IS-only readout per width.
+     **Negative/structural result**: every width narrower than round 2's own
+     30 scores *monotonically worse* on **every** available proxy window,
+     fold1_IS included (`fold1_IS_vs_flat_dca` runs from `-79.42%` at
+     width=30 down to `-86.18%` at width=0.5) — narrowing the dead zone
+     (i.e., trading more) never looks better in-sample, because fold1_IS
+     (2015-01-01→2019-09-11) is itself an expanding window still dominated
+     by the same explosive 2015-2017 early history that broke round 3's
+     search proxy. Widths ≥40 do score better on the aggregate objective
+     (`-34.06%`/`-25.37%` at 40/50) but blow through the drawdown cap
+     (`52.3%`/`61.0%` vs the 50% cap) and are rejected — the feasible
+     region's optimum lands exactly back on round 2's original width
+     (`30.0`), i.e. **the sweep re-selects round 2's unchanged shape**;
+     it cannot choose anything narrower under this objective no matter how
+     the grid is walked. This is the same structural mechanism diagnosed in
+     round 3, now confirmed from the opposite direction: there is no
+     available IS-only proxy window that isn't dominated by 2015-2017, so no
+     safe (non-leaking) objective can currently reward the fold-1-specific
+     fix the dead-zone hypothesis predicts should exist.
+     Re-evaluating round 2's own shape through this round's simplified
+     non-Nautilus evaluator (`window_report`, same as round 3's, with the
+     same caveat that its absolute numbers are only comparable to round 3,
+     not to round 2's original Nautilus-evaluator figures) gives: mean OOS
+     `+14.50%` (vs round 3's `+1.91%` on the same evaluator), fold 0
+     `+48.56%`, **fold 1 `-25.79%` (still negative — narrower-dead-zone
+     search found nothing better; this is just round 3's aggressive
+     `sell_max_rate=90` reverted back to round 2's `30`)**, fold 2
+     `+20.72%`. Net: undoing round 3's sell-rate regression helps fold
+     0/2/mean substantially, but **fold 1 remains unsolved** by any
+     width choice available to this search. Per-fold `max_drawdown_pct`
+     from this same Phase 4 walk-forward pass, against Chris's original
+     ≤30% target (round 8 was `-61.32%`): fold 0 `17.0%`, fold 1 `16.8%`,
+     **fold 2 `34.4%` (over target)**, holdout `23.8%`. `beats_flat_dca_oos
+     =True` (`+14.50%>0`), `beats_baseline_oos=True` (delta `+32.27%>0`).
+     `sensitivity_stable` **could not be computed** — it comes from
+     `optimize._sensitivity_of`, which perturbs the winning params and
+     re-scores them via `run_sdca_walk_forward`'s Nautilus-typed
+     `evaluator`/`rails_fitter`, the same dependency this whole session's
+     driver scripts have had to route around (see `walk_forward.py`'s
+     `SdcaTrialEvaluator` Protocol docstring: "Production implementations
+     must use Nautilus fills" — no concrete non-Nautilus implementation
+     exists in `src/`, and `nautilus_trader` is not installed in this
+     environment). This is a hard environmental gap, not a skipped step.
+     `tests/dq/strategies/sdca/`
+     green throughout (585 passed, 38 skipped); no `src/` changes this round
+     (pre-existing mechanisms only) —
+     `.scratch/recalibration_v1_round4.py` is the driver, not committed
+     (gitignored). **Not promoted.** Per the coordinator's explicit
+     instruction, stopping here rather than proceeding unilaterally to the
+     OOS-adjacency option: fold 1 (2019-09-12→2022-01-14) has now failed
+     under every technique tried in this entire research program (see item
+     6's ablation-program history above, which hit the identical wall) --
+     flagged back for a decision on whether to accept the OOS-adjacency
+     tradeoff, accept fold 1 as an unfixable regime under the current
+     curve-shape-only lever, or explore a different lever entirely.
+   - **Visualization (2026-09-25)** — Chris asked to see rounds 1-4's real
+     tearsheets in the site's own UI instead of reading tables. Added
+     `scripts/build_round{1,2,3,4}_diagnostic_tearsheet.py`, one per round,
+     mirroring `scripts/build_round8_diagnostic_tearsheet.py`'s exact
+     pattern: each round's own actual `SdcaCompositeWeights`/`SdcaCurveShape`
+     (round 1-4 all use `PHASE1_WEIGHTS`; shapes are the round-specific
+     winners above — round 4's is numerically identical to round 2's, since
+     the dead-zone-width sweep re-selected it unchanged) feeding
+     `from_nautilus_run` to write
+     `apps/digiquant-web/public/strategies/btc_sdca_round{1,2,3,4}.json`.
+     Same standing guardrails as round 8's script: never writes
+     `settings.json`, never touches this file's validated-candidate section,
+     never pushes to Supabase; every script sets `beats_flat_dca_oos=False`
+     regardless of a round's raw headline sign, since none of rounds 1-4
+     were promoted. Slugs wired into
+     `apps/digiquant-web/app/strategies/[id]/page.tsx`'s `PUBLISHED` map
+     alongside the existing `btc_sdca_round8` entry, and `toIndexEntry` was
+     exported from `apps/digiquant-web/lib/live/strategies.ts` so a page can
+     project any fetched tearsheet into a library-style index card without
+     going through the Supabase-only `fetchStrategyIndex()`. New page
+     `apps/digiquant-web/app/strategies/sdca-recalibration/page.tsx` (+
+     `components/tearsheet/sdca-recalibration-comparison.tsx`) lists all six
+     — round 1 → 2 → 3 → 4 → 8 → the live `btc_sdca` baseline — as
+     `StrategyCard`s with a one-line per-round caption, reusing the existing
+     card component rather than inventing new UI. Verified locally
+     (`next dev`): all 6 `/strategies/<slug>` tearsheet routes and the new
+     `/strategies/sdca-recalibration` comparison route return 200 and render
+     correctly; the live-baseline card shows "unavailable" in local dev only
+     because `NEXT_PUBLIC_SUPABASE_*` env vars aren't set in this worktree
+     (same pre-existing gap the production `/strategies` library page has
+     locally) — it resolves normally wherever those vars are configured.
+     No `src/` changes; `tests/dq/strategies/sdca/` unaffected.
+   - **Full comparison-set expansion (2026-09-25)** — Chris: "round 8 is by
+     far better and the only one worth keeping... add the full set of all
+     the sdca start attempts to the tearsheet collection so i can see how
+     they compare" against "the current version of the strategy and any
+     previous strategy calibrations." Ablation rounds 1-8 already had
+     tearsheets (previous bullet); this pass adds the four remaining
+     candidates that had persisted `best_params` but no visualization:
+     `scripts/build_validated_baseline_diagnostic_tearsheet.py` (item 10
+     Phase 3's `validated_baseline` — this file's own "Current best
+     validated candidate" banner), `build_live_settings_diagnostic_tearsheet.py`
+     (item 10 Phase 3's `live_settings_json` — what's actually deployed
+     right now), and `build_task93_round{2,3}_diagnostic_tearsheet.py`
+     (Task #93's two rejected rounds, item 9). All four reconstruct their
+     `SdcaCurveShape`/`SdcaCompositeWeights` purely from the frozen
+     `best_params` snapshots in `.scratch/baseline_relative_rescore.json`
+     via `shape_from_params`/`composite_weights_from_params` (never reading
+     live `settings.json` presets), so none can silently drift if
+     `settings.json` changes later. Same standing guardrails as every prior
+     round: never writes `settings.json`, never touches this file's
+     validated-candidate section, never pushes to Supabase; `beats_flat_dca
+     _oos` set per the sensitivity-gate precedent (`False` for
+     `live_settings_json` and `task93_round2` despite a numerically-positive
+     raw result on the latter, `False` for `task93_round3`'s unambiguous
+     reject, and `True` for `validated_baseline` — respecting this file's
+     own standing canonical verdict, with the caveat below disclosed in the
+     tearsheet's own notes rather than silently overriding it).
+     **Flagged for Chris, not a change to the banner**: the
+     `validated_baseline` tearsheet's notes now surface, visually, the
+     discrepancy item 10 Phase 3 already recorded numerically — the
+     `+84.90%` OOS banner (dated 2026-09-03, pre band-crossing-fix) versus
+     `+21.73%` duration-weighted OOS under the fixed rails
+     (`beats_baseline_oos=False`, loses to the naive risk50-linear reference
+     curve by `-0.76%`, `sensitivity.stable=False`). No file besides this
+     one and the four new scripts/slugs below was touched to produce that
+     framing — the banner itself is untouched pending Chris's explicit
+     accept/reject. New slugs wired into
+     `apps/digiquant-web/app/strategies/[id]/page.tsx`'s `PUBLISHED` map
+     (`btc_sdca_validated_baseline`, `btc_sdca_live_settings`,
+     `btc_sdca_task93_round2`, `btc_sdca_task93_round3`) and into
+     `components/tearsheet/sdca-recalibration-comparison.tsx`, reorganized
+     into four labeled sections ("Ablation rounds 1–4 and 8", "Validated
+     baseline vs. live production", "Task #93", "Current live candidate")
+     so the arc of every attempt is visible at a glance. Verified locally
+     (`next dev`): all four new `/strategies/<slug>` routes return 200 and
+     render correctly. No `src/` library changes; `tests/dq/strategies/sdca/`
+     unaffected (diagnostic scripts only, no production code touched).
+   - **Blend attempts: combining round 8 and Task #93 Round 2 (2026-09-25)**
+     — Chris: "I like the valuation index shape of the 17 indicator strat,
+     then the performance and behavior of the round 8 [strategy]," and asked
+     for 3 concrete blend mechanisms to be tried, in order, against the same
+     admissible 17-name `SURVIVING_INDICATORS` ceiling Task #93 used (no
+     bigger universe; `vol_regime`/`halving_cycle` stay Stage-2 rejected;
+     `adx`/`stochastic` stay blocked on OHLC plumbing; `fast_crash_vol` stays
+     out of a valuation-index reweight). All three used Task #93 Round 2's
+     `ROUND23_OSCILLATORS`/`ROUND23_EXTRA_WINDOWS` config throughout —
+     **none beats round 8, and none clears the standing accept gate**
+     (numeric OOS win AND `sensitivity.stable`).
+     - **Approach 1** (`scripts/run_blend_approach1_round2index_round8curve.py`)
+       froze Round 2's 17-indicator weights exactly as scored, then re-ran
+       round 8's own full-resolution feasibility-aware curve search
+       (`search_wide_knee_curve_feasibility_aware`, n_random=3000) on top of
+       that fixed index. Result: `mean_oos_vs_flat_dca_pct=-13.84%` (both
+       weightings), `beats_flat_dca_oos=False` — **loses outright to flat
+       DCA**, despite beating the risk50-linear baseline
+       (`delta_mean_oos_vs_flat_dca_pct=+35.79%`, `beats_baseline_oos=True`).
+       `sensitivity.max_abs_delta_oos_pct=3.35` (vs 2.0 threshold, unstable).
+       Surprising: Round 2's valuation-index shape does not carry round 8's
+       edge through a fresh curve search. REJECT.
+     - **Approach 2** (`scripts/run_blend_approach2_full17_ablation.py`) ran
+       round 8's own iterative-elimination ablation loop from scratch,
+       seeded with the full 17-name `SURVIVING_INDICATORS` pool (confirmed:
+       round 1's starting pool matches that tuple exactly, in order) instead
+       of round 8's narrower starting pool. All 8 rounds ran (stopped at
+       `budget_exhausted`, the `MAX_ROUNDS` cap); best-seen was round 1
+       itself (`power_law`/`onchain_addr_ratio`/`weekly_monthly_macd` each
+       at weight 1.0, everything else in the 17-pool at a 0.1 floor) —
+       every later round (dropping the prior dominant indicator) scored
+       worse, several sharply negative (as low as -27.60%). Full-resolution
+       curve search + walk-forward on round 1's weights:
+       `mean_oos_vs_flat_dca_pct=+3.52%` (both weightings),
+       `beats_flat_dca_oos=True` (barely, numerically),
+       `sensitivity.max_abs_delta_oos_pct=6.03` (vs 2.0 threshold, unstable)
+       — roughly matches Task #93 Round 2's own weak magnitude (+4.07% OOS)
+       but with worse instability (6.03 vs 2.79). Broadening the ablation
+       pool to the full 17 names surfaced nothing round 8's narrower search
+       missed. REJECT.
+     - **Approach 3** (`scripts/run_blend_approach3_hybrid_weights.py`) built
+       a literal hybrid weight vector — round 8's 5 nonzero weights as fixed
+       floors, Round 2's other ~12 nonzero weights layered in at half their
+       Round 2 value — and reused round 8's actual curve params unchanged
+       (no new curve search). Result: `mean_oos_vs_flat_dca_pct=+41.57%`
+       (both weightings), `beats_flat_dca_oos=True` (numerically),
+       `delta_mean_oos_vs_flat_dca_pct=+73.18%`,
+       `beats_baseline_oos=True` — the closest of the three to round 8's own
+       magnitude (+52.01%), but
+       `sensitivity.max_abs_delta_oos_pct=10.92` (vs 2.0 threshold) is more
+       than double round 8's own 4.25 — layering in Round 2's weights at
+       half strength sharply amplifies instability rather than damping it.
+       REJECT.
+     All three never write `settings.json` or this file's "Current best
+     validated candidate" section, never push to Supabase. Diagnostic
+     tearsheets built via `scripts/build_blend{1,2,3}_diagnostic_tearsheet.py`
+     (each reconstructing its `SdcaCurveShape`/`SdcaCompositeWeights` purely
+     from its own frozen `.scratch/blend/approach{1,2,3}_*.json` result, via
+     `shape_from_params`/`composite_weights_from_params`), with
+     `beats_flat_dca_oos=False` in every payload per the sensitivity-gate
+     precedent (none clears the full gate, so none may display a win). New
+     slugs `btc_sdca_blend1`, `btc_sdca_blend2`, `btc_sdca_blend3` wired into
+     `apps/digiquant-web/app/strategies/[id]/page.tsx`'s `PUBLISHED` map and
+     into `components/tearsheet/sdca-recalibration-comparison.tsx` as a new
+     "Blend attempts" section placing all 3 alongside round 8's and Task #93
+     Round 2's existing cards, per Chris's explicit request to see all 5
+     together. No `src/` library changes; `tests/dq/strategies/sdca/`
+     unaffected (diagnostic scripts only, no production code touched).
 
 ## North-star ceiling (benchmark only — NEVER a trading candidate)
 

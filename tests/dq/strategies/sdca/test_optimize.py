@@ -17,11 +17,13 @@ from digiquant.strategies.sdca.optimize import (
     SdcaOptimizeProvenance,
     SdcaWalkForwardResult,
     load_btc_optimized_provenance,
+    load_sdca_extra_z,
     persist_btc_optimized,
     run_sdca_walk_forward,
     walk_forward_to_optimize_result,
 )
 from digiquant.strategies.sdca.presets import load_preset
+from digiquant.strategies.sdca.price_oscillators import SdcaOscillatorSpec
 from digiquant.strategies.sdca.risk_model import RiskModel
 from digiquant.strategies.sdca.walk_forward import SdcaTrialMetrics
 from digiquant.strategy_specs import (
@@ -387,3 +389,160 @@ class TestPersistAndDispatch:
         )
         assert result.best_params["m2_weight"] == pytest.approx(0.6)
         assert result.best_params["valuation_weight"] == pytest.approx(0.4)
+
+
+class TestFoldWeighting:
+    """``fold_weighting`` (default ``"unweighted"``) must reproduce every
+    existing caller byte-for-byte; both weighted means are always populated
+    regardless of which is primary."""
+
+    def test_default_matches_explicit_unweighted_byte_for_byte(self) -> None:
+        dates = _dates(200)
+        prices = [100.0 + i for i in range(len(dates))]
+        default = run_sdca_walk_forward(
+            dates,
+            prices,
+            [dict(_HIDDEN)],
+            rails_fitter=_fitter,
+            evaluator=_evaluator,
+            evaluator_label="synthetic_fixture",
+        )
+        explicit = run_sdca_walk_forward(
+            dates,
+            prices,
+            [dict(_HIDDEN)],
+            rails_fitter=_fitter,
+            evaluator=_evaluator,
+            evaluator_label="synthetic_fixture",
+            fold_weighting="unweighted",
+        )
+        assert default.fold_weighting == "unweighted"
+        assert default.mean_is_vs_flat_dca_pct == pytest.approx(explicit.mean_is_vs_flat_dca_pct)
+        assert default.mean_oos_vs_flat_dca_pct == pytest.approx(explicit.mean_oos_vs_flat_dca_pct)
+        assert default.sensitivity.max_abs_delta_oos_pct == pytest.approx(
+            explicit.sensitivity.max_abs_delta_oos_pct
+        )
+        assert default.beats_flat_dca_oos == explicit.beats_flat_dca_oos
+
+    def test_both_weighted_means_always_populated(self) -> None:
+        dates = _dates(200)
+        prices = [100.0 + i for i in range(len(dates))]
+        result = run_sdca_walk_forward(
+            dates,
+            prices,
+            [dict(_HIDDEN)],
+            rails_fitter=_fitter,
+            evaluator=_evaluator,
+            evaluator_label="synthetic_fixture",
+        )
+        # Unweighted is primary here, so the primary field must equal the
+        # unweighted sidecar -- and the duration sidecar must still be there.
+        assert result.mean_oos_vs_flat_dca_pct == pytest.approx(
+            result.mean_oos_vs_flat_dca_pct_unweighted
+        )
+        assert isinstance(result.mean_oos_vs_flat_dca_pct_duration_weighted, float)
+
+    def test_duration_weighting_shifts_mean_is_toward_the_longer_expanding_fold(self) -> None:
+        # IS windows expand fold-over-fold (fold 0 shortest, fold 2 longest);
+        # OOS windows all tile the same fixed length, so mean_oos is identical
+        # either way -- only the expanding IS leg can diverge.
+        dates = _dates(200)
+        prices = [100.0 + i for i in range(len(dates))]
+        unweighted = run_sdca_walk_forward(
+            dates,
+            prices,
+            [dict(_HIDDEN)],
+            rails_fitter=_fitter,
+            evaluator=_evaluator,
+            evaluator_label="synthetic_fixture",
+        )
+        duration = run_sdca_walk_forward(
+            dates,
+            prices,
+            [dict(_HIDDEN)],
+            rails_fitter=_fitter,
+            evaluator=_evaluator,
+            evaluator_label="synthetic_fixture",
+            fold_weighting="duration",
+        )
+        assert duration.fold_weighting == "duration"
+        assert duration.mean_oos_vs_flat_dca_pct == pytest.approx(unweighted.mean_oos_vs_flat_dca_pct)
+        assert duration.mean_is_vs_flat_dca_pct != pytest.approx(unweighted.mean_is_vs_flat_dca_pct)
+        # The evaluator's `- 0.02 * len(dates)` penalty makes vs_flat_dca_pct
+        # decrease as the IS window grows, so weighting toward the longest
+        # (last) fold must pull the duration-weighted mean IS down.
+        assert duration.mean_is_vs_flat_dca_pct < unweighted.mean_is_vs_flat_dca_pct
+
+
+class TestLoadSdcaExtraZOscillators:
+    """A frozen ``oscillators`` spec must actually change the price-oscillator
+    extras -- #3174's walk-forward silently reverted weekly_monthly_rsi/macd,
+    sma_band, weekly_rsi, and weekly_macd to ``SdcaOscillatorSpec()`` defaults
+    because ``load_sdca_extra_z``'s second ``extra_z_vectors(...)`` call (used
+    to also pick up m2/dxy/rs_eth) omitted ``oscillators=oscillators`` and
+    then clobbered the correctly-computed keys from the first call via
+    ``dict.update``.
+    """
+
+    def test_frozen_oscillators_change_price_oscillator_extras(self, tmp_path: Path) -> None:
+        dates = [date(2018, 1, 1) + timedelta(days=i) for i in range(900)]
+        import math
+
+        prices = [30_000.0 * (1.0 + 0.4 * math.sin(i / 45.0)) for i in range(len(dates))]
+
+        frozen = SdcaOscillatorSpec(
+            rsi_length=5,
+            monthly_rsi_length=2,
+            macd_fast=16,
+            macd_slow=35,
+            monthly_macd_fast=4,
+            monthly_macd_slow=9,
+            sma_band_window=120,
+            sma_band_fast_window=30,
+        )
+        extra_frozen = load_sdca_extra_z(
+            dates, prices, data_path=None, data_dir=str(tmp_path), oscillators=frozen
+        )
+        extra_default = load_sdca_extra_z(
+            dates, prices, data_path=None, data_dir=str(tmp_path), oscillators=None
+        )
+
+        # weekly_monthly_rsi/macd (confluence family) are dormant on develop and
+        # not emitted by load_sdca_extra_z, so only the wired oscillators are checked.
+        for name in (
+            "sma_band",
+            "weekly_rsi",
+            "weekly_macd",
+        ):
+            assert extra_frozen[name] != extra_default[name], (
+                f"{name} did not change with a different oscillators spec -- "
+                "load_sdca_extra_z is silently ignoring `oscillators` again"
+            )
+
+
+class TestLoadSdcaExtraZWindows:
+    """``extra_windows`` must reach the per-indicator z computation through
+    both ``load_sdca_extra_z`` and ``extra_z_vectors`` -- a per-indicator
+    period-search result (e.g. dxy at 60 days) should not be silently
+    dropped back to the shared default window."""
+
+    def test_extra_windows_overrides_reach_load_sdca_extra_z(self, tmp_path: Path) -> None:
+        dates = [date(2018, 1, 1) + timedelta(days=i) for i in range(400)]
+        import math
+
+        prices = [30_000.0 * (1.0 + 0.4 * math.sin(i / 45.0)) for i in range(len(dates))]
+        dxy_values = [90.0 + 10.0 * math.sin(i / 20.0) for i in range(len(dates))]
+        pl.DataFrame({"date": dates, "value": dxy_values}).write_csv(tmp_path / "DTWEXBGS.csv")
+
+        extra_overridden = load_sdca_extra_z(
+            dates, prices, data_path=None, data_dir=str(tmp_path), extra_windows={"dxy": 60}
+        )
+        extra_default = load_sdca_extra_z(
+            dates, prices, data_path=None, data_dir=str(tmp_path), extra_windows=None
+        )
+
+        assert extra_overridden["dxy"] != extra_default["dxy"], (
+            "extra_windows={'dxy': 60} did not change the dxy z-series -- "
+            "load_sdca_extra_z is not threading extra_windows through to "
+            "build_extra_indicators"
+        )

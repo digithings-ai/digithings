@@ -73,7 +73,7 @@ import polars as pl
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from digiquant.paths import canonicalize_path
-from digiquant.strategies.sdca.composite_risk import IndicatorWeight
+from digiquant.strategies.sdca.composite_risk import IndicatorWeight, causal_ema_smooth
 from digiquant.strategies.sdca.price_oscillators import (
     SdcaOscillatorSpec,
     agreement_scaled_blend,
@@ -119,6 +119,14 @@ _SIGMA_FLOOR = 1e-12
 # docstring. The z-score window stays DEFAULT_ROLLING_WINDOW.
 _FAST_CRASH_VOL_WINDOW = 14
 _FAST_CRASH_VOL_MIN_SAMPLES = 7
+# M2's source is monthly FRED data forward-filled to daily, so a
+# DEFAULT_ROLLING_WINDOW (90d) rolling-z window sees only ~3 distinct real
+# prints -- the z-score is a step function that reads as a spike each time a
+# new print lands. Smoothing the z-score output itself (not the rolling-z
+# window, which would just trade this problem for a laggier one) turns that
+# step into a short ramp. Short halflife is fine: M2 is inherently a slow,
+# monthly-cadence signal, so a few days of lag costs nothing.
+_M2_SMOOTHING_HALFLIFE_DAYS = 5.0
 _RS_ETH_CONFLUENCE_SLOW_WEIGHT = 0.5
 _RS_ETH_CONFLUENCE_AGREEMENT_BOOST = 0.5
 _RS_ETH_CONFLUENCE_DISAGREEMENT_DAMP = 0.5
@@ -446,12 +454,14 @@ def m2_liquidity_z(
     window: int = DEFAULT_ROLLING_WINDOW,
     min_samples: int = _MIN_SAMPLES,
 ) -> pl.Series:
-    """YoY (or ``roc_days``) M2 growth, rolling-z. Expanding liquidity → +z (buy).
+    """YoY (or ``roc_days``) M2 growth, rolling-z, causal-EMA smoothed. Expanding liquidity → +z (buy).
 
     YoY and rolling-z run on the **full** FRED series (dense daily from the
     first observation), then the z is aligned onto ``dates``. Shifting after
     joining onto Coinbase BTC days would null the first year even when M2SL
-    exists back to 1959.
+    exists back to 1959. The rolling-z step function jumps once per monthly
+    FRED print (see ``_M2_SMOOTHING_HALFLIFE_DAYS``); a short-halflife causal
+    EMA turns each jump into a ramp without materially lagging this signal.
     """
     if dates.dtype != pl.Date:
         raise ValueError(f"dates must be pl.Date, got {dates.dtype}")
@@ -461,6 +471,7 @@ def m2_liquidity_z(
         return pl.Series([None] * dates.len(), dtype=pl.Float64)
     roc = cal_values / cal_values.shift(roc_days) - 1.0
     z_full = causal_rolling_z(roc, window=window, min_samples=min_samples)
+    z_full = causal_ema_smooth(z_full, half_life=_M2_SMOOTHING_HALFLIFE_DAYS)
     return align_to_dates(dates, cal_dates, z_full, forward_fill=True)
 
 
@@ -879,231 +890,6 @@ def gld_slv_z(
     return causal_rolling_z(ratio, window=window, min_samples=min_samples).alias("gld_slv")
 
 
-def _log_ratio_sign_flipped_z(
-    dates: pl.Series,
-    src_dates: pl.Series,
-    src_values: pl.Series,
-    *,
-    window: int,
-    min_samples: int,
-    name: str,
-) -> pl.Series:
-    """Shared core for the Bitview/BRK on-chain ratio indicators (MVRV,
-    aSOPR, Puell Multiple, RHODL Ratio). See the module docstring.
-
-    Log-transformed first since each is a strictly-positive, right-skewed
-    multiplicative ratio (a bull-market spike would otherwise dominate a
-    level-based rolling std), then sign-flipped like ``dxy_z``: an elevated
-    ratio (overheated/euphoric) is sell-favorable (−z) and a depressed one
-    (capitulation) is buy-favorable (+z).
-
-    A handful of pre-history warmup days report ``0.0`` (not enough chain
-    history yet to compute the ratio). Those are nulled *before* the log so
-    ``align_to_dates``'s forward-fill treats them as an ordinary coverage gap
-    instead of producing ``-inf``.
-    """
-    frame = pl.DataFrame({"value": src_values})
-    positive_values = frame.select(
-        pl.when(pl.col("value") > 0).then(pl.col("value")).otherwise(None)
-    )["value"]
-    aligned = align_to_dates(dates, src_dates, positive_values, forward_fill=True)
-    log_values = aligned.log()
-    return (-causal_rolling_z(log_values, window=window, min_samples=min_samples)).alias(name)
-
-
-def onchain_mvrv_z(
-    dates: pl.Series,
-    mvrv_dates: pl.Series,
-    mvrv_values: pl.Series,
-    *,
-    window: int = DEFAULT_ROLLING_WINDOW,
-    min_samples: int = _MIN_SAMPLES,
-) -> pl.Series:
-    """Bitview/BRK MVRV — see ``_log_ratio_sign_flipped_z``."""
-    return _log_ratio_sign_flipped_z(
-        dates,
-        mvrv_dates,
-        mvrv_values,
-        window=window,
-        min_samples=min_samples,
-        name="onchain_mvrv",
-    )
-
-
-def onchain_asopr_z(
-    dates: pl.Series,
-    asopr_dates: pl.Series,
-    asopr_values: pl.Series,
-    *,
-    window: int = DEFAULT_ROLLING_WINDOW,
-    min_samples: int = _MIN_SAMPLES,
-) -> pl.Series:
-    """Bitview/BRK adjusted SOPR (24h) — see ``_log_ratio_sign_flipped_z``."""
-    return _log_ratio_sign_flipped_z(
-        dates,
-        asopr_dates,
-        asopr_values,
-        window=window,
-        min_samples=min_samples,
-        name="onchain_asopr",
-    )
-
-
-def onchain_puell_z(
-    dates: pl.Series,
-    puell_dates: pl.Series,
-    puell_values: pl.Series,
-    *,
-    window: int = DEFAULT_ROLLING_WINDOW,
-    min_samples: int = _MIN_SAMPLES,
-) -> pl.Series:
-    """Bitview/BRK Puell Multiple — see ``_log_ratio_sign_flipped_z``."""
-    return _log_ratio_sign_flipped_z(
-        dates,
-        puell_dates,
-        puell_values,
-        window=window,
-        min_samples=min_samples,
-        name="onchain_puell",
-    )
-
-
-def onchain_rhodl_z(
-    dates: pl.Series,
-    rhodl_dates: pl.Series,
-    rhodl_values: pl.Series,
-    *,
-    window: int = DEFAULT_ROLLING_WINDOW,
-    min_samples: int = _MIN_SAMPLES,
-) -> pl.Series:
-    """Bitview/BRK RHODL Ratio — see ``_log_ratio_sign_flipped_z``."""
-    return _log_ratio_sign_flipped_z(
-        dates,
-        rhodl_dates,
-        rhodl_values,
-        window=window,
-        min_samples=min_samples,
-        name="onchain_rhodl",
-    )
-
-
-def onchain_addr_ratio_z(
-    dates: pl.Series,
-    btc_price: pl.Series,
-    addr_dates: pl.Series,
-    addr_values: pl.Series,
-    *,
-    window: int = DEFAULT_ROLLING_WINDOW,
-    min_samples: int = _MIN_SAMPLES,
-) -> pl.Series:
-    """Price-per-active-address ratio (NVT/Metcalfe-style) — see ``_log_ratio_sign_flipped_z``.
-
-    Unlike the four series above, this ratio is not fetched pre-derived:
-    ``addr_values`` is CoinMetrics' raw daily active-address count
-    (``AdrActCnt``), so the ratio is computed here. Pre-adoption days report 0
-    addresses; those are nulled *before* the divide (not just the resulting
-    ratio) so a zero denominator cannot produce ``inf`` before the core ever
-    sees it.
-    """
-    addr_aligned = align_to_dates(dates, addr_dates, addr_values, forward_fill=True)
-    positive_addr = pl.DataFrame({"value": addr_aligned}).select(
-        pl.when(pl.col("value") > 0).then(pl.col("value")).otherwise(None)
-    )["value"]
-    ratio = (btc_price / positive_addr).alias("value")
-    return _log_ratio_sign_flipped_z(
-        dates, dates, ratio, window=window, min_samples=min_samples, name="onchain_addr_ratio"
-    )
-
-
-def fear_greed_z(
-    dates: pl.Series,
-    fear_greed_dates: pl.Series,
-    fear_greed_values: pl.Series,
-    *,
-    window: int = DEFAULT_ROLLING_WINDOW,
-    min_samples: int = _MIN_SAMPLES,
-) -> pl.Series:
-    """alternative.me Fear & Greed (0-100), rolling-z, sign-flipped.
-
-    Same shape as ``dxy_z`` — a *level* series, so no log transform — but read
-    contrarian: elevated ("greed") is sell-favorable (−z), depressed ("fear")
-    is buy-favorable (+z). The source publishes weekly, so the forward-fill in
-    ``align_to_dates`` matters here.
-    """
-    aligned = align_to_dates(dates, fear_greed_dates, fear_greed_values, forward_fill=True)
-    return (-causal_rolling_z(aligned, window=window, min_samples=min_samples)).alias("fear_greed")
-
-
-def fast_crash_vol_z(
-    dates: pl.Series,
-    btc_price: pl.Series,
-    *,
-    window: int = _FAST_CRASH_VOL_WINDOW,
-    min_samples: int = _FAST_CRASH_VOL_MIN_SAMPLES,
-    z_window: int = DEFAULT_ROLLING_WINDOW,
-    z_min_samples: int = _MIN_SAMPLES,
-) -> pl.Series:
-    """Short-window realized volatility of daily log returns, sign-flipped z.
-
-    See the module docstring. ``window``/``min_samples`` control the raw
-    realized-vol lookback — deliberately short (14d vs. the 90d default), since
-    the fast reaction to a crash *is* the signal. The resulting series is then
-    rolling-z-scored against its own trailing history (``causal_rolling_z``, as
-    everywhere else here) and sign-flipped so an unusual vol spike reads
-    sell/de-risk-favorable.
-    """
-    if dates.len() != btc_price.len():
-        raise ValueError("dates and btc_price must be the same length")
-    log_ret = btc_price.log() - btc_price.shift(1).log()
-    realized_vol = log_ret.rolling_std(window_size=window, min_samples=min_samples)
-    z = causal_rolling_z(realized_vol, window=z_window, min_samples=z_min_samples)
-    return (-z).alias("fast_crash_vol")
-
-
-def rs_eth_confluence_z(
-    dates: pl.Series,
-    btc_price: pl.Series,
-    eth_dates: pl.Series,
-    eth_close: pl.Series,
-    *,
-    slow_window: int = DEFAULT_ROLLING_WINDOW,
-    slow_min_samples: int = _MIN_SAMPLES,
-    fast_window: int = 30,
-    fast_min_samples: int = 15,
-    slow_weight: float = _RS_ETH_CONFLUENCE_SLOW_WEIGHT,
-    agreement_boost: float = _RS_ETH_CONFLUENCE_AGREEMENT_BOOST,
-    disagreement_damp: float = _RS_ETH_CONFLUENCE_DISAGREEMENT_DAMP,
-) -> pl.Series:
-    """Slow (long-term) + fast (medium-term) BTC/ETH relative-strength z.
-
-    The same agreement-scaled blend as the price-oscillator confluences
-    (``rsi_confluence_z`` / ``macd_confluence_z`` / ``sma_band_confluence_z`` in
-    ``price_oscillators.py``). As in ``sma_band_confluence_z``, both legs share
-    one formula — ``rs_eth_z``'s rolling z of the BTC/ETH log ratio — so the
-    timeframe separation is window length, not bar aggregation. BTC/ETH rotation
-    has both a slow multi-quarter cycle and faster swings, so a two-timeframe
-    read fits the ratio the same way it fits a price band.
-
-    Not wired into ``build_extra_indicators`` in this leaf: ``rs_eth`` still
-    resolves to plain ``rs_eth_z`` there, and switching it over is a measured
-    behaviour change tracked as its own leaf.
-    """
-    slow = rs_eth_z(
-        dates, btc_price, eth_dates, eth_close, window=slow_window, min_samples=slow_min_samples
-    )
-    fast = rs_eth_z(
-        dates, btc_price, eth_dates, eth_close, window=fast_window, min_samples=fast_min_samples
-    )
-    return agreement_scaled_blend(
-        slow,
-        fast,
-        long_term_weight=slow_weight,
-        agreement_boost=agreement_boost,
-        disagreement_damp=disagreement_damp,
-        name="rs_eth",
-    )
-
-
 def build_extra_indicators(
     dates: pl.Series,
     btc_price: pl.Series,
@@ -1115,6 +901,7 @@ def build_extra_indicators(
     roc_days: int = 365,
     oscillators: SdcaOscillatorSpec | None = None,
     allowlist: Sequence[str] | None = None,
+    extra_windows: dict[str, int] | None = None,
 ) -> list[IndicatorWeight]:
     """Materialize enabled extras. Weight 0 is omitted (does not null the blend).
 
@@ -1122,9 +909,23 @@ def build_extra_indicators(
     extras (M2 / rs_eth / DXY) are BTC-oriented plugins; pass ``allowlist``
     from ``SdcaAssetProfile.extra_indicators`` so a second asset cannot
     silently vote with BTC-only series.
+
+    ``extra_windows`` optionally overrides the shared ``window`` on a
+    per-indicator basis for the simple macro/on-chain extras (m2, dxy,
+    onchain_mvrv, onchain_asopr, onchain_puell, onchain_rhodl,
+    onchain_addr_ratio, fear_greed) -- e.g. ``{"dxy": 60}`` computes dxy_z at
+    window=60 while every other extra not present in the dict keeps using
+    the shared ``window`` exactly as before. Absent or ``None``, every extra
+    uses the shared ``window`` (unchanged behavior).
     """
     spec = oscillators or SdcaOscillatorSpec()
     enabled = weights.enabled_extras()
+
+    def _window_for(name: str) -> int:
+        if extra_windows is not None and name in extra_windows:
+            return extra_windows[name]
+        return window
+
     if allowlist is not None:
         forbidden = [name for name in enabled if name not in allowlist]
         if forbidden:
@@ -1140,7 +941,7 @@ def build_extra_indicators(
                     m2_dates,
                     sources.m2_values,  # type: ignore[arg-type]
                     roc_days=roc_days,
-                    window=window,
+                    window=_window_for("m2"),
                     min_samples=min_samples,
                 ),
                 weight=enabled["m2"],
@@ -1171,7 +972,7 @@ def build_extra_indicators(
                     dates,
                     dxy_dates,
                     sources.dxy_values,  # type: ignore[arg-type]
-                    window=window,
+                    window=_window_for("dxy"),
                     min_samples=min_samples,
                 ),
                 weight=enabled["dxy"],
@@ -1188,7 +989,7 @@ def build_extra_indicators(
                     dates,
                     mvrv_dates,
                     sources.onchain_mvrv_values,  # type: ignore[arg-type]
-                    window=window,
+                    window=_window_for("onchain_mvrv"),
                     min_samples=min_samples,
                 ),
                 weight=enabled["onchain_mvrv"],
@@ -1205,7 +1006,7 @@ def build_extra_indicators(
                     dates,
                     asopr_dates,
                     sources.onchain_asopr_values,  # type: ignore[arg-type]
-                    window=window,
+                    window=_window_for("onchain_asopr"),
                     min_samples=min_samples,
                 ),
                 weight=enabled["onchain_asopr"],
@@ -1222,7 +1023,7 @@ def build_extra_indicators(
                     dates,
                     puell_dates,
                     sources.onchain_puell_values,  # type: ignore[arg-type]
-                    window=window,
+                    window=_window_for("onchain_puell"),
                     min_samples=min_samples,
                 ),
                 weight=enabled["onchain_puell"],
@@ -1239,7 +1040,7 @@ def build_extra_indicators(
                     dates,
                     rhodl_dates,
                     sources.onchain_rhodl_values,  # type: ignore[arg-type]
-                    window=window,
+                    window=_window_for("onchain_rhodl"),
                     min_samples=min_samples,
                 ),
                 weight=enabled["onchain_rhodl"],
@@ -1259,7 +1060,7 @@ def build_extra_indicators(
                     btc_price,
                     addr_dates,
                     sources.onchain_addr_ratio_values,  # type: ignore[arg-type]
-                    window=window,
+                    window=_window_for("onchain_addr_ratio"),
                     min_samples=min_samples,
                 ),
                 weight=enabled["onchain_addr_ratio"],
@@ -1274,7 +1075,7 @@ def build_extra_indicators(
                     dates,
                     fg_dates,
                     sources.fear_greed_values,  # type: ignore[arg-type]
-                    window=window,
+                    window=_window_for("fear_greed"),
                     min_samples=min_samples,
                 ),
                 weight=enabled["fear_greed"],
@@ -1512,8 +1313,13 @@ def extra_z_vectors(
     roc_days: int = 365,
     oscillators: SdcaOscillatorSpec | None = None,
     allowlist: Sequence[str] | None = None,
+    extra_windows: dict[str, int] | None = None,
 ) -> dict[str, list[float | None]]:
-    """Full-calendar extra-z for walk-forward slicing (causal; no OOS leak)."""
+    """Full-calendar extra-z for walk-forward slicing (causal; no OOS leak).
+
+    ``extra_windows`` passes through to ``build_extra_indicators`` -- see its
+    docstring for the per-indicator override semantics.
+    """
     extras = build_extra_indicators(
         dates,
         btc_price,
@@ -1524,6 +1330,7 @@ def extra_z_vectors(
         roc_days=roc_days,
         oscillators=oscillators,
         allowlist=allowlist,
+        extra_windows=extra_windows,
     )
     vectors = {ind.name: ind.z.to_list() for ind in extras}
     # Always precompute oscillators from close so a later trial can enable them.
