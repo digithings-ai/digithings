@@ -134,12 +134,18 @@ digiquant = "digiquant.cli:main"
 
 # Repo-split 1.2 (DIG-3691): plugin contract between public `digiquant` (R0)
 # and private `digiquant-strategies` (R1). R1 distributions declare these
-# groups; R0 discovers them via `digiquant.plugin`. No built-in plugin ships
-# in R0 (reference strategies stay direct-imported), so the tables are
-# intentionally empty here — they document the group names.
+# groups; R0 discovers them via `digiquant.plugin`. The reference strategies
+# stay direct-imported, so `digiquant.strategies` and `digiquant.cli` ship empty
+# here and only document their group names.
+#
+# `digiquant.mcp_tools` carries the lab's own tools. They live in the R0 tree
+# (`strategies/lab/mcp_tools.py`) but declare through the same group a plugin
+# uses, so an in-tree tool and a plugin tool take one registration path rather
+# than two. See `tests/dq/strategies/sdca/test_lab_mcp_tools.py`.
 [project.entry-points."digiquant.strategies"]
 
 [project.entry-points."digiquant.mcp_tools"]
+lab = "digiquant.strategies.lab.mcp_tools:register_mcp_tools"
 
 [project.entry-points."digiquant.cli"]
 

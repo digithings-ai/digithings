@@ -52,6 +52,37 @@ def _tool_names(server) -> set[str]:
     return {t.name for t in tools}
 
 
+def _plugin_tool_count() -> int:
+    """Tools the installed distribution's ``digiquant.mcp_tools`` plugins add.
+
+    Measured by running the real registrar against a capture-only server, so the
+    expected total is derived from what is installed rather than pinned twice.
+    An undeclared/not-yet-reinstalled distribution contributes 0.
+    """
+    from digiquant import plugin
+
+    captured: list[str] = []
+
+    def _capture_maybe_tool(name: str):
+        def _register(fn):
+            captured.append(name)
+            return fn
+
+        return _register
+
+    class _CaptureMCP:
+        @staticmethod
+        def tool(name: str | None = None, **_kwargs):
+            def _register(fn):
+                captured.append(name or getattr(fn, "__name__", "?"))
+                return fn
+
+            return _register
+
+    plugin.register_plugin_mcp_tools(_CaptureMCP(), _capture_maybe_tool)
+    return len(captured)
+
+
 READ_TOOLS_EXTRA = {"digiquant_list_coinmetrics_catalog"}
 
 #: The 89 digifetch x Gloomberb tools (#4069, #4110, 130-coverage through Task 8)
@@ -286,8 +317,41 @@ def test_tool_counts_pin_post_3855_surface():
     }
     assert len(gated) == 41
     names = _tool_names(create_mcp_server())
-    assert len(names) == 85
+    # Plugin tools register through the ``digiquant.mcp_tools`` entry-point
+    # group, so the pin is the in-tree surface PLUS whatever the installed
+    # distribution declares. Measure that contribution by running the real
+    # registrar, rather than hard-coding a second total: the count is exact both
+    # before a reinstall (85) and after one (85 + the plugin's tools), and a
+    # declared plugin that fails to register still shows up as a mismatch.
+    assert len(names) == 85 + _plugin_tool_count()
     assert not any(name.startswith("digifetch_") for name in names)
+
+
+@pytest.mark.unit
+def test_plugin_tool_count_can_see_a_resolving_entry_point(monkeypatch):
+    """The derived expectation must be able to measure a plugin at all.
+
+    A helper that always returned 0 would leave the count pin exact by
+    coincidence and would not notice a declared plugin failing to register, so
+    the lab's entry point stands in as a known-resolving plugin here.
+    """
+    from digiquant.strategies.lab import mcp_tools
+
+    from digiquant import plugin
+
+    class _FakeEntryPoint:
+        name = "lab"
+
+        @staticmethod
+        def load():
+            return mcp_tools.register_mcp_tools
+
+    monkeypatch.setattr(
+        plugin,
+        "discover",
+        lambda group: [_FakeEntryPoint()] if group == plugin.MCP_TOOLS_GROUP else [],
+    )
+    assert _plugin_tool_count() == len(mcp_tools.TOOL_NAMES) == 3
 
 
 @pytest.mark.unit

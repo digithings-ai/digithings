@@ -73,6 +73,7 @@ from digiquant.strategies.lab.curve_sim import DEFAULT_TRIAL_CASH, evaluate_sdca
 from digiquant.strategies.lab.dca_metrics import tearsheet_overlays
 from digiquant.strategies.lab.optimize import (
     SdcaWalkForwardResult,
+    btc_power_law_rails_fitter,
     load_sdca_ohlcv,
     run_sdca_walk_forward,
 )
@@ -465,6 +466,56 @@ def optimize_asset(
 
 
 # --------------------------------------------------------------------------- #
+# Named rails fitters
+# --------------------------------------------------------------------------- #
+
+
+def rails_fitter_for(name: str) -> RailsFitter:
+    """Map a known SDCA risk-model name to a walk-forward ``RailsFitter``.
+
+    :func:`run_sdca_walk_forward` hands its fitter the in-sample window of each
+    fold, and nothing wider on purpose: ``walk_forward`` records that a
+    full-history rail fit must not be reused inside the optimizer because
+    truncated quadratic log-time fits do not extrapolate (#3173). So the
+    mapping has to respect what each named model actually does when called.
+
+    ``btc_power_law`` maps to :func:`btc_power_law_rails_fitter`, **not** to
+    :func:`resolve_sdca_risk_model`. The resolver constructs
+    ``BtcPowerLawRiskModel`` from *stored coefficients*, which is a full-history
+    fit by definition; on a window shorter than the 730-observation floor it
+    succeeds while the real fitter refuses, so wiring the resolver here would
+    inject exactly the leak the fold protocol exists to prevent.
+
+    ``generic_valuation`` and ``rolling_z`` are fitted from the series they are
+    handed, so they can go through the resolver as long as coefficients are not
+    loaded — hence ``coefficients_path=None``.
+
+    Raises ``ValueError`` for an unknown name, naming the models it accepts.
+    """
+    if name == "btc_power_law":
+        return btc_power_law_rails_fitter
+
+    if name not in ("generic_valuation", "rolling_z"):
+        raise ValueError(
+            f"unknown SDCA risk model {name!r} for a walk-forward rails fitter; "
+            f"expected one of {sorted(KNOWN_SDCA_RISK_MODELS)}"
+        )
+
+    def _fitter(dates: Sequence[date], prices: Sequence[float]) -> RiskModel:
+        return resolve_sdca_risk_model(
+            name,
+            dates=pl.Series("date", list(dates), dtype=pl.Date),
+            price=pl.Series("close", [float(price) for price in prices]),
+            coefficients_path=None,
+        )
+
+    # Name the closure after the model it wraps, so a provenance record reading
+    # the fitter's ``__name__`` says which model produced the rails.
+    _fitter.__name__ = f"{name}_rails_fitter"
+    return _fitter
+
+
+# --------------------------------------------------------------------------- #
 # Stage 4 — tearsheet
 # --------------------------------------------------------------------------- #
 
@@ -736,6 +787,7 @@ __all__ = [
     "backtest_asset",
     "optimize_asset",
     "persist_golden_path",
+    "rails_fitter_for",
     "research_asset",
     "run_golden_path",
     "tearsheet_payload",

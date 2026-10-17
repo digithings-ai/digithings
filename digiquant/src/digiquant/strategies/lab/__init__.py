@@ -129,6 +129,7 @@ _NAMES: dict[str, tuple[str, str]] = {
     "research_asset": ("golden_path", "research_asset"),
     "backtest_asset": ("golden_path", "backtest_asset"),
     "optimize_asset": ("golden_path", "optimize_asset"),
+    "rails_fitter_for": ("golden_path", "rails_fitter_for"),
     "tearsheet_payload": ("golden_path", "tearsheet_payload"),
     "run_golden_path": ("golden_path", "run_golden_path"),
     "persist_golden_path": ("golden_path", "persist_golden_path"),
