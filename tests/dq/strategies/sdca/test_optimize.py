@@ -615,3 +615,72 @@ class TestSensitivityGuardFailsLoudly:
                 0.05,
                 None,
             )
+
+
+def _evaluator_with_deployment(end_pct: float, peak_pct: float):
+    """Evaluator stub reporting a chosen capital-deployment profile."""
+
+    def _ev(
+        dates: list[date],
+        prices: list[float],
+        model: RiskModel,
+        shape: SdcaCurveShape,
+        valuation_weight: float,
+        extra_indicators: object = None,
+    ) -> SdcaTrialMetrics:
+        return SdcaTrialMetrics(
+            vs_flat_dca_pct=1.0,
+            vs_lump_pct=0.0,
+            capital_deployed_pct=end_pct,
+            capital_deployed_peak_pct=peak_pct,
+            max_drawdown_pct=0.0,
+        )
+
+    return _ev
+
+
+class TestHoldoutTradedFlag:
+    """A holdout that never trades must say so rather than report a number.
+
+    The holdout window can sit entirely above the rails' median rail, so the
+    composite risk never enters either shape's buy band: no capital is deployed,
+    every metric is the held-cash outcome, and the candidate's ``holdout_metrics``
+    comes out byte-identical to the baseline's. That identity reads like a
+    measurement and is not one.
+
+    The signal is ``capital_deployed_peak_pct``, the quantity ``is_feasible``
+    already gates on. ``capital_deployed_pct`` is a documented end-of-window cash
+    snapshot that goes negative whenever a curve sold appreciated asset into a
+    rally, so it cannot answer "did this window trade" -- see the third case.
+    """
+
+    def _result(self, end_pct: float, peak_pct: float):
+        return run_sdca_walk_forward(
+            _dates(60),
+            [100.0 + i for i in range(60)],
+            [dict(_HIDDEN)],
+            rails_fitter=_fitter,
+            evaluator=_evaluator_with_deployment(end_pct, peak_pct),
+            evaluator_label="synthetic_fixture",
+        )
+
+    def test_a_holdout_that_never_deployed_capital_is_flagged(self) -> None:
+        result = self._result(0.0, 0.0)
+        assert result.holdout_metrics is not None
+        assert result.holdout_metrics.capital_deployed_peak_pct == 0.0
+        assert result.holdout_traded is False
+
+    def test_a_holdout_that_deployed_capital_is_flagged_as_traded(self) -> None:
+        assert self._result(40.0, 40.0).holdout_traded is True
+
+    def test_a_holdout_that_ended_net_negative_still_counts_as_traded(self) -> None:
+        # Sold appreciated asset into a rally, so end-of-window cash exceeds the
+        # starting cash and capital_deployed_pct is negative. The window plainly
+        # traded, so the flag must not key on that field.
+        assert self._result(-12.0, 30.0).holdout_traded is True
+
+    def test_the_message_reports_whether_the_holdout_traded(self) -> None:
+        envelope = walk_forward_to_optimize_result(
+            self._result(0.0, 0.0), strategy_name="sdca", symbols=["BTC-USD"]
+        )
+        assert "holdout_traded=False" in envelope.message

@@ -115,6 +115,15 @@ class SdcaWalkForwardResult(BaseModel):
     mean_oos_vs_flat_dca_pct: float
     is_oos_gap_pct: float
     holdout_metrics: SdcaTrialMetrics | None
+    holdout_traded: bool = Field(
+        default=True,
+        description=(
+            "False when the holdout window never deployed capital "
+            "(capital_deployed_peak_pct == 0). Every holdout metric is then the "
+            "held-cash outcome, identical for any shape, so the holdout comparison "
+            "carries no information -- read the OOS folds instead."
+        ),
+    )
     sensitivity: SensitivityReport
     num_evaluations: int = Field(ge=0)
     objective: SdcaOptimizeObjective
@@ -471,6 +480,10 @@ def run_sdca_walk_forward(
     holdout_metrics = _holdout_metrics(
         best_params, dates, prices, folds, holdout, rails_fitter, evaluator, extra_z
     )
+    # A holdout that deployed no capital produced no trade: every metric is then the
+    # held-cash outcome, identical for any shape, so the holdout comparison is
+    # vacuous rather than favourable. Say so instead of reporting a number.
+    holdout_traded = holdout_metrics is not None and holdout_metrics.capital_deployed_peak_pct > 0.0
     return SdcaWalkForwardResult(
         best_params=best_params,
         folds=folds,
@@ -480,6 +493,7 @@ def run_sdca_walk_forward(
         mean_oos_vs_flat_dca_pct=mean_oos,
         is_oos_gap_pct=mean_is - mean_oos,
         holdout_metrics=holdout_metrics,
+        holdout_traded=holdout_traded,
         sensitivity=sensitivity,
         num_evaluations=evaluated,
         objective=obj,
@@ -665,7 +679,8 @@ def walk_forward_to_optimize_result(
         f"evals={result.num_evaluations} mean_oos_vs_flat_dca_pct="
         f"{result.mean_oos_vs_flat_dca_pct:.4f} mean_is_vs_flat_dca_pct="
         f"{result.mean_is_vs_flat_dca_pct:.4f} gap={result.is_oos_gap_pct:.4f} "
-        f"holdout_vs_flat_dca_pct={hold_txt} beats_flat_dca_oos="
+        f"holdout_vs_flat_dca_pct={hold_txt} holdout_traded="
+        f"{result.holdout_traded} beats_flat_dca_oos="
         f"{result.beats_flat_dca_oos} sensitivity_stable={result.sensitivity.stable}"
     )
     return OptimizeResult(
