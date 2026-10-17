@@ -49,7 +49,6 @@ Module architecture stays next to the module (`digiquant/ARCHITECTURE.md`, `digi
 | [superpowers](superpowers/) | Shipped plans and design specs |
 | [surfaces](surfaces/) | Surface parity notes |
 | [templates](templates/) | Doc templates |
-| [vendor-terms](vendor-terms/) | Vendor term archives |
 | [vision](vision/) | Longer product-vision notes |
 
 Dated one-offs at the top of `docs/` (`free-model-benchmark-2026-10-12.md`, `local-stack-ui-target-inventory.md`) are measurements, not manuals.

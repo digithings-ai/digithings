@@ -209,7 +209,7 @@ Three corollaries that each cost us time:
 - **A licence claim inherited from a repo is an assumption wearing a citation.**
   If our code asserts a data licence, that assertion needs the vendor's terms
   behind it, not a note in a sibling module. See the
-  [LuxAlgo record](vendor-terms/luxalgo/INDEX.md), where an unverified "CC0"
+  vendor's record in the private vendor-records store, where an unverified "CC0"
   claim sits next to a guard that only covers the code licence.
 - **"Client brings their own account" must come from the vendor's terms.** It was
   permitted in Gloomberb's §12 ("for yourself **or for users who have their own
@@ -218,12 +218,12 @@ Three corollaries that each cost us time:
 
 ### Where the record lives
 
-Step 6 writes to `docs/vendor-terms/<vendor>/INDEX.md`, indexed from
-[`docs/vendor-terms/INDEX.md`](vendor-terms/INDEX.md). The standing line lives
-there too:
+Step 6 writes to the private vendor-records store, which is kept local only and
+is never committed to this repository (standing decision, 2026-10-15). The
+standing line:
 
-> No third-party data access merges without a `docs/vendor-terms/<vendor>/INDEX.md`
-> entry. The check runs when the integration is proposed, not at review time.
+> No third-party data access merges without a vendor terms record in the private vendor-records store.
+> The check runs when the integration is proposed, not at review time.
 
 | Step | Action | Evidence Required |
 |------|--------|-------------------|
@@ -232,7 +232,7 @@ there too:
 | 3 | **Read the artefact for the relevant clauses.** Search for: scraping/crawling/spidering prohibitions, automation/bot prohibitions, API restrictions, "competing products/services" clauses, derivative-work claims, consent requirements for reproduction, permitted-use scope (personal/internal vs commercial). | Quote the relevant sections verbatim in the PR comment with section numbers. |
 | 4 | **Classify the access method** against the terms: **Permitted** (explicitly allowed, e.g., official API with key), **Prohibited** (explicitly forbidden), or **Unclear** (silent, ambiguous, or "contact us"). | Classification + reasoning in the PR comment. |
 | 5 | **Escalate if Prohibited or Unclear.** Tag Counsel and Security on the PR and request a recorded position. | A recorded position from Counsel or Security (memo, issue, or PR comment). |
-| 6 | **Record the decision** in the vendor's terms record. | For a public repository: an entry in `docs/vendor-terms/<vendor>/INDEX.md`. For a private one: the equivalent private record. |
+| 6 | **Record the decision** in the vendor's terms record. | An entry in the private vendor-records store. Never in this repository. |
 
 ### On step 5, precisely
 

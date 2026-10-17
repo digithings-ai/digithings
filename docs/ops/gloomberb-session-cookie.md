@@ -9,7 +9,7 @@ free-account signup, where a credential is placed per
 deployment, the privacy rules, and exactly what an operator sees when the cookie
 is absent. **It no longer covers how to take a credential out of a browser
 session — Security removed those steps on 2026-10-05, see
-[`vendor-terms/gloomber/`](../vendor-terms/gloomber/INDEX.md).**
+the vendor's record in the private vendor-records store.**
 It is a follow-up to #4069 (the family landed in PR #4085) and was
 last widened by #4837 (130-function coverage: 15 probe-backed Cloud reads and
 13 inert workspace/broker tools joined the gated set).
@@ -141,7 +141,7 @@ A cookie is as good as the login behind it, so treat it like one:
 > - **The 47 anonymous tools are a separate question**, not part of this status.
 >
 > Terms, archived artefact, sha256 and the full reasoning:
-> [`vendor-terms/gloomber/COUNSEL-2026-10-05-session-cookie-position.md`](../vendor-terms/gloomber/COUNSEL-2026-10-05-session-cookie-position.md).
+> the private vendor-records store (local only, not in this repository).
 > Counsel's sign-off covers PR #5157 and approves **no new Gloomber access work**.
 > §11 names "data delays" as an access control, but Counsel reads it as
 > prohibiting *interference* with a delay, which a free plan does not involve —
