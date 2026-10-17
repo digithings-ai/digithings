@@ -79,7 +79,7 @@ registry name, add a `PARAM_SPEC_NAMES` entry.
 
 ### SDCA Engine (#1080, #1081)
 
-`strategies/sdca/` is the generic, asset-agnostic Strategic-DCA engine: composite
+`strategies/lab/` is the generic, asset-agnostic Strategic-DCA engine (`strategies/sdca/` is now only an alias shim that re-exports these modules under their historical names): composite
 risk score → accumulation/distribution curve → daily backtest vs. lump-sum
 buy-&-hold. Reverse-engineered from the owner's BTC SDCA artifact but with the
 BTC valuation model factored out — the core engine (`curve.py`,
@@ -155,7 +155,7 @@ published calendar. Round-trip `trades_from_positions` is skipped for SDCA
 `trade_size` is only passed into configs that declare it
 (`registry.config_declares_field`).
 
-`strategies/sdca/presets.py` (backed by `presets.json`) ships named
+`strategies/lab/presets.py` (backed by `presets.json`) ships named
 personalities as public config — `conservative_hold`, `balanced`,
 `aggressive_accumulate` (long-only, increasingly aggressive accumulation) and
 `accumulate_and_distribute` (signed curve). Since #3169 these are authored as

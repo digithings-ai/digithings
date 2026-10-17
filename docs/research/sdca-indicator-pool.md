@@ -67,9 +67,9 @@ signal delay** is later — not this note.
 
 | Piece | Where | SDCA-relevant fact |
 |---|---|---|
-| Power-law rails → `power_law_z` | [`btc_power_law.py`](../../digiquant/src/digiquant/strategies/sdca/btc_power_law.py), [`power_law_zscore.py`](../../digiquant/src/digiquant/strategies/sdca/power_law_zscore.py) | Primary indicator. Cheap = +3, rich = −3. `#3173` real coefficients live on a parallel branch; develop still has the synthetic example. |
-| Composite blend | [`composite_risk.py`](../../digiquant/src/digiquant/strategies/sdca/composite_risk.py) | Weight-normalized average of enabled z series. **Any enabled null nulls the day** — no partial blend. |
-| Risk parquet glue | [`risk_index.py`](../../digiquant/src/digiquant/strategies/sdca/risk_index.py) | `build_risk_index(..., extra_indicators=None, power_law_weight=1.0)`. Hook already exists; do not edit it here. |
+| Power-law rails → `power_law_z` | [`btc_power_law.py`](../../digiquant/src/digiquant/strategies/lab/btc_power_law.py), [`power_law_zscore.py`](../../digiquant/src/digiquant/strategies/lab/power_law_zscore.py) | Primary indicator. Cheap = +3, rich = −3. `#3173` real coefficients live on a parallel branch; develop still has the synthetic example. |
+| Composite blend | [`composite_risk.py`](../../digiquant/src/digiquant/strategies/lab/composite_risk.py) | Weight-normalized average of enabled z series. **Any enabled null nulls the day** — no partial blend. |
+| Risk parquet glue | [`risk_index.py`](../../digiquant/src/digiquant/strategies/lab/risk_index.py) | `build_risk_index(..., extra_indicators=None, power_law_weight=1.0)`. Hook already exists; do not edit it here. |
 | History cache | [`history_cache.py`](../../digiquant/src/digiquant/data/prices/history_cache.py) | Flat CSV `data/price-history/<TICKER>.csv`. Same store as `digiquant_fetch_coinbase_ohlcv`. |
 | Coinbase daily OHLCV | [`fetch_coinbase.py`](../../digiquant/scripts/fetch_coinbase.py) | BTC/ETH/SOL daily via CCXT. This environment's BTC cache: 2015-07-20 → 2026-08-29 (4059 bars). |
 | Daily technicals | [`technicals.py`](../../digiquant/src/digiquant/data/prices/technicals.py) | RSI(7/14/21), MACD(12,26,9), SMA 20/50/**200**, `% vs SMA200`, **zscore vs SMA200**. **Daily only** — no weekly resample. |
@@ -200,7 +200,7 @@ OAS, VIX) — do not wire them into `btc_sdca` “just because they exist.”
 
 ## How each series becomes a z `compute_composite_risk` can blend
 
-Convention (already in [`power_law_zscore.py`](../../digiquant/src/digiquant/strategies/sdca/power_law_zscore.py)):
+Convention (already in [`power_law_zscore.py`](../../digiquant/src/digiquant/strategies/lab/power_law_zscore.py)):
 **cheap / buy = +3, rich / sell = −3**, clipped to `[-3, 3]`.
 
 | Series | Raw | z mapping | Nulls |

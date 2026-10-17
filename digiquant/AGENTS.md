@@ -48,7 +48,7 @@ Beyond root `AGENTS.md`:
 |------|--------|-------------|
 | `digiquant/nautilus_runner.py` | Nautilus `BarDataWrangler` requires pandas | None — documented boundary |
 | `digiquant/data/prices/fetchers.py` | yfinance returns pandas DataFrames; pandas is imported lazily only at the yfinance conversion boundary (`_pandas_to_polars` and the fetch path) | None — documented boundary |
-| `digiquant/strategies/sdca/nautilus_evaluator.py` | Same BarDataWrangler boundary for SDCA walk-forward trials (#3174) | None — documented boundary |
+| `digiquant/strategies/lab/nautilus_evaluator.py` | Same BarDataWrangler boundary for SDCA walk-forward trials (#3174) | None — documented boundary |
 | `digiquant/dashboard/replay/nautilus_portfolio.py` | Same BarDataWrangler boundary for shared-cash portfolio replay (#2784) | None — documented boundary |
 | `digiquant/tearsheet.py` | Nautilus `account_report` / `fills_report` are pandas DataFrames | Defer — Plotly quantstats bridge |
 | `digiquant/tearsheet_extract.py` | Same Nautilus report boundary as `tearsheet.py` (#1185 split) | Defer — same as tearsheet |
@@ -59,7 +59,7 @@ Beyond root `AGENTS.md`:
 | `digiquant/scripts/research/preload-history.py` | Same research ops family | Delegate to `scripts/preload-history.py` (Polars) when touched |
 | `digiquant/strategies/bollinger_mr.py` | Nautilus strategy bar helpers | Issue backlog — migrate to stdlib `timedelta` pattern (see `rsi_momentum.py`) |
 | `digiquant/strategies/macd_trend.py` | Same | Same |
-| `digiquant/strategies/sdca/nautilus_evaluator.py` | Nautilus `BarDataWrangler` for SDCA walk-forward trials (#3174) | None — documented boundary |
+| `digiquant/strategies/lab/nautilus_evaluator.py` | Nautilus `BarDataWrangler` for SDCA walk-forward trials (#3174) | None — documented boundary |
 | `digiquant/strategies/rsi_momentum.py` | **Migrated** — uses `datetime.timedelta` only | Done (audit PR) |
 | `tests/dq/test_strategies.py` | `TestSdcaStrategyNautilusParity` and `TestSdcaRiskIndexNautilusChain` build bars via `BarDataWrangler`, same boundary as `nautilus_runner.py` (#1081, #3168) | None — documented boundary |
 
@@ -163,15 +163,18 @@ evaluation.
 
 ## SDCA Engine (#1080, #1081)
 
-`strategies/sdca/` is the asset-agnostic Strategic-DCA engine (composite risk →
-accumulation/distribution curve → daily backtest). See
-[`ARCHITECTURE.md` § SDCA Engine](ARCHITECTURE.md#sdca-engine-1080-1081) for
+`strategies/lab/` is the asset-agnostic Strategic-DCA engine (composite risk →
+accumulation/distribution curve → daily backtest). `strategies/sdca/` is now only an
+alias shim (`__init__.py`) that re-exports every `lab` module under its historical
+name, so existing importers keep working — new code imports
+`digiquant.strategies.lab`. See
+[Internal architecture § SDCA Engine](docs/architecture/internal-architecture.md#sdca-engine-1080-1081) for
 the full module map.
 
 - **The core engine (`curve.py`, `composite_risk.py`, `risk_model.py`,
   `valuation.py`, `backtest.py`) has zero NautilusTrader dependency.** Only
   `nautilus_strategy.py` imports `nautilus_trader` — don't add a `nautilus_trader`
-  import to any other file in this package, or `strategies.sdca` stops being
+  import to any other file in this package, or `strategies.lab` stops being
   importable without the `nautilus` extra.
 - **`SdcaStrategy` is registered as `btc_sdca` (#3170)** with `risk_path`-less
   `default_params`. `generate_tearsheets.py` materializes the parquet from the
@@ -181,10 +184,10 @@ the full module map.
   `trade_size` into configs that do not declare it (`config_declares_field`).
   `m2_liquidity` remains unregistered — same runtime-path pattern, not a
   second special case. Research parquets also come from
-  `sdca/risk_index.py::build_risk_index()` + `write_risk_index()`, or the
+  `lab/risk_index.py::build_risk_index()` + `write_risk_index()`, or the
   `digiquant_build_sdca_risk_index` MCP tool — do not hand-assemble them.
 - **`SdcaStrategy.on_bar()` must call `AccumDistCurve.value_at_risk()` and
-  mirror `sdca/backtest.py::run_backtest()`'s buy/sell sizing loop, never
+  mirror `lab/backtest.py::run_backtest()`'s buy/sell sizing loop, never
   reimplement it.** This is what keeps the Nautilus-run result and the
   standalone parity harness (`tests/dq/strategies/sdca/test_backtest.py`) from
   silently diverging.
@@ -235,7 +238,7 @@ the full module map.
 
 ### RiskModel providers (#1082)
 
-`strategies/sdca/btc_power_law.py` is the first concrete `RiskModel`
+`strategies/lab/btc_power_law.py` is the first concrete `RiskModel`
 (`BtcPowerLawRiskModel`) — a fitted BTC power-law (RAQQR). Anti-patterns:
 
 - **Never treat `btc_power_law_coefficients.example.json` as a real fit**
@@ -256,7 +259,7 @@ the full module map.
   revisit once that artifact is reachable, don't assume the default is
   correct.
 - The per-asset ladder is `btc_power_law` → `generic_valuation` →
-  `rolling_z` (`sdca/providers.py`, #3175). RS-driven risk is still #1084,
+  `rolling_z` (`lab/providers.py`, #3175). RS-driven risk is still #1084,
   not this WP. Equity CAPE is #3176 — do not add it here.
 
 ### Adding an asset (SDCA framework)
@@ -293,7 +296,7 @@ fail-soft). MCP `digiquant_fetch_bitview_series` and CLI
 and optionally upsert `macro_series_observations` (`source=bitview`). Scheduled
 job: `.github/workflows/pipeline-digiquant-onchain.yml` (persistent failure
 tracker). Local **MVRV-Z** + companion z-series live in
-`strategies/sdca/onchain_valuation.py` (`OnChainValuationProvider`) and are
+`strategies/lab/onchain_valuation.py` (`OnChainValuationProvider`) and are
 consumable by `compute_composite_risk` — **not published composite votes yet**
 (null-rule would halt SDCA on a Bitview gap). Coverage is BTC-rich; ETH/SOL
 fall back to basic `rolling_z` via `resolve_sdca_valuation_tier`. Coin Metrics
@@ -309,8 +312,8 @@ weekly RSI 14), not a 2018/2021 cliff.
 
 ### Adding a preset
 
-Presets are public personalities in `strategies/sdca/presets.json`, loaded via
-`strategies/sdca/presets.py` (`list_presets()`, `load_preset(name)`). Since
+Presets are public personalities in `strategies/lab/presets.json`, loaded via
+`strategies/lab/presets.py` (`list_presets()`, `load_preset(name)`). Since
 #3169 they are authored as `SdcaCurveShape` parameters (a dead zone and two
 knees), not 21 free nodes. `load_preset()` still returns `SdcaPreset.curve_nodes`
 for `SdcaStrategyConfig`.
@@ -337,7 +340,7 @@ pytest -m unit tests/dq/strategies/sdca/test_walk_forward.py tests/dq/strategies
 PATH="$PWD/.venv/bin:$PATH" python -c "
 from pathlib import Path
 from digiquant.optimize import run_optimize
-from digiquant.strategies.sdca.optimize import persist_btc_optimized, run_sdca_walk_forward
+from digiquant.strategies.lab.optimize import persist_btc_optimized, run_sdca_walk_forward
 # Prefer run_optimize(strategy_name='sdca', ...) which already refits rails per fold.
 "
 ```

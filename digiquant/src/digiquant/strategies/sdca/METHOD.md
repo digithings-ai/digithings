@@ -18,7 +18,7 @@ BTC-hardcoded (see seams below).
 > on `develop`.
 
 - Trade mechanics: `AccumDistCurve` + `size_trade` + `run_backtest`
-  (`strategies/sdca/backtest.py`, `curve.py`) — identical semantics to the
+  (`strategies/lab/backtest.py`, `curve.py`) — identical semantics to the
   production signals app.
 - Index math: `compute_composite_risk`, `causal_rolling_z`,
   `causal_ema_smooth` (`composite_risk.py`); `build_risk_index`
