@@ -202,54 +202,6 @@
       "reason": "the vendor's public endpoint, present since the merge base with main. Kept for provenance in some cases, but rule 2 approved the desk login URL only."
     },
     {
-      "rule": "V2",
-      "path": "docs/vendor-terms/gloomber/COUNSEL-2026-10-05-session-cookie-position.md",
-      "match": "https://gloom.sh",
-      "owner": "Security b14d7a18 + Counsel 0e57e884",
-      "ticket": "DIG-1418",
-      "reason": "the vendor's public endpoint, present since the merge base with main. Kept for provenance in some cases, but rule 2 approved the desk login URL only. (present only on PR #5157, which is open; recorded here so the day that PR merges is not the day this gate goes red.)"
-    },
-    {
-      "rule": "V2",
-      "path": "docs/vendor-terms/gloomber/INDEX.md",
-      "match": "https://api.gloom.sh",
-      "owner": "Security b14d7a18 + Counsel 0e57e884",
-      "ticket": "DIG-1418",
-      "reason": "the vendor's public endpoint, present since the merge base with main. Kept for provenance in some cases, but rule 2 approved the desk login URL only. (present only on PR #5157, which is open; recorded here so the day that PR merges is not the day this gate goes red.)"
-    },
-    {
-      "rule": "V2",
-      "path": "docs/vendor-terms/gloomber/INDEX.md",
-      "match": "https://gloom.sh",
-      "owner": "Security b14d7a18 + Counsel 0e57e884",
-      "ticket": "DIG-1418",
-      "reason": "the vendor's public endpoint, present since the merge base with main. Kept for provenance in some cases, but rule 2 approved the desk login URL only. (present only on PR #5157, which is open; recorded here so the day that PR merges is not the day this gate goes red.)"
-    },
-    {
-      "rule": "V2",
-      "path": "docs/vendor-terms/gloomber/POSITION-2026-10-05-session-cookie.md",
-      "match": "https://api.gloom.sh",
-      "owner": "Security b14d7a18 + Counsel 0e57e884",
-      "ticket": "DIG-1418",
-      "reason": "the vendor's public endpoint, present since the merge base with main. Kept for provenance in some cases, but rule 2 approved the desk login URL only. (present only on PR #5157, which is open; recorded here so the day that PR merges is not the day this gate goes red.)"
-    },
-    {
-      "rule": "V2",
-      "path": "docs/vendor-terms/gloomber/POSITION-2026-10-05-session-cookie.md",
-      "match": "https://gloom.sh",
-      "owner": "Security b14d7a18 + Counsel 0e57e884",
-      "ticket": "DIG-1418",
-      "reason": "the vendor's public endpoint, present since the merge base with main. Kept for provenance in some cases, but rule 2 approved the desk login URL only. (present only on PR #5157, which is open; recorded here so the day that PR merges is not the day this gate goes red.)"
-    },
-    {
-      "rule": "V2",
-      "path": "docs/vendor-terms/gloomber/gloomber-terms-2026-10-05.html",
-      "match": "https://gloom.sh",
-      "owner": "Security b14d7a18 + Counsel 0e57e884",
-      "ticket": "DIG-1418",
-      "reason": "the vendor's public endpoint, present since the merge base with main. Kept for provenance in some cases, but rule 2 approved the desk login URL only. (present only on PR #5157, which is open; recorded here so the day that PR merges is not the day this gate goes red.)"
-    },
-    {
       "rule": "V3",
       "path": "docs/ops/SECRETS_INVENTORY.md",
       "match": "pmt_auth_token",
@@ -442,46 +394,6 @@
       "reason": "a mention of the vendor's public brand word. The pmt_* rename is out of scope for this leaf, so the occurrence is recorded rather than removed. (present only on PR #5157, which is open; recorded here so the day that PR merges is not the day this gate goes red.)"
     },
     {
-      "rule": "V4",
-      "path": "docs/vendor-terms/INDEX.md",
-      "match": "PrimeMarket",
-      "owner": "Security b14d7a18 + Counsel 0e57e884",
-      "ticket": "DIG-1418",
-      "reason": "a mention of the vendor's public brand word. The pmt_* rename is out of scope for this leaf, so the occurrence is recorded rather than removed."
-    },
-    {
-      "rule": "V4",
-      "path": "docs/vendor-terms/bloomberg/INDEX.md",
-      "match": "PrimeMarket",
-      "owner": "Security b14d7a18 + Counsel 0e57e884",
-      "ticket": "DIG-1418",
-      "reason": "a mention of the vendor's public brand word. The pmt_* rename is out of scope for this leaf, so the occurrence is recorded rather than removed."
-    },
-    {
-      "rule": "V4",
-      "path": "docs/vendor-terms/gloomber/COUNSEL-2026-10-05-session-cookie-position.md",
-      "match": "PrimeMarket",
-      "owner": "Security b14d7a18 + Counsel 0e57e884",
-      "ticket": "DIG-1418",
-      "reason": "a mention of the vendor's public brand word. The pmt_* rename is out of scope for this leaf, so the occurrence is recorded rather than removed. (present only on PR #5157, which is open; recorded here so the day that PR merges is not the day this gate goes red.)"
-    },
-    {
-      "rule": "V4",
-      "path": "docs/vendor-terms/gloomber/INDEX.md",
-      "match": "PrimeMarket",
-      "owner": "Security b14d7a18 + Counsel 0e57e884",
-      "ticket": "DIG-1418",
-      "reason": "a mention of the vendor's public brand word. The pmt_* rename is out of scope for this leaf, so the occurrence is recorded rather than removed. (present only on PR #5157, which is open; recorded here so the day that PR merges is not the day this gate goes red.)"
-    },
-    {
-      "rule": "V4",
-      "path": "docs/vendor-terms/gloomber/POSITION-2026-10-05-session-cookie.md",
-      "match": "PrimeMarket",
-      "owner": "Security b14d7a18 + Counsel 0e57e884",
-      "ticket": "DIG-1418",
-      "reason": "a mention of the vendor's public brand word. The pmt_* rename is out of scope for this leaf, so the occurrence is recorded rather than removed. (present only on PR #5157, which is open; recorded here so the day that PR merges is not the day this gate goes red.)"
-    },
-    {
       "rule": "V5",
       "path": "digiquant/AGENTS.md",
       "match": "https://api.gloom.sh",
@@ -584,54 +496,6 @@
       "owner": "Security b14d7a18 + Counsel 0e57e884",
       "ticket": "DIG-1418",
       "reason": "vendor cookie/endpoint surface present since the merge base with main. Rule 2 did not name this host, so no approver exists yet."
-    },
-    {
-      "rule": "V5",
-      "path": "docs/vendor-terms/gloomber/COUNSEL-2026-10-05-session-cookie-position.md",
-      "match": "https://gloom.sh",
-      "owner": "Security b14d7a18 + Counsel 0e57e884",
-      "ticket": "DIG-1418",
-      "reason": "vendor cookie/endpoint surface present since the merge base with main. Rule 2 did not name this host, so no approver exists yet. (present only on PR #5157, which is open; recorded here so the day that PR merges is not the day this gate goes red.)"
-    },
-    {
-      "rule": "V5",
-      "path": "docs/vendor-terms/gloomber/INDEX.md",
-      "match": "https://api.gloom.sh",
-      "owner": "Security b14d7a18 + Counsel 0e57e884",
-      "ticket": "DIG-1418",
-      "reason": "vendor cookie/endpoint surface present since the merge base with main. Rule 2 did not name this host, so no approver exists yet. (present only on PR #5157, which is open; recorded here so the day that PR merges is not the day this gate goes red.)"
-    },
-    {
-      "rule": "V5",
-      "path": "docs/vendor-terms/gloomber/INDEX.md",
-      "match": "https://gloom.sh",
-      "owner": "Security b14d7a18 + Counsel 0e57e884",
-      "ticket": "DIG-1418",
-      "reason": "vendor cookie/endpoint surface present since the merge base with main. Rule 2 did not name this host, so no approver exists yet. (present only on PR #5157, which is open; recorded here so the day that PR merges is not the day this gate goes red.)"
-    },
-    {
-      "rule": "V5",
-      "path": "docs/vendor-terms/gloomber/POSITION-2026-10-05-session-cookie.md",
-      "match": "https://api.gloom.sh",
-      "owner": "Security b14d7a18 + Counsel 0e57e884",
-      "ticket": "DIG-1418",
-      "reason": "vendor cookie/endpoint surface present since the merge base with main. Rule 2 did not name this host, so no approver exists yet. (present only on PR #5157, which is open; recorded here so the day that PR merges is not the day this gate goes red.)"
-    },
-    {
-      "rule": "V5",
-      "path": "docs/vendor-terms/gloomber/POSITION-2026-10-05-session-cookie.md",
-      "match": "https://gloom.sh",
-      "owner": "Security b14d7a18 + Counsel 0e57e884",
-      "ticket": "DIG-1418",
-      "reason": "vendor cookie/endpoint surface present since the merge base with main. Rule 2 did not name this host, so no approver exists yet. (present only on PR #5157, which is open; recorded here so the day that PR merges is not the day this gate goes red.)"
-    },
-    {
-      "rule": "V5",
-      "path": "docs/vendor-terms/gloomber/gloomber-terms-2026-10-05.html",
-      "match": "https://gloom.sh",
-      "owner": "Security b14d7a18 + Counsel 0e57e884",
-      "ticket": "DIG-1418",
-      "reason": "vendor cookie/endpoint surface present since the merge base with main. Rule 2 did not name this host, so no approver exists yet. (present only on PR #5157, which is open; recorded here so the day that PR merges is not the day this gate goes red.)"
     },
     {
       "rule": "V5",
