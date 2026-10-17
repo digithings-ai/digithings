@@ -67,6 +67,12 @@ BLOCKING_REVIEW_STATES: frozenset[str] = frozenset({"CHANGES_REQUESTED"})
 # `BEHIND` is the dangerous one — see `evaluate`.
 STALE_MERGE_STATES: frozenset[str] = frozenset({"BLOCKED", "BEHIND", "DIRTY", "UNKNOWN"})
 
+# Statuses the queue does not read at all, in either direction. QA is not in the
+# review path (Chris, 2026-10-17): a `qa/gate` status QA posts on a PR head neither
+# clears nor blocks a merge, so it is dropped before any gate sees the rollup, and
+# it is left out of the audit comment's check list.
+IGNORED_STATUS_CONTEXTS: frozenset[str] = frozenset({"qa/gate"})
+
 EXIT_OK = 0
 EXIT_OPERATIONAL = 1
 EXIT_NOT_AUTHORISED = 2
@@ -92,7 +98,6 @@ class Policy:
     """The merge-path policy, loaded from scripts/merge_queue_policy.json."""
 
     merge_authorities: tuple[Authority, ...]
-    review_path: tuple[str, ...]
     blocked_bases: tuple[str, ...]
     merge_method: str
     delete_branch: bool
@@ -150,6 +155,7 @@ class Verdict:
     eligible: bool
     reasons: tuple[str, ...] = field(default_factory=tuple)
     checks: tuple[str, ...] = field(default_factory=tuple)
+    review_evidence: str = ""
 
     def order_key(self) -> tuple[str, int]:
         """FIFO on creation time, PR number breaking ties.
@@ -176,12 +182,13 @@ def load_policy(path: Path = POLICY_PATH) -> Policy:
             )
             for a in raw["merge_authorities"]
         ),
-        review_path=tuple(raw.get("review_path", ())),
         blocked_bases=tuple(raw["blocked_bases"]),
         merge_method=defaults.get("merge_method", "squash"),
         delete_branch=bool(defaults.get("delete_branch", True)),
         required_checks=tuple(defaults.get("required_checks", ())),
-        status_context_checks=frozenset(str(name) for name in (raw.get("status_context_checks") or [])),
+        status_context_checks=frozenset(
+            str(name) for name in (raw.get("status_context_checks") or [])
+        ),
         ignored_checks=frozenset(defaults.get("ignored_checks", ())),
         # Reject a non-string entry rather than coercing it: a typo'd check name is
         # the exact failure DIG-690 was, and `str(42)` would turn that into a gate
@@ -249,6 +256,15 @@ def _check_name(entry: dict[str, Any]) -> str:
     return str(entry.get("name") or entry.get("context") or "")
 
 
+def _rollup(pr: dict[str, Any]) -> list[dict[str, Any]]:
+    """The PR's check rollup without the statuses the queue ignores."""
+    return [
+        e
+        for e in (pr.get("statusCheckRollup") or [])
+        if isinstance(e, dict) and _check_name(e) not in IGNORED_STATUS_CONTEXTS
+    ]
+
+
 def _is_check_run(entry: dict[str, Any]) -> bool:
     """True when the report came from a workflow run rather than a commit status.
 
@@ -308,7 +324,7 @@ def unmatched_required_checks(
     """
     reported: set[str] = set()
     for pr in prs:
-        for entry in pr.get("statusCheckRollup") or []:
+        for entry in _rollup(pr):
             reported.add(_check_name(entry))
     if not reported:
         # Nothing ran anywhere. That is CI being absent, not a naming mistake, and
@@ -319,7 +335,7 @@ def unmatched_required_checks(
 
 def _gate_checks(pr: dict[str, Any], policy: Policy) -> list[str]:
     """Required checks must have reported, and must have passed. No exceptions."""
-    rollup = pr.get("statusCheckRollup") or []
+    rollup = _rollup(pr)
     reasons: list[str] = []
 
     by_name: dict[str, list[dict[str, Any]]] = {}
@@ -475,43 +491,115 @@ def _posted_verdict_reason(pr: dict[str, Any]) -> list[str]:
     ]
 
 
-def _gate_review(pr: dict[str, Any], acting_role: str, attest_role: str | None) -> list[str]:
-    """Satisfied by an approving review from someone else, or by another role's attestation."""
+def _gate_review(pr: dict[str, Any]) -> list[str]:
+    """Open change requests block: a formal one, or a verdict posted as a comment.
+
+    This gate no longer demands an approving review from a non-author, and it no
+    longer accepts a role attestation in place of one. Every agent on this org
+    pushes under one GitHub login, so no agent can give a non-author approval and
+    the old gate could only ever be met by `--attest-review`, a declared role with
+    no review act behind it (Chris, 2026-10-17: "Drop the false QA attestation").
+    The review that counts is the board's own review pass, read by
+    `_gate_review_coverage`, with its comments addressed (`_gate_review_threads`)
+    — Chris's 2026-10-15 definition. A human approval still counts there.
+    """
     reasons: list[str] = []
     if str(pr.get("reviewDecision") or "").upper() == "CHANGES_REQUESTED":
         reasons.append("review has outstanding change requests")
-
-    # A blocking verdict is checked before the approval shortcut below. An approving
-    # review is a way *past* this gate, not a waiver of it: twelve-x PR #347 carried
-    # `--attest-review qa` and a posted "changes requested", and it merged.
+    # twelve-x PR #347 merged on an attestation 6m37s after a posted "changes
+    # requested". A posted blocking verdict stays a block until a newer one clears it.
     reasons.extend(_posted_verdict_reason(pr))
-
-    author = str((pr.get("author") or {}).get("login") or "")
-    reviews = pr.get("reviews") or []
-    approved_by_other = any(
-        str(r.get("state") or "").upper() == "APPROVED"
-        and str((r.get("author") or {}).get("login") or "") != author
-        # A bot's APPROVED is a linter saying it found no problems, not a person
-        # taking responsibility for the change. GitHub's own review summary
-        # ignores bot reviews for the same reason.
-        and not str((r.get("author") or {}).get("login") or "").endswith("[bot]")
-        for r in reviews
-    )
-    if approved_by_other:
-        return reasons
-
-    # No usable approval. Someone has to stand behind the review, and it cannot be
-    # the role doing the merging: on this org every agent shares one GitHub login,
-    # so a role that authored a PR is indistinguishable from one that did not. The
-    # role is therefore asserted explicitly, and self-attestation is refused.
-    if attest_role is None:
-        reasons.append("no approving review from a non-author; needs --attest-review <role>")
-    elif attest_role == acting_role:
-        reasons.append(
-            f"attested by '{acting_role}', which is also the merging role; "
-            "attestation must come from a different role"
-        )
     return reasons
+
+
+# --- review comments addressed -----------------------------------------------
+#
+# A review pass that left comments is only half of Chris's 2026-10-15 rule; the
+# other half is that those comments were resolved or addressed before merge. A
+# review thread GitHub marks `isResolved` was resolved. One marked `isOutdated`
+# sits on code that has since changed under it, which is the closest artifact
+# GitHub has for "addressed by a follow-up commit" (CodeRabbit threads stay
+# unresolved after the fix lands, see check_review_coverage.py). Anything else
+# is a comment on the current code that nobody has answered, and it blocks.
+
+_THREADS_QUERY = """
+query($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      reviewThreads(first: 100) {
+        totalCount
+        nodes { isResolved isOutdated path comments(first: 1) { nodes { author { login } } } }
+      }
+    }
+  }
+}
+"""
+
+
+def _fetch_review_threads(repo: str, number: int) -> list[dict[str, Any]]:
+    owner, _, name = repo.partition("/")
+    data = _gh_json(
+        "api",
+        "graphql",
+        "-f",
+        f"query={_THREADS_QUERY}",
+        "-F",
+        f"owner={owner}",
+        "-F",
+        f"name={name}",
+        "-F",
+        f"number={number}",
+    )
+    threads = (
+        (((data or {}).get("data") or {}).get("repository") or {}).get("pullRequest") or {}
+    ).get("reviewThreads") or {}
+    nodes = threads.get("nodes")
+    if not isinstance(nodes, list):
+        raise QueueError(f"review threads for #{number} came back without a node list")
+    if int(threads.get("totalCount") or 0) > len(nodes):
+        # More than one page. Treat the unread tail as unanswered rather than
+        # paging: a PR with 100+ review threads is not one a cron should merge.
+        nodes = nodes + [{"isResolved": False, "isOutdated": False, "path": "(unread page)"}]
+    return nodes
+
+
+def _open_threads(threads: list[Any]) -> list[dict[str, Any]]:
+    return [
+        t
+        for t in threads
+        if isinstance(t, dict) and not t.get("isResolved") and not t.get("isOutdated")
+    ]
+
+
+def _gate_review_threads(pr: dict[str, Any], repo: str | None) -> list[str]:
+    """Unresolved review threads on the current code block the merge.
+
+    A row that already carries `reviewThreads` (a test fixture, or a caller that
+    fetched them) is judged as given. Otherwise they are read from `repo`; a read
+    that fails holds the PR, because "could not see the comments" must not read as
+    "the comments were addressed". With neither, there is nothing to judge.
+    """
+    threads = pr.get("reviewThreads")
+    if threads is None:
+        if repo is None:
+            return []
+        try:
+            threads = _fetch_review_threads(repo, int(pr.get("number") or 0))
+        except (QueueError, ValueError):
+            return [
+                "review comments: the PR's review threads could not be read, so the "
+                "queue cannot tell they were addressed"
+            ]
+    open_threads = _open_threads(threads if isinstance(threads, list) else [])
+    if not open_threads:
+        return []
+    paths = sorted({str(t.get("path") or "?") for t in open_threads})
+    shown = ", ".join(paths[:3]) + (f" and {len(paths) - 3} more" if len(paths) > 3 else "")
+    return [
+        f"review comments not addressed: {len(open_threads)} unresolved review "
+        f"thread(s) on the current code ({shown}); resolve them, or push the fix "
+        "that makes them outdated"
+    ]
 
 
 def _coverage_module() -> Any:
@@ -541,6 +629,10 @@ def _label_names(pr: dict[str, Any]) -> set[str]:
 
 
 def _gate_review_coverage(pr: dict[str, Any], repo: str | None) -> list[str]:
+    return _review_coverage(pr, repo)[0]
+
+
+def _review_coverage(pr: dict[str, Any], repo: str | None) -> tuple[list[str], str]:
     """The promotion gate's evidence, enforced at merge time.
 
     `scripts/check_review_coverage.py` refuses an unreviewed commit at promotion;
@@ -555,12 +647,11 @@ def _gate_review_coverage(pr: dict[str, Any], repo: str | None) -> list[str]:
 
     Two deliberate properties worth stating plainly:
 
-    * `--attest-review` no longer substitutes for review evidence. Both
-      reopen cases merged attested by `qa` with zero reviews and zero
-      comments; attestation is an assertion, and an assertion with no artifact
-      is exactly what the promotion gate refuses. The attestation mechanism
-      itself is unchanged — it still satisfies `_gate_review` — but it does
-      not satisfy this gate.
+    * This is the review gate. Both reopen cases merged attested by `qa` with
+      zero reviews and zero comments; attestation is an assertion, and an
+      assertion with no artifact is exactly what the promotion gate refuses.
+      `--attest-review` is gone (2026-10-17), and no non-author approval is
+      required on top of this evidence (Chris's 2026-10-15 definition).
     * Comments are fetched lazily and only when a `reviewed:agent` label makes
       them load-bearing (`fetch_queue` carries labels but not comments). An
       unreadable comments read fails closed, for the same reason an absent
@@ -574,7 +665,7 @@ def _gate_review_coverage(pr: dict[str, Any], repo: str | None) -> list[str]:
             return [
                 "review coverage: `reviewed:agent` is set but the findings "
                 "comment cannot be verified without a repo to read it from"
-            ]
+            ], ""
         try:
             data = _gh_json(
                 "pr",
@@ -589,7 +680,7 @@ def _gate_review_coverage(pr: dict[str, Any], repo: str | None) -> list[str]:
             return [
                 "review coverage: `reviewed:agent` is set but its findings "
                 "comment could not be read"
-            ]
+            ], ""
         comments = (data or {}).get("comments") or []
     state: dict[str, Any] = {
         "labels": labels,
@@ -603,18 +694,19 @@ def _gate_review_coverage(pr: dict[str, Any], repo: str | None) -> list[str]:
     crc._apply_reviews_checks_comments(
         state,
         reviews=pr.get("reviews") or [],
-        checks=pr.get("statusCheckRollup") or [],
+        checks=_rollup(pr),
         comments=comments if isinstance(comments, list) else [],
     )
     reviewed, why = crc.verdict_for(state)
     if reviewed:
-        return []
+        return [], why
     return [
-        f"review coverage: {why} — the queue enforces the same evidence "
-        "scripts/check_review_coverage.py enforces at promotion "
-        "(completed Bot run, approval, Bot review, in-session findings, or "
-        "reviewed:owner)"
-    ]
+        f"review coverage: {why} — the queue needs a review pass that left its "
+        "findings on the PR, the same evidence scripts/check_review_coverage.py "
+        "enforces at promotion (completed Bot run, a reviewer bot such as "
+        "CodeRabbit or Copilot, an in-session review with its findings comment, "
+        "an approval, or reviewed:owner)"
+    ], ""
 
 
 def evaluate(
@@ -623,7 +715,6 @@ def evaluate(
     *,
     base: str,
     acting_role: str,
-    attest_role: str | None,
     repo: str | None = None,
 ) -> Verdict:
     """Apply every gate to one PR. Returns the verdict, including why it failed."""
@@ -653,10 +744,15 @@ def evaluate(
         reasons.append(f"mergeStateStatus={state} (base moved since the checks ran)")
 
     reasons.extend(_gate_checks(pr, policy))
-    reasons.extend(_gate_review(pr, acting_role, attest_role))
-    reasons.extend(_gate_review_coverage(pr, repo))
+    reasons.extend(_gate_review(pr))
+    coverage_reasons, review_evidence = _review_coverage(pr, repo)
+    reasons.extend(coverage_reasons)
+    # Read last, and only for a PR every other gate passed: it is one GraphQL read
+    # per PR, and a PR already refused elsewhere needs no second reason to wait.
+    if not reasons:
+        reasons.extend(_gate_review_threads(pr, repo))
 
-    rollup = pr.get("statusCheckRollup") or []
+    rollup = _rollup(pr)
     return Verdict(
         number=int(pr.get("number", 0)),
         title=str(pr.get("title") or ""),
@@ -665,6 +761,7 @@ def evaluate(
         head_sha=str(pr.get("headRefOid") or ""),
         eligible=not reasons,
         reasons=tuple(reasons),
+        review_evidence=review_evidence,
         checks=tuple(
             f"{_check_name(e)}={e.get('conclusion') or e.get('state') or '?'}" for e in rollup
         ),
@@ -677,23 +774,19 @@ def evaluate_all(
     *,
     base: str,
     acting_role: str,
-    attest_role: str | None,
     repo: str | None = None,
 ) -> list[Verdict]:
     """Every PR, in queue order, with its verdict."""
-    verdicts = [
-        evaluate(pr, policy, base=base, acting_role=acting_role, attest_role=attest_role, repo=repo)
-        for pr in prs
-    ]
+    verdicts = [evaluate(pr, policy, base=base, acting_role=acting_role, repo=repo) for pr in prs]
     verdicts.sort(key=Verdict.order_key)
     return verdicts
 
 
-def _audit_body(
-    verdict: Verdict, authority: Authority, policy: Policy, attest_role: str | None
-) -> str:
+def _audit_body(verdict: Verdict, authority: Authority, policy: Policy) -> str:
     checks = "\n".join(f"- `{c}`" for c in verdict.checks) or "- (no checks reported)"
-    review = f"attested by `{attest_role}`" if attest_role else "approving review from a non-author"
+    review = (verdict.review_evidence or "review coverage passed") + (
+        "; no unresolved review threads on the current code"
+    )
     return (
         "Merged through the `develop` merge queue — no decision card required.\n\n"
         f"- merging role: `{authority.role}` ({authority.title})\n"
@@ -774,11 +867,6 @@ def main(argv: list[str] | None = None) -> int:
         required=True,
         help="the merge-authority role invoking the queue; must be on the roster",
     )
-    parser.add_argument(
-        "--attest-review",
-        default=None,
-        help="role standing behind the review when no non-author approval exists",
-    )
     # DIG-3240: the --json field list below costs ~10,502 possible GraphQL nodes
     # per PR, and GitHub rejects requests above 500,000 nodes. A default of 50
     # (~525k nodes) made every `run` at the default exit 1 with an unreadable
@@ -824,14 +912,6 @@ def main(argv: list[str] | None = None) -> int:
         )
         return EXIT_REFUSED_BASE
 
-    if args.attest_review is not None and args.attest_review not in policy.review_path:
-        print(
-            f"merge_queue: '{args.attest_review}' is not in the review path "
-            f"({', '.join(policy.review_path)}).",
-            file=sys.stderr,
-        )
-        return EXIT_NOT_AUTHORISED
-
     try:
 
         def read_queue() -> list[Verdict]:
@@ -861,7 +941,6 @@ def main(argv: list[str] | None = None) -> int:
                 policy,
                 base=args.base,
                 acting_role=args.acting_role,
-                attest_role=args.attest_review,
                 repo=args.repo,
             )
 
@@ -898,7 +977,7 @@ def main(argv: list[str] | None = None) -> int:
             comment_audit(
                 args.repo,
                 head,
-                _audit_body(head, authority, policy, args.attest_review),
+                _audit_body(head, authority, policy),
             )
             merged.append(head)
             print(f"merged #{head.number} {head.head_ref} as {authority.role}")

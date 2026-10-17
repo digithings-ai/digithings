@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "reason": "The EM and the CTO merge into a develop branch without a merge decision card. This roster exists so that rule is a reviewable artifact instead of a convention buried in a prompt. QA is in the review path, not the merge path: a reviewer cannot also be the merge authority for the same PR, which is why 'attested' and 'approved' are separate verdicts in merge_queue.py.",
+  "reason": "The EM and the CTO merge into a develop branch without a merge decision card. This roster exists so that rule is a reviewable artifact instead of a convention buried in a prompt. No role attests a review: the review gate is the board's own review pass that left its findings on the PR, with those comments resolved or addressed (Chris, 2026-10-15). QA is not in the review path, and a `qa/gate` status is ignored (Chris, 2026-10-17).",
   "merge_authorities": [
     {
       "role": "cto",
@@ -15,7 +15,6 @@
       "note": "Merge authority for develop. Owns queue order and hands a blocked PR back with a reason."
     }
   ],
-  "review_path": ["qa", "em", "cto"],
   "blocked_bases": ["main", "master", "release"],
   "blocked_bases_reason": "Mirrors the AGENTS.md 'Still stop and ask' gate: a merge into a release or trunk branch is a human decision. The queue refuses these outright rather than asking a caller to pass a flag.",
   "defaults": {
@@ -34,5 +33,5 @@
     "local-ci"
   ],
   "status_context_checks_note": "Names accepted as commit statuses instead of workflow runs. `local-ci` is posted as a StatusContext by the local-ci daemon; no workflow ever reports a CheckRun by that name, so the CheckRun-evidence rule in merge_queue._gate_checks would refuse every PR if it applied. The exception is per-name: any other required check still needs a CheckRun. Keep this list to exactly the names branch protection requires as statuses.",
-  "github_identity_note": "Both authorities merge with the same org credential, so GitHub sees one committer. The role is an assertion the runner records in its audit comment, and an identity GitHub cannot enforce. Two things compensate: merge_queue.py refuses any role that is not on this roster, and it refuses an attestation that comes from the same role as the one doing the merge. Note what that does NOT give you: it cannot tell that the attesting role did not also author the PR, because a single login cannot be attributed to two roles. Treat editing this file to add a role as a policy change that needs the CEO, not a routine edit. The launchd wrapper `bin/dt-merge-queue` hardcodes `ACTING_ROLE = \"em\"` and `ATTEST_ROLE = \"qa\"`, so the qa attestation is a string literal in a script run by the same tick that merges: nothing connects `qa` to a QA act, and the attestation is a declared role, not evidence of a QA pass."
+  "github_identity_note": "Both authorities merge with the same org credential, so GitHub sees one committer. The role is an assertion the runner records in its audit comment, and an identity GitHub cannot enforce. So a role cannot stand behind a review either: `--attest-review` was removed on 2026-10-17 because the launchd wrapper hardcoded `qa` as the attesting role and nothing connected it to a QA act. Review evidence is now an artifact on the PR (see merge_queue._review_coverage), and merge_queue.py refuses any role that is not on this roster. Treat editing this file to add a role as a policy change that needs the CEO, not a routine edit."
 }
